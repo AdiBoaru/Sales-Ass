@@ -1,0 +1,14 @@
+{
+  "type": "module",
+  "scripts": {
+    "seed": "tsx db/seed/seed.ts",
+    "embed": "tsx db/seed/embed.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  }
+}

@@ -14,7 +14,10 @@ build/
 .env.local
 .env.production
 .env.staging
-.env.example
+# .env.example se commitează — arată ce variabile sunt necesare
+
+# Node
+node_modules/
 
 # VS Code
 .vscode/settings.json
