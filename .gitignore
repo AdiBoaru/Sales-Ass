@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+dist/
+*.egg-info/
+
+# Env — NICIODATĂ în git
+.env
+.env.local
+.env.production
+
+# VS Code
+.vscode/settings.json
+
+# Supabase
+supabase/.branches
+supabase/.temp
