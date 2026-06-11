@@ -14,6 +14,7 @@ build/
 .env.local
 .env.production
 .env.staging
+.env.example
 
 # VS Code
 .vscode/settings.json
