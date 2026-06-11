@@ -2,19 +2,45 @@
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 .venv/
 venv/
 dist/
+build/
 *.egg-info/
 
-# Env — NICIODATĂ în git
+# Env - NICIODATA in git
 .env
 .env.local
 .env.production
+.env.staging
 
 # VS Code
 .vscode/settings.json
+.vscode/launch.json
+
+# PyCharm / JetBrains
+.idea/
+
+# OS - Windows
+Thumbs.db
+desktop.ini
+
+# OS - Mac
+.DS_Store
 
 # Supabase
 supabase/.branches
 supabase/.temp
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
