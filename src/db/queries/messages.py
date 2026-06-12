@@ -1,0 +1,126 @@
+"""Query-uri pe `messages` (partiționat lunar) — insert + istoric (max 8).
+
+În schema reală textul e `body`, rolul e `direction` (inbound|outbound|internal)
++ `author` (contact|bot|human_agent|system) — NU `role`/`content`.
+
+Dedupe la nivel de provider (retry-ul agresiv al Meta) NU se rezolvă aici:
+unique-ul de pe `messages` include cheia de partiționare (`created_at`), deci
+un retry cu alt `created_at` nu se prinde prin ON CONFLICT. Garanția exact-once
+e în stratul de dedupe dedicat (NX-51: Redis + tabel ne-partiționat), upstream
+de acest insert. Aici facem inserturi simple.
+
+`conn` trebuie să fie deja tenant-scoped (tenant_conn).
+"""
+
+import json
+from typing import Any
+
+import asyncpg
+
+from src.models import Author, Direction, Message
+
+# Bugetul de istoric din arhitectură: max 8 mesaje, cel mai recent ultimul.
+HISTORY_LIMIT = 8
+
+
+async def insert_message(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    contact_id: str,
+    direction: Direction | str,
+    author: Author | str,
+    *,
+    body: str | None = None,
+    content_type: str = "text",
+    provider_msg_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    media_ref: str | None = None,
+    status: str | None = None,
+    model_route: str | None = None,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
+    cost_usd: float | None = None,
+    latency_ms: int | None = None,
+) -> str:
+    """Inserează un mesaj (inbound/outbound/internal) și întoarce id-ul lui.
+
+    Câmpurile de observabilitate (tokens/cost/latency/model_route) sunt opționale
+    — runner-ul le completează pentru mesajele bot. Status default-ul DB e
+    'received'; pentru outbound trece prin status='queued' (setat de Sender).
+    """
+    direction = Direction(direction).value if isinstance(direction, Direction) else direction
+    author = Author(author).value if isinstance(author, Author) else author
+
+    row = await conn.fetchrow(
+        """
+        insert into messages (
+            business_id, conversation_id, contact_id, direction, author,
+            body, content_type, provider_msg_id, payload, media_ref,
+            status, model_route, tokens_in, tokens_out, cost_usd, latency_ms
+        )
+        values (
+            $1, $2, $3, $4, $5,
+            $6, $7, $8, coalesce($9::jsonb, '{}'::jsonb), $10,
+            coalesce($11, 'received'), $12, $13, $14, $15, $16
+        )
+        returning id::text as id
+        """,
+        business_id,
+        conversation_id,
+        contact_id,
+        direction,
+        author,
+        body,
+        content_type,
+        provider_msg_id,
+        json.dumps(payload) if payload is not None else None,
+        media_ref,
+        status,
+        model_route,
+        tokens_in,
+        tokens_out,
+        cost_usd,
+        latency_ms,
+    )
+    return row["id"]
+
+
+async def get_recent_messages(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    limit: int = HISTORY_LIMIT,
+) -> list[Message]:
+    """Ultimele `limit` mesaje ale conversației, ordonate cronologic crescător
+    (cel mai recent ultimul — exact ce așteaptă context builder-ul / agentul).
+
+    Hard cap la HISTORY_LIMIT (8): chiar dacă cineva cere mai mult, bugetul de
+    context e impus în cod (principiul 4)."""
+    limit = min(limit, HISTORY_LIMIT)
+    rows = await conn.fetch(
+        """
+        select direction, author, body, content_type, created_at
+        from (
+            select direction, author, body, content_type, created_at
+            from messages
+            where business_id = $1 and conversation_id = $2
+            order by created_at desc
+            limit $3
+        ) recent
+        order by created_at asc
+        """,
+        business_id,
+        conversation_id,
+        limit,
+    )
+    return [
+        Message(
+            direction=Direction(r["direction"]),
+            author=Author(r["author"]),
+            body=r["body"],
+            content_type=r["content_type"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
