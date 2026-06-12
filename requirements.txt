@@ -24,7 +24,3 @@ python-dotenv==1.2.2
 # Embeddings / vector
 numpy==2.4.6
 
-# Teste + linting
-pytest==9.0.3
-pytest-asyncio==1.4.0
-ruff==0.11.13
