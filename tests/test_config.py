@@ -24,6 +24,18 @@ def test_reads_required_and_optional(monkeypatch):
 
 
 def test_defaults(monkeypatch):
+    # testează valorile IMPLICITE → șterge variabilele opționale ca să nu se
+    # scurgă mediul (CI le setează ca env de job)
+    for k in (
+        "MODEL_AGENT",
+        "MODEL_TRIAGE",
+        "MODEL_EMBED",
+        "REDIS_URL",
+        "DAILY_COST_CAP_USD",
+        "ENV",
+        "LOG_LEVEL",
+    ):
+        monkeypatch.delenv(k, raising=False)
     s = _settings(monkeypatch)
     assert s.model_agent == "gpt-5.4-mini"
     assert s.model_triage == "gpt-5.4-nano"
