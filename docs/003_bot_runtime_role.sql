@@ -1,11 +1,11 @@
 -- ============================================================================
 -- 003 — ROL bot_runtime + PLASĂ RLS (app.business_id) + GUARD state 8KB
 -- ----------------------------------------------------------------------------
--- STATUS: DRAFT — NEAPLICAT, NETESTAT.
---   Se rulează și se verifică la T018 (acces DB direct, conexiunea 5432).
---   Verificare obligatorie după aplicare: conectat ca bot_runtime, fără
---   `set app.business_id`, un `select * from contacts` trebuie să dea 0 rânduri;
---   cu business_id setat → doar rândurile tenantului.
+-- STATUS: APLICAT + TESTAT pe Supabase (2026-06-12) via scripts/apply_003.py.
+--   Izolare verificată pe products (500 rânduri demo): bot_runtime fără
+--   app.business_id → 0 rânduri; cu business_id demo → 500; cu alt id → 0;
+--   insert analytics_events cu business_id străin → respins de WITH CHECK.
+--   Idempotent (drop policy if exists / if not exists) → re-rulabil safe.
 -- ----------------------------------------------------------------------------
 -- Aditiv peste schema_v2_production.sql (NU modifică tabele existente).
 -- Implementează principiul 7 (RLS ca plasă) peste schema reală:
@@ -23,6 +23,12 @@ begin
 end $$;
 
 grant usage on schema public to bot_runtime;
+
+-- Pe Supabase workerul se conectează prin pooler ca `postgres` (nu există login
+-- custom prin pooler). Modelul: la fiecare conexiune workerul face
+-- `SET ROLE bot_runtime; SET app.business_id = $1` → coboară privilegiile +
+-- activează RLS. Pentru asta `postgres` trebuie să fie MEMBRU al rolului.
+grant bot_runtime to postgres;
 
 -- 2. Helper: business_id-ul sesiunii curente (setat de pool per conexiune).
 --    `true` = missing_ok → întoarce NULL dacă nu e setat (=> 0 rânduri, safe).
@@ -99,8 +105,9 @@ end $$;
 
 -- 4b. analytics_events: append-only, dar tot izolat pe business_id la insert
 drop policy if exists bot_runtime_analytics on analytics_events;
-create policy bot_runtime_analytics on analytics_events to bot_runtime
-  for insert with check (business_id = current_business_id());
+create policy bot_runtime_analytics on analytics_events
+  for insert to bot_runtime
+  with check (business_id = current_business_id());
 
 -- 4c. Catalog child fără business_id (no PII): citibile prin join la parent.
 --     Parent-ul (products) e deja filtrat pe business_id → join-ul e tenant-safe.
@@ -115,8 +122,9 @@ begin
   foreach t in array child_tables loop
     execute format('drop policy if exists bot_runtime_child_read on %I', t);
     execute format($f$
-      create policy bot_runtime_child_read on %I to bot_runtime
-        for select using (true)
+      create policy bot_runtime_child_read on %I
+        for select to bot_runtime
+        using (true)
     $f$, t);
   end loop;
 end $$;
