@@ -55,3 +55,16 @@ async def test_tenant_isolation_no_leak(pool):
     async with tenant_conn(pool, OTHER_BIZ) as conn:
         rows = await search_products(conn, OTHER_BIZ, limit=6)
     assert rows == []
+
+
+async def test_price_reflects_variant_not_product(pool):
+    """T037: prețul returnat = min preț variantă, nu products.price."""
+    async with tenant_conn(pool, DEMO_BIZ) as conn:
+        rows = await search_products(conn, DEMO_BIZ, limit=3)
+        for r in rows:
+            min_variant = await conn.fetchval(
+                "select min(coalesce(sale_price, price))::float8 "
+                "from product_variants where product_id = $1",
+                r["id"],
+            )
+            assert r["price"] == min_variant
