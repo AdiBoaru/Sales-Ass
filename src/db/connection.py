@@ -76,6 +76,20 @@ async def close_pool() -> None:
 
 
 @asynccontextmanager
+async def admin_conn(pool: asyncpg.Pool):
+    """Conexiune de CONTROL PLANE — fără scope de tenant (rămâne `postgres`).
+
+    Folosită DOAR pentru lookup-uri de infrastructură care preced rezolvarea
+    tenantului — în practică un singur caz: `phone_number_id → business_id`
+    (vezi db/queries/channels.py). NU citi/scrie date de client pe ea: pentru
+    orice e tenant-scoped folosește `tenant_conn`. RLS e bypass-at aici (postgres),
+    de aceea suprafața e limitată intenționat la maparea canal→business.
+    """
+    async with pool.acquire() as conn:
+        yield conn
+
+
+@asynccontextmanager
 async def tenant_conn(pool: asyncpg.Pool, business_id: str):
     """Conexiune cu izolare de tenant activă.
 
