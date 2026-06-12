@@ -12,20 +12,30 @@ from typing import Any
 
 import asyncpg
 
+# Prețul REAL e pe variantă (vezi T037): fiecare produs are variante cu sale_price
+# propriu, de obicei mai mic decât products.price. Sursăm min(variant) cu fallback
+# la products. Validatorul de preț trebuie să vadă același preț ca clientul.
+_EFFECTIVE_PRICE = "coalesce(vp.price, p.sale_price, p.price)"
+
 # 8 câmpuri per produs (CLAUDE.md): id, name, brand, price, url, ai_summary, stock, availability
-_SELECT = """
+_SELECT = f"""
     select
-        p.id::text                              as id,
-        p.name                                  as name,
-        b.name                                  as brand,
-        coalesce(p.sale_price, p.price)::float8 as price,
-        p.product_url                           as url,
-        p.ai_summary                            as ai_summary,
-        p.stock_total                           as stock,
-        p.availability                          as availability
+        p.id::text                  as id,
+        p.name                      as name,
+        b.name                      as brand,
+        {_EFFECTIVE_PRICE}::float8  as price,
+        p.product_url               as url,
+        p.ai_summary                as ai_summary,
+        p.stock_total               as stock,
+        p.availability              as availability
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
+    left join lateral (
+        select min(coalesce(v.sale_price, v.price)) as price
+        from product_variants v
+        where v.product_id = p.id
+    ) vp on true
 """
 
 
@@ -62,7 +72,7 @@ async def search_products(
     if brand:
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if price_max is not None:
-        conds.append(f"coalesce(p.sale_price, p.price) <= {placeholder(price_max)}")
+        conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if query_text:
         conds.append(f"p.name ilike {placeholder(f'%{query_text}%')}")
 
@@ -70,7 +80,7 @@ async def search_products(
         _SELECT
         + " where "
         + " and ".join(conds)
-        + " order by p.rating desc, coalesce(p.sale_price, p.price) asc"
+        + f" order by p.rating desc, {_EFFECTIVE_PRICE} asc"
         + f" limit {placeholder(limit)}"
     )
 
