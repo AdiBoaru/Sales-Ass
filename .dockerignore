@@ -1,0 +1,35 @@
+# Virtualenv / build artefacte
+.venv
+venv
+*.egg-info
+dist
+build
+
+# Git
+.git
+.gitignore
+
+# Teste și cache
+tests
+.pytest_cache
+.ruff_cache
+htmlcov
+.coverage
+**/__pycache__
+*.pyc
+
+# Secrete și config local
+.env
+.env.*
+
+# Node (seed scripts — nu intră în imaginea Python)
+node_modules
+package.json
+package-lock.json
+db/seed
+
+# IDE / harness
+.vscode
+.claude
+.github
+tasks
