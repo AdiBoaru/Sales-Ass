@@ -1,0 +1,36 @@
+# Mediu de dev: Redis + webhook (hot reload) + worker.
+# Postgres NU e local — e Supabase remote (SUPABASE_DB_URL din .env).
+# Pornire: docker compose up
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  webhook:
+    build: .
+    command: uvicorn src.webhook.app:app --reload --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: python -m src.worker.consumer
+    volumes:
+      - ./src:/app/src
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
