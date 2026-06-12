@@ -11,6 +11,7 @@
 Dispatcher-ul (separat) citește outbox, trimite la Meta și leagă provider_msg_id.
 """
 
+import logging
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ from src.db.queries.conversations import (
     patch_conversation_state,
     touch_last_inbound,
 )
+from src.db.queries.inbound_dedupe import claim_inbound
 from src.db.queries.messages import get_recent_messages, insert_message
 from src.db.queries.outbox import enqueue_outbox
 from src.models import (
@@ -34,6 +36,8 @@ from src.models import (
 )
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 
+log = logging.getLogger(__name__)
+
 _CHANNEL_KIND = "whatsapp"
 
 
@@ -41,11 +45,12 @@ _CHANNEL_KIND = "whatsapp"
 class TurnResult:
     """Rezultatul procesării unui tur (pentru logging/teste)."""
 
-    conversation_id: str
-    contact_id: str
-    turn_id: str
+    conversation_id: str | None
+    contact_id: str | None
+    turn_id: str | None
     reply_text: str | None
     outbox_id: str | None
+    deduped: bool = False
 
 
 async def handle_turn(
@@ -65,6 +70,15 @@ async def handle_turn(
     stages = stages or DEFAULT_STAGES
     turn_id = str(uuid4())
     wa_id = event["wa_id"]
+    provider_msg_id = event.get("provider_msg_id")
+
+    # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
+    # Guard ÎNAINTE de orice scriere — un duplicat nu produce mesaj, nici outbox.
+    # Trade-off (NX-51): claim-ul se commit-ează imediat, deci un crash în mijlocul
+    # turului marchează mesajul ca văzut fără a-l finaliza (dead-letter = follow-up).
+    if provider_msg_id and not await claim_inbound(conn, business.id, provider_msg_id):
+        log.info("dedupe_hit_db: %s deja procesat (business %s)", provider_msg_id, business.id)
+        return TurnResult(None, None, None, None, None, deduped=True)
 
     contact = await get_or_create_contact(
         conn,
