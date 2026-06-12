@@ -1,0 +1,119 @@
+# Nativx Assistant
+
+Platformă multi-tenant de AI Sales Assistant pe WhatsApp (by Nativx Technology).
+Arhitectura completă, schema și principiile sunt în [`CLAUDE.md`](CLAUDE.md).
+
+> De la `git clone` la teste verzi în ~10 minute. Pașii sunt scriși executându-i
+> pe curat — dacă ceva nu merge, vezi [Troubleshooting](#troubleshooting).
+
+---
+
+## Cerințe
+
+| Tool | Pentru ce | Note |
+|---|---|---|
+| **Python 3.12** | runtime + teste | local merge și 3.11; CI rulează 3.12 |
+| **gh** (GitHub CLI) | PR-uri | `winget install GitHub.cli`, apoi `gh auth login` |
+| **cloudflared** | tunel webhook (dev) | doar când testezi mesaje live de la Meta |
+| **Docker** | rulare stack containerizat | OPȚIONAL — necesar doar pe VPS / pentru `docker compose`. Dev local merge fără. |
+
+DB-ul (Postgres) NU rulează local — e **Supabase remote**.
+
+---
+
+## Setup
+
+```bash
+git clone https://github.com/AdiBoaru/Sales-Ass.git
+cd Sales-Ass
+
+python -m venv .venv
+# Windows:  .venv\Scripts\activate
+# Linux/Mac: source .venv/bin/activate
+
+pip install -r requirements-dev.txt
+
+cp .env.example .env      # apoi completează valorile (vezi mai jos)
+```
+
+### Completează `.env`
+
+Valorile reale le iei din vault-ul echipei / dashboard-uri. Minim pentru a rula:
+
+- **`SUPABASE_DB_URL`** — connection string Postgres. Folosește **Session pooler**
+  din Supabase (Settings → Database → Connection string → *Session pooler*):
+  ```
+  postgresql://postgres.<ref>:<PAROLA>@aws-0-<region>.pooler.supabase.com:5432/postgres
+  ```
+  ⚠️ NU conexiunea directă `db.<ref>.supabase.co` — nu se rezolvă pe rețele IPv4.
+- `OPENAI_API_KEY`, `META_*` — vezi `.env.example` (necesare pentru LLM / WhatsApp,
+  nu pentru testele de bază).
+
+### DB: aplică plasa RLS (o singură dată per proiect)
+
+```bash
+python scripts/apply_003.py      # rol bot_runtime + RLS + guard 8KB; testează izolarea
+python scripts/db_check.py       # verificare read-only: tabele, extensii, business demo
+```
+
+---
+
+## Rulare teste
+
+```bash
+# Unit (fără DB) — ce rulează și în CI:
+pytest -x -q -m "not integration"
+
+# Integration (ating Supabase real, exclus din CI) — necesită SUPABASE_DB_URL:
+pytest -m integration
+
+# Lint + format (obligatoriu înainte de PR):
+ruff check . && ruff format --check .
+```
+
+> Pe Windows, `ruff` și `pytest` se rulează prin `python -m ruff ...` /
+> `python -m pytest ...` dacă nu sunt în PATH.
+
+---
+
+## Rulare stack (opțional, necesită Docker)
+
+```bash
+docker compose up      # redis + webhook (hot reload) + worker
+```
+Postgres nu e în compose (e Supabase). Fără Docker, rulezi direct:
+```bash
+uvicorn src.webhook.app:app --reload      # webhook
+python -m src.worker.consumer             # worker (când există)
+```
+
+## Webhook live de la Meta (după setup Meta — T013)
+
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+Pune `https://<url-tunel>/webhook` + verify token în Meta config → Verify and Save.
+⚠️ URL-ul tunelului se schimbă la fiecare restart → re-verifică webhook-ul în Meta.
+
+---
+
+## Cum lucrezi un task
+
+1. Citește [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch-uri, commit-uri, PR).
+2. Cardul taskului e în [`tasks/TXXX.md`](tasks/) — implementezi STRICT ce cere.
+3. Branch din card → implementare → `ruff` + `pytest` verzi → PR.
+4. Schema DB: [`docs/schema_reference.md`](docs/schema_reference.md) e harta numelor reale.
+
+---
+
+## Troubleshooting
+
+| Simptom | Cauză / fix |
+|---|---|
+| `getaddrinfo failed` la conectare DB | Folosești conexiunea directă Supabase (IPv6-only). Treci pe **Session pooler**. |
+| `password authentication failed` | Parolă greșită în `SUPABASE_DB_URL`, sau conține caractere care strică URL-ul (resetează la una alfanumerică în Supabase). |
+| `getaddrinfo failed` intermitent pe **Windows** | Bug asyncpg/ProactorEventLoop. Codul (`connection.py`, scripturile) rezolvă IPv4 sincron + conectează pe IP — deja gestionat. |
+| `UnicodeEncodeError` în consolă (Windows) | Output cu diacritice pe cp1252. Scripturile fac `sys.stdout.reconfigure(encoding="utf-8")`. |
+| `docker: command not found` | Docker nu e instalat — opțional. Rulează direct cu uvicorn/python sau folosește doar testele. |
+| Port 8000 ocupat | Oprește procesul care îl folosește sau schimbă portul în comanda uvicorn. |
+| `.env` lipsă / variabilă lipsă | `cp .env.example .env` și completează. `SUPABASE_DB_URL` e obligatoriu pentru integration. |
