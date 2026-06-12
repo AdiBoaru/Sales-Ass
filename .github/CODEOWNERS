@@ -1,0 +1,5 @@
+# Review obligatoriu de la Senior pe fișierele sensibile
+# Orice PR care atinge căile de mai jos cere aprobarea lui @AdiBoaru
+
+prompts/         @AdiBoaru
+docs/*.sql       @AdiBoaru
