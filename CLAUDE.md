@@ -420,12 +420,14 @@ nativx-assistant/
 
 ## Client demo activ
 
-**Slug**: `sole-demo` (vezi `db/seed/seed.ts` — `SEED_BUSINESS_SLUG`)
+**business_id**: `6098812a-50fc-44bd-a1ba-bc77e6399158`
+**Slug**: `nativex-demo` (name „Sole Demo")
 **Vertical**: `beauty`
-**Date**: produse reale sole.ro (221 produse, 284 variante) + FAQ-uri, seedate prin `db/seed/`
+**Date reale în Supabase**: 500 produse seedate. ⚠️ `product_embeddings` = 0
+(produsele NU sunt încă embed-uite — `search_products` semantic merge după jobul
+de embed). `faqs` = 0 deocamdată.
 
-`business_id`-ul demo se obține din `businesses` după seed (slug `sole-demo`).
-Folosește acest tenant pentru toate testele locale.
+Folosește acest `business_id` pentru toate testele locale.
 
 ---
 
