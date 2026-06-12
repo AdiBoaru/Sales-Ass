@@ -4,7 +4,7 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-06-12_
+_Ultima actualizare: 2026-06-13_
 
 ---
 
@@ -21,10 +21,14 @@ Deblochează tot WhatsApp-ul. Fără el, nimic din webhook/mesaje nu se poate te
 - [ ] Adaugă telefoanele tale + ale juniorului ca **recipient phone numbers** (max 5)
 - [ ] Trimite un "hello world" din Graph API Explorer către telefonul tău (confirmă că merge)
 - [ ] Pune în `.env` local: `META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_PHONE_NUMBER_ID`
+- [ ] Dă-i lui Claude **Phone Number ID** → inserează rândul în `channels` pentru
+      business-ul demo (fără el, worker-ul nu poate mapa mesajele live la tenant)
 
-### T017 — OpenAI: chei + limite de spend  ·  ~0.5h
+### T017 — OpenAI: chei + limite de spend  ·  ~0.5h  ⬅️ **BLOCKER pe drumul critic**
 
-Protecție financiară înainte de primul apel LLM.
+Protecție financiară înainte de primul apel LLM. Din 2026-06-13: e SINGURUL
+lucru care blochează G3 (triaj + agent live) și `embed_products` — codul de
+pipeline e gata să-l primească.
 
 - [ ] platform.openai.com → 2 proiecte: `nativx-dev`, `nativx-prod` (cheie per proiect)
 - [ ] Billing → Usage limits: hard limit (ex. 50 USD dev / 200 USD prod) + alerte 50%/80%
@@ -82,6 +86,10 @@ Expune localhost:8000 spre Meta prin HTTPS public, fără deploy.
 - [ ] **Branch protection finalizare:** Settings → Branches → regula `main` → adaugă required checks `Lint (ruff)` + `Test (pytest)` (apar în search după ce au rulat o dată)
 - [ ] **CODEOWNERS review:** bifează "Require review from Code Owners" (forțează review-ul tău pe `prompts/` și `docs/*.sql`)
 - [ ] (Opțional) "Allow specified actors to bypass" → adaugă-te pe tine dacă vrei 1-approval pentru junior dar bypass pentru tine
+- [ ] **Auto-delete branches:** Settings → General → bifează "Automatically delete
+      head branches" — curăță branch-urile după merge și reduce riscul de
+      commit-uri orfane (s-a întâmplat de 3 ori: #15, #17, #23). Pe cele ~20
+      de branch-uri vechi deja merged: spune-i lui Claude să le șteargă.
 
 ---
 

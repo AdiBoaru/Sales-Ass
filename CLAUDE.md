@@ -38,20 +38,27 @@ Un singur obiect `TurnContext` curge prin toate stagiile.
 Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
 
 ```
-[1] WEBHOOK SVC
-    • validare semnătură Meta X-Hub-Signature-256
-    • dedupe pe provider_msg_id (messages, insert ... on conflict do nothing)
-    • update conversations.last_inbound_at (alimentează 24h window)
-    • insert mesaj brut în Redis stream: inbound:{conversation_id}
+[1] WEBHOOK SVC  (implementat: src/webhook/ — subțire, FĂRĂ DB)
+    • validare semnătură Meta X-Hub-Signature-256 peste corpul BRUT (signature.py)
+    • dedupe LAYER 1 (NX-51): Redis SET NX EX pe (phone_number_id, wamid).
+      NB: unique-ul de pe messages include cheia de partiționare (created_at) →
+      retry-ul Meta vine cu alt created_at, ON CONFLICT nu prinde. De aceea
+      dedupe-ul e în 2 straturi, NU pe messages.
+    • push pe stream-ul Redis unic `inbound` (conversation_id nu e cunoscut
+      la webhook fără round-trip în DB; ordinea per conversație = în worker)
     • ACK 200 în < 50ms (Meta face retry agresiv la timeout)
+    • update conversations.last_inbound_at s-a mutat în worker (processor)
 
-[2] REDIS BACKBONE
-    • stream per conversație (FIFO garantat)
-    • lock per conversație (procesare serializată, zero race condition)
-    • debounce adaptiv 2-3s (lot de mesaje, nu string lipit)
-    • rate limit per user + abuse blocklist (contacts.is_blocked)
-    • cost guard zilnic per business (contor Redis; sursa de adevăr
-      pentru facturare = usage_daily, rollup nocturn)
+[2] REDIS BACKBONE + WORKER  (implementat: redis_bus.py, worker/consumer.py + processor.py)
+    • stream unic `inbound` + consumer group `workers` (XREADGROUP + ACK)
+    • worker: resolve phone_number_id → business (admin_conn, control plane)
+      → tenant_conn → dedupe LAYER 2 durabil (inbound_dedupe, claim ÎNAINTE
+      de orice scriere — prinde retry scăpat de Redis după restart/FLUSHALL)
+      → contact/conversație → last_inbound_at → pipeline
+    • TODO: lock per conversație (multi-consumer), debounce adaptiv 2-3s,
+      rate limit per user + abuse blocklist (contacts.is_blocked),
+      cost guard zilnic per business (contor Redis; sursa de adevăr
+      pentru facturare = usage_daily, rollup nocturn), XAUTOCLAIM
 
 [3] GATES (cod pur, fără LLM)
     • bot_active check (conversations.bot_active) → early exit cu handoff dacă false
@@ -194,8 +201,13 @@ messages [PARTIȚIONAT] — id, business_id, conversation_id, contact_id,
                     human_agent|system), provider_msg_id, content_type, body,
                     payload jsonb, media_ref, status, model_route, tokens_in/out,
                     cost_usd, latency_ms
-                    • dedupe: unique(business_id, provider_msg_id, created_at)
+                    • unique(business_id, provider_msg_id, created_at) = doar consistență;
+                      dedupe-ul REAL la retry e inbound_dedupe (vezi mai jos, NX-51)
                     • textul e `body`, rolul e `direction`+`author` (NU `role`/`content`)
+inbound_dedupe    — business_id + provider_msg_id (PK compus), first_seen
+                    • NE-partiționat → ON CONFLICT funcționează; claim în worker
+                      înainte de orice scriere; purjă >48h (jobs/cleanup_dedupe)
+                    • migrare: docs/004_inbound_dedupe.sql (aplicată live)
 message_status_events — provider_msg_id, status, occurred_at  (delivered/read/failed)
 outbox            — id, business_id, conversation_id, idempotency_key UNIQUE,
                     kind, payload jsonb, status(pending|dispatching|sent|failed|dead),
@@ -343,6 +355,12 @@ gdpr_svc     — EXECUTE gdpr_erase_contact + export + audit_log (security defin
 (în `db/connection.py`), iar politicile RLS pe `bot_runtime` transformă un query
 greșit în „zero rezultate", nu „datele altui client". `bot_runtime` NU are bypassrls.
 
+**Excepție unică, documentată — `admin_conn` (control plane):** lookup-ul
+`phone_number_id → business_id` (db/queries/channels.py) rulează ÎNAINTE ca
+tenantul să fie cunoscut — e operația care îl derivă. Suprafața e limitată la
+maparea canal→business + mentenanță non-PII (cleanup inbound_dedupe). Orice
+alt query pe admin_conn = bug de izolare.
+
 ---
 
 ## Principii — respectă-le în tot codul
@@ -367,30 +385,40 @@ greșit în „zero rezultate", nu „datele altui client". `bot_runtime` NU are
 ```
 nativx-assistant/
 ├── CLAUDE.md                    ← acest fișier
+├── TODO-MANUAL.md               ← taskurile manuale ale lui Adi (conturi/setup extern)
 ├── docs/
 │   ├── schema_v2_production.sql ← SURSA DE ADEVĂR a schemei (Postgres 16, seedată)
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
-│   └── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2
+│   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
+│   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
+│   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2
+│   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
+├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
+├── scripts/                     ← utilitare DB: apply_003/004.py, db_check.py, spot_check.py
 ├── db/
 │   └── seed/                    ← seed.ts + embed.ts (Supabase JS client, tsx)
 ├── src/
 │   ├── config.py                ← settings (Pydantic BaseSettings)
 │   ├── models.py                ← TurnContext + toate dataclass-urile
+│   ├── redis_bus.py             ← client Redis + dedupe layer 1 + XADD inbound
 │   ├── db/
-│   │   ├── connection.py        ← pool asyncpg, SET app.business_id, context managers
-│   │   └── queries/             ← SQL per domeniu
+│   │   ├── connection.py        ← pool asyncpg, tenant_conn (RLS) + admin_conn (control plane)
+│   │   └── queries/             ← SQL per domeniu (contacts, conversations, messages,
+│   │                              outbox, inbound_dedupe, catalog, channels, businesses)
 │   ├── webhook/
-│   │   ├── app.py               ← FastAPI app (GET /webhook verify există deja)
-│   │   ├── meta.py              ← semnătură + dedupe + last_inbound_at + push Redis
-│   │   ├── status.py            ← delivered/read/failed → messages.status
-│   │   └── orders.py            ← webhook comenzi → match ref_code → atribuire
+│   │   ├── app.py               ← FastAPI: GET verify + POST inbound (ambele LIVE)
+│   │   ├── signature.py         ← verificare X-Hub-Signature-256 (corp brut)
+│   │   ├── meta.py              ← parser payload Meta → InboundEvent
+│   │   ├── status.py            ← TODO: delivered/read/failed → messages.status
+│   │   └── orders.py            ← TODO: webhook comenzi → match ref_code → atribuire
 │   ├── worker/
-│   │   ├── runner.py            ← pipeline runner (execută stagiile, măsoară)
-│   │   ├── consumer.py          ← Redis stream consumer cu lock
-│   │   ├── dispatcher.py        ← outbox → Meta API, retry idempotent
-│   │   └── stages/             ← gates, free_layers, triage, context_builder,
-│   │                             agent, validator, sender
+│   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK)
+│   │   ├── processor.py         ← handle_turn: dedupe L2 → contact/conv → pipeline → outbox
+│   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
+│   │   ├── dispatcher.py        ← TODO: outbox → Meta API, retry idempotent
+│   │   └── stages/             ← TODO: gates, free_layers, triage, context_builder,
+│   │                             agent, validator, sender (acum: echo_stage în runner)
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
@@ -401,9 +429,10 @@ nativx-assistant/
 │   ├── gdpr/
 │   │   └── erase.py             ← gdpr_erase_contact + export
 │   └── jobs/
-│       ├── rollup_usage.py      ← nocturn: analytics_events → usage_daily
-│       ├── embed_products.py    ← ai_summary → product_embeddings (content_hash)
-│       └── cleanup.py           ← drop partiții vechi, expire semantic_cache
+│       ├── cleanup_dedupe.py    ← purjă inbound_dedupe >48h (admin_conn, zilnic)
+│       ├── rollup_usage.py      ← TODO: nocturn: analytics_events → usage_daily
+│       ├── embed_products.py    ← TODO: ai_summary → product_embeddings (content_hash)
+│       └── cleanup.py           ← TODO: drop partiții vechi, expire semantic_cache
 ├── tests/
 │   ├── golden/                  ← conversații de test (fixture JSON)
 │   ├── test_pipeline.py
@@ -425,7 +454,10 @@ nativx-assistant/
 **Vertical**: `beauty`
 **Date reale în Supabase**: 500 produse seedate. ⚠️ `product_embeddings` = 0
 (produsele NU sunt încă embed-uite — `search_products` semantic merge după jobul
-de embed). `faqs` = 0 deocamdată.
+de embed; blocat de T017/cheia OpenAI). `faqs` = 0 deocamdată.
+⚠️ `channels` = 0 — pentru e2e LIVE trebuie inserat canalul WhatsApp al demo-ului
+(`kind='whatsapp'`, `provider_account_id` = META_PHONE_NUMBER_ID din T013).
+Testele integration își creează channel throwaway (tranzacție rollback-uită).
 
 Folosește acest `business_id` pentru toate testele locale.
 

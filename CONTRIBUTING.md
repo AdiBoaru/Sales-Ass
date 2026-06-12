@@ -4,12 +4,13 @@
 
 Fiecare task are branch-ul său specificat în card. Format:
 ```
-feat/TXXX-nume-scurt    # funcționalitate nouă
+feat/TXXX-nume-scurt    # funcționalitate nouă (la fel: feat/NX-XX-nume)
 fix/TXXX-nume-scurt     # bug fix
 chore/TXXX-nume-scurt   # infra, config, migrări
 test/TXXX-nume-scurt    # teste standalone
 docs/TXXX-nume-scurt    # documentație
 ```
+Pentru lucru grupat fără card (ex. „G1 queries"), nume descriptiv: `feat/db-runtime-queries`.
 
 Niciodată nu lucrezi direct pe `main` (excepție: T001 — repo gol).
 
@@ -25,7 +26,7 @@ Format conventional commits cu ID-ul taskului:
 ```
 feat(T042): add semantic cache lookup with language filter
 fix(T031): correct business_id isolation in faq query
-chore(T021): add conv.outbox DDL to 002_schema_fixes.sql
+chore(NX-51): add inbound_dedupe DDL to 004_inbound_dedupe.sql
 ```
 
 Reguli:
@@ -53,14 +54,29 @@ Toate trei trebuie să treacă cu zero erori. `ruff format` modifică fișierele
 - Merge: Squash and merge, după aprobare + CI verde
 - Nu forța merge fără review, indiferent de urgență
 
+### ⚠️ Branch-ul cu PR deschis e ÎNGHEȚAT
+
+PR-urile se merge-uiesc repede — uneori la primul commit. Un push pe branch
+DUPĂ merge rămâne ORFAN (squash merge → commit-ul nu ajunge în main și nimeni
+nu observă). S-a întâmplat de 3 ori (#15, #17, #23). Reguli:
+
+1. După `gh pr create`, NU mai împingi scope nou pe acel branch — chiar dacă
+   e înrudit. Branch NOU din main + PR separat.
+2. Excepție (fix cerut la review): verifică ÎNTÂI `gh pr view N --json state`
+   — doar dacă e `OPEN` ai voie să împingi.
+3. Recuperare orfan: `git checkout -b fix/recover-... origin/main &&
+   git cherry-pick <sha>` + PR nou.
+4. La început de sesiune, un scan rapid prinde orfanii devreme — fișierele
+   din commit lipsesc din main, nu doar SHA-ul (squash schimbă SHA-urile mereu).
+
 ## Reguli permanente (din CLAUDE.md)
 
 1. Orice query SQL are `WHERE business_id = $1` — fără excepție
-2. Lookup-urile în faq / response_cache / clarification_templates / wa_templates includ și `language`
-3. PII (telefoane) doar în `conv.channel_identities` și `conv.orders.customer_phone` — niciodată în loguri
+2. Lookup-urile în `faqs` / `semantic_cache` / `wa_templates` includ și `locale` (limba e parte din cheie)
+3. PII (telefoane / id-uri de canal) DOAR în `channel_identities` — `orders` NU are customer_phone; niciodată în loguri
 4. LLM se apelează DOAR din stagiile triaj și agent
 5. Un singur scriitor per câmp din `TurnContext` — respectă docstring-ul câmpului
-6. `conv.outbox` e singurul punct de ieșire — nicio trimitere directă la Meta din stagii
+6. `outbox` e singurul punct de ieșire — nicio trimitere directă la Meta din stagii
 
 ## Structura unui task
 
