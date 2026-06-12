@@ -1,0 +1,660 @@
+<mxfile host="app.diagrams.net" agent="claude" pages="2">
+  <diagram id="archM" name="Arhitectura detaliată (master)">
+    <mxGraphModel dx="889" dy="423" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="m3" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="1. CANALE &amp; EDGE" vertex="1">
+          <mxGeometry height="660" width="330" x="40" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="m4" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Client WhatsApp / Telegram" vertex="1">
+          <mxGeometry height="40" width="290" x="60" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m5" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Meta Cloud API / Bot API text · liste · butoane · carduri · template" vertex="1">
+          <mxGeometry height="50" width="290" x="60" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="m6" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="WAF + API Gateway TLS · rate limit global · trace id · [AUDIT] impl. azi = Cloudflare (NX-01)" vertex="1">
+          <mxGeometry height="50" width="290" x="60" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="m7" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="Webhook svc (FastAPI) semnătură · dedupe provider_msg_id · insert raw · ACK &lt; 50ms" vertex="1">
+          <mxGeometry height="65" width="290" x="60" y="295" as="geometry" />
+        </mxCell>
+        <mxCell id="m8" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="Status svc delivered / read / failed → events" vertex="1">
+          <mxGeometry height="45" width="290" x="60" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="m9" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] 24h window tracker știe per conversație dacă suntem în fereastra liberă sau e nevoie de template" vertex="1">
+          <mxGeometry height="60" width="290" x="60" y="435" as="geometry" />
+        </mxCell>
+        <mxCell id="m10" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Template manager ciclu de viață template-uri Meta: draft → submitted → approved · versiuni" vertex="1">
+          <mxGeometry height="60" width="290" x="60" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="m11" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Language detect (gate) RO / HU / EN → promptul răspunde în limba clientului" vertex="1">
+          <mxGeometry height="60" width="290" x="60" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="m12" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#ffe6cc;strokeColor=#d79b00;" value="2. BACKBONE — Redis (→Kafka la scară)" vertex="1">
+          <mxGeometry height="660" width="330" x="410" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="m13" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="stream: inbound partajat pe conversation_id (FIFO)" vertex="1">
+          <mxGeometry height="50" width="290" x="430" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m14" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="lock per conversație procesare serializată" vertex="1">
+          <mxGeometry height="45" width="290" x="430" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="m15" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="debounce adaptiv 2-3s lot de mesaje, nu string lipit" vertex="1">
+          <mxGeometry height="45" width="290" x="430" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="m16" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="stream: outbound (outbox) dispatcher idempotent + retry" vertex="1">
+          <mxGeometry height="50" width="290" x="430" y="295" as="geometry" />
+        </mxCell>
+        <mxCell id="m17" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="stream: domain events comenzi · stoc · AWB · preț" vertex="1">
+          <mxGeometry height="50" width="290" x="430" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="m18" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="DLQ + retry policy nimic nu moare tăcut; alertă la acumulare" vertex="1">
+          <mxGeometry height="50" width="290" x="430" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="m19" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="rate limit per user (anti-spam) + [NOU] abuse blocklist" vertex="1">
+          <mxGeometry height="50" width="290" x="430" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="m20" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="cost guard zilnic per business la plafon → handoff politicos + alertă" vertex="1">
+          <mxGeometry height="55" width="290" x="430" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="m21" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#f5f5f5;strokeColor=#666666;" value="3. CONVERSATION ENGINE — workers (autoscale)" vertex="1">
+          <mxGeometry height="900" width="620" x="780" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="m22" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Identity resolution același client pe WhatsApp+Telegram → un singur contact + profil" vertex="1">
+          <mxGeometry height="60" width="270" x="800" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="m23" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="GATES (cod) bot_active · handoff_until · risc · media: vocale→STT, poze→Vision" vertex="1">
+          <mxGeometry height="65" width="270" x="800" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="m24" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="STRATURI GRATUITE FAQ alias → cache semantic → clarificare template (40-60% opresc)" vertex="1">
+          <mxGeometry height="65" width="270" x="800" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="m25" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="TRIAJ (nano ~300 tok) simple|sales|order|handoff «simple» compune răspunsul pe nano" vertex="1">
+          <mxGeometry height="65" width="270" x="800" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="m26" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="CONTEXT BUILDER (buget impus) ≤8 msg · state ≤8KB · profil compact [NOU] summarizer conversații lungi" vertex="1">
+          <mxGeometry height="70" width="270" x="800" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="m27" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="AGENT (mini) buying stages · decide mutarea MAX 3 tool calls · prompt caching" vertex="1">
+          <mxGeometry height="65" width="270" x="800" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="m28" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="VALIDATOR prețuri/produse/linkuri vs retrieval 1 retry → formulare fără cifre" vertex="1">
+          <mxGeometry height="60" width="270" x="800" y="625" as="geometry" />
+        </mxCell>
+        <mxCell id="m29" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" value="SENDER (unic punct ieșire) typing · mesaje sparte · outbox · msg + patch state + events" vertex="1">
+          <mxGeometry height="70" width="270" x="800" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="m30" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="POST-TUR (async) extractor profil (nano) · lead score · alias candidates" vertex="1">
+          <mxGeometry height="60" width="270" x="800" y="795" as="geometry" />
+        </mxCell>
+        <mxCell id="m31" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;fillOpacity=35;fillColor=#fff2cc;strokeColor=#d6b656;" value="TOOLS (determinist, per business)" vertex="1">
+          <mxGeometry height="560" width="280" x="1100" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m32" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="search_products filtre SQL + semantic + reranker" vertex="1">
+          <mxGeometry height="45" width="250" x="1115" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="m33" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="get_product_details (+review summary)" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="m34" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="compare_products — diferențe structurate" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="m35" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="check_order + delivery ETA" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="m36" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="reorder din istoricul contactului" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="335" as="geometry" />
+        </mxCell>
+        <mxCell id="m37" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="cart_add / checkout_link (ref conversație)" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="m38" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="subscribe_back_in_stock" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="m39" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="faq_lookup / knowledge_guides" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="m40" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="book_appointment (servicii)" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="515" as="geometry" />
+        </mxCell>
+        <mxCell id="m41" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" value="request_human (set handoff_until)" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="m42" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="web_grounding (domenii de încredere)" vertex="1">
+          <mxGeometry height="35" width="250" x="1115" y="605" as="geometry" />
+        </mxCell>
+        <mxCell id="m43" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="DEGRADARE GRAȚIOASĂ mini→retry→nano→template→om NICIODATĂ tăcere" vertex="1">
+          <mxGeometry height="70" width="280" x="1100" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="m44" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="SHADOW MODE per client nou propune → om aprobă → corecturile devin aliase + golden tests" vertex="1">
+          <mxGeometry height="70" width="280" x="1100" y="790" as="geometry" />
+        </mxCell>
+        <mxCell id="m45" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#f8cecc;strokeColor=#b85450;" value="4. AI PLATFORM (LLMOps)" vertex="1">
+          <mxGeometry height="900" width="350" x="1440" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="m46" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="Model Gateway multi-provider · failover · circuit breaker cost meter · caching enforcement" vertex="1">
+          <mxGeometry height="65" width="310" x="1460" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m47" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="Prompt Registry versionat · GENERAT din taxonomie · canary 5% · promovare pe cifre" vertex="1">
+          <mxGeometry height="65" width="310" x="1460" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="m48" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="Eval pipeline (standard de calitate) golden set per client + LLM-as-judge nocturn (Batch) · prag numeric = gate în CI/CD" vertex="1">
+          <mxGeometry height="80" width="310" x="1460" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="m49" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="Review intelligence (offline) ingest review-uri → sumar per produs + sentiment + top pro/contra" vertex="1">
+          <mxGeometry height="65" width="310" x="1460" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="m50" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="Web grounding svc căutare restricționată, locală, cu citare + cache pe răspunsuri externe" vertex="1">
+          <mxGeometry height="60" width="310" x="1460" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="m51" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="Vision svc — foto → match catalog" vertex="1">
+          <mxGeometry height="35" width="310" x="1460" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="m52" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="STT svc (Whisper) — vocale → text" vertex="1">
+          <mxGeometry height="35" width="310" x="1460" y="565" as="geometry" />
+        </mxCell>
+        <mxCell id="m53" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="Embedding svc + cache normalizat" vertex="1">
+          <mxGeometry height="35" width="310" x="1460" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="m54" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" value="Reranker + recommendation integrity ranking doar pe relevanță; auditabil" vertex="1">
+          <mxGeometry height="50" width="310" x="1460" y="655" as="geometry" />
+        </mxCell>
+        <mxCell id="m55" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Limba modelelor prompturi multi-limbă (RO/HU/EN) testate separat în evals" vertex="1">
+          <mxGeometry height="55" width="310" x="1460" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="m56" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#e1d5e7;strokeColor=#9673a6;" value="5. DATA PLATFORM" vertex="1">
+          <mxGeometry height="900" width="340" x="1830" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="m57" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="Postgres OLTP (Supabase) core · catalog · conv · analytics RLS · roluri · retenție · partiționare" vertex="1">
+          <mxGeometry height="70" width="300" x="1850" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m58" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="pgvector produse · cache semantic · FAQ" vertex="1">
+          <mxGeometry height="45" width="300" x="1850" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="m59" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Media object storage pozele clienților (S3/Supabase Storage, TTL, link în messages.metadata)" vertex="1">
+          <mxGeometry height="60" width="300" x="1850" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="m60" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="CDC → Warehouse (ClickHouse) analytics la scară fără load pe OLTP" vertex="1">
+          <mxGeometry height="50" width="300" x="1850" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="m61" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="Customer 360 / feature store profil + istoric comenzi + RFM → sursa personalizării" vertex="1">
+          <mxGeometry height="60" width="300" x="1850" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="m62" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="Catalog ingestion pipeline feed → normalizare → taxonomie → enrichment LLM (Batch) → upsert" vertex="1">
+          <mxGeometry height="65" width="300" x="1850" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="m63" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Catalog quality monitor sync eșuat · prețuri anomale (±50%) · stoc înghețat → alertă, nu publicare" vertex="1">
+          <mxGeometry height="60" width="300" x="1850" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="m64" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="GDPR svc — erase/export per contact + audit log + PII redaction în loguri" vertex="1">
+          <mxGeometry height="50" width="300" x="1850" y="625" as="geometry" />
+        </mxCell>
+        <mxCell id="m65" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="6. INTEGRĂRI COMERȚ" vertex="1">
+          <mxGeometry height="240" width="540" x="40" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="m66" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Platforma magazin — catalog API/feed, webhook comenzi" vertex="1">
+          <mxGeometry height="55" width="240" x="60" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m67" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="ERP / stoc &amp; ETA (delivery promise)" vertex="1">
+          <mxGeometry height="40" width="240" x="60" y="1110" as="geometry" />
+        </mxCell>
+        <mxCell id="m68" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Payments — link cu ref conversație" vertex="1">
+          <mxGeometry height="40" width="240" x="60" y="1165" as="geometry" />
+        </mxCell>
+        <mxCell id="m69" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Curier — evenimente AWB" vertex="1">
+          <mxGeometry height="40" width="240" x="320" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m70" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Surse review-uri (platformă + externe)" vertex="1">
+          <mxGeometry height="40" width="240" x="320" y="1095" as="geometry" />
+        </mxCell>
+        <mxCell id="m71" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Google Calendar (verticale servicii)" vertex="1">
+          <mxGeometry height="40" width="240" x="320" y="1150" as="geometry" />
+        </mxCell>
+        <mxCell id="m72" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#ffe6cc;strokeColor=#d79b00;" value="7. MOTOR PROACTIV" vertex="1">
+          <mxGeometry height="240" width="380" x="620" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="m73" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="AWB la expediere · back-in-stock · follow-up coș abandonat" vertex="1">
+          <mxGeometry height="55" width="340" x="640" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m74" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="respectă 24h window tracker: în fereastră → mesaj normal, în afara → DOAR template aprobat + opt-in" vertex="1">
+          <mxGeometry height="70" width="340" x="640" y="1110" as="geometry" />
+        </mxCell>
+        <mxCell id="m75" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#82b366;" value="8. ADMIN, BILLING &amp; OPS" vertex="1">
+          <mxGeometry height="240" width="560" x="1040" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="m76" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="Dashboard per client intents · conversii · revenue atribuit · cost" vertex="1">
+          <mxGeometry height="55" width="250" x="1060" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m77" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="Inbox handoff + shadow mode + coadă aprobare aliase/candidates" vertex="1">
+          <mxGeometry height="60" width="250" x="1060" y="1110" as="geometry" />
+        </mxCell>
+        <mxCell id="m78" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;strokeWidth=2;fillColor=#d0f0ec;strokeColor=#1ba39c;" value="[NOU] Usage metering &amp; billing consum per tenant (mesaje, tokens, cost) → facturare / plafoane contractuale" vertex="1">
+          <mxGeometry height="75" width="250" x="1330" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m79" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="Alerting: drift rute · cost spike · eval drop · DLQ · sync eșuat" vertex="1">
+          <mxGeometry height="55" width="250" x="1330" y="1130" as="geometry" />
+        </mxCell>
+        <mxCell id="m80" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#f5f5f5;strokeColor=#666666;" value="9. PLATFORM ENGINEERING (banda transversală)" vertex="1">
+          <mxGeometry height="240" width="530" x="1640" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="m81" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="CI/CD cu eval gate · canary · rollback" vertex="1">
+          <mxGeometry height="45" width="230" x="1660" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m82" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="Docker Compose → K8s + HPA · IaC · secrets" vertex="1">
+          <mxGeometry height="50" width="230" x="1660" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="m83" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="OTel tracing per tur · SLO p95 · status page" vertex="1">
+          <mxGeometry height="50" width="240" x="1910" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="m84" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="Sondă sintetică e2e / 5 min per business" vertex="1">
+          <mxGeometry height="45" width="240" x="1910" y="1105" as="geometry" />
+        </mxCell>
+        <mxCell id="m85" edge="1" parent="1" source="m4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m86" edge="1" parent="1" source="m5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m6" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m87" edge="1" parent="1" source="m6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m7" value="2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m88" edge="1" parent="1" source="m7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m13" value="3 XADD">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m89" edge="1" parent="1" source="m13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m14" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m90" edge="1" parent="1" source="m14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m15" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m91" edge="1" parent="1" source="m15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m22" value="4 lot">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m92" edge="1" parent="1" source="m22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m23" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m93" edge="1" parent="1" source="m23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m24" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m94" edge="1" parent="1" source="m24" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m25" value="miss">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m95" edge="1" parent="1" source="m25" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m26" value="sales/order">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m96" edge="1" parent="1" source="m26" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m27" value="5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m97" edge="1" parent="1" source="m27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m28" value="6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m98" edge="1" parent="1" source="m28" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m29" value="7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m99" edge="1" parent="1" source="m29" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m16" value="8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m100" edge="1" parent="1" source="m16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m5" value="9 send">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m101" edge="1" parent="1" source="m24" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m29" value="hit → direct">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m102" edge="1" parent="1" source="m25" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m29" value="simple">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m103" edge="1" parent="1" source="m27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;exitX=1;exitY=0.5;" target="m32" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m104" edge="1" parent="1" source="m32" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m58" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m105" edge="1" parent="1" source="m33" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m49" value="sumar">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m106" edge="1" parent="1" source="m35" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m67" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m107" edge="1" parent="1" source="m42" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m50" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m108" edge="1" parent="1" source="m27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m46" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m109" edge="1" parent="1" source="m25" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m46" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m110" edge="1" parent="1" source="m53" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m58" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m111" edge="1" parent="1" source="m23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m52" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m112" edge="1" parent="1" source="m23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m51" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m113" edge="1" parent="1" source="m51" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m59" value="foto">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m114" edge="1" parent="1" source="m29" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m57" value="msg+state+events">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m115" edge="1" parent="1" source="m30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m61" value="profil">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m116" edge="1" parent="1" source="m66" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m62" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m117" edge="1" parent="1" source="m62" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m63" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m118" edge="1" parent="1" source="m63" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m57" value="publish doar curat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m119" edge="1" parent="1" source="m70" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m49" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m120" edge="1" parent="1" source="m66" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m17" value="orders">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m121" edge="1" parent="1" source="m17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m73" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m122" edge="1" parent="1" source="m73" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m74" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m123" edge="1" parent="1" source="m74" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m5" value="template">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m124" edge="1" parent="1" source="m9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m74" value="fereastră">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m125" edge="1" parent="1" source="m10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m74" value="template aprobat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m126" edge="1" parent="1" source="m68" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m76" value="conversie atribuită">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m127" edge="1" parent="1" source="m57" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;" target="m60" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m128" edge="1" parent="1" source="m60" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m76" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m129" edge="1" parent="1" source="m46" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m78" value="cost per tenant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m130" edge="1" parent="1" source="m48" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m81" value="gate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m131" edge="1" parent="1" source="m19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m29" value="guard">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m132" edge="1" parent="1" source="m20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m29" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m133" edge="1" parent="1" source="m11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;fontStyle=1;dashed=1;" target="m23" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+              <mxCell id="audL" value="[AUDIT CTO · 12.06.2026]  Cutiile roșii = adăugiri &amp; fixuri din audit. P0 înaintea webhook-ului (G2): NX-50/51/53/04. Zona 1b = canalul web care lipsea complet din diagramă. Detalii: Nativx_Audit_CTO_iunie_2026.md + carduri NX." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6336c;strokeWidth=2;fontSize=12;fontStyle=1;align=left;spacingLeft=8;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="12" width="1340" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="audZ" value="1b. CANAL WEB — WIDGET (V1.5 · E26: NX-20…26) — [AUDIT: zona lipsea complet; „omnichannel&quot; exista doar pe hârtie]" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=14;fontStyle=1;fillOpacity=18;strokeWidth=2;fillColor=#f8cecc;strokeColor=#d6336c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="745" width="700" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="audW1" value="widget.js embeddabil — shadow DOM · embed 1 linie · temă per tenant · i18n RO/HU/EN · disclosure AI vizibil (art. 50)  (NX-21)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="55" y="790" width="210" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="audW2" value="Chat Gateway SSE — POST /web/messages + stream SSE · sesiune semnată · rate limit IP/visitor · CORS/CSP allowlist per tenant  (NX-20/25)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="285" y="790" width="210" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="audW3" value="channel_kind=&#x27;web&#x27; în gates/sender — fără fereastră 24h · debounce scurt · typing = eveniment SSE  (NX-22)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="515" y="790" width="210" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="audW4" value="Identitate vizitator — visitor_id semnat → capturare telefon → MERGE auditat cu WhatsApp  (NX-23)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="55" y="892" width="210" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="audW5" value="Context pagină — page_url / product_id în payload → hint pentru retrieval  (NX-24)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="285" y="892" width="210" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="audW6" value="Golden tests canal web + load test 200 sesiuni SSE  (NX-26)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="515" y="892" width="210" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="audF1" value="[P0-B] Dedupe REAL în 2 straturi — Redis SETNX EX 48h + tabel inbound_dedupe NE-partiționat; unique-ul pe messages partiționat NU oprește retry-urile Meta  (NX-51)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="655" width="290" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="audF2" value="[AUDIT] Redis durabil — requirepass · bind privat · appendonly everysec · noeviction (NX-02) → replica/HA + systemd healthchecks la faza B (NX-11)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="430" y="622" width="290" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="audF3" value="[P0-A] Conexiunea workerului — rol LOGIN bot_runtime pe 5432/session-mode SAU SET LOCAL per tranzacție + assert la checkout. NU postgres + SET ROLE prin pooler transaction-mode  (NX-50/04/53)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="690" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="audF4" value="[AUDIT] pg_partman + pg_cron — partiții auto +2 luni pe messages/analytics_events, alertă la lipsă  (NX-40)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="805" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="audF5" value="[AUDIT] Supabase Pro UE + PITR + restore test trimestrial · registru procesatori GDPR  (NX-14/13 · S8/S10)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1850" y="880" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="audF6" value="[AUDIT] Moderation inbound (endpoint gratuit) + 8 golden-uri injecție/jailbreak în CI + schema_version în payload-urile din stream  (NX-15/16/17)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="878" width="270" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="audF7" value="[AUDIT] Tools lipsă pt. vânzare: get_promotions + regulă validator „discount ⊆ promotions&quot; (NX-30) · cross-sell map + free-shipping-gap (NX-32) · export CRM (NX-31)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="878" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="audF8" value="[AUDIT] Failover OpenAI→Anthropic în adapter = BIBLIOTECĂ, nu microserviciu — circuit breaker + flag per business (NX-12)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="795" width="310" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="audF9" value="[AUDIT] În MVP doar golden gate în CI; LLM-as-judge nocturn + canary rămân faza B — nu construi serviciul acum" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="885" width="310" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="audF10" value="[AUDIT] Quality rating &amp; tier monitor per număr + pacing/quiet-hours proactiv (NX-05/07) · Inbox-lite Slack pentru handoff (NX-08)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="1178" width="250" height="57" as="geometry" />
+        </mxCell>
+        <mxCell id="audF11" value="[AUDIT] Rate card propriu RO/HU de la 1 iul 2026 → tarife Meta per piață în config, nu hardcodate  (NX-54)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="1192" width="250" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="audF12" value="[AUDIT] Disclosure AI (art. 50) + consent &amp; opt-out logat pe proactiv — T180/NX-10 LAUNCH-BLOCKING · 2 aug 2026" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1188" width="340" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="audF13" value="[AUDIT] Embedded Signup / Tech Provider Meta — onboarding WABA la scară (faza B)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1660" y="1162" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="audF14" value="[AUDIT] Alerte timpurii: consumer lag (XINFO) + outbox pending depth &amp; max age  (NX-03)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d6336c;strokeWidth=2;fontSize=11;align=left;spacingLeft=6;spacingRight=4;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1910" y="1158" width="240" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="audE1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d6336c;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="audW1" target="audW2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="audE2" value="XADD inbound (channel=web)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d6336c;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="audW2" target="m13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="audE3" value="SSE out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d6336c;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="m29" target="audW2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="arch2" name="Optimization Layer">
+    <mxGraphModel dx="1414" dy="751" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1340" pageHeight="840" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" parent="1" style="text;html=1;fontSize=14;fontStyle=1;" value="CONDUCTA DE BAZĂ (pagina 1, comprimată)" vertex="1">
+          <mxGeometry height="30" width="1280" x="20" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="3" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Webhook" vertex="1">
+          <mxGeometry height="50" width="110" x="30" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="4" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Redis stream+debounce" vertex="1">
+          <mxGeometry height="50" width="130" x="170" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="5" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Gates" vertex="1">
+          <mxGeometry height="50" width="100" x="330" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="6" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Straturi gratuite" vertex="1">
+          <mxGeometry height="50" width="110" x="460" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="7" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Triaj (nano)" vertex="1">
+          <mxGeometry height="50" width="100" x="600" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="8" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Agent (mini)" vertex="1">
+          <mxGeometry height="50" width="100" x="730" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="9" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#82b366;" value="VALIDATOR RĂSPUNS" vertex="1">
+          <mxGeometry height="50" width="110" x="860" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="10" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Sender (outbox)" vertex="1">
+          <mxGeometry height="50" width="110" x="1000" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666;strokeWidth=2;" value="Meta Cloud API" vertex="1">
+          <mxGeometry height="50" width="110" x="1140" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="12" edge="1" parent="1" source="3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="13" edge="1" parent="1" source="4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="14" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="15" edge="1" parent="1" source="6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="16" edge="1" parent="1" source="7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="17" edge="1" parent="1" source="8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="9" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="18" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="10" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="19" edge="1" parent="1" source="10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="11" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="20" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=13;fontStyle=1;fillOpacity=25;strokeWidth=1.5;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="A. PERCEPȚIE — cum se simte (prioritate înaltă, efort mic)" vertex="1">
+          <mxGeometry height="270" width="640" x="20" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="21" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="P3 · Typing indicator instant la primirea mesajului" vertex="1">
+          <mxGeometry height="50" width="180" x="50" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="22" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="P3 · Prefetch în debounce context + embedding în paralel cu fereastra de liniște" vertex="1">
+          <mxGeometry height="60" width="190" x="250" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="23" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="P3 · Răspunsuri sparte 2 mesaje scurte la ~1s, ca un om pe WhatsApp" vertex="1">
+          <mxGeometry height="60" width="180" x="460" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="24" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="P4 · Voice STT (Whisper) vocala → text → pipeline normal" vertex="1">
+          <mxGeometry height="60" width="180" x="50" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="25" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="P6 · Vision pe poze screenshot produs → match catalog «aveți așa ceva?»" vertex="1">
+          <mxGeometry height="70" width="190" x="250" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="26" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="P7 · Căutare hibridă filtre SQL dure + ranking semantic pe ai_summary (pgvector)" vertex="1">
+          <mxGeometry height="70" width="180" x="460" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="27" edge="1" parent="1" source="21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="28" edge="1" parent="1" source="22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="29" edge="1" parent="1" source="23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="10" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="30" edge="1" parent="1" source="24" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="31" edge="1" parent="1" source="25" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="32" edge="1" parent="1" source="26" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="8" value="tool">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="33" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=13;fontStyle=1;fillOpacity=25;strokeWidth=1.5;fillColor=#d5e8d4;strokeColor=#82b366;" value="B. CORECTITUDINE — încrederea" vertex="1">
+          <mxGeometry height="270" width="610" x="690" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="34" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="P1 · Validator de răspuns prețuri/produse/linkuri verificate contra retrieval; retry sau formulare fără cifre. ZERO prețuri inventate, structural" vertex="1">
+          <mxGeometry height="90" width="200" x="720" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="35" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="P8 · LLM-as-judge nocturn 2-3% din conversații notate pe Batch API; scor calitate în analytics" vertex="1">
+          <mxGeometry height="70" width="210" x="950" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="36" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="P9 · Canary pe prompturi 5% trafic, comparare automată, promovare doar pe cifre" vertex="1">
+          <mxGeometry height="70" width="210" x="950" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="37" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" value="P9 · Drift alerts distribuția rutelor se schimbă → alertă (semnal de degradare)" vertex="1">
+          <mxGeometry height="70" width="200" x="720" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="38" edge="1" parent="1" source="34" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="9" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="39" edge="1" parent="1" source="35" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="8" value="feedback">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="40" edge="1" parent="1" source="36" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="41" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=13;fontStyle=1;fillOpacity=25;strokeWidth=1.5;fillColor=#e1d5e7;strokeColor=#9673a6;" value="C. BUSINESS — bucla de bani" vertex="1">
+          <mxGeometry height="290" width="640" x="20" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="42" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="P2 · Atribuire conversie checkout link cu ref conversație → webhook comenzi → analytics «botul a generat X RON luna asta»" vertex="1">
+          <mxGeometry height="90" width="200" x="50" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="43" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="P5 · Lead scoring stage + valoare coș decid modelul (nano/mini) și alerta către om la lead fierbinte" vertex="1">
+          <mxGeometry height="80" width="190" x="280" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="44" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="P5 · Profil auto-învățat extractor nano post-conversație → customer_profile; nu mai întrebi niciodată tipul de ten" vertex="1">
+          <mxGeometry height="90" width="150" x="490" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="45" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" value="Dashboard revenue per client (retainer-ul se vinde singur)" vertex="1">
+          <mxGeometry height="50" width="200" x="50" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="46" edge="1" parent="1" source="42" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="10" value="ref în link">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="47" edge="1" parent="1" source="43" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="48" edge="1" parent="1" source="44" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="10" value="post-tur">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="49" edge="1" parent="1" source="42" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="45" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="50" parent="1" style="rounded=1;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=13;fontStyle=1;fillOpacity=25;strokeWidth=1.5;fillColor=#ffe6cc;strokeColor=#d79b00;" value="D. OPERAȚIONAL — când pică ceva" vertex="1">
+          <mxGeometry height="290" width="610" x="690" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="51" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="P4 · Scara de degradare mini → retry → nano → template → om notificat. NICIODATĂ tăcere" vertex="1">
+          <mxGeometry height="70" width="200" x="720" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="52" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="P4 · Failover provider LLM al 2-lea provider + circuit breaker în adapterul existent" vertex="1">
+          <mxGeometry height="60" width="200" x="950" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="53" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="P6 · Outbox pattern răspuns scris tranzacțional cu state, dispatcher cu retry idempotent" vertex="1">
+          <mxGeometry height="70" width="200" x="720" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="54" parent="1" style="rounded=1;html=1;whiteSpace=wrap;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" value="P6 · Sondă sintetică nr. de test scrie la 5 min, verifică e2e; afli tu primul, nu clientul" vertex="1">
+          <mxGeometry height="70" width="200" x="950" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="55" edge="1" parent="1" source="51" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="56" edge="1" parent="1" source="52" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="57" edge="1" parent="1" source="53" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" target="10" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="58" edge="1" parent="1" source="54" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" target="3" value="ping e2e">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="59" parent="1" style="text;html=1;fontSize=11;fontStyle=2;" value="Legenda P1-P9 = ordinea de implementare recomandată (~3 săptămâni total peste fundație). Săgețile punctate = puncte de inserție în conducta de bază." vertex="1">
+          <mxGeometry height="30" width="1280" x="20" y="770" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
