@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(ruff *)",
+      "Bash(pytest *)",
+      "Bash(python *)",
+      "Bash(pip *)",
+      "Bash(pip install *)",
+      "Bash(python -m pytest *)",
+      "Bash(python -m ruff *)"
+    ],
+    "deny": []
+  }
+}
