@@ -23,10 +23,17 @@ import asyncpg
 _BACKOFF_SECONDS = [5, 30, 120, 300]
 MAX_ATTEMPTS = 6  # după atâtea eșecuri → 'dead' (nu mai reîncearcă)
 
-# Calificat cu `o.`: în RETURNING-ul unui UPDATE ... FROM, `id` ar fi ambiguu
-# între tabelul țintă `o` și subquery-ul `due`.
+# Visibility timeout: la claim, next_attempt_at se împinge cu atât în viitor. Un
+# rând rămas 'dispatching' (dispatcher mort între claim și mark) redevine scadent
+# după acest interval și e re-revendicat — reaper implicit, fără coloană separată.
+_VISIBILITY_TIMEOUT_S = 120
+
+# Calificat cu `o.`/`due.`: în RETURNING-ul unui UPDATE ... FROM, coloanele comune
+# (id) ar fi ambigue între tabelul țintă `o` și subquery-ul `due`. phone_number_id
+# (numărul EXPEDITOR) vine din join-ul outbox→conversations→channels.
 _CLAIM_COLS = (
-    "o.id::text, o.conversation_id::text, o.idempotency_key, o.kind, o.payload, o.attempts"
+    "o.id::text, o.conversation_id::text, o.idempotency_key, o.kind, "
+    "o.payload, o.attempts, due.phone_number_id"
 )
 
 
@@ -72,26 +79,35 @@ async def claim_due(
     business_id: str,
     *,
     limit: int = 10,
+    visibility_timeout_s: int = _VISIBILITY_TIMEOUT_S,
 ) -> list[dict[str, Any]]:
     """Revendică până la `limit` rânduri scadente și le trece în 'dispatching'.
 
     `FOR UPDATE SKIP LOCKED` sare peste rândurile pe care alți workeri le țin deja
-    → zero dublu-trimitere între dispatcher-i paraleli. Rândurile revendicate ies
-    din filtrul de scadență (status devine 'dispatching'), deci nu vor fi reluate
-    până la mark_failed/reaper. `attempts` se incrementează la claim.
+    → zero dublu-trimitere între dispatcher-i paraleli. La claim, `next_attempt_at`
+    e împins cu `visibility_timeout_s` în viitor: rândul nu e re-revendicat imediat,
+    iar dacă dispatcher-ul moare înainte de mark_sent/mark_failed, redevine scadent
+    după timeout (reaper implicit). `attempts` se incrementează la claim.
+
+    Returnează și `phone_number_id` (numărul EXPEDITOR, din canalul conversației),
+    de care are nevoie apelul către Meta.
     """
     rows = await conn.fetch(
         f"""
         update outbox o
-           set status = 'dispatching', attempts = o.attempts + 1
+           set status = 'dispatching',
+               attempts = o.attempts + 1,
+               next_attempt_at = now() + make_interval(secs => $3)
           from (
-            select id
-            from outbox
-            where business_id = $1
-              and status in ('pending', 'failed')
-              and next_attempt_at <= now()
-            order by next_attempt_at
-            for update skip locked
+            select o2.id, ch.provider_account_id as phone_number_id
+            from outbox o2
+            join conversations c on c.id = o2.conversation_id
+            join channels ch on ch.id = c.channel_id
+            where o2.business_id = $1
+              and o2.status in ('pending', 'failed', 'dispatching')
+              and o2.next_attempt_at <= now()
+            order by o2.next_attempt_at
+            for update of o2 skip locked
             limit $2
           ) due
          where o.id = due.id
@@ -99,8 +115,34 @@ async def claim_due(
         """,
         business_id,
         limit,
+        visibility_timeout_s,
     )
     return [_claimed_row(r) for r in rows]
+
+
+async def business_ids_with_due_outbox(
+    conn: asyncpg.Connection,
+    *,
+    limit: int = 100,
+) -> list[str]:
+    """Tenanții care au rânduri scadente în outbox — operație de CONTROL PLANE.
+
+    A se rula pe `admin_conn` (cross-tenant): dispatcher-ul nu știe dinainte ce
+    tenanți au de trimis, iar a deschide tenant_conn pentru fiecare business activ
+    ar fi risipă. Întoarce doar id-urile; trimiterea efectivă se face per tenant,
+    sub RLS. (`channels`/`conversations` nu sunt necesare aici — doar business_id.)
+    """
+    rows = await conn.fetch(
+        """
+        select distinct business_id::text as business_id
+        from outbox
+        where status in ('pending', 'failed', 'dispatching')
+          and next_attempt_at <= now()
+        limit $1
+        """,
+        limit,
+    )
+    return [r["business_id"] for r in rows]
 
 
 async def mark_sent(
