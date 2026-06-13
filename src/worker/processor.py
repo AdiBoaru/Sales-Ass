@@ -18,6 +18,7 @@ from uuid import uuid4
 import asyncpg
 from redis.asyncio import Redis
 
+from src.db.queries.analytics import insert_events
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import (
     get_or_create_conversation,
@@ -51,6 +52,23 @@ class TurnResult:
     reply_text: str | None
     outbox_id: str | None
     deduped: bool = False
+
+
+async def _persist_events(conn, business_id, conversation_id, contact_id, events) -> None:
+    """Scrie evenimentele turului în analytics_events, best-effort.
+    Observabilitatea NU blochează turul: un eșec se loghează, nu propagă."""
+    if not events:
+        return
+    try:
+        await insert_events(
+            conn,
+            business_id,
+            events,
+            conversation_id=conversation_id,
+            contact_id=contact_id,
+        )
+    except Exception:  # noqa: BLE001 — analytics e best-effort
+        log.exception("persistarea analytics_events a eșuat (turul continuă)")
 
 
 async def handle_turn(
@@ -125,6 +143,7 @@ async def handle_turn(
     )
 
     await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis), stages)
+    await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
 
     if ctx.reply is None:
         # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
