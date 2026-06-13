@@ -89,6 +89,18 @@ search_products) — vezi istoricul PR #1–#18.
 echo pe telefon. Cere: dispatcher (cod) + T013/T015 (manual: Meta app + tunel) +
 rândul în `channels` pentru demo.
 
+### Cale de test alternativă: Telegram pe VPS (epic NX-60→63)
+Decizie 2026-06-13: pentru iterare rapidă, testăm botul vorbind direct pe
+**Telegram** (long polling pe VPS, fără Meta/HTTPS/tunel). Aditiv — WhatsApp rămâne
+primar. Cards:
+- **NX-60** abstracție de canal (envelope neutru + ChannelSender registry) — fundație
+- **NX-61** Telegram inbound (long polling) · **NX-62** Telegram outbound (TelegramClient)
+- **NX-63** onboarding canal Telegram demo + rulare VPS (manual: BotFather token)
+
+Ajunge la „Telegram e2e live" MULT mai repede decât WhatsApp (zero birocrație Meta).
+> Notă: secțiunile 2-4 de mai sus se vor reîmprospăta după ce intră în main PR-urile
+> deschise (#25 dispatcher, #26 status, #27 NX-02, #28 analytics).
+
 ## 6. Decizii de arhitectură luate pe parcurs (nereflectate în planul inițial)
 
 - **Stream unic `inbound`** (nu per conversație): conversation_id nu e cunoscut

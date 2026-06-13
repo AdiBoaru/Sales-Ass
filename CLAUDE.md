@@ -20,7 +20,8 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | LLM sales | OpenAI GPT-5.4-mini |
 | LLM triaj + simple | OpenAI GPT-5.4-nano |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
-| WhatsApp | Meta Cloud API direct (NU Twilio) |
+| WhatsApp | Meta Cloud API direct (NU Twilio) — canal PRIMAR de producție |
+| Telegram | Bot API (long polling) — canal de TEST (chat direct pe VPS, fără HTTPS) |
 | Validare | Pydantic v2 |
 | Teste | pytest + pytest-asyncio |
 
@@ -124,6 +125,32 @@ PROACTIV (în afara pipeline-ului, scheduler separat — proactive_jobs)
       mesaj normal; altfel → DOAR template cu status='approved'
       din wa_templates
 ```
+
+---
+
+## Canale (multi-channel) — cuplajul stă DOAR la margini
+
+Pipeline-ul (stagiile 3-9) și worker-ul sunt **agnostice de canal**: operează pe
+`TurnContext` (contact, conversație, mesaj, reply). Cuplajul de canal trăiește la
+exact DOUĂ margini, izolat prin contracte (NX-60):
+
+- **Ingestie** (stagiul 1): fiecare canal are parser-ul + verificarea lui →
+  produc un **envelope NEUTRU** pe stream-ul unic `inbound`:
+  `channel_kind`, `channel_account_id` (id-ul canalului RECEPTOR — phone_number_id
+  la WhatsApp, bot id la Telegram), `sender_external_id` (id-ul userului — wa_id /
+  chat.id), `provider_msg_id`, `body`, ... Worker-ul rezolvă tenantul cu
+  `resolve_channel(channel_kind, channel_account_id)` și nu mai știe de canal.
+- **Trimitere** (stagiul 9): `outbox` e singurul punct de ieșire; un **registru
+  `ChannelSender`** mapează `channel_kind → client`. Dispatcher-ul alege clientul
+  după `channel_kind` (zero logică de coadă duplicată).
+
+Canale:
+- **WhatsApp** — Meta Cloud API, webhook semnat (X-Hub-Signature-256), PRIMAR de
+  producție. Are fereastră 24h + template-uri (proactiv).
+- **Telegram** — Bot API prin **long polling** (`getUpdates`), canal de **TEST**:
+  rulează pe VPS fără HTTPS/tunel/verificare de semnătură. Fără fereastră 24h.
+  Pentru iterare rapidă pe comportamentul botului vorbind direct cu el. NU
+  înlocuiește WhatsApp; e aditiv. (Webhook mode = opțiune de prod ulterioară.)
 
 ---
 
@@ -413,12 +440,16 @@ nativx-assistant/
 │   │   ├── status.py            ← TODO: delivered/read/failed → messages.status
 │   │   └── orders.py            ← TODO: webhook comenzi → match ref_code → atribuire
 │   ├── worker/
-│   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK)
+│   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK), rutare pe channel_kind
 │   │   ├── processor.py         ← handle_turn: dedupe L2 → contact/conv → pipeline → outbox
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
-│   │   ├── dispatcher.py        ← TODO: outbox → Meta API, retry idempotent
+│   │   ├── dispatcher.py        ← outbox → ChannelSender (Meta/Telegram), retry idempotent
 │   │   └── stages/             ← TODO: gates, free_layers, triage, context_builder,
 │   │                             agent, validator, sender (acum: echo_stage în runner)
+│   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
+│   │   ├── base.py              ← ChannelSender Protocol + SENDER_REGISTRY
+│   │   └── telegram/            ← client.py (Bot API) + poller.py (long polling, TEST)
+│   ├── meta_client.py           ← MetaClient (WhatsApp Cloud API send); implementează ChannelSender
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
@@ -455,8 +486,10 @@ nativx-assistant/
 **Date reale în Supabase**: 500 produse seedate. ⚠️ `product_embeddings` = 0
 (produsele NU sunt încă embed-uite — `search_products` semantic merge după jobul
 de embed; blocat de T017/cheia OpenAI). `faqs` = 0 deocamdată.
-⚠️ `channels` = 0 — pentru e2e LIVE trebuie inserat canalul WhatsApp al demo-ului
-(`kind='whatsapp'`, `provider_account_id` = META_PHONE_NUMBER_ID din T013).
+⚠️ `channels` = 0 — pentru e2e LIVE trebuie inserat un canal al demo-ului:
+- WhatsApp: `kind='whatsapp'`, `provider_account_id` = META_PHONE_NUMBER_ID (T013).
+- Telegram (TEST, mai rapid): `kind='telegram'`, `provider_account_id` = bot id
+  (seed NX-63 din TELEGRAM_BOT_TOKEN). Pentru testul pe VPS vorbind direct cu botul.
 Testele integration își creează channel throwaway (tranzacție rollback-uită).
 
 Folosește acest `business_id` pentru toate testele locale.
@@ -472,7 +505,8 @@ Folosește acest `business_id` pentru toate testele locale.
 - NU recovery agent pentru cazuri ambigue — CLARIFY ieftin
 - NU scriere în catalog din worker (excepție: `semantic_cache` și `intent_aliases` candidates)
 - NU tăcere la erori — întotdeauna ceva iese spre client
-- NU trimitere directă la Meta din stagii — totul prin `outbox` + dispatcher
+- NU trimitere directă la Meta/Telegram din stagii — totul prin `outbox` + dispatcher (ChannelSender)
+- NU cod specific de canal în pipeline/worker — doar la margini (parser ingestie + ChannelSender)
 - NU mesaje proactive fără consent + (24h window SAU template approved)
 - NU telefoane/PII în loguri sau în analytics — doar în `channel_identities`
 - NU `service_role` în worker — workerul folosește `bot_runtime` (RLS activ)

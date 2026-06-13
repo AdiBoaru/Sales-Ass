@@ -49,6 +49,16 @@ Conexiunea corectă pentru bot + backup confirmat.
 > ⚠️ **ÎNAINTE de primul client plătitor:** trecere pe Supabase **Pro** (daily backups).
 > Date reale de client fără backup = riscul din T018. Nu acum, dar nu uita.
 
+### TG-TEST — Bot Telegram pentru testul rapid pe VPS  ·  ~15 min  ⬅️ cale de test fără birocrație
+
+Ca să testăm botul vorbind direct pe Telegram (pe VPS), fără Meta/HTTPS/tunel.
+WhatsApp rămâne canalul primar — Telegram e DOAR pentru iterare rapidă (NX-61/62/63).
+
+- [ ] Telegram → caută **@BotFather** → `/newbot` → nume + username → copiază **tokenul**
+- [ ] `TELEGRAM_BOT_TOKEN=...` în `.env` (pe VPS; și local dacă testezi)
+- [ ] (long polling → NU e nevoie de setWebhook, HTTPS sau tunel)
+- [ ] După ce Claude livrează NX-61/62/63 + seed-ul canalului: scrie „salut" botului → aștepți echo
+
 ---
 
 ## 🟡 Pornește acum, durează zile (birocrație)
