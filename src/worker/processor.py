@@ -147,6 +147,7 @@ async def handle_turn(
     if ctx.reply is None:
         # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
         # aici doar raportăm că turul n-a produs reply.
+        log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
         return TurnResult(conv["id"], contact.id, turn_id, None, None)
 
     # Scrierea Sender-ului: mesaj outbound + outbox + state, în aceeași tranzacție.
@@ -183,4 +184,12 @@ async def handle_turn(
             touch_outbound=True,
         )
 
+    # Log per-tur la succes (fără PII: doar id-uri + lungimea reply-ului, nu corpul).
+    log.info(
+        "tur procesat: conv=%s turn=%s reply=%dch outbox=%s",
+        conv["id"],
+        turn_id,
+        len(ctx.reply.text),
+        outbox_id,
+    )
     return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)
