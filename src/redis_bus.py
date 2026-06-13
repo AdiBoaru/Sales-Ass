@@ -2,7 +2,7 @@
 
 Producătorul (webhook) face XADD pe stream-ul de inbound; consumatorul (worker)
 citește cu consumer group. Aici stau și helperele de:
-  • dedupe rapid (NX-51 layer 1): SET NX EX peste (phone_number_id, wamid),
+  • dedupe rapid (NX-51 layer 1): SET NX EX peste (channel_account_id, provider_msg_id),
     ca retry-ul agresiv al Meta să nu producă două procesări. Plasa durabilă
     (layer 2, tabel ne-partiționat) e în worker, cu business_id real.
   • enqueue inbound: XADD cu trim aproximativ (cap de siguranță la lungime).
@@ -47,14 +47,15 @@ async def close_redis() -> None:
         _redis = None
 
 
-async def seen_before(redis: Redis, phone_number_id: str, provider_msg_id: str) -> bool:
+async def seen_before(redis: Redis, channel_account_id: str, provider_msg_id: str) -> bool:
     """True dacă mesajul a mai fost văzut (dedupe layer 1).
 
     `SET key 1 NX EX` e atomic: întoarce True (cheie setată) doar prima dată.
-    Cheia e pe (phone_number_id, wamid) — phone_number_id mapează 1:1 la canal/
-    business, deci e un proxy corect pentru unicitate înainte de a avea business_id.
+    Cheia e pe (channel_account_id, provider_msg_id) — channel_account_id (id-ul
+    canalului receptor) mapează 1:1 la canal/business, deci e un proxy corect
+    pentru unicitate înainte de a avea business_id.
     """
-    key = f"dedupe:{phone_number_id}:{provider_msg_id}"
+    key = f"dedupe:{channel_account_id}:{provider_msg_id}"
     was_set = await redis.set(key, "1", nx=True, ex=_DEDUPE_TTL_SECONDS)
     return not was_set
 

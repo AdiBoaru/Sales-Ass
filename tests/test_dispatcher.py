@@ -11,6 +11,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from src.channels.base import ChannelSenderRegistry
 from src.db.connection import close_pool, get_pool
 from src.db.queries.businesses import load_business
 from src.db.queries.outbox import business_ids_with_due_outbox, claim_due
@@ -55,8 +56,8 @@ class FakeMeta:
         self.calls: list[tuple] = []
         self._fail = fail
 
-    async def send_text(self, phone_number_id, to, text) -> str:
-        self.calls.append((phone_number_id, to, text))
+    async def send_text(self, account_id, to, text) -> str:
+        self.calls.append((account_id, to, text))
         if self._fail:
             raise self._fail
         return f"wamid.{uuid4().hex[:8]}"
@@ -64,14 +65,21 @@ class FakeMeta:
 
 def _event(body="salut"):
     return {
-        "phone_number_id": "PNID-demo",
-        "wa_id": f"+40{uuid4().hex[:9]}",
+        "channel_kind": "whatsapp",
+        "channel_account_id": "PNID-demo",
+        "sender_external_id": f"+40{uuid4().hex[:9]}",
         "provider_msg_id": f"wamid.{uuid4().hex[:10]}",
         "content_type": "text",
         "body": body,
         "media_id": None,
-        "profile_name": "Ana",
+        "sender_name": "Ana",
     }
+
+
+def _registry(sender, kind="whatsapp") -> ChannelSenderRegistry:
+    r = ChannelSenderRegistry()
+    r.register(kind, sender)
+    return r
 
 
 async def _enqueue_via_turn(conn, channel_id):
@@ -82,11 +90,11 @@ async def _enqueue_via_turn(conn, channel_id):
 
 
 # --------------------------------------------------------------------------- #
-# claim_due — întoarce phone_number_id (expeditor) din join
+# claim_due — întoarce channel_kind + channel_account_id (expeditor) din join
 # --------------------------------------------------------------------------- #
 
 
-async def test_claim_returns_sender_phone_number_id(pool):
+async def test_claim_returns_sender_channel(pool):
     async with tenant_tx(pool) as (conn, channel_id):
         pnid = await conn.fetchval(
             "select provider_account_id from channels where id = $1", channel_id
@@ -94,7 +102,8 @@ async def test_claim_returns_sender_phone_number_id(pool):
         await _enqueue_via_turn(conn, channel_id)
         rows = await claim_due(conn, DEMO_BIZ)
         assert len(rows) == 1
-        assert rows[0]["phone_number_id"] == pnid
+        assert rows[0]["channel_kind"] == "whatsapp"
+        assert rows[0]["channel_account_id"] == pnid
         assert rows[0]["payload"]["type"] == "text"
 
 
@@ -117,10 +126,11 @@ async def test_dispatch_row_success_marks_sent_and_links_wamid(pool):
         [row] = await claim_due(conn, DEMO_BIZ)
 
         meta = FakeMeta()
-        status = await dispatch_row(conn, DEMO_BIZ, meta, row)
+        status = await dispatch_row(conn, DEMO_BIZ, _registry(meta), row)
 
         assert status == "sent"
-        assert len(meta.calls) == 1  # un singur apel Meta
+        assert len(meta.calls) == 1  # un singur apel pe canal
+        assert meta.calls[0][0] == row["channel_account_id"]  # account expeditor corect
 
         ob = await conn.fetchrow(
             "select status, sent_message_id::text from outbox where id = $1", row["id"]
@@ -142,7 +152,7 @@ async def test_dispatch_row_failure_marks_failed_with_backoff(pool):
         [row] = await claim_due(conn, DEMO_BIZ)
 
         meta = FakeMeta(fail=httpx.ConnectError("boom"))
-        status = await dispatch_row(conn, DEMO_BIZ, meta, row)
+        status = await dispatch_row(conn, DEMO_BIZ, _registry(meta), row)
 
         assert status == "failed"
         ob = await conn.fetchrow(
@@ -153,6 +163,16 @@ async def test_dispatch_row_failure_marks_failed_with_backoff(pool):
         assert ob["status"] == "failed"
         assert "boom" in ob["last_error"]
         assert ob["scheduled"] is True  # programat pentru retry
+
+
+async def test_dispatch_row_unknown_channel_is_dead(pool):
+    """channel_kind fără sender înregistrat → 'dead' cu log, fără crash."""
+    async with tenant_tx(pool) as (conn, channel_id):
+        await _enqueue_via_turn(conn, channel_id)
+        [row] = await claim_due(conn, DEMO_BIZ)
+        empty_registry = ChannelSenderRegistry()  # niciun sender
+        status = await dispatch_row(conn, DEMO_BIZ, empty_registry, row)
+        assert status == "dead"
 
 
 async def test_claim_visibility_timeout_hides_then_reclaims(pool):

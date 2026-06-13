@@ -18,6 +18,7 @@ import logging
 
 import httpx
 
+from src.channels.base import ChannelSenderRegistry
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn
 from src.db.queries.messages import set_message_provider_id
@@ -32,27 +33,37 @@ from src.meta_client import MetaClient
 log = logging.getLogger(__name__)
 
 
-async def dispatch_row(conn, business_id: str, meta: MetaClient, row: dict) -> str:
-    """Trimite un singur rând de outbox. Întoarce statusul rezultat.
+async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, row: dict) -> str:
+    """Trimite un singur rând de outbox prin canalul lui. Întoarce statusul rezultat.
 
-    `conn` e tenant-scoped pe `business_id`. Succesul (mark_sent + leagă wamid pe
+    Alege transportul din registru după `channel_kind` (NX-60). `conn` e
+    tenant-scoped pe `business_id`. Succesul (mark_sent + leagă provider_msg_id pe
     mesajul outbound) e tranzacțional ca să nu rămână outbox 'sent' cu mesaj fără
-    provider_msg_id. Eșecul → mark_failed (backoff sau 'dead')."""
+    id. Eșecul → mark_failed (backoff sau 'dead')."""
     payload = row["payload"]
-    kind = row.get("kind", "message")
-    if kind not in ("message", "text") or payload.get("type") != "text":
-        # G2b trimite doar text; template/interactive/typing → follow-up.
+    outbox_kind = row.get("kind", "message")
+    if outbox_kind not in ("message", "text") or payload.get("type") != "text":
+        # acum trimitem doar text; template/interactive/typing → follow-up.
         log.warning(
             "outbox %s: kind/type nesuportat (%s/%s) — marcat dead",
             row["id"],
-            kind,
+            outbox_kind,
             payload.get("type"),
         )
         await mark_failed(conn, business_id, row["id"], 999, "tip nesuportat de dispatcher")
         return "dead"
 
+    channel_kind = row["channel_kind"]
+    sender = registry.get(channel_kind)
+    if sender is None:
+        log.warning("outbox %s: niciun sender pentru channel_kind=%s", row["id"], channel_kind)
+        await mark_failed(conn, business_id, row["id"], 999, f"canal nesuportat: {channel_kind}")
+        return "dead"
+
     try:
-        wamid = await meta.send_text(row["phone_number_id"], payload["to"], payload["text"])
+        provider_id = await sender.send_text(
+            row["channel_account_id"], payload["to"], payload["text"]
+        )
     except Exception as e:  # noqa: BLE001 — orice eroare de transport/HTTP → retry
         status = await mark_failed(conn, business_id, row["id"], row["attempts"], str(e)[:500])
         log.warning("outbox %s: trimitere eșuată (%s) → %s", row["id"], type(e).__name__, status)
@@ -61,11 +72,11 @@ async def dispatch_row(conn, business_id: str, meta: MetaClient, row: dict) -> s
     async with conn.transaction():
         await mark_sent(conn, business_id, row["id"], sent_message_id=payload.get("message_id"))
         if payload.get("message_id"):
-            await set_message_provider_id(conn, business_id, payload["message_id"], wamid)
+            await set_message_provider_id(conn, business_id, payload["message_id"], provider_id)
     return "sent"
 
 
-async def dispatch_due(pool, meta: MetaClient, *, batch: int = 10) -> int:
+async def dispatch_due(pool, registry: ChannelSenderRegistry, *, batch: int = 10) -> int:
     """Un ciclu: revendică și trimite rândurile scadente, per tenant. Întoarce
     numărul de rânduri tratate."""
     async with admin_conn(pool) as conn:
@@ -77,20 +88,30 @@ async def dispatch_due(pool, meta: MetaClient, *, batch: int = 10) -> int:
             rows = await claim_due(conn, business_id, limit=batch)
             for row in rows:
                 try:
-                    await dispatch_row(conn, business_id, meta, row)
+                    await dispatch_row(conn, business_id, registry, row)
                 except Exception:  # noqa: BLE001 — un rând stricat nu oprește restul
                     log.exception("eroare neașteptată la dispatch outbox %s", row["id"])
                 handled += 1
     return handled
 
 
-async def run_dispatcher(pool, meta: MetaClient, *, idle_sleep: float = 2.0) -> None:
+async def run_dispatcher(pool, registry: ChannelSenderRegistry, *, idle_sleep: float = 2.0) -> None:
     """Bucla principală a dispatcher-ului (rulează până la anulare)."""
-    log.info("dispatcher pornit")
+    log.info("dispatcher pornit (canale: %s)", registry.kinds())
     while True:
-        handled = await dispatch_due(pool, meta)
+        handled = await dispatch_due(pool, registry)
         if handled == 0:
             await asyncio.sleep(idle_sleep)
+
+
+def build_registry(http: httpx.AsyncClient, settings) -> ChannelSenderRegistry:
+    """Construiește registrul de sender-e din config. Canalele fără credențiale
+    nu se înregistrează (rândurile lor → 'dead' cu log explicit)."""
+    registry = ChannelSenderRegistry()
+    if settings.meta_access_token:
+        registry.register("whatsapp", MetaClient(http, settings.meta_access_token))
+    # Telegram se adaugă în NX-62 (TelegramClient), tot aici.
+    return registry
 
 
 async def _main() -> None:
@@ -98,9 +119,9 @@ async def _main() -> None:
     settings = get_settings()
     pool = await get_pool()
     async with httpx.AsyncClient(timeout=15.0) as http:
-        meta = MetaClient(http, settings.meta_access_token)
+        registry = build_registry(http, settings)
         try:
-            await run_dispatcher(pool, meta)
+            await run_dispatcher(pool, registry)
         finally:
             await close_pool()
 
