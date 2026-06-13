@@ -18,57 +18,14 @@ sau malformat → listă goală.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 from typing import Any
+
+from src.channels.base import InboundEvent, StatusEvent
 
 # Tipurile Meta care poartă media (id-ul de media stă sub cheia omonimă).
 _MEDIA_TYPES = ("image", "audio", "video", "document", "sticker")
 
-
-@dataclass
-class InboundEvent:
-    """Un mesaj inbound NORMALIZAT (envelope neutru de canal), serializabil JSON.
-
-    Câmpuri agnostice de canal (NX-60) — worker-ul nu știe că vine de la Meta:
-      • channel_kind        — 'whatsapp' | 'telegram' | ...
-      • channel_account_id  — id-ul canalului RECEPTOR (phone_number_id la Meta)
-      • sender_external_id  — id-ul userului pe canal (wa_id la Meta)
-    `content_type` e tipul BRUT al canalului; normalizarea o face worker-ul.
-    `payload` păstrează mesajul brut (interactive, location, butoane)."""
-
-    channel_kind: str
-    channel_account_id: str
-    sender_external_id: str
-    provider_msg_id: str
-    content_type: str
-    timestamp: str | None = None
-    body: str | None = None
-    media_id: str | None = None
-    sender_name: str | None = None
-    payload: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"kind": "message", **asdict(self)}
-
-
-@dataclass
-class StatusEvent:
-    """Un update de status (delivered/read/failed/sent) pentru un mesaj OUTBOUND.
-
-    `provider_msg_id` = id-ul mesajului raportat (pe care l-am trimis noi).
-    NU se deduplică la webhook: 'delivered' și 'read' au același id — dedupe
-    pe id ar arunca statusuri legitime distincte."""
-
-    channel_kind: str
-    channel_account_id: str
-    provider_msg_id: str
-    status: str
-    timestamp: str | None = None
-    recipient_id: str | None = None
-    payload: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"kind": "status", **asdict(self)}
+__all__ = ["InboundEvent", "StatusEvent", "parse_webhook", "parse_statuses"]
 
 
 def _extract_body(msg: dict[str, Any], content_type: str) -> tuple[str | None, str | None]:

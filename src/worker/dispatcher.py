@@ -19,6 +19,7 @@ import logging
 import httpx
 
 from src.channels.base import ChannelSenderRegistry
+from src.channels.telegram.client import TelegramClient
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn
 from src.db.queries.messages import set_message_provider_id
@@ -110,7 +111,8 @@ def build_registry(http: httpx.AsyncClient, settings) -> ChannelSenderRegistry:
     registry = ChannelSenderRegistry()
     if settings.meta_access_token:
         registry.register("whatsapp", MetaClient(http, settings.meta_access_token))
-    # Telegram se adaugă în NX-62 (TelegramClient), tot aici.
+    if settings.telegram_bot_token:
+        registry.register("telegram", TelegramClient(http, settings.telegram_bot_token))
     return registry
 
 
