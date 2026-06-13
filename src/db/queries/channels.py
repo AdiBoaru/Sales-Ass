@@ -45,3 +45,34 @@ async def resolve_channel_by_phone(
 ) -> dict[str, str] | None:
     """Wrapper WhatsApp peste `resolve_channel` (compat)."""
     return await resolve_channel(conn, "whatsapp", phone_number_id)
+
+
+async def upsert_channel(
+    conn: asyncpg.Connection,
+    business_id: str,
+    kind: str,
+    provider_account_id: str,
+    *,
+    display_name: str | None = None,
+) -> dict:
+    """Creează/actualizează un canal (idempotent pe unique(kind, provider_account_id)).
+
+    Operație de ONBOARDING — a se rula cu rol ADMIN (postgres), NU bot_runtime:
+    `channels` e read-only pentru bot. Întoarce {id, created} (created=False dacă
+    rândul exista deja și a fost reactivat). Folosit de scripturile de seed."""
+    row = await conn.fetchrow(
+        """
+        insert into channels (business_id, kind, provider_account_id, display_name, status)
+        values ($1, $2, $3, $4, 'active')
+        on conflict (kind, provider_account_id) do update
+            set status = 'active',
+                business_id = excluded.business_id,
+                display_name = coalesce(excluded.display_name, channels.display_name)
+        returning id::text as id, (xmax = 0) as created
+        """,
+        business_id,
+        kind,
+        provider_account_id,
+        display_name,
+    )
+    return {"id": row["id"], "created": row["created"]}
