@@ -124,3 +124,29 @@ async def get_recent_messages(
         )
         for r in rows
     ]
+
+
+async def set_message_provider_id(
+    conn: asyncpg.Connection,
+    business_id: str,
+    message_id: str,
+    provider_msg_id: str,
+    *,
+    status: str = "sent",
+) -> None:
+    """Leagă wamid-ul Meta de mesajul outbound, după trimitere (dispatcher).
+
+    UPDATE pe (business_id, id) — pe tabela partiționată nu putem prune fără
+    created_at, dar volumul per dispatch e mic, acceptabil. Statusul devine 'sent';
+    delivered/read vin ulterior din webhook-ul de status pe provider_msg_id."""
+    await conn.execute(
+        """
+        update messages
+           set provider_msg_id = $3, status = $4
+         where business_id = $1 and id = $2
+        """,
+        business_id,
+        message_id,
+        provider_msg_id,
+        status,
+    )
