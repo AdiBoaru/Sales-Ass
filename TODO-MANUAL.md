@@ -34,7 +34,7 @@ Deblochează tot WhatsApp-ul. Fără el, nimic din webhook/mesaje nu se poate te
 - [ ] Trimite un "hello world" din Graph API Explorer către telefonul tău (confirmă că merge)
 - [ ] Pune în `.env` local: `META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_PHONE_NUMBER_ID`
 - [ ] Dă-i lui Claude **Phone Number ID** → inserează rândul în `channels` pentru
-      business-ul demo (fără el, worker-ul nu poate mapa mesajele live la tenant)
+  business-ul demo (fără el, worker-ul nu poate mapa mesajele live la tenant)
 
 ### T017 — OpenAI: chei + limite de spend  ·  ~0.5h  ⬅️ **BLOCKER pe drumul critic**
 
@@ -43,9 +43,15 @@ lucru care blochează G3 (triaj + agent live) și `embed_products` — codul de
 pipeline e gata să-l primească.
 
 - [ ] platform.openai.com → 2 proiecte: `nativx-dev`, `nativx-prod` (cheie per proiect)
-- [ ] Billing → Usage limits: hard limit (ex. 50 USD dev / 200 USD prod) + alerte 50%/80%
-- [ ] Test 1 apel pe fiecare model: `gpt-5.4-mini`, `gpt-5.4-nano`, `text-embedding-3-small`
-- [ ] `OPENAI_API_KEY` (dev) în `.env` la tine + junior
+- [ ] **Billing → Usage limits — limite MICI inițial (⛔ ÎNCĂ NEPUSE, 2026-06-13):**
+      hard limit **$10 dev** + alertă email la **$5** (50%); prod lăsat nesetat până la
+      primul client plătitor. Decizie: mic acum, creștem la consumul real. **De pus
+      ÎNAINTE de testarea G3 mai grea** (acum botul e echo, nu apelează încă LLM).
+- [X] ✅ Modelele confirmate că EXISTĂ în cont (din pagina de rate limits, 2026-06-13):
+      `gpt-5.4-mini`, `gpt-5.4-nano`, `text-embedding-3-small` — riscul de 404 eliminat.
+- [ ] Test 1 apel REAL pe fiecare model (script `scripts/check_openai.py` — confirmă
+      cheia + că apelurile chiar răspund; de rulat acum că e cheia în `.env`)
+- [X] ✅ `OPENAI_API_KEY` (dev) pus în `.env` (Adi, 2026-06-13). Junior: încă de pus.
 
 ### T018 — Supabase: connection strings + PITR  ·  ~0.5h
 
@@ -78,8 +84,8 @@ Securitate P0-A din audit, AMÂNAT conștient. Azi worker-ul intră ca `postgres
 Ca să testăm botul vorbind direct pe Telegram (pe VPS), fără Meta/HTTPS/tunel.
 WhatsApp rămâne canalul primar — Telegram e DOAR pentru iterare rapidă (NX-61/62/63).
 
-- [ ] Telegram → caută **@BotFather** → `/newbot` → nume + username → copiază **tokenul**
-- [ ] `TELEGRAM_BOT_TOKEN=...` în `.env` (pe VPS; și local dacă testezi)
+- [X] Telegram → caută **@BotFather** → `/newbot` → nume + username → copiază **tokenul**
+- [X] `TELEGRAM_BOT_TOKEN=...` în `.env` (pe VPS; și local dacă testezi)
 - [ ] (long polling → NU e nevoie de setWebhook, HTTPS sau tunel)
 - [ ] După ce Claude livrează NX-61/62/63 + seed-ul canalului: scrie „salut" botului → aștepți echo
 
@@ -147,9 +153,9 @@ Expune localhost:8000 spre Meta prin HTTPS public, fără deploy.
 - [ ] **CODEOWNERS review:** bifează "Require review from Code Owners" (forțează review-ul tău pe `prompts/` și `docs/*.sql`)
 - [ ] (Opțional) "Allow specified actors to bypass" → adaugă-te pe tine dacă vrei 1-approval pentru junior dar bypass pentru tine
 - [ ] **Auto-delete branches:** Settings → General → bifează "Automatically delete
-      head branches" — curăță branch-urile după merge și reduce riscul de
-      commit-uri orfane (s-a întâmplat de 3 ori: #15, #17, #23). Pe cele ~20
-      de branch-uri vechi deja merged: spune-i lui Claude să le șteargă.
+  head branches" — curăță branch-urile după merge și reduce riscul de
+  commit-uri orfane (s-a întâmplat de 3 ori: #15, #17, #23). Pe cele ~20
+  de branch-uri vechi deja merged: spune-i lui Claude să le șteargă.
 
 ---
 
