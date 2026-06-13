@@ -8,15 +8,15 @@ _Ultima actualizare: 2026-06-13_
 
 ---
 
-## 🎯 Drumul critic pentru „Telegram e2e live" (cel mai rapid test)
+## 🎯 „Telegram e2e live" — ✅ ATINS (2026-06-13, LOCAL pe laptop)
 
-În ordine, doar partea ta (Claude livrează codul în paralel):
-1. **TG-TEST** — token de la BotFather (~15 min)
-2. **Deploy VPS** — Docker + `.env` (cu `REDIS_PASSWORD` generat + token) + `docker compose up`
-3. rulezi seed-ul canalului (după ce Claude livrează NX-63) → scrii botului → echo
+Botul **@solechat_bot** răspunde echo pe Telegram, cu stack-ul rulând local prin
+Docker Desktop (WSL2). Lanțul complet `poller → worker → dispatcher → Telegram`
+e dovedit pe infrastructură reală.
 
-Restul (T013/T015/T016 WhatsApp, T017 OpenAI) NU blochează testul Telegram pe echo.
-T017 (cheia OpenAI) e necesar doar ca botul să răspundă „inteligent", nu doar echo.
+Ce a mai rămas (OPȚIONAL / pasul următor):
+- **Deploy VPS** (secțiunea de mai jos) — ca botul să ruleze CONTINUU, nu doar cât e laptopul pornit.
+- **T017 spend limit** — înainte de G3 (botul „inteligent", nu doar echo).
 
 ---
 
@@ -49,8 +49,8 @@ pipeline e gata să-l primească.
       ÎNAINTE de testarea G3 mai grea** (acum botul e echo, nu apelează încă LLM).
 - [X] ✅ Modelele confirmate că EXISTĂ în cont (din pagina de rate limits, 2026-06-13):
       `gpt-5.4-mini`, `gpt-5.4-nano`, `text-embedding-3-small` — riscul de 404 eliminat.
-- [ ] Test 1 apel REAL pe fiecare model (script `scripts/check_openai.py` — confirmă
-      cheia + că apelurile chiar răspund; de rulat acum că e cheia în `.env`)
+- [X] ✅ Test 1 apel REAL pe fiecare model — `scripts/check_openai.py` rulat,
+      toate 3 modelele răspund (Adi, 2026-06-13).
 - [X] ✅ `OPENAI_API_KEY` (dev) pus în `.env` (Adi, 2026-06-13). Junior: încă de pus.
 
 ### T018 — Supabase: connection strings + PITR  ·  ~0.5h
@@ -86,15 +86,19 @@ WhatsApp rămâne canalul primar — Telegram e DOAR pentru iterare rapidă (NX-
 
 - [X] Telegram → caută **@BotFather** → `/newbot` → nume + username → copiază **tokenul**
 - [X] `TELEGRAM_BOT_TOKEN=...` în `.env` (pe VPS; și local dacă testezi)
-- [ ] (long polling → NU e nevoie de setWebhook, HTTPS sau tunel)
-- [ ] După ce Claude livrează NX-61/62/63 + seed-ul canalului: scrie „salut" botului → aștepți echo
+- [X] (long polling → NU e nevoie de setWebhook, HTTPS sau tunel)
+- [X] ✅ Echo confirmat: **@solechat_bot** răspunde pe Telegram (LOCAL, 2026-06-13)
 
 ---
 
-## 🚀 Deploy pe VPS (pentru testul Telegram) · ~1h  ⬅️ pasul care lipsea
+## 🚀 Deploy pe VPS (rulare CONTINUĂ) · ~1h
 
-Aici rulezi efectiv proiectul ca să poți vorbi cu botul. DB rămâne Supabase remote
-(NU instalezi Postgres pe VPS). Depinde de: TG-TEST (tokenul) + un VPS cu Docker.
+> ℹ️ Echo-ul a fost deja testat **local** (Docker Desktop + WSL2 pe laptop, 2026-06-13).
+> VPS-ul e pentru ca botul să ruleze non-stop, independent de laptop. Pașii de mai jos
+> (REDIS_PASSWORD, seed canal, compose) sunt deja validați local — se repetă pe VPS.
+> ⚠️ Parola `SUPABASE_DB_URL` trebuie percent-encoded (`@`→`%40`) — vezi README troubleshooting.
+
+DB rămâne Supabase remote (NU instalezi Postgres pe VPS). Depinde de: un VPS cu Docker.
 
 - [ ] VPS cu **Docker + docker compose** instalate (Ubuntu e ok)
 - [ ] Clonează repo-ul pe VPS (deploy key sau PAT GitHub — repo-ul e privat)
