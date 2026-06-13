@@ -3,15 +3,18 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from src.webhook.app import app
+from src.webhook.app import app, get_verify_token
 
 VERIFY_TOKEN = "test-verify-token-12345"
 
 
 @pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setenv("META_VERIFY_TOKEN", VERIFY_TOKEN)
-    return TestClient(app)
+def client():
+    """Token-ul de verificare e injectat prin dependency override (ca app_secret),
+    nu prin env — sursa unică de config e `settings` (vezi config.py)."""
+    app.dependency_overrides[get_verify_token] = lambda: VERIFY_TOKEN
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 def test_verify_correct_token_returns_challenge(client):
@@ -70,16 +73,19 @@ def test_verify_wrong_mode_returns_403(client):
     assert resp.status_code == 403
 
 
-def test_verify_token_not_configured_returns_403(monkeypatch):
-    """Failure: META_VERIFY_TOKEN nesetat → 403 (nu acceptă orice)."""
-    monkeypatch.delenv("META_VERIFY_TOKEN", raising=False)
-    client = TestClient(app)
-    resp = client.get(
-        "/webhook",
-        params={
-            "hub.mode": "subscribe",
-            "hub.verify_token": "",
-            "hub.challenge": "x",
-        },
-    )
-    assert resp.status_code == 403
+def test_verify_token_not_configured_returns_403():
+    """Failure: META_VERIFY_TOKEN nesetat (gol) → 403 (nu acceptă orice)."""
+    app.dependency_overrides[get_verify_token] = lambda: ""
+    try:
+        client = TestClient(app)
+        resp = client.get(
+            "/webhook",
+            params={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "",
+                "hub.challenge": "x",
+            },
+        )
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.clear()

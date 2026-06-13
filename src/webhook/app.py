@@ -7,7 +7,6 @@ POST /webhook → mesaje inbound: verifică semnătura, deduplică (Redis layer 
 """
 
 import json
-import os
 
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import PlainTextResponse
@@ -29,6 +28,10 @@ def get_app_secret() -> str:
     return get_settings().meta_app_secret
 
 
+def get_verify_token() -> str:
+    return get_settings().meta_verify_token
+
+
 async def redis_dep() -> Redis:
     return await get_redis()
 
@@ -41,14 +44,14 @@ def verify_webhook(
     hub_mode: str | None = Query(default=None, alias="hub.mode"),
     hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
     hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
+    expected: str = Depends(get_verify_token),
 ) -> Response:
     """Handshake-ul de verificare Meta.
 
     Meta trimite GET cu hub.mode=subscribe, hub.verify_token, hub.challenge.
-    Dacă token-ul corespunde META_VERIFY_TOKEN → întoarce challenge-ul ca text
-    BRUT (nu JSON — Meta compară exact). Altfel → 403.
+    Dacă token-ul corespunde META_VERIFY_TOKEN (din settings) → întoarce
+    challenge-ul ca text BRUT (nu JSON — Meta compară exact). Altfel → 403.
     """
-    expected = os.environ.get("META_VERIFY_TOKEN")
     if hub_mode == "subscribe" and expected and hub_verify_token == expected:
         return PlainTextResponse(hub_challenge or "", status_code=200)
     return PlainTextResponse("forbidden", status_code=403)
