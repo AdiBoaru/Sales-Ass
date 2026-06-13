@@ -437,13 +437,13 @@ nativx-assistant/
 │   │   ├── app.py               ← FastAPI: GET verify + POST inbound (ambele LIVE)
 │   │   ├── signature.py         ← verificare X-Hub-Signature-256 (corp brut)
 │   │   ├── meta.py              ← parser payload Meta → InboundEvent
-│   │   ├── status.py            ← TODO: delivered/read/failed → messages.status
+│   │   ├── status.py            ← LIVE: delivered/read/failed → messages.status (#26)
 │   │   └── orders.py            ← TODO: webhook comenzi → match ref_code → atribuire
 │   ├── worker/
-│   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK), rutare pe channel_kind
-│   │   ├── processor.py         ← handle_turn: dedupe L2 → contact/conv → pipeline → outbox
+│   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK) + entrypoint __main__
+│   │   ├── processor.py         ← handle_turn: dedupe L2 → contact/conv → pipeline → outbox (+log per-tur)
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
-│   │   ├── dispatcher.py        ← outbox → ChannelSender (Meta/Telegram), retry idempotent
+│   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (Meta/Telegram), retry idempotent
 │   │   └── stages/             ← TODO: gates, free_layers, triage, context_builder,
 │   │                             agent, validator, sender (acum: echo_stage în runner)
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
@@ -483,13 +483,14 @@ nativx-assistant/
 **business_id**: `6098812a-50fc-44bd-a1ba-bc77e6399158`
 **Slug**: `nativex-demo` (name „Sole Demo")
 **Vertical**: `beauty`
-**Date reale în Supabase**: 500 produse seedate. ⚠️ `product_embeddings` = 0
-(produsele NU sunt încă embed-uite — `search_products` semantic merge după jobul
-de embed; blocat de T017/cheia OpenAI). `faqs` = 0 deocamdată.
-⚠️ `channels` = 0 — pentru e2e LIVE trebuie inserat un canal al demo-ului:
-- WhatsApp: `kind='whatsapp'`, `provider_account_id` = META_PHONE_NUMBER_ID (T013).
-- Telegram (TEST, mai rapid): `kind='telegram'`, `provider_account_id` = bot id
-  (seed NX-63 din TELEGRAM_BOT_TOKEN). Pentru testul pe VPS vorbind direct cu botul.
+**Date reale în Supabase** (verificat 2026-06-13): 500 produse seedate.
+⚠️ `product_embeddings` = 0 (produsele NU sunt încă embed-uite — `search_products`
+semantic merge după jobul `embed_products`, încă de scris; **deblocat** acum că
+cheia OpenAI e validată). ⚠️ `products.product_url` = 0 (toate NULL → agentul n-are
+linkuri de produs; gaură de DATE, nu de cod). `ai_summary` = 500 (templat). `faqs` = 0.
+**Canale**: ✅ Telegram seedat — `@solechat_bot` (kind='telegram', provider_account_id
+= bot id, prin `scripts/seed_telegram_channel.py`). **Echo e2e LIVE confirmat** pe
+Telegram (long polling, fără HTTPS). WhatsApp încă 0 — cere T013 (Meta phone_number_id).
 Testele integration își creează channel throwaway (tranzacție rollback-uită).
 
 Folosește acest `business_id` pentru toate testele locale.

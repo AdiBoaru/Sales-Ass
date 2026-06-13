@@ -79,13 +79,18 @@ ruff check . && ruff format --check .
 ## Rulare stack (opțional, necesită Docker)
 
 ```bash
-docker compose up      # redis + webhook (hot reload) + worker
+docker compose up      # redis + webhook + worker + dispatcher + telegram-poller
 ```
-Postgres nu e în compose (e Supabase). Fără Docker, rulezi direct:
+Postgres nu e în compose (e Supabase). Pe Win10 Home, Docker Desktop cere backend
+**WSL2** (vezi Troubleshooting). Fără Docker, rulezi procesele direct:
 ```bash
-uvicorn src.webhook.app:app --reload      # webhook
-python -m src.worker.consumer             # worker (când există)
+uvicorn src.webhook.app:app --reload      # webhook (inbound WhatsApp)
+python -m src.worker.consumer             # worker (consumer → pipeline → outbox)
+python -m src.worker.dispatcher           # dispatcher (outbox → canal)
+python -m src.channels.telegram.poller    # poller Telegram (long polling, TEST)
 ```
+> ⚠️ Procesele directe au nevoie de un Redis accesibil (`REDIS_URL`). `docker
+> compose` îl pornește pe `redis`; local fără Docker ai nevoie de un Redis separat.
 
 ## Canal de TEST: Telegram (cel mai rapid e2e — fără HTTPS)
 
@@ -131,5 +136,6 @@ Pune `https://<url-tunel>/webhook` + verify token în Meta config → Verify and
 | `getaddrinfo failed` intermitent pe **Windows** | Bug asyncpg/ProactorEventLoop. Codul (`connection.py`, scripturile) rezolvă IPv4 sincron + conectează pe IP — deja gestionat. |
 | `UnicodeEncodeError` în consolă (Windows) | Output cu diacritice pe cp1252. Scripturile fac `sys.stdout.reconfigure(encoding="utf-8")`. |
 | `docker: command not found` | Docker nu e instalat — opțional. Rulează direct cu uvicorn/python sau folosește doar testele. |
+| `wsl --install` → `The system cannot find the file specified` (Win10) | Feature-urile WSL nu-s activate. Admin PowerShell: `dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart` + `…VirtualMachinePlatform…` → reboot → kernel de la aka.ms/wsl2kernel → `wsl --set-default-version 2`. Docker Desktop pe Win10 **Home** cere backend WSL2. |
 | Port 8000 ocupat | Oprește procesul care îl folosește sau schimbă portul în comanda uvicorn. |
 | `.env` lipsă / variabilă lipsă | `cp .env.example .env` și completează. `SUPABASE_DB_URL` e obligatoriu pentru integration. |
