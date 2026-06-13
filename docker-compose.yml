@@ -60,5 +60,17 @@ services:
       redis:
         condition: service_healthy
 
+  # Canal de TEST (NX-61): long polling Telegram → stream inbound. Pornește doar
+  # dacă TELEGRAM_BOT_TOKEN e setat (altfel iese imediat, fără să blocheze restul).
+  telegram-poller:
+    build: .
+    command: python -m src.channels.telegram.poller
+    volumes:
+      - ./src:/app/src
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   redis-data:

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # --- Redis ---
     redis_url: str = Field(default="redis://redis:6379/0", validation_alias="REDIS_URL")
 
+    # --- Telegram (canal de TEST — long polling) ---
+    telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
+
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")

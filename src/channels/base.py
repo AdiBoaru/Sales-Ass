@@ -1,15 +1,58 @@
-"""Contractul de canal pentru TRIMITERE (marginea de outbound).
+"""Contractul de canal — envelope neutru (inbound) + ChannelSender (outbound).
 
-Pipeline-ul și dispatcher-ul sunt agnostice de canal: dispatcher-ul ia un rând din
-`outbox`, citește `channel_kind` și cere registrului clientul potrivit. Adăugarea
-unui canal nou = o clasă care implementează `ChannelSender` + o înregistrare în
-registru — fără atingerea worker-ului sau a logicii de coadă/retry (NX-60).
+Marginile sistemului (NX-60). Pipeline-ul și worker-ul sunt agnostice de canal:
+  • INTRARE: fiecare canal (Meta webhook, Telegram poller, ...) parsează formatul
+    lui și produce un `InboundEvent`/`StatusEvent` NEUTRU pe stream.
+  • IEȘIRE: dispatcher-ul citește `channel_kind` din outbox și cere registrului
+    `ChannelSender` potrivit. Adăugarea unui canal = o clasă + o înregistrare.
 
-Simetric, marginea de INTRARE (parser + verificare per canal) produce un envelope
-neutru pe stream (vezi webhook/meta.py, channels/telegram/poller.py).
+Câmpuri neutre: `channel_account_id` = id-ul canalului (phone_number_id la Meta,
+bot id la Telegram); `sender_external_id` = id-ul userului pe canal (wa_id / chat_id).
 """
 
-from typing import Protocol, runtime_checkable
+from dataclasses import asdict, dataclass, field
+from typing import Any, Protocol, runtime_checkable
+
+
+@dataclass
+class InboundEvent:
+    """Un mesaj inbound NORMALIZAT (envelope neutru de canal), serializabil JSON.
+
+    `content_type` e tipul BRUT al canalului; normalizarea la valorile permise de
+    `messages.content_type` o face worker-ul. `payload` păstrează mesajul brut."""
+
+    channel_kind: str
+    channel_account_id: str
+    sender_external_id: str
+    provider_msg_id: str
+    content_type: str
+    timestamp: str | None = None
+    body: str | None = None
+    media_id: str | None = None
+    sender_name: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "message", **asdict(self)}
+
+
+@dataclass
+class StatusEvent:
+    """Un update de status (delivered/read/failed/sent) pentru un mesaj OUTBOUND.
+
+    `provider_msg_id` = id-ul mesajului raportat (pe care l-am trimis noi). NU se
+    deduplică la intrare: 'delivered' și 'read' au același id."""
+
+    channel_kind: str
+    channel_account_id: str
+    provider_msg_id: str
+    status: str
+    timestamp: str | None = None
+    recipient_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "status", **asdict(self)}
 
 
 @runtime_checkable
