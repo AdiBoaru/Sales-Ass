@@ -239,6 +239,20 @@ async def test_post_status_not_deduped(client_and_redis):
     assert await fake.xlen(STREAM_INBOUND) == 2
 
 
+async def test_post_redis_down_returns_503(client_and_redis):
+    """Redis indisponibil la enqueue → 503 (Meta reîncearcă), nu 500/pierdere tăcută."""
+    from redis.exceptions import ConnectionError as RedisConnError
+
+    ac, fake = client_and_redis
+
+    async def boom(*a, **k):
+        raise RedisConnError("redis down")
+
+    fake.set = boom  # seen_before → SET NX eșuează
+    resp = await _post(ac, _text_payload())
+    assert resp.status_code == 503
+
+
 async def test_post_bad_json_signed_is_400(client_and_redis):
     ac, fake = client_and_redis
     body = b"not json at all"

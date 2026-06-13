@@ -12,6 +12,7 @@ import os
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import PlainTextResponse
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from src.config import get_settings
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
@@ -82,12 +83,17 @@ async def receive_webhook(
     except json.JSONDecodeError:
         return PlainTextResponse("bad request", status_code=400)
 
-    for event in parse_webhook(payload):
-        if await seen_before(redis, event.phone_number_id, event.provider_msg_id):
-            continue  # retry Meta → deja văzut, nu re-enqueua
-        await enqueue_inbound(redis, event.to_dict())
+    try:
+        for event in parse_webhook(payload):
+            if await seen_before(redis, event.phone_number_id, event.provider_msg_id):
+                continue  # retry Meta → deja văzut, nu re-enqueua
+            await enqueue_inbound(redis, event.to_dict())
 
-    for status in parse_statuses(payload):
-        await enqueue_inbound(redis, status.to_dict())
+        for status in parse_statuses(payload):
+            await enqueue_inbound(redis, status.to_dict())
+    except RedisError:
+        # Redis indisponibil / memorie plină (noeviction → XADD eroare). NU pierdem
+        # tăcut: 503 → Meta reîncearcă, iar la retry NX-51 deduplică ce-a prins deja.
+        return PlainTextResponse("service unavailable", status_code=503)
 
     return PlainTextResponse("ok", status_code=200)
