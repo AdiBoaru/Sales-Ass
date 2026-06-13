@@ -84,6 +84,7 @@ async def run_poller(client: TelegramClient, redis, account_id: str) -> None:
 
 async def _main() -> None:
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
     settings = get_settings()
     if not settings.telegram_bot_token:
         log.error("TELEGRAM_BOT_TOKEN lipsește — poller-ul nu pornește")

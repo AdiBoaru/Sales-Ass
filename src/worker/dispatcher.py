@@ -74,6 +74,7 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
         await mark_sent(conn, business_id, row["id"], sent_message_id=payload.get("message_id"))
         if payload.get("message_id"):
             await set_message_provider_id(conn, business_id, payload["message_id"], provider_id)
+    log.info("outbox %s trimis pe %s (provider_msg_id=%s)", row["id"], channel_kind, provider_id)
     return "sent"
 
 
@@ -118,6 +119,7 @@ def build_registry(http: httpx.AsyncClient, settings) -> ChannelSenderRegistry:
 
 async def _main() -> None:
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
     settings = get_settings()
     pool = await get_pool()
     async with httpx.AsyncClient(timeout=15.0) as http:

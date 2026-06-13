@@ -13,17 +13,19 @@ Defer (follow-up, peste acest schelet):
   • claim mesaje „stuck" via XAUTOCLAIM (consumer mort)
 """
 
+import asyncio
 import json
 import logging
+import socket
 
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
-from src.db.connection import admin_conn, tenant_conn
+from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
-from src.redis_bus import STREAM_INBOUND
+from src.redis_bus import STREAM_INBOUND, close_redis, get_redis
 from src.worker.processor import handle_turn
 
 log = logging.getLogger(__name__)
@@ -109,3 +111,24 @@ async def run_consumer(pool, redis: Redis, consumer_name: str) -> None:
     log.info("consumer %s pornit pe stream %s", consumer_name, STREAM_INBOUND)
     while True:
         await consume_once(pool, redis, consumer_name)
+
+
+async def _main() -> None:
+    """Entrypoint proces worker: `python -m src.worker.consumer`.
+
+    Numele de consumer = hostname-ul (în container = id-ul containerului) → unic
+    per replică, ca XREADGROUP să distribuie mesajele corect între workeri."""
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
+    pool = await get_pool()
+    redis = await get_redis()
+    consumer_name = f"worker-{socket.gethostname()}"
+    try:
+        await run_consumer(pool, redis, consumer_name)
+    finally:
+        await close_redis()
+        await close_pool()
+
+
+if __name__ == "__main__":
+    asyncio.run(_main())
