@@ -15,7 +15,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.redis_bus import STREAM_INBOUND
 from src.webhook.app import app, get_app_secret, redis_dep
-from src.webhook.meta import parse_webhook
+from src.webhook.meta import parse_statuses, parse_webhook
 from src.webhook.signature import verify_meta_signature
 
 SECRET = "test-app-secret"
@@ -130,6 +130,20 @@ def test_parse_statuses_only_is_empty():
     assert parse_webhook(_statuses_payload()) == []
 
 
+def test_parse_statuses_extracts_delivery():
+    events = parse_statuses(_statuses_payload())
+    assert len(events) == 1
+    st = events[0]
+    assert st.phone_number_id == "PNID1"
+    assert st.provider_msg_id == "wamid.X"
+    assert st.status == "delivered"
+    assert st.to_dict()["kind"] == "status"
+
+
+def test_parse_statuses_on_message_payload_is_empty():
+    assert parse_statuses(_text_payload()) == []
+
+
 def test_parse_media_with_caption():
     payload = _text_payload()
     msg = payload["entry"][0]["changes"][0]["value"]["messages"][0]
@@ -203,11 +217,26 @@ async def test_post_duplicate_deduped(client_and_redis):
     assert await fake.xlen(STREAM_INBOUND) == 1
 
 
-async def test_post_statuses_only_acked_no_enqueue(client_and_redis):
+async def test_post_statuses_enqueued_with_kind(client_and_redis):
     ac, fake = client_and_redis
     resp = await _post(ac, _statuses_payload())
     assert resp.status_code == 200
-    assert await fake.xlen(STREAM_INBOUND) == 0
+    assert await fake.xlen(STREAM_INBOUND) == 1
+    entries = await fake.xrange(STREAM_INBOUND)
+    data = json.loads(entries[0][1]["data"])
+    assert data["kind"] == "status"
+    assert data["status"] == "delivered"
+    assert data["provider_msg_id"] == "wamid.X"
+
+
+async def test_post_status_not_deduped(client_and_redis):
+    """delivered apoi read pe același wamid → 2 evenimente (dedupe NU se aplică)."""
+    ac, fake = client_and_redis
+    await _post(ac, _statuses_payload())  # delivered
+    payload = _statuses_payload()
+    payload["entry"][0]["changes"][0]["value"]["statuses"][0]["status"] = "read"
+    await _post(ac, payload)
+    assert await fake.xlen(STREAM_INBOUND) == 2
 
 
 async def test_post_bad_json_signed_is_400(client_and_redis):
