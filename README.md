@@ -87,6 +87,21 @@ uvicorn src.webhook.app:app --reload      # webhook
 python -m src.worker.consumer             # worker (când există)
 ```
 
+## Canal de TEST: Telegram (cel mai rapid e2e — fără HTTPS)
+
+Pentru a testa botul vorbind direct cu el, fără birocrația Meta. Long polling →
+niciun webhook public / tunel / TLS. WhatsApp rămâne canalul primar de producție.
+
+```bash
+# 1. token de la @BotFather (/newbot) → în .env:  TELEGRAM_BOT_TOKEN=...
+# 2. seed-ul canalului demo (validează tokenul + inserează rândul channels):
+python scripts/seed_telegram_channel.py
+# 3. pornește stack-ul (poller-ul Telegram + worker + dispatcher + redis):
+docker compose up -d
+# 4. scrie „salut" botului pe Telegram → primești echo
+```
+Pașii pe VPS sunt în `TODO-MANUAL.md` (secțiunea Deploy VPS).
+
 ## Webhook live de la Meta (după setup Meta — T013)
 
 ```bash
