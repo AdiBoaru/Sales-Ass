@@ -127,6 +127,7 @@ Pune `https://<url-tunel>/webhook` + verify token în Meta config → Verify and
 |---|---|
 | `getaddrinfo failed` la conectare DB | Folosești conexiunea directă Supabase (IPv6-only). Treci pe **Session pooler**. |
 | `password authentication failed` | Parolă greșită în `SUPABASE_DB_URL`, sau conține caractere care strică URL-ul (resetează la una alfanumerică în Supabase). |
+| `socket.gaierror: Name or service not known` la worker/dispatcher **în Docker** | Parola din `SUPABASE_DB_URL` are caractere speciale (`@`, `/`...) **neescapate**. Pe Windows merge (urlparse tolerează, split la ultimul `@`), dar asyncpg în container parsează greșit host-ul → „DNS broken" fals. Fix: **percent-encode parola** (`@`→`%40` etc.). |
 | `getaddrinfo failed` intermitent pe **Windows** | Bug asyncpg/ProactorEventLoop. Codul (`connection.py`, scripturile) rezolvă IPv4 sincron + conectează pe IP — deja gestionat. |
 | `UnicodeEncodeError` în consolă (Windows) | Output cu diacritice pe cp1252. Scripturile fac `sys.stdout.reconfigure(encoding="utf-8")`. |
 | `docker: command not found` | Docker nu e instalat — opțional. Rulează direct cu uvicorn/python sau folosește doar testele. |
