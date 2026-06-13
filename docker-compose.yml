@@ -1,14 +1,29 @@
-# Mediu de dev: Redis + webhook (hot reload) + worker.
+# Mediu de dev: Redis + webhook (hot reload) + worker + dispatcher.
 # Postgres NU e local — e Supabase remote (SUPABASE_DB_URL din .env).
 # Pornire: docker compose up
+#
+# Redis (NX-02): durabil + securizat.
+#  • --appendonly yes --appendfsync everysec → un restart nu pierde mesaje în zbor
+#  • --requirepass → fără auth nu se conectează nimeni la backbone
+#  • --maxmemory-policy noeviction → la presiune de memorie, XADD dă eroare
+#    (webhook → 503, Meta reîncearcă, NX-51 deduplică) în loc de pierdere TĂCUTĂ
+#  • fără `ports:` publicat → Redis e doar pe rețeaua internă compose
+#    (pentru redis-cli: `docker compose exec redis redis-cli -a $REDIS_PASSWORD`)
 
 services:
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory-policy noeviction
+      --save ""
+    volumes:
+      - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -34,3 +49,16 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  dispatcher:
+    build: .
+    command: python -m src.worker.dispatcher
+    volumes:
+      - ./src:/app/src
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
