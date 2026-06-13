@@ -30,14 +30,14 @@ class MetaClient:
         self._token = token
         self._base = f"{base_url.rstrip('/')}/{version}"
 
-    async def send_text(self, phone_number_id: str, to: str, text: str) -> str:
+    async def send_text(self, account_id: str, to: str, text: str) -> str:
         """Trimite un mesaj text. Întoarce wamid-ul (provider_msg_id) de la Meta.
 
-        `phone_number_id` = numărul EXPEDITOR (canalul). `to` = destinatarul (wa_id).
-        Ridică la status HTTP de eroare (raise_for_status) sau dacă răspunsul nu
-        conține un message id."""
+        Implementează `ChannelSender` (NX-60): `account_id` = numărul EXPEDITOR
+        (phone_number_id), `to` = destinatarul (wa_id). Ridică la status HTTP de
+        eroare (raise_for_status) sau dacă răspunsul nu conține un message id."""
         resp = await self._http.post(
-            f"{self._base}/{phone_number_id}/messages",
+            f"{self._base}/{account_id}/messages",
             headers={"Authorization": f"Bearer {self._token}"},
             json={
                 "messaging_product": "whatsapp",

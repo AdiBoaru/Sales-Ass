@@ -21,7 +21,7 @@ from redis.exceptions import ResponseError
 
 from src.db.connection import admin_conn, tenant_conn
 from src.db.queries.businesses import load_business
-from src.db.queries.channels import resolve_channel_by_phone
+from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
 from src.redis_bus import STREAM_INBOUND
 from src.worker.processor import handle_turn
@@ -41,12 +41,20 @@ async def ensure_group(redis: Redis) -> None:
 
 
 async def process_event(pool, redis: Redis, event: dict) -> None:
-    """Rezolvă tenantul și rutează evenimentul după `kind` (message | status)."""
-    phone_number_id = event.get("phone_number_id", "")
+    """Rezolvă tenantul și rutează evenimentul după `kind` (message | status).
+
+    `channel_kind` (whatsapp|telegram|...) = transportul; `kind` (message|status)
+    = tipul de envelope. Rezolvarea tenantului e comună tuturor canalelor."""
+    channel_kind = event.get("channel_kind", "whatsapp")
+    channel_account_id = event.get("channel_account_id", "")
     async with admin_conn(pool) as conn:
-        channel = await resolve_channel_by_phone(conn, phone_number_id)
+        channel = await resolve_channel(conn, channel_kind, channel_account_id)
     if channel is None:
-        log.warning("canal necunoscut pentru phone_number_id=%s — ignorat", phone_number_id)
+        log.warning(
+            "canal necunoscut: kind=%s account_id=%s — ignorat",
+            channel_kind,
+            channel_account_id,
+        )
         return
 
     business_id = channel["business_id"]

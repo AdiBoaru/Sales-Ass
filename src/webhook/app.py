@@ -65,7 +65,7 @@ async def receive_webhook(
     Pași (toți rapizi, fără LLM, fără DB):
       1. verifică X-Hub-Signature-256 peste corpul BRUT → 403 la eșec
       2. parsează mesaje inbound + update-uri de status
-      3. mesaje: dedupe layer 1 (Redis SET NX) pe (phone_number_id, wamid)
+      3. mesaje: dedupe layer 1 (Redis SET NX) pe (channel_account_id, provider_msg_id)
       4. XADD pe stream-ul de procesare (mesaje + statusuri, cu `kind`)
       5. ACK 200 imediat (Meta oprește retry-ul; restul e async în worker)
 
@@ -85,7 +85,7 @@ async def receive_webhook(
 
     try:
         for event in parse_webhook(payload):
-            if await seen_before(redis, event.phone_number_id, event.provider_msg_id):
+            if await seen_before(redis, event.channel_account_id, event.provider_msg_id):
                 continue  # retry Meta → deja văzut, nu re-enqueua
             await enqueue_inbound(redis, event.to_dict())
 

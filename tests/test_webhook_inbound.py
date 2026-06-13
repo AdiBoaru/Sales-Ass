@@ -118,12 +118,13 @@ def test_parse_text_message():
     events = parse_webhook(_text_payload(body="ce preț are X?"))
     assert len(events) == 1
     ev = events[0]
-    assert ev.phone_number_id == "PNID1"
-    assert ev.wa_id == "40712345678"
+    assert ev.channel_kind == "whatsapp"
+    assert ev.channel_account_id == "PNID1"
+    assert ev.sender_external_id == "40712345678"
     assert ev.provider_msg_id == "wamid.AAA"
     assert ev.content_type == "text"
     assert ev.body == "ce preț are X?"
-    assert ev.profile_name == "Ana"
+    assert ev.sender_name == "Ana"
 
 
 def test_parse_statuses_only_is_empty():
@@ -134,7 +135,8 @@ def test_parse_statuses_extracts_delivery():
     events = parse_statuses(_statuses_payload())
     assert len(events) == 1
     st = events[0]
-    assert st.phone_number_id == "PNID1"
+    assert st.channel_kind == "whatsapp"
+    assert st.channel_account_id == "PNID1"
     assert st.provider_msg_id == "wamid.X"
     assert st.status == "delivered"
     assert st.to_dict()["kind"] == "status"

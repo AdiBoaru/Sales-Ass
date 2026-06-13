@@ -39,8 +39,6 @@ from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 
 log = logging.getLogger(__name__)
 
-_CHANNEL_KIND = "whatsapp"
-
 
 @dataclass
 class TurnResult:
@@ -82,12 +80,13 @@ async def handle_turn(
 ) -> TurnResult:
     """Procesează un mesaj inbound pe o conexiune tenant-scoped pe `business.id`.
 
-    `event` = dict-ul produs de webhook (InboundEvent.to_dict): wa_id,
-    provider_msg_id, content_type, body, profile_name, ...
+    `event` = envelope-ul neutru (InboundEvent.to_dict): channel_kind,
+    channel_account_id, sender_external_id, provider_msg_id, content_type, body, ...
     """
     stages = stages or DEFAULT_STAGES
     turn_id = str(uuid4())
-    wa_id = event["wa_id"]
+    channel_kind = event.get("channel_kind", "whatsapp")
+    sender_external_id = event["sender_external_id"]
     provider_msg_id = event.get("provider_msg_id")
 
     # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
@@ -101,9 +100,9 @@ async def handle_turn(
     contact = await get_or_create_contact(
         conn,
         business.id,
-        _CHANNEL_KIND,
-        wa_id,
-        display_name=event.get("profile_name"),
+        channel_kind,
+        sender_external_id,
+        display_name=event.get("sender_name"),
     )
     conv = await get_or_create_conversation(
         conn,
@@ -170,7 +169,7 @@ async def handle_turn(
             turn_id,  # idempotency_key = turn → un singur outbox per tur
             {
                 "type": "text",
-                "to": wa_id,
+                "to": sender_external_id,
                 "text": ctx.reply.text,
                 "message_id": out_msg_id,
             },

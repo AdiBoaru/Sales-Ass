@@ -29,11 +29,12 @@ MAX_ATTEMPTS = 6  # după atâtea eșecuri → 'dead' (nu mai reîncearcă)
 _VISIBILITY_TIMEOUT_S = 120
 
 # Calificat cu `o.`/`due.`: în RETURNING-ul unui UPDATE ... FROM, coloanele comune
-# (id) ar fi ambigue între tabelul țintă `o` și subquery-ul `due`. phone_number_id
-# (numărul EXPEDITOR) vine din join-ul outbox→conversations→channels.
+# (id) ar fi ambigue între tabelul țintă `o` și subquery-ul `due`. channel_kind +
+# channel_account_id (canalul EXPEDITOR) vin din join-ul outbox→conversations→channels;
+# dispatcher-ul alege transportul după channel_kind (NX-60).
 _CLAIM_COLS = (
     "o.id::text, o.conversation_id::text, o.idempotency_key, o.kind, "
-    "o.payload, o.attempts, due.phone_number_id"
+    "o.payload, o.attempts, due.channel_kind, due.channel_account_id"
 )
 
 
@@ -89,8 +90,8 @@ async def claim_due(
     iar dacă dispatcher-ul moare înainte de mark_sent/mark_failed, redevine scadent
     după timeout (reaper implicit). `attempts` se incrementează la claim.
 
-    Returnează și `phone_number_id` (numărul EXPEDITOR, din canalul conversației),
-    de care are nevoie apelul către Meta.
+    Returnează și `channel_kind` + `channel_account_id` (canalul EXPEDITOR, din
+    conversație) — dispatcher-ul alege transportul potrivit după channel_kind.
     """
     rows = await conn.fetch(
         f"""
@@ -99,7 +100,8 @@ async def claim_due(
                attempts = o.attempts + 1,
                next_attempt_at = now() + make_interval(secs => $3)
           from (
-            select o2.id, ch.provider_account_id as phone_number_id
+            select o2.id, ch.kind as channel_kind,
+                   ch.provider_account_id as channel_account_id
             from outbox o2
             join conversations c on c.id = o2.conversation_id
             join channels ch on ch.id = c.channel_id

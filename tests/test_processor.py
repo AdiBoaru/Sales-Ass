@@ -53,13 +53,14 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
 
 def _event(body="salut", wamid=None):
     return {
-        "phone_number_id": "PNID-demo",
-        "wa_id": f"+40{uuid4().hex[:9]}",
+        "channel_kind": "whatsapp",
+        "channel_account_id": "PNID-demo",
+        "sender_external_id": f"+40{uuid4().hex[:9]}",
         "provider_msg_id": wamid or f"wamid.{uuid4().hex[:10]}",
         "content_type": "text",
         "body": body,
         "media_id": None,
-        "profile_name": "Ana",
+        "sender_name": "Ana",
     }
 
 

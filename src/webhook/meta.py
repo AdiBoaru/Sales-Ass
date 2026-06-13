@@ -27,21 +27,24 @@ _MEDIA_TYPES = ("image", "audio", "video", "document", "sticker")
 
 @dataclass
 class InboundEvent:
-    """Un mesaj inbound normalizat, gata de pus pe stream (serializabil JSON).
+    """Un mesaj inbound NORMALIZAT (envelope neutru de canal), serializabil JSON.
 
-    `content_type` e tipul BRUT Meta (text/image/audio/...); normalizarea la
-    valorile permise de `messages.content_type` o face worker-ul. `payload`
-    păstrează mesajul brut Meta pentru cazurile pe care nu le aplatizăm aici
-    (interactive, location, butoane)."""
+    Câmpuri agnostice de canal (NX-60) — worker-ul nu știe că vine de la Meta:
+      • channel_kind        — 'whatsapp' | 'telegram' | ...
+      • channel_account_id  — id-ul canalului RECEPTOR (phone_number_id la Meta)
+      • sender_external_id  — id-ul userului pe canal (wa_id la Meta)
+    `content_type` e tipul BRUT al canalului; normalizarea o face worker-ul.
+    `payload` păstrează mesajul brut (interactive, location, butoane)."""
 
-    phone_number_id: str
-    wa_id: str
+    channel_kind: str
+    channel_account_id: str
+    sender_external_id: str
     provider_msg_id: str
     content_type: str
     timestamp: str | None = None
     body: str | None = None
     media_id: str | None = None
-    profile_name: str | None = None
+    sender_name: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -52,11 +55,12 @@ class InboundEvent:
 class StatusEvent:
     """Un update de status (delivered/read/failed/sent) pentru un mesaj OUTBOUND.
 
-    `provider_msg_id` = wamid-ul mesajului raportat (pe care l-am trimis noi).
-    NU se deduplică la webhook: 'delivered' și 'read' au același wamid — dedupe
-    pe wamid ar arunca statusuri legitime distincte."""
+    `provider_msg_id` = id-ul mesajului raportat (pe care l-am trimis noi).
+    NU se deduplică la webhook: 'delivered' și 'read' au același id — dedupe
+    pe id ar arunca statusuri legitime distincte."""
 
-    phone_number_id: str
+    channel_kind: str
+    channel_account_id: str
     provider_msg_id: str
     status: str
     timestamp: str | None = None
@@ -118,14 +122,15 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundEvent]:
                 body, media_id = _extract_body(msg, content_type)
                 events.append(
                     InboundEvent(
-                        phone_number_id=phone_number_id,
-                        wa_id=wa_id,
+                        channel_kind="whatsapp",
+                        channel_account_id=phone_number_id,
+                        sender_external_id=wa_id,
                         provider_msg_id=provider_msg_id,
                         content_type=content_type,
                         timestamp=msg.get("timestamp"),
                         body=body,
                         media_id=media_id,
-                        profile_name=names.get(wa_id),
+                        sender_name=names.get(wa_id),
                         payload=msg,
                     )
                 )
@@ -153,7 +158,8 @@ def parse_statuses(payload: dict[str, Any]) -> list[StatusEvent]:
                     continue
                 events.append(
                     StatusEvent(
-                        phone_number_id=phone_number_id,
+                        channel_kind="whatsapp",
+                        channel_account_id=phone_number_id,
                         provider_msg_id=provider_msg_id,
                         status=status,
                         timestamp=st.get("timestamp"),
