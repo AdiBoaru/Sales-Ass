@@ -19,7 +19,11 @@ import asyncpg
 import httpx
 from dotenv import load_dotenv
 
-from src.db.queries.channels import upsert_channel
+# Rădăcina proiectului pe sys.path când scriptul e rulat direct (python scripts/...),
+# nu doar ca modul. Trebuie ÎNAINTE de importul `src`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.db.queries.channels import upsert_channel  # noqa: E402
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
