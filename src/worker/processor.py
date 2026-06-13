@@ -18,6 +18,7 @@ from uuid import uuid4
 import asyncpg
 from redis.asyncio import Redis
 
+from src.agent.llm import get_llm
 from src.db.queries.analytics import insert_events
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import (
@@ -141,7 +142,7 @@ async def handle_turn(
         language=conv["locale"] or business.default_locale,
     )
 
-    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis), stages)
+    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=get_llm()), stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
 
     if ctx.reply is None:

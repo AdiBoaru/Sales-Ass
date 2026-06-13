@@ -17,15 +17,18 @@ from time import perf_counter
 import asyncpg
 from redis.asyncio import Redis
 
+from src.agent.llm import LLMClient
 from src.models import TurnContext
 
 
 @dataclass
 class PipelineDeps:
-    """Resursele pe care le primesc stagiile. Conexiunea e DEJA tenant-scoped."""
+    """Resursele pe care le primesc stagiile. Conexiunea e DEJA tenant-scoped.
+    `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios."""
 
     conn: asyncpg.Connection
     redis: Redis | None = None
+    llm: LLMClient | None = None
 
 
 # Un stagiu: mutează `ctx` pe loc; poate seta ctx.reply pentru early exit.
@@ -51,8 +54,10 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
 
 
 async def echo_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """SCAFFOLD G2b: răspuns determinist care dovedește fluxul inbound→outbox.
-    Se înlocuiește cu stagiile reale în G3+ (acesta nu rămâne în producție)."""
+    """Fallback determinist: dacă niciun stagiu LLM n-a produs reply (ex. rută
+    sales/order fără agent încă — G4, sau fără cheie OpenAI), tot iese ceva spre
+    client (principiul 6: niciodată tăcere). Se restrânge pe măsură ce G4 acoperă
+    rutele rămase."""
     body = (ctx.message.body or "").strip()
     if body:
         ctx.set_reply(f"Am primit mesajul tău: „{body}”. Revenim imediat.")
@@ -60,5 +65,9 @@ async def echo_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.set_reply("Am primit mesajul tău. Revenim imediat.")
 
 
-# Setul implicit de stagii pentru G2b (un singur stagiu).
-DEFAULT_STAGES: list[Stage] = [echo_stage]
+# Pipeline-ul curent: Triaj (nano) → echo fallback. Stagiile 6-8 (context, agent,
+# validator) se adaugă în ordine în G4+. `triage_stage` importat aici jos ca să
+# evităm un ciclu de import (triage referă PipelineDeps doar sub TYPE_CHECKING).
+from src.worker.stages.triage import triage_stage  # noqa: E402
+
+DEFAULT_STAGES: list[Stage] = [triage_stage, echo_stage]

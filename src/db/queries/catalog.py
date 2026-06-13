@@ -86,3 +86,16 @@ async def search_products(
 
     rows = await conn.fetch(sql, *params)
     return [dict(r) for r in rows]
+
+
+async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
+    """Slug-urile categoriilor active ale tenantului — pentru groundarea triajului.
+
+    Triaj-ul (nano) primește lista asta și alege `category_key` din ea; orice
+    valoare inventată în afara listei e respinsă în cod (→ category_key None /
+    CLARIFY). `conn` trebuie să fie deja tenant-scoped (tenant_conn)."""
+    rows = await conn.fetch(
+        "select slug from categories where business_id = $1 order by slug",
+        business_id,
+    )
+    return [r["slug"] for r in rows]
