@@ -22,6 +22,7 @@ from redis.exceptions import ResponseError
 from src.db.connection import admin_conn, tenant_conn
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel_by_phone
+from src.db.queries.message_status import record_status_event
 from src.redis_bus import STREAM_INBOUND
 from src.worker.processor import handle_turn
 
@@ -40,7 +41,7 @@ async def ensure_group(redis: Redis) -> None:
 
 
 async def process_event(pool, redis: Redis, event: dict) -> None:
-    """Rezolvă tenantul și rulează turul pentru un singur eveniment inbound."""
+    """Rezolvă tenantul și rutează evenimentul după `kind` (message | status)."""
     phone_number_id = event.get("phone_number_id", "")
     async with admin_conn(pool) as conn:
         channel = await resolve_channel_by_phone(conn, phone_number_id)
@@ -49,7 +50,17 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
         return
 
     business_id = channel["business_id"]
+    kind = event.get("kind", "message")
     async with tenant_conn(pool, business_id) as conn:
+        if kind == "status":
+            await record_status_event(
+                conn,
+                business_id,
+                event["provider_msg_id"],
+                event["status"],
+                payload=event.get("payload"),
+            )
+            return
         business = await load_business(conn, business_id)
         if business is None:
             log.warning("business %s lipsește — ignorat", business_id)

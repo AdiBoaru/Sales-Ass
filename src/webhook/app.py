@@ -12,10 +12,11 @@ import os
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import PlainTextResponse
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from src.config import get_settings
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
-from src.webhook.meta import parse_webhook
+from src.webhook.meta import parse_statuses, parse_webhook
 from src.webhook.signature import verify_meta_signature
 
 app = FastAPI(title="Nativx Assistant — webhook")
@@ -63,13 +64,14 @@ async def receive_webhook(
 
     Pași (toți rapizi, fără LLM, fără DB):
       1. verifică X-Hub-Signature-256 peste corpul BRUT → 403 la eșec
-      2. parsează payload-ul în mesaje inbound
-      3. dedupe layer 1 (Redis SET NX) pe (phone_number_id, wamid)
-      4. XADD pe stream-ul de procesare
+      2. parsează mesaje inbound + update-uri de status
+      3. mesaje: dedupe layer 1 (Redis SET NX) pe (phone_number_id, wamid)
+      4. XADD pe stream-ul de procesare (mesaje + statusuri, cu `kind`)
       5. ACK 200 imediat (Meta oprește retry-ul; restul e async în worker)
 
-    Întoarce mereu 200 pe payload valid-semnat, chiar dacă nu conține mesaje
-    procesabile (statuses, tipuri necunoscute) — altfel Meta reîncearcă inutil.
+    Statusurile NU se deduplică (delivered și read au același wamid). Întoarce
+    mereu 200 pe payload valid-semnat, chiar dacă nu conține nimic procesabil —
+    altfel Meta reîncearcă inutil.
     """
     raw = await request.body()
     signature = request.headers.get("X-Hub-Signature-256")
@@ -81,9 +83,17 @@ async def receive_webhook(
     except json.JSONDecodeError:
         return PlainTextResponse("bad request", status_code=400)
 
-    for event in parse_webhook(payload):
-        if await seen_before(redis, event.phone_number_id, event.provider_msg_id):
-            continue  # retry Meta → deja văzut, nu re-enqueua
-        await enqueue_inbound(redis, event.to_dict())
+    try:
+        for event in parse_webhook(payload):
+            if await seen_before(redis, event.phone_number_id, event.provider_msg_id):
+                continue  # retry Meta → deja văzut, nu re-enqueua
+            await enqueue_inbound(redis, event.to_dict())
+
+        for status in parse_statuses(payload):
+            await enqueue_inbound(redis, status.to_dict())
+    except RedisError:
+        # Redis indisponibil / memorie plină (noeviction → XADD eroare). NU pierdem
+        # tăcut: 503 → Meta reîncearcă, iar la retry NX-51 deduplică ce-a prins deja.
+        return PlainTextResponse("service unavailable", status_code=503)
 
     return PlainTextResponse("ok", status_code=200)

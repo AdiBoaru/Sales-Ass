@@ -45,7 +45,26 @@ class InboundEvent:
     payload: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {"kind": "message", **asdict(self)}
+
+
+@dataclass
+class StatusEvent:
+    """Un update de status (delivered/read/failed/sent) pentru un mesaj OUTBOUND.
+
+    `provider_msg_id` = wamid-ul mesajului raportat (pe care l-am trimis noi).
+    NU se deduplică la webhook: 'delivered' și 'read' au același wamid — dedupe
+    pe wamid ar arunca statusuri legitime distincte."""
+
+    phone_number_id: str
+    provider_msg_id: str
+    status: str
+    timestamp: str | None = None
+    recipient_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "status", **asdict(self)}
 
 
 def _extract_body(msg: dict[str, Any], content_type: str) -> tuple[str | None, str | None]:
@@ -108,6 +127,38 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundEvent]:
                         media_id=media_id,
                         profile_name=names.get(wa_id),
                         payload=msg,
+                    )
+                )
+
+    return events
+
+
+def parse_statuses(payload: dict[str, Any]) -> list[StatusEvent]:
+    """Aplatizează update-urile de status (delivered/read/failed/sent) din payload.
+    Robust la structuri parțiale; un payload doar cu mesaje → listă goală."""
+    events: list[StatusEvent] = []
+
+    for entry in payload.get("entry") or []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            statuses = value.get("statuses")
+            if not statuses:
+                continue
+
+            phone_number_id = (value.get("metadata") or {}).get("phone_number_id", "")
+            for st in statuses:
+                provider_msg_id = st.get("id")
+                status = st.get("status")
+                if not provider_msg_id or not status:
+                    continue
+                events.append(
+                    StatusEvent(
+                        phone_number_id=phone_number_id,
+                        provider_msg_id=provider_msg_id,
+                        status=status,
+                        timestamp=st.get("timestamp"),
+                        recipient_id=st.get("recipient_id"),
+                        payload=st,
                     )
                 )
 
