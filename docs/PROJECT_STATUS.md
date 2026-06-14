@@ -72,7 +72,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 3 | Gates (bot_active, handoff, limbă, risc, media) | ❌ |
 | 4 | Straturi gratuite (alias, cache semantic, clarificare) | ❌ (faqs=0, cache=0) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
-| 6 | Context builder | ❌ (agentul nu folosește încă istoricul) |
+| 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
 | 7 | Agent (mini) + search semantic | ✅ **live** (RAG: embed query → cosine + filtru preț; tool-calling complet = refinement) |
 | 8 | Validator | ✅ inline în agent (zero prețuri inventate; retry → fallback determinist) |
 | 9 | Sender → outbox → dispatcher (+ carduri W1) | ✅ **live cap-coadă** |
@@ -117,16 +117,15 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
 1. **D3 — rezumate recenzii** (953 → `product_review_summaries`, LLM) → botul
    menționează rating + ce laudă clienții. Wow ieftin.
-2. **Context builder (stagiul 6)** — istoric în prompt → conversație continuă
-   (agentul ține minte ce-a cerut clientul, follow-up coerent).
-3. **R1 debounce + R2 carduri „pro"** (carusel Telegram / List Messages WhatsApp) —
+2. **R1 debounce + R2 carduri „pro"** (carusel Telegram / List Messages WhatsApp) —
    vezi `docs/REFINEMENTS.md`.
-4. **NX-50/04/53** (rol login + assert + test concurent) — înainte de load real.
-5. **G5**: gates (limbă, handoff, risc), straturi gratuite (alias, cache semantic).
-6. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
+3. **NX-50/04/53** (rol login + assert + test concurent) — înainte de load real.
+4. **G5**: gates (limbă, handoff, risc), straturi gratuite (alias, cache semantic).
+5. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
 
-**Milestone atins (2026-06-14):** „bot care VINDE pe Telegram" — triaj + agent +
-carduri, pe catalog de calitate. Următorul: memorie de conversație (context) + recenzii.
+**Milestone atins (2026-06-14):** „bot care VINDE și ține firul" — triaj + agent +
+carduri + **memorie de conversație** (follow-up „mai ieftin"), pe catalog de calitate.
+Următorul: rezumate recenzii + debounce.
 
 ## 7. Decizii de arhitectură luate pe parcurs
 

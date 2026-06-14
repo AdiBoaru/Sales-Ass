@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.db.queries.catalog import search_products_semantic
 from src.models import RetrievalResult, Route, RouteDecision, TurnContext
+from src.worker.context import conversation_transcript, search_query
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -42,6 +43,8 @@ Reguli STRICTE:
   ce se potrivește.
 - Maxim 3 produse. Termină cu o întrebare scurtă (buget / tip de ten) sau ofertă
   de a trimite link.
+- Dacă întrebarea e un follow-up (ex. „mai ieftin", „și pentru păr?"), ține cont
+  de conversația de mai sus (ce a cerut clientul deja).
 - Text simplu pentru chat, fără markdown greu."""
 
 
@@ -99,10 +102,14 @@ def _card_products(products: list[dict[str, Any]], n: int = 3) -> list[dict[str,
     ]
 
 
-async def _recommend(llm, query: str, products: list[dict[str, Any]], language: str) -> str:
+async def _recommend(
+    llm, query: str, products: list[dict[str, Any]], language: str, *, history: str = ""
+) -> str:
     """Compune recomandarea + validează prețurile (retry 1, apoi fallback determinist)."""
+    history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     user = (
-        f"Limba clientului: {language}\nÎntrebare: {query}\nProduse:\n{_products_brief(products)}"
+        f"Limba clientului: {language}\n{history_block}"
+        f"Întrebare: {query}\nProduse:\n{_products_brief(products)}"
     )
     reply = await llm.complete(_SYSTEM, user)
     if reply and _prices_ok(reply, products):
@@ -131,8 +138,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not query:
         return
 
+    # Search context-aware: follow-up-urile scurte („mai ieftin") caută în contextul
+    # ultimelor mesaje ale clientului, nu izolat.
     try:
-        query_vec = (await deps.llm.embed([query]))[0]
+        query_vec = (await deps.llm.embed([search_query(ctx.history, query)]))[0]
     except Exception as e:  # noqa: BLE001 — embed eșuat → lasă echo fallback
         log.warning("agent: embed query eșuat (%s)", type(e).__name__)
         return
@@ -155,7 +164,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     ctx.retrieval = RetrievalResult(products=products, source="semantic")
     try:
-        reply = await _recommend(deps.llm, query, products, ctx.language)
+        reply = await _recommend(
+            deps.llm, query, products, ctx.language, history=conversation_transcript(ctx.history)
+        )
     except Exception as e:  # noqa: BLE001 — compunere eșuată → fallback determinist
         log.warning("agent: compunere eșuată (%s) → fallback", type(e).__name__)
         reply = _deterministic_reply(products)
