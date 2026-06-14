@@ -45,8 +45,8 @@ Reguli STRICTE:
   de a trimite link.
 - Dacă întrebarea e un follow-up (ex. „mai ieftin", „și pentru păr?"), ține cont
   de conversația de mai sus (ce a cerut clientul deja).
-- Poți menționa ratingul (★) și ce apreciază clienții, DOAR dacă apar în date
-  (nu inventa rating sau recenzii).
+- Menționează ratingul (★) la fiecare produs recomandat, și ce apreciază clienții
+  când e relevant. Folosește DOAR ce e în date (nu inventa rating sau recenzii).
 - Text simplu pentru chat, fără markdown greu."""
 
 
