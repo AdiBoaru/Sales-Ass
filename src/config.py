@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # `bot_runtime` (parolă proprie, fără bypassrls). Gol în dev înainte de
     # provisioning → bot_pool cade grațios pe supabase_db_url + SET ROLE.
     database_url_bot: str = Field(default="", validation_alias="DATABASE_URL_BOT")
+    # Plasa NX-04: assert rol + app.business_id la fiecare checkout din bot_pool.
+    # 'strict' (default) → IsolationError înainte de primul query; 'off' → sare
+    # verificarea (cu WARNING la boot), pt măsurare/oprire la scară.
+    db_isolation_assert: str = Field(default="strict", validation_alias="DB_ISOLATION_ASSERT")
 
     # --- OpenAI ---
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
