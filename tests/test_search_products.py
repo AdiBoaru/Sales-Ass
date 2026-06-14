@@ -13,7 +13,19 @@ pytestmark = pytest.mark.integration
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 OTHER_BIZ = "00000000-0000-0000-0000-000000000000"
 
-FIELDS = {"id", "name", "brand", "price", "url", "ai_summary", "stock", "availability", "image"}
+FIELDS = {
+    "id",
+    "name",
+    "brand",
+    "price",
+    "url",
+    "ai_summary",
+    "stock",
+    "availability",
+    "image",
+    "rating",
+    "review_pro",
+}
 
 
 @pytest.fixture

@@ -29,10 +29,13 @@ _SELECT = f"""
         p.ai_summary                as ai_summary,
         p.stock_total               as stock,
         p.availability              as availability,
-        img.url                     as image
+        img.url                     as image,
+        p.rating::float8            as rating,
+        prs.top_pros[1]             as review_pro
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
+    left join product_review_summaries prs on prs.product_id = p.id
     left join lateral (
         select min(coalesce(v.sale_price, v.price)) as price
         from product_variants v

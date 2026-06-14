@@ -45,6 +45,8 @@ Reguli STRICTE:
   de a trimite link.
 - Dacă întrebarea e un follow-up (ex. „mai ieftin", „și pentru păr?"), ține cont
   de conversația de mai sus (ce a cerut clientul deja).
+- Poți menționa ratingul (★) și ce apreciază clienții, DOAR dacă apar în date
+  (nu inventa rating sau recenzii).
 - Text simplu pentru chat, fără markdown greu."""
 
 
@@ -74,9 +76,14 @@ def _products_brief(products: list[dict[str, Any]]) -> str:
     lines = []
     for p in products:
         summary = (p.get("ai_summary") or "")[:140]
+        extra = ""
+        if p.get("rating"):
+            extra += f" | {float(p['rating']):.1f}★"
+        if p.get("review_pro"):
+            extra += f" | clienții laudă: {p['review_pro']}"
         lines.append(
             f"- {p['name']} | brand: {p.get('brand') or '-'} | "
-            f"preț: {float(p['price']):.2f} lei | {summary}"
+            f"preț: {float(p['price']):.2f} lei{extra} | {summary}"
         )
     return "\n".join(lines)
 
