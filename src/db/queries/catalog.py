@@ -99,3 +99,52 @@ async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> lis
         business_id,
     )
     return [r["slug"] for r in rows]
+
+
+async def search_products_semantic(
+    conn: asyncpg.Connection,
+    business_id: str,
+    query_embedding: list[float],
+    *,
+    price_max: float | None = None,
+    concerns: list[str] | None = None,
+    category: str | None = None,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """Căutare HIBRIDĂ: filtre SQL dure (preț/categorie/concerns) + ranking semantic
+    (cosine pe `product_embeddings`). `query_embedding` = vectorul mesajului (calculat
+    de tool/agent prin adaptor — stratul de date NU apelează LLM). Max 6 produse, cele
+    8 câmpuri. `conn` trebuie să fie deja tenant-scoped (tenant_conn).
+
+    `concerns` filtrează pe `attributes->'concerns'` (operatorul jsonb `?|` = oricare).
+    Ordinea = distanța cosine (cel mai apropiat primul)."""
+    limit = min(limit, 6)
+    qvec = "[" + ",".join(f"{x:.7f}" for x in query_embedding) + "]"
+
+    conds = ["p.business_id = $1", "p.status = 'active'"]
+    params: list[Any] = [business_id]
+
+    def placeholder(value: Any) -> str:
+        params.append(value)
+        return f"${len(params)}"
+
+    qvec_ph = placeholder(qvec)  # vectorul de query
+    if price_max is not None:
+        conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
+    if category:
+        slug_ph = placeholder(category)
+        name_ph = placeholder(category)
+        conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
+    if concerns:
+        conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+
+    sql = (
+        _SELECT
+        + " join product_embeddings pe on pe.product_id = p.id"
+        + " where "
+        + " and ".join(conds)
+        + f" order by pe.embedding <=> {qvec_ph}::vector"
+        + f" limit {placeholder(limit)}"
+    )
+    rows = await conn.fetch(sql, *params)
+    return [dict(r) for r in rows]

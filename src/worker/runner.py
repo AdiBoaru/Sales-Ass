@@ -65,9 +65,11 @@ async def echo_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.set_reply("Am primit mesajul tău. Revenim imediat.")
 
 
-# Pipeline-ul curent: Triaj (nano) → echo fallback. Stagiile 6-8 (context, agent,
-# validator) se adaugă în ordine în G4+. `triage_stage` importat aici jos ca să
-# evităm un ciclu de import (triage referă PipelineDeps doar sub TYPE_CHECKING).
+# Pipeline-ul curent: Triaj (nano) → Agent (mini, doar route=sales) → echo fallback.
+# Triaj setează reply pt simple/clarify (early exit). Agentul răspunde pt sales.
+# Restul (gates, context, free layers) se adaugă în ordine ulterior. Importate jos
+# ca să evităm un ciclu (stagiile referă PipelineDeps doar sub TYPE_CHECKING).
+from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
-DEFAULT_STAGES: list[Stage] = [triage_stage, echo_stage]
+DEFAULT_STAGES: list[Stage] = [triage_stage, agent_stage, echo_stage]
