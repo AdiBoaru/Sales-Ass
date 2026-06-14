@@ -22,10 +22,18 @@ log = logging.getLogger(__name__)
 class LLMClient:
     """Wrapper subțire peste AsyncOpenAI. Modelele vin din settings (nano/mini)."""
 
-    def __init__(self, client: AsyncOpenAI, *, model_triage: str, model_agent: str) -> None:
+    def __init__(
+        self,
+        client: AsyncOpenAI,
+        *,
+        model_triage: str,
+        model_agent: str,
+        model_embed: str = "text-embedding-3-small",
+    ) -> None:
         self._client = client
         self.model_triage = model_triage
         self.model_agent = model_agent
+        self.model_embed = model_embed
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
         """Apel chat cu răspuns JSON forțat (`response_format=json_object`).
@@ -44,6 +52,16 @@ class LLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
+    async def embed(self, texts: list[str], *, model: str | None = None) -> list[list[float]]:
+        """Embeddings pentru un lot de texte. Întoarce o listă de vectori (1536 dim
+        la text-embedding-3-small). Folosit de jobul `embed_products` + (viitor)
+        cache semantic / search semantic."""
+        resp = await self._client.embeddings.create(
+            model=model or self.model_embed,
+            input=texts,
+        )
+        return [d.embedding for d in resp.data]
+
 
 _llm: LLMClient | None = None
 
@@ -59,5 +77,6 @@ def get_llm() -> LLMClient | None:
             AsyncOpenAI(api_key=s.openai_api_key),
             model_triage=s.model_triage,
             model_agent=s.model_agent,
+            model_embed=s.model_embed,
         )
     return _llm
