@@ -100,8 +100,9 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
    tenant path = login direct `bot_runtime` (zero `SET ROLE` → fără scurgere sub
    multiplexare); control plane = `admin_conn` privilegiat (`docs/db_connections.md`).
    **Rămâne:** provisioning manual (`apply_005.py` + `DATABASE_URL_BOT`) — până atunci
-   codul cade grațios pe modul compat. NX-04 (assert la checkout) + NX-53 (test
-   concurent) se construiesc peste.
+   codul cade grațios pe modul compat. NX-04 (assert la checkout) **livrat** —
+   `tenant_conn` ridică `IsolationError` dacă rolul/scope-ul nu-s corecte, zero
+   overhead (combinat în set_config). NX-53 (test concurent) se construiește peste.
 2. **R1 — Debounce lipsă** (stagiul 2): mesajele succesive = tururi separate →
    răspunsuri redundante. Vezi `docs/REFINEMENTS.md`. P1 la hardening worker.
 3. **Limita de spend OpenAI NEPUSĂ** — protecția financiară (dashboard) e încă de
