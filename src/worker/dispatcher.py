@@ -21,7 +21,7 @@ import httpx
 from src.channels.base import ChannelSenderRegistry
 from src.channels.telegram.client import TelegramClient
 from src.config import get_settings
-from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn
+from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.messages import set_message_provider_id
 from src.db.queries.outbox import (
     business_ids_with_due_outbox,
@@ -94,7 +94,7 @@ async def dispatch_due(pool, registry: ChannelSenderRegistry, *, batch: int = 10
 
     handled = 0
     for business_id in business_ids:
-        async with tenant_conn(pool, business_id) as conn:
+        async with tenant_conn(business_id) as conn:
             rows = await claim_due(conn, business_id, limit=batch)
             for row in rows:
                 try:
@@ -129,7 +129,8 @@ async def _main() -> None:
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
     settings = get_settings()
-    pool = await get_pool()
+    pool = await get_pool()  # admin (control plane: business_ids_with_due_outbox)
+    await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot
     async with httpx.AsyncClient(timeout=15.0) as http:
         registry = build_registry(http, settings)
         try:

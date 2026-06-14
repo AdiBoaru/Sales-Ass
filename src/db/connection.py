@@ -1,16 +1,28 @@
-"""Pool asyncpg + izolare multi-tenant per conexiune.
+"""Pool-uri asyncpg + izolare multi-tenant (NX-50: rol de LOGIN `bot_runtime`).
 
-Modelul de securitate (vezi docs/003_bot_runtime_role.sql + schema_reference.md):
-pe Supabase ne conectăm prin pooler ca `postgres`, dar la fiecare conexiune
-coborâm la rolul `bot_runtime` (fără bypassrls) și setăm `app.business_id`.
-Astfel RLS devine plasă: un query fără filtru de tenant → zero rezultate, nu
-datele altui client (principiul 7).
+Două căi de acces, două pool-uri (vezi docs/db_connections.md):
 
-Folosire:
-    pool = await get_pool()
-    async with tenant_conn(pool, business_id) as conn:
+  • TENANT PATH (hot path, ~tot traficul) — `tenant_conn(business_id)` pe
+    `bot_pool`. Pool-ul se loghează DIRECT ca `bot_runtime` (rol de LOGIN, fără
+    bypassrls, parolă proprie). Identitatea e fixată de credențiale, NU de un
+    `SET ROLE` de sesiune → nu se mai poate scurge sub multiplexarea poolerului
+    (P0-A din audit). La checkout setăm doar `app.business_id`; la release îl
+    resetăm. RLS devine plasă: un query fără filtru de tenant → 0 rânduri.
+
+  • CONTROL PLANE (o dată/mesaj, înainte de a ști tenantul) — `admin_conn(pool)`
+    pe `admin_pool` (rol privilegiat, SUPABASE_DB_URL). Singura excepție de la
+    „business_id pe tot": lookup `provider_account_id → business_id` (channels.py)
+    precede tenantul. Tot aici rulează joburile admin (cleanup, embed).
+
+Folosire (tenant):
+    async with tenant_conn(business_id) as conn:
         rows = await conn.fetch("select * from products limit 5")
         # rândurile sunt DEJA filtrate la business_id de RLS
+
+Provisioning (o dată, manual — vezi docs/005_bot_runtime_login.sql + TODO-MANUAL):
+    ALTER ROLE bot_runtime LOGIN PASSWORD '<din vault>';  + setezi DATABASE_URL_BOT.
+    Fără DATABASE_URL_BOT, `bot_pool` cade grațios pe SUPABASE_DB_URL + `SET ROLE`
+    (compat dev/test înainte de provisioning; NU pentru prod — vezi docstring-ul).
 """
 
 import socket
@@ -23,7 +35,12 @@ import asyncpg
 
 from src.config import get_settings
 
+# admin_pool (control plane + joburi) și bot_pool (tenant path). Singleton/proces.
 _pool: asyncpg.Pool | None = None
+_bot_pool: asyncpg.Pool | None = None
+# True dacă bot_pool s-a logat DIRECT ca bot_runtime (DATABASE_URL_BOT setat).
+# False = mod compat: logat ca admin, coborâm rolul în init (dev/test).
+_bot_login_mode: bool = False
 
 
 def _connect_kwargs(dsn: str) -> dict:
@@ -53,7 +70,11 @@ def _connect_kwargs(dsn: str) -> dict:
 
 
 async def get_pool() -> asyncpg.Pool:
-    """Pool singleton per proces. Lazy-init la primul apel."""
+    """Pool ADMIN (control plane + joburi). Privilegiat — NU pentru date de tenant.
+
+    Folosit DOAR de `admin_conn` (resolve_channel) și de joburile admin. Pentru
+    orice e tenant-scoped folosește `tenant_conn` (bot_pool). Lazy-init.
+    """
     global _pool
     if _pool is None:
         dsn = get_settings().supabase_db_url
@@ -68,41 +89,90 @@ async def get_pool() -> asyncpg.Pool:
     return _pool
 
 
+async def _assert_bot_role(conn: asyncpg.Connection) -> None:
+    """Plasă la boot: după init, identitatea efectivă TREBUIE să fie bot_runtime.
+
+    Dacă DATABASE_URL_BOT a fost setat greșit (ex. spre un rol privilegiat),
+    pool-ul NU pornește — eroare explicită la boot, nu un drum de cod care
+    rulează ca superuser și ocolește RLS în tăcere (P0-A)."""
+    user = await conn.fetchval("select current_user")
+    if user != "bot_runtime":
+        raise RuntimeError(
+            f"bot_pool: rol efectiv {user!r}, aștept 'bot_runtime'. "
+            "Verifică DATABASE_URL_BOT (login bot_runtime) sau grant-ul bot_runtime→postgres."
+        )
+
+
+async def _init_bot_conn_compat(conn: asyncpg.Connection) -> None:
+    """Mod compat (fără DATABASE_URL_BOT): ne-am logat ca admin → coborâm o
+    singură dată la rol, la crearea conexiunii (NU per-checkout, ca să nu existe
+    un `SET ROLE` care se scurge sub multiplexare). Apoi verificăm."""
+    await conn.execute("set role bot_runtime")
+    await _assert_bot_role(conn)
+
+
+async def get_bot_pool() -> asyncpg.Pool:
+    """Pool TENANT (bot_runtime). Login direct dacă DATABASE_URL_BOT e setat;
+    altfel compat pe SUPABASE_DB_URL + SET ROLE în init (dev/test).
+
+    Eager la boot-ul workerului (consumer/dispatcher) ca o parolă greșită să
+    crape la pornire, nu la primul mesaj."""
+    global _bot_pool, _bot_login_mode
+    if _bot_pool is None:
+        s = get_settings()
+        _bot_login_mode = bool(s.database_url_bot)
+        dsn = s.database_url_bot or s.supabase_db_url
+        init = _assert_bot_role if _bot_login_mode else _init_bot_conn_compat
+        _bot_pool = await asyncpg.create_pool(
+            **_connect_kwargs(dsn),
+            min_size=2,
+            max_size=10,
+            # login direct (conexiune de sesiune) → cache OK; compat pe pooler → 0
+            statement_cache_size=100 if _bot_login_mode else 0,
+            init=init,
+        )
+    return _bot_pool
+
+
 async def close_pool() -> None:
-    global _pool
+    """Închide ambele pool-uri (la oprirea procesului)."""
+    global _pool, _bot_pool
     if _pool is not None:
         await _pool.close()
         _pool = None
+    if _bot_pool is not None:
+        await _bot_pool.close()
+        _bot_pool = None
 
 
 @asynccontextmanager
 async def admin_conn(pool: asyncpg.Pool):
-    """Conexiune de CONTROL PLANE — fără scope de tenant (rămâne `postgres`).
+    """Conexiune de CONTROL PLANE — fără scope de tenant (rol privilegiat).
 
     Folosită DOAR pentru lookup-uri de infrastructură care preced rezolvarea
-    tenantului — în practică un singur caz: `phone_number_id → business_id`
-    (vezi db/queries/channels.py). NU citi/scrie date de client pe ea: pentru
-    orice e tenant-scoped folosește `tenant_conn`. RLS e bypass-at aici (postgres),
-    de aceea suprafața e limitată intenționat la maparea canal→business.
+    tenantului — în practică `provider_account_id → business_id` (channels.py) —
+    și pentru joburile admin. NU citi/scrie date de client pe ea: pentru orice e
+    tenant-scoped folosește `tenant_conn`. RLS e bypass-at aici (rol privilegiat),
+    de aceea suprafața e limitată intenționat la maparea canal→business + mentenanță.
     """
     async with pool.acquire() as conn:
         yield conn
 
 
 @asynccontextmanager
-async def tenant_conn(pool: asyncpg.Pool, business_id: str):
-    """Conexiune cu izolare de tenant activă.
+async def tenant_conn(business_id: str):
+    """Conexiune tenant-scoped (RLS activ) din `bot_pool`.
 
-    Coboară la rolul bot_runtime (RLS activ) și setează app.business_id pentru
-    durata acestei conexiuni. La final, resetează ca să nu „murdărim" conexiunea
-    întoarsă în pool.
-    """
+    Conexiunea ESTE deja `bot_runtime` (login direct sau coborât în init) — aici
+    NU mai facem `SET ROLE` (asta era scurgerea P0-A). Setăm doar `app.business_id`
+    pentru durata checkout-ului și îl resetăm la release, ca să nu „murdărim"
+    conexiunea întoarsă în pool (un checkout ulterior pe alt tenant n-o vede)."""
+    pool = await get_bot_pool()
     async with pool.acquire() as conn:
-        await conn.execute("set role bot_runtime")
-        # set_config(..., is_local=false) → ține pe sesiune; quoting safe pe param
+        # set_config(..., is_local=false) → ține pe checkout; quoting safe pe param
         await conn.execute("select set_config('app.business_id', $1, false)", business_id)
         try:
             yield conn
         finally:
-            await conn.execute("reset role")
+            # echivalent RESET app.business_id → următorul checkout fail-closed
             await conn.execute("select set_config('app.business_id', '', false)")

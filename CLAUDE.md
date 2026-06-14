@@ -378,9 +378,13 @@ gdpr_svc     — EXECUTE gdpr_erase_contact + export + audit_log (security defin
 ```
 
 **Izolarea multi-tenant primară: `WHERE business_id = $1` în cod, FĂRĂ excepție.**
-**Defense-in-depth:** pool-ul asyncpg face `SET app.business_id = $1` per conexiune
-(în `db/connection.py`), iar politicile RLS pe `bot_runtime` transformă un query
-greșit în „zero rezultate", nu „datele altui client". `bot_runtime` NU are bypassrls.
+**Defense-in-depth:** workerul se conectează pe tenant path cu rolul de **LOGIN**
+`bot_runtime` (NX-50, pool dedicat `bot_pool`); `tenant_conn` setează DOAR
+`app.business_id` per checkout — fără `SET ROLE` (care se scurgea sub
+multiplexarea poolerului). Politicile RLS pe `bot_runtime` transformă un query
+greșit în „zero rezultate", nu „datele altui client". `bot_runtime` NU are
+bypassrls. Control plane-ul (`admin_conn`) rulează pe un pool privilegiat separat.
+Detalii: `docs/db_connections.md`.
 
 **Excepție unică, documentată — `admin_conn` (control plane):** lookup-ul
 `phone_number_id → business_id` (db/queries/channels.py) rulează ÎNAINTE ca
