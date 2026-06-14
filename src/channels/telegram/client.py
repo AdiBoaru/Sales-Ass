@@ -12,6 +12,12 @@ HTTP de eroare ridicăm — apelantul (poller/dispatcher) decide retry/skip.
 import httpx
 
 
+def _short(name: str, limit: int = 30) -> str:
+    """Scurtează numele pentru eticheta unui buton (Telegram trunchiază urât numele lungi)."""
+    name = name.strip()
+    return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
+
+
 class TelegramError(RuntimeError):
     """Răspuns Telegram cu ok=false sau payload neașteptat."""
 
@@ -58,6 +64,26 @@ class TelegramClient:
         """Implementează ChannelSender: trimite text → întoarce message_id (str).
         `account_id` (bot id) e informativ — tokenul e în URL. `to` = chat_id."""
         result = await self._call("sendMessage", {"chat_id": to, "text": text})
+        try:
+            return str(result["message_id"])
+        except (KeyError, TypeError) as e:
+            raise TelegramError(f"sendMessage fără message_id: {result}") from e
+
+    async def send_products(self, account_id: str, to: str, text: str, products: list[dict]) -> str:
+        """Carduri compacte (W1): UN singur mesaj — textul de recomandare + un buton
+        inline per produs (nume scurt + preț → link). Pattern „listă tappabilă",
+        compact pe telefon (fără poze mari). Întoarce message_id-ul mesajului.
+
+        Produsele fără URL nu pot avea buton → apar doar în text (deja le conține)."""
+        rows = [
+            [{"text": f"🛍️ {_short(p['name'])} — {float(p['price']):.2f} lei", "url": p["url"]}]
+            for p in products
+            if p.get("url")
+        ]
+        payload: dict = {"chat_id": to, "text": text or "Recomandările mele:"}
+        if rows:
+            payload["reply_markup"] = {"inline_keyboard": rows}
+        result = await self._call("sendMessage", payload)
         try:
             return str(result["message_id"])
         except (KeyError, TypeError) as e:

@@ -13,7 +13,7 @@ pytestmark = pytest.mark.integration
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 OTHER_BIZ = "00000000-0000-0000-0000-000000000000"
 
-EIGHT_FIELDS = {"id", "name", "brand", "price", "url", "ai_summary", "stock", "availability"}
+FIELDS = {"id", "name", "brand", "price", "url", "ai_summary", "stock", "availability", "image"}
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ async def test_returns_limited_eight_field_shape(pool):
         rows = await search_products(conn, DEMO_BIZ, limit=3)
     assert 0 < len(rows) <= 3
     for r in rows:
-        assert set(r.keys()) == EIGHT_FIELDS
+        assert set(r.keys()) == FIELDS
 
 
 async def test_hard_cap_six(pool):
