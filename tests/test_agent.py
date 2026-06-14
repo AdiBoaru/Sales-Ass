@@ -7,12 +7,24 @@ from src.worker.stages.agent import _budget, _prices_ok, agent_stage
 
 PRODUCTS = [
     {
-        "id": "1", "name": "Crema Hidratantă", "brand": "BrandA", "price": 82.99,
-        "url": "u1", "ai_summary": "hidratare profundă", "stock": 5, "availability": "in_stock",
+        "id": "1",
+        "name": "Crema Hidratantă",
+        "brand": "BrandA",
+        "price": 82.99,
+        "url": "u1",
+        "ai_summary": "hidratare profundă",
+        "stock": 5,
+        "availability": "in_stock",
     },
     {
-        "id": "2", "name": "Ser Calmant", "brand": "BrandB", "price": 120.50,
-        "url": "u2", "ai_summary": "calmare", "stock": 3, "availability": "in_stock",
+        "id": "2",
+        "name": "Ser Calmant",
+        "brand": "BrandB",
+        "price": 120.50,
+        "url": "u2",
+        "ai_summary": "calmare",
+        "stock": 3,
+        "availability": "in_stock",
     },
 ]
 
