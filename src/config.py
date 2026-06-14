@@ -18,9 +18,14 @@ class Settings(BaseSettings):
         extra="ignore",  # .env are și variabile pt seed-ul node (SUPABASE_URL etc.)
     )
 
-    # --- Postgres / Supabase (runtime bot, asyncpg direct) ---
-    # Acceptă și numele vechi DATABASE_URL ca alias, pt compat cu .env existente.
+    # --- Postgres / Supabase ---
+    # admin_pool (control plane + joburi): rol privilegiat. Acceptă și numele
+    # vechi DATABASE_URL ca alias, pt compat cu .env existente.
     supabase_db_url: str = Field(validation_alias=AliasChoices("SUPABASE_DB_URL", "DATABASE_URL"))
+    # bot_pool (tenant path, NX-50): conexiune DIRECTĂ (port 5432) cu rol de LOGIN
+    # `bot_runtime` (parolă proprie, fără bypassrls). Gol în dev înainte de
+    # provisioning → bot_pool cade grațios pe supabase_db_url + SET ROLE.
+    database_url_bot: str = Field(default="", validation_alias="DATABASE_URL_BOT")
 
     # --- OpenAI ---
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")

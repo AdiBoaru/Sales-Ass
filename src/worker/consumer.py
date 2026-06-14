@@ -21,7 +21,7 @@ import socket
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
-from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn
+from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
@@ -62,7 +62,7 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
 
     business_id = channel["business_id"]
     kind = event.get("kind", "message")
-    async with tenant_conn(pool, business_id) as conn:
+    async with tenant_conn(business_id) as conn:
         if kind == "status":
             await record_status_event(
                 conn,
@@ -132,7 +132,8 @@ async def _main() -> None:
     per replică, ca XREADGROUP să distribuie mesajele corect între workeri."""
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
-    pool = await get_pool()
+    pool = await get_pool()  # admin (control plane: resolve_channel)
+    await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot, nu la primul mesaj
     redis = await get_redis()
     consumer_name = f"worker-{socket.gethostname()}"
     try:

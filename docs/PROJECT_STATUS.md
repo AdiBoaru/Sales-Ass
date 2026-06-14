@@ -96,9 +96,12 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
 ## 5. Riscuri & datorie tehnică (curente)
 
-1. **Worker-ul se loghează ca `postgres` + SET ROLE** (`tenant_conn`) — NX-50
-   (P0-A audit) cere rol de LOGIN `bot_runtime`. De făcut înainte de load real;
-   NX-04 (assert la checkout) + NX-53 (test concurent) vin peste.
+1. **NX-50 livrat (cod) — `bot_runtime` rol de LOGIN** (P0-A audit). Două pool-uri:
+   tenant path = login direct `bot_runtime` (zero `SET ROLE` → fără scurgere sub
+   multiplexare); control plane = `admin_conn` privilegiat (`docs/db_connections.md`).
+   **Rămâne:** provisioning manual (`apply_005.py` + `DATABASE_URL_BOT`) — până atunci
+   codul cade grațios pe modul compat. NX-04 (assert la checkout) + NX-53 (test
+   concurent) se construiesc peste.
 2. **R1 — Debounce lipsă** (stagiul 2): mesajele succesive = tururi separate →
    răspunsuri redundante. Vezi `docs/REFINEMENTS.md`. P1 la hardening worker.
 3. **Limita de spend OpenAI NEPUSĂ** — protecția financiară (dashboard) e încă de
@@ -119,7 +122,8 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
    menționează rating + ce laudă clienții. Wow ieftin.
 2. **R1 debounce + R2 carduri „pro"** (carusel Telegram / List Messages WhatsApp) —
    vezi `docs/REFINEMENTS.md`.
-3. **NX-50/04/53** (rol login + assert + test concurent) — înainte de load real.
+3. **NX-04/53** (assert la checkout + test concurent) — peste NX-50 (livrat).
+   Plus provisioning manual NX-50 (`apply_005.py` + `DATABASE_URL_BOT`).
 4. **G5**: gates (limbă, handoff, risc), straturi gratuite (alias, cache semantic).
 5. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
 

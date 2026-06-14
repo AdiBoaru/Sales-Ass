@@ -67,15 +67,25 @@ Conexiunea corectă pentru bot + backup confirmat.
 > ⚠️ **ÎNAINTE de primul client plătitor:** trecere pe Supabase **Pro** (daily backups).
 > Date reale de client fără backup = riscul din T018. Nu acum, dar nu uita.
 
-### NX-50 — rol DB de login `bot_runtime` (înainte de load real, NU acum)
+### NX-50 — rol DB de login `bot_runtime` (CODUL E GATA; cutover înainte de load real)
 
-Securitate P0-A din audit, AMÂNAT conștient. Azi worker-ul intră ca `postgres` +
-`SET ROLE bot_runtime` (merge, dar sub multiplexare poolerul poate scurge starea).
-Înainte de trafic real cu mai mulți clienți, faci cutover-ul:
+Securitate P0-A din audit. **Codul e livrat** (două pool-uri: `bot_runtime` login
+pentru tenant path + admin pentru control plane — vezi `docs/db_connections.md`).
+Până faci pașii de mai jos, codul cade **grațios** pe modul compat (`SUPABASE_DB_URL`
++ `SET ROLE` în init) → nimic nu se rupe acum. Cutover-ul (recomandat înainte de
+trafic real cu mai mulți clienți):
 
-- [ ] Rulezi (Claude îți dă SQL-ul exact la momentul respectiv): `ALTER ROLE bot_runtime LOGIN PASSWORD '...'`
-- [ ] Pui `DATABASE_URL_BOT=postgresql://bot_runtime:...@...:5432/postgres` în `.env` (separat de cel `postgres`)
-- [ ] Confirmi că niciun `.env` de runtime nu mai are user `postgres`
+- [ ] Generează o parolă pt `bot_runtime` (vault) și rulează:
+      `BOT_RUNTIME_PASSWORD='...' python scripts/apply_005.py`
+      (face `ALTER ROLE bot_runtime LOGIN PASSWORD` + verifică login/bypassrls/super)
+- [ ] Pune în `.env`: `DATABASE_URL_BOT=postgresql://bot_runtime:<parola>@<host>:5432/postgres`
+      (separat de `SUPABASE_DB_URL`). ⚠️ Parola percent-encoded dacă are caractere speciale.
+- [ ] ⚠️ **Verifică conectivitatea:** pe Supabase, login-ul cu rol custom (`bot_runtime`)
+      merge pe **conexiunea directă** (`db.<ref>.supabase.co:5432`) sau pe Session pooler
+      cu user `bot_runtime.<ref>`. Confirmă care funcționează din rețeaua ta
+      (la fel ca nuanța IPv4 din T018). Dacă login-ul direct nu merge, rămâi pe compat.
+- [ ] Confirmă că `.env`-ul de runtime al workerului folosește `bot_runtime`, nu `postgres`
+      (acesta din urmă rămâne DOAR pt admin/migrări — control plane).
 
 > Nu blochează testul Telegram. E pe lista „înainte de clienți reali", lângă Supabase Pro.
 
