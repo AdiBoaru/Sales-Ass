@@ -444,8 +444,9 @@ nativx-assistant/
 │   │   ├── processor.py         ← handle_turn: dedupe L2 → contact/conv → pipeline → outbox (+log per-tur)
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
 │   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (Meta/Telegram), retry idempotent
+│   │   ├── context.py           ← stagiul 6: istoric conversație bugetat (triaj+agent)
 │   │   └── stages/             ← triage.py (nano) ✅ + agent.py (mini, RAG+validator) ✅;
-│   │                             TODO: gates, free_layers, context_builder; echo=fallback
+│   │                             TODO: gates, free_layers; echo=fallback
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
 │   │   ├── base.py              ← ChannelSender Protocol + SENDER_REGISTRY
 │   │   └── telegram/            ← client.py (Bot API) + poller.py (long polling, TEST)
