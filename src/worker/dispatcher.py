@@ -43,13 +43,14 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
     id. Eșecul → mark_failed (backoff sau 'dead')."""
     payload = row["payload"]
     outbox_kind = row.get("kind", "message")
-    if outbox_kind not in ("message", "text") or payload.get("type") != "text":
-        # acum trimitem doar text; template/interactive/typing → follow-up.
+    ptype = payload.get("type")
+    if outbox_kind not in ("message", "text") or ptype not in ("text", "products"):
+        # text + products (carduri); template/interactive/typing → follow-up.
         log.warning(
             "outbox %s: kind/type nesuportat (%s/%s) — marcat dead",
             row["id"],
             outbox_kind,
-            payload.get("type"),
+            ptype,
         )
         await mark_failed(conn, business_id, row["id"], 999, "tip nesuportat de dispatcher")
         return "dead"
@@ -62,9 +63,16 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
         return "dead"
 
     try:
-        provider_id = await sender.send_text(
-            row["channel_account_id"], payload["to"], payload["text"]
-        )
+        if ptype == "products" and payload.get("products") and hasattr(sender, "send_products"):
+            provider_id = await sender.send_products(
+                row["channel_account_id"], payload["to"], payload["text"], payload["products"]
+            )
+        else:
+            # text, sau products pe un canal fără suport → trimite lead-in-ul ca text
+            # (conține deja recomandarea — degradare grațioasă, principiul 6).
+            provider_id = await sender.send_text(
+                row["channel_account_id"], payload["to"], payload["text"]
+            )
     except Exception as e:  # noqa: BLE001 — orice eroare de transport/HTTP → retry
         status = await mark_failed(conn, business_id, row["id"], row["attempts"], str(e)[:500])
         log.warning("outbox %s: trimitere eșuată (%s) → %s", row["id"], type(e).__name__, status)

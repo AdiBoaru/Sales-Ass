@@ -17,7 +17,8 @@ import asyncpg
 # la products. Validatorul de preț trebuie să vadă același preț ca clientul.
 _EFFECTIVE_PRICE = "coalesce(vp.price, p.sale_price, p.price)"
 
-# 8 câmpuri per produs (CLAUDE.md): id, name, brand, price, url, ai_summary, stock, availability
+# Câmpuri per produs (CLAUDE.md): id, name, brand, price, url, ai_summary, stock,
+# availability + image (prima poză, pentru cardurile de produs — W1).
 _SELECT = f"""
     select
         p.id::text                  as id,
@@ -27,7 +28,8 @@ _SELECT = f"""
         p.product_url               as url,
         p.ai_summary                as ai_summary,
         p.stock_total               as stock,
-        p.availability              as availability
+        p.availability              as availability,
+        img.url                     as image
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
@@ -36,6 +38,12 @@ _SELECT = f"""
         from product_variants v
         where v.product_id = p.id
     ) vp on true
+    left join lateral (
+        select pi.url from product_images pi
+        where pi.product_id = p.id
+        order by pi.position asc nulls last
+        limit 1
+    ) img on true
 """
 
 

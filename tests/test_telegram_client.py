@@ -67,3 +67,32 @@ async def test_http_error_raises():
     client = _client(handler)
     with pytest.raises(httpx.HTTPStatusError):
         await client.send_text("b", "1", "x")
+
+
+async def test_send_products_compact_list_with_buttons():
+    """W1: UN sendMessage = text + un buton-link per produs (produsul fără url e sărit)."""
+    import json
+
+    calls: list[dict] = []
+
+    def handler(request):
+        assert str(request.url).endswith("/sendMessage")  # un singur mesaj, fără sendPhoto
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 7}})
+
+    client = _client(handler)
+    products = [
+        {"name": "Crema X", "price": 82.99, "url": "https://shop/p/x"},
+        {"name": "Ser Y", "price": 120.5, "url": None},  # fără url → fără buton
+    ]
+    mid = await client.send_products("botid", "555", "Uite ce-ți recomand:", products)
+
+    assert mid == "7"
+    assert len(calls) == 1  # un singur mesaj (compact, nu 3)
+    body = calls[0]
+    assert body["text"] == "Uite ce-ți recomand:"
+    keyboard = body["reply_markup"]["inline_keyboard"]
+    assert len(keyboard) == 1  # un buton (Ser Y fără url e sărit)
+    btn = keyboard[0][0]
+    assert btn["url"] == "https://shop/p/x"
+    assert "82.99" in btn["text"]  # prețul EXACT în eticheta butonului (ca în text)

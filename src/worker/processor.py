@@ -164,17 +164,22 @@ async def handle_turn(
             content_type="text",
             status="queued",
         )
+        payload = {
+            "type": "text",
+            "to": sender_external_id,
+            "text": ctx.reply.text,
+            "message_id": out_msg_id,
+        }
+        if ctx.reply.products:
+            # carduri de produs (W1): Sender-ul trimite text + poză/preț/buton per produs
+            payload["type"] = "products"
+            payload["products"] = ctx.reply.products
         outbox_id = await enqueue_outbox(
             conn,
             business.id,
             conv["id"],
             turn_id,  # idempotency_key = turn → un singur outbox per tur
-            {
-                "type": "text",
-                "to": sender_external_id,
-                "text": ctx.reply.text,
-                "message_id": out_msg_id,
-            },
+            payload,
         )
         await patch_conversation_state(
             conn,

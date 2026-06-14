@@ -102,6 +102,10 @@ async def test_sales_recommends(monkeypatch):
     assert ctx.retrieval is not None
     assert len(ctx.retrieval.products) == 2
     assert any(e.type == "agent_recommended" for e in ctx.events)
+    # W1: produsele atașate ca i carduri (compact: name, price, url, image) pt Sender
+    assert ctx.reply.products is not None
+    assert ctx.reply.products[0]["name"] == "Crema Hidratantă"
+    assert "price" in ctx.reply.products[0]
 
 
 async def test_no_products_asks_clarify(monkeypatch):

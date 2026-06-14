@@ -86,6 +86,19 @@ def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _card_products(products: list[dict[str, Any]], n: int = 3) -> list[dict[str, Any]]:
+    """Câmpuri compacte pentru cardurile de produs (W1): name, price, url, image."""
+    return [
+        {
+            "name": p["name"],
+            "price": float(p["price"]),
+            "url": p.get("url"),
+            "image": p.get("image"),
+        }
+        for p in products[:n]
+    ]
+
+
 async def _recommend(llm, query: str, products: list[dict[str, Any]], language: str) -> str:
     """Compune recomandarea + validează prețurile (retry 1, apoi fallback determinist)."""
     user = (
@@ -147,5 +160,5 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         log.warning("agent: compunere eșuată (%s) → fallback", type(e).__name__)
         reply = _deterministic_reply(products)
 
-    ctx.set_reply(reply)
+    ctx.set_reply(reply, products=_card_products(products))
     ctx.emit("agent_recommended", n=len(products), price_max=price_max)

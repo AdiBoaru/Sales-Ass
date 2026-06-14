@@ -159,6 +159,9 @@ class Reply:
 
     text: str
     kind: str = "message"  # message | template | typing
+    # Carduri de produs (W1): dacă setate, Sender-ul le trimite ca poză+preț+buton
+    # după textul de lead-in. Câmpuri compacte (name, price, url, image), nu obiecte.
+    products: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -193,6 +196,9 @@ class TurnContext:
         """Helper pentru stagii: adaugă un event fără să știe cum e scris."""
         self.events.append(Event(type=type_, properties=properties))
 
-    def set_reply(self, text: str, kind: str = "message") -> None:
-        """Setează reply → semnalează early exit la Sender."""
-        self.reply = Reply(text=text, kind=kind)
+    def set_reply(
+        self, text: str, kind: str = "message", products: list[dict[str, Any]] | None = None
+    ) -> None:
+        """Setează reply → semnalează early exit la Sender. `products` (opțional) →
+        Sender-ul le trimite ca carduri (poză+preț+buton) după text (W1)."""
+        self.reply = Reply(text=text, kind=kind, products=products)

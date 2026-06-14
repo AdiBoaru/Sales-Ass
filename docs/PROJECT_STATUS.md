@@ -1,6 +1,6 @@
 # Nativx Assistant — Status proiect
 
-_Actualizat: 2026-06-13 · Bază: `main` la zi (PR #1–#39) · Document VIU — se
+_Actualizat: 2026-06-14 · Bază: `main` la zi (PR #1–#45 + W1) · Document VIU — se
 actualizează la fiecare milestone; data stă aici, nu în numele fișierului._
 
 Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) riscuri
@@ -22,14 +22,18 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
 - **OpenAI verificat** (T017 parțial). Cheia validă + cele 3 modele
   (`gpt-5.4-mini`/`nano`, `text-embedding-3-small`) confirmate live cu
   `scripts/check_openai.py`. **Rămâne** de pus limita de spend în dashboard.
-- **Botul e încă ECHO.** Pipeline-ul are un singur stagiu real (`echo_stage`,
-  scaffold). Următorul salt de valoare = **G3 (triaj nano → agent mini)**, acum
-  DEBLOCAT (cheia merge).
+- **🎉 Botul VINDE (G3+G4 LIVE, 2026-06-14).** Triaj (nano) clasifică intenția →
+  agent (mini) caută **semantic** în catalog → recomandă **produse reale cu prețuri
+  validate** (zero prețuri inventate) + **carduri compacte** (text + butoane-link)
+  pe Telegram. Ex. „caut o cremă pentru ten uscat sub 80 lei" → recomandări fix pe
+  nevoie. Echo rămâne doar fallback.
+- **Catalog de calitate.** 500 produse cu descrieri reale + `concerns` filtrabile
+  (LLM enrichment), prețuri realiste, `product_url`, **500/500 embeddings**.
 - **Stack-ul rulează LOCAL.** Docker Desktop + WSL2 instalate 2026-06-13 →
   `docker compose up` pornește redis + worker + dispatcher + telegram-poller +
   webhook pe Windows. (VPS rămâne ținta de producție.)
 
-## 2. Ce e în main (până la PR #39)
+## 2. Ce e în main (până la PR #45 + W1)
 
 | Componentă | Stare | PR |
 |---|---|---|
@@ -49,6 +53,12 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
 | Fix seed rulabil direct (sys.path) | ✅ | #37 |
 | Fix worker: entrypoint `__main__` + log per-tur + silențiere token | ✅ | #38 |
 | `.gitignore .env.bak*` + doc gotcha parolă DB | ✅ | #39 |
+| Docs refresh complet | ✅ | #40 |
+| **G3: adaptor OpenAI + Triaj (nano)** | ✅ live | #41 |
+| Catalog: normalize (preț/url) + enrich (descrieri+concerns, LLM) | ✅ | #42, #43 |
+| **P1: embed_products** (product_embeddings=500) | ✅ | #44 |
+| **G4: agent (mini) + search semantic + validator preț** | ✅ live | #45 |
+| **W1: carduri compacte** (listă text + butoane-link) | ✅ live | (acest PR) |
 
 Fundațiile anterioare (infra, schema v2 + RLS 003, config/pool/models,
 search_products SQL) — vezi istoricul PR #1–#18.
@@ -61,62 +71,62 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 2 | Redis backbone: stream + consumer group + dedupe 2L | ✅ live (TODO: debounce, lock multi-consumer, rate limit, cost guard) |
 | 3 | Gates (bot_active, handoff, limbă, risc, media) | ❌ |
 | 4 | Straturi gratuite (alias, cache semantic, clarificare) | ❌ (faqs=0, cache=0) |
-| 5 | Triaj (nano) | ❌ — **deblocat** (cheia OpenAI merge) |
-| 6 | Context builder | ❌ |
-| 7 | Agent (mini) + tools | 🟡 doar `search_products` SQL (fără ranking semantic — embeddings=0) |
-| 8 | Validator | ❌ |
-| 9 | Sender → outbox → dispatcher | ✅ **live cap-coadă** |
+| 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
+| 6 | Context builder | ❌ (agentul nu folosește încă istoricul) |
+| 7 | Agent (mini) + search semantic | ✅ **live** (RAG: embed query → cosine + filtru preț; tool-calling complet = refinement) |
+| 8 | Validator | ✅ inline în agent (zero prețuri inventate; retry → fallback determinist) |
+| 9 | Sender → outbox → dispatcher (+ carduri W1) | ✅ **live cap-coadă** |
 | — | Status webhook (delivered/read/failed) | ✅ |
 | — | Proactiv / Jobs (embed, rollup, cleanup partiții) | ❌ (doar `cleanup_dedupe` ✅) |
 
-## 4. Starea DATELOR demo (verificat live în Supabase, 2026-06-13)
+## 4. Starea DATELOR demo (verificat live în Supabase, 2026-06-14)
 
 business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
 | Tabel | Count | Notă |
 |---|---|---|
-| `products` | 500 | seedate |
-| `product_embeddings` | **0** | ⚠️ neembed-uite → search semantic indisponibil. Job `embed_products` de scris (acum deblocat — cheia merge) |
-| `products.product_url` | **0 populate** | ⚠️ toate NULL → agentul n-are linkuri de produs. Gaură de DATE (seed), nu de cod |
-| `products.ai_summary` | 500 | prezente, dar generate templat (calitate de îmbunătățit) |
+| `products` | 500 | seedate; prețuri normalizate (outlier 11M reparat) |
+| `product_embeddings` | **500/500** ✅ | embed pe descriere+concerns (1536 dim); incremental pe content_hash |
+| `products.product_url` | **500** ✅ | generate din slug (`shop.sole-demo.ro/p/<slug>`) |
+| `products.ai_summary` + `attributes.concerns` | **500** ✅ | descrieri reale + concerns filtrabile (LLM enrichment) |
+| `product_images` | 2500 | placehold.co `.png` (fixat din SVG pt carduri) |
+| `reviews` | 953 | nesumarizate încă (D3 = rezumate → product_review_summaries) |
 | `faqs` | 0 | stratul gratuit FAQ gol |
-| `channels` | telegram ✅ | `@solechat_bot` (id 7980364420) seedat; WhatsApp încă 0 (cere T013) |
+| `channels` | telegram ✅ | `@solechat_bot` seedat; WhatsApp încă 0 (cere T013) |
 
 ## 5. Riscuri & datorie tehnică (curente)
 
 1. **Worker-ul se loghează ca `postgres` + SET ROLE** (`tenant_conn`) — NX-50
    (P0-A audit) cere rol de LOGIN `bot_runtime`. De făcut înainte de load real;
    NX-04 (assert la checkout) + NX-53 (test concurent) vin peste.
-2. **`product_embeddings` = 0** → `search_products` merge doar pe filtre SQL, fără
-   ranking semantic. De scris `embed_products` (deblocat de cheia OpenAI).
-3. **`product_url` = 0 (toate NULL)** → agentul/validatorul n-au linkuri de produs.
-   De rezolvat sursa URL-urilor în catalog/seed.
-4. **Limita de spend OpenAI NEPUSĂ** — protecția financiară (dashboard) e încă de
-   făcut (tracked în TODO-MANUAL T017). Cost actual ~$0 (botul e echo).
-5. **Echo stage e scaffold** — marcat explicit; se înlocuiește în G3.
-6. **Dedupe claim-first:** crash între claim și finalizarea turului = mesaj marcat
+2. **R1 — Debounce lipsă** (stagiul 2): mesajele succesive = tururi separate →
+   răspunsuri redundante. Vezi `docs/REFINEMENTS.md`. P1 la hardening worker.
+3. **Limita de spend OpenAI NEPUSĂ** — protecția financiară (dashboard) e încă de
+   făcut (T017). Cost real mic (enrichment+embed one-time ~$0.5; per tur fracțiuni).
+4. **Agentul e RAG, nu tool-calling** — fără context istoric (stagiul 6), fără
+   compară/detalii (max-3-tools). Suficient pt demo; refinement ulterior.
+5. **Dedupe claim-first:** crash între claim și finalizarea turului = mesaj marcat
    văzut dar neprocesat. Dead-letter / reaper = follow-up.
-7. **`get_or_create_conversation` race teoretic** pe primul mesaj al unui contact
+6. **`get_or_create_conversation` race teoretic** pe primul mesaj al unui contact
    nou (fără unique pe open-conv). Advisory lock = follow-up.
-8. **Tokenul Telegram a apărut în loguri** (httpx loga URL-ul complet) — silențiat
-   în #38. Pentru zero risc: `/revoke` la BotFather după teste.
-9. **DB password gotcha** (#39): parola din `SUPABASE_DB_URL` trebuie percent-encoded
-   sau asyncpg crapă în container (nu pe Windows). Documentat în README.
+7. **Tokenul Telegram în loguri** — silențiat în #38; `/revoke` la BotFather pt zero risc.
+8. **DB password gotcha** (#39): parola din `SUPABASE_DB_URL` percent-encoded sau
+   asyncpg crapă în container. Documentat în README.
 
 ## 6. Ce urmează (ordine recomandată)
 
-1. **`embed_products` (embeddings)** — job mic, cost ~$0.01, deblochează search
-   semantic. Quick win + dovedește modelul embed live.
-2. **G3: adapter OpenAI (v2) + Triaj (nano) + prompt_builder** — primul stagiu LLM;
-   mock/replay în CI. Botul începe să „gândească" (vizibil pe @solechat_bot).
-3. **G4: agent (mini) + tools + validator** — răspuns real de vânzare, zero prețuri
-   inventate. (Validatorul are nevoie de `product_url` populat.)
+1. **D3 — rezumate recenzii** (953 → `product_review_summaries`, LLM) → botul
+   menționează rating + ce laudă clienții. Wow ieftin.
+2. **Context builder (stagiul 6)** — istoric în prompt → conversație continuă
+   (agentul ține minte ce-a cerut clientul, follow-up coerent).
+3. **R1 debounce + R2 carduri „pro"** (carusel Telegram / List Messages WhatsApp) —
+   vezi `docs/REFINEMENTS.md`.
 4. **NX-50/04/53** (rol login + assert + test concurent) — înainte de load real.
-5. **G5/G6**: gates, straturi gratuite, context builder, proactiv, jobs.
+5. **G5**: gates (limbă, handoff, risc), straturi gratuite (alias, cache semantic).
 6. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
 
-**Milestone următor:** „bot care răspunde inteligent pe Telegram" — triaj + agent
-înlocuiesc echo-ul, vizibil instant pe `@solechat_bot`.
+**Milestone atins (2026-06-14):** „bot care VINDE pe Telegram" — triaj + agent +
+carduri, pe catalog de calitate. Următorul: memorie de conversație (context) + recenzii.
 
 ## 7. Decizii de arhitectură luate pe parcurs
 
