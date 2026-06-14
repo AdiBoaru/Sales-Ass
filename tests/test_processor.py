@@ -64,6 +64,11 @@ def _event(body="salut", wamid=None):
     }
 
 
+async def _echo_stage(ctx, deps):
+    """Stage determinist pentru testele de plumbing (fără LLM real)."""
+    ctx.set_reply(f"echo: {ctx.message.body}")
+
+
 # --------------------------------------------------------------------------- #
 # load_business
 # --------------------------------------------------------------------------- #
@@ -111,9 +116,11 @@ async def test_resolve_channel_by_phone(pool):
 async def test_handle_turn_echo_writes_outbox(pool):
     async with tenant_tx(pool) as (conn, channel_id):
         biz = await load_business(conn, DEMO_BIZ)
-        result = await handle_turn(conn, biz, channel_id, _event(body="ce preț are X?"))
+        result = await handle_turn(
+            conn, biz, channel_id, _event(body="ce preț are X?"), stages=[_echo_stage]
+        )
 
-        # reply determinist din echo_stage
+        # reply determinist din stage-ul de test (plumbing, fără LLM)
         assert result.reply_text is not None
         assert "ce preț are X?" in result.reply_text
         assert result.outbox_id is not None
@@ -147,8 +154,8 @@ async def test_handle_turn_same_contact_same_conversation(pool):
         biz = await load_business(conn, DEMO_BIZ)
         ev1 = _event(body="salut")
         ev2 = {**ev1, "provider_msg_id": "wamid.second", "body": "încă unul"}
-        r1 = await handle_turn(conn, biz, channel_id, ev1)
-        r2 = await handle_turn(conn, biz, channel_id, ev2)
+        r1 = await handle_turn(conn, biz, channel_id, ev1, stages=[_echo_stage])
+        r2 = await handle_turn(conn, biz, channel_id, ev2, stages=[_echo_stage])
         assert r1.conversation_id == r2.conversation_id
         assert r1.contact_id == r2.contact_id
         assert r1.turn_id != r2.turn_id

@@ -26,6 +26,7 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
 from src.redis_bus import STREAM_INBOUND, close_redis, get_redis
+from src.worker.debounce import Debouncer
 from src.worker.processor import handle_turn
 
 log = logging.getLogger(__name__)
@@ -78,8 +79,11 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
         await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
 
 
-async def consume_once(pool, redis: Redis, consumer_name: str, *, block_ms: int = 2000) -> int:
-    """Un ciclu de citire+procesare. Întoarce numărul de mesaje tratate."""
+async def consume_once(
+    pool, redis: Redis, consumer_name: str, debouncer: Debouncer, *, block_ms: int = 2000
+) -> int:
+    """Un ciclu de citire+procesare. Mesajele trec prin debounce (lot per expeditor);
+    statusurile se procesează imediat. Întoarce numărul de evenimente tratate."""
     resp = await redis.xreadgroup(
         CONSUMER_GROUP,
         consumer_name,
@@ -95,7 +99,10 @@ async def consume_once(pool, redis: Redis, consumer_name: str, *, block_ms: int 
         for msg_id, fields in entries:
             try:
                 event = json.loads(fields["data"])
-                await process_event(pool, redis, event)
+                if event.get("kind", "message") == "message":
+                    await debouncer.add(event)  # coalesce + flush async (R1)
+                else:
+                    await process_event(pool, redis, event)  # status → imediat
             except Exception:  # noqa: BLE001 — bucla nu trebuie să moară pe un mesaj
                 log.exception("eroare la procesarea mesajului %s", msg_id)
             finally:
@@ -108,9 +115,14 @@ async def consume_once(pool, redis: Redis, consumer_name: str, *, block_ms: int 
 async def run_consumer(pool, redis: Redis, consumer_name: str) -> None:
     """Bucla principală a worker-ului (rulează până la anulare)."""
     await ensure_group(redis)
+
+    async def _handle(event: dict) -> None:
+        await process_event(pool, redis, event)
+
+    debouncer = Debouncer(_handle)
     log.info("consumer %s pornit pe stream %s", consumer_name, STREAM_INBOUND)
     while True:
-        await consume_once(pool, redis, consumer_name)
+        await consume_once(pool, redis, consumer_name, debouncer)
 
 
 async def _main() -> None:
