@@ -21,6 +21,7 @@ from pydantic import BaseModel, ValidationError
 
 from src.db.queries.catalog import list_category_slugs
 from src.models import Route, RouteDecision, TurnContext
+from src.worker.context import conversation_transcript
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -46,6 +47,9 @@ Reguli:
   primită; altfel null.
 - "reply": DOAR pentru "simple" (răspuns scurt, prietenos, în limba clientului)
   și "clarify" (o întrebare scurtă de clarificare). Pentru restul rutelor: null.
+- Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și pentru păr?"),
+  folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
+  „sales"), NU „clarify".
 - Nu inventa produse, prețuri sau categorii."""
 
 
@@ -67,9 +71,12 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
 
     categories = await list_category_slugs(deps.conn, ctx.business.id)
+    transcript = conversation_transcript(ctx.history)
+    history_block = f"Conversație până acum:\n{transcript}\n\n" if transcript else ""
     user = (
         f"Limba clientului: {ctx.language}\n"
-        f"Mesaj client: {body}\n"
+        f"{history_block}"
+        f"Mesaj client NOU: {body}\n"
         f"Categorii valide (slug): {', '.join(categories) or '(niciuna)'}"
     )
 
