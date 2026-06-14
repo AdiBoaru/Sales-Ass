@@ -52,6 +52,19 @@ class LLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
+    async def complete(self, system: str, user: str, *, model: str | None = None) -> str:
+        """Apel chat care întoarce TEXT simplu (nu JSON). Modelul implicit = agent
+        (mini). Folosit de agent pentru a compune recomandarea. Ridică la eroare de
+        API — caller-ul prinde și degradează."""
+        resp = await self._client.chat.completions.create(
+            model=model or self.model_agent,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return (resp.choices[0].message.content or "").strip()
+
     async def embed(self, texts: list[str], *, model: str | None = None) -> list[list[float]]:
         """Embeddings pentru un lot de texte. Întoarce o listă de vectori (1536 dim
         la text-embedding-3-small). Folosit de jobul `embed_products` + (viitor)
