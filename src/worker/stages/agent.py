@@ -39,8 +39,11 @@ Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis.
 Reguli STRICTE:
 - Folosește DOAR produsele și prețurile din listă. NU inventa produse, prețuri,
   ingrediente sau caracteristici.
-- Pentru fiecare recomandare: numele, prețul EXACT din listă (în lei), o frază de
-  ce se potrivește.
+- Pentru fiecare recomandare, în ordine: numele, prețul EXACT (lei) și ratingul
+  (★) din listă, apoi o frază scurtă de CE SE POTRIVEȘTE pe nevoia clientului
+  (din descriere). NU înlocui descrierea cu recenziile — pune și de ce se
+  potrivește, și ratingul. Ce laudă clienții = opțional, scurt.
+- Folosește rating/recenzii DOAR din date (nu inventa).
 - Maxim 3 produse. Termină cu o întrebare scurtă (buget / tip de ten) sau ofertă
   de a trimite link.
 - Dacă întrebarea e un follow-up (ex. „mai ieftin", „și pentru păr?"), ține cont
@@ -74,9 +77,14 @@ def _products_brief(products: list[dict[str, Any]]) -> str:
     lines = []
     for p in products:
         summary = (p.get("ai_summary") or "")[:140]
+        extra = ""
+        if p.get("rating"):
+            extra += f" | {float(p['rating']):.1f}★"
+        if p.get("review_pro"):
+            extra += f" | clienții laudă: {p['review_pro']}"
         lines.append(
             f"- {p['name']} | brand: {p.get('brand') or '-'} | "
-            f"preț: {float(p['price']):.2f} lei | {summary}"
+            f"preț: {float(p['price']):.2f} lei{extra} | {summary}"
         )
     return "\n".join(lines)
 
