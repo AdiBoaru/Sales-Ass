@@ -53,16 +53,14 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     ctx.emit("pipeline_complete")
 
 
-async def echo_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Fallback determinist: dacă niciun stagiu LLM n-a produs reply (ex. rută
-    sales/order fără agent încă — G4, sau fără cheie OpenAI), tot iese ceva spre
-    client (principiul 6: niciodată tăcere). Se restrânge pe măsură ce G4 acoperă
-    rutele rămase."""
-    body = (ctx.message.body or "").strip()
-    if body:
-        ctx.set_reply(f"Am primit mesajul tău: „{body}”. Revenim imediat.")
-    else:
-        ctx.set_reply("Am primit mesajul tău. Revenim imediat.")
+async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
+    """Fallback grațios: dacă niciun stagiu n-a produs reply (rută order/handoff
+    neacoperită încă, triaj fără răspuns, sau fără cheie OpenAI), iese o întrebare
+    de clarificare — NU tăcere (principiul 6) și NU text de schelet."""
+    ctx.set_reply(
+        "Hmm, n-am înțeles exact 🙂 Cauți un produs anume, ai o întrebare despre o "
+        "comandă, sau altceva?"
+    )
 
 
 # Pipeline-ul curent: Triaj (nano) → Agent (mini, doar route=sales) → echo fallback.
@@ -72,4 +70,4 @@ async def echo_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
-DEFAULT_STAGES: list[Stage] = [triage_stage, agent_stage, echo_stage]
+DEFAULT_STAGES: list[Stage] = [triage_stage, agent_stage, fallback_stage]

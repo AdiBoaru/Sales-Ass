@@ -20,7 +20,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEBOUNCE_SECONDS = 2.0
+DEBOUNCE_SECONDS = 3.0
 
 
 class Debouncer:

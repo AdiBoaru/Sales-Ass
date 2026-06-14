@@ -6,7 +6,7 @@ from src.models import (
     InboundMessage,
     TurnContext,
 )
-from src.worker.runner import PipelineDeps, echo_stage, run_pipeline
+from src.worker.runner import PipelineDeps, fallback_stage, run_pipeline
 
 
 def _ctx(body: str | None = "salut") -> TurnContext:
@@ -60,14 +60,14 @@ async def test_all_stages_run_when_no_reply():
     assert sum(e.type == "stage_completed" for e in ctx.events) == 2
 
 
-async def test_echo_stage_reflects_body():
+async def test_fallback_stage_sets_clarify_reply():
     ctx = _ctx(body="ce preț are X?")
-    await echo_stage(ctx, _deps())
+    await fallback_stage(ctx, _deps())
     assert ctx.reply is not None
-    assert "ce preț are X?" in ctx.reply.text
+    assert "n-am înțeles" in ctx.reply.text.lower()
 
 
-async def test_echo_stage_handles_empty_body():
+async def test_fallback_stage_handles_empty_body():
     ctx = _ctx(body=None)
-    await echo_stage(ctx, _deps())
+    await fallback_stage(ctx, _deps())
     assert ctx.reply is not None  # niciodată tăcere
