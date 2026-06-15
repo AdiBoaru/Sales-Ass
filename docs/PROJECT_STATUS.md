@@ -1,7 +1,8 @@
 # Nativx Assistant — Status proiect
 
-_Actualizat: 2026-06-14 · Bază: `main` la zi (PR #1–#45 + W1) · Document VIU — se
-actualizează la fiecare milestone; data stă aici, nu în numele fișierului._
+_Actualizat: 2026-06-15 · Bază: `main` la zi (PR #1–#55: + G5a gates, G5b-1 cache
+static) · Document VIU — se actualizează la fiecare milestone; data stă aici, nu în
+numele fișierului._
 
 Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) riscuri
 și datorie tehnică, (3) ce urmează — material pentru generarea taskurilor.
@@ -58,7 +59,12 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
 | Catalog: normalize (preț/url) + enrich (descrieri+concerns, LLM) | ✅ | #42, #43 |
 | **P1: embed_products** (product_embeddings=500) | ✅ | #44 |
 | **G4: agent (mini) + search semantic + validator preț** | ✅ live | #45 |
-| **W1: carduri compacte** (listă text + butoane-link) | ✅ live | (acest PR) |
+| **W1: carduri compacte** (listă text + butoane-link) | ✅ live | #50 |
+| R2: carusel de produse pe Telegram | ✅ | #53 |
+| NX-04/53: assert izolare la checkout + test concurent | ✅ | #51, #52 |
+| **G5a: gates** (bot_active + handoff + risc → request_human) | ✅ live | #54 |
+| **G5b-1: cache semantic** (lookup exact+semantic, write-back static) | ✅ live | #55 |
+| **G5b-2: invalidare cache + caching dynamic** (price-check + data_version) | ✅ | (acest PR) |
 
 Fundațiile anterioare (infra, schema v2 + RLS 003, config/pool/models,
 search_products SQL) — vezi istoricul PR #1–#18.
@@ -70,7 +76,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 1 | Webhook: GET verify + POST inbound | ✅ live |
 | 2 | Redis backbone: stream + consumer group + dedupe 2L | ✅ live (TODO: debounce, lock multi-consumer, rate limit, cost guard) |
 | 3 | Gates (bot_active, handoff, limbă, risc, media) | ❌ |
-| 4 | Straturi gratuite (alias, cache semantic, clarificare) | ❌ (faqs=0, cache=0) |
+| 4 | Straturi gratuite (alias, cache semantic, clarificare) | ✅ **cache semantic live** (static G5b-1 + dynamic cu invalidare price-check/data_version G5b-2); alias + clarificare ulterior; cache se încălzește din răspunsuri (faqs=0) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
 | 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
 | 7 | Agent (mini) + search semantic | ✅ **live** (RAG: embed query → cosine + filtru preț; tool-calling complet = refinement) |
@@ -125,7 +131,8 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
    vezi `docs/REFINEMENTS.md`.
 3. **Provisioning manual NX-50** (`apply_005.py` + `DATABASE_URL_BOT`) — NX-04/53
    (assert la checkout + test concurent) deja livrate peste NX-50.
-4. **G5**: gates (limbă, handoff, risc), straturi gratuite (alias, cache semantic).
+4. **G5**: gates (G5a ✅) + cache semantic (G5b-1/G5b-2 ✅). Rămâne: alias lookup
+   (`intent_aliases`), detecție de limbă (RO/HU/EN), clarificare cu `pending_question`.
 5. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
 
 **Milestone atins (2026-06-14):** „bot care VINDE și ține firul" — triaj + agent +

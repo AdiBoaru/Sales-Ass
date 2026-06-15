@@ -22,6 +22,7 @@ from src.agent.llm import get_llm
 from src.cache.canonical import canonicalize, classify_volatility
 from src.config import get_settings
 from src.db.queries.analytics import insert_events
+from src.db.queries.businesses import get_data_version
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import (
     get_or_create_conversation,
@@ -74,22 +75,42 @@ async def _persist_events(conn, business_id, conversation_id, contact_id, events
 
 
 async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
-    """Write-back gated (G5b-1), best-effort — scrie răspunsul în semantic_cache ca să
+    """Write-back gated (G5b), best-effort — scrie răspunsul în semantic_cache ca să
     serveas tururi viitoare fără LLM. Rulează DUPĂ outbox (nu întârzie livrarea).
 
-    Gate (precision-first): nu re-scriem un hit; doar tier static; fără produse
-    (dynamic = G5b-2); doar răspunsuri reutilizabile (cacheable, nu clarify/fallback)."""
+    Gate (precision-first): nu re-scriem un hit; doar răspunsuri reutilizabile (cacheable,
+    nu clarify/fallback). Două tiere, după volatilitatea query-ului:
+      • `static` (fără produse) → entry FAQ/generic, TTL în zile (G5b-1).
+      • `dynamic` (recomandare cu produse) → entry cu `retrieval_signature` (snapshot de
+        preț) + `data_version`, TTL scurt în minute (G5b-2). Invalidat la lookup prin
+        price-check, deci sigur de cache-uit (zero preț învechit servit)."""
     settings = get_settings()
     reply = ctx.reply
     if not settings.cache_enabled or ctx.from_cache or reply is None or llm is None:
         return
-    if reply.products is not None or not reply.cacheable:
+    if not reply.cacheable:
         return
     text = (reply.text or "").strip()
     if not 5 <= len(text) <= 4000:
         return
-    if classify_volatility(body) != "static":
+
+    volatility = classify_volatility(body)
+    # Parametrii upsert-ului diferă pe tier; gate-ul de eligibilitate îi decide.
+    kwargs: dict = {}
+    if volatility == "static" and reply.products is None:
+        kwargs = {"ttl_days": settings.cache_ttl_static_days}
+    elif volatility == "dynamic" and reply.products:
+        kwargs = {
+            "ttl_minutes": settings.cache_ttl_dynamic_minutes,
+            "retrieval_signature": [
+                {"product_id": p["product_id"], "price": p["price"]} for p in reply.products
+            ],
+            "data_version": await get_data_version(conn, business_id),
+        }
+    else:
+        # static cu produse / dynamic fără produse / realtime → nu se cache-uiește.
         return
+
     try:
         canonical, canonical_hash = canonicalize(body or "")
         if not canonical:
@@ -106,12 +127,15 @@ async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
                 canonical_hash=canonical_hash,
                 embedding=embedding,
                 answer=text,
-                volatility_class="static",
+                volatility_class=volatility,
                 embedding_model=settings.model_embed,
                 quality_score=1.0,
-                ttl_days=settings.cache_ttl_static_days,
+                **kwargs,
             )
-        ctx.emit("cache_write", volatility="static", ttl_days=settings.cache_ttl_static_days)
+        if volatility == "dynamic":
+            ctx.emit("cache_write", volatility="dynamic", n_products=len(reply.products))
+        else:
+            ctx.emit("cache_write", volatility="static", ttl_days=settings.cache_ttl_static_days)
     except Exception:  # noqa: BLE001 — write-back best-effort, turul a răspuns deja
         log.exception("cache write-back a eșuat (turul continuă)")
 

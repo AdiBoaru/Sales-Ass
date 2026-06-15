@@ -53,7 +53,7 @@ def _ctx(body: str) -> TurnContext:
 
 
 async def test_exact_hit_serves_and_skips_pipeline(monkeypatch):
-    async def fake_exact(conn, bid, locale, h):
+    async def fake_exact(conn, bid, locale, h, **k):
         return {"id": "e1", "answer": "Retur în 14 zile."}
 
     async def fake_touch(conn, bid, eid):
@@ -71,10 +71,10 @@ async def test_exact_hit_serves_and_skips_pipeline(monkeypatch):
 
 
 async def test_semantic_hit_above_threshold(monkeypatch):
-    async def no_exact(*a):
+    async def no_exact(*a, **k):
         return None
 
-    async def fake_sem(conn, bid, locale, emb):
+    async def fake_sem(conn, bid, locale, emb, **k):
         return {"id": "e2", "answer": "Livrare 2-4 zile.", "similarity": 0.95}
 
     async def fake_touch(*a):
@@ -91,10 +91,10 @@ async def test_semantic_hit_above_threshold(monkeypatch):
 
 
 async def test_semantic_miss_below_threshold(monkeypatch):
-    async def no_exact(*a):
+    async def no_exact(*a, **k):
         return None
 
-    async def fake_sem(conn, bid, locale, emb):
+    async def fake_sem(conn, bid, locale, emb, **k):
         return {"id": "e3", "answer": "x", "similarity": 0.80}  # sub τ_high (0.92)
 
     monkeypatch.setattr(cache_mod, "exact_lookup", no_exact)
@@ -107,16 +107,18 @@ async def test_semantic_miss_below_threshold(monkeypatch):
     assert any(e.type == "cache_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
 
 
-async def test_dynamic_query_bypasses(monkeypatch):
-    async def boom(*a):
-        raise AssertionError("nu trebuie să facă lookup pe dynamic")
+async def test_realtime_query_bypasses(monkeypatch):
+    # G5b-2: `dynamic` NU mai face bypass (trece prin cache cu price-check). DOAR
+    # `realtime` (comandă/personal) e rutat pe lângă cache — răspuns specific userului.
+    async def boom(*a, **k):
+        raise AssertionError("nu trebuie să facă lookup pe realtime")
 
     monkeypatch.setattr(cache_mod, "exact_lookup", boom)
-    ctx = _ctx("caut o cremă sub 80 lei")
+    ctx = _ctx("unde e comanda mea")
     await cache_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
     assert ctx.reply is None
     assert any(
-        e.type == "cache_bypass" and e.properties["volatility"] == "dynamic" for e in ctx.events
+        e.type == "cache_bypass" and e.properties["volatility"] == "realtime" for e in ctx.events
     )
 
 

@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # (precizie peste recall); calibrat cu instrumentarea înainte de a coborî.
     cache_tau_high: float = Field(default=0.92, validation_alias="CACHE_TAU_HIGH")
     cache_ttl_static_days: int = Field(default=7, validation_alias="CACHE_TTL_STATIC_DAYS")
+    # TTL dynamic (recomandări de produs, G5b-2): backstop SCURT — invalidarea reală e
+    # price-check + data_version la lookup, nu expirarea. Default 30 min.
+    cache_ttl_dynamic_minutes: int = Field(default=30, validation_alias="CACHE_TTL_DYNAMIC_MINUTES")
 
     @property
     def is_prod(self) -> bool:
