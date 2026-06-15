@@ -166,6 +166,11 @@ Expune localhost:8000 spre Meta prin HTTPS public, fără deploy.
 - [ ] **Branch protection finalizare:** Settings → Branches → regula `main` → adaugă required checks `Lint (ruff)` + `Test (pytest)` (apar în search după ce au rulat o dată)
 - [ ] **CODEOWNERS review:** bifează "Require review from Code Owners" (forțează review-ul tău pe `prompts/` și `docs/*.sql`)
 - [ ] (Opțional) "Allow specified actors to bypass" → adaugă-te pe tine dacă vrei 1-approval pentru junior dar bypass pentru tine
+- [ ] **Secret CI `SUPABASE_DB_URL`** (pt jobul nightly `isolation-concurrent`, NX-53):
+  Settings → Secrets and variables → Actions → New repository secret →
+  `SUPABASE_DB_URL` = URL-ul pooler (Session pooler, rezolvabil pe IPv4 din Actions).
+  Fără el, jobul nightly de izolare pică la conectare. (Jobul rulează DOAR pe main +
+  nightly, nu pe PR-uri.)
 - [ ] **Auto-delete branches:** Settings → General → bifează "Automatically delete
   head branches" — curăță branch-urile după merge și reduce riscul de
   commit-uri orfane (s-a întâmplat de 3 ori: #15, #17, #23). Pe cele ~20

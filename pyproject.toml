@@ -11,4 +11,7 @@ known-first-party = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["integration: teste care ating servicii reale (excluse din CI)"]
+markers = [
+    "integration: teste care ating servicii reale (excluse din CI)",
+    "slow: teste lente (ex. concurență NX-53); rulează în jobul nightly, nu pe PR-uri",
+]

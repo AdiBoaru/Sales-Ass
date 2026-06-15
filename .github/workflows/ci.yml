@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: "0 3 * * *" # nightly 03:00 UTC — jobul isolation-concurrent (NX-53)
 
 jobs:
   lint:
@@ -48,3 +50,29 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       - run: pytest -x -q -m "not integration"
+
+  isolation-concurrent:
+    name: Izolare concurentă (NX-53)
+    runs-on: ubuntu-latest
+    # NU pe PR-uri (atinge DB real) — doar pe main + nightly. Obligatoriu pe main.
+    if: github.event_name != 'pull_request'
+    env:
+      # SUPABASE_DB_URL = secret repo (URL pooler, rezolvabil pe IPv4 din Actions).
+      # Compat mode (fără DATABASE_URL_BOT) → SET ROLE bot_runtime în init.
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      OPENAI_API_KEY: test-key
+      REDIS_URL: redis://localhost:6379/0
+      ENV: test
+      LOG_LEVEL: WARNING
+      DAILY_COST_CAP_USD: "5"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements-dev.txt
+
+      - run: pytest -q -m "integration and slow"

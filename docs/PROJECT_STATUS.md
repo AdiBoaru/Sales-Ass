@@ -123,8 +123,8 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
    menționează rating + ce laudă clienții. Wow ieftin.
 2. **R1 debounce + R2 carduri „pro"** (carusel Telegram / List Messages WhatsApp) —
    vezi `docs/REFINEMENTS.md`.
-3. **NX-04/53** (assert la checkout + test concurent) — peste NX-50 (livrat).
-   Plus provisioning manual NX-50 (`apply_005.py` + `DATABASE_URL_BOT`).
+3. **Provisioning manual NX-50** (`apply_005.py` + `DATABASE_URL_BOT`) — NX-04/53
+   (assert la checkout + test concurent) deja livrate peste NX-50.
 4. **G5**: gates (limbă, handoff, risc), straturi gratuite (alias, cache semantic).
 5. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
 
