@@ -47,7 +47,8 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
         await stage(ctx, deps)
         latency_ms = round((perf_counter() - started) * 1000, 1)
         ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
-        if ctx.reply is not None:
+        # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
+        if ctx.reply is not None or ctx.halt:
             ctx.emit("pipeline_early_exit", stage=name)
             return
     ctx.emit("pipeline_complete")
@@ -64,13 +65,20 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
 
 
-# Pipeline-ul curent: Cache (4) → Triaj (nano) → Agent (mini, route=sales) → fallback.
-# Cache-ul (G5b) servește din cache query-uri statice repetate ÎNAINTE de orice LLM.
-# Triaj setează reply pt simple/clarify; agentul răspunde pt sales. Gates (G5a) +
-# context se adaugă ulterior (cache vine după gates când G5a e în main). Importate jos
-# ca să evităm un ciclu (stagiile referă PipelineDeps doar sub TYPE_CHECKING).
+# Pipeline-ul: Gates (3) → Cache (4) → Triaj (5) → Agent (7) → fallback.
+# Gates (G5a) decide PRIMUL dacă botul răspunde (bot_active/handoff/risc) — poate opri
+# cu reply (risc) sau tăcere intenționată (halt). Cache (G5b) servește query-uri statice
+# repetate fără LLM. Triaj setează reply pt simple/clarify; agentul răspunde pt sales.
+# Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
 from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.cache import cache_stage  # noqa: E402
+from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
-DEFAULT_STAGES: list[Stage] = [cache_stage, triage_stage, agent_stage, fallback_stage]
+DEFAULT_STAGES: list[Stage] = [
+    gates_stage,
+    cache_stage,
+    triage_stage,
+    agent_stage,
+    fallback_stage,
+]

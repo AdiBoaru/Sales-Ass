@@ -186,15 +186,21 @@ async def handle_turn(
         conversation_id=conv["id"],
         history=await get_recent_messages(conn, business.id, conv["id"]),
         language=conv["locale"] or business.default_locale,
+        bot_active=conv["bot_active"],
+        handoff_until=conv["handoff_until"],
     )
 
     await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=get_llm()), stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
 
     if ctx.reply is None:
-        # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
-        # aici doar raportăm că turul n-a produs reply.
-        log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
+        if ctx.halt:
+            # tăcere INTENȚIONATĂ (Gates): handoff activ / bot oprit — omul se ocupă.
+            log.info("tăcere intenționată (handoff): conv=%s turn=%s", conv["id"], turn_id)
+        else:
+            # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
+            # aici doar raportăm că turul n-a produs reply.
+            log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
         return TurnResult(conv["id"], contact.id, turn_id, None, None)
 
     # Scrierea Sender-ului: mesaj outbound + outbox + state, în aceeași tranzacție.
