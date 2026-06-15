@@ -170,10 +170,14 @@ async def handle_turn(
             "text": ctx.reply.text,
             "message_id": out_msg_id,
         }
+        new_state = conv["state"]
         if ctx.reply.products:
-            # carduri de produs (W1): Sender-ul trimite text + poză/preț/buton per produs
-            payload["type"] = "products"
+            # carusel de produs (R2): primul card + butoane ◀🛒▶; W1 (products) =
+            # fallback în dispatcher. Persistăm setul afișat în state → navigarea
+            # caruselului (handle_callback) îl citește de acolo (ref-uri, principiul 8).
+            payload["type"] = "carousel"
             payload["products"] = ctx.reply.products
+            new_state = {**conv["state"], "displayed_products": ctx.reply.products}
         outbox_id = await enqueue_outbox(
             conn,
             business.id,
@@ -185,7 +189,7 @@ async def handle_turn(
             conn,
             business.id,
             conv["id"],
-            conv["state"],
+            new_state,
             conv["state_version"],
             touch_outbound=True,
         )

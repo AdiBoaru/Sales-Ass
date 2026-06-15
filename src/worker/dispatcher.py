@@ -44,8 +44,13 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
     payload = row["payload"]
     outbox_kind = row.get("kind", "message")
     ptype = payload.get("type")
-    if outbox_kind not in ("message", "text") or ptype not in ("text", "products"):
-        # text + products (carduri); template/interactive/typing → follow-up.
+    if outbox_kind not in ("message", "text") or ptype not in (
+        "text",
+        "products",
+        "carousel",
+        "edit_media",
+    ):
+        # text/products/carousel/edit_media; template/interactive/typing → follow-up.
         log.warning(
             "outbox %s: kind/type nesuportat (%s/%s) — marcat dead",
             row["id"],
@@ -63,16 +68,40 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
         return "dead"
 
     try:
-        if ptype == "products" and payload.get("products") and hasattr(sender, "send_products"):
+        account_id = row["channel_account_id"]
+        if ptype == "edit_media":
+            # navigare carusel (R2): editează cardul existent. Doar pe canale cu suport.
+            if not hasattr(sender, "edit_message_media"):
+                await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")
+                return "dead"
+            provider_id = await sender.edit_message_media(
+                account_id,
+                payload["to"],
+                payload["card_message_id"],
+                payload["products"],
+                payload["index"],
+            )
+        elif (
+            ptype == "carousel"
+            and payload.get("products")
+            and hasattr(sender, "send_carousel_card")
+        ):
+            provider_id = await sender.send_carousel_card(
+                account_id, payload["to"], payload["products"], 0
+            )
+        elif (
+            ptype in ("carousel", "products")
+            and payload.get("products")
+            and hasattr(sender, "send_products")
+        ):
+            # fallback W1: listă compactă cu butoane-link (carusel nesuportat de canal).
             provider_id = await sender.send_products(
-                row["channel_account_id"], payload["to"], payload["text"], payload["products"]
+                account_id, payload["to"], payload["text"], payload["products"]
             )
         else:
-            # text, sau products pe un canal fără suport → trimite lead-in-ul ca text
+            # text, sau carusel/products pe un canal fără suport → lead-in ca text
             # (conține deja recomandarea — degradare grațioasă, principiul 6).
-            provider_id = await sender.send_text(
-                row["channel_account_id"], payload["to"], payload["text"]
-            )
+            provider_id = await sender.send_text(account_id, payload["to"], payload["text"])
     except Exception as e:  # noqa: BLE001 — orice eroare de transport/HTTP → retry
         status = await mark_failed(conn, business_id, row["id"], row["attempts"], str(e)[:500])
         log.warning("outbox %s: trimitere eșuată (%s) → %s", row["id"], type(e).__name__, status)

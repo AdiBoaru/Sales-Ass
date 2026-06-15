@@ -26,6 +26,7 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
 from src.redis_bus import STREAM_INBOUND, close_redis, get_redis
+from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
 from src.worker.processor import handle_turn
 
@@ -75,6 +76,10 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
         business = await load_business(conn, business_id)
         if business is None:
             log.warning("business %s lipsește — ignorat", business_id)
+            return
+        if kind == "callback":
+            # navigare carusel (R2): drum determinist, NU pipeline LLM.
+            await handle_callback(conn, business, channel["channel_id"], event)
             return
         await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
 
