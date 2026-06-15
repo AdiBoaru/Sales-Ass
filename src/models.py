@@ -162,6 +162,9 @@ class Reply:
     # Carduri de produs (W1): dacă setate, Sender-ul le trimite ca poză+preț+buton
     # după textul de lead-in. Câmpuri compacte (name, price, url, image), nu obiecte.
     products: list[dict[str, Any]] | None = None
+    # G5b: răspuns reutilizabil pentru cache (False pe clarify/refuz/fallback —
+    # specifice contextului, nu se cache-uiesc).
+    cacheable: bool = True
 
 
 @dataclass
@@ -190,6 +193,7 @@ class TurnContext:
     route: RouteDecision | None = None  # owner: Triaj
     retrieval: RetrievalResult | None = None  # owner: Retrieval
     reply: Reply | None = None  # owner: orice stagiu (early exit)
+    from_cache: bool = False  # owner: Cache (G5b) — reply servit din cache
     events: list[Event] = field(default_factory=list)
 
     def emit(self, type_: str, **properties: Any) -> None:
@@ -197,8 +201,14 @@ class TurnContext:
         self.events.append(Event(type=type_, properties=properties))
 
     def set_reply(
-        self, text: str, kind: str = "message", products: list[dict[str, Any]] | None = None
+        self,
+        text: str,
+        kind: str = "message",
+        products: list[dict[str, Any]] | None = None,
+        *,
+        cacheable: bool = True,
     ) -> None:
         """Setează reply → semnalează early exit la Sender. `products` (opțional) →
-        Sender-ul le trimite ca carduri (poză+preț+buton) după text (W1)."""
-        self.reply = Reply(text=text, kind=kind, products=products)
+        Sender-ul le trimite ca carduri (poză+preț+buton) după text (W1). `cacheable`
+        (G5b) → False pe clarify/refuz/fallback (nu se scriu în cache)."""
+        self.reply = Reply(text=text, kind=kind, products=products, cacheable=cacheable)

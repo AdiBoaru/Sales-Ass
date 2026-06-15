@@ -19,6 +19,8 @@ import asyncpg
 from redis.asyncio import Redis
 
 from src.agent.llm import get_llm
+from src.cache.canonical import canonicalize, classify_volatility
+from src.config import get_settings
 from src.db.queries.analytics import insert_events
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import (
@@ -29,6 +31,7 @@ from src.db.queries.conversations import (
 from src.db.queries.inbound_dedupe import claim_inbound
 from src.db.queries.messages import get_recent_messages, insert_message
 from src.db.queries.outbox import enqueue_outbox
+from src.db.queries.semantic_cache import upsert_entry
 from src.models import (
     Author,
     BusinessConfig,
@@ -68,6 +71,49 @@ async def _persist_events(conn, business_id, conversation_id, contact_id, events
         )
     except Exception:  # noqa: BLE001 — analytics e best-effort
         log.exception("persistarea analytics_events a eșuat (turul continuă)")
+
+
+async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
+    """Write-back gated (G5b-1), best-effort — scrie răspunsul în semantic_cache ca să
+    serveas tururi viitoare fără LLM. Rulează DUPĂ outbox (nu întârzie livrarea).
+
+    Gate (precision-first): nu re-scriem un hit; doar tier static; fără produse
+    (dynamic = G5b-2); doar răspunsuri reutilizabile (cacheable, nu clarify/fallback)."""
+    settings = get_settings()
+    reply = ctx.reply
+    if not settings.cache_enabled or ctx.from_cache or reply is None or llm is None:
+        return
+    if reply.products is not None or not reply.cacheable:
+        return
+    text = (reply.text or "").strip()
+    if not 5 <= len(text) <= 4000:
+        return
+    if classify_volatility(body) != "static":
+        return
+    try:
+        canonical, canonical_hash = canonicalize(body or "")
+        if not canonical:
+            return
+        embedding = (await llm.embed([canonical]))[0]
+        # Savepoint: dacă upsert-ul eșuează (RLS/grant/conflict), rollback DOAR la el —
+        # nu poluează tranzacția apelantului (turul a răspuns deja).
+        async with conn.transaction():
+            await upsert_entry(
+                conn,
+                business_id,
+                locale,
+                canonical_str=canonical,
+                canonical_hash=canonical_hash,
+                embedding=embedding,
+                answer=text,
+                volatility_class="static",
+                embedding_model=settings.model_embed,
+                quality_score=1.0,
+                ttl_days=settings.cache_ttl_static_days,
+            )
+        ctx.emit("cache_write", volatility="static", ttl_days=settings.cache_ttl_static_days)
+    except Exception:  # noqa: BLE001 — write-back best-effort, turul a răspuns deja
+        log.exception("cache write-back a eșuat (turul continuă)")
 
 
 async def handle_turn(
@@ -202,4 +248,6 @@ async def handle_turn(
         len(ctx.reply.text),
         outbox_id,
     )
+    # Write-back cache (G5b-1) — după outbox, nu întârzie livrarea.
+    await _cache_writeback(conn, get_llm(), business.id, ctx.language, ctx.message.body, ctx)
     return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)

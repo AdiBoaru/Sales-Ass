@@ -59,15 +59,18 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     de clarificare — NU tăcere (principiul 6) și NU text de schelet."""
     ctx.set_reply(
         "Hmm, n-am înțeles exact 🙂 Cauți un produs anume, ai o întrebare despre o "
-        "comandă, sau altceva?"
+        "comandă, sau altceva?",
+        cacheable=False,  # non-răspuns specific contextului → nu se cache-uiește (G5b)
     )
 
 
-# Pipeline-ul curent: Triaj (nano) → Agent (mini, doar route=sales) → echo fallback.
-# Triaj setează reply pt simple/clarify (early exit). Agentul răspunde pt sales.
-# Restul (gates, context, free layers) se adaugă în ordine ulterior. Importate jos
+# Pipeline-ul curent: Cache (4) → Triaj (nano) → Agent (mini, route=sales) → fallback.
+# Cache-ul (G5b) servește din cache query-uri statice repetate ÎNAINTE de orice LLM.
+# Triaj setează reply pt simple/clarify; agentul răspunde pt sales. Gates (G5a) +
+# context se adaugă ulterior (cache vine după gates când G5a e în main). Importate jos
 # ca să evităm un ciclu (stagiile referă PipelineDeps doar sub TYPE_CHECKING).
 from src.worker.stages.agent import agent_stage  # noqa: E402
+from src.worker.stages.cache import cache_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
-DEFAULT_STAGES: list[Stage] = [triage_stage, agent_stage, fallback_stage]
+DEFAULT_STAGES: list[Stage] = [cache_stage, triage_stage, agent_stage, fallback_stage]
