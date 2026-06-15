@@ -35,6 +35,11 @@ cross-tenant. → două pool-uri, două roluri.
   la fiecare conexiune nouă. DSN greșit (rol privilegiat) → pool-ul NU pornește,
   eroare explicită la boot, nu la primul mesaj. `consumer`/`dispatcher` creează
   `bot_pool` eager în `_main` exact pentru asta.
+- **Plasă la checkout (NX-04):** `tenant_conn` verifică rol + `app.business_id`
+  ÎNAINTE de a da conexiunea apelantului — set + verificare într-un singur
+  round-trip (`set_config(...) as biz, current_user as usr`), zero latență în
+  plus. Orice abatere → `IsolationError` (fail-fast, log `critical`), conexiunea
+  nu ajunge la query. Flag `DB_ISOLATION_ASSERT=off` o sare (cu WARNING la boot).
 
 ### `admin_pool` — CONTROL PLANE + JOBURI
 - **Rol:** privilegiat (`postgres`/`service_role`), `SUPABASE_DB_URL`.
