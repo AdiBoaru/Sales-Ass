@@ -11,12 +11,22 @@ acest adaptor, niciodată direct din alt cod.
 
 import json
 import logging
+from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 
 from src.config import get_settings
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ModerationResult:
+    """Rezultatul moderation-ului (NX-15). `categories` = doar categoriile True
+    (ex. ['harassment', 'hate']) — fără corpul mesajului (principiul 12)."""
+
+    flagged: bool
+    categories: list[str]
 
 
 class LLMClient:
@@ -29,11 +39,13 @@ class LLMClient:
         model_triage: str,
         model_agent: str,
         model_embed: str = "text-embedding-3-small",
+        model_moderation: str = "omni-moderation-latest",
     ) -> None:
         self._client = client
         self.model_triage = model_triage
         self.model_agent = model_agent
         self.model_embed = model_embed
+        self.model_moderation = model_moderation
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
         """Apel chat cu răspuns JSON forțat (`response_format=json_object`).
@@ -65,6 +77,19 @@ class LLMClient:
         )
         return (resp.choices[0].message.content or "").strip()
 
+    async def moderate(self, text: str, *, model: str | None = None) -> ModerationResult:
+        """Clasifică un mesaj cu endpointul de moderation OpenAI (gratuit, NU generare —
+        principiul 2, ca embed). Folosit de Gates (NX-15) ÎNAINTE de triaj. Ridică la
+        eroare de API — caller-ul (gate) prinde și degradează fail-open."""
+        resp = await self._client.moderations.create(
+            model=model or self.model_moderation,
+            input=text,
+        )
+        r = resp.results[0]
+        data = r.categories.model_dump()
+        flagged = [k for k, v in data.items() if v]
+        return ModerationResult(flagged=bool(r.flagged), categories=sorted(flagged))
+
     async def embed(self, texts: list[str], *, model: str | None = None) -> list[list[float]]:
         """Embeddings pentru un lot de texte. Întoarce o listă de vectori (1536 dim
         la text-embedding-3-small). Folosit de jobul `embed_products` + (viitor)
@@ -91,5 +116,6 @@ def get_llm() -> LLMClient | None:
             model_triage=s.model_triage,
             model_agent=s.model_agent,
             model_embed=s.model_embed,
+            model_moderation=s.model_moderation,
         )
     return _llm
