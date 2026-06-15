@@ -55,6 +55,26 @@ class StatusEvent:
         return {"kind": "status", **asdict(self)}
 
 
+@dataclass
+class CallbackEvent:
+    """Apăsare pe un buton inline (Telegram callback_query) — UI deterministă,
+    NU mesaj. Worker-ul o rutează la handler-ul de carusel (navigare), fără
+    pipeline LLM. `card_message_id` = mesajul de editat; `data` = callback_data
+    (ex. 'car:nav:2'). `provider_msg_id` = callback.id (idempotență)."""
+
+    channel_kind: str
+    channel_account_id: str
+    sender_external_id: str
+    provider_msg_id: str
+    card_message_id: str
+    data: str
+    sender_name: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "callback", **asdict(self)}
+
+
 @runtime_checkable
 class ChannelSender(Protocol):
     """Un transport de mesaje outbound (WhatsApp, Telegram, ...).

@@ -14,7 +14,7 @@ import logging
 
 import httpx
 
-from src.channels.base import InboundEvent
+from src.channels.base import CallbackEvent, InboundEvent
 from src.channels.telegram.client import TelegramClient
 from src.config import get_settings
 from src.redis_bus import close_redis, enqueue_inbound, get_redis
@@ -30,7 +30,7 @@ def _to_event(update: dict, account_id: str) -> InboundEvent | None:
     """Mapează un update Telegram la envelope-ul neutru. None dacă nu e text util."""
     msg = update.get("message")
     if not msg or "text" not in msg:
-        return None  # edited_message, callback_query, media fără text → ignorate (TEST)
+        return None  # edited_message, media fără text → ignorate (TEST). callback → separat.
     chat = msg.get("chat") or {}
     sender = msg.get("from") or {}
     return InboundEvent(
@@ -41,6 +41,27 @@ def _to_event(update: dict, account_id: str) -> InboundEvent | None:
         content_type="text",
         timestamp=str(msg.get("date")) if msg.get("date") is not None else None,
         body=msg.get("text"),
+        sender_name=sender.get("first_name"),
+        payload=update,
+    )
+
+
+def _to_callback_event(update: dict, account_id: str) -> CallbackEvent | None:
+    """Mapează un `callback_query` (apăsare buton inline) la envelope `kind=callback`.
+    None dacă lipsesc câmpurile esențiale (data / mesajul cardului)."""
+    cq = update.get("callback_query") or {}
+    msg = cq.get("message") or {}
+    chat = msg.get("chat") or {}
+    if not cq.get("data") or chat.get("id") is None or msg.get("message_id") is None:
+        return None
+    sender = cq.get("from") or {}
+    return CallbackEvent(
+        channel_kind="telegram",
+        channel_account_id=account_id,
+        sender_external_id=str(chat["id"]),
+        provider_msg_id=str(cq.get("id")),
+        card_message_id=str(msg["message_id"]),
+        data=cq["data"],
         sender_name=sender.get("first_name"),
         payload=update,
     )
@@ -60,6 +81,18 @@ async def poll_once(client: TelegramClient, redis, account_id: str, *, timeout: 
     max_update_id = offset - 1
     for update in updates:
         max_update_id = max(max_update_id, int(update.get("update_id", max_update_id)))
+        if "callback_query" in update:
+            cb = _to_callback_event(update, account_id)
+            if cb is None:
+                continue
+            # ACK de transport la margine: oprește spinner-ul imediat, apoi enqueue.
+            try:
+                await client.answer_callback_query(cb.provider_msg_id)
+            except Exception:  # noqa: BLE001 — ACK best-effort, nu blochează procesarea
+                log.warning("answerCallbackQuery a eșuat (continuă)")
+            await enqueue_inbound(redis, cb.to_dict())
+            enqueued += 1
+            continue
         event = _to_event(update, account_id)
         if event is None:
             continue

@@ -18,6 +18,32 @@ def _short(name: str, limit: int = 30) -> str:
     return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
 
 
+# Poză de rezervă când produsul n-are imagine (R2; placehold .png, ca W1).
+_FALLBACK_IMG = "https://placehold.co/600x600/png?text=Produs"
+
+
+def _carousel_caption(product: dict, index: int, total: int) -> str:
+    """Textul de sub poza din carusel: nume + preț + poziția în set."""
+    name = product.get("name") or "Produs"
+    price = float(product["price"]) if product.get("price") is not None else None
+    price_line = f"\n💰 {price:.2f} lei" if price is not None else ""
+    return f"{name}{price_line}\n{index + 1}/{total}"
+
+
+def _carousel_keyboard(product: dict, index: int, total: int) -> dict:
+    """`◀ 🛒 ▶` — ◀/▶ navighează (callback cu indexul ȚINTĂ → navigare stateless),
+    🛒 = url-button spre pagina produsului (ca W1, fără backend de coș). Butoanele
+    din afara limitelor sunt omise (clamp la capete, fără wrap-around)."""
+    row: list[dict] = []
+    if index > 0:
+        row.append({"text": "◀", "callback_data": f"car:nav:{index - 1}"})
+    if product.get("url"):
+        row.append({"text": "🛒 Vezi produsul", "url": product["url"]})
+    if index < total - 1:
+        row.append({"text": "▶", "callback_data": f"car:nav:{index + 1}"})
+    return {"inline_keyboard": [row]} if row else {"inline_keyboard": []}
+
+
 class TelegramError(RuntimeError):
     """Răspuns Telegram cu ok=false sau payload neașteptat."""
 
@@ -88,6 +114,52 @@ class TelegramClient:
             return str(result["message_id"])
         except (KeyError, TypeError) as e:
             raise TelegramError(f"sendMessage fără message_id: {result}") from e
+
+    async def send_carousel_card(
+        self, account_id: str, to: str, products: list[dict], index: int = 0
+    ) -> str:
+        """Carusel (R2): UN card de produs (poză + nume + preț) cu butoane ◀🛒▶.
+        Trimite `sendPhoto` pentru `products[index]`; navigarea ulterioară editează
+        ACEST mesaj (vezi `edit_message_media`). Întoarce message_id-ul cardului."""
+        product = products[index]
+        result = await self._call(
+            "sendPhoto",
+            {
+                "chat_id": to,
+                "photo": product.get("image") or _FALLBACK_IMG,
+                "caption": _carousel_caption(product, index, len(products)),
+                "reply_markup": _carousel_keyboard(product, index, len(products)),
+            },
+        )
+        try:
+            return str(result["message_id"])
+        except (KeyError, TypeError) as e:
+            raise TelegramError(f"sendPhoto fără message_id: {result}") from e
+
+    async def edit_message_media(
+        self, account_id: str, chat_id: str, message_id: str, products: list[dict], index: int
+    ) -> str:
+        """Editează cardul existent la `products[index]` (`editMessageMedia` —
+        schimbă poza + caption + butoane în loc, fără mesaj nou). Întoarce message_id."""
+        product = products[index]
+        await self._call(
+            "editMessageMedia",
+            {
+                "chat_id": chat_id,
+                "message_id": int(message_id),
+                "media": {
+                    "type": "photo",
+                    "media": product.get("image") or _FALLBACK_IMG,
+                    "caption": _carousel_caption(product, index, len(products)),
+                },
+                "reply_markup": _carousel_keyboard(product, index, len(products)),
+            },
+        )
+        return str(message_id)
+
+    async def answer_callback_query(self, callback_id: str) -> None:
+        """Oprește spinner-ul de pe buton (Telegram îl arată ~15s). ACK de transport."""
+        await self._call("answerCallbackQuery", {"callback_query_id": callback_id})
 
     async def get_me(self) -> dict:
         """Info despre bot (id, username) — pentru seed-ul canalului (NX-63)."""
