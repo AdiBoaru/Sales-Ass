@@ -47,7 +47,8 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
         await stage(ctx, deps)
         latency_ms = round((perf_counter() - started) * 1000, 1)
         ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
-        if ctx.reply is not None:
+        # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
+        if ctx.reply is not None or ctx.halt:
             ctx.emit("pipeline_early_exit", stage=name)
             return
     ctx.emit("pipeline_complete")
@@ -63,11 +64,13 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
 
 
-# Pipeline-ul curent: Triaj (nano) → Agent (mini, doar route=sales) → echo fallback.
-# Triaj setează reply pt simple/clarify (early exit). Agentul răspunde pt sales.
-# Restul (gates, context, free layers) se adaugă în ordine ulterior. Importate jos
-# ca să evităm un ciclu (stagiile referă PipelineDeps doar sub TYPE_CHECKING).
+# Pipeline-ul curent: Gates (3) → Triaj (nano) → Agent (mini, route=sales) → fallback.
+# Gates (G5a) decide PRIMUL dacă botul răspunde (bot_active/handoff/risc) — poate
+# opri cu reply (risc) sau cu tăcere intenționată (halt). Triaj setează reply pt
+# simple/clarify; agentul răspunde pt sales. Context + free layers se adaugă ulterior.
+# Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
 from src.worker.stages.agent import agent_stage  # noqa: E402
+from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
-DEFAULT_STAGES: list[Stage] = [triage_stage, agent_stage, fallback_stage]
+DEFAULT_STAGES: list[Stage] = [gates_stage, triage_stage, agent_stage, fallback_stage]

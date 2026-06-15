@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     daily_cost_cap_usd: float = Field(default=5.0, validation_alias="DAILY_COST_CAP_USD")
     operator_alert_webhook: str = Field(default="", validation_alias="OPERATOR_ALERT_WEBHOOK")
+    # Gates (G5a): cât timp tace botul după un handoff (risc / preluare de om).
+    # Agentul (consola, ulterior) poate prelungi/curăța fereastra.
+    handoff_window_minutes: int = Field(default=45, validation_alias="HANDOFF_WINDOW_MINUTES")
 
     @property
     def is_prod(self) -> bool:
