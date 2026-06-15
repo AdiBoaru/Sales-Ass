@@ -187,14 +187,24 @@ class TurnContext:
     history: list[Message] = field(default_factory=list)
     state: ConversationState = field(default_factory=ConversationState)
     language: str = "ro"
+    bot_active: bool = True  # owner: processor (din conversations.bot_active)
+    handoff_until: datetime | None = None  # owner: processor (conversations.handoff_until)
     route: RouteDecision | None = None  # owner: Triaj
     retrieval: RetrievalResult | None = None  # owner: Retrieval
     reply: Reply | None = None  # owner: orice stagiu (early exit)
+    halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     events: list[Event] = field(default_factory=list)
 
     def emit(self, type_: str, **properties: Any) -> None:
         """Helper pentru stagii: adaugă un event fără să știe cum e scris."""
         self.events.append(Event(type=type_, properties=properties))
+
+    def halt_silent(self, reason: str) -> None:
+        """Tăcere INTENȚIONATĂ (Gates): oprește pipeline-ul FĂRĂ reply de bot —
+        omul se ocupă (handoff activ / bot oprit). Singura excepție de la
+        principiul 6 ('niciodată tăcere'). Emite `gate_halt` pentru observabilitate."""
+        self.halt = True
+        self.emit("gate_halt", reason=reason)
 
     def set_reply(
         self, text: str, kind: str = "message", products: list[dict[str, Any]] | None = None
