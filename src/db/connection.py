@@ -25,6 +25,7 @@ Provisioning (o dată, manual — vezi docs/005_bot_runtime_login.sql + TODO-MAN
     (compat dev/test înainte de provisioning; NU pentru prod — vezi docstring-ul).
 """
 
+import logging
 import socket
 import ssl
 import sys
@@ -34,6 +35,9 @@ from urllib.parse import unquote, urlparse
 import asyncpg
 
 from src.config import get_settings
+from src.db.errors import IsolationError
+
+log = logging.getLogger(__name__)
 
 # admin_pool (control plane + joburi) și bot_pool (tenant path). Singleton/proces.
 _pool: asyncpg.Pool | None = None
@@ -111,6 +115,32 @@ async def _init_bot_conn_compat(conn: asyncpg.Connection) -> None:
     await _assert_bot_role(conn)
 
 
+def _isolation_enabled() -> bool:
+    """NX-04: asserturile de izolare la checkout sunt active (default) decât dacă
+    DB_ISOLATION_ASSERT='off'."""
+    return get_settings().db_isolation_assert != "off"
+
+
+def _check_isolation(current_user: str | None, current_biz: str | None, expected: str) -> None:
+    """Plasa NX-04: conexiunea scoasă din bot_pool TREBUIE să fie `bot_runtime`
+    și să poarte exact `app.business_id = expected`. Orice abatere → IsolationError
+    ÎNAINTE de primul query (rol greșit, GUC nesetat, sau reuse murdar de la alt
+    tenant). Mesajul are doar id-uri de tenant + rolul, fără date de client."""
+    if current_user != "bot_runtime":
+        raise IsolationError(
+            f"checkout bot_pool cu rol {current_user!r}, aștept 'bot_runtime' (business {expected})"
+        )
+    if not current_biz:
+        raise IsolationError(
+            f"checkout bot_pool fără app.business_id setat (business cerut {expected})"
+        )
+    if current_biz != expected:
+        raise IsolationError(
+            f"checkout bot_pool cu app.business_id={current_biz}, dar s-a cerut {expected} "
+            "(reuse murdar de conexiune)"
+        )
+
+
 async def get_bot_pool() -> asyncpg.Pool:
     """Pool TENANT (bot_runtime). Login direct dacă DATABASE_URL_BOT e setat;
     altfel compat pe SUPABASE_DB_URL + SET ROLE în init (dev/test).
@@ -120,6 +150,11 @@ async def get_bot_pool() -> asyncpg.Pool:
     global _bot_pool, _bot_login_mode
     if _bot_pool is None:
         s = get_settings()
+        if not _isolation_enabled():
+            log.warning(
+                "DB_ISOLATION_ASSERT=off — asserturile de izolare la checkout sunt "
+                "DEZACTIVATE; o regresie de izolare NU mai pică zgomotos (NX-04)"
+            )
         _bot_login_mode = bool(s.database_url_bot)
         dsn = s.database_url_bot or s.supabase_db_url
         init = _assert_bot_role if _bot_login_mode else _init_bot_conn_compat
@@ -169,8 +204,26 @@ async def tenant_conn(business_id: str):
     conexiunea întoarsă în pool (un checkout ulterior pe alt tenant n-o vede)."""
     pool = await get_bot_pool()
     async with pool.acquire() as conn:
-        # set_config(..., is_local=false) → ține pe checkout; quoting safe pe param
-        await conn.execute("select set_config('app.business_id', $1, false)", business_id)
+        # set_config(..., is_local=false) → ține pe checkout; quoting safe pe param.
+        # Plasa NX-04 (strict): set + verificare ÎNTR-UN SINGUR round-trip —
+        # set_config întoarce valoarea setată, current_user confirmă rolul. Zero
+        # latență în plus față de set-ul pe care oricum îl făceam.
+        if _isolation_enabled():
+            row = await conn.fetchrow(
+                "select set_config('app.business_id', $1, false) as biz, current_user as usr",
+                business_id,
+            )
+            try:
+                _check_isolation(row["usr"], row["biz"], business_id)
+            except IsolationError as e:
+                # alertă maximă: o conexiune neizolată a ajuns la checkout. Logăm
+                # CRITIC (fără PII) și resetăm GUC-ul; NU scriem în analytics_events
+                # (ar fi un write pe exact conexiunea declarată ne-de-încredere).
+                log.critical("isolation_assert_failed: %s", e)
+                await conn.execute("select set_config('app.business_id', '', false)")
+                raise
+        else:
+            await conn.execute("select set_config('app.business_id', $1, false)", business_id)
         try:
             yield conn
         finally:

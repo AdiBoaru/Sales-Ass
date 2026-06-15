@@ -98,9 +98,12 @@ def _deterministic_reply(products: list[dict[str, Any]]) -> str:
 
 
 def _card_products(products: list[dict[str, Any]], n: int = 3) -> list[dict[str, Any]]:
-    """Câmpuri compacte pentru cardurile de produs (W1): name, price, url, image."""
+    """Câmpuri compacte pentru cardurile de produs (W1 + carusel R2): product_id,
+    name, price, url, image. `product_id` e ref-ul păstrat în state pentru navigarea
+    caruselului (R2); W1 (send_products) îl ignoră."""
     return [
         {
+            "product_id": p["id"],
             "name": p["name"],
             "price": float(p["price"]),
             "url": p.get("url"),

@@ -5,7 +5,7 @@ import json
 import fakeredis.aioredis
 import pytest
 
-from src.channels.telegram.poller import _offset_key, _to_event, poll_once
+from src.channels.telegram.poller import _offset_key, _to_callback_event, _to_event, poll_once
 from src.redis_bus import STREAM_INBOUND
 
 BOT_ID = "555"
@@ -17,10 +17,14 @@ class FakeTgClient:
     def __init__(self, batches: list[list[dict]]):
         self._batches = list(batches)
         self.offsets: list[int] = []
+        self.answered: list[str] = []
 
     async def get_updates(self, offset, *, timeout=30, limit=100):
         self.offsets.append(offset)
         return self._batches.pop(0) if self._batches else []
+
+    async def answer_callback_query(self, callback_id: str) -> None:
+        self.answered.append(callback_id)
 
 
 @pytest.fixture
@@ -95,3 +99,48 @@ async def test_poll_once_empty_no_offset_change(redis):
     assert n == 0
     assert await redis.get(_offset_key(BOT_ID)) == "100"  # neschimbat
     assert client.offsets == [100]  # a cerut de la offset-ul salvat
+
+
+# --- R2: callback_query (navigare carusel) -----------------------------------
+
+
+def _callback_update(update_id: int, data: str = "car:nav:1", chat_id: int = 98765) -> dict:
+    return {
+        "update_id": update_id,
+        "callback_query": {
+            "id": f"cb-{update_id}",
+            "from": {"id": chat_id, "first_name": "Ana"},
+            "message": {"message_id": 500, "chat": {"id": chat_id, "type": "private"}},
+            "data": data,
+        },
+    }
+
+
+def test_to_callback_event_maps_neutral_envelope():
+    ev = _to_callback_event(_callback_update(5, "car:nav:2"), BOT_ID)
+    assert ev is not None
+    d = ev.to_dict()
+    assert d["kind"] == "callback"
+    assert d["channel_account_id"] == BOT_ID
+    assert d["sender_external_id"] == "98765"
+    assert d["card_message_id"] == "500"
+    assert d["data"] == "car:nav:2"
+    assert d["provider_msg_id"] == "cb-5"
+
+
+def test_to_callback_event_ignores_incomplete():
+    assert _to_callback_event({"callback_query": {"id": "x"}}, BOT_ID) is None  # fără data/mesaj
+
+
+async def test_poll_once_handles_callback(redis):
+    client = FakeTgClient([[_callback_update(30, "car:nav:1")]])
+    n = await poll_once(client, redis, BOT_ID, timeout=0)
+
+    assert n == 1
+    assert client.answered == ["cb-30"]  # spinner oprit (ACK la margine)
+    entries = await redis.xrange(STREAM_INBOUND)
+    data = json.loads(entries[0][1]["data"])
+    assert data["kind"] == "callback"
+    assert data["data"] == "car:nav:1"
+    assert data["card_message_id"] == "500"
+    assert await redis.get(_offset_key(BOT_ID)) == "31"
