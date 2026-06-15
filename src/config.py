@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # Agentul (consola, ulterior) poate prelungi/curăța fereastra.
     handoff_window_minutes: int = Field(default=45, validation_alias="HANDOFF_WINDOW_MINUTES")
 
+    # --- Cache semantic (G5b) ---
+    cache_enabled: bool = Field(default=True, validation_alias="CACHE_ENABLED")
+    # τ_high: prag de auto-accept pentru L2 semantic (cosine similarity). Conservator
+    # (precizie peste recall); calibrat cu instrumentarea înainte de a coborî.
+    cache_tau_high: float = Field(default=0.92, validation_alias="CACHE_TAU_HIGH")
+    cache_ttl_static_days: int = Field(default=7, validation_alias="CACHE_TTL_STATIC_DAYS")
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"

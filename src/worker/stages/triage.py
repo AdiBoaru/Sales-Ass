@@ -100,5 +100,8 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.emit("intent_detected", route=out.route.value, category=category_key)
 
     # simple / clarify: nano a compus răspunsul → early exit la Sender.
-    if out.route in (Route.SIMPLE, Route.CLARIFY) and out.reply:
+    # simple = răspuns static reutilizabil (cacheabil); clarify = specific contextului.
+    if out.route == Route.SIMPLE and out.reply:
         ctx.set_reply(out.reply)
+    elif out.route == Route.CLARIFY and out.reply:
+        ctx.set_reply(out.reply, cacheable=False)

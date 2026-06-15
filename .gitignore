@@ -50,3 +50,6 @@ logs/
 
 # Docker
 .docker/
+
+# Doc de referință binar (păstrat local, nu în repo)
+docs/semantic-cache-architecture-review.md.pdf
