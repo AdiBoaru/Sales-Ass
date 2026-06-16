@@ -1,0 +1,148 @@
+[
+  {
+    "id": "greeting-simple",
+    "input": "salut",
+    "language": "ro",
+    "expect": { "route": "simple", "expect_reply": true },
+    "fixtures": {
+      "moderation": { "flagged": false },
+      "categories": [],
+      "triage": {
+        "route": "simple",
+        "category_key": null,
+        "reply": "Salut! 🙂 Cu ce te pot ajuta — cauți un produs anume?"
+      }
+    }
+  },
+  {
+    "id": "sales-grounded",
+    "input": "caut o cremă de față",
+    "language": "ro",
+    "expect": {
+      "route": "sales",
+      "must_include": ["82.99"],
+      "forbidden": ["999"],
+      "expect_reply": true
+    },
+    "fixtures": {
+      "moderation": { "flagged": false },
+      "categories": ["creme-fata"],
+      "triage": { "route": "sales", "category_key": "creme-fata", "reply": null },
+      "tool_calls": [
+        ["search_products", { "query": "cremă de față", "price_max": null, "limit": 6 }]
+      ],
+      "final": "Îți recomand Crema Hidratantă Aqua la 82.99 lei — hidratare profundă, perfectă pentru ten uscat. Vrei și un link?",
+      "catalog": [
+        {
+          "id": "p1",
+          "name": "Crema Hidratantă Aqua",
+          "brand": "BrandA",
+          "price": 82.99,
+          "url": "https://shop.sole-demo.ro/p/crema-aqua",
+          "ai_summary": "hidratare profundă pentru ten uscat",
+          "availability": "in_stock",
+          "rating": 4.6,
+          "top_pros": ["hidratează bine"],
+          "image": "https://placehold.co/aqua.png"
+        },
+        {
+          "id": "p2",
+          "name": "Ser Calmant Pure",
+          "brand": "BrandB",
+          "price": 120.5,
+          "url": "https://shop.sole-demo.ro/p/ser-pure",
+          "ai_summary": "calmează pielea sensibilă",
+          "availability": "in_stock",
+          "rating": 4.3,
+          "top_pros": ["calmează rapid"],
+          "image": "https://placehold.co/pure.png"
+        }
+      ]
+    }
+  },
+  {
+    "id": "invented-price-blocked",
+    "input": "vreau o cremă hidratantă",
+    "language": "ro",
+    "expect": {
+      "route": "sales",
+      "must_include": ["82.99"],
+      "forbidden": ["999", "888"],
+      "expect_reply": true
+    },
+    "fixtures": {
+      "moderation": { "flagged": false },
+      "categories": ["creme-fata"],
+      "triage": { "route": "sales", "category_key": "creme-fata", "reply": null },
+      "tool_calls": [
+        ["search_products", { "query": "cremă hidratantă", "price_max": null, "limit": 6 }]
+      ],
+      "final": "Îți recomand Crema Hidratantă Aqua la 999 lei.",
+      "retry": "Scuze — de fapt costă 888 lei.",
+      "catalog": [
+        {
+          "id": "p1",
+          "name": "Crema Hidratantă Aqua",
+          "brand": "BrandA",
+          "price": 82.99,
+          "url": "https://shop.sole-demo.ro/p/crema-aqua",
+          "ai_summary": "hidratare profundă pentru ten uscat",
+          "availability": "in_stock",
+          "rating": 4.6,
+          "top_pros": ["hidratează bine"],
+          "image": "https://placehold.co/aqua.png"
+        },
+        {
+          "id": "p2",
+          "name": "Ser Calmant Pure",
+          "brand": "BrandB",
+          "price": 120.5,
+          "url": "https://shop.sole-demo.ro/p/ser-pure",
+          "ai_summary": "calmează pielea sensibilă",
+          "availability": "in_stock",
+          "rating": 4.3,
+          "top_pros": ["calmează rapid"],
+          "image": "https://placehold.co/pure.png"
+        }
+      ]
+    }
+  },
+  {
+    "id": "moderation-neutral",
+    "input": "ești un gunoi, te urăsc",
+    "language": "ro",
+    "expect": {
+      "must_include": ["respectuoasă"],
+      "expect_reply": true
+    },
+    "fixtures": {
+      "moderation": { "flagged": true, "categories": ["harassment"] }
+    }
+  },
+  {
+    "id": "risk-handoff",
+    "input": "vreau să vorbesc cu un om",
+    "language": "ro",
+    "expect": {
+      "must_include": ["coleg"],
+      "expect_reply": true
+    },
+    "fixtures": {
+      "moderation": { "flagged": false }
+    }
+  },
+  {
+    "id": "order-never-silent",
+    "input": "unde e comanda mea",
+    "language": "ro",
+    "expect": {
+      "route": "order",
+      "expect_reply": true
+    },
+    "fixtures": {
+      "moderation": { "flagged": false },
+      "categories": [],
+      "triage": { "route": "order", "category_key": null, "reply": null }
+    }
+  }
+]

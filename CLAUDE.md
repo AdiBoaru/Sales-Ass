@@ -464,13 +464,16 @@ nativx-assistant/
 │   │   └── templates.py         ← wa_templates + 24h window + consent check
 │   ├── gdpr/
 │   │   └── erase.py             ← gdpr_erase_contact + export
+│   ├── evals/                   ← G8-1: harness golden (regresii de pipeline)
+│   │   └── golden.py            ← checker pur (evaluate_reply) + run_case (pipeline real, LLM scriptat) + load_cases
 │   └── jobs/
 │       ├── cleanup_dedupe.py    ← purjă inbound_dedupe >48h (admin_conn, zilnic)
 │       ├── rollup_usage.py      ← TODO: nocturn: analytics_events → usage_daily
 │       ├── embed_products.py    ← TODO: ai_summary → product_embeddings (content_hash)
 │       └── cleanup.py           ← TODO: drop partiții vechi, expire semantic_cache
 ├── tests/
-│   ├── golden/                  ← conversații de test (fixture JSON)
+│   ├── golden/                  ← cazuri golden (cases.json) + fixture-uri de conversație
+│   ├── test_golden.py           ← G8-1: gate CI (ScriptedLLM + stub-uri DB, zero OpenAI/DB real)
 │   ├── test_pipeline.py
 │   ├── test_tools.py
 │   ├── test_validator.py
