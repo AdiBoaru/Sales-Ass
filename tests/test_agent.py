@@ -174,3 +174,30 @@ async def test_model_answers_without_tools(monkeypatch):
     assert ctx.reply is not None and ctx.reply.text == "Salut! Ce tip de ten ai?"
     assert ctx.reply.products is None
     assert ctx.retrieval is not None and ctx.retrieval.products == []
+
+
+async def test_sales_no_products_invented_price_uses_sales_fallback(monkeypatch):
+    # G7-3 regresie: SALES fără produse + preț inventat → mesaj de VÂNZARE, NU fallback de comandă.
+    _patch_search(monkeypatch, [])
+    ctx = _ctx()
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "x", "price_max": None, "limit": 6})],
+        final="Avem Crema X la 999 lei",
+    )
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None
+    assert "999" not in ctx.reply.text  # prețul inventat nu ajunge la client
+    assert "n-am găsit" in ctx.reply.text.lower()  # mesaj de vânzare
+    assert "comand" not in ctx.reply.text.lower()  # NU fallback-ul de status comandă
+
+
+async def test_sales_no_products_clarify_served_verbatim(monkeypatch):
+    # SALES fără produse + text fără preț (clarificare) → servit ca atare (zero regresie).
+    _patch_search(monkeypatch, [])
+    ctx = _ctx()
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "x", "price_max": None, "limit": 6})],
+        final="Ce tip de ten cauți?",
+    )
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None and ctx.reply.text == "Ce tip de ten cauți?"

@@ -105,7 +105,12 @@ async def checkout_link_tool(
 
     lines = ", ".join(f"{c['name']} ×{c['quantity']} ({c['price']:.2f} lei)" for c in cart)
     llm_view = f"Link de checkout creat: {url}\nCoș: {lines} | total {total:.2f} lei"
-    # `products` (cart) → prețurile sunt grounded pt validator; `links` → linkul e permis.
+    # `products` (cart) → prețurile produselor sunt grounded; `links` → linkul permis;
+    # `prices=[total]` → TOTALUL coșului e grounded (altfel validatorul l-ar respinge).
     return ToolResult(
-        ok=True, products=[by_id[c["product_id"]] for c in cart], links=[url], llm_view=llm_view
+        ok=True,
+        products=[by_id[c["product_id"]] for c in cart],
+        links=[url],
+        prices=[total],
+        llm_view=llm_view,
     )

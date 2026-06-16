@@ -22,6 +22,7 @@ from src.models import RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
+    orders_tools,
 )
 from src.tools.base import enabled_tools, run_tool
 from src.worker.context import context_blocks, conversation_transcript
@@ -46,6 +47,8 @@ Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 - compare_products(product_ids): compară 2-3 produse.
 - checkout_link(cart_items): creează linkul de cumpărare. Cheamă-l DOAR când clientul e gata să
   cumpere sau cere linkul/să comande; trimite-i URL-ul întors, nu inventa linkuri.
+- check_order(order_ref): status + livrarea unei comenzi. Cheamă-l când clientul întreabă de o
+  comandă („unde e comanda mea?", „status ORD-123"); raportează DOAR ce întoarce, nu inventa.
 
 Reguli:
 - Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /
@@ -76,9 +79,12 @@ def _allowed_prices(products: list[dict[str, Any]]) -> list[float]:
     return [round(float(p["price"]), 2) for p in products if p.get("price") is not None]
 
 
-def _prices_ok(reply: str, products: list[dict[str, Any]]) -> bool:
-    """Fiecare preț menționat în reply trebuie să fie unul real (toleranță 0.5 lei)."""
-    allowed = _allowed_prices(products)
+def _prices_ok(
+    reply: str, products: list[dict[str, Any]], allowed_prices: set[float] | None = None
+) -> bool:
+    """Fiecare preț menționat în reply trebuie să fie real (toleranță 0.5 lei): preț de produs
+    retrievat SAU o sumă grounded din DB (ex. total comandă/checkout, G7-3)."""
+    allowed = _allowed_prices(products) + sorted(allowed_prices or set())
     for token in _PRICE_RE.findall(reply):
         value = float(token.replace(",", "."))
         if not any(abs(value - a) <= 0.5 for a in allowed):
@@ -100,9 +106,12 @@ def _links_ok(
 
 
 def _valid(
-    reply: str, products: list[dict[str, Any]], allowed_links: set[str] | None = None
+    reply: str,
+    products: list[dict[str, Any]],
+    allowed_links: set[str] | None = None,
+    allowed_prices: set[float] | None = None,
 ) -> bool:
-    return _prices_ok(reply, products) and _links_ok(reply, products, allowed_links)
+    return _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
 
 
 def _products_brief(products: list[dict[str, Any]]) -> str:
@@ -168,15 +177,17 @@ async def _finalize(
     language: str,
     history: str,
     allowed_links: set[str] | None = None,
+    allowed_prices: set[float] | None = None,
 ) -> str:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
     prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
-    `allowed_links` = linkuri generate de bot (checkout_link) acceptate pe lângă product_url-uri."""
-    if text and _valid(text, products, allowed_links):
+    `allowed_links`/`allowed_prices` = linkuri/sume grounded de bot (checkout_link/check_order)."""
+    if text and _valid(text, products, allowed_links, allowed_prices):
         return text
 
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
-    allowed = ", ".join(f"{p:.2f} lei" for p in _allowed_prices(products))
+    prices = _allowed_prices(products) + sorted(allowed_prices or set())
+    allowed = ", ".join(f"{p:.2f} lei" for p in prices)
     user = (
         f"Limba clientului: {language}\n{history_block}"
         f"Întrebare: {query}\nProduse:\n{_products_brief(products)}\n\n"
@@ -187,34 +198,87 @@ async def _finalize(
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback determinist
         log.warning("agent: retry compunere eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, products, allowed_links):
+    if reply2 and _valid(reply2, products, allowed_links, allowed_prices):
         return reply2
 
     log.warning("agent: validator a eșuat → fallback determinist")
     return _deterministic_reply(products)
 
 
+# Prompt de recompunere pt răspunsuri FĂRĂ produse cu date grounded (ex. status comandă) —
+# NU produse: validatorul a respins textul (sumă inventată). Forma e de SUPORT, nu de vânzare.
+_ORDER_RECO_SYSTEM = """Ești un asistent de suport pentru un magazin online din România.
+Raportezi statusul comenzii clientului, concis și prietenos, în limba lui. Folosește DOAR datele
+și sumele din informațiile primite — NU inventa numere, AWB, date de livrare sau linkuri."""
+
+
+async def _finalize_grounded(
+    llm,
+    text: str,
+    facts: str,
+    language: str,
+    allowed_links: set[str],
+    allowed_prices: set[float],
+) -> str:
+    """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
+    1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
+    NU forma de produs `_deterministic_reply`)."""
+    if text and _valid(text, [], allowed_links, allowed_prices):
+        return text
+
+    allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
+    user = (
+        f"Limba clientului: {language}\nDate comandă:\n{facts}\n\n"
+        f"FOLOSEȘTE EXACT doar aceste sume: {allowed}. Niciun alt număr, AWB sau link inventat."
+    )
+    try:
+        reply2 = await llm.complete(_ORDER_RECO_SYSTEM, user)
+    except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
+        log.warning("agent: retry status comandă eșuat (%s)", type(e).__name__)
+        reply2 = ""
+    if reply2 and _valid(reply2, [], allowed_links, allowed_prices):
+        return reply2
+
+    log.warning("agent: validator status comandă a eșuat → fallback sigur")
+    return "Ți-am verificat comanda 🙂 Îți confirm imediat detaliile exacte — revin la tine."
+
+
+def _no_result_msg(is_order: bool) -> str:
+    if is_order:
+        return "N-am găsit nicio comandă pe contul tău. Îmi dai numărul comenzii?"
+    return (
+        "Momentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți (tip de produs, buget)?"
+    )
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Pentru route='sales': bucla de tool-calling → recomandare grounded (validată)."""
+    """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
+    status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
     if deps.llm is None:
         return
     route: RouteDecision | None = ctx.route
-    if route is None or route.route != Route.SALES:
+    if route is None or route.route not in (Route.SALES, Route.ORDER):
         return
     query = (ctx.message.body or "").strip()
     if not query:
         return
+    is_order = route.route == Route.ORDER
 
-    tools = tool_schemas(enabled_tools(ctx.business))
+    tools = tool_schemas(enabled_tools(ctx.business, route.route.value))
     retrieved: list[dict[str, Any]] = []
     generated_links: set[str] = set()  # linkuri create de bot (checkout_link) → validator
+    grounded_prices: set[float] = set()  # sume din DB (total comandă/checkout) → validator
+    order_views: list[str] = []  # vederi grounded de comandă, pt fallback-ul de status
 
     async def execute(name: str, args: dict[str, Any]) -> str:
-        """Callback al buclei: rulează tool-ul, acumulează produsele + linkurile generate,
+        """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
         întoarce vederea compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
         result = await run_tool(ctx, deps, name, args)
         retrieved.extend(result.products)
         generated_links.update(result.links)
+        grounded_prices.update(result.prices)
+        if name == "check_order" and result.ok and result.llm_view:
+            order_views.append(result.llm_view)
         ctx.emit("tool_call", name=name, ok=result.ok)
         return result.llm_view or (result.error or "(fără rezultat)")
 
@@ -235,15 +299,34 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     if products:
         reply = await _finalize(
-            deps.llm, query, final, products, ctx.language, history, generated_links
+            deps.llm,
+            query,
+            final,
+            products,
+            ctx.language,
+            history,
+            generated_links,
+            grounded_prices,
         )
         ctx.set_reply(reply, products=_card_products(products))
         ctx.emit("agent_recommended", n=len(products))
     elif final:
-        # model a răspuns fără produse (clarificare / conversațional) → servim textul
-        ctx.set_reply(final)
+        # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
+        # pe rută — nu trecem o întrebare de vânzare prin fallback-ul de status comandă.
+        if is_order:
+            reply = await _finalize_grounded(
+                deps.llm,
+                final,
+                "\n".join(order_views),
+                ctx.language,
+                generated_links,
+                grounded_prices,
+            )
+        elif _valid(final, [], generated_links, grounded_prices):
+            reply = final  # SALES: text fără produse și fără sumă inventată (clarificare) → servim
+        else:
+            # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
+            reply = _no_result_msg(is_order=False)
+        ctx.set_reply(reply)
     else:
-        ctx.set_reply(
-            "Momentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți "
-            "(tip de produs, buget)?"
-        )
+        ctx.set_reply(_no_result_msg(is_order))

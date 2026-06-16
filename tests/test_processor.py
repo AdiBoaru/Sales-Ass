@@ -222,3 +222,78 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
         assert row["summary"] == "REZUMAT"
         # watermark = al 14-lea mesaj (22 total − 8 din coadă): cel mai nou care iese din fereastră.
         assert row["upto_message_at"] == created[13]
+
+
+# --------------------------------------------------------------------------- #
+# G7-3 — get_orders_status (lateral joins orders+items+shipments) sub RLS
+# --------------------------------------------------------------------------- #
+
+
+async def test_get_orders_status_joins_and_contact_isolation(pool):
+    """get_orders_status pe DB real: lateral joins (items jsonb + ultimul shipment) + IZOLAREA pe
+    contact (comanda unui contact NU apare la altul, nici după external_id).
+
+    `check_order` e READ-ONLY: în producție `bot_runtime` are DOAR `select` pe `order_items`
+    (003 linia 49-51) + CRUD pe `shipments`. Deci setăm datele ca rol PRIVILEGIAT, apoi CITIM sub
+    `bot_runtime`+RLS — ca în producție (order_items se scrie pe alt drum, nu de check_order)."""
+    from uuid import uuid4 as _u
+
+    from src.db.queries.commerce import get_orders_status
+    from src.db.queries.contacts import get_or_create_contact
+    from src.db.queries.conversations import get_or_create_conversation
+
+    async with pool.acquire() as conn:
+        tr = conn.transaction()
+        await tr.start()
+        try:
+            channel_id = await conn.fetchval(
+                "insert into channels (business_id, kind, provider_account_id) "
+                "values ($1, 'whatsapp', $2) returning id::text",
+                DEMO_BIZ,
+                f"test-{_u()}",
+            )
+            c1 = await get_or_create_contact(
+                conn, DEMO_BIZ, "whatsapp", f"+40{_u().hex[:9]}", display_name="A"
+            )
+            c2 = await get_or_create_contact(
+                conn, DEMO_BIZ, "whatsapp", f"+40{_u().hex[:9]}", display_name="B"
+            )
+            await get_or_create_conversation(conn, DEMO_BIZ, c1.id, channel_id, locale="ro")
+            ext = f"ORD-{_u().hex[:8]}"
+            order_id = await conn.fetchval(
+                "insert into orders (business_id, contact_id, external_id, status, total, "
+                "currency, attribution, placed_at) "
+                "values ($1,$2,$3,'shipped',247.50,'RON','assisted', now()) returning id::text",
+                DEMO_BIZ,
+                c1.id,
+                ext,
+            )
+            await conn.execute(
+                "insert into order_items (order_id, name, quantity, unit_price) "
+                "values ($1, 'Crema', 1, 82.99)",
+                order_id,
+            )
+            await conn.execute(
+                "insert into shipments (business_id, order_id, carrier, awb, status, eta) "
+                "values ($1,$2,'FAN',$3,'in_transit', now())",
+                DEMO_BIZ,
+                order_id,
+                f"AWB{_u().hex[:10]}",
+            )
+
+            # CITIRE sub rolul de runtime (RLS de producție).
+            await conn.execute("set local role bot_runtime")
+            await conn.execute("select set_config('app.business_id', $1, true)", DEMO_BIZ)
+
+            rows = await get_orders_status(conn, DEMO_BIZ, contact_id=c1.id)
+            assert len(rows) == 1
+            o = rows[0]
+            assert o["status"] == "shipped" and abs(o["total"] - 247.50) < 0.01
+            assert o["carrier"] == "FAN" and o["awb"] is not None  # lateral shipment
+            assert o["items"] and o["items"][0]["name"] == "Crema"  # lateral jsonb_agg items
+
+            # IZOLARE: c2 n-are comenzi; chiar cu external_id-ul lui c1 → gol (scoped în SQL).
+            assert await get_orders_status(conn, DEMO_BIZ, contact_id=c2.id) == []
+            assert await get_orders_status(conn, DEMO_BIZ, external_id=ext, contact_id=c2.id) == []
+        finally:
+            await tr.rollback()

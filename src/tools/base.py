@@ -32,6 +32,9 @@ class ToolResult:
     # Linkuri GENERATE de bot în acest tur (ex. checkout_link, F2): grounded prin construcție
     # → validatorul le acceptă, pe lângă product_url-urile retrievate.
     links: list[str] = field(default_factory=list)
+    # Sume citite din DB (ex. total comandă/checkout, G7-3): grounded prin construcție →
+    # validatorul de preț le acceptă, pe lângă prețurile produselor retrievate.
+    prices: list[float] = field(default_factory=list)
 
 
 ToolFn = Callable[["TurnContext", "PipelineDeps", dict[str, Any]], Awaitable[ToolResult]]
@@ -49,14 +52,17 @@ def register(name: str) -> Callable[[ToolFn], ToolFn]:
     return deco
 
 
-# Faza 1: read core. Faza 2 (F2): comerț (write). Activarea per-business (settings) = ulterior.
-_PHASE1 = ("search_products", "get_product_details", "compare_products")
-_PHASE2 = ("checkout_link",)
+# Toolset PER RUTĂ (G7-3): pe SALES oferim catalogul + comerțul; pe ORDER doar status comandă.
+# A nu oferi search pe ORDER (și invers) ține modelul focusat pe sarcina rutei.
+_SALES_TOOLS = ("search_products", "get_product_details", "compare_products", "checkout_link")
+_ORDER_TOOLS = ("check_order",)
 
 
-def enabled_tools(business: Any) -> list[str]:  # noqa: ARG001 — per-business vine ulterior
-    """Tool-urile active pentru un business (Faza 1 read + Faza 2 comerț, dacă-s înregistrate)."""
-    return [name for name in (*_PHASE1, *_PHASE2) if name in TOOL_REGISTRY]
+def enabled_tools(business: Any, route: str | None = None) -> list[str]:  # noqa: ARG001
+    """Tool-urile active pentru un business, după rută (per-business settings = ulterior).
+    `route='order'` → unelte de status comandă; altceva (sales/None) → unelte de vânzare."""
+    names = _ORDER_TOOLS if route == "order" else _SALES_TOOLS
+    return [name for name in names if name in TOOL_REGISTRY]
 
 
 async def run_tool(

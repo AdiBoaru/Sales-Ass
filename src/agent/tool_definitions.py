@@ -124,6 +124,31 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "check_order": {
+        "type": "function",
+        "function": {
+            "name": "check_order",
+            "description": (
+                "Verifică statusul + livrarea unei comenzi. Folosește când clientul întreabă de "
+                "o comandă (unde e comanda mea, status ORD-123). Caută pe contul clientului."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "order_ref": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Numărul comenzii dacă l-a dat clientul; altfel null → ultimele "
+                            "comenzi ale contactului."
+                        ),
+                    },
+                },
+                "required": ["order_ref"],
+            },
+        },
+    },
 }
 
 

@@ -156,3 +156,59 @@ async def mark_checkout_converted(
         checkout_link_id,
         order_id,
     )
+
+
+# --- citire status comandă (G7-3, tool check_order) --------------------------
+
+
+async def get_orders_status(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    external_id: str | None = None,
+    contact_id: str | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Comenzile (status + tracking) pentru tool-ul `check_order`. UN singur SELECT cu lateral
+    `order_items` (jsonb_agg, fără N+1) + ultimul `shipment` (după updated_at). Filtrare DURĂ pe
+    `business_id` ȘI (opțional) `external_id`/`contact_id` — izolarea pe contact se face ÎN SQL
+    (defense-in-depth), nu doar în cod. `order_items` n-are `business_id` → izolare tranzitivă prin
+    rândul părinte `orders` (deja tenant-scoped). Ordine: cele mai recente comenzi întâi."""
+    rows = await conn.fetch(
+        """
+        select o.id::text as id, o.contact_id::text as contact_id, o.external_id,
+               o.status, o.total::float8 as total, o.currency, o.placed_at,
+               s.carrier, s.awb, s.status as shipment_status, s.eta,
+               coalesce(items.items, '[]'::jsonb) as items
+        from orders o
+        left join lateral (
+            select jsonb_agg(jsonb_build_object(
+                'name', oi.name, 'quantity', oi.quantity, 'unit_price', oi.unit_price
+            )) as items
+            from order_items oi where oi.order_id = o.id
+        ) items on true
+        left join lateral (
+            select carrier, awb, status, eta
+            from shipments sh
+            where sh.business_id = $1 and sh.order_id = o.id
+            order by sh.updated_at desc
+            limit 1
+        ) s on true
+        where o.business_id = $1
+          and ($2::text is null or o.external_id = $2)
+          and ($3::uuid is null or o.contact_id = $3)
+        order by o.placed_at desc
+        limit $4
+        """,
+        business_id,
+        external_id,
+        contact_id,
+        min(limit, 6),
+    )
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        if isinstance(d.get("items"), str):  # jsonb vine ca text fără codec
+            d["items"] = json.loads(d["items"])
+        out.append(d)
+    return out
