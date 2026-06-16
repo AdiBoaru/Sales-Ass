@@ -26,6 +26,7 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
 from src.redis_bus import STREAM_INBOUND, close_redis, get_redis
+from src.webhook.orders import process_order
 from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
 from src.worker.processor import handle_turn
@@ -49,6 +50,20 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
 
     `channel_kind` (whatsapp|telegram|...) = transportul; `kind` (message|status)
     = tipul de envelope. Rezolvarea tenantului e comună tuturor canalelor."""
+    # Comenzile (F2-2) nu-s evenimente de canal: `business_id` vine din envelope (autentificat
+    # de secret la webhook), nu din rezolvarea pe canal. Rutăm ÎNAINTE de resolve_channel.
+    if event.get("kind") == "order":
+        business_id = event.get("business_id")
+        if not business_id:
+            log.warning("order fără business_id — ignorat")
+            return
+        async with tenant_conn(business_id) as conn:
+            try:
+                await process_order(conn, business_id, event.get("order") or {})
+            except Exception:  # noqa: BLE001 — un order rău nu blochează coada (e logat)
+                log.exception("procesarea comenzii a eșuat (business=%s)", business_id)
+        return
+
     channel_kind = event.get("channel_kind", "whatsapp")
     channel_account_id = event.get("channel_account_id", "")
     async with admin_conn(pool) as conn:
