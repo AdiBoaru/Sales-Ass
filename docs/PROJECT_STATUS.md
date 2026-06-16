@@ -1,8 +1,8 @@
 # Nativx Assistant — Status proiect
 
-_Actualizat: 2026-06-15 · Bază: `main` la zi (PR #1–#55: + G5a gates, G5b-1 cache
-static) · Document VIU — se actualizează la fiecare milestone; data stă aici, nu în
-numele fișierului._
+_Actualizat: 2026-06-16 · Bază: `main` la zi (PR #1–#56: + G5a gates, G5b-1/G5b-2
+cache semantic) · Document VIU — se actualizează la fiecare milestone; data stă aici,
+nu în numele fișierului._
 
 Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) riscuri
 și datorie tehnică, (3) ce urmează — material pentru generarea taskurilor.
@@ -34,7 +34,7 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
   `docker compose up` pornește redis + worker + dispatcher + telegram-poller +
   webhook pe Windows. (VPS rămâne ținta de producție.)
 
-## 2. Ce e în main (până la PR #45 + W1)
+## 2. Ce e în main (până la PR #56)
 
 | Componentă | Stare | PR |
 |---|---|---|
@@ -59,12 +59,17 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
 | Catalog: normalize (preț/url) + enrich (descrieri+concerns, LLM) | ✅ | #42, #43 |
 | **P1: embed_products** (product_embeddings=500) | ✅ | #44 |
 | **G4: agent (mini) + search semantic + validator preț** | ✅ live | #45 |
-| **W1: carduri compacte** (listă text + butoane-link) | ✅ live | #50 |
-| R2: carusel de produse pe Telegram | ✅ | #53 |
-| NX-04/53: assert izolare la checkout + test concurent | ✅ | #51, #52 |
+| **W1: carduri compacte** (listă text + butoane-link) | ✅ live | #46 |
+| **G6: context builder** (istoric conversație, follow-up-uri) | ✅ live | #47 |
+| **D3: rezumate recenzii** (rating + laude; `product_review_summaries` 500/500) | ✅ live | #48 |
+| **R1: debounce** (mesaje rapide ale aceluiași user → un singur tur) | ✅ live | #49 |
+| **NX-50: worker pe rol de login `bot_runtime`** (două pool-uri) | ✅ | #50 |
+| **NX-04: assert izolare la checkout** (fail-fast `IsolationError`) | ✅ | #51 |
+| **NX-53: test izolare sub concurență** (50 tururi paralele) | ✅ | #52 |
+| **R2: carusel de produse pe Telegram** (callback_query + editMessageMedia) | ✅ live | #53 |
 | **G5a: gates** (bot_active + handoff + risc → request_human) | ✅ live | #54 |
 | **G5b-1: cache semantic** (lookup exact+semantic, write-back static) | ✅ live | #55 |
-| **G5b-2: invalidare cache + caching dynamic** (price-check + data_version) | ✅ | (acest PR) |
+| **G5b-2: invalidare cache + caching dynamic** (price-check + data_version) | ✅ live | #56 |
 
 Fundațiile anterioare (infra, schema v2 + RLS 003, config/pool/models,
 search_products SQL) — vezi istoricul PR #1–#18.
@@ -74,9 +79,9 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | # | Stagiu | Stare |
 |---|---|---|
 | 1 | Webhook: GET verify + POST inbound | ✅ live |
-| 2 | Redis backbone: stream + consumer group + dedupe 2L | ✅ live (TODO: debounce, lock multi-consumer, rate limit, cost guard) |
-| 3 | Gates (bot_active, handoff, limbă, risc, media) | ❌ |
-| 4 | Straturi gratuite (alias, cache semantic, clarificare) | ✅ **cache semantic live** (static G5b-1 + dynamic cu invalidare price-check/data_version G5b-2); alias + clarificare ulterior; cache se încălzește din răspunsuri (faqs=0) |
+| 2 | Redis backbone: stream + consumer group + dedupe 2L + **debounce (R1)** | ✅ live (TODO rămas: lock multi-consumer, rate limit, cost guard) |
+| 3 | Gates (bot_active, handoff, risc → request_human) | ✅ **live (G5a)** · ❌ rămas: **detecție de limbă**, media routing (STT/Vision) |
+| 4 | Straturi gratuite (cache semantic, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 #56) · ❌ rămas: **alias lookup** (`intent_aliases`), clarify cu `pending_question` (faqs=0) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
 | 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
 | 7 | Agent (mini) + search semantic | ✅ **live** (RAG: embed query → cosine + filtru preț; tool-calling complet = refinement) |
@@ -85,7 +90,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | — | Status webhook (delivered/read/failed) | ✅ |
 | — | Proactiv / Jobs (embed, rollup, cleanup partiții) | ❌ (doar `cleanup_dedupe` ✅) |
 
-## 4. Starea DATELOR demo (verificat live în Supabase, 2026-06-14)
+## 4. Starea DATELOR demo (verificat live în Supabase, 2026-06-15)
 
 business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
@@ -96,25 +101,27 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 | `products.product_url` | **500** ✅ | generate din slug (`shop.sole-demo.ro/p/<slug>`) |
 | `products.ai_summary` + `attributes.concerns` | **500** ✅ | descrieri reale + concerns filtrabile (LLM enrichment) |
 | `product_images` | 2500 | placehold.co `.png` (fixat din SVG pt carduri) |
-| `reviews` | 953 | nesumarizate încă (D3 = rezumate → product_review_summaries) |
-| `faqs` | 0 | stratul gratuit FAQ gol |
+| `reviews` | 953 | brute (fictive, formulaice) — sursă pt D3 |
+| `product_review_summaries` | **500/500** ✅ | D3 (#48): summary + top_pros + sentiment; `products.rating` variat 4.3–4.9 |
+| `semantic_cache` | warming | G5b-1 live: 006 + write-back static; se încălzește din răspunsuri |
+| `faqs` | 0 | stratul gratuit FAQ gol (cache-ul se încălzește oricum din răspunsuri) |
+| `intent_aliases` | 0 | gol până vine shadow mode (alias lookup n-are ce servi încă) |
 | `channels` | telegram ✅ | `@solechat_bot` seedat; WhatsApp încă 0 (cere T013) |
 
 ## 5. Riscuri & datorie tehnică (curente)
 
-1. **NX-50 livrat (cod) — `bot_runtime` rol de LOGIN** (P0-A audit). Două pool-uri:
+1. **NX-50 livrat (#50) — `bot_runtime` rol de LOGIN** (P0-A audit). Două pool-uri:
    tenant path = login direct `bot_runtime` (zero `SET ROLE` → fără scurgere sub
    multiplexare); control plane = `admin_conn` privilegiat (`docs/db_connections.md`).
-   **Rămâne:** provisioning manual (`apply_005.py` + `DATABASE_URL_BOT`) — până atunci
-   codul cade grațios pe modul compat. NX-04 (assert la checkout) **livrat** —
-   `tenant_conn` ridică `IsolationError` dacă rolul/scope-ul nu-s corecte, zero
-   overhead (combinat în set_config). NX-53 (test concurent) se construiește peste.
-2. **R1 — Debounce lipsă** (stagiul 2): mesajele succesive = tururi separate →
-   răspunsuri redundante. Vezi `docs/REFINEMENTS.md`. P1 la hardening worker.
+   NX-04 (assert la checkout, #51) + NX-53 (test concurent, #52) **livrate** peste.
+   **Rămâne DOAR pasul de deploy:** provisioning (`apply_005.py` + setarea
+   `DATABASE_URL_BOT` în env-ul de prod) — până atunci codul cade grațios pe compat.
+2. **R1 — Debounce LIVRAT (#49):** mesajele rapide ale aceluiași user se coalescă
+   într-un singur tur (`worker/debounce.py`). Risc închis.
 3. **Limita de spend OpenAI NEPUSĂ** — protecția financiară (dashboard) e încă de
    făcut (T017). Cost real mic (enrichment+embed one-time ~$0.5; per tur fracțiuni).
-4. **Agentul e RAG, nu tool-calling** — fără context istoric (stagiul 6), fără
-   compară/detalii (max-3-tools). Suficient pt demo; refinement ulterior.
+4. **Agentul e RAG, nu tool-calling** — are istoric de conversație (G6 #47, follow-up-uri),
+   dar încă fără compară/detalii (max-3-tools), profil/state/summarizer. Suficient pt demo.
 5. **Dedupe claim-first:** crash între claim și finalizarea turului = mesaj marcat
    văzut dar neprocesat. Dead-letter / reaper = follow-up.
 6. **`get_or_create_conversation` race teoretic** pe primul mesaj al unui contact
@@ -125,19 +132,24 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
 ## 6. Ce urmează (ordine recomandată)
 
-1. **D3 — rezumate recenzii** (953 → `product_review_summaries`, LLM) → botul
-   menționează rating + ce laudă clienții. Wow ieftin.
-2. **R1 debounce + R2 carduri „pro"** (carusel Telegram / List Messages WhatsApp) —
-   vezi `docs/REFINEMENTS.md`.
-3. **Provisioning manual NX-50** (`apply_005.py` + `DATABASE_URL_BOT`) — NX-04/53
-   (assert la checkout + test concurent) deja livrate peste NX-50.
-4. **G5**: gates (G5a ✅) + cache semantic (G5b-1/G5b-2 ✅). Rămâne: alias lookup
-   (`intent_aliases`), detecție de limbă (RO/HU/EN), clarificare cu `pending_question`.
-5. **WhatsApp e2e** (T013/T015 manual) + deploy VPS pentru rulare continuă.
+> NB (2026-06-16): D3, R1, NX-50, R2, G5a, G5b-1, G5b-2 sunt DEJA în main (vezi §2) —
+> lista veche le marca „urmează". Mai jos = ce e GENUIN nefăcut, verificat în cod.
+> (NX-15 moderation gate = PR #58, în flight.)
 
-**Milestone atins (2026-06-14):** „bot care VINDE și ține firul" — triaj + agent +
-carduri + **memorie de conversație** (follow-up „mai ieftin"), pe catalog de calitate.
-Următorul: rezumate recenzii + debounce.
+1. **Detecție de limbă** (stagiul 3, gates): `ctx.language` vine acum doar din
+   `conv.locale`/default → un mesaj HU/EN pe o conversație RO rămâne tratat ca RO
+   (principiul 11: „cache hit în limba greșită = bug"). Determinist, fără LLM.
+   Efect pe demo doar dacă tenantul are `supported_locales` multiple (demo = RO).
+2. **Alias lookup** (stagiul 4): `intent_aliases` (phrase_norm → rută). Tabelul e
+   GOL până vine shadow mode → valoare imediată mică; de făcut împreună cu shadow.
+3. **Limita de spend OpenAI** (T017) — protecție financiară în dashboard.
+4. **WhatsApp e2e** (T013/T015 manual: phone_number_id Meta) + deploy VPS continuu.
+5. **Backlog NX** (`tasks/NX_backlog_compact.md`): NX-03 alerte lag/outbox,
+   NX-07 pacing proactiv, NX-41 create_tenant, etc.
+
+**Milestone atins (2026-06-16):** bot care VINDE, ține firul, menționează recenzii,
+coalescă mesaje rapide (debounce), escaladează la om (gates), și servește din cache
+semantic (static + dynamic cu invalidare). Următorul: detecție de limbă / shadow+alias.
 
 ## 7. Decizii de arhitectură luate pe parcurs
 
