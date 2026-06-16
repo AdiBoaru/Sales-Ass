@@ -17,6 +17,7 @@ from src.worker.context import (
     customer_profile_block,
     search_query,
     state_block,
+    summary_block,
 )
 
 
@@ -150,6 +151,27 @@ def test_context_blocks_joins_nonempty():
 
 def test_context_blocks_empty_when_nothing():
     assert context_blocks(_ctx()) == ""
+
+
+def test_summary_block_empty_when_none():
+    assert summary_block(_ctx()) == ""  # ctx.summary None → ""
+
+
+def test_summary_block_formatted_and_capped():
+    ctx = _ctx()
+    ctx.summary = "Clientul caută cremă hidratantă pentru ten uscat, buget sub 100 lei. " * 20
+    block = summary_block(ctx, max_chars=80)
+    assert block.startswith("Rezumat conversație anterioară: ")
+    assert len(block) <= 80
+
+
+def test_context_blocks_summary_first():
+    ctx = _ctx(profile={"tip_ten": "uscat"}, products=[ProductRef("p1", "Crema", 82.99)])
+    ctx.summary = "Discuție anterioară despre creme."
+    blocks = context_blocks(ctx)
+    # ordine cronologică: rezumatul (fundal vechi) ÎNAINTEA profilului și state-ului
+    assert blocks.index("Rezumat conversație") < blocks.index("Profil client")
+    assert blocks.index("Profil client") < blocks.index("Produse arătate recent")
 
 
 async def test_agent_prompt_includes_context_blocks():
