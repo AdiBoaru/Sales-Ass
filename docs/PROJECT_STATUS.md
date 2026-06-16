@@ -1,7 +1,9 @@
 # Nativx Assistant — Status proiect
 
-_Actualizat: 2026-06-16 · Bază: `main` la zi (PR #1–#56: + G5a gates, G5b-1/G5b-2
-cache semantic) · Document VIU — se actualizează la fiecare milestone; data stă aici,
+_Actualizat: 2026-06-16 · Bază: `main` la zi (PR #1–#61: + NX-15 moderation, G5c
+detecție de limbă, G7-1 agent tool-calling, G2c cost guard + rate limit) · **În review:**
+#62 G8-1 evals/golden CI, #63–#65 F2 bucla de bani (checkout_link → atribuire comenzi →
+usage_daily) · Document VIU — se actualizează la fiecare milestone; data stă aici,
 nu în numele fișierului._
 
 Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) riscuri
@@ -34,7 +36,7 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
   `docker compose up` pornește redis + worker + dispatcher + telegram-poller +
   webhook pe Windows. (VPS rămâne ținta de producție.)
 
-## 2. Ce e în main (până la PR #56)
+## 2. Ce e în main (până la PR #61)
 
 | Componentă | Stare | PR |
 |---|---|---|
@@ -70,25 +72,39 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
 | **G5a: gates** (bot_active + handoff + risc → request_human) | ✅ live | #54 |
 | **G5b-1: cache semantic** (lookup exact+semantic, write-back static) | ✅ live | #55 |
 | **G5b-2: invalidare cache + caching dynamic** (price-check + data_version) | ✅ live | #56 |
+| Sync PROJECT_STATUS (#46–#55 livrate) | ✅ | #57 |
+| **NX-15: moderation gate** (mesaj flagged → răspuns neutru + abuse blocklist) | ✅ live | #58 |
+| **G5c: detecție de limbă** RO/HU/EN în Gates (stagiul 3) | ✅ live | #59 |
+| **G7-1: agent tool-calling** (framework + search/details/compare, cap dur 3) | ✅ live | #60 |
+| **G2c: cost guard + rate limit** (contoare Redis, fail-open) | ✅ live | #61 |
 
 Fundațiile anterioare (infra, schema v2 + RLS 003, config/pool/models,
 search_products SQL) — vezi istoricul PR #1–#18.
+
+### În review (PR-uri deschise, nu încă în main)
+
+| Componentă | PR |
+|---|---|
+| **G8-1: evals — golden harness + gate CI** (regresii de pipeline) | #62 |
+| **F2-1: `checkout_link`** — link de cumpărare atribuibil (`?ref=`) | #63 |
+| **F2-2: atribuire comenzi** — webhook → match `ref_code` → `orders.attribution` (stacked pe #63) | #64 |
+| **F2-3: usage_daily rollup** — analytics+messages+orders → `usage_daily` | #65 |
 
 ## 3. Stadiu pe pipeline (cele 9 stagii)
 
 | # | Stagiu | Stare |
 |---|---|---|
 | 1 | Webhook: GET verify + POST inbound | ✅ live |
-| 2 | Redis backbone: stream + consumer group + dedupe 2L + **debounce (R1)** | ✅ live (TODO rămas: lock multi-consumer, rate limit, cost guard) |
-| 3 | Gates (bot_active, handoff, risc → request_human) | ✅ **live (G5a)** · ❌ rămas: **detecție de limbă**, media routing (STT/Vision) |
+| 2 | Redis backbone: stream + consumer group + dedupe 2L + **debounce (R1)** + **rate limit & cost guard (G2c #61)** | ✅ live (TODO rămas: lock multi-consumer, XAUTOCLAIM) |
+| 3 | Gates (bot_active, handoff, risc, **moderare NX-15 #58**, **limbă RO/HU/EN G5c #59**) | ✅ **live** · ❌ rămas: media routing (STT/Vision) |
 | 4 | Straturi gratuite (cache semantic, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 #56) · ❌ rămas: **alias lookup** (`intent_aliases`), clarify cu `pending_question` (faqs=0) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
 | 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
-| 7 | Agent (mini) + search semantic | ✅ **live** (RAG: embed query → cosine + filtru preț; tool-calling complet = refinement) |
-| 8 | Validator | ✅ inline în agent (zero prețuri inventate; retry → fallback determinist) |
+| 7 | Agent (mini) + **tool-calling (G7-1 #60)** | ✅ **live** (search/details/compare, cap dur 3 apeluri; + `checkout_link` în review #63) |
+| 8 | Validator | ✅ inline în agent (zero prețuri/linkuri inventate; retry → fallback determinist; link de checkout permis doar dacă botul l-a generat, #63) |
 | 9 | Sender → outbox → dispatcher (+ carduri W1) | ✅ **live cap-coadă** |
 | — | Status webhook (delivered/read/failed) | ✅ |
-| — | Proactiv / Jobs (embed, rollup, cleanup partiții) | ❌ (doar `cleanup_dedupe` ✅) |
+| — | Proactiv / Jobs (embed, rollup, cleanup partiții) | `cleanup_dedupe` ✅ · `embed_products` ✅ · **`rollup_usage` în review (#65)** · cleanup partiții ❌ |
 
 ## 4. Starea DATELOR demo (verificat live în Supabase, 2026-06-15)
 
@@ -118,10 +134,12 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
    `DATABASE_URL_BOT` în env-ul de prod) — până atunci codul cade grațios pe compat.
 2. **R1 — Debounce LIVRAT (#49):** mesajele rapide ale aceluiași user se coalescă
    într-un singur tur (`worker/debounce.py`). Risc închis.
-3. **Limita de spend OpenAI NEPUSĂ** — protecția financiară (dashboard) e încă de
-   făcut (T017). Cost real mic (enrichment+embed one-time ~$0.5; per tur fracțiuni).
-4. **Agentul e RAG, nu tool-calling** — are istoric de conversație (G6 #47, follow-up-uri),
-   dar încă fără compară/detalii (max-3-tools), profil/state/summarizer. Suficient pt demo.
+3. **Cost guard + rate limit LIVRATE (G2c #61):** plafon zilnic per business (contor Redis,
+   peste prag → LLM dezactivat, degradare grațioasă) + rate limit per contact. Fail-open.
+   **Rămâne** limita de spend la nivel de cont OpenAI (dashboard, T017) ca a doua plasă.
+4. **Agentul e tool-calling LIVRAT (G7-1 #60):** decide ce unealtă cheamă (search/details/
+   compare, cap dur 3). Profil/state/summarizer (context builder bogat) rămân follow-up.
+   Bucla de bani (`checkout_link` → atribuire → usage_daily) = F2, în review (#63–#65).
 5. **Dedupe claim-first:** crash între claim și finalizarea turului = mesaj marcat
    văzut dar neprocesat. Dead-letter / reaper = follow-up.
 6. **`get_or_create_conversation` race teoretic** pe primul mesaj al unui contact
@@ -132,24 +150,27 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
 ## 6. Ce urmează (ordine recomandată)
 
-> NB (2026-06-16): D3, R1, NX-50, R2, G5a, G5b-1, G5b-2 sunt DEJA în main (vezi §2) —
-> lista veche le marca „urmează". Mai jos = ce e GENUIN nefăcut, verificat în cod.
-> (NX-15 moderation gate = PR #58, în flight.)
+> NB (2026-06-16): NX-15, G5c, G7-1, G2c sunt DEJA în main (vezi §2); F2 (bucla de bani)
+> + G8-1 evals sunt în review (#62–#65). Mai jos = ce rămâne GENUIN nefăcut, verificat în cod.
 
-1. **Detecție de limbă** (stagiul 3, gates): `ctx.language` vine acum doar din
-   `conv.locale`/default → un mesaj HU/EN pe o conversație RO rămâne tratat ca RO
-   (principiul 11: „cache hit în limba greșită = bug"). Determinist, fără LLM.
-   Efect pe demo doar dacă tenantul are `supported_locales` multiple (demo = RO).
-2. **Alias lookup** (stagiul 4): `intent_aliases` (phrase_norm → rută). Tabelul e
-   GOL până vine shadow mode → valoare imediată mică; de făcut împreună cu shadow.
-3. **Limita de spend OpenAI** (T017) — protecție financiară în dashboard.
-4. **WhatsApp e2e** (T013/T015 manual: phone_number_id Meta) + deploy VPS continuu.
-5. **Backlog NX** (`tasks/NX_backlog_compact.md`): NX-03 alerte lag/outbox,
+1. **Merge #62–#65** (evals/golden CI + bucla de bani) → main. Apoi:
+   **provisioning checkout** (`CHECKOUT_BASE_URL` / `businesses.settings["checkout_url"]` +
+   `ORDERS_WEBHOOK_SECRET`) ca linkurile + atribuirea să meargă pe demo — vezi TODO-MANUAL.
+2. **Context builder bogat** (stagiul 6): profil compact + state + summarizer conversații lungi.
+3. **Alias lookup** (stagiul 4): `intent_aliases` (phrase_norm → rută). GOL până vine shadow
+   mode → valoare imediată mică; de făcut împreună cu shadow.
+4. **Limita de spend OpenAI** (T017) — a doua plasă financiară, la nivel de cont (dashboard),
+   peste cost guard-ul aplicativ (G2c #61).
+5. **WhatsApp e2e** (T013/T015 manual: phone_number_id Meta) + deploy VPS continuu
+   (+ provisioning `bot_runtime`: `DATABASE_URL_BOT`).
+6. **Backlog NX** (`tasks/NX_backlog_compact.md`): NX-03 alerte lag/outbox,
    NX-07 pacing proactiv, NX-41 create_tenant, etc.
 
-**Milestone atins (2026-06-16):** bot care VINDE, ține firul, menționează recenzii,
-coalescă mesaje rapide (debounce), escaladează la om (gates), și servește din cache
-semantic (static + dynamic cu invalidare). Următorul: detecție de limbă / shadow+alias.
+**Milestone atins (2026-06-16):** bot care VINDE cu **tool-calling** (G7-1), ține firul,
+menționează recenzii, coalescă mesaje rapide, escaladează la om, detectează limba (RO/HU/EN),
+moderează abuzul, servește din cache semantic, și e protejat de **cost guard + rate limit**.
+**În review:** evals/golden CI (G8-1) + **bucla de bani** (checkout_link → atribuire comenzi →
+usage_daily). Următorul: merge F2 + provisioning checkout / context builder bogat.
 
 ## 7. Decizii de arhitectură luate pe parcurs
 
