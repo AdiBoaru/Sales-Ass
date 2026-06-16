@@ -150,9 +150,13 @@ nu e vizibilă pe demo până nu-l faci.
 - [ ] Generează un secret aleator → `.env`: `ORDERS_WEBHOOK_SECRET=...` (gol = endpointul
       `POST /webhook/orders/{business_id}` întoarce 403).
 - [ ] Platforma magazinului (sau un script de test) trimite comenzile la
-      `POST /webhook/orders/<business_id>` cu headerul `X-Orders-Secret: <secret>` și corpul
-      JSON neutru (`external_id, status, total, ref, placed_at, items[]`). `ref` = `?ref=` din
-      linkul botului → declanșează atribuirea.
+      `POST /webhook/orders/<business_id>` cu headerul **`X-Orders-Signature: sha256=<hmac>`**
+      (HMAC-SHA256 peste corpul BRUT, cu `ORDERS_WEBHOOK_SECRET`, NX-94 — nu mai trimite
+      secretul în clar) și corpul JSON neutru (`external_id, status, total, ref, placed_at,
+      items[]`). `ref` = `?ref=` din linkul botului → declanșează atribuirea.
+      Semnare în shell (test):
+      `SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"`
+      apoi `curl -H "X-Orders-Signature: $SIG" -d "$BODY" .../webhook/orders/<business_id>`.
 
 ### F2-C — Scheduler rollup nocturn  ·  ~10 min (la deploy)
 - [ ] Cron/n8n care rulează zilnic `python -m src.jobs.rollup_usage` (ziua de ieri, UTC) →

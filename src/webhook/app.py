@@ -6,7 +6,6 @@ POST /webhook → mesaje inbound: verifică semnătura, deduplică (Redis layer 
                 contact/conversație + plasa de dedupe durabilă sunt în worker.
 """
 
-import hmac
 import json
 
 from fastapi import Depends, FastAPI, Query, Request, Response
@@ -17,7 +16,7 @@ from redis.exceptions import RedisError
 from src.config import get_settings
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
 from src.webhook.meta import parse_statuses, parse_webhook
-from src.webhook.signature import verify_meta_signature
+from src.webhook.signature import verify_meta_signature, verify_orders_signature
 
 app = FastAPI(title="Nativx Assistant — webhook")
 
@@ -115,15 +114,16 @@ async def receive_order(
     redis: Redis = Depends(redis_dep),
 ) -> Response:
     """Webhook comenzi (F2-2) → atribuire. Margine SUBȚIRE, fără DB (ca path-ul Meta):
-    verifică un secret partajat, parsează, pune un envelope `kind='order'` pe stream →
-    worker-ul face atribuirea (`process_order`). Comenzile nu-s evenimente de canal, deci
-    `business_id` vine din path (autentificat de secret)."""
-    expected = secret
-    provided = request.headers.get("X-Orders-Secret") or ""
-    if not expected or not hmac.compare_digest(provided, expected):
-        return PlainTextResponse("forbidden", status_code=403)
-
+    verifică semnătura HMAC peste corpul brut, parsează, pune un envelope `kind='order'`
+    pe stream → worker-ul face atribuirea (`process_order`). Comenzile nu-s evenimente de
+    canal, deci `business_id` vine din path (autentificat acum de HMAC — un corp semnat cu
+    secretul businessului, NX-94). Verificăm ÎNAINTE de orice parsare (principiul 7)."""
     raw = await request.body()
+    signature = request.headers.get("X-Orders-Signature")
+    if not verify_orders_signature(secret, raw, signature):
+        # NU logăm corpul/header-ul/secretul (P12) — corpul poate conține nume/total.
+        return PlainTextResponse("invalid signature", status_code=403)
+
     try:
         order = json.loads(raw)
     except json.JSONDecodeError:
