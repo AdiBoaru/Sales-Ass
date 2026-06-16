@@ -59,11 +59,13 @@ def _deps(llm=None) -> PipelineDeps:
     return PipelineDeps(conn=object(), redis=None, llm=llm or _LLM())
 
 
-def test_enabled_tools_phase1():
+def test_enabled_tools_phase1_and_2():
+    # Faza 1 (read) + Faza 2 (comerț, F2): checkout_link adăugat.
     assert set(enabled_tools(None)) == {
         "search_products",
         "get_product_details",
         "compare_products",
+        "checkout_link",
     }
 
 

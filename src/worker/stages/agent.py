@@ -19,7 +19,10 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.tool_definitions import tool_schemas
 from src.models import RetrievalResult, Route, RouteDecision, TurnContext
-from src.tools import catalog_tools  # noqa: F401 — importul înregistrează tool-urile în registry
+from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
+    catalog_tools,
+    commerce_tools,
+)
 from src.tools.base import enabled_tools, run_tool
 from src.worker.context import conversation_transcript
 
@@ -41,6 +44,8 @@ Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 - search_products(query, price_max, limit): caută produse pe nevoia clientului.
 - get_product_details(product_id): preț, rating, ce laudă clienții (recenzii) pentru un produs.
 - compare_products(product_ids): compară 2-3 produse.
+- checkout_link(cart_items): creează linkul de cumpărare. Cheamă-l DOAR când clientul e gata să
+  cumpere sau cere linkul/să comande; trimite-i URL-ul întors, nu inventa linkuri.
 
 Reguli:
 - Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /
@@ -81,9 +86,12 @@ def _prices_ok(reply: str, products: list[dict[str, Any]]) -> bool:
     return True
 
 
-def _links_ok(reply: str, products: list[dict[str, Any]]) -> bool:
-    """Fiecare URL din reply trebuie să fie un product_url retrievat (nu inventat)."""
-    allowed = {p.get("url") for p in products if p.get("url")}
+def _links_ok(
+    reply: str, products: list[dict[str, Any]], allowed_links: set[str] | None = None
+) -> bool:
+    """Fiecare URL din reply trebuie să fie un product_url retrievat SAU un link generat de bot
+    în acest tur (checkout_link, F2) — niciodată inventat."""
+    allowed = {p.get("url") for p in products if p.get("url")} | (allowed_links or set())
     for raw in _URL_RE.findall(reply):
         url = raw.rstrip(".,;:!?)\"'")
         if url not in allowed:
@@ -91,8 +99,10 @@ def _links_ok(reply: str, products: list[dict[str, Any]]) -> bool:
     return True
 
 
-def _valid(reply: str, products: list[dict[str, Any]]) -> bool:
-    return _prices_ok(reply, products) and _links_ok(reply, products)
+def _valid(
+    reply: str, products: list[dict[str, Any]], allowed_links: set[str] | None = None
+) -> bool:
+    return _prices_ok(reply, products) and _links_ok(reply, products, allowed_links)
 
 
 def _products_brief(products: list[dict[str, Any]]) -> str:
@@ -151,11 +161,18 @@ def _dedupe(products: list[dict[str, Any]], cap: int = 6) -> list[dict[str, Any]
 
 
 async def _finalize(
-    llm, query: str, text: str, products: list[dict[str, Any]], language: str, history: str
+    llm,
+    query: str,
+    text: str,
+    products: list[dict[str, Any]],
+    language: str,
+    history: str,
+    allowed_links: set[str] | None = None,
 ) -> str:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
-    prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate."""
-    if text and _valid(text, products):
+    prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
+    `allowed_links` = linkuri generate de bot (checkout_link) acceptate pe lângă product_url-uri."""
+    if text and _valid(text, products, allowed_links):
         return text
 
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
@@ -170,7 +187,7 @@ async def _finalize(
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback determinist
         log.warning("agent: retry compunere eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, products):
+    if reply2 and _valid(reply2, products, allowed_links):
         return reply2
 
     log.warning("agent: validator a eșuat → fallback determinist")
@@ -190,12 +207,14 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     tools = tool_schemas(enabled_tools(ctx.business))
     retrieved: list[dict[str, Any]] = []
+    generated_links: set[str] = set()  # linkuri create de bot (checkout_link) → validator
 
     async def execute(name: str, args: dict[str, Any]) -> str:
-        """Callback al buclei: rulează tool-ul, acumulează produsele, întoarce vederea
-        compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
+        """Callback al buclei: rulează tool-ul, acumulează produsele + linkurile generate,
+        întoarce vederea compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
         result = await run_tool(ctx, deps, name, args)
         retrieved.extend(result.products)
+        generated_links.update(result.links)
         ctx.emit("tool_call", name=name, ok=result.ok)
         return result.llm_view or (result.error or "(fără rezultat)")
 
@@ -213,7 +232,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.retrieval = RetrievalResult(products=products, source="tools")
 
     if products:
-        reply = await _finalize(deps.llm, query, final, products, ctx.language, history)
+        reply = await _finalize(
+            deps.llm, query, final, products, ctx.language, history, generated_links
+        )
         ctx.set_reply(reply, products=_card_products(products))
         ctx.emit("agent_recommended", n=len(products))
     elif final:

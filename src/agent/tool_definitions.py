@@ -83,6 +83,47 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "checkout_link": {
+        "type": "function",
+        "function": {
+            "name": "checkout_link",
+            "description": (
+                "Creează un link de cumpărare pentru produsele alese. Folosește DOAR când "
+                "clientul e gata de cumpărare sau cere explicit linkul. Întoarce un URL de trimis."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "cart_items": {
+                        "type": "array",
+                        "description": "Produsele de pus în coș (din rezultatele search_products).",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "product_id": {
+                                    "type": "string",
+                                    "description": "id-ul produsului.",
+                                },
+                                "variant_id": {
+                                    "type": ["string", "null"],
+                                    "description": "id-ul variantei, dacă există; altfel null.",
+                                },
+                                "quantity": {
+                                    "type": "integer",
+                                    "description": "Cantitatea (≥1).",
+                                },
+                            },
+                            "required": ["product_id", "variant_id", "quantity"],
+                        },
+                    },
+                },
+                "required": ["cart_items"],
+            },
+        },
+    },
 }
 
 
