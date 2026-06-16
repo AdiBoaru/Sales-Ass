@@ -4,7 +4,7 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-06-13_
+_Ultima actualizare: 2026-06-16_
 
 ---
 
@@ -128,6 +128,35 @@ DB rămâne Supabase remote (NU instalezi Postgres pe VPS). Depinde de: un VPS c
 > 🔒 Secretele trăiesc DOAR în `.env`-ul de pe VPS, niciodată în repo. Firewall:
 > expune doar portul de webhook DACĂ ajungi pe WhatsApp; pentru Telegram (long
 > polling) nu trebuie niciun port deschis spre exterior.
+
+---
+
+## 🟢 Comerț / bucla de bani (F2) — când demonstrezi vânzarea cu link
+
+Codul F2 e gata (PR #63–#65): agentul poate genera un **link de cumpărare** cu `?ref=`,
+webhookul de comenzi îl **atribuie** (`assisted revenue`), iar jobul nocturn agregă în
+`usage_daily`. Fără provisioning-ul de mai jos, codul **degradează grațios** (botul
+recomandă fără link; atribuirea nu rulează) — deci nu blochează nimic, dar bucla de bani
+nu e vizibilă pe demo până nu-l faci.
+
+### F2-A — Base URL de checkout  ·  ~5 min
+- [ ] Decide URL-ul de checkout al magazinului demo (ex. `https://shop.sole-demo.ro/checkout`).
+- [ ] Pune-l fie în `.env` (`CHECKOUT_BASE_URL=...`), fie cere-i lui Claude să-l scrie în
+      `businesses.settings["checkout_url"]` pt demo (are prioritate față de `.env`).
+- [ ] Gol = `checkout_link` întoarce `ok=False` (botul răspunde fără link). `?ref=<turn_id>`
+      se adaugă automat în cod.
+
+### F2-B — Secret webhook comenzi  ·  ~5 min
+- [ ] Generează un secret aleator → `.env`: `ORDERS_WEBHOOK_SECRET=...` (gol = endpointul
+      `POST /webhook/orders/{business_id}` întoarce 403).
+- [ ] Platforma magazinului (sau un script de test) trimite comenzile la
+      `POST /webhook/orders/<business_id>` cu headerul `X-Orders-Secret: <secret>` și corpul
+      JSON neutru (`external_id, status, total, ref, placed_at, items[]`). `ref` = `?ref=` din
+      linkul botului → declanșează atribuirea.
+
+### F2-C — Scheduler rollup nocturn  ·  ~10 min (la deploy)
+- [ ] Cron/n8n care rulează zilnic `python -m src.jobs.rollup_usage` (ziua de ieri, UTC) →
+      populează `usage_daily` (sursa pt dashboard + facturare).
 
 ---
 
