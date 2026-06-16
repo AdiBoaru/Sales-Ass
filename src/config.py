@@ -96,7 +96,8 @@ class Settings(BaseSettings):
     checkout_base_url: str = Field(default="", validation_alias="CHECKOUT_BASE_URL")
     # Cât timp e valabil un link de checkout (zile) → checkout_links.expires_at.
     checkout_link_ttl_days: int = Field(default=7, validation_alias="CHECKOUT_LINK_TTL_DAYS")
-    # Secret partajat pt webhookul de comenzi (F2-2): header X-Orders-Secret. Gol → endpoint 403.
+    # Secret HMAC pt webhookul de comenzi (F2-2): semnătura X-Orders-Signature peste corpul
+    # brut (NX-94). Gol → endpoint 403 (fail-closed).
     orders_webhook_secret: str = Field(default="", validation_alias="ORDERS_WEBHOOK_SECRET")
 
     # --- Summarizer conversații lungi (G6-2 felia 2, stagiul 6) ---

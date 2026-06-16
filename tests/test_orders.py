@@ -5,6 +5,8 @@ fakeredis + override de secret. Acoperă: atribuire la match pe ref, ne-atribuit
 necunoscut, idempotență (items doar la insert nou), evenimente, și marginea HTTP (secret/JSON).
 """
 
+import hashlib
+import hmac
 import json
 
 import fakeredis.aioredis
@@ -127,6 +129,11 @@ async def test_invalid_order_raises(monkeypatch):
 # --- endpoint (margine HTTP cu fakeredis) ------------------------------------
 
 
+def _sign(body: bytes, secret: str = SECRET) -> str:
+    """Semnătura pe care o calculează emitentul: sha256=<hmac_sha256(secret, corp brut)>."""
+    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
 @pytest.fixture
 async def client_and_redis():
     fake = fakeredis.aioredis.FakeRedis(decode_responses=True)
@@ -142,7 +149,9 @@ async def client_and_redis():
 async def test_order_endpoint_enqueues(client_and_redis):
     ac, fake = client_and_redis
     body = json.dumps(_order(ref="r")).encode()
-    resp = await ac.post("/webhook/orders/biz-1", content=body, headers={"X-Orders-Secret": SECRET})
+    resp = await ac.post(
+        "/webhook/orders/biz-1", content=body, headers={"X-Orders-Signature": _sign(body)}
+    )
     assert resp.status_code == 200
     assert await fake.xlen(STREAM_INBOUND) == 1
     entries = await fake.xrange(STREAM_INBOUND)
@@ -151,24 +160,72 @@ async def test_order_endpoint_enqueues(client_and_redis):
     assert data["order"]["external_id"] == "ORD-1"
 
 
-async def test_order_endpoint_bad_secret(client_and_redis):
+async def test_order_endpoint_utf8_signed_on_raw_bytes(client_and_redis):
     ac, fake = client_and_redis
-    body = json.dumps(_order()).encode()
-    resp = await ac.post("/webhook/orders/biz-1", content=body, headers={"X-Orders-Secret": "nope"})
+    # HMAC e pe octeții bruți → diacriticele validează identic, fără re-serializare.
+    body = json.dumps(_order(items=[{"name": "Cremă hidratantă", "unit_price": 50.0}])).encode()
+    resp = await ac.post(
+        "/webhook/orders/biz-1", content=body, headers={"X-Orders-Signature": _sign(body)}
+    )
+    assert resp.status_code == 200
+    assert await fake.xlen(STREAM_INBOUND) == 1
+
+
+async def test_order_endpoint_missing_signature(client_and_redis):
+    ac, fake = client_and_redis
+    resp = await ac.post("/webhook/orders/biz-1", content=json.dumps(_order()).encode())
     assert resp.status_code == 403
     assert await fake.xlen(STREAM_INBOUND) == 0
 
 
-async def test_order_endpoint_missing_secret(client_and_redis):
+async def test_order_endpoint_wrong_signature(client_and_redis):
     ac, fake = client_and_redis
-    resp = await ac.post("/webhook/orders/biz-1", content=json.dumps(_order()).encode())
+    # Atacatorul nu cunoaște corpul real: semnează un ALT corp → respins.
+    body = json.dumps(_order()).encode()
+    sig_of_other = _sign(b'{"external_id":"FAKE"}')
+    resp = await ac.post(
+        "/webhook/orders/biz-1", content=body, headers={"X-Orders-Signature": sig_of_other}
+    )
     assert resp.status_code == 403
+    assert await fake.xlen(STREAM_INBOUND) == 0
+
+
+async def test_order_endpoint_signature_without_prefix(client_and_redis):
+    ac, fake = client_and_redis
+    body = json.dumps(_order()).encode()
+    bare_hex = hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()  # fără 'sha256='
+    resp = await ac.post(
+        "/webhook/orders/biz-1", content=body, headers={"X-Orders-Signature": bare_hex}
+    )
+    assert resp.status_code == 403
+    assert await fake.xlen(STREAM_INBOUND) == 0
+
+
+async def test_order_endpoint_secret_unconfigured_fail_closed(client_and_redis):
+    ac, fake = client_and_redis
+    app.dependency_overrides[get_orders_secret] = lambda: ""  # secret negsetat
+    body = json.dumps(_order()).encode()
+    resp = await ac.post(
+        "/webhook/orders/biz-1", content=body, headers={"X-Orders-Signature": _sign(body, "")}
+    )
+    assert resp.status_code == 403  # fail-closed: gol → respinge
+    assert await fake.xlen(STREAM_INBOUND) == 0
+
+
+async def test_order_endpoint_old_secret_header_rejected(client_and_redis):
+    ac, fake = client_and_redis
+    # Contractul vechi (X-Orders-Secret cu secretul în clar) nu mai autentifică.
+    body = json.dumps(_order()).encode()
+    resp = await ac.post("/webhook/orders/biz-1", content=body, headers={"X-Orders-Secret": SECRET})
+    assert resp.status_code == 403
+    assert await fake.xlen(STREAM_INBOUND) == 0
 
 
 async def test_order_endpoint_bad_json(client_and_redis):
     ac, fake = client_and_redis
+    body = b"{not json"  # JSON rupt DAR semnat corect → 403 nu, 400 (semnătura trece)
     resp = await ac.post(
-        "/webhook/orders/biz-1", content=b"{not json", headers={"X-Orders-Secret": SECRET}
+        "/webhook/orders/biz-1", content=body, headers={"X-Orders-Signature": _sign(body)}
     )
     assert resp.status_code == 400
     assert await fake.xlen(STREAM_INBOUND) == 0
