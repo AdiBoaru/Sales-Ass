@@ -252,3 +252,44 @@ async def test_adapter_moderate_parses_flagged_categories():
     res = await llm.moderate("ceva")
     assert res.flagged is True
     assert res.categories == ["harassment", "violence"]  # sortate, doar True
+
+
+# --- rate limit (G2c) --------------------------------------------------------
+
+
+async def test_rate_limit_under_threshold_passes(monkeypatch):
+    async def boom(*a, **k):
+        raise AssertionError("mesaj normal sub prag → fără handoff")
+
+    monkeypatch.setattr(gates, "set_handoff", boom)
+    ctx = _ctx(body="salut")
+    # count=5 ≤ max(20) → trece (llm=None → moderation sărit)
+    await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=_FakeRedis(count=5), llm=None))
+    assert ctx.reply is None and ctx.halt is False
+
+
+async def test_rate_limit_crossing_sends_throttle():
+    ctx = _ctx(body="spam spam spam")
+    # count == max+1 (21) → un singur mesaj de throttle
+    await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=_FakeRedis(count=21), llm=None))
+    assert ctx.reply is not None and "multe mesaje" in ctx.reply.text.lower()
+    assert ctx.reply.cacheable is False
+    assert any(e.type == "rate_limited" and e.properties["count"] == 21 for e in ctx.events)
+
+
+async def test_rate_limit_already_over_halts_silent():
+    ctx = _ctx(body="spam")
+    # count > max+1 (25) → tăcere (nu re-trimite throttle)
+    await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=_FakeRedis(count=25), llm=None))
+    assert ctx.halt is True and ctx.reply is None
+    assert any(e.type == "rate_limited" for e in ctx.events)
+
+
+async def test_rate_limit_no_redis_is_noop(monkeypatch):
+    async def boom(*a, **k):
+        raise AssertionError("fără redis → rate limit no-op")
+
+    monkeypatch.setattr(gates, "set_handoff", boom)
+    ctx = _ctx(body="salut")
+    await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=None, llm=None))
+    assert ctx.reply is None and ctx.halt is False
