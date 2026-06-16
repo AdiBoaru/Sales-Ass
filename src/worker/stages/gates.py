@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 import asyncpg
 
 from src.config import get_settings
+from src.db.queries.contacts import block_contact
 from src.db.queries.conversations import set_handoff
 from src.models import TurnContext
 
@@ -32,6 +33,15 @@ if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
+
+# Răspuns neutru la un mesaj flagged (NX-15): ne-cache-uit, fără a premia abuzul cu un om.
+NEUTRAL_MSG = (
+    "Hai să păstrăm conversația respectuoasă, te rog 🙂 "
+    "Cu ce te pot ajuta legat de produse sau comenzi?"
+)
+
+# Fereastra contorului de flag-uri (secunde) — 24h, ca pragul de blocklist să fie pe zi.
+_FLAG_WINDOW_S = 24 * 60 * 60
 
 # Pattern-uri de risc (RO, normalizate fără diacritice/uppercase). Determinist, NU LLM.
 # Extensibil per-business din settings = follow-up.
@@ -99,6 +109,49 @@ async def request_human(
     ctx.emit("handoff_requested", reason=reason, source=source)
 
 
+async def _record_flag_and_maybe_block(ctx: TurnContext, deps: PipelineDeps) -> None:
+    """Contor de flag-uri în Redis (analytics e append-only fără SELECT din runtime).
+    La ≥ prag într-o fereastră de 24h → abuse blocklist. Best-effort: orice eșec se
+    loghează, NU rupe răspunsul neutru (deja setat)."""
+    if deps.redis is None:
+        return
+    key = f"modflags:{ctx.business.id}:{ctx.contact.id}"
+    try:
+        count = await deps.redis.incr(key)
+        if count == 1:
+            await deps.redis.expire(key, _FLAG_WINDOW_S)
+        if count >= get_settings().moderation_block_threshold:
+            await block_contact(deps.conn, ctx.business.id, ctx.contact.id)
+            ctx.emit("contact_blocked", flag_count=count)
+    except Exception as e:  # noqa: BLE001 — contorul e best-effort, răspunsul neutru rămâne
+        log.warning("moderation: contor/blocklist eșuat (%s)", type(e).__name__)
+
+
+async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
+    """Poarta de moderare (NX-15). True ⇒ flagged: a setat răspunsul neutru → early-exit.
+
+    Fail-OPEN: fără cheie / API jos → False (mesajul trece normal). Indisponibilitatea
+    moderării NU trebuie să tacă tot traficul; e best-effort safety, nu o poartă dură."""
+    settings = get_settings()
+    if not settings.moderation_enabled or deps.llm is None:
+        return False
+    body = (ctx.message.body or "").strip()
+    if not body:
+        return False
+    try:
+        res = await deps.llm.moderate(body)
+    except Exception as e:  # noqa: BLE001 — fail-open
+        log.warning("moderation: apel eșuat (%s) → fail-open", type(e).__name__)
+        return False
+    if not res.flagged:
+        return False
+    # Flagged: NICIODATĂ corpul în analytics (principiul 12) — doar categoriile.
+    ctx.emit("message_moderated", categories=res.categories)
+    await _record_flag_and_maybe_block(ctx, deps)
+    ctx.set_reply(NEUTRAL_MSG, cacheable=False)
+    return True
+
+
 async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Porțile de control (vezi docstring-ul modulului). Early-exit pe oricare."""
     # 1. kill-switch: botul e oprit pe ACEASTĂ conversație → tăcere.
@@ -106,12 +159,22 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.halt_silent("bot_inactive")
         return
 
-    # 2. handoff activ: un om a preluat până la handoff_until → tăcere.
+    # 2. abuse blocklist (NX-15): contact blocat → tăcere (ca handoff).
+    if ctx.contact.is_blocked:
+        ctx.halt_silent("contact_blocked")
+        return
+
+    # 3. handoff activ: un om a preluat până la handoff_until → tăcere.
     if ctx.handoff_until is not None and ctx.handoff_until > datetime.now(UTC):
         ctx.halt_silent("handoff_active")
         return
 
-    # 3. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (2).
+    # 4. moderare (NX-15): mesaj toxic → răspuns neutru, NU ajunge la triaj/agent.
+    #    Înaintea riscului: abuzul primește răspuns neutru, nu escaladare la om.
+    if await _moderation_blocked(ctx, deps):
+        return
+
+    # 5. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (3).
     reason = detect_risk(ctx.message.body)
     if reason:
         await request_human(deps.conn, ctx, reason, source="risk")

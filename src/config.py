@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     model_agent: str = Field(default="gpt-5.4-mini", validation_alias="MODEL_AGENT")
     model_triage: str = Field(default="gpt-5.4-nano", validation_alias="MODEL_TRIAGE")
     model_embed: str = Field(default="text-embedding-3-small", validation_alias="MODEL_EMBED")
+    model_moderation: str = Field(
+        default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
+    )
+
+    # --- Moderation gate (NX-15) ---
+    # Poartă în Gates înaintea triajului: mesaj flagged → răspuns neutru (gratuit la OpenAI).
+    moderation_enabled: bool = Field(default=True, validation_alias="MODERATION_ENABLED")
+    # Câte flag-uri într-o fereastră de 24h trec contactul pe abuse blocklist.
+    moderation_block_threshold: int = Field(
+        default=3, validation_alias="MODERATION_BLOCK_THRESHOLD"
+    )
 
     # --- Meta WhatsApp Cloud API ---
     meta_access_token: str = Field(default="", validation_alias="META_ACCESS_TOKEN")
@@ -64,6 +75,9 @@ class Settings(BaseSettings):
     # (precizie peste recall); calibrat cu instrumentarea înainte de a coborî.
     cache_tau_high: float = Field(default=0.92, validation_alias="CACHE_TAU_HIGH")
     cache_ttl_static_days: int = Field(default=7, validation_alias="CACHE_TTL_STATIC_DAYS")
+    # TTL dynamic (recomandări de produs, G5b-2): backstop SCURT — invalidarea reală e
+    # price-check + data_version la lookup, nu expirarea. Default 30 min.
+    cache_ttl_dynamic_minutes: int = Field(default=30, validation_alias="CACHE_TTL_DYNAMIC_MINUTES")
 
     @property
     def is_prod(self) -> bool:

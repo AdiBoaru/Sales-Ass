@@ -1,8 +1,8 @@
 # Nativx Assistant — Status proiect
 
-_Actualizat: 2026-06-15 · Bază: `main` la zi (PR #1–#55) · Document VIU — se
-actualizează la fiecare milestone; data stă aici, nu în numele fișierului.
-G5b-2 (invalidare cache + caching dynamic) = în flight, PR #56._
+_Actualizat: 2026-06-16 · Bază: `main` la zi (PR #1–#56: + G5a gates, G5b-1/G5b-2
+cache semantic) · Document VIU — se actualizează la fiecare milestone; data stă aici,
+nu în numele fișierului._
 
 Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) riscuri
 și datorie tehnică, (3) ce urmează — material pentru generarea taskurilor.
@@ -34,7 +34,7 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
   `docker compose up` pornește redis + worker + dispatcher + telegram-poller +
   webhook pe Windows. (VPS rămâne ținta de producție.)
 
-## 2. Ce e în main (până la PR #55)
+## 2. Ce e în main (până la PR #56)
 
 | Componentă | Stare | PR |
 |---|---|---|
@@ -69,7 +69,7 @@ Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) risc
 | **R2: carusel de produse pe Telegram** (callback_query + editMessageMedia) | ✅ live | #53 |
 | **G5a: gates** (bot_active + handoff + risc → request_human) | ✅ live | #54 |
 | **G5b-1: cache semantic** (lookup exact+semantic, write-back static) | ✅ live | #55 |
-| G5b-2: invalidare cache + caching dynamic (price-check + data_version) | 🔄 PR #56 | #56 |
+| **G5b-2: invalidare cache + caching dynamic** (price-check + data_version) | ✅ live | #56 |
 
 Fundațiile anterioare (infra, schema v2 + RLS 003, config/pool/models,
 search_products SQL) — vezi istoricul PR #1–#18.
@@ -81,7 +81,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 1 | Webhook: GET verify + POST inbound | ✅ live |
 | 2 | Redis backbone: stream + consumer group + dedupe 2L + **debounce (R1)** | ✅ live (TODO rămas: lock multi-consumer, rate limit, cost guard) |
 | 3 | Gates (bot_active, handoff, risc → request_human) | ✅ **live (G5a)** · ❌ rămas: **detecție de limbă**, media routing (STT/Vision) |
-| 4 | Straturi gratuite (cache semantic, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 PR #56) · ❌ rămas: **alias lookup** (`intent_aliases`), clarify cu `pending_question` (faqs=0) |
+| 4 | Straturi gratuite (cache semantic, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 #56) · ❌ rămas: **alias lookup** (`intent_aliases`), clarify cu `pending_question` (faqs=0) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
 | 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
 | 7 | Agent (mini) + search semantic | ✅ **live** (RAG: embed query → cosine + filtru preț; tool-calling complet = refinement) |
@@ -132,22 +132,22 @@ business_id `6098812a-50fc-44bd-a1ba-bc77e6399158` (slug `nativex-demo`):
 
 ## 6. Ce urmează (ordine recomandată)
 
-> NB (2026-06-15): D3, R1, NX-50, R2, G5a, G5b-1 sunt DEJA în main (vezi §2) —
+> NB (2026-06-16): D3, R1, NX-50, R2, G5a, G5b-1, G5b-2 sunt DEJA în main (vezi §2) —
 > lista veche le marca „urmează". Mai jos = ce e GENUIN nefăcut, verificat în cod.
+> (NX-15 moderation gate = PR #58, în flight.)
 
-1. **G5b-2** — merge PR #56 (invalidare cache + caching dynamic). În flight.
-2. **Detecție de limbă** (stagiul 3, gates): `ctx.language` vine acum doar din
+1. **Detecție de limbă** (stagiul 3, gates): `ctx.language` vine acum doar din
    `conv.locale`/default → un mesaj HU/EN pe o conversație RO rămâne tratat ca RO
    (principiul 11: „cache hit în limba greșită = bug"). Determinist, fără LLM.
    Efect pe demo doar dacă tenantul are `supported_locales` multiple (demo = RO).
-3. **Alias lookup** (stagiul 4): `intent_aliases` (phrase_norm → rută). Tabelul e
+2. **Alias lookup** (stagiul 4): `intent_aliases` (phrase_norm → rută). Tabelul e
    GOL până vine shadow mode → valoare imediată mică; de făcut împreună cu shadow.
-4. **Limita de spend OpenAI** (T017) — protecție financiară în dashboard.
-5. **WhatsApp e2e** (T013/T015 manual: phone_number_id Meta) + deploy VPS continuu.
-6. **Backlog NX** (`tasks/NX_backlog_compact.md`): NX-15 moderation gate, NX-03
-   alerte lag/outbox, NX-07 pacing proactiv, NX-41 create_tenant, etc.
+3. **Limita de spend OpenAI** (T017) — protecție financiară în dashboard.
+4. **WhatsApp e2e** (T013/T015 manual: phone_number_id Meta) + deploy VPS continuu.
+5. **Backlog NX** (`tasks/NX_backlog_compact.md`): NX-03 alerte lag/outbox,
+   NX-07 pacing proactiv, NX-41 create_tenant, etc.
 
-**Milestone atins (2026-06-15):** bot care VINDE, ține firul, menționează recenzii,
+**Milestone atins (2026-06-16):** bot care VINDE, ține firul, menționează recenzii,
 coalescă mesaje rapide (debounce), escaladează la om (gates), și servește din cache
 semantic (static + dynamic cu invalidare). Următorul: detecție de limbă / shadow+alias.
 
