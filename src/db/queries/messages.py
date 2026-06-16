@@ -13,6 +13,7 @@ de acest insert. Aici facem inserturi simple.
 """
 
 import json
+from datetime import datetime
 from typing import Any
 
 import asyncpg
@@ -113,6 +114,59 @@ async def get_recent_messages(
         business_id,
         conversation_id,
         limit,
+    )
+    return [
+        Message(
+            direction=Direction(r["direction"]),
+            author=Author(r["author"]),
+            body=r["body"],
+            content_type=r["content_type"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+
+
+async def count_messages(conn: asyncpg.Connection, business_id: str, conversation_id: str) -> int:
+    """Nr. TOTAL de mesaje pe conversație — declanșatorul de prag al summarizer-ului (G6-2).
+    `business_id = $1` (P7). Conversațiile au zeci de mesaje, nu milioane → count(*) acceptabil."""
+    return await conn.fetchval(
+        "select count(*) from messages where business_id = $1 and conversation_id = $2",
+        business_id,
+        conversation_id,
+    )
+
+
+async def get_messages_for_summary(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    *,
+    after: datetime | None,
+    tail: int = HISTORY_LIMIT,
+) -> list[Message]:
+    """Fereastra de SUMARIZAT: mesajele mai VECHI decât ultimele `tail` (care rămân în
+    transcriptul live) ȘI mai noi decât `after` (watermark-ul rezumatului anterior; None = de la
+    început). Ordine cronologică crescătoare. Asta evită bug-ul „sumarizezi aceleași 8 din
+    transcript": rezumatul acoperă fix mesajele care ies din fereastra de 8, fără pierderi.
+    `business_id = $1` (P7)."""
+    rows = await conn.fetch(
+        """
+        with ranked as (
+            select direction, author, body, content_type, created_at,
+                   row_number() over (order by created_at desc) as rn
+            from messages
+            where business_id = $1 and conversation_id = $2
+        )
+        select direction, author, body, content_type, created_at
+        from ranked
+        where rn > $3 and ($4::timestamptz is null or created_at > $4)
+        order by created_at asc
+        """,
+        business_id,
+        conversation_id,
+        tail,
+        after,
     )
     return [
         Message(

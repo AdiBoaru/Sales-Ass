@@ -159,3 +159,66 @@ async def test_handle_turn_same_contact_same_conversation(pool):
         assert r1.conversation_id == r2.conversation_id
         assert r1.contact_id == r2.contact_id
         assert r1.turn_id != r2.turn_id
+
+
+# --------------------------------------------------------------------------- #
+# G6-2 felia 2 — summarizer DB path sub bot_runtime/RLS (window query + watermark)
+# --------------------------------------------------------------------------- #
+
+
+async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
+    """_summarize_if_needed pe DB real (rolul bot_runtime): validează SELECTUL de fereastră
+    (`get_messages_for_summary`: rn>tail + after) + INSERTUL pe tabela partiționată + watermark-ul
+    ONEST (cel mai nou mesaj IES din ultimele 8), pe care unit-urile cu monkeypatch nu-l ating.
+    LLM scriptat → testăm comportamentul față de DB, nu textul rezumatului."""
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from src.db.queries.contacts import get_or_create_contact
+    from src.db.queries.conversations import get_or_create_conversation
+    from src.worker.processor import _summarize_if_needed
+
+    class _LLM:
+        model_triage = "nano"
+
+        async def complete(self, system, user, *, model=None):
+            return "REZUMAT"
+
+    async with tenant_tx(pool) as (conn, channel_id):
+        contact = await get_or_create_contact(
+            conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}", display_name="Ana"
+        )
+        conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id, locale="ro")
+        conv_id = conv["id"]
+
+        # 22 mesaje cu created_at strict crescător → peste prag (20); 14 ies din ultimele 8.
+        base = datetime.now(UTC).replace(microsecond=0)
+        created = [base + timedelta(seconds=i) for i in range(1, 23)]
+        for i, ts in enumerate(created, start=1):
+            await conn.execute(
+                "insert into messages (business_id, conversation_id, contact_id, direction, "
+                "author, body, content_type, created_at) values ($1,$2,$3,$4,$5,$6,'text',$7)",
+                DEMO_BIZ,
+                conv_id,
+                contact.id,
+                "inbound" if i % 2 else "outbound",
+                "contact" if i % 2 else "bot",
+                f"mesaj {i}",
+                ts,
+            )
+
+        await _summarize_if_needed(
+            conn, None, DEMO_BIZ, conv_id, SimpleNamespace(language="ro"), _LLM()
+        )
+
+        row = await conn.fetchrow(
+            "select business_id::text as business_id, upto_message_at, summary "
+            "from conversation_summaries where conversation_id = $1 "
+            "order by upto_message_at desc limit 1",
+            conv_id,
+        )
+        assert row is not None
+        assert row["business_id"] == DEMO_BIZ  # P7
+        assert row["summary"] == "REZUMAT"
+        # watermark = al 14-lea mesaj (22 total − 8 din coadă): cel mai nou care iese din fereastră.
+        assert row["upto_message_at"] == created[13]

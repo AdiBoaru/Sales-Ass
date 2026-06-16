@@ -219,6 +219,9 @@ class TurnContext:
     reply: Reply | None = None  # owner: orice stagiu (early exit)
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     from_cache: bool = False  # owner: Cache (G5b) — reply servit din cache
+    # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al
+    # conversației lungi (acoperă mesajele de dinaintea ultimelor 8). Citit de context_blocks.
+    summary: str | None = None
     events: list[Event] = field(default_factory=list)
 
     def emit(self, type_: str, **properties: Any) -> None:

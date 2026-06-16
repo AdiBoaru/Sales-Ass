@@ -3,15 +3,17 @@ prompturile LLM (triaj + agent), cu BUGET impus în cod (principiul 4).
 
 Istoricul e deja încărcat în `ctx.history` de processor (max 8 mesaje, cel mai
 recent ultimul — INCLUSIV mesajul curent). Aici îl formatăm compact + bugetat, plus
-blocuri de **profil client** (`contacts.profile`) și **state references** (produse
-arătate + constrângeri, principiul 8). Summarizer-ul conversațiilor lungi
-(>20 msg → `conversation_summaries`) = felia următoare (rămâne în acest modul).
+blocuri de **rezumat de conversație** (`conversation_summaries`, felia 2), **profil client**
+(`contacts.profile`) și **state references** (produse arătate + constrângeri, principiul 8).
+Rezumatul e DOAR citit aici (din `ctx.summary`, seedat de processor) — generarea lui rulează
+post-tur async (vezi `src.worker.summarizer`).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.config import get_settings
 from src.models import Direction, Message
 
 if TYPE_CHECKING:
@@ -72,11 +74,24 @@ def state_block(state: ConversationState, *, max_products: int = 3, max_chars: i
     return "\n".join(lines)[:max_chars]
 
 
+def summary_block(ctx: TurnContext, *, max_chars: int | None = None) -> str:
+    """Bloc de rezumat al conversației anterioare (felia 2), din `ctx.summary` (seedat de
+    processor — fără I/O aici). Acoperă mesajele de dinaintea ultimelor 8 (care rămân în
+    transcript). Bugetat (P4); gol/lipsă → "" (degradare: doar ultimele 8)."""
+    text = (ctx.summary or "").strip()
+    if not text:
+        return ""
+    cap = max_chars if max_chars is not None else get_settings().summary_max_chars
+    return ("Rezumat conversație anterioară: " + text)[:cap]
+
+
 def context_blocks(ctx: TurnContext) -> str:
-    """Unește blocurile ne-goale de context (profil + state) pentru prompturile triaj/agent.
-    Stă în mesajul USER (dinamic), nu în system — promptul static rămâne byte-identic
-    (prompt caching neatins). Gol → "" (nimic de adăugat)."""
-    blocks = [customer_profile_block(ctx.contact), state_block(ctx.state)]
+    """Unește blocurile ne-goale de context (rezumat + profil + state) pentru prompturile
+    triaj/agent. Ordine CRONOLOGICĂ: rezumatul (fundalul vechi) ÎNAINTEA profilului/state-ului;
+    transcriptul ultimelor 8 e concatenat downstream (în triage/agent), deci rezumat→…→recent.
+    Stă în mesajul USER (dinamic), nu în system — promptul static rămâne byte-identic (prompt
+    caching neatins). Gol → "" (nimic de adăugat)."""
+    blocks = [summary_block(ctx), customer_profile_block(ctx.contact), state_block(ctx.state)]
     return "\n".join(b for b in blocks if b)
 
 

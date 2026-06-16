@@ -30,19 +30,31 @@ from src.db.queries.conversations import (
     touch_last_inbound,
 )
 from src.db.queries.inbound_dedupe import claim_inbound
-from src.db.queries.messages import get_recent_messages, insert_message
+from src.db.queries.messages import (
+    count_messages,
+    get_messages_for_summary,
+    get_recent_messages,
+    insert_message,
+)
 from src.db.queries.outbox import enqueue_outbox
 from src.db.queries.semantic_cache import upsert_entry
+from src.db.queries.summaries import (
+    get_latest_summary,
+    get_summary_for_context,
+    insert_conversation_summary,
+)
 from src.models import (
     Author,
     BusinessConfig,
     ConversationState,
     Direction,
+    Event,
     InboundMessage,
     TurnContext,
 )
 from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
+from src.worker.summarizer import generate_summary
 
 log = logging.getLogger(__name__)
 
@@ -140,6 +152,64 @@ async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
             ctx.emit("cache_write", volatility="static", ttl_days=settings.cache_ttl_static_days)
     except Exception:  # noqa: BLE001 — write-back best-effort, turul a răspuns deja
         log.exception("cache write-back a eșuat (turul continuă)")
+
+
+async def _summarize_if_needed(conn, redis, business_id, conversation_id, ctx, llm) -> None:
+    """POST-TUR async (G6-2 felia 2), best-effort — întreține rezumatul rolling al conversației.
+    Rulează DUPĂ outbox (nu întârzie livrarea). NANO (model_triage), în afara pipeline-ului
+    sincron → principiul 2 respectat. Degradare (P6): kill-switch/llm None/eroare → skip, turul
+    a răspuns deja.
+
+    Acoperire CORECTĂ: sumarizează fereastra `get_messages_for_summary` (mesajele care ies din
+    ultimele 8, NU `ctx.history`), iar watermark-ul = cel mai NOU mesaj INCLUS (onest). Anti-
+    regenerare: re-sumarizăm doar la >= `summary_regen_delta` mesaje noi. Cost: apelul nano intră
+    în contorul zilnic G2c (`cost_add`), altfel ar scăpa bugetului."""
+    settings = get_settings()
+    if not settings.summary_enabled or llm is None:
+        return
+    try:
+        total = await count_messages(conn, business_id, conversation_id)
+        if total < settings.summary_threshold:
+            return
+        prev = await get_latest_summary(conn, business_id, conversation_id)
+        watermark = prev["upto_message_at"] if prev else None
+        to_summarize = await get_messages_for_summary(
+            conn, business_id, conversation_id, after=watermark
+        )
+        if not to_summarize:
+            return  # totul nou e încă în fereastra de 8 → nimic de comprimat
+        if prev is not None and len(to_summarize) < settings.summary_regen_delta:
+            return  # prea puține mesaje noi → nu ardem un apel nano (limbo temporar acceptat)
+
+        summary = await generate_summary(
+            llm, to_summarize, prev["summary"] if prev else None, ctx.language
+        )
+        if not summary:
+            return
+        new_watermark = to_summarize[-1].created_at  # cel mai nou mesaj INCLUS (watermark onest)
+        # tranzacție proprie (savepoint dacă rulăm nested, altfel BEGIN): insert eșuat → rollback
+        # doar la el; turul a răspuns deja, restul fluxului nu e afectat.
+        async with conn.transaction():
+            await insert_conversation_summary(
+                conn, business_id, conversation_id, new_watermark, summary
+            )
+        # Cost guard (G2c): apelul nano extra trebuie contabilizat, altfel scapă plafonului zilnic.
+        if redis is not None and settings.cost_guard_enabled:
+            await cost_add(redis, business_id, settings.cost_triage_usd)
+        await insert_events(
+            conn,
+            business_id,
+            [Event("summarizer_run", {"messages": len(to_summarize)})],
+            conversation_id=conversation_id,
+        )
+        log.info(
+            "summarizer: rezumat scris conv=%s msgs=%d len=%dch",
+            conversation_id,
+            len(to_summarize),
+            len(summary),
+        )
+    except Exception:  # noqa: BLE001 — best-effort: turul a răspuns deja, nimic nu se rupe
+        log.exception("summarizer a eșuat (turul continuă)")
 
 
 async def _llm_within_budget(ctx: TurnContext, redis: Redis | None, business: BusinessConfig):
@@ -255,6 +325,7 @@ async def handle_turn(
         conversation_id=conv["id"],
         history=await get_recent_messages(conn, business.id, conv["id"]),
         state=ConversationState.from_jsonb(conv["state"]),  # G6-2: agentul vede ce-a afișat
+        summary=await get_summary_for_context(conn, business.id, conv["id"]),  # G6-2 felia 2
         language=conv["locale"] or business.default_locale,
         bot_active=conv["bot_active"],
         handoff_until=conv["handoff_until"],
@@ -330,4 +401,7 @@ async def handle_turn(
     # Write-back cache (G5b-1) — după outbox, nu întârzie livrarea. LLM-ul guardat (cost
     # guard): peste buget → None → write-back sărit (nu mai consumăm embed).
     await _cache_writeback(conn, llm, business.id, ctx.language, ctx.message.body, ctx)
+    # Summarizer (G6-2 felia 2) — post-tur async, întreține rezumatul rolling. `llm` e cel
+    # guardat de cost guard: peste buget → None → hook-ul se sare (P2 + P6 gratis).
+    await _summarize_if_needed(conn, redis, business.id, conv["id"], ctx, llm)
     return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)
