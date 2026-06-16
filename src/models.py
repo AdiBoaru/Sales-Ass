@@ -189,6 +189,7 @@ class TurnContext:
     conversation_id: str
     history: list[Message] = field(default_factory=list)
     state: ConversationState = field(default_factory=ConversationState)
+    # seed: processor (din conv.locale); owner refinare per-tur: language_stage (G5c)
     language: str = "ro"
     bot_active: bool = True  # owner: processor (din conversations.bot_active)
     handoff_until: datetime | None = None  # owner: processor (conversations.handoff_until)
