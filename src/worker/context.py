@@ -2,12 +2,20 @@
 prompturile LLM (triaj + agent), cu BUGET impus în cod (principiul 4).
 
 Istoricul e deja încărcat în `ctx.history` de processor (max 8 mesaje, cel mai
-recent ultimul — INCLUSIV mesajul curent). Aici doar îl formatăm compact și
-bugetăm. Profil client + state compact + summarizer pentru conversații lungi =
-adăugiri ulterioare (rămân în acest modul).
+recent ultimul — INCLUSIV mesajul curent). Aici îl formatăm compact + bugetat, plus
+blocuri de **profil client** (`contacts.profile`) și **state references** (produse
+arătate + constrângeri, principiul 8). Summarizer-ul conversațiilor lungi
+(>20 msg → `conversation_summaries`) = felia următoare (rămâne în acest modul).
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from src.models import Direction, Message
+
+if TYPE_CHECKING:
+    from src.models import Contact, ConversationState, TurnContext
 
 
 def conversation_transcript(
@@ -25,6 +33,51 @@ def conversation_transcript(
         role = "Client" if m.direction == Direction.INBOUND else "Asistent"
         lines.append(f"{role}: {body}")
     return "\n".join(lines)[-max_chars:]
+
+
+def customer_profile_block(contact: Contact, *, max_chars: int = 300) -> str:
+    """Bloc compact de profil din `contacts.profile` (+ stadiu lifecycle dacă ≠ new).
+    Sare valorile goale; listele se taie la 4 elemente. Gol → "" (nimic injectat).
+    Profilul NU conține PII de canal (telefonul stă în channel_identities, P12)."""
+    profile = contact.profile or {}
+    parts: list[str] = []
+    for key, value in profile.items():
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value[:4])
+        parts.append(f"{key}: {value}")
+    if contact.lifecycle and contact.lifecycle != "new":
+        parts.append(f"stadiu: {contact.lifecycle}")
+    if not parts:
+        return ""
+    return ("Profil client: " + "; ".join(parts))[:max_chars]
+
+
+def state_block(state: ConversationState, *, max_products: int = 3, max_chars: int = 400) -> str:
+    """Bloc de state references: produse arătate recent (nume + preț, ref-uri — principiul 8) +
+    constrângeri știute (buget, tip de ten…). Memoria scurtă pt follow-up coerent. Gol → ""."""
+    lines: list[str] = []
+    if state.displayed_products:
+        shown = ", ".join(
+            f"{p.name} ({p.price:.2f} lei)" for p in state.displayed_products[:max_products]
+        )
+        lines.append(f"Produse arătate recent: {shown}")
+    if state.constraints:
+        cons = "; ".join(
+            f"{k}: {v}" for k, v in state.constraints.items() if v not in (None, "", [], {})
+        )
+        if cons:
+            lines.append(f"Constrângeri știute: {cons}")
+    return "\n".join(lines)[:max_chars]
+
+
+def context_blocks(ctx: TurnContext) -> str:
+    """Unește blocurile ne-goale de context (profil + state) pentru prompturile triaj/agent.
+    Stă în mesajul USER (dinamic), nu în system — promptul static rămâne byte-identic
+    (prompt caching neatins). Gol → "" (nimic de adăugat)."""
+    blocks = [customer_profile_block(ctx.contact), state_block(ctx.state)]
+    return "\n".join(b for b in blocks if b)
 
 
 def search_query(history: list[Message], current: str, *, n: int = 2) -> str:

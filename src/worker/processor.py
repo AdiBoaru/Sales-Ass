@@ -36,6 +36,7 @@ from src.db.queries.semantic_cache import upsert_entry
 from src.models import (
     Author,
     BusinessConfig,
+    ConversationState,
     Direction,
     InboundMessage,
     TurnContext,
@@ -253,6 +254,7 @@ async def handle_turn(
         ),
         conversation_id=conv["id"],
         history=await get_recent_messages(conn, business.id, conv["id"]),
+        state=ConversationState.from_jsonb(conv["state"]),  # G6-2: agentul vede ce-a afișat
         language=conv["locale"] or business.default_locale,
         bot_active=conv["bot_active"],
         handoff_until=conv["handoff_until"],
