@@ -25,6 +25,7 @@ from src.models import (
 )
 from src.tools import catalog_tools as ct
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps
+from src.worker.stages import agent as agent_mod
 from src.worker.stages import cache as cache_mod
 from src.worker.stages import gates as gates_mod
 from src.worker.stages import triage as triage_mod
@@ -129,16 +130,64 @@ async def test_golden_case(case, monkeypatch):
 
 
 def test_all_seed_cases_present():
-    """Plasa de regresie: cele 6 cazuri din card sunt încărcate (niciunul scăpat)."""
+    """Plasa de regresie: cazurile seed (G8-1) + securitate (NX-16) sunt încărcate."""
     ids = {c.id for c in CASES}
     assert ids == {
+        # G8-1: pipeline de bază (rutare / grounding / anti-halucinație / P6)
         "greeting-simple",
         "sales-grounded",
         "invented-price-blocked",
         "moderation-neutral",
         "risk-handoff",
         "order-never-silent",
+        # NX-16: prompt-injection / jailbreak → guard determinist neutralizează
+        "injection-fake-discount-blocked",
+        "injection-fake-link-blocked",
+        "injection-toxic-stays-neutral",
+        "injection-legal-threat-handoff",
+        "injection-ignore-instructions-stays-grounded",
     }
+
+
+# --- NX-16: proba anti-teatru (fiecare caz PICĂ dacă guard-ul lui e scos) -----
+
+
+async def _disable_guard(monkeypatch, which: str) -> None:
+    """Dezactivează un guard determinist (pt proba că un caz de injection e load-bearing)."""
+    if which == "validator":
+        monkeypatch.setattr(agent_mod, "_valid", lambda *a, **k: True)  # acceptă orice text
+    elif which == "moderation":
+
+        async def _no_block(ctx, deps):
+            return False
+
+        monkeypatch.setattr(gates_mod, "_moderation_blocked", _no_block)
+    elif which == "risk":
+        monkeypatch.setattr(gates_mod, "detect_risk", lambda text: None)
+
+
+@pytest.mark.parametrize(
+    ("case_id", "guard"),
+    [
+        ("injection-fake-discount-blocked", "validator"),
+        ("injection-fake-link-blocked", "validator"),
+        ("injection-ignore-instructions-stays-grounded", "validator"),
+        ("injection-toxic-stays-neutral", "moderation"),
+        ("injection-legal-threat-handoff", "risk"),
+    ],
+)
+async def test_injection_case_fails_without_its_guard(case_id, guard, monkeypatch):
+    """Anti-teatru: cu guard-ul scos, atacul scriptat trece în reply → cazul TREBUIE să pice.
+    Dacă ar trece și fără guard, cazul nu testează nimic (security theater)."""
+    case = next(c for c in CASES if c.id == case_id)
+    _apply_stubs(monkeypatch, case.fixtures)
+    await _disable_guard(monkeypatch, guard)
+    ctx = _build_ctx(case)
+    deps = PipelineDeps(conn=object(), redis=None, llm=ScriptedLLM(case.fixtures))
+
+    result = await run_case(ctx, deps, DEFAULT_STAGES, case.expect, case_id=case.id)
+
+    assert not result.passed, f"{case_id}: a trecut cu guard-ul '{guard}' SCOS → security theater"
 
 
 # --- evaluate_reply (checker pur, fără pipeline) ------------------------------
