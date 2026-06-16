@@ -28,6 +28,7 @@ from src.config import get_settings
 from src.db.queries.contacts import block_contact
 from src.db.queries.conversations import set_handoff
 from src.models import TurnContext
+from src.worker.limits import rate_limit_count
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -42,6 +43,11 @@ NEUTRAL_MSG = (
 
 # Fereastra contorului de flag-uri (secunde) — 24h, ca pragul de blocklist să fie pe zi.
 _FLAG_WINDOW_S = 24 * 60 * 60
+
+# Mesaj de throttle (G2c): trimis O SINGURĂ dată la depășirea pragului de rate limit.
+THROTTLE_MSG = (
+    "Primesc multe mesaje deodată 🙂 Îți răspund imediat, mai trimite-mi în câteva secunde."
+)
 
 # Pattern-uri de risc (RO, normalizate fără diacritice/uppercase). Determinist, NU LLM.
 # Extensibil per-business din settings = follow-up.
@@ -127,6 +133,31 @@ async def _record_flag_and_maybe_block(ctx: TurnContext, deps: PipelineDeps) -> 
         log.warning("moderation: contor/blocklist eșuat (%s)", type(e).__name__)
 
 
+async def _rate_limited(ctx: TurnContext, deps: PipelineDeps) -> bool:
+    """Rate limit per contact (G2c). True ⇒ peste prag: a setat throttle (la depășire) sau
+    a tăcut (deja peste) → early-exit. Fail-OPEN: Redis jos / dezactivat → False (nu blochează).
+    Rulează ÎNAINTE de moderation (check Redis ieftin înaintea apelului de moderation API)."""
+    settings = get_settings()
+    if not settings.rate_limit_enabled or deps.redis is None:
+        return False
+    try:
+        count = await rate_limit_count(
+            deps.redis, ctx.business.id, ctx.contact.id, settings.rate_limit_window_seconds
+        )
+    except Exception as e:  # noqa: BLE001 — guard Redis jos → fail-open
+        log.warning("rate limit: contor eșuat (%s) → fail-open", type(e).__name__)
+        return False
+    if count <= settings.rate_limit_max:
+        return False
+    ctx.emit("rate_limited", count=count)
+    if count == settings.rate_limit_max + 1:
+        # tocmai a depășit → un singur mesaj de throttle (apoi tăcere pe restul burst-ului).
+        ctx.set_reply(THROTTLE_MSG, cacheable=False)
+    else:
+        ctx.halt_silent("rate_limited")
+    return True
+
+
 async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
     """Poarta de moderare (NX-15). True ⇒ flagged: a setat răspunsul neutru → early-exit.
 
@@ -169,12 +200,16 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.halt_silent("handoff_active")
         return
 
-    # 4. moderare (NX-15): mesaj toxic → răspuns neutru, NU ajunge la triaj/agent.
+    # 4. rate limit (G2c): prea multe mesaje/fereastră → throttle (ieftin, înaintea moderării).
+    if await _rate_limited(ctx, deps):
+        return
+
+    # 5. moderare (NX-15): mesaj toxic → răspuns neutru, NU ajunge la triaj/agent.
     #    Înaintea riscului: abuzul primește răspuns neutru, nu escaladare la om.
     if await _moderation_blocked(ctx, deps):
         return
 
-    # 5. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (3).
+    # 6. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (3).
     reason = detect_risk(ctx.message.body)
     if reason:
         await request_human(deps.conn, ctx, reason, source="risk")

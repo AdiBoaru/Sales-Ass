@@ -40,6 +40,7 @@ from src.models import (
     InboundMessage,
     TurnContext,
 )
+from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 
 log = logging.getLogger(__name__)
@@ -140,6 +141,49 @@ async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
         log.exception("cache write-back a eșuat (turul continuă)")
 
 
+async def _llm_within_budget(ctx: TurnContext, redis: Redis | None, business: BusinessConfig):
+    """Cost guard (G2c): dacă businessul a depășit plafonul zilnic, întoarce None → pipeline-ul
+    rulează FĂRĂ LLM (triaj/agent degradează grațios, cache L1 încă servește), dar gates rămân
+    intacte. Best-effort: eșec Redis → fail-open (LLM normal). Plafon =
+    businesses.daily_cost_cap_usd sau settings.daily_cost_cap_usd."""
+    llm = get_llm()
+    settings = get_settings()
+    if llm is None or redis is None or not settings.cost_guard_enabled:
+        return llm
+    cap = business.daily_cost_cap_usd or settings.daily_cost_cap_usd
+    if not cap:
+        return llm
+    try:
+        if await cost_over_budget(redis, business.id, cap):
+            ctx.emit("cost_guard_tripped", cap_usd=cap)
+            log.warning(
+                "cost guard: business %s peste plafon ($%.2f) → LLM dezactivat", business.id, cap
+            )
+            return None
+    except Exception as e:  # noqa: BLE001 — check eșuat → fail-open
+        log.warning("cost guard: check eșuat (%s) → fail-open", type(e).__name__)
+    return llm
+
+
+async def _record_turn_cost(
+    redis: Redis | None, business_id: str, ctx: TurnContext, *, llm_used: bool
+) -> None:
+    """Adaugă estimarea de cost a turului în contorul zilnic (G2c) — DOAR dacă LLM-ul a fost
+    folosit (peste buget nu acumulează). Best-effort; sursa de facturare = usage_daily."""
+    settings = get_settings()
+    if redis is None or not settings.cost_guard_enabled or not llm_used:
+        return
+    cost = estimate_turn_cost(
+        ctx.events, cost_triage_usd=settings.cost_triage_usd, cost_agent_usd=settings.cost_agent_usd
+    )
+    if cost <= 0:
+        return
+    try:
+        await cost_add(redis, business_id, cost)
+    except Exception as e:  # noqa: BLE001 — contor best-effort, turul a răspuns deja
+        log.warning("cost guard: add eșuat (%s)", type(e).__name__)
+
+
 async def handle_turn(
     conn: asyncpg.Connection,
     business: BusinessConfig,
@@ -214,8 +258,11 @@ async def handle_turn(
         handoff_until=conv["handoff_until"],
     )
 
-    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=get_llm()), stages)
+    # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
+    llm = await _llm_within_budget(ctx, redis, business)
+    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm), stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
+    await _record_turn_cost(redis, business.id, ctx, llm_used=llm is not None)
 
     if ctx.reply is None:
         if ctx.halt:
@@ -278,6 +325,7 @@ async def handle_turn(
         len(ctx.reply.text),
         outbox_id,
     )
-    # Write-back cache (G5b-1) — după outbox, nu întârzie livrarea.
-    await _cache_writeback(conn, get_llm(), business.id, ctx.language, ctx.message.body, ctx)
+    # Write-back cache (G5b-1) — după outbox, nu întârzie livrarea. LLM-ul guardat (cost
+    # guard): peste buget → None → write-back sărit (nu mai consumăm embed).
+    await _cache_writeback(conn, llm, business.id, ctx.language, ctx.message.body, ctx)
     return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)

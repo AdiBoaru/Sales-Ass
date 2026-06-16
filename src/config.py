@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     # price-check + data_version la lookup, nu expirarea. Default 30 min.
     cache_ttl_dynamic_minutes: int = Field(default=30, validation_alias="CACHE_TTL_DYNAMIC_MINUTES")
 
+    # --- Cost guard + rate limit (G2c, stagiul 2) ---
+    # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)
+    # dezactivează LLM-ul pt restul zilei. Estimare-plasă; facturarea reală = usage_daily.
+    cost_guard_enabled: bool = Field(default=True, validation_alias="COST_GUARD_ENABLED")
+    cost_triage_usd: float = Field(default=0.0003, validation_alias="COST_TRIAGE_USD")
+    cost_agent_usd: float = Field(default=0.003, validation_alias="COST_AGENT_USD")
+    # Rate limit per contact: max mesaje într-o fereastră (peste debounce R1).
+    rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")
+    rate_limit_max: int = Field(default=20, validation_alias="RATE_LIMIT_MAX")
+    rate_limit_window_seconds: int = Field(default=60, validation_alias="RATE_LIMIT_WINDOW_SECONDS")
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
