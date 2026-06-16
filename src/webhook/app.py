@@ -6,6 +6,7 @@ POST /webhook → mesaje inbound: verifică semnătura, deduplică (Redis layer 
                 contact/conversație + plasa de dedupe durabilă sunt în worker.
 """
 
+import hmac
 import json
 
 from fastapi import Depends, FastAPI, Query, Request, Response
@@ -30,6 +31,10 @@ def get_app_secret() -> str:
 
 def get_verify_token() -> str:
     return get_settings().meta_verify_token
+
+
+def get_orders_secret() -> str:
+    return get_settings().orders_webhook_secret
 
 
 async def redis_dep() -> Redis:
@@ -99,4 +104,33 @@ async def receive_webhook(
         # tăcut: 503 → Meta reîncearcă, iar la retry NX-51 deduplică ce-a prins deja.
         return PlainTextResponse("service unavailable", status_code=503)
 
+    return PlainTextResponse("ok", status_code=200)
+
+
+@app.post("/webhook/orders/{business_id}")
+async def receive_order(
+    business_id: str,
+    request: Request,
+    secret: str = Depends(get_orders_secret),
+    redis: Redis = Depends(redis_dep),
+) -> Response:
+    """Webhook comenzi (F2-2) → atribuire. Margine SUBȚIRE, fără DB (ca path-ul Meta):
+    verifică un secret partajat, parsează, pune un envelope `kind='order'` pe stream →
+    worker-ul face atribuirea (`process_order`). Comenzile nu-s evenimente de canal, deci
+    `business_id` vine din path (autentificat de secret)."""
+    expected = secret
+    provided = request.headers.get("X-Orders-Secret") or ""
+    if not expected or not hmac.compare_digest(provided, expected):
+        return PlainTextResponse("forbidden", status_code=403)
+
+    raw = await request.body()
+    try:
+        order = json.loads(raw)
+    except json.JSONDecodeError:
+        return PlainTextResponse("bad request", status_code=400)
+
+    try:
+        await enqueue_inbound(redis, {"kind": "order", "business_id": business_id, "order": order})
+    except RedisError:
+        return PlainTextResponse("service unavailable", status_code=503)
     return PlainTextResponse("ok", status_code=200)
