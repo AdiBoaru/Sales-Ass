@@ -81,6 +81,9 @@ def _apply_stubs(monkeypatch, fixtures: dict) -> None:
     async def fake_search(conn, business_id, vec, **kwargs):
         return list(catalog)
 
+    async def has_emb(conn, business_id):  # NX-98: tenant cu embeddings → calea semantică
+        return True
+
     async def fake_by_ids(conn, business_id, ids, **kwargs):
         return [by_id[i] for i in ids if i in by_id]
 
@@ -93,6 +96,7 @@ def _apply_stubs(monkeypatch, fixtures: dict) -> None:
     # triaj → categorii valide ale cazului
     monkeypatch.setattr(triage_mod, "list_category_slugs", fake_categories)
     # tool-uri agent → catalogul cazului
+    monkeypatch.setattr(ct, "has_embeddings", has_emb)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
     monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
     # cache → miss curat (forțăm regenerarea prin pipeline)

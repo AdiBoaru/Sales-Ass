@@ -99,6 +99,20 @@ async def search_products(
     return [dict(r) for r in rows]
 
 
+async def has_embeddings(conn: asyncpg.Connection, business_id: str) -> bool:
+    """True dacă tenantul are măcar un `product_embedding`.
+
+    Decide calea din `search_products_tool`: semantic (JOIN pe product_embeddings)
+    doar dacă există embeddings; altfel SQL-only (NX-98). Un singur SELECT scoped
+    (principiul 7); ieftin — nu merită memoizat (embeddings apar după job, nu în tur).
+    """
+    row = await conn.fetchrow(
+        "select 1 from product_embeddings where business_id = $1 limit 1",
+        business_id,
+    )
+    return row is not None
+
+
 # Detalii bogate per produs (tool-uri G7): câmpurile de bază + rezumatul de recenzii (D3).
 _DETAIL_SELECT = f"""
     select

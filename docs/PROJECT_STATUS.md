@@ -100,7 +100,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 4 | Straturi gratuite (cache semantic, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 #56) · ❌ rămas: **alias lookup** (`intent_aliases`), clarify cu `pending_question` (faqs=0) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
 | 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
-| 7 | Agent (mini) + **tool-calling (G7-1 #60)** | ✅ **live** (search/details/compare, cap dur 3 apeluri; + `checkout_link` în review #63) |
+| 7 | Agent (mini) + **tool-calling (G7-1 #60)** | ✅ **live** (search/details/compare, cap dur 3 apeluri; + `checkout_link` în review #63). **NX-98:** `search_products` cade determinist pe **SQL-only** (`name ilike`) când tenantul n-are embeddings / LLM / semantic gol → niciodată „indisponibil" structural (P6); `mode=sql_only` în analytics = semnal de embed lipsă |
 | 8 | Validator | ✅ inline în agent (zero prețuri/linkuri inventate; retry → fallback determinist; link de checkout permis doar dacă botul l-a generat, #63) |
 | 9 | Sender → outbox → dispatcher (+ carduri W1) | ✅ **live cap-coadă** |
 | — | Status webhook (delivered/read/failed) | ✅ |
