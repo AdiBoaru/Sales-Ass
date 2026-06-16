@@ -87,6 +87,16 @@ async def _select_by_identity(
     return _row_to_contact(row) if row else None
 
 
+async def block_contact(conn: asyncpg.Connection, business_id: str, contact_id: str) -> None:
+    """Abuse blocklist (NX-15): marchează contactul ca blocat. Gate-ul tace contactele
+    blocate la următoarele tururi. `conn` tenant-scoped; bot_runtime are UPDATE pe contacts."""
+    await conn.execute(
+        "update contacts set is_blocked = true where business_id = $1 and id = $2",
+        business_id,
+        contact_id,
+    )
+
+
 async def get_or_create_contact(
     conn: asyncpg.Connection,
     business_id: str,

@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     model_agent: str = Field(default="gpt-5.4-mini", validation_alias="MODEL_AGENT")
     model_triage: str = Field(default="gpt-5.4-nano", validation_alias="MODEL_TRIAGE")
     model_embed: str = Field(default="text-embedding-3-small", validation_alias="MODEL_EMBED")
+    model_moderation: str = Field(
+        default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
+    )
+
+    # --- Moderation gate (NX-15) ---
+    # Poartă în Gates înaintea triajului: mesaj flagged → răspuns neutru (gratuit la OpenAI).
+    moderation_enabled: bool = Field(default=True, validation_alias="MODERATION_ENABLED")
+    # Câte flag-uri într-o fereastră de 24h trec contactul pe abuse blocklist.
+    moderation_block_threshold: int = Field(
+        default=3, validation_alias="MODERATION_BLOCK_THRESHOLD"
+    )
 
     # --- Meta WhatsApp Cloud API ---
     meta_access_token: str = Field(default="", validation_alias="META_ACCESS_TOKEN")
