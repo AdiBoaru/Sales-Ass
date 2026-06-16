@@ -166,6 +166,27 @@ async def set_handoff(
     )
 
 
+async def set_conversation_locale(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    locale: str,
+) -> None:
+    """Persistă limba detectată (G5c) pe `conversations.locale` → limba „se lipește"
+    (procesorul seedează `ctx.language` din ea la turul următor). NU atinge
+    `state`/`state_version` → fără conflict cu patch-ul Sender-ului."""
+    await conn.execute(
+        """
+        update conversations
+           set locale = $3
+         where business_id = $1 and id = $2
+        """,
+        business_id,
+        conversation_id,
+        locale,
+    )
+
+
 async def touch_last_inbound(
     conn: asyncpg.Connection,
     business_id: str,
