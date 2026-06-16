@@ -24,7 +24,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     commerce_tools,
 )
 from src.tools.base import enabled_tools, run_tool
-from src.worker.context import conversation_transcript
+from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -220,7 +220,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     history = conversation_transcript(ctx.history)
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
-    user = f"Limba clientului: {ctx.language}\n{history_block}Mesaj client: {query}"
+    context = context_blocks(ctx)
+    context_block = f"{context}\n\n" if context else ""
+    user = f"Limba clientului: {ctx.language}\n{context_block}{history_block}Mesaj client: {query}"
 
     try:
         final = await deps.llm.run_tool_loop(_TOOL_SYSTEM, user, tools, execute)

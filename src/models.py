@@ -129,6 +129,27 @@ class ConversationState:
     constraints: dict[str, Any] = field(default_factory=dict)
     state_version: int = 0
 
+    @classmethod
+    def from_jsonb(cls, raw: dict[str, Any] | None) -> ConversationState:
+        """Hidratează din `conversations.state` (jsonb). DEFENSIV: chei lipsă → default,
+        produse fără id/name/price → sărite (nu crapă pe state vechi/parțial). `displayed_products`
+        e scris ca {product_id|id, name, price, ...} de Sender — luăm doar cele 3 ref-uri (P8)."""
+        raw = raw or {}
+        products: list[ProductRef] = []
+        for p in raw.get("displayed_products") or []:
+            pid = p.get("product_id") or p.get("id")
+            if pid is None or p.get("name") is None or p.get("price") is None:
+                continue
+            products.append(ProductRef(product_id=pid, name=p["name"], price=float(p["price"])))
+        return cls(
+            active_search=raw.get("active_search") or {},
+            displayed_products=products,
+            pending_question=raw.get("pending_question"),
+            asked_intents=raw.get("asked_intents") or [],
+            constraints=raw.get("constraints") or {},
+            state_version=int(raw.get("state_version") or 0),
+        )
+
 
 # ---------------------------------------------------------------------------
 # Rezultate scrise de stagii specifice

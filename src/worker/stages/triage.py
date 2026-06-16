@@ -21,7 +21,7 @@ from pydantic import BaseModel, ValidationError
 
 from src.db.queries.catalog import list_category_slugs
 from src.models import Route, RouteDecision, TurnContext
-from src.worker.context import conversation_transcript
+from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -73,8 +73,11 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     categories = await list_category_slugs(deps.conn, ctx.business.id)
     transcript = conversation_transcript(ctx.history)
     history_block = f"Conversație până acum:\n{transcript}\n\n" if transcript else ""
+    context = context_blocks(ctx)
+    context_block = f"{context}\n\n" if context else ""
     user = (
         f"Limba clientului: {ctx.language}\n"
+        f"{context_block}"
         f"{history_block}"
         f"Mesaj client NOU: {body}\n"
         f"Categorii valide (slug): {', '.join(categories) or '(niciuna)'}"
