@@ -29,6 +29,9 @@ class ToolResult:
     products: list[dict[str, Any]] = field(default_factory=list)  # complete → validator
     llm_view: str = ""  # compact → model
     error: str | None = None
+    # Linkuri GENERATE de bot în acest tur (ex. checkout_link, F2): grounded prin construcție
+    # → validatorul le acceptă, pe lângă product_url-urile retrievate.
+    links: list[str] = field(default_factory=list)
 
 
 ToolFn = Callable[["TurnContext", "PipelineDeps", dict[str, Any]], Awaitable[ToolResult]]
@@ -46,13 +49,14 @@ def register(name: str) -> Callable[[ToolFn], ToolFn]:
     return deco
 
 
-# Faza 1: read core. Activarea per-business (settings) = ulterior.
+# Faza 1: read core. Faza 2 (F2): comerț (write). Activarea per-business (settings) = ulterior.
 _PHASE1 = ("search_products", "get_product_details", "compare_products")
+_PHASE2 = ("checkout_link",)
 
 
 def enabled_tools(business: Any) -> list[str]:  # noqa: ARG001 — per-business vine ulterior
-    """Numele tool-urilor active pentru un business (Faza 1: cele 3 read, dacă-s înregistrate)."""
-    return [name for name in _PHASE1 if name in TOOL_REGISTRY]
+    """Tool-urile active pentru un business (Faza 1 read + Faza 2 comerț, dacă-s înregistrate)."""
+    return [name for name in (*_PHASE1, *_PHASE2) if name in TOOL_REGISTRY]
 
 
 async def run_tool(

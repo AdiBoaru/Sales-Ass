@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     rate_limit_max: int = Field(default=20, validation_alias="RATE_LIMIT_MAX")
     rate_limit_window_seconds: int = Field(default=60, validation_alias="RATE_LIMIT_WINDOW_SECONDS")
 
+    # --- Comerț / bucla de bani (F2) ---
+    # Base URL de checkout (fallback global; businesses.settings["checkout_url"] are prioritate).
+    # Gol → checkout_link întoarce ok=False (nu inventăm domeniu). `?ref=<turn_id>` adăugat în cod.
+    checkout_base_url: str = Field(default="", validation_alias="CHECKOUT_BASE_URL")
+    # Cât timp e valabil un link de checkout (zile) → checkout_links.expires_at.
+    checkout_link_ttl_days: int = Field(default=7, validation_alias="CHECKOUT_LINK_TTL_DAYS")
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
