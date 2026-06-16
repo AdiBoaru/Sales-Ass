@@ -99,6 +99,64 @@ async def search_products(
     return [dict(r) for r in rows]
 
 
+# Detalii bogate per produs (tool-uri G7): câmpurile de bază + rezumatul de recenzii (D3).
+_DETAIL_SELECT = f"""
+    select
+        p.id::text                  as id,
+        p.name                      as name,
+        b.name                      as brand,
+        {_EFFECTIVE_PRICE}::float8  as price,
+        p.product_url               as url,
+        p.ai_summary                as ai_summary,
+        p.stock_total               as stock,
+        p.availability              as availability,
+        img.url                     as image,
+        p.rating::float8            as rating,
+        prs.summary                 as review_summary,
+        prs.top_pros                as top_pros,
+        prs.top_cons                as top_cons,
+        prs.sentiment::float8       as sentiment
+    from products p
+    left join brands b on b.id = p.brand_id
+    left join product_review_summaries prs on prs.product_id = p.id
+    left join lateral (
+        select min(coalesce(v.sale_price, v.price)) as price
+        from product_variants v
+        where v.product_id = p.id
+    ) vp on true
+    left join lateral (
+        select pi.url from product_images pi
+        where pi.product_id = p.id
+        order by pi.position asc nulls last
+        limit 1
+    ) img on true
+"""
+
+
+async def get_products_by_ids(
+    conn: asyncpg.Connection,
+    business_id: str,
+    product_ids: list[str],
+    *,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """Produse active după id (tool-uri get_product_details / compare_products), cu detalii
+    bogate (rating + rezumat recenzii D3). `business_id = $1` (izolare; RLS plasa). Max
+    `limit` (hard cap 6). Ordinea NU e garantată — caller-ul o poate re-mapa pe id."""
+    if not product_ids:
+        return []
+    limit = min(limit, 6)
+    rows = await conn.fetch(
+        _DETAIL_SELECT
+        + " where p.business_id = $1 and p.status = 'active' and p.id = any($2::uuid[])"
+        + " limit $3",
+        business_id,
+        product_ids[:limit],
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
 async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
     """Slug-urile categoriilor active ale tenantului — pentru groundarea triajului.
 
