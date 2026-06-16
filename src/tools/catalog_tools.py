@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from src.db.queries.catalog import get_products_by_ids, search_products_semantic
+from src.db.queries.catalog import (
+    get_products_by_ids,
+    has_embeddings,
+    search_products,
+    search_products_semantic,
+)
 from src.tools.base import ToolResult, register
 
 if TYPE_CHECKING:
@@ -82,19 +87,48 @@ def _compare_view(products: list[dict[str, Any]]) -> str:
 async def search_products_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
 ) -> ToolResult:
-    """Caută în catalog (semantic + filtru de preț). Întoarce până la 6 produse."""
+    """Caută în catalog. Întoarce până la 6 produse REALE — niciodată „indisponibil".
+
+    Calea bună = semantic (embedding query × `product_embeddings`). Plasa (NX-98) =
+    SQL-only (`name ilike '%q%'`, ZERO halucinație) când tenantul n-are embeddings,
+    n-avem LLM pentru vectorul de query, sau semantic întoarce gol. Degradare
+    deterministă (P6): tot iese ceva, nu listă goală structurală. Singurul apel extern
+    rămâne `embed([query])` pe calea semantică (P2); SQL-only n-are LLM deloc.
+    """
     a = SearchArgs(**args)
-    if deps.llm is None:
-        return ToolResult(ok=False, error="no_llm", llm_view="Căutarea nu e disponibilă.")
-    query_vec = (await deps.llm.embed([a.query]))[0]
-    products = await search_products_semantic(
-        deps.conn, ctx.business.id, query_vec, price_max=a.price_max, limit=a.limit
-    )
-    if not products and a.price_max is not None:
-        # bugetul a tăiat tot → reia fără filtru (ranking semantic decide)
-        products = await search_products_semantic(
-            deps.conn, ctx.business.id, query_vec, limit=a.limit
+    # 1. cale semantică doar dacă avem LLM (vector de query) ȘI tenantul are embeddings
+    use_semantic = deps.llm is not None and await has_embeddings(deps.conn, ctx.business.id)
+    products: list[dict[str, Any]] = []
+    mode = "sql_only"
+    if use_semantic:
+        try:
+            query_vec = (await deps.llm.embed([a.query]))[0]
+            products = await search_products_semantic(
+                deps.conn, ctx.business.id, query_vec, price_max=a.price_max, limit=a.limit
+            )
+            if not products and a.price_max is not None:
+                # bugetul a tăiat tot → reia fără filtru (ranking semantic decide)
+                products = await search_products_semantic(
+                    deps.conn, ctx.business.id, query_vec, limit=a.limit
+                )
+            if products:
+                mode = "semantic"
+        except Exception:  # noqa: BLE001 — embed/rețea pică → NU tăcem, cădem pe SQL-only (P6)
+            products = []
+    # 2. plasă SQL-only: fără embeddings/LLM, semantic gol, sau embed a aruncat
+    if not products:
+        products = await search_products(
+            deps.conn, ctx.business.id, query_text=a.query, price_max=a.price_max, limit=a.limit
         )
+        if not products and a.price_max is not None:
+            products = await search_products(
+                deps.conn, ctx.business.id, query_text=a.query, limit=a.limit
+            )
+    # `sql_only` în analytics = semnal că jobul de embed trebuie rulat pe tenant.
+    # FĂRĂ `query` în properties (P12 — poate conține nume/adrese/PII).
+    ctx.emit(
+        "product_search", mode=mode, count=len(products), had_price_filter=a.price_max is not None
+    )
     return ToolResult(ok=True, products=products, llm_view=_brief(products))
 
 

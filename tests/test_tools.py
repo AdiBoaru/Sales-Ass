@@ -41,8 +41,29 @@ PRODUCTS = [
 
 
 class _LLM:
+    """LLM stub care numără apelurile `embed` (spy pentru calea semantică vs SQL-only)."""
+
+    def __init__(self):
+        self.embed_calls = 0
+
     async def embed(self, texts, *, model=None):
+        self.embed_calls += 1
         return [[0.0] * 8 for _ in texts]
+
+
+class _RaisingLLM:
+    """`embed` aruncă (pică rețeaua/API) → tool-ul trebuie să cadă pe SQL-only, nu să tacă."""
+
+    async def embed(self, texts, *, model=None):
+        raise RuntimeError("embed down")
+
+
+async def _has_emb_true(conn, business_id):
+    return True
+
+
+async def _has_emb_false(conn, business_id):
+    return False
 
 
 def _ctx() -> TurnContext:
@@ -59,6 +80,11 @@ def _deps(llm=None) -> PipelineDeps:
     return PipelineDeps(conn=object(), redis=None, llm=llm or _LLM())
 
 
+def _deps_no_llm() -> PipelineDeps:
+    """Deps fără LLM (cheie OpenAI absentă) — forțează calea SQL-only."""
+    return PipelineDeps(conn=object(), redis=None, llm=None)
+
+
 def test_enabled_tools_phase1_and_2():
     # Faza 1 (read) + Faza 2 (comerț, F2): checkout_link adăugat.
     assert set(enabled_tools(None)) == {
@@ -69,6 +95,11 @@ def test_enabled_tools_phase1_and_2():
     }
 
 
+def _search_event(ctx):
+    """Ultimul event `product_search` emis (pentru aserții pe mode/PII)."""
+    return next(e for e in reversed(ctx.events) if e.type == "product_search")
+
+
 async def test_search_products_tool(monkeypatch):
     captured = {}
 
@@ -76,11 +107,107 @@ async def test_search_products_tool(monkeypatch):
         captured["business_id"] = business_id  # business_id vine din ctx, nu din args
         return PRODUCTS
 
+    async def fake_sql(conn, business_id, **k):  # NU trebuie chemat când semantic întoarce
+        captured["sql_called"] = True
+        return []
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
-    res = await run_tool(_ctx(), _deps(), "search_products", {"query": "cremă", "limit": 6})
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "cremă", "limit": 6})
     assert res.ok and len(res.products) == 2
     assert "Crema A" in res.llm_view and "[p1]" in res.llm_view
     assert captured["business_id"] == "biz-1"
+    assert "sql_called" not in captured  # SQL-only NU se cheamă dacă semantic a întors
+    assert llm.embed_calls == 1  # un singur embedding (P2)
+    ev = _search_event(ctx)
+    assert ev.properties["mode"] == "semantic" and ev.properties["count"] == 2
+    assert "query" not in ev.properties  # P12 — fără PII în analytics
+
+
+async def test_search_no_embeddings_falls_back_sql_only(monkeypatch):
+    """Tenant fără embeddings → SQL-only direct, ZERO apel embed, mode=sql_only."""
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    async def boom_semantic(*a, **k):  # nu trebuie atins
+        raise AssertionError("calea semantică nu trebuie chemată fără embeddings")
+
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_semantic", boom_semantic)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "cremă"})
+    assert res.ok and len(res.products) == 2
+    assert llm.embed_calls == 0  # SQL-only n-are LLM deloc (cost $0)
+    assert _search_event(ctx).properties["mode"] == "sql_only"
+
+
+async def test_search_no_llm_sql_only(monkeypatch):
+    """Fără LLM (cheie absentă) → SQL-only direct; `has_embeddings` nici nu se evaluează."""
+
+    async def boom_has_emb(conn, business_id):
+        raise AssertionError("has_embeddings nu trebuie chemat fără LLM (short-circuit)")
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "has_embeddings", boom_has_emb)
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2
+    assert _search_event(ctx).properties["mode"] == "sql_only"
+
+
+async def test_search_semantic_empty_falls_back_sql(monkeypatch):
+    """Embeddings prezente dar semantic gol (chiar și fără preț) → cade pe SQL-only."""
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def empty_semantic(conn, business_id, vec, **k):
+        return []
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_semantic", empty_semantic)
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x", "price_max": 50})
+    assert res.ok and len(res.products) == 2
+    assert llm.embed_calls == 1  # a încercat semantic o dată, apoi a căzut
+    assert _search_event(ctx).properties["mode"] == "sql_only"
+
+
+async def test_search_embed_error_falls_back_sql(monkeypatch):
+    """`embed` aruncă deși există embeddings → prins, cade pe SQL-only, NU propagă (P6)."""
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_RaisingLLM()), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2
+    assert _search_event(ctx).properties["mode"] == "sql_only"
+
+
+async def test_search_all_empty_is_graceful(monkeypatch):
+    """Și semantic și SQL-only goale → ToolResult ok cu listă goală + „Niciun produs" (P6)."""
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def empty(conn, business_id, *a, **k):
+        return []
+
+    monkeypatch.setattr(ct, "search_products_semantic", empty)
+    monkeypatch.setattr(ct, "search_products", empty)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "zzz"})
+    assert res.ok and res.products == [] and "Niciun produs" in res.llm_view
+    assert _search_event(ctx).properties["mode"] == "sql_only"
 
 
 async def test_get_product_details_tool(monkeypatch):
