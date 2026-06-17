@@ -25,6 +25,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     orders_tools,
 )
 from src.tools.base import enabled_tools, run_tool
+from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
@@ -65,6 +66,75 @@ Primești întrebarea clientului și o listă de produse din catalog (cu prețur
 Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis. Pentru fiecare:
 numele, prețul EXACT (lei) și ratingul (★) din listă, apoi de ce se potrivește. Folosește
 DOAR produsele, prețurile și linkurile din listă — NU inventa nimic. Maxim 3 produse."""
+
+# Recomandarea STRUCTURATĂ (model iZi, NX-richreply): modelul emite DOAR cuvinte + referințe
+# product_id/pro_index; codul (compose) pune prețuri/rating/linkuri din retrieval. Așa, clasa
+# „preț inventat" dispare prin construcție, iar motivul fiecărui card e ancorat pe un avantaj REAL.
+_FINAL_SCHEMA_SYSTEM = """Ești consultant de vânzări într-un magazin de beauty online din România.
+Primești nevoia clientului și o listă de produse REALE (id, preț, rating, avantaje din recenzii).
+Compui o recomandare structurată. Răspunzi DOAR cu JSON conform schemei.
+
+REGULI DURE:
+- NU scrii prețuri, linkuri, ratinguri, procente, număr de recenzii, termene de livrare sau ORICE
+  cifră. Codul le pune din date. Tu scrii DOAR cuvinte.
+- `intro` = o frază scurtă care REIA nevoia clientului în cuvintele LUI (ex. dacă a zis „mâini
+  uscate", pornește de la „Pentru mâini uscate..."). NU generic — legat de ce a cerut.
+- Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
+  avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = o clauză SCURTĂ care leagă
+  produsul de NEVOIA exactă a clientului (ex. „pentru mâini foarte uscate") — doar nevoia lui.
+- Recomandă 3-5 produse din listă, în limba clientului.
+- `pick` = un singur produs (cel mai potrivit) + justificare în cuvinte (fără cifre,
+  fără „cel mai bun").
+- `education` = 1-2 propoziții despre ce contează la nevoia clientului (fără cifre).
+- `suggestions` = 2-4 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
+  în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
+  „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un
+  buget cu cifre), NU afirmațiile tale. Evită generice de tip „Spune-mi mai multe".
+- Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
+
+# Schema strict pentru `complete_schema` (mini-ul folosește deja strict:true în tool-uri).
+# NB: fără maxItems/minimum — keyword-uri nesuportate de structured outputs strict; capul (6) și
+# range-ul pro_index se impun în compose.
+_RICH_SCHEMA: dict[str, Any] = {
+    "name": "sales_recommendation",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["intro", "items", "pick", "education", "suggestions"],
+        "properties": {
+            "intro": {"type": "string"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["product_id", "pro_index", "fit_clause"],
+                    "properties": {
+                        "product_id": {"type": "string"},
+                        "pro_index": {"type": "integer"},
+                        "fit_clause": {"type": "string"},
+                    },
+                },
+            },
+            "pick": {
+                "type": ["object", "null"],
+                "additionalProperties": False,
+                "required": ["product_id", "justification"],
+                "properties": {
+                    "product_id": {"type": "string"},
+                    "justification": {"type": "string"},
+                },
+            },
+            "education": {"type": ["string", "null"]},
+            # Mesaje de follow-up din partea CLIENTULUI (voce de client → fără scrub, contextuale).
+            "suggestions": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+    },
+}
 
 
 def _budget(text: str) -> float | None:
@@ -251,6 +321,40 @@ def _no_result_msg(is_order: bool) -> str:
     )
 
 
+def _rich_bundle(products: list[dict[str, Any]]) -> str:
+    """Lista de produse pentru apelul structurat: id + preț + rating + avantaje INDEXATE
+    (pentru `pro_index`). Modelul VEDE prețul (ca să ordoneze/aleagă) dar NU-l emite."""
+    lines = []
+    for p in products:
+        raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
+        pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()][:3]
+        pros_str = "; ".join(f"{i}) {pr}" for i, pr in enumerate(pros)) or "(fără avantaje listate)"
+        rating = f"{float(p['rating']):.1f}★" if p.get("rating") else "-"
+        lines.append(
+            f"[{p['id']}] {p['name']} | preț {float(p['price']):.2f} lei | "
+            f"rating {rating} | avantaje: {pros_str}"
+        )
+    return "\n".join(lines)
+
+
+async def _finalize_rich(llm, query: str, products: list[dict[str, Any]], ctx, history: str):
+    """Compune recomandarea STRUCTURATĂ (model iZi). Modelul emite intro + referințe
+    product_id/pro_index/fit_clause + pick + education + chip_intents (enum închis); codul
+    (compose) hidratează faptele. Întoarce `RichReply` sau None (→ fallback pe proză)."""
+    history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
+    user = (
+        f"Limba clientului: {ctx.language}\n{history_block}"
+        f"Nevoia clientului: {query}\n\nProduse disponibile (alege dintre acestea):\n"
+        f"{_rich_bundle(products)}"
+    )
+    try:
+        j = await llm.complete_schema(_FINAL_SCHEMA_SYSTEM, user, _RICH_SCHEMA)
+    except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fallback pe proză
+        log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
+        return None
+    return compose.assemble(ctx, j, products)
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -298,6 +402,18 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.retrieval = RetrievalResult(products=products, source="tools")
 
     if products:
+        # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
+        # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
+        if not is_order:
+            rich = await _finalize_rich(deps.llm, query, products, ctx, history)
+            if rich is not None and rich.items:
+                ctx.set_rich_reply(
+                    rich,
+                    text=compose.flatten(rich),
+                    products=compose.card_products(rich.items),
+                )
+                ctx.emit("agent_recommended", n=len(rich.items), rich=True)
+                return
         reply = await _finalize(
             deps.llm,
             query,

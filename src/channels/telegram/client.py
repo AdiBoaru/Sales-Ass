@@ -115,6 +115,47 @@ class TelegramClient:
         except (KeyError, TypeError) as e:
             raise TelegramError(f"sendMessage fără message_id: {result}") from e
 
+    async def send_rich(self, account_id: str, to: str, payload: dict) -> str:
+        """Recomandare bogată (model iZi): UN mesaj cu textul complet (intro + carduri +
+        pick + educație + disclaimer) + butoane-link inline per produs; apoi, opțional, un
+        al doilea mesaj cu chips ca reply-keyboard. Repară drop-ul de text al caruselului —
+        textul recomandării ajunge MEREU la client. Întoarce message_id-ul primului mesaj.
+
+        Chips = reply-keyboard: tap-ul trimite `label` ca mesaj normal → reintră în pipeline
+        ca tur NOU (fără callback/recursie). `account_id` informativ (token în URL)."""
+        rich = payload.get("rich") or {}
+        # Butoanele-link cer URL absolut http(s) — altfel Telegram respinge ÎNTREG mesajul.
+        # Fără scheme valid → fără buton (textul bogat ajunge oricum la client).
+        rows = [
+            [{"text": f"🛍️ {_short(it['name'])} — {float(it['price']):.2f} lei", "url": it["url"]}]
+            for it in (rich.get("items") or [])
+            if isinstance(it.get("url"), str) and it["url"].startswith(("http://", "https://"))
+        ]
+        msg: dict = {"chat_id": to, "text": payload.get("text") or "Recomandările mele:"}
+        if rows:
+            msg["reply_markup"] = {"inline_keyboard": rows}
+        result = await self._call("sendMessage", msg)
+        try:
+            message_id = str(result["message_id"])
+        except (KeyError, TypeError) as e:
+            raise TelegramError(f"sendMessage fără message_id: {result}") from e
+
+        chips = rich.get("chips") or []
+        if chips:
+            await self._call(
+                "sendMessage",
+                {
+                    "chat_id": to,
+                    "text": "Pot continua cu:",
+                    "reply_markup": {
+                        "keyboard": [[{"text": c["label"]}] for c in chips],
+                        "resize_keyboard": True,
+                        "one_time_keyboard": True,
+                    },
+                },
+            )
+        return message_id
+
     async def send_carousel_card(
         self, account_id: str, to: str, products: list[dict], index: int = 0
     ) -> str:

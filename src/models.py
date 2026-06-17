@@ -174,6 +174,51 @@ class RetrievalResult:
     source: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# RichReply — recomandare structurată „model iZi" (NX-richreply)
+# Separă faptele (din retrieval, hidratate de cod) de raționament (proza LLM).
+# LLM-ul emite DOAR cuvinte + referințe `product_id`; codul pune prețuri/rating/
+# linkuri. Zero preț/produs inventat PRIN CONSTRUCȚIE. Câmpurile factuale vin
+# din `ctx.retrieval`; singurul text LLM per card e `reason` (ancorat pe un pro real).
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RichItem:
+    """Un card îmbogățit. TOATE câmpurile vin din retrieval, EXCEPT `reason`."""
+
+    product_id: str
+    name: str
+    price: float
+    reason: str | None = None  # SINGURUL text LLM per card (fit scurt + pro real), scrubuit
+    url: str | None = None
+    image: str | None = None
+    rating: float | None = None
+    review_count: int | None = None  # randat doar dacă > 0 (data-gated)
+    badge: str | None = None  # data-gated + guard pe tag de discount (vezi compose)
+
+
+@dataclass
+class Chip:
+    """Sugestie de follow-up tappabilă (Telegram reply-keyboard → trimite `label` ca mesaj nou)."""
+
+    label: str
+    payload: str  # token rutat: "chip:cheaper" | "chip:nofrag" | "chip:cmp:<idA>:<idB>"
+
+
+@dataclass
+class RichReply:
+    """Recomandarea structurată, NEUTRĂ de canal. Sender-ul o aplatizează în text
+    (floor) + o trimite bogat pe canalele care suportă (Telegram `send_rich`)."""
+
+    intro: str | None  # framing LLM (fără cifre/linkuri), scrubuit
+    items: list[RichItem]  # asamblate de COD din retrieval, cap 6
+    pick: tuple[str, str] | None  # (product_id, justificare) — recomandarea decisivă
+    education: str | None  # „ce contează la categoria asta" (LLM), scrubuit
+    chips: list[Chip]  # derivate DETERMINIST din retrieval
+    disclaimer: str  # constant per-locale
+
+
 @dataclass
 class Reply:
     """Orice stagiu poate seta → early exit la Sender."""
@@ -183,6 +228,9 @@ class Reply:
     # Carduri de produs (W1): dacă setate, Sender-ul le trimite ca poză+preț+buton
     # după textul de lead-in. Câmpuri compacte (name, price, url, image), nu obiecte.
     products: list[dict[str, Any]] | None = None
+    # NX-richreply: recomandare structurată (model iZi). Dacă setată, Sender-ul o
+    # randează bogat (Telegram); `text` rămâne aplatizarea ei (floor pt WhatsApp/cache).
+    rich: RichReply | None = None
     # G5b: răspuns reutilizabil pentru cache (False pe clarify/refuz/fallback —
     # specifice contextului, nu se cache-uiesc).
     cacheable: bool = True
@@ -247,3 +295,19 @@ class TurnContext:
         Sender-ul le trimite ca carduri (poză+preț+buton) după text (W1). `cacheable`
         (G5b) → False pe clarify/refuz/fallback (nu se scriu în cache)."""
         self.reply = Reply(text=text, kind=kind, products=products, cacheable=cacheable)
+
+    def set_rich_reply(
+        self,
+        rich: RichReply,
+        *,
+        text: str,
+        products: list[dict[str, Any]] | None = None,
+        cacheable: bool = False,
+    ) -> None:
+        """Setează un reply BOGAT (model iZi) → early exit la Sender. `text` = aplatizarea
+        deterministă a lui `rich` (floor pt canale fără rich + messages.body + log). `products`
+        = cardurile compacte (pt cache signature). `cacheable=False` implicit: răspunsul bogat
+        se regenerează (cache-ul ar servi doar textul aplatizat). Owner: stagiul agent."""
+        self.reply = Reply(
+            text=text, kind="message", products=products, rich=rich, cacheable=cacheable
+        )

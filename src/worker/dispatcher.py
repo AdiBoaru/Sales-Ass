@@ -69,7 +69,11 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
 
     try:
         account_id = row["channel_account_id"]
-        if ptype == "edit_media":
+        if payload.get("rich") and hasattr(sender, "send_rich"):
+            # Recomandare bogată (model iZi): canalul o randează (intro + carduri + pick +
+            # chips). Canalele fără `send_rich` (ex. WhatsApp) cad pe `send_text` (aplatizare).
+            provider_id = await sender.send_rich(account_id, payload["to"], payload)
+        elif ptype == "edit_media":
             # navigare carusel (R2): editează cardul existent. Doar pe canale cu suport.
             if not hasattr(sender, "edit_message_media"):
                 await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")

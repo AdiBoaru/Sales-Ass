@@ -24,7 +24,9 @@ FIELDS = {
     "availability",
     "image",
     "rating",
+    "review_count",
     "review_pro",
+    "top_pros",
 }
 
 
