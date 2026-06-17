@@ -203,3 +203,26 @@ async def touch_last_inbound(
         business_id,
         conversation_id,
     )
+
+
+async def is_in_24h_window(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+) -> bool:
+    """Fereastra de 24h Meta pentru o conversație (proactiv, NX-71).
+
+    Interogăm funcția SQL `in_24h_window(conversations)` (schema_v2) — sursa de
+    adevăr (derivat din `last_inbound_at`, nu flag stocat — CLAUDE.md). `business_id`
+    e în WHERE chiar dacă filtrăm pe PK: izolare multi-tenant fără excepție (P7).
+    Conversație inexistentă / `last_inbound_at` NULL → `False` (cădem corect pe
+    ramura de template, nu trimitem liber din greșeală)."""
+    val = await conn.fetchval(
+        """
+        select in_24h_window(c) from conversations c
+         where c.business_id = $1 and c.id = $2
+        """,
+        business_id,
+        conversation_id,
+    )
+    return bool(val)
