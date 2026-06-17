@@ -130,6 +130,13 @@ class Settings(BaseSettings):
         default=3600, validation_alias="SCHEDULER_EMBED_INTERVAL_SECONDS"
     )
 
+    # --- Motor proactiv (NX-70, scheduler separat peste proactive_jobs) ---
+    # Producătorul pentru outbox: AWB / back-in-stock / coș abandonat / follow-up.
+    # Gating-ul (consent / fereastră 24h / template) e poarta NX-71. v1 = doar type=text.
+    proactive_enabled: bool = Field(default=True, validation_alias="PROACTIVE_ENABLED")
+    proactive_batch_size: int = Field(default=20, validation_alias="PROACTIVE_BATCH_SIZE")
+    proactive_idle_sleep_s: float = Field(default=5.0, validation_alias="PROACTIVE_IDLE_SLEEP_S")
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"

@@ -79,6 +79,16 @@ services:
       retries: 3
       start_period: 30s
 
+  # Motor proactiv (NX-70): scheduler peste proactive_jobs → outbox (dispatcher-ul
+  # trimite). Folosește DOAR DB-ul (admin_conn + tenant_conn), nu Redis. Iese imediat
+  # dacă PROACTIVE_ENABLED=false.
+  proactive:
+    build: .
+    command: python -m src.proactive.scheduler
+    volumes:
+      - ./src:/app/src
+    env_file: .env
+
   # Canal de TEST (NX-61): long polling Telegram → stream inbound. Pornește doar
   # dacă TELEGRAM_BOT_TOKEN e setat (altfel iese imediat, fără să blocheze restul).
   telegram-poller:
