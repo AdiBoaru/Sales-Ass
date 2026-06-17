@@ -124,12 +124,32 @@ def test_state_block_shows_products_and_constraints():
     )
     block = state_block(s)
     assert "Crema (82.99 lei)" in block and "Ser (120.50 lei)" in block
+    # R3: id-ul (UUID) e expus → agentul poate chema tools pe produsele afișate fără re-căutare.
+    assert "[p1]" in block and "[p2]" in block
     assert "buget_max: 100" in block
     assert "gol" not in block
 
 
 def test_state_block_empty_state_is_blank():
     assert state_block(ConversationState()) == ""
+
+
+def test_state_block_exposes_full_uuids_without_truncation():
+    # R3: 3 produse cu UUID-uri reale (36 char) + nume lungi (cazul cel mai rău de buget) →
+    # fiecare id COMPLET în bloc. O trunchiere care ar tăia un UUID l-ar corupe → DataError la cast.
+    ids = [
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
+        "33333333-3333-3333-3333-333333333333",
+    ]
+    s = ConversationState(
+        displayed_products=[
+            ProductRef(i, "Mira Atelier Balance Crema pentru hidratare 214", 97.99) for i in ids
+        ]
+    )
+    block = state_block(s)
+    for i in ids:
+        assert f"[{i}]" in block
 
 
 def _ctx(*, profile=None, products=None) -> TurnContext:
@@ -146,7 +166,7 @@ def _ctx(*, profile=None, products=None) -> TurnContext:
 def test_context_blocks_joins_nonempty():
     ctx = _ctx(profile={"tip_ten": "uscat"}, products=[ProductRef("p1", "Crema", 82.99)])
     blocks = context_blocks(ctx)
-    assert "Profil client:" in blocks and "Produse arătate recent:" in blocks
+    assert "Profil client:" in blocks and "[p1] Crema (82.99 lei)" in blocks
 
 
 def test_context_blocks_empty_when_nothing():
@@ -199,4 +219,4 @@ async def test_agent_prompt_includes_context_blocks():
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=_CapLLM()))
 
     assert "Profil client:" in captured["user"]
-    assert "Produse arătate recent:" in captured["user"]
+    assert "[p1] Crema (82.99 lei)" in captured["user"]  # R3: id-ul produsului afișat în context

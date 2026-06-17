@@ -18,6 +18,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from src.agent.tool_definitions import tool_schemas
+from src.db.queries.catalog import get_products_by_ids
 from src.models import RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
@@ -57,6 +58,9 @@ Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 Reguli:
 - Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /
   compare_products când clientul vrea detalii sau o comparație. Maxim 3 apeluri de unelte.
+- Pentru produsele DEJA arătate (vezi „Produse arătate recent" din context), folosește id-ul
+  lor din [] în get_product_details / compare_products / checkout_link — NU re-căuta. La un
+  follow-up de tip „care e cea mai bună?" / „trimite-mi linkul la prima", ia id-ul de acolo.
 - Recomandă 2-3 produse, în limba clientului, prietenos și concis. Pentru fiecare: numele,
   prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se potrivește pe nevoie.
 - NU inventa produse, prețuri, ingrediente sau linkuri. Folosește DOAR ce întorc uneltele.
@@ -408,6 +412,19 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
 
     products = _dedupe(retrieved)
+    # R3: follow-up pe produse DEJA arătate („care e cea mai bună?") la care modelul n-a rechemat
+    # un tool → re-hidratează produsele afișate (după id, din state) ca set de retrieval, ca să
+    # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, doar cu id-uri în state, și DOAR
+    # când textul singur ar pica (gol sau preț negroundat) — un răspuns prose valid (mulțumesc/
+    # clarificare) rămâne neatins. Cuplat cu id-urile expuse în state_block, comparația merge sigur.
+    if (
+        not products
+        and not is_order
+        and ctx.state.displayed_products
+        and not (final and _valid(final, [], generated_links, grounded_prices))
+    ):
+        ids = [p.product_id for p in ctx.state.displayed_products]
+        products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
     ctx.retrieval = RetrievalResult(products=products, source="tools")
 
     if products:
@@ -447,11 +464,14 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 generated_links,
                 grounded_prices,
             )
+            ctx.set_reply(reply)
         elif _valid(final, [], generated_links, grounded_prices):
-            reply = final  # SALES: text fără produse și fără sumă inventată (clarificare) → servim
+            # SALES: text fără produse și fără sumă inventată (clarificare) → servim
+            ctx.set_reply(final)
         else:
             # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
-            reply = _no_result_msg(is_order=False)
-        ctx.set_reply(reply)
+            # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
+            # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
+            ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
     else:
-        ctx.set_reply(_no_result_msg(is_order))
+        ctx.set_reply(_no_result_msg(is_order), cacheable=False)

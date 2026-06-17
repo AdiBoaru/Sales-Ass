@@ -56,15 +56,23 @@ def customer_profile_block(contact: Contact, *, max_chars: int = 300) -> str:
     return ("Profil client: " + "; ".join(parts))[:max_chars]
 
 
-def state_block(state: ConversationState, *, max_products: int = 3, max_chars: int = 400) -> str:
-    """Bloc de state references: produse arătate recent (nume + preț, ref-uri — principiul 8) +
-    constrângeri știute (buget, tip de ten…). Memoria scurtă pt follow-up coerent. Gol → ""."""
+def state_block(state: ConversationState, *, max_products: int = 3, max_chars: int = 600) -> str:
+    """Bloc de state references: produse arătate recent (id + nume + preț, ref-uri — principiul 8)
+    + constrângeri știute (buget, tip de ten…). Memoria scurtă pt follow-up coerent. Gol → "".
+
+    R3: expunem `product_id`-ul (UUID) ca agentul să poată chema get_product_details /
+    compare_products / checkout_link pe produsele DEJA arătate, fără re-căutare. Fără id în
+    context, un follow-up de tip „care e cea mai bună?" pasa un id inventat → DataError pe cast."""
     lines: list[str] = []
     if state.displayed_products:
-        shown = ", ".join(
-            f"{p.name} ({p.price:.2f} lei)" for p in state.displayed_products[:max_products]
+        shown = "; ".join(
+            f"[{p.product_id}] {p.name} ({p.price:.2f} lei)"
+            for p in state.displayed_products[:max_products]
         )
-        lines.append(f"Produse arătate recent: {shown}")
+        lines.append(
+            "Produse arătate recent (folosește id-ul din [] pt detalii/comparație/checkout): "
+            + shown
+        )
     if state.constraints:
         cons = "; ".join(
             f"{k}: {v}" for k, v in state.constraints.items() if v not in (None, "", [], {})
