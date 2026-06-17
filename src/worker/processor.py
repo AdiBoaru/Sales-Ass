@@ -52,6 +52,7 @@ from src.models import (
     InboundMessage,
     TurnContext,
 )
+from src.worker.compose import ensure_disclaimer
 from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 from src.worker.summarizer import generate_summary
@@ -347,6 +348,12 @@ async def handle_turn(
             log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
         return TurnResult(conv["id"], contact.id, turn_id, None, None)
 
+    # Sender (P5): garantează disclaimer-ul AI (art. 50) pe text, o singură dată, pt TOATE
+    # rutele (simple/clarify/prose/fallback/cache). Idempotent — rich/welcome și-l aplatizează
+    # deja → nu dublează. `ctx.reply.text` rămâne PUR (owner = stagiul; cache-ul îl stochează fără
+    # disclaimer și-l re-aplică la hit). NX-134.
+    reply_text = ensure_disclaimer(ctx.reply.text, ctx.language)
+
     # Scrierea Sender-ului: mesaj outbound + outbox + state, în aceeași tranzacție.
     async with conn.transaction():
         out_msg_id = await insert_message(
@@ -356,14 +363,14 @@ async def handle_turn(
             contact.id,
             Direction.OUTBOUND,
             Author.BOT,
-            body=ctx.reply.text,
+            body=reply_text,
             content_type="text",
             status="queued",
         )
         payload = {
             "type": "text",
             "to": sender_external_id,
-            "text": ctx.reply.text,
+            "text": reply_text,
             "message_id": out_msg_id,
         }
         new_state = conv["state"]
@@ -402,7 +409,7 @@ async def handle_turn(
         "tur procesat: conv=%s turn=%s reply=%dch outbox=%s",
         conv["id"],
         turn_id,
-        len(ctx.reply.text),
+        len(reply_text),
         outbox_id,
     )
     # Write-back cache (G5b-1) — după outbox, nu întârzie livrarea. LLM-ul guardat (cost
