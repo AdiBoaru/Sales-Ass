@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.config import get_settings
 from src.db.connection import close_pool
-from src.jobs import cleanup_dedupe
+from src.jobs import cleanup, cleanup_dedupe
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +109,13 @@ def _build_jobs() -> list[Job]:
             "cleanup_dedupe",
             cleanup_dedupe.run,
             interval_seconds=s.scheduler_dedupe_interval_seconds,
+        ),
+        # NX-84: drop partiții vechi + expire semantic_cache, zilnic la oră fixă UTC.
+        Job(
+            "cleanup",
+            cleanup.run,
+            interval_seconds=86400,
+            at_hour_utc=s.scheduler_cleanup_hour_utc,
         ),
     ]
     if s.embed_job_enabled and s.openai_api_key:  # embed cere cheie OpenAI

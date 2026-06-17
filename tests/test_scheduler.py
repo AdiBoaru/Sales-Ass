@@ -19,6 +19,7 @@ def _settings(*, key="sk-x", embed=True):
         scheduler_rollup_hour_utc=0,
         scheduler_dedupe_interval_seconds=21600,
         scheduler_embed_interval_seconds=3600,
+        scheduler_cleanup_hour_utc=3,
     )
 
 
@@ -78,13 +79,19 @@ async def test_safe_run_runs_ok():
 
 def test_build_jobs_includes_embed_with_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="sk-x", embed=True))
-    assert [j.name for j in _build_jobs()] == ["rollup_usage", "cleanup_dedupe", "embed_products"]
+    assert [j.name for j in _build_jobs()] == [
+        "rollup_usage",
+        "cleanup_dedupe",
+        "cleanup",
+        "embed_products",
+    ]
 
 
 def test_build_jobs_excludes_embed_without_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="", embed=True))
     names = [j.name for j in _build_jobs()]
-    assert names == ["rollup_usage", "cleanup_dedupe"]  # rollup + cleanup chiar fără cheie
+    # rollup + dedupe + cleanup rulează chiar fără cheie OpenAI; doar embed e gated
+    assert names == ["rollup_usage", "cleanup_dedupe", "cleanup"]
 
 
 def test_build_jobs_excludes_embed_when_disabled(monkeypatch):
