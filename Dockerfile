@@ -24,5 +24,6 @@ RUN useradd --create-home --uid 1000 app \
 USER app
 
 # Fără CMD hardcodat — comanda vine din docker-compose (webhook vs worker)
-# webhook: uvicorn src.webhook.app:app --host 0.0.0.0 --port 8000
-# worker:  python -m src.worker.consumer
+# webhook:   uvicorn src.webhook.app:app --host 0.0.0.0 --port 8000
+# worker:    python -m src.worker.consumer
+# scheduler: python -m src.jobs.scheduler   (NX-83: joburi de mentenanță)

@@ -118,6 +118,18 @@ class Settings(BaseSettings):
     # Buget de caractere al blocului de rezumat injectat în prompt (P4).
     summary_max_chars: int = Field(default=600, validation_alias="SUMMARY_MAX_CHARS")
 
+    # --- Mini-scheduler joburi de mentenanță (NX-83) ---
+    # Orchestrează funcțiile run() existente la intervale fixe (rollup nocturn,
+    # purjă dedupe, embed incremental). Embed gated suplimentar pe prezența cheii OpenAI.
+    embed_job_enabled: bool = Field(default=True, validation_alias="EMBED_JOB_ENABLED")
+    scheduler_rollup_hour_utc: int = Field(default=0, validation_alias="SCHEDULER_ROLLUP_HOUR_UTC")
+    scheduler_dedupe_interval_seconds: int = Field(
+        default=21600, validation_alias="SCHEDULER_DEDUPE_INTERVAL_SECONDS"
+    )
+    scheduler_embed_interval_seconds: int = Field(
+        default=3600, validation_alias="SCHEDULER_EMBED_INTERVAL_SECONDS"
+    )
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
