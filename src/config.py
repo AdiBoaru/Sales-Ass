@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     # Agentul (consola, ulterior) poate prelungi/curăța fereastra.
     handoff_window_minutes: int = Field(default=45, validation_alias="HANDOFF_WINDOW_MINUTES")
 
+    # --- Mesaj de întâmpinare (free layer, stagiul 4) ---
+    # Un pur salut → mesaj de welcome branded, determinist (fără LLM). Numele botului și
+    # sugestiile pot fi override-uite per business din businesses.settings["welcome"].
+    welcome_enabled: bool = Field(default=True, validation_alias="WELCOME_ENABLED")
+    welcome_bot_name: str = Field(default="Native", validation_alias="WELCOME_BOT_NAME")
+
     # --- Cache semantic (G5b) ---
     cache_enabled: bool = Field(default=True, validation_alias="CACHE_ENABLED")
     # τ_high: prag de auto-accept pentru L2 semantic (cosine similarity). Conservator
