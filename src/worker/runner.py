@@ -65,21 +65,24 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
 
 
-# Pipeline-ul: Gates (3) → Limbă (3) → Cache (4) → Triaj (5) → Agent (7) → fallback.
+# Pipeline-ul: Gates (3) → Limbă (3) → Welcome (4) → Cache (4) → Triaj (5) → Agent (7) → fallback.
 # Gates (G5a) decide PRIMUL dacă botul răspunde (bot_active/handoff/risc) — poate opri
 # cu reply (risc) sau tăcere intenționată (halt). Limbă (G5c) refină ctx.language ÎNAINTE
-# de straturile locale-keyed (principiul 11). Cache (G5b) servește query-uri statice
-# repetate fără LLM. Triaj setează reply pt simple/clarify; agentul răspunde pt sales.
+# de straturile locale-keyed (principiul 11). Welcome întâmpină DETERMINIST un pur salut
+# (free layer, fără LLM). Cache (G5b) servește query-uri statice repetate fără LLM. Triaj
+# setează reply pt simple/clarify; agentul răspunde pt sales.
 # Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
 from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.cache import cache_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
+from src.worker.stages.greeting import greeting_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
 DEFAULT_STAGES: list[Stage] = [
     gates_stage,
     language_stage,
+    greeting_stage,
     cache_stage,
     triage_stage,
     agent_stage,

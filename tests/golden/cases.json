@@ -3,15 +3,9 @@
     "id": "greeting-simple",
     "input": "salut",
     "language": "ro",
-    "expect": { "route": "simple", "expect_reply": true },
+    "expect": { "expect_reply": true, "must_include": ["inteligență artificială"] },
     "fixtures": {
-      "moderation": { "flagged": false },
-      "categories": [],
-      "triage": {
-        "route": "simple",
-        "category_key": null,
-        "reply": "Salut! 🙂 Cu ce te pot ajuta — cauți un produs anume?"
-      }
+      "moderation": { "flagged": false }
     }
   },
   {

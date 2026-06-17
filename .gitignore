@@ -51,5 +51,10 @@ logs/
 # Docker
 .docker/
 
+# DB dumps — date reale + PII (channel_identities), NICIODATA in git
+backups/
+*.sql.dump
+*.pgdump
+
 # Doc de referință binar (păstrat local, nu în repo)
 docs/semantic-cache-architecture-review.md.pdf
