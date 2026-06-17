@@ -104,6 +104,9 @@ def test_part_re_matches_monthly_not_default():
     assert not _PART_RE.match("messages_default")
     assert not _PART_RE.match("messages")
     assert not _PART_RE.match("orders_2026_06")  # alt tabel
+    # luni invalide → NU se potrivesc (altfel date() ar arunca ValueError la parsare)
+    assert not _PART_RE.match("messages_2026_13")
+    assert not _PART_RE.match("messages_2026_00")
 
 
 async def test_drop_partition_rejects_injection():

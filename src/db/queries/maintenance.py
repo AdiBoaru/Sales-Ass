@@ -14,7 +14,9 @@ from datetime import date
 import asyncpg
 
 # Pattern strict: DOAR partițiile lunare ale celor 2 tabele hot (NU *_default, NU altceva).
-_PART_RE = re.compile(r"^(messages|analytics_events)_(\d{4})_(\d{2})$")
+# Luna constrânsă la 01-12 → un nume corupt (ex. _13/_00) NU se potrivește, deci nu ajunge
+# la date(year, month, 1) (care ar arunca ValueError și ar opri jobul).
+_PART_RE = re.compile(r"^(messages|analytics_events)_(\d{4})_(0[1-9]|1[0-2])$")
 
 
 async def list_time_partitions(conn: asyncpg.Connection) -> list[tuple[str, date]]:
