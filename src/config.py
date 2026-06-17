@@ -130,6 +130,13 @@ class Settings(BaseSettings):
         default=3600, validation_alias="SCHEDULER_EMBED_INTERVAL_SECONDS"
     )
 
+    # --- Cleanup retenție (NX-84) ---
+    # Drop partiții lunare > retention_months + purjă semantic_cache expirat (zilnic).
+    retention_months: int = Field(default=6, validation_alias="RETENTION_MONTHS")
+    scheduler_cleanup_hour_utc: int = Field(
+        default=3, validation_alias="SCHEDULER_CLEANUP_HOUR_UTC"
+    )
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
