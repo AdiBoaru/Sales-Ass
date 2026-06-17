@@ -15,7 +15,7 @@ de input), nu aici.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -231,6 +231,10 @@ class Reply:
     # NX-richreply: recomandare structurată (model iZi). Dacă setată, Sender-ul o
     # randează bogat (Telegram); `text` rămâne aplatizarea ei (floor pt WhatsApp/cache).
     rich: RichReply | None = None
+    # NX-130: slot de clarificare. Dacă setat (reply de tip CLARIFY), processor-ul îl
+    # persistă în `conversations.state.pending_question`; orice alt reply îl curăță (None).
+    # Owner: stagiul care cere clarificarea (triaj azi). Ref-uri compacte (P8), nu obiecte.
+    pending_question: dict[str, Any] | None = None
     # G5b: răspuns reutilizabil pentru cache (False pe clarify/refuz/fallback —
     # specifice contextului, nu se cache-uiesc).
     cacheable: bool = True
@@ -311,3 +315,21 @@ class TurnContext:
         self.reply = Reply(
             text=text, kind="message", products=products, rich=rich, cacheable=cacheable
         )
+
+    def set_clarify(self, text: str, *, field: str, resume_route: str) -> None:
+        """NX-130 — pune o întrebare de clarificare ȘI memorează slotul de umplut la turul
+        următor (`pending_question`). Reply NON-cacheabil (specific contextului). `attempts`
+        crește dacă re-întrebăm ACELAȘI slot consecutiv (semnal anti-buclă). Owner al
+        scrierii în DB rămâne Sender (processor propagă `reply.pending_question` în state)."""
+        prev = (
+            self.state.pending_question if isinstance(self.state.pending_question, dict) else None
+        )
+        attempts = int(prev.get("attempts") or 0) + 1 if prev and prev.get("field") == field else 1
+        pq: dict[str, Any] = {
+            "field": field,
+            "resume_route": resume_route,
+            "asked_at": datetime.now(UTC).isoformat(),
+            "attempts": attempts,
+        }
+        self.reply = Reply(text=text, cacheable=False, pending_question=pq)
+        self.emit("clarify_asked", field=field, attempts=attempts)

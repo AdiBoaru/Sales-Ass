@@ -64,6 +64,8 @@ class TriageOut(BaseModel):
 
 async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Clasifică turul cu nano și scrie `ctx.route` (+ reply pentru simple/clarify)."""
+    if ctx.route is not None:
+        return  # NX-130: clarify_resume a setat deja ruta determinist → triajul e no-op (P3)
     if deps.llm is None:
         return  # fără cheie OpenAI → lăsăm echo fallback (degradare grațioasă)
     body = (ctx.message.body or "").strip()
@@ -107,4 +109,8 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if out.route == Route.SIMPLE and out.reply:
         ctx.set_reply(out.reply)
     elif out.route == Route.CLARIFY and out.reply:
-        ctx.set_reply(out.reply, cacheable=False)
+        # NX-130: persistă slotul cerut → turul următor îl reia determinist (clarify_resume_stage),
+        # fără să re-cheme triajul pe răspunsul scurt al clientului (ex. „200 lei").
+        ctx.set_clarify(
+            out.reply, field=out.missing_field or "intent", resume_route=Route.SALES.value
+        )

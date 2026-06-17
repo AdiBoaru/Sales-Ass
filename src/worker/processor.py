@@ -381,6 +381,9 @@ async def handle_turn(
             payload["type"] = "carousel"
             payload["products"] = ctx.reply.products
             new_state = {**conv["state"], "displayed_products": ctx.reply.products}
+        # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
+        # pending_question default None) → nu lăsăm întrebări zombi în state.
+        new_state = {**new_state, "pending_question": ctx.reply.pending_question}
         outbox_id = await enqueue_outbox(
             conn,
             business.id,

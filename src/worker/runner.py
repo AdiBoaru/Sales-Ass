@@ -74,14 +74,19 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 # Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
 from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.cache import cache_stage  # noqa: E402
+from src.worker.stages.clarify import clarify_resume_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.greeting import greeting_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
+# clarify_resume (NX-130) rulează după `language` și ÎNAINTE de greeting/cache/triage:
+# dacă un slot e în așteptare, răspunsul scurt al clientului e consumat determinist
+# (rută + constraint), nu tratat ca salut / cache / re-triat de la zero.
 DEFAULT_STAGES: list[Stage] = [
     gates_stage,
     language_stage,
+    clarify_resume_stage,
     greeting_stage,
     cache_stage,
     triage_stage,
