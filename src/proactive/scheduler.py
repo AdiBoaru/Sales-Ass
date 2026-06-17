@@ -107,9 +107,12 @@ async def _process_job(conn, business_id: str, job: dict[str, Any], events: list
         return
 
     # mode == 'free' → mesaj liber în fereastra 24h. Enqueue + mark, ATOMIC.
+    # outbox.kind = 'message' (transport): CHECK-ul permite doar message/template/typing/reaction,
+    # iar dispatcher-ul acceptă message/text. Natura proactivă e deja în idempotency_key +
+    # payload.type — NU în kind (care e strategia de transport, nu clasificarea mesajului).
     payload = {"type": "text", "to": to, "text": decision.rendered_text}
     new_id = await enqueue_outbox(
-        conn, business_id, conv_id, f"proactive:{job_id}", payload, kind="proactive"
+        conn, business_id, conv_id, f"proactive:{job_id}", payload, kind="message"
     )
     await mark_job(conn, business_id, job_id, "sent")
     events.append(Event("proactive_enqueued", {"kind": kind, "deduped": new_id is None}))

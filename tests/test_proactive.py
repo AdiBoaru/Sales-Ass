@@ -109,7 +109,8 @@ async def test_free_enqueues_text_and_marks_sent(monkeypatch):
     events: list[Event] = []
     await scheduler._process_job(FakeConn(), "b1", _job(), events)
     assert calls["enqueue"] == [
-        ("conv1", "proactive:job1", {"type": "text", "to": "chat-9", "text": "hi"}, "proactive")
+        # kind='message' = transport valid (CHECK + dispatcher); proactivul e în idempotency_key
+        ("conv1", "proactive:job1", {"type": "text", "to": "chat-9", "text": "hi"}, "message")
     ]
     assert calls["mark"] == [("job1", "sent")]
     assert events[0].type == "proactive_enqueued"
