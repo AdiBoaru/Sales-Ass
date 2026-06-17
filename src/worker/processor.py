@@ -12,7 +12,7 @@ Dispatcher-ul (separat) citește outbox, trimite la Meta și leagă provider_msg
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from uuid import uuid4
 
 import asyncpg
@@ -367,7 +367,14 @@ async def handle_turn(
             "message_id": out_msg_id,
         }
         new_state = conv["state"]
-        if ctx.reply.products:
+        if ctx.reply.rich is not None:
+            # Recomandare BOGATĂ (model iZi): payload aditiv `rich`. `type` rămâne `text` →
+            # trece de allow-list; canalele cu `send_rich` (Telegram) randează bogat, restul
+            # (WhatsApp) primesc `text` = aplatizarea deterministă. Persistăm setul afișat.
+            payload["rich"] = asdict(ctx.reply.rich)
+            if ctx.reply.products:
+                new_state = {**conv["state"], "displayed_products": ctx.reply.products}
+        elif ctx.reply.products:
             # carusel de produs (R2): primul card + butoane ◀🛒▶; W1 (products) =
             # fallback în dispatcher. Persistăm setul afișat în state → navigarea
             # caruselului (handle_callback) îl citește de acolo (ref-uri, principiul 8).

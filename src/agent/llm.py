@@ -79,6 +79,26 @@ class LLMClient:
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
+    async def complete_schema(
+        self, system: str, user: str, schema: dict[str, Any], *, model: str | None = None
+    ) -> dict:
+        """Apel chat cu STRUCTURED OUTPUT strict (`response_format=json_schema`). Modelul
+        e forțat să întoarcă JSON conform `schema` (= {name, strict, schema}). Folosit de
+        agent pentru recomandarea structurată (model iZi): modelul emite DOAR cuvinte +
+        referințe product_id, niciun preț/link. Modelul implicit = agent (mini), care deja
+        depinde de `strict:true` în tool-uri. Ridică la JSON invalid / eroare API — caller
+        prinde și degradează pe calea de proză liberă."""
+        resp = await self._client.chat.completions.create(
+            model=model or self.model_agent,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            response_format={"type": "json_schema", "json_schema": schema},
+        )
+        content = resp.choices[0].message.content or "{}"
+        return json.loads(content)
+
     async def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         """Apel chat care întoarce TEXT simplu (nu JSON). Modelul implicit = agent
         (mini). Folosit de agent pentru a compune recomandarea. Ridică la eroare de

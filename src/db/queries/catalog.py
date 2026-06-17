@@ -31,7 +31,9 @@ _SELECT = f"""
         p.availability              as availability,
         img.url                     as image,
         p.rating::float8            as rating,
-        prs.top_pros[1]             as review_pro
+        p.review_count              as review_count,
+        prs.top_pros[1]             as review_pro,
+        prs.top_pros                as top_pros
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
