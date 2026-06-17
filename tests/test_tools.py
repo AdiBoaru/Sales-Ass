@@ -76,6 +76,17 @@ def _ctx() -> TurnContext:
     )
 
 
+def _ctx_beauty() -> TurnContext:
+    """Ctx cu vertical=beauty (NX-72) — taxonomia concern→cheie are tabel doar pentru beauty."""
+    return TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="biz-1", slug="s", name="n", vertical="beauty"),
+        contact=Contact(id="c", business_id="biz-1"),
+        message=InboundMessage(provider_msg_id="m", body="x"),
+        conversation_id="conv",
+    )
+
+
 def _deps(llm=None) -> PipelineDeps:
     return PipelineDeps(conn=object(), redis=None, llm=llm or _LLM())
 
@@ -208,6 +219,104 @@ async def test_search_all_empty_is_graceful(monkeypatch):
     res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "zzz"})
     assert res.ok and res.products == [] and "Niciun produs" in res.llm_view
     assert _search_event(ctx).properties["mode"] == "sql_only"
+
+
+# --- NX-72: filtre concern/category/brand + relaxare progresivă --------------
+
+
+async def test_search_maps_concerns_and_passes_filters_semantic(monkeypatch):
+    """concerns liberi → chei canonice; category/concerns ajung la calea semantică."""
+    calls = []
+
+    async def fake_search(conn, business_id, vec, **k):
+        calls.append(k)
+        return PRODUCTS
+
+    async def boom_sql(conn, business_id, **k):
+        raise AssertionError("SQL-only nu trebuie chemat când semantic întoarce")
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_search)
+    monkeypatch.setattr(ct, "search_products", boom_sql)
+    ctx = _ctx_beauty()
+    res = await run_tool(
+        ctx,
+        _deps(_LLM()),
+        "search_products",
+        {"query": "cremă", "concerns": ["ten gras"], "category": "creme-fata"},
+    )
+    assert res.ok and len(res.products) == 2
+    assert calls[0]["concerns"] == ["oily"]  # „ten gras" → „oily"
+    assert calls[0]["category"] == "creme-fata"
+    ev = _search_event(ctx)
+    assert ev.properties["n_concerns"] == 1
+    assert ev.properties["had_category"] is True and ev.properties["relaxed"] is False
+    assert "query" not in ev.properties and "concerns" not in ev.properties  # P12
+
+
+async def test_search_sql_only_gets_mapped_concerns_and_brand(monkeypatch):
+    """Fără embeddings → SQL-only primește category/brand/concerns mapate (paritate)."""
+    calls = []
+
+    async def fake_sql(conn, business_id, **k):
+        calls.append(k)
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx = _ctx_beauty()
+    res = await run_tool(
+        ctx,
+        _deps(_LLM()),
+        "search_products",
+        {"query": "x", "concerns": ["piele sensibilă"], "brand": "BrandA"},
+    )
+    assert res.ok and len(res.products) == 2
+    assert calls[0]["concerns"] == ["sensitive"] and calls[0]["brand"] == "BrandA"
+    assert _search_event(ctx).properties["had_brand"] is True
+
+
+async def test_search_unknown_concern_no_false_filter(monkeypatch):
+    """concern necunoscut taxonomiei → fără condiție de concern (n_concerns=0), nu golește."""
+    calls = []
+
+    async def fake_sql(conn, business_id, **k):
+        calls.append(k)
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx = _ctx_beauty()
+    res = await run_tool(
+        ctx, _deps(_LLM()), "search_products", {"query": "x", "concerns": ["frigider"]}
+    )
+    assert res.ok and len(res.products) == 2
+    assert calls[0]["concerns"] is None  # necunoscut → niciun filtru
+    assert _search_event(ctx).properties["n_concerns"] == 0
+
+
+async def test_search_progressive_relaxation(monkeypatch):
+    """Filtre dure golesc tot → relaxare (price → concerns) întoarce produse; relaxed=True."""
+    calls = []
+
+    async def fake_sql(conn, business_id, **k):
+        calls.append(k)
+        # Întoarce produse DOAR când nu mai e niciun filtru de concern (după relaxare).
+        return PRODUCTS if not k.get("concerns") else []
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products", fake_sql)
+    ctx = _ctx_beauty()
+    res = await run_tool(
+        ctx,
+        _deps(_LLM()),
+        "search_products",
+        {"query": "x", "concerns": ["ten gras"], "price_max": 50},
+    )
+    assert res.ok and len(res.products) == 2
+    # ladder: {price+concern} → {concern} → {} ; ultima (fără concern) întoarce.
+    assert calls[-1]["concerns"] is None and calls[-1]["price_max"] is None
+    assert _search_event(ctx).properties["relaxed"] is True
 
 
 async def test_get_product_details_tool(monkeypatch):

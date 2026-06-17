@@ -43,7 +43,10 @@ _URL_RE = re.compile(r"https?://\S+")
 # Prompt pentru bucla de tool-calling: agentul alege uneltele.
 _TOOL_SYSTEM = """Ești consultant de vânzări într-un magazin de beauty online din România.
 Ai unelte ca să răspunzi GROUNDED pe catalogul real:
-- search_products(query, price_max, limit): caută produse pe nevoia clientului.
+- search_products(query, price_max, category, brand, concerns, limit): caută pe nevoia clientului.
+  Pasează `concerns` cu nevoile lui în cuvintele LUI (ex. „ten gras", „acnee"), `category` (slug)
+  dacă primești „Categorie probabilă" potrivită, `brand` doar dacă l-a cerut explicit. Filtrarea
+  pe nevoie dă recomandări relevante, nu doar potrivire de nume.
 - get_product_details(product_id): preț, rating, ce laudă clienții (recenzii) pentru un produs.
 - compare_products(product_ids): compară 2-3 produse.
 - checkout_link(cart_items): creează linkul de cumpărare. Cheamă-l DOAR când clientul e gata să
@@ -390,7 +393,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     context = context_blocks(ctx)
     context_block = f"{context}\n\n" if context else ""
-    user = f"Limba clientului: {ctx.language}\n{context_block}{history_block}Mesaj client: {query}"
+    # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
+    # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
+    cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
+    user = (
+        f"Limba clientului: {ctx.language}\n{cat_hint}{context_block}{history_block}"
+        f"Mesaj client: {query}"
+    )
 
     try:
         final = await deps.llm.run_tool_loop(_TOOL_SYSTEM, user, tools, execute)
