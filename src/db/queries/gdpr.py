@@ -205,10 +205,12 @@ async def fetch_orders(
     conn: asyncpg.Connection, business_id: str, contact_id: str
 ) -> list[dict[str, Any]]:
     rows = await conn.fetch(
+        # placed_at = momentul plasării (relevant pt persoană / portabilitate GDPR);
+        # created_at = ingestia în sistem. Exportăm ambele; ordonăm pe placed_at (ca commerce.py).
         """
-        select external_id, status, total, currency, created_at
+        select external_id, status, total, currency, placed_at, created_at
         from orders where business_id = $1 and contact_id = $2
-        order by created_at
+        order by placed_at
         """,
         business_id,
         contact_id,
