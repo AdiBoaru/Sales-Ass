@@ -34,10 +34,23 @@ def test_safe_badge_drops_discount_keeps_curation() -> None:
 
 def test_assemble_hydrates_facts_and_drops_unknown_ids() -> None:
     retrieved = [
-        {"id": "A", "name": "Crema A", "price": 34.99, "url": "u/a", "rating": 4.7,
-         "top_pros": ["hidratează intens", "se absoarbe repede"], "review_count": 12},
-        {"id": "B", "name": "Crema B", "price": 48.99, "url": "u/b", "rating": 4.8,
-         "top_pros": ["fără parfum"]},
+        {
+            "id": "A",
+            "name": "Crema A",
+            "price": 34.99,
+            "url": "u/a",
+            "rating": 4.7,
+            "top_pros": ["hidratează intens", "se absoarbe repede"],
+            "review_count": 12,
+        },
+        {
+            "id": "B",
+            "name": "Crema B",
+            "price": 48.99,
+            "url": "u/b",
+            "rating": 4.8,
+            "top_pros": ["fără parfum"],
+        },
     ]
     j = {
         "intro": "Pentru mâini uscate, câteva variante:",
@@ -63,14 +76,16 @@ def test_assemble_hydrates_facts_and_drops_unknown_ids() -> None:
 
 
 def test_suggestion_chips_are_normalized_not_hardcoded() -> None:
-    chips = compose._suggestion_chips([
-        "Vreau una mai ieftină",
-        "  vreau una mai ieftină ",  # dedupe (case + spații)
-        "Compară CeraVe cu La Roche-Posay Cicaplast pentru mâinile foarte uscate ale tale",
-        "Ceva fără parfum",
-        "Hidratant de corp",
-        "a cincea peste cap",
-    ])
+    chips = compose._suggestion_chips(
+        [
+            "Vreau una mai ieftină",
+            "  vreau una mai ieftină ",  # dedupe (case + spații)
+            "Compară CeraVe cu La Roche-Posay Cicaplast pentru mâinile foarte uscate ale tale",
+            "Ceva fără parfum",
+            "Hidratant de corp",
+            "a cincea peste cap",
+        ]
+    )
     labels = [c.label for c in chips]
     assert len(chips) == 4  # cap 4
     assert labels.count("Vreau una mai ieftină") == 1  # de-duplicat
@@ -80,26 +95,48 @@ def test_suggestion_chips_are_normalized_not_hardcoded() -> None:
 
 def test_assemble_scrubs_bad_fit_but_keeps_real_anchor() -> None:
     retrieved = [{"id": "A", "name": "A", "price": 10.0, "top_pros": ["hidratează"]}]
-    j = {"intro": None, "pick": None, "education": None, "chip_intents": [],
-         "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "4.9 stele garantat"}]}
+    j = {
+        "intro": None,
+        "pick": None,
+        "education": None,
+        "chip_intents": [],
+        "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "4.9 stele garantat"}],
+    }
     rich = compose.assemble(_ctx(), j, retrieved)
     assert rich.items[0].reason == "hidratează"  # fit scrubuit, ancora reală rămâne
 
 
 def test_assemble_invalid_pro_index_falls_back_to_first() -> None:
     retrieved = [{"id": "A", "name": "A", "price": 10.0, "top_pros": ["primul", "al doilea"]}]
-    j = {"intro": None, "items": [{"product_id": "A", "pro_index": 9, "fit_clause": "bun"}],
-         "pick": None, "education": None, "suggestions": []}
+    j = {
+        "intro": None,
+        "items": [{"product_id": "A", "pro_index": 9, "fit_clause": "bun"}],
+        "pick": None,
+        "education": None,
+        "suggestions": [],
+    }
     rich = compose.assemble(_ctx(), j, retrieved)
     assert rich.items[0].reason == "bun — primul"
 
 
 def test_flatten_renders_data_prices_and_disclaimer() -> None:
-    retrieved = [{"id": "A", "name": "Crema A", "price": 34.99, "url": "u", "rating": 4.7,
-                  "top_pros": ["hidratează"]}]
-    j = {"intro": "Intro.", "education": "Educație.", "suggestions": ["Una mai ieftină"],
-         "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "pentru uscăciune"}],
-         "pick": {"product_id": "A", "justification": "alegere bună"}}
+    retrieved = [
+        {
+            "id": "A",
+            "name": "Crema A",
+            "price": 34.99,
+            "url": "u",
+            "rating": 4.7,
+            "top_pros": ["hidratează"],
+        }
+    ]
+    j = {
+        "intro": "Intro.",
+        "education": "Educație.",
+        "suggestions": ["Una mai ieftină"],
+        "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "pentru uscăciune"}],
+        "pick": {"product_id": "A", "justification": "alegere bună"},
+    }
     text = compose.flatten(compose.assemble(_ctx(), j, retrieved))
     assert "34.99 lei" in text and "⭐4.7" in text
     assert "Recomandarea mea: Crema A" in text
@@ -108,7 +145,12 @@ def test_flatten_renders_data_prices_and_disclaimer() -> None:
 
 def test_card_products_has_signature_keys() -> None:
     retrieved = [{"id": "A", "name": "A", "price": 10.0, "url": "u", "top_pros": ["x"]}]
-    j = {"intro": None, "pick": None, "education": None, "chip_intents": [],
-         "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "x"}]}
+    j = {
+        "intro": None,
+        "pick": None,
+        "education": None,
+        "chip_intents": [],
+        "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "x"}],
+    }
     cards = compose.card_products(compose.assemble(_ctx(), j, retrieved).items)
     assert cards[0]["product_id"] == "A" and cards[0]["price"] == 10.0
