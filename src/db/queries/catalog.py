@@ -58,6 +58,7 @@ async def search_products(
     *,
     category: str | None = None,
     brand: str | None = None,
+    concerns: list[str] | None = None,
     price_max: float | None = None,
     query_text: str | None = None,
     limit: int = 6,
@@ -67,6 +68,9 @@ async def search_products(
     Toate filtrele sunt opționale și se combină cu AND. Returnează max `limit`
     produse (hard cap 6 — principiul „max 6 produse" din arhitectură), fiecare
     cu cele 8 câmpuri. `conn` trebuie să fie deja tenant-scoped (tenant_conn).
+
+    `concerns` filtrează pe `attributes->'concerns'` (operatorul jsonb `?|` = oricare),
+    paritate cu `search_products_semantic` — calea de plasă (NX-98) filtrează la fel pe nevoie.
     """
     limit = min(limit, 6)
 
@@ -84,6 +88,8 @@ async def search_products(
         conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
     if brand:
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+    if concerns:
+        conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if query_text:

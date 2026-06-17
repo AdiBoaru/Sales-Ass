@@ -13,8 +13,9 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "function": {
             "name": "search_products",
             "description": (
-                "Caută produse în catalog după nevoia clientului (semantic + filtru de preț). "
-                "Folosește pentru orice cerere de tip „caut/recomandă/ce aveți pentru…”."
+                "Caută produse în catalog după nevoia clientului (semantic + filtre dure: preț, "
+                "categorie, brand, concerns). Folosește pentru orice cerere de tip "
+                "„caut/recomandă/ce aveți pentru…”."
             ),
             "strict": True,
             "parameters": {
@@ -29,12 +30,31 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                         "type": ["number", "null"],
                         "description": "Buget maxim în lei, dacă e menționat; altfel null.",
                     },
+                    "category": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Slug-ul categoriei dacă e clar (din «Categorie probabilă» din prompt "
+                            "sau cererea clientului); altfel null."
+                        ),
+                    },
+                    "brand": {
+                        "type": ["string", "null"],
+                        "description": "Brandul, doar dacă l-a cerut explicit; altfel null.",
+                    },
+                    "concerns": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": (
+                            "Nevoile/atributele în cuvintele clientului (ex. „ten gras”, "
+                            "„piele sensibilă”, „acnee”); altfel null."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Câte produse (1-6).",
                     },
                 },
-                "required": ["query", "price_max", "limit"],
+                "required": ["query", "price_max", "category", "brand", "concerns", "limit"],
             },
         },
     },
