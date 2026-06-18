@@ -15,10 +15,14 @@ from redis.exceptions import RedisError
 
 from src.config import get_settings
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
+from src.web.app import router as web_router
 from src.webhook.meta import parse_statuses, parse_webhook
 from src.webhook.signature import verify_meta_signature, verify_orders_signature
 
 app = FastAPI(title="Nativx Assistant — webhook")
+# Al treilea canal (NX-20): router /web/* în ACELAȘI proces FastAPI. Endpointurile sunt
+# gardate de WEB_ENABLED (404 când canalul e OFF, V1.5) — montarea e inofensivă.
+app.include_router(web_router)
 
 
 # --- dependențe (injectabile/overridabile în teste) --------------------------

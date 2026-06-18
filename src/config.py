@@ -70,6 +70,16 @@ class Settings(BaseSettings):
     web_session_secret_ttl_s: float = Field(
         default=60.0, validation_alias="WEB_SESSION_SECRET_TTL_S"
     )
+    # Rate limit web (NX-20b) — public anonim → praguri mai strânse decât per-contact WhatsApp.
+    # Două chei: visitor (un browser legit care spam-ează) + IP (atacator care rotește visitor_id;
+    # cap mai sus, tolerează NAT/birou cu mulți vizitatori în spatele aceluiași IP).
+    web_rate_limit_max_visitor: int = Field(
+        default=15, validation_alias="WEB_RATE_LIMIT_MAX_VISITOR"
+    )
+    web_rate_limit_max_ip: int = Field(default=40, validation_alias="WEB_RATE_LIMIT_MAX_IP")
+    web_rate_limit_window_seconds: int = Field(
+        default=60, validation_alias="WEB_RATE_LIMIT_WINDOW_SECONDS"
+    )
 
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")

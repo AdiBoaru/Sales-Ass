@@ -31,14 +31,19 @@ def _today() -> str:
 # --- rate limit per contact --------------------------------------------------
 
 
-async def rate_limit_count(redis: Redis, business_id: str, contact_id: str, window_s: int) -> int:
-    """INCR contorul de mesaje al contactului; EXPIRE la primul (fereastră FIXĂ — resetează
-    după `window_s` de la primul mesaj). Întoarce noul count."""
-    key = f"rate:{business_id}:{contact_id}"
+async def incr_window(redis: Redis, key: str, window_s: int) -> int:
+    """INCR un contor de fereastră FIXĂ; EXPIRE la primul hit (resetează după `window_s` de la
+    primul). Întoarce noul count. Primitivă parametrizată pe cheie — refolosită de rate-limit-ul
+    per contact (WhatsApp/Telegram) și de cel web (IP+visitor, NX-20b)."""
     count = await redis.incr(key)
     if count == 1:
         await redis.expire(key, window_s)
     return int(count)
+
+
+async def rate_limit_count(redis: Redis, business_id: str, contact_id: str, window_s: int) -> int:
+    """INCR contorul de mesaje al contactului (fereastră fixă). Întoarce noul count."""
+    return await incr_window(redis, f"rate:{business_id}:{contact_id}", window_s)
 
 
 # --- cost guard per business (zilnic) ---------------------------------------
