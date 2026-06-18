@@ -40,6 +40,18 @@ class Settings(BaseSettings):
         default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
     )
 
+    # --- Media routing: Vision poză→catalog (NX-76, stagiul 3) ---
+    # O poză de produs (content_type=image) e descrisă de Vision (prin adaptorul unic, ca
+    # embed/moderate — extracție, NU generare) și descrierea devine text de căutare în
+    # ctx.message.body → triaj rutează SALES → agentul cheamă search_products. Imagine→text→search.
+    vision_enabled: bool = Field(default=True, validation_alias="VISION_ENABLED")
+    # Modelul Vision: agentul (mini) are vedere; nano NU. Default = model_agent.
+    model_vision: str = Field(default="gpt-5.4-mini", validation_alias="MODEL_VISION")
+    # Cap dur de mărime al pozei descărcate (bytes) — peste = fail-soft (nu trimitem la Vision).
+    vision_max_bytes: int = Field(default=5_000_000, validation_alias="VISION_MAX_BYTES")
+    # Estimare cost/apel Vision (ca un apel de agent) pt contorul zilnic G2c (plasă, nu facturare).
+    cost_vision_usd: float = Field(default=0.003, validation_alias="COST_VISION_USD")
+
     # --- Moderation gate (NX-15) ---
     # Poartă în Gates înaintea triajului: mesaj flagged → răspuns neutru (gratuit la OpenAI).
     moderation_enabled: bool = Field(default=True, validation_alias="MODERATION_ENABLED")

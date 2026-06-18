@@ -83,12 +83,18 @@ class Contact:
 
 @dataclass
 class InboundMessage:
-    """Mesajul brut primit. Owner: Webhook → pus pe stream → citit de runner."""
+    """Mesajul brut primit. Owner: Webhook → pus pe stream → citit de runner.
+
+    `channel_kind`/`channel_account_id` = contextul de canal (id-ul canalului RECEPTOR), umplute
+    de processor din envelope. Gates le folosește ca să ceară fetcher-ul de media corect (NX-76),
+    fără cod de canal în pipeline."""
 
     provider_msg_id: str
     content_type: str = "text"
     body: str | None = None
     media_ref: str | None = None
+    channel_kind: str = "whatsapp"
+    channel_account_id: str = ""
     payload: dict[str, Any] = field(default_factory=dict)
 
 

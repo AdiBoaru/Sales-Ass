@@ -21,6 +21,7 @@ import socket
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
+from src.channels.media import close_media
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
@@ -159,6 +160,7 @@ async def _main() -> None:
     try:
         await run_consumer(pool, redis, consumer_name)
     finally:
+        await close_media()  # închide httpx-ul de download media (NX-76)
         await close_redis()
         await close_pool()
 

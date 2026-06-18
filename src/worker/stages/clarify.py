@@ -32,9 +32,14 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     pq = ctx.state.pending_question
     if not isinstance(pq, dict):
         return  # nimic în așteptare (sau state corupt) → mai departe în pipeline
+    # O POZĂ (NX-76: gates îi injectează o descriere ca body) NU e răspuns la un slot de TEXT —
+    # e o re-orientare către produs. Nu consuma slotul cu textul derivat din imagine; lasă
+    # triajul/agentul să caute pe descriere, iar slotul rămâne în așteptare pentru un răspuns text.
+    if ctx.message.content_type == "image":
+        return
     answer = (ctx.message.body or "").strip()
     if not answer:
-        return  # body gol (ex. media) → nu consumăm slotul pe gol; rămâne pentru data viitoare
+        return  # body gol (ex. media fără descriere) → nu consumăm slotul; rămâne pt data viitoare
 
     # 1. mesajul curent umple slotul cerut → memorie scurtă citită de context_blocks (state_block).
     field = pq.get("field") or "intent"
