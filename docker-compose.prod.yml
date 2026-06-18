@@ -1,0 +1,122 @@
+# Nativx Assistant — PRODUCȚIE pe VPS partajat (Hostinger).
+#
+# Diferă FUNDAMENTAL de docker-compose.yml (dev):
+#   • imagine baked (COPY src/ în Dockerfile) — FĂRĂ bind-mount, FĂRĂ --reload
+#   • restart: unless-stopped pe tot
+#   • mem_limit pe fiecare serviciu → raza de explozie la OOM e închisă la propriul
+#     container (nu poate ucide procesele altui client de pe VPS). Plasa principală
+#     cât timp NU avem swap (vezi DEPLOY.md §Future).
+#   • ZERO porturi publicate pe host — doar `webhook` atinge rețeaua `shared_network`
+#     (a ta, externă) ca să fie rutat de Traefik-ul existent. Restul pe rețea privată.
+#
+# Rulare:  docker compose -p nativx -f docker-compose.prod.yml up -d --build
+# Vezi DEPLOY.md pentru runbook complet.
+
+name: nativx
+
+# Config comun pentru serviciile Python (toate aceeași imagine).
+x-app: &app
+  image: nativx:prod
+  build: .
+  env_file: .env
+  restart: unless-stopped
+  networks: [internal]
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  # Backbone-ul (Redis Streams). DEDICAT — separat de redis-ul altui client.
+  # Fără `ports:` → invizibil în afara rețelei interne nativx.
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 80mb
+      --maxmemory-policy noeviction
+      --save ""
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    mem_limit: 96m
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Singurul serviciu expus. Pe `internal` (vede redis) + `shared_network` (îl vede Traefik).
+  webhook:
+    <<: *app
+    command: uvicorn src.webhook.app:app --host 0.0.0.0 --port 8000 --workers 1
+    mem_limit: 256m
+    networks: [internal, shared_network]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=shared_network"
+      - "traefik.http.routers.nativx-wh.rule=Host(`${WEBHOOK_HOST}`)"
+      # ⚠️ Confirmă entrypoint + certresolver din recon-ul Traefik (vezi DEPLOY.md §3).
+      - "traefik.http.routers.nativx-wh.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.nativx-wh.tls=true"
+      - "traefik.http.routers.nativx-wh.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.nativx-wh.loadbalancer.server.port=8000"
+    healthcheck:
+      # Slim image n-are curl: verificăm cu socket că uvicorn ascultă pe 8000.
+      test: ["CMD-SHELL", "python -c \"import socket,sys; socket.create_connection(('localhost',8000),3).close()\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Consumer-ul Redis → pipeline → outbox. Cel mai gras (asyncpg + OpenAI + pipeline).
+  worker:
+    <<: *app
+    command: python -m src.worker.consumer
+    mem_limit: 320m
+
+  # Outbox → ChannelSender (Meta/Telegram), retry idempotent.
+  dispatcher:
+    <<: *app
+    command: python -m src.worker.dispatcher
+    mem_limit: 192m
+
+  # Canal de TEST: long polling Telegram. Iese imediat dacă TELEGRAM_BOT_TOKEN e gol.
+  telegram-poller:
+    <<: *app
+    command: python -m src.channels.telegram.poller
+    mem_limit: 192m
+
+  # Joburi de mentenanță (NX-83): rollup nocturn, purjă dedupe, embed incremental.
+  # Folosește DOAR DB (admin_conn). Healthcheck pe heartbeat file.
+  scheduler:
+    <<: *app
+    command: python -m src.jobs.scheduler
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import time,sys; sys.exit(0 if time.time()-float(open('/tmp/scheduler_alive').read())<360 else 1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Motor proactiv (NX-70): AWB / back-in-stock / coș abandonat → outbox.
+  # OFF la primul deploy: pornește-l doar cu `--profile proactive` când e nevoie.
+  proactive:
+    <<: *app
+    command: python -m src.proactive.scheduler
+    mem_limit: 192m
+    profiles: ["proactive"]
+
+networks:
+  internal:
+    driver: bridge
+  # Rețeaua TA existentă (Traefik + apps). NU o creez eu — doar mă atașez la ea.
+  shared_network:
+    external: true
+
+volumes:
+  redis-data:
