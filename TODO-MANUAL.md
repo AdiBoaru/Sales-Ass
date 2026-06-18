@@ -179,6 +179,25 @@ până popularezi tabelul. Jobul e idempotent (re-rulabil) și scrie în Supabas
 
 ---
 
+## 🟢 Seed imagini produse pe demo (poze reale beauty) · ~10 min
+
+Catalogul demo are 2500 de imagini placeholder text (`placehold.co/...?text=NUME`) —
+arată fals. `scripts/seed_product_images.py` le înlocuiește cu poze REALE beauty de pe
+Pexels, mapate pe categorie (un „ser" arată un ser, o „cremă" o cremă). Codul e gata și
+idempotent; îi lipsește doar cheia API.
+
+- [ ] Cont gratuit pe https://www.pexels.com/api/ → copiază „Your API Key"
+- [ ] `PEXELS_API_KEY=...` în `.env` local
+- [ ] Dă-i lui Claude semnal → rulează (sau rulezi tu):
+      `python scripts/seed_product_images.py --limit 5 --dry-run`  (verifici)
+      apoi `python scripts/seed_product_images.py`  (toate cele 500)
+- [ ] (Opțional) verifică în Supabase: `select count(*) from product_images where url like '%pexels%';`
+
+> Pexels free: 200 req/oră, 20k/lună — scriptul face ≤58 căutări (una per categorie),
+> deci sub limită cu mult. Hot-link la CDN-ul lor (licența permite), fără descărcare.
+
+---
+
 ## 🟡 Pornește acum, durează zile (birocrație)
 
 ### T016 — Verificare Meta Business (producție)  ·  ~1h + așteptare 3-15 zile
