@@ -179,6 +179,18 @@ până popularezi tabelul. Jobul e idempotent (re-rulabil) și scrie în Supabas
 
 ---
 
+## 🟢 Migrare DB 010 — cost obs / cached_tokens (NX-78) · ~2 min
+
+Observabilitatea economiei din prompt caching scrie în `usage_daily.cached_tokens` (coloană
+nouă). Fără migrare, rollup-ul nocturn crapă pe `cached_tokens` lipsă. Aditiv + idempotent.
+
+- [ ] Rulează o dată pe Supabase: `python scripts/apply_010.py`
+      (adaugă `usage_daily.cached_tokens bigint default 0` + verifică).
+- [ ] (Tarifele LLM pt `cost_usd` sunt estimări în `src/agent/pricing.py` — actualizează-le
+      când ai prețurile reale OpenAI; facturarea reală se reconciliază din factură.)
+
+---
+
 ## 🟡 Pornește acum, durează zile (birocrație)
 
 ### T016 — Verificare Meta Business (producție)  ·  ~1h + așteptare 3-15 zile
