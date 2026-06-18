@@ -23,7 +23,7 @@ from src.cache.canonical import canonicalize, classify_volatility
 from src.config import get_settings
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import get_data_version
-from src.db.queries.contacts import get_or_create_contact
+from src.db.queries.contacts import get_or_create_contact, update_contact_profile_and_score
 from src.db.queries.conversations import (
     get_or_create_conversation,
     patch_conversation_state,
@@ -54,6 +54,7 @@ from src.models import (
 )
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
+from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 from src.worker.summarizer import generate_summary
 
@@ -211,6 +212,65 @@ async def _summarize_if_needed(conn, redis, business_id, conversation_id, ctx, l
         )
     except Exception:  # noqa: BLE001 — best-effort: turul a răspuns deja, nimic nu se rupe
         log.exception("summarizer a eșuat (turul continuă)")
+
+
+async def _extract_profile_and_score(
+    conn, redis, ctx: TurnContext, llm, *, shadow_mode: bool
+) -> None:
+    """POST-TUR async (NX-88), best-effort — botul „învață" clientul. Un apel NANO extrage semnale →
+    patch FILTRAT pe whitelist pe `contacts.profile` + `lead_score` DETERMINIST (formulă în cod,
+    nu numărul LLM-ului). Rulează DUPĂ outbox (nu întârzie livrarea). Owner EXCLUSIV la runtime pe
+    contacts.profile + contacts.lead_score (P3).
+
+    Degradare/skip (P6): kill-switch / llm None (cost guard, fără cheie) / shadow mode (NX-93) /
+    tur deflectat de free-layer/cache/gates (`ctx.route is None` ⟺ triajul n-a rulat → niciun
+    semnal de profil, n-ar trebui taxat cu un apel nano — card §Cost) / orice eroare → skip.
+    PII (P12): evenimentele logă DOAR chei + contoare, niciodată valori sau corpul mesajului."""
+    settings = get_settings()
+    if not settings.profile_extraction_enabled or llm is None or shadow_mode or ctx.route is None:
+        return
+    try:
+        delta = await extract_profile(llm, ctx.history, ctx.message, ctx.language)
+        if delta is None:
+            return  # parse/API fail → fail-soft, nimic de scris
+        # Apelul nano a avut loc → contabilizează-l în contorul zilnic (G2c), altfel scapă bugetul.
+        if redis is not None and settings.cost_guard_enabled:
+            await cost_add(redis, ctx.business.id, settings.cost_triage_usd)
+
+        patch, dropped = filter_profile_patch(delta.profile_patch, ctx.business.vertical)
+        new_score = compute_lead_score(delta.lead_signals, ctx)
+        old_score = float(ctx.contact.lead_score)
+        score_changed = abs(new_score - old_score) > 1e-9
+
+        # Cheile aruncate sunt un semnal (NX-43) chiar dacă nu scriem nimic altceva.
+        events = [Event("profile_key_dropped", {"key": k}) for k in dropped]
+        if patch or score_changed:
+            # Savepoint propriu: UPDATE eșuat → rollback doar la el (turul a răspuns deja).
+            async with conn.transaction():
+                await update_contact_profile_and_score(
+                    conn, ctx.business.id, ctx.contact.id, patch, new_score
+                )
+            if patch:
+                events.append(
+                    Event("profile_updated", {"keys_set": sorted(patch), "dropped": len(dropped)})
+                )
+            if score_changed:
+                events.append(
+                    Event(
+                        "lead_score_updated",
+                        {"old": round(old_score, 2), "new": round(new_score, 2)},
+                    )
+                )
+        if events:
+            await insert_events(
+                conn,
+                ctx.business.id,
+                events,
+                conversation_id=ctx.conversation_id,
+                contact_id=ctx.contact.id,
+            )
+    except Exception:  # noqa: BLE001 — best-effort: turul a răspuns deja, nimic nu se rupe
+        log.exception("extractor profil a eșuat (turul continuă)")
 
 
 async def _llm_within_budget(ctx: TurnContext, redis: Redis | None, business: BusinessConfig):
@@ -421,4 +481,10 @@ async def handle_turn(
     # Summarizer (G6-2 felia 2) — post-tur async, întreține rezumatul rolling. `llm` e cel
     # guardat de cost guard: peste buget → None → hook-ul se sare (P2 + P6 gratis).
     await _summarize_if_needed(conn, redis, business.id, conv["id"], ctx, llm)
+    # Extractor profil + lead_score (NX-88) — post-tur async, best-effort. Nano extrage semnale →
+    # patch whitelist pe contacts.profile + scor determinist. `llm` guardat (cost guard → None →
+    # skip); sărit în shadow mode (NX-93) și pe tururi free-layer/cache (ctx.route None).
+    await _extract_profile_and_score(
+        conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
+    )
     return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)
