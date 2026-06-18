@@ -90,6 +90,8 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     settings = get_settings()
     if not settings.cache_enabled:
         return
+    if ctx.route is not None:
+        return  # upstream determinist (alias/clarify_resume) a rutat deja → nu deflectăm (P3)
     body = (ctx.message.body or "").strip()
     if not body:
         return
