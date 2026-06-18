@@ -105,6 +105,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 9 | Sender → outbox → dispatcher (+ carduri W1) | ✅ **live cap-coadă** |
 | — | Status webhook (delivered/read/failed) | ✅ |
 | — | Proactiv / Jobs (embed, rollup, cleanup partiții) | `cleanup_dedupe` ✅ · `embed_products` ✅ · **`rollup_usage` în review (#65)** · cleanup partiții ❌ |
+| — | **Cost obs (NX-78 follow-up)** | ✅ adaptorul captează usage-ul OpenAI (prompt/completion/**cached_tokens**) → event `llm_usage` din runner → `analytics_events` → `rollup_usage` agregă în `usage_daily` (+ coloană `cached_tokens`, migrare 010). Tarife în `src/agent/pricing.py` (estimări). Arată economia din prompt caching (NX-78) |
 
 ## 4. Starea DATELOR demo (verificat live în Supabase, 2026-06-15)
 

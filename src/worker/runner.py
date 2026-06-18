@@ -17,6 +17,7 @@ from time import perf_counter
 import asyncpg
 from redis.asyncio import Redis
 
+from src.agent import usage
 from src.agent.llm import LLMClient
 from src.models import TurnContext
 
@@ -40,18 +41,36 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
 
     Măsoară latența fiecărui stagiu și o pune în `ctx.events` (persistarea în
     analytics_events e treaba unui pas ulterior — observabilitatea nu blochează
-    turul)."""
-    for stage in stages:
-        name = getattr(stage, "__name__", "stage")
-        started = perf_counter()
-        await stage(ctx, deps)
-        latency_ms = round((perf_counter() - started) * 1000, 1)
-        ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
-        # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
-        if ctx.reply is not None or ctx.halt:
-            ctx.emit("pipeline_early_exit", stage=name)
-            return
-    ctx.emit("pipeline_complete")
+    turul). Tot aici se acumulează usage-ul LLM al turului (tokeni + cached + cost)
+    și se emite UN event `llm_usage` la final — stagiile nu știu că sunt măsurate
+    (principiul 10); adaptorul raportează, runner-ul agregă."""
+    acc, token = usage.push()
+    try:
+        for stage in stages:
+            name = getattr(stage, "__name__", "stage")
+            started = perf_counter()
+            await stage(ctx, deps)
+            latency_ms = round((perf_counter() - started) * 1000, 1)
+            ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
+            # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
+            if ctx.reply is not None or ctx.halt:
+                ctx.emit("pipeline_early_exit", stage=name)
+                break
+        else:
+            ctx.emit("pipeline_complete")
+    finally:
+        usage.pop(token)
+        if acc.calls:
+            # tokens_in/out/cost_usd → coloane dedicate (insert_events); cached_tokens →
+            # properties jsonb (rollup le citește de acolo). Economia caching = cached_tokens.
+            ctx.emit(
+                "llm_usage",
+                tokens_in=acc.tokens_in,
+                tokens_out=acc.tokens_out,
+                cached_tokens=acc.cached_tokens,
+                cost_usd=round(acc.cost_usd, 6),
+                llm_calls=acc.calls,
+            )
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

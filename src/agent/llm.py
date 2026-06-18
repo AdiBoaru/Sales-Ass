@@ -18,6 +18,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from src.agent import usage
 from src.config import get_settings
 
 log = logging.getLogger(__name__)
@@ -68,14 +69,16 @@ class LLMClient:
         Întoarce dict-ul parsat. Folosit de triaj (clasificare rută). Modelul
         implicit e cel de triaj (nano). Ridică la JSON invalid / eroare de API —
         caller-ul (stagiul) prinde și degradează."""
+        mdl = model or self.model_triage
         resp = await self._client.chat.completions.create(
-            model=model or self.model_triage,
+            model=mdl,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             response_format={"type": "json_object"},
         )
+        usage.record_chat(resp, mdl)
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
@@ -88,14 +91,16 @@ class LLMClient:
         referințe product_id, niciun preț/link. Modelul implicit = agent (mini), care deja
         depinde de `strict:true` în tool-uri. Ridică la JSON invalid / eroare API — caller
         prinde și degradează pe calea de proză liberă."""
+        mdl = model or self.model_agent
         resp = await self._client.chat.completions.create(
-            model=model or self.model_agent,
+            model=mdl,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             response_format={"type": "json_schema", "json_schema": schema},
         )
+        usage.record_chat(resp, mdl)
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
 
@@ -103,13 +108,15 @@ class LLMClient:
         """Apel chat care întoarce TEXT simplu (nu JSON). Modelul implicit = agent
         (mini). Folosit de agent pentru a compune recomandarea. Ridică la eroare de
         API — caller-ul prinde și degradează."""
+        mdl = model or self.model_agent
         resp = await self._client.chat.completions.create(
-            model=model or self.model_agent,
+            model=mdl,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
         )
+        usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
 
     async def run_tool_loop(
@@ -139,6 +146,7 @@ class LLMClient:
             resp = await self._client.chat.completions.create(
                 model=mdl, messages=messages, tools=tools, tool_choice="auto"
             )
+            usage.record_chat(resp, mdl)
             msg = resp.choices[0].message
             tool_calls = getattr(msg, "tool_calls", None)
             if not tool_calls:
@@ -171,6 +179,7 @@ class LLMClient:
 
         # cap atins → un ultim apel FĂRĂ tools (text forțat, nu o a 4-a rundă de tool calls).
         resp = await self._client.chat.completions.create(model=mdl, messages=messages)
+        usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
 
     async def moderate(self, text: str, *, model: str | None = None) -> ModerationResult:
@@ -190,10 +199,12 @@ class LLMClient:
         """Embeddings pentru un lot de texte. Întoarce o listă de vectori (1536 dim
         la text-embedding-3-small). Folosit de jobul `embed_products` + (viitor)
         cache semantic / search semantic."""
+        mdl = model or self.model_embed
         resp = await self._client.embeddings.create(
-            model=model or self.model_embed,
+            model=mdl,
             input=texts,
         )
+        usage.record_embeddings(resp, mdl)
         return [d.embedding for d in resp.data]
 
 
