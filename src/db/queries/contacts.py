@@ -12,6 +12,7 @@ primar). RLS (rolul bot_runtime + app.business_id din tenant_conn) e plasa.
 """
 
 import json
+from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -108,6 +109,34 @@ async def block_contact(conn: asyncpg.Connection, business_id: str, contact_id: 
         "update contacts set is_blocked = true where business_id = $1 and id = $2",
         business_id,
         contact_id,
+    )
+
+
+async def update_contact_profile_and_score(
+    conn: asyncpg.Connection,
+    business_id: str,
+    contact_id: str,
+    profile_patch: dict[str, Any],
+    lead_score: float,
+) -> None:
+    """Post-tur (NX-88): MERGE `profile` (`||`, NU overwrite → cheile vechi rămân) + set
+    `lead_score` (calculat în COD, nu de LLM) + `updated_at`. Owner EXCLUSIV la runtime pe aceste
+    două câmpuri (P3). `business_id = $1` explicit (P7); `bot_runtime` are UPDATE pe contacts (003).
+
+    `coalesce(profile, '{}')`: defensiv pe profile NULL (în schema_v2 e NOT NULL default '{}', dar
+    nu plătim un crash pe state vechi). `lead_score` e numeric(5,2) → trimis ca Decimal."""
+    await conn.execute(
+        """
+        update contacts
+           set profile = coalesce(profile, '{}'::jsonb) || $3::jsonb,
+               lead_score = $4,
+               updated_at = now()
+         where business_id = $1 and id = $2
+        """,
+        business_id,
+        contact_id,
+        json.dumps(profile_patch),
+        Decimal(str(round(lead_score, 2))),
     )
 
 

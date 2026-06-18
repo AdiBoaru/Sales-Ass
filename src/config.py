@@ -141,6 +141,16 @@ class Settings(BaseSettings):
         default=3600, validation_alias="SCHEDULER_EMBED_INTERVAL_SECONDS"
     )
 
+    # --- Extractor profil + lead_score (NX-88, post-tur stagiul 9) ---
+    # Botul „învață" clientul: nano extrage semnale de profil → patch whitelist pe
+    # contacts.profile + lead_score determinist. POST-TUR async (nu blochează livrarea), guardat
+    # de cost guard (peste plafon → llm None → sărit). Rulează DOAR pe tururi cu rută (triajul a
+    # angajat LLM-ul), NU pe free-layer/cache. Modelul e nano (model_triage); whitelist-ul de chei
+    # per vertical e în src/worker/profile.py (mutat în taxonomie la NX-43). Kill-switch global.
+    profile_extraction_enabled: bool = Field(
+        default=True, validation_alias="PROFILE_EXTRACTION_ENABLED"
+    )
+
     # --- Motor proactiv (NX-70, scheduler separat peste proactive_jobs) ---
     # Producătorul pentru outbox: AWB / back-in-stock / coș abandonat / follow-up.
     # Gating-ul (consent / fereastră 24h / template) e poarta NX-71. v1 = doar type=text.
