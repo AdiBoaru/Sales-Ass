@@ -4,7 +4,15 @@ FakeLLM scriptează tool_calls (prin `execute`) + textul final; query-urile de c
 `catalog_tools` sunt monkeypatch-uite. Testăm: recomandare grounded, retrieval acumulat,
 fallback la preț inventat, răspuns fără produse, helperele de validare."""
 
-from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDecision, TurnContext
+from src.models import (
+    BusinessConfig,
+    Contact,
+    InboundMessage,
+    ProductRef,
+    Route,
+    RouteDecision,
+    TurnContext,
+)
 from src.tools import catalog_tools as ct
 from src.worker.runner import PipelineDeps
 from src.worker.stages.agent import _budget, _links_ok, _prices_ok, agent_stage
@@ -151,6 +159,46 @@ async def test_no_products_asks_clarify(monkeypatch):
     llm = FakeLLM(
         tool_calls=[("search_products", {"query": "x", "price_max": None, "limit": 6})], final=""
     )
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None and "n-am găsit" in ctx.reply.text.lower()
+    # «n-am găsit» NU se cache-uiește (altfel otrăvește semantic_cache → re-servit, sare agentul).
+    assert ctx.reply.cacheable is False
+
+
+async def test_sales_rehydrates_displayed_products_when_no_retrieval(monkeypatch):
+    """R3: follow-up („care e cea mai bună?") la care modelul NU recheamă un tool → re-hidratează
+    produsele DEJA arătate (din state, după id) și răspunde grounded pe ele, NU «n-am găsit»."""
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        assert ids == ["p1", "p2"]  # id-urile produselor afișate (din state)
+        return PRODUCTS
+
+    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", fake_by_ids)
+    ctx = _ctx(body="care dintre ele e cea mai bună?")
+    ctx.state.displayed_products = [
+        ProductRef("p1", "Crema Hidratantă", 82.99),
+        ProductRef("p2", "Ser Calmant", 120.50),
+    ]
+    # retrieved gol + preț negroundat în text (82.99, fără produse) → fără re-hidratare ar pica
+    # validatorul → «n-am găsit». Re-hidratarea aduce produsele care groundează prețul.
+    llm = FakeLLM(tool_calls=[], final="Cea mai bună e Crema Hidratantă la 82.99 lei.")
+    await agent_stage(ctx, _deps(llm))
+
+    assert ctx.reply is not None and "n-am găsit" not in ctx.reply.text.lower()
+    assert "82.99" in ctx.reply.text  # preț groundat acum, din produsele re-hidratate
+    assert ctx.retrieval is not None and len(ctx.retrieval.products) == 2  # re-hidratate din state
+    assert ctx.reply.products and ctx.reply.products[0]["name"] == "Crema Hidratantă"
+
+
+async def test_no_rehydrate_when_state_empty(monkeypatch):
+    """Fără produse afișate în state → R3 nu se aplică; comportament neschimbat («n-am găsit»)."""
+
+    async def boom(conn, business_id, ids, **k):
+        raise AssertionError("get_products_by_ids NU trebuie chemat fără displayed_products")
+
+    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", boom)
+    ctx = _ctx(body="care e cea mai bună?")  # state.displayed_products gol (default)
+    llm = FakeLLM(tool_calls=[], final="")
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None and "n-am găsit" in ctx.reply.text.lower()
 
