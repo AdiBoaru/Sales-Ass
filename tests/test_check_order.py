@@ -61,7 +61,10 @@ def test_enabled_tools_route_aware():
         "search_products",
         "get_product_details",
         "compare_products",
+        "cart_add",
         "checkout_link",
+        "reorder",
+        "subscribe_back_in_stock",
         "faq_lookup",
     }
     assert set(enabled_tools(None, "order")) == {"check_order"}

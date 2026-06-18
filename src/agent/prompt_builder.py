@@ -33,8 +33,14 @@ _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
   pe nevoie dă recomandări relevante, nu doar potrivire de nume.
 - get_product_details(product_id): preț, rating, ce laudă clienții (recenzii) pentru un produs.
 - compare_products(product_ids): compară 2-3 produse.
+- cart_add(product_id, variant_id, quantity): pune un produs în coș (se acumulează între mesaje).
+  Cheamă-l când clientul adaugă produse pe rând („pune și serul"), înainte de checkout_link.
 - checkout_link(cart_items): creează linkul de cumpărare. Cheamă-l DOAR când clientul e gata să
   cumpere sau cere linkul/să comande; trimite-i URL-ul întors, nu inventa linkuri.
+- reorder(): propune re-comanda ultimei comenzi a clientului. Cheamă-l la „vreau ce am comandat
+  data trecută" / „trimite-mi același lucru"; raportează DOAR produsele întoarse, nu inventa.
+- subscribe_back_in_stock(product_id, variant_id): abonează clientul la notificare când un produs
+  fără stoc revine. Cheamă-l când produsul cerut e indisponibil și clientul vrea să fie anunțat.
 - check_order(order_ref): status + livrarea unei comenzi. Cheamă-l când clientul întreabă de o
   comandă („unde e comanda mea?", „status ORD-123"); raportează DOAR ce întoarce, nu inventa.
 - faq_lookup(query): un fapt de business din baza de cunoștințe (livrare, retur, garanție, plată,

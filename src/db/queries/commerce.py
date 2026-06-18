@@ -158,6 +158,63 @@ async def mark_checkout_converted(
     )
 
 
+# --- back-in-stock (NX-80, tool subscribe_back_in_stock) ---------------------
+
+
+async def has_back_in_stock_sub(
+    conn: asyncpg.Connection,
+    business_id: str,
+    contact_id: str,
+    product_id: str,
+    variant_id: str | None,
+) -> bool:
+    """True dacă există deja un abonament pe (business, contact, product, variant). Guard pentru
+    cazul `variant_id IS NULL`: în Postgres NULL e DISTINCT în UNIQUE → `ON CONFLICT` NU prinde,
+    deci verificăm întâi cu `is not distinct from` (NULL = NULL). `business_id = $1` (izolare)."""
+    row = await conn.fetchrow(
+        """
+        select 1 from back_in_stock_subscriptions
+        where business_id = $1 and contact_id = $2 and product_id = $3
+          and variant_id is not distinct from $4::uuid
+        limit 1
+        """,
+        business_id,
+        contact_id,
+        product_id,
+        variant_id,
+    )
+    return row is not None
+
+
+async def subscribe_back_in_stock(
+    conn: asyncpg.Connection,
+    business_id: str,
+    contact_id: str,
+    product_id: str,
+    variant_id: str | None = None,
+) -> dict[str, Any]:
+    """INSERT idempotent în `back_in_stock_subscriptions`. Re-subscribe pe aceeași
+    (product, variant) = `ON CONFLICT` re-armează notificarea (`notified_at` → NULL: vrea iar
+    notificare la următorul restock). `business_id = $1` (P7). Întoarce `{id, created}`
+    (`created` = insert nou, via `xmax = 0`). NB: pe `variant_id IS NULL` ON CONFLICT nu prinde
+    (NULL distinct) → caller-ul cheamă `has_back_in_stock_sub` întâi (NX-80)."""
+    row = await conn.fetchrow(
+        """
+        insert into back_in_stock_subscriptions
+            (business_id, contact_id, product_id, variant_id)
+        values ($1, $2, $3, $4::uuid)
+        on conflict (business_id, contact_id, product_id, variant_id)
+            do update set notified_at = null
+        returning id::text as id, (xmax = 0) as created
+        """,
+        business_id,
+        contact_id,
+        product_id,
+        variant_id,
+    )
+    return dict(row)
+
+
 # --- citire status comandă (G7-3, tool check_order) --------------------------
 
 

@@ -313,3 +313,28 @@ async def test_db_failure_loading_prompt_falls_back_to_echo(monkeypatch):
     llm = FakeLLM(tool_calls=[], final="orice")
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is None  # no-op → fallback_stage (echo) preia mai târziu
+
+
+async def test_cart_add_state_patch_accumulated_in_ctx(monkeypatch):
+    # NX-79: execute (callback-ul buclei) acumulează ToolResult.state_patch în ctx.state_patch
+    # → processor-ul îl persistă în conversations.state.cart (path-ul de scriere a state-ului).
+    from src.tools import commerce_tools as ctools
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [PRODUCTS[0]]  # p1, in_stock, 82.99
+
+    monkeypatch.setattr(ctools, "get_products_by_ids", fake_by_ids)
+    ctx = _ctx()
+    llm = FakeLLM(tool_calls=[("cart_add", {"product_id": "p1", "quantity": 2})], final="ok")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.state_patch == {
+        "cart": [
+            {
+                "product_id": "p1",
+                "variant_id": None,
+                "name": "Crema Hidratantă",
+                "price": 82.99,
+                "quantity": 2,
+            }
+        ]
+    }

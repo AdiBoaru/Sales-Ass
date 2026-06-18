@@ -350,6 +350,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         retrieved.extend(result.products)
         generated_links.update(result.links)
         grounded_prices.update(result.prices)
+        if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
+            ctx.state_patch.update(result.state_patch)
         if name == "check_order" and result.ok and result.llm_view:
             order_views.append(result.llm_view)
         ctx.emit("tool_call", name=name, ok=result.ok)
