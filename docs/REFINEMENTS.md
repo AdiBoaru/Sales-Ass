@@ -49,6 +49,52 @@ determinist (citește `displayed_products` din state, calculează indexul) → o
 Messages** native (catalog Meta Commerce). Blocat pe WhatsApp e2e (T013) — task
 separat.
 
+### R3 — Follow-up de comparație/detalii pe produse afișate → DataError · P1
+
+**Observat:** 2026-06-17, test de conversație live multi-tur (`scripts/convo_sim.py`,
+demo). După ce botul a arătat 3 produse, mesajul „care dintre ele e cea mai bună?"
+→ răspuns „Momentan n-am găsit produse potrivite"; în loguri `compare_products` și
+`get_product_details` → **DataError**. Cascadează: turul următor („trimite-mi linkul
+la prima") rămâne fără referent → nu generează checkout.
+
+**Cauză:** `state_block` (`context.py:64-67`) expune produsele afișate ca **nume +
+preț, FĂRĂ `product_id` (UUID)**. La un follow-up de comparație/detalii, agentul
+(mini) n-are UUID-ul în context → pasează un id inventat (probabil numărul din numele
+produsului, ex. „214") → `get_products_by_ids` face `p.id = any($2::uuid[])` →
+DataError → zero produse → fallback. **Rupe pâlnia compară→detalii→checkout pe
+produsele DEJA arătate.**
+
+**Fix planificat:** expune `product_id`-ul în `state_block` (sau un bloc de referințe
+dedicat) ca agentul să poată chema `compare_products`/`get_product_details`/
+`checkout_link` pe produsele afișate fără re-căutare. Principiul 8: `product_id` E
+ref-ul de state — trebuie expus, nu doar numele. Posibil overlap cu NX-116 (coș
+persistent).
+
+### R4 — Numărul din intro-ul rich e scrubuit (buget cerut de client) · P2
+
+**Observat:** 2026-06-17, convo live. „ai ceva sub 80 de lei?" → intro-ul rich a ieșit
+**„Ai ceva sub lei pentru ten gras?"** — lipsește „80".
+
+**Cauză:** `compose.scrub_prose` taie TOATE cifrele din proză (anti-halucinație de
+preț). Dar `intro` reia nevoia clientului în cuvintele LUI, inclusiv bugetul pe care
+EL l-a zis → cifra clientului e înghițită → frază trunchiată/neîngrijită.
+
+**Fix planificat:** o cifră pe care CLIENTUL a dat-o nu e halucinație. Fie exceptăm
+`intro` de la scrub-ul de cifre, fie permitem cifrele care apar în mesajul clientului.
+Grijă să NU reintroducem prețuri de produs inventate (intro nu citează prețuri de
+produs, doar bugetul cerut).
+
+### R5 — Cerere de operator uman → fallback generic (handoff neconsumat) · P1
+
+**Observat:** 2026-06-17, convo live. „aș vrea să vorbesc cu un coleg uman" → **„Hmm,
+n-am înțeles exact 🙂"** (fallback generic), în loc de escaladare la operator.
+
+**Cauză:** triajul emite `Route.HANDOFF`, dar niciun stagiu nu-l consumă; `agent_stage`
+iese no-op pe HANDOFF → cădere pe `fallback_stage`. (Confirmare live a găurii.)
+
+**Fix planificat:** = **NX-123** (consumator rută handoff + `request_human` ca tool de
+agent). Card existent, gata de implementat.
+
 ---
 
 ## ✅ Implementate
