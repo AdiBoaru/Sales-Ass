@@ -164,6 +164,21 @@ nu e vizibilă pe demo până nu-l faci.
 
 ---
 
+## 🟢 Seed FAQ pe demo (NX-74) · ~5 min
+
+Codul stratului gratuit FAQ e gata (PR NX-74), dar `faqs=0` pe demo → nu servește nimic
+până popularezi tabelul. Jobul e idempotent (re-rulabil) și scrie în Supabase (admin).
+
+- [ ] Rulează pe demo (cu OPENAI_API_KEY + SUPABASE_DB_URL în `.env`):
+      `python -m src.jobs.seed_faqs --generate`
+      (fără `--generate` = doar baza curatată RO; cu = + întrebări generate de LLM)
+- [ ] (Opțional) verifică în Supabase: `select count(*) from faqs where embedding is not null;`
+- [ ] ⚠️ Răspunsurile din baza curatată sunt valori DEMO (retur 14 zile, livrare 19,99 lei,
+      gratis peste 200 lei etc.) — editează-le în DB cu politicile REALE ale clientului
+      înainte de producție (FAQ-ul e „un singur adevăr editat de client", nu inventat).
+
+---
+
 ## 🟡 Pornește acum, durează zile (birocrație)
 
 ### T016 — Verificare Meta Business (producție)  ·  ~1h + așteptare 3-15 zile

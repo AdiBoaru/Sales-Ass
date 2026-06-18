@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     # price-check + data_version la lookup, nu expirarea. Default 30 min.
     cache_ttl_dynamic_minutes: int = Field(default=30, validation_alias="CACHE_TTL_DYNAMIC_MINUTES")
 
+    # --- Strat gratuit FAQ (NX-74, stagiul 4) ---
+    # Întrebări de cunoștințe (retur/livrare/garanție/plată) → răspuns din `faqs` ÎNAINTE de
+    # triaj/agent (early-exit fără LLM de generare). Lookup ÎNTOTDEAUNA business_id + locale +
+    # cosine. Doar `embed()`, niciodată generare (principiul 2). Kill-switch global.
+    faq_enabled: bool = Field(default=True, validation_alias="FAQ_ENABLED")
+    # τ_high strat gratuit: prag de auto-accept (cosine). FAQ-ul e curat (editat de client) →
+    # poate fi puțin mai relaxat decât cache_tau_high, dar precision-first. Default 0.82.
+    faq_tau_high: float = Field(default=0.82, validation_alias="FAQ_TAU_HIGH")
+    # τ tool: agentul parafrazează oricum răspunsul → un match aproximativ e util. Default 0.75.
+    faq_tau_tool: float = Field(default=0.75, validation_alias="FAQ_TAU_TOOL")
+
     # --- Cost guard + rate limit (G2c, stagiul 2) ---
     # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)
     # dezactivează LLM-ul pt restul zilei. Estimare-plasă; facturarea reală = usage_daily.

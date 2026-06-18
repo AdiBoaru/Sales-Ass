@@ -97,7 +97,7 @@ search_products SQL) — vezi istoricul PR #1–#18.
 | 1 | Webhook: GET verify + POST inbound | ✅ live |
 | 2 | Redis backbone: stream + consumer group + dedupe 2L + **debounce (R1)** + **rate limit & cost guard (G2c #61)** | ✅ live (TODO rămas: lock multi-consumer, XAUTOCLAIM) |
 | 3 | Gates (bot_active, handoff, risc, **moderare NX-15 #58**, **limbă RO/HU/EN G5c #59**) | ✅ **live** · ❌ rămas: media routing (STT/Vision) |
-| 4 | Straturi gratuite (cache semantic, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 #56) · ❌ rămas: **alias lookup** (`intent_aliases`), clarify cu `pending_question` (faqs=0) |
+| 4 | Straturi gratuite (cache semantic, FAQ, alias, clarificare) | ✅ **cache live** (static G5b-1 + dynamic G5b-2 #56) · ✅ **FAQ live (NX-74)**: `faq_stage` (cosine pe `faqs`, business_id+locale, doar embed) + tool `faq_lookup` pe SALES + job `seed_faqs` (bază curatată RO + generare LLM) — RULEAZĂ seed-ul pe demo ca să servească (`faqs=0` până atunci) · ❌ rămas: **alias lookup** (`intent_aliases`) |
 | 5 | Triaj (nano) | ✅ **live** (simple/clarify răspund, sales/order → agent) |
 | 6 | Context builder | ✅ istoric conversație în triaj+agent (follow-up „mai ieftin"); profil/state/summarizer ulterior |
 | 7 | Agent (mini) + **tool-calling (G7-1 #60)** | ✅ **live** (search/details/compare, cap dur 3 apeluri; + `checkout_link` în review #63). **NX-98:** `search_products` cade determinist pe **SQL-only** (`name ilike`) când tenantul n-are embeddings / LLM / semantic gol → niciodată „indisponibil" structural (P6); `mode=sql_only` în analytics = semnal de embed lipsă |
