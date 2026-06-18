@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     # --- Telegram (canal de TEST — long polling) ---
     telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
 
+    # --- Web Widget (NX-20, E26 — al treilea canal, V1.5) ---
+    # Gateway SSE pe app-ul FastAPI: POST /web/messages (→ envelope neutru, ca Telegram) +
+    # GET /web/stream (Server-Sent Events). Sesiune anonimă semnată HMAC (token public per tenant
+    # + visitor_id); secretul din channels.settings (control plane, cache). Default OFF (V1.5).
+    web_enabled: bool = Field(default=False, validation_alias="WEB_ENABLED")
+    # TTL cache control-plane pt public_token → (business_id, session_secret). Scurt → revocare/seed
+    # rapid; suficient cât să nu lovim DB la fiecare mesaj/heartbeat.
+    web_session_secret_ttl_s: float = Field(
+        default=60.0, validation_alias="WEB_SESSION_SECRET_TTL_S"
+    )
+
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
