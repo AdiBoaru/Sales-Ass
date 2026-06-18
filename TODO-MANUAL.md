@@ -191,10 +191,17 @@ idempotent; îi lipsește doar cheia API.
 - [ ] Dă-i lui Claude semnal → rulează (sau rulezi tu):
       `python scripts/seed_product_images.py --limit 5 --dry-run`  (verifici)
       apoi `python scripts/seed_product_images.py`  (toate cele 500)
-- [ ] (Opțional) verifică în Supabase: `select count(*) from product_images where url like '%pexels%';`
+- [ ] **Găzduire în Supabase Storage** (ca să NU depinzi de CDN-ul Pexels):
+      `python scripts/host_images_supabase.py`
+      → descarcă pozele unice, le urcă în bucket-ul public `product-images` și
+      rescrie `product_images.url` la URL-ul TĂU. Folosește `SUPABASE_SERVICE_ROLE_KEY`
+      (deja în `.env`); nu cere pas manual nou.
+- [ ] (Opțional) verifică în Supabase: imaginile pointează spre
+      `.../storage/v1/object/public/product-images/...`
 
 > Pexels free: 200 req/oră, 20k/lună — scriptul face ≤58 căutări (una per categorie),
-> deci sub limită cu mult. Hot-link la CDN-ul lor (licența permite), fără descărcare.
+> deci sub limită cu mult. După hosting, pozele trăiesc în proiectul tău Supabase
+> (473 fișiere unice ≈ câțiva MB), independent de Pexels.
 
 ---
 
