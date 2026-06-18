@@ -4,6 +4,8 @@ FakeLLM scriptează tool_calls (prin `execute`) + textul final; query-urile de c
 `catalog_tools` sunt monkeypatch-uite. Testăm: recomandare grounded, retrieval acumulat,
 fallback la preț inventat, răspuns fără produse, helperele de validare."""
 
+import pytest
+
 from src.models import (
     BusinessConfig,
     Contact,
@@ -15,7 +17,24 @@ from src.models import (
 )
 from src.tools import catalog_tools as ct
 from src.worker.runner import PipelineDeps
+from src.worker.stages import agent as agent_mod
 from src.worker.stages.agent import _budget, _links_ok, _prices_ok, agent_stage
+
+
+@pytest.fixture(autouse=True)
+def _stub_prompt_inputs(monkeypatch):
+    """NX-78: agent_stage citește categorii/aliase din DB pt promptul generat. Testele folosesc
+    `conn=object()` → stubbim cele două query-uri (prompt generic, fără DB reală)."""
+
+    async def _cats(conn, business_id):
+        return ["Creme", "Parfumuri"]
+
+    async def _aliases(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(agent_mod, "list_category_names", _cats)
+    monkeypatch.setattr(agent_mod, "list_routing_aliases", _aliases)
+
 
 PRODUCTS = [
     {
@@ -253,3 +272,44 @@ async def test_sales_no_products_clarify_served_verbatim(monkeypatch):
     )
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None and ctx.reply.text == "Ce tip de ten cauți?"
+
+
+# --- NX-78: prompt generat din DB --------------------------------------------
+
+
+async def test_agent_uses_generated_prompt_with_business_vertical(monkeypatch):
+    """Mock LLM capturează system-ul primit → conține verticalul businessului de test
+    (din DB, nu „beauty" hardcodat) + categoriile încărcate."""
+    _patch_search(monkeypatch, PRODUCTS)
+    captured = {}
+
+    class _CapLLM(FakeLLM):
+        async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+            captured["system"] = system
+            return await super().run_tool_loop(
+                system, user, tools, execute, max_steps=max_steps, model=model
+            )
+
+    ctx = _ctx()
+    ctx.business.vertical = "hvac"  # tenant non-beauty
+    llm = _CapLLM(
+        tool_calls=[("search_products", {"query": "x", "price_max": None, "limit": 6})],
+        final="Îți recomand Crema Hidratantă la 82.99 lei.",
+    )
+    await agent_stage(ctx, _deps(llm))
+    assert "hvac" in captured["system"] and "beauty" not in captured["system"]
+    assert "Creme" in captured["system"]  # categorii din stub (DB)
+
+
+async def test_db_failure_loading_prompt_falls_back_to_echo(monkeypatch):
+    """Failure case (card): query categorii aruncă → prins în try-ul buclei → echo (P6),
+    nicio excepție propagată, agentul nu setează reply."""
+
+    async def boom(conn, business_id):
+        raise RuntimeError("DB down")
+
+    monkeypatch.setattr(agent_mod, "list_category_names", boom)
+    ctx = _ctx()
+    llm = FakeLLM(tool_calls=[], final="orice")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is None  # no-op → fallback_stage (echo) preia mai târziu

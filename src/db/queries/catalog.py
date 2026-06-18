@@ -192,6 +192,34 @@ async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> lis
     return [r["slug"] for r in rows]
 
 
+async def list_category_names(conn: asyncpg.Connection, business_id: str) -> list[str]:
+    """Numele categoriilor TOP-LEVEL ale tenantului — pentru groundarea promptului agentului
+    (NX-78, principiul 9). `order by name` → ordine deterministă (prefix de cache stabil).
+    `conn` trebuie să fie deja tenant-scoped (tenant_conn)."""
+    rows = await conn.fetch(
+        "select name from categories where business_id = $1 and parent_id is null order by name",
+        business_id,
+    )
+    return [r["name"] for r in rows]
+
+
+async def list_routing_aliases(
+    conn: asyncpg.Connection, business_id: str, *, limit: int = 20
+) -> list[tuple[str, str]]:
+    """Aliasele de rutare APROBATE (`(phrase_norm, target_value)`) — hint scurt în promptul
+    agentului (NX-78). DOAR `status='approved'` (principiul 9: nu rutăm pe ghicit neaprobat).
+    `order by phrase_norm` → deterministic (prefix de cache stabil)."""
+    rows = await conn.fetch(
+        "select phrase_norm, coalesce(target_value, '') as target "
+        "from intent_aliases "
+        "where business_id = $1 and status = 'approved' "
+        "order by phrase_norm limit $2",
+        business_id,
+        limit,
+    )
+    return [(r["phrase_norm"], r["target"]) for r in rows]
+
+
 async def search_products_semantic(
     conn: asyncpg.Connection,
     business_id: str,
