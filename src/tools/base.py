@@ -54,7 +54,13 @@ def register(name: str) -> Callable[[ToolFn], ToolFn]:
 
 # Toolset PER RUTĂ (G7-3): pe SALES oferim catalogul + comerțul; pe ORDER doar status comandă.
 # A nu oferi search pe ORDER (și invers) ține modelul focusat pe sarcina rutei.
-_SALES_TOOLS = ("search_products", "get_product_details", "compare_products", "checkout_link")
+_SALES_TOOLS = (
+    "search_products",
+    "get_product_details",
+    "compare_products",
+    "checkout_link",
+    "faq_lookup",
+)
 _ORDER_TOOLS = ("check_order",)
 
 

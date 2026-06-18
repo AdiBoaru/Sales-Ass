@@ -62,6 +62,7 @@ def test_enabled_tools_route_aware():
         "get_product_details",
         "compare_products",
         "checkout_link",
+        "faq_lookup",
     }
     assert set(enabled_tools(None, "order")) == {"check_order"}
     assert "check_order" not in enabled_tools(None, "sales")  # nu pe SALES

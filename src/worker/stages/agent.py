@@ -23,6 +23,7 @@ from src.models import RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
+    faq_tools,
     orders_tools,
 )
 from src.tools.base import enabled_tools, run_tool
@@ -54,6 +55,9 @@ Ai unelte ca să răspunzi GROUNDED pe catalogul real:
   cumpere sau cere linkul/să comande; trimite-i URL-ul întors, nu inventa linkuri.
 - check_order(order_ref): status + livrarea unei comenzi. Cheamă-l când clientul întreabă de o
   comandă („unde e comanda mea?", „status ORD-123"); raportează DOAR ce întoarce, nu inventa.
+- faq_lookup(query): un fapt de business din baza de cunoștințe (livrare, retur, garanție, plată,
+  facturare). Cheamă-l când clientul întreabă o regulă/politică în mijlocul vânzării; raportează
+  DOAR ce întoarce, nu inventa reguli.
 
 Reguli:
 - Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /

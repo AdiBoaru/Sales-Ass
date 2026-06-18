@@ -144,6 +144,29 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "faq_lookup": {
+        "type": "function",
+        "function": {
+            "name": "faq_lookup",
+            "description": (
+                "Caută în baza de cunoștințe a magazinului un fapt de business (livrare, retur, "
+                "garanție, plată, facturare). Folosește când clientul întreabă o regulă/politică, "
+                "NU pentru produse."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Întrebarea de business în limbaj natural (ex. livrarea).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
     "check_order": {
         "type": "function",
         "function": {
