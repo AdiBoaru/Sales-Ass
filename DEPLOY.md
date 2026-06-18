@@ -31,8 +31,8 @@ să-l atingem. DB = Supabase remote (nu se atinge Postgres-ul local). Canale:
 ## Faza 1 — Pregătire
 
 ```bash
-# 1. Codul pe VPS (alege un dir dedicat, ex. /opt/nativx)
-sudo mkdir -p /opt/nativx && cd /opt/nativx
+# 1. Codul pe VPS — în dir-ul dedicat, lângă restul platformei nativextech
+sudo mkdir -p /opt/nativextech/nativx && cd /opt/nativextech/nativx
 git clone <repo-url> .          # sau git pull dacă există deja
 
 # 2. .env de prod
@@ -42,6 +42,11 @@ nano .env                       # completează (vezi §3 pentru valorile Traefik
 # 3. Provisioning rol bot_runtime pe Supabase (o singură dată, dacă nu e făcut)
 BOT_RUNTIME_PASSWORD='...' python scripts/apply_005.py
 ```
+
+> `.env` conține `COMPOSE_FILE=docker-compose.prod.yml` + `COMPOSE_PROJECT_NAME=nativx`,
+> deci de aici toate comenzile sunt **`docker compose ...` simplu** (fără `-p`/`-f`),
+> exact ca celelalte stack-uri din `/opt/nativextech/` — și NU pornește accidental
+> `docker-compose.yml` (cel de DEV din repo).
 
 ⚠️ Parola Supabase din URL trebuie **percent-encoded** (`@`→`%40`, `#`→`%23`...) —
 altfel asyncpg crapă în container.
@@ -67,11 +72,10 @@ Pune în `.env`:
 DNS încă nenecesar (Telegram = polling, fără ingress). Pornește fără webhook expus:
 
 ```bash
-docker compose -p nativx -f docker-compose.prod.yml up -d --build \
-  redis worker dispatcher telegram-poller scheduler
-
-docker compose -p nativx -f docker-compose.prod.yml ps
-docker compose -p nativx -f docker-compose.prod.yml logs -f telegram-poller worker
+cd /opt/nativextech/nativx
+docker compose up -d --build redis worker dispatcher telegram-poller scheduler
+docker compose ps
+docker compose logs -f telegram-poller worker
 docker stats --no-stream            # ← verifică RAM-ul sub sarcină
 ```
 
@@ -83,8 +87,8 @@ câteva minute. Dacă RAM-ul e ok, treci la WhatsApp.
 1. **DNS:** A-record `WEBHOOK_HOST` → `72.62.34.245` (+ AAAA către IPv6 dacă vrei).
 2. **Pornește webhook-ul** (Traefik îi emite certul automat la prima cerere HTTPS):
    ```bash
-   docker compose -p nativx -f docker-compose.prod.yml up -d webhook
-   docker compose -p nativx -f docker-compose.prod.yml logs -f webhook
+   docker compose up -d webhook
+   docker compose logs -f webhook
    ```
 3. **Meta dashboard** (T013 — număr WhatsApp Business propriu, NU Evolution):
    - completează în `.env`: `META_ACCESS_TOKEN`, `META_APP_SECRET`,
@@ -101,14 +105,17 @@ câteva minute. Dacă RAM-ul e ok, treci la WhatsApp.
 
 ## Operare
 
+Din `/opt/nativextech/nativx/` (COMPOSE_FILE + COMPOSE_PROJECT_NAME sunt în `.env`),
+deci aceleași comenzi ca la celelalte stack-uri ale tale:
+
 ```bash
-C="docker compose -p nativx -f docker-compose.prod.yml"
-$C ps                 # stare
-$C logs -f worker     # loguri (fără PII — redaction în logger)
-$C restart worker     # restart un serviciu
-git pull && $C up -d --build      # update cod (rebuild imagine imutabilă)
-$C --profile proactive up -d proactive   # pornește motorul proactiv când e nevoie
-$C down               # oprește DOAR stack-ul nativx (nu atinge restul VPS-ului)
+cd /opt/nativextech/nativx
+docker compose ps                 # stare
+docker compose logs -f worker     # loguri (fără PII — redaction în logger)
+docker compose restart worker     # restart un serviciu
+git pull && docker compose up -d --build       # update cod (rebuild imagine imutabilă)
+docker compose --profile proactive up -d proactive   # motor proactiv când e nevoie
+docker compose down               # oprește DOAR stack-ul nativx (nu atinge restul VPS-ului)
 ```
 
 ## Future
