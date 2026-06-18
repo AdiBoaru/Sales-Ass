@@ -101,3 +101,36 @@ class ChannelSenderRegistry:
 
     def kinds(self) -> list[str]:
         return list(self._senders)
+
+
+@runtime_checkable
+class MediaFetcher(Protocol):
+    """Descarcă o media INBOUND (poză/voce) de la un canal — transport, la margine (NX-76).
+
+    Simetric cu `ChannelSender` (outbound), dar pentru intrare: Gates îl folosește ca să aducă
+    binarul unei poze/note vocale înainte de Vision/STT. `account_id` = id-ul canalului receptor;
+    `media_id` = id-ul de media din envelope (`messages.media_ref`). Întoarce `(bytes, mime)`.
+    `max_bytes` (opțional) = refuză media peste prag ÎNAINTE de a o descărca integral în memorie
+    (din mărimea raportată de canal). Ridică la eroare de transport / prea mare — gate-ul prinde
+    și degradează grațios (fail-soft, P6)."""
+
+    async def fetch_media(
+        self, account_id: str, media_id: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, str]: ...
+
+
+class MediaFetcherRegistry:
+    """Mapează `channel_kind → MediaFetcher`. DOAR canalele care suportă download de media inbound
+    (azi: WhatsApp). Un canal neînregistrat → `get` întoarce None → gate-ul degradează fail-soft."""
+
+    def __init__(self) -> None:
+        self._fetchers: dict[str, MediaFetcher] = {}
+
+    def register(self, channel_kind: str, fetcher: MediaFetcher) -> None:
+        self._fetchers[channel_kind] = fetcher
+
+    def get(self, channel_kind: str) -> MediaFetcher | None:
+        return self._fetchers.get(channel_kind)
+
+    def kinds(self) -> list[str]:
+        return list(self._fetchers)

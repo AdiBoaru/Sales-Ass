@@ -53,3 +53,29 @@ class MetaClient:
             return data["messages"][0]["id"]
         except (KeyError, IndexError, TypeError) as e:
             raise MetaSendError(f"răspuns Meta fără message id: {data}") from e
+
+    async def fetch_media(
+        self, account_id: str, media_id: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, str]:
+        """Descarcă o media inbound (poză/voce) → `(bytes, mime)`. Implementează `MediaFetcher`
+        (NX-76): folosit de Gates pt Vision/STT, NU de dispatcher.
+
+        Flux Graph în 2 hop-uri: `GET /{media_id}` (cu Bearer) → metadata (`url` semnat host
+        lookaside, `mime_type`, `file_size`) → `GET url` (tot cu Bearer) → bytes. `account_id` e
+        informativ (token-ul autorizează). `max_bytes`: dacă metadata raportează `file_size` peste
+        prag, ridicăm ÎNAINTE de a descărca binarul (nu bufferiza zeci de MB pe un VPS mic).
+        Ridică la status HTTP de eroare / prea mare — caller-ul (gate) degradează fail-soft."""
+        meta = await self._http.get(
+            f"{self._base}/{media_id}",
+            headers={"Authorization": f"Bearer {self._token}"},
+        )
+        meta.raise_for_status()
+        info = meta.json()
+        url = info["url"]  # KeyError → fail-soft în gate (try/except)
+        mime = info.get("mime_type") or "application/octet-stream"
+        size = info.get("file_size")
+        if max_bytes is not None and isinstance(size, int) and size > max_bytes:
+            raise MetaSendError(f"media prea mare: {size} > {max_bytes}")
+        blob = await self._http.get(url, headers={"Authorization": f"Bearer {self._token}"})
+        blob.raise_for_status()
+        return blob.content, mime

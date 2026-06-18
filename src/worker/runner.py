@@ -18,17 +18,20 @@ import asyncpg
 from redis.asyncio import Redis
 
 from src.agent.llm import LLMClient
+from src.channels.base import MediaFetcherRegistry
 from src.models import TurnContext
 
 
 @dataclass
 class PipelineDeps:
     """Resursele pe care le primesc stagiile. Conexiunea e DEJA tenant-scoped.
-    `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios."""
+    `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios.
+    `media` poate fi None (fără canal cu download configurat) → media routing fail-soft (NX-76)."""
 
     conn: asyncpg.Connection
     redis: Redis | None = None
     llm: LLMClient | None = None
+    media: MediaFetcherRegistry | None = None
 
 
 # Un stagiu: mutează `ctx` pe loc; poate seta ctx.reply pentru early exit.

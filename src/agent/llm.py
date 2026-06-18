@@ -44,6 +44,24 @@ class ModerationResult:
     categories: list[str]
 
 
+# Vision (NX-76): sentinel pentru o poză care NU e produs (selfie/screenshot/peisaj). Definit AICI
+# și interpolat în prompt → codul (gates._route_image) match-uiește exact ce cere promptul, fără
+# drift între cele două. La match → fail-soft determinist (clarificare), nu căutare pe text mort.
+VISION_NOT_PRODUCT = "nu pare un produs"
+
+# Vision: extractor vizual, NU vânzător. Cere STRICT atribute observabile (tip produs, brand
+# vizibil, culoare, text de pe etichetă) ca interogare de căutare; interzice inventarea de
+# preț/disponibilitate (groundarea rămâne treaba search-ului + validatorului din agent).
+_VISION_SYSTEM = (
+    "Ești un extractor vizual pentru un asistent de vânzări. Primești poza unui produs trimisă "
+    "de un client. Descrie-l STRICT ca o interogare scurtă de căutare în catalog: tip de produs, "
+    "brand vizibil pe ambalaj, culoare, și text citibil de pe etichetă. Răspunde cu o singură "
+    "frază (max ~15 cuvinte), în limba română, fără introduceri sau ghilimele. NU inventa preț, "
+    f"disponibilitate sau detalii pe care NU le vezi în poză. Dacă nu pare un produs (selfie, "
+    f"captură de ecran, peisaj), răspunde exact: {VISION_NOT_PRODUCT}."
+)
+
+
 class LLMClient:
     """Wrapper subțire peste AsyncOpenAI. Modelele vin din settings (nano/mini)."""
 
@@ -55,12 +73,14 @@ class LLMClient:
         model_agent: str,
         model_embed: str = "text-embedding-3-small",
         model_moderation: str = "omni-moderation-latest",
+        model_vision: str = "gpt-5.4-mini",
     ) -> None:
         self._client = client
         self.model_triage = model_triage
         self.model_agent = model_agent
         self.model_embed = model_embed
         self.model_moderation = model_moderation
+        self.model_vision = model_vision
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
         """Apel chat cu răspuns JSON forțat (`response_format=json_object`).
@@ -186,6 +206,36 @@ class LLMClient:
         flagged = [k for k, v in data.items() if v]
         return ModerationResult(flagged=bool(r.flagged), categories=sorted(flagged))
 
+    async def describe_image(self, image_b64: str, mime: str, *, model: str | None = None) -> str:
+        """Descrie o poză de produs ca TEXT de căutare în catalog (Vision, NX-76). Extracție, NU
+        generare/conversație — în spiritul `embed`/`moderate` (principiul 2). `detail:"low"` +
+        `max_tokens` mic = costul tăiat în cod (un tile, fără high-res). Modelul implicit are
+        vedere (mini). Ridică la eroare de API — caller-ul (gate) prinde și degradează fail-soft."""
+        resp = await self._client.chat.completions.create(
+            model=model or self.model_vision,
+            messages=[
+                {"role": "system", "content": _VISION_SYSTEM},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Descrie produsul din poză ca interogare de căutare.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime};base64,{image_b64}",
+                                "detail": "low",
+                            },
+                        },
+                    ],
+                },
+            ],
+            max_tokens=120,
+        )
+        return (resp.choices[0].message.content or "").strip()
+
     async def embed(self, texts: list[str], *, model: str | None = None) -> list[list[float]]:
         """Embeddings pentru un lot de texte. Întoarce o listă de vectori (1536 dim
         la text-embedding-3-small). Folosit de jobul `embed_products` + (viitor)
@@ -213,5 +263,6 @@ def get_llm() -> LLMClient | None:
             model_agent=s.model_agent,
             model_embed=s.model_embed,
             model_moderation=s.model_moderation,
+            model_vision=s.model_vision,
         )
     return _llm

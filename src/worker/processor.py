@@ -20,6 +20,7 @@ from redis.asyncio import Redis
 
 from src.agent.llm import get_llm
 from src.cache.canonical import canonicalize, classify_volatility
+from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import get_data_version
@@ -382,6 +383,8 @@ async def handle_turn(
             content_type=event.get("content_type", "text"),
             body=event.get("body"),
             media_ref=event.get("media_id"),
+            channel_kind=channel_kind,
+            channel_account_id=event.get("channel_account_id", ""),
         ),
         conversation_id=conv["id"],
         history=await get_recent_messages(conn, business.id, conv["id"]),
@@ -394,7 +397,9 @@ async def handle_turn(
 
     # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
     llm = await _llm_within_budget(ctx, redis, business)
-    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm), stages)
+    # Media routing (NX-76): registry de fetchers (singleton, ca llm) → gate-ul descarcă poza.
+    media = get_media_registry()
+    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm, media=media), stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
     await _record_turn_cost(redis, business.id, ctx, llm_used=llm is not None)
 
