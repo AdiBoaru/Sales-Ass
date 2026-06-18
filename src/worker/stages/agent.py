@@ -83,9 +83,11 @@ Compui o recomandare structurată. Răspunzi DOAR cu JSON conform schemei.
 
 REGULI DURE:
 - NU scrii prețuri, linkuri, ratinguri, procente, număr de recenzii, termene de livrare sau ORICE
-  cifră. Codul le pune din date. Tu scrii DOAR cuvinte.
+  cifră. Codul le pune din date. Tu scrii DOAR cuvinte. SINGURA excepție: în `intro` poți relua
+  bugetul EXACT pe care l-a scris CLIENTUL (ex. „sub 80 lei") — e cifra LUI, nu un preț de produs.
 - `intro` = o frază scurtă care REIA nevoia clientului în cuvintele LUI (ex. dacă a zis „mâini
-  uscate", pornește de la „Pentru mâini uscate..."). NU generic — legat de ce a cerut.
+  uscate" → „Pentru mâini uscate..."; dacă a zis „sub 80 lei" → poți păstra „sub 80 lei").
+  NU generic — legat de ce a cerut.
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
   avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = o clauză SCURTĂ care leagă
   produsul de NEVOIA exactă a clientului (ex. „pentru mâini foarte uscate") — doar nevoia lui.

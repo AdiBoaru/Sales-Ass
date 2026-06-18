@@ -7,11 +7,24 @@ avantaj REAL (top_pro). Pur, fără I/O — zero DB/LLM.
 
 from types import SimpleNamespace
 
+from src.models import Direction
 from src.worker import compose
 
 
-def _ctx(language: str = "ro", vertical: str = "beauty") -> SimpleNamespace:
-    return SimpleNamespace(language=language, business=SimpleNamespace(vertical=vertical))
+def _ctx(
+    language: str = "ro",
+    vertical: str = "beauty",
+    body: str = "",
+    history=None,
+    constraints=None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        language=language,
+        business=SimpleNamespace(vertical=vertical),
+        message=SimpleNamespace(body=body),
+        history=history or [],
+        state=SimpleNamespace(constraints=constraints or {}),
+    )
 
 
 def test_scrub_drops_numbers_claims_superlatives() -> None:
@@ -23,6 +36,57 @@ def test_scrub_drops_numbers_claims_superlatives() -> None:
     assert compose.scrub_prose("cel mai bun produs") is None
     assert compose.scrub_prose("") is None
     assert compose.scrub_prose(None) is None
+
+
+# --- R4: bugetul clientului permis în intro (nu „Ai ceva sub lei") -----------
+
+
+def test_scrub_intro_keeps_client_budget_number() -> None:
+    assert compose.scrub_intro("Pentru ten gras sub 80 lei", {"80"}) == "Pentru ten gras sub 80 lei"
+
+
+def test_scrub_intro_drops_unknown_number() -> None:
+    # cifră care NU e a clientului (preț inventat) → drop tot intro-ul
+    assert compose.scrub_intro("Variante de la 30 lei", set()) is None
+    assert compose.scrub_intro("Variante de la 30 lei", {"80"}) is None
+
+
+def test_scrub_intro_drops_percent_claim_super_even_with_allowed() -> None:
+    assert compose.scrub_intro("80% reducere", {"80"}) is None
+    assert compose.scrub_intro("livrare în 80 ore", {"80"}) is None
+    assert compose.scrub_intro("cel mai bun", set()) is None
+
+
+def test_scrub_intro_empty_is_none() -> None:
+    assert compose.scrub_intro("", {"80"}) is None
+    assert compose.scrub_intro(None, {"80"}) is None
+
+
+def test_allowed_client_numbers_excludes_bot_replies() -> None:
+    ctx = _ctx(
+        body="ai ceva sub 80 lei?",
+        history=[
+            SimpleNamespace(direction=Direction.INBOUND, body="vreau ceva de 50 lei"),
+            SimpleNamespace(direction=Direction.OUTBOUND, body="Crema X costă 999 lei"),
+        ],
+        constraints={"buget": "120 lei"},
+    )
+    nums = compose._allowed_client_numbers(ctx)
+    assert {"80", "50", "120"} <= nums
+    assert "999" not in nums  # replica botului NU e sursă de cifre permise
+
+
+def test_assemble_intro_keeps_budget_from_client_message() -> None:
+    ctx = _ctx(body="ai ceva sub 80 de lei?")
+    j = {
+        "intro": "Pentru ten gras sub 80 lei, am ales:",
+        "items": [],
+        "pick": None,
+        "education": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, [])
+    assert rich.intro == "Pentru ten gras sub 80 lei, am ales:"
 
 
 def test_safe_badge_drops_discount_keeps_curation() -> None:

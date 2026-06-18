@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from src.models import Chip, RichItem, RichReply
+from src.models import Chip, Direction, RichItem, RichReply
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -54,6 +54,35 @@ def scrub_prose(s: str | None) -> str | None:
     if not t:
         return None
     if _DIGIT.search(t) or _PCT.search(t) or _CLAIMY.search(t) or _SUPER.search(t):
+        return None
+    return t
+
+
+def _allowed_client_numbers(ctx: TurnContext) -> set[str]:
+    """Cifrele scrise de CLIENT (mesaj curent + mesajele LUI din istoric + constrângeri știute).
+    Permise în intro (ex. bugetul „sub 80 lei"). NU includem replicile botului (ar reintroduce
+    prețuri de produs scrubuite). R4."""
+    out: set[str] = set(re.findall(r"\d+", ctx.message.body or ""))
+    for m in ctx.history:
+        if m.direction == Direction.INBOUND:
+            out |= set(re.findall(r"\d+", m.body or ""))
+    for v in (ctx.state.constraints or {}).values():
+        out |= set(re.findall(r"\d+", str(v)))
+    return out
+
+
+def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
+    """Ca `scrub_prose`, dar PERMITE cifrele pe care CLIENTUL le-a scris (bugetul lui) — intro-ul
+    reia nevoia lui în cuvintele lui, deci un buget pe care el l-a dat NU e halucinație (repară
+    „Ai ceva sub lei", R4). Cifre NEcunoscute (inventate), procente, claim-uri, superlative → DROP
+    (ca scrub_prose). Așa intro-ul nu mai iese trunchiat, dar nici nu strecoară un preț inventat."""
+    if not s:
+        return None
+    t = " ".join(s.split())
+    if not t:
+        return None
+    unknown = [n for n in re.findall(r"\d+", t) if n not in allowed_numbers]
+    if unknown or _PCT.search(t) or _CLAIMY.search(t) or _SUPER.search(t):
         return None
     return t
 
@@ -170,7 +199,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             pick = (pj["product_id"], reason)
 
     return RichReply(
-        intro=scrub_prose(j.get("intro")),
+        intro=scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)),
         items=items,
         pick=pick,
         education=scrub_prose(j.get("education")),
