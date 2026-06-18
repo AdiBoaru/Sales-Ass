@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     welcome_enabled: bool = Field(default=True, validation_alias="WELCOME_ENABLED")
     welcome_bot_name: str = Field(default="Native", validation_alias="WELCOME_BOT_NAME")
 
+    # --- Strat gratuit alias (NX-73, stagiul 4) ---
+    # Match EXACT al frazei normalizate în `intent_aliases` (status='approved'), ÎNAINTE de cache
+    # + triaj → early-exit FĂRĂ niciun apel LLM (nici embed). Stratul cel mai ieftin (index).
+    # Valoarea apare după ce shadow mode (NX-93) populează aliasurile (gol pe demo). Kill-switch.
+    alias_enabled: bool = Field(default=True, validation_alias="ALIAS_ENABLED")
+
     # --- Cache semantic (G5b) ---
     cache_enabled: bool = Field(default=True, validation_alias="CACHE_ENABLED")
     # τ_high: prag de auto-accept pentru L2 semantic (cosine similarity). Conservator

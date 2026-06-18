@@ -31,6 +31,8 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     s = get_settings()
     if not s.faq_enabled:
         return
+    if ctx.route is not None:
+        return  # upstream determinist (alias/clarify_resume) a rutat deja → nu deflectăm (P3)
     body = (ctx.message.body or "").strip()
     if not body or deps.llm is None:  # fără LLM nu putem embed → miss grațios
         return

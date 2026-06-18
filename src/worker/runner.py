@@ -65,16 +65,18 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
 
 
-# Pipeline-ul: Gates (3) → Limbă (3) → Welcome (4) → Cache (4) → FAQ (4) → Triaj (5) →
-# Agent (7) → fallback.
+# Pipeline-ul: Gates (3) → Limbă (3) → Welcome (4) → Alias (4) → Cache (4) → FAQ (4) →
+# Triaj (5) → Agent (7) → fallback.
 # Gates (G5a) decide PRIMUL dacă botul răspunde (bot_active/handoff/risc) — poate opri
 # cu reply (risc) sau tăcere intenționată (halt). Limbă (G5c) refină ctx.language ÎNAINTE
 # de straturile locale-keyed (principiul 11). Welcome întâmpină DETERMINIST un pur salut
-# (free layer, fără LLM). Cache (G5b) servește query-uri statice repetate fără LLM; FAQ
-# (NX-74) răspunde la întrebări de cunoștințe din `faqs` (un embed, fără generare). Triaj
-# setează reply pt simple/clarify; agentul răspunde pt sales.
+# (free layer, fără LLM). Alias (NX-73) face match EXACT pe `intent_aliases` aprobate (index
+# B-tree, zero token) ÎNAINTE de cache — cel mai ieftin strat. Cache (G5b) servește query-uri
+# statice repetate fără LLM; FAQ (NX-74) răspunde la întrebări de cunoștințe din `faqs` (un
+# embed, fără generare). Triaj setează reply pt simple/clarify; agentul răspunde pt sales.
 # Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
 from src.worker.stages.agent import agent_stage  # noqa: E402
+from src.worker.stages.alias import alias_stage  # noqa: E402
 from src.worker.stages.cache import cache_stage  # noqa: E402
 from src.worker.stages.clarify import clarify_resume_stage  # noqa: E402
 from src.worker.stages.faq import faq_stage  # noqa: E402
@@ -86,11 +88,15 @@ from src.worker.stages.triage import triage_stage  # noqa: E402
 # clarify_resume (NX-130) rulează după `language` și ÎNAINTE de greeting/cache/triage:
 # dacă un slot e în așteptare, răspunsul scurt al clientului e consumat determinist
 # (rută + constraint), nu tratat ca salut / cache / re-triat de la zero.
+# alias (NX-73) e IMEDIAT ÎNAINTE de cache: match exact pe index, mai ieftin și mai sigur decât
+# embed-ul semantic din cache. Un hit FAQ early-exit-ează; un hit route/category setează ctx.route,
+# iar cache/FAQ/triaj îl respectă (skip dacă ctx.route e setat) → agentul servește.
 DEFAULT_STAGES: list[Stage] = [
     gates_stage,
     language_stage,
     clarify_resume_stage,
     greeting_stage,
+    alias_stage,
     cache_stage,
     faq_stage,
     triage_stage,
