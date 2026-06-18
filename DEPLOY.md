@@ -51,21 +51,16 @@ BOT_RUNTIME_PASSWORD='...' python scripts/apply_005.py
 ⚠️ Parola Supabase din URL trebuie **percent-encoded** (`@`→`%40`, `#`→`%23`...) —
 altfel asyncpg crapă în container.
 
-## §3 — Valori Traefik (recon read-only)
+## §3 — Traefik (CONFIRMAT din recon 2026-06-18)
 
-`docker-compose.prod.yml` are 2 placeholdere care trebuie să corespundă Traefik-ului tău:
+Traefik rulează cu `--providers.docker.network=shared_network`, entrypoint HTTPS
+`websecure` (:443), resolver ACME `letsencrypt` (TLS-ALPN) și redirect HTTP→HTTPS
+global pe entrypoint `web`. Valorile sunt deja **hardcodate** în
+`docker-compose.prod.yml` (la fel ca labels-urile lui `evolution`), deci în `.env`
+trebuie DOAR:
+- `WEBHOOK_HOST` = subdomeniul (ex. `bot.nativextech.com`) + **A-record către `72.62.34.245`**.
 
-```bash
-# entrypoint-uri + certresolver definite în Traefik:
-docker inspect traefik --format '{{range .Args}}{{println .}}{{end}}'
-# șablon de copiat — labels Traefik pe un serviciu deja rutat:
-docker inspect evolution --format '{{range $k,$v := .Config.Labels}}{{$k}}={{$v}}{{println}}{{end}}' | grep -i traefik
-```
-
-Pune în `.env`:
-- `TRAEFIK_ENTRYPOINT` = numele entrypoint-ului HTTPS (ex. `websecure` / `https`)
-- `TRAEFIK_CERTRESOLVER` = numele resolver-ului ACME (ex. `letsencrypt` / `le` / `myresolver`)
-- `WEBHOOK_HOST` = subdomeniul (ex. `bot.domeniul-tau.ro`)
+Traefik emite certul Let's Encrypt automat la prima cerere HTTPS pe acel host.
 
 ## Faza 2 — Telegram live (risc ~0, validare)
 
