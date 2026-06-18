@@ -90,6 +90,20 @@ def disclaimer(language: str | None) -> str:
     return _DISCLAIMER.get(language or "ro") or _DISCLAIMER["ro"]
 
 
+def ensure_disclaimer(text: str | None, language: str | None) -> str:
+    """Garantează că `text` se termină cu disclaimer-ul AI (art. 50 AI Act), o singură dată.
+
+    Idempotent: dacă disclaimer-ul (pe ORICE locale cunoscut) e deja prezent, nu-l re-adaugă —
+    welcome (greeting) și rich (`flatten`) îl pun deja, iar un text scris în `ro` rămâne acoperit
+    chiar dacă `ctx.language` a derivat altceva între timp (set-membership pe toate locale-urile).
+    Pur, fără I/O. Aplicat DOAR la Sender (P5) → acoperă toate rutele, fără a atinge stagiile."""
+    d = disclaimer(language)
+    body = (text or "").rstrip()
+    if any(known in body for known in _DISCLAIMER.values()):
+        return body
+    return f"{body}\n\n{d}" if body else d
+
+
 def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
     """Chips = mesaje de follow-up DIN PARTEA CLIENTULUI, generate de model pe contextul lui
     (NU hardcodate). Apăsarea trimite `label` ca mesaj NOU → reintră în pipeline ca tur nou
