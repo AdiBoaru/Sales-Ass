@@ -187,6 +187,14 @@ class Settings(BaseSettings):
     proactive_batch_size: int = Field(default=20, validation_alias="PROACTIVE_BATCH_SIZE")
     proactive_idle_sleep_s: float = Field(default=5.0, validation_alias="PROACTIVE_IDLE_SLEEP_S")
 
+    # --- Validator cifre bare (NX-91, stagiul 8 inline în agent) ---
+    # Pe lângă prețurile cu valută (_PRICE_RE), validatorul prinde și cifrele «grele» FĂRĂ valută
+    # („costă 89", „47 pe stoc", „rating 4.9") care nu sunt grounded în ctx.retrieval → retry/
+    # fallback. Kill-switch FAIL-OPEN: la fals-pozitive în prod, dezactivează fără redeploy de cod.
+    validator_bare_numbers_enabled: bool = Field(
+        default=True, validation_alias="VALIDATOR_BARE_NUMBERS_ENABLED"
+    )
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
