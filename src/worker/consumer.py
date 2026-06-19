@@ -148,21 +148,26 @@ async def consume_once(
     handled = 0
     for _stream, entries in resp:
         for msg_id, fields in entries:
+            handled += 1
             try:
                 event = json.loads(fields["data"])
+            except Exception:  # noqa: BLE001 — payload nevalid → ACK + skip (nu blochează coada)
+                log.exception("mesaj inbound nevalid %s — ACK + skip", msg_id)
+                await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
+                continue
+            try:
                 if event.get("kind", "message") == "message":
                     # NX-90: „typing…" INSTANT la primire, înainte de debounce (fire-and-forget).
                     if get_settings().typing_enabled:
                         asyncio.create_task(_safe_typing(registry, event))
-                    await debouncer.add(event)  # coalesce + flush async (R1)
+                    # NX-87: ACK delegat Debouncer-ului DUPĂ flush reușit (durabilitate) — NU aici.
+                    await debouncer.add(event, msg_id)
                 else:
-                    await process_event(pool, redis, event)  # status → imediat
-            except Exception:  # noqa: BLE001 — bucla nu trebuie să moară pe un mesaj
+                    await process_event(pool, redis, event)  # status/callback/order → imediat
+                    await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
+            except Exception:  # noqa: BLE001 — eroare → ACK (mesajul e logat, nu blochează coada)
                 log.exception("eroare la procesarea mesajului %s", msg_id)
-            finally:
-                # ACK chiar și la eșec: mesajul nu blochează coada (e logat).
                 await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
-            handled += 1
     return handled
 
 
@@ -176,7 +181,12 @@ async def run_consumer(
     async def _handle(event: dict) -> None:
         await process_event(pool, redis, event)
 
-    debouncer = Debouncer(_handle)
+    async def _ack_batch(msg_ids: list[str]) -> None:
+        # NX-87: ACK lotul de mesaje DUPĂ flush reușit (durabilitate — nu la citire).
+        if msg_ids:
+            await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, *msg_ids)
+
+    debouncer = Debouncer(_handle, ack=_ack_batch)
     log.info("consumer %s pornit pe stream %s", consumer_name, STREAM_INBOUND)
     while True:
         await consume_once(pool, redis, consumer_name, debouncer, registry)

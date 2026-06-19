@@ -73,3 +73,37 @@ async def test_single_message_passes_through():
     await asyncio.sleep(0.08)
     assert len(processed) == 1
     assert processed[0]["body"] == "salut"
+
+
+# --- NX-87: ACK după flush (durabilitate) ------------------------------------
+
+
+async def test_acks_msg_ids_after_successful_flush():
+    acked: list[list[str]] = []
+
+    async def proc(ev):
+        pass
+
+    async def ack(ids):
+        acked.append(list(ids))
+
+    d = Debouncer(proc, delay=0.05, ack=ack)
+    await d.add(_ev("u", "a", "1"), "stream-1")
+    await d.add(_ev("u", "b", "2"), "stream-2")
+    await asyncio.sleep(0.12)
+    assert acked == [["stream-1", "stream-2"]]  # toate msg_id-urile lotului, DUPĂ flush reușit
+
+
+async def test_no_ack_when_process_fails():
+    acked: list = []
+
+    async def proc(ev):
+        raise RuntimeError("flush boom")
+
+    async def ack(ids):
+        acked.append(ids)
+
+    d = Debouncer(proc, delay=0.05, ack=ack)
+    await d.add(_ev("u", "a", "1"), "stream-1")
+    await asyncio.sleep(0.12)
+    assert acked == []  # flush eșuat → fără ACK (mesajul rămâne pending, nu pierdut)
