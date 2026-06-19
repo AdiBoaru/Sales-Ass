@@ -456,6 +456,10 @@ async def handle_turn(
         # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
         # pending_question default None) → nu lăsăm întrebări zombi în state.
         new_state = {**new_state, "pending_question": ctx.reply.pending_question}
+        # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
+        # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
+        if ctx.state_patch:
+            new_state = {**new_state, **ctx.state_patch}
         outbox_id = await enqueue_outbox(
             conn,
             business.id,

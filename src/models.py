@@ -133,6 +133,9 @@ class ConversationState:
     pending_question: dict[str, Any] | None = None
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
+    # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
+    # owner la scriere: Sender (processor, din `ctx.state_patch`). Cap 10 linii (impus în cart_add).
+    cart: list[dict[str, Any]] = field(default_factory=list)
     state_version: int = 0
 
     @classmethod
@@ -147,12 +150,28 @@ class ConversationState:
             if pid is None or p.get("name") is None or p.get("price") is None:
                 continue
             products.append(ProductRef(product_id=pid, name=p["name"], price=float(p["price"])))
+        # Coșul (NX-79): linii incomplete sărite (la fel de defensiv ca displayed_products).
+        cart: list[dict[str, Any]] = []
+        for line in raw.get("cart") or []:
+            pid = line.get("product_id")
+            if pid is None or line.get("name") is None or line.get("price") is None:
+                continue
+            cart.append(
+                {
+                    "product_id": pid,
+                    "variant_id": line.get("variant_id"),
+                    "name": line["name"],
+                    "price": float(line["price"]),
+                    "quantity": int(line.get("quantity") or 1),
+                }
+            )
         return cls(
             active_search=raw.get("active_search") or {},
             displayed_products=products,
             pending_question=raw.get("pending_question"),
             asked_intents=raw.get("asked_intents") or [],
             constraints=raw.get("constraints") or {},
+            cart=cart,
             state_version=int(raw.get("state_version") or 0),
         )
 
@@ -280,6 +299,10 @@ class TurnContext:
     # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al
     # conversației lungi (acoperă mesajele de dinaintea ultimelor 8). Citit de context_blocks.
     summary: str | None = None
+    # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}). Owner UNIC:
+    # stagiul Agent (acumulat din `ToolResult.state_patch` în `execute`); processor-ul îl
+    # merge-uiește în `new_state` la scriere (P3 — nu se scrie din două locuri).
+    state_patch: dict[str, Any] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
 
     def emit(self, type_: str, **properties: Any) -> None:

@@ -35,6 +35,9 @@ class ToolResult:
     # Sume citite din DB (ex. total comandă/checkout, G7-3): grounded prin construcție →
     # validatorul de preț le acceptă, pe lângă prețurile produselor retrievate.
     prices: list[float] = field(default_factory=list)
+    # Mutație de state cerută de tool (NX-79, ex. cart_add → {"cart": [...]}). Stagiul Agent
+    # o acumulează în `ctx.state_patch`; processor-ul o persistă. Tool-urile NU scriu ctx direct.
+    state_patch: dict[str, Any] = field(default_factory=dict)
 
 
 ToolFn = Callable[["TurnContext", "PipelineDeps", dict[str, Any]], Awaitable[ToolResult]]
@@ -58,7 +61,10 @@ _SALES_TOOLS = (
     "search_products",
     "get_product_details",
     "compare_products",
+    "cart_add",  # NX-79: acumulează coșul în state, înainte de checkout_link
     "checkout_link",
+    "reorder",  # NX-79: re-comandă din istoricul contactului
+    "subscribe_back_in_stock",  # NX-80: notificare la restock (WRITE; citit de proactiv NX-70)
     "faq_lookup",
 )
 _ORDER_TOOLS = ("check_order",)
