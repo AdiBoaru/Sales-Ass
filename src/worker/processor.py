@@ -30,7 +30,7 @@ from src.db.queries.conversations import (
     patch_conversation_state,
     touch_last_inbound,
 )
-from src.db.queries.inbound_dedupe import claim_inbound
+from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
 from src.db.queries.messages import (
     count_messages,
     get_messages_for_summary,
@@ -340,8 +340,9 @@ async def handle_turn(
 
     # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
     # Guard ÎNAINTE de orice scriere — un duplicat nu produce mesaj, nici outbox.
-    # Trade-off (NX-51): claim-ul se commit-ează imediat, deci un crash în mijlocul
-    # turului marchează mesajul ca văzut fără a-l finaliza (dead-letter = follow-up).
+    # NX-86 (dead-letter închis): claim-or-resume — un crash în mijlocul turului lasă
+    # completed_at NULL → orfanul e reclamat după CLAIM_TTL (nu mai e „văzut dar neprocesat").
+    # mark_inbound_completed (mai jos, în TX-ul de outbox) îl finalizează atomic la succes.
     if provider_msg_id and not await claim_inbound(conn, business.id, provider_msg_id):
         log.info("dedupe_hit_db: %s deja procesat (business %s)", provider_msg_id, business.id)
         return TurnResult(None, None, None, None, None, deduped=True)
@@ -412,6 +413,9 @@ async def handle_turn(
             # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
             # aici doar raportăm că turul n-a produs reply.
             log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
+        # NX-86: tur DONE (halt/no-reply) → finalizează claim-ul (altfel reaper-ul l-ar reprocesa).
+        if provider_msg_id:
+            await mark_inbound_completed(conn, business.id, provider_msg_id)
         return TurnResult(conv["id"], contact.id, turn_id, None, None)
 
     # Sender (P5): garantează disclaimer-ul AI (art. 50) pe text, o singură dată, pt TOATE
@@ -487,6 +491,10 @@ async def handle_turn(
             conv["state_version"],
             touch_outbound=True,
         )
+        # NX-86: finalizează claim-ul ÎN aceeași TX cu outbox → atomic. Crash înainte de commit →
+        # completed_at NULL → orfan recuperabil; commit → finalizat, niciodată reprocesat.
+        if provider_msg_id:
+            await mark_inbound_completed(conn, business.id, provider_msg_id)
 
     outbox_id = first_outbox_id
     if len(fragments) > 1:
