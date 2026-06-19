@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import socket
+import time
 
 import httpx
 from redis.asyncio import Redis
@@ -39,6 +40,12 @@ from src.worker.processor import handle_turn
 log = logging.getLogger(__name__)
 
 CONSUMER_GROUP = "workers"
+
+# Reaper PEL (NX-86): un consumer care n-a ACK-uit în `REAP_MIN_IDLE_MS` = probabil mort → îi
+# reclamăm intrările cu XAUTOCLAIM și le reprocesăm. Rulat periodic (`REAP_INTERVAL_S`), nu mereu.
+REAP_MIN_IDLE_MS = 60_000
+REAP_BATCH = 50
+REAP_INTERVAL_S = 30.0
 
 
 async def _safe_typing(registry: ChannelSenderRegistry | None, event: dict) -> None:
@@ -171,11 +178,57 @@ async def consume_once(
     return handled
 
 
+async def reap_pending(pool, redis: Redis, consumer_name: str, debouncer: Debouncer) -> int:
+    """XAUTOCLAIM (NX-86): reclamă intrările PEL rămase de la un consumer MORT (citite cu
+    XREADGROUP dar ne-ACK-uite > `min_idle`) și le reprocesează pe ACEEAȘI cale (mesaje → debounce
+    cu ACK-after-flush; restul → imediat + ACK). Intrări șterse între timp (`fields` None) →
+    ACK-only. Închide gaura „consumer mort între citire și ACK". Best-effort: orice eroare e
+    logată, nu oprește bucla. Întoarce câte intrări a tratat."""
+    try:
+        resp = await redis.xautoclaim(
+            STREAM_INBOUND,
+            CONSUMER_GROUP,
+            consumer_name,
+            min_idle_time=REAP_MIN_IDLE_MS,
+            start_id="0-0",
+            count=REAP_BATCH,
+        )
+    except ResponseError as e:
+        log.warning("reaper: XAUTOCLAIM eșuat (%s) — sărit", type(e).__name__)
+        return 0
+    # redis-py: [cursor, messages, deleted] (sau [cursor, messages] pe versiuni mai vechi).
+    messages = resp[1] if len(resp) > 1 else []
+    handled = 0
+    for msg_id, fields in messages:
+        handled += 1
+        if not fields:  # intrare ștearsă din stream între claim și reap → doar ACK
+            await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
+            continue
+        try:
+            event = json.loads(fields["data"])
+            if event.get("kind", "message") == "message":
+                await debouncer.add(event, msg_id)  # ACK delegat Debouncer-ului (NX-87)
+            else:
+                await process_event(pool, redis, event)
+                await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
+        except Exception:  # noqa: BLE001 — o intrare stricată nu oprește reaper-ul
+            log.exception("reaper: reprocesare eșuată %s — ACK", msg_id)
+            await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
+    if handled:
+        log.info("reaper: %d intrări PEL reclamate de la consumeri morți", handled)
+    return handled
+
+
 async def run_consumer(
-    pool, redis: Redis, consumer_name: str, registry: ChannelSenderRegistry | None = None
+    pool,
+    redis: Redis,
+    consumer_name: str,
+    registry: ChannelSenderRegistry | None = None,
+    *,
+    reap_interval_s: float = REAP_INTERVAL_S,
 ) -> None:
     """Bucla principală a worker-ului (rulează până la anulare). `registry` (NX-90) = sender-ele
-    de canal pentru typing-ul instant pe inbound; None → fără typing (compat dev/test)."""
+    de canal pt typing instant; None → fără typing. Rulează periodic reaper-ul PEL (NX-86)."""
     await ensure_group(redis)
 
     async def _handle(event: dict) -> None:
@@ -188,8 +241,13 @@ async def run_consumer(
 
     debouncer = Debouncer(_handle, ack=_ack_batch)
     log.info("consumer %s pornit pe stream %s", consumer_name, STREAM_INBOUND)
+    last_reap = time.monotonic()
     while True:
         await consume_once(pool, redis, consumer_name, debouncer, registry)
+        now = time.monotonic()
+        if now - last_reap >= reap_interval_s:
+            last_reap = now
+            await reap_pending(pool, redis, consumer_name, debouncer)
 
 
 async def _main() -> None:
