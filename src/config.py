@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     web_session_secret_ttl_s: float = Field(
         default=60.0, validation_alias="WEB_SESSION_SECRET_TTL_S"
     )
+    # Rate limit web (NX-20): public anonim → praguri mai strânse decât WhatsApp, pe DOUĂ chei
+    # (IP prinde rotirea de visitor_id; visitor prinde spam-ul unui client legit).
+    web_rate_limit_max_visitor: int = Field(
+        default=15, validation_alias="WEB_RATE_LIMIT_MAX_VISITOR"
+    )
+    web_rate_limit_max_ip: int = Field(default=40, validation_alias="WEB_RATE_LIMIT_MAX_IP")
+    web_rate_limit_window_s: int = Field(default=60, validation_alias="WEB_RATE_LIMIT_WINDOW_S")
+    # SSE: heartbeat (ține proxy-ul deschis) + backlog per vizitator pt reconectare (Last-Event-ID).
+    web_sse_heartbeat_s: float = Field(default=15.0, validation_alias="WEB_SSE_HEARTBEAT_S")
+    web_backlog_size: int = Field(default=20, validation_alias="WEB_BACKLOG_SIZE")
+    web_backlog_ttl_s: int = Field(default=300, validation_alias="WEB_BACKLOG_TTL_S")
 
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")
