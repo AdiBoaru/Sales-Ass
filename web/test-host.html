@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ro">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nativx widget — pagină de test (CSS ostil)</title>
+    <!--
+      Pagină TERȚĂ de test (NX-21 DoD): CSS global AGRESIV ca să dovedim izolarea prin shadow DOM
+      (widgetul rămâne intact, iar layout-ul gazdei NU e afectat de widget). Include un GATEWAY MOCK
+      (fetch + EventSource interceptate) ca să meargă fără backend real — demo standalone în browser.
+      Deschide direct în Chrome/Firefox/Safari.
+    -->
+    <style>
+      /* Reset ostil: tot ce ar putea scurge în widget dacă n-ar fi shadow DOM. */
+      * {
+        box-sizing: content-box !important;
+        font-family: "Comic Sans MS", cursive !important;
+        line-height: 3 !important;
+      }
+      body {
+        margin: 0;
+        padding: 40px;
+        background: repeating-linear-gradient(45deg, #fafafa, #fafafa 20px, #eee 20px, #eee 40px);
+        color: #222;
+      }
+      button {
+        background: hotpink !important;
+        border: 4px dashed lime !important;
+      }
+      input {
+        border: 4px solid orange !important;
+      }
+      h1 {
+        color: #b00;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Pagina gazdă (cu CSS ostil)</h1>
+    <p>
+      Dacă shadow DOM-ul funcționează: butonul/inputul widgetului NU sunt roz/portocalii/Comic Sans,
+      iar acest text rămâne afectat de CSS-ul ostil (dovadă că widgetul nu „repară" gazda).
+    </p>
+    <button>Buton al gazdei (trebuie roz cu chenar verde)</button>
+    <input placeholder="input al gazdei (chenar portocaliu)" />
+
+    <!-- ===== GATEWAY MOCK (doar pentru test standalone; în prod widgetul vorbește cu NX-20) ===== -->
+    <script>
+      (function () {
+        var realFetch = window.fetch;
+        window.fetch = function (url, opts) {
+          url = String(url);
+          if (url.indexOf("/web/bootstrap") !== -1) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ token: "t", visitor_id: "web_demo", sig: "sigdemo" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              }),
+            );
+          }
+          if (url.indexOf("/web/messages") !== -1) {
+            var body = JSON.parse((opts && opts.body) || "{}");
+            // răspuns bot „de la gateway" după 600ms, pe stream-ul mock
+            setTimeout(function () {
+              if (window.__mockES)
+                window.__mockES.emit({
+                  id: "web_out_" + Date.now(),
+                  type: "text",
+                  text: "Am primit: «" + body.text + "». (răspuns mock)",
+                });
+            }, 600);
+            return Promise.resolve(
+              new Response(JSON.stringify({ accepted: true, msg_id: "m1" }), { status: 200 }),
+            );
+          }
+          return realFetch.apply(window, arguments);
+        };
+        // EventSource mock: reține instanța, expune .emit() ca să simulăm push-ul de pe SSE.
+        window.EventSource = function (url) {
+          var self = this;
+          this.onopen = this.onmessage = this.onerror = null;
+          this.close = function () {};
+          this.emit = function (obj) {
+            if (self.onmessage) self.onmessage({ data: JSON.stringify(obj) });
+          };
+          window.__mockES = this;
+          setTimeout(function () {
+            if (self.onopen) self.onopen();
+          }, 50);
+        };
+      })();
+    </script>
+
+    <!-- ===== Embed de o linie (exact ca pe site-ul unui client) ===== -->
+    <script
+      src="./widget.js"
+      data-token="pub_demo_token"
+      data-api="https://mock.local"
+      data-locale="ro"
+      data-title="Sole Demo"
+      data-primary="#1f6feb"
+      data-position="right"
+      async
+    ></script>
+  </body>
+</html>
