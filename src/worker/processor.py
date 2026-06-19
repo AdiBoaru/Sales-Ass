@@ -56,6 +56,7 @@ from src.models import (
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
 from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
+from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 from src.worker.summarizer import generate_summary
 
@@ -419,39 +420,21 @@ async def handle_turn(
     # disclaimer și-l re-aplică la hit). NX-134.
     reply_text = ensure_disclaimer(ctx.reply.text, ctx.language)
 
-    # Scrierea Sender-ului: mesaj outbound + outbox + state, în aceeași tranzacție.
+    # Sender (P5): 1-2 mesaje outbound + outbox + state, în aceeași tranzacție. NX-90: reply lung
+    # de TEXT PUR → spart în max 2 fragmente (citire ușoară pe telefon); carusel/rich → un singur
+    # fragment (spargerea lead-in-ului ar strica ordinea cardurilor). Spargerea NU atinge state-ul.
+    is_rich = ctx.reply.rich is not None
+    has_products = bool(ctx.reply.products)
+    if is_rich or has_products:
+        fragments = [reply_text]
+    else:
+        fragments = split_reply(reply_text, limit=get_settings().reply_split_chars)
+
     async with conn.transaction():
-        out_msg_id = await insert_message(
-            conn,
-            business.id,
-            conv["id"],
-            contact.id,
-            Direction.OUTBOUND,
-            Author.BOT,
-            body=reply_text,
-            content_type="text",
-            status="queued",
-        )
-        payload = {
-            "type": "text",
-            "to": sender_external_id,
-            "text": reply_text,
-            "message_id": out_msg_id,
-        }
         new_state = conv["state"]
-        if ctx.reply.rich is not None:
-            # Recomandare BOGATĂ (model iZi): payload aditiv `rich`. `type` rămâne `text` →
-            # trece de allow-list; canalele cu `send_rich` (Telegram) randează bogat, restul
-            # (WhatsApp) primesc `text` = aplatizarea deterministă. Persistăm setul afișat.
-            payload["rich"] = asdict(ctx.reply.rich)
-            if ctx.reply.products:
-                new_state = {**conv["state"], "displayed_products": ctx.reply.products}
-        elif ctx.reply.products:
-            # carusel de produs (R2): primul card + butoane ◀🛒▶; W1 (products) =
-            # fallback în dispatcher. Persistăm setul afișat în state → navigarea
-            # caruselului (handle_callback) îl citește de acolo (ref-uri, principiul 8).
-            payload["type"] = "carousel"
-            payload["products"] = ctx.reply.products
+        if (is_rich or has_products) and ctx.reply.products:
+            # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
+            # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
             new_state = {**conv["state"], "displayed_products": ctx.reply.products}
         # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
         # pending_question default None) → nu lăsăm întrebări zombi în state.
@@ -460,13 +443,42 @@ async def handle_turn(
         # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
         if ctx.state_patch:
             new_state = {**new_state, **ctx.state_patch}
-        outbox_id = await enqueue_outbox(
-            conn,
-            business.id,
-            conv["id"],
-            turn_id,  # idempotency_key = turn → un singur outbox per tur
-            payload,
-        )
+
+        first_outbox_id = None
+        for i, frag in enumerate(fragments):
+            out_msg_id = await insert_message(
+                conn,
+                business.id,
+                conv["id"],
+                contact.id,
+                Direction.OUTBOUND,
+                Author.BOT,
+                body=frag,
+                content_type="text",
+                status="queued",
+            )
+            payload = {
+                "type": "text",
+                "to": sender_external_id,
+                "text": frag,
+                "message_id": out_msg_id,
+            }
+            # Extras-urile bogate stau pe PRIMUL fragment (rich/carusel = un fragment oricum):
+            # `type=text` rămâne (allow-list); canalele cu send_rich/carousel randează bogat.
+            if i == 0 and is_rich:
+                payload["rich"] = asdict(ctx.reply.rich)
+            elif i == 0 and has_products:
+                payload["type"] = "carousel"
+                payload["products"] = ctx.reply.products
+            outbox_id = await enqueue_outbox(
+                conn,
+                business.id,
+                conv["id"],
+                f"{turn_id}:{i}",  # idempotency_key per fragment (turn:0 / turn:1)
+                payload,
+            )
+            if first_outbox_id is None:
+                first_outbox_id = outbox_id
         await patch_conversation_state(
             conn,
             business.id,
@@ -475,6 +487,13 @@ async def handle_turn(
             conv["state_version"],
             touch_outbound=True,
         )
+
+    outbox_id = first_outbox_id
+    if len(fragments) > 1:
+        # Observabilitate (P10): emis după persistarea principală de events → persistăm separat.
+        split_ev = Event("reply_split", {"parts": len(fragments)})
+        ctx.events.append(split_ev)
+        await _persist_events(conn, business.id, conv["id"], contact.id, [split_ev])
 
     # Log per-tur la succes (fără PII: doar id-uri + lungimea reply-ului, nu corpul).
     log.info(

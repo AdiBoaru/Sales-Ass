@@ -95,6 +95,12 @@ class TelegramClient:
         except (KeyError, TypeError) as e:
             raise TelegramError(f"sendMessage fără message_id: {result}") from e
 
+    async def mark_typing(self, account_id: str, to: str, provider_msg_id: str | None) -> None:
+        """NX-90: `sendChatAction` cu `action=typing` → bula „...scrie" (~5s, suficient pt un tur
+        normal; fără keep-alive în P1). `provider_msg_id` ignorat (Bot API n-are read receipts).
+        Best-effort: ridică la eroare, caller-ul (`_safe_typing`) prinde și ignoră (P6)."""
+        await self._call("sendChatAction", {"chat_id": to, "action": "typing"})
+
     async def send_products(self, account_id: str, to: str, text: str, products: list[dict]) -> str:
         """Carduri compacte (W1): UN singur mesaj — textul de recomandare + un buton
         inline per produs (nume scurt + preț → link). Pattern „listă tappabilă",

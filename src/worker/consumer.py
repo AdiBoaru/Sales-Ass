@@ -18,10 +18,13 @@ import json
 import logging
 import socket
 
+import httpx
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
+from src.channels.base import ChannelSenderRegistry
 from src.channels.media import close_media
+from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
@@ -30,11 +33,32 @@ from src.redis_bus import STREAM_INBOUND, close_redis, get_redis
 from src.webhook.orders import process_order
 from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
+from src.worker.dispatcher import build_registry
 from src.worker.processor import handle_turn
 
 log = logging.getLogger(__name__)
 
 CONSUMER_GROUP = "workers"
+
+
+async def _safe_typing(registry: ChannelSenderRegistry | None, event: dict) -> None:
+    """Trimite „typing/read" pentru un mesaj inbound, INSTANT și best-effort (NX-90). Direct prin
+    ChannelSender (NU outbox: un typing întârziat/retry-uit e inutil). Canal fără `mark_typing`
+    (hasattr) → skip tăcut. Orice eroare → log fără PII, turul NU se rupe (P6). Argumentele
+    (channel_account_id receptor + sender_external_id + provider_msg_id) vin din envelope."""
+    if registry is None:
+        return
+    sender = registry.get(event.get("channel_kind", "whatsapp"))
+    if sender is None or not hasattr(sender, "mark_typing"):
+        return
+    try:
+        await sender.mark_typing(
+            event.get("channel_account_id", ""),
+            event.get("sender_external_id", ""),
+            event.get("provider_msg_id"),
+        )
+    except Exception as e:  # noqa: BLE001 — typing eșuat NU rupe turul (P6)
+        log.warning("typing eșuat (%s) — ignorat", type(e).__name__)
 
 
 async def ensure_group(redis: Redis) -> None:
@@ -101,7 +125,13 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
 
 
 async def consume_once(
-    pool, redis: Redis, consumer_name: str, debouncer: Debouncer, *, block_ms: int = 2000
+    pool,
+    redis: Redis,
+    consumer_name: str,
+    debouncer: Debouncer,
+    registry: ChannelSenderRegistry | None = None,
+    *,
+    block_ms: int = 2000,
 ) -> int:
     """Un ciclu de citire+procesare. Mesajele trec prin debounce (lot per expeditor);
     statusurile se procesează imediat. Întoarce numărul de evenimente tratate."""
@@ -121,6 +151,9 @@ async def consume_once(
             try:
                 event = json.loads(fields["data"])
                 if event.get("kind", "message") == "message":
+                    # NX-90: „typing…" INSTANT la primire, înainte de debounce (fire-and-forget).
+                    if get_settings().typing_enabled:
+                        asyncio.create_task(_safe_typing(registry, event))
                     await debouncer.add(event)  # coalesce + flush async (R1)
                 else:
                     await process_event(pool, redis, event)  # status → imediat
@@ -133,8 +166,11 @@ async def consume_once(
     return handled
 
 
-async def run_consumer(pool, redis: Redis, consumer_name: str) -> None:
-    """Bucla principală a worker-ului (rulează până la anulare)."""
+async def run_consumer(
+    pool, redis: Redis, consumer_name: str, registry: ChannelSenderRegistry | None = None
+) -> None:
+    """Bucla principală a worker-ului (rulează până la anulare). `registry` (NX-90) = sender-ele
+    de canal pentru typing-ul instant pe inbound; None → fără typing (compat dev/test)."""
     await ensure_group(redis)
 
     async def _handle(event: dict) -> None:
@@ -143,7 +179,7 @@ async def run_consumer(pool, redis: Redis, consumer_name: str) -> None:
     debouncer = Debouncer(_handle)
     log.info("consumer %s pornit pe stream %s", consumer_name, STREAM_INBOUND)
     while True:
-        await consume_once(pool, redis, consumer_name, debouncer)
+        await consume_once(pool, redis, consumer_name, debouncer, registry)
 
 
 async def _main() -> None:
@@ -157,12 +193,16 @@ async def _main() -> None:
     await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot, nu la primul mesaj
     redis = await get_redis()
     consumer_name = f"worker-{socket.gethostname()}"
-    try:
-        await run_consumer(pool, redis, consumer_name)
-    finally:
-        await close_media()  # închide httpx-ul de download media (NX-76)
-        await close_redis()
-        await close_pool()
+    # NX-90: client httpx + registru de sender-e pentru typing instant (reutilizăm build_registry
+    # din dispatcher). Canalele fără credențiale nu se înregistrează → typing-ul lor e skip tăcut.
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        registry = build_registry(http, get_settings())
+        try:
+            await run_consumer(pool, redis, consumer_name, registry)
+        finally:
+            await close_media()  # închide httpx-ul de download media (NX-76)
+            await close_redis()
+            await close_pool()
 
 
 if __name__ == "__main__":

@@ -108,7 +108,7 @@ async def claim_due(
             where o2.business_id = $1
               and o2.status in ('pending', 'failed', 'dispatching')
               and o2.next_attempt_at <= now()
-            order by o2.next_attempt_at
+            order by o2.next_attempt_at, o2.id
             for update of o2 skip locked
             limit $2
           ) due
