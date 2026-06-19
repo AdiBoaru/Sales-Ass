@@ -72,10 +72,9 @@ async def get_or_create_conversation(
 ) -> dict[str, Any]:
     """Întoarce conversația deschisă a contactului pe canal; o creează dacă lipsește.
 
-    Nota: nu există unique pe (contact, channel, open), deci două primele-mesaje
-    strict simultane pentru un contact NOU ar putea crea două conversații. În
-    practică debounce-ul (stagiul 2) le coalesce într-un singur lot, iar lock-ul
-    per-conversație serializează restul. Hardening (advisory lock) → follow-up.
+    Race-safe (NX-87): două prime-mesaje strict simultane ale unui contact NOU nu mai pot crea
+    două conversații deschise — `ON CONFLICT` pe indexul parțial `uq_conversations_one_open`
+    (migrația 010) face al doilea INSERT no-op, iar pierzătorul re-citește conversația câștigătoare.
     """
     existing = await get_open_conversation(conn, business_id, contact_id, channel_id)
     if existing is not None:
@@ -85,6 +84,8 @@ async def get_or_create_conversation(
         f"""
         insert into conversations (business_id, contact_id, channel_id, locale)
         values ($1, $2, $3, $4)
+        on conflict (business_id, contact_id, channel_id) where status = 'open'
+        do nothing
         returning {_CONV_COLS}
         """,
         business_id,
@@ -92,7 +93,16 @@ async def get_or_create_conversation(
         channel_id,
         locale,
     )
-    return _row_to_dict(row)
+    if row is not None:
+        return _row_to_dict(row)
+    # Am pierdut cursa: un INSERT simultan a câștigat (ON CONFLICT DO NOTHING → zero rânduri).
+    # Re-citim conversația deschisă (a câștigătorului). Garantat să existe (indexul tocmai a prins).
+    existing = await get_open_conversation(conn, business_id, contact_id, channel_id)
+    if existing is not None:
+        return existing
+    raise RuntimeError(
+        "get_or_create_conversation: conversație deschisă indisponibilă după conflict"
+    )
 
 
 async def patch_conversation_state(
