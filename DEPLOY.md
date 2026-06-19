@@ -96,6 +96,44 @@ câteva minute. Dacă RAM-ul e ok, treci la WhatsApp.
 
 > Verificarea Meta Business poate dura zile — începe paperwork-ul T013 din timp.
 
+## Faza 4 — Widget web (chat pe site)
+
+Al treilea canal: widget de chat embeddabil pe site-ul clientului. Rulează pe rute
+suplimentare în serviciul `webhook` (deja rutat de Traefik) — **fără container nou, fără
+DNS nou** (același `WEBHOOK_HOST`). `/web/chat` (sincron) rulează pipeline-ul IN-PROCES în
+`webhook`, deci acel container are nevoie de `OPENAI_API_KEY` + `DATABASE_URL_BOT` (deja în `.env`).
+
+1. **Seed canalul webchat** (o singură dată, generează `public_token` + `session_secret`):
+   ```bash
+   cd /opt/nativextech/nativx
+   docker compose run --rm webhook python scripts/seed_web_channel.py
+   # → public_token (= VITE_CHAT_PUBLIC_TOKEN în frontend)
+   ```
+2. **Activează gateway-ul** în `.env` (deja setate în `.env.prod.example`):
+   ```bash
+   WEB_ENABLED=true
+   WEB_CORS_ORIGINS=https://shop.nativextech.com   # originea EXACTĂ a site-ului, fără slash final
+   ```
+   apoi `docker compose up -d webhook`. Endpointurile devin live:
+   `https://WEBHOOK_HOST/web/bootstrap` + `/web/chat`.
+3. **Test e2e** (fără frontend):
+   ```bash
+   # bootstrap → ia visitor_id + sig
+   curl "https://WEBHOOK_HOST/web/bootstrap?token=PUBLIC_TOKEN"
+   # chat sincron (cu visitor_id + sig din pasul precedent)
+   curl -X POST "https://WEBHOOK_HOST/web/chat" -H "Content-Type: application/json" \
+     -d '{"token":"PUBLIC_TOKEN","visitor_id":"web_...","sig":"...","message":"ce ai pentru ten gras?"}'
+   # → {"content":"...","products":[...],"suggestions":[...]}
+   ```
+   Verifică din browser-ul site-ului că NU apare eroare CORS (originea trebuie să fie EXACT
+   în `WEB_CORS_ORIGINS`; `https://shop.nativextech.com` ≠ `https://www.shop.nativextech.com`
+   ≠ cu slash final).
+4. **Frontend**: dă echipei `VITE_CHAT_API_BASE=https://WEBHOOK_HOST` + `VITE_CHAT_PUBLIC_TOKEN=<public_token>`
+   (vezi `docs/web-widget-embed.md` §sincron pt contractul `{content, products, suggestions}`).
+
+> Carduri de produs: apar doar dacă rândurile din `products` au `image` + `product_url` în
+> Supabase (embeddings deja făcute → căutarea semantică merge). Lipsesc curat dacă datele lipsesc.
+
 ---
 
 ## Operare
@@ -118,6 +156,6 @@ docker compose down               # oprește DOAR stack-ul nativx (nu atinge res
 - **Swap** (amânat): `fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap
   /swapfile && swapon /swapfile` + linie în `/etc/fstab` + `sysctl vm.swappiness=10`.
   Plasă contra epuizării TOTALE de RAM (peste ce prind `mem_limit`-urile).
-- **Widget web** (canal NX-20a, în lucru): va sta pe rute suplimentare în serviciul
-  `webhook` → deja rutat de Traefik, fără container nou. Dacă cere WebSocket, Traefik
-  îl trece pe același router.
+- **Widget web** — LIVE (vezi Faza 4). Rute în serviciul `webhook`, fără container nou.
+  Dacă traficul web crește, mută `/web/*` într-un serviciu `webgw` dedicat (aceeași imagine,
+  alt router Traefik) ca să nu concureze cu ingestia de webhook pe CPU/RAM.

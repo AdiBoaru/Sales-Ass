@@ -20,6 +20,7 @@ from redis.asyncio import Redis
 
 from src.agent.llm import get_llm
 from src.cache.canonical import canonicalize, classify_volatility
+from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import get_data_version
@@ -29,7 +30,7 @@ from src.db.queries.conversations import (
     patch_conversation_state,
     touch_last_inbound,
 )
-from src.db.queries.inbound_dedupe import claim_inbound
+from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
 from src.db.queries.messages import (
     count_messages,
     get_messages_for_summary,
@@ -50,11 +51,13 @@ from src.models import (
     Direction,
     Event,
     InboundMessage,
+    Reply,
     TurnContext,
 )
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
 from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
+from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 from src.worker.summarizer import generate_summary
 
@@ -63,7 +66,12 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class TurnResult:
-    """Rezultatul procesării unui tur (pentru logging/teste)."""
+    """Rezultatul procesării unui tur (pentru logging/teste).
+
+    `reply` + `language` sunt populate DOAR pe calea sincronă (`deliver=False`, gateway web
+    request/response): apelantul mapează `reply` (text + produse + chips) direct în răspunsul HTTP,
+    fără outbox/dispatcher. Pe calea async (WhatsApp/Telegram/SSE) rămân None — livrarea e prin
+    outbox, iar `reply_text` (text PUR, fără disclaimer) e suficient pt log/teste."""
 
     conversation_id: str | None
     contact_id: str | None
@@ -71,6 +79,8 @@ class TurnResult:
     reply_text: str | None
     outbox_id: str | None
     deduped: bool = False
+    reply: Reply | None = None  # obiectul complet (sync); None pe calea async (outbox)
+    language: str | None = None  # limba turului (pt re-aplicarea disclaimer-ului la mapare sync)
 
 
 async def _persist_events(conn, business_id, conversation_id, contact_id, events) -> None:
@@ -324,11 +334,19 @@ async def handle_turn(
     *,
     redis: Redis | None = None,
     stages: list[Stage] | None = None,
+    deliver: bool = True,
 ) -> TurnResult:
     """Procesează un mesaj inbound pe o conexiune tenant-scoped pe `business.id`.
 
     `event` = envelope-ul neutru (InboundEvent.to_dict): channel_kind,
     channel_account_id, sender_external_id, provider_msg_id, content_type, body, ...
+
+    `deliver` (NX-25b — gateway web sincron): True (default, calea async) = Sender-ul scrie
+    reply-ul în `outbox` → dispatcher-ul îl livrează (WhatsApp/Telegram/SSE), eventual spart în 2.
+    False (request/response: răspunsul HTTP E transportul) = persistăm mesajul outbound (status
+    `sent`, un singur fragment) + state, dar NU punem în outbox (n-ar avea cine-l livra) și
+    întoarcem `ctx.reply` în `TurnResult` ca apelantul să-l mapeze în răspuns. Restul (dedupe,
+    history, analytics, cache, profil) e identic — sincronul nu pierde nimic din pipeline.
     """
     stages = stages or DEFAULT_STAGES
     turn_id = str(uuid4())
@@ -338,8 +356,9 @@ async def handle_turn(
 
     # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
     # Guard ÎNAINTE de orice scriere — un duplicat nu produce mesaj, nici outbox.
-    # Trade-off (NX-51): claim-ul se commit-ează imediat, deci un crash în mijlocul
-    # turului marchează mesajul ca văzut fără a-l finaliza (dead-letter = follow-up).
+    # NX-86 (dead-letter închis): claim-or-resume — un crash în mijlocul turului lasă
+    # completed_at NULL → orfanul e reclamat după CLAIM_TTL (nu mai e „văzut dar neprocesat").
+    # mark_inbound_completed (mai jos, în TX-ul de outbox) îl finalizează atomic la succes.
     if provider_msg_id and not await claim_inbound(conn, business.id, provider_msg_id):
         log.info("dedupe_hit_db: %s deja procesat (business %s)", provider_msg_id, business.id)
         return TurnResult(None, None, None, None, None, deduped=True)
@@ -382,6 +401,8 @@ async def handle_turn(
             content_type=event.get("content_type", "text"),
             body=event.get("body"),
             media_ref=event.get("media_id"),
+            channel_kind=channel_kind,
+            channel_account_id=event.get("channel_account_id", ""),
         ),
         conversation_id=conv["id"],
         history=await get_recent_messages(conn, business.id, conv["id"]),
@@ -394,7 +415,9 @@ async def handle_turn(
 
     # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
     llm = await _llm_within_budget(ctx, redis, business)
-    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm), stages)
+    # Media routing (NX-76): registry de fetchers (singleton, ca llm) → gate-ul descarcă poza.
+    media = get_media_registry()
+    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm, media=media), stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
     await _record_turn_cost(redis, business.id, ctx, llm_used=llm is not None)
 
@@ -406,7 +429,12 @@ async def handle_turn(
             # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
             # aici doar raportăm că turul n-a produs reply.
             log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
-        return TurnResult(conv["id"], contact.id, turn_id, None, None)
+        # NX-86: tur DONE (halt/no-reply) → finalizează claim-ul (altfel reaper-ul l-ar reprocesa).
+        if provider_msg_id:
+            await mark_inbound_completed(conn, business.id, provider_msg_id)
+        return TurnResult(
+            conv["id"], contact.id, turn_id, None, None, language=ctx.language
+        )
 
     # Sender (P5): garantează disclaimer-ul AI (art. 50) pe text, o singură dată, pt TOATE
     # rutele (simple/clarify/prose/fallback/cache). Idempotent — rich/welcome și-l aplatizează
@@ -414,50 +442,73 @@ async def handle_turn(
     # disclaimer și-l re-aplică la hit). NX-134.
     reply_text = ensure_disclaimer(ctx.reply.text, ctx.language)
 
-    # Scrierea Sender-ului: mesaj outbound + outbox + state, în aceeași tranzacție.
+    # Sender (P5): 1-2 mesaje outbound + outbox + state, în aceeași tranzacție. NX-90: reply lung
+    # de TEXT PUR → spart în max 2 fragmente (citire ușoară pe telefon); carusel/rich → un singur
+    # fragment (spargerea lead-in-ului ar strica ordinea cardurilor). Spargerea NU atinge state-ul.
+    is_rich = ctx.reply.rich is not None
+    has_products = bool(ctx.reply.products)
+    # Sync (deliver=False): un singur `content` în răspunsul HTTP — nu spargem (frontendul randează
+    # o bulă). Rich/carusel rămân un fragment oricum (spargerea lead-in-ului ar strica ordinea).
+    if is_rich or has_products or not deliver:
+        fragments = [reply_text]
+    else:
+        fragments = split_reply(reply_text, limit=get_settings().reply_split_chars)
+
     async with conn.transaction():
-        out_msg_id = await insert_message(
-            conn,
-            business.id,
-            conv["id"],
-            contact.id,
-            Direction.OUTBOUND,
-            Author.BOT,
-            body=reply_text,
-            content_type="text",
-            status="queued",
-        )
-        payload = {
-            "type": "text",
-            "to": sender_external_id,
-            "text": reply_text,
-            "message_id": out_msg_id,
-        }
         new_state = conv["state"]
-        if ctx.reply.rich is not None:
-            # Recomandare BOGATĂ (model iZi): payload aditiv `rich`. `type` rămâne `text` →
-            # trece de allow-list; canalele cu `send_rich` (Telegram) randează bogat, restul
-            # (WhatsApp) primesc `text` = aplatizarea deterministă. Persistăm setul afișat.
-            payload["rich"] = asdict(ctx.reply.rich)
-            if ctx.reply.products:
-                new_state = {**conv["state"], "displayed_products": ctx.reply.products}
-        elif ctx.reply.products:
-            # carusel de produs (R2): primul card + butoane ◀🛒▶; W1 (products) =
-            # fallback în dispatcher. Persistăm setul afișat în state → navigarea
-            # caruselului (handle_callback) îl citește de acolo (ref-uri, principiul 8).
-            payload["type"] = "carousel"
-            payload["products"] = ctx.reply.products
+        if (is_rich or has_products) and ctx.reply.products:
+            # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
+            # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
             new_state = {**conv["state"], "displayed_products": ctx.reply.products}
         # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
         # pending_question default None) → nu lăsăm întrebări zombi în state.
         new_state = {**new_state, "pending_question": ctx.reply.pending_question}
-        outbox_id = await enqueue_outbox(
-            conn,
-            business.id,
-            conv["id"],
-            turn_id,  # idempotency_key = turn → un singur outbox per tur
-            payload,
-        )
+        # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
+        # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
+        if ctx.state_patch:
+            new_state = {**new_state, **ctx.state_patch}
+
+        first_outbox_id = None
+        for i, frag in enumerate(fragments):
+            out_msg_id = await insert_message(
+                conn,
+                business.id,
+                conv["id"],
+                contact.id,
+                Direction.OUTBOUND,
+                Author.BOT,
+                body=frag,
+                content_type="text",
+                # Sync: livrarea e răspunsul HTTP → mesajul e deja `sent` (n-are dispatcher care
+                # să-l ducă din `queued`). Async: `queued` până trece dispatcher-ul.
+                status="queued" if deliver else "sent",
+            )
+            if not deliver:
+                # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
+                # Persistăm doar mesajul outbound (history) + state mai jos.
+                continue
+            payload = {
+                "type": "text",
+                "to": sender_external_id,
+                "text": frag,
+                "message_id": out_msg_id,
+            }
+            # Extras-urile bogate stau pe PRIMUL fragment (rich/carusel = un fragment oricum):
+            # `type=text` rămâne (allow-list); canalele cu send_rich/carousel randează bogat.
+            if i == 0 and is_rich:
+                payload["rich"] = asdict(ctx.reply.rich)
+            elif i == 0 and has_products:
+                payload["type"] = "carousel"
+                payload["products"] = ctx.reply.products
+            outbox_id = await enqueue_outbox(
+                conn,
+                business.id,
+                conv["id"],
+                f"{turn_id}:{i}",  # idempotency_key per fragment (turn:0 / turn:1)
+                payload,
+            )
+            if first_outbox_id is None:
+                first_outbox_id = outbox_id
         await patch_conversation_state(
             conn,
             business.id,
@@ -466,6 +517,17 @@ async def handle_turn(
             conv["state_version"],
             touch_outbound=True,
         )
+        # NX-86: finalizează claim-ul ÎN aceeași TX cu outbox → atomic. Crash înainte de commit →
+        # completed_at NULL → orfan recuperabil; commit → finalizat, niciodată reprocesat.
+        if provider_msg_id:
+            await mark_inbound_completed(conn, business.id, provider_msg_id)
+
+    outbox_id = first_outbox_id
+    if len(fragments) > 1:
+        # Observabilitate (P10): emis după persistarea principală de events → persistăm separat.
+        split_ev = Event("reply_split", {"parts": len(fragments)})
+        ctx.events.append(split_ev)
+        await _persist_events(conn, business.id, conv["id"], contact.id, [split_ev])
 
     # Log per-tur la succes (fără PII: doar id-uri + lungimea reply-ului, nu corpul).
     log.info(
@@ -487,4 +549,12 @@ async def handle_turn(
     await _extract_profile_and_score(
         conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
     )
-    return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)
+    return TurnResult(
+        conv["id"],
+        contact.id,
+        turn_id,
+        ctx.reply.text,
+        outbox_id,
+        reply=ctx.reply,  # sync: apelantul mapează text+produse+chips în răspunsul HTTP
+        language=ctx.language,
+    )

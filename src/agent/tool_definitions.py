@@ -144,6 +144,79 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "cart_add": {
+        "type": "function",
+        "function": {
+            "name": "cart_add",
+            "description": (
+                "Adaugă un produs în coș (se acumulează între mesaje). Folosește când clientul "
+                "vrea să mai pună ceva în coș fără să comande încă; apoi checkout_link când e gata."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "description": "id-ul produsului (din rezultatele search_products).",
+                    },
+                    "variant_id": {
+                        "type": ["string", "null"],
+                        "description": "id-ul variantei, dacă există; altfel null.",
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "description": "Cantitatea (≥1).",
+                    },
+                },
+                "required": ["product_id", "variant_id", "quantity"],
+            },
+        },
+    },
+    "reorder": {
+        "type": "function",
+        "function": {
+            "name": "reorder",
+            "description": (
+                "Propune re-comanda ultimei comenzi a clientului. Folosește când clientul spune "
+                "„vreau ce am comandat data trecută” / „trimite-mi același lucru”. Fără argumente."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    "subscribe_back_in_stock": {
+        "type": "function",
+        "function": {
+            "name": "subscribe_back_in_stock",
+            "description": (
+                "Abonează clientul la notificare când un produs fără stoc revine. Folosește când "
+                "produsul cerut e indisponibil și clientul vrea să fie anunțat la reaprovizionare."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "description": "id-ul produsului fără stoc (din rezultatele search).",
+                    },
+                    "variant_id": {
+                        "type": ["string", "null"],
+                        "description": "id-ul variantei, dacă a cerut una anume; altfel null.",
+                    },
+                },
+                "required": ["product_id", "variant_id"],
+            },
+        },
+    },
     "faq_lookup": {
         "type": "function",
         "function": {
@@ -164,6 +237,29 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     },
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    "request_human": {
+        "type": "function",
+        "function": {
+            "name": "request_human",
+            "description": (
+                "Escaladează la un operator uman. Folosește când clientul cere explicit un om, e "
+                "frustrat/nemulțumit, sau cererea e în afara a ce poți rezolva (reclamație, caz "
+                "sensibil). Un coleg preia; spune-i clientului că revine cineva în scurt timp."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "De ce escaladezi, pe scurt (ex. client nemulțumit).",
+                    },
+                },
+                "required": ["reason"],
             },
         },
     },

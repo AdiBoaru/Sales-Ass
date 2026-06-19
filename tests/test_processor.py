@@ -147,6 +147,40 @@ async def test_handle_turn_echo_writes_outbox(pool):
         assert row["last_outbound_at"] is not None
 
 
+async def test_handle_turn_splits_long_reply_into_two_outbox(pool):
+    """NX-90: reply de TEXT pur > 200ch → 2 rânduri outbox (turn:0/turn:1) + 2 mesaje outbound,
+    în ordine stabilă; reply scurt → 1 rând. State patch-uit o singură dată."""
+    long_text = "Propoziție despre cremă numărul " + "foarte lungă și detaliată. " * 12
+
+    async def _long_stage(ctx, deps):
+        ctx.set_reply(long_text)
+
+    async with tenant_tx(pool) as (conn, channel_id):
+        biz = await load_business(conn, DEMO_BIZ)
+        result = await handle_turn(
+            conn, biz, channel_id, _event(body="zi-mi tot"), stages=[_long_stage]
+        )
+
+        rows = await conn.fetch(
+            "select idempotency_key, status from outbox where conversation_id = $1 "
+            "order by idempotency_key",
+            result.conversation_id,
+        )
+        keys = [r["idempotency_key"] for r in rows]
+        assert len(rows) == 2 and keys[0].endswith(":0") and keys[1].endswith(":1")
+        # 3 mesaje: 1 inbound + 2 outbound (fragmentele)
+        n_out = await conn.fetchval(
+            "select count(*) from messages where conversation_id = $1 and direction = 'outbound'",
+            result.conversation_id,
+        )
+        assert n_out == 2
+        # state patch-uit o singură dată (un singur bump de versiune)
+        sv = await conn.fetchval(
+            "select state_version from conversations where id = $1", result.conversation_id
+        )
+        assert sv == 1
+
+
 async def test_handle_turn_same_contact_same_conversation(pool):
     """Două mesaje de la ACELAȘI wa_id → un singur contact + o singură conversație
     (identity resolution + get_or_create_conversation), tururi distincte."""

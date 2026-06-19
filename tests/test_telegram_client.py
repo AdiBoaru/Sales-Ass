@@ -195,3 +195,20 @@ async def test_carousel_fallback_image_when_missing():
     await _client(handler).send_carousel_card("b", "c", prods, 0)
 
     assert "placehold" in captured["body"]["photo"]
+
+
+async def test_mark_typing_sends_chat_action():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": True})
+
+    client = _client(handler)
+    await client.mark_typing("botid", "98765", None)  # provider_msg_id ignorat la Telegram
+
+    assert captured["url"] == "https://tg.test/bot123:ABC/sendChatAction"
+    assert captured["body"] == {"chat_id": "98765", "action": "typing"}

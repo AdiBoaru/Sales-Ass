@@ -20,6 +20,7 @@ import httpx
 
 from src.channels.base import ChannelSenderRegistry
 from src.channels.telegram.client import TelegramClient
+from src.channels.web.sender import WebSender
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.messages import set_message_provider_id
@@ -30,6 +31,7 @@ from src.db.queries.outbox import (
     mark_sent,
 )
 from src.meta_client import MetaClient
+from src.redis_bus import close_redis, get_redis
 
 log = logging.getLogger(__name__)
 
@@ -147,14 +149,24 @@ async def run_dispatcher(pool, registry: ChannelSenderRegistry, *, idle_sleep: f
             await asyncio.sleep(idle_sleep)
 
 
-def build_registry(http: httpx.AsyncClient, settings) -> ChannelSenderRegistry:
+def build_registry(http: httpx.AsyncClient, settings, redis=None) -> ChannelSenderRegistry:
     """Construiește registrul de sender-e din config. Canalele fără credențiale
-    nu se înregistrează (rândurile lor → 'dead' cu log explicit)."""
+    nu se înregistrează (rândurile lor → 'dead' cu log explicit). `redis` (NX-20) e necesar
+    pt WebSender (publish SSE); fără el / web dezactivat → canalul webchat nu se înregistrează."""
     registry = ChannelSenderRegistry()
     if settings.meta_access_token:
         registry.register("whatsapp", MetaClient(http, settings.meta_access_token))
     if settings.telegram_bot_token:
         registry.register("telegram", TelegramClient(http, settings.telegram_bot_token))
+    if settings.web_enabled and redis is not None:
+        registry.register(
+            "webchat",
+            WebSender(
+                redis,
+                backlog_size=settings.web_backlog_size,
+                backlog_ttl_s=settings.web_backlog_ttl_s,
+            ),
+        )
     return registry
 
 
@@ -164,11 +176,14 @@ async def _main() -> None:
     settings = get_settings()
     pool = await get_pool()  # admin (control plane: business_ids_with_due_outbox)
     await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot
+    redis = await get_redis() if settings.web_enabled else None  # NX-20: WebSender publică pe SSE
     async with httpx.AsyncClient(timeout=15.0) as http:
-        registry = build_registry(http, settings)
+        registry = build_registry(http, settings, redis)
         try:
             await run_dispatcher(pool, registry)
         finally:
+            if redis is not None:
+                await close_redis()
             await close_pool()
 
 

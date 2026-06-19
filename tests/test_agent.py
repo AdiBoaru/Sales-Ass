@@ -4,6 +4,8 @@ FakeLLM scriptează tool_calls (prin `execute`) + textul final; query-urile de c
 `catalog_tools` sunt monkeypatch-uite. Testăm: recomandare grounded, retrieval acumulat,
 fallback la preț inventat, răspuns fără produse, helperele de validare."""
 
+import pytest
+
 from src.models import (
     BusinessConfig,
     Contact,
@@ -15,7 +17,24 @@ from src.models import (
 )
 from src.tools import catalog_tools as ct
 from src.worker.runner import PipelineDeps
+from src.worker.stages import agent as agent_mod
 from src.worker.stages.agent import _budget, _links_ok, _prices_ok, agent_stage
+
+
+@pytest.fixture(autouse=True)
+def _stub_prompt_inputs(monkeypatch):
+    """NX-78: agent_stage citește categorii/aliase din DB pt promptul generat. Testele folosesc
+    `conn=object()` → stubbim cele două query-uri (prompt generic, fără DB reală)."""
+
+    async def _cats(conn, business_id):
+        return ["Creme", "Parfumuri"]
+
+    async def _aliases(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(agent_mod, "list_category_names", _cats)
+    monkeypatch.setattr(agent_mod, "list_routing_aliases", _aliases)
+
 
 PRODUCTS = [
     {
@@ -253,3 +272,88 @@ async def test_sales_no_products_clarify_served_verbatim(monkeypatch):
     )
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None and ctx.reply.text == "Ce tip de ten cauți?"
+
+
+# --- NX-78: prompt generat din DB --------------------------------------------
+
+
+async def test_agent_uses_generated_prompt_with_business_vertical(monkeypatch):
+    """Mock LLM capturează system-ul primit → conține verticalul businessului de test
+    (din DB, nu „beauty" hardcodat) + categoriile încărcate."""
+    _patch_search(monkeypatch, PRODUCTS)
+    captured = {}
+
+    class _CapLLM(FakeLLM):
+        async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+            captured["system"] = system
+            return await super().run_tool_loop(
+                system, user, tools, execute, max_steps=max_steps, model=model
+            )
+
+    ctx = _ctx()
+    ctx.business.vertical = "hvac"  # tenant non-beauty
+    llm = _CapLLM(
+        tool_calls=[("search_products", {"query": "x", "price_max": None, "limit": 6})],
+        final="Îți recomand Crema Hidratantă la 82.99 lei.",
+    )
+    await agent_stage(ctx, _deps(llm))
+    assert "hvac" in captured["system"] and "beauty" not in captured["system"]
+    assert "Creme" in captured["system"]  # categorii din stub (DB)
+
+
+async def test_db_failure_loading_prompt_falls_back_to_echo(monkeypatch):
+    """Failure case (card): query categorii aruncă → prins în try-ul buclei → echo (P6),
+    nicio excepție propagată, agentul nu setează reply."""
+
+    async def boom(conn, business_id):
+        raise RuntimeError("DB down")
+
+    monkeypatch.setattr(agent_mod, "list_category_names", boom)
+    ctx = _ctx()
+    llm = FakeLLM(tool_calls=[], final="orice")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is None  # no-op → fallback_stage (echo) preia mai târziu
+
+
+async def test_cart_add_state_patch_accumulated_in_ctx(monkeypatch):
+    # NX-79: execute (callback-ul buclei) acumulează ToolResult.state_patch în ctx.state_patch
+    # → processor-ul îl persistă în conversations.state.cart (path-ul de scriere a state-ului).
+    from src.tools import commerce_tools as ctools
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [PRODUCTS[0]]  # p1, in_stock, 82.99
+
+    monkeypatch.setattr(ctools, "get_products_by_ids", fake_by_ids)
+    ctx = _ctx()
+    llm = FakeLLM(tool_calls=[("cart_add", {"product_id": "p1", "quantity": 2})], final="ok")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.state_patch == {
+        "cart": [
+            {
+                "product_id": "p1",
+                "variant_id": None,
+                "name": "Crema Hidratantă",
+                "price": 82.99,
+                "quantity": 2,
+            }
+        ]
+    }
+
+
+async def test_bare_number_hallucination_triggers_retry_and_event(monkeypatch):
+    """NX-91: text brut cu o cifră bare halucinată (89 ∉ retrieval, fără valută) → validatorul
+    o prinde → retry de recompunere → reply curat (fără 89) + event validator_rejected (doar n)."""
+    _patch_search(monkeypatch, PRODUCTS)  # PRODUCTS: 82.99 / 120.50, NU 89
+    ctx = _ctx()
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "cremă", "price_max": None, "limit": 6})],
+        final="Crema costă 89 super ok",  # 89 negroundat, fără „lei"
+        retry="Îți recomand Crema Hidratantă, bună pentru hidratare.",  # recompunere fără cifre
+    )
+    await agent_stage(ctx, _deps(llm))
+
+    assert ctx.reply is not None and "89" not in ctx.reply.text  # halucinația nu ajunge la client
+    assert llm.complete_calls == 1  # s-a declanșat retry-ul de recompunere
+    ev = next((e for e in ctx.events if e.type == "validator_rejected"), None)
+    assert ev is not None and ev.properties == {"kind": "bare_number", "n": 1}
+    assert "text" not in ev.properties and "reply" not in ev.properties  # P12: zero corp reply

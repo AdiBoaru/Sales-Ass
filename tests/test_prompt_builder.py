@@ -1,0 +1,102 @@
+"""NX-78 — prompt_builder: prompt agent GENERAT din DB + determinism (prompt caching).
+
+Modul pur (zero LLM/DB) → assert-uri pe string direct. Acoperă: vertical injectat (≠ beauty),
+categorii goale (fallback fără vertical inventat), determinism byte-identic (ordine amestecată →
+același string = invariantul de cache), aliase doar când există.
+"""
+
+from src.agent.prompt_builder import (
+    ORDER_RECO_SYSTEM,
+    PromptInputs,
+    build_agent_system,
+    build_reco_system,
+    build_rich_system,
+)
+
+
+def _inp(**kw):
+    base = {
+        "business_name": "Sole Demo",
+        "vertical": "beauty",
+        "locale": "ro",
+        "categories": ["Creme", "Parfumuri", "Rujuri"],
+        "aliases": [],
+    }
+    base.update(kw)
+    return PromptInputs.build(**base)
+
+
+# --- vertical din DB (P9) ----------------------------------------------------
+
+
+def test_vertical_injected_beauty():
+    s = build_agent_system(_inp())
+    assert "beauty" in s
+    assert "Creme" in s and "Parfumuri" in s and "Rujuri" in s
+    assert "search_products" in s and "Maxim 3 apeluri" in s  # blocul de tool-uri + reguli
+
+
+def test_vertical_injected_hvac_not_beauty():
+    s = build_agent_system(
+        _inp(vertical="hvac", categories=["Aer condiționat", "Centrale termice"])
+    )
+    assert "hvac" in s and "beauty" not in s
+    assert "Aer condiționat" in s and "Centrale termice" in s
+
+
+def test_empty_categories_no_invented_vertical():
+    s = build_agent_system(_inp(vertical="auto", categories=[]))
+    assert "beauty" not in s
+    assert "Vinzi din aceste categorii" not in s  # linia lipsește când n-avem categorii
+    assert "search_products" in s  # promptul rămâne valid pt bucla de tool-calling
+
+
+# --- determinism = prompt caching --------------------------------------------
+
+
+def test_byte_identical_same_input():
+    assert build_agent_system(_inp()) == build_agent_system(_inp())
+
+
+def test_category_order_does_not_matter():
+    a = build_agent_system(_inp(categories=["Rujuri", "Creme", "Parfumuri"]))
+    b = build_agent_system(_inp(categories=["Creme", "Parfumuri", "Rujuri"]))
+    assert a == b  # sortare internă → prefix byte-identic indiferent de ordinea din DB
+
+
+def test_no_dynamic_content_in_system():
+    # promptul NU conține mesajul/produsele clientului (alea stau în USER) → stabil per tenant
+    s = build_agent_system(_inp())
+    assert "Mesaj client" not in s and "Nevoia clientului" not in s
+
+
+# --- aliase de rutare --------------------------------------------------------
+
+
+def test_aliases_line_present_only_when_nonempty():
+    without = build_agent_system(_inp(aliases=[]))
+    assert "Indicii de rutare" not in without
+    with_alias = build_agent_system(_inp(aliases=[("crema fata", "creme")]))
+    assert "Indicii de rutare" in with_alias and "crema fata" in with_alias
+
+
+# --- celelalte builder-e -----------------------------------------------------
+
+
+def test_reco_and_rich_carry_vertical():
+    assert "hvac" in build_reco_system(_inp(vertical="hvac"))
+    assert "hvac" in build_rich_system(_inp(vertical="hvac"))
+    # REGULI DURE din calea rich rămân (anti-halucinație)
+    assert "REGULI DURE" in build_rich_system(_inp())
+
+
+def test_order_reco_is_vertical_neutral():
+    # status comandă = suport, neutru pe vertical → constantă, fără „beauty"/categorie
+    assert "beauty" not in ORDER_RECO_SYSTEM and "comenzii" in ORDER_RECO_SYSTEM
+
+
+def test_build_defaults_tolerant():
+    inp = PromptInputs.build("", "", "", [], [])
+    assert inp.vertical == "ecommerce" and inp.business_name and inp.locale == "ro"
+    # nu crapă, produce un prompt valid generic
+    assert "search_products" in build_agent_system(inp)

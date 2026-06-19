@@ -18,17 +18,20 @@ import asyncpg
 from redis.asyncio import Redis
 
 from src.agent.llm import LLMClient
+from src.channels.base import MediaFetcherRegistry
 from src.models import TurnContext
 
 
 @dataclass
 class PipelineDeps:
     """Resursele pe care le primesc stagiile. Conexiunea e DEJA tenant-scoped.
-    `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios."""
+    `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios.
+    `media` poate fi None (fără canal cu download configurat) → media routing fail-soft (NX-76)."""
 
     conn: asyncpg.Connection
     redis: Redis | None = None
     llm: LLMClient | None = None
+    media: MediaFetcherRegistry | None = None
 
 
 # Un stagiu: mutează `ctx` pe loc; poate seta ctx.reply pentru early exit.
@@ -82,6 +85,7 @@ from src.worker.stages.clarify import clarify_resume_stage  # noqa: E402
 from src.worker.stages.faq import faq_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.greeting import greeting_stage  # noqa: E402
+from src.worker.stages.handoff import handoff_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
@@ -100,6 +104,7 @@ DEFAULT_STAGES: list[Stage] = [
     cache_stage,
     faq_stage,
     triage_stage,
+    handoff_stage,  # NX-123: consumă Route.HANDOFF (escaladare) înainte ca agentul să-l ignore
     agent_stage,
     fallback_stage,
 ]

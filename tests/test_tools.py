@@ -97,12 +97,18 @@ def _deps_no_llm() -> PipelineDeps:
 
 
 def test_enabled_tools_phase1_and_2():
-    # Faza 1 (read) + Faza 2 (comerț, F2): checkout_link + faq_lookup (NX-74) adăugate.
+    # Faza 1 (read) + Faza 2 (comerț): checkout_link + faq_lookup (NX-74) + cart_add/reorder/
+    # subscribe_back_in_stock (NX-79/80). Importul explicit garantează înregistrarea.
+    import src.tools.commerce_tools  # noqa: F401 — populează TOOL_REGISTRY cu tool-urile de comerț
+
     assert set(enabled_tools(None)) == {
         "search_products",
         "get_product_details",
         "compare_products",
+        "cart_add",
         "checkout_link",
+        "reorder",
+        "subscribe_back_in_stock",
         "faq_lookup",
     }
 

@@ -17,13 +17,21 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.agent import prompt_builder
+from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
-from src.db.queries.catalog import get_products_by_ids
+from src.config import get_settings
+from src.db.queries.catalog import (
+    get_products_by_ids,
+    list_category_names,
+    list_routing_aliases,
+)
 from src.models import RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
     faq_tools,
+    handoff_tools,
     orders_tools,
 )
 from src.tools.base import enabled_tools, run_tool
@@ -42,68 +50,17 @@ _BUDGET_RE = re.compile(
 )
 _URL_RE = re.compile(r"https?://\S+")
 
-# Prompt pentru bucla de tool-calling: agentul alege uneltele.
-_TOOL_SYSTEM = """Ești consultant de vânzări într-un magazin de beauty online din România.
-Ai unelte ca să răspunzi GROUNDED pe catalogul real:
-- search_products(query, price_max, category, brand, concerns, limit): caută pe nevoia clientului.
-  Pasează `concerns` cu nevoile lui în cuvintele LUI (ex. „ten gras", „acnee"), `category` (slug)
-  dacă primești „Categorie probabilă" potrivită, `brand` doar dacă l-a cerut explicit. Filtrarea
-  pe nevoie dă recomandări relevante, nu doar potrivire de nume.
-- get_product_details(product_id): preț, rating, ce laudă clienții (recenzii) pentru un produs.
-- compare_products(product_ids): compară 2-3 produse.
-- checkout_link(cart_items): creează linkul de cumpărare. Cheamă-l DOAR când clientul e gata să
-  cumpere sau cere linkul/să comande; trimite-i URL-ul întors, nu inventa linkuri.
-- check_order(order_ref): status + livrarea unei comenzi. Cheamă-l când clientul întreabă de o
-  comandă („unde e comanda mea?", „status ORD-123"); raportează DOAR ce întoarce, nu inventa.
-- faq_lookup(query): un fapt de business din baza de cunoștințe (livrare, retur, garanție, plată,
-  facturare). Cheamă-l când clientul întreabă o regulă/politică în mijlocul vânzării; raportează
-  DOAR ce întoarce, nu inventa reguli.
+# NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
+# numerele mici de proză („top 3", „pasul 2"). `(?<![\w./-])` / `(?![\w%])` → nu prinde procente
+# (89% = NX-30), nici cifre lipite de litere/căi (id-uri, „p2", versiuni). Vs _allowed_numbers.
+_BARE_NUM_RE = re.compile(r"(?<![\w./-])(\d{2,6}(?:[.,]\d{1,2})?|\d[.,]\d{1,2})(?![\w%])")
+# Whitelist mic, documentat: 24/48h (ferestre), „100%" fără semn, 2026 (anul curent — schema_v2 e
+# 2026). Conservator: la fals-pozitiv în live, extinzi setul SAU kill-switch, nu rescrii regula.
+_SAFE_BARE: frozenset[float] = frozenset({24.0, 48.0, 100.0, 2026.0})
 
-Reguli:
-- Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /
-  compare_products când clientul vrea detalii sau o comparație. Maxim 3 apeluri de unelte.
-- Pentru produsele DEJA arătate (vezi „Produse arătate recent" din context), folosește id-ul
-  lor din [] în get_product_details / compare_products / checkout_link — NU re-căuta. La un
-  follow-up de tip „care e cea mai bună?" / „trimite-mi linkul la prima", ia id-ul de acolo.
-- Recomandă 2-3 produse, în limba clientului, prietenos și concis. Pentru fiecare: numele,
-  prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se potrivește pe nevoie.
-- NU inventa produse, prețuri, ingrediente sau linkuri. Folosește DOAR ce întorc uneltele.
-- Termină cu o întrebare scurtă (buget / tip de ten) sau oferta de a trimite link. Text
-  simplu pentru chat, fără markdown greu."""
-
-# Prompt pentru retry/recompunere (din produse, fără unelte) — validatorul a respins textul.
-_RECO_SYSTEM = """Ești consultant de vânzări într-un magazin de beauty online din România.
-Primești întrebarea clientului și o listă de produse din catalog (cu prețuri REALE).
-Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis. Pentru fiecare:
-numele, prețul EXACT (lei) și ratingul (★) din listă, apoi de ce se potrivește. Folosește
-DOAR produsele, prețurile și linkurile din listă — NU inventa nimic. Maxim 3 produse."""
-
-# Recomandarea STRUCTURATĂ (model iZi, NX-richreply): modelul emite DOAR cuvinte + referințe
-# product_id/pro_index; codul (compose) pune prețuri/rating/linkuri din retrieval. Așa, clasa
-# „preț inventat" dispare prin construcție, iar motivul fiecărui card e ancorat pe un avantaj REAL.
-_FINAL_SCHEMA_SYSTEM = """Ești consultant de vânzări într-un magazin de beauty online din România.
-Primești nevoia clientului și o listă de produse REALE (id, preț, rating, avantaje din recenzii).
-Compui o recomandare structurată. Răspunzi DOAR cu JSON conform schemei.
-
-REGULI DURE:
-- NU scrii prețuri, linkuri, ratinguri, procente, număr de recenzii, termene de livrare sau ORICE
-  cifră. Codul le pune din date. Tu scrii DOAR cuvinte. SINGURA excepție: în `intro` poți relua
-  bugetul EXACT pe care l-a scris CLIENTUL (ex. „sub 80 lei") — e cifra LUI, nu un preț de produs.
-- `intro` = o frază scurtă care REIA nevoia clientului în cuvintele LUI (ex. dacă a zis „mâini
-  uscate" → „Pentru mâini uscate..."; dacă a zis „sub 80 lei" → poți păstra „sub 80 lei").
-  NU generic — legat de ce a cerut.
-- Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
-  avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = o clauză SCURTĂ care leagă
-  produsul de NEVOIA exactă a clientului (ex. „pentru mâini foarte uscate") — doar nevoia lui.
-- Recomandă 3-5 produse din listă, în limba clientului.
-- `pick` = un singur produs (cel mai potrivit) + justificare în cuvinte (fără cifre,
-  fără „cel mai bun").
-- `education` = 1-2 propoziții despre ce contează la nevoia clientului (fără cifre).
-- `suggestions` = 2-4 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
-  în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
-  „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un
-  buget cu cifre), NU afirmațiile tale. Evită generice de tip „Spune-mi mai multe".
-- Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
+# System prompt-urile sunt GENERATE din DB per (business, locale) — vezi `prompt_builder`
+# (NX-78, principiul 9). ZERO vertical hardcodat aici. `agent_stage` construiește `PromptInputs`
+# o dată și pasează prompturile la run_tool_loop / _finalize / _finalize_rich.
 
 # Schema strict pentru `complete_schema` (mini-ul folosește deja strict:true în tool-uri).
 # NB: fără maxItems/minimum — keyword-uri nesuportate de structured outputs strict; capul (6) și
@@ -188,13 +145,67 @@ def _links_ok(
     return True
 
 
+def _allowed_numbers(products: list[dict[str, Any]], grounded_prices: set[float]) -> set[float]:
+    """Toate numerele pe care botul AVEA voie să le spună fără valută: prețuri (price/sale_price),
+    stoc, rating — din produsele retrievate + variante — plus sumele grounded (total comandă)."""
+    allowed: set[float] = set(grounded_prices)
+    for p in products:
+        for key in ("price", "sale_price", "stock", "stock_total", "rating"):
+            v = p.get(key)
+            if v is not None:
+                allowed.add(round(float(v), 2))
+        for var in p.get("variants") or []:
+            for key in ("price", "sale_price", "stock"):
+                v = var.get(key)
+                if v is not None:
+                    allowed.add(round(float(v), 2))
+    return allowed
+
+
+def _bad_bare_numbers(
+    reply: str, products: list[dict[str, Any]], grounded_prices: set[float]
+) -> list[float]:
+    """Cifrele «grele» fără valută din reply care NU sunt grounded (nici preț cu valută deja
+    validat, nici whitelist de proză, nici valoare din retrieval). Gol = ok. Kill-switch
+    dezactivat → întotdeauna gol (fail-open). Toleranță 0.5 (ca _prices_ok)."""
+    if not get_settings().validator_bare_numbers_enabled:
+        return []
+    priced = {float(t.replace(",", ".")) for t in _PRICE_RE.findall(reply)}  # deja în _prices_ok
+    allowed = _allowed_numbers(products, grounded_prices)
+    bad: list[float] = []
+    for token in _BARE_NUM_RE.findall(reply):
+        value = float(token.replace(",", "."))
+        if any(abs(value - p) <= 0.5 for p in priced):  # „89 lei" → numărul 89 e deja acoperit
+            continue
+        if value in _SAFE_BARE:
+            continue
+        if not any(abs(value - a) <= 0.5 for a in allowed):
+            bad.append(value)
+    return bad
+
+
+def _bare_numbers_ok(
+    reply: str, products: list[dict[str, Any]], grounded_prices: set[float]
+) -> bool:
+    return not _bad_bare_numbers(reply, products, grounded_prices)
+
+
 def _valid(
     reply: str,
     products: list[dict[str, Any]],
     allowed_links: set[str] | None = None,
     allowed_prices: set[float] | None = None,
+    *,
+    check_bare: bool = True,
 ) -> bool:
-    return _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
+    """Preț + link grounded (mereu) + cifre bare grounded (NX-91, doar SALES). `check_bare=False`
+    pe ruta ORDER: statusul comenzii are numere DB legitime (dată livrare, AWB, cantitate) care NU
+    sunt prețuri → bare-check ar da fals-pozitive; sumele de comandă rămân păzite de _prices_ok."""
+    if not (
+        _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
+    ):
+        return False
+    return not check_bare or _bare_numbers_ok(reply, products, allowed_prices or set())
 
 
 def _products_brief(products: list[dict[str, Any]]) -> str:
@@ -254,6 +265,7 @@ def _dedupe(products: list[dict[str, Any]], cap: int = 6) -> list[dict[str, Any]
 
 async def _finalize(
     llm,
+    reco_system: str,
     query: str,
     text: str,
     products: list[dict[str, Any]],
@@ -264,7 +276,8 @@ async def _finalize(
 ) -> str:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
     prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
-    `allowed_links`/`allowed_prices` = linkuri/sume grounded de bot (checkout_link/check_order)."""
+    `reco_system` = system-ul de recompunere generat din DB (NX-78). `allowed_links`/
+    `allowed_prices` = linkuri/sume grounded de bot (checkout_link/check_order)."""
     if text and _valid(text, products, allowed_links, allowed_prices):
         return text
 
@@ -277,7 +290,7 @@ async def _finalize(
         f"FOLOSEȘTE EXACT doar aceste prețuri: {allowed}. Niciun alt preț, niciun link inventat."
     )
     try:
-        reply2 = await llm.complete(_RECO_SYSTEM, user)
+        reply2 = await llm.complete(reco_system, user)
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback determinist
         log.warning("agent: retry compunere eșuat (%s)", type(e).__name__)
         reply2 = ""
@@ -286,13 +299,6 @@ async def _finalize(
 
     log.warning("agent: validator a eșuat → fallback determinist")
     return _deterministic_reply(products)
-
-
-# Prompt de recompunere pt răspunsuri FĂRĂ produse cu date grounded (ex. status comandă) —
-# NU produse: validatorul a respins textul (sumă inventată). Forma e de SUPORT, nu de vânzare.
-_ORDER_RECO_SYSTEM = """Ești un asistent de suport pentru un magazin online din România.
-Raportezi statusul comenzii clientului, concis și prietenos, în limba lui. Folosește DOAR datele
-și sumele din informațiile primite — NU inventa numere, AWB, date de livrare sau linkuri."""
 
 
 async def _finalize_grounded(
@@ -306,7 +312,7 @@ async def _finalize_grounded(
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
     NU forma de produs `_deterministic_reply`)."""
-    if text and _valid(text, [], allowed_links, allowed_prices):
+    if text and _valid(text, [], allowed_links, allowed_prices, check_bare=False):
         return text
 
     allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
@@ -315,11 +321,11 @@ async def _finalize_grounded(
         f"FOLOSEȘTE EXACT doar aceste sume: {allowed}. Niciun alt număr, AWB sau link inventat."
     )
     try:
-        reply2 = await llm.complete(_ORDER_RECO_SYSTEM, user)
+        reply2 = await llm.complete(prompt_builder.ORDER_RECO_SYSTEM, user)
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
         log.warning("agent: retry status comandă eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, [], allowed_links, allowed_prices):
+    if reply2 and _valid(reply2, [], allowed_links, allowed_prices, check_bare=False):
         return reply2
 
     log.warning("agent: validator status comandă a eșuat → fallback sigur")
@@ -350,10 +356,13 @@ def _rich_bundle(products: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-async def _finalize_rich(llm, query: str, products: list[dict[str, Any]], ctx, history: str):
+async def _finalize_rich(
+    llm, rich_system: str, query: str, products: list[dict[str, Any]], ctx, history: str
+):
     """Compune recomandarea STRUCTURATĂ (model iZi). Modelul emite intro + referințe
     product_id/pro_index/fit_clause + pick + education + chip_intents (enum închis); codul
-    (compose) hidratează faptele. Întoarce `RichReply` sau None (→ fallback pe proză)."""
+    (compose) hidratează faptele. `rich_system` = system generat din DB (NX-78). Întoarce
+    `RichReply` sau None (→ fallback pe proză)."""
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     user = (
         f"Limba clientului: {ctx.language}\n{history_block}"
@@ -361,11 +370,22 @@ async def _finalize_rich(llm, query: str, products: list[dict[str, Any]], ctx, h
         f"{_rich_bundle(products)}"
     )
     try:
-        j = await llm.complete_schema(_FINAL_SCHEMA_SYSTEM, user, _RICH_SCHEMA)
+        j = await llm.complete_schema(rich_system, user, _RICH_SCHEMA)
     except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fallback pe proză
         log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
         return None
     return compose.assemble(ctx, j, products)
+
+
+async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInputs:
+    """Citește categoriile + aliasele aprobate (scoped pe business) și compune `PromptInputs`
+    (NX-78). Determinist (query-uri `order by`) → prefix de cache stabil. Ridicarea unei
+    excepții de DB se propagă în `try`-ul din `agent_stage` (→ echo fallback, P6)."""
+    categories = await list_category_names(deps.conn, ctx.business.id)
+    aliases = await list_routing_aliases(deps.conn, ctx.business.id)
+    return PromptInputs.build(
+        ctx.business.name, ctx.business.vertical, ctx.language, categories, aliases
+    )
 
 
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -394,6 +414,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         retrieved.extend(result.products)
         generated_links.update(result.links)
         grounded_prices.update(result.prices)
+        if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
+            ctx.state_patch.update(result.state_patch)
         if name == "check_order" and result.ok and result.llm_view:
             order_views.append(result.llm_view)
         ctx.emit("tool_call", name=name, ok=result.ok)
@@ -412,7 +434,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
 
     try:
-        final = await deps.llm.run_tool_loop(_TOOL_SYSTEM, user, tools, execute)
+        inp = await _load_prompt_inputs(deps, ctx)  # prompt generat din DB (NX-78, P9)
+        final = await deps.llm.run_tool_loop(
+            prompt_builder.build_agent_system(inp), user, tools, execute
+        )
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
@@ -437,7 +462,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
-            rich = await _finalize_rich(deps.llm, query, products, ctx, history)
+            rich = await _finalize_rich(
+                deps.llm, prompt_builder.build_rich_system(inp), query, products, ctx, history
+            )
             if rich is not None and rich.items:
                 ctx.set_rich_reply(
                     rich,
@@ -446,8 +473,14 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 )
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
                 return
+        # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
+        # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
+        bare = _bad_bare_numbers(final, products, grounded_prices) if final else []
+        if bare:
+            ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
         reply = await _finalize(
             deps.llm,
+            prompt_builder.build_reco_system(inp),
             query,
             final,
             products,
@@ -462,6 +495,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
         # pe rută — nu trecem o întrebare de vânzare prin fallback-ul de status comandă.
         if is_order:
+            # ORDER: fără bare-check (numere DB legitime: dată/AWB/cantitate) — vezi _valid.
             reply = await _finalize_grounded(
                 deps.llm,
                 final,

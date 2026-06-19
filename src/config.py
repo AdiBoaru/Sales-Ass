@@ -40,6 +40,18 @@ class Settings(BaseSettings):
         default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
     )
 
+    # --- Media routing: Vision poză→catalog (NX-76, stagiul 3) ---
+    # O poză de produs (content_type=image) e descrisă de Vision (prin adaptorul unic, ca
+    # embed/moderate — extracție, NU generare) și descrierea devine text de căutare în
+    # ctx.message.body → triaj rutează SALES → agentul cheamă search_products. Imagine→text→search.
+    vision_enabled: bool = Field(default=True, validation_alias="VISION_ENABLED")
+    # Modelul Vision: agentul (mini) are vedere; nano NU. Default = model_agent.
+    model_vision: str = Field(default="gpt-5.4-mini", validation_alias="MODEL_VISION")
+    # Cap dur de mărime al pozei descărcate (bytes) — peste = fail-soft (nu trimitem la Vision).
+    vision_max_bytes: int = Field(default=5_000_000, validation_alias="VISION_MAX_BYTES")
+    # Estimare cost/apel Vision (ca un apel de agent) pt contorul zilnic G2c (plasă, nu facturare).
+    cost_vision_usd: float = Field(default=0.003, validation_alias="COST_VISION_USD")
+
     # --- Moderation gate (NX-15) ---
     # Poartă în Gates înaintea triajului: mesaj flagged → răspuns neutru (gratuit la OpenAI).
     moderation_enabled: bool = Field(default=True, validation_alias="MODERATION_ENABLED")
@@ -59,6 +71,39 @@ class Settings(BaseSettings):
 
     # --- Telegram (canal de TEST — long polling) ---
     telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
+
+    # --- Web Widget (NX-20, E26 — al treilea canal, V1.5) ---
+    # Gateway SSE pe app-ul FastAPI: POST /web/messages (→ envelope neutru, ca Telegram) +
+    # GET /web/stream (Server-Sent Events). Sesiune anonimă semnată HMAC (token public per tenant
+    # + visitor_id); secretul din channels.settings (control plane, cache). Default OFF (V1.5).
+    web_enabled: bool = Field(default=False, validation_alias="WEB_ENABLED")
+    # TTL cache control-plane pt public_token → (business_id, session_secret). Scurt → revocare/seed
+    # rapid; suficient cât să nu lovim DB la fiecare mesaj/heartbeat.
+    web_session_secret_ttl_s: float = Field(
+        default=60.0, validation_alias="WEB_SESSION_SECRET_TTL_S"
+    )
+    # Rate limit web (NX-20): public anonim → praguri mai strânse decât WhatsApp, pe DOUĂ chei
+    # (IP prinde rotirea de visitor_id; visitor prinde spam-ul unui client legit).
+    web_rate_limit_max_visitor: int = Field(
+        default=15, validation_alias="WEB_RATE_LIMIT_MAX_VISITOR"
+    )
+    web_rate_limit_max_ip: int = Field(default=40, validation_alias="WEB_RATE_LIMIT_MAX_IP")
+    web_rate_limit_window_s: int = Field(default=60, validation_alias="WEB_RATE_LIMIT_WINDOW_S")
+    # SSE: heartbeat (ține proxy-ul deschis) + backlog per vizitator pt reconectare (Last-Event-ID).
+    web_sse_heartbeat_s: float = Field(default=15.0, validation_alias="WEB_SSE_HEARTBEAT_S")
+    web_backlog_size: int = Field(default=20, validation_alias="WEB_BACKLOG_SIZE")
+    web_backlog_ttl_s: int = Field(default=300, validation_alias="WEB_BACKLOG_TTL_S")
+    # CORS allowlist pt POST /web/chat (NX-25b — gateway web SINCRON request/response). Browserul
+    # shop-ului apelează endpointul cross-origin → preflight-ul (înainte de body, deci fără token)
+    # se gate-uiește la nivel de browser pe ACEASTĂ listă. Token public + sig + rate-limit rămân
+    # gardele server-side. CSV (`https://shop.ro,http://localhost:5173`); gol → CORS dezactivat
+    # (doar same-origin). Binding fin origin↔token per canal (channels.settings) = follow-up NX-25.
+    web_cors_origins: str = Field(default="", validation_alias="WEB_CORS_ORIGINS")
+
+    @property
+    def web_cors_origins_list(self) -> list[str]:
+        """Origin-urile CORS permise pentru /web/chat (CSV → listă, fără goluri)."""
+        return [o.strip() for o in self.web_cors_origins.split(",") if o.strip()]
 
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")
@@ -163,6 +208,29 @@ class Settings(BaseSettings):
     proactive_enabled: bool = Field(default=True, validation_alias="PROACTIVE_ENABLED")
     proactive_batch_size: int = Field(default=20, validation_alias="PROACTIVE_BATCH_SIZE")
     proactive_idle_sleep_s: float = Field(default=5.0, validation_alias="PROACTIVE_IDLE_SLEEP_S")
+
+    # --- Validator cifre bare (NX-91, stagiul 8 inline în agent) ---
+    # Pe lângă prețurile cu valută (_PRICE_RE), validatorul prinde și cifrele «grele» FĂRĂ valută
+    # („costă 89", „47 pe stoc", „rating 4.9") care nu sunt grounded în ctx.retrieval → retry/
+    # fallback. Kill-switch FAIL-OPEN: la fals-pozitive în prod, dezactivează fără redeploy de cod.
+    validator_bare_numbers_enabled: bool = Field(
+        default=True, validation_alias="VALIDATOR_BARE_NUMBERS_ENABLED"
+    )
+    # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
+    # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).
+    # Reply > reply_split_chars → spart în max 2 mesaje (citire ușoară pe telefon). Pur transport.
+    typing_enabled: bool = Field(default=True, validation_alias="TYPING_ENABLED")
+    reply_split_chars: int = Field(default=200, validation_alias="REPLY_SPLIT_CHARS")
+
+    # --- Lock per conversație (NX-85, stagiul 2 — ordonare multi-consumer) ---
+    # Serializează tururile aceleiași conversații între REPLICI de worker (lock Redis SET NX EX pe
+    # business+expeditor). Ocupat → re-queue cu backoff scurt (cap dur). Fail-open dacă Redis e jos.
+    conv_lock_enabled: bool = Field(default=True, validation_alias="CONV_LOCK_ENABLED")
+    conv_lock_ttl_seconds: int = Field(default=30, validation_alias="CONV_LOCK_TTL_SECONDS")
+    conv_lock_requeue_delay_ms: int = Field(
+        default=150, validation_alias="CONV_LOCK_REQUEUE_DELAY_MS"
+    )
+    conv_lock_max_requeues: int = Field(default=10, validation_alias="CONV_LOCK_MAX_REQUEUES")
 
     @property
     def is_prod(self) -> bool:

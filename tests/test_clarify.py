@@ -179,6 +179,7 @@ async def _run_handle_turn(monkeypatch, stage):
         return None  # llm=None; folosim `stages` custom oricum
 
     monkeypatch.setattr(proc, "claim_inbound", fake_claim)
+    monkeypatch.setattr(proc, "mark_inbound_completed", anoop)  # NX-86: finalizare claim
     monkeypatch.setattr(proc, "get_or_create_contact", fake_contact)
     monkeypatch.setattr(proc, "get_or_create_conversation", fake_conv)
     monkeypatch.setattr(proc, "insert_message", fake_insert_msg)
