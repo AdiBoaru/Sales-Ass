@@ -207,6 +207,36 @@ def test_flatten_renders_data_prices_and_disclaimer() -> None:
     assert "Funcționez cu inteligență" in text
 
 
+def test_flatten_framing_omits_enumeration_and_chips() -> None:
+    """Widget (carduri): flatten_framing = intro + pick + educație + disclaimer, FĂRĂ lista
+    numerotată cu preț/rating și FĂRĂ „Poți cere și:" — le fac cardurile + butoanele."""
+    retrieved = [
+        {
+            "id": "A",
+            "name": "Crema A",
+            "price": 34.99,
+            "url": "u",
+            "rating": 4.7,
+            "top_pros": ["hidratează"],
+        }
+    ]
+    j = {
+        "intro": "Intro.",
+        "education": "Educație.",
+        "suggestions": ["Una mai ieftină"],
+        "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "pentru uscăciune"}],
+        "pick": {"product_id": "A", "justification": "alegere bună"},
+    }
+    text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
+    assert "Intro." in text  # framing
+    assert "Recomandarea mea: Crema A" in text  # pick (numește produsul)
+    assert "Educație." in text  # educație
+    assert "Funcționez cu inteligență" in text  # disclaimer
+    assert "34.99" not in text and "⭐" not in text  # FĂRĂ preț/rating (le fac cardurile)
+    assert "1. Crema A" not in text  # FĂRĂ lista numerotată
+    assert "Poți cere și" not in text  # chips = butoane, nu text
+
+
 def test_card_products_has_signature_keys() -> None:
     retrieved = [{"id": "A", "name": "A", "price": 10.0, "url": "u", "top_pros": ["x"]}]
     j = {
