@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent import prompt_builder
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
+from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
@@ -47,6 +48,14 @@ _BUDGET_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_RE = re.compile(r"https?://\S+")
+
+# NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
+# numerele mici de proză („top 3", „pasul 2"). `(?<![\w./-])` / `(?![\w%])` → nu prinde procente
+# (89% = NX-30), nici cifre lipite de litere/căi (id-uri, „p2", versiuni). Vs _allowed_numbers.
+_BARE_NUM_RE = re.compile(r"(?<![\w./-])(\d{2,6}(?:[.,]\d{1,2})?|\d[.,]\d{1,2})(?![\w%])")
+# Whitelist mic, documentat: 24/48h (ferestre), „100%" fără semn, 2026 (anul curent — schema_v2 e
+# 2026). Conservator: la fals-pozitiv în live, extinzi setul SAU kill-switch, nu rescrii regula.
+_SAFE_BARE: frozenset[float] = frozenset({24.0, 48.0, 100.0, 2026.0})
 
 # System prompt-urile sunt GENERATE din DB per (business, locale) — vezi `prompt_builder`
 # (NX-78, principiul 9). ZERO vertical hardcodat aici. `agent_stage` construiește `PromptInputs`
@@ -135,13 +144,67 @@ def _links_ok(
     return True
 
 
+def _allowed_numbers(products: list[dict[str, Any]], grounded_prices: set[float]) -> set[float]:
+    """Toate numerele pe care botul AVEA voie să le spună fără valută: prețuri (price/sale_price),
+    stoc, rating — din produsele retrievate + variante — plus sumele grounded (total comandă)."""
+    allowed: set[float] = set(grounded_prices)
+    for p in products:
+        for key in ("price", "sale_price", "stock", "stock_total", "rating"):
+            v = p.get(key)
+            if v is not None:
+                allowed.add(round(float(v), 2))
+        for var in p.get("variants") or []:
+            for key in ("price", "sale_price", "stock"):
+                v = var.get(key)
+                if v is not None:
+                    allowed.add(round(float(v), 2))
+    return allowed
+
+
+def _bad_bare_numbers(
+    reply: str, products: list[dict[str, Any]], grounded_prices: set[float]
+) -> list[float]:
+    """Cifrele «grele» fără valută din reply care NU sunt grounded (nici preț cu valută deja
+    validat, nici whitelist de proză, nici valoare din retrieval). Gol = ok. Kill-switch
+    dezactivat → întotdeauna gol (fail-open). Toleranță 0.5 (ca _prices_ok)."""
+    if not get_settings().validator_bare_numbers_enabled:
+        return []
+    priced = {float(t.replace(",", ".")) for t in _PRICE_RE.findall(reply)}  # deja în _prices_ok
+    allowed = _allowed_numbers(products, grounded_prices)
+    bad: list[float] = []
+    for token in _BARE_NUM_RE.findall(reply):
+        value = float(token.replace(",", "."))
+        if any(abs(value - p) <= 0.5 for p in priced):  # „89 lei" → numărul 89 e deja acoperit
+            continue
+        if value in _SAFE_BARE:
+            continue
+        if not any(abs(value - a) <= 0.5 for a in allowed):
+            bad.append(value)
+    return bad
+
+
+def _bare_numbers_ok(
+    reply: str, products: list[dict[str, Any]], grounded_prices: set[float]
+) -> bool:
+    return not _bad_bare_numbers(reply, products, grounded_prices)
+
+
 def _valid(
     reply: str,
     products: list[dict[str, Any]],
     allowed_links: set[str] | None = None,
     allowed_prices: set[float] | None = None,
+    *,
+    check_bare: bool = True,
 ) -> bool:
-    return _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
+    """Preț + link grounded (mereu) + cifre bare grounded (NX-91, doar SALES). `check_bare=False`
+    pe ruta ORDER: statusul comenzii are numere DB legitime (dată livrare, AWB, cantitate) care NU
+    sunt prețuri → bare-check ar da fals-pozitive; sumele de comandă rămân păzite de _prices_ok."""
+    if not (
+        _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
+    ):
+        return False
+    return not check_bare or _bare_numbers_ok(reply, products, allowed_prices or set())
 
 
 def _products_brief(products: list[dict[str, Any]]) -> str:
@@ -248,7 +311,7 @@ async def _finalize_grounded(
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
     NU forma de produs `_deterministic_reply`)."""
-    if text and _valid(text, [], allowed_links, allowed_prices):
+    if text and _valid(text, [], allowed_links, allowed_prices, check_bare=False):
         return text
 
     allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
@@ -261,7 +324,7 @@ async def _finalize_grounded(
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
         log.warning("agent: retry status comandă eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, [], allowed_links, allowed_prices):
+    if reply2 and _valid(reply2, [], allowed_links, allowed_prices, check_bare=False):
         return reply2
 
     log.warning("agent: validator status comandă a eșuat → fallback sigur")
@@ -409,6 +472,11 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 )
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
                 return
+        # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
+        # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
+        bare = _bad_bare_numbers(final, products, grounded_prices) if final else []
+        if bare:
+            ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
         reply = await _finalize(
             deps.llm,
             prompt_builder.build_reco_system(inp),
@@ -426,6 +494,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
         # pe rută — nu trecem o întrebare de vânzare prin fallback-ul de status comandă.
         if is_order:
+            # ORDER: fără bare-check (numere DB legitime: dată/AWB/cantitate) — vezi _valid.
             reply = await _finalize_grounded(
                 deps.llm,
                 final,

@@ -20,8 +20,8 @@ from functools import lru_cache
 ORDER_RECO_SYSTEM = (
     "Ești un asistent de suport pentru un magazin online din România.\n"
     "Raportezi statusul comenzii clientului, concis și prietenos, în limba lui. Folosește DOAR "
-    "datele\nși sumele din informațiile primite — NU inventa numere, AWB, date de livrare sau "
-    "linkuri."
+    "datele\nși sumele din informațiile primite — NU inventa numere (sume, cantități, AWB), date "
+    "de livrare\nsau linkuri."
 )
 
 # Blocul de tool-uri + reguli pt bucla de tool-calling — IDENTIC pe toți tenanții (parte din
@@ -145,7 +145,8 @@ def build_reco_system(inp: PromptInputs) -> str:
         "Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis. Pentru "
         "fiecare:\nnumele, prețul EXACT (lei) și ratingul (★) din listă, apoi de ce se "
         "potrivește. Folosește\nDOAR produsele, prețurile și linkurile din listă — NU inventa "
-        "nimic. Maxim 3 produse."
+        "nimic. NU pune cifre\nde stoc, cantitate sau rating care nu sunt în listă (nicio cifră "
+        "negroundată, cu sau fără\nvalută). Maxim 3 produse."
     )
 
 

@@ -338,3 +338,22 @@ async def test_cart_add_state_patch_accumulated_in_ctx(monkeypatch):
             }
         ]
     }
+
+
+async def test_bare_number_hallucination_triggers_retry_and_event(monkeypatch):
+    """NX-91: text brut cu o cifră bare halucinată (89 ∉ retrieval, fără valută) → validatorul
+    o prinde → retry de recompunere → reply curat (fără 89) + event validator_rejected (doar n)."""
+    _patch_search(monkeypatch, PRODUCTS)  # PRODUCTS: 82.99 / 120.50, NU 89
+    ctx = _ctx()
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "cremă", "price_max": None, "limit": 6})],
+        final="Crema costă 89 super ok",  # 89 negroundat, fără „lei"
+        retry="Îți recomand Crema Hidratantă, bună pentru hidratare.",  # recompunere fără cifre
+    )
+    await agent_stage(ctx, _deps(llm))
+
+    assert ctx.reply is not None and "89" not in ctx.reply.text  # halucinația nu ajunge la client
+    assert llm.complete_calls == 1  # s-a declanșat retry-ul de recompunere
+    ev = next((e for e in ctx.events if e.type == "validator_rejected"), None)
+    assert ev is not None and ev.properties == {"kind": "bare_number", "n": 1}
+    assert "text" not in ev.properties and "reply" not in ev.properties  # P12: zero corp reply
