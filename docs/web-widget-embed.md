@@ -40,6 +40,35 @@ Atât. Apare un buton flotant de chat; la deschidere widgetul își creează ses
 3. **Primire** — `GET /web/stream?token=…&visitor_id=…&sig=…` (EventSource SSE). Răspunsurile bot
    vin pe acest stream; reconectare nativă la drop de rețea (Last-Event-ID).
 
+## Variantă sincronă — `POST /web/chat` (NX-25b)
+
+Pentru widget-uri care **randează carduri de produs** și vor răspunsul în același request (nu prin
+SSE), gateway-ul expune o variantă **request/response**:
+
+```
+POST /web/chat
+{ "token": "pub_…", "visitor_id": "web_…", "sig": "…", "message": "ce ai pentru ten gras?" }
+→ { "content": "…", "products": [ { "name", "price", "image_url", "url", "rating", "reason" } ],
+    "suggestions": ["Mai ieftin", "Compară cu X"] }
+```
+
+- **Aceeași autentificare** ca `/web/messages`: `visitor_id` + `sig` din `GET /web/bootstrap`
+  (un singur apel la montare). `history`-ul trimis de frontend e **ignorat** — serverul ține
+  istoricul în DB pe `visitor_id` (memorie, state, validator).
+- **Același pipeline** ca toate canalele: gates, triaj, agent, **validator de prețuri** (zero preț
+  inventat), căutare reală în catalog, analytics. NU e un endpoint paralel — rulează `handle_turn`
+  in-process cu `deliver=False` (răspunsul HTTP e transportul, fără outbox/dispatcher).
+- **CORS** — browserul shop-ului apelează cross-origin → setează originile permise în
+  `WEB_CORS_ORIGINS` (CSV). Preflight-ul (înainte de body) se gate-uiește pe această listă;
+  gardele server-side rămân token + sig + rate-limit. Binding fin origin↔token per canal = NX-25.
+- **Operațional**: `/web/chat` rulează pipeline-ul (DB + LLM) **în procesul API**, nu în worker →
+  containerul care servește FastAPI are nevoie de `OPENAI_API_KEY` + credențialele `bot_runtime`
+  (`DATABASE_URL_BOT`), exact ca worker-ul. (Calea SSE păstrează API-ul subțire; sincronul nu.)
+
+`content` are deja disclaimer-ul AI; `products`/`suggestions` sunt goale când turul nu produce
+recomandare (frontendul afișează doar textul). Carduri ⇐ `reply.rich.items` (au `rating`/`reason`)
+sau `reply.products`; `suggestions` ⇐ chip-urile de follow-up.
+
 ## Izolare & conformitate
 
 - **Shadow DOM** — tot UI-ul trăiește într-un `shadowRoot` (mode open); zero conflict CSS cu

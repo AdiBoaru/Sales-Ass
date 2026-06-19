@@ -51,6 +51,7 @@ from src.models import (
     Direction,
     Event,
     InboundMessage,
+    Reply,
     TurnContext,
 )
 from src.worker.compose import ensure_disclaimer
@@ -65,7 +66,12 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class TurnResult:
-    """Rezultatul procesării unui tur (pentru logging/teste)."""
+    """Rezultatul procesării unui tur (pentru logging/teste).
+
+    `reply` + `language` sunt populate DOAR pe calea sincronă (`deliver=False`, gateway web
+    request/response): apelantul mapează `reply` (text + produse + chips) direct în răspunsul HTTP,
+    fără outbox/dispatcher. Pe calea async (WhatsApp/Telegram/SSE) rămân None — livrarea e prin
+    outbox, iar `reply_text` (text PUR, fără disclaimer) e suficient pt log/teste."""
 
     conversation_id: str | None
     contact_id: str | None
@@ -73,6 +79,8 @@ class TurnResult:
     reply_text: str | None
     outbox_id: str | None
     deduped: bool = False
+    reply: Reply | None = None  # obiectul complet (sync); None pe calea async (outbox)
+    language: str | None = None  # limba turului (pt re-aplicarea disclaimer-ului la mapare sync)
 
 
 async def _persist_events(conn, business_id, conversation_id, contact_id, events) -> None:
@@ -326,11 +334,19 @@ async def handle_turn(
     *,
     redis: Redis | None = None,
     stages: list[Stage] | None = None,
+    deliver: bool = True,
 ) -> TurnResult:
     """Procesează un mesaj inbound pe o conexiune tenant-scoped pe `business.id`.
 
     `event` = envelope-ul neutru (InboundEvent.to_dict): channel_kind,
     channel_account_id, sender_external_id, provider_msg_id, content_type, body, ...
+
+    `deliver` (NX-25b — gateway web sincron): True (default, calea async) = Sender-ul scrie
+    reply-ul în `outbox` → dispatcher-ul îl livrează (WhatsApp/Telegram/SSE), eventual spart în 2.
+    False (request/response: răspunsul HTTP E transportul) = persistăm mesajul outbound (status
+    `sent`, un singur fragment) + state, dar NU punem în outbox (n-ar avea cine-l livra) și
+    întoarcem `ctx.reply` în `TurnResult` ca apelantul să-l mapeze în răspuns. Restul (dedupe,
+    history, analytics, cache, profil) e identic — sincronul nu pierde nimic din pipeline.
     """
     stages = stages or DEFAULT_STAGES
     turn_id = str(uuid4())
@@ -416,7 +432,9 @@ async def handle_turn(
         # NX-86: tur DONE (halt/no-reply) → finalizează claim-ul (altfel reaper-ul l-ar reprocesa).
         if provider_msg_id:
             await mark_inbound_completed(conn, business.id, provider_msg_id)
-        return TurnResult(conv["id"], contact.id, turn_id, None, None)
+        return TurnResult(
+            conv["id"], contact.id, turn_id, None, None, language=ctx.language
+        )
 
     # Sender (P5): garantează disclaimer-ul AI (art. 50) pe text, o singură dată, pt TOATE
     # rutele (simple/clarify/prose/fallback/cache). Idempotent — rich/welcome și-l aplatizează
@@ -429,7 +447,9 @@ async def handle_turn(
     # fragment (spargerea lead-in-ului ar strica ordinea cardurilor). Spargerea NU atinge state-ul.
     is_rich = ctx.reply.rich is not None
     has_products = bool(ctx.reply.products)
-    if is_rich or has_products:
+    # Sync (deliver=False): un singur `content` în răspunsul HTTP — nu spargem (frontendul randează
+    # o bulă). Rich/carusel rămân un fragment oricum (spargerea lead-in-ului ar strica ordinea).
+    if is_rich or has_products or not deliver:
         fragments = [reply_text]
     else:
         fragments = split_reply(reply_text, limit=get_settings().reply_split_chars)
@@ -459,8 +479,14 @@ async def handle_turn(
                 Author.BOT,
                 body=frag,
                 content_type="text",
-                status="queued",
+                # Sync: livrarea e răspunsul HTTP → mesajul e deja `sent` (n-are dispatcher care
+                # să-l ducă din `queued`). Async: `queued` până trece dispatcher-ul.
+                status="queued" if deliver else "sent",
             )
+            if not deliver:
+                # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
+                # Persistăm doar mesajul outbound (history) + state mai jos.
+                continue
             payload = {
                 "type": "text",
                 "to": sender_external_id,
@@ -523,4 +549,12 @@ async def handle_turn(
     await _extract_profile_and_score(
         conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
     )
-    return TurnResult(conv["id"], contact.id, turn_id, ctx.reply.text, outbox_id)
+    return TurnResult(
+        conv["id"],
+        contact.id,
+        turn_id,
+        ctx.reply.text,
+        outbox_id,
+        reply=ctx.reply,  # sync: apelantul mapează text+produse+chips în răspunsul HTTP
+        language=ctx.language,
+    )

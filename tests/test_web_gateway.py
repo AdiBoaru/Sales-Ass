@@ -4,6 +4,7 @@ webchat pe stream, rate limit IP+visitor, bootstrap HMAC, WebSender publish+back
 Last-Event-ID, formatul SSE, un eveniment livrat pe stream, build_registry."""
 
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pydantic
@@ -11,8 +12,9 @@ import pytest
 
 from src.channels.web.sender import WebSender
 from src.web import app as wa
-from src.web.app import WebMessageIn
+from src.web.app import WebChatIn, WebMessageIn
 from src.web.session import WebSession, verify_sig
+from src.worker.processor import TurnResult
 
 
 class FakeRedis:
@@ -264,6 +266,157 @@ def test_build_registry_no_webchat_when_disabled():
 
     reg = build_registry(None, _settings(web_enabled=False), FakeRedis())
     assert reg.get("webchat") is None
+
+
+# --- POST /web/chat (NX-25b — sincron request/response) ----------------------
+
+
+@asynccontextmanager
+async def _fake_cm(*a, **k):
+    """admin_conn / tenant_conn fake (yield None) — handle_turn e oricum monkeypatch-uit."""
+    yield None
+
+
+def test_chat_in_message_too_long_rejected():
+    with pytest.raises(pydantic.ValidationError):
+        WebChatIn(token="t", visitor_id="v", sig="s", message="x" * 2001)
+
+
+def test_chat_in_ignores_extra_history():
+    # frontendul trimite și `history` → ignorat (serverul e sursa de adevăr pe visitor_id)
+    req = WebChatIn(token="t", visitor_id="v", sig="s", message="hei", history=[{"role": "user"}])
+    assert req.message == "hei"
+
+
+def test_build_chat_response_maps_rich_items_and_chips():
+    from src.models import Chip, Reply, RichItem, RichReply
+
+    rich = RichReply(
+        intro="Pentru ten gras:",
+        items=[
+            RichItem(
+                product_id="p1",
+                name="Ser X",
+                price=89.0,
+                image="http://img/1.jpg",
+                url="http://shop/p1",
+                rating=4.8,
+                reason="bun la sebum",
+            )
+        ],
+        pick=("p1", "cel mai bun fit"),
+        education=None,
+        chips=[Chip(label="Mai ieftin", payload="chip:cheaper")],
+        disclaimer="AI",
+    )
+    reply = Reply(text="Îți recomand Ser X.", rich=rich)
+    res = wa._build_chat_response(
+        TurnResult("c", "ct", "t", reply.text, None, reply=reply, language="ro")
+    )
+    assert "Îți recomand Ser X." in res["content"]  # disclaimer re-aplicat după text
+    card = res["products"][0]
+    assert card["name"] == "Ser X" and card["price"] == 89.0
+    assert card["image_url"] == "http://img/1.jpg" and card["rating"] == 4.8
+    assert card["reason"] == "bun la sebum"
+    assert res["suggestions"] == ["Mai ieftin"]
+
+
+def test_build_chat_response_maps_simple_products():
+    from src.models import Reply
+
+    reply = Reply(
+        text="Uite ceva.",
+        products=[
+            {
+                "product_id": "p1",
+                "name": "Cremă",
+                "price": 49.0,
+                "url": "http://shop/p1",
+                "image": "http://img/p1.jpg",
+            }
+        ],
+    )
+    res = wa._build_chat_response(
+        TurnResult("c", "ct", "t", reply.text, None, reply=reply, language="ro")
+    )
+    assert res["products"][0] == {
+        "product_id": "p1",
+        "name": "Cremă",
+        "price": 49.0,
+        "image_url": "http://img/p1.jpg",
+        "url": "http://shop/p1",
+    }
+    assert res["suggestions"] == []
+
+
+def test_build_chat_response_no_reply_is_empty():
+    res = wa._build_chat_response(TurnResult("c", "ct", "t", None, None, reply=None))
+    assert res == {"content": "", "products": [], "suggestions": []}
+
+
+async def test_web_chat_returns_reply_synchronously(monkeypatch):
+    from src.models import Reply
+
+    captured = {}
+
+    async def fake_verify(token, vid, sig):
+        return WebSession(business_id="b", token=token, visitor_id=vid)
+
+    async def fake_resolve_channel(conn, kind, token):
+        assert kind == "webchat"
+        return {"channel_id": "chan", "business_id": "b"}
+
+    async def fake_load_business(conn, bid):
+        return SimpleNamespace(id=bid)
+
+    async def fake_handle_turn(conn, business, channel_id, event, *, redis=None, deliver=True):
+        captured["deliver"] = deliver
+        captured["event"] = event
+        reply = Reply(
+            text="Salut!",
+            products=[{"product_id": "p1", "name": "X", "price": 10.0, "url": None, "image": None}],
+        )
+        return TurnResult("c", "ct", "t", reply.text, None, reply=reply, language="ro")
+
+    monkeypatch.setattr(wa, "_verify", fake_verify)
+    monkeypatch.setattr(wa, "get_redis", lambda: _coro(FakeRedis()))
+    monkeypatch.setattr(wa, "get_pool", lambda: _coro(None))
+    monkeypatch.setattr(wa, "admin_conn", _fake_cm)
+    monkeypatch.setattr(wa, "tenant_conn", _fake_cm)
+    monkeypatch.setattr(wa, "resolve_channel", fake_resolve_channel)
+    monkeypatch.setattr(wa, "load_business", fake_load_business)
+    monkeypatch.setattr(wa, "handle_turn", fake_handle_turn)
+
+    res = await wa.web_chat(
+        WebChatIn(token="tok", visitor_id="web_1", sig="s", message="  hei  "), _Req()
+    )
+
+    assert captured["deliver"] is False  # sync: NU prin outbox
+    assert captured["event"]["body"] == "hei"  # trim
+    assert captured["event"]["channel_account_id"] == "tok"
+    assert "Salut!" in res["content"]
+    assert res["products"][0]["name"] == "X"
+
+
+async def test_web_chat_invalid_session_403(monkeypatch):
+    async def none_verify(*a):
+        return None
+
+    monkeypatch.setattr(wa, "_verify", none_verify)
+    with pytest.raises(wa.HTTPException) as ei:
+        await wa.web_chat(WebChatIn(token="t", visitor_id="v", sig="bad", message="x"), _Req())
+    assert ei.value.status_code == 403
+
+
+async def test_web_chat_rate_limited_429(monkeypatch):
+    async def fake_verify(*a):
+        return WebSession(business_id="b", token="t", visitor_id="v")
+
+    monkeypatch.setattr(wa, "_verify", fake_verify)
+    monkeypatch.setattr(wa, "get_redis", lambda: _coro(FakeRedis(incr_value=999)))
+    with pytest.raises(wa.HTTPException) as ei:
+        await wa.web_chat(WebChatIn(token="t", visitor_id="v", sig="s", message="x"), _Req())
+    assert ei.value.status_code == 429
 
 
 # --- helper -----------------------------------------------------------------
