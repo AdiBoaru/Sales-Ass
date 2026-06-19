@@ -305,17 +305,23 @@ def test_build_chat_response_maps_rich_items_and_chips():
             )
         ],
         pick=("p1", "cel mai bun fit"),
-        education=None,
+        education="curăță delicat",
         chips=[Chip(label="Mai ieftin", payload="chip:cheaper")],
-        disclaimer="AI",
+        disclaimer="Funcționez cu inteligență artificială, așa că pot greși uneori.",
     )
-    reply = Reply(text="Îți recomand Ser X.", rich=rich)
+    reply = Reply(text="1. Ser X — 89.00 lei\n\nÎți recomand Ser X.", rich=rich)
     res = wa._build_chat_response(
         TurnResult("c", "ct", "t", reply.text, None, reply=reply, language="ro")
     )
-    assert "Îți recomand Ser X." in res["content"]  # disclaimer re-aplicat după text
+    content = res["content"]
+    # Widget: content = DOAR framing (intro + pick + educație), NU enumerarea cu preț.
+    assert "Pentru ten gras:" in content  # intro
+    assert "Recomandarea mea: Ser X" in content  # pick numește produsul
+    assert "curăță delicat" in content  # educație
+    assert "89" not in content  # FĂRĂ enumerarea cu preț (o fac cardurile)
+    assert "1. Ser X" not in content  # FĂRĂ lista numerotată (flatten complet)
     card = res["products"][0]
-    assert card["name"] == "Ser X" and card["price"] == 89.0
+    assert card["name"] == "Ser X" and card["price"] == 89.0  # prețul e pe CARD
     assert card["image_url"] == "http://img/1.jpg" and card["rating"] == 4.8
     assert card["reason"] == "bun la sebum"
     assert res["suggestions"] == ["Mai ieftin"]

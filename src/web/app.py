@@ -38,7 +38,7 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.session import WebSession, get_session_cache, issue_visitor, verify_web_session
-from src.worker.compose import ensure_disclaimer
+from src.worker.compose import ensure_disclaimer, flatten_framing
 from src.worker.limits import incr_window
 from src.worker.processor import TurnResult, handle_turn
 
@@ -145,13 +145,16 @@ def _card(name, price, image, url, *, product_id=None, rating=None, reason=None)
 def _build_chat_response(result: TurnResult) -> dict:
     """`TurnResult` (calea sincronă) → `{content, products, suggestions}` (contractul widget-ului).
 
-    Sursa produselor, în ordine: `reply.rich.items` (recomandare bogată: are rating/reason) →
-    `reply.products` (carduri simple). `suggestions` = label-urile chip-urilor (rich). `content` =
-    textul reply-ului cu disclaimer-ul AI re-aplicat (idempotent; `reply.text` rămâne pur). Tur fără
-    reply (handoff tăcut / degradare) → content gol, fără carduri (frontendul afișează fallback)."""
+    Pe RICH (recomandare cu carduri): `content` = DOAR framing-ul conversațional (`flatten_framing`:
+    intro + recomandare + educație), NU enumerarea produselor — o fac cardurile (`products`) și
+    butoanele (`suggestions`). Așa textul nu mai dublează cardurile (vs WhatsApp/cache, care iau
+    `flatten()` complet — same engine, prezentare per canal). Pe reply simplu (text/produse fără
+    rich): `content` = `reply.text`. Disclaimer-ul AI e re-aplicat idempotent. Tur fără reply
+    (handoff tăcut / degradare) → content gol, fără carduri (frontendul afișează fallback)."""
     reply = result.reply
     if reply is None:
         return {"content": "", "products": [], "suggestions": []}
+    lang = result.language or "ro"
     products: list[dict] = []
     suggestions: list[str] = []
     if reply.rich is not None:
@@ -168,13 +171,18 @@ def _build_chat_response(result: TurnResult) -> dict:
             for it in reply.rich.items
         ]
         suggestions = [c.label for c in reply.rich.chips]
+        # Widget: produsele = CARDURI → content e doar framing (intro + pick + educație),
+        # fără lista numerotată (o fac cardurile) și fără „Poți cere și:" (o fac butoanele).
+        content = ensure_disclaimer(flatten_framing(reply.rich), lang)
     elif reply.products:
         products = [
             _card(p.get("name"), p.get("price"), p.get("image"), p.get("url"),
                   product_id=p.get("product_id"))
             for p in reply.products
         ]
-    content = ensure_disclaimer(reply.text, result.language or "ro")
+        content = ensure_disclaimer(reply.text, lang)
+    else:
+        content = ensure_disclaimer(reply.text, lang)
     return {"content": content, "products": products, "suggestions": suggestions}
 
 

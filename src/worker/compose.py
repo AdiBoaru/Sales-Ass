@@ -248,3 +248,25 @@ def flatten(rich: RichReply) -> str:
     if rich.disclaimer:
         lines += ["", rich.disclaimer]
     return "\n".join(lines).strip()
+
+
+def flatten_framing(rich: RichReply) -> str:
+    """Aplatizare pentru canalele care randează produsele ca CARDURI (widget web, /web/chat):
+    DOAR framing-ul conversațional — intro + recomandarea („pick") + educație + disclaimer.
+
+    OMITE enumerarea numerotată a produselor (o fac cardurile cu poză/preț/rating/buton) și linia
+    „Poți cere și:" (o fac chips-urile, randate ca butoane). Așa textul nu mai dublează cardurile.
+    `flatten()` rămâne floor-ul COMPLET pt canalele fără carduri (WhatsApp/cache/messages.body).
+    Same engine, altă prezentare per canal — cuplajul stă la margine (P: canal doar la margini)."""
+    blocks: list[str] = []
+    if rich.intro:
+        blocks.append(rich.intro)
+    if rich.pick:
+        name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
+        head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
+        blocks.append(head + rich.pick[1])
+    if rich.education:
+        blocks.append(rich.education)
+    if rich.disclaimer:
+        blocks.append(rich.disclaimer)
+    return "\n\n".join(blocks).strip()
