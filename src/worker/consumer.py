@@ -6,11 +6,11 @@ mesaj → rezolvare canal→business (control plane) → conexiune tenant-scoped
 se piardă tăcut (principiul 6); un mesaj care crapă procesarea e tot ACK-uit ca
 să nu blocheze coada, dar e logat pentru investigație.
 
-Defer (follow-up, peste acest schelet):
-  • debounce adaptiv 2-3s (lot de mesaje, nu string lipit)
-  • lock per conversație pentru >1 consumer (acum: ordinea ține pe un consumer)
-  • dedupe layer 2 durabil în DB (NX-51) — acum avem layer 1 (Redis) din webhook
-  • claim mesaje „stuck" via XAUTOCLAIM (consumer mort)
+Hardening livrat peste schelet:
+  • debounce adaptiv (R1) + ACK-after-flush durabil (NX-87)
+  • lock per conversație pentru >1 replică (NX-85) — re-queue cu backoff la contenție
+  • dedupe layer 1 (Redis, webhook) + layer 2 durabil în DB (NX-51) + claim-or-resume (NX-86)
+  • reaper XAUTOCLAIM pentru mesaje „stuck" de la un consumer mort (NX-86)
 """
 
 import asyncio
@@ -18,6 +18,7 @@ import json
 import logging
 import socket
 import time
+from uuid import uuid4
 
 import httpx
 from redis.asyncio import Redis
@@ -30,7 +31,14 @@ from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, te
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
-from src.redis_bus import STREAM_INBOUND, close_redis, get_redis
+from src.redis_bus import (
+    STREAM_INBOUND,
+    acquire_conv_lock,
+    close_redis,
+    enqueue_inbound,
+    get_redis,
+    release_conv_lock,
+)
 from src.webhook.orders import process_order
 from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
@@ -77,6 +85,18 @@ async def ensure_group(redis: Redis) -> None:
             raise
 
 
+async def _requeue_busy(redis: Redis, event: dict, settings) -> str:
+    """Conversație ocupată de altă replică (NX-85) → re-pune evenimentul pe stream cu backoff scurt
+    (altă replică îl ia după ce eliberează lock-ul). Cap dur de reîncercări → drop (nu rebuclează la
+    infinit pe o conversație blocată). Întoarce un status pt log (fără PII)."""
+    n = int(event.get("_requeues", 0)) + 1
+    if n > settings.conv_lock_max_requeues:
+        return f"dropped după {n} reîncercări"
+    await asyncio.sleep(settings.conv_lock_requeue_delay_ms / 1000)
+    await enqueue_inbound(redis, {**event, "_requeues": n})
+    return f"requeue n={n}"
+
+
 async def process_event(pool, redis: Redis, event: dict) -> None:
     """Rezolvă tenantul și rutează evenimentul după `kind` (message | status).
 
@@ -110,8 +130,10 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
 
     business_id = channel["business_id"]
     kind = event.get("kind", "message")
-    async with tenant_conn(business_id) as conn:
-        if kind == "status":
+
+    # Statusurile sunt idempotente (delivered/read/failed pe provider_msg_id) → fără lock.
+    if kind == "status":
+        async with tenant_conn(business_id) as conn:
             await record_status_event(
                 conn,
                 business_id,
@@ -119,16 +141,45 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
                 event["status"],
                 payload=event.get("payload"),
             )
+        return
+
+    # NX-85: lock per conversație — serializează tururile aceleiași conversații între REPLICI.
+    # Mesaj/callback mutează state-ul; cheia = business + expeditor (PII de canal → DOAR în cheie,
+    # efemeră cu TTL; nu în loguri). Ocupat → re-queue cu backoff. Redis jos/off → fail-open.
+    settings = get_settings()
+    sender_key = f"{channel_kind}:{channel_account_id}:{event.get('sender_external_id', '')}"
+    token = uuid4().hex
+    locked: bool | None = (
+        None  # None = fără lock (dezactivat/fail-open); True = deținut; False = ocupat
+    )
+    if settings.conv_lock_enabled and redis is not None:
+        try:
+            got = await acquire_conv_lock(
+                redis, business_id, sender_key, token, ttl_s=settings.conv_lock_ttl_seconds
+            )
+            locked = bool(got)
+        except Exception as e:  # noqa: BLE001 — Redis jos → fail-open (nu blocăm traficul)
+            log.warning("conv lock: acquire eșuat (%s) — fail-open", type(e).__name__)
+            locked = None
+        if locked is False:  # altă replică procesează aceeași conversație → re-queue
+            ctx_emit_busy = await _requeue_busy(redis, event, settings)
+            log.info("conv lock: ocupat → re-queue (business=%s, %s)", business_id, ctx_emit_busy)
             return
-        business = await load_business(conn, business_id)
-        if business is None:
-            log.warning("business %s lipsește — ignorat", business_id)
-            return
-        if kind == "callback":
-            # navigare carusel (R2): drum determinist, NU pipeline LLM.
-            await handle_callback(conn, business, channel["channel_id"], event)
-            return
-        await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
+
+    try:
+        async with tenant_conn(business_id) as conn:
+            business = await load_business(conn, business_id)
+            if business is None:
+                log.warning("business %s lipsește — ignorat", business_id)
+                return
+            if kind == "callback":
+                # navigare carusel (R2): drum determinist, NU pipeline LLM.
+                await handle_callback(conn, business, channel["channel_id"], event)
+                return
+            await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
+    finally:
+        if locked is True:
+            await release_conv_lock(redis, business_id, sender_key, token)
 
 
 async def consume_once(
