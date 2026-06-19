@@ -211,6 +211,16 @@ class Settings(BaseSettings):
     typing_enabled: bool = Field(default=True, validation_alias="TYPING_ENABLED")
     reply_split_chars: int = Field(default=200, validation_alias="REPLY_SPLIT_CHARS")
 
+    # --- Lock per conversație (NX-85, stagiul 2 — ordonare multi-consumer) ---
+    # Serializează tururile aceleiași conversații între REPLICI de worker (lock Redis SET NX EX pe
+    # business+expeditor). Ocupat → re-queue cu backoff scurt (cap dur). Fail-open dacă Redis e jos.
+    conv_lock_enabled: bool = Field(default=True, validation_alias="CONV_LOCK_ENABLED")
+    conv_lock_ttl_seconds: int = Field(default=30, validation_alias="CONV_LOCK_TTL_SECONDS")
+    conv_lock_requeue_delay_ms: int = Field(
+        default=150, validation_alias="CONV_LOCK_REQUEUE_DELAY_MS"
+    )
+    conv_lock_max_requeues: int = Field(default=10, validation_alias="CONV_LOCK_MAX_REQUEUES")
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
