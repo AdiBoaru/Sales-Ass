@@ -240,6 +240,29 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "request_human": {
+        "type": "function",
+        "function": {
+            "name": "request_human",
+            "description": (
+                "Escaladează la un operator uman. Folosește când clientul cere explicit un om, e "
+                "frustrat/nemulțumit, sau cererea e în afara a ce poți rezolva (reclamație, caz "
+                "sensibil). Un coleg preia; spune-i clientului că revine cineva în scurt timp."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "De ce escaladezi, pe scurt (ex. client nemulțumit).",
+                    },
+                },
+                "required": ["reason"],
+            },
+        },
+    },
     "check_order": {
         "type": "function",
         "function": {

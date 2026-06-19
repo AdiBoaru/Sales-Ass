@@ -85,6 +85,7 @@ from src.worker.stages.clarify import clarify_resume_stage  # noqa: E402
 from src.worker.stages.faq import faq_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.greeting import greeting_stage  # noqa: E402
+from src.worker.stages.handoff import handoff_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
@@ -103,6 +104,7 @@ DEFAULT_STAGES: list[Stage] = [
     cache_stage,
     faq_stage,
     triage_stage,
+    handoff_stage,  # NX-123: consumă Route.HANDOFF (escaladare) înainte ca agentul să-l ignore
     agent_stage,
     fallback_stage,
 ]

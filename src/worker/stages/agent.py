@@ -30,6 +30,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
     faq_tools,
+    handoff_tools,
     orders_tools,
 )
 from src.tools.base import enabled_tools, run_tool

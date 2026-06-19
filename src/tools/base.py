@@ -70,11 +70,22 @@ _SALES_TOOLS = (
 _ORDER_TOOLS = ("check_order",)
 
 
-def enabled_tools(business: Any, route: str | None = None) -> list[str]:  # noqa: ARG001
-    """Tool-urile active pentru un business, după rută (per-business settings = ulterior).
-    `route='order'` → unelte de status comandă; altceva (sales/None) → unelte de vânzare."""
-    names = _ORDER_TOOLS if route == "order" else _SALES_TOOLS
-    return [name for name in names if name in TOOL_REGISTRY]
+# Tool-uri OPT-IN per business (NX-82): nu se oferă decât dacă tenantul le activează în
+# `businesses.settings["tools"]`. `request_human` cere un operator real → default OFF.
+_OPT_IN_SALES_TOOLS = ("request_human",)
+
+
+def enabled_tools(business: Any, route: str | None = None) -> list[str]:
+    """Tool-urile active pentru un business, după rută. `route='order'` → status comandă;
+    altceva (sales/None) → unelte de vânzare. NX-82: `settings["tools"]` activează opt-in-uri
+    (ex. `request_human`: true) și poate dezactiva orice tool (`disabled: [...]`). Fără settings
+    (sau `business=None`) → toolset-ul de bază (backward-compatible)."""
+    names = list(_ORDER_TOOLS if route == "order" else _SALES_TOOLS)
+    cfg = (getattr(business, "settings", None) or {}).get("tools", {}) if business else {}
+    if route != "order":
+        names += [t for t in _OPT_IN_SALES_TOOLS if cfg.get(t)]
+    disabled = set(cfg.get("disabled") or [])
+    return [name for name in names if name in TOOL_REGISTRY and name not in disabled]
 
 
 async def run_tool(
