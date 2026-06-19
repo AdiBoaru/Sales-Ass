@@ -134,3 +134,11 @@ async def receive_order(
     except RedisError:
         return PlainTextResponse("service unavailable", status_code=503)
     return PlainTextResponse("ok", status_code=200)
+
+
+# Gateway web widget (NX-20, E26 — al treilea canal). Montat DOAR dacă web_enabled (V1.5):
+# endpointurile /web/* (bootstrap, messages, stream SSE) trăiesc în src/web/app.py.
+if get_settings().web_enabled:
+    from src.web.app import router as web_router
+
+    app.include_router(web_router)
