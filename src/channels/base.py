@@ -86,6 +86,11 @@ class ChannelSender(Protocol):
 
     async def send_text(self, account_id: str, to: str, text: str) -> str: ...
 
+    # Metode OPȚIONALE (duck-typed via `hasattr`, NU pe Protocol — ca send_rich/send_products/
+    # send_carousel_card/edit_message_media): un canal care nu le are e sărit grațios.
+    #   • mark_typing(account_id, to, provider_msg_id) — semnal „typing/read" pe inbound (NX-90)
+    #   • send_products / send_rich / send_carousel_card / edit_message_media — UX bogat (W1/R2)
+
 
 class ChannelSenderRegistry:
     """Mapează `channel_kind → ChannelSender`. Populat la bootstrap-ul dispatcher-ului."""

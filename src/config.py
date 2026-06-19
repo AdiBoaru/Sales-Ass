@@ -205,6 +205,11 @@ class Settings(BaseSettings):
     validator_bare_numbers_enabled: bool = Field(
         default=True, validation_alias="VALIDATOR_BARE_NUMBERS_ENABLED"
     )
+    # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
+    # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).
+    # Reply > reply_split_chars → spart în max 2 mesaje (citire ușoară pe telefon). Pur transport.
+    typing_enabled: bool = Field(default=True, validation_alias="TYPING_ENABLED")
+    reply_split_chars: int = Field(default=200, validation_alias="REPLY_SPLIT_CHARS")
 
     @property
     def is_prod(self) -> bool:

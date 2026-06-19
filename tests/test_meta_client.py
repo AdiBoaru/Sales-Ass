@@ -49,3 +49,35 @@ async def test_send_text_raises_on_unexpected_payload():
     meta = _client(handler)
     with pytest.raises(MetaSendError):
         await meta.send_text("PNID", "40712", "x")
+
+
+async def test_mark_typing_sends_read_and_typing():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"success": True})
+
+    meta = _client(handler)
+    await meta.mark_typing("PNID-x", "40712345678", "wamid.IN123")
+
+    assert captured["url"] == "https://graph.test/v21.0/PNID-x/messages"
+    assert captured["body"]["status"] == "read"
+    assert captured["body"]["message_id"] == "wamid.IN123"
+    assert captured["body"]["typing_indicator"] == {"type": "text"}
+
+
+async def test_mark_typing_noop_without_wamid():
+    called = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, json={})
+
+    meta = _client(handler)
+    await meta.mark_typing("PNID-x", "40712345678", None)  # fără wamid → no-op
+    assert called is False

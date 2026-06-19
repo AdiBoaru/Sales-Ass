@@ -54,6 +54,26 @@ class MetaClient:
         except (KeyError, IndexError, TypeError) as e:
             raise MetaSendError(f"răspuns Meta fără message id: {data}") from e
 
+    async def mark_typing(self, account_id: str, to: str, provider_msg_id: str | None) -> None:
+        """NX-90: marchează inbound-ul ca citit + arată „typing…" (Meta unește read + typing
+        într-un singur call). Bula dispare automat la ~25s sau la primul mesaj outbound. Necesită
+        wamid-ul inbound (`provider_msg_id`); fără el e no-op (Meta cere message_id). Best-effort —
+        ridică la eroare HTTP, caller-ul (`_safe_typing`) prinde și ignoră (P6). `to` ignorat
+        (Meta țintește pe message_id)."""
+        if not provider_msg_id:
+            return
+        resp = await self._http.post(
+            f"{self._base}/{account_id}/messages",
+            headers={"Authorization": f"Bearer {self._token}"},
+            json={
+                "messaging_product": "whatsapp",
+                "status": "read",
+                "message_id": provider_msg_id,
+                "typing_indicator": {"type": "text"},
+            },
+        )
+        resp.raise_for_status()
+
     async def fetch_media(
         self, account_id: str, media_id: str, *, max_bytes: int | None = None
     ) -> tuple[bytes, str]:
