@@ -137,8 +137,23 @@ async def receive_order(
 
 
 # Gateway web widget (NX-20, E26 — al treilea canal). Montat DOAR dacă web_enabled (V1.5):
-# endpointurile /web/* (bootstrap, messages, stream SSE) trăiesc în src/web/app.py.
+# endpointurile /web/* (bootstrap, messages, stream SSE, chat sincron) trăiesc în src/web/app.py.
 if get_settings().web_enabled:
+    from fastapi.middleware.cors import CORSMiddleware
+
     from src.web.app import router as web_router
+
+    # CORS pt widget-ul de pe site (browser cross-origin). Preflight-ul (OPTIONS, înainte de body)
+    # se gate-uiește pe allowlist-ul de origin-uri (CSV în WEB_CORS_ORIGINS). Gol → fără origin-uri
+    # permise (doar same-origin). Endpointurile NE-browser (webhook Meta/orders) n-au Origin →
+    # neafectate. Gardele reale rămân server-side: token public + sig HMAC + rate-limit.
+    cors_origins = get_settings().web_cors_origins_list
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "Last-Event-ID"],
+        )
 
     app.include_router(web_router)

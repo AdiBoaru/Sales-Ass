@@ -93,6 +93,17 @@ class Settings(BaseSettings):
     web_sse_heartbeat_s: float = Field(default=15.0, validation_alias="WEB_SSE_HEARTBEAT_S")
     web_backlog_size: int = Field(default=20, validation_alias="WEB_BACKLOG_SIZE")
     web_backlog_ttl_s: int = Field(default=300, validation_alias="WEB_BACKLOG_TTL_S")
+    # CORS allowlist pt POST /web/chat (NX-25b — gateway web SINCRON request/response). Browserul
+    # shop-ului apelează endpointul cross-origin → preflight-ul (înainte de body, deci fără token)
+    # se gate-uiește la nivel de browser pe ACEASTĂ listă. Token public + sig + rate-limit rămân
+    # gardele server-side. CSV (`https://shop.ro,http://localhost:5173`); gol → CORS dezactivat
+    # (doar same-origin). Binding fin origin↔token per canal (channels.settings) = follow-up NX-25.
+    web_cors_origins: str = Field(default="", validation_alias="WEB_CORS_ORIGINS")
+
+    @property
+    def web_cors_origins_list(self) -> list[str]:
+        """Origin-urile CORS permise pentru /web/chat (CSV → listă, fără goluri)."""
+        return [o.strip() for o in self.web_cors_origins.split(",") if o.strip()]
 
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")
