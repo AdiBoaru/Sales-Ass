@@ -273,6 +273,41 @@ class Event:
     properties: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class TurnUsage:
+    """Consumul LLM al turului (tokeni + cost + defalcări) — observabilitate de cost (NX-103).
+    Owner UNIC la scriere: runner-ul (din UsageAccumulator, după pipeline). Citit de processor
+    (atașat pe rândul `messages` outbound) și expus de harness-ul de simulare per mesaj.
+
+    `tokens_in` INCLUDE `cached_tokens` (convenția OpenAI). `latency_ms` = wall-clock-ul
+    pipeline-ului. `by_stage`/`by_model` = defalcări {nume: {calls, tokens, cost}}."""
+
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cached_tokens: int = 0
+    cost_usd: float = 0.0
+    calls: int = 0
+    savings_usd: float = 0.0  # bani economisiți de prompt caching (tarif plin − cached)
+    latency_ms: float = 0.0
+    models: list[str] = field(default_factory=list)  # modelele folosite (pt messages.model_route)
+    by_stage: dict[str, dict[str, Any]] = field(default_factory=dict)
+    by_model: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def as_event_props(self) -> dict[str, Any]:
+        """Forma pentru event-ul `llm_usage` (analytics_events): coloane dedicate tokens_in/out +
+        cost_usd extrase de insert_events; restul (cached/savings/defalcări) în properties jsonb."""
+        return {
+            "tokens_in": self.tokens_in,
+            "tokens_out": self.tokens_out,
+            "cached_tokens": self.cached_tokens,
+            "cost_usd": round(self.cost_usd, 6),
+            "savings_usd": round(self.savings_usd, 6),
+            "llm_calls": self.calls,
+            "by_stage": self.by_stage,
+            "by_model": self.by_model,
+        }
+
+
 # ---------------------------------------------------------------------------
 # TurnContext — obiectul care curge prin pipeline
 # ---------------------------------------------------------------------------
@@ -304,6 +339,9 @@ class TurnContext:
     # merge-uiește în `new_state` la scriere (P3 — nu se scrie din două locuri).
     state_patch: dict[str, Any] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
+    # NX-103: consumul LLM al turului (tokeni/cost/defalcări). Owner: runner-ul (post-pipeline);
+    # processor-ul îl atașează pe mesajul outbound. None până rulează pipeline-ul / fără apel LLM.
+    usage: TurnUsage | None = None
 
     def emit(self, type_: str, **properties: Any) -> None:
         """Helper pentru stagii: adaugă un event fără să știe cum e scris."""

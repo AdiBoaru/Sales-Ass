@@ -18,7 +18,9 @@ from uuid import uuid4
 import asyncpg
 from redis.asyncio import Redis
 
+from src.agent import usage
 from src.agent.llm import get_llm
+from src.agent.pricing import savings_for
 from src.cache.canonical import canonicalize, classify_volatility
 from src.channels.media import get_media_registry
 from src.config import get_settings
@@ -53,6 +55,7 @@ from src.models import (
     InboundMessage,
     Reply,
     TurnContext,
+    TurnUsage,
 )
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
@@ -326,6 +329,38 @@ async def _record_turn_cost(
         log.warning("cost guard: add eșuat (%s)", type(e).__name__)
 
 
+def _message_usage_kwargs(turn_usage: TurnUsage | None) -> dict:
+    """Câmpurile de observabilitate (NX-103) atașate pe rândul `messages` outbound al botului:
+    tokeni/cost/latență/model. DOAR pe primul fragment al reply-ului (split-ul e același reply).
+    None/zero apeluri → {} (mesaj fără cost: cache/free-layer/welcome — corect 0, nu NULL fals)."""
+    if turn_usage is None or turn_usage.calls == 0:
+        return {}
+    return {
+        "model_route": ",".join(turn_usage.models) or None,
+        "tokens_in": turn_usage.tokens_in,
+        "tokens_out": turn_usage.tokens_out,
+        "cost_usd": round(turn_usage.cost_usd, 6),
+        "latency_ms": int(round(turn_usage.latency_ms)),
+    }
+
+
+def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
+    """Props pentru un event `llm_usage` dintr-un acumulator (folosit la POST-tur: summarizer +
+    profil + cache write-back embed). Aceeași formă ca runner-ul → rollup-ul/raportul le tratează
+    uniform; `phase` separă reply-ul de fundalul amortizat."""
+    savings = sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
+    return {
+        "phase": phase,
+        "tokens_in": acc.tokens_in,
+        "tokens_out": acc.tokens_out,
+        "cached_tokens": acc.cached_tokens,
+        "cost_usd": round(acc.cost_usd, 6),
+        "savings_usd": round(savings, 6),
+        "llm_calls": acc.calls,
+        "by_model": acc.by_model,
+    }
+
+
 async def handle_turn(
     conn: asyncpg.Connection,
     business: BusinessConfig,
@@ -482,6 +517,9 @@ async def handle_turn(
                 # Sync: livrarea e răspunsul HTTP → mesajul e deja `sent` (n-are dispatcher care
                 # să-l ducă din `queued`). Async: `queued` până trece dispatcher-ul.
                 status="queued" if deliver else "sent",
+                # NX-103: cost/tokeni/latență/model pe PRIMUL fragment (reply-ul botului). Split-ul
+                # (frag 2) e același reply → nu dublăm costul. messages.cost_usd devine real.
+                **(_message_usage_kwargs(ctx.usage) if i == 0 else {}),
             )
             if not deliver:
                 # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
@@ -537,18 +575,28 @@ async def handle_turn(
         len(reply_text),
         outbox_id,
     )
-    # Write-back cache (G5b-1) — după outbox, nu întârzie livrarea. LLM-ul guardat (cost
-    # guard): peste buget → None → write-back sărit (nu mai consumăm embed).
-    await _cache_writeback(conn, llm, business.id, ctx.language, ctx.message.body, ctx)
-    # Summarizer (G6-2 felia 2) — post-tur async, întreține rezumatul rolling. `llm` e cel
-    # guardat de cost guard: peste buget → None → hook-ul se sare (P2 + P6 gratis).
-    await _summarize_if_needed(conn, redis, business.id, conv["id"], ctx, llm)
-    # Extractor profil + lead_score (NX-88) — post-tur async, best-effort. Nano extrage semnale →
-    # patch whitelist pe contacts.profile + scor determinist. `llm` guardat (cost guard → None →
-    # skip); sărit în shadow mode (NX-93) și pe tururi free-layer/cache (ctx.route None).
-    await _extract_profile_and_score(
-        conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
-    )
+    # POST-TUR async (cache write-back + summarizer + profil) — după outbox, nu întârzie livrarea.
+    # NX-103: îl învelim într-un acumulator de usage propriu → un al doilea event `llm_usage`
+    # (phase=post_turn) ca embed-ul de cache + apelurile nano de fundal să NU scape rollup-ului
+    # zilnic (altfel costul real al zilei e subestimat). NU intră pe rândul `messages` al reply-ului
+    # (nu e parte din reply); intră doar în analytics_events (rollup + raport de cost).
+    post_acc, post_token = usage.push()
+    try:
+        # Write-back cache (G5b-1). LLM-ul guardat (cost guard): peste buget → None → sărit.
+        await _cache_writeback(conn, llm, business.id, ctx.language, ctx.message.body, ctx)
+        # Summarizer (G6-2 felia 2) — întreține rezumatul rolling. `llm` guardat → None → sare.
+        await _summarize_if_needed(conn, redis, business.id, conv["id"], ctx, llm)
+        # Extractor profil + lead_score (NX-88) — nano extrage semnale → patch whitelist pe
+        # contacts.profile + scor determinist. Guardat (cost guard / shadow / free-layer → skip).
+        await _extract_profile_and_score(
+            conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
+        )
+    finally:
+        usage.pop(post_token)
+    if post_acc.calls:
+        post_ev = Event("llm_usage", _usage_event_props(post_acc, phase="post_turn"))
+        ctx.events.append(post_ev)
+        await _persist_events(conn, business.id, conv["id"], contact.id, [post_ev])
     return TurnResult(
         conv["id"],
         contact.id,

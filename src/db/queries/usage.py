@@ -19,9 +19,14 @@ _ROLLUP_SQL = """
 with ev as (
     select
         count(distinct conversation_id)                       as conversations,
-        coalesce(sum(tokens_in), 0)                           as tokens_in,
-        coalesce(sum(tokens_out), 0)                          as tokens_out,
-        coalesce(sum(cost_usd), 0)                            as cost_usd,
+        -- tokeni/cost agregați DOAR din event-urile llm_usage (singurele care populează aceste
+        -- coloane / cheia cached_tokens). FILTER explicit = apărare: un viitor event_type care ar
+        -- pune din greșeală tokens_in/cost_usd în properties nu poate polua/dubla rollup-ul.
+        coalesce(sum(tokens_in) filter (where event_type = 'llm_usage'), 0)  as tokens_in,
+        coalesce(sum(tokens_out) filter (where event_type = 'llm_usage'), 0) as tokens_out,
+        coalesce(sum((properties->>'cached_tokens')::bigint)
+                 filter (where event_type = 'llm_usage'), 0)  as cached_tokens,
+        coalesce(sum(cost_usd) filter (where event_type = 'llm_usage'), 0)   as cost_usd,
         count(*) filter (
             where event_type = 'cache_lookup'
               and properties->>'layer' in ('exact', 'semantic')
@@ -61,12 +66,12 @@ ord as (
 )
 insert into usage_daily (
     business_id, day, conversations, messages_in, messages_out, templates_sent,
-    tokens_in, tokens_out, cost_usd, cache_hits, handoffs,
+    tokens_in, tokens_out, cached_tokens, cost_usd, cache_hits, handoffs,
     orders_attributed, revenue_attributed, intents
 )
 select
     $1, $2, ev.conversations, msg.messages_in, msg.messages_out, msg.templates_sent,
-    ev.tokens_in, ev.tokens_out, ev.cost_usd, ev.cache_hits, ev.handoffs,
+    ev.tokens_in, ev.tokens_out, ev.cached_tokens, ev.cost_usd, ev.cache_hits, ev.handoffs,
     ord.orders_attributed, ord.revenue_attributed, intents.intents
 from ev, intents, msg, ord
 on conflict (business_id, day) do update set
@@ -76,6 +81,7 @@ on conflict (business_id, day) do update set
     templates_sent     = excluded.templates_sent,
     tokens_in          = excluded.tokens_in,
     tokens_out         = excluded.tokens_out,
+    cached_tokens      = excluded.cached_tokens,
     cost_usd           = excluded.cost_usd,
     cache_hits         = excluded.cache_hits,
     handoffs           = excluded.handoffs,
