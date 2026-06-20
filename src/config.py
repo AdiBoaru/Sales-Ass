@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     model_moderation: str = Field(
         default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
     )
+    # Override de tarife LLM pentru observabilitatea de cost (NX-103). JSON parțial, merge peste
+    # implicitul din src/agent/pricing.py — tunabil în prod fără redeploy. Gol → tarifele din cod.
+    # Ex: {"gpt-5.4-mini": {"input": 0.30, "cached_input": 0.03, "output": 2.40}}
+    llm_pricing_json: str = Field(default="", validation_alias="LLM_PRICING_JSON")
 
     # --- Media routing: Vision poză→catalog (NX-76, stagiul 3) ---
     # O poză de produs (content_type=image) e descrisă de Vision (prin adaptorul unic, ca
@@ -231,6 +235,17 @@ class Settings(BaseSettings):
         default=150, validation_alias="CONV_LOCK_REQUEUE_DELAY_MS"
     )
     conv_lock_max_requeues: int = Field(default=10, validation_alias="CONV_LOCK_MAX_REQUEUES")
+
+    # --- Retrieval & ranking de produse (ARCH-product-retrieval, 2026) ---
+    # P0: sortare explicită pe intenție (sort_mode: price_asc pt „cel mai ieftin") + tie-break
+    # determinist p.id + shrunk_rating (cold-start). Kill-switch FAIL-SAFE: OFF → ORDER BY-ul vechi
+    # (rating desc, price asc) ȘI relax-ladder-ul vechi (price relaxat primul) — byte-identic.
+    search_sort_mode_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_SORT_MODE_ENABLED"
+    )
+    # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
+    # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
+    cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
 
     @property
     def is_prod(self) -> bool:
