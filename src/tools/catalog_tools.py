@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
     has_embeddings,
@@ -35,6 +36,8 @@ class SearchArgs(BaseModel):
     category: str | None = None
     brand: str | None = None
     concerns: list[str] | None = None
+    sort_mode: str = "relevance"  # relevance | price_asc | price_desc | rating_desc (clamp în SQL)
+    in_stock_only: bool = False
     limit: int = Field(default=6, ge=1, le=6)
 
 
@@ -88,24 +91,39 @@ def _compare_view(products: list[dict[str, Any]]) -> str:
 
 
 def _relax_ladder(
-    *, price_max: float | None, concerns: list[str] | None, category: str | None
+    *,
+    price_max: float | None,
+    concerns: list[str] | None,
+    category: str | None,
+    in_stock_only: bool,
 ) -> list[dict[str, Any]]:
-    """Trepte de filtre dure în ordinea de relaxare price_max → concerns → category.
+    """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
+    (P6). Brand-ul NU se relaxează niciodată.
 
-    De la cel mai restrictiv (toate filtrele) la cel mai relaxat; fiecare treaptă renunță
-    CUMULATIV la încă un filtru. Garantează că tot iese ceva relevant înainte de lista goală
-    (P6), relaxând de la cel mai puțin la cel mai mult important pentru relevanță. Brand-ul NU
-    se relaxează — dacă clientul a cerut un brand anume, nu-i dăm altul.
-    """
-    steps: list[dict[str, Any]] = [
-        {"price_max": price_max, "concerns": concerns, "category": category}
-    ]
-    if price_max is not None:
-        steps.append({**steps[-1], "price_max": None})
-    if concerns:
-        steps.append({**steps[-1], "concerns": None})
-    if category:
-        steps.append({**steps[-1], "category": None})
+    Cu `SEARCH_SORT_MODE_ENABLED` (ARCH-product-retrieval): prețul + disponibilitatea sunt
+    constrângeri DURE, NU se relaxează — relaxăm doar SOFTUL (concerns → category). Altfel un
+    „sub 80" supra-constrâns ar scoate bound-ul de preț și ar întoarce un 149.99 (bug-ul de preț).
+    Fără flag (kill-switch OFF): comportamentul vechi (price → concerns → category)."""
+    base = {
+        "price_max": price_max,
+        "concerns": concerns,
+        "category": category,
+        "in_stock_only": in_stock_only,
+    }
+    steps: list[dict[str, Any]] = [base]
+    if get_settings().search_sort_mode_enabled:
+        # prețul + stocul rămân fixate; relaxăm softul
+        if concerns:
+            steps.append({**steps[-1], "concerns": None})
+        if category:
+            steps.append({**steps[-1], "category": None})
+    else:
+        if price_max is not None:
+            steps.append({**steps[-1], "price_max": None})
+        if concerns:
+            steps.append({**steps[-1], "concerns": None})
+        if category:
+            steps.append({**steps[-1], "category": None})
     return steps
 
 
@@ -126,7 +144,12 @@ async def search_products_tool(
     # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
     # Determinist (P2), per vertical; necunoscutele se ignoră (fără filtru fals care golește).
     concern_keys = map_concerns(ctx.business.vertical, a.concerns) or None
-    ladder = _relax_ladder(price_max=a.price_max, concerns=concern_keys, category=a.category)
+    ladder = _relax_ladder(
+        price_max=a.price_max,
+        concerns=concern_keys,
+        category=a.category,
+        in_stock_only=a.in_stock_only,
+    )
 
     products: list[dict[str, Any]] = []
     mode = "sql_only"
@@ -145,6 +168,8 @@ async def search_products_tool(
                     price_max=f["price_max"],
                     concerns=f["concerns"],
                     category=f["category"],
+                    sort_mode=a.sort_mode,
+                    in_stock_only=f["in_stock_only"],
                     limit=a.limit,
                 )
                 if products:
@@ -164,6 +189,8 @@ async def search_products_tool(
                 concerns=f["concerns"],
                 category=f["category"],
                 brand=a.brand,
+                sort_mode=a.sort_mode,
+                in_stock_only=f["in_stock_only"],
                 limit=a.limit,
             )
             if products:

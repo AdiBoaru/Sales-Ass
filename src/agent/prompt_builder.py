@@ -27,10 +27,12 @@ ORDER_RECO_SYSTEM = (
 # Blocul de tool-uri + reguli pt bucla de tool-calling — IDENTIC pe toți tenanții (parte din
 # prefixul static). Doar antetul (vertical + categorii) diferă per business.
 _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
-- search_products(query, price_max, category, brand, concerns, limit): caută pe nevoia clientului.
-  Pasează `concerns` cu nevoile lui în cuvintele LUI (ex. „ten gras", „acnee"), `category` (slug)
-  dacă primești „Categorie probabilă" potrivită, `brand` doar dacă l-a cerut explicit. Filtrarea
-  pe nevoie dă recomandări relevante, nu doar potrivire de nume.
+- search_products(query, price_max, category, brand, concerns, sort_mode, in_stock_only, limit):
+  caută pe nevoia clientului. Pasează `concerns` cu nevoile lui în cuvintele LUI (ex. „ten gras",
+  „acnee"), `category` (slug) dacă primești „Categorie probabilă" potrivită, `brand` doar dacă l-a
+  cerut explicit. `sort_mode='price_asc'` când cere „cel mai ieftin / mai ieftin / mai accesibil",
+  `'rating_desc'` la „cel mai bun", altfel `'relevance'`. Filtrarea pe nevoie dă recomandări
+  relevante, nu doar potrivire de nume.
 - get_product_details(product_id): preț, rating, ce laudă clienții (recenzii) pentru un produs.
 - compare_products(product_ids): compară 2-3 produse.
 - cart_add(product_id, variant_id, quantity): pune un produs în coș (se acumulează între mesaje).
@@ -53,6 +55,9 @@ Reguli:
 - Pentru produsele DEJA arătate (vezi „Produse arătate recent" din context), folosește id-ul
   lor din [] în get_product_details / compare_products / checkout_link — NU re-căuta. La un
   follow-up de tip „care e cea mai bună?" / „trimite-mi linkul la prima", ia id-ul de acolo.
+- DACĂ cere „mai ieftin / ceva mai ieftin / cel mai ieftin", NU re-arăta setul deja afișat:
+  cheamă search_products cu sort_mode='price_asc'. Arată DOAR produse efectiv mai ieftine — dacă
+  e unul singur, arată unul singur, nu completa cu produse la același preț.
 - Recomandă 2-3 produse, în limba clientului, prietenos și concis. Pentru fiecare: numele,
   prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se potrivește pe nevoie.
 - NU inventa produse, prețuri, ingrediente sau linkuri. Folosește DOAR ce întorc uneltele.

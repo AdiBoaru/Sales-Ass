@@ -303,7 +303,8 @@ async def test_search_unknown_concern_no_false_filter(monkeypatch):
 
 
 async def test_search_progressive_relaxation(monkeypatch):
-    """Filtre dure golesc tot → relaxare (price → concerns) întoarce produse; relaxed=True."""
+    """Filtre dure golesc tot → relaxăm SOFTUL (concerns), dar PREȚUL rămâne fixat
+    (ARCH-product-retrieval cauza #3: nu mai scoatem bound-ul de buget). relaxed=True."""
     calls = []
 
     async def fake_sql(conn, business_id, **k):
@@ -321,8 +322,8 @@ async def test_search_progressive_relaxation(monkeypatch):
         {"query": "x", "concerns": ["ten gras"], "price_max": 50},
     )
     assert res.ok and len(res.products) == 2
-    # ladder: {price+concern} → {concern} → {} ; ultima (fără concern) întoarce.
-    assert calls[-1]["concerns"] is None and calls[-1]["price_max"] is None
+    # ladder NOU: {price+concern} → {price, fără concern}; prețul (50) rămâne fixat.
+    assert calls[-1]["concerns"] is None and calls[-1]["price_max"] == 50
     assert _search_event(ctx).properties["relaxed"] is True
 
 

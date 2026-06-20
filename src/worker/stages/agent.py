@@ -25,6 +25,7 @@ from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
     list_routing_aliases,
+    search_cheaper_than,
 )
 from src.models import RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
@@ -49,6 +50,31 @@ _BUDGET_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_RE = re.compile(r"https?://\S+")
+
+# P1 (ARCH-product-retrieval): follow-up de PREȚ pe un set deja afișat → re-căutare DETERMINISTĂ a
+# produselor strict mai ieftine (search_cheaper_than), NU re-rank pe setul afișat (R3). Precizie
+# mare RO/HU/EN (comparativ/superlativ de preț). Un miss cade grațios pe comportamentul vechi (R3).
+_CHEAPER_RE = re.compile(
+    r"\bmai\s+ieftin\w*|\bcea\s+mai\s+ieftin\w*|\bmai\s+accesibil\w*"
+    r"|\bpre[țt]\s+mai\s+mic|\bmai\s+mic\s+la\s+pre[țt]|\bbuget\s+mai\s+mic"
+    r"|\bprea\s+scump\w*|\bcam\s+scump\w*"
+    r"|\bcheaper\b|\bcheapest\b|\bolcs[óo]bb\w*|\blegolcs[óo]bb\w*",
+    re.IGNORECASE,
+)
+
+# Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
+_CHEAPEST_ALREADY: dict[str, str] = {
+    "ro": "Momentan asta e cea mai ieftină opțiune pe care o am pentru tine. "
+    "Vrei să-ți arăt altceva sau o altă categorie?",
+    "en": "This is the cheapest option I have right now. "
+    "Want me to show you something else or another category?",
+    "hu": "Jelenleg ez a legolcsóbb lehetőség, amim van. "
+    "Mutassak mást vagy egy másik kategóriát?",
+}
+
+
+def _cheapest_already_msg(language: str | None) -> str:
+    return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
 
 # NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
 # numerele mici de proză („top 3", „pasul 2"). `(?<![\w./-])` / `(?![\w%])` → nu prinde procente
@@ -443,14 +469,38 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
 
     products = _dedupe(retrieved)
+    # P1 (ARCH-product-retrieval): follow-up „mai ieftin" pe un set deja afișat → re-căutare
+    # DETERMINISTĂ a produselor strict mai ieftine decât cel mai ieftin afișat, în aceeași categorie
+    # (search_cheaper_than) — NU re-rank pe setul afișat (bug-ul „cea mai ieftină 80.99 când există
+    # 18.99"). Arată DOAR ce e mai ieftin (1 dacă e 1, zero padding); nimic mai ieftin → mesaj
+    # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
+    cheaper_intent = (
+        not is_order
+        and get_settings().cheaper_intent_enabled
+        and bool(ctx.state.displayed_products)
+        and _CHEAPER_RE.search(query) is not None
+    )
+    if cheaper_intent:
+        baseline = min(p.price for p in ctx.state.displayed_products)
+        ref_ids = [p.product_id for p in ctx.state.displayed_products]
+        cheaper = await search_cheaper_than(deps.conn, ctx.business.id, ref_ids, baseline, limit=6)
+        ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
+        if cheaper:
+            products = _dedupe(cheaper)
+        else:
+            # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI
+            # client; un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
+            ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
+            return
     # R3: follow-up pe produse DEJA arătate („care e cea mai bună?") la care modelul n-a rechemat
     # un tool → re-hidratează produsele afișate (după id, din state) ca set de retrieval, ca să
-    # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, doar cu id-uri în state, și DOAR
-    # când textul singur ar pica (gol sau preț negroundat) — un răspuns prose valid (mulțumesc/
-    # clarificare) rămâne neatins. Cuplat cu id-urile expuse în state_block, comparația merge sigur.
+    # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, NU pe intenția de preț (aia o
+    # tratează cheaper_intent mai sus), doar cu id-uri în state, și DOAR când textul singur ar pica
+    # (gol sau preț negroundat). Rămâne plasa de grounding pentru follow-up-urile neclasificate.
     if (
         not products
         and not is_order
+        and not cheaper_intent
         and ctx.state.displayed_products
         and not (final and _valid(final, [], generated_links, grounded_prices))
     ):
