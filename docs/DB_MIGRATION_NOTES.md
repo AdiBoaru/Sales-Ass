@@ -48,3 +48,31 @@
 1. Webhook → `insert into messages ... on conflict do nothing` (dedupe gratis pe `provider_msg_id`).
 2. Rollup job nocturn pentru `usage_daily` (alimentează și cost guard-ul zilnic).
 3. Funcția SQL de căutare hibridă (`search_products(business_id, filters, query_embedding)`) — e tool-ul nr. 1 al agentului.
+
+## Runner de migrări `scripts/migrate.py` (NX-123)
+
+Migrările `docs/0NN_*.sql` nu se mai aplică manual prin `apply_0NN.py` (fire-and-forget, fără
+stare). Sursa de adevăr a stării e tabelul `schema_migrations(version, filename, checksum, applied_at)`
+(creat de `docs/014_schema_migrations.sql`).
+
+| Comandă | Ce face |
+|---|---|
+| `python scripts/migrate.py` | aplică pending în ordine NUMERICĂ (010 > 009), o tranzacție per fișier, înregistrează în `schema_migrations` |
+| `python scripts/migrate.py --dry-run` | listează pending fără a aplica |
+| `python scripts/migrate.py --check` | cod `≠0` dacă există pending sau drift de checksum (poarta de boot + pas CI) |
+| `python scripts/migrate.py --baseline` | marchează tot ce e pe disc ca aplicat (`legacy`) FĂRĂ a rula SQL — **adoptare o singură dată pe o DB de PROD existentă** |
+
+**Adoptare pe DB existentă (003–013 deja aplicate manual):** rulează `--baseline` O SINGURĂ DATĂ →
+marchează 003–014 ca `legacy` fără reaplicare. Apoi `migrate.py` aplică doar migrările NOI (015+).
+Alternativ, backfill-ul din `014_schema_migrations.sql` marchează 003–013 ca `legacy` și la aplicarea
+normală a lui 014.
+
+**DB proaspătă (CI/dev):** după `schema_v2_production.sql`, `migrate.py` aplică 003→014 în ordine, cu
+checksum real; backfill-ul lui 014 devine no-op.
+
+**Poarta de boot (P6):** workerul (`consumer.py`) cheamă `assert_migrations_current(pool)` înainte de
+XREADGROUP → refuză pornirea cu eroare explicită dacă există migrări pending (regresia 010/012 care
+crăpa primul mesaj al fiecărui client nou — acum prinsă la boot/CI, nu în prod).
+
+**Checksum platform-independent:** se normalizează CRLF→LF înainte de sha256, ca Windows (dev) și Linux
+(CI) să dea aceeași amprentă. Rândurile `legacy` (backfill istoric) sunt scutite de verificarea de drift.

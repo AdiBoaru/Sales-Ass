@@ -12,10 +12,11 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
     has_embeddings,
-    search_products,
+    search_products_lexical,
     search_products_semantic,
 )
 from src.tools.base import ToolResult, register
@@ -35,6 +36,8 @@ class SearchArgs(BaseModel):
     category: str | None = None
     brand: str | None = None
     concerns: list[str] | None = None
+    sort_mode: str = "relevance"  # relevance | price_asc | price_desc | rating_desc (clamp în SQL)
+    in_stock_only: bool = False
     limit: int = Field(default=6, ge=1, le=6)
 
 
@@ -88,24 +91,39 @@ def _compare_view(products: list[dict[str, Any]]) -> str:
 
 
 def _relax_ladder(
-    *, price_max: float | None, concerns: list[str] | None, category: str | None
+    *,
+    price_max: float | None,
+    concerns: list[str] | None,
+    category: str | None,
+    in_stock_only: bool,
 ) -> list[dict[str, Any]]:
-    """Trepte de filtre dure în ordinea de relaxare price_max → concerns → category.
+    """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
+    (P6). Brand-ul NU se relaxează niciodată.
 
-    De la cel mai restrictiv (toate filtrele) la cel mai relaxat; fiecare treaptă renunță
-    CUMULATIV la încă un filtru. Garantează că tot iese ceva relevant înainte de lista goală
-    (P6), relaxând de la cel mai puțin la cel mai mult important pentru relevanță. Brand-ul NU
-    se relaxează — dacă clientul a cerut un brand anume, nu-i dăm altul.
-    """
-    steps: list[dict[str, Any]] = [
-        {"price_max": price_max, "concerns": concerns, "category": category}
-    ]
-    if price_max is not None:
-        steps.append({**steps[-1], "price_max": None})
-    if concerns:
-        steps.append({**steps[-1], "concerns": None})
-    if category:
-        steps.append({**steps[-1], "category": None})
+    Cu `SEARCH_SORT_MODE_ENABLED` (ARCH-product-retrieval): prețul + disponibilitatea sunt
+    constrângeri DURE, NU se relaxează — relaxăm doar SOFTUL (concerns → category). Altfel un
+    „sub 80" supra-constrâns ar scoate bound-ul de preț și ar întoarce un 149.99 (bug-ul de preț).
+    Fără flag (kill-switch OFF): comportamentul vechi (price → concerns → category)."""
+    base = {
+        "price_max": price_max,
+        "concerns": concerns,
+        "category": category,
+        "in_stock_only": in_stock_only,
+    }
+    steps: list[dict[str, Any]] = [base]
+    if get_settings().search_sort_mode_enabled:
+        # prețul + stocul rămân fixate; relaxăm softul
+        if concerns:
+            steps.append({**steps[-1], "concerns": None})
+        if category:
+            steps.append({**steps[-1], "category": None})
+    else:
+        if price_max is not None:
+            steps.append({**steps[-1], "price_max": None})
+        if concerns:
+            steps.append({**steps[-1], "concerns": None})
+        if category:
+            steps.append({**steps[-1], "category": None})
     return steps
 
 
@@ -126,10 +144,15 @@ async def search_products_tool(
     # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
     # Determinist (P2), per vertical; necunoscutele se ignoră (fără filtru fals care golește).
     concern_keys = map_concerns(ctx.business.vertical, a.concerns) or None
-    ladder = _relax_ladder(price_max=a.price_max, concerns=concern_keys, category=a.category)
+    ladder = _relax_ladder(
+        price_max=a.price_max,
+        concerns=concern_keys,
+        category=a.category,
+        in_stock_only=a.in_stock_only,
+    )
 
     products: list[dict[str, Any]] = []
-    mode = "sql_only"
+    mode = "lexical"  # default = plasa lexicală (FTS+trgm); urcă la "semantic" dacă avem vector
     relaxed = False
 
     # 1. cale semantică doar dacă avem LLM (vector de query) ȘI tenantul are embeddings
@@ -145,6 +168,9 @@ async def search_products_tool(
                     price_max=f["price_max"],
                     concerns=f["concerns"],
                     category=f["category"],
+                    brand=a.brand,  # brand = filtru DUR și pe calea semantică (nu se relaxează)
+                    sort_mode=a.sort_mode,
+                    in_stock_only=f["in_stock_only"],
                     limit=a.limit,
                 )
                 if products:
@@ -152,11 +178,13 @@ async def search_products_tool(
                     break
         except Exception:  # noqa: BLE001 — embed/rețea pică → NU tăcem, cădem pe SQL-only (P6)
             products = []
-    # 2. plasă SQL-only: fără embeddings/LLM, semantic gol, sau embed a aruncat. Filtrele dure
-    #    (category/brand/concerns) se păstrează la fallback — nu se pierd la trecerea pe plasă.
+    # 2. plasă LEXICALĂ (NX-113a): fără embeddings/LLM, semantic gol, sau embed a aruncat. Acum
+    #    lexical REAL (FTS `websearch_to_tsquery` + `pg_trgm`), nu `name ILIKE '%q%'` spart — prinde
+    #    fraze naturale ȘI SKU/typo. Filtrele dure (category/brand/concerns) se păstrează.
     if not products:
+        mode = "lexical"
         for i, f in enumerate(ladder):
-            products = await search_products(
+            products = await search_products_lexical(
                 deps.conn,
                 ctx.business.id,
                 query_text=a.query,
@@ -164,12 +192,14 @@ async def search_products_tool(
                 concerns=f["concerns"],
                 category=f["category"],
                 brand=a.brand,
-                limit=a.limit,
+                sort_mode=a.sort_mode,
+                in_stock_only=f["in_stock_only"],
+                pool=a.limit,
             )
             if products:
                 relaxed = i > 0
                 break
-    # `sql_only` în analytics = semnal că jobul de embed trebuie rulat pe tenant.
+    # `mode=lexical` în analytics = semnal că jobul de embed trebuie rulat pe tenant (fără vector).
     # FĂRĂ `query`/`concerns` text în properties (P12 — pot conține formulări PII); doar flag-uri.
     ctx.emit(
         "product_search",
@@ -181,6 +211,19 @@ async def search_products_tool(
         n_concerns=len(concern_keys or []),
         relaxed=relaxed,
     )
+    # Brand cerut explicit + zero rezultate = brandul nu e în catalog. Semnal EXPLICIT pentru agent
+    # (raportează DOAR ce întoarce tool-ul) ca să spună „nu lucrăm cu brandul X", nu să prezinte
+    # produse de la alt brand ca și cum ar fi al lui (fix CAT-001 / brand-availability).
+    if not products and a.brand:
+        return ToolResult(
+            ok=True,
+            products=[],
+            llm_view=(
+                f"Nu am găsit niciun produs de la brandul «{a.brand}» în catalog. "
+                f"Nu prezenta alt brand ca fiind «{a.brand}». Poți oferi alternative din alte "
+                f"branduri, dar spune explicit că sunt alt brand."
+            ),
+        )
     return ToolResult(ok=True, products=products, llm_view=_brief(products))
 
 

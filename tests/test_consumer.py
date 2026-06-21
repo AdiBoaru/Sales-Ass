@@ -1,6 +1,7 @@
-"""NX-90 — typing instant pe inbound (`_safe_typing`). Fără DB/rețea: registru + sender fals."""
+"""NX-90 — typing instant pe inbound (`_safe_typing`). Fără DB/rețea: registru + sender fals.
+NX-115: gardarea e pe capabilitatea TYPING declarată (nu `hasattr`)."""
 
-from src.channels.base import ChannelSenderRegistry
+from src.channels.base import Capability, ChannelSenderRegistry
 from src.worker.consumer import _safe_typing
 
 EVENT = {
@@ -12,6 +13,8 @@ EVENT = {
 
 
 class _TypingSender:
+    capabilities = frozenset({Capability.TEXT, Capability.TYPING})
+
     def __init__(self):
         self.calls = []
 
@@ -23,6 +26,8 @@ class _TypingSender:
 
 
 class _NoTypingSender:
+    capabilities = frozenset({Capability.TEXT})  # fără TYPING → skip
+
     async def send_text(self, account_id, to, text):
         return "x"
 
@@ -39,13 +44,21 @@ async def test_safe_typing_fires_with_envelope_args():
     assert s.calls == [("PNID", "40712345678", "wamid.IN1")]
 
 
-async def test_safe_typing_skips_channel_without_mark_typing():
+async def test_safe_typing_skips_channel_without_typing_cap():
     s = _NoTypingSender()
-    await _safe_typing(_registry(s), EVENT)  # hasattr False → skip tăcut, fără eroare
+    await _safe_typing(_registry(s), EVENT)  # fără capabilitatea TYPING → skip tăcut, fără eroare
 
 
 async def test_safe_typing_noop_when_registry_none():
     await _safe_typing(None, EVENT)  # compat dev/test — fără registru
+
+
+async def test_safe_typing_noop_when_channel_kind_missing():
+    # NX-115: fără default „whatsapp" — event fără channel_kind NU mai trimite typing pe WhatsApp.
+    s = _TypingSender()
+    reg = _registry(s)
+    await _safe_typing(reg, {k: v for k, v in EVENT.items() if k != "channel_kind"})
+    assert s.calls == []
 
 
 async def test_safe_typing_noop_for_unknown_channel():
@@ -57,6 +70,8 @@ async def test_safe_typing_noop_for_unknown_channel():
 
 async def test_safe_typing_swallows_transport_error():
     class _Boom:
+        capabilities = frozenset({Capability.TEXT, Capability.TYPING})
+
         async def send_text(self, account_id, to, text):
             return "x"
 

@@ -25,6 +25,7 @@ from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
     list_routing_aliases,
+    search_cheaper_than,
 )
 from src.models import RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
@@ -37,18 +38,50 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
 from src.tools.base import enabled_tools, run_tool
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
+from src.worker.text_scrub import has_text_claim
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
 
-_PRICE_RE = re.compile(r"(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:lei|ron)", re.IGNORECASE)
+# NX-117: prinde valuta în SUFIX („89 lei", „89 de lei", „89 ron") ȘI în PREFIX („RON 89", „lei 89")
+# → un preț real prefixat nu e tratat fals ca cifră bară, iar un preț prefixat negroundat e prins.
+_PRICE_RE = re.compile(
+    r"\b(?:lei|ron)\s*(\d{1,6}(?:[.,]\d{1,2})?)"  # prefix-valută
+    r"|(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:de\s+)?(?:lei|ron)\b",  # sufix (+ „de lei")
+    re.IGNORECASE,
+)
 _BUDGET_RE = re.compile(
     r"(?:sub|pana la|până la|maxim|maximum|buget|max)\s*(\d{1,5})|(\d{1,5})\s*(?:lei|ron)",
     re.IGNORECASE,
 )
 _URL_RE = re.compile(r"https?://\S+")
+
+# P1 (ARCH-product-retrieval): follow-up de PREȚ pe un set deja afișat → re-căutare DETERMINISTĂ a
+# produselor strict mai ieftine (search_cheaper_than), NU re-rank pe setul afișat (R3). Precizie
+# mare RO/HU/EN (comparativ/superlativ de preț). Un miss cade grațios pe comportamentul vechi (R3).
+_CHEAPER_RE = re.compile(
+    r"\bmai\s+ieftin\w*|\bcea\s+mai\s+ieftin\w*|\bmai\s+accesibil\w*"
+    r"|\bpre[țt]\s+mai\s+mic|\bmai\s+mic\s+la\s+pre[țt]|\bbuget\s+mai\s+mic"
+    r"|\bprea\s+scump\w*|\bcam\s+scump\w*"
+    r"|\bcheaper\b|\bcheapest\b|\bolcs[óo]bb\w*|\blegolcs[óo]bb\w*",
+    re.IGNORECASE,
+)
+
+# Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
+_CHEAPEST_ALREADY: dict[str, str] = {
+    "ro": "Momentan asta e cea mai ieftină opțiune pe care o am pentru tine. "
+    "Vrei să-ți arăt altceva sau o altă categorie?",
+    "en": "This is the cheapest option I have right now. "
+    "Want me to show you something else or another category?",
+    "hu": "Jelenleg ez a legolcsóbb lehetőség, amim van. Mutassak mást vagy egy másik kategóriát?",
+}
+
+
+def _cheapest_already_msg(language: str | None) -> str:
+    return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
+
 
 # NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
 # numerele mici de proză („top 3", „pasul 2"). `(?<![\w./-])` / `(?![\w%])` → nu prinde procente
@@ -125,8 +158,9 @@ def _prices_ok(
     """Fiecare preț menționat în reply trebuie să fie real (toleranță 0.5 lei): preț de produs
     retrievat SAU o sumă grounded din DB (ex. total comandă/checkout, G7-3)."""
     allowed = _allowed_prices(products) + sorted(allowed_prices or set())
-    for token in _PRICE_RE.findall(reply):
-        value = float(token.replace(",", "."))
+    for m in _PRICE_RE.finditer(reply):
+        tok = m.group(1) or m.group(2)  # prefix-valută (grup 1) sau sufix (grup 2)
+        value = float(tok.replace(",", "."))
         if not any(abs(value - a) <= 0.5 for a in allowed):
             return False
     return True
@@ -170,7 +204,10 @@ def _bad_bare_numbers(
     dezactivat → întotdeauna gol (fail-open). Toleranță 0.5 (ca _prices_ok)."""
     if not get_settings().validator_bare_numbers_enabled:
         return []
-    priced = {float(t.replace(",", ".")) for t in _PRICE_RE.findall(reply)}  # deja în _prices_ok
+    # NX-117: _PRICE_RE are 2 grupuri (prefix/sufix-valută) → finditer + group, nu findall (tuple).
+    priced = {
+        float((m.group(1) or m.group(2)).replace(",", ".")) for m in _PRICE_RE.finditer(reply)
+    }  # prețurile deja validate în _prices_ok
     allowed = _allowed_numbers(products, grounded_prices)
     bad: list[float] = []
     for token in _BARE_NUM_RE.findall(reply):
@@ -190,6 +227,14 @@ def _bare_numbers_ok(
     return not _bad_bare_numbers(reply, products, grounded_prices)
 
 
+def _claims_ok(reply: str) -> bool:
+    """NX-117: pe calea de proză, claim-uri ne-numerice neverificabile (superlativ „best seller",
+    claim de stoc/disponibilitate) → respins → retry/fallback. Gated FAIL-OPEN de flag."""
+    if not get_settings().validator_claims_enabled:
+        return True
+    return not has_text_claim(reply)
+
+
 def _valid(
     reply: str,
     products: list[dict[str, Any]],
@@ -197,15 +242,21 @@ def _valid(
     allowed_prices: set[float] | None = None,
     *,
     check_bare: bool = True,
+    check_claims: bool = True,
 ) -> bool:
-    """Preț + link grounded (mereu) + cifre bare grounded (NX-91, doar SALES). `check_bare=False`
-    pe ruta ORDER: statusul comenzii are numere DB legitime (dată livrare, AWB, cantitate) care NU
-    sunt prețuri → bare-check ar da fals-pozitive; sumele de comandă rămân păzite de _prices_ok."""
+    """Preț + link grounded (mereu) + cifre bare grounded (NX-91, doar SALES) + claim-uri de text
+    neverificabile (NX-117, calea de proză). `check_bare=False` + `check_claims=False` pe ORDER:
+    statusul comenzii are numere DB legitime (dată/AWB/cantitate) și fapte de livrare grounded care
+    NU sunt claim-uri de marketing → ar da fals-pozitive; sumele rămân păzite de _prices_ok."""
     if not (
         _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
     ):
         return False
-    return not check_bare or _bare_numbers_ok(reply, products, allowed_prices or set())
+    if check_bare and not _bare_numbers_ok(reply, products, allowed_prices or set()):
+        return False
+    if check_claims and not _claims_ok(reply):
+        return False
+    return True
 
 
 def _products_brief(products: list[dict[str, Any]]) -> str:
@@ -312,7 +363,10 @@ async def _finalize_grounded(
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
     NU forma de produs `_deterministic_reply`)."""
-    if text and _valid(text, [], allowed_links, allowed_prices, check_bare=False):
+    # NX-117: ORDER → fără claims-check (faptele de livrare/stoc din check_order sunt grounded).
+    if text and _valid(
+        text, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
+    ):
         return text
 
     allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
@@ -325,7 +379,9 @@ async def _finalize_grounded(
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
         log.warning("agent: retry status comandă eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, [], allowed_links, allowed_prices, check_bare=False):
+    if reply2 and _valid(
+        reply2, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
+    ):
         return reply2
 
     log.warning("agent: validator status comandă a eșuat → fallback sigur")
@@ -388,6 +444,26 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     )
 
 
+def _filters_hint(filters: dict[str, Any]) -> str:
+    """NX-116: constrângerile structurate din triaj (`RouteDecision.filters`) ca HINT determinist
+    pentru primul `search_products` — agentul nu le reparsează din proză. Args rămân ale modelului
+    (P3); hint-ul doar îl seedează cu ce a extras nano."""
+    if not filters:
+        return ""
+    parts: list[str] = []
+    if filters.get("budget_max") is not None:
+        parts.append(f"buget max {filters['budget_max']:g}")
+    if filters.get("concerns"):
+        parts.append("nevoi: " + ", ".join(filters["concerns"]))
+    if filters.get("suitable_for"):
+        parts.append(f"pentru: {filters['suitable_for']}")
+    if filters.get("brand"):
+        parts.append(f"brand: {filters['brand']}")
+    if not parts:
+        return ""
+    return "Constrângeri detectate (folosește-le în search_products): " + "; ".join(parts) + "\n"
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -428,8 +504,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
     cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
+    filters_hint = _filters_hint(route.filters)  # NX-116: seed structurat din triaj (P3 respectat)
     user = (
-        f"Limba clientului: {ctx.language}\n{cat_hint}{context_block}{history_block}"
+        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{context_block}{history_block}"
         f"Mesaj client: {query}"
     )
 
@@ -443,14 +520,38 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
 
     products = _dedupe(retrieved)
+    # P1 (ARCH-product-retrieval): follow-up „mai ieftin" pe un set deja afișat → re-căutare
+    # DETERMINISTĂ a produselor strict mai ieftine decât cel mai ieftin afișat, în aceeași categorie
+    # (search_cheaper_than) — NU re-rank pe setul afișat (bug-ul „cea mai ieftină 80.99 când există
+    # 18.99"). Arată DOAR ce e mai ieftin (1 dacă e 1, zero padding); nimic mai ieftin → mesaj
+    # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
+    cheaper_intent = (
+        not is_order
+        and get_settings().cheaper_intent_enabled
+        and bool(ctx.state.displayed_products)
+        and _CHEAPER_RE.search(query) is not None
+    )
+    if cheaper_intent:
+        baseline = min(p.price for p in ctx.state.displayed_products)
+        ref_ids = [p.product_id for p in ctx.state.displayed_products]
+        cheaper = await search_cheaper_than(deps.conn, ctx.business.id, ref_ids, baseline, limit=6)
+        ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
+        if cheaper:
+            products = _dedupe(cheaper)
+        else:
+            # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI
+            # client; un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
+            ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
+            return
     # R3: follow-up pe produse DEJA arătate („care e cea mai bună?") la care modelul n-a rechemat
     # un tool → re-hidratează produsele afișate (după id, din state) ca set de retrieval, ca să
-    # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, doar cu id-uri în state, și DOAR
-    # când textul singur ar pica (gol sau preț negroundat) — un răspuns prose valid (mulțumesc/
-    # clarificare) rămâne neatins. Cuplat cu id-urile expuse în state_block, comparația merge sigur.
+    # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, NU pe intenția de preț (aia o
+    # tratează cheaper_intent mai sus), doar cu id-uri în state, și DOAR când textul singur ar pica
+    # (gol sau preț negroundat). Rămâne plasa de grounding pentru follow-up-urile neclasificate.
     if (
         not products
         and not is_order
+        and not cheaper_intent
         and ctx.state.displayed_products
         and not (final and _valid(final, [], generated_links, grounded_prices))
     ):
@@ -478,6 +579,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         bare = _bad_bare_numbers(final, products, grounded_prices) if final else []
         if bare:
             ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
+        # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
+        if final and not _claims_ok(final):
+            ctx.emit("validator_rejected", kind="claim")
         reply = await _finalize(
             deps.llm,
             prompt_builder.build_reco_system(inp),

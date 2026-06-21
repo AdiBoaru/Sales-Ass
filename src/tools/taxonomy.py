@@ -11,16 +11,10 @@ vertical live). Un tabel `taxonomy` în DB se adaugă ADITIV doar când apar ver
 
 from __future__ import annotations
 
-import unicodedata
-
-
-def _norm(s: str) -> str:
-    """Normalizare robustă: lower + strip diacritice (ă→a, ș→s, î→i) + trim.
-
-    Așa „Ten Grăs" / „TEN GRAS" / „ten gras" colapsează la aceeași cheie de lookup."""
-    nfkd = unicodedata.normalize("NFKD", s.strip().lower())
-    return "".join(c for c in nfkd if not unicodedata.combining(c))
-
+# NX-114: `_norm` extras în helper-ul partajat src/domain/normalize.py (comportament IDENTIC —
+# lower + strip diacritice + trim). Re-exportat ca alias pentru compat (DomainPack folosește
+# aceeași normalizare pentru concern_map).
+from src.domain.normalize import normalize as _norm
 
 # Termeni liberi (RO + EN) → cheia canonică din attributes->'concerns'. Cheile sunt
 # normalizate la încărcare, deci pot fi scrise natural (cu diacritice) aici.

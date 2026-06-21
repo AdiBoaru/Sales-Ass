@@ -12,11 +12,14 @@ business e un singur câmp JSON `data`.
 """
 
 import json
+import logging
 from typing import Any
 
 from redis.asyncio import Redis, from_url
 
 from src.config import get_settings
+
+log = logging.getLogger(__name__)
 
 # Stream unic de inbound. Ordinea per-conversație e impusă în worker prin lock
 # pe conversation_id (rezolvat după ce worker-ul atinge DB), nu prin stream key —
@@ -68,3 +71,39 @@ async def enqueue_inbound(redis: Redis, event: dict[str, Any]) -> str:
         maxlen=_STREAM_MAXLEN,
         approximate=True,
     )
+
+
+# --- Lock per conversație (NX-85) -------------------------------------------
+# Serializează tururile aceleiași conversații între REPLICI de worker. Cheia include
+# `business_id` (P7) + identificatorul de expeditor (PII de canal → DOAR în cheie, efemeră cu TTL;
+# NICIODATĂ în loguri, P12). `token` per-tentativă → release atomic (compare-del), nu ștergem
+# lock-ul altui worker dacă al nostru a expirat la TTL.
+
+# Lua: șterge cheia DOAR dacă valoarea (token) e a noastră → release sigur sub TTL/race.
+_RELEASE_LUA = (
+    "if redis.call('get', KEYS[1]) == ARGV[1] "
+    "then return redis.call('del', KEYS[1]) else return 0 end"
+)
+
+
+def _conv_lock_key(business_id: str, sender_key: str) -> str:
+    return f"convlock:{business_id}:{sender_key}"
+
+
+async def acquire_conv_lock(
+    redis: Redis, business_id: str, sender_key: str, token: str, *, ttl_s: int
+) -> bool:
+    """`SET NX EX` atomic: True dacă am luat lock-ul, False dacă e ocupat (alt worker procesează
+    aceeași conversație). TTL = plasă dacă worker-ul moare cu lock-ul luat. Ridică la eroare de
+    Redis (caller-ul tratează fail-open)."""
+    got = await redis.set(_conv_lock_key(business_id, sender_key), token, nx=True, ex=ttl_s)
+    return bool(got)
+
+
+async def release_conv_lock(redis: Redis, business_id: str, sender_key: str, token: str) -> None:
+    """Eliberează lock-ul DOAR dacă tokenul e al nostru (Lua compare-del atomic). Best-effort:
+    o eroare de Redis e logată, lock-ul expiră oricum la TTL (nu blocăm conversația pe veci)."""
+    try:
+        await redis.eval(_RELEASE_LUA, 1, _conv_lock_key(business_id, sender_key), token)
+    except Exception as e:  # noqa: BLE001 — best-effort; TTL e plasa
+        log.warning("conv lock: release eșuat (%s) — expiră la TTL", type(e).__name__)

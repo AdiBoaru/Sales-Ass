@@ -4,7 +4,7 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-06-16_
+_Ultima actualizare: 2026-06-20_
 
 ---
 
@@ -17,6 +17,16 @@ e dovedit pe infrastructură reală.
 Ce a mai rămas (OPȚIONAL / pasul următor):
 - **Deploy VPS** (secțiunea de mai jos) — ca botul să ruleze CONTINUU, nu doar cât e laptopul pornit.
 - **T017 spend limit** — înainte de G3 (botul „inteligent", nu doar echo).
+
+---
+
+## 🟡 Migrare DB — observabilitate de cost (NX-103)
+
+Rollup-ul nocturn `usage_daily` are nevoie de coloana `cached_tokens`. Afișarea per-mesaj
+în sim NU depinde de asta (citește din `analytics_events`), dar rollup-ul/dashboard-ul da.
+
+- [ ] `python scripts/apply_013.py` (aditiv + idempotent — rulabil de două ori fără eroare)
+- [ ] (opțional) `LLM_PRICING_JSON` în `.env.prod` dacă vrei să tunezi tarifele fără redeploy
 
 ---
 

@@ -17,7 +17,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # NX-114: DomainPack trăiește în src/domain/pack.py; import doar pt type-hint (fără ciclu
+    # la runtime — `from __future__ import annotations` face adnotările lazy).
+    from src.domain.pack import DomainPack
 
 # ---------------------------------------------------------------------------
 # Enum-uri (oglindesc CHECK-urile din schema_v2)
@@ -63,6 +68,9 @@ class BusinessConfig:
     timezone: str = "Europe/Bucharest"
     settings: dict[str, Any] = field(default_factory=dict)
     daily_cost_cap_usd: float | None = None
+    # NX-114: config per-(business, vertical) — politică/taxonomie din DB+seed (P9). Owner UNIC:
+    # `load_business` (apelează load_domain_pack). None dacă DOMAIN_PACK_ENABLED=false (fail-safe).
+    domain_pack: DomainPack | None = None
 
 
 @dataclass
@@ -128,9 +136,12 @@ class ConversationState:
     """`conversations.state` jsonb. Owner la scriere: Sender (patch tranzacțional).
     Bugetul de 8KB e impus în context builder + CHECK în DB (003)."""
 
-    active_search: dict[str, Any] = field(default_factory=dict)
+    # NX-112: `active_search` ȘTERS — era hidratat dar NICIUN stagiu nu-l scria (cheie moartă).
+    # Re-introdus cu owner REAL (retrieval memorează setul de filtre pe follow-up) în NX-113/NX-119.
     displayed_products: list[ProductRef] = field(default_factory=list)
     pending_question: dict[str, Any] | None = None
+    # NX-112: semnal ieftin anti-loop — sloturile deja întrebate (citit de context_blocks; NX-116).
+    # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
@@ -166,10 +177,10 @@ class ConversationState:
                 }
             )
         return cls(
-            active_search=raw.get("active_search") or {},
             displayed_products=products,
             pending_question=raw.get("pending_question"),
-            asked_intents=raw.get("asked_intents") or [],
+            # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
+            asked_intents=(raw.get("asked_intents") or [])[-8:],
             constraints=raw.get("constraints") or {},
             cart=cart,
             state_version=int(raw.get("state_version") or 0),
@@ -187,6 +198,8 @@ class RouteDecision:
 
     route: Route
     category_key: str | None = None
+    # NX-116: sloturi structurate normalizate (budget_max/concerns/suitable_for/brand). Owner UNIC
+    # = Triaj (din `slots` validate); citit de agent ca seed pentru search_products (hint, P3).
     filters: dict[str, Any] = field(default_factory=dict)
     missing_field: str | None = None
 
@@ -245,6 +258,19 @@ class RichReply:
 
 
 @dataclass
+class Offer:
+    """NX-114 — ofertă/CTA NEUTRĂ de canal. Emitentul (agent/checkout) setează intenția
+    semantică; CUM se randează e exclusiv la margine (NX-60): buton (web), CTA interactiv
+    (WhatsApp), buton inline (Telegram). Floor pe canale fără randare bogată = url append-uit
+    în text. Owner: stagiul care emite oferta."""
+
+    kind: str  # "checkout" | "open_url" | "quick_reply" | "book"
+    label: str  # textul afișat pe buton/CTA (per-locale, vine de la emitent)
+    url: str | None = None  # pt checkout/open_url (din catalog/checkout_links, NU inventat)
+    payload: str | None = None  # pt quick_reply: token rutat (ex. "offer:reorder") — neutru
+
+
+@dataclass
 class Reply:
     """Orice stagiu poate seta → early exit la Sender."""
 
@@ -263,6 +289,9 @@ class Reply:
     # G5b: răspuns reutilizabil pentru cache (False pe clarify/refuz/fallback —
     # specifice contextului, nu se cache-uiesc).
     cacheable: bool = True
+    # NX-114: ofertă/CTA neutră de canal (seam channel-aware). Randată bogat la margine
+    # (NX-115/127); floor pe canale text = url append-uit la text de `set_offer`. Owner: emitent.
+    offer: Offer | None = None
 
 
 @dataclass
@@ -271,6 +300,41 @@ class Event:
 
     type: str
     properties: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TurnUsage:
+    """Consumul LLM al turului (tokeni + cost + defalcări) — observabilitate de cost (NX-103).
+    Owner UNIC la scriere: runner-ul (din UsageAccumulator, după pipeline). Citit de processor
+    (atașat pe rândul `messages` outbound) și expus de harness-ul de simulare per mesaj.
+
+    `tokens_in` INCLUDE `cached_tokens` (convenția OpenAI). `latency_ms` = wall-clock-ul
+    pipeline-ului. `by_stage`/`by_model` = defalcări {nume: {calls, tokens, cost}}."""
+
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cached_tokens: int = 0
+    cost_usd: float = 0.0
+    calls: int = 0
+    savings_usd: float = 0.0  # bani economisiți de prompt caching (tarif plin − cached)
+    latency_ms: float = 0.0
+    models: list[str] = field(default_factory=list)  # modelele folosite (pt messages.model_route)
+    by_stage: dict[str, dict[str, Any]] = field(default_factory=dict)
+    by_model: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def as_event_props(self) -> dict[str, Any]:
+        """Forma pentru event-ul `llm_usage` (analytics_events): coloane dedicate tokens_in/out +
+        cost_usd extrase de insert_events; restul (cached/savings/defalcări) în properties jsonb."""
+        return {
+            "tokens_in": self.tokens_in,
+            "tokens_out": self.tokens_out,
+            "cached_tokens": self.cached_tokens,
+            "cost_usd": round(self.cost_usd, 6),
+            "savings_usd": round(self.savings_usd, 6),
+            "llm_calls": self.calls,
+            "by_stage": self.by_stage,
+            "by_model": self.by_model,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +368,9 @@ class TurnContext:
     # merge-uiește în `new_state` la scriere (P3 — nu se scrie din două locuri).
     state_patch: dict[str, Any] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
+    # NX-103: consumul LLM al turului (tokeni/cost/defalcări). Owner: runner-ul (post-pipeline);
+    # processor-ul îl atașează pe mesajul outbound. None până rulează pipeline-ul / fără apel LLM.
+    usage: TurnUsage | None = None
 
     def emit(self, type_: str, **properties: Any) -> None:
         """Helper pentru stagii: adaugă un event fără să știe cum e scris."""
@@ -344,6 +411,17 @@ class TurnContext:
         self.reply = Reply(
             text=text, kind="message", products=products, rich=rich, cacheable=cacheable
         )
+
+    def set_offer(self, offer: Offer) -> None:
+        """NX-114 — atașează o ofertă NEUTRĂ de canal pe reply-ul curent. Marginile bogate
+        (NX-115/127) o randează ca buton/CTA/inline; un Sender vechi vede FLOOR-ul: dacă
+        `offer.url` există, e append-uit la `text` (comportamentul de azi, dar din câmp tipizat,
+        nu „scuipat" de LLM). Necesită un reply setat (creează unul gol defensiv altfel)."""
+        if self.reply is None:
+            self.reply = Reply(text="")
+        self.reply.offer = offer
+        if offer.url and offer.url not in self.reply.text:
+            self.reply.text = f"{self.reply.text}\n{offer.url}".strip()
 
     def set_clarify(self, text: str, *, field: str, resume_route: str) -> None:
         """NX-130 — pune o întrebare de clarificare ȘI memorează slotul de umplut la turul

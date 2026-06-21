@@ -131,7 +131,7 @@ async def test_search_products_tool(monkeypatch):
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx, llm = _ctx(), _LLM()
     res = await run_tool(ctx, _deps(llm), "search_products", {"query": "cremă", "limit": 6})
     assert res.ok and len(res.products) == 2
@@ -154,13 +154,13 @@ async def test_search_no_embeddings_falls_back_sql_only(monkeypatch):
     async def boom_semantic(*a, **k):  # nu trebuie atins
         raise AssertionError("calea semantică nu trebuie chemată fără embeddings")
 
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     monkeypatch.setattr(ct, "search_products_semantic", boom_semantic)
     ctx, llm = _ctx(), _LLM()
     res = await run_tool(ctx, _deps(llm), "search_products", {"query": "cremă"})
     assert res.ok and len(res.products) == 2
     assert llm.embed_calls == 0  # SQL-only n-are LLM deloc (cost $0)
-    assert _search_event(ctx).properties["mode"] == "sql_only"
+    assert _search_event(ctx).properties["mode"] == "lexical"
 
 
 async def test_search_no_llm_sql_only(monkeypatch):
@@ -173,11 +173,11 @@ async def test_search_no_llm_sql_only(monkeypatch):
         return PRODUCTS
 
     monkeypatch.setattr(ct, "has_embeddings", boom_has_emb)
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx = _ctx()
     res = await run_tool(ctx, _deps_no_llm(), "search_products", {"query": "x"})
     assert res.ok and len(res.products) == 2
-    assert _search_event(ctx).properties["mode"] == "sql_only"
+    assert _search_event(ctx).properties["mode"] == "lexical"
 
 
 async def test_search_semantic_empty_falls_back_sql(monkeypatch):
@@ -191,12 +191,12 @@ async def test_search_semantic_empty_falls_back_sql(monkeypatch):
         return PRODUCTS
 
     monkeypatch.setattr(ct, "search_products_semantic", empty_semantic)
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx, llm = _ctx(), _LLM()
     res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x", "price_max": 50})
     assert res.ok and len(res.products) == 2
     assert llm.embed_calls == 1  # a încercat semantic o dată, apoi a căzut
-    assert _search_event(ctx).properties["mode"] == "sql_only"
+    assert _search_event(ctx).properties["mode"] == "lexical"
 
 
 async def test_search_embed_error_falls_back_sql(monkeypatch):
@@ -206,11 +206,11 @@ async def test_search_embed_error_falls_back_sql(monkeypatch):
     async def fake_sql(conn, business_id, **k):
         return PRODUCTS
 
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx = _ctx()
     res = await run_tool(ctx, _deps(_RaisingLLM()), "search_products", {"query": "x"})
     assert res.ok and len(res.products) == 2
-    assert _search_event(ctx).properties["mode"] == "sql_only"
+    assert _search_event(ctx).properties["mode"] == "lexical"
 
 
 async def test_search_all_empty_is_graceful(monkeypatch):
@@ -221,11 +221,11 @@ async def test_search_all_empty_is_graceful(monkeypatch):
         return []
 
     monkeypatch.setattr(ct, "search_products_semantic", empty)
-    monkeypatch.setattr(ct, "search_products", empty)
+    monkeypatch.setattr(ct, "search_products_lexical",empty)
     ctx = _ctx()
     res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "zzz"})
     assert res.ok and res.products == [] and "Niciun produs" in res.llm_view
-    assert _search_event(ctx).properties["mode"] == "sql_only"
+    assert _search_event(ctx).properties["mode"] == "lexical"
 
 
 # --- NX-72: filtre concern/category/brand + relaxare progresivă --------------
@@ -244,7 +244,7 @@ async def test_search_maps_concerns_and_passes_filters_semantic(monkeypatch):
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
-    monkeypatch.setattr(ct, "search_products", boom_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",boom_sql)
     ctx = _ctx_beauty()
     res = await run_tool(
         ctx,
@@ -270,7 +270,7 @@ async def test_search_sql_only_gets_mapped_concerns_and_brand(monkeypatch):
         return PRODUCTS
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx = _ctx_beauty()
     res = await run_tool(
         ctx,
@@ -292,7 +292,7 @@ async def test_search_unknown_concern_no_false_filter(monkeypatch):
         return PRODUCTS
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx = _ctx_beauty()
     res = await run_tool(
         ctx, _deps(_LLM()), "search_products", {"query": "x", "concerns": ["frigider"]}
@@ -303,7 +303,8 @@ async def test_search_unknown_concern_no_false_filter(monkeypatch):
 
 
 async def test_search_progressive_relaxation(monkeypatch):
-    """Filtre dure golesc tot → relaxare (price → concerns) întoarce produse; relaxed=True."""
+    """Filtre dure golesc tot → relaxăm SOFTUL (concerns), dar PREȚUL rămâne fixat
+    (ARCH-product-retrieval cauza #3: nu mai scoatem bound-ul de buget). relaxed=True."""
     calls = []
 
     async def fake_sql(conn, business_id, **k):
@@ -312,7 +313,7 @@ async def test_search_progressive_relaxation(monkeypatch):
         return PRODUCTS if not k.get("concerns") else []
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
-    monkeypatch.setattr(ct, "search_products", fake_sql)
+    monkeypatch.setattr(ct, "search_products_lexical",fake_sql)
     ctx = _ctx_beauty()
     res = await run_tool(
         ctx,
@@ -321,8 +322,8 @@ async def test_search_progressive_relaxation(monkeypatch):
         {"query": "x", "concerns": ["ten gras"], "price_max": 50},
     )
     assert res.ok and len(res.products) == 2
-    # ladder: {price+concern} → {concern} → {} ; ultima (fără concern) întoarce.
-    assert calls[-1]["concerns"] is None and calls[-1]["price_max"] is None
+    # ladder NOU: {price+concern} → {price, fără concern}; prețul (50) rămâne fixat.
+    assert calls[-1]["concerns"] is None and calls[-1]["price_max"] == 50
     assert _search_event(ctx).properties["relaxed"] is True
 
 

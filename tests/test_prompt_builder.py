@@ -36,6 +36,24 @@ def test_vertical_injected_beauty():
     assert "search_products" in s and "Maxim 3 apeluri" in s  # blocul de tool-uri + reguli
 
 
+# --- NX-114: moneda din DomainPack în prompt ---------------------------------
+
+
+def test_currency_default_ron_shows_lei():
+    s = build_agent_system(_inp())  # currency default RON
+    assert "prețul EXACT (lei)" in s  # byte-identic cu comportamentul de dinainte de NX-114
+
+
+def test_currency_override_shows_label():
+    s = build_agent_system(_inp(currency="EUR"))
+    assert "prețul EXACT (euro)" in s
+    assert "prețul EXACT (lei)" not in s
+
+
+def test_currency_in_reco_system():
+    assert "prețul EXACT (euro)" in build_reco_system(_inp(currency="EUR"))
+
+
 def test_vertical_injected_hvac_not_beauty():
     s = build_agent_system(
         _inp(vertical="hvac", categories=["Aer condiționat", "Centrale termice"])

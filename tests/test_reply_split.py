@@ -57,3 +57,38 @@ def test_second_fragment_may_exceed_limit():
     frags = split_reply(text, limit=200)
     assert len(frags) == 2
     assert len(frags[1]) > 0
+
+
+# --- NX-126: min_head guard + păstrarea glifei de listă ----------------------
+
+
+def test_min_head_skips_tiny_first_fragment():
+    # prima graniță („Da." la index 2) e sub min_head → algoritmul preferă o graniță mai târzie.
+    text = "Da. " + "cuvant " * 60  # ~420 chars; singura propoziție timpurie e „Da."
+    frags = split_reply(text, limit=200, min_head=50)
+    assert len(frags) == 2
+    assert len(frags[0]) >= 50  # NU un head minuscul „Da."
+    assert frags[0] != "Da."
+
+
+def test_min_head_default_is_quarter_limit():
+    text = "Ok. " + "z" * 300
+    # min_head default = 200 // 4 = 50 → „Ok." (index 2) sărit.
+    frags = split_reply(text, limit=200)
+    assert frags[0] != "Ok."
+
+
+def test_leading_list_glyph_preserved_on_newline_split():
+    intro = "Iată câteva opțiuni pentru tine, alese pe nevoia ta de hidratare zilnică intensă:"
+    text = f"{intro}\n• Crema A\n• Crema B"
+    frags = split_reply(text, limit=len(intro) + 5)
+    assert len(frags) == 2
+    assert frags[1].startswith("•")  # bullet-ul rămâne lipit de item în fragmentul 2
+
+
+def test_orphan_bullet_moved_to_second_fragment():
+    from src.worker.reply_split import _bullet_safe
+
+    head, tail = _bullet_safe("Recomandările mele: •", "Crema A")
+    assert head == "Recomandările mele:"
+    assert tail == "• Crema A"  # glifa orfană mutată în fragmentul 2

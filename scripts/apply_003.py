@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică docs/003_bot_runtime_role.sql pe Supabase și verifică izolarea RLS.
 
 Rulează: python scripts/apply_003.py

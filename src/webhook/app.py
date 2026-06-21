@@ -15,10 +15,26 @@ from redis.exceptions import RedisError
 
 from src.config import get_settings
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
+from src.webhook.body_limit import enforce_body_cap
 from src.webhook.meta import parse_statuses, parse_webhook
 from src.webhook.signature import verify_meta_signature, verify_orders_signature
 
 app = FastAPI(title="Nativx Assistant — webhook")
+
+
+@app.middleware("http")
+async def _request_size_guard(request: Request, call_next):
+    """NX-120: respinge Content-Length peste capul global ÎNAINTE de routing/parsing.
+    Închide OOM-ul pe /web/* (FastAPI bufferizează corpul în Pydantic înainte de handler).
+    Cap global = max (webhook 256KB); `enforce_body_cap` per-endpoint rafinează (web 16KB)."""
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > get_settings().webhook_max_body_bytes:
+                return PlainTextResponse("payload too large", status_code=413)
+        except ValueError:
+            return PlainTextResponse("bad content-length", status_code=400)
+    return await call_next(request)
 
 
 # --- dependențe (injectabile/overridabile în teste) --------------------------
@@ -80,7 +96,9 @@ async def receive_webhook(
     mereu 200 pe payload valid-semnat, chiar dacă nu conține nimic procesabil —
     altfel Meta reîncearcă inutil.
     """
-    raw = await request.body()
+    # NX-120: cap de body ÎNAINTE de a bufferiza/verifica (anti-OOM pe VPS mic). Un corp uriaș
+    # e respins cu 413 chiar dacă semnătura ar fi invalidă — nu-l mai citim integral.
+    raw = await enforce_body_cap(request, get_settings().webhook_max_body_bytes)
     signature = request.headers.get("X-Hub-Signature-256")
     if not verify_meta_signature(app_secret, raw, signature):
         return PlainTextResponse("invalid signature", status_code=403)
@@ -118,7 +136,7 @@ async def receive_order(
     pe stream → worker-ul face atribuirea (`process_order`). Comenzile nu-s evenimente de
     canal, deci `business_id` vine din path (autentificat acum de HMAC — un corp semnat cu
     secretul businessului, NX-94). Verificăm ÎNAINTE de orice parsare (principiul 7)."""
-    raw = await request.body()
+    raw = await enforce_body_cap(request, get_settings().webhook_max_body_bytes)  # NX-120
     signature = request.headers.get("X-Orders-Signature")
     if not verify_orders_signature(secret, raw, signature):
         # NU logăm corpul/header-ul/secretul (P12) — corpul poate conține nume/total.
@@ -137,8 +155,23 @@ async def receive_order(
 
 
 # Gateway web widget (NX-20, E26 — al treilea canal). Montat DOAR dacă web_enabled (V1.5):
-# endpointurile /web/* (bootstrap, messages, stream SSE) trăiesc în src/web/app.py.
+# endpointurile /web/* (bootstrap, messages, stream SSE, chat sincron) trăiesc în src/web/app.py.
 if get_settings().web_enabled:
+    from fastapi.middleware.cors import CORSMiddleware
+
     from src.web.app import router as web_router
+
+    # CORS pt widget-ul de pe site (browser cross-origin). Preflight-ul (OPTIONS, înainte de body)
+    # se gate-uiește pe allowlist-ul de origin-uri (CSV în WEB_CORS_ORIGINS). Gol → fără origin-uri
+    # permise (doar same-origin). Endpointurile NE-browser (webhook Meta/orders) n-au Origin →
+    # neafectate. Gardele reale rămân server-side: token public + sig HMAC + rate-limit.
+    cors_origins = get_settings().web_cors_origins_list
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "Last-Event-ID"],
+        )
 
     app.include_router(web_router)

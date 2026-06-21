@@ -199,8 +199,9 @@ async def test_sales_rehydrates_displayed_products_when_no_retrieval(monkeypatch
         ProductRef("p2", "Ser Calmant", 120.50),
     ]
     # retrieved gol + preț negroundat în text (82.99, fără produse) → fără re-hidratare ar pica
-    # validatorul → «n-am găsit». Re-hidratarea aduce produsele care groundează prețul.
-    llm = FakeLLM(tool_calls=[], final="Cea mai bună e Crema Hidratantă la 82.99 lei.")
+    # validatorul → «n-am găsit». Re-hidratarea aduce produsele care groundează prețul. (Fără
+    # superlativ în reply — NX-117 l-ar respinge ca claim; testăm doar grounding-ul de preț.)
+    llm = FakeLLM(tool_calls=[], final="Îți recomand Crema Hidratantă la 82.99 lei.")
     await agent_stage(ctx, _deps(llm))
 
     assert ctx.reply is not None and "n-am găsit" not in ctx.reply.text.lower()
