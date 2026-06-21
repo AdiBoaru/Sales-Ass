@@ -125,3 +125,62 @@ def test_cheapest_already_msg_locale():
     assert "cea mai ieftină" in _cheapest_already_msg("ro")
     assert "cheapest" in _cheapest_already_msg("en")
     assert _cheapest_already_msg("xx") == _cheapest_already_msg("ro")  # locale necunoscut → ro
+
+
+# --- NX-113a: search_products_lexical (FTS + pg_trgm) — assert pe SQL, fără DB ----
+
+
+class _CaptureConn:
+    """Conn fals: captează SQL-ul + params (zero DB). search_products_lexical execută conn.fetch."""
+
+    def __init__(self):
+        self.sql = ""
+        self.params: tuple = ()
+
+    async def fetch(self, sql, *params):
+        self.sql = sql
+        self.params = params
+        return []
+
+
+async def test_lexical_uses_fts_and_trgm():
+    conn = _CaptureConn()
+    await catalog.search_products_lexical(conn, "biz-1", "cremă pentru ten gras", pool=50)
+    assert "websearch_to_tsquery('simple'" in conn.sql  # FTS real, nu ILIKE
+    assert "ts_rank_cd" in conn.sql  # rank lexical
+    assert "p.name %" in conn.sql and "similarity(p.name" in conn.sql  # pg_trgm (typo/SKU)
+    assert "p.business_id = $1" in conn.sql  # P7
+    assert conn.params[0] == "biz-1" and "cremă pentru ten gras" in conn.params
+    assert "ilike '%" not in conn.sql.lower()  # NU mai e substring ILIKE pe frază
+
+
+async def test_lexical_query_param_reused_single_placeholder():
+    conn = _CaptureConn()
+    await catalog.search_products_lexical(conn, "b", "abc", pool=10)
+    # query_text e UN singur placeholder ($2), reutilizat în match + rank (nu dublat în params)
+    assert conn.params.count("abc") == 1
+
+
+async def test_lexical_relevance_orders_by_rank(flag_on):
+    conn = _CaptureConn()
+    await catalog.search_products_lexical(conn, "b", "q", sort_mode="relevance", pool=10)
+    order = conn.sql.split("order by")[-1]  # [-1] = ORDER BY final (nu cel din lateral-ul img)
+    assert "ts_rank_cd" in order and "desc" in order and "p.id" in order  # rang + tie-break
+
+
+async def test_lexical_explicit_sort_keeps_filter_but_sorts(flag_on):
+    conn = _CaptureConn()
+    await catalog.search_products_lexical(conn, "b", "q", sort_mode="price_asc", pool=10)
+    assert "websearch_to_tsquery" in conn.sql  # filtrul lexical păstrat
+    assert "coalesce(vp.price" in conn.sql and "asc" in conn.sql  # ordonare pe preț
+    assert "ts_rank_cd" not in conn.sql.split("order by")[-1]  # NU pe rank în ORDER BY final
+
+
+async def test_lexical_applies_hard_filters():
+    conn = _CaptureConn()
+    await catalog.search_products_lexical(
+        conn, "b", "q", brand="Nivea", price_max=80.0, in_stock_only=True, pool=10
+    )
+    assert "b.name ilike" in conn.sql  # brand = filtru dur
+    assert "in ('in_stock', 'low_stock')" in conn.sql  # stoc
+    assert "Nivea" in str(conn.params) and 80.0 in conn.params
