@@ -128,9 +128,12 @@ class ConversationState:
     """`conversations.state` jsonb. Owner la scriere: Sender (patch tranzacțional).
     Bugetul de 8KB e impus în context builder + CHECK în DB (003)."""
 
-    active_search: dict[str, Any] = field(default_factory=dict)
+    # NX-112: `active_search` ȘTERS — era hidratat dar NICIUN stagiu nu-l scria (cheie moartă).
+    # Re-introdus cu owner REAL (retrieval memorează setul de filtre pe follow-up) în NX-113/NX-119.
     displayed_products: list[ProductRef] = field(default_factory=list)
     pending_question: dict[str, Any] | None = None
+    # NX-112: semnal ieftin anti-loop — sloturile deja întrebate (citit de context_blocks; NX-116).
+    # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
@@ -166,10 +169,10 @@ class ConversationState:
                 }
             )
         return cls(
-            active_search=raw.get("active_search") or {},
             displayed_products=products,
             pending_question=raw.get("pending_question"),
-            asked_intents=raw.get("asked_intents") or [],
+            # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
+            asked_intents=(raw.get("asked_intents") or [])[-8:],
             constraints=raw.get("constraints") or {},
             cart=cart,
             state_version=int(raw.get("state_version") or 0),

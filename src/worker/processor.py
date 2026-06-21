@@ -467,9 +467,7 @@ async def handle_turn(
         # NX-86: tur DONE (halt/no-reply) → finalizează claim-ul (altfel reaper-ul l-ar reprocesa).
         if provider_msg_id:
             await mark_inbound_completed(conn, business.id, provider_msg_id)
-        return TurnResult(
-            conv["id"], contact.id, turn_id, None, None, language=ctx.language
-        )
+        return TurnResult(conv["id"], contact.id, turn_id, None, None, language=ctx.language)
 
     # Sender (P5): garantează disclaimer-ul AI (art. 50) pe text, o singură dată, pt TOATE
     # rutele (simple/clarify/prose/fallback/cache). Idempotent — rich/welcome și-l aplatizează
@@ -498,8 +496,20 @@ async def handle_turn(
         # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
         # pending_question default None) → nu lăsăm întrebări zombi în state.
         new_state = {**new_state, "pending_question": ctx.reply.pending_question}
+        # NX-112 (P3: processor = singurul scriitor explicit): merge canonic din ctx.state pentru
+        # câmpurile pe care stagiile le mută IN-PLACE (clarify umple constraints; clarify scrie
+        # asked_intents). Fără asta, un slot NOU (ex. „buget 200") trăiește doar pe ctx.state
+        # (dict detașat de from_jsonb) și se pierde silențios la write-back → botul „uită".
+        # `cart` rămâne owned de Agent prin state_patch (ctx.state.cart NU e ținut sincron de
+        # cart_add) → NU îl includem aici; persistă via conv["state"] brut + state_patch mai jos.
+        new_state = {
+            **new_state,
+            "constraints": ctx.state.constraints,
+            "asked_intents": ctx.state.asked_intents,
+        }
         # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
         # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
+        # Rămâne ULTIMUL → state_patch (Agent) are întâietate peste merge-ul canonic.
         if ctx.state_patch:
             new_state = {**new_state, **ctx.state_patch}
 

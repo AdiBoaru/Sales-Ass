@@ -114,6 +114,37 @@ async def test_resume_corrupt_pending_is_noop():
     assert ctx.route is None  # .get defensiv → no-op, nu crapă turul
 
 
+# --- NX-112: asked_intents (semnal anti-loop) populat la reluare -------------
+
+
+async def test_resume_appends_asked_intent():
+    ctx = _ctx("200 lei", pending={"field": "budget_max", "resume_route": "sales"})
+    await clarify_resume_stage(ctx, _deps())
+    assert "budget_max" in ctx.state.asked_intents
+
+
+async def test_resume_asked_intents_dedup():
+    ctx = _ctx("200 lei", pending={"field": "budget_max", "resume_route": "sales"})
+    ctx.state.asked_intents = ["budget_max"]  # deja întrebat o dată
+    await clarify_resume_stage(ctx, _deps())
+    assert ctx.state.asked_intents == ["budget_max"]  # fără duplicat
+
+
+async def test_resume_asked_intents_capped_at_8():
+    ctx = _ctx("x", pending={"field": "f8", "resume_route": "sales"})
+    ctx.state.asked_intents = [f"f{i}" for i in range(8)]  # plin (8)
+    await clarify_resume_stage(ctx, _deps())
+    assert len(ctx.state.asked_intents) == 8  # cap menținut
+    assert ctx.state.asked_intents[-1] == "f8"  # cel nou păstrat
+    assert "f0" not in ctx.state.asked_intents  # cel mai vechi scos
+
+
+async def test_resume_empty_body_does_not_touch_asked_intents():
+    ctx = _ctx("", pending={"field": "budget_max", "resume_route": "sales"})
+    await clarify_resume_stage(ctx, _deps())
+    assert ctx.state.asked_intents == []  # body gol → slot neconsumat, semnal neatins
+
+
 # --- garda din triaj: un singur owner pe `route` (P3) ------------------------
 
 
@@ -208,11 +239,14 @@ async def _run_handle_turn(monkeypatch, stage):
 
 async def test_processor_persists_pending_question(monkeypatch):
     async def clarify_stage(ctx, deps):
+        # NX-112: slot NOU umplut de stagiu pe ctx.state (dict detașat de from_jsonb).
+        ctx.state.constraints["budget_max"] = "200"
         ctx.set_clarify("Ce buget ai?", field="budget_max", resume_route="sales")
 
     new_state = await _run_handle_turn(monkeypatch, clarify_stage)
     assert new_state["pending_question"]["field"] == "budget_max"
-    assert new_state["constraints"] == {"x": 1}  # cheile pre-existente se păstrează
+    # NX-112: cheia pre-existentă PĂSTRATĂ + slotul NOU PERSISTAT (înainte se pierdea silențios).
+    assert new_state["constraints"] == {"x": 1, "budget_max": "200"}
 
 
 async def test_processor_clears_pending_question_on_normal_reply(monkeypatch):
