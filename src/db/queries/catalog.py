@@ -148,6 +148,64 @@ async def search_products(
     return [dict(r) for r in rows]
 
 
+async def search_products_lexical(
+    conn: asyncpg.Connection,
+    business_id: str,
+    query_text: str,
+    *,
+    category: str | None = None,
+    brand: str | None = None,
+    concerns: list[str] | None = None,
+    price_max: float | None = None,
+    sort_mode: str = "relevance",
+    in_stock_only: bool = False,
+    pool: int = 50,
+) -> list[dict[str, Any]]:
+    """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. Match pe FTS
+    (`websearch_to_tsquery('simple', $q)` pe `search_tsv`) SAU pe `pg_trgm` similarity pe nume
+    (typo / SKU / cod-piesă — esențial pe HVAC/auto, generic). ACELEAȘI filtre dure ca
+    `search_products` (paritate). Întoarce ~`pool` rânduri; pe `relevance` ordinea = rang lexical
+    (`ts_rank_cd + similarity`), deci POZIȚIA în listă = rangul pt RRF (NX-113b). Pe sort explicit
+    (price/rating) delegă `_order_clause`. Config `'simple'` = limbă-agnostic (P11). `conn`
+    tenant-scoped (P7: `business_id = $1`)."""
+    conds = ["p.business_id = $1", "p.status = 'active'"]
+    params: list[Any] = [business_id]
+
+    def placeholder(value: Any) -> str:
+        params.append(value)
+        return f"${len(params)}"
+
+    q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
+    # Match lexical: FTS (frază naturală) SAU trgm (typo/SKU). Query gol/stopwords → tsquery gol
+    # (nu prinde nimic) → cade pe trgm; niciun SQL invalid.
+    conds.append(f"(p.search_tsv @@ websearch_to_tsquery('simple', {q_ph}) or p.name % {q_ph})")
+    if category:
+        slug_ph = placeholder(category)
+        name_ph = placeholder(category)
+        conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
+    if brand:
+        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+    if concerns:
+        conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if price_max is not None:
+        conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
+    if in_stock_only:
+        conds.append("p.availability in ('in_stock', 'low_stock')")
+
+    if sort_mode == "relevance":
+        rank = (
+            f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', {q_ph}))"
+            f" + similarity(p.name, {q_ph})"
+        )
+        order = f" order by ({rank}) desc, p.id"
+    else:
+        order = _order_clause(sort_mode)  # price/rating explicit → sort pe subsetul lexical filtrat
+
+    sql = _SELECT + " where " + " and ".join(conds) + order + f" limit {placeholder(pool)}"
+    rows = await conn.fetch(sql, *params)
+    return [dict(r) for r in rows]
+
+
 async def has_embeddings(conn: asyncpg.Connection, business_id: str) -> bool:
     """True dacă tenantul are măcar un `product_embedding`.
 
