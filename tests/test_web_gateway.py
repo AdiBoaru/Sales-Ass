@@ -21,6 +21,7 @@ class FakeRedis:
     def __init__(self, incr_value=None):
         self._incr_value = incr_value
         self.counters: dict = {}
+        self.kv: dict = {}  # NX-120: get/incrbyfloat (cost guard)
         self.published: list = []
         self.lists: dict = {}
         self.expires: list = []
@@ -31,6 +32,14 @@ class FakeRedis:
             return self._incr_value
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
+
+    async def get(self, key):
+        v = self.kv.get(key)
+        return str(v) if v is not None else None
+
+    async def incrbyfloat(self, key, amount):
+        self.kv[key] = float(self.kv.get(key, 0)) + float(amount)
+        return self.kv[key]
 
     async def expire(self, key, ttl):
         self.expires.append((key, ttl))
@@ -55,8 +64,14 @@ class FakeRedis:
 
 
 class _Req:
-    def __init__(self, host="1.2.3.4"):
+    def __init__(self, host="1.2.3.4", body=b"{}", headers=None):
         self.client = SimpleNamespace(host=host)
+        self._body = body
+        # NX-120: enforce_body_cap citește Content-Length + request.stream().
+        self.headers = headers if headers is not None else {"content-length": str(len(body))}
+
+    async def stream(self):
+        yield self._body
 
 
 # --- WebMessageIn (buget de input dur) ---------------------------------------
@@ -130,7 +145,7 @@ async def test_bootstrap_issues_verifiable_session(monkeypatch):
         return {"business_id": "b", "session_secret": "sek"}
 
     monkeypatch.setattr(wa, "_resolve_token", fake_resolve)
-    res = await wa.web_bootstrap("tok")
+    res = await wa.web_bootstrap("tok", _Req())
     assert res["token"] == "tok" and res["visitor_id"].startswith("web_")
     assert verify_sig("tok", res["visitor_id"], res["sig"], "sek")  # semnătura e validă
 
@@ -141,7 +156,7 @@ async def test_bootstrap_unknown_token_403(monkeypatch):
 
     monkeypatch.setattr(wa, "_resolve_token", none_resolve)
     with pytest.raises(wa.HTTPException) as ei:
-        await wa.web_bootstrap("nope")
+        await wa.web_bootstrap("nope", _Req())
     assert ei.value.status_code == 403
 
 
@@ -154,11 +169,11 @@ async def test_websender_publishes_and_backlogs():
     mid = await sender.send_text("tok", "web_1", "salut")
 
     assert mid.startswith("web_out_")
-    assert fr.published[0][0] == "web:out:web_1"
+    assert fr.published[0][0] == "web:out:tok:web_1"  # NX-120: prefix tenant (token)
     evt = json.loads(fr.published[0][1])
     assert evt == {"id": mid, "type": "text", "text": "salut"}
-    assert fr.lists["web:backlog:web_1"]  # scris în backlog pt reconectare
-    assert ("web:backlog:web_1", 300) in fr.expires
+    assert fr.lists["web:backlog:tok:web_1"]  # scris în backlog pt reconectare (prefix tenant)
+    assert ("web:backlog:tok:web_1", 300) in fr.expires
 
 
 # --- reconectare + format SSE ------------------------------------------------
@@ -166,15 +181,15 @@ async def test_websender_publishes_and_backlogs():
 
 async def test_replay_after_returns_events_after_id():
     fr = FakeRedis()
-    fr.lists["web:backlog:web_1"] = [
+    fr.lists["web:backlog:tok:web_1"] = [
         json.dumps({"id": f"web_out_{i}", "type": "text", "text": str(i)}) for i in (3, 4, 5)
     ]
-    out = await wa._replay_after(fr, "web_1", "web_out_3")
+    out = await wa._replay_after(fr, "tok", "web_1", "web_out_3")
     assert [e["text"] for e in out] == ["4", "5"]  # DOAR după id-ul confirmat
 
 
 async def test_replay_after_empty_without_last_id():
-    assert await wa._replay_after(FakeRedis(), "web_1", None) == []
+    assert await wa._replay_after(FakeRedis(), "tok", "web_1", None) == []
 
 
 def test_sse_frame_format():
@@ -229,7 +244,7 @@ async def test_stream_emits_published_event(monkeypatch):
     chunks = [c async for c in resp.body_iterator]
 
     assert any("web_out_1" in c and "hi" in c for c in chunks)
-    assert pubsub.unsubscribed == ["web:out:web_1"]  # cleanup în finally (fără leak de subscriber)
+    assert pubsub.unsubscribed == ["web:out:t:web_1"]  # cleanup în finally (prefix tenant=token)
 
 
 # --- build_registry (NX-20: webchat doar cu redis + web_enabled) -------------
@@ -373,7 +388,7 @@ async def test_web_chat_returns_reply_synchronously(monkeypatch):
         return {"channel_id": "chan", "business_id": "b"}
 
     async def fake_load_business(conn, bid):
-        return SimpleNamespace(id=bid)
+        return SimpleNamespace(id=bid, daily_cost_cap_usd=None)  # NX-120: cap citit la admitere
 
     async def fake_handle_turn(conn, business, channel_id, event, *, redis=None, deliver=True):
         captured["deliver"] = deliver
