@@ -258,6 +258,14 @@ class Settings(BaseSettings):
     # NX-116: anti-bucla de clarificare — după atâtea re-întrebări pe ACELAȘI slot, escaladăm
     # (HANDOFF pe slot critic / best-effort SALES altfel), niciodată re-întrebare la infinit (P6).
     clarify_max_attempts: int = Field(default=2, validation_alias="CLARIFY_MAX_ATTEMPTS")
+    # NX-126: reziliență adaptor OpenAI (llm.py). `timeout` anti-hang (mai ales pe web sincron);
+    # retry bounded pe tranzitoriu (429/5xx/timeout). `sampling_enabled` = kill-switch pt modele
+    # „reasoning" care resping `temperature` ne-default → OFF lasă apelurile fără sampling params.
+    llm_timeout_s: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_S")
+    llm_retry_max: int = Field(default=2, validation_alias="LLM_RETRY_MAX")
+    llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
+    llm_temperature: float = Field(default=0.3, validation_alias="LLM_TEMPERATURE")
+    llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT")
 
     @property
     def is_prod(self) -> bool:

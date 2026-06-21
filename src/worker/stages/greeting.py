@@ -60,7 +60,9 @@ _GREETINGS: frozenset[str] = frozenset(
         # HU
         "szia",
         "sziasztok",
-        "hellо",
+        # NX-126: „helló" (HU) normalizează la „hello" (NFKD) — deja acoperit de intrarea EN ASCII.
+        # Intrarea veche „hellо" avea un „о" CHIRILIC (homoglif) ce nu se match-uia pe input ASCII →
+        # ștearsă. Guard: test_greeting verifică `_norm(g)==g` pe tot setul.
         "jo napot",
         "jo napot kivanok",
         "udv",
