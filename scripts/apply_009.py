@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică docs/009_gdpr_svc_role.sql pe Supabase și verifică rolul + grant-ul (NX-72).
 
 Creează rolul `gdpr_svc` (nologin) + EXECUTE pe `gdpr_erase_contact(uuid)`. Aditiv,

@@ -75,4 +75,10 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
+      # NX-123: poarta de migrări — pică build-ul dacă există migrări neaplicate pe DB-ul real
+      # (read-only: --check NU mutează prod). Mută regresia 010/012 de la „prod, primul client" la CI.
+      - name: Verifică migrări la zi (NX-123)
+        run: python scripts/migrate.py --check
+
+      # include smoke-test-ul de grant/policy (test_grants_smoke.py: integration + slow).
       - run: pytest -q -m "integration and slow"

@@ -17,7 +17,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # NX-114: DomainPack trăiește în src/domain/pack.py; import doar pt type-hint (fără ciclu
+    # la runtime — `from __future__ import annotations` face adnotările lazy).
+    from src.domain.pack import DomainPack
 
 # ---------------------------------------------------------------------------
 # Enum-uri (oglindesc CHECK-urile din schema_v2)
@@ -63,6 +68,9 @@ class BusinessConfig:
     timezone: str = "Europe/Bucharest"
     settings: dict[str, Any] = field(default_factory=dict)
     daily_cost_cap_usd: float | None = None
+    # NX-114: config per-(business, vertical) — politică/taxonomie din DB+seed (P9). Owner UNIC:
+    # `load_business` (apelează load_domain_pack). None dacă DOMAIN_PACK_ENABLED=false (fail-safe).
+    domain_pack: DomainPack | None = None
 
 
 @dataclass
@@ -128,9 +136,12 @@ class ConversationState:
     """`conversations.state` jsonb. Owner la scriere: Sender (patch tranzacțional).
     Bugetul de 8KB e impus în context builder + CHECK în DB (003)."""
 
-    active_search: dict[str, Any] = field(default_factory=dict)
+    # NX-112: `active_search` ȘTERS — era hidratat dar NICIUN stagiu nu-l scria (cheie moartă).
+    # Re-introdus cu owner REAL (retrieval memorează setul de filtre pe follow-up) în NX-113/NX-119.
     displayed_products: list[ProductRef] = field(default_factory=list)
     pending_question: dict[str, Any] | None = None
+    # NX-112: semnal ieftin anti-loop — sloturile deja întrebate (citit de context_blocks; NX-116).
+    # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
@@ -166,10 +177,10 @@ class ConversationState:
                 }
             )
         return cls(
-            active_search=raw.get("active_search") or {},
             displayed_products=products,
             pending_question=raw.get("pending_question"),
-            asked_intents=raw.get("asked_intents") or [],
+            # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
+            asked_intents=(raw.get("asked_intents") or [])[-8:],
             constraints=raw.get("constraints") or {},
             cart=cart,
             state_version=int(raw.get("state_version") or 0),
@@ -245,6 +256,19 @@ class RichReply:
 
 
 @dataclass
+class Offer:
+    """NX-114 — ofertă/CTA NEUTRĂ de canal. Emitentul (agent/checkout) setează intenția
+    semantică; CUM se randează e exclusiv la margine (NX-60): buton (web), CTA interactiv
+    (WhatsApp), buton inline (Telegram). Floor pe canale fără randare bogată = url append-uit
+    în text. Owner: stagiul care emite oferta."""
+
+    kind: str  # "checkout" | "open_url" | "quick_reply" | "book"
+    label: str  # textul afișat pe buton/CTA (per-locale, vine de la emitent)
+    url: str | None = None  # pt checkout/open_url (din catalog/checkout_links, NU inventat)
+    payload: str | None = None  # pt quick_reply: token rutat (ex. "offer:reorder") — neutru
+
+
+@dataclass
 class Reply:
     """Orice stagiu poate seta → early exit la Sender."""
 
@@ -263,6 +287,9 @@ class Reply:
     # G5b: răspuns reutilizabil pentru cache (False pe clarify/refuz/fallback —
     # specifice contextului, nu se cache-uiesc).
     cacheable: bool = True
+    # NX-114: ofertă/CTA neutră de canal (seam channel-aware). Randată bogat la margine
+    # (NX-115/127); floor pe canale text = url append-uit la text de `set_offer`. Owner: emitent.
+    offer: Offer | None = None
 
 
 @dataclass
@@ -382,6 +409,17 @@ class TurnContext:
         self.reply = Reply(
             text=text, kind="message", products=products, rich=rich, cacheable=cacheable
         )
+
+    def set_offer(self, offer: Offer) -> None:
+        """NX-114 — atașează o ofertă NEUTRĂ de canal pe reply-ul curent. Marginile bogate
+        (NX-115/127) o randează ca buton/CTA/inline; un Sender vechi vede FLOOR-ul: dacă
+        `offer.url` există, e append-uit la `text` (comportamentul de azi, dar din câmp tipizat,
+        nu „scuipat" de LLM). Necesită un reply setat (creează unul gol defensiv altfel)."""
+        if self.reply is None:
+            self.reply = Reply(text="")
+        self.reply.offer = offer
+        if offer.url and offer.url not in self.reply.text:
+            self.reply.text = f"{self.reply.text}\n{offer.url}".strip()
 
     def set_clarify(self, text: str, *, field: str, resume_route: str) -> None:
         """NX-130 — pune o întrebare de clarificare ȘI memorează slotul de umplut la turul

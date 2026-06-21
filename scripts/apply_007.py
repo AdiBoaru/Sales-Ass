@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică docs/007_semantic_cache_invalidation.sql pe Supabase și verifică coloanele.
 
 Rulează: python scripts/apply_007.py

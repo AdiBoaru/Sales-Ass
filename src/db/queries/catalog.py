@@ -305,13 +305,14 @@ async def search_products_semantic(
     price_max: float | None = None,
     concerns: list[str] | None = None,
     category: str | None = None,
+    brand: str | None = None,
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
     limit: int = 6,
 ) -> list[dict[str, Any]]:
-    """Căutare HIBRIDĂ: filtre SQL dure (preț/categorie/concerns/stoc) + ranking. `query_embedding`
-    = vectorul mesajului (calculat de tool/agent prin adaptor — stratul de date NU apelează LLM).
-    Max 6 produse, cele 8 câmpuri. `conn` trebuie să fie deja tenant-scoped (tenant_conn).
+    """Căutare HIBRIDĂ: filtre SQL dure (preț/categorie/brand/concerns/stoc) + ranking.
+    `query_embedding` = vectorul mesajului (calculat de tool/agent prin adaptor — stratul de date
+    NU apelează LLM). Max 6 produse, cele 8 câmpuri. `conn` trebuie tenant-scoped (tenant_conn).
 
     `sort_mode`: `relevance` = cosine (cel mai apropiat primul); `price_asc`/`rating_desc` = sort
     explicit pe subsetul filtrat semantic. `concerns` filtrează pe `attributes->'concerns'`."""
@@ -332,6 +333,10 @@ async def search_products_semantic(
         slug_ph = placeholder(category)
         name_ph = placeholder(category)
         conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
+    if brand:
+        # Filtru DUR pe brand (la fel ca SQL-only): un brand cerut care nu există în catalog →
+        # zero rezultate, NU produse semantic-apropiate de la alt brand (bug-ul „avem … Chanel").
+        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if in_stock_only:

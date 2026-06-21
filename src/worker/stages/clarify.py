@@ -44,6 +44,11 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # 1. mesajul curent umple slotul cerut → memorie scurtă citită de context_blocks (state_block).
     field = pq.get("field") or "intent"
     ctx.state.constraints[field] = answer
+    # NX-112: marchează slotul ca „deja întrebat" (semnal anti-loop citit de context_blocks/NX-116).
+    # Dedup + cap 8 (P4). Mutația pe ctx.state e persistată de processor (merge canonic, P3).
+    if field not in ctx.state.asked_intents:
+        ctx.state.asked_intents.append(field)
+        ctx.state.asked_intents[:] = ctx.state.asked_intents[-8:]
     # 2. rutăm determinist pe intenția de reluat — fără triaj. `route` deja setat → triajul no-op.
     resume = pq.get("resume_route") or Route.SALES.value
     try:

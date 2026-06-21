@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică docs/012_inbound_dedupe_completion.sql (NX-86): watermark claimed_at/completed_at
 pe inbound_dedupe + index orfani + GRANT UPDATE pentru bot_runtime.
 

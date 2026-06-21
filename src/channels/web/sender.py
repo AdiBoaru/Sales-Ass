@@ -13,6 +13,8 @@ import json
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from src.channels.base import Capability
+
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
@@ -27,6 +29,11 @@ def backlog_key(visitor_id: str) -> str:
 
 class WebSender:
     """`account_id` = public_token (informativ); `to` = visitor_id (canalul Pub/Sub țintă)."""
+
+    # NX-115: azi doar TEXT (RICH/CARDS/OFFER vin în NX-127). Fără clamp (frontendul randează bulă).
+    capabilities = frozenset({Capability.TEXT})
+    max_text_len: int | None = None
+    max_caption_len: int | None = None
 
     def __init__(self, redis: Redis, *, backlog_size: int = 20, backlog_ttl_s: int = 300) -> None:
         self._redis = redis

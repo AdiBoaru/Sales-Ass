@@ -18,7 +18,7 @@ import logging
 
 import httpx
 
-from src.channels.base import ChannelSenderRegistry
+from src.channels.base import Capability, ChannelSenderRegistry
 from src.channels.telegram.client import TelegramClient
 from src.channels.web.sender import WebSender
 from src.config import get_settings
@@ -34,6 +34,25 @@ from src.meta_client import MetaClient
 from src.redis_bus import close_redis, get_redis
 
 log = logging.getLogger(__name__)
+
+
+def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability]) -> str:
+    """NX-115 — rutare table-driven PURĂ pe capabilități. Întoarce ramura de randat:
+    'rich' | 'edit' | 'edit_unsupported' | 'carousel' | 'products' | 'text'. Degradează
+    mereu spre 'text' (P6, niciodată tăcere). `edit_media` NU degradează la text — e o
+    navigare UI, nu conținut nou → 'edit_unsupported' (dead) dacă lipsește EDIT.
+
+    `Reply.offer` (NX-114) e deja aplatizat în payload['text'] (floor); randarea nativă pe
+    canale cu OFFER e follow-up (NX-127/CTA WhatsApp) → nicio ramură dedicată azi."""
+    if payload.get("rich") and Capability.RICH in caps:
+        return "rich"
+    if ptype == "edit_media":
+        return "edit" if Capability.EDIT in caps else "edit_unsupported"
+    if ptype == "carousel" and payload.get("products") and Capability.CAROUSEL in caps:
+        return "carousel"
+    if ptype in ("carousel", "products") and payload.get("products") and Capability.CARDS in caps:
+        return "products"
+    return "text"
 
 
 async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, row: dict) -> str:
@@ -69,17 +88,23 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
         await mark_failed(conn, business_id, row["id"], 999, f"canal nesuportat: {channel_kind}")
         return "dead"
 
+    # NX-115: matrice de capabilități în loc de scară `hasattr`. Ramura aleasă pur (testabil)
+    # apoi executată; degradare grațioasă spre text (P6). edit_media fără EDIT = dead (UI, nu text).
+    caps = getattr(sender, "capabilities", frozenset())
+    branch = choose_render(payload, ptype, caps)
+    if branch == "edit_unsupported":
+        log.warning("outbox %s: edit_media pe canal fără EDIT (%s)", row["id"], channel_kind)
+        await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")
+        return "dead"
+
     try:
         account_id = row["channel_account_id"]
-        if payload.get("rich") and hasattr(sender, "send_rich"):
-            # Recomandare bogată (model iZi): canalul o randează (intro + carduri + pick +
-            # chips). Canalele fără `send_rich` (ex. WhatsApp) cad pe `send_text` (aplatizare).
+        if branch == "rich":
+            # Recomandare bogată (model iZi): intro + carduri + pick + chips. Canalele fără RICH
+            # au degradat deja la 'text' în choose_render (aplatizare — payload['text']).
             provider_id = await sender.send_rich(account_id, payload["to"], payload)
-        elif ptype == "edit_media":
-            # navigare carusel (R2): editează cardul existent. Doar pe canale cu suport.
-            if not hasattr(sender, "edit_message_media"):
-                await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")
-                return "dead"
+        elif branch == "edit":
+            # navigare carusel (R2): editează cardul existent (canal cu EDIT).
             provider_id = await sender.edit_message_media(
                 account_id,
                 payload["to"],
@@ -87,26 +112,18 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
                 payload["products"],
                 payload["index"],
             )
-        elif (
-            ptype == "carousel"
-            and payload.get("products")
-            and hasattr(sender, "send_carousel_card")
-        ):
+        elif branch == "carousel":
             provider_id = await sender.send_carousel_card(
                 account_id, payload["to"], payload["products"], 0
             )
-        elif (
-            ptype in ("carousel", "products")
-            and payload.get("products")
-            and hasattr(sender, "send_products")
-        ):
-            # fallback W1: listă compactă cu butoane-link (carusel nesuportat de canal).
+        elif branch == "products":
+            # listă compactă cu butoane-link (carusel nesuportat de canal, dar are CARDS).
             provider_id = await sender.send_products(
                 account_id, payload["to"], payload["text"], payload["products"]
             )
         else:
-            # text, sau carusel/products pe un canal fără suport → lead-in ca text
-            # (conține deja recomandarea — degradare grațioasă, principiul 6).
+            # text, sau carusel/products pe un canal fără CARDS/CAROUSEL → lead-in ca text
+            # (conține deja recomandarea + offer-ul aplatizat — degradare grațioasă, P6).
             provider_id = await sender.send_text(account_id, payload["to"], payload["text"])
     except Exception as e:  # noqa: BLE001 — orice eroare de transport/HTTP → retry
         status = await mark_failed(conn, business_id, row["id"], row["attempts"], str(e)[:500])

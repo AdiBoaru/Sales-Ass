@@ -11,11 +11,22 @@ HTTP de eroare ridicăm — apelantul (poller/dispatcher) decide retry/skip.
 
 import httpx
 
+from src.channels.base import Capability
+
+# Limite Telegram: body 4096, caption (sendPhoto) 1024. Peste → Telegram respinge mesajul.
+_TG_TEXT_MAX = 4096
+_TG_CAPTION_MAX = 1024
+
 
 def _short(name: str, limit: int = 30) -> str:
     """Scurtează numele pentru eticheta unui buton (Telegram trunchiază urât numele lungi)."""
     name = name.strip()
     return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
+
+
+def _clamp(text: str, limit: int) -> str:
+    """NX-115: trunchiere cu elipsă la limita de transport (mai bine trunchiat decât respins)."""
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 # Poză de rezervă când produsul n-are imagine (R2; placehold .png, ca W1).
@@ -27,7 +38,7 @@ def _carousel_caption(product: dict, index: int, total: int) -> str:
     name = product.get("name") or "Produs"
     price = float(product["price"]) if product.get("price") is not None else None
     price_line = f"\n💰 {price:.2f} lei" if price is not None else ""
-    return f"{name}{price_line}\n{index + 1}/{total}"
+    return _clamp(f"{name}{price_line}\n{index + 1}/{total}", _TG_CAPTION_MAX)  # NX-115 clamp
 
 
 def _carousel_keyboard(product: dict, index: int, total: int) -> dict:
@@ -50,6 +61,20 @@ class TelegramError(RuntimeError):
 
 class TelegramClient:
     """Wrapper subțire peste https://api.telegram.org/bot{token}/{method}."""
+
+    # NX-115: canal de test bogat — text + rich + carduri + carusel + edit + typing.
+    capabilities = frozenset(
+        {
+            Capability.TEXT,
+            Capability.RICH,
+            Capability.CARDS,
+            Capability.CAROUSEL,
+            Capability.EDIT,
+            Capability.TYPING,
+        }
+    )
+    max_text_len = _TG_TEXT_MAX
+    max_caption_len = _TG_CAPTION_MAX
 
     def __init__(
         self,
@@ -89,7 +114,9 @@ class TelegramClient:
     async def send_text(self, account_id: str, to: str, text: str) -> str:
         """Implementează ChannelSender: trimite text → întoarce message_id (str).
         `account_id` (bot id) e informativ — tokenul e în URL. `to` = chat_id."""
-        result = await self._call("sendMessage", {"chat_id": to, "text": text})
+        result = await self._call(
+            "sendMessage", {"chat_id": to, "text": _clamp(text, _TG_TEXT_MAX)}
+        )
         try:
             return str(result["message_id"])
         except (KeyError, TypeError) as e:
@@ -112,7 +139,7 @@ class TelegramClient:
             for p in products
             if p.get("url")
         ]
-        payload: dict = {"chat_id": to, "text": text or "Recomandările mele:"}
+        payload: dict = {"chat_id": to, "text": _clamp(text or "Recomandările mele:", _TG_TEXT_MAX)}
         if rows:
             payload["reply_markup"] = {"inline_keyboard": rows}
         result = await self._call("sendMessage", payload)
@@ -137,7 +164,10 @@ class TelegramClient:
             for it in (rich.get("items") or [])
             if isinstance(it.get("url"), str) and it["url"].startswith(("http://", "https://"))
         ]
-        msg: dict = {"chat_id": to, "text": payload.get("text") or "Recomandările mele:"}
+        msg: dict = {
+            "chat_id": to,
+            "text": _clamp(payload.get("text") or "Recomandările mele:", _TG_TEXT_MAX),
+        }
         if rows:
             msg["reply_markup"] = {"inline_keyboard": rows}
         result = await self._call("sendMessage", msg)
