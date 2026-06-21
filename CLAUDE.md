@@ -422,11 +422,14 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
+│   ├── 0NN_*.sql                ← migrări delta (003→014), aplicate ORDONAT de scripts/migrate.py
+│   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
-│   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2
+│   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
-├── scripts/                     ← utilitare DB: apply_003/004.py, db_check.py, spot_check.py
+├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); apply_0NN.py
+│                                  DEPRECATE (istoric); db_check.py, spot_check.py
 ├── db/
 │   └── seed/                    ← seed.ts + embed.ts (Supabase JS client, tsx)
 ├── src/

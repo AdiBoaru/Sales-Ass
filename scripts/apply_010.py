@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică docs/010_conversations_one_open.sql (NX-87): index unic parțial pentru
 „o singură conversație deschisă per (business, contact, canal)".
 

@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică docs/008_order_items_insert.sql pe Supabase și verifică grant + RLS INSERT.
 
 Adaugă INSERT pe order_items pentru bot_runtime (gaură F2-2): liniile unei comenzi se

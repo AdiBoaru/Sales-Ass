@@ -308,7 +308,15 @@ async def _main() -> None:
     per replică, ca XREADGROUP să distribuie mesajele corect între workeri."""
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
+    # NX-123: poarta de boot trăiește în runner-ul de migrări (scripts/migrate.py); import local
+    # ca să nu cuplăm src→scripts la încărcarea modulului (și calea e sensibilă la sys.path).
+    from scripts.migrate import assert_migrations_current
+
     pool = await get_pool()  # admin (control plane: resolve_channel)
+    # NX-123 (P6): poartă de boot — workerul NU pornește tăcut peste o schemă incompletă.
+    # Migrare pending = boot refuzat cu eroare explicită (regresia 010/012 care crăpa primul
+    # mesaj al fiecărui client nou), nu un crash la primul inbound.
+    await assert_migrations_current(pool)
     await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot, nu la primul mesaj
     redis = await get_redis()
     consumer_name = f"worker-{socket.gethostname()}"
