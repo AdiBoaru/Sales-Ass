@@ -246,6 +246,12 @@ class Settings(BaseSettings):
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
+    # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
+    # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
+    # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.
+    triage_factual_guard_enabled: bool = Field(
+        default=True, validation_alias="TRIAGE_FACTUAL_GUARD_ENABLED"
+    )
 
     @property
     def is_prod(self) -> bool:

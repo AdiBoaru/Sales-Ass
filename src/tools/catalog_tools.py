@@ -168,6 +168,7 @@ async def search_products_tool(
                     price_max=f["price_max"],
                     concerns=f["concerns"],
                     category=f["category"],
+                    brand=a.brand,  # brand = filtru DUR și pe calea semantică (nu se relaxează)
                     sort_mode=a.sort_mode,
                     in_stock_only=f["in_stock_only"],
                     limit=a.limit,
@@ -208,6 +209,19 @@ async def search_products_tool(
         n_concerns=len(concern_keys or []),
         relaxed=relaxed,
     )
+    # Brand cerut explicit + zero rezultate = brandul nu e în catalog. Semnal EXPLICIT pentru agent
+    # (raportează DOAR ce întoarce tool-ul) ca să spună „nu lucrăm cu brandul X", nu să prezinte
+    # produse de la alt brand ca și cum ar fi al lui (fix CAT-001 / brand-availability).
+    if not products and a.brand:
+        return ToolResult(
+            ok=True,
+            products=[],
+            llm_view=(
+                f"Nu am găsit niciun produs de la brandul «{a.brand}» în catalog. "
+                f"Nu prezenta alt brand ca fiind «{a.brand}». Poți oferi alternative din alte "
+                f"branduri, dar spune explicit că sunt alt brand."
+            ),
+        )
     return ToolResult(ok=True, products=products, llm_view=_brief(products))
 
 

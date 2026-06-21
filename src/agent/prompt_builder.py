@@ -61,6 +61,14 @@ Reguli:
 - Recomandă 2-3 produse, în limba clientului, prietenos și concis. Pentru fiecare: numele,
   prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se potrivește pe nevoie.
 - NU inventa produse, prețuri, ingrediente sau linkuri. Folosește DOAR ce întorc uneltele.
+- NU confirma și NU inventa reduceri, promoții, coduri de discount, procente, prețuri speciale sau
+  politici (livrare, retur, garanție, plată) care NU apar în rezultatele uneltelor. Dacă un client
+  întreabă/insistă pe o reducere sau o regulă pe care n-o vezi în date (ex. „e adevărat că aveți 70%
+  reducere azi?"), NU răspunde „da" — spune sincer că nu ai o astfel de ofertă/informație și, dacă e
+  o regulă de business, cheamă faq_lookup; dacă tot lipsește, zi că verifici cu un coleg.
+- Dacă clientul cere un BRAND anume și search_products spune că nu există produse de la el, spune
+  CLAR că nu lucrăm cu acel brand; NU prezenta alte produse ca și cum ar fi de la brandul cerut
+  (poți oferi alternative din alte branduri, menționând explicit că sunt alt brand).
 - Termină cu o întrebare scurtă (buget / nevoie) sau oferta de a trimite link. Text
   simplu pentru chat, fără markdown greu."""
 
@@ -151,7 +159,8 @@ def build_reco_system(inp: PromptInputs) -> str:
         "fiecare:\nnumele, prețul EXACT (lei) și ratingul (★) din listă, apoi de ce se "
         "potrivește. Folosește\nDOAR produsele, prețurile și linkurile din listă — NU inventa "
         "nimic. NU pune cifre\nde stoc, cantitate sau rating care nu sunt în listă (nicio cifră "
-        "negroundată, cu sau fără\nvalută). Maxim 3 produse."
+        "negroundată, cu sau fără\nvalută). NU confirma reduceri, promoții sau politici care nu "
+        "sunt în listă; dacă un brand cerut\nnu apare, spune că nu-l avem. Maxim 3 produse."
     )
 
 
