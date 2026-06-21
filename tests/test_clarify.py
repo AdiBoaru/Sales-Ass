@@ -145,6 +145,34 @@ async def test_resume_empty_body_does_not_touch_asked_intents():
     assert ctx.state.asked_intents == []  # body gol → slot neconsumat, semnal neatins
 
 
+# --- NX-116: anti-buclă (attempts) — escaladare peste prag -------------------
+
+
+async def test_resume_escalates_handoff_on_intent_after_max_attempts():
+    # attempts >= clarify_max_attempts (default 2) pe slotul „intent" → HANDOFF (operator).
+    ctx = _ctx("nu stiu", pending={"field": "intent", "resume_route": "sales", "attempts": 2})
+    await clarify_resume_stage(ctx, _deps())
+    assert ctx.route.route == Route.HANDOFF
+    ev = _event(ctx, "clarify_escalated")
+    assert ev.properties == {"field": "intent", "attempts": 2, "to": "handoff"}
+    assert "nu stiu" not in str(ev.properties)  # P12 — fără answer
+
+
+async def test_resume_escalates_sales_on_specific_slot_after_max_attempts():
+    ctx = _ctx("ceva", pending={"field": "budget_max", "resume_route": "sales", "attempts": 2})
+    await clarify_resume_stage(ctx, _deps())
+    assert ctx.route.route == Route.SALES  # best-effort cu ce avem
+    assert _event(ctx, "clarify_escalated").properties["to"] == "sales"
+
+
+async def test_resume_below_threshold_no_escalation():
+    ctx = _ctx("ceva", pending={"field": "budget_max", "resume_route": "sales", "attempts": 1})
+    await clarify_resume_stage(ctx, _deps())
+    assert ctx.route.route == Route.SALES  # reluare normală, NU escaladare
+    assert any(e.type == "clarify_resumed" for e in ctx.events)
+    assert not any(e.type == "clarify_escalated" for e in ctx.events)
+
+
 # --- garda din triaj: un singur owner pe `route` (P3) ------------------------
 
 

@@ -1,5 +1,6 @@
 """Teste unit pentru stagiul de Triaj (nano) — LLM mockuit, fără DB/apeluri reale."""
 
+from src.domain.pack import DomainPack
 from src.models import BusinessConfig, Contact, InboundMessage, Route, TurnContext
 from src.worker.runner import PipelineDeps
 from src.worker.stages.triage import triage_stage
@@ -113,3 +114,92 @@ async def test_invalid_route_value_is_graceful():
     llm = FakeLLM({"route": "bla-bla", "reply": None})
     await triage_stage(ctx, _deps(llm))
     assert ctx.route is None
+
+
+# --- NX-116: confidence + sloturi structurate ------------------------------------------
+
+
+def _ctx_dp(body, concern_map=None):
+    ctx = _ctx(body)
+    ctx.business.domain_pack = DomainPack(
+        vertical="beauty_salon", concern_map=concern_map or {"ten gras": "oily"}
+    )
+    return ctx
+
+
+async def test_slots_populate_route_filters():
+    ctx = _ctx_dp("crema spf sub 200 pentru ten gras")
+    llm = FakeLLM(
+        {
+            "route": "sales",
+            "category_key": "creme-fata",
+            "confidence": "high",
+            "slots": {"budget_max": 200, "concerns": ["ten gras"], "suitable_for": "fata"},
+        }
+    )
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.SALES
+    assert ctx.route.filters["budget_max"] == 200.0
+    assert ctx.route.filters["concerns"] == ["ten gras"]
+    assert ctx.route.filters["suitable_for"] == "fata"
+
+
+async def test_unknown_concern_dropped():
+    ctx = _ctx_dp("ceva")
+    llm = FakeLLM(
+        {
+            "route": "sales",
+            "category_key": "creme-fata",
+            "confidence": "high",
+            "slots": {"concerns": ["ten gras", "inventat xyz"]},
+        }
+    )
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.filters["concerns"] == ["ten gras"]  # necunoscutul aruncat (vocab DomainPack)
+
+
+async def test_negative_budget_dropped_rest_kept():
+    ctx = _ctx("ceva")
+    llm = FakeLLM(
+        {
+            "route": "sales",
+            "category_key": "creme-fata",
+            "confidence": "high",
+            "slots": {"budget_max": -5, "brand": "Nivea"},
+        }
+    )
+    await triage_stage(ctx, _deps(llm))
+    assert "budget_max" not in ctx.route.filters  # negativ aruncat
+    assert ctx.route.filters["brand"] == "Nivea"  # restul rămâne
+
+
+async def test_low_confidence_forces_clarify():
+    ctx = _ctx("ceva bun")
+    llm = FakeLLM({"route": "sales", "category_key": None, "confidence": "low", "reply": None})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.CLARIFY  # cod forțează clarify, nu sales pe ghicit
+    assert ctx.reply is not None and ctx.reply.text  # întrebare generică (fallback)
+    assert ctx.reply.pending_question is not None
+
+
+async def test_low_confidence_does_not_override_handoff():
+    ctx = _ctx("vreau un om")
+    llm = FakeLLM({"route": "handoff", "confidence": "low"})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.HANDOFF  # handoff e terminal, nu-l forțăm clarify
+
+
+async def test_backcompat_no_confidence_slots():
+    ctx = _ctx("vreau o crema")
+    llm = FakeLLM({"route": "sales", "category_key": "creme-fata"})  # fără confidence/slots
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.SALES  # med default → nu forțează clarify
+    assert ctx.route.filters == {}
+
+
+async def test_intent_detected_includes_confidence():
+    ctx = _ctx("vreau o crema")
+    llm = FakeLLM({"route": "sales", "category_key": "creme-fata", "confidence": "high"})
+    await triage_stage(ctx, _deps(llm))
+    ev = next(e for e in ctx.events if e.type == "intent_detected")
+    assert ev.properties["confidence"] == "high"

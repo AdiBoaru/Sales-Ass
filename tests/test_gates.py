@@ -97,6 +97,7 @@ async def test_risk_escalates_and_replies(monkeypatch):
     assert calls["window"] > 0
     assert ctx.reply is not None
     assert "coleg" in ctx.reply.text.lower()
+    assert ctx.reply.cacheable is False  # NX-126: escaladarea NU se cache-uiește (cache-poison)
     assert ctx.halt is False  # are reply (tranziție), nu halt
     assert any(
         e.type == "handoff_requested" and e.properties["reason"] == "human_request"

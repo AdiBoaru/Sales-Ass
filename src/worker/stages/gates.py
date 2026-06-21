@@ -285,7 +285,9 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     reason = detect_risk(ctx.message.body)
     if reason:
         await request_human(deps.conn, ctx, reason, source="risk")
-        ctx.set_reply("Te conectez cu un coleg, revin imediat 🙂")
+        # NX-126: necacheabil — un mesaj de escaladare scris în semantic_cache ar fi servit altui
+        # user FĂRĂ ca vreun om să fie notificat (cache poisoning → tăcere de facto, încalcă P6).
+        ctx.set_reply("Te conectez cu un coleg, revin imediat 🙂", cacheable=False)
         return
 
     # 7. media routing (NX-76): poză → Vision → descriere ca text de căutare, apoi pipeline normal.

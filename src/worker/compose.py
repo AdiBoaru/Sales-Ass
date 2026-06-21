@@ -20,6 +20,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from src.models import Chip, Direction, RichItem, RichReply
+from src.worker.text_scrub import has_marketing_claim, has_unverifiable_claim
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -31,17 +32,8 @@ _DISCLAIMER: dict[str, str] = {
     "hu": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
 }
 
-# --- scrub proză LLM (validatorul de proză, extins per audit) ----------------
-_DIGIT = re.compile(r"\d")
-_PCT = re.compile(r"%|\bla sută\b", re.IGNORECASE)
-_CLAIMY = re.compile(
-    r"\b(stele|stea|recenzii|review|rating|zile|ore|livrare|reducere|garan)\w*", re.IGNORECASE
-)
-_SUPER = re.compile(
-    r"\b(cel mai|cea mai|cei mai|cele mai|nr\.?\s*1|#\s*1|best\s*seller"
-    r"|recomandat de specialiști)\b",
-    re.IGNORECASE,
-)
+# --- scrub proză LLM (validatorul de proză) ----------------------------------
+# NX-117: pattern-urile trăiesc în `text_scrub` (loc canonic partajat cu calea de proză).
 
 
 def scrub_prose(s: str | None) -> str | None:
@@ -53,7 +45,7 @@ def scrub_prose(s: str | None) -> str | None:
     t = " ".join(s.split())
     if not t:
         return None
-    if _DIGIT.search(t) or _PCT.search(t) or _CLAIMY.search(t) or _SUPER.search(t):
+    if has_unverifiable_claim(t):  # NX-117: digit + pct + claim + super (semantică neschimbată)
         return None
     return t
 
@@ -82,7 +74,9 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
     if not t:
         return None
     unknown = [n for n in re.findall(r"\d+", t) if n not in allowed_numbers]
-    if unknown or _PCT.search(t) or _CLAIMY.search(t) or _SUPER.search(t):
+    if unknown or has_marketing_claim(
+        t
+    ):  # NX-117: pct + claim + super (cifrele clientului permise)
         return None
     return t
 

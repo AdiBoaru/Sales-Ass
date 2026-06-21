@@ -40,7 +40,8 @@ class _Completions:
         self.script = list(script)
         self.calls = []
 
-    async def create(self, *, model, messages, tools=None, tool_choice=None):
+    async def create(self, *, model, messages, tools=None, tool_choice=None, **kwargs):
+        # **kwargs absoarbe sampling params (temperature/max_tokens) injectate de _chat (NX-126).
         self.calls.append({"messages": list(messages), "tools": tools})
         return _Resp(self.script.pop(0))
 
