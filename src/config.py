@@ -255,6 +255,9 @@ class Settings(BaseSettings):
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")
+    # NX-116: anti-bucla de clarificare — după atâtea re-întrebări pe ACELAȘI slot, escaladăm
+    # (HANDOFF pe slot critic / best-effort SALES altfel), niciodată re-întrebare la infinit (P6).
+    clarify_max_attempts: int = Field(default=2, validation_alias="CLARIFY_MAX_ATTEMPTS")
 
     @property
     def is_prod(self) -> bool:

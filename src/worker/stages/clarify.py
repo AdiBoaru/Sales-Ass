@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from src.config import get_settings
 from src.models import Route, RouteDecision, TurnContext
 
 if TYPE_CHECKING:
@@ -49,6 +50,21 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if field not in ctx.state.asked_intents:
         ctx.state.asked_intents.append(field)
         ctx.state.asked_intents[:] = ctx.state.asked_intents[-8:]
+
+    # NX-116: ANTI-BUCLĂ reală — `attempts` (scris de set_clarify la re-întrebarea ACELUIAȘI slot,
+    # azi necitit) e consumat aici. Peste prag NU mai re-întrebăm la infinit (P6): escaladăm. Slot
+    # „intent" (nu știm nici măcar ce vrea) → HANDOFF (operator, prin handoff_stage); slot specific
+    # (buget/etc.) → best-effort SALES cu ce avem (agentul vede constraint-ul stocat). În ambele
+    # cazuri pending_question se curăță la writeback (reply non-clarify din handoff/agent).
+    attempts = int(pq.get("attempts") or 0)
+    if attempts >= get_settings().clarify_max_attempts:
+        escalate_to = "handoff" if field == "intent" else "sales"
+        ctx.route = RouteDecision(route=Route.HANDOFF if escalate_to == "handoff" else Route.SALES)
+        ctx.emit(
+            "clarify_escalated", field=field, attempts=attempts, to=escalate_to
+        )  # P12: fără answer
+        return
+
     # 2. rutăm determinist pe intenția de reluat — fără triaj. `route` deja setat → triajul no-op.
     resume = pq.get("resume_route") or Route.SALES.value
     try:

@@ -68,13 +68,13 @@ _CHEAPEST_ALREADY: dict[str, str] = {
     "Vrei să-ți arăt altceva sau o altă categorie?",
     "en": "This is the cheapest option I have right now. "
     "Want me to show you something else or another category?",
-    "hu": "Jelenleg ez a legolcsóbb lehetőség, amim van. "
-    "Mutassak mást vagy egy másik kategóriát?",
+    "hu": "Jelenleg ez a legolcsóbb lehetőség, amim van. Mutassak mást vagy egy másik kategóriát?",
 }
 
 
 def _cheapest_already_msg(language: str | None) -> str:
     return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
+
 
 # NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
 # numerele mici de proză („top 3", „pasul 2"). `(?<![\w./-])` / `(?![\w%])` → nu prinde procente
@@ -414,6 +414,26 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     )
 
 
+def _filters_hint(filters: dict[str, Any]) -> str:
+    """NX-116: constrângerile structurate din triaj (`RouteDecision.filters`) ca HINT determinist
+    pentru primul `search_products` — agentul nu le reparsează din proză. Args rămân ale modelului
+    (P3); hint-ul doar îl seedează cu ce a extras nano."""
+    if not filters:
+        return ""
+    parts: list[str] = []
+    if filters.get("budget_max") is not None:
+        parts.append(f"buget max {filters['budget_max']:g}")
+    if filters.get("concerns"):
+        parts.append("nevoi: " + ", ".join(filters["concerns"]))
+    if filters.get("suitable_for"):
+        parts.append(f"pentru: {filters['suitable_for']}")
+    if filters.get("brand"):
+        parts.append(f"brand: {filters['brand']}")
+    if not parts:
+        return ""
+    return "Constrângeri detectate (folosește-le în search_products): " + "; ".join(parts) + "\n"
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -454,8 +474,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
     cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
+    filters_hint = _filters_hint(route.filters)  # NX-116: seed structurat din triaj (P3 respectat)
     user = (
-        f"Limba clientului: {ctx.language}\n{cat_hint}{context_block}{history_block}"
+        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{context_block}{history_block}"
         f"Mesaj client: {query}"
     )
 

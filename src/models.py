@@ -198,6 +198,8 @@ class RouteDecision:
 
     route: Route
     category_key: str | None = None
+    # NX-116: sloturi structurate normalizate (budget_max/concerns/suitable_for/brand). Owner UNIC
+    # = Triaj (din `slots` validate); citit de agent ca seed pentru search_products (hint, P3).
     filters: dict[str, Any] = field(default_factory=dict)
     missing_field: str | None = None
 
