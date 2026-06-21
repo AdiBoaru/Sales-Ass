@@ -1,0 +1,30 @@
+{
+  "_note": "NX-114 seed ecommerce generic — fără taxonomie de concern; whitelist minim agnostic (profile._WHITELIST_DEFAULT).",
+  "currency": "RON",
+  "concern_map": {},
+  "profile_whitelist": ["budget_band", "fav_brands", "concerns"],
+  "risk_terms": {
+    "ro": {
+      "human_request": [
+        "vreau sa vorbesc cu un om",
+        "vorbesc cu un om",
+        "cu un operator",
+        "operator uman",
+        "agent uman",
+        "om real",
+        "persoana reala"
+      ],
+      "legal_complaint": [
+        "avocat",
+        "anaf",
+        "protectia consumatorului",
+        "reclamatie",
+        "instanta",
+        "te dau in judecata",
+        "in judecata"
+      ]
+    }
+  },
+  "greetings": {},
+  "settled_order_statuses": ["delivered", "completed", "closed"]
+}

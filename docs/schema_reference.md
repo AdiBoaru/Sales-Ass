@@ -66,3 +66,26 @@
    - **Model de conectare (NX-50, `docs/db_connections.md`):** două pool-uri. **Tenant path** = `bot_runtime` ca rol de **LOGIN** (conexiune directă 5432, `DATABASE_URL_BOT`, fără bypassrls); `tenant_conn` setează DOAR `app.business_id` la checkout (zero `SET ROLE` → nu se mai scurge sub multiplexare). **Control plane** (`resolve_channel`, joburi) = `admin_conn` pe rol privilegiat (`SUPABASE_DB_URL`). Fără `DATABASE_URL_BOT`, `bot_pool` cade compat pe `postgres` + `SET ROLE` în init (dev/test). `005_bot_runtime_login.sql` face doar `ALTER ROLE ... LOGIN` — grant-urile/politicile sunt deja din 003+004.
    - **Conexiune dev (Windows):** pooler-ul Supabase (`...pooler.supabase.com:5432`, user `postgres.<ref>`); conexiunea directă `db.<ref>.supabase.co` NU se rezolvă pe rețele IPv4. asyncpg pe Windows are bug la getaddrinfo async → workaround în `scripts/` (rezolvare IPv4 sincronă + connect pe IP). Pe Linux/VPS nu e necesar.
 4. **Taskurile T021–T033** (scrierea migrării 002 bucată cu bucată) sunt **OBSOLETE** — schema e deja construită. Rămân valide: review-ul (acest doc = T020), 003 (rol+RLS), seed/embed (există în `db/seed/`).
+
+## Convenții `businesses.settings` (jsonb)
+
+`businesses.settings` (jsonb existent, `schema_v2_production.sql:43`) ține config per-tenant fără
+schimbare de schemă. Chei convenite (citite defensiv — lipsă → default):
+
+- **`settings["domain_pack"]`** (NX-114): override per-tenant peste default-ul JSON al verticalului
+  (`src/domain/defaults/<vertical>.json`). Formă (toate cheile opționale, merge deep peste default):
+  ```json
+  {
+    "concern_map":   {"<termen liber>": "<cheie canonică attributes->'concerns'>"},
+    "risk_terms":    {"<locale>": {"human_request": ["..."], "legal_complaint": ["..."]}},
+    "greetings":     {"<locale>": ["salut adițional", ...]},
+    "profile_whitelist": ["skin_type", "budget_band", ...],
+    "settled_order_statuses": ["delivered", "closed"]
+  }
+  ```
+  Cheile/frazele se normalizează la încărcare (lower + fără diacritice). Loader: `src/domain/loader.py`
+  (`load_domain_pack`), atașat pe `BusinessConfig.domain_pack` de `load_business`. Kill-switch
+  `DOMAIN_PACK_ENABLED=false` → `domain_pack=None` (consumatorii cad pe constantele de cod).
+- **`settings["currency"]`** (NX-114): moneda afișată (ex. `"RON"`, `"EUR"`). Fallback `"RON"`.
+  `prompt_builder` o folosește în loc de „lei" hardcodat.
+- **`settings["welcome"]`**: config de welcome (enabled, bot_name, suggestions) — vezi `greeting.py`.

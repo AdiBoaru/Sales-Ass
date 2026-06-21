@@ -252,6 +252,9 @@ class Settings(BaseSettings):
     triage_factual_guard_enabled: bool = Field(
         default=True, validation_alias="TRIAGE_FACTUAL_GUARD_ENABLED"
     )
+    # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
+    # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
+    domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")
 
     @property
     def is_prod(self) -> bool:

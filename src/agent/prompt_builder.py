@@ -107,6 +107,7 @@ class PromptInputs:
     locale: str
     categories: tuple[str, ...] = ()
     aliases: tuple[tuple[str, str], ...] = ()  # (phrase_norm, target) aprobate
+    currency: str = "RON"  # NX-114: moneda din DomainPack; afișarea prețurilor în prompt
 
     @classmethod
     def build(
@@ -116,6 +117,7 @@ class PromptInputs:
         locale: str,
         categories: list[str],
         aliases: list[tuple[str, str]],
+        currency: str = "RON",
     ) -> PromptInputs:
         """Constructor tolerant: normalizează la tuple + sortează DETERMINIST (chiar dacă DB
         n-ar fi sortat) → același set ⇒ prefix byte-identic indiferent de ordinea rândurilor."""
@@ -125,7 +127,17 @@ class PromptInputs:
             locale=locale or "ro",
             categories=tuple(sorted(c for c in categories if c)),
             aliases=tuple(sorted((p, t) for p, t in aliases if p)),
+            currency=currency or "RON",
         )
+
+
+# NX-114: eticheta de monedă în prompt. RON → „lei" (byte-identic cu azi); altele → codul.
+_CURRENCY_LABELS = {"RON": "lei", "EUR": "euro", "USD": "dolari", "HUF": "forinți", "MDL": "lei"}
+
+
+def _currency_label(currency: str) -> str:
+    cur = (currency or "RON").upper()
+    return _CURRENCY_LABELS.get(cur, cur)
 
 
 def _store_header(inp: PromptInputs) -> str:
@@ -145,18 +157,23 @@ def _store_header(inp: PromptInputs) -> str:
 @lru_cache(maxsize=256)
 def build_agent_system(inp: PromptInputs) -> str:
     """System prompt pt bucla de tool-calling (înlocuiește `_TOOL_SYSTEM`). STATIC per
-    (business, locale): NU conține mesajul/produsele clientului (alea stau în USER)."""
-    return f"{_store_header(inp)}\n{_TOOLS_BLOCK}"
+    (business, locale, currency): NU conține mesajul/produsele clientului (alea stau în USER)."""
+    # NX-114: moneda din DomainPack înlocuiește „lei" hardcodat (byte-identic pt RON).
+    block = _TOOLS_BLOCK.replace(
+        "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
+    )
+    return f"{_store_header(inp)}\n{block}"
 
 
 @lru_cache(maxsize=256)
 def build_reco_system(inp: PromptInputs) -> str:
     """System de recompunere/retry (înlocuiește `_RECO_SYSTEM`), tot static per business."""
+    cur = _currency_label(inp.currency)  # NX-114: moneda din DomainPack (byte-identic pt RON)
     return (
         f"{_store_header(inp)}\n"
         "Primești întrebarea clientului și o listă de produse din catalog (cu prețuri REALE).\n"
         "Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis. Pentru "
-        "fiecare:\nnumele, prețul EXACT (lei) și ratingul (★) din listă, apoi de ce se "
+        f"fiecare:\nnumele, prețul EXACT ({cur}) și ratingul (★) din listă, apoi de ce se "
         "potrivește. Folosește\nDOAR produsele, prețurile și linkurile din listă — NU inventa "
         "nimic. NU pune cifre\nde stoc, cantitate sau rating care nu sunt în listă (nicio cifră "
         "negroundată, cu sau fără\nvalută). NU confirma reduceri, promoții sau politici care nu "

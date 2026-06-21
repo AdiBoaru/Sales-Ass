@@ -1,0 +1,36 @@
+{
+  "_note": "NX-114 seed auto_service — schelet; whitelist profil din profile._WHITELIST['auto'].",
+  "currency": "RON",
+  "concern_map": {},
+  "profile_whitelist": [
+    "vehicle_make",
+    "vehicle_model",
+    "vehicle_year_band",
+    "part_category",
+    "budget_band"
+  ],
+  "risk_terms": {
+    "ro": {
+      "human_request": [
+        "vreau sa vorbesc cu un om",
+        "vorbesc cu un om",
+        "cu un operator",
+        "operator uman",
+        "agent uman",
+        "om real",
+        "persoana reala"
+      ],
+      "legal_complaint": [
+        "avocat",
+        "anaf",
+        "protectia consumatorului",
+        "reclamatie",
+        "instanta",
+        "te dau in judecata",
+        "in judecata"
+      ]
+    }
+  },
+  "greetings": {},
+  "settled_order_statuses": ["delivered", "completed", "closed"]
+}

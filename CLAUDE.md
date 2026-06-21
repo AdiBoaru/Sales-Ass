@@ -459,6 +459,8 @@ nativx-assistant/
 │   │   └── telegram/            ← client.py (Bot API) + poller.py (long polling, TEST)
 │   ├── meta_client.py           ← MetaClient (WhatsApp Cloud API send); implementează ChannelSender
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)
+│   ├── domain/                  ← NX-114: DomainPack (config per-vertical din DB+seed)
+│   │   ├── pack.py + loader.py + normalize.py + defaults/*.json (ecommerce/beauty_salon/...)
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
 │   │   └── tool_definitions.py  ← OpenAI tool schemas

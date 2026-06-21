@@ -8,6 +8,7 @@ from src.models import (
     Direction,
     InboundMessage,
     Message,
+    Offer,
     ProductRef,
     Reply,
     Route,
@@ -52,6 +53,36 @@ def test_set_reply_signals_early_exit():
     assert isinstance(ctx.reply, Reply)
     assert ctx.reply.text == "răspuns"
     assert ctx.reply.kind == "message"
+
+
+# --- NX-114: Reply.offer (seam neutru de canal) + floor de aplatizare -------
+
+
+def test_set_offer_floors_url_into_text():
+    ctx = _ctx()
+    ctx.set_reply("Iată produsul potrivit.")
+    ctx.set_offer(Offer(kind="open_url", label="Vezi produsul", url="https://shop.ro/p/1"))
+    assert ctx.reply.offer.kind == "open_url"
+    assert "https://shop.ro/p/1" in ctx.reply.text  # floor: url append-uit pt canale text
+
+
+def test_set_offer_without_url_keeps_text():
+    ctx = _ctx()
+    ctx.set_reply("Răspuns simplu.")
+    ctx.set_offer(Offer(kind="quick_reply", label="Reia comanda", payload="offer:reorder"))
+    assert ctx.reply.text == "Răspuns simplu."  # quick_reply fără url → text neschimbat
+    assert ctx.reply.offer.payload == "offer:reorder"
+
+
+def test_set_offer_url_not_duplicated():
+    ctx = _ctx()
+    ctx.set_reply("Vezi: https://shop.ro/p/1")
+    ctx.set_offer(Offer(kind="open_url", label="Vezi", url="https://shop.ro/p/1"))
+    assert ctx.reply.text.count("https://shop.ro/p/1") == 1  # nu dublăm url-ul deja prezent
+
+
+def test_reply_offer_defaults_none():
+    assert Reply(text="x").offer is None  # un Sender vechi nu vede offer (floor opțional)
 
 
 def test_route_decision_uses_enum():
