@@ -62,6 +62,24 @@ trebuie DOAR:
 
 Traefik emite certul Let's Encrypt automat la prima cerere HTTPS pe acel host.
 
+### Body-size cap la margine (defense-in-depth, NX-120)
+
+Aplicația respinge deja corpuri prea mari cu `413` ÎNAINTE de a le citi (gardul de app =
+**sursa de adevăr**, fiindcă un `curl` direct la container ocolește Traefik). Adăugăm și la
+Traefik un middleware de `buffering` ca pachetele mari să fie oprite la margine, pe VPS-ul mic
+(1vCPU/4GB/0-swap, vezi topologia) — un POST de mulți MB nu trebuie să ajungă nici măcar la app:
+
+```yaml
+# labels pe serviciul `webhook` (în docker-compose.prod.yml), pe lângă cele de routing:
+- "traefik.http.middlewares.nativx-body.buffering.maxRequestBodyBytes=262144"   # 256KB (webhook Meta)
+- "traefik.http.middlewares.nativx-body.buffering.memRequestBodyBytes=262144"
+- "traefik.http.routers.<router-webhook>.middlewares=nativx-body"
+```
+
+> Web (`/web/*`) e capat la 16KB în app (`WEB_MAX_BODY_BYTES`); dacă pui un router Traefik
+> separat pentru `/web`, folosește `maxRequestBodyBytes=16384` pe el. Capul Traefik e un plus —
+> NU înlocuiește gardul din app.
+
 ## Faza 2 — Telegram live (risc ~0, validare)
 
 DNS încă nenecesar (Telegram = polling, fără ingress). Pornește fără webhook expus:

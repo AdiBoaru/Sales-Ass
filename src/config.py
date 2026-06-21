@@ -103,6 +103,15 @@ class Settings(BaseSettings):
     # gardele server-side. CSV (`https://shop.ro,http://localhost:5173`); gol → CORS dezactivat
     # (doar same-origin). Binding fin origin↔token per canal (channels.settings) = follow-up NX-25.
     web_cors_origins: str = Field(default="", validation_alias="WEB_CORS_ORIGINS")
+    # NX-120 (DoS hardening): cap de body pe ingestie — respinge POST-uri mari ÎNAINTE de a le citi
+    # integral (VPS mic, 0-swap → un singur request mare poate OOM-ui procesul). Web e mic
+    # (text capat la 2000 char) → 16KB; webhook Meta/orders → 256KB (generos). Plus cap zilnic de
+    # cost per-vizitator: un token public furat NU poate goli tot bugetul tenantului.
+    web_max_body_bytes: int = Field(default=16384, validation_alias="WEB_MAX_BODY_BYTES")
+    webhook_max_body_bytes: int = Field(default=262144, validation_alias="WEBHOOK_MAX_BODY_BYTES")
+    web_cost_cap_per_visitor_usd: float = Field(
+        default=0.50, validation_alias="WEB_COST_CAP_PER_VISITOR_USD"
+    )
 
     @property
     def web_cors_origins_list(self) -> list[str]:

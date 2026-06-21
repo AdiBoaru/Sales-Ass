@@ -19,12 +19,14 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
 
-def out_channel(visitor_id: str) -> str:
-    return f"web:out:{visitor_id}"
+# NX-120: chei prefixate cu tenantul (token-ul public = id de canal, 1:1 cu businessul) — izolare
+# + observabilitate per tenant (P7), nu doar pe `visitor_id` global.
+def out_channel(tenant: str, visitor_id: str) -> str:
+    return f"web:out:{tenant}:{visitor_id}"
 
 
-def backlog_key(visitor_id: str) -> str:
-    return f"web:backlog:{visitor_id}"
+def backlog_key(tenant: str, visitor_id: str) -> str:
+    return f"web:backlog:{tenant}:{visitor_id}"
 
 
 class WebSender:
@@ -47,8 +49,9 @@ class WebSender:
         vine după publish-ul reușit."""
         msg_id = f"web_out_{uuid4().hex}"
         evt = json.dumps({"id": msg_id, "type": "text", "text": text}, ensure_ascii=False)
-        await self._redis.publish(out_channel(to), evt)
-        key = backlog_key(to)
+        # NX-120: `account_id` = token-ul public (tenant) → cheie prefixată cu tenantul (P7).
+        await self._redis.publish(out_channel(account_id, to), evt)
+        key = backlog_key(account_id, to)
         await self._redis.rpush(key, evt)
         await self._redis.ltrim(key, -self._backlog_size, -1)
         await self._redis.expire(key, self._backlog_ttl_s)

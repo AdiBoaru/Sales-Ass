@@ -66,6 +66,32 @@ async def cost_add(redis: Redis, business_id: str, amount_usd: float) -> None:
     await redis.expire(key, _COST_KEY_TTL_S)
 
 
+# --- cost guard per vizitator web (NX-120) ----------------------------------
+
+
+async def web_cost_over_visitor_cap(
+    redis: Redis, business_id: str, visitor_id: str, cap_usd: float
+) -> bool:
+    """NX-120: True dacă un SINGUR vizitator web a cheltuit azi ≥ plafonul per-vizitator. Plasă ca
+    un token public furat să nu poată epuiza tot `daily_cost_cap_usd`-ul tenantului. Cheie fără PII
+    în clar (visitor_id e id de canal, ca `webrl:*`)."""
+    val = await redis.get(f"webcost:{business_id}:{visitor_id}:{_today()}")
+    spent = float(val) if val else 0.0
+    return spent >= cap_usd
+
+
+async def web_cost_add_visitor(
+    redis: Redis, business_id: str, visitor_id: str, amount_usd: float
+) -> None:
+    """Adaugă o estimare de cost în contorul per-vizitator (+ EXPIRE). No-op la sumă ≤ 0.
+    Estimare-plasă de admitere (precizia per-tur = NX-125)."""
+    if amount_usd <= 0:
+        return
+    key = f"webcost:{business_id}:{visitor_id}:{_today()}"
+    await redis.incrbyfloat(key, amount_usd)
+    await redis.expire(key, _COST_KEY_TTL_S)
+
+
 def estimate_turn_cost(
     events: Sequence[Event], *, cost_triage_usd: float, cost_agent_usd: float
 ) -> float:
