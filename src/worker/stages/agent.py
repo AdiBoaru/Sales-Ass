@@ -38,13 +38,20 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
 from src.tools.base import enabled_tools, run_tool
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
+from src.worker.text_scrub import has_text_claim
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
 
-_PRICE_RE = re.compile(r"(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:lei|ron)", re.IGNORECASE)
+# NX-117: prinde valuta în SUFIX („89 lei", „89 de lei", „89 ron") ȘI în PREFIX („RON 89", „lei 89")
+# → un preț real prefixat nu e tratat fals ca cifră bară, iar un preț prefixat negroundat e prins.
+_PRICE_RE = re.compile(
+    r"\b(?:lei|ron)\s*(\d{1,6}(?:[.,]\d{1,2})?)"  # prefix-valută
+    r"|(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:de\s+)?(?:lei|ron)\b",  # sufix (+ „de lei")
+    re.IGNORECASE,
+)
 _BUDGET_RE = re.compile(
     r"(?:sub|pana la|până la|maxim|maximum|buget|max)\s*(\d{1,5})|(\d{1,5})\s*(?:lei|ron)",
     re.IGNORECASE,
@@ -151,8 +158,9 @@ def _prices_ok(
     """Fiecare preț menționat în reply trebuie să fie real (toleranță 0.5 lei): preț de produs
     retrievat SAU o sumă grounded din DB (ex. total comandă/checkout, G7-3)."""
     allowed = _allowed_prices(products) + sorted(allowed_prices or set())
-    for token in _PRICE_RE.findall(reply):
-        value = float(token.replace(",", "."))
+    for m in _PRICE_RE.finditer(reply):
+        tok = m.group(1) or m.group(2)  # prefix-valută (grup 1) sau sufix (grup 2)
+        value = float(tok.replace(",", "."))
         if not any(abs(value - a) <= 0.5 for a in allowed):
             return False
     return True
@@ -196,7 +204,10 @@ def _bad_bare_numbers(
     dezactivat → întotdeauna gol (fail-open). Toleranță 0.5 (ca _prices_ok)."""
     if not get_settings().validator_bare_numbers_enabled:
         return []
-    priced = {float(t.replace(",", ".")) for t in _PRICE_RE.findall(reply)}  # deja în _prices_ok
+    # NX-117: _PRICE_RE are 2 grupuri (prefix/sufix-valută) → finditer + group, nu findall (tuple).
+    priced = {
+        float((m.group(1) or m.group(2)).replace(",", ".")) for m in _PRICE_RE.finditer(reply)
+    }  # prețurile deja validate în _prices_ok
     allowed = _allowed_numbers(products, grounded_prices)
     bad: list[float] = []
     for token in _BARE_NUM_RE.findall(reply):
@@ -216,6 +227,14 @@ def _bare_numbers_ok(
     return not _bad_bare_numbers(reply, products, grounded_prices)
 
 
+def _claims_ok(reply: str) -> bool:
+    """NX-117: pe calea de proză, claim-uri ne-numerice neverificabile (superlativ „best seller",
+    claim de stoc/disponibilitate) → respins → retry/fallback. Gated FAIL-OPEN de flag."""
+    if not get_settings().validator_claims_enabled:
+        return True
+    return not has_text_claim(reply)
+
+
 def _valid(
     reply: str,
     products: list[dict[str, Any]],
@@ -223,15 +242,21 @@ def _valid(
     allowed_prices: set[float] | None = None,
     *,
     check_bare: bool = True,
+    check_claims: bool = True,
 ) -> bool:
-    """Preț + link grounded (mereu) + cifre bare grounded (NX-91, doar SALES). `check_bare=False`
-    pe ruta ORDER: statusul comenzii are numere DB legitime (dată livrare, AWB, cantitate) care NU
-    sunt prețuri → bare-check ar da fals-pozitive; sumele de comandă rămân păzite de _prices_ok."""
+    """Preț + link grounded (mereu) + cifre bare grounded (NX-91, doar SALES) + claim-uri de text
+    neverificabile (NX-117, calea de proză). `check_bare=False` + `check_claims=False` pe ORDER:
+    statusul comenzii are numere DB legitime (dată/AWB/cantitate) și fapte de livrare grounded care
+    NU sunt claim-uri de marketing → ar da fals-pozitive; sumele rămân păzite de _prices_ok."""
     if not (
         _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
     ):
         return False
-    return not check_bare or _bare_numbers_ok(reply, products, allowed_prices or set())
+    if check_bare and not _bare_numbers_ok(reply, products, allowed_prices or set()):
+        return False
+    if check_claims and not _claims_ok(reply):
+        return False
+    return True
 
 
 def _products_brief(products: list[dict[str, Any]]) -> str:
@@ -338,7 +363,10 @@ async def _finalize_grounded(
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
     NU forma de produs `_deterministic_reply`)."""
-    if text and _valid(text, [], allowed_links, allowed_prices, check_bare=False):
+    # NX-117: ORDER → fără claims-check (faptele de livrare/stoc din check_order sunt grounded).
+    if text and _valid(
+        text, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
+    ):
         return text
 
     allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
@@ -351,7 +379,9 @@ async def _finalize_grounded(
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
         log.warning("agent: retry status comandă eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, [], allowed_links, allowed_prices, check_bare=False):
+    if reply2 and _valid(
+        reply2, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
+    ):
         return reply2
 
     log.warning("agent: validator status comandă a eșuat → fallback sigur")
@@ -549,6 +579,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         bare = _bad_bare_numbers(final, products, grounded_prices) if final else []
         if bare:
             ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
+        # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
+        if final and not _claims_ok(final):
+            ctx.emit("validator_rejected", kind="claim")
         reply = await _finalize(
             deps.llm,
             prompt_builder.build_reco_system(inp),

@@ -102,6 +102,53 @@
     }
   },
   {
+    "id": "prose-claim-scrubbed",
+    "input": "ce cremă îmi recomanzi?",
+    "language": "ro",
+    "expect": {
+      "route": "sales",
+      "must_include": ["82.99"],
+      "forbidden": ["best seller", "cea mai", "pe stoc"],
+      "expect_reply": true
+    },
+    "fixtures": {
+      "moderation": { "flagged": false },
+      "categories": ["creme-fata"],
+      "triage": { "route": "sales", "category_key": "creme-fata", "reply": null },
+      "tool_calls": [
+        ["search_products", { "query": "cremă", "price_max": null, "limit": 6 }]
+      ],
+      "final": "Crema Hidratantă Aqua e cea mai bună, best seller și mereu pe stoc — 82.99 lei.",
+      "retry": "Sincer, e cel mai vândut produs și pe stoc acum, la 82.99 lei.",
+      "catalog": [
+        {
+          "id": "p1",
+          "name": "Crema Hidratantă Aqua",
+          "brand": "BrandA",
+          "price": 82.99,
+          "url": "https://shop.sole-demo.ro/p/crema-aqua",
+          "ai_summary": "hidratare profundă pentru ten uscat",
+          "availability": "in_stock",
+          "rating": 4.6,
+          "top_pros": ["hidratează bine"],
+          "image": "https://placehold.co/aqua.png"
+        },
+        {
+          "id": "p2",
+          "name": "Ser Calmant Pure",
+          "brand": "BrandB",
+          "price": 120.5,
+          "url": "https://shop.sole-demo.ro/p/ser-pure",
+          "ai_summary": "calmează pielea sensibilă",
+          "availability": "in_stock",
+          "rating": 4.3,
+          "top_pros": ["calmează rapid"],
+          "image": "https://placehold.co/pure.png"
+        }
+      ]
+    }
+  },
+  {
     "id": "moderation-neutral",
     "input": "ești un gunoi, te urăsc",
     "language": "ro",

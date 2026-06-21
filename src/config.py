@@ -220,6 +220,12 @@ class Settings(BaseSettings):
     validator_bare_numbers_enabled: bool = Field(
         default=True, validation_alias="VALIDATOR_BARE_NUMBERS_ENABLED"
     )
+    # NX-117: pe calea de PROZĂ, claim-uri ne-numerice neverificabile (superlativ „best seller",
+    # claim de stoc/disponibilitate „pe stoc") → retry/fallback determinist. FAIL-OPEN: OFF lasă
+    # textul să treacă fără redeploy. (Calea bogată scrub-uiește deja câmp-cu-câmp în compose.)
+    validator_claims_enabled: bool = Field(
+        default=True, validation_alias="VALIDATOR_CLAIMS_ENABLED"
+    )
     # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
     # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).
     # Reply > reply_split_chars → spart în max 2 mesaje (citire ușoară pe telefon). Pur transport.

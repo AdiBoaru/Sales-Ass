@@ -29,9 +29,13 @@ PRODUCTS = [
 ]
 
 
-def _enable(monkeypatch, on=True):
+def _enable(monkeypatch, on=True, *, claims=False):
+    # claims=False implicit: testele de cifre-bare izolează validatorul NX-91 (replicile lor conțin
+    # incidental cuvinte-claim ca „rating"/„ore"/„in stock"). Testele NX-117 setează claims=True.
     monkeypatch.setattr(
-        ag, "get_settings", lambda: SimpleNamespace(validator_bare_numbers_enabled=on)
+        ag,
+        "get_settings",
+        lambda: SimpleNamespace(validator_bare_numbers_enabled=on, validator_claims_enabled=claims),
     )
 
 
@@ -112,3 +116,50 @@ def test_kill_switch_off_disables_bare_check(monkeypatch):
     # cu kill-switch off, comportamentul revine la cel pre-NX-91 (doar preț cu valută + link)
     assert _valid("Crema costă 89, super preț", PRODUCTS) is True
     assert _bad_bare_numbers("Crema costă 89", PRODUCTS, set()) == []
+
+
+# --- NX-117: claim-uri de text neverificabile pe calea de proză --------------
+
+
+def test_clean_prose_valid(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    assert _valid("Pentru tenul tău sensibil, varianta ușoară se potrivește bine", PRODUCTS) is True
+
+
+def test_stock_claim_rejected(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    assert _valid("Crema asta e pe stoc și ți-o recomand", PRODUCTS) is False
+
+
+def test_superlative_claim_rejected(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    assert _valid("Este cel mai bun produs, best seller la noi", PRODUCTS) is False
+
+
+def test_claims_kill_switch_off_lets_claim_through(monkeypatch):
+    _enable(monkeypatch, claims=False)  # VALIDATOR_CLAIMS_ENABLED=false → fail-open
+    assert _valid("Acesta este pe stoc și e best seller", PRODUCTS) is True
+
+
+def test_order_path_skips_claim_check(monkeypatch):
+    # ORDER (check_bare=False, check_claims=False): „livrăm" e fapt grounded, nu claim de marketing.
+    _enable(monkeypatch, claims=True)
+    assert _valid("Comanda e pe drum, o livrăm curând", [], check_bare=False, check_claims=False)
+
+
+# --- NX-117: _PRICE_RE prinde prefix-valută + „de lei" -----------------------
+
+
+def test_prefix_currency_grounded_accepted(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    assert _valid("Costă RON 82.99 și merită", PRODUCTS) is True  # 82.99 ∈ retrieval
+
+
+def test_prefix_currency_ungrounded_rejected(monkeypatch):
+    _enable(monkeypatch)
+    assert _valid("Costă RON 999", PRODUCTS) is False  # preț prefixat negroundat → prins
+
+
+def test_de_lei_spacing_grounded_accepted(monkeypatch):
+    _enable(monkeypatch)
+    assert _valid("Crema e 82.99 de lei", PRODUCTS) is True  # „de lei" tratat ca valută
