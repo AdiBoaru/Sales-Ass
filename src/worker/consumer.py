@@ -24,7 +24,7 @@ import httpx
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
-from src.channels.base import ChannelSenderRegistry
+from src.channels.base import Capability, ChannelSenderRegistry
 from src.channels.media import close_media
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
@@ -58,13 +58,15 @@ REAP_INTERVAL_S = 30.0
 
 async def _safe_typing(registry: ChannelSenderRegistry | None, event: dict) -> None:
     """Trimite „typing/read" pentru un mesaj inbound, INSTANT și best-effort (NX-90). Direct prin
-    ChannelSender (NU outbox: un typing întârziat/retry-uit e inutil). Canal fără `mark_typing`
-    (hasattr) → skip tăcut. Orice eroare → log fără PII, turul NU se rupe (P6). Argumentele
+    ChannelSender (NU outbox: un typing întârziat/retry-uit e inutil). Canal fără capabilitatea
+    TYPING → skip tăcut. Orice eroare → log fără PII, turul NU se rupe (P6). Argumentele
     (channel_account_id receptor + sender_external_id + provider_msg_id) vin din envelope."""
     if registry is None:
         return
-    sender = registry.get(event.get("channel_kind", "whatsapp"))
-    if sender is None or not hasattr(sender, "mark_typing"):
+    # NX-115: FĂRĂ default „whatsapp" (un canal necunoscut ar fi trimis typing greșit pe WhatsApp);
+    # gardă pe capabilitatea TYPING declarată, nu pe `hasattr(mark_typing)`.
+    sender = registry.get(event.get("channel_kind"))
+    if sender is None or Capability.TYPING not in getattr(sender, "capabilities", frozenset()):
         return
     try:
         await sender.mark_typing(

@@ -455,7 +455,7 @@ nativx-assistant/
 │   │   └── stages/             ← triage.py (nano) ✅ + agent.py (mini, RAG+validator) ✅;
 │   │                             TODO: gates, free_layers; echo=fallback
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
-│   │   ├── base.py              ← ChannelSender Protocol + SENDER_REGISTRY
+│   │   ├── base.py              ← ChannelSender Protocol + Capability matrix (NX-115) + registry
 │   │   └── telegram/            ← client.py (Bot API) + poller.py (long polling, TEST)
 │   ├── meta_client.py           ← MetaClient (WhatsApp Cloud API send); implementează ChannelSender
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)

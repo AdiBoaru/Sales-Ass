@@ -10,6 +10,16 @@ programează retry cu backoff).
 
 import httpx
 
+from src.channels.base import Capability
+
+# WhatsApp body max ~4096 caractere; peste → Meta respinge ÎNTREG mesajul.
+_WA_TEXT_MAX = 4096
+
+
+def _clamp(text: str, limit: int) -> str:
+    """Trunchiere cu elipsă la limita platformei (NX-115) — mai bine trunchiat decât respins."""
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
 
 class MetaSendError(RuntimeError):
     """Răspuns Meta fără un message id utilizabil (payload neașteptat)."""
@@ -17,6 +27,11 @@ class MetaSendError(RuntimeError):
 
 class MetaClient:
     """Wrapper subțire peste Graph API /{phone_number_id}/messages."""
+
+    # NX-115: WhatsApp = text + typing + media (download). OFFER (CTA nativ) = follow-up; azi floor.
+    capabilities = frozenset({Capability.TEXT, Capability.TYPING, Capability.MEDIA})
+    max_text_len = _WA_TEXT_MAX
+    max_caption_len: int | None = None
 
     def __init__(
         self,
@@ -44,7 +59,7 @@ class MetaClient:
                 "recipient_type": "individual",
                 "to": to,
                 "type": "text",
-                "text": {"body": text},
+                "text": {"body": _clamp(text, _WA_TEXT_MAX)},  # NX-115: clamp transport
             },
         )
         resp.raise_for_status()
