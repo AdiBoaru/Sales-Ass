@@ -19,6 +19,7 @@ Câmpuri TurnContext scrise aici: `ctx.halt` (via halt_silent), `ctx.reply` (ris
 from __future__ import annotations
 
 import logging
+import re
 import unicodedata
 from base64 import b64encode
 from datetime import UTC, datetime
@@ -27,7 +28,7 @@ from typing import TYPE_CHECKING
 import asyncpg
 
 from src.agent.llm import VISION_NOT_PRODUCT
-from src.config import get_settings
+from src.config import INBOUND_BODY_MAX, get_settings
 from src.db.queries.contacts import block_contact
 from src.db.queries.conversations import set_handoff
 from src.models import TurnContext
@@ -94,6 +95,153 @@ def detect_risk(text: str | None) -> str | None:
         if any(phrase in norm for phrase in phrases):
             return reason
     return None
+
+
+# --- NX-121: guardrails de input (cod determinist, înainte de LLM) -----------
+
+# PII liber-tastat de client (NU PII-ul de canal din channel_identities, ăla e autorizat). Defense-
+# in-depth: ține PII-ul afară din promptul TURULUI CURENT (ctx.message.body → triaj/agent),
+# write-back-ul de cache și analytics (doar contoare). NB (scope NX-121): `messages.body` stocat
+# rămâne RAW (PII legitim în storage — explicit out-of-scope) → istoricul îl poate reintroduce în
+# prompt la turul următor; redaction de storage/istoric = follow-up. Conservativ — semnal mare,
+# fără să corupă coduri de produs/comenzi. EMAIL/IBAN întâi (semn distinctiv), CARD înaintea
+# TELEFON (un card de 16 cifre nu trebuie spart de regexul de telefon).
+_PII_EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+_PII_IBAN = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b")
+# Candidat de card: 13-19 cifre cu separatori uzuali, dar separatorul stă ÎNTRE cifre (nu la
+# coadă) → nu „înghite" spațiul de după (ar lipi `[card]` de cuvântul următor). _card decide.
+_PII_CARD_CAND = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")
+# Lungimi REALE de PAN (Amex 15, majoritatea 16, Visa/Discover 19) + IIN 3-6 (Amex/Visa/MC/Disc).
+# Exclude 13/14 → un EAN-13 care TRECE Luhn (~10% din ele) NU mai e mascat ca „card" (DoD).
+_CARD_LEN = frozenset({15, 16, 19})
+# Telefon: cere prefix de TELEFON (+țară sau 0 local RO) ca să NU prindem coduri/EAN-uri bare.
+# Două alternative: internațional (+40 7xx...) sau local RO (07xx...). `(?<!\d)`/`(?!\d)` evită
+# matching parțial al unei secvențe mai lungi (un cod de 13+ cifre nu devine „telefon").
+_PII_PHONE = re.compile(
+    r"(?<!\d)(?:"
+    r"(?:\+|00)\d{1,3}(?:[ .-]?\d){8,11}"  # +40 / 0040 712 345 678 (intl: țară + 8-11 cifre)
+    r"|0(?:[ .-]?\d){9}"  # 0712 345 678 (RO local: 0 + 9 cifre)
+    r")(?!\d)"
+)
+
+
+def _luhn(digits: str) -> bool:
+    """Checksum Luhn (validare card). Plasă SECUNDARĂ după lungime (_CARD_LEN) + IIN 3-6 — nu se
+    bazează singur pe Luhn ca să excludă EAN-uri (un EAN-13 poate trece Luhn ~10% din timp)."""
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch)
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def mask_pii(text: str) -> tuple[str, dict[str, int]]:
+    """Maschează PII liber-tastat (telefon/email/iban/card) → `[telefon]`/`[email]`/`[iban]`/
+    `[card]`. Pur. Întoarce (text_mascat, contoare per tip). Cardul = secvență 13-19 cifre care
+    trece Luhn (nu prinde EAN/cod produs). Ordine: email → iban → card → telefon."""
+    counts = {"phone": 0, "email": 0, "iban": 0, "card": 0}
+
+    def _email(_m: re.Match) -> str:
+        counts["email"] += 1
+        return "[email]"
+
+    def _iban(_m: re.Match) -> str:
+        counts["iban"] += 1
+        return "[iban]"
+
+    def _card(m: re.Match) -> str:
+        digits = re.sub(r"\D", "", m.group(0))
+        if len(digits) in _CARD_LEN and digits[0] in "3456" and _luhn(digits):
+            counts["card"] += 1
+            return "[card]"
+        return m.group(0)  # secvență lungă dar nu card (EAN/cod produs) → neatins
+
+    def _phone(_m: re.Match) -> str:
+        counts["phone"] += 1
+        return "[telefon]"
+
+    text = _PII_EMAIL.sub(_email, text)
+    text = _PII_IBAN.sub(_iban, text)
+    text = _PII_CARD_CAND.sub(_card, text)
+    text = _PII_PHONE.sub(_phone, text)
+    return text, counts
+
+
+# Pattern-uri NEUTRE de prompt-injection (vertical-agnostice, normalizate fără diacritice). Baza din
+# cod; DomainPack (NX-114) ADAUGĂ per-tenant/vertical (P9). Detectare, NU apărare load-bearing.
+_INJECTION_FALLBACK = (
+    "ignore previous",
+    "ignore all previous",
+    "ignore the above",
+    "disregard previous",
+    "ignora instructiun",
+    "ignora tot ce",
+    "uita instructiun",
+    "nu tine cont de instructiun",
+    "you are now",
+    "esti acum",
+    "act as if",
+    "pretinde ca esti",
+    "system prompt",
+    "reveal your instruct",
+    "show your prompt",
+    "arata-ti instructiun",
+    "spune-mi promptul",
+    "output the price",
+    "set the price",
+    "schimba pretul",
+    "pretul este acum",
+    "developer mode",
+    "jailbreak",
+)
+
+
+def _injection_patterns(ctx: TurnContext) -> list[str]:
+    """Pattern-urile de injection NORMALIZATE: baza neutră din cod + cele din DomainPack (toate
+    locale-urile, additiv). Fără DomainPack → doar baza (fail-open)."""
+    pats = [_norm(p) for p in _INJECTION_FALLBACK]
+    pack = getattr(ctx.business, "domain_pack", None)
+    if pack is not None:
+        for locale_pats in (pack.injection_patterns or {}).values():
+            pats.extend(_norm(p) for p in locale_pats)
+    return [p for p in pats if p]
+
+
+def screen_injection(ctx: TurnContext) -> int:
+    """Câte pattern-uri de injection apar în corpul inbound (normalizat). 0 = niciunul. Pur."""
+    body = _norm(ctx.message.body or "")
+    if not body:
+        return 0
+    return sum(1 for p in _injection_patterns(ctx) if p in body)
+
+
+def _apply_input_guardrails(ctx: TurnContext) -> None:
+    """NX-121: clamp lungime (idempotent — acoperă și body-ul derivat din Vision) → mascare PII →
+    ecran injection. Cod determinist (P2), înainte de triaj/agent. Niciun guard nu setează `reply`
+    și niciunul nu tace (P6): trunchiere, nu rejection; injection = doar observabilitate."""
+    s = get_settings()
+    body = ctx.message.body or ""
+    if len(body) > INBOUND_BODY_MAX:
+        ctx.message.body = body[:INBOUND_BODY_MAX]
+        ctx.emit("body_truncated", chars=len(body))  # DOAR lungimea, nu corpul (P12)
+    if s.input_pii_mask_enabled and ctx.message.body:
+        masked, counts = mask_pii(ctx.message.body)
+        if any(counts.values()):
+            ctx.message.body = masked
+            ctx.emit("input_pii_masked", **counts)  # DOAR contoare per tip (P12)
+    if s.injection_screen_enabled:
+        try:
+            n = screen_injection(ctx)
+            if n:
+                # NU tăcem și NU escaladăm (ar premia abuzul); mesajul curge → validatorul de
+                # stagiul 8 e apărarea reală. DOAR contorul, niciodată corpul (P12).
+                ctx.emit("injection_screened", n=n)
+        except Exception as e:  # noqa: BLE001 — ecran best-effort → fail-open (P6)
+            log.warning("injection screen eșuat (%s) → fail-open", type(e).__name__)
 
 
 async def request_human(
@@ -295,3 +443,7 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     #    (doar îmbogățește ctx.message.body) → triajul/agentul curg pe textul derivat din poză.
     if ctx.message.content_type == "image":
         await _route_image(ctx, deps)
+
+    # 8. NX-121: guardrails de input (clamp lungime + mascare PII + ecran injection) ÎNAINTE de
+    #    triaj/agent. DUPĂ media routing → plasă unică pe orice cale (web/WA/Vision). Nu early-exit.
+    _apply_input_guardrails(ctx)
