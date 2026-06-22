@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     model_moderation: str = Field(
         default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
     )
+    # Override de tarife LLM pentru observabilitatea de cost (NX-103). JSON parțial, merge peste
+    # implicitul din src/agent/pricing.py — tunabil în prod fără redeploy. Gol → tarifele din cod.
+    # Ex: {"gpt-5.4-mini": {"input": 0.30, "cached_input": 0.03, "output": 2.40}}
+    llm_pricing_json: str = Field(default="", validation_alias="LLM_PRICING_JSON")
 
     # --- Media routing: Vision poză→catalog (NX-76, stagiul 3) ---
     # O poză de produs (content_type=image) e descrisă de Vision (prin adaptorul unic, ca
@@ -93,6 +97,26 @@ class Settings(BaseSettings):
     web_sse_heartbeat_s: float = Field(default=15.0, validation_alias="WEB_SSE_HEARTBEAT_S")
     web_backlog_size: int = Field(default=20, validation_alias="WEB_BACKLOG_SIZE")
     web_backlog_ttl_s: int = Field(default=300, validation_alias="WEB_BACKLOG_TTL_S")
+    # CORS allowlist pt POST /web/chat (NX-25b — gateway web SINCRON request/response). Browserul
+    # shop-ului apelează endpointul cross-origin → preflight-ul (înainte de body, deci fără token)
+    # se gate-uiește la nivel de browser pe ACEASTĂ listă. Token public + sig + rate-limit rămân
+    # gardele server-side. CSV (`https://shop.ro,http://localhost:5173`); gol → CORS dezactivat
+    # (doar same-origin). Binding fin origin↔token per canal (channels.settings) = follow-up NX-25.
+    web_cors_origins: str = Field(default="", validation_alias="WEB_CORS_ORIGINS")
+    # NX-120 (DoS hardening): cap de body pe ingestie — respinge POST-uri mari ÎNAINTE de a le citi
+    # integral (VPS mic, 0-swap → un singur request mare poate OOM-ui procesul). Web e mic
+    # (text capat la 2000 char) → 16KB; webhook Meta/orders → 256KB (generos). Plus cap zilnic de
+    # cost per-vizitator: un token public furat NU poate goli tot bugetul tenantului.
+    web_max_body_bytes: int = Field(default=16384, validation_alias="WEB_MAX_BODY_BYTES")
+    webhook_max_body_bytes: int = Field(default=262144, validation_alias="WEBHOOK_MAX_BODY_BYTES")
+    web_cost_cap_per_visitor_usd: float = Field(
+        default=0.50, validation_alias="WEB_COST_CAP_PER_VISITOR_USD"
+    )
+
+    @property
+    def web_cors_origins_list(self) -> list[str]:
+        """Origin-urile CORS permise pentru /web/chat (CSV → listă, fără goluri)."""
+        return [o.strip() for o in self.web_cors_origins.split(",") if o.strip()]
 
     # --- App ---
     env: str = Field(default="dev", validation_alias="ENV")
@@ -205,11 +229,58 @@ class Settings(BaseSettings):
     validator_bare_numbers_enabled: bool = Field(
         default=True, validation_alias="VALIDATOR_BARE_NUMBERS_ENABLED"
     )
+    # NX-117: pe calea de PROZĂ, claim-uri ne-numerice neverificabile (superlativ „best seller",
+    # claim de stoc/disponibilitate „pe stoc") → retry/fallback determinist. FAIL-OPEN: OFF lasă
+    # textul să treacă fără redeploy. (Calea bogată scrub-uiește deja câmp-cu-câmp în compose.)
+    validator_claims_enabled: bool = Field(
+        default=True, validation_alias="VALIDATOR_CLAIMS_ENABLED"
+    )
     # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
     # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).
     # Reply > reply_split_chars → spart în max 2 mesaje (citire ușoară pe telefon). Pur transport.
     typing_enabled: bool = Field(default=True, validation_alias="TYPING_ENABLED")
     reply_split_chars: int = Field(default=200, validation_alias="REPLY_SPLIT_CHARS")
+
+    # --- Lock per conversație (NX-85, stagiul 2 — ordonare multi-consumer) ---
+    # Serializează tururile aceleiași conversații între REPLICI de worker (lock Redis SET NX EX pe
+    # business+expeditor). Ocupat → re-queue cu backoff scurt (cap dur). Fail-open dacă Redis e jos.
+    conv_lock_enabled: bool = Field(default=True, validation_alias="CONV_LOCK_ENABLED")
+    conv_lock_ttl_seconds: int = Field(default=30, validation_alias="CONV_LOCK_TTL_SECONDS")
+    conv_lock_requeue_delay_ms: int = Field(
+        default=150, validation_alias="CONV_LOCK_REQUEUE_DELAY_MS"
+    )
+    conv_lock_max_requeues: int = Field(default=10, validation_alias="CONV_LOCK_MAX_REQUEUES")
+
+    # --- Retrieval & ranking de produse (ARCH-product-retrieval, 2026) ---
+    # P0: sortare explicită pe intenție (sort_mode: price_asc pt „cel mai ieftin") + tie-break
+    # determinist p.id + shrunk_rating (cold-start). Kill-switch FAIL-SAFE: OFF → ORDER BY-ul vechi
+    # (rating desc, price asc) ȘI relax-ladder-ul vechi (price relaxat primul) — byte-identic.
+    search_sort_mode_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_SORT_MODE_ENABLED"
+    )
+    # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
+    # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
+    cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
+    # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
+    # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
+    # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.
+    triage_factual_guard_enabled: bool = Field(
+        default=True, validation_alias="TRIAGE_FACTUAL_GUARD_ENABLED"
+    )
+    # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
+    # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
+    domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")
+    # NX-116: anti-bucla de clarificare — după atâtea re-întrebări pe ACELAȘI slot, escaladăm
+    # (HANDOFF pe slot critic / best-effort SALES altfel), niciodată re-întrebare la infinit (P6).
+    clarify_max_attempts: int = Field(default=2, validation_alias="CLARIFY_MAX_ATTEMPTS")
+    # NX-126: reziliență adaptor OpenAI (llm.py). `timeout` anti-hang (mai ales pe web sincron);
+    # retry bounded pe tranzitoriu (429/5xx/timeout). `sampling_enabled` = kill-switch pt modele
+    # „reasoning" care resping `temperature` ne-default → OFF lasă apelurile fără sampling params.
+    llm_timeout_s: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_S")
+    llm_retry_max: int = Field(default=2, validation_alias="LLM_RETRY_MAX")
+    llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
+    llm_temperature: float = Field(default=0.3, validation_alias="LLM_TEMPERATURE")
+    llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT")
 
     @property
     def is_prod(self) -> bool:

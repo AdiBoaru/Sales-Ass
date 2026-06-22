@@ -1,0 +1,65 @@
+{
+  "_note": "NX-114 seed beauty_salon — echivalent cu mapările hardcodate (taxonomy._BEAUTY_RAW, profile._WHITELIST['beauty']). Cheile concern_map se normalizează la încărcare (lower + fără diacritice).",
+  "currency": "RON",
+  "concern_map": {
+    "ten gras": "oily",
+    "piele grasă": "oily",
+    "oily": "oily",
+    "ten uscat": "dry",
+    "piele uscată": "dry",
+    "dry": "dry",
+    "ten sensibil": "sensitive",
+    "piele sensibilă": "sensitive",
+    "sensitive": "sensitive",
+    "ten mixt": "combination",
+    "piele mixtă": "combination",
+    "combination": "combination",
+    "acnee": "acne",
+    "cosuri": "acne",
+    "coșuri": "acne",
+    "acne": "acne",
+    "riduri": "anti_aging",
+    "anti-îmbătrânire": "anti_aging",
+    "antiîmbătrânire": "anti_aging",
+    "anti-aging": "anti_aging",
+    "pete": "hyperpigmentation",
+    "pete pigmentare": "hyperpigmentation",
+    "hyperpigmentation": "hyperpigmentation",
+    "hidratare": "hydration",
+    "deshidratat": "hydration",
+    "hydration": "hydration"
+  },
+  "profile_whitelist": [
+    "skin_type",
+    "hair_type",
+    "concerns",
+    "budget_band",
+    "fav_brands",
+    "age_band",
+    "gender"
+  ],
+  "risk_terms": {
+    "ro": {
+      "human_request": [
+        "vreau sa vorbesc cu un om",
+        "vorbesc cu un om",
+        "cu un operator",
+        "operator uman",
+        "agent uman",
+        "om real",
+        "persoana reala"
+      ],
+      "legal_complaint": [
+        "avocat",
+        "anaf",
+        "protectia consumatorului",
+        "reclamatie",
+        "instanta",
+        "te dau in judecata",
+        "in judecata"
+      ]
+    }
+  },
+  "greetings": {},
+  "settled_order_statuses": ["delivered", "completed", "closed"]
+}

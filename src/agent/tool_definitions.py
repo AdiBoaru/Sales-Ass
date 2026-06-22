@@ -53,8 +53,33 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                         "type": "integer",
                         "description": "Câte produse (1-6).",
                     },
+                    "sort_mode": {
+                        "type": "string",
+                        "enum": ["relevance", "price_asc", "price_desc", "rating_desc"],
+                        "description": (
+                            "Cum sortezi: 'price_asc' pentru «cel mai ieftin / mai ieftin», "
+                            "'rating_desc' pentru «cel mai bun / cel mai bine cotat», altfel "
+                            "'relevance'."
+                        ),
+                    },
+                    "in_stock_only": {
+                        "type": "boolean",
+                        "description": (
+                            "True DOAR dacă clientul cere explicit «în stoc / disponibil»; "
+                            "altfel false."
+                        ),
+                    },
                 },
-                "required": ["query", "price_max", "category", "brand", "concerns", "limit"],
+                "required": [
+                    "query",
+                    "price_max",
+                    "category",
+                    "brand",
+                    "concerns",
+                    "limit",
+                    "sort_mode",
+                    "in_stock_only",
+                ],
             },
         },
     },

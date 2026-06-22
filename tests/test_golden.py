@@ -141,6 +141,7 @@ def test_all_seed_cases_present():
         "greeting-simple",
         "sales-grounded",
         "invented-price-blocked",
+        "prose-claim-scrubbed",
         "moderation-neutral",
         "risk-handoff",
         "order-never-silent",

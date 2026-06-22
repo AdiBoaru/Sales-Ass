@@ -17,9 +17,11 @@ from time import perf_counter
 import asyncpg
 from redis.asyncio import Redis
 
+from src.agent import usage
 from src.agent.llm import LLMClient
+from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
-from src.models import TurnContext
+from src.models import TurnContext, TurnUsage
 
 
 @dataclass
@@ -43,18 +45,75 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
 
     Măsoară latența fiecărui stagiu și o pune în `ctx.events` (persistarea în
     analytics_events e treaba unui pas ulterior — observabilitatea nu blochează
-    turul)."""
-    for stage in stages:
-        name = getattr(stage, "__name__", "stage")
-        started = perf_counter()
-        await stage(ctx, deps)
-        latency_ms = round((perf_counter() - started) * 1000, 1)
-        ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
-        # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
-        if ctx.reply is not None or ctx.halt:
-            ctx.emit("pipeline_early_exit", stage=name)
-            return
-    ctx.emit("pipeline_complete")
+    turul). Tot aici se acumulează usage-ul LLM al turului (tokeni + cached + cost),
+    defalcat pe STAGIU și pe MODEL, și se emite UN event `llm_usage` la final —
+    stagiile nu știu că sunt măsurate (principiul 10); adaptorul raportează, runner-ul
+    agregă. `ctx.usage` (TurnUsage) e pus la dispoziția processor-ului (cost/mesaj)."""
+    acc, token = usage.push()
+    turn_started = perf_counter()
+    by_stage: dict[str, dict] = {}
+    try:
+        for stage in stages:
+            name = getattr(stage, "__name__", "stage")
+            before = acc.snapshot()
+            started = perf_counter()
+            await stage(ctx, deps)
+            latency_ms = round((perf_counter() - started) * 1000, 1)
+            ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
+            _record_stage_delta(by_stage, name, before, acc.snapshot(), latency_ms)
+            # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
+            if ctx.reply is not None or ctx.halt:
+                ctx.emit("pipeline_early_exit", stage=name)
+                break
+        else:
+            ctx.emit("pipeline_complete")
+    finally:
+        usage.pop(token)
+        latency_ms = round((perf_counter() - turn_started) * 1000, 1)
+        if acc.calls:
+            savings = sum(
+                savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items()
+            )
+            ctx.usage = TurnUsage(
+                tokens_in=acc.tokens_in,
+                tokens_out=acc.tokens_out,
+                cached_tokens=acc.cached_tokens,
+                cost_usd=acc.cost_usd,
+                calls=acc.calls,
+                savings_usd=savings,
+                latency_ms=latency_ms,
+                models=sorted(acc.by_model),
+                by_stage=by_stage,
+                by_model=acc.by_model,
+            )
+            # tokens_in/out/cost_usd → coloane dedicate (insert_events); cached_tokens/savings/
+            # defalcări → properties jsonb (rollup le citește de acolo). Principiul 10.
+            # phase='turn' (reply) vs 'post_turn' (summarizer/profil, emis de processor).
+            ctx.emit("llm_usage", phase="turn", **ctx.usage.as_event_props())
+
+
+def _record_stage_delta(
+    by_stage: dict[str, dict],
+    name: str,
+    before: tuple[int, int, int, int, float],
+    after: tuple[int, int, int, int, float],
+    latency_ms: float,
+) -> None:
+    """Diff-ul acumulatorului în jurul unui stagiu → cât a consumat stagiul ăsta (defalcare
+    pe stagiu, NX-103). Doar stagiile care chiar au apelat LLM-ul apar (delta de calls > 0).
+    Un stagiu apelat de mai multe ori (n-ar trebui în pipeline-ul liniar) s-ar aduna."""
+    d_calls = after[0] - before[0]
+    if d_calls <= 0:
+        return
+    row = by_stage.setdefault(
+        name, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cached_tokens": 0, "cost_usd": 0.0}
+    )
+    row["calls"] += d_calls
+    row["tokens_in"] += after[1] - before[1]
+    row["tokens_out"] += after[2] - before[2]
+    row["cached_tokens"] += after[3] - before[3]
+    row["cost_usd"] += round(after[4] - before[4], 6)
+    row["latency_ms"] = row.get("latency_ms", 0.0) + latency_ms
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

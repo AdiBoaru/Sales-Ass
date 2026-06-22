@@ -33,6 +33,24 @@ def test_is_greeting_negative():
     assert not is_greeting("vreau sa vorbesc cu un om")
 
 
+# --- NX-126: setul de saluturi e ASCII pur (fără homoglife) ------------------
+
+
+def test_all_greetings_are_self_normalized_ascii():
+    """Guard anti-homoglif: fiecare salut e deja propria-i formă normalizată (ASCII). Prinde
+    orice „о" chirilic / diacritic introdus viitor în set (regresia „hellо")."""
+    bad = [g for g in greeting._GREETINGS if greeting._norm(g) != g]
+    assert not bad, f"saluturi ne-normalizate (homoglife/diacritice): {bad}"
+    non_ascii = [g for g in greeting._GREETINGS if not g.isascii()]
+    assert not non_ascii, f"saluturi non-ASCII: {non_ascii}"
+
+
+def test_hungarian_greetings_match():
+    assert is_greeting("helló")  # HU: normalizează la „hello" (acoperit de intrarea ASCII)
+    assert is_greeting("szia")
+    assert is_greeting("Jó napot!")
+
+
 # --- greeting_stage ----------------------------------------------------------
 
 

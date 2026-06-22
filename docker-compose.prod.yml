@@ -50,20 +50,25 @@ services:
       retries: 5
 
   # Singurul serviciu expus. Pe `internal` (vede redis) + `shared_network` (îl vede Traefik).
+  # Rutează ȘI gateway-ul web (/web/*): /web/chat (sincron) rulează pipeline-ul IN-PROCES aici
+  # (DB + OpenAI), nu doar ingestie → mem_limit mai mare decât scheletul subțire. Are nevoie de
+  # OPENAI_API_KEY + DATABASE_URL_BOT (din env_file); bot_pool se deschide lazy la primul /web/chat.
   webhook:
     <<: *app
     command: uvicorn src.webhook.app:app --host 0.0.0.0 --port 8000 --workers 1
-    mem_limit: 256m
+    mem_limit: 384m
     networks: [internal, shared_network]
     labels:
+      # Confirmat din recon Traefik (2026-06-18), aliniat la șablonul `evolution`:
+      # entrypoint `websecure` (:443), resolver `letsencrypt` (TLS-ALPN). Redirect
+      # HTTP→HTTPS e global pe entrypoint `web` → nu-l configurăm aici.
       - "traefik.enable=true"
+      # webhook e pe 2 rețele (internal + shared_network) → spune-i lui Traefik pe care s-o folosească
       - "traefik.docker.network=shared_network"
-      - "traefik.http.routers.nativx-wh.rule=Host(`${WEBHOOK_HOST}`)"
-      # ⚠️ Confirmă entrypoint + certresolver din recon-ul Traefik (vezi DEPLOY.md §3).
-      - "traefik.http.routers.nativx-wh.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
-      - "traefik.http.routers.nativx-wh.tls=true"
-      - "traefik.http.routers.nativx-wh.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
-      - "traefik.http.services.nativx-wh.loadbalancer.server.port=8000"
+      - "traefik.http.routers.nativx.rule=Host(`${WEBHOOK_HOST}`)"
+      - "traefik.http.routers.nativx.entrypoints=websecure"
+      - "traefik.http.routers.nativx.tls.certresolver=letsencrypt"
+      - "traefik.http.services.nativx.loadbalancer.server.port=8000"
     healthcheck:
       # Slim image n-are curl: verificăm cu socket că uvicorn ascultă pe 8000.
       test: ["CMD-SHELL", "python -c \"import socket,sys; socket.create_connection(('localhost',8000),3).close()\""]

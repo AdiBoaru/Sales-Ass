@@ -1,3 +1,5 @@
+# DEPRECAT (NX-123): foloseste `python scripts/migrate.py` (runner ordonat + tracking).
+# Pastrat doar pentru istoric — NU mai rula manual apply_0NN.py.
 """Aplică NX-50: face `bot_runtime` rol de LOGIN cu parolă (din vault) + verifică.
 
 Rulează (parola NU se comite — vine din environment):

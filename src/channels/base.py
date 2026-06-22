@@ -11,7 +11,36 @@ bot id la Telegram); `sender_external_id` = id-ul userului pe canal (wa_id / cha
 """
 
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from typing import Any, Protocol, runtime_checkable
+
+
+class Capability(str, Enum):
+    """NX-115 — ce poate randa un canal. Declarat per `ChannelSender`; dispatcher-ul rutează
+    table-driven și degradează grațios la `send_text` (P6). Un canal nou = declară capabilități,
+    nu editezi scara `if/elif`."""
+
+    TEXT = "text"  # send_text — OBLIGATORIU pt orice sender
+    RICH = "rich"  # send_rich — recomandare structurată (model iZi)
+    CARDS = "cards"  # send_products — listă compactă cu butoane-link
+    CAROUSEL = "carousel"  # send_carousel_card
+    EDIT = "edit"  # edit_message_media — navigare carusel (R2)
+    TYPING = "typing"  # mark_typing — semnal inbound (NX-90)
+    MEDIA = "media"  # fetch_media — download inbound (informativ aici)
+    OFFER = "offer"  # randare nativă Reply.offer (NX-114); fără ea → floor aplatizat în text
+
+
+# Capabilitate → metoda reală pe sender. Sursa pt testul de consistență caps↔metode.
+# OFFER NU e aici: nu mapează la o metodă dedicată (randare inline în send_*; azi floor în text).
+CAPABILITY_METHODS: dict[Capability, str] = {
+    Capability.TEXT: "send_text",
+    Capability.RICH: "send_rich",
+    Capability.CARDS: "send_products",
+    Capability.CAROUSEL: "send_carousel_card",
+    Capability.EDIT: "edit_message_media",
+    Capability.TYPING: "mark_typing",
+    Capability.MEDIA: "fetch_media",
+}
 
 
 @dataclass
@@ -84,12 +113,18 @@ class ChannelSender(Protocol):
     Întoarce provider_msg_id-ul atribuit de platformă (wamid / message_id).
     Ridică la eroare de transport (dispatcher-ul prinde și programează retry)."""
 
+    # NX-115: capabilități DECLARATE (matrice), nu deduse prin `hasattr`. Dispatcher-ul rutează
+    # randarea pe baza lor și degradează grațios la send_text. `max_*_len` = clamp de transport
+    # (None = fără limită). Fiecare implementare le setează ca atribute de clasă.
+    capabilities: frozenset[Capability]
+    max_text_len: int | None
+    max_caption_len: int | None
+
     async def send_text(self, account_id: str, to: str, text: str) -> str: ...
 
-    # Metode OPȚIONALE (duck-typed via `hasattr`, NU pe Protocol — ca send_rich/send_products/
-    # send_carousel_card/edit_message_media): un canal care nu le are e sărit grațios.
-    #   • mark_typing(account_id, to, provider_msg_id) — semnal „typing/read" pe inbound (NX-90)
-    #   • send_products / send_rich / send_carousel_card / edit_message_media — UX bogat (W1/R2)
+    # Metode OPȚIONALE, gardate de CAPABILITY (nu `hasattr`): send_rich (RICH), send_products
+    # (CARDS), send_carousel_card (CAROUSEL), edit_message_media (EDIT), mark_typing (TYPING),
+    # fetch_media (MEDIA). Testul de consistență (test_dispatcher) verifică declarat ⇔ metodă reală.
 
 
 class ChannelSenderRegistry:

@@ -40,7 +40,7 @@ async def load_business(conn: asyncpg.Connection, business_id: str) -> BusinessC
     )
     if row is None:
         return None
-    return BusinessConfig(
+    cfg = BusinessConfig(
         id=row["id"],
         slug=row["slug"],
         name=row["name"],
@@ -53,6 +53,12 @@ async def load_business(conn: asyncpg.Connection, business_id: str) -> BusinessC
             float(row["daily_cost_cap_usd"]) if row["daily_cost_cap_usd"] is not None else None
         ),
     )
+    # NX-114: atașează DomainPack-ul (P3 — load_business e owner unic). Import lazy ca să nu
+    # introducem un ciclu src.domain → src.models → ... . None dacă kill-switch-ul e OFF.
+    from src.domain.loader import load_domain_pack
+
+    cfg.domain_pack = load_domain_pack(cfg)
+    return cfg
 
 
 async def get_data_version(conn: asyncpg.Connection, business_id: str) -> int:
