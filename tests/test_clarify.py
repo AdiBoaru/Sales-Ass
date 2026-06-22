@@ -51,7 +51,7 @@ def test_set_clarify_writes_pending_question():
     assert pq["attempts"] == 1 and "asked_at" in pq
     assert ctx.reply.cacheable is False  # clarify = specific contextului, nu cache
     ev = _event(ctx, "clarify_asked")
-    assert ev.properties == {"field": "budget_max", "attempts": 1}
+    assert ev.properties == {"field": "budget_max", "attempts": 1, "turn_id": "t"}
 
 
 def test_set_clarify_attempts_increment_same_slot():
@@ -76,7 +76,7 @@ async def test_resume_fills_slot_and_routes():
     assert ctx.route is not None and ctx.route.route == Route.SALES
     assert ctx.state.constraints["budget_max"] == "200 lei"
     ev = _event(ctx, "clarify_resumed")
-    assert ev.properties == {"field": "budget_max"}  # P12 — fără `answer`
+    assert ev.properties == {"field": "budget_max", "turn_id": "t"}  # P12 — fără `answer`
     assert "answer" not in ev.properties and "200 lei" not in str(ev.properties)
 
 
@@ -154,7 +154,7 @@ async def test_resume_escalates_handoff_on_intent_after_max_attempts():
     await clarify_resume_stage(ctx, _deps())
     assert ctx.route.route == Route.HANDOFF
     ev = _event(ctx, "clarify_escalated")
-    assert ev.properties == {"field": "intent", "attempts": 2, "to": "handoff"}
+    assert ev.properties == {"field": "intent", "attempts": 2, "to": "handoff", "turn_id": "t"}
     assert "nu stiu" not in str(ev.properties)  # P12 — fără answer
 
 

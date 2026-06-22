@@ -103,7 +103,7 @@ async def test_checkout_link_happy(monkeypatch):
         }
     ]
     ev = [e for e in ctx.events if e.type == "checkout_link_created"]
-    assert ev and ev[0].properties == {"items": 1, "value": round(82.99 * 2, 2)}
+    assert ev and ev[0].properties == {"items": 1, "value": round(82.99 * 2, 2), "turn_id": "t"}
     assert [p["id"] for p in res.products] == ["p1"]
 
 

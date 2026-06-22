@@ -290,8 +290,9 @@ appointments      — business_id, contact_id, service_name, starts_at, ends_at,
 ### Analytics (append-only — botul are doar INSERT)
 ```
 analytics_events [PARTIȚIONAT] — business_id, conversation_id, event_type,
-                    properties jsonb, tokens_in/out, cost_usd
+                    properties jsonb, tokens_in/out, cost_usd, turn_id (NX-122)
                     • model generic: intent_detected/route/tool_call/cache_hit/handoff...
+                    • turn_id: corelare per-tur (emit() îl injectează; replay traiectorie)
 usage_daily       — business_id, day PK, conversations, messages_in/out,
                     templates_sent, tokens, cost_usd, cache_hits, handoffs,
                     orders_attributed, revenue_attributed, intents jsonb

@@ -28,7 +28,9 @@ async def insert_events(
 
     `tokens_in/out` și `cost_usd` se extrag din `properties` dacă există (le pun
     acolo stagiile LLM) → coloane dedicate pentru agregare ieftină; restul rămâne
-    în `properties` jsonb."""
+    în `properties` jsonb. NX-122: `turn_id` la fel — extras în coloană dedicată
+    (rămâne și în jsonb) pentru filtrare/replay ieftin al traiectoriei unui tur.
+    Event fără `turn_id` (ex. emis în afara unui tur) → coloana primește NULL."""
     if not events:
         return 0
 
@@ -42,6 +44,7 @@ async def insert_events(
             e.properties.get("tokens_in"),
             e.properties.get("tokens_out"),
             e.properties.get("cost_usd"),
+            e.properties.get("turn_id"),
         )
         for e in events
     ]
@@ -49,8 +52,8 @@ async def insert_events(
         """
         insert into analytics_events
             (business_id, conversation_id, contact_id, event_type, properties,
-             tokens_in, tokens_out, cost_usd)
-        values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+             tokens_in, tokens_out, cost_usd, turn_id)
+        values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)
         """,
         rows,
     )

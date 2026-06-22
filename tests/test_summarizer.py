@@ -86,6 +86,7 @@ class _FakeConn:
 
 class _Ctx:
     language = "ro"
+    turn_id = "t-sum"  # NX-122: stampat pe summarizer_run (replay per-tur)
 
 
 def _patch(monkeypatch, *, total, prev, to_summarize, gen="REZUMAT"):

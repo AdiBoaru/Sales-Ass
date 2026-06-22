@@ -261,6 +261,7 @@ class _FakeConn:
 
 def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
     return SimpleNamespace(
+        turn_id="turn-1",  # NX-122: stampat pe event-urile post-tur (replay per-tur)
         route=route,
         language="ro",
         history=[_msg(Direction.INBOUND, "caut cremă pentru ten uscat, buget 80")],
@@ -313,10 +314,13 @@ async def test_happy_path_filters_patch_and_scores(monkeypatch):
     assert sink["update"]["contact_id"] == "contact1"
     # scor DETERMINIST din cod (clamp 100), nu din numărul LLM-ului
     assert sink["update"]["score"] == 100.0
-    # evenimente (P12 — chei + contoare, fără valori)
-    assert ("profile_key_dropped", {"key": "fav_color"}) in sink["events"]
-    assert ("profile_updated", {"keys_set": ["skin_type"], "dropped": 1}) in sink["events"]
-    assert ("lead_score_updated", {"old": 0.0, "new": 100.0}) in sink["events"]
+    # evenimente (P12 — chei + contoare, fără valori; NX-122 — + turn_id de corelare)
+    assert ("profile_key_dropped", {"key": "fav_color", "turn_id": "turn-1"}) in sink["events"]
+    assert (
+        "profile_updated",
+        {"keys_set": ["skin_type"], "dropped": 1, "turn_id": "turn-1"},
+    ) in sink["events"]
+    assert ("lead_score_updated", {"old": 0.0, "new": 100.0, "turn_id": "turn-1"}) in sink["events"]
     assert sink["events_contact"] == "contact1"
     assert sink["cost"] > 0  # apelul nano contabilizat (G2c)
 
@@ -400,7 +404,8 @@ async def test_dropped_keys_emitted_even_without_db_write(monkeypatch):
         _FakeConn(), object(), _ctx(lead_score=10.0), object(), shadow_mode=False
     )
     assert "update" not in sink  # patch gol post-whitelist + scor 10==10 → nicio scriere
-    assert ("profile_key_dropped", {"key": "fav_color"}) in sink["events"]  # semnalul NX-43 rămâne
+    # semnalul NX-43 rămâne (+ turn_id NX-122)
+    assert ("profile_key_dropped", {"key": "fav_color", "turn_id": "turn-1"}) in sink["events"]
     assert sink["events_contact"] == "contact1"
 
 
