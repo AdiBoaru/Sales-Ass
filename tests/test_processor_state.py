@@ -155,3 +155,29 @@ async def test_cart_via_state_patch_coexists_with_constraint(monkeypatch):
     new_state = await _run(monkeypatch, stage, initial_state={"cart": []})
     assert new_state["constraints"]["budget_max"] == "200"  # constraint persistat
     assert new_state["cart"][0]["product_id"] == "p1"  # cart-ul nou NU e suprascris cu cel vechi
+
+
+# --- NX-119b: sesiunea de căutare se resetează la reply non-căutare (fără zombi) -
+
+
+async def test_active_search_reset_on_non_search_reply(monkeypatch):
+    # reply FĂRĂ produse → sesiunea de căutare veche se șterge (un „mai arată-mi" ulterior n-o reia)
+    async def stage(ctx, deps):
+        ctx.set_reply("Salut! Cu ce te ajut?")  # niciun produs
+
+    new_state = await _run(
+        monkeypatch,
+        stage,
+        initial_state={"active_search": {"pool": ["p1"], "cursor": 6, "fp": "x"}},
+    )
+    assert new_state["active_search"] is None
+
+
+async def test_active_search_kept_on_product_reply(monkeypatch):
+    # reply CU produse + state_patch active_search → sesiunea persistă (state_patch are întâietate)
+    async def stage(ctx, deps):
+        ctx.state_patch["active_search"] = {"pool": ["p2"], "cursor": 6, "fp": "y", "page": 0}
+        ctx.set_reply("Uite", products=[{"product_id": "p2", "name": "P2", "price": 9.0}])
+
+    new_state = await _run(monkeypatch, stage, initial_state={})
+    assert new_state["active_search"]["fp"] == "y"

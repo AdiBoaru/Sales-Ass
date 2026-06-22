@@ -362,3 +362,88 @@ async def test_bare_number_hallucination_triggers_retry_and_event(monkeypatch):
     ev = next((e for e in ctx.events if e.type == "validator_rejected"), None)
     assert ev is not None and ev.properties == {"kind": "bare_number", "n": 1}
     assert "text" not in ev.properties and "reply" not in ev.properties  # P12: zero corp reply
+
+
+# --- NX-119b: ramura deterministă „mai arată-mi" (paginare fără bucla LLM) -----
+
+
+class _NoLoopLLM(FakeLLM):
+    """Eșuează dacă intră în bucla LLM — dovedește că show-more e DETERMINIST (fără inferență)."""
+
+    async def run_tool_loop(self, *a, **k):
+        raise AssertionError("show_more NU trebuie să cheme bucla LLM")
+
+
+def _session_ctx(pool_n=8, cursor=6, shown=6):
+    ctx = _ctx(body="mai arată-mi")
+    ctx.state.active_search = {
+        "filters": {"query": "creme"},
+        "pool": [f"p{i}" for i in range(pool_n)],
+        "cursor": cursor,
+        "fp": "x",
+        "page": 0,
+    }
+    ctx.state.displayed_products = [ProductRef(f"p{i}", f"P{i}", 10.0 + i) for i in range(shown)]
+    return ctx
+
+
+async def test_show_more_paginates_without_tool_loop(monkeypatch):
+    ctx = _session_ctx(pool_n=8, cursor=6)
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [
+            {
+                "id": i,
+                "name": i.upper(),
+                "brand": "B",
+                "price": 9.0,
+                "url": "u",
+                "ai_summary": "",
+                "availability": "in_stock",
+                "rating": 4.0,
+            }
+            for i in ids
+        ]
+
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+    await agent_stage(ctx, _deps(_NoLoopLLM()))
+    assert ctx.reply is not None
+    assert [p["id"] for p in ctx.retrieval.products] == ["p6", "p7"]  # pagina următoare din pool
+    assert ctx.state_patch["active_search"]["cursor"] == 8  # cursor avansat
+    assert any(e.type == "show_more" and e.properties["served"] == 2 for e in ctx.events)
+
+
+async def test_show_more_exhausted_returns_deterministic_msg(monkeypatch):
+    ctx = _session_ctx(pool_n=6, cursor=6)  # tot pool-ul deja servit
+
+    async def boom_by_ids(conn, business_id, ids, **k):
+        raise AssertionError("nu hidratăm nimic pe pool epuizat")
+
+    monkeypatch.setattr(ct, "get_products_by_ids", boom_by_ids)
+    await agent_stage(ctx, _deps(_NoLoopLLM()))
+    assert ctx.reply is not None and ctx.reply.cacheable is False
+    assert "toate" in ctx.reply.text.lower()  # _no_more_msg(ro)
+    assert any(e.type == "show_more" and e.properties["served"] == 0 for e in ctx.events)
+
+
+async def test_show_more_no_session_falls_through_to_llm(monkeypatch):
+    # „mai arată-mi" FĂRĂ sesiune activă → flux normal (bucla LLM rulează), nu crapă
+    _patch_search(monkeypatch, PRODUCTS)
+    ctx = _ctx(body="mai arată-mi")  # state.active_search = None (default)
+    llm = FakeLLM(tool_calls=[("search_products", {"query": "creme"})], final="ok")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None
+
+
+async def test_show_more_with_refinement_falls_through_to_llm(monkeypatch):
+    """Review NX-119b: „mai multe sub 50" pe sesiune activă DAR cu slot nou din triaj = RAFINARE →
+    bucla LLM (sesiune rafinată), NU pagina sesiunii VECHI (p6/p7)."""
+    _patch_search(monkeypatch, PRODUCTS)
+    ctx = _session_ctx()  # sesiune activă, pool p0..p7
+    ctx.message = InboundMessage(provider_msg_id="m", body="mai multe sub 50 lei")
+    ctx.route.filters = {"budget_max": 50}  # triajul a extras o constrângere nouă
+    llm = FakeLLM(tool_calls=[("search_products", {"query": "creme", "price_max": 50})], final="ok")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None
+    served = {p["id"] for p in (ctx.retrieval.products if ctx.retrieval else [])}
+    assert "p6" not in served and "p7" not in served  # NU pagina sesiunii vechi (refinarea câștigă)

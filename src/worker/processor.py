@@ -507,6 +507,12 @@ async def handle_turn(
             "constraints": ctx.state.constraints,
             "asked_intents": ctx.state.asked_intents,
         }
+        # NX-119b: resetează sesiunea de căutare dacă reply-ul NU e o căutare de produse (fără
+        # sesiuni zombi — un „mai arată-mi" ulterior nu trebuie să reia o sesiune veche, fără
+        # legătură). Dacă tool-ul/agentul a scris `active_search` în state_patch (căutare nouă sau
+        # pagină), acela are întâietate prin merge-ul de mai jos.
+        if not (is_rich or has_products):
+            new_state = {**new_state, "active_search": None}
         # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
         # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
         # Rămâne ULTIMUL → state_patch (Agent) are întâietate peste merge-ul canonic.
