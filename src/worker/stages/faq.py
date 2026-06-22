@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from src.cache.canonical import canonicalize
 from src.config import get_settings
 from src.db.queries.faqs import semantic_lookup
 from src.models import TurnContext
@@ -37,7 +38,9 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not body or deps.llm is None:  # fără LLM nu putem embed → miss grațios
         return
     try:
-        emb = (await deps.llm.embed([body]))[0]
+        # NX-124a: embed pe `canonicalize(body)` (fără diacritice + punctuație) — paritate cu seed
+        # FAQ (care embed-uiește tot canonical) → „cat e livrarea" matchează „Cât costă livrarea?".
+        emb = (await deps.llm.embed([canonicalize(body)[0]]))[0]
         hit = await semantic_lookup(deps.conn, ctx.business.id, ctx.language, emb)
         sim = float(hit["similarity"]) if hit else 0.0
         if hit is not None and sim >= s.faq_tau_high:

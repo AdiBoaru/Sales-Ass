@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.cache.canonical import canonicalize
 from src.config import get_settings
 from src.db.queries.faqs import semantic_lookup
 from src.tools.base import ToolResult, register
@@ -35,7 +36,7 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
     a = FaqArgs(**args)
     if deps.llm is None:
         return ToolResult(ok=False, error="no_llm", llm_view="FAQ indisponibil.")
-    emb = (await deps.llm.embed([a.query]))[0]
+    emb = (await deps.llm.embed([canonicalize(a.query)[0]]))[0]  # NX-124a: paritate cu seed FAQ
     hit = await semantic_lookup(deps.conn, ctx.business.id, ctx.language, emb)
     if hit is None or float(hit["similarity"]) < get_settings().faq_tau_tool:
         return ToolResult(

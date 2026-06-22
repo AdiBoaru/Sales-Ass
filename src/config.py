@@ -155,10 +155,14 @@ class Settings(BaseSettings):
     # cosine. Doar `embed()`, niciodată generare (principiul 2). Kill-switch global.
     faq_enabled: bool = Field(default=True, validation_alias="FAQ_ENABLED")
     # τ_high strat gratuit: prag de auto-accept (cosine). FAQ-ul e curat (editat de client) →
-    # poate fi puțin mai relaxat decât cache_tau_high, dar precision-first. Default 0.82.
-    faq_tau_high: float = Field(default=0.82, validation_alias="FAQ_TAU_HIGH")
-    # τ tool: agentul parafrazează oricum răspunsul → un match aproximativ e util. Default 0.75.
-    faq_tau_tool: float = Field(default=0.75, validation_alias="FAQ_TAU_TOOL")
+    # poate fi puțin mai relaxat decât cache_tau_high, dar precision-first. NX-124a: cu paritate de
+    # normalizare (canonicalize seed↔lookup) similaritățile question↔question cresc → 0.78 (tunat
+    # empiric pe setul RO: matchurile corecte ~0.79-1.0, întrebarea greșită cade mult sub).
+    faq_tau_high: float = Field(default=0.78, validation_alias="FAQ_TAU_HIGH")
+    # τ tool: agentul parafrazează oricum răspunsul (el e filtrul de precizie pe hint) → un match
+    # aproximativ e util. NX-124a: 0.66 după paritate + variante de formulare (recall RO bun;
+    # agentul decide dacă folosește hint-ul).
+    faq_tau_tool: float = Field(default=0.66, validation_alias="FAQ_TAU_TOOL")
 
     # --- Cost guard + rate limit (G2c, stagiul 2) ---
     # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)

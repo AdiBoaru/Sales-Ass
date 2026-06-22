@@ -236,8 +236,9 @@ async def search_products_tool(
     dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2)."""
     a = SearchArgs(**args)
     # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
-    # Determinist (P2), per vertical; necunoscutele se ignoră (fără filtru fals care golește).
-    concern_keys = map_concerns(ctx.business.vertical, a.concerns) or None
+    # NX-124: maparea vine din DomainPack (config DB per-vertical), nu hardcodat beauty → generic.
+    # Determinist (P2); necunoscutele/pack lipsă → fără filtru fals care golește (P6).
+    concern_keys = map_concerns(ctx.business.domain_pack, a.concerns) or None
     seen = _displayed_ids(ctx)
     filters = _session_filters(a, concern_keys)
     fp = _fp(filters)

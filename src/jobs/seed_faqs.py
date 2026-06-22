@@ -28,6 +28,7 @@ import logging
 from typing import Any
 
 from src.agent.llm import get_llm
+from src.cache.canonical import canonicalize
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_pool
 
@@ -35,70 +36,183 @@ log = logging.getLogger(__name__)
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"  # nativex-demo (CLAUDE.md)
 
-# Baza curatată RO (retail/beauty) — adevărul de business pentru DEMO. Editabil de client în
-# dashboard ulterior; aici dăm un punct de plecare realist ca stratul gratuit să aibă ce servi.
+# Baza curatată RO (cosmetice/beauty) — set construit din cercetare de piață (magazine RO: Notino,
+# Douglas, Sephora, ProBeauty, MakeupShop + best-practices internaționale) și aliniat legal RO:
+# OUG 34/2014 (retur 14 zile + excepția cosmeticelor desigilate, Art. 16 lit. e), OUG 140/2021
+# (garanție 2 ani), RO e-Factura, GDPR, ANPC/SOL. Adevărul de business pentru DEMO, editabil de
+# dashboard. (OC) = conține un default realist de piață (cost/prag/transport) DE CONFIRMAT.
 BASE_FAQS_RO: list[tuple[str, str]] = [
+    # --- livrare ---
     (
-        "Care este politica de retur?",
-        "Ai 14 zile calendaristice de la primirea coletului să returnezi produsele nedesfăcute, "
-        "în ambalajul original. Banii se întorc în 5-7 zile lucrătoare după ce primim returul.",
+        "Cât costă livrarea?",  # (OC)
+        "Livrarea prin curier rapid costă 19,99 lei pe teritoriul României, iar comanda "
+        "ajunge în 1-3 zile lucrătoare de la confirmare. Costul exact și curierul se văd "
+        "la finalizarea comenzii.",
     ),
     (
-        "Cât costă livrarea și în cât timp ajunge?",
-        "Livrarea prin curier costă 19,99 lei și este GRATUITĂ la comenzi peste 200 lei. Coletul "
-        "ajunge de obicei în 1-3 zile lucrătoare în toată țara.",
+        "De la ce sumă e livrarea gratuită?",  # (OC)
+        "Livrarea este gratuită la comenzile de peste 200 lei. Sub acest prag se aplică "
+        "taxa standard de transport, afișată la finalizarea comenzii.",
     ),
     (
-        "Ce metode de plată acceptați?",
-        "Poți plăti cu cardul online (Visa/Mastercard), prin transfer bancar sau ramburs la "
-        "curier (cash sau card la livrare).",
+        "În câte zile primesc comanda?",
+        "Comenzile se procesează în 24-48 de ore, iar livrarea prin curier durează 1-3 zile "
+        "lucrătoare. Comenzile plasate în weekend se expediază începând de luni.",
+    ),
+    # --- comenzi ---
+    (
+        "Cum urmăresc coletul și unde văd AWB-ul?",
+        "După expediere primești numărul AWB și linkul de urmărire pe e-mail și pe WhatsApp. "
+        "Poți verifica statusul oricând pe site-ul curierului sau întrebându-mă aici.",
     ),
     (
-        "Pot plăti ramburs la livrare?",
-        "Da, accepți plata ramburs la curier — cash sau card în momentul livrării. Se poate adăuga "
-        "un mic comision de ramburs afișat la finalizarea comenzii.",
-    ),
-    (
-        "Produsele au garanție?",
-        "Toate produsele sunt originale și beneficiază de garanție conform legii. Pentru produsele "
-        "cosmetice respectăm termenul de valabilitate inscripționat pe ambalaj.",
-    ),
-    (
-        "Primesc factură pentru comandă?",
-        "Da, pentru fiecare comandă emitem factură fiscală. O primești pe email după confirmarea "
-        "comenzii; dacă vrei factură pe firmă, adaugă datele companiei la finalizarea comenzii.",
-    ),
-    (
-        "Cum urmăresc starea comenzii mele?",
-        "După expediere primești pe email/WhatsApp numărul AWB cu link de tracking. Îmi poți "
-        "scrie oricând numărul comenzii și verific eu statusul pentru tine.",
+        "Cum știu că s-a confirmat comanda?",
+        "Primești imediat un e-mail de confirmare cu detaliile comenzii. Dacă nu îl găsești, "
+        "verifică și folderul spam; îți pot confirma și eu starea dacă îmi spui numărul comenzii.",
     ),
     (
         "Pot anula sau modifica o comandă?",
-        "Da, dacă ne scrii înainte ca pachetul să fie predat curierului. După expediere poți "
-        "refuza coletul la livrare sau folosi dreptul de retur în 14 zile.",
+        "Poți anula sau modifica comanda doar înainte să fie procesată și expediată; după "
+        "expediere, opțiunea rămâne returul. Scrie-ne cât mai repede ca să putem interveni.",
     ),
     (
-        "Livrați în toată țara?",
-        "Da, livrăm prin curier în toată România. Pentru localitățile fără acces direct al "
-        "curierului, coletul ajunge la cel mai apropiat punct de ridicare.",
+        "Primesc factură pentru comandă?",
+        "Da, emitem factură fiscală pentru fiecare comandă și o primești pe e-mail. Din 2025 "
+        "facturile se transmit și în sistemul național RO e-Factura. Pentru factură pe firmă, "
+        "completează datele companiei la plasarea comenzii.",
+    ),
+    # --- plată ---
+    (
+        "Ce metode de plată acceptați?",  # (OC)
+        "Poți plăti cu cardul online (Visa/Mastercard, securizat 3D Secure) sau ramburs la "
+        "livrare (cash sau card la curier). Datele cardului sunt procesate criptat de "
+        "procesatorul de plăți și nu se stochează la noi.",
     ),
     (
-        "Produsele sunt originale?",
-        "Da, lucrăm doar cu produse 100% originale, achiziționate din surse autorizate. Nu "
-        "comercializăm replici sau produse fără proveniență.",
+        "Plata cu cardul e sigură?",
+        "Da. Plățile cu cardul sunt procesate securizat, prin 3D Secure, de un procesator "
+        "autorizat. Magazinul nu vede și nu stochează datele cardului tău.",
     ),
     (
-        "Aveți magazin fizic sau program de contact?",
-        "Suntem magazin online; echipa de suport îți răspunde în zilele lucrătoare între 09:00 și "
-        "18:00. În afara programului îți scriu eu și preiau un coleg dacă e nevoie.",
+        "Pot plăti ramburs la livrare?",  # (OC)
+        "Da, accepți plata ramburs la curier — cash sau card în momentul livrării. La unele "
+        "comenzi se poate adăuga un comision de ramburs, afișat la finalizarea comenzii.",
+    ),
+    # --- retur ---
+    (
+        "Cum returnez un produs?",
+        "Ai 14 zile calendaristice de la primirea coletului să te retragi din comandă, fără "
+        "să justifici motivul. Trimite-ne întâi cererea de retragere (e-mail sau formular), "
+        "apoi ai încă 14 zile să returnezi produsul (conform OUG 34/2014).",
     ),
     (
-        "Cum mă pot abona la o reducere sau noutăți?",
-        "Îți pot trimite o notificare când un produs revine în stoc sau când apar oferte. Spune-mi "
-        "doar ce produs te interesează și te anunț.",
+        "Pot returna un produs cosmetic desigilat sau deschis?",
+        "Nu. Din motive de igienă și protecția sănătății, produsele cosmetice desigilate "
+        "(deschise, folosite sau cu sigiliul rupt) sunt exceptate de la dreptul de retur, "
+        "conform Art. 16 lit. e) din OUG 34/2014. Cele rămase sigilate pot fi returnate în 14 zile."
+        " calendaristice.",
+    ),
+    (
+        "În cât timp primesc banii înapoi la retur?",
+        "Îți rambursăm integral suma plătită, inclusiv costul livrării standard, în cel mult "
+        "14 zile de la primirea coletului returnat (sau a dovezii de expediere). Rambursarea "
+        "se face pe aceeași metodă de plată folosită la comandă.",
+    ),
+    (
+        "Cine plătește transportul de retur?",  # (OC)
+        "Costul transportului de retur este suportat de tine, conform legii. Excepție: dacă "
+        "produsul a fost livrat greșit, deteriorat sau defect, returul e pe cheltuiala noastră.",
+    ),
+    (
+        "Ce fac dacă am primit produsul greșit sau deteriorat?",
+        "Ne pare rău pentru neplăcere. Scrie-ne cu numărul comenzii și, dacă poți, o poză a "
+        "produsului și a coletului. Înlocuim produsul sau îți returnăm banii, fără costuri de "
+        "transport pentru tine.",
+    ),
+    # --- produse (specific cosmetice) ---
+    (
+        "Sunt produsele originale?",
+        "Da, vindem exclusiv produse 100% originale, achiziționate de la distribuitorii "
+        "oficiali ai brandurilor. Fiecare produs ajunge sigilat, cu lot și termen de "
+        "valabilitate, și este conform reglementărilor UE.",
+    ),
+    (
+        "Unde găsesc lista de ingrediente? Am alergie la ceva.",
+        "Lista completă de ingrediente (INCI) este afișată pe pagina fiecărui produs. Dacă "
+        "ești alergic(ă) la un ingredient, verifică lista înainte de comandă. Pentru piele "
+        "sensibilă îți recomand un patch test, iar pentru sănătate consultă un medic.",
+    ),
+    (
+        "Ce înseamnă PAO și cât ține produsul după deschidere?",
+        "PAO (Period After Opening) e simbolul borcanului deschis de pe ambalaj, cu un număr "
+        "urmat de „M” (ex. 6M = 6 luni de la deschidere). Până la deschidere e valabil până "
+        "la termenul inscripționat. Păstrează produsele ferite de soare și căldură.",
+    ),
+    (
+        "Cum aleg crema potrivită pentru tenul meu?",
+        "Spune-mi tipul de ten (gras, uscat, mixt, sensibil) și ce te preocupă (acnee, riduri, "
+        "pete, roșeață) și îți recomand produse potrivite din catalog, cu link direct. "
+        "Rutina uzuală: curățare, ser, cremă și SPF dimineața.",
+    ),
+    (
+        "Am avut o reacție sau iritație de la un produs, ce fac?",
+        "Oprește imediat folosirea produsului și, dacă simptomele persistă, consultă un medic. "
+        "Eu nu pot oferi sfat medical, dar te pot pune în legătură cu un coleg din echipă "
+        "pentru opțiunile de retur sau înlocuire.",
+    ),
+    # --- cont ---
+    (
+        "Trebuie să îmi fac cont ca să comand?",
+        "Nu este obligatoriu să ai cont pentru a comanda. Un cont îți aduce însă beneficii: "
+        "istoricul comenzilor, urmărirea statusului și comenzi mai rapide data viitoare.",
+    ),
+    (
+        "Mi-am uitat parola, cum o resetez?",
+        "Folosește opțiunea „Am uitat parola” de pe pagina de autentificare și vei primi un "
+        "e-mail cu link pentru resetare. Dacă nu îl găsești, verifică și folderul spam.",
+    ),
+    # --- legal ---
+    (
+        "Ce garanție au produsele?",
+        "Toate produsele beneficiază de garanția legală de conformitate de 2 ani de la "
+        "livrare, conform OUG 140/2021. La un defect ai dreptul, după caz, la reparare, "
+        "înlocuire, reducere de preț sau banii înapoi. E diferită de termenul de valabilitate.",
+    ),
+    (
+        "Ce faceți cu datele mele personale (GDPR)?",
+        "Datele tale (nume, adresă, telefon, e-mail) sunt prelucrate pentru a procesa, factura "
+        "și livra comanda, conform GDPR. Nu le folosim pentru marketing decât cu acordul tău. "
+        "Ai drept de acces, rectificare și ștergere.",
+    ),
+    # --- contact ---
+    (
+        "Cum vă contactez? Pot vorbi cu un om?",
+        "Mă poți întreba aici orice, iar dacă ai nevoie de un coleg din echipă te pot pune în "
+        "legătură cu un operator uman. Pentru o reclamație, scrie-ne întâi nouă; dacă nu găsim "
+        "o soluție, te poți adresa ANPC (anpc.ro) ori platformei SOL a Comisiei Europene.",
     ),
 ]
+
+# Variante de formulare (NX-124a): ACELAȘI răspuns, dar întrebarea e formulată cum tastează clienții
+# RO (terse, fără diacritice) → după `canonicalize` matchează aproape exact mesajul lor (recall mai
+# bun pe straturile gratuite). Răspunsul e REUTILIZAT din întrebarea-părinte (fără duplicare).
+_BY_Q = {q: a for q, a in BASE_FAQS_RO}
+_VARIANTS_RO: list[tuple[str, str]] = [
+    ("Acceptați ramburs?", _BY_Q["Pot plăti ramburs la livrare?"]),
+    ("Cum plătesc?", _BY_Q["Ce metode de plată acceptați?"]),
+    ("Îmi dați factură?", _BY_Q["Primesc factură pentru comandă?"]),
+    ("Vreau să vorbesc cu un operator.", _BY_Q["Cum vă contactez? Pot vorbi cu un om?"]),
+    ("Aveți livrare gratuită?", _BY_Q["De la ce sumă e livrarea gratuită?"]),
+    (
+        "Cât ține produsul după deschidere?",
+        _BY_Q["Ce înseamnă PAO și cât ține produsul după deschidere?"],
+    ),
+    (
+        "Pot returna un produs desfăcut?",
+        _BY_Q["Pot returna un produs cosmetic desigilat sau deschis?"],
+    ),
+]
+BASE_FAQS_RO = BASE_FAQS_RO + _VARIANTS_RO
 
 # Schema strict pt generarea LLM (suplimentar bazei): listă de {question, answer} în RO.
 _GEN_SCHEMA: dict[str, Any] = {
@@ -220,7 +334,9 @@ async def seed_faqs(
     vectors: list[str | None] = [None] * len(unique)
     embedded = 0
     if llm is not None:
-        raw = await llm.embed([q for q, _ in unique])
+        # NX-124a: embed pe `canonicalize(question)` (fără diacritice + punctuație) → paritate cu
+        # lookup-ul (faq_stage/faq_lookup embed-uiesc tot canonical) → recall mult mai bun pe RO.
+        raw = await llm.embed([canonicalize(q)[0] for q, _ in unique])
         vectors = [_vec(v) for v in raw]
         embedded = len(vectors)
 
