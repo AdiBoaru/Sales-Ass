@@ -81,6 +81,9 @@ def _apply_stubs(monkeypatch, fixtures: dict) -> None:
     async def fake_search(conn, business_id, vec, **kwargs):
         return list(catalog)
 
+    async def fake_lexical(conn, business_id, **kwargs):  # NX-113b: lexical rulează MEREU (hibrid)
+        return []
+
     async def has_emb(conn, business_id):  # NX-98: tenant cu embeddings → calea semantică
         return True
 
@@ -98,6 +101,7 @@ def _apply_stubs(monkeypatch, fixtures: dict) -> None:
     # tool-uri agent → catalogul cazului
     monkeypatch.setattr(ct, "has_embeddings", has_emb)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
     monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
     # cache → miss curat (forțăm regenerarea prin pipeline)
     monkeypatch.setattr(cache_mod, "exact_lookup", none_lookup)

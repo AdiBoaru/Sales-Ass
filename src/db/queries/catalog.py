@@ -368,14 +368,18 @@ async def search_products_semantic(
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
     limit: int = 6,
+    pool: int | None = None,
 ) -> list[dict[str, Any]]:
     """Căutare HIBRIDĂ: filtre SQL dure (preț/categorie/brand/concerns/stoc) + ranking.
     `query_embedding` = vectorul mesajului (calculat de tool/agent prin adaptor — stratul de date
-    NU apelează LLM). Max 6 produse, cele 8 câmpuri. `conn` trebuie tenant-scoped (tenant_conn).
+    NU apelează LLM). `conn` trebuie tenant-scoped (tenant_conn).
 
     `sort_mode`: `relevance` = cosine (cel mai apropiat primul); `price_asc`/`rating_desc` = sort
-    explicit pe subsetul filtrat semantic. `concerns` filtrează pe `attributes->'concerns'`."""
-    limit = min(limit, 6)
+    explicit pe subsetul filtrat semantic. `concerns` filtrează pe `attributes->'concerns'`.
+
+    `pool` (NX-113b): când e dat, întoarce ~`pool` candidați pentru fuziunea RRF (nu doar 6);
+    poziția în listă = rangul vectorial. Lipsă (`None`) → comportament compat (max 6)."""
+    sql_limit = pool if pool is not None else min(limit, 6)
     qvec = "[" + ",".join(f"{x:.7f}" for x in query_embedding) + "]"
 
     conds = ["p.business_id = $1", "p.status = 'active'"]
@@ -407,7 +411,7 @@ async def search_products_semantic(
         + " where "
         + " and ".join(conds)
         + _order_clause(sort_mode, qvec_ph=qvec_ph)
-        + f" limit {placeholder(limit)}"
+        + f" limit {placeholder(sql_limit)}"
     )
     rows = await conn.fetch(sql, *params)
     return [dict(r) for r in rows]
