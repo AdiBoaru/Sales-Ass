@@ -120,11 +120,16 @@ async def test_sampling_disabled_kill_switch(monkeypatch):
     monkeypatch.setattr(
         llm,
         "get_settings",
-        lambda: SimpleNamespace(llm_sampling_enabled=False, llm_retry_max=2),
+        lambda: SimpleNamespace(
+            llm_sampling_enabled=False, llm_retry_max=2, llm_max_tokens_agent=800
+        ),
     )
     c, comp = _llm_client([_Resp("x")])
     await c.complete("sys", "usr")
+    # reasoning (sampling off): fără temperature/max_tokens (le resping), dar PLAFON de output
+    # rămâne prin max_completion_tokens (NX-125) — un completion patologic tot e tăiat.
     assert "temperature" not in comp.last_kwargs and "max_tokens" not in comp.last_kwargs
+    assert comp.last_kwargs["max_completion_tokens"] == 800
 
 
 def test_get_llm_builds_client_with_timeout_and_no_sdk_retry(monkeypatch):

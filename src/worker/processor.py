@@ -58,7 +58,16 @@ from src.models import (
     TurnUsage,
 )
 from src.worker.compose import ensure_disclaimer
-from src.worker.limits import cost_add, cost_over_budget, estimate_turn_cost
+from src.worker.limits import (
+    CONTACT_COST_WINDOW_S,
+    contact_scope_key,
+    cost_add,
+    cost_add_and_total,
+    cost_over_budget,
+    seed_daily_cost,
+    spend_capped,
+    spend_over_cap,
+)
 from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
@@ -294,47 +303,83 @@ async def _extract_profile_and_score(
         log.exception("extractor profil a eșuat (turul continuă)")
 
 
-async def _llm_within_budget(ctx: TurnContext, redis: Redis | None, business: BusinessConfig):
-    """Cost guard (G2c): dacă businessul a depășit plafonul zilnic, întoarce None → pipeline-ul
-    rulează FĂRĂ LLM (triaj/agent degradează grațios, cache L1 încă servește), dar gates rămân
-    intacte. Best-effort: eșec Redis → fail-open (LLM normal). Plafon =
-    businesses.daily_cost_cap_usd sau settings.daily_cost_cap_usd."""
+# Canale IDENTIFICATE (contact stabil) → plafon per-contact. Web (`webchat`) e anonim și are deja
+# plafon per-vizitor pe calea sincronă (NX-120) → nu-l dublăm aici (NX-125).
+_IDENTIFIED_CHANNELS = ("whatsapp", "telegram")
+
+
+async def _llm_within_budget(
+    ctx: TurnContext, redis: Redis | None, business: BusinessConfig, *, channel_kind: str
+):
+    """Cost guard (G2c): dacă businessul SAU contactul a depășit plafonul, întoarce None →
+    pipeline-ul rulează FĂRĂ LLM (triaj/agent degradează grațios, cache L1 încă servește), dar
+    gates rămân intacte. Best-effort: eșec Redis → fail-open (LLM normal). Plafoane:
+    businesses.daily_cost_cap_usd | settings.daily_cost_cap_usd (business) și
+    settings.contact_daily_cost_cap_usd (per-contact, canale identificate — NX-125)."""
     llm = get_llm()
     settings = get_settings()
     if llm is None or redis is None or not settings.cost_guard_enabled:
         return llm
     cap = business.daily_cost_cap_usd or settings.daily_cost_cap_usd
-    if not cap:
+    contact_cap = settings.contact_daily_cost_cap_usd
+    if not cap and not contact_cap:
         return llm
     try:
-        if await cost_over_budget(redis, business.id, cap):
+        if cap and await cost_over_budget(redis, business.id, cap):
             ctx.emit("cost_guard_tripped", cap_usd=cap)
             log.warning(
                 "cost guard: business %s peste plafon ($%.2f) → LLM dezactivat", business.id, cap
             )
             return None
+        # NX-125: plafon SOFT per-contact (canale identificate; web = NX-120). Pre-check read-only.
+        if contact_cap and channel_kind in _IDENTIFIED_CHANNELS:
+            scope = contact_scope_key(business.id, ctx.contact.id)
+            if await spend_capped(redis, scope, contact_cap):
+                ctx.emit("contact_spend_capped", cap_usd=contact_cap)
+                log.warning(
+                    "cost guard: contact peste plafon per-contact ($%.4f) → LLM off", contact_cap
+                )
+                return None
     except Exception as e:  # noqa: BLE001 — check eșuat → fail-open
         log.warning("cost guard: check eșuat (%s) → fail-open", type(e).__name__)
     return llm
 
 
 async def _record_turn_cost(
-    redis: Redis | None, business_id: str, ctx: TurnContext, *, llm_used: bool
+    redis: Redis | None,
+    business: BusinessConfig,
+    ctx: TurnContext,
+    *,
+    llm_used: bool,
+    channel_kind: str,
 ) -> None:
-    """Adaugă estimarea de cost a turului în contorul zilnic (G2c) — DOAR dacă LLM-ul a fost
-    folosit (peste buget nu acumulează). Best-effort; sursa de facturare = usage_daily."""
+    """Adaugă costul EXACT al turului în contorul zilnic (G2c) — DOAR dacă LLM-ul a fost folosit.
+    NX-125: costul vine din tokeni reali (`ctx.usage.cost_usd`, cifra dashboard/usage_daily), nu
+    din euristica `estimate_turn_cost`. Increment ATOMIC + enforcement POST-increment (fără TOCTOU):
+    dacă noul total ≥ plafon, emite `cost_guard_tripped` → turul URMĂTOR e blocat de pre-check.
+    Aplică și plafonul per-contact (canale identificate). Best-effort; facturare = usage_daily."""
     settings = get_settings()
     if redis is None or not settings.cost_guard_enabled or not llm_used:
         return
-    cost = estimate_turn_cost(
-        ctx.events, cost_triage_usd=settings.cost_triage_usd, cost_agent_usd=settings.cost_agent_usd
-    )
-    if cost <= 0:
+    cost = ctx.usage.cost_usd if ctx.usage else 0.0
+    if cost <= 0:  # tur fără apeluri LLM (cache L1/gates) → nimic de contorizat
         return
     try:
-        await cost_add(redis, business_id, cost)
+        total = await cost_add_and_total(redis, business.id, cost)
+        cap = business.daily_cost_cap_usd or settings.daily_cost_cap_usd
+        if cap and total >= cap:
+            ctx.emit("cost_guard_tripped", cap_usd=cap, total_usd=round(total, 6))
     except Exception as e:  # noqa: BLE001 — contor best-effort, turul a răspuns deja
         log.warning("cost guard: add eșuat (%s)", type(e).__name__)
+    # NX-125: plafon per-contact (canale identificate; web = NX-120). Increment atomic + compară.
+    contact_cap = settings.contact_daily_cost_cap_usd
+    if contact_cap and channel_kind in _IDENTIFIED_CHANNELS:
+        try:
+            scope = contact_scope_key(business.id, ctx.contact.id)
+            if await spend_over_cap(redis, scope, cost, contact_cap, CONTACT_COST_WINDOW_S):
+                ctx.emit("contact_spend_capped", cap_usd=contact_cap)
+        except Exception as e:  # noqa: BLE001 — fail-open pe scope
+            log.warning("cost guard: spend per-contact eșuat (%s)", type(e).__name__)
 
 
 def _message_usage_kwargs(turn_usage: TurnUsage | None) -> dict:
@@ -457,12 +502,18 @@ async def handle_turn(
     )
 
     # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
-    llm = await _llm_within_budget(ctx, redis, business)
+    # NX-125: reseed LAZY al contorului zilei din usage_daily (supraviețuiește pierderii Redis),
+    # ÎNAINTE de pre-check; santinelă internă → o singură dată/zi, best-effort.
+    if redis is not None and get_settings().cost_guard_enabled:
+        await seed_daily_cost(conn, redis, business.id)
+    llm = await _llm_within_budget(ctx, redis, business, channel_kind=channel_kind)
     # Media routing (NX-76): registry de fetchers (singleton, ca llm) → gate-ul descarcă poza.
     media = get_media_registry()
     await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm, media=media), stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
-    await _record_turn_cost(redis, business.id, ctx, llm_used=llm is not None)
+    await _record_turn_cost(
+        redis, business, ctx, llm_used=llm is not None, channel_kind=channel_kind
+    )
 
     if ctx.reply is None:
         if ctx.halt:
