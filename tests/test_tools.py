@@ -119,14 +119,16 @@ def _search_event(ctx):
 
 
 async def test_search_products_tool(monkeypatch):
+    """NX-113b: HIBRID — ambele retrievere rulează MEREU (nu XOR), pe pool, apoi fuziune RRF."""
     captured = {}
 
     async def fake_search(conn, business_id, vec, **k):
         captured["business_id"] = business_id  # business_id vine din ctx, nu din args
+        captured["sem_pool"] = k.get("pool")
         return PRODUCTS
 
-    async def fake_sql(conn, business_id, **k):  # NU trebuie chemat când semantic întoarce
-        captured["sql_called"] = True
+    async def fake_sql(conn, business_id, **k):  # lexical rulează ȘI el (hibrid)
+        captured["lex_pool"] = k.get("pool")
         return []
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
@@ -137,15 +139,166 @@ async def test_search_products_tool(monkeypatch):
     assert res.ok and len(res.products) == 2
     assert "Crema A" in res.llm_view and "[p1]" in res.llm_view
     assert captured["business_id"] == "biz-1"
-    assert "sql_called" not in captured  # SQL-only NU se cheamă dacă semantic a întors
+    assert captured["lex_pool"] == 50 and captured["sem_pool"] == 50  # pool de fuziune, nu 6
     assert llm.embed_calls == 1  # un singur embedding (P2)
     ev = _search_event(ctx)
     assert ev.properties["mode"] == "semantic" and ev.properties["count"] == 2
     assert "query" not in ev.properties  # P12 — fără PII în analytics
 
 
+async def test_search_fuses_both_retrievers(monkeypatch):
+    """RRF: produsul prezent în AMBELE liste urcă peste cel prezent doar într-una."""
+    p_only_vec = {**PRODUCTS[0], "id": "vec-only"}
+    p_both = {**PRODUCTS[1], "id": "both"}
+
+    async def fake_search(conn, business_id, vec, **k):  # vector: [vec-only(1), both(2)]
+        return [p_only_vec, p_both]
+
+    async def fake_lex(conn, business_id, **k):  # lexical: [both(1)]
+        return [p_both]
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_search)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
+    # both: 1/(60+2)+1/(60+1) > vec-only: 1/(60+1) → „both" primul
+    assert [p["id"] for p in res.products] == ["both", "vec-only"]
+    assert _search_event(ctx).properties["mode"] == "semantic"
+
+
+async def test_search_dedups_displayed_products(monkeypatch):
+    """Dedup vs `state.displayed_products` ÎNAINTE de trunchiere (paritate „arată altele", P8)."""
+    from src.models import ProductRef
+
+    async def fake_lex(conn, business_id, **k):
+        return PRODUCTS  # p1 + p2
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]  # p1 deja arătat
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
+    assert [p["id"] for p in res.products] == ["p2"]  # p1 exclus (deja afișat)
+
+
+async def test_search_dedup_before_truncate(monkeypatch):
+    """Dedup ÎNAINTE de trunchiere: cu >6 candidați și un produs afișat în top-6, al 7-lea trebuie
+    să apară (truncate-first l-ar pierde). Regression-guard pe ordinea cerută de card."""
+    from src.models import ProductRef
+
+    seven = [{"id": f"q{i}", "name": f"P{i}", "price": 10.0 + i} for i in range(7)]
+
+    async def fake_lex(conn, business_id, **k):
+        return seven
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.state.displayed_products = [ProductRef("q0", "P0", 10.0)]  # rank-1 deja afișat
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
+    ids = [p["id"] for p in res.products]
+    assert "q0" not in ids and "q6" in ids and len(ids) == 6  # q6 supraviețuiește (dedup întâi)
+
+
+async def test_search_all_displayed_is_graceful_empty(monkeypatch):
+    """Card Edge: TOȚI candidații deja în displayed_products → după dedup gol → răspuns gol grațios
+    (P6, fără tăcere), nu negare de brand (fără brand cerut)."""
+    from src.models import ProductRef
+
+    async def fake_lex(conn, business_id, **k):
+        return PRODUCTS  # p1 + p2
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.state.displayed_products = [
+        ProductRef("p1", "Crema A", 82.99),
+        ProductRef("p2", "Ser B", 1.0),
+    ]
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
+    assert res.ok and res.products == [] and "Niciun produs" in res.llm_view
+    assert _search_event(ctx).properties["count"] == 0
+
+
+async def test_search_tool_threads_price_sort_into_fusion(monkeypatch):
+    """sort_mode=price_asc trebuie să ajungă în fuziune → re-sort pe preț, NU RRF (mutation-guard:
+    dacă sort_mode nu e threaded, „cheap" (în ambele liste) ar urca prin RRF, nu prin preț)."""
+    cheap = {"id": "cheap", "name": "Cheap", "price": 10.0}
+    mid = {"id": "mid", "name": "Mid", "price": 50.0}
+    expensive = {"id": "expensive", "name": "Exp", "price": 90.0}
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return [cheap, expensive]  # vector
+
+    async def fake_lex(conn, business_id, **k):
+        return [mid, cheap]  # lexical (cheap în ambele)
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx, _deps(_LLM()), "search_products", {"query": "x", "sort_mode": "price_asc"}
+    )
+    assert [p["id"] for p in res.products] == ["cheap", "mid", "expensive"]  # pe preț, nu RRF
+
+
+async def test_search_brand_present_all_displayed_no_false_denial(monkeypatch):
+    """Fix NX-113b: brand PREZENT dar tot ce avea e deja afișat → răspuns gol grațios, NU negarea
+    falsă „nu lucrăm cu brandul X" (ar fi dezinformare CAT-001 în sens invers)."""
+    from src.models import ProductRef
+
+    async def fake_lex(conn, business_id, **k):
+        return [PRODUCTS[0]]  # p1 = de la BrandA, dar deja afișat
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x", "brand": "BrandA"})
+    assert res.ok and res.products == []
+    assert "Nu am găsit niciun produs de la brandul" not in res.llm_view  # fără negare falsă
+    assert "Niciun produs" in res.llm_view  # răspuns gol normal (P6)
+
+
+async def test_search_brand_truly_absent_still_denies(monkeypatch):
+    """Contra-test: brand chiar ABSENT (zero match real) → negarea brandului rămâne (CAT-001)."""
+
+    async def fake_lex(conn, business_id, **k):
+        return []  # niciun produs de la brand
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x", "brand": "Chanel"})
+    assert res.ok and res.products == []
+    assert "Nu am găsit niciun produs de la brandul «Chanel»" in res.llm_view
+
+
+async def test_search_mode_lexical_when_all_vector_deduped(monkeypatch):
+    """Fix NX-113b: mode=lexical dacă toate hiturile vector sunt eliminate de dedup (deși vectorul
+    a întors ceva) — analytics-ul reflectă setul ÎNTORS, nu ce-a întors vectorul brut."""
+    from src.models import ProductRef
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return [PRODUCTS[0]]  # vector întoarce p1 ...
+
+    async def fake_lex(conn, business_id, **k):
+        return [PRODUCTS[1]]  # lexical întoarce p2
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]  # ... dar p1 e deja afișat
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
+    assert [p["id"] for p in res.products] == ["p2"]  # doar lexical supraviețuiește
+    assert _search_event(ctx).properties["mode"] == "lexical"  # nu „semantic", deși vector a întors
+
+
 async def test_search_no_embeddings_falls_back_sql_only(monkeypatch):
-    """Tenant fără embeddings → SQL-only direct, ZERO apel embed, mode=sql_only."""
+    """Tenant fără embeddings → lexical-only direct, ZERO apel embed, mode=lexical."""
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
 
     async def fake_sql(conn, business_id, **k):
@@ -232,19 +385,20 @@ async def test_search_all_empty_is_graceful(monkeypatch):
 
 
 async def test_search_maps_concerns_and_passes_filters_semantic(monkeypatch):
-    """concerns liberi → chei canonice; category/concerns ajung la calea semantică."""
-    calls = []
+    """concerns liberi → chei canonice; category/concerns ajung la AMBELE retrievere (paritate)."""
+    sem_calls, lex_calls = [], []
 
     async def fake_search(conn, business_id, vec, **k):
-        calls.append(k)
+        sem_calls.append(k)
         return PRODUCTS
 
-    async def boom_sql(conn, business_id, **k):
-        raise AssertionError("SQL-only nu trebuie chemat când semantic întoarce")
+    async def fake_lex(conn, business_id, **k):  # NX-113b: lexical rulează ȘI el (hibrid)
+        lex_calls.append(k)
+        return []
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
-    monkeypatch.setattr(ct, "search_products_lexical", boom_sql)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
     ctx = _ctx_beauty()
     res = await run_tool(
         ctx,
@@ -253,8 +407,10 @@ async def test_search_maps_concerns_and_passes_filters_semantic(monkeypatch):
         {"query": "cremă", "concerns": ["ten gras"], "category": "creme-fata"},
     )
     assert res.ok and len(res.products) == 2
-    assert calls[0]["concerns"] == ["oily"]  # „ten gras" → „oily"
-    assert calls[0]["category"] == "creme-fata"
+    assert sem_calls[0]["concerns"] == ["oily"]  # „ten gras" → „oily"
+    assert sem_calls[0]["category"] == "creme-fata"
+    assert lex_calls[0]["concerns"] == ["oily"]  # același mapping pe lexical (paritate filtre)
+    assert lex_calls[0]["category"] == "creme-fata"
     ev = _search_event(ctx)
     assert ev.properties["n_concerns"] == 1
     assert ev.properties["had_category"] is True and ev.properties["relaxed"] is False

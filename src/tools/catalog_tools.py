@@ -19,8 +19,13 @@ from src.db.queries.catalog import (
     search_products_lexical,
     search_products_semantic,
 )
+from src.db.queries.fusion import fuse_candidates
 from src.tools.base import ToolResult, register
 from src.tools.taxonomy import map_concerns
+
+# Candidați per retriever înainte de fuziune (P4: pool intern mare, dar tool result rămâne 6×8
+# spre model). ~50 = standardul de product-RAG; recall bun fără să umfle latența.
+_FUSION_POOL = 50
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -127,6 +132,15 @@ def _relax_ladder(
     return steps
 
 
+def _displayed_ids(ctx: TurnContext) -> set[str]:
+    """Id-urile produselor deja afișate (din `state.displayed_products`, ref-uri P8) — pentru
+    dedup la „arată-mi altele". State gol / lipsă → set gol (fără efect)."""
+    state = getattr(ctx, "state", None)
+    if state is None:
+        return set()
+    return {str(p.product_id) for p in getattr(state, "displayed_products", [])}
+
+
 @register("search_products")
 async def search_products_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
@@ -134,12 +148,12 @@ async def search_products_tool(
     """Caută în catalog cu filtre dure (preț, categorie, brand, concerns). Întoarce până la
     6 produse REALE — niciodată „indisponibil".
 
-    Calea bună = semantic (embedding query × `product_embeddings`, filtrat pe categorie/concerns).
-    Plasa (NX-98) = SQL-only (`name ilike '%q%'`, ZERO halucinație) când tenantul n-are embeddings,
-    n-avem LLM pentru vectorul de query, sau semantic întoarce gol. Filtrele dure care golesc tot
-    se relaxează progresiv (price → concerns → category) ÎNAINTE de a întoarce gol (P6). Singurul
-    apel extern rămâne `embed([query])` pe calea semantică (P2); SQL-only n-are LLM deloc.
-    """
+    HIBRID (NX-113b): rulează AMÂNDOUĂ retrieverele pe pool (~50) — lexical REAL (FTS+pg_trgm,
+    NX-113a) ȘI vector (când avem LLM + embeddings) — fuzionate prin RRF (`relevance`) sau
+    re-sortate determinist (preț/rating). Filtrele dure care golesc tot se relaxează progresiv
+    ÎNAINTE de a întoarce gol (P6). Înainte de trunchierea la 6: dedup vs `displayed_products`
+    (paritate „arată altele", P8). Degradare grațioasă la lexical-only fără LLM/embeddings sau
+    dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2)."""
     a = SearchArgs(**args)
     # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
     # Determinist (P2), per vertical; necunoscutele se ignoră (fără filtru fals care golește).
@@ -150,57 +164,68 @@ async def search_products_tool(
         category=a.category,
         in_stock_only=a.in_stock_only,
     )
+    seen = _displayed_ids(ctx)
 
-    products: list[dict[str, Any]] = []
-    mode = "lexical"  # default = plasa lexicală (FTS+trgm); urcă la "semantic" dacă avem vector
-    relaxed = False
-
-    # 1. cale semantică doar dacă avem LLM (vector de query) ȘI tenantul are embeddings
-    use_semantic = deps.llm is not None and await has_embeddings(deps.conn, ctx.business.id)
-    if use_semantic:
+    # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
+    # degradare grațioasă la lexical-only (P6), fără tăcere.
+    query_vec: list[float] | None = None
+    if deps.llm is not None and await has_embeddings(deps.conn, ctx.business.id):
         try:
             query_vec = (await deps.llm.embed([a.query]))[0]
-            for i, f in enumerate(ladder):
-                products = await search_products_semantic(
+        except Exception:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
+            query_vec = None
+
+    products: list[dict[str, Any]] = []
+    relaxed = False
+    vector_contributed = False
+    had_any_match = False  # vreun retriever a întors ceva ÎNAINTE de dedup (semnal brand-not-found)
+    for i, f in enumerate(ladder):
+        lexical = await search_products_lexical(
+            deps.conn,
+            ctx.business.id,
+            query_text=a.query,
+            price_max=f["price_max"],
+            concerns=f["concerns"],
+            category=f["category"],
+            brand=a.brand,
+            sort_mode=a.sort_mode,
+            in_stock_only=f["in_stock_only"],
+            pool=_FUSION_POOL,
+        )
+        vector: list[dict[str, Any]] = []
+        if query_vec is not None:
+            try:
+                vector = await search_products_semantic(
                     deps.conn,
                     ctx.business.id,
                     query_vec,
                     price_max=f["price_max"],
                     concerns=f["concerns"],
                     category=f["category"],
-                    brand=a.brand,  # brand = filtru DUR și pe calea semantică (nu se relaxează)
+                    brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
                     sort_mode=a.sort_mode,
                     in_stock_only=f["in_stock_only"],
-                    limit=a.limit,
+                    pool=_FUSION_POOL,
                 )
-                if products:
-                    mode, relaxed = "semantic", i > 0
-                    break
-        except Exception:  # noqa: BLE001 — embed/rețea pică → NU tăcem, cădem pe SQL-only (P6)
-            products = []
-    # 2. plasă LEXICALĂ (NX-113a): fără embeddings/LLM, semantic gol, sau embed a aruncat. Acum
-    #    lexical REAL (FTS `websearch_to_tsquery` + `pg_trgm`), nu `name ILIKE '%q%'` spart — prinde
-    #    fraze naturale ȘI SKU/typo. Filtrele dure (category/brand/concerns) se păstrează.
-    if not products:
-        mode = "lexical"
-        for i, f in enumerate(ladder):
-            products = await search_products_lexical(
-                deps.conn,
-                ctx.business.id,
-                query_text=a.query,
-                price_max=f["price_max"],
-                concerns=f["concerns"],
-                category=f["category"],
-                brand=a.brand,
-                sort_mode=a.sort_mode,
-                in_stock_only=f["in_stock_only"],
-                pool=a.limit,
-            )
-            if products:
-                relaxed = i > 0
-                break
-    # `mode=lexical` în analytics = semnal că jobul de embed trebuie rulat pe tenant (fără vector).
-    # FĂRĂ `query`/`concerns` text în properties (P12 — pot conține formulări PII); doar flag-uri.
+            except Exception:  # noqa: BLE001 — semantic pică în tur → lexical rămâne (P6)
+                vector = []
+        fused = fuse_candidates(lexical, vector, sort_mode=a.sort_mode)
+        had_any_match = had_any_match or bool(fused)
+        # Dedup vs produsele deja afișate ÎNAINTE de trunchiere (paritate „arată altele", P8).
+        deduped = [p for p in fused if str(p["id"]) not in seen]
+        if deduped:
+            products = deduped[: a.limit]
+            relaxed = i > 0
+            # mode=semantic DOAR dacă un produs din vector a SUPRAVIEȚUIT în setul întors (nu doar
+            # „vectorul a întors ceva"): dedup/RRF pot elimina toate hiturile vector → altfel minte.
+            vector_ids = {str(v["id"]) for v in vector}
+            vector_contributed = any(str(p["id"]) in vector_ids for p in products)
+            break
+
+    # mode=lexical = semnal că jobul de embed trebuie rulat pe tenant (fără vector); =semantic când
+    # vectorul a contribuit la setul întors. FĂRĂ `query`/`concerns` text (P12). (NX-113c extinde
+    # emit-ul cu `fused`/pool-counts/`top_cosine_distance`/`relax_depth`/`zero_result`.)
+    mode = "semantic" if vector_contributed else "lexical"
     ctx.emit(
         "product_search",
         mode=mode,
@@ -211,10 +236,11 @@ async def search_products_tool(
         n_concerns=len(concern_keys or []),
         relaxed=relaxed,
     )
-    # Brand cerut explicit + zero rezultate = brandul nu e în catalog. Semnal EXPLICIT pentru agent
-    # (raportează DOAR ce întoarce tool-ul) ca să spună „nu lucrăm cu brandul X", nu să prezinte
-    # produse de la alt brand ca și cum ar fi al lui (fix CAT-001 / brand-availability).
-    if not products and a.brand:
+    # Brand cerut + ZERO match real (nu doar zero după dedup) = brandul nu e în catalog. Semnal
+    # EXPLICIT pentru agent („nu lucrăm cu brandul X"), nu prezenta alt brand ca al lui (CAT-001).
+    # `had_any_match` separă „brand absent" de „brand prezent dar tot ce avea e deja afișat" — în al
+    # doilea caz cădem pe răspunsul gol normal (P6), NU pe negarea falsă a brandului (NX-113b).
+    if not products and a.brand and not had_any_match:
         return ToolResult(
             ok=True,
             products=[],

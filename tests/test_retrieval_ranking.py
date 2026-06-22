@@ -182,3 +182,60 @@ async def test_lexical_applies_hard_filters():
     assert "b.name ilike" in conn.sql  # brand = filtru dur
     assert "in ('in_stock', 'low_stock')" in conn.sql  # stoc
     assert "Nivea" in str(conn.params) and 80.0 in conn.params
+
+
+# --- NX-113b: RRF fusion + merge determinist (pur, fără DB) -----------------------
+
+
+def test_rrf_in_both_lists_beats_single_list():
+    from src.db.queries.fusion import rrf_fuse
+
+    # „dual" la rang 3 lexical + rang 1 vector; „solo" doar la rang 1 vector.
+    lexical = [{"id": "a"}, {"id": "b"}, {"id": "dual"}]
+    vector = [{"id": "dual"}, {"id": "solo"}]
+    order = rrf_fuse(lexical, vector)
+    assert order[0] == "dual"  # prezent în ambele → scor cumulat → primul
+    assert order.index("dual") < order.index("solo")
+
+
+def test_rrf_tie_break_stable_on_id():
+    from src.db.queries.fusion import rrf_fuse
+
+    # două produse, fiecare la rang 1 într-o singură listă → scor egal → tie-break pe id (crescător)
+    order = rrf_fuse([{"id": "z1"}], [{"id": "a1"}])
+    assert order == ["a1", "z1"]
+
+
+def test_rrf_accepts_bare_ids():
+    from src.db.queries.fusion import rrf_fuse
+
+    assert rrf_fuse(["x", "y"], ["y"])[0] == "y"  # acceptă și liste de id-uri, nu doar dict-uri
+
+
+def test_fuse_relevance_uses_rrf_returns_dicts():
+    from src.db.queries.fusion import fuse_candidates
+
+    lexical = [{"id": "a", "price": 10.0}, {"id": "dual", "price": 5.0}]
+    vector = [{"id": "dual", "price": 5.0}, {"id": "c", "price": 7.0}]
+    fused = fuse_candidates(lexical, vector, sort_mode="relevance")
+    assert fused[0]["id"] == "dual"  # în ambele → primul
+    assert {p["id"] for p in fused} == {"a", "dual", "c"}  # union, dedup pe id
+
+
+def test_fuse_price_asc_resorts_union_deterministic():
+    from src.db.queries.fusion import fuse_candidates
+
+    lexical = [{"id": "scump", "price": 90.0}]
+    vector = [{"id": "ieftin", "price": 10.0}]
+    fused = fuse_candidates(lexical, vector, sort_mode="price_asc")
+    assert [p["id"] for p in fused] == ["ieftin", "scump"]  # re-sort pe preț, nu pe RRF
+
+
+def test_fuse_rating_desc_uses_shrunk_rating():
+    from src.db.queries.fusion import fuse_candidates
+
+    # rating brut egal (5.0), review_count diferit → shrunk rating departajează (mai multe = sus)
+    few = {"id": "few", "rating": 5.0, "review_count": 1, "price": 10.0}
+    many = {"id": "many", "rating": 5.0, "review_count": 500, "price": 10.0}
+    fused = fuse_candidates([few], [many], sort_mode="rating_desc")
+    assert [p["id"] for p in fused] == ["many", "few"]  # shrunk: 500 recenzii > 1 recenzie

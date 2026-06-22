@@ -108,11 +108,15 @@ def _patch_search(monkeypatch, products):
     async def fake_search(conn, business_id, vec, **k):
         return products
 
+    async def fake_lexical(conn, business_id, **k):  # NX-113b: lexical rulează MEREU (hibrid)
+        return []
+
     async def has_emb(conn, business_id):  # NX-98: tenant cu embeddings → calea semantică
         return True
 
     monkeypatch.setattr(ct, "has_embeddings", has_emb)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
 
 
 # --- helpere de validare (pure) ----------------------------------------------
