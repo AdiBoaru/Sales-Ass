@@ -139,10 +139,15 @@ class LLMClient:
     def _sampling(self, *, agent: bool) -> dict[str, Any]:
         """NX-126: params de sampling din settings, gated de kill-switch (modele „reasoning" care
         resping `temperature` ne-default → LLM_SAMPLING_ENABLED=false). `max_tokens` DOAR pe
-        apelurile de agent (triajul JSON e scurt; embed/moderate/vision nu trec pe aici)."""
+        apelurile de agent (triajul JSON e scurt; embed/moderate/vision nu trec pe aici).
+
+        NX-125: PLAFON de output pe TOATE apelurile de agent, independent de sampling (un completion
+        patologic / buclă nu scapă de ceiling). Non-reasoning → `max_tokens`; „reasoning" (sampling
+        off, care resping `temperature` ȘI `max_tokens`) → `max_completion_tokens` (param echivalent
+        acceptat de ele). Niciodată ambele pe același apel (fără conflict de param OpenAI)."""
         s = get_settings()
         if not s.llm_sampling_enabled:
-            return {}
+            return {"max_completion_tokens": s.llm_max_tokens_agent} if agent else {}
         out: dict[str, Any] = {"temperature": s.llm_temperature}
         if agent:
             out["max_tokens"] = s.llm_max_tokens_agent

@@ -170,6 +170,12 @@ class Settings(BaseSettings):
     cost_guard_enabled: bool = Field(default=True, validation_alias="COST_GUARD_ENABLED")
     cost_triage_usd: float = Field(default=0.0003, validation_alias="COST_TRIAGE_USD")
     cost_agent_usd: float = Field(default=0.003, validation_alias="COST_AGENT_USD")
+    # NX-125: plafon SOFT de cheltuială per-contact (canale identificate), fereastră 24h. O singură
+    # conversație în buclă nu mai poate arde plafonul întregului tenant. 0 = dezactivat (opt-in,
+    # tunabil per-vertical/tenant). Web anonim are deja plafon per-vizitor (NX-120).
+    contact_daily_cost_cap_usd: float = Field(
+        default=0.0, validation_alias="CONTACT_DAILY_COST_CAP_USD"
+    )
     # Rate limit per contact: max mesaje într-o fereastră (peste debounce R1).
     rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")
     rate_limit_max: int = Field(default=20, validation_alias="RATE_LIMIT_MAX")
