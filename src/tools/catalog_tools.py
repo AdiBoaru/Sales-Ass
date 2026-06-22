@@ -179,6 +179,9 @@ async def search_products_tool(
     relaxed = False
     vector_contributed = False
     had_any_match = False  # vreun retriever a întors ceva ÎNAINTE de dedup (semnal brand-not-found)
+    relax_depth = 0  # treapta de relaxare la care s-a oprit (0 = filtre stricte)
+    lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
+    top_cosine = None  # cea mai mică distanță cosine (cel mai apropiat vector) — semnal de calitate
     for i, f in enumerate(ladder):
         lexical = await search_products_lexical(
             deps.conn,
@@ -209,10 +212,14 @@ async def search_products_tool(
                 )
             except Exception:  # noqa: BLE001 — semantic pică în tur → lexical rămâne (P6)
                 vector = []
-        fused = fuse_candidates(lexical, vector, sort_mode=a.sort_mode)
-        had_any_match = had_any_match or bool(fused)
+        relax_depth, lexical_pool_n, vector_pool_n = i, len(lexical), len(vector)
+        cosines = [p["cosine_distance"] for p in vector if p.get("cosine_distance") is not None]
+        if cosines:
+            top_cosine = min(cosines)
+        ranked = fuse_candidates(lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys)
+        had_any_match = had_any_match or bool(ranked)
         # Dedup vs produsele deja afișate ÎNAINTE de trunchiere (paritate „arată altele", P8).
-        deduped = [p for p in fused if str(p["id"]) not in seen]
+        deduped = [p for p in ranked if str(p["id"]) not in seen]
         if deduped:
             products = deduped[: a.limit]
             relaxed = i > 0
@@ -223,8 +230,8 @@ async def search_products_tool(
             break
 
     # mode=lexical = semnal că jobul de embed trebuie rulat pe tenant (fără vector); =semantic când
-    # vectorul a contribuit la setul întors. FĂRĂ `query`/`concerns` text (P12). (NX-113c extinde
-    # emit-ul cu `fused`/pool-counts/`top_cosine_distance`/`relax_depth`/`zero_result`.)
+    # vectorul a contribuit la setul ÎNTORS. `fused` = ambele retrievere au întors candidați la
+    # treapta finală. FĂRĂ `query`/`concerns` text (P12 — doar flag-uri/counts/distanță numerică).
     mode = "semantic" if vector_contributed else "lexical"
     ctx.emit(
         "product_search",
@@ -235,6 +242,12 @@ async def search_products_tool(
         had_brand=a.brand is not None,
         n_concerns=len(concern_keys or []),
         relaxed=relaxed,
+        fused=bool(lexical_pool_n) and bool(vector_pool_n),
+        lexical_pool=lexical_pool_n,
+        vector_pool=vector_pool_n,
+        relax_depth=relax_depth,
+        zero_result=not products,
+        top_cosine_distance=top_cosine,
     )
     # Brand cerut + ZERO match real (nu doar zero după dedup) = brandul nu e în catalog. Semnal
     # EXPLICIT pentru agent („nu lucrăm cu brandul X"), nu prezenta alt brand ca al lui (CAT-001).

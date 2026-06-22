@@ -167,6 +167,46 @@ async def test_search_fuses_both_retrievers(monkeypatch):
     assert _search_event(ctx).properties["mode"] == "semantic"
 
 
+async def test_search_emit_observability_fields(monkeypatch):
+    """NX-113c: emit are fused/pool-counts/relax_depth/zero_result/top_cosine_distance (P12)."""
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return [
+            {**PRODUCTS[0], "cosine_distance": 0.12},
+            {**PRODUCTS[1], "cosine_distance": 0.30},
+        ]
+
+    async def fake_lex(conn, business_id, **k):
+        return [PRODUCTS[0]]
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
+    ev = _search_event(ctx)
+    assert ev.properties["fused"] is True  # ambele retrievere au întors candidați
+    assert ev.properties["lexical_pool"] == 1 and ev.properties["vector_pool"] == 2
+    assert ev.properties["relax_depth"] == 0 and ev.properties["zero_result"] is False
+    assert ev.properties["top_cosine_distance"] == 0.12  # cel mai apropiat (min distanță)
+    assert "query" not in ev.properties and "concerns" not in ev.properties  # P12
+
+
+async def test_search_emit_zero_result_and_unfused(monkeypatch):
+    """zero_result=True + fused=False când nimic nu iese; vector_pool=0 fără embeddings."""
+
+    async def empty(conn, business_id, *a, **k):
+        return []
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", empty)
+    ctx = _ctx()
+    await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "zzz"})
+    ev = _search_event(ctx)
+    assert ev.properties["zero_result"] is True and ev.properties["fused"] is False
+    assert ev.properties["vector_pool"] == 0 and ev.properties["top_cosine_distance"] is None
+
+
 async def test_search_dedups_displayed_products(monkeypatch):
     """Dedup vs `state.displayed_products` ÎNAINTE de trunchiere (paritate „arată altele", P8)."""
     from src.models import ProductRef

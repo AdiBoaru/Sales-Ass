@@ -70,7 +70,9 @@ _SELECT = f"""
         p.rating::float8            as rating,
         p.review_count              as review_count,
         prs.top_pros[1]             as review_pro,
-        prs.top_pros                as top_pros
+        prs.top_pros                as top_pros,
+        (p.sale_price is not null and p.sale_price < p.price) as on_sale,
+        p.attributes->'concerns'    as concerns
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
@@ -378,9 +380,13 @@ async def search_products_semantic(
     explicit pe subsetul filtrat semantic. `concerns` filtrează pe `attributes->'concerns'`.
 
     `pool` (NX-113b): când e dat, întoarce ~`pool` candidați pentru fuziunea RRF (nu doar 6);
-    poziția în listă = rangul vectorial. Lipsă (`None`) → comportament compat (max 6)."""
+    poziția în listă = rangul vectorial. Lipsă (`None`) → comportament compat (max 6).
+
+    NX-113c: `query_embedding` se trimite ca `list[float]` DIRECT (codecul pgvector din pool îl
+    encodează) — fără literalul text de ~15KB inline pe hot path. SELECT-ul expune și
+    `cosine_distance` (distanța vectorială a rândului) ca semnal de calitate (`top_cosine_distance`
+    în emit)."""
     sql_limit = pool if pool is not None else min(limit, 6)
-    qvec = "[" + ",".join(f"{x:.7f}" for x in query_embedding) + "]"
 
     conds = ["p.business_id = $1", "p.status = 'active'"]
     params: list[Any] = [business_id]
@@ -389,7 +395,7 @@ async def search_products_semantic(
         params.append(value)
         return f"${len(params)}"
 
-    qvec_ph = placeholder(qvec)  # vectorul de query
+    qvec_ph = placeholder(query_embedding)  # vectorul de query (list[float], codec pgvector)
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if category:
@@ -405,8 +411,11 @@ async def search_products_semantic(
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
 
+    # Injectează coloana distanței vectoriale (cosine) în SELECT — semnal de calitate pt emit.
+    cos_col = f"        (pe.embedding <=> {qvec_ph}::vector)::float8 as cosine_distance,\n"
+    select_with_cos = _SELECT.replace("    select\n", "    select\n" + cos_col, 1)
     sql = (
-        _SELECT
+        select_with_cos
         + " join product_embeddings pe on pe.product_id = p.id"
         + " where "
         + " and ".join(conds)

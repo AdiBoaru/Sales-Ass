@@ -11,7 +11,15 @@ Două straturi:
 
 import pytest
 
-from src.db.connection import _assert_bot_role, close_pool, get_bot_pool, tenant_conn
+from src.db.connection import (
+    _assert_bot_role,
+    _vector_decode,
+    _vector_encode,
+    close_pool,
+    get_bot_pool,
+    register_vector_codec,
+    tenant_conn,
+)
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 OTHER_BIZ = "00000000-0000-0000-0000-000000000000"
@@ -38,6 +46,60 @@ async def test_assert_bot_role_rejects_non_bot():
 
 async def test_assert_bot_role_accepts_bot():
     await _assert_bot_role(_FakeConn("bot_runtime"))  # nu ridică
+
+
+# --- UNIT: codec pgvector (NX-113c), fără DB ----------------------------------
+
+
+def test_vector_encode_decode_roundtrip():
+    assert _vector_encode([1.0, 2.5, -0.3]) == "[1.0000000,2.5000000,-0.3000000]"
+    assert _vector_decode("[1.0,2.5,-0.3]") == [1.0, 2.5, -0.3]
+    assert _vector_decode("[]") == [] and _vector_decode("") == []
+
+
+class _CodecConn:
+    """Stub: `fetchval` întoarce schema tipului `vector`; `set_type_codec` capturează schema primită
+    (sau aruncă, pentru testul defensiv). `ns=None` simulează tipul absent."""
+
+    def __init__(self, *, fail: bool = False, ns: str | None = "public") -> None:
+        self.fail = fail
+        self.ns = ns
+        self.calls: list[str] = []
+        self.codec_schema: str | None = None
+
+    async def fetchval(self, *args):
+        return self.ns
+
+    async def set_type_codec(self, name, **kwargs):
+        self.calls.append(name)
+        self.codec_schema = kwargs.get("schema")
+        if self.fail:
+            raise RuntimeError("type 'vector' does not exist")
+
+
+async def test_register_vector_codec_registers_vector():
+    conn = _CodecConn()
+    await register_vector_codec(conn)
+    assert conn.calls == ["vector"]
+
+
+async def test_register_vector_codec_uses_resolved_schema():
+    """Schema NU e hardcodată „public" — se rezolvă dinamic (pgvector poate fi în `extensions`)."""
+    conn = _CodecConn(ns="extensions")
+    await register_vector_codec(conn)
+    assert conn.codec_schema == "extensions"  # folosește namespace-ul real, nu „public"
+
+
+async def test_register_vector_codec_skips_when_type_absent():
+    """Tipul `vector` nu există (ns=None) → nu apelăm set_type_codec, nu ridicăm."""
+    conn = _CodecConn(ns=None)
+    await register_vector_codec(conn)
+    assert conn.calls == []
+
+
+async def test_register_vector_codec_is_defensive():
+    """Introspecție/codec picat → NU ridică (boot-ul nu cade pe un codec opțional, P6)."""
+    await register_vector_codec(_CodecConn(fail=True))  # nu ridică
 
 
 # --- INTEGRATION: izolare reală prin RLS --------------------------------------
