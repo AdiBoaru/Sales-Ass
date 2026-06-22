@@ -605,6 +605,7 @@ async def handle_turn(
                 "to": sender_external_id,
                 "text": frag,
                 "message_id": out_msg_id,
+                "language": ctx.language,  # NX-127: randorul de canal re-aplică disclaimer/locale
             }
             # Extras-urile bogate stau pe PRIMUL fragment (rich/carusel = un fragment oricum):
             # `type=text` rămâne (allow-list); canalele cu send_rich/carousel randează bogat.
@@ -613,6 +614,10 @@ async def handle_turn(
             elif i == 0 and has_products:
                 payload["type"] = "carousel"
                 payload["products"] = ctx.reply.products
+            # NX-127: offer neutru (NX-114) pe primul fragment → randat NATIV (buton web / CTA),
+            # nu doar floor-uit în text. reply_from_outbox îl reconstruiește pe ruta async.
+            if i == 0 and ctx.reply.offer is not None:
+                payload["offer"] = asdict(ctx.reply.offer)
             outbox_id = await enqueue_outbox(
                 conn,
                 business.id,
