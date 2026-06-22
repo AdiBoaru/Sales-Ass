@@ -129,7 +129,7 @@ async def test_request_human_tool_sets_handoff_and_emits(monkeypatch):
     # operatorul primește motivul REAL; eventul de analytics primește un token FIX (P12)
     assert calls["notify"] == "client nemulțumit de livrare"
     ev = next(e for e in ctx.events if e.type == "handoff_requested")
-    assert ev.properties == {"reason": "agent_request", "source": "agent"}
+    assert ev.properties == {"reason": "agent_request", "source": "agent", "turn_id": "t"}
 
 
 async def test_request_human_tool_invalid_args_graceful():

@@ -360,7 +360,7 @@ async def test_bare_number_hallucination_triggers_retry_and_event(monkeypatch):
     assert ctx.reply is not None and "89" not in ctx.reply.text  # halucinația nu ajunge la client
     assert llm.complete_calls == 1  # s-a declanșat retry-ul de recompunere
     ev = next((e for e in ctx.events if e.type == "validator_rejected"), None)
-    assert ev is not None and ev.properties == {"kind": "bare_number", "n": 1}
+    assert ev is not None and ev.properties == {"kind": "bare_number", "n": 1, "turn_id": "t"}
     assert "text" not in ev.properties and "reply" not in ev.properties  # P12: zero corp reply
 
 

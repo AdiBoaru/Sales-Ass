@@ -214,7 +214,10 @@ async def _summarize_if_needed(conn, redis, business_id, conversation_id, ctx, l
         await insert_events(
             conn,
             business_id,
-            [Event("summarizer_run", {"messages": len(to_summarize)})],
+            # NX-122: persist OUT-OF-BAND (lista proprie, după batch-ul principal ctx.events) →
+            # stampăm turn_id explicit pe event (emit() îl injectează doar pe calea ctx.events)
+            # ca evenimentul să rămână corelat cu turul la replay.
+            [Event("summarizer_run", {"messages": len(to_summarize), "turn_id": ctx.turn_id})],
             conversation_id=conversation_id,
         )
         log.info(
@@ -256,7 +259,9 @@ async def _extract_profile_and_score(
         score_changed = abs(new_score - old_score) > 1e-9
 
         # Cheile aruncate sunt un semnal (NX-43) chiar dacă nu scriem nimic altceva.
-        events = [Event("profile_key_dropped", {"key": k}) for k in dropped]
+        # NX-122: turn_id stampat explicit (persist out-of-band, vezi summarizer_run) → replay/tur.
+        tid = ctx.turn_id
+        events = [Event("profile_key_dropped", {"key": k, "turn_id": tid}) for k in dropped]
         if patch or score_changed:
             # Savepoint propriu: UPDATE eșuat → rollback doar la el (turul a răspuns deja).
             async with conn.transaction():
@@ -265,13 +270,16 @@ async def _extract_profile_and_score(
                 )
             if patch:
                 events.append(
-                    Event("profile_updated", {"keys_set": sorted(patch), "dropped": len(dropped)})
+                    Event(
+                        "profile_updated",
+                        {"keys_set": sorted(patch), "dropped": len(dropped), "turn_id": tid},
+                    )
                 )
             if score_changed:
                 events.append(
                     Event(
                         "lead_score_updated",
-                        {"old": round(old_score, 2), "new": round(new_score, 2)},
+                        {"old": round(old_score, 2), "new": round(new_score, 2), "turn_id": tid},
                     )
                 )
         if events:
@@ -579,9 +587,9 @@ async def handle_turn(
     outbox_id = first_outbox_id
     if len(fragments) > 1:
         # Observabilitate (P10): emis după persistarea principală de events → persistăm separat.
-        split_ev = Event("reply_split", {"parts": len(fragments)})
-        ctx.events.append(split_ev)
-        await _persist_events(conn, business.id, conv["id"], contact.id, [split_ev])
+        # NX-122: prin ctx.emit → primește turn_id (parte din traiectoria aceluiași tur).
+        ctx.emit("reply_split", parts=len(fragments))
+        await _persist_events(conn, business.id, conv["id"], contact.id, [ctx.events[-1]])
 
     # Log per-tur la succes (fără PII: doar id-uri + lungimea reply-ului, nu corpul).
     log.info(
@@ -610,9 +618,9 @@ async def handle_turn(
     finally:
         usage.pop(post_token)
     if post_acc.calls:
-        post_ev = Event("llm_usage", _usage_event_props(post_acc, phase="post_turn"))
-        ctx.events.append(post_ev)
-        await _persist_events(conn, business.id, conv["id"], contact.id, [post_ev])
+        # NX-122: prin ctx.emit → turn_id atașat (corelează costul post-tur cu turul).
+        ctx.emit("llm_usage", **_usage_event_props(post_acc, phase="post_turn"))
+        await _persist_events(conn, business.id, conv["id"], contact.id, [ctx.events[-1]])
     return TurnResult(
         conv["id"],
         contact.id,

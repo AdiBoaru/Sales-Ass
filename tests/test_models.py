@@ -43,7 +43,8 @@ def test_emit_accumulates_events():
     ctx.emit("cache_hit", cache_type="semantic")
     ctx.emit("route", route="sales")
     assert [e.type for e in ctx.events] == ["cache_hit", "route"]
-    assert ctx.events[0].properties == {"cache_type": "semantic"}
+    # NX-122: emit() injectează turn_id-ul turului în orice event (P10).
+    assert ctx.events[0].properties == {"cache_type": "semantic", "turn_id": "t1"}
 
 
 def test_set_reply_signals_early_exit():

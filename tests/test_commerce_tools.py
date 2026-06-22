@@ -53,7 +53,7 @@ async def test_cart_add_happy(monkeypatch):
     ]
     assert res.prices == [240.0]  # total grounded (price × qty)
     ev = _event(ctx, "cart_updated")
-    assert ev and ev.properties == {"lines": 1, "value": 240.0}
+    assert ev and ev.properties == {"lines": 1, "value": 240.0, "turn_id": "t"}
 
 
 async def test_cart_add_merges_same_line(monkeypatch):
@@ -131,7 +131,7 @@ async def test_reorder_happy(monkeypatch):
     assert res.ok and res.prices == [80.0, 120.0]
     assert "Crema A" in res.llm_view and "Ser B" in res.llm_view
     ev = _event(ctx, "reorder_suggested")
-    assert ev and ev.properties == {"order_id": "ord-1", "lines": 2}
+    assert ev and ev.properties == {"order_id": "ord-1", "lines": 2, "turn_id": "t"}
     # contact_id/business_id din ctx, nu din args (izolare)
     assert captured["business_id"] == "biz-1" and captured["contact_id"] == "contact-1"
 
@@ -180,7 +180,7 @@ async def test_back_in_stock_subscribes_out_of_stock(monkeypatch):
         "variant_id": None,
     }
     ev = _event(ctx, "back_in_stock_subscribed")
-    assert ev and ev.properties == {"product_id": "p1", "created": True}
+    assert ev and ev.properties == {"product_id": "p1", "created": True, "turn_id": "t"}
 
 
 async def test_back_in_stock_already_subscribed_variant_null(monkeypatch):

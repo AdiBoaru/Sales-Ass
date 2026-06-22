@@ -407,7 +407,12 @@ class TurnContext:
     usage: TurnUsage | None = None
 
     def emit(self, type_: str, **properties: Any) -> None:
-        """Helper pentru stagii: adaugă un event fără să știe cum e scris."""
+        """Helper pentru stagii: adaugă un event fără să știe cum e scris.
+
+        NX-122: injectează `turn_id`-ul turului în orice event, fără ca stagiul să
+        știe (P10 — observabilitate din runner/context). `setdefault` → nu suprascrie
+        un `turn_id` explicit pasat de apelant (P3 — un singur scriitor de turn_id)."""
+        properties.setdefault("turn_id", self.turn_id)
         self.events.append(Event(type=type_, properties=properties))
 
     def halt_silent(self, reason: str) -> None:

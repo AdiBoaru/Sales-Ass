@@ -174,7 +174,8 @@ async def test_route_image_enriches_body_no_caption():
     assert ctx.reply is None and ctx.halt is False
     assert fetcher.calls == [("PNID", "m1", 5_000_000)]  # cap propagat la fetcher (pre-download)
     assert any(
-        e.type == "image_routed" and e.properties == {"chars": len("ser Cerave alb")}
+        e.type == "image_routed"
+        and e.properties == {"chars": len("ser Cerave alb"), "turn_id": "t1"}
         for e in ctx.events
     )
 
@@ -292,9 +293,9 @@ async def test_no_pii_in_logs_or_events(caplog):
     import base64
 
     assert base64.b64encode(raw).decode() not in blob
-    # evenimentul image_routed poartă DOAR lungimea descrierii
+    # evenimentul image_routed poartă DOAR lungimea descrierii (+ turn_id de corelare, NX-122)
     ev = next(e for e in ctx.events if e.type == "image_routed")
-    assert set(ev.properties) == {"chars"}
+    assert set(ev.properties) == {"chars", "turn_id"}
 
 
 async def test_not_a_product_sentinel_falls_soft():

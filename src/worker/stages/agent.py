@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
@@ -495,6 +496,63 @@ def _filters_hint(filters: dict[str, Any]) -> str:
     return "Constrângeri detectate (folosește-le în search_products): " + "; ".join(parts) + "\n"
 
 
+# NX-122: whitelist de chei per tool pentru `tool_call` în analytics, ALINIATĂ la arg-urile
+# REALE ale tool-urilor (SearchArgs/CartAddArgs/...). NICIUN fallback „pune tot ce e acolo" —
+# tool necunoscut sau cheie ne-listată → omis (P12: analytics nu primește text liber / PII).
+# `search_products.query` e EXCLUS deliberat (e textul de căutare al modelului, poate ecoua
+# fraza userului) — păstrăm doar FILTRELE structurate (category/concerns/price_max...) care
+# răspund la „de ce a căutat în categoria greșită". `check_order` e special (vezi _safe_tool_args).
+# Tool-urile cu arg-uri PII (faq_lookup.query, reorder, request_human) NU-s în whitelist → `{}`.
+_TOOL_ARG_WHITELIST: dict[str, tuple[str, ...]] = {
+    "search_products": (
+        "category",
+        "brand",
+        "concerns",
+        "price_max",
+        "sort_mode",
+        "in_stock_only",
+        "limit",
+    ),
+    "get_product_details": ("product_id",),
+    "compare_products": ("product_ids",),
+    "cart_add": ("product_id", "variant_id", "quantity"),
+    "checkout_link": ("cart_items",),  # listă de {product_id, variant_id, quantity} — fără PII
+    "subscribe_back_in_stock": ("product_id", "variant_id"),
+}
+
+
+def _trunc(v: Any) -> Any:
+    """Trunchiere defensivă a unei valori de arg pentru tracing: scalari / liste scurte /
+    dict mic (ex. `filters`). Stringuri tăiate la 64 de caractere, liste la 8 elemente,
+    dict la 8 chei — nimic care să poarte text liber lung al userului în analytics."""
+    if isinstance(v, str):
+        return v[:64]
+    if isinstance(v, list):
+        # recursiv: elementele pot fi dict-uri (ex. cart_items) → bornăm și ele (string cap +
+        # 8-key cap), nu doar string-urile top-level. Altfel un dict în listă scăpa neplafonat.
+        return [_trunc(s) for s in v[:8]]
+    if isinstance(v, dict):
+        return {k: _trunc(val) for k, val in list(v.items())[:8]}
+    return v  # int / float / bool / None — neschimbat
+
+
+def _safe_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
+    """NX-122: args sanitizate pentru event-ul `tool_call` (whitelist per tool, fără PII — P12).
+    `check_order` → DOAR `{has_arg}` (numărul/contactul nu ajung niciodată în analytics); tool
+    necunoscut / fără chei whitelisted → `{}`."""
+    if name == "check_order":
+        return {"has_arg": bool(args)}
+    allowed = _TOOL_ARG_WHITELIST.get(name)
+    if not allowed:
+        return {}
+    out: dict[str, Any] = {}
+    for k in allowed:
+        val = args.get(k)
+        if val is not None:
+            out[k] = _trunc(val)
+    return out
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -533,7 +591,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     async def execute(name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
         întoarce vederea compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
+        started = perf_counter()
         result = await run_tool(ctx, deps, name, args)
+        latency_ms = round((perf_counter() - started) * 1000, 1)
         retrieved.extend(result.products)
         generated_links.update(result.links)
         grounded_prices.update(result.prices)
@@ -541,7 +601,17 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             ctx.state_patch.update(result.state_patch)
         if name == "check_order" and result.ok and result.llm_view:
             order_views.append(result.llm_view)
-        ctx.emit("tool_call", name=name, ok=result.ok)
+        # NX-122: args whitelisted + count + latență + clasă de eroare (NU corpul). Corelat
+        # cu restul turului prin `turn_id` injectat automat în emit() → traiectorie rejucabilă.
+        ctx.emit(
+            "tool_call",
+            name=name,
+            ok=result.ok,
+            args=_safe_tool_args(name, args),
+            n_results=len(result.products),
+            latency_ms=latency_ms,
+            error=(result.error if not result.ok else None),
+        )
         return result.llm_view or (result.error or "(fără rezultat)")
 
     history = conversation_transcript(ctx.history)
@@ -635,6 +705,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 )
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
                 return
+            # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
+            # structurat a eșuat/excepție; `rich.items == []` = toate produsele au picat la
+            # grounding-ul de apartenență. Pur observabilitate (downgrade-ul exista deja, P6).
+            reason = (
+                "all-items-dropped-by-membership" if rich is not None else "structured-call-failed"
+            )
+            ctx.emit("rich_downgraded", reason=reason)
         # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
         # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
         bare = _bad_bare_numbers(final, products, grounded_prices) if final else []
