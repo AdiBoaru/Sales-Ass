@@ -174,6 +174,18 @@ async def test_lexical_explicit_sort_keeps_filter_but_sorts(flag_on):
     assert "ts_rank_cd" not in conn.sql.split("order by")[-1]  # NU pe rank în ORDER BY final
 
 
+async def test_semantic_sql_injects_cosine_and_sends_vector_list():
+    """NX-113c: SELECT-ul semantic conține `cosine_distance` (semnal de calitate) și vectorul de
+    query e trimis ca list[float] (codec pgvector), nu inline ca text. Assert pe SQL, fără DB."""
+    conn = _CaptureConn()
+    vec = [0.1, 0.2, 0.3]
+    await catalog.search_products_semantic(conn, "biz-1", vec, pool=50)
+    assert "cosine_distance" in conn.sql  # coloana de distanță injectată
+    assert "pe.embedding <=>" in conn.sql and "join product_embeddings pe" in conn.sql
+    assert "p.business_id = $1" in conn.sql  # P7
+    assert conn.params[0] == "biz-1" and vec in conn.params  # list[float] direct, fără literal text
+
+
 async def test_lexical_applies_hard_filters():
     conn = _CaptureConn()
     await catalog.search_products_lexical(
@@ -239,3 +251,72 @@ def test_fuse_rating_desc_uses_shrunk_rating():
     many = {"id": "many", "rating": 5.0, "review_count": 500, "price": 10.0}
     fused = fuse_candidates([few], [many], sort_mode="rating_desc")
     assert [p["id"] for p in fused] == ["many", "few"]  # shrunk: 500 recenzii > 1 recenzie
+
+
+# --- NX-113c: deterministic_rerank (pur) -----------------------------------------
+
+
+def test_rerank_breaks_rrf_tie_by_instock_and_sale():
+    from src.db.queries.fusion import deterministic_rerank
+
+    out = deterministic_rerank(
+        [
+            {"id": "a", "availability": "out_of_stock"},
+            {"id": "b", "availability": "in_stock", "on_sale": True},
+        ],
+        {"a": 0.5, "b": 0.5},  # scor RRF EGAL → boost departajează
+    )
+    assert [p["id"] for p in out] == ["b", "a"]  # in_stock + sale urcă
+
+
+def test_rerank_does_not_override_relevance():
+    from src.db.queries.fusion import deterministic_rerank
+
+    out = deterministic_rerank(
+        [
+            {"id": "a", "availability": "in_stock", "on_sale": True},  # boost mare ...
+            {"id": "b", "availability": "out_of_stock"},  # ... dar scor mai mic
+        ],
+        {"a": 0.1, "b": 0.9},  # scor RRF DIFERIT → relevanța primează, boost nu răstoarnă
+    )
+    assert [p["id"] for p in out] == ["b", "a"]
+
+
+def test_rerank_concern_overlap_lifts_on_tie():
+    from src.db.queries.fusion import deterministic_rerank
+
+    out = deterministic_rerank(
+        [{"id": "a", "concerns": ["dry"]}, {"id": "b", "concerns": ["oily", "sensitive"]}],
+        {"a": 0.5, "b": 0.5},
+        concerns=["oily", "sensitive"],
+    )
+    assert [p["id"] for p in out] == ["b", "a"]  # b: 2 overlap, a: 0
+
+
+def test_rerank_tie_break_stable_on_id():
+    from src.db.queries.fusion import deterministic_rerank
+
+    out = deterministic_rerank([{"id": "z"}, {"id": "a"}], {"z": 0.5, "a": 0.5})
+    assert [p["id"] for p in out] == ["a", "z"]  # tot egal → id crescător
+
+
+def test_rerank_parses_jsonb_string_concerns():
+    from src.db.queries.fusion import deterministic_rerank
+
+    # asyncpg fără codec întoarce jsonb ca TEXT → parsat defensiv în rerank
+    out = deterministic_rerank(
+        [{"id": "a", "concerns": "[]"}, {"id": "b", "concerns": '["oily"]'}],
+        {"a": 0.5, "b": 0.5},
+        concerns=["oily"],
+    )
+    assert [p["id"] for p in out] == ["b", "a"]
+
+
+def test_fuse_relevance_applies_rerank_on_tie():
+    from src.db.queries.fusion import fuse_candidates
+
+    # fiecare produs la rang 1 într-o singură listă → scor RRF egal → in_stock urcă
+    lexical = [{"id": "lo", "availability": "out_of_stock"}]
+    vector = [{"id": "hi", "availability": "in_stock"}]
+    out = fuse_candidates(lexical, vector, sort_mode="relevance")
+    assert out[0]["id"] == "hi"
