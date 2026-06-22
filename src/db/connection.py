@@ -115,6 +115,62 @@ async def _init_bot_conn_compat(conn: asyncpg.Connection) -> None:
     await _assert_bot_role(conn)
 
 
+def _vector_encode(value) -> str:
+    """list[float] → literal text pgvector `[a,b,c]` (formatul trimis ca `::vector`)."""
+    return "[" + ",".join(f"{float(x):.7f}" for x in value) + "]"
+
+
+def _vector_decode(value: str) -> list[float]:
+    """Literal pgvector `[a,b,c]` → list[float] (rar folosit: nu citim coloana embedding)."""
+    s = (value or "").strip()
+    if len(s) <= 2:
+        return []
+    return [float(x) for x in s[1:-1].split(",")]
+
+
+async def register_vector_codec(conn: asyncpg.Connection) -> None:
+    """NX-113c: codec pgvector (text) pe conexiune → trimitem `list[float]` DIRECT ca `$n::vector`,
+    fără literalul text de ~15KB inline pe fiecare query semantic (hot path).
+
+    DEFENSIV: dacă tipul `vector` nu există / introspecția pică, NU rupem pool init — boot-ul nu
+    trebuie să cadă pe un codec opțional. Fără codec, query-ul semantic ar pica la encode, dar e
+    prins de orchestrator (search_products_tool) → degradare lexical-only, fără tăcere (P6)."""
+    try:
+        # Rezolvă schema REALĂ a tipului `vector`: `set_type_codec` face match EXACT pe namespace
+        # (NU pe search_path), iar migrarea creează extensia fără clauză de schemă → pe Supabase
+        # tipul poate ajunge în `extensions`, nu `public`. Hardcodarea 'public' ar rata tipul →
+        # codec neînregistrat în tăcere → optimizarea 113c defeated odată ce apar embeddings.
+        ns = await conn.fetchval(
+            "select n.nspname from pg_type t "
+            "join pg_namespace n on n.oid = t.typnamespace "
+            "where t.typname = 'vector' limit 1"
+        )
+        if ns is None:
+            log.warning("register_vector_codec: tipul pgvector 'vector' nu există (fallback)")
+            return
+        await conn.set_type_codec(
+            "vector",
+            schema=ns,
+            encoder=_vector_encode,
+            decoder=_vector_decode,
+            format="text",
+        )
+    except Exception:  # noqa: BLE001 — tip absent / pooler → rămânem fără codec (fallback la query)
+        log.warning("register_vector_codec: codec pgvector neînregistrat (fallback text-inline)")
+
+
+async def _init_bot_login(conn: asyncpg.Connection) -> None:
+    """Init bot_pool (login direct): verifică rolul (boot fail-loud pe rol greșit), apoi codec."""
+    await _assert_bot_role(conn)
+    await register_vector_codec(conn)
+
+
+async def _init_bot_compat(conn: asyncpg.Connection) -> None:
+    """Init bot_pool (compat): coboară+verifică rolul, apoi codec."""
+    await _init_bot_conn_compat(conn)
+    await register_vector_codec(conn)
+
+
 def _isolation_enabled() -> bool:
     """NX-04: asserturile de izolare la checkout sunt active (default) decât dacă
     DB_ISOLATION_ASSERT='off'."""
@@ -157,7 +213,7 @@ async def get_bot_pool() -> asyncpg.Pool:
             )
         _bot_login_mode = bool(s.database_url_bot)
         dsn = s.database_url_bot or s.supabase_db_url
-        init = _assert_bot_role if _bot_login_mode else _init_bot_conn_compat
+        init = _init_bot_login if _bot_login_mode else _init_bot_compat
         _bot_pool = await asyncpg.create_pool(
             **_connect_kwargs(dsn),
             min_size=2,
