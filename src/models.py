@@ -131,14 +131,47 @@ class ProductRef:
     price: float
 
 
+# NX-119: cap dur al pool-ului de sesiune (≈24×uuid(36) ≈ 0.9KB → sub bugetul de 8KB, P4/P8).
+MAX_SEARCH_POOL = 24
+
+
+def _safe_int(value: Any) -> int:
+    """Întreg defensiv: orice gunoi (string ne-numeric, None, listă) → 0, niciodată ridică."""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _hydrate_active_search(raw: Any) -> dict[str, Any] | None:
+    """Hidratează `active_search` DEFENSIV (NX-119): chei lipsă/ne-listă → sesiune absentă.
+    Păstrează DOAR ref-uri (P8): `pool` id-uri (cap MAX_SEARCH_POOL), `cursor`/`page` int-uri
+    defensive, `fp` str, `filters` dict mic. from_jsonb rulează la FIECARE tur pe hot path → un
+    cursor ne-numeric (drift/edit manual) NU trebuie să crape turul (ar bloca conversația, P6)."""
+    if not isinstance(raw, dict):
+        return None
+    pool = raw.get("pool")
+    if not isinstance(pool, list) or not pool:
+        return None
+    return {
+        "filters": raw.get("filters") if isinstance(raw.get("filters"), dict) else {},
+        "pool": [str(x) for x in pool][:MAX_SEARCH_POOL],
+        "cursor": _safe_int(raw.get("cursor")),
+        "fp": str(raw.get("fp") or ""),
+        "page": _safe_int(raw.get("page")),
+    }
+
+
 @dataclass
 class ConversationState:
     """`conversations.state` jsonb. Owner la scriere: Sender (patch tranzacțional).
     Bugetul de 8KB e impus în context builder + CHECK în DB (003)."""
 
-    # NX-112: `active_search` ȘTERS — era hidratat dar NICIUN stagiu nu-l scria (cheie moartă).
-    # Re-introdus cu owner REAL (retrieval memorează setul de filtre pe follow-up) în NX-113/NX-119.
     displayed_products: list[ProductRef] = field(default_factory=list)
+    # NX-119: sesiune de căutare persistentă peste tururi — DOAR ref-uri (`pool` id-uri + `cursor` +
+    # `fp` + `filters` mici), NU obiecte de produs (P8, cap MAX_SEARCH_POOL). Owner la scriere:
+    # processor (din ctx.state_patch produs de search_products_tool). None = nicio sesiune activă.
+    active_search: dict[str, Any] | None = None
     pending_question: dict[str, Any] | None = None
     # NX-112: semnal ieftin anti-loop — sloturile deja întrebate (citit de context_blocks; NX-116).
     # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
@@ -178,6 +211,7 @@ class ConversationState:
             )
         return cls(
             displayed_products=products,
+            active_search=_hydrate_active_search(raw.get("active_search")),
             pending_question=raw.get("pending_question"),
             # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
             asked_intents=(raw.get("asked_intents") or [])[-8:],
