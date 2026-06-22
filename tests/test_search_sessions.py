@@ -7,6 +7,9 @@ forma `active_search` (pool/cursor/fp), paginarea fără suprapunere, epuizarea 
 
 import json
 
+import pytest
+
+from src.config import get_settings
 from src.models import (
     MAX_SEARCH_POOL,
     BusinessConfig,
@@ -19,6 +22,7 @@ from src.models import (
 from src.tools import catalog_tools as ct
 from src.tools.base import run_tool
 from src.worker.runner import PipelineDeps
+from src.worker.stages.agent import _MORE_RE, _no_more_msg
 
 
 def _prod(i: int) -> dict:
@@ -173,6 +177,53 @@ async def test_no_session_when_zero_results(monkeypatch):
     ctx = _ctx()
     res = await run_tool(ctx, _deps(), "search_products", {"query": "zzz"})
     assert res.products == [] and "active_search" not in ctx.state_patch
+
+
+async def test_kill_switch_off_no_session(monkeypatch):
+    """SEARCH_SESSIONS_ENABLED=False → tot servește prima pagină, dar NU seamănă sesiune."""
+    monkeypatch.setattr(get_settings(), "search_sessions_enabled", False)
+    _patch(monkeypatch, [_prod(i) for i in range(10)])
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(), "search_products", {"query": "creme"})
+    assert len(res.products) == 6  # căutare fresh normală
+    assert "active_search" not in ctx.state_patch  # fără pool persistat
+
+
+# --- NX-119b: detector „mai arată-mi" + mesaj epuizare (pur) --------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["mai arată-mi", "mai multe", "arată-mi altele", "și altele", "vreau mai multe", "show more"],
+)
+def test_more_re_matches(text):
+    assert _MORE_RE.search(text) is not None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "mai ieftin",
+        "ceva mai accesibil",
+        "vreau o cremă",
+        "care e cea mai bună",
+        "compară primele 2",
+        # rafinări cu cuvânt de „more" — NU paginare pură (review NX-119b): regexul nu le prinde,
+        # iar gate-ul `not route.filters` le rutează oricum pe bucla LLM → sesiune nouă rafinată.
+        "vreau mai multă hidratare",
+        "ai ceva cu mai mult retinol",
+        "și alte ingrediente active",
+        "mai multe creme de față",
+    ],
+)
+def test_more_re_no_false_positive(text):
+    assert _MORE_RE.search(text) is None  # rafinare/cheaper, NU show-more pur
+
+
+def test_no_more_msg_locale():
+    assert "toate" in _no_more_msg("ro").lower()
+    assert "everything" in _no_more_msg("en").lower()
+    assert _no_more_msg("xx") == _no_more_msg("ro")  # locale necunoscut → ro
 
 
 # --- regresii din review-ul adversarial NX-119a ---------------------------------

@@ -182,6 +182,45 @@ def _next_page(pool: list[str], cursor: int, seen: set[str], limit: int) -> tupl
     return page, i
 
 
+async def continue_search_session(
+    ctx: TurnContext, deps: PipelineDeps, sess: dict[str, Any], limit: int
+) -> ToolResult:
+    """Servește pagina URMĂTOARE dintr-o sesiune activă (NX-119): paginare din `pool[cursor:]` FĂRĂ
+    re-fetch/embed, unseen-dedup vs displayed, cursor monotonic. Folosit de `search_products_tool`
+    (fp identic) ȘI de ramura deterministă „mai arată-mi" din agent (NX-119b). Pool epuizat / toate
+    inactive → semnal determinist `_NO_MORE_VIEW` (P6). Scrie `ctx.state_patch` (persistă proc)."""
+    pool: list[str] = sess.get("pool") or []
+    cursor = int(sess.get("cursor") or 0)
+    seen = _displayed_ids(ctx)
+    page_ids, new_cursor = _next_page(pool, cursor, seen, limit)
+    page = int(sess.get("page") or 0) + 1
+    ctx.state_patch["active_search"] = {**sess, "cursor": new_cursor, "page": page}
+    products = (
+        await get_products_by_ids(deps.conn, ctx.business.id, page_ids, limit=limit)
+        if page_ids
+        else []
+    )
+    if products:
+        ctx.emit(
+            "search_session",
+            action="page",
+            page_index=page,
+            pool_size=len(pool),
+            served=len(products),
+            unseen=len(page_ids),
+        )
+        return ToolResult(ok=True, products=products, llm_view=_brief(products))
+    ctx.emit(
+        "search_session",
+        action="exhausted",
+        page_index=page,
+        pool_size=len(pool),
+        served=0,
+        unseen=len(page_ids),
+    )
+    return ToolResult(ok=True, products=[], llm_view=_NO_MORE_VIEW)
+
+
 @register("search_products")
 async def search_products_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
@@ -203,44 +242,14 @@ async def search_products_tool(
     filters = _session_filters(a, concern_keys)
     fp = _fp(filters)
     sess = ctx.state.active_search or {}
+    sessions_on = (
+        get_settings().search_sessions_enabled
+    )  # kill-switch (OFF → fiecare căutare fresh)
 
     # === CONTINUARE sesiune (NX-119): aceleași filtre (fp) + pool stocat → pagina URMĂTOARE,
     # FĂRĂ re-fetch/embed. Paginare deterministă (pool stabil, tie-break p.id) + unseen-dedup.
-    if sess.get("fp") == fp and sess.get("pool"):
-        pool: list[str] = sess["pool"]
-        cursor = int(sess.get("cursor") or 0)
-        page_ids, new_cursor = _next_page(pool, cursor, seen, a.limit)
-        page = int(sess.get("page") or 0) + 1
-        # Cursorul avansează MEREU (monotonic) — și pe pagina goală — ca un tur ulterior să nu
-        # re-servească coada pool-ului (review #3). `page` = contor real → page_index corect chiar
-        # dacă `limit` variază între tururi (review #5/6).
-        ctx.state_patch["active_search"] = {**sess, "cursor": new_cursor, "page": page}
-        products = (
-            await get_products_by_ids(deps.conn, ctx.business.id, page_ids, limit=a.limit)
-            if page_ids
-            else []
-        )
-        if products:
-            ctx.emit(
-                "search_session",
-                action="page",
-                page_index=page,
-                pool_size=len(pool),
-                served=len(products),
-                unseen=len(page_ids),
-            )
-            return ToolResult(ok=True, products=products, llm_view=_brief(products))
-        # Zero nevăzut rămas SAU toate id-urile paginii au devenit inactive între tururi → epuizat:
-        # semnal determinist (NU bare „Niciun produs"), niciodată tăcere (P6; review #7).
-        ctx.emit(
-            "search_session",
-            action="exhausted",
-            page_index=page,
-            pool_size=len(pool),
-            served=0,
-            unseen=len(page_ids),
-        )
-        return ToolResult(ok=True, products=[], llm_view=_NO_MORE_VIEW)
+    if sessions_on and sess.get("fp") == fp and sess.get("pool"):
+        return await continue_search_session(ctx, deps, sess, a.limit)
 
     # === SESIUNE NOUĂ: retrieval hibrid → pool stabil (top MAX_SEARCH_POOL) + prima pagină ===
     ladder = _relax_ladder(
@@ -344,7 +353,7 @@ async def search_products_tool(
     # NX-119: semează sesiunea de căutare — DOAR id-uri (pool, cap MAX_SEARCH_POOL) + cursor + fp +
     # filtre mici (P8). Următorul „mai arată-mi" (fp identic) paginează din pool fără re-fetch. Doar
     # dacă avem rezultate (zero → nicio sesiune de paginat). Owner scriere: processor (state_patch).
-    if products:
+    if products and sessions_on:
         ctx.state_patch["active_search"] = {
             "filters": filters,
             "pool": pool_ids,

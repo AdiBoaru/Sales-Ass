@@ -83,6 +83,37 @@ def _cheapest_already_msg(language: str | None) -> str:
     return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
 
 
+# NX-119b: „mai arată-mi"/„show more" = INTENȚIE de PAGINARE (NU un tool nou). Pe o sesiune activă
+# → pagina următoare DETERMINIST, fără bucla LLM. NU prinde „mai ieftin" (= cheaper_intent). Ancorat
+# pe sensul de paginare: „mai multe" PLURAL bare/terminal sau + obiect de listă — NU „mai multă/mult
+# X" (rafinare „mai multă hidratare") și nu „și alte INGREDIENTE" (rafinare). Rafinările cu cuvânt
+# „more" sunt prinse oricum de gate-ul `not route.filters` (cad pe bucla LLM → sesiune nouă).
+_MORE_RE = re.compile(
+    r"\bmai\s+arat\w*"  # „mai arată-mi"
+    r"|\bmai\s+multe\b(?!\s+\w)"  # „mai multe" bare/terminal (NU „mai multă/mult X")
+    r"|\bmai\s+multe\s+(?:produse|op[țt]iuni|variante|rezultate|exemple)\b"
+    r"|\balte\s+(?:op[țt]iuni|variante|produse)\b|\b[șs]i\s+alte\s+(?:op[țt]iuni|variante|produse)\b"
+    r"|\baltele\b|\bmai\s+vreau\b"
+    r"|\bshow\s+more\b|\bmore\s+(?:options|products|results)\b|\bother\s+(?:options|ones)\b"
+    r"|\bt[öo]bbet\b",  # HU: többet (mai mult)
+    re.IGNORECASE,
+)
+
+# Pool epuizat pe „mai arată-mi" → mesaj determinist per-locale (P6, fără tăcere; cacheable=False
+# fiindcă e relativ la sesiunea ACESTUI contact — un cache hit l-ar servi altui context).
+_NO_MORE_RESULTS: dict[str, str] = {
+    "ro": "Astea sunt toate opțiunile pe care le am pe criteriile astea. "
+    "Vrei să căutăm altceva sau să schimbăm filtrele?",
+    "en": "That's everything I have for these criteria. "
+    "Want to search for something else or adjust the filters?",
+    "hu": "Ez minden, amim ezekre a feltételekre van. Keressünk mást vagy módosítsuk a szűrőket?",
+}
+
+
+def _no_more_msg(language: str | None) -> str:
+    return _NO_MORE_RESULTS.get(language or "ro") or _NO_MORE_RESULTS["ro"]
+
+
 # NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
 # numerele mici de proză („top 3", „pasul 2"). `(?<![\w./-])` / `(?![\w%])` → nu prinde procente
 # (89% = NX-30), nici cifre lipite de litere/căi (id-uri, „p2", versiuni). Vs _allowed_numbers.
@@ -477,6 +508,22 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
     is_order = route.route == Route.ORDER
 
+    # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (fără bucla LLM, cost $0
+    # de inferență). NU pe ORDER/„mai ieftin" (cheaper_intent). Sesiune absentă → flux normal.
+    # `not route.filters`: dacă triajul a extras constrângeri NOI (buget/concerns/brand/categorie),
+    # mesajul e o RAFINARE („mai multe sub 50", „mai multă hidratare"), NU paginare pură → cade pe
+    # bucla LLM (filters_hint → search_products → fp nou → sesiune nouă pe filtrele rafinate). Fără
+    # asta, refinarea ar servi pagina sesiunii VECHI și ar pierde tăcut constrângerile (review).
+    sess = ctx.state.active_search
+    show_more = (
+        not is_order
+        and get_settings().search_sessions_enabled
+        and bool(sess)
+        and not route.filters
+        and _MORE_RE.search(query) is not None
+        and _CHEAPER_RE.search(query) is None
+    )
+
     tools = tool_schemas(enabled_tools(ctx.business, route.route.value))
     retrieved: list[dict[str, Any]] = []
     generated_links: set[str] = set()  # linkuri create de bot (checkout_link) → validator
@@ -512,9 +559,21 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     try:
         inp = await _load_prompt_inputs(deps, ctx)  # prompt generat din DB (NX-78, P9)
-        final = await deps.llm.run_tool_loop(
-            prompt_builder.build_agent_system(inp), user, tools, execute
-        )
+        if show_more:
+            # Pagina următoare din pool-ul sesiunii — determinist, fără inferență LLM (NX-119b).
+            page = await catalog_tools.continue_search_session(ctx, deps, sess, 6)
+            if not page.products:
+                # Pool epuizat → mesaj determinist per-locale, fără tăcere (P6, cacheable=False).
+                ctx.emit("show_more", served=0)
+                ctx.set_reply(_no_more_msg(ctx.language), cacheable=False)
+                return
+            retrieved = page.products
+            ctx.emit("show_more", served=len(retrieved))
+            final = ""  # fără text de model — compose-ul rich phrasează din produse mai jos
+        else:
+            final = await deps.llm.run_tool_loop(
+                prompt_builder.build_agent_system(inp), user, tools, execute
+            )
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
@@ -527,6 +586,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
     cheaper_intent = (
         not is_order
+        and not show_more  # „mai arată-mi" deja paginat determinist mai sus
         and get_settings().cheaper_intent_enabled
         and bool(ctx.state.displayed_products)
         and _CHEAPER_RE.search(query) is not None
@@ -552,6 +612,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         not products
         and not is_order
         and not cheaper_intent
+        and not show_more
         and ctx.state.displayed_products
         and not (final and _valid(final, [], generated_links, grounded_prices))
     ):
