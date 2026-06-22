@@ -272,9 +272,11 @@ def _vec(embedding: list[float]) -> str:
     return "[" + ",".join(f"{x:.7f}" for x in embedding) + "]"
 
 
-async def _upsert(conn, business_id: str, locale: str, q: str, a: str, vec: str | None) -> str:
-    """Upsert manual pe `(business_id, question, locale)` (fără unique în schema → select-then).
-    Întoarce 'created' | 'updated'."""
+async def _upsert(
+    conn, business_id: str, locale: str, q: str, a: str, vec: str | None, embedding_model: str
+) -> str:
+    """Upsert manual pe `(business_id, question, locale)` (fără unique → select-then). Întoarce
+    'created' | 'updated'. NX-124a: stochează `embedding_model` (lookup-ul îl filtrează)."""
     existing = await conn.fetchval(
         "select id from faqs where business_id = $1 and question = $2 and locale = $3",
         business_id,
@@ -283,22 +285,24 @@ async def _upsert(conn, business_id: str, locale: str, q: str, a: str, vec: str 
     )
     if existing is not None:
         await conn.execute(
-            """update faqs set answer = $2, embedding = $3::vector, is_active = true,
-                              updated_at = now()
+            """update faqs set answer = $2, embedding = $3::vector, embedding_model = $4,
+                              is_active = true, updated_at = now()
                where id = $1""",
             existing,
             a,
             vec,
+            embedding_model,
         )
         return "updated"
     await conn.execute(
-        """insert into faqs (business_id, question, answer, locale, embedding)
-           values ($1, $2, $3, $4, $5::vector)""",
+        """insert into faqs (business_id, question, answer, locale, embedding, embedding_model)
+           values ($1, $2, $3, $4, $5::vector, $6)""",
         business_id,
         q,
         a,
         locale,
         vec,
+        embedding_model,
     )
     return "created"
 
@@ -340,10 +344,11 @@ async def seed_faqs(
         vectors = [_vec(v) for v in raw]
         embedded = len(vectors)
 
+    model = get_settings().model_embed  # NX-124a: stocăm modelul care a produs embedding-urile
     stats = {"created": 0, "updated": 0, "embedded": embedded}
     async with conn.transaction():
         for (q, a), vec in zip(unique, vectors, strict=True):
-            stats[await _upsert(conn, business_id, locale, q, a, vec)] += 1
+            stats[await _upsert(conn, business_id, locale, q, a, vec, model)] += 1
     return stats
 
 

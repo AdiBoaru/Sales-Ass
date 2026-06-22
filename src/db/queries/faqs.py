@@ -26,13 +26,15 @@ async def semantic_lookup(
     locale: str,
     embedding: list[float],
     *,
+    embedding_model: str,
     limit: int = 1,  # noqa: ARG001 — v1 întoarce mereu cel mai apropiat rând
 ) -> dict[str, Any] | None:
     """Cel mai apropiat FAQ activ (cosine) pe `(business_id, locale)`. None la 0 rânduri.
     Întoarce `{id, question, answer, similarity}`; caller-ul aplică pragul de similaritate.
 
     `embedding is not null` în WHERE exclude rândurile ne-embed-uite (seed parțial) — ele nu
-    pot fi ordonate cosine oricum."""
+    pot fi ordonate cosine oricum. NX-124a: filtru pe `embedding_model` — vectori dintr-un alt
+    model (dim/spațiu diferit) nu se compară cosine cu query-ul curent (P11)."""
     row = await conn.fetchrow(
         """
         select id::text as id, question, answer,
@@ -42,11 +44,13 @@ async def semantic_lookup(
           and locale = $2
           and is_active = true
           and embedding is not null
+          and embedding_model = $4
         order by embedding <=> $3::vector
         limit 1
         """,
         business_id,
         locale,
         _vec(embedding),
+        embedding_model,
     )
     return dict(row) if row else None

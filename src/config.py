@@ -168,6 +168,13 @@ class Settings(BaseSettings):
     # aproximativ e util. NX-124a: 0.66 după paritate + variante de formulare (recall RO bun;
     # agentul decide dacă folosește hint-ul).
     faq_tau_tool: float = Field(default=0.66, validation_alias="FAQ_TAU_TOOL")
+    # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
+    # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
+    # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).
+    faq_locale_fallback_enabled: bool = Field(
+        default=False, validation_alias="FAQ_LOCALE_FALLBACK_ENABLED"
+    )
+    faq_fallback_tau: float = Field(default=0.85, validation_alias="FAQ_FALLBACK_TAU")
 
     # --- Cost guard + rate limit (G2c, stagiul 2) ---
     # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)

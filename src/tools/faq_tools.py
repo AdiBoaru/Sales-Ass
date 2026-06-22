@@ -36,9 +36,12 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
     a = FaqArgs(**args)
     if deps.llm is None:
         return ToolResult(ok=False, error="no_llm", llm_view="FAQ indisponibil.")
+    s = get_settings()
     emb = (await deps.llm.embed([canonicalize(a.query)[0]]))[0]  # NX-124a: paritate cu seed FAQ
-    hit = await semantic_lookup(deps.conn, ctx.business.id, ctx.language, emb)
-    if hit is None or float(hit["similarity"]) < get_settings().faq_tau_tool:
+    hit = await semantic_lookup(
+        deps.conn, ctx.business.id, ctx.language, emb, embedding_model=s.model_embed
+    )
+    if hit is None or float(hit["similarity"]) < s.faq_tau_tool:
         return ToolResult(
             ok=True,
             llm_view=(

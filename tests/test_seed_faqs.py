@@ -54,8 +54,10 @@ async def test_base_seed_creates_and_embeds():
     assert stats["created"] == len(sf.BASE_FAQS_RO)
     assert stats["updated"] == 0
     assert stats["embedded"] == len(sf.BASE_FAQS_RO)
-    # fiecare insert are un vector pgvector ne-nul pe poziția embedding (ultimul arg)
-    assert all(args[-1] is not None and args[-1].startswith("[") for args in conn.inserts)
+    # fiecare insert are un vector pgvector ne-nul pe poziția embedding (penultimul; ultimul =
+    # embedding_model, NX-124a)
+    assert all(args[-2] is not None and args[-2].startswith("[") for args in conn.inserts)
+    assert all(args[-1] == "text-embedding-3-small" for args in conn.inserts)  # modelul stocat
 
 
 async def test_idempotent_existing_updates_not_duplicates():
@@ -71,7 +73,7 @@ async def test_no_llm_inserts_with_null_embedding():
     conn = _FakeConn()
     stats = await sf.seed_faqs(conn, None, "biz-1", locale="ro")
     assert stats["created"] == len(sf.BASE_FAQS_RO) and stats["embedded"] == 0
-    assert all(args[-1] is None for args in conn.inserts)  # embedding NULL fără cheie
+    assert all(args[-2] is None for args in conn.inserts)  # embedding NULL fără cheie (penultim)
 
 
 async def test_generate_adds_and_dedupes():
