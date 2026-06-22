@@ -8,6 +8,8 @@ Pydantic ÎNAINTE de execuție. `llm_view` = reprezentare COMPACTĂ (fără PII)
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
@@ -20,12 +22,19 @@ from src.db.queries.catalog import (
     search_products_semantic,
 )
 from src.db.queries.fusion import fuse_candidates
+from src.models import MAX_SEARCH_POOL
 from src.tools.base import ToolResult, register
 from src.tools.taxonomy import map_concerns
 
 # Candidați per retriever înainte de fuziune (P4: pool intern mare, dar tool result rămâne 6×8
 # spre model). ~50 = standardul de product-RAG; recall bun fără să umfle latența.
 _FUSION_POOL = 50
+
+# Pool epuizat: semnal pt agent (NX-119b randează mesajul determinist cacheable=False per-locale).
+_NO_MORE_VIEW = (
+    "(sesiune de căutare epuizată — nu mai sunt alte produse pe filtrele curente. "
+    "Spune-i clientului că asta e tot ce ai pe aceste criterii; nu inventa produse.)"
+)
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -141,6 +150,38 @@ def _displayed_ids(ctx: TurnContext) -> set[str]:
     return {str(p.product_id) for p in getattr(state, "displayed_products", [])}
 
 
+def _session_filters(a: SearchArgs, concern_keys: list[str] | None) -> dict[str, Any]:
+    """Setul canonic de filtre care DEFINEȘTE o sesiune de căutare (baza fp-ului). Rafinarea
+    oricăruia (preț, concerns, brand...) schimbă fp → sesiune nouă pe filtrele rafinate (NX-119)."""
+    return {
+        "query": a.query,
+        "category": a.category,
+        "brand": a.brand,
+        "concerns": concern_keys,
+        "price_max": a.price_max,
+        "sort_mode": a.sort_mode,
+        "in_stock_only": a.in_stock_only,
+    }
+
+
+def _fp(filters: dict[str, Any]) -> str:
+    """Fingerprint determinist al filtrelor → invalidează sesiunea când se schimbă (rafinare)."""
+    canon = json.dumps(filters, sort_keys=True, default=str)
+    return hashlib.sha1(canon.encode()).hexdigest()[:16]
+
+
+def _next_page(pool: list[str], cursor: int, seen: set[str], limit: int) -> tuple[list[str], int]:
+    """Următoarea pagină de ≤`limit` id-uri NEVĂZUTE din `pool[cursor:]` → (ids, cursor_nou);
+    cursor_nou trece peste tot ce s-a consumat (inclusiv id-urile sărite ca deja-văzute)."""
+    page: list[str] = []
+    i = cursor
+    while i < len(pool) and len(page) < limit:
+        if pool[i] not in seen:
+            page.append(pool[i])
+        i += 1
+    return page, i
+
+
 @register("search_products")
 async def search_products_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
@@ -158,13 +199,56 @@ async def search_products_tool(
     # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
     # Determinist (P2), per vertical; necunoscutele se ignoră (fără filtru fals care golește).
     concern_keys = map_concerns(ctx.business.vertical, a.concerns) or None
+    seen = _displayed_ids(ctx)
+    filters = _session_filters(a, concern_keys)
+    fp = _fp(filters)
+    sess = ctx.state.active_search or {}
+
+    # === CONTINUARE sesiune (NX-119): aceleași filtre (fp) + pool stocat → pagina URMĂTOARE,
+    # FĂRĂ re-fetch/embed. Paginare deterministă (pool stabil, tie-break p.id) + unseen-dedup.
+    if sess.get("fp") == fp and sess.get("pool"):
+        pool: list[str] = sess["pool"]
+        cursor = int(sess.get("cursor") or 0)
+        page_ids, new_cursor = _next_page(pool, cursor, seen, a.limit)
+        page = int(sess.get("page") or 0) + 1
+        # Cursorul avansează MEREU (monotonic) — și pe pagina goală — ca un tur ulterior să nu
+        # re-servească coada pool-ului (review #3). `page` = contor real → page_index corect chiar
+        # dacă `limit` variază între tururi (review #5/6).
+        ctx.state_patch["active_search"] = {**sess, "cursor": new_cursor, "page": page}
+        products = (
+            await get_products_by_ids(deps.conn, ctx.business.id, page_ids, limit=a.limit)
+            if page_ids
+            else []
+        )
+        if products:
+            ctx.emit(
+                "search_session",
+                action="page",
+                page_index=page,
+                pool_size=len(pool),
+                served=len(products),
+                unseen=len(page_ids),
+            )
+            return ToolResult(ok=True, products=products, llm_view=_brief(products))
+        # Zero nevăzut rămas SAU toate id-urile paginii au devenit inactive între tururi → epuizat:
+        # semnal determinist (NU bare „Niciun produs"), niciodată tăcere (P6; review #7).
+        ctx.emit(
+            "search_session",
+            action="exhausted",
+            page_index=page,
+            pool_size=len(pool),
+            served=0,
+            unseen=len(page_ids),
+        )
+        return ToolResult(ok=True, products=[], llm_view=_NO_MORE_VIEW)
+
+    # === SESIUNE NOUĂ: retrieval hibrid → pool stabil (top MAX_SEARCH_POOL) + prima pagină ===
     ladder = _relax_ladder(
         price_max=a.price_max,
         concerns=concern_keys,
         category=a.category,
         in_stock_only=a.in_stock_only,
     )
-    seen = _displayed_ids(ctx)
 
     # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
     # degradare grațioasă la lexical-only (P6), fără tăcere.
@@ -175,10 +259,10 @@ async def search_products_tool(
         except Exception:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
             query_vec = None
 
-    products: list[dict[str, Any]] = []
+    ranked_final: list[dict[str, Any]] = []  # ordinea fuzionată+re-rankată la treapta care a produs
+    vector_final: list[dict[str, Any]] = []
     relaxed = False
-    vector_contributed = False
-    had_any_match = False  # vreun retriever a întors ceva ÎNAINTE de dedup (semnal brand-not-found)
+    had_any_match = False  # vreun retriever a întors ceva (semnal brand-not-found)
     relax_depth = 0  # treapta de relaxare la care s-a oprit (0 = filtre stricte)
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
     top_cosine = None  # cea mai mică distanță cosine (cel mai apropiat vector) — semnal de calitate
@@ -218,16 +302,24 @@ async def search_products_tool(
             top_cosine = min(cosines)
         ranked = fuse_candidates(lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys)
         had_any_match = had_any_match or bool(ranked)
-        # Dedup vs produsele deja afișate ÎNAINTE de trunchiere (paritate „arată altele", P8).
-        deduped = [p for p in ranked if str(p["id"]) not in seen]
-        if deduped:
-            products = deduped[: a.limit]
+        if ranked:
+            ranked_final = ranked
+            vector_final = vector
             relaxed = i > 0
-            # mode=semantic DOAR dacă un produs din vector a SUPRAVIEȚUIT în setul întors (nu doar
-            # „vectorul a întors ceva"): dedup/RRF pot elimina toate hiturile vector → altfel minte.
-            vector_ids = {str(v["id"]) for v in vector}
-            vector_contributed = any(str(p["id"]) in vector_ids for p in products)
             break
+
+    # Pool-ul sesiunii = ordinea fuzionată COMPLETĂ (top MAX_SEARCH_POOL), NU dedup-uită: dacă l-am
+    # semăna din setul minus-displayed, produsele deja afișate ar fi excluse PERMANENT din sesiune +
+    # epuizare falsă (review #1). Prima pagină se servește prin ACELAȘI `_next_page` ca paginarea
+    # (unseen-dedup vs displayed, P8) → cursorul reflectă poziția în pool, paritate cu paginarea.
+    pool_ids = [str(p["id"]) for p in ranked_final][:MAX_SEARCH_POOL]
+    by_id = {str(p["id"]): p for p in ranked_final}
+    page_ids, cursor = _next_page(pool_ids, 0, seen, a.limit)
+    products = [by_id[i] for i in page_ids]
+    # mode=semantic DOAR dacă un produs din vector a SUPRAVIEȚUIT în pagina întoarsă (nu doar
+    # „vectorul a întors ceva"): dedup/RRF pot elimina toate hiturile vector → altfel minte.
+    vector_ids = {str(v["id"]) for v in vector_final}
+    vector_contributed = any(i in vector_ids for i in page_ids)
 
     # mode=lexical = semnal că jobul de embed trebuie rulat pe tenant (fără vector); =semantic când
     # vectorul a contribuit la setul ÎNTORS. `fused` = ambele retrievere au întors candidați la
@@ -249,6 +341,25 @@ async def search_products_tool(
         zero_result=not products,
         top_cosine_distance=top_cosine,
     )
+    # NX-119: semează sesiunea de căutare — DOAR id-uri (pool, cap MAX_SEARCH_POOL) + cursor + fp +
+    # filtre mici (P8). Următorul „mai arată-mi" (fp identic) paginează din pool fără re-fetch. Doar
+    # dacă avem rezultate (zero → nicio sesiune de paginat). Owner scriere: processor (state_patch).
+    if products:
+        ctx.state_patch["active_search"] = {
+            "filters": filters,
+            "pool": pool_ids,
+            "cursor": cursor,
+            "fp": fp,
+            "page": 0,
+        }
+        ctx.emit(
+            "search_session",
+            action="new",
+            page_index=0,
+            pool_size=len(pool_ids),
+            served=len(products),
+            unseen=len(page_ids),
+        )
     # Brand cerut + ZERO match real (nu doar zero după dedup) = brandul nu e în catalog. Semnal
     # EXPLICIT pentru agent („nu lucrăm cu brandul X"), nu prezenta alt brand ca al lui (CAT-001).
     # `had_any_match` separă „brand absent" de „brand prezent dar tot ce avea e deja afișat" — în al
