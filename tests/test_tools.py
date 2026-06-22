@@ -77,10 +77,15 @@ def _ctx() -> TurnContext:
 
 
 def _ctx_beauty() -> TurnContext:
-    """Ctx cu vertical=beauty (NX-72) — taxonomia concern→cheie are tabel doar pentru beauty."""
+    """Ctx cu DomainPack beauty (NX-124): maparea concern→cheie vine din `concern_map`."""
+    from src.domain.pack import DomainPack
+    from src.tools.taxonomy import _BEAUTY
+
+    business = BusinessConfig(id="biz-1", slug="s", name="n", vertical="beauty")
+    business.domain_pack = DomainPack(vertical="beauty_salon", concern_map=_BEAUTY)
     return TurnContext(
         turn_id="t",
-        business=BusinessConfig(id="biz-1", slug="s", name="n", vertical="beauty"),
+        business=business,
         contact=Contact(id="c", business_id="biz-1"),
         message=InboundMessage(provider_msg_id="m", body="x"),
         conversation_id="conv",

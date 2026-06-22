@@ -1,23 +1,29 @@
-"""Taxonomie concern→cheie de filtru (NX-72) — clasificator DETERMINIST, ZERO LLM (P2).
+"""Taxonomie concern→cheie de filtru (NX-72, NX-124) — clasificator DETERMINIST, ZERO LLM (P2).
 
-Normalizează termenul liber al clientului („ten gras", „piele sensibilă") la cheia REALĂ
-din `products.attributes->'concerns'` (ex. „oily", „sensitive"). Fără ea, modelul ar trimite
-`concerns=["ten gras"]` iar operatorul jsonb `?|` n-ar prinde nimic (în DB e „oily").
+Normalizează termenul liber al clientului („ten gras", „piele sensibilă") la cheia REALĂ din
+`products.attributes->'concerns'` (ex. „oily"). Fără ea, modelul ar trimite `concerns=["ten gras"]`
+iar operatorul jsonb `?|` n-ar prinde nimic (în DB e „oily").
 
-Decizie (CLAUDE.md, principiul 9, nota): maparea stă STATIC în cod pentru `beauty` (singurul
-vertical live). Un tabel `taxonomy` în DB se adaugă ADITIV doar când apar verticale multiple
-(editabil din dashboard) — vezi Out of Scope în tasks/NX-72.md.
+NX-124: maparea vine acum din **DomainPack** (`concern_map`, config DB per-(business,vertical) —
+principiul 9), NU hardcodat pe beauty. Orice vertical cu `concern_map` seedat (HVAC „zgomotos"→
+„low_noise", auto etc.) mapează corect, fără deploy. `_BEAUTY_RAW`/`_BEAUTY` rămân DOAR ca referință
+a seed-ului demo (`src/domain/defaults/beauty_salon.json`) pentru parity-guard-ul din
+test_domain_pack — NU mai sunt sursa de mapare la runtime.
 """
 
 from __future__ import annotations
 
-# NX-114: `_norm` extras în helper-ul partajat src/domain/normalize.py (comportament IDENTIC —
-# lower + strip diacritice + trim). Re-exportat ca alias pentru compat (DomainPack folosește
-# aceeași normalizare pentru concern_map).
+from typing import TYPE_CHECKING
+
+# `_norm` = helper partajat (lower + strip diacritice + trim) — aceeași normalizare ca DomainPack.
 from src.domain.normalize import normalize as _norm
 
-# Termeni liberi (RO + EN) → cheia canonică din attributes->'concerns'. Cheile sunt
-# normalizate la încărcare, deci pot fi scrise natural (cu diacritice) aici.
+if TYPE_CHECKING:
+    from src.domain.pack import DomainPack
+
+# Referință seed beauty (= conținutul `concern_map` din defaults/beauty_salon.json). NU sursa de
+# mapare la runtime (aceea e DomainPack din DB); păstrat pentru parity-guard seed↔cod
+# (test_domain_pack) și ca documentare a mapării demo. Cheile se normalizează la încărcare.
 _BEAUTY_RAW: dict[str, str] = {
     "ten gras": "oily",
     "piele grasă": "oily",
@@ -49,18 +55,19 @@ _BEAUTY_RAW: dict[str, str] = {
 
 _BEAUTY: dict[str, str] = {_norm(k): v for k, v in _BEAUTY_RAW.items()}
 
-_BY_VERTICAL: dict[str, dict[str, str]] = {"beauty": _BEAUTY}
 
+def map_concerns(domain_pack: DomainPack | None, raw: list[str] | None) -> list[str]:
+    """Termeni liberi → chei canonice din `attributes->'concerns'`, prin `domain_pack.concern_map`
+    (config DB per-vertical, NX-124).
 
-def map_concerns(vertical: str, raw: list[str] | None) -> list[str]:
-    """Termeni liberi → chei canonice din `attributes->'concerns'`.
-
-    Necunoscutele se IGNORĂ (nu inventăm un filtru fals care ar goli rezultatul — mai bine
-    zero filtru decât unul greșit, P6 indirect). Vertical necunoscut → tabel gol → `[]`.
-    Întoarce chei unice, ordine stabilă (determinist → testabil + prompt-cache-friendly).
+    Necunoscutele se IGNORĂ (nu inventăm un filtru fals care ar goli rezultatul — mai bine zero
+    filtru decât unul greșit, P6 indirect). DomainPack lipsă / `concern_map` gol → `[]` (fără crash,
+    fără filtru). Întoarce chei unice, ordine stabilă (determinist → testabil + cache-friendly).
     """
     if not raw:
         return []
-    table = _BY_VERTICAL.get(vertical, {})
+    table = domain_pack.concern_map if domain_pack else {}
+    if not table:
+        return []
     out = [table[_norm(c)] for c in raw if _norm(c) in table]
     return sorted(dict.fromkeys(out))
