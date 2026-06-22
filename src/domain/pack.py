@@ -27,6 +27,9 @@ class DomainPack:
     risk_terms: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     # locale → saluturi adiționale NORMALIZATE (peste baza din greeting.py) (P11).
     greetings: dict[str, list[str]] = field(default_factory=dict)
+    # NX-121: locale → pattern-uri NORMALIZATE de prompt-injection (peste baza neutră din cod, P9).
+    # Ecranul e DETECTARE/observabilitate; apărarea reală = validatorul de stagiul 8.
+    injection_patterns: dict[str, list[str]] = field(default_factory=dict)
     # chei permise în contacts.profile (peste minimul agnostic). NICIODATĂ PII (telefon/email/nume).
     profile_whitelist: frozenset[str] = frozenset()
     # statusuri „finalizat" pt check_order (ex. delivered/closed) — neutre pe vertical.

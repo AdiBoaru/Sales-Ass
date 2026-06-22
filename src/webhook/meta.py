@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.channels.base import InboundEvent, StatusEvent
+from src.config import INBOUND_BODY_MAX
 
 # Tipurile Meta care poartă media (id-ul de media stă sub cheia omonimă).
 _MEDIA_TYPES = ("image", "audio", "video", "document", "sticker")
@@ -77,6 +78,11 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundEvent]:
                     continue  # mesaj inutilizabil fără id/expeditor
 
                 body, media_id = _extract_body(msg, content_type)
+                # NX-121: cap dur de lungime pe ORICE corp inbound WA (text/caption/button/title),
+                # paritate cu webul (max_length=2000). WhatsApp e fire-and-forget → trunchiere
+                # ascuțită, nu rejection (P6). `None` rămâne `None`.
+                if body is not None and len(body) > INBOUND_BODY_MAX:
+                    body = body[:INBOUND_BODY_MAX]
                 events.append(
                     InboundEvent(
                         channel_kind="whatsapp",

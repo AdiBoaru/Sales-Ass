@@ -127,6 +127,14 @@ def test_parse_text_message():
     assert ev.sender_name == "Ana"
 
 
+def test_parse_clamps_long_body():
+    # NX-121: corpul inbound WA > 2000 → trunchiat la margine (paritate cu webul, P6 trunchiere)
+    from src.config import INBOUND_BODY_MAX
+
+    events = parse_webhook(_text_payload(body="x" * 5000))
+    assert len(events) == 1 and len(events[0].body) == INBOUND_BODY_MAX
+
+
 def test_parse_statuses_only_is_empty():
     assert parse_webhook(_statuses_payload()) == []
 

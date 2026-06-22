@@ -10,6 +10,11 @@ from functools import lru_cache
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# NX-121: cap dur de lungime pe corpul inbound (text/caption/titlu interactiv), aliniat cu
+# validarea web (`src/web/app.py` max_length=2000). Constantă structurală (paritate canale), nu
+# setare per-tenant. Folosit la margine (webhook/meta.py) + ca plasă în gate (Vision-derived body).
+INBOUND_BODY_MAX = 2000
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -253,6 +258,14 @@ class Settings(BaseSettings):
     # SEPARAT de `validator_claims_enabled` (NX-117): a opri claim-urile NU oprește stocul.
     validator_stock_claims_enabled: bool = Field(
         default=False, validation_alias="VALIDATOR_STOCK_CLAIMS_ENABLED"
+    )
+    # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
+    # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
+    # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
+    # DETECTARE/observabilitate, NU apărarea load-bearing (aia = validatorul de stagiul 8).
+    input_pii_mask_enabled: bool = Field(default=True, validation_alias="INPUT_PII_MASK_ENABLED")
+    injection_screen_enabled: bool = Field(
+        default=False, validation_alias="INJECTION_SCREEN_ENABLED"
     )
     # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
     # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).

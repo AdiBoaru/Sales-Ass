@@ -103,6 +103,17 @@ def _norm_greetings(raw: Any) -> dict[str, list[str]]:
     return out
 
 
+def _norm_injection_patterns(raw: Any) -> dict[str, list[str]]:
+    """NX-121: locale → pattern-uri de injection NORMALIZATE (aceeași formă ca greetings)."""
+    out: dict[str, list[str]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for locale, pats in raw.items():
+        if isinstance(pats, list):
+            out[locale] = [normalize(p) for p in pats if isinstance(p, str)]
+    return out
+
+
 def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
     """Construiește DomainPack-ul tenantului. None dacă kill-switch-ul e OFF (fail-safe:
     consumatorii cad pe constantele de cod). Owner unic = loader-ul (apelat din load_business)."""
@@ -120,6 +131,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         concern_map=_norm_concern_map(merged.get("concern_map")),
         risk_terms=_norm_risk_terms(merged.get("risk_terms")),
         greetings=_norm_greetings(merged.get("greetings")),
+        injection_patterns=_norm_injection_patterns(merged.get("injection_patterns")),
         profile_whitelist=frozenset(
             k for k in (merged.get("profile_whitelist") or []) if isinstance(k, str)
         ),
