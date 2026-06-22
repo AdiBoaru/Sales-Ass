@@ -59,8 +59,33 @@ class FakeRedis:
     async def lrange(self, key, start, stop):
         return list(self.lists.get(key, []))
 
+    def pipeline(self, transaction=True):
+        # NX-127: backlog atomic — buffer-uiește rpush/ltrim/expire, le aplică pe execute().
+        return _GwPipe(self)
+
     def pubsub(self):
         return self._pubsub
+
+
+class _GwPipe:
+    def __init__(self, r):
+        self._r = r
+        self._q: list = []
+
+    def rpush(self, *a):
+        self._q.append(("rpush", a))
+        return self
+
+    def ltrim(self, *a):
+        self._q.append(("ltrim", a))
+        return self
+
+    def expire(self, *a):
+        self._q.append(("expire", a))
+        return self
+
+    async def execute(self):
+        return [await getattr(self._r, op)(*args) for op, args in self._q]
 
 
 class _Req:

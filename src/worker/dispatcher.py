@@ -23,6 +23,7 @@ from src.channels.telegram.client import TelegramClient
 from src.channels.web.sender import WebSender
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
+from src.db.queries.analytics import insert_events
 from src.db.queries.messages import set_message_provider_id
 from src.db.queries.outbox import (
     business_ids_with_due_outbox,
@@ -31,9 +32,59 @@ from src.db.queries.outbox import (
     mark_sent,
 )
 from src.meta_client import MetaClient
+from src.models import Event
 from src.redis_bus import close_redis, get_redis
 
 log = logging.getLogger(__name__)
+
+
+_DELIVERED = {"rich": "rich", "carousel": "carousel", "products": "cards", "edit": "edit"}
+
+
+def _requested_render(payload: dict, ptype: str | None) -> str:
+    """Randarea CERUTĂ de pipeline (taxonomie aliniată cu `_DELIVERED` ca să nu raportăm un
+    carousel→carousel reușit drept degradare). rich > carousel > cards > text."""
+    if payload.get("rich"):
+        return "rich"
+    if not payload.get("products"):
+        return "text"
+    if ptype == "carousel":
+        return "carousel"
+    if ptype == "products":
+        return "cards"
+    return "text"
+
+
+async def _emit_render_path(
+    conn,
+    business_id: str,
+    channel_kind: str,
+    payload: dict,
+    ptype: str | None,
+    branch: str,
+    conversation_id: str | None = None,
+) -> None:
+    """NX-127 (P10): face VIZIBILĂ degradarea de randare (rich/cards → text) per canal — înainte
+    pica TĂCUT (cardurile/chips dispăreau). Emite `render_path {channel_kind, requested, delivered}`
+    DOAR când cerut ≠ livrat (zero overhead pe calea fericită). Best-effort (livrarea a reușit)."""
+    requested = _requested_render(payload, ptype)
+    delivered = _DELIVERED.get(branch, "text")
+    if requested == delivered:
+        return
+    try:
+        await insert_events(
+            conn,
+            business_id,
+            [
+                Event(
+                    "render_path",
+                    {"channel_kind": channel_kind, "requested": requested, "delivered": delivered},
+                )
+            ],
+            conversation_id=conversation_id,
+        )
+    except Exception as e:  # noqa: BLE001 — observabilitate best-effort (livrarea a reușit)
+        log.warning("render_path emit eșuat (%s)", type(e).__name__)
 
 
 def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability]) -> str:
@@ -135,6 +186,9 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
         if payload.get("message_id"):
             await set_message_provider_id(conn, business_id, payload["message_id"], provider_id)
     log.info("outbox %s trimis pe %s (provider_msg_id=%s)", row["id"], channel_kind, provider_id)
+    await _emit_render_path(
+        conn, business_id, channel_kind, payload, ptype, branch, row.get("conversation_id")
+    )
     return "sent"
 
 

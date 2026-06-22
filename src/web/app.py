@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -32,6 +31,7 @@ from pydantic import BaseModel, Field
 from redis.exceptions import RedisError
 
 from src.channels.base import InboundEvent
+from src.channels.web.render import render_web
 from src.channels.web.sender import backlog_key, out_channel
 from src.config import get_settings
 from src.db.connection import admin_conn, get_pool, tenant_conn
@@ -40,7 +40,6 @@ from src.db.queries.channels import resolve_channel
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.session import WebSession, get_session_cache, issue_visitor, verify_web_session
 from src.webhook.body_limit import enforce_body_cap
-from src.worker.compose import ensure_disclaimer, flatten_framing
 from src.worker.limits import (
     cost_over_budget,
     incr_window,
@@ -157,68 +156,11 @@ async def web_message(req: WebMessageIn, request: Request) -> dict:
     return {"accepted": True, "msg_id": event.provider_msg_id}
 
 
-def _card(name, price, image, url, *, product_id=None, rating=None, reason=None) -> dict:
-    """Un card de produs pt răspunsul sincron. Câmpuri compacte (P8) din ctx.reply; `image_url`/
-    `rating` lipsesc dacă datele nu există (nu inventăm). Frontendul randează ce primește."""
-    card: dict[str, Any] = {"product_id": product_id, "name": name, "price": price}
-    if image:
-        card["image_url"] = image
-    if url:
-        card["url"] = url
-    if rating:
-        card["rating"] = rating
-    if reason:
-        card["reason"] = reason  # fit scurt LLM (din RichItem), ancorat pe un pro real
-    return card
-
-
 def _build_chat_response(result: TurnResult) -> dict:
-    """`TurnResult` (calea sincronă) → `{content, products, suggestions}` (contractul widget-ului).
-
-    Pe RICH (recomandare cu carduri): `content` = DOAR framing-ul conversațional (`flatten_framing`:
-    intro + recomandare + educație), NU enumerarea produselor — o fac cardurile (`products`) și
-    butoanele (`suggestions`). Așa textul nu mai dublează cardurile (vs WhatsApp/cache, care iau
-    `flatten()` complet — same engine, prezentare per canal). Pe reply simplu (text/produse fără
-    rich): `content` = `reply.text`. Disclaimer-ul AI e re-aplicat idempotent. Tur fără reply
-    (handoff tăcut / degradare) → content gol, fără carduri (frontendul afișează fallback)."""
-    reply = result.reply
-    if reply is None:
-        return {"content": "", "products": [], "suggestions": []}
-    lang = result.language or "ro"
-    products: list[dict] = []
-    suggestions: list[str] = []
-    if reply.rich is not None:
-        products = [
-            _card(
-                it.name,
-                it.price,
-                it.image,
-                it.url,
-                product_id=it.product_id,
-                rating=it.rating,
-                reason=it.reason,
-            )
-            for it in reply.rich.items
-        ]
-        suggestions = [c.label for c in reply.rich.chips]
-        # Widget: produsele = CARDURI → content e doar framing (intro + pick + educație),
-        # fără lista numerotată (o fac cardurile) și fără „Poți cere și:" (o fac butoanele).
-        content = ensure_disclaimer(flatten_framing(reply.rich), lang)
-    elif reply.products:
-        products = [
-            _card(
-                p.get("name"),
-                p.get("price"),
-                p.get("image"),
-                p.get("url"),
-                product_id=p.get("product_id"),
-            )
-            for p in reply.products
-        ]
-        content = ensure_disclaimer(reply.text, lang)
-    else:
-        content = ensure_disclaimer(reply.text, lang)
-    return {"content": content, "products": products, "suggestions": suggestions}
+    """`TurnResult` (calea SINCRONĂ `/web/chat`) → contractul widget-ului, prin randorul UNIC
+    `render_web` (NX-127). Aceeași sursă de adevăr ca ruta async SSE (`WebSender.send_rich`) →
+    paritate de UX rich↔text între rute. Tur fără reply → content gol (frontendul dă fallback)."""
+    return render_web(result.reply, result.language or "ro")
 
 
 @router.post("/chat")
