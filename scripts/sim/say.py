@@ -72,12 +72,10 @@ def main() -> int:
     ap.add_argument("--pretty", action="store_true")
     a = ap.parse_args()
 
-    body = json.dumps(
-        {"sender": a.sender, "text": a.text, "content_type": a.content_type}
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        URL, data=body, headers={"Content-Type": "application/json"}
+    body = json.dumps({"sender": a.sender, "text": a.text, "content_type": a.content_type}).encode(
+        "utf-8"
     )
+    req = urllib.request.Request(URL, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:  # noqa: S310 — localhost cunoscut
             data = json.loads(resp.read().decode("utf-8"))

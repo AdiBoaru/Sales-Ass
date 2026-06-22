@@ -53,6 +53,7 @@ def _order_clause(sort_mode: str, *, qvec_ph: str | None = None) -> str:
         return f" order by pe.embedding <=> {qvec_ph}::vector, p.id"
     return f" order by {_SHRUNK_RATING} desc, {_EFFECTIVE_PRICE} asc, p.id"
 
+
 # Câmpuri per produs (CLAUDE.md): id, name, brand, price, url, ai_summary, stock,
 # availability + image (prima poză, pentru cardurile de produs — W1).
 _SELECT = f"""

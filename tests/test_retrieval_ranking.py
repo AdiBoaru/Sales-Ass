@@ -73,9 +73,7 @@ def test_order_clause_semantic_price_asc_ignores_cosine(flag_on):
 
 
 def test_relax_ladder_pins_price_when_flag_on(flag_on):
-    steps = _relax_ladder(
-        price_max=80.0, concerns=["oily"], category="parfum", in_stock_only=False
-    )
+    steps = _relax_ladder(price_max=80.0, concerns=["oily"], category="parfum", in_stock_only=False)
     assert all(s["price_max"] == 80.0 for s in steps)  # prețul NU se relaxează niciodată
     assert any(s["concerns"] is None for s in steps)  # softul (concerns) se relaxează
     assert any(s["category"] is None for s in steps)
