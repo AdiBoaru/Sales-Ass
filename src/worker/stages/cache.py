@@ -122,7 +122,12 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             return
         embedding = (await deps.llm.embed([canonical]))[0]
         cand = await semantic_lookup(
-            deps.conn, ctx.business.id, ctx.language, embedding, volatility_class=volatility
+            deps.conn,
+            ctx.business.id,
+            ctx.language,
+            embedding,
+            volatility_class=volatility,
+            embedding_model=settings.model_embed,
         )
         similarity = float(cand["similarity"]) if cand else 0.0
         if (

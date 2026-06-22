@@ -48,7 +48,9 @@ async def test_cache_roundtrip(pool):
             assert hit is not None
             assert hit["answer"] == "Răspuns de test."
 
-            cand = await semantic_lookup(conn, DEMO, "ro", emb)
+            cand = await semantic_lookup(
+                conn, DEMO, "ro", emb, embedding_model="text-embedding-3-small"
+            )
             assert cand is not None
             assert float(cand["similarity"]) > 0.99  # vectorul identic → cosine ~1
         finally:

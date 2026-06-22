@@ -49,7 +49,11 @@ async def exact_lookup(
     volatility_class: str = "static",
 ) -> dict[str, Any] | None:
     """L1 exact: entry neexpirat din clasa cerută pentru hash-ul canonic. None la miss.
-    Întoarce și `retrieval_signature`+`data_version` (provenance pt price-check dynamic)."""
+    Întoarce și `retrieval_signature`+`data_version` (provenance pt price-check dynamic).
+
+    NX-124a: L1 NU filtrează pe `embedding_model` — match pe hash-ul canonic (cheia de precizie),
+    iar `answer`-ul servit e TEXT, independent de model (vectorul stocat nu e citit pe un hit L1).
+    Filtrul de model trăiește DOAR pe calea cosine (`semantic_lookup`), unde contează spațiul."""
     row = await conn.fetchrow(
         """
         select id::text as id, answer, retrieval_signature, data_version
@@ -76,10 +80,14 @@ async def semantic_lookup(
     embedding: list[float],
     *,
     volatility_class: str = "static",
+    embedding_model: str,
 ) -> dict[str, Any] | None:
     """L2 semantic: cel mai apropiat entry din clasa cerută (cosine). Întoarce
     `{id, answer, similarity, retrieval_signature, data_version}` sau None. Caller-ul
-    aplică pragul τ_high (și, pe dynamic, price-check-ul)."""
+    aplică pragul τ_high (și, pe dynamic, price-check-ul).
+
+    NX-124a: filtru OBLIGATORIU pe `embedding_model` — ordonarea cosine pe vectori din alt model
+    (dim/spațiu diferit) e zgomot. Un upgrade de embeddings nu mai amestecă spațiile (P11)."""
     row = await conn.fetchrow(
         """
         select id::text as id, answer, retrieval_signature, data_version,
@@ -88,6 +96,7 @@ async def semantic_lookup(
         where business_id = $1
           and locale = $2
           and volatility_class = $4
+          and embedding_model = $5
           and expires_at > now()
         order by embedding <=> $3::vector
         limit 1
@@ -96,6 +105,7 @@ async def semantic_lookup(
         locale,
         _vec(embedding),
         volatility_class,
+        embedding_model,
     )
     return _row(row)
 
@@ -146,6 +156,7 @@ async def upsert_entry(
         on conflict (business_id, locale, canonical_hash) do update
             set answer = excluded.answer,
                 embedding = excluded.embedding,
+                embedding_model = excluded.embedding_model,
                 quality_score = excluded.quality_score,
                 volatility_class = excluded.volatility_class,
                 retrieval_signature = excluded.retrieval_signature,
