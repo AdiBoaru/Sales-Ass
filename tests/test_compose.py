@@ -96,6 +96,66 @@ def test_safe_badge_drops_discount_keeps_curation() -> None:
     assert compose._safe_badge(None) is None
 
 
+# --- NX-118: stoc availability-aware pe calea bogată ------------------------
+
+
+def _enable_stock(monkeypatch, on=True):
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: SimpleNamespace(validator_stock_claims_enabled=on)
+    )
+
+
+def test_assemble_drops_stock_claim_when_all_out_of_stock(monkeypatch) -> None:
+    _enable_stock(monkeypatch)
+    retrieved = [{"id": "A", "name": "Crema A", "price": 34.99, "availability": "out_of_stock"}]
+    j = {
+        "intro": "Avem produsul pe stoc:",
+        "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "este disponibil acum"}],
+        "education": "Produsul este în stoc.",
+    }
+    rich = compose.assemble(_ctx(), j, retrieved)
+    assert rich.intro is None  # „pe stoc" nefondat (nimic in_stock) → drop
+    assert rich.education is None
+    assert rich.items[0].reason is None  # fit „disponibil" nefondat → drop
+
+
+def test_assemble_keeps_stock_claim_when_in_stock(monkeypatch) -> None:
+    _enable_stock(monkeypatch)
+    retrieved = [
+        {
+            "id": "A",
+            "name": "Crema A",
+            "price": 34.99,
+            "availability": "in_stock",
+            "top_pros": ["bun"],
+        }
+    ]
+    j = {
+        "intro": "Avem produsul pe stoc:",
+        "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "disponibil acum"}],
+    }
+    rich = compose.assemble(_ctx(), j, retrieved)
+    assert rich.intro == "Avem produsul pe stoc:"  # grounded (in_stock) → păstrat
+    assert "disponibil acum" in (rich.items[0].reason or "")
+
+
+def test_assemble_keeps_negated_stock_when_out_of_stock(monkeypatch) -> None:
+    _enable_stock(monkeypatch)
+    retrieved = [{"id": "A", "name": "Crema A", "price": 34.99, "availability": "out_of_stock"}]
+    j = {"intro": "Din păcate nu mai este pe stoc momentan.", "items": []}
+    rich = compose.assemble(_ctx(), j, retrieved)
+    # afirmație ONESTĂ de indisponibilitate (negată) → NU se respinge (negation-aware)
+    assert rich.intro == "Din păcate nu mai este pe stoc momentan."
+
+
+def test_assemble_stock_kill_switch_off_keeps_claim(monkeypatch) -> None:
+    _enable_stock(monkeypatch, on=False)
+    retrieved = [{"id": "A", "name": "Crema A", "price": 34.99, "availability": "out_of_stock"}]
+    j = {"intro": "Este pe stoc:", "items": []}
+    rich = compose.assemble(_ctx(), j, retrieved)
+    assert rich.intro == "Este pe stoc:"  # kill-switch off → byte-identic
+
+
 def test_assemble_hydrates_facts_and_drops_unknown_ids() -> None:
     retrieved = [
         {

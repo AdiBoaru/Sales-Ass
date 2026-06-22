@@ -72,9 +72,11 @@ def _brief(products: list[dict[str, Any]]) -> str:
     lines = []
     for p in products:
         rating = f" | {float(p['rating']):.1f}★" if p.get("rating") else ""
+        # NX-118: tokenul de stoc → modelul nu mai scrie „este pe stoc" fără bază pe ruta de search.
+        avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
         lines.append(
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
-            f"{float(p['price']):.2f} lei{rating} | {(p.get('ai_summary') or '')[:120]}"
+            f"{float(p['price']):.2f} lei{rating}{avail} | {(p.get('ai_summary') or '')[:120]}"
         )
     return "\n".join(lines)
 
@@ -94,6 +96,20 @@ def _detail_view(p: dict[str, Any]) -> str:
         parts.append("plusuri: " + ", ".join(list(p["top_pros"])[:3]))
     if p.get("top_cons"):
         parts.append("minusuri: " + ", ".join(list(p["top_cons"])[:2]))
+    # NX-118: variante (nuanțe/mărimi) cu id + PREȚ real → modelul răspunde grounded la „aveți
+    # nuanța 03?", recomandă un preț per-variantă acceptat de validator, și poate trimite un
+    # `variant_id` REAL la cart_add (membership-ul rămâne plasa). Format `[id] etichetă (preț)`.
+    vlabels: list[str] = []
+    for v in (p.get("variants") or [])[:8]:
+        lbl = v.get("label")
+        vid = v.get("id")
+        if not lbl or not vid:
+            continue
+        pr = v.get("price")
+        price_str = f" ({float(pr):.2f} lei)" if pr is not None else ""
+        vlabels.append(f"[{vid}] {lbl}{price_str}")
+    if vlabels:
+        parts.append("variante: " + ", ".join(vlabels))
     return " | ".join(parts)
 
 

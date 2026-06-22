@@ -45,3 +45,33 @@ async def test_list_routing_aliases_only_approved():
     assert "business_id = $1" in conn.sql  # izolare (P7)
     assert conn.params[0] == "biz-1"
     assert conn.params[1] == 20  # limită implicită (hint scurt, nu listă lungă)
+
+
+# --- NX-118: _row_to_product decode variants (codec str/list/None/malformed) ---
+
+
+def test_row_to_product_decodes_jsonb_str():
+    from src.db.queries.catalog import _row_to_product
+
+    out = _row_to_product({"id": "p1", "variants": '[{"id": "v1", "price": 9.5}]'})
+    assert out["variants"] == [{"id": "v1", "price": 9.5}]
+
+
+def test_row_to_product_passes_list_through():
+    from src.db.queries.catalog import _row_to_product
+
+    out = _row_to_product({"id": "p1", "variants": [{"id": "v1"}]})
+    assert out["variants"] == [{"id": "v1"}]
+
+
+def test_row_to_product_null_and_malformed_to_empty():
+    from src.db.queries.catalog import _row_to_product
+
+    assert _row_to_product({"id": "p1", "variants": None})["variants"] == []
+    assert _row_to_product({"id": "p1", "variants": "{not json"})["variants"] == []
+
+
+def test_row_to_product_without_variants_key_untouched():
+    from src.db.queries.catalog import _row_to_product
+
+    assert "variants" not in _row_to_product({"id": "p1", "price": 10.0})

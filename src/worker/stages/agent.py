@@ -39,7 +39,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
 from src.tools.base import enabled_tools, run_tool
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
-from src.worker.text_scrub import has_text_claim
+from src.worker.text_scrub import has_stock_claim, has_text_claim
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -181,7 +181,18 @@ def _budget(text: str) -> float | None:
 
 
 def _allowed_prices(products: list[dict[str, Any]]) -> list[float]:
-    return [round(float(p["price"]), 2) for p in products if p.get("price") is not None]
+    # NX-118: include prețurile per-variantă (hidratate pe read path) — un „149 lei" pentru
+    # varianta de 100ml NU mai e respins de validator (avea doar scalarul min(variant)).
+    out: list[float] = []
+    for p in products:
+        if p.get("price") is not None:
+            out.append(round(float(p["price"]), 2))
+        for var in p.get("variants") or []:
+            for key in ("price", "sale_price"):
+                v = var.get(key)
+                if v is not None:
+                    out.append(round(float(v), 2))
+    return out
 
 
 def _prices_ok(
@@ -260,11 +271,27 @@ def _bare_numbers_ok(
 
 
 def _claims_ok(reply: str) -> bool:
-    """NX-117: pe calea de proză, claim-uri ne-numerice neverificabile (superlativ „best seller",
-    claim de stoc/disponibilitate) → respins → retry/fallback. Gated FAIL-OPEN de flag."""
+    """NX-117: pe calea de proză, claim-uri ne-numerice neverificabile (superlativ „best seller")
+    → respins → retry/fallback. Gated FAIL-OPEN de flag. (Stocul = `_stock_claim_ok`, NX-118.)"""
     if not get_settings().validator_claims_enabled:
         return True
     return not has_text_claim(reply)
+
+
+def _stock_available(products: list[dict[str, Any]]) -> bool:
+    """Vreun produs retrievat e efectiv cumpărabil acum? `in_stock`/`low_stock` = da."""
+    return any((p.get("availability") or "") in ("in_stock", "low_stock") for p in products)
+
+
+def _stock_claim_ok(reply: str, products: list[dict[str, Any]]) -> bool:
+    """NX-118: o afirmație „pe stoc / disponibil / in stock" e validă DOAR dacă măcar un produs
+    retrievat e efectiv pe stoc (in_stock/low_stock). Altfel = nefondată → invalid (retry/fallback).
+    Gated FAIL-OPEN de `validator_stock_claims_enabled`. Fără claim de stoc → trece."""
+    if not get_settings().validator_stock_claims_enabled:
+        return True
+    if not has_stock_claim(reply):
+        return True
+    return _stock_available(products)
 
 
 def _valid(
@@ -287,6 +314,8 @@ def _valid(
     if check_bare and not _bare_numbers_ok(reply, products, allowed_prices or set()):
         return False
     if check_claims and not _claims_ok(reply):
+        return False
+    if check_claims and not _stock_claim_ok(reply, products):  # NX-118: stoc availability-aware
         return False
     return True
 
@@ -720,6 +749,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
         if final and not _claims_ok(final):
             ctx.emit("validator_rejected", kind="claim")
+        # NX-118: claim de stoc nefondat (niciun produs pe stoc) → semnalează (P12: doar contorul).
+        if final and not _stock_claim_ok(final, products):
+            ctx.emit("validator_rejected", kind="stock_claim")
         reply = await _finalize(
             deps.llm,
             prompt_builder.build_reco_system(inp),

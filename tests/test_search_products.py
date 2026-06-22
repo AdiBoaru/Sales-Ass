@@ -27,6 +27,9 @@ FIELDS = {
     "review_count",
     "review_pro",
     "top_pros",
+    "on_sale",  # NX-113 (ranking tie-break)
+    "concerns",  # NX-124 (taxonomy filter)
+    "variants",  # NX-118 (per-variant hydration)
 }
 
 
@@ -43,6 +46,7 @@ async def test_returns_limited_eight_field_shape(pool):
     assert 0 < len(rows) <= 3
     for r in rows:
         assert set(r.keys()) == FIELDS
+        assert isinstance(r["variants"], list)  # NX-118: variants decodate la list[dict] (sau [])
 
 
 async def test_hard_cap_six(pool):

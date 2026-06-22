@@ -125,6 +125,20 @@ async def test_checkout_link_filters_unknown_product(monkeypatch):
     assert len(res.products) == 1 and res.products[0]["id"] == "p1"
 
 
+async def test_checkout_link_unknown_variant_rejected(monkeypatch):
+    # NX-118: un variant_id fabricat pe un produs real → checkout respins (nu linkuim ce nu există).
+    _patch_catalog(monkeypatch)
+    _patch_create(monkeypatch, [])
+    ctx = _ctx(settings={"checkout_url": BASE})
+    res = await cm.checkout_link_tool(
+        ctx,
+        _deps(),
+        {"cart_items": [{"product_id": "p1", "variant_id": "fabricat", "quantity": 1}]},
+    )
+    assert res.ok is False and res.error == "variant_not_found"
+    assert any(e.type == "variant_rejected" for e in ctx.events)
+
+
 async def test_checkout_link_no_valid_products(monkeypatch):
     _patch_catalog(monkeypatch)
     _patch_create(monkeypatch, [])
