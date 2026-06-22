@@ -100,6 +100,40 @@ async def test_cart_add_product_not_found(monkeypatch):
     assert res.state_patch == {}  # coșul existent neatins
 
 
+# --- NX-118: variant-membership pe cart_add ----------------------------------
+
+_P_VAR = {
+    "id": "p2",
+    "name": "Ser B",
+    "price": 89.0,
+    "availability": "in_stock",
+    "variants": [{"id": "v1", "label": "50ml", "price": 89.0}, {"id": "v2", "label": "100ml"}],
+}
+
+
+async def test_cart_add_valid_variant(monkeypatch):
+    _patch_by_ids(monkeypatch, [_P_VAR])
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(), "cart_add", {"product_id": "p2", "variant_id": "v2"})
+    assert res.ok and res.state_patch["cart"][0]["variant_id"] == "v2"
+
+
+async def test_cart_add_unknown_variant_rejected(monkeypatch):
+    _patch_by_ids(monkeypatch, [_P_VAR])
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(), "cart_add", {"product_id": "p2", "variant_id": "fabricat"})
+    assert res.ok is False and res.error == "variant_not_found"
+    assert res.state_patch == {}
+    assert _event(ctx, "variant_rejected") is not None
+
+
+async def test_cart_add_no_variant_id_unchanged(monkeypatch):
+    _patch_by_ids(monkeypatch, [_P_VAR])
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(), "cart_add", {"product_id": "p2"})
+    assert res.ok and res.state_patch["cart"][0]["variant_id"] is None
+
+
 # --- reorder -----------------------------------------------------------------
 
 

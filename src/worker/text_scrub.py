@@ -7,8 +7,11 @@ deleagă spre predicatele de mai jos — fără duplicare, fără drift de patte
 Trei niveluri (calea bogată vs proză au verificări de cifre diferite):
   • `has_marketing_claim`   = procent + claim + superlativ (FĂRĂ cifre brute, FĂRĂ stoc)
   • `has_unverifiable_claim` = cifre + procente + claim + superlativ (semantica scrub_prose bogat)
-  • `has_text_claim`        = claim + superlativ + STOC/disponibilitate (calea de proză, care are
-    deja `_prices_ok`/`_bare_numbers_ok` pe cifre → fără digit/pct aici)
+  • `has_text_claim`        = claim + superlativ (calea de proză; cifrele = `_prices_ok`/
+    `_bare_numbers_ok`)
+  • `has_stock_claim`       = DOAR afirmația de stoc/disponibilitate. NX-118: stocul nu mai e
+    respins necondiționat — e validat AVAILABILITY-aware de caller (drop doar dacă niciun produs
+    retrievat nu e efectiv pe stoc), deci stă separat de `has_text_claim`.
 """
 
 from __future__ import annotations
@@ -25,10 +28,18 @@ _SUPER = re.compile(
     r"|recomandat de specialiști)\b",
     re.IGNORECASE,
 )
-# NX-117: claim de STOC / disponibilitate (RO + EN + HU). Livrarea e deja prinsă de `_CLAIMY`
-# („livrare"/„zile"). Aici țintim stocul: „pe stoc", „în stoc", „disponibil", „in stock", „készlet".
+# NX-117/NX-118: claim de STOC / disponibilitate (RO + EN + HU). Livrarea e deja prinsă de
+# `_CLAIMY` („livrare"/„zile"). Aici țintim stocul: „pe stoc", „în stoc", „disponibil", „in stock".
 _STOCK_CLAIM = re.compile(
     r"\b(pe stoc|[iî]n stoc|disponibil\w*|[iî]n stock|in stock|on stock|available|k[ée]szlet\w*)\b",
+    re.IGNORECASE,
+)
+# NX-118: NEGAȚIE / VIITOR înaintea lexemului de stoc → NU e o afirmație POZITIVĂ de disponibilitate
+# curentă (ci „nu mai e pe stoc" / „revine pe stoc" / „out of stock"). Fără asta, validatorul ar
+# respinge un răspuns ONEST de indisponibilitate. Fereastră mică înainte de match (~24 caractere).
+_STOCK_NEG = re.compile(
+    r"\b(nu|n-|fără|fara|niciun|nicio|ne-|not|no|n't|out of|no longer"
+    r"|nincs|elfogyott|revine|reapare|reaprovizion\w*|[iî]napoi|back)\b",
     re.IGNORECASE,
 )
 
@@ -50,8 +61,23 @@ def has_unverifiable_claim(text: str | None) -> bool:
 
 
 def has_text_claim(text: str | None) -> bool:
-    """Claim ne-numeric pentru calea de PROZĂ: superlativ / claim cuantificabil / STOC. FĂRĂ
-    digit/pct (proza are deja `_prices_ok`/`_bare_numbers_ok` pe cifre)."""
+    """Claim ne-numeric pentru calea de PROZĂ: superlativ / claim cuantificabil. FĂRĂ digit/pct
+    (proza are deja `_prices_ok`/`_bare_numbers_ok` pe cifre). NX-118: stocul s-a MUTAT în
+    `has_stock_claim` (validat availability-aware de caller), nu mai e respins aici."""
     if not text:
         return False
-    return bool(_CLAIMY.search(text) or _SUPER.search(text) or _STOCK_CLAIM.search(text))
+    return bool(_CLAIMY.search(text) or _SUPER.search(text))
+
+
+def has_stock_claim(text: str | None) -> bool:
+    """NX-118: textul afirmă POZITIV stoc/disponibilitate curentă („pe stoc", „disponibil",
+    „in stock")? Sare peste lexemele negate / la viitor („nu mai e pe stoc", „revine pe stoc",
+    „out of stock") — alea sunt răspunsuri ONESTE de indisponibilitate, nu claim-uri de validat.
+    Caller-ul decide dacă e fondat (drop DOAR când niciun produs retrievat nu e efectiv pe stoc)."""
+    if not text:
+        return False
+    for m in _STOCK_CLAIM.finditer(text):
+        if _STOCK_NEG.search(text[max(0, m.start() - 24) : m.start()]):
+            continue  # negat / viitor → nu e afirmație pozitivă de disponibilitate
+        return True
+    return False

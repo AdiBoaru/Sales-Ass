@@ -8,6 +8,7 @@ Ranking-ul SEMANTIC (embedding <=> query pe subsetul filtrat) se adaugă după c
 există product_embeddings (job de embed). Vezi schema_reference.md.
 """
 
+import json
 from typing import Any
 
 import asyncpg
@@ -28,6 +29,46 @@ _SHRUNK_RATING = (
 
 # Moduri de sortare (allowlist → zero injection; sort_mode e structural, nu param bindabil).
 _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
+
+# NX-118: array compact de variante (cap 12, cele mai ieftine) hidratat pe read path → validatorul
+# vede prețurile per-variantă reale (50ml vs 100ml) și modelul etichetele/SKU. Neutru de vertical
+# (nuanțe beauty / mărimi fashion / fitment auto — `label` vine din DB). `vp` (scalarul min) rămâne
+# (îl folosesc _EFFECTIVE_PRICE + sortarea). Fragment partajat de `_SELECT`/`_DETAIL_SELECT` (DRY).
+# Perf: rulează pe tot pool-ul de fuziune (ca lateralele `vp`/`img` existente), dar e un index-scan
+# ieftin pe idx_variants_product(product_id), ≤12 rânduri — îl ținem și pe `_SELECT` ca validatorul
+# să aibă prețurile per-variantă pe ORICE cale (search/detail), robust la dedup.
+_VARIANTS_AGG = """
+    left join lateral (
+        select jsonb_agg(
+            jsonb_build_object(
+                'id', v.id::text, 'label', v.label, 'sku', v.sku,
+                'price', coalesce(v.sale_price, v.price)::float8, 'stock', v.stock
+            ) order by coalesce(v.sale_price, v.price) asc
+        ) as variants
+        from (
+            select * from product_variants
+            where product_id = p.id
+            order by coalesce(sale_price, price) asc
+            limit 12
+        ) v
+    ) vr on true
+"""
+
+
+def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
+    """`dict(r)` + decodează `variants` (NX-118). asyncpg întoarce jsonb ca STR (fără codec) →
+    `json.loads` la `list[dict]`; NULL (produs fără variante) → `[]`. Orice altă coloană intactă."""
+    d = dict(r)
+    if "variants" in d:
+        v = d["variants"]
+        if isinstance(v, str):
+            try:
+                d["variants"] = json.loads(v)
+            except (ValueError, TypeError):
+                d["variants"] = []
+        elif v is None:
+            d["variants"] = []
+    return d
 
 
 def _order_clause(sort_mode: str, *, qvec_ph: str | None = None) -> str:
@@ -72,7 +113,8 @@ _SELECT = f"""
         prs.top_pros[1]             as review_pro,
         prs.top_pros                as top_pros,
         (p.sale_price is not null and p.sale_price < p.price) as on_sale,
-        p.attributes->'concerns'    as concerns
+        p.attributes->'concerns'    as concerns,
+        vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
@@ -88,6 +130,7 @@ _SELECT = f"""
         order by pi.position asc nulls last
         limit 1
     ) img on true
+{_VARIANTS_AGG}
 """
 
 
@@ -148,7 +191,7 @@ async def search_products(
     )
 
     rows = await conn.fetch(sql, *params)
-    return [dict(r) for r in rows]
+    return [_row_to_product(r) for r in rows]
 
 
 async def search_products_lexical(
@@ -206,7 +249,7 @@ async def search_products_lexical(
 
     sql = _SELECT + " where " + " and ".join(conds) + order + f" limit {placeholder(pool)}"
     rows = await conn.fetch(sql, *params)
-    return [dict(r) for r in rows]
+    return [_row_to_product(r) for r in rows]
 
 
 async def has_embeddings(conn: asyncpg.Connection, business_id: str) -> bool:
@@ -239,7 +282,8 @@ _DETAIL_SELECT = f"""
         prs.summary                 as review_summary,
         prs.top_pros                as top_pros,
         prs.top_cons                as top_cons,
-        prs.sentiment::float8       as sentiment
+        prs.sentiment::float8       as sentiment,
+        vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
     left join product_review_summaries prs on prs.product_id = p.id
@@ -254,6 +298,7 @@ _DETAIL_SELECT = f"""
         order by pi.position asc nulls last
         limit 1
     ) img on true
+{_VARIANTS_AGG}
 """
 
 
@@ -280,7 +325,7 @@ async def get_products_by_ids(
         product_ids[:limit],
         limit,
     )
-    return [dict(r) for r in rows]
+    return [_row_to_product(r) for r in rows]
 
 
 async def search_cheaper_than(
@@ -314,7 +359,7 @@ async def search_cheaper_than(
         + " limit $4"
     )
     rows = await conn.fetch(sql, business_id, reference_ids, max_price_exclusive, limit)
-    return [dict(r) for r in rows]
+    return [_row_to_product(r) for r in rows]
 
 
 async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
@@ -423,4 +468,4 @@ async def search_products_semantic(
         + f" limit {placeholder(sql_limit)}"
     )
     rows = await conn.fetch(sql, *params)
-    return [dict(r) for r in rows]
+    return [_row_to_product(r) for r in rows]

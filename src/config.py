@@ -239,6 +239,15 @@ class Settings(BaseSettings):
     validator_claims_enabled: bool = Field(
         default=True, validation_alias="VALIDATOR_CLAIMS_ENABLED"
     )
+    # NX-118: afirmație POZITIVĂ de stoc/disponibilitate („pe stoc", „in stock") validată
+    # AVAILABILITY-aware — drop (rich) / invalid+retry+fallback (proză) DOAR dacă niciun produs
+    # retrievat nu e pe stoc (in_stock/low_stock). `has_stock_claim` sare peste negat/viitor
+    # („nu mai e pe stoc", „revine pe stoc"). DEFAULT OFF (opt-in): depinde de calitatea datelor
+    # `availability` (frecvent stale/NULL) — activează-l per-tenant când stocul e fiabil. Flag
+    # SEPARAT de `validator_claims_enabled` (NX-117): a opri claim-urile NU oprește stocul.
+    validator_stock_claims_enabled: bool = Field(
+        default=False, validation_alias="VALIDATOR_STOCK_CLAIMS_ENABLED"
+    )
     # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
     # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).
     # Reply > reply_split_chars → spart în max 2 mesaje (citire ușoară pe telefon). Pur transport.

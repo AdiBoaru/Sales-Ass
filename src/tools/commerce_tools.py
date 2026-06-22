@@ -51,6 +51,15 @@ def _checkout_base(ctx: TurnContext) -> str:
     return (per_business or get_settings().checkout_base_url or "").strip()
 
 
+def _variant_known(p: dict[str, Any], variant_id: str | None) -> bool:
+    """NX-118: `variant_id` None → ok (linie fără variantă). Altfel trebuie să existe în variantele
+    HIDRATATE ale produsului (`get_products_by_ids` întoarce `variants` cu `id`). Omoară un
+    `variant_id` fabricat („nuanța 03") înainte să ajungă în coș/checkout."""
+    if variant_id is None:
+        return True
+    return any(str(v.get("id")) == variant_id for v in (p.get("variants") or []))
+
+
 @register("checkout_link")
 async def checkout_link_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
@@ -75,6 +84,14 @@ async def checkout_link_tool(
         p = by_id.get(it.product_id)
         if p is None or p.get("price") is None:
             continue
+        # NX-118: nu linkuim un `variant_id` fabricat (orice variantă cerută trebuie să existe).
+        if not _variant_known(p, it.variant_id):
+            ctx.emit("variant_rejected", tool="checkout_link", product_id=it.product_id)
+            return ToolResult(
+                ok=False,
+                error="variant_not_found",
+                llm_view="Una dintre variantele cerute nu există; confirmă mărimea/nuanța.",
+            )
         price = round(float(p["price"]), 2)
         cart.append(
             {
@@ -146,6 +163,14 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
     if p is None or p.get("price") is None:
         return ToolResult(
             ok=False, error="product_not_found", llm_view="Produsul nu mai e în catalog."
+        )
+    # NX-118: variant-membership — un `variant_id` inexistent în catalog NU intră în coș.
+    if not _variant_known(p, a.variant_id):
+        ctx.emit("variant_rejected", tool="cart_add", product_id=a.product_id)
+        return ToolResult(
+            ok=False,
+            error="variant_not_found",
+            llm_view="Varianta cerută nu există; spune-mi ce mărime/nuanță dorești.",
         )
 
     # Coșul curent din state (ref-uri compacte, NU obiectul complet — P8). Copie → nu mutăm state.

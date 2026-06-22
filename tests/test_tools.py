@@ -143,6 +143,7 @@ async def test_search_products_tool(monkeypatch):
     res = await run_tool(ctx, _deps(llm), "search_products", {"query": "cremă", "limit": 6})
     assert res.ok and len(res.products) == 2
     assert "Crema A" in res.llm_view and "[p1]" in res.llm_view
+    assert "stoc: in_stock" in res.llm_view  # NX-118: tokenul de availability în _brief
     assert captured["business_id"] == "biz-1"
     assert captured["lex_pool"] == 50 and captured["sem_pool"] == 50  # pool de fuziune, nu 6
     assert llm.embed_calls == 1  # un singur embedding (P2)
@@ -536,6 +537,25 @@ async def test_get_product_details_tool(monkeypatch):
     res = await run_tool(_ctx(), _deps(), "get_product_details", {"product_id": "p1"})
     assert res.ok
     assert "4.6★" in res.llm_view and "hidratează bine" in res.llm_view
+
+
+async def test_get_product_details_lists_variants(monkeypatch):
+    # NX-118: variantele (etichetă + preț real) ajung la model → poate recomanda grounded.
+    prod = {
+        **PRODUCTS[0],
+        "variants": [
+            {"id": "v1", "label": "50ml", "price": 82.99},
+            {"id": "v2", "label": "100ml", "price": 149.0},
+        ],
+    }
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [prod]
+
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+    res = await run_tool(_ctx(), _deps(), "get_product_details", {"product_id": "p1"})
+    assert "variante:" in res.llm_view and "50ml" in res.llm_view and "100ml" in res.llm_view
+    assert "149.00 lei" in res.llm_view  # prețul per-variantă vizibil modelului
 
 
 async def test_get_product_details_not_found(monkeypatch):

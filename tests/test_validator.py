@@ -32,10 +32,15 @@ PRODUCTS = [
 def _enable(monkeypatch, on=True, *, claims=False):
     # claims=False implicit: testele de cifre-bare izolează validatorul NX-91 (replicile lor conțin
     # incidental cuvinte-claim ca „rating"/„ore"/„in stock"). Testele NX-117 setează claims=True.
+    # NX-118: guard-ul de stoc urmează `claims` (stoc availability-aware pe calea de proză).
     monkeypatch.setattr(
         ag,
         "get_settings",
-        lambda: SimpleNamespace(validator_bare_numbers_enabled=on, validator_claims_enabled=claims),
+        lambda: SimpleNamespace(
+            validator_bare_numbers_enabled=on,
+            validator_claims_enabled=claims,
+            validator_stock_claims_enabled=claims,
+        ),
     )
 
 
@@ -163,3 +168,51 @@ def test_prefix_currency_ungrounded_rejected(monkeypatch):
 def test_de_lei_spacing_grounded_accepted(monkeypatch):
     _enable(monkeypatch)
     assert _valid("Crema e 82.99 de lei", PRODUCTS) is True  # „de lei" tratat ca valută
+
+
+# --- NX-118: stoc availability-aware + prețuri per-variantă ------------------
+
+_IN_STOCK = [{"id": "p1", "name": "Crema A", "price": 82.99, "availability": "in_stock"}]
+_OUT_STOCK = [{"id": "p1", "name": "Crema A", "price": 82.99, "availability": "out_of_stock"}]
+
+
+def test_stock_claim_allowed_when_in_stock(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    # produs efectiv pe stoc → „pe stoc" e GROUNDED → NU se respinge (NX-118 rafinează NX-117)
+    assert _valid("Crema asta e pe stoc, ți-o recomand", _IN_STOCK) is True
+
+
+def test_stock_claim_rejected_when_out_of_stock(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    assert _valid("Crema asta e pe stoc", _OUT_STOCK) is False
+
+
+def test_negated_stock_not_rejected(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    # răspuns ONEST de indisponibilitate (negat) → NU se respinge (negation-aware, NX-118)
+    assert _valid("Din păcate nu mai este disponibil momentan", _OUT_STOCK) is True
+    assert _valid("Nu este pe stoc acum", _OUT_STOCK) is True
+
+
+def test_stock_claim_low_stock_counts_as_available(monkeypatch):
+    _enable(monkeypatch, claims=True)
+    low = [{"id": "p1", "name": "A", "price": 10.0, "availability": "low_stock"}]
+    assert _valid("Mai este disponibil acum", low) is True
+
+
+def test_stock_claim_kill_switch_off(monkeypatch):
+    _enable(monkeypatch, claims=False)  # stoc OFF → claim trece fără in_stock (fail-open)
+    assert _valid("Este pe stoc", _OUT_STOCK) is True
+
+
+def test_variant_price_with_currency_accepted(monkeypatch):
+    _enable(monkeypatch)  # bare-numbers on; prețul per-variantă real NU mai e respins
+    prod = [
+        {
+            "id": "p1",
+            "name": "Ser",
+            "price": 89.0,
+            "variants": [{"id": "v1", "price": 89.0}, {"id": "v2", "price": 149.0}],
+        }
+    ]
+    assert _valid("Varianta mare e 149 lei", prod) is True  # 149 = preț variantă grounded

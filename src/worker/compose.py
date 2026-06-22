@@ -19,8 +19,9 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.config import get_settings
 from src.models import Chip, Direction, RichItem, RichReply
-from src.worker.text_scrub import has_marketing_claim, has_unverifiable_claim
+from src.worker.text_scrub import has_marketing_claim, has_stock_claim, has_unverifiable_claim
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -150,11 +151,27 @@ def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
     return out
 
 
+def _stock_available(retrieved: list[dict[str, Any]]) -> bool:
+    """Vreun produs retrievat e efectiv pe stoc (in_stock/low_stock)? (NX-118)"""
+    return any((p.get("availability") or "") in ("in_stock", "low_stock") for p in retrieved)
+
+
+def _drop_unfounded_stock(text: str | None, stock_present: bool) -> str | None:
+    """NX-118: pe calea bogată, dacă framing-ul afirmă disponibilitate dar niciun produs nu e pe
+    stoc → drop (None). Gated FAIL-OPEN de `validator_stock_claims_enabled`."""
+    if not text or stock_present or not get_settings().validator_stock_claims_enabled:
+        return text
+    return None if has_stock_claim(text) else text
+
+
 def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]]) -> RichReply:
     """Asamblează `RichReply` din JSON-ul modelului + produsele retrievate. Hidratează
     fiecare card din `facts` (preț/rating/link/badge), motivul = fit scrubuit + pro real;
     id necunoscut → drop tăcut; cap 6, dedupe."""
     facts = {p["id"]: p for p in retrieved if p.get("id")}
+    # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
+    # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).
+    stock_present = _stock_available(retrieved)
     items: list[RichItem] = []
     seen: set[str] = set()
     for it in j.get("items") or []:
@@ -173,7 +190,9 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
                 product_id=pid,
                 name=p["name"],
                 price=float(p["price"]),
-                reason=_join_reason(scrub_prose(it.get("fit_clause")), anchor),
+                reason=_drop_unfounded_stock(
+                    _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
+                ),
                 url=p.get("url"),
                 image=p.get("image"),
                 rating=float(p["rating"]) if p.get("rating") is not None else None,
@@ -188,15 +207,19 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     pj = j.get("pick")
     if isinstance(pj, dict) and pj.get("product_id") in facts:
         anchor = (_pros(facts[pj["product_id"]]) or [None])[0]
-        reason = _join_reason(scrub_prose(pj.get("justification")), anchor)
+        reason = _drop_unfounded_stock(
+            _join_reason(scrub_prose(pj.get("justification")), anchor), stock_present
+        )
         if reason:
             pick = (pj["product_id"], reason)
 
     return RichReply(
-        intro=scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)),
+        intro=_drop_unfounded_stock(
+            scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)), stock_present
+        ),
         items=items,
         pick=pick,
-        education=scrub_prose(j.get("education")),
+        education=_drop_unfounded_stock(scrub_prose(j.get("education")), stock_present),
         chips=_suggestion_chips(j.get("suggestions") or []),
         disclaimer=disclaimer(ctx.language),
     )
