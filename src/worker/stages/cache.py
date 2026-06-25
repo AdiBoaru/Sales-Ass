@@ -97,8 +97,11 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
 
     volatility = classify_volatility(body)
-    if volatility == "realtime":
-        # comandă/personal → răspuns specific userului, niciodată din cache.
+    if volatility in ("realtime", "contextual"):
+        # realtime: comandă/personal → răspuns specific userului. contextual: refinare
+        # relativă la setul afișat („mai ieftin") → un hit din cache-ul partajat ar servi
+        # răspunsul altui client (alt baseline). Ambele bypass: niciodată din cache, lasă
+        # turul la agent (acolo `cheaper_intent` tratează „mai ieftin" determinist).
         ctx.emit("cache_bypass", volatility=volatility)
         return
 

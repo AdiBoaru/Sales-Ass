@@ -4,9 +4,10 @@ Cod PUR, determinist (fără LLM). Două funcții:
   • `canonicalize` — normalizează query-ul → `canonical_str` + `canonical_hash`.
     Colapsează paraphrase-urile pe un singur entry (ridică hit-rate) și alimentează
     stratul L1 exact prin hash.
-  • `classify_volatility` — rutează query-ul: `realtime` (comandă/personal) și
-    `dynamic` (produs/preț) NU se servesc/scriu în G5b-1 (precision-first: când e
-    dubiu, bypass). Doar `static` (FAQ/generic) e cacheabil acum.
+  • `classify_volatility` — rutează query-ul: `realtime` (comandă/personal),
+    `contextual` (refinare relativă la setul afișat — „mai ieftin") și `dynamic`
+    (produs/preț) NU se servesc/scriu în G5b-1 (precision-first: când e dubiu,
+    bypass). Doar `static` (FAQ/generic) e cacheabil acum.
 
 Vezi docs/semantic-cache-design.md §2.
 """
@@ -49,6 +50,18 @@ _DYNAMIC_WORDS = (
     "stoc",
     "disponibil",
 )
+# Bypass contextual: refinare de preț RELATIVĂ la ce a văzut clientul în acest tur
+# („mai ieftin decât ce-ai văzut TU"). Un astfel de răspuns e specific conversației —
+# servit din cache-ul partajat (alt client, alt set afișat) = cache poisoning. Trebuie
+# să ajungă mereu la agent (acolo `cheaper_intent`, agent.py:_CHEAPER_RE, îl tratează
+# determinist). Oglindă normalizată (fără diacritice) a lui `_CHEAPER_RE` din agent.py;
+# duplicat intenționat — cache-ul e strat inferior, nu importă din stagiul agent.
+_CONTEXTUAL_RE = re.compile(
+    r"\bmai\s+ieftin\w*|\bcea\s+mai\s+ieftin\w*|\bmai\s+accesibil\w*"
+    r"|\bmai\s+scump\w*|\bpret\s+mai\s+mic|\bmai\s+mic\s+la\s+pret|\bbuget\s+mai\s+mic"
+    r"|\bprea\s+scump\w*|\bcam\s+scump\w*"
+    r"|\bcheaper\b|\bcheapest\b|\bolcsobb\w*|\blegolcsobb\w*"
+)
 # Buget / număr + monedă („sub 80 lei", „100 ron") → query de produs.
 _BUDGET_RE = re.compile(r"\d+\s*(lei|ron)")
 # Pentru canonicalize: orice nu e literă/cifră/spațiu → spațiu.
@@ -74,13 +87,17 @@ def canonicalize(text: str) -> tuple[str, str]:
 
 
 def classify_volatility(text: str | None) -> str:
-    """`'realtime' | 'dynamic' | 'static'`. Precision-first: realtime/dynamic →
-    bypass în G5b-1; restul (FAQ/generic) → static (cacheabil)."""
+    """`'realtime' | 'contextual' | 'dynamic' | 'static'`. Precision-first:
+    realtime/contextual/dynamic → bypass în G5b-1; restul (FAQ/generic) → static
+    (cacheabil). `contextual` ÎNAINTE de `dynamic`: „caut ceva mai ieftin" e o
+    refinare relativă (bypass), nu un query de produs cacheabil."""
     if not text:
         return "static"
     norm = _norm(text)
     if any(p in norm for p in _REALTIME):
         return "realtime"
+    if _CONTEXTUAL_RE.search(norm):
+        return "contextual"
     if _BUDGET_RE.search(norm) or any(w in norm for w in _DYNAMIC_WORDS):
         return "dynamic"
     return "static"

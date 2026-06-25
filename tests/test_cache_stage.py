@@ -122,6 +122,22 @@ async def test_realtime_query_bypasses(monkeypatch):
     )
 
 
+async def test_contextual_cheaper_bypasses(monkeypatch):
+    # „mai ieftin" e relativ la setul afișat al ACESTUI client → niciun lookup în cache-ul
+    # partajat (ar servi răspunsul altui client). Bypass → turul ajunge la agent.
+    async def boom(*a, **k):
+        raise AssertionError("nu trebuie să facă lookup pe contextual")
+
+    monkeypatch.setattr(cache_mod, "exact_lookup", boom)
+    ctx = _ctx("ceva mai ieftin")
+    await cache_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
+    assert ctx.reply is None
+    assert any(
+        e.type == "cache_bypass" and e.properties["volatility"] == "contextual"
+        for e in ctx.events
+    )
+
+
 async def test_disabled_noop(monkeypatch):
     monkeypatch.setattr(get_settings(), "cache_enabled", False)
 
@@ -182,6 +198,17 @@ async def test_writeback_skips_dynamic_query(monkeypatch):
     monkeypatch.setattr(proc_mod, "upsert_entry", boom)
     ctx = _ctx_reply("caut crema sub 80 lei", Reply(text="raspuns oarecare lung"))
     await _cache_writeback(None, _LLM(), "biz-1", "ro", "caut crema sub 80 lei", ctx)
+
+
+async def test_writeback_skips_contextual_query(monkeypatch):
+    # Un reply la „mai ieftin" e relativ la setul afișat → niciodată scris în cache
+    # (altfel îl servim altui client cu alt baseline = cache poisoning).
+    async def boom(*a, **k):
+        raise AssertionError("query contextual → nu se scrie")
+
+    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    ctx = _ctx_reply("ceva mai ieftin", Reply(text="Uite o variantă mai ieftină pentru tine."))
+    await _cache_writeback(None, _LLM(), "biz-1", "ro", "ceva mai ieftin", ctx)
 
 
 async def test_writeback_skips_not_cacheable(monkeypatch):

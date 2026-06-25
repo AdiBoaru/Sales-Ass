@@ -146,7 +146,8 @@ async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
             "data_version": await get_data_version(conn, business_id),
         }
     else:
-        # static cu produse / dynamic fără produse / realtime → nu se cache-uiește.
+        # static cu produse / dynamic fără produse / realtime / contextual („mai ieftin",
+        # relativ la setul afișat) → nu se cache-uiește.
         return
 
     try:

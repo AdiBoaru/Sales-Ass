@@ -39,8 +39,11 @@ se încălzește din răspunsuri + (când există) FAQ.
 mesaj (după Gates) →
   L1 CANONICALIZE + ROUTE VOLATILITY (determinist, fără LLM)
     • canonical_str + canonical_hash (lowercase, fără diacritice, colaps spații/filler)
-    • clasă de volatilitate: static (FAQ) | dynamic (produs/preț) | realtime (comandă, "a mea")
-    • realtime/personalizat → BYPASS cache (regenerează)
+    • clasă de volatilitate: static (FAQ) | dynamic (produs/preț) |
+      contextual (refinare relativă: "mai ieftin" decât setul AFIȘAT) | realtime (comandă, "a mea")
+    • realtime/contextual/personalizat → BYPASS cache (regenerează)
+      — contextual e relativ la conversația curentă: un hit din cache-ul partajat ar servi
+        răspunsul altui client (alt baseline); lasă turul la agent (cheaper_intent)
   │
   ├─ L2 EXACT (KV): GET (business_id, locale, canonical_hash[, data_version])
   │     HIT ⇒ servește (O(1), zero false-positive) ── iese aici
