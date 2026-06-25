@@ -17,6 +17,13 @@ COPY --from=builder /install /usr/local
 # Cod aplicație
 WORKDIR /app
 COPY src/ ./src/
+# Poarta de boot a workerului (NX-123) importă `scripts.migrate` și citește migrările din
+# `docs/*.sql` (DOCS_DIR). Fără ele, `python -m src.worker.consumer` crapă la boot cu
+# ModuleNotFoundError → restart-loop (webhook n-are poarta, deci nu se vede acolo). Copiem
+# DOAR ce-i necesar (migrate.py n-are deps interne; SQL-urile de migrare) — nu tot docs/
+# (PDF/xlsx) și nu scripts/sim. Permite și `docker compose run --rm worker python scripts/migrate.py`.
+COPY scripts/migrate.py ./scripts/migrate.py
+COPY docs/*.sql ./docs/
 
 # User non-root (uid 1000)
 RUN useradd --create-home --uid 1000 app \
