@@ -133,8 +133,7 @@ async def test_contextual_cheaper_bypasses(monkeypatch):
     await cache_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
     assert ctx.reply is None
     assert any(
-        e.type == "cache_bypass" and e.properties["volatility"] == "contextual"
-        for e in ctx.events
+        e.type == "cache_bypass" and e.properties["volatility"] == "contextual" for e in ctx.events
     )
 
 
