@@ -39,3 +39,19 @@ def test_classify_realtime():
     assert classify_volatility("unde e comanda mea") == "realtime"
     assert classify_volatility("care e statusul comenzii") == "realtime"
     assert classify_volatility("vreau factura") == "realtime"
+
+
+def test_classify_contextual_cheaper():
+    # Refinare RELATIVĂ la setul afișat → bypass (niciodată din cache-ul partajat).
+    assert classify_volatility("ceva mai ieftin") == "contextual"
+    assert classify_volatility("Aș vrea varianta cea mai ieftină") == "contextual"
+    assert classify_volatility("ai ceva mai accesibil") == "contextual"
+    assert classify_volatility("e prea scump") == "contextual"
+    assert classify_volatility("cheaper please") == "contextual"
+    # `contextual` ÎNAINTE de `dynamic`: „caut ceva mai ieftin" rămâne bypass, nu dynamic.
+    assert classify_volatility("caut ceva mai ieftin") == "contextual"
+
+
+def test_classify_bare_cheap_stays_dynamic():
+    # „ieftin" simplu (fără comparativul „mai") = query de produs, NU refinare relativă.
+    assert classify_volatility("caut o cremă ieftină") == "dynamic"
