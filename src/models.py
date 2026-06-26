@@ -326,6 +326,9 @@ class Reply:
     # NX-114: ofertă/CTA neutră de canal (seam channel-aware). Randată bogat la margine
     # (NX-115/127); floor pe canale text = url append-uit la text de `set_offer`. Owner: emitent.
     offer: Offer | None = None
+    # Chips de sugestie pe un reply NON-rich (ex. clarify): opțiuni scurte pe care clientul le poate
+    # apăsa (voce de client → reintră ca tur nou). Rich-ul are propriile chips (rich.chips).
+    suggestions: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -462,10 +465,13 @@ class TurnContext:
         if offer.url and offer.url not in self.reply.text:
             self.reply.text = f"{self.reply.text}\n{offer.url}".strip()
 
-    def set_clarify(self, text: str, *, field: str, resume_route: str) -> None:
+    def set_clarify(
+        self, text: str, *, field: str, resume_route: str, suggestions: list[str] | None = None
+    ) -> None:
         """NX-130 — pune o întrebare de clarificare ȘI memorează slotul de umplut la turul
         următor (`pending_question`). Reply NON-cacheabil (specific contextului). `attempts`
-        crește dacă re-întrebăm ACELAȘI slot consecutiv (semnal anti-buclă). Owner al
+        crește dacă re-întrebăm ACELAȘI slot consecutiv (semnal anti-buclă). `suggestions` =
+        chips opționale pe care clientul le poate apăsa (ex. idei de cadou). Owner al
         scrierii în DB rămâne Sender (processor propagă `reply.pending_question` în state)."""
         prev = (
             self.state.pending_question if isinstance(self.state.pending_question, dict) else None
@@ -477,5 +483,7 @@ class TurnContext:
             "asked_at": datetime.now(UTC).isoformat(),
             "attempts": attempts,
         }
-        self.reply = Reply(text=text, cacheable=False, pending_question=pq)
+        self.reply = Reply(
+            text=text, cacheable=False, pending_question=pq, suggestions=suggestions or []
+        )
         self.emit("clarify_asked", field=field, attempts=attempts)

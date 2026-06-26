@@ -55,7 +55,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
         return {"content": "", "products": [], "suggestions": []}
     lang = language or "ro"
     products: list[dict[str, Any]] = []
-    suggestions: list[str] = []
+    suggestions: list[str] = list(reply.suggestions)  # non-rich (ex. clarify): chips de pe reply
     if reply.rich is not None:
         products = [
             _card(
