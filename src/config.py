@@ -321,7 +321,11 @@ class Settings(BaseSettings):
     llm_timeout_s: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_S")
     llm_retry_max: int = Field(default=2, validation_alias="LLM_RETRY_MAX")
     llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
-    llm_temperature: float = Field(default=0.3, validation_alias="LLM_TEMPERATURE")
+    # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
+    # triajul (clasificare) vrea determinism → mic; agentul (copy către client) vrea variație → mai
+    # mare, ca răspunsurile să NU fie repetitive. Active doar când llm_sampling_enabled.
+    llm_temperature_triage: float = Field(default=0.2, validation_alias="LLM_TEMPERATURE_TRIAGE")
+    llm_temperature_agent: float = Field(default=0.7, validation_alias="LLM_TEMPERATURE_AGENT")
     llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT")
 
     @property

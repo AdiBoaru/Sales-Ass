@@ -63,7 +63,7 @@ async def test_describe_image_returns_text_low_detail_bounded():
     out = await client.describe_image("Ym9keQ==", "image/jpeg")
     assert out == "ser hidratant alb/albastru"
     assert captured["model"] == "gpt-5.4-mini"
-    assert captured["max_tokens"] == 120  # cost bornat
+    assert captured["max_completion_tokens"] == 256  # cost bornat (max_tokens → 400 pe gpt-5.4-*)
     # payload conține image_url cu detail:"low" + data URL cu mime-ul
     user_msg = captured["messages"][1]["content"]
     img = next(p for p in user_msg if p["type"] == "image_url")["image_url"]

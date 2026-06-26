@@ -137,20 +137,24 @@ class LLMClient:
         self.model_vision = model_vision
 
     def _sampling(self, *, agent: bool) -> dict[str, Any]:
-        """NX-126: params de sampling din settings, gated de kill-switch (modele „reasoning" care
-        resping `temperature` ne-default → LLM_SAMPLING_ENABLED=false). `max_tokens` DOAR pe
-        apelurile de agent (triajul JSON e scurt; embed/moderate/vision nu trec pe aici).
+        """Params trimiși la chat.completions, pe DOUĂ axe INDEPENDENTE:
 
-        NX-125: PLAFON de output pe TOATE apelurile de agent, independent de sampling (un completion
-        patologic / buclă nu scapă de ceiling). Non-reasoning → `max_tokens`; „reasoning" (sampling
-        off, care resping `temperature` ȘI `max_tokens`) → `max_completion_tokens` (param echivalent
-        acceptat de ele). Niciodată ambele pe același apel (fără conflict de param OpenAI)."""
+        • Plafon de output: `max_completion_tokens` pe TOATE apelurile de agent, MEREU (NX-125 — un
+          completion patologic/buclă nu scapă de ceiling), independent de sampling. Folosim
+          `max_completion_tokens`, NU `max_tokens` (deprecat → 400 pe modelele curente gpt-5.4-*).
+        • `temperature`: gated de `llm_sampling_enabled`. ON → variație controlată (agent: copy
+          ne-repetitiv `llm_temperature_agent`; triaj: clasificare deterministă
+          `llm_temperature_triage`). OFF → omis → default-ul modelului. Corectitudinea NU depinde de
+          temperatură (o asigură validatorul stagiului 8), deci `agent` poate fi urcat liber.
+
+        Triajul (agent=False) nu primește ceiling (JSON scurt). embed/moderate/vision nu trec
+        pe aici."""
         s = get_settings()
-        if not s.llm_sampling_enabled:
-            return {"max_completion_tokens": s.llm_max_tokens_agent} if agent else {}
-        out: dict[str, Any] = {"temperature": s.llm_temperature}
+        out: dict[str, Any] = {}
         if agent:
-            out["max_tokens"] = s.llm_max_tokens_agent
+            out["max_completion_tokens"] = s.llm_max_tokens_agent
+        if s.llm_sampling_enabled:
+            out["temperature"] = s.llm_temperature_agent if agent else s.llm_temperature_triage
         return out
 
     async def _chat(self, *, agent: bool, **kwargs: Any):
@@ -327,7 +331,9 @@ class LLMClient:
                         ],
                     },
                 ],
-                max_tokens=120,
+                # max_completion_tokens (NU max_tokens, deprecat → 400 pe gpt-5.4-*); 256 = headroom
+                # pentru tokenii de „reasoning" + extracția scurtă, cost tot mic (detail:"low").
+                max_completion_tokens=256,
             ),
             max_retries=get_settings().llm_retry_max,
         )
