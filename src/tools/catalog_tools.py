@@ -255,13 +255,30 @@ async def search_products_tool(
     # NX-124: maparea vine din DomainPack (config DB per-vertical), nu hardcodat beauty → generic.
     # Determinist (P2); necunoscutele/pack lipsă → fără filtru fals care golește (P6).
     concern_keys = map_concerns(ctx.business.domain_pack, a.concerns) or None
+    sessions_on = (
+        get_settings().search_sessions_enabled
+    )  # kill-switch (OFF → fiecare căutare fresh)
+    # IZI-anti-drift: rafinare ÎN sesiune activă, fără categorie/concerns NOI → moștenește-le pe ale
+    # sesiunii (ține „raftul" curent). Bug „mai ieftin → mască/ser/toner": user scrie „mai ifetin"
+    # (typo) → `cheaper_intent` (regex) ratează → modelul re-caută `price_asc` fără categorie →
+    # drift pe alt raft. Moștenirea repară fără wordlist (model+context); DOAR când câmpul NU e
+    # re-specificat (schimbare de subiect = modelul setează explicit category → fără moștenire).
+    # Observabil prin `search_filter_inherited`.
+    sess_filters = (ctx.state.active_search or {}).get("filters") or {}
+    if sessions_on and sess_filters:
+        inherited: list[str] = []
+        if a.category is None and sess_filters.get("category"):
+            a.category = sess_filters["category"]
+            inherited.append("category")
+        if concern_keys is None and sess_filters.get("concerns"):
+            concern_keys = [str(x) for x in sess_filters["concerns"]] or None
+            inherited.append("concerns")
+        if inherited:
+            ctx.emit("search_filter_inherited", fields=inherited)
     seen = _displayed_ids(ctx)
     filters = _session_filters(a, concern_keys)
     fp = _fp(filters)
     sess = ctx.state.active_search or {}
-    sessions_on = (
-        get_settings().search_sessions_enabled
-    )  # kill-switch (OFF → fiecare căutare fresh)
 
     # === CONTINUARE sesiune (NX-119): aceleași filtre (fp) + pool stocat → pagina URMĂTOARE,
     # FĂRĂ re-fetch/embed. Paginare deterministă (pool stabil, tie-break p.id) + unseen-dedup.
