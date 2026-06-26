@@ -105,15 +105,18 @@ async def test_retry_exhausted_raises():
 async def test_agent_call_includes_sampling_params():
     c, comp = _llm_client([_Resp("raspuns")])
     await c.complete("sys", "usr")
-    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature
-    assert comp.last_kwargs["max_tokens"] == get_settings().llm_max_tokens_agent
+    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_agent
+    # Plafonul de output = max_completion_tokens (NU max_tokens, deprecat → 400 pe gpt-5.4-*).
+    assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
+    assert "max_tokens" not in comp.last_kwargs
 
 
-async def test_triage_has_temperature_but_no_max_tokens():
+async def test_triage_has_temperature_but_no_ceiling():
     c, comp = _llm_client([_Resp("{}")])
     await c.classify_json("sys", "usr")
-    assert "temperature" in comp.last_kwargs
-    assert "max_tokens" not in comp.last_kwargs  # JSON triaj nu primește max_tokens
+    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_triage
+    assert "max_tokens" not in comp.last_kwargs  # JSON triaj nu primește plafon (răspuns scurt)
+    assert "max_completion_tokens" not in comp.last_kwargs
 
 
 async def test_sampling_disabled_kill_switch(monkeypatch):
