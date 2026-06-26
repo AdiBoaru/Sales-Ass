@@ -28,10 +28,13 @@ class Capability(str, Enum):
     TYPING = "typing"  # mark_typing — semnal inbound (NX-90)
     MEDIA = "media"  # fetch_media — download inbound (informativ aici)
     OFFER = "offer"  # randare nativă Reply.offer (NX-114); fără ea → floor aplatizat în text
+    # IZI-compare: randare nativă a tabelului `Reply.comparison` (web). Fără ea → floor aplatizat
+    # (tabelul ca text) prin send_text. Randat tot prin `send_rich` (ca OFFER), nu metodă dedicată.
+    COMPARISON = "comparison"
 
 
 # Capabilitate → metoda reală pe sender. Sursa pt testul de consistență caps↔metode.
-# OFFER NU e aici: nu mapează la o metodă dedicată (randare inline în send_*; azi floor în text).
+# OFFER/COMPARISON NU sunt aici: nu mapează la o metodă dedicată (randare în send_rich; floor text).
 CAPABILITY_METHODS: dict[Capability, str] = {
     Capability.TEXT: "send_text",
     Capability.RICH: "send_rich",

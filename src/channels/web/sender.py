@@ -34,9 +34,17 @@ def backlog_key(tenant: str, visitor_id: str) -> str:
 class WebSender:
     """`account_id` = public_token (informativ); `to` = visitor_id (canalul Pub/Sub țintă)."""
 
-    # NX-127: web randează acum RICH (carduri + chips) + CARDS + OFFER nativ (buton), paritate cu
-    # ruta sincronă /web/chat. Fără clamp de lungime (frontendul randează bula).
-    capabilities = frozenset({Capability.TEXT, Capability.RICH, Capability.CARDS, Capability.OFFER})
+    # NX-127: web randează RICH (carduri + chips) + CARDS + OFFER nativ (buton), paritate cu ruta
+    # sincronă /web/chat. IZI-compare: + COMPARISON (tabel). Fără clamp (frontendul randează bula).
+    capabilities = frozenset(
+        {
+            Capability.TEXT,
+            Capability.RICH,
+            Capability.CARDS,
+            Capability.OFFER,
+            Capability.COMPARISON,
+        }
+    )
     max_text_len: int | None = None
     max_caption_len: int | None = None
 

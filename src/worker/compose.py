@@ -20,7 +20,15 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from src.config import get_settings
-from src.models import Chip, Direction, RichItem, RichReply
+from src.models import (
+    Chip,
+    Comparison,
+    ComparisonColumn,
+    ComparisonRow,
+    Direction,
+    RichItem,
+    RichReply,
+)
 from src.worker.text_scrub import has_marketing_claim, has_stock_claim, has_unverifiable_claim
 
 if TYPE_CHECKING:
@@ -187,11 +195,13 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         in_range = isinstance(idx, int) and 0 <= idx < len(pros)
         anchor = pros[idx] if in_range else (pros[0] if pros else None)
         rc = p.get("review_count")
+        eff = float(p["price"])
+        lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
         items.append(
             RichItem(
                 product_id=pid,
                 name=p["name"],
-                price=float(p["price"]),
+                price=eff,
                 reason=_drop_unfounded_stock(
                     _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
                 ),
@@ -200,6 +210,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
                 rating=float(p["rating"]) if p.get("rating") is not None else None,
                 review_count=int(rc) if rc else None,
                 badge=_safe_badge(p.get("badge")),
+                list_price=float(lp) if lp is not None and float(lp) > eff else None,
             )
         )
         if len(items) >= 6:
@@ -241,6 +252,21 @@ def card_products(items: list[RichItem]) -> list[dict[str, Any]]:
     ]
 
 
+def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:
+    """Carduri compacte ale produselor comparate (→ `displayed_products`, ca un follow-up «adaugă
+    prima» să le regăsească; + cache signature). `price` = prețul afișat al coloanei."""
+    return [
+        {
+            "product_id": c.product_id,
+            "name": c.name,
+            "price": c.price,
+            "url": c.url,
+            "image": c.image,
+        }
+        for c in comparison.columns
+    ]
+
+
 def flatten(rich: RichReply) -> str:
     """Aplatizare deterministă în text — floor-ul pentru canale fără rich (WhatsApp),
     messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză."""
@@ -249,6 +275,8 @@ def flatten(rich: RichReply) -> str:
         lines += [rich.intro, ""]
     for i, it in enumerate(rich.items, 1):
         head = f"{i}. {it.name} — {it.price:.2f} lei"
+        if it.list_price and it.list_price > it.price:  # IZI-anchor: preț redus în floor
+            head += f" (de la {it.list_price:.2f})"
         if it.rating:
             head += f"  ⭐{it.rating:.1f}"
         if it.badge:
@@ -274,10 +302,12 @@ def flatten_framing(rich: RichReply) -> str:
     framing conversațional UȘOR și VARIABIL ca structură (#4 — evită tiparul identic la fiecare
     mesaj): intro + recomandarea („pick") DOAR când sunt ≥2 produse de departajat.
 
-    OMITE: enumerarea numerotată (o fac cardurile), linia „Poți cere și:" (o fac chips-urile) și
-    paragraful de EDUCAȚIE generic (s-a dovedit repetitiv pe widget). La un SINGUR produs nu mai
-    punem „Recomandarea mea" (cardul ESTE recomandarea → ar dubla). `flatten()` rămâne floor-ul
-    COMPLET pt canalele fără carduri (WhatsApp/cache/messages.body)."""
+    OMITE: enumerarea numerotată (o fac cardurile) și linia „Poți cere și:" (o fac chips-urile). La
+    un SINGUR produs nu mai punem „Recomandarea mea" (cardul ESTE recomandarea → ar dubla).
+
+    IZI-coaching: `education` (paragraful „cum alegi" + cross-sell) revine ca PARAGRAF DE FINAL pe
+    widget (gap-ul iZi — botul listează, nu consultă). E scrub-uit (fără cifre/claim-uri), deci
+    sigur. `flatten()` rămâne floor-ul COMPLET pt canalele fără carduri (WhatsApp/cache)."""
     blocks: list[str] = []
     if rich.intro:
         blocks.append(rich.intro)
@@ -286,6 +316,161 @@ def flatten_framing(rich: RichReply) -> str:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
         head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
         blocks.append(head + rich.pick[1])
+    if rich.education:  # coaching de final (model iZi) — randat și pe widget acum
+        blocks.append(rich.education)
     if rich.disclaimer:
         blocks.append(rich.disclaimer)
     return "\n\n".join(blocks).strip()
+
+
+# --- comparație structurată (model iZi) --------------------------------------
+# Etichetele de RÂND + disponibilitate sunt per-locale (text de UI, NU vocabular de rutare).
+# Faptele din celule (preț/rating/avantaje) vin DOAR din retrieval → zero halucinație.
+_COMPARE_LABELS: dict[str, dict[str, str]] = {
+    "ro": {
+        "title": "Comparație",
+        "price": "Preț",
+        "rating": "Rating",
+        "avail": "Disponibilitate",
+        "pros": "Avantaje",
+        "cons": "De luat în calcul",
+        "brand": "Brand",
+        "lead": "Iată diferențele principale — alege în funcție de ce contează pentru tine.",
+        "cheapest": "Cea mai accesibilă: {name}.",
+        "top_rated": "Cea mai bine cotată: {name}.",
+    },
+    "en": {
+        "title": "Comparison",
+        "price": "Price",
+        "rating": "Rating",
+        "avail": "Availability",
+        "pros": "Pros",
+        "cons": "To consider",
+        "brand": "Brand",
+        "lead": "Here are the main differences — pick based on what matters to you.",
+        "cheapest": "Most affordable: {name}.",
+        "top_rated": "Top rated: {name}.",
+    },
+    "hu": {
+        "title": "Összehasonlítás",
+        "price": "Ár",
+        "rating": "Értékelés",
+        "avail": "Elérhetőség",
+        "pros": "Előnyök",
+        "cons": "Megfontolandó",
+        "brand": "Márka",
+        "lead": "Íme a fő különbségek — válassz aszerint, ami neked fontos.",
+        "cheapest": "A legkedvezőbb: {name}.",
+        "top_rated": "A legjobbra értékelt: {name}.",
+    },
+}
+_AVAIL_LABELS: dict[str, dict[str, str]] = {
+    "ro": {"in_stock": "În stoc", "low_stock": "Stoc limitat", "out_of_stock": "Indisponibil"},
+    "en": {"in_stock": "In stock", "low_stock": "Low stock", "out_of_stock": "Out of stock"},
+    "hu": {"in_stock": "Raktáron", "low_stock": "Kevés", "out_of_stock": "Elfogyott"},
+}
+
+
+def _labels(language: str | None) -> dict[str, str]:
+    return _COMPARE_LABELS.get(language or "ro") or _COMPARE_LABELS["ro"]
+
+
+def _join_list(raw: Any, n: int) -> str | None:
+    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—")."""
+    if not isinstance(raw, (list, tuple)):
+        return None
+    items = [s.strip() for s in raw if isinstance(s, str) and s.strip()]
+    return "; ".join(items[:n]) or None
+
+
+def _comparison_lead(chosen: list[dict[str, Any]], language: str | None) -> str:
+    """Lead determinist: framing scurt + verdict DERIVAT din date (cel mai ieftin / cel mai bine
+    cotat, doar când departajează). Zero proză LLM → sigur prin construcție."""
+    L = _labels(language)
+    parts = [L["lead"]]
+    priced = [p for p in chosen if p.get("price") is not None]
+    if len(priced) > 1:
+        prices = [float(p["price"]) for p in priced]
+        if len(set(prices)) > 1:
+            cheapest = min(priced, key=lambda p: float(p["price"]))
+            parts.append(L["cheapest"].format(name=cheapest["name"]))
+    rated = [p for p in chosen if p.get("rating") is not None]
+    if len(rated) > 1:
+        ratings = [float(p["rating"]) for p in rated]
+        if len(set(ratings)) > 1:
+            top = max(rated, key=lambda p: float(p["rating"]))
+            # nu repeta dacă „cel mai ieftin" == „cel mai bine cotat" (un singur câștigător clar)
+            parts.append(L["top_rated"].format(name=top["name"]))
+    return " ".join(parts)
+
+
+def build_comparison(products: list[dict[str, Any]], language: str | None) -> Comparison | None:
+    """Tabel comparativ STRUCTURAT din 2-3 produse retrievate (get_products_by_ids). Determinist:
+    fiecare celulă e un fapt real (preț/rating/disponibilitate/avantaje-minusuri din recenzii/brand)
+    — NICIUN text LLM → zero halucinație prin construcție. `None` dacă < 2 produse valide.
+
+    Anchor preț redus (PR2): dacă produsul are `list_price` > prețul efectiv, coloana ține prețul
+    de listă + `sale_price` = efectivul (frontendul taie listul). Forward-compatible: fără
+    `list_price` → fără anchor (prețul afișat e cel efectiv, ca azi)."""
+    chosen = [
+        p
+        for p in products[:3]
+        if p.get("id") and p.get("name") is not None and p.get("price") is not None
+    ]
+    if len(chosen) < 2:
+        return None
+    L = _labels(language)
+    AV = _AVAIL_LABELS.get(language or "ro") or _AVAIL_LABELS["ro"]
+
+    columns: list[ComparisonColumn] = []
+    for p in chosen:
+        eff = float(p["price"])
+        lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
+        on_sale = lp is not None and float(lp) > eff
+        columns.append(
+            ComparisonColumn(
+                product_id=str(p["id"]),
+                name=p["name"],
+                price=eff,  # CURENT (efectiv)
+                list_price=float(lp) if on_sale else None,  # ORIGINAL tăiat (anchor)
+                image=p.get("image"),
+                url=p.get("url"),
+                rating=float(p["rating"]) if p.get("rating") is not None else None,
+            )
+        )
+
+    def _row(label: str, values: list[str | None]) -> ComparisonRow | None:
+        # Rând sărit dacă TOATE celulele sunt goale (ex. niciun produs n-are minusuri).
+        return ComparisonRow(label=label, values=values) if any(v for v in values) else None
+
+    def _price_cell(p: dict[str, Any]) -> str:
+        eff = float(p["price"])
+        lp = p.get("list_price")
+        if lp is not None and float(lp) > eff:  # IZI-anchor: preț redus (de la X)
+            return f"{eff:.2f} lei (de la {float(lp):.2f})"
+        return f"{eff:.2f} lei"
+
+    candidate_rows = [
+        ComparisonRow(label=L["price"], values=[_price_cell(p) for p in chosen]),
+        _row(
+            L["rating"],
+            [f"{float(p['rating']):.1f}★" if p.get("rating") is not None else None for p in chosen],
+        ),
+        _row(L["avail"], [AV.get(p.get("availability") or "") or None for p in chosen]),
+        _row(L["pros"], [_join_list(p.get("top_pros"), 3) for p in chosen]),
+        _row(L["cons"], [_join_list(p.get("top_cons"), 2) for p in chosen]),
+        _row(L["brand"], [p.get("brand") for p in chosen]),
+    ]
+    rows = [r for r in candidate_rows if r is not None]
+    return Comparison(columns=columns, rows=rows, intro=_comparison_lead(chosen, language))
+
+
+def flatten_comparison(comparison: Comparison, language: str | None) -> str:
+    """Floor aplatizat al tabelului (WhatsApp/cache/messages.body + canale fără randare de tabel):
+    lead + antet cu numele produselor + un rând per dimensiune, celulele separate cu „ · "."""
+    title = _labels(language)["title"]
+    head = f"{title}: " + " · ".join(c.name for c in comparison.columns)
+    lines = [comparison.intro, "", head] if comparison.intro else [head]
+    for row in comparison.rows:
+        lines.append(f"{row.label}: " + " · ".join(v or "—" for v in row.values))
+    return "\n".join(line for line in lines if line is not None).strip()

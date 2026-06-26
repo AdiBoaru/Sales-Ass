@@ -612,6 +612,13 @@ async def handle_turn(
             # `type=text` rămâne (allow-list); canalele cu send_rich/carousel randează bogat.
             if i == 0 and is_rich:
                 payload["rich"] = asdict(ctx.reply.rich)
+            elif i == 0 and ctx.reply.comparison is not None:
+                # IZI-compare: tabelul structurat + cardurile produselor comparate. `type` rămâne
+                # 'text' (floor = tabelul aplatizat pe canalele fără COMPARISON); web rutează pe
+                # send_rich după payload['comparison']. reply_from_outbox îl reconstruiește.
+                payload["comparison"] = asdict(ctx.reply.comparison)
+                if ctx.reply.products:
+                    payload["products"] = ctx.reply.products
             elif i == 0 and has_products:
                 payload["type"] = "carousel"
                 payload["products"] = ctx.reply.products

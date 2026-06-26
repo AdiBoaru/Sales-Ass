@@ -261,13 +261,16 @@ class RichItem:
 
     product_id: str
     name: str
-    price: float
+    price: float  # prețul CURENT (efectiv) — pe ăsta îl validează validatorul (nu-i schimba sensul)
     reason: str | None = None  # SINGURUL text LLM per card (fit scurt + pro real), scrubuit
     url: str | None = None
     image: str | None = None
     rating: float | None = None
     review_count: int | None = None  # randat doar dacă > 0 (data-gated)
     badge: str | None = None  # data-gated + guard pe tag de discount (vezi compose)
+    # IZI-anchor: prețul ORIGINAL (de listă), randat tăiat pe card DOAR la reducere reală (on_sale).
+    # `price` rămâne CURENTUL; `list_price > price` ⇒ reducere. Din date (compose), nu LLM.
+    list_price: float | None = None
 
 
 @dataclass
@@ -304,6 +307,49 @@ class Offer:
     payload: str | None = None  # pt quick_reply: token rutat (ex. "offer:reorder") — neutru
 
 
+# ---------------------------------------------------------------------------
+# Comparison — tabel comparativ structurat (model iZi), NEUTRU de canal.
+# Construit DETERMINIST din retrieval (compose.build_comparison): fiecare celulă e
+# un fapt real (preț/rating/avantaje din recenzii), NICIUN text LLM → zero halucinație
+# prin construcție (aceeași garanție ca RichReply). Web îl randează ca tabel; canalele
+# fără randare de tabel îl primesc ca floor aplatizat (compose.flatten_comparison).
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ComparisonColumn:
+    """O coloană = un produs comparat. TOATE câmpurile vin din retrieval (P: fapte din date)."""
+
+    product_id: str
+    name: str
+    price: float  # prețul CURENT (efectiv, ce plătește clientul)
+    list_price: float | None = None  # preț original (tăiat) — DOAR la reducere reală (on_sale)
+    image: str | None = None
+    url: str | None = None
+    rating: float | None = None
+
+
+@dataclass
+class ComparisonRow:
+    """Un rând = o dimensiune (Preț, Rating, Avantaje, ...) + valoarea per coloană (aliniat 1:1
+    cu `columns`). `None` = lipsă (randat „—"), NU zero — un fapt absent nu e inventat."""
+
+    label: str
+    values: list[str | None]
+
+
+@dataclass
+class Comparison:
+    """Tabel comparativ structurat (2-3 produse), neutru de canal. Owner: stagiul Agent."""
+
+    columns: list[ComparisonColumn]
+    rows: list[ComparisonRow]
+    # Lead-ul conversațional (framing scurt + verdict derivat din date: cel mai ieftin / cel mai
+    # bine cotat). Determinist — fără proză LLM → randat ca text de lead pe web (tabelul îl fac
+    # `rows`); pe canalele text intră în `Reply.text` (floor) împreună cu tabelul aplatizat.
+    intro: str | None = None
+
+
 @dataclass
 class Reply:
     """Orice stagiu poate seta → early exit la Sender."""
@@ -316,6 +362,10 @@ class Reply:
     # NX-richreply: recomandare structurată (model iZi). Dacă setată, Sender-ul o
     # randează bogat (Telegram); `text` rămâne aplatizarea ei (floor pt WhatsApp/cache).
     rich: RichReply | None = None
+    # IZI-compare: tabel comparativ structurat (2-3 produse). Dacă setat, marginile care îl
+    # suportă (web, Capability.COMPARISON) îl randează ca tabel; restul primesc `text` (floor
+    # aplatizat). Coexistă cu `products` (cardurile produselor comparate). Owner: stagiul Agent.
+    comparison: Comparison | None = None
     # NX-130: slot de clarificare. Dacă setat (reply de tip CLARIFY), processor-ul îl
     # persistă în `conversations.state.pending_question`; orice alt reply îl curăță (None).
     # Owner: stagiul care cere clarificarea (triaj azi). Ref-uri compacte (P8), nu obiecte.
@@ -452,6 +502,29 @@ class TurnContext:
         se regenerează (cache-ul ar servi doar textul aplatizat). Owner: stagiul agent."""
         self.reply = Reply(
             text=text, kind="message", products=products, rich=rich, cacheable=cacheable
+        )
+
+    def set_comparison_reply(
+        self,
+        comparison: Comparison,
+        *,
+        text: str,
+        products: list[dict[str, Any]] | None = None,
+        chips: list[str] | None = None,
+    ) -> None:
+        """IZI-compare — setează un reply de COMPARAȚIE (tabel structurat) → early exit la Sender.
+        `text` = aplatizarea deterministă a tabelului (floor pt canale fără randare de tabel +
+        messages.body + cache). `products` = cardurile compacte ale produselor comparate (→
+        `displayed_products`, ca un follow-up „adaugă prima" să le regăsească). `chips` =
+        follow-up-uri din partea clientului (voce de client → fără scrub). Non-cacheabil (relativ
+        la setul afișat al ACESTUI client). Owner: stagiul agent."""
+        self.reply = Reply(
+            text=text,
+            kind="message",
+            products=products,
+            comparison=comparison,
+            suggestions=chips or [],
+            cacheable=False,
         )
 
     def set_offer(self, offer: Offer) -> None:

@@ -43,8 +43,9 @@ _DELIVERED = {"rich": "rich", "carousel": "carousel", "products": "cards", "edit
 
 def _requested_render(payload: dict, ptype: str | None) -> str:
     """Randarea CERUTĂ de pipeline (taxonomie aliniată cu `_DELIVERED` ca să nu raportăm un
-    carousel→carousel reușit drept degradare). rich > carousel > cards > text."""
-    if payload.get("rich"):
+    carousel→carousel reușit drept degradare). rich > carousel > cards > text. IZI-compare:
+    `comparison` se cere ca `rich` (web îl livrează prin `send_rich`; canalele text → degradare)."""
+    if payload.get("rich") or payload.get("comparison"):
         return "rich"
     if not payload.get("products"):
         return "text"
@@ -94,7 +95,12 @@ def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability])
     navigare UI, nu conținut nou → 'edit_unsupported' (dead) dacă lipsește EDIT.
 
     `Reply.offer` (NX-114) e deja aplatizat în payload['text'] (floor); randarea nativă pe
-    canale cu OFFER e follow-up (NX-127/CTA WhatsApp) → nicio ramură dedicată azi."""
+    canale cu OFFER e follow-up (NX-127/CTA WhatsApp) → nicio ramură dedicată azi.
+
+    IZI-compare: `comparison` se randează prin `send_rich` DOAR pe canale cu COMPARISON (web);
+    altundeva cade pe floor-ul aplatizat (tabelul ca text) prin degradarea normală spre 'text'."""
+    if payload.get("comparison") and Capability.COMPARISON in caps:
+        return "rich"
     if payload.get("rich") and Capability.RICH in caps:
         return "rich"
     if ptype == "edit_media":
