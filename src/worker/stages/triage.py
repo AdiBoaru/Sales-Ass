@@ -110,7 +110,8 @@ Format JSON de răspuns:
  "missing_field": <ce lipsește, pt clarify, sau null>, "reply": <text sau null>,
  "confidence": "<low|med|high>",
  "slots": {"budget_max": <număr sau null>, "concerns": [<termeni din lista de nevoi sau []>],
-           "suitable_for": <text scurt sau null>, "brand": <nume brand sau null>}}
+           "suitable_for": <text scurt sau null>, "brand": <nume brand sau null>},
+ "suggestions": [<2-4 opțiuni scurte de apăsat pt clarify (ex. idei de cadou), altfel []>]}
 
 Reguli:
 - "confidence": "high" = intenție ȘI categorie clare; "med" = rezonabil de clar; "low" = nu e
@@ -122,6 +123,9 @@ Reguli:
   primită; altfel null.
 - "reply": DOAR pentru "simple" (răspuns scurt, prietenos, în limba clientului)
   și "clarify" (o întrebare scurtă de clarificare). Pentru restul rutelor: null.
+- "suggestions": DOAR pentru "clarify" — 2-4 opțiuni SCURTE pe care clientul le poate apăsa ca să
+  avanseze, potrivite magazinului (vezi categoriile). La cadou vag: destinatar/ocazie/tip (ex.
+  „Cadou pentru ea", „Cadou pentru el", „Set cadou sub 100 lei"). Altă rută → [].
 - Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și pentru păr?"),
   folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
   „sales"), NU „clarify".
@@ -149,6 +153,9 @@ class TriageOut(BaseModel):
     # ele → default med/{} (pipeline-ul continuă). Codul decide ce face cu „low" (nu nano).
     confidence: Literal["low", "med", "high"] = "med"
     slots: dict[str, Any] = {}
+    # Chips pe care clientul le poate apăsa la o întrebare de clarificare (ex. idei de cadou). DOAR
+    # pentru route="clarify"; altă rută → []. Voce de client → reintră ca tur nou (fără scrub).
+    suggestions: list[str] = []
 
 
 async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -235,4 +242,10 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # NX-116: dacă nano n-a compus o întrebare (low-confidence forțat din sales/order), folosim
         # una generică per-locale.
         text = out.reply or _CLARIFY_FALLBACK.get(ctx.language, _CLARIFY_FALLBACK["ro"])
-        ctx.set_clarify(text, field=out.missing_field or "intent", resume_route=Route.SALES.value)
+        sugg = [s.strip() for s in out.suggestions if isinstance(s, str) and s.strip()][:4]
+        ctx.set_clarify(
+            text,
+            field=out.missing_field or "intent",
+            resume_route=Route.SALES.value,
+            suggestions=sugg,
+        )

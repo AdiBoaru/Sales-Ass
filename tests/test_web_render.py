@@ -100,6 +100,14 @@ def test_render_web_rich_shape():
     assert out["products"][0]["product_id"] == "p1" and out["products"][0]["image_url"] == "i1"
 
 
+def test_render_web_surfaces_clarify_suggestions():
+    # reply NON-rich (clarify) cu chips → widget-ul le primește ca `suggestions` (idei de cadou).
+    reply = Reply(text="Pentru cine e cadoul?", suggestions=["Cadou pentru ea", "Cadou pentru el"])
+    out = render_web(reply, "ro")
+    assert out["suggestions"] == ["Cadou pentru ea", "Cadou pentru el"]
+    assert out["content"].startswith("Pentru cine") and out["products"] == []
+
+
 # --- WebSender.send_rich / send_products (async, SSE) ------------------------
 
 
