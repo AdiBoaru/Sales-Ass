@@ -133,6 +133,9 @@ Reguli:
   buget), fără să spună CE produs — e „clarify": întreabă scurt ce tip de produs și, dacă e cadou,
   pentru cine și cu ce ocazie. DAR „cremă"/„ser"/„parfum"/„șampon" SUNT tipuri de produs → „sales"
   (chiar dacă nu se potrivesc unei categorii din listă).
+- Mesajele vin des FĂRĂ diacritice → unele cuvinte devin ambigue (ex. „fata" = „fată"/persoană sau
+  „față"/zona feței). Dezambiguizează din CONTEXT. Dacă rămâne genuin ambiguu, route „clarify" și
+  pune în „suggestions" AMBELE citiri (ex. „Cadou pentru o persoană" / „Produse pentru ten").
 - O cerere care îți cere să CONFIRMI un fapt de business (o reducere, o promoție, un preț, stocul,
   disponibilitatea unui produs/brand, livrarea, returul, garanția) NU e „simple". Dacă e despre
   produse/prețuri/promoții/disponibilitate → „sales"; altfel → „clarify". Pe „simple" NU confirma
