@@ -74,7 +74,7 @@ async def test_welcome_on_pure_greeting():
     text = ctx.reply.text
     assert "Native" in text  # numele implicit al botului
     assert "Sole Demo" in text  # numele magazinului
-    assert "inteligență artificială" in text  # disclaimer AI
+    assert "inteligență artificială" not in text  # disclaimer OFF default (#2)
     assert "Caut o cremă pentru ten uscat" in text  # sugestie pe vertical beauty
     assert ctx.reply.cacheable is False
     assert any(e.type == "welcome_sent" for e in ctx.events)
@@ -111,7 +111,17 @@ async def test_welcome_language_en():
     await greeting.greeting_stage(ctx, _DEPS)
     assert ctx.reply is not None
     assert "I'm Native" in ctx.reply.text
-    assert "artificial intelligence" in ctx.reply.text
+    assert "artificial intelligence" not in ctx.reply.text  # disclaimer OFF default (#2)
+
+
+async def test_welcome_includes_disclaimer_when_enabled(monkeypatch):
+    """AI_DISCLAIMER_ENABLED=true repune dezvăluirea în welcome (reversibil)."""
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_disclaimer_enabled", True)
+    ctx = _ctx("salut")
+    await greeting.greeting_stage(ctx, _DEPS)
+    assert "inteligență artificială" in ctx.reply.text
 
 
 async def test_welcome_unknown_vertical_uses_generic():

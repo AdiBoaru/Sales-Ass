@@ -4,6 +4,9 @@
 (simple/clarify/prose/fallback) iese cu disclaimer-ul; welcome/rich nu-l dublează; cache-ul
 stochează textul PUR (re-aplicat la hit). ZERO OpenAI/DB real (stub conn, pattern G8-1)."""
 
+import pytest
+
+from src.config import get_settings
 from src.models import BusinessConfig, Contact
 from src.worker import compose
 from src.worker import processor as proc
@@ -13,6 +16,12 @@ from src.worker.processor import handle_turn
 RO = compose._DISCLAIMER["ro"]
 EN = compose._DISCLAIMER["en"]
 HU = compose._DISCLAIMER["hu"]
+
+
+@pytest.fixture(autouse=True)
+def _enable_disclaimer(monkeypatch):
+    # disclaimer OFF default (#2) — acest fișier testează MECANISMUL, deci îl pornim explicit.
+    monkeypatch.setattr(get_settings(), "ai_disclaimer_enabled", True)
 
 
 # --- ensure_disclaimer: pur, idempotent --------------------------------------

@@ -533,7 +533,7 @@ async def handle_turn(
     # rutele (simple/clarify/prose/fallback/cache). Idempotent — rich/welcome și-l aplatizează
     # deja → nu dublează. `ctx.reply.text` rămâne PUR (owner = stagiul; cache-ul îl stochează fără
     # disclaimer și-l re-aplică la hit). NX-134.
-    reply_text = ensure_disclaimer(ctx.reply.text, ctx.language)
+    reply_text = ensure_disclaimer(ctx.reply.text, ctx.language)  # self-gated
 
     # Sender (P5): 1-2 mesaje outbound + outbox + state, în aceeași tranzacție. NX-90: reply lung
     # de TEXT PUR → spart în max 2 fragmente (citire ușoară pe telefon); carusel/rich → un singur

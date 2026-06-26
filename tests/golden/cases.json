@@ -3,7 +3,7 @@
     "id": "greeting-simple",
     "input": "salut",
     "language": "ro",
-    "expect": { "expect_reply": true, "must_include": ["inteligență artificială"] },
+    "expect": { "expect_reply": true, "must_include": ["Spune-mi ce cauți"] },
     "fixtures": {
       "moderation": { "flagged": false }
     }

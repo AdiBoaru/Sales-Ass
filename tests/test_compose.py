@@ -101,7 +101,9 @@ def test_safe_badge_drops_discount_keeps_curation() -> None:
 
 def _enable_stock(monkeypatch, on=True):
     monkeypatch.setattr(
-        compose, "get_settings", lambda: SimpleNamespace(validator_stock_claims_enabled=on)
+        compose,
+        "get_settings",
+        lambda: SimpleNamespace(validator_stock_claims_enabled=on, ai_disclaimer_enabled=False),
     )
 
 
@@ -243,7 +245,13 @@ def test_assemble_invalid_pro_index_falls_back_to_first() -> None:
     assert rich.items[0].reason == "bun — primul"
 
 
-def test_flatten_renders_data_prices_and_disclaimer() -> None:
+def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
+    # disclaimer-ul e OFF default → îl PORNIM aici ca să verificăm că `flatten` îl randează când e.
+    monkeypatch.setattr(
+        compose,
+        "get_settings",
+        lambda: SimpleNamespace(validator_stock_claims_enabled=False, ai_disclaimer_enabled=True),
+    )
     retrieved = [
         {
             "id": "A",
@@ -267,9 +275,10 @@ def test_flatten_renders_data_prices_and_disclaimer() -> None:
     assert "Funcționez cu inteligență" in text
 
 
-def test_flatten_framing_omits_enumeration_and_chips() -> None:
-    """Widget (carduri): flatten_framing = intro + pick + educație + disclaimer, FĂRĂ lista
-    numerotată cu preț/rating și FĂRĂ „Poți cere și:" — le fac cardurile + butoanele."""
+def test_flatten_framing_light_and_variable_single_item() -> None:
+    """Widget (#4 — structură ușoară/variabilă): la UN singur produs framing-ul = doar intro.
+    FĂRĂ „Recomandarea mea" (cardul ESTE recomandarea), FĂRĂ educație generică, FĂRĂ disclaimer
+    (default off), FĂRĂ enumerare/preț/rating, FĂRĂ „Poți cere și:"."""
     retrieved = [
         {
             "id": "A",
@@ -289,12 +298,32 @@ def test_flatten_framing_omits_enumeration_and_chips() -> None:
     }
     text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
     assert "Intro." in text  # framing
-    assert "Recomandarea mea: Crema A" in text  # pick (numește produsul)
-    assert "Educație." in text  # educație
-    assert "Funcționez cu inteligență" in text  # disclaimer
+    assert "Recomandarea mea" not in text  # un singur produs → fără pick separat
+    assert "Educație." not in text  # educația generică omisă (#4)
+    assert "Funcționez cu inteligență" not in text  # disclaimer OFF default (#2)
     assert "34.99" not in text and "⭐" not in text  # FĂRĂ preț/rating (le fac cardurile)
-    assert "1. Crema A" not in text  # FĂRĂ lista numerotată
-    assert "Poți cere și" not in text  # chips = butoane, nu text
+    assert "1. Crema A" not in text and "Poți cere și" not in text
+
+
+def test_flatten_framing_pick_only_when_multiple_items() -> None:
+    """„Recomandarea mea" apare DOAR când departajează între ≥2 produse (#4)."""
+    retrieved = [
+        {"id": "A", "name": "Crema A", "price": 34.99, "top_pros": ["x"]},
+        {"id": "B", "name": "Crema B", "price": 48.99, "top_pros": ["y"]},
+    ]
+    j = {
+        "intro": "Două variante:",
+        "items": [
+            {"product_id": "A", "pro_index": 0, "fit_clause": "a"},
+            {"product_id": "B", "pro_index": 0, "fit_clause": "b"},
+        ],
+        "pick": {"product_id": "A", "justification": "alegere bună"},
+        "education": "Educație.",
+        "suggestions": [],
+    }
+    text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
+    assert "Recomandarea mea: Crema A" in text  # ≥2 produse → pick prezent
+    assert "Educație." not in text  # educația rămâne omisă din framing
 
 
 def test_card_products_has_signature_keys() -> None:
