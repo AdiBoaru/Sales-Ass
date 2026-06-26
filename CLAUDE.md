@@ -427,6 +427,7 @@ nativx-assistant/
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
+│   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web (carduri+comparison) pt randarea FE (paritate iZi)
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
 ├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); apply_0NN.py
