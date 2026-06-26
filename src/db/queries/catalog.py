@@ -354,7 +354,8 @@ async def search_cheaper_than(
         + " and p.primary_category_id in ("
         + "   select primary_category_id from products"
         + "   where business_id = $1 and id = any($2::uuid[]) and primary_category_id is not null)"
-        + f" and {_EFFECTIVE_PRICE} < $3"
+        + " and p.id <> all($2::uuid[])"  # exclude produsele AFIȘATE: un produs în reducere nu e
+        + f" and {_EFFECTIVE_PRICE} < $3"  # „mai ieftin decât el însuși" → altfel bucla pe același
         + f" order by {_EFFECTIVE_PRICE} asc, {_SHRUNK_RATING} desc, p.id"
         + " limit $4"
     )

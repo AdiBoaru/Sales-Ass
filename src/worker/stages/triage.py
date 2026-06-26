@@ -103,7 +103,7 @@ Rute posibile (câmpul "route"):
 - "sales"   : caută/întreabă despre produse, recomandări, prețuri, comparații.
 - "order"   : întrebări despre o comandă existentă, livrare, AWB, retur.
 - "handoff" : cere explicit un operator uman, reclamație serioasă, caz sensibil.
-- "clarify" : mesaj ambiguu/incomplet — nu e clar ce vrea.
+- "clarify" : ambiguu — nu e clar CE produs vrea (ex. „un cadou", „ceva", doar un buget).
 
 Format JSON de răspuns:
 {"route": "<una din cele 5>", "category_key": <slug din lista dată sau null>,
@@ -125,6 +125,10 @@ Reguli:
 - Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și pentru păr?"),
   folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
   „sales"), NU „clarify".
+- O cerere de cumpărare FĂRĂ tip de produs — doar „un cadou" / „ceva" / „ceva sub 100 lei" (numai
+  buget), fără să spună CE produs — e „clarify": întreabă scurt ce tip de produs și, dacă e cadou,
+  pentru cine și cu ce ocazie. DAR „cremă"/„ser"/„parfum"/„șampon" SUNT tipuri de produs → „sales"
+  (chiar dacă nu se potrivesc unei categorii din listă).
 - O cerere care îți cere să CONFIRMI un fapt de business (o reducere, o promoție, un preț, stocul,
   disponibilitatea unui produs/brand, livrarea, returul, garanția) NU e „simple". Dacă e despre
   produse/prețuri/promoții/disponibilitate → „sales"; altfel → „clarify". Pe „simple" NU confirma

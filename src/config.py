@@ -327,6 +327,9 @@ class Settings(BaseSettings):
     llm_temperature_triage: float = Field(default=0.2, validation_alias="LLM_TEMPERATURE_TRIAGE")
     llm_temperature_agent: float = Field(default=0.7, validation_alias="LLM_TEMPERATURE_AGENT")
     llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT")
+    # Dezvăluirea AI (art. 50 AI Act): OFF = NU o adăugăm la mesaje (decizie 2026-06-26 — clientul o
+    # consideră repetitivă). Reversibilă: ON o repune (o singură dată, idempotent în Sender).
+    ai_disclaimer_enabled: bool = Field(default=False, validation_alias="AI_DISCLAIMER_ENABLED")
 
     @property
     def is_prod(self) -> bool:

@@ -121,8 +121,10 @@ def ensure_disclaimer(text: str | None, language: str | None) -> str:
     welcome (greeting) și rich (`flatten`) îl pun deja, iar un text scris în `ro` rămâne acoperit
     chiar dacă `ctx.language` a derivat altceva între timp (set-membership pe toate locale-urile).
     Pur, fără I/O. Aplicat DOAR la Sender (P5) → acoperă toate rutele, fără a atinge stagiile."""
-    d = disclaimer(language)
     body = (text or "").rstrip()
+    if not get_settings().ai_disclaimer_enabled:
+        return body  # #2: disclaimer OFF (default) → text neatins (gate unic pt toate canalele)
+    d = disclaimer(language)
     if any(known in body for known in _DISCLAIMER.values()):
         return body
     return f"{body}\n\n{d}" if body else d
@@ -221,7 +223,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         pick=pick,
         education=_drop_unfounded_stock(scrub_prose(j.get("education")), stock_present),
         chips=_suggestion_chips(j.get("suggestions") or []),
-        disclaimer=disclaimer(ctx.language),
+        disclaimer=disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None,
     )
 
 
@@ -269,21 +271,21 @@ def flatten(rich: RichReply) -> str:
 
 def flatten_framing(rich: RichReply) -> str:
     """Aplatizare pentru canalele care randează produsele ca CARDURI (widget web, /web/chat):
-    DOAR framing-ul conversațional — intro + recomandarea („pick") + educație + disclaimer.
+    framing conversațional UȘOR și VARIABIL ca structură (#4 — evită tiparul identic la fiecare
+    mesaj): intro + recomandarea („pick") DOAR când sunt ≥2 produse de departajat.
 
-    OMITE enumerarea numerotată a produselor (o fac cardurile cu poză/preț/rating/buton) și linia
-    „Poți cere și:" (o fac chips-urile, randate ca butoane). Așa textul nu mai dublează cardurile.
-    `flatten()` rămâne floor-ul COMPLET pt canalele fără carduri (WhatsApp/cache/messages.body).
-    Same engine, altă prezentare per canal — cuplajul stă la margine (P: canal doar la margini)."""
+    OMITE: enumerarea numerotată (o fac cardurile), linia „Poți cere și:" (o fac chips-urile) și
+    paragraful de EDUCAȚIE generic (s-a dovedit repetitiv pe widget). La un SINGUR produs nu mai
+    punem „Recomandarea mea" (cardul ESTE recomandarea → ar dubla). `flatten()` rămâne floor-ul
+    COMPLET pt canalele fără carduri (WhatsApp/cache/messages.body)."""
     blocks: list[str] = []
     if rich.intro:
         blocks.append(rich.intro)
-    if rich.pick:
+    # „pick" doar când departajează între ≥2 produse; la unul singur cardul vorbește de la sine.
+    if rich.pick and len(rich.items) > 1:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
         head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
         blocks.append(head + rich.pick[1])
-    if rich.education:
-        blocks.append(rich.education)
     if rich.disclaimer:
         blocks.append(rich.disclaimer)
     return "\n\n".join(blocks).strip()

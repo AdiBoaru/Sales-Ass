@@ -347,17 +347,19 @@ def test_build_chat_response_maps_rich_items_and_chips():
         pick=("p1", "cel mai bun fit"),
         education="curăță delicat",
         chips=[Chip(label="Mai ieftin", payload="chip:cheaper")],
-        disclaimer="Funcționez cu inteligență artificială, așa că pot greși uneori.",
+        disclaimer=None,  # disclaimer OFF default (#2) — nu mai face parte din framing
     )
     reply = Reply(text="1. Ser X — 89.00 lei\n\nÎți recomand Ser X.", rich=rich)
     res = wa._build_chat_response(
         TurnResult("c", "ct", "t", reply.text, None, reply=reply, language="ro")
     )
     content = res["content"]
-    # Widget: content = DOAR framing (intro + pick + educație), NU enumerarea cu preț.
+    # Widget (#4): framing UȘOR — intro; la UN produs FĂRĂ „Recomandarea mea", fără educație
+    # generică, fără disclaimer (default off). Enumerarea cu preț o fac cardurile.
     assert "Pentru ten gras:" in content  # intro
-    assert "Recomandarea mea: Ser X" in content  # pick numește produsul
-    assert "curăță delicat" in content  # educație
+    assert "Recomandarea mea" not in content  # un singur produs → fără pick separat
+    assert "curăță delicat" not in content  # educația omisă din framing
+    assert "inteligență" not in content  # disclaimer OFF default
     assert "89" not in content  # FĂRĂ enumerarea cu preț (o fac cardurile)
     assert "1. Ser X" not in content  # FĂRĂ lista numerotată (flatten complet)
     card = res["products"][0]

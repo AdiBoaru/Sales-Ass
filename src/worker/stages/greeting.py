@@ -176,7 +176,8 @@ def build_welcome(
     ]
     if suggestions:
         parts += ["", t["try"], *(f"• {s}" for s in suggestions)]
-    parts += ["", t["disclaimer"]]
+    if get_settings().ai_disclaimer_enabled:  # art. 50 AI Act — gated (decizie 2026-06-26: OFF)
+        parts += ["", t["disclaimer"]]
     return "\n".join(parts)
 
 
