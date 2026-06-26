@@ -139,4 +139,16 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
             s for s in (merged.get("settled_order_statuses") or []) if isinstance(s, str)
         ),
         currency=str(currency),
+        badge_rules=_norm_badge_rules(merged.get("badge_rules")),
     )
+
+
+def _norm_badge_rules(raw: Any) -> dict[str, float]:
+    """Praguri badge: chei str → valori numerice (float). Orice gunoi → ignorat (fail-safe, P6)."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        if isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[k] = float(v)
+    return out

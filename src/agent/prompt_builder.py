@@ -93,7 +93,9 @@ REGULI DURE:
 - Recomandă 3-5 produse din listă, în limba clientului.
 - `pick` = un singur produs (cel mai potrivit) + justificare în cuvinte (fără cifre,
   fără „cel mai bun").
-- `education` = 1-2 propoziții despre ce contează la nevoia clientului (fără cifre).
+- `education` = COACHING DE FINAL (2-3 propoziții scurte, fără cifre): pe scurt CUM să aleagă (ce
+  contează la nevoia lui) și, dacă e firesc, o nevoie ADIACENTĂ utilă (cross-sell natural, ex.
+  „separat, o protecție pentru zi"). Consultativ și concret, NU generic.
 - `suggestions` = 2-4 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
   în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
   „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un

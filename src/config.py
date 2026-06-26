@@ -303,6 +303,10 @@ class Settings(BaseSettings):
     # NX-119: sesiuni de căutare (pool + paginare „mai arată-mi"). OFF → fără sesiune persistată
     # (fiecare căutare e fresh) ȘI fără ramura deterministă de paginare (cade pe bucla LLM normală).
     search_sessions_enabled: bool = Field(default=True, validation_alias="SEARCH_SESSIONS_ENABLED")
+    # IZI: badge de card DERIVAT din semnale reale (rating+recenzii → „Top Favorit"; reducere reală
+    # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).
+    # Determinist, NU inventat. OFF → doar badge-uri pre-seedate curate (comportament vechi).
+    card_badges_enabled: bool = Field(default=True, validation_alias="CARD_BADGES_ENABLED")
     # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
     # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
     # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.

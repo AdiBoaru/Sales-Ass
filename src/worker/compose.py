@@ -29,6 +29,7 @@ from src.models import (
     RichItem,
     RichReply,
 )
+from src.worker.badges import derive_badge
 from src.worker.text_scrub import has_marketing_claim, has_stock_claim, has_unverifiable_claim
 
 if TYPE_CHECKING:
@@ -182,6 +183,11 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
     # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).
     stock_present = _stock_available(retrieved)
+    # IZI: badge DERIVAT (Top Favorit / Super Preț) din semnale reale, prin pragurile DomainPack.
+    # Badge-ul pre-seedat curat (rar) are prioritate; gated de kill-switch (OFF → vechi).
+    badges_on = get_settings().card_badges_enabled
+    pack = getattr(ctx.business, "domain_pack", None)
+    badge_rules = pack.badge_rules if pack else None
     items: list[RichItem] = []
     seen: set[str] = set()
     for it in j.get("items") or []:
@@ -209,7 +215,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
                 image=p.get("image"),
                 rating=float(p["rating"]) if p.get("rating") is not None else None,
                 review_count=int(rc) if rc else None,
-                badge=_safe_badge(p.get("badge")),
+                badge=_safe_badge(p.get("badge"))
+                or (derive_badge(p, ctx.language, badge_rules) if badges_on else None),
                 list_price=float(lp) if lp is not None and float(lp) > eff else None,
             )
         )
