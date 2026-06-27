@@ -354,11 +354,11 @@ def test_build_chat_response_maps_rich_items_and_chips():
         TurnResult("c", "ct", "t", reply.text, None, reply=reply, language="ro")
     )
     content = res["content"]
-    # Widget (#4): framing UȘOR — intro; la UN produs FĂRĂ „Recomandarea mea", fără educație
-    # generică, fără disclaimer (default off). Enumerarea cu preț o fac cardurile.
+    # Widget (#4): framing UȘOR — intro + coaching de final (IZI: `education` revine pe widget);
+    # la UN produs FĂRĂ „Recomandarea mea", fără disclaimer (default off). Prețul îl fac cardurile.
     assert "Pentru ten gras:" in content  # intro
     assert "Recomandarea mea" not in content  # un singur produs → fără pick separat
-    assert "curăță delicat" not in content  # educația omisă din framing
+    assert "curăță delicat" in content  # IZI: coaching de final randat pe widget (era omis)
     assert "inteligență" not in content  # disclaimer OFF default
     assert "89" not in content  # FĂRĂ enumerarea cu preț (o fac cardurile)
     assert "1. Ser X" not in content  # FĂRĂ lista numerotată (flatten complet)

@@ -103,7 +103,11 @@ def _enable_stock(monkeypatch, on=True):
     monkeypatch.setattr(
         compose,
         "get_settings",
-        lambda: SimpleNamespace(validator_stock_claims_enabled=on, ai_disclaimer_enabled=False),
+        lambda: SimpleNamespace(
+            validator_stock_claims_enabled=on,
+            ai_disclaimer_enabled=False,
+            card_badges_enabled=False,  # aceste teste nu testează badge-uri → fără interferență
+        ),
     )
 
 
@@ -250,7 +254,11 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
     monkeypatch.setattr(
         compose,
         "get_settings",
-        lambda: SimpleNamespace(validator_stock_claims_enabled=False, ai_disclaimer_enabled=True),
+        lambda: SimpleNamespace(
+            validator_stock_claims_enabled=False,
+            ai_disclaimer_enabled=True,
+            card_badges_enabled=False,
+        ),
     )
     retrieved = [
         {
@@ -276,9 +284,9 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
 
 
 def test_flatten_framing_light_and_variable_single_item() -> None:
-    """Widget (#4 — structură ușoară/variabilă): la UN singur produs framing-ul = doar intro.
-    FĂRĂ „Recomandarea mea" (cardul ESTE recomandarea), FĂRĂ educație generică, FĂRĂ disclaimer
-    (default off), FĂRĂ enumerare/preț/rating, FĂRĂ „Poți cere și:"."""
+    """Widget (#4): la UN singur produs framing-ul = intro + coaching de final (IZI: `education`
+    revine pe widget). FĂRĂ „Recomandarea mea" (cardul ESTE recomandarea), FĂRĂ disclaimer (default
+    off), FĂRĂ enumerare/preț/rating, FĂRĂ „Poți cere și:"."""
     retrieved = [
         {
             "id": "A",
@@ -299,7 +307,7 @@ def test_flatten_framing_light_and_variable_single_item() -> None:
     text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
     assert "Intro." in text  # framing
     assert "Recomandarea mea" not in text  # un singur produs → fără pick separat
-    assert "Educație." not in text  # educația generică omisă (#4)
+    assert "Educație." in text  # IZI: coaching de final randat acum pe widget (era omis, NX-134)
     assert "Funcționez cu inteligență" not in text  # disclaimer OFF default (#2)
     assert "34.99" not in text and "⭐" not in text  # FĂRĂ preț/rating (le fac cardurile)
     assert "1. Crema A" not in text and "Poți cere și" not in text
@@ -323,7 +331,7 @@ def test_flatten_framing_pick_only_when_multiple_items() -> None:
     }
     text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
     assert "Recomandarea mea: Crema A" in text  # ≥2 produse → pick prezent
-    assert "Educație." not in text  # educația rămâne omisă din framing
+    assert "Educație." in text  # IZI: coaching de final prezent pe widget (era omis, NX-134)
 
 
 def test_card_products_has_signature_keys() -> None:

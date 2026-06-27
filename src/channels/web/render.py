@@ -12,7 +12,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from src.models import Chip, Offer, Reply, RichItem, RichReply
+from src.models import (
+    Chip,
+    Comparison,
+    ComparisonColumn,
+    ComparisonRow,
+    Offer,
+    Reply,
+    RichItem,
+    RichReply,
+)
 from src.worker.compose import ensure_disclaimer, flatten_framing
 
 if TYPE_CHECKING:
@@ -28,9 +37,14 @@ def _card(
     product_id: Any = None,
     rating: Any = None,
     reason: Any = None,
+    review_count: Any = None,
+    badge: Any = None,
+    list_price: Any = None,
 ) -> dict[str, Any]:
-    """Un card de produs pt widget. Câmpuri compacte (P8); `image_url`/`url`/`rating`/`reason`
-    lipsesc dacă datele nu există (NU inventăm `null`-uri). Frontendul randează ce primește."""
+    """Un card de produs pt widget. Câmpuri compacte (P8); cheile lipsesc dacă datele nu există
+    (NU inventăm `null`-uri). Frontendul randează ce primește. `price` = prețul CURENT; `list_price`
+    (preț original tăiat) se emite DOAR când e strict peste `price` (reducere reală); `review_count`
+    doar > 0; `badge` doar curat (data-gated în compose). Vezi docs/FRONTEND-CONTRACT-IZI.md."""
     card: dict[str, Any] = {"product_id": product_id, "name": name, "price": price}
     if image:
         card["image_url"] = image
@@ -40,7 +54,33 @@ def _card(
         card["rating"] = rating
     if reason:
         card["reason"] = reason
+    if review_count and review_count > 0:
+        card["review_count"] = review_count
+    if badge:
+        card["badge"] = badge
+    if list_price and price and list_price > price:
+        card["list_price"] = list_price
     return card
+
+
+def _comparison_payload(cmp: Comparison) -> dict[str, Any]:
+    """Forma de CONTRACT FRONTEND a tabelului: coloane (un produs/coloană) + rânduri (o
+    dimensiune/rând, `values` aliniat 1:1 cu coloanele; `null` = celulă lipsă → „—"). Cheile
+    opționale lipsesc dacă datele nu există. Vezi docs/FRONTEND-CONTRACT-IZI.md."""
+    columns: list[dict[str, Any]] = []
+    for c in cmp.columns:
+        col: dict[str, Any] = {"product_id": c.product_id, "name": c.name, "price": c.price}
+        if c.list_price is not None and c.price and c.list_price > c.price:
+            col["list_price"] = c.list_price
+        if c.image:
+            col["image_url"] = c.image
+        if c.url:
+            col["url"] = c.url
+        if c.rating is not None:
+            col["rating"] = c.rating
+        columns.append(col)
+    rows = [{"label": r.label, "values": list(r.values)} for r in cmp.rows]
+    return {"columns": columns, "rows": rows}
 
 
 def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
@@ -56,7 +96,26 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
     lang = language or "ro"
     products: list[dict[str, Any]] = []
     suggestions: list[str] = list(reply.suggestions)  # non-rich (ex. clarify): chips de pe reply
-    if reply.rich is not None:
+    extra: dict[str, Any] = {}  # câmpuri suplimentare de contract (ex. `comparison`)
+    if reply.comparison is not None:
+        # IZI-compare: tabel structurat. `content` = DOAR lead-ul (tabelul îl randează frontendul
+        # din `comparison`); cardurile = produsele comparate (header poză+preț). Vezi spec FE.
+        cmp = reply.comparison
+        products = [
+            _card(
+                c.name,
+                c.price,
+                c.image,
+                c.url,
+                product_id=c.product_id,
+                rating=c.rating,
+                list_price=c.list_price,
+            )
+            for c in cmp.columns
+        ]
+        extra["comparison"] = _comparison_payload(cmp)
+        content = ensure_disclaimer(cmp.intro or "", lang)
+    elif reply.rich is not None:
         products = [
             _card(
                 it.name,
@@ -66,6 +125,9 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
                 product_id=it.product_id,
                 rating=it.rating,
                 reason=it.reason,
+                review_count=it.review_count,
+                badge=it.badge,
+                list_price=getattr(it, "list_price", None),
             )
             for it in reply.rich.items
         ]
@@ -85,7 +147,12 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
         content = ensure_disclaimer(reply.text, lang)
     else:
         content = ensure_disclaimer(reply.text, lang)
-    out: dict[str, Any] = {"content": content, "products": products, "suggestions": suggestions}
+    out: dict[str, Any] = {
+        "content": content,
+        "products": products,
+        "suggestions": suggestions,
+        **extra,
+    }
     offer = getattr(reply, "offer", None)
     if offer is not None:
         # Web = buton tappabil; pe WhatsApp/Telegram același offer e CTA/text (floor aplatizat).
@@ -113,6 +180,28 @@ def reply_from_outbox(payload: dict[str, Any]) -> Reply:
             chips=[Chip(**c) for c in (rd.get("chips") or []) if isinstance(c, dict)],
             disclaimer=rd.get("disclaimer") or "",
         )
+    comparison: Comparison | None = None
+    cd = payload.get("comparison")
+    if isinstance(cd, dict):
+        cols = [
+            ComparisonColumn(
+                product_id=col.get("product_id"),
+                name=col.get("name"),
+                price=col.get("price"),
+                list_price=col.get("list_price"),
+                image=col.get("image"),
+                url=col.get("url"),
+                rating=col.get("rating"),
+            )
+            for col in (cd.get("columns") or [])
+            if isinstance(col, dict)
+        ]
+        rows = [
+            ComparisonRow(label=r.get("label") or "", values=list(r.get("values") or []))
+            for r in (cd.get("rows") or [])
+            if isinstance(r, dict)
+        ]
+        comparison = Comparison(columns=cols, rows=rows, intro=cd.get("intro"))
     offer: Offer | None = None
     od = payload.get("offer")
     if isinstance(od, dict) and od.get("kind") and od.get("label"):
@@ -122,6 +211,7 @@ def reply_from_outbox(payload: dict[str, Any]) -> Reply:
     return Reply(
         text=payload.get("text") or "",
         rich=rich,
+        comparison=comparison,
         products=payload.get("products"),
         offer=offer,
     )

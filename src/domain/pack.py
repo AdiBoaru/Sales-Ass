@@ -35,3 +35,6 @@ class DomainPack:
     # statusuri „finalizat" pt check_order (ex. delivered/closed) — neutre pe vertical.
     settled_order_statuses: tuple[str, ...] = ()
     currency: str = "RON"  # moneda afișată (din businesses.settings["currency"], fallback RON)
+    # IZI: praguri pt badge-ul DERIVAT de card (top_rating/top_reviews/deal_discount_pct). Gol →
+    # default-uri agnostice de vertical din `src/worker/badges.py`. Override per-tenant în settings.
+    badge_rules: dict[str, float] = field(default_factory=dict)

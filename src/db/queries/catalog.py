@@ -113,6 +113,10 @@ _SELECT = f"""
         prs.top_pros[1]             as review_pro,
         prs.top_pros                as top_pros,
         (p.sale_price is not null and p.sale_price < p.price) as on_sale,
+        -- IZI-anchor: preț ORIGINAL (tăiat), DOAR la reducere reală; altfel NULL → cardul nu
+        -- afișează „de la X" fals pe o variantă mai mică. `price` rămâne efectivul curent.
+        (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
+                                    as list_price,
         p.attributes->'concerns'    as concerns,
         vr.variants                 as variants
     from products p
@@ -279,6 +283,10 @@ _DETAIL_SELECT = f"""
         p.availability              as availability,
         img.url                     as image,
         p.rating::float8            as rating,
+        p.review_count              as review_count,
+        -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
+        (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
+                                    as list_price,
         prs.summary                 as review_summary,
         prs.top_pros                as top_pros,
         prs.top_cons                as top_cons,

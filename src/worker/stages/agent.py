@@ -84,6 +84,29 @@ def _cheapest_already_msg(language: str | None) -> str:
     return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
 
 
+# IZI-compare: chips deterministe pe un tabel comparativ (voce de client → reintră ca tur nou:
+# „Adaugă X" → cart_add; „Ceva mai ieftin" → cheaper). Etichete per-locale (text UI, nu rutare).
+_ADD_LABEL: dict[str, str] = {"ro": "Adaugă", "en": "Add", "hu": "Hozzáad"}
+_CHEAPER_CHIP: dict[str, str] = {
+    "ro": "Ceva mai ieftin",
+    "en": "Something cheaper",
+    "hu": "Valami olcsóbb",
+}
+
+
+def _compare_chips(columns: list[Any], language: str | None) -> list[str]:
+    """Follow-up-uri deterministe după o comparație: „Adaugă <produs>" pentru primele 2 + „mai
+    ieftin". Numele lungi se scurtează (butonul are limită). Voce de client (fără scrub)."""
+    lang = language or "ro"
+    add = _ADD_LABEL.get(lang) or _ADD_LABEL["ro"]
+    chips: list[str] = []
+    for c in columns[:2]:
+        name = c.name if len(c.name) <= 28 else c.name[:27].rstrip() + "…"
+        chips.append(f"{add} {name}")
+    chips.append(_CHEAPER_CHIP.get(lang) or _CHEAPER_CHIP["ro"])
+    return chips
+
+
 # NX-119b: „mai arată-mi"/„show more" = INTENȚIE de PAGINARE (NU un tool nou). Pe o sesiune activă
 # → pagina următoare DETERMINIST, fără bucla LLM. NU prinde „mai ieftin" (= cheaper_intent). Ancorat
 # pe sensul de paginare: „mai multe" PLURAL bare/terminal sau + obiect de listă — NU „mai multă/mult
@@ -621,6 +644,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     generated_links: set[str] = set()  # linkuri create de bot (checkout_link) → validator
     grounded_prices: set[float] = set()  # sume din DB (total comandă/checkout) → validator
     order_views: list[str] = []  # vederi grounded de comandă, pt fallback-ul de status
+    compared: list[dict[str, Any]] = []  # IZI-compare: setul EXPLICIT comparat (compare_products)
 
     async def execute(name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
@@ -629,6 +653,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         result = await run_tool(ctx, deps, name, args)
         latency_ms = round((perf_counter() - started) * 1000, 1)
         retrieved.extend(result.products)
+        # IZI-compare: dacă modelul a chemat compare_products (a înțeles „compară primele două"),
+        # reține setul comparat ÎN ORDINEA cerută (get_products_by_ids o păstrează) → tabel.
+        if name == "compare_products" and result.ok and result.products:
+            compared[:] = result.products
         generated_links.update(result.links)
         grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
@@ -723,6 +751,24 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ids = [p.product_id for p in ctx.state.displayed_products]
         products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
     ctx.retrieval = RetrievalResult(products=products, source="tools")
+
+    # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
+    # Tabel structurat DETERMINIST din setul comparat (ordinea cerută păstrată) — fapte din
+    # retrieval, lead determinist (cel mai ieftin / cel mai bine cotat), ZERO proză LLM în celule →
+    # zero halucinație. Web randează tabelul; canalele text primesc floor-ul aplatizat. Precede
+    # calea rich de recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele
+    # două" care doar re-lista produsele). Sare peste rich/proză pentru acest tur.
+    if compared and not is_order:
+        comparison = compose.build_comparison(compared, ctx.language)
+        if comparison is not None:
+            ctx.set_comparison_reply(
+                comparison,
+                text=compose.flatten_comparison(comparison, ctx.language),
+                products=compose.comparison_cards(comparison),
+                chips=_compare_chips(comparison.columns, ctx.language),
+            )
+            ctx.emit("agent_compared", n=len(comparison.columns))
+            return
 
     if products:
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.

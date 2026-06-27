@@ -219,6 +219,39 @@ def test_render_web_none_reply_empty():
     assert render_web(None, "ro") == {"content": "", "products": [], "suggestions": []}
 
 
+# --- IZI carduri bogate: review_count + badge + list_price + coaching de final ---
+
+
+def _rich_with(**item_kw) -> Reply:
+    item = RichItem(product_id="p", name="A", price=item_kw.pop("price", 63.99), **item_kw)
+    return Reply(
+        text="",
+        rich=RichReply(
+            intro=None, items=[item], pick=None, education=None, chips=[], disclaimer="d"
+        ),
+    )
+
+
+def test_card_surfaces_review_count_badge_list_price():
+    card = render_web(
+        _rich_with(rating=4.6, review_count=120, badge="Top Favorite", list_price=79.99), "ro"
+    )["products"][0]
+    assert card["review_count"] == 120 and card["badge"] == "Top Favorite"
+    assert card["list_price"] == 79.99 and card["price"] == 63.99  # original tăiat vs curent
+
+
+def test_review_count_zero_and_undiscounted_list_price_omitted():
+    card = render_web(_rich_with(review_count=0, list_price=40.0, price=50.0), "ro")["products"][0]
+    assert "review_count" not in card  # 0 recenzii → cheia lipsește (nu „0 recenzii")
+    assert "list_price" not in card  # list (40) < price (50) → NU e reducere → fără anchor
+
+
+def test_education_rendered_as_closing_coaching_on_web():
+    # IZI-coaching: `education` revine ca paragraf de final pe widget (înainte cădea tăcut, NX-134).
+    out = render_web(_rich_reply(), "ro")
+    assert "contează ingredientele" in out["content"]
+
+
 # --- render_path event (P10: degradarea rich→text devine vizibilă) ----------
 
 
