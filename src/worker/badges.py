@@ -54,8 +54,10 @@ def derive_badge(
     rating = product.get("rating")
     review_count = product.get("review_count") or 0
     try:
-        if rating is not None and float(rating) >= r["top_rating"] and int(review_count) >= int(
-            r["top_reviews"]
+        if (
+            rating is not None
+            and float(rating) >= r["top_rating"]
+            and int(review_count) >= int(r["top_reviews"])
         ):
             return labels["top"]
     except (TypeError, ValueError):

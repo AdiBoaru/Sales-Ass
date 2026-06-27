@@ -55,8 +55,19 @@ def _ctx_with_session(*, category, concerns):
 def _capture_lexical(monkeypatch):
     seen = {}
 
-    async def fake_lexical(conn, business_id, *, query_text, price_max, concerns, category,
-                           brand, sort_mode, in_stock_only, pool):
+    async def fake_lexical(
+        conn,
+        business_id,
+        *,
+        query_text,
+        price_max,
+        concerns,
+        category,
+        brand,
+        sort_mode,
+        in_stock_only,
+        pool,
+    ):
         seen["category"] = category
         seen["concerns"] = concerns
         return [{"id": "p-cheap", "name": "Crema ieftină", "price": 19.99}]
