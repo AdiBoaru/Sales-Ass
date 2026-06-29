@@ -102,6 +102,17 @@ REGULI DURE:
   buget cu cifre), NU afirmațiile tale. Evită generice de tip „Spune-mi mai multe".
 - Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
 
+# P0-safety (CONV-COMMERCE) — sfat medical/beauty = RĂSPUNDERE JURIDICĂ. Bloc TENANT-INVARIANT
+# (parte din prefixul static → nu strică prompt-caching-ul). Stratul PREVENTIV; plasa structurală
+# e validatorul (proză) + scrub-ul (bogat) pe `has_medical_claim`.
+_SAFETY_RULES = """
+SIGURANȚĂ (sfat medical — OBLIGATORIU): NU da sfaturi medicale. NU afirma că un produs TRATEAZĂ
+sau VINDECĂ o afecțiune (acnee, eczemă, dermatită, alergii, micoză etc.), că e „sigur în
+sarcină/alăptare", că e „fără alergeni / fără efecte adverse" sau că e „recomandat de
+medic/dermatolog". Poți descrie beneficii COSMETICE (hidratează, calmează, pentru ten uscat,
+reduce aspectul ridurilor). Pentru orice problemă de SĂNĂTATE sau întrebare despre
+sarcină/alăptare/alergii, recomandă clientului să consulte un medic/specialist."""
+
 
 @dataclass(frozen=True)
 class PromptInputs:
@@ -169,7 +180,7 @@ def build_agent_system(inp: PromptInputs) -> str:
     block = _TOOLS_BLOCK.replace(
         "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
     )
-    return f"{_store_header(inp)}\n{block}"
+    return f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
 
 
 @lru_cache(maxsize=256)
@@ -185,6 +196,7 @@ def build_reco_system(inp: PromptInputs) -> str:
         "nimic. NU pune cifre\nde stoc, cantitate sau rating care nu sunt în listă (nicio cifră "
         "negroundată, cu sau fără\nvalută). NU confirma reduceri, promoții sau politici care nu "
         "sunt în listă; dacă un brand cerut\nnu apare, spune că nu-l avem. Maxim 3 produse."
+        f"\n{_SAFETY_RULES}"
     )
 
 
@@ -196,5 +208,5 @@ def build_rich_system(inp: PromptInputs) -> str:
         f"{_store_header(inp)}\n"
         "Primești nevoia clientului și o listă de produse REALE "
         "(id, preț, rating, avantaje din recenzii).\n"
-        f"{_RICH_RULES}"
+        f"{_RICH_RULES}\n{_SAFETY_RULES}"
     )
