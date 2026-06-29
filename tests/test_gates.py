@@ -106,6 +106,20 @@ async def test_risk_escalates_and_replies(monkeypatch):
     )
 
 
+async def test_risk_not_escalated_on_web(monkeypatch):
+    # Web (handoff off): risc detectat, dar NU escaladăm și NU întrerupem — mesajul curge normal.
+    async def _boom(*a, **k):
+        raise AssertionError("nu escaladăm pe web")
+
+    monkeypatch.setattr(gates, "set_handoff", _boom)
+    ctx = _ctx(body="vreau sa vorbesc cu un om")
+    ctx.message.channel_kind = "webchat"
+    await gates.gates_stage(ctx, PipelineDeps(conn=None))
+    assert ctx.reply is None  # niciun mesaj de „coleg"
+    assert ctx.halt is False  # nu oprește pipeline-ul (curge la triaj)
+    assert any(e.type == "handoff_suppressed" for e in ctx.events)
+
+
 async def test_normal_message_passes(monkeypatch):
     # set_handoff NU trebuie atins pe un mesaj normal
     async def boom(*a, **k):

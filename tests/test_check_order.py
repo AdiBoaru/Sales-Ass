@@ -231,13 +231,15 @@ async def test_web_order_gated_to_login_no_llm(monkeypatch):
     assert calls["n"] == 0  # check_order nici nu e chemat
 
 
-async def test_web_order_login_offers_handoff_when_enabled():
+async def test_web_order_login_no_handoff_offer_on_web():
+    # Handoff off pe web → NU oferim operator, chiar dacă tenantul are `request_human` activ.
+    # (Codul `with_handoff`/sufixul rămâne — doar gardat pe canal; reversibil din env.)
     ctx = _web_ctx()
     ctx.business.settings = {"tools": {"request_human": True}}  # tenant CU operator
     await agent_stage(ctx, _deps(_FakeLLM(final="x")))
     assert ctx.reply is not None
-    assert ctx.reply.text == login_required_message("ro", with_handoff=True)
-    assert "coleg" in ctx.reply.text  # oferta de handoff prezentă
+    assert ctx.reply.text == login_required_message("ro")  # fără sufix de „coleg"
+    assert "coleg" not in ctx.reply.text
 
 
 async def test_no_orders_message_is_channel_aware(monkeypatch):
