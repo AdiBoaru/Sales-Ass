@@ -38,6 +38,7 @@ from src.db.connection import admin_conn, get_pool, tenant_conn
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.redis_bus import enqueue_inbound, get_redis
+from src.web.identity import verify_identity_token
 from src.web.session import WebSession, get_session_cache, issue_visitor, verify_web_session
 from src.webhook.body_limit import enforce_body_cap
 from src.worker.limits import (
@@ -59,6 +60,8 @@ class WebMessageIn(BaseModel):
     sig: str = Field(min_length=1)
     text: str = Field(min_length=1, max_length=2000)
     client_msg_id: str | None = None
+    # NX-129: JWT host-signed de login passthrough (opțional). Absent/invalid → vizitator anonim.
+    id_token: str | None = Field(default=None, max_length=4096)
 
 
 class WebChatIn(BaseModel):
@@ -70,6 +73,8 @@ class WebChatIn(BaseModel):
     sig: str = Field(min_length=1)
     message: str = Field(min_length=1, max_length=2000)
     client_msg_id: str | None = None
+    # NX-129: JWT host-signed de login passthrough (opțional). Absent/invalid → vizitator anonim.
+    id_token: str | None = Field(default=None, max_length=4096)
 
 
 # --- seam-uri de control plane (admin_conn) — monkeypatch-uite în teste ------
@@ -87,6 +92,23 @@ async def _verify(token: str, visitor_id: str, sig: str) -> WebSession | None:
     pool = await get_pool()
     async with admin_conn(pool) as conn:
         return await verify_web_session(conn, token, visitor_id, sig)
+
+
+def _apply_identity(event: InboundEvent, session: WebSession, id_token: str | None) -> None:
+    """NX-129 — login passthrough: verifică `id_token`-ul opțional (JWT HS256) la marginea web și
+    marchează envelope-ul cu `verified_customer_ref` (worker-ul rezolvă contactul verificat pe el).
+    Feature OFF / fără token / tenant fără `identity_secret` → no-op (vizitator anonim). Un token
+    invalid/expirat → NU blochează chat-ul (rămâne anonim); motivul respingerii merge în payload
+    pentru observabilitate (worker-ul emite `web_identity_rejected`)."""
+    s = get_settings()
+    if not (s.web_identity_enabled and id_token and session.identity_secret):
+        return
+    customer_ref, reject = verify_identity_token(
+        id_token, session.identity_secret, leeway_s=s.web_identity_leeway_s
+    )
+    event.verified_customer_ref = customer_ref
+    if reject:
+        event.payload = {**event.payload, "identity_rejected": reject}
 
 
 async def web_rate_limited(
@@ -152,6 +174,7 @@ async def web_message(req: WebMessageIn, request: Request) -> dict:
         content_type="text",
         body=req.text.strip(),
     )
+    _apply_identity(event, session, req.id_token)  # NX-129: login passthrough (opțional)
     await enqueue_inbound(redis, event.to_dict())
     return {"accepted": True, "msg_id": event.provider_msg_id}
 
@@ -186,14 +209,16 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
         channel = await resolve_channel(conn, "webchat", req.token)
     if channel is None:
         raise HTTPException(status_code=403, detail="unknown channel")
-    event = InboundEvent(
+    event_obj = InboundEvent(
         channel_kind="webchat",
         channel_account_id=req.token,
         sender_external_id=req.visitor_id,
         provider_msg_id=req.client_msg_id or str(uuid4()),
         content_type="text",
         body=req.message.strip(),
-    ).to_dict()
+    )
+    _apply_identity(event_obj, session, req.id_token)  # NX-129: login passthrough (opțional)
+    event = event_obj.to_dict()
     s = get_settings()
     async with tenant_conn(session.business_id) as conn:
         business = await load_business(conn, session.business_id)

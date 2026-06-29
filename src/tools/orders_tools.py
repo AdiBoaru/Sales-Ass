@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from src.db.queries.commerce import get_orders_status
 from src.tools.base import ToolResult, register
+from src.worker.order_gate import no_orders_message
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -63,18 +64,24 @@ async def check_order_tool(
 ) -> ToolResult:
     """Status + tracking pentru comanda cerută (după nr) sau ultimele comenzi ale contactului."""
     a = CheckOrderArgs(**args)
-    # Izolare: ÎNTOTDEAUNA scoped pe contactul curent (în SQL). `order_ref` doar îngustează.
+    # Izolare: cheia de lookup vine din CONTEXT (verificat server-side), NU din args — `order_ref`
+    # doar îngustează. NX-130: web cu login passthrough verificat (`ctx.verified_customer_ref`) →
+    # caută pe customer_ref (comenzile reale, NElegate de contactul web throwaway); canalele
+    # identificate (telefon/chat = cont) → pe contact_id, ca azi. customer_ref din args = ignorat.
+    customer_ref = ctx.verified_customer_ref
     orders = await get_orders_status(
         deps.conn,
         ctx.business.id,
         external_id=a.order_ref,
-        contact_id=ctx.contact.id,
+        contact_id=None if customer_ref else ctx.contact.id,
+        external_customer_ref=customer_ref,
         limit=1 if a.order_ref else 3,
     )
     if not orders:
-        return ToolResult(
-            ok=False, error="not_found", llm_view="Nu am găsit nicio comandă pe acest cont."
-        )
+        # NX-128: mesaj onest, conștient de canal. Web anonim e scurtcircuitat în agent_stage
+        # (mesaj de login) ÎNAINTE de tool → aici ajung doar canalele identificate (telefon/chat =
+        # cont), unde „pe contul tău" e corect, nu „pe acest cont" (cont căutat inexistent).
+        return ToolResult(ok=False, error="not_found", llm_view=no_orders_message(ctx))
     return ToolResult(
         ok=True,
         products=[],  # nu-s produse de catalog → nu poluează validatorul de preț

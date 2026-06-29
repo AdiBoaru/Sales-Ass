@@ -39,6 +39,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
 from src.tools.base import enabled_tools, run_tool
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
+from src.worker.order_gate import login_required_message, web_unidentified
 from src.worker.text_scrub import has_stock_claim, has_text_claim
 
 if TYPE_CHECKING:
@@ -622,6 +623,21 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not query:
         return
     is_order = route.route == Route.ORDER
+
+    # NX-128: pe web ANONIM (fără cont), o cerere de comandă/retur nu poate găsi comenzi —
+    # `check_order` e scoped pe contactul throwaway (src/web/session.py). În loc de „nu am găsit
+    # comanda pe acest cont" (înșelător) + buclă (modelul ar cere nr/email inutil), răspuns
+    # determinist de login, ÎNAINTE de bucla LLM (cost $0). Oferta de handoff doar dacă tenantul
+    # are operator (`request_human` opt-in). NX-129 va lăsa web-ul cu login verificat să treacă.
+    if is_order and web_unidentified(ctx):
+        with_handoff = "request_human" in enabled_tools(ctx.business)
+        ctx.emit(
+            "order_lookup_gated", channel_kind=ctx.message.channel_kind, reason="web_unidentified"
+        )
+        ctx.set_reply(
+            login_required_message(ctx.language, with_handoff=with_handoff), cacheable=False
+        )
+        return
 
     # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (fără bucla LLM, cost $0
     # de inferență). NU pe ORDER/„mai ieftin" (cheaper_intent). Sesiune absentă → flux normal.

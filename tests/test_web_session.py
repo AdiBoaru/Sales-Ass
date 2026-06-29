@@ -147,10 +147,18 @@ class _FakeConn:
 
 
 async def test_resolve_web_session_returns_secret():
-    conn = _FakeConn({"business_id": "biz-1", "session_secret": "sek"})
+    conn = _FakeConn({"business_id": "biz-1", "session_secret": "sek", "identity_secret": "idk"})
     out = await channels_q.resolve_web_session(conn, "pub_abc")
-    assert out == {"business_id": "biz-1", "session_secret": "sek"}
+    assert out == {"business_id": "biz-1", "session_secret": "sek", "identity_secret": "idk"}
     assert conn.captured == ("pub_abc",)  # public_token = $1 (P7: derivă tenantul)
+
+
+async def test_resolve_web_session_identity_secret_optional():
+    # NX-129: canal cu session_secret dar FĂRĂ identity_secret (login passthrough inactiv pe tenant)
+    # → sesiune anonimă validă, identity_secret None (nu invalidează sesiunea).
+    conn = _FakeConn({"business_id": "biz-1", "session_secret": "sek", "identity_secret": None})
+    out = await channels_q.resolve_web_session(conn, "pub_abc")
+    assert out == {"business_id": "biz-1", "session_secret": "sek", "identity_secret": None}
 
 
 async def test_resolve_web_session_none_on_no_row():
@@ -159,5 +167,5 @@ async def test_resolve_web_session_none_on_no_row():
 
 async def test_resolve_web_session_none_when_secret_missing():
     # canal seedat incomplet (fără session_secret) → miss grațios, nu o sesiune fără secret
-    conn = _FakeConn({"business_id": "biz-1", "session_secret": None})
+    conn = _FakeConn({"business_id": "biz-1", "session_secret": None, "identity_secret": None})
     assert await channels_q.resolve_web_session(conn, "pub_abc") is None

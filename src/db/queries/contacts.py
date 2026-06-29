@@ -148,6 +148,7 @@ async def get_or_create_contact(
     *,
     display_name: str | None = None,
     locale: str | None = None,
+    verified: bool = False,
 ) -> Contact:
     """Rezolvă contactul după identitatea de canal; îl creează dacă lipsește.
 
@@ -156,6 +157,10 @@ async def get_or_create_contact(
     `unique(business_id, channel_kind, external_id)` previne duplicatele sub
     concurență — dacă două tururi creează același contact nou simultan, cel care
     pierde conflictul face rollback la contactul orfan și re-citește câștigătorul.
+
+    `verified` (NX-129): marchează identitatea ca VERIFICATĂ la creare (login passthrough web —
+    `external_id` = customer_ref dovedit prin JWT). Anonim (visitor_id) = False (default). E creată
+    DOAR cu un token valid → nu re-evaluăm flagul pe drumul rapid (rămâne stabil).
     """
     existing = await _select_by_identity(conn, business_id, channel_kind, external_id)
     if existing is not None:
@@ -176,8 +181,8 @@ async def get_or_create_contact(
             won = await conn.fetchval(
                 """
                 insert into channel_identities
-                    (business_id, contact_id, channel_kind, external_id)
-                values ($1, $2, $3, $4)
+                    (business_id, contact_id, channel_kind, external_id, verified)
+                values ($1, $2, $3, $4, $5)
                 on conflict (business_id, channel_kind, external_id) do nothing
                 returning contact_id
                 """,
@@ -185,6 +190,7 @@ async def get_or_create_contact(
                 row["id"],
                 channel_kind,
                 external_id,
+                verified,
             )
             if won is None:
                 # alt tur a creat identitatea între timp → rollback orfanul

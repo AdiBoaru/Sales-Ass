@@ -22,6 +22,7 @@ from src.agent import usage
 from src.agent.llm import get_llm
 from src.agent.pricing import savings_for
 from src.cache.canonical import canonicalize, classify_volatility
+from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.db.queries.analytics import insert_events
@@ -304,11 +305,6 @@ async def _extract_profile_and_score(
         log.exception("extractor profil a eșuat (turul continuă)")
 
 
-# Canale IDENTIFICATE (contact stabil) → plafon per-contact. Web (`webchat`) e anonim și are deja
-# plafon per-vizitor pe calea sincronă (NX-120) → nu-l dublăm aici (NX-125).
-_IDENTIFIED_CHANNELS = ("whatsapp", "telegram")
-
-
 async def _llm_within_budget(
     ctx: TurnContext, redis: Redis | None, business: BusinessConfig, *, channel_kind: str
 ):
@@ -333,7 +329,7 @@ async def _llm_within_budget(
             )
             return None
         # NX-125: plafon SOFT per-contact (canale identificate; web = NX-120). Pre-check read-only.
-        if contact_cap and channel_kind in _IDENTIFIED_CHANNELS:
+        if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_capped(redis, scope, contact_cap):
                 ctx.emit("contact_spend_capped", cap_usd=contact_cap)
@@ -374,7 +370,7 @@ async def _record_turn_cost(
         log.warning("cost guard: add eșuat (%s)", type(e).__name__)
     # NX-125: plafon per-contact (canale identificate; web = NX-120). Increment atomic + compară.
     contact_cap = settings.contact_daily_cost_cap_usd
-    if contact_cap and channel_kind in _IDENTIFIED_CHANNELS:
+    if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
         try:
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_over_cap(redis, scope, cost, contact_cap, CONTACT_COST_WINDOW_S):
@@ -442,6 +438,11 @@ async def handle_turn(
     channel_kind = event.get("channel_kind", "whatsapp")
     sender_external_id = event["sender_external_id"]
     provider_msg_id = event.get("provider_msg_id")
+    # NX-129: login passthrough — dacă marginea de canal a verificat o identitate stabilă
+    # (`customer_ref` din JWT host-signed), rezolvăm contactul pe EA (verified=true → contact stabil
+    # peste sesiuni/device-uri), nu pe visitor_id-ul anonim. Absent → comportament anonim (ca azi).
+    verified_customer_ref = event.get("verified_customer_ref")
+    identity_external_id = verified_customer_ref or sender_external_id
 
     # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
     # Guard ÎNAINTE de orice scriere — un duplicat nu produce mesaj, nici outbox.
@@ -456,8 +457,9 @@ async def handle_turn(
         conn,
         business.id,
         channel_kind,
-        sender_external_id,
+        identity_external_id,
         display_name=event.get("sender_name"),
+        verified=bool(verified_customer_ref),
     )
     conv = await get_or_create_conversation(
         conn,
@@ -500,7 +502,16 @@ async def handle_turn(
         language=conv["locale"] or business.default_locale,
         bot_active=conv["bot_active"],
         handoff_until=conv["handoff_until"],
+        verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
+
+    # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
+    if verified_customer_ref:
+        ctx.emit("web_identity_verified")
+    else:
+        reject = (event.get("payload") or {}).get("identity_rejected")
+        if reject:
+            ctx.emit("web_identity_rejected", reason=reject)
 
     # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
     # NX-125: reseed LAZY al contorului zilei din usage_daily (supraviețuiește pierderii Redis),

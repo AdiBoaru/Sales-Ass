@@ -7,6 +7,7 @@ izolarea (scoped pe contact în apel), totaluri grounded, toolset per-rută, și
 from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDecision, TurnContext
 from src.tools import orders_tools as om
 from src.tools.base import enabled_tools
+from src.worker.order_gate import login_required_message
 from src.worker.runner import PipelineDeps
 from src.worker.stages.agent import _prices_ok, _valid, agent_stage
 
@@ -43,10 +44,16 @@ def _deps(llm=None) -> PipelineDeps:
 
 
 def _patch_orders(monkeypatch, orders, sink=None):
-    async def fake(conn, business_id, *, external_id=None, contact_id=None, limit=3):
+    async def fake(
+        conn, business_id, *, external_id=None, contact_id=None, external_customer_ref=None, limit=3
+    ):
         if sink is not None:
             sink.update(
-                business_id=business_id, external_id=external_id, contact_id=contact_id, limit=limit
+                business_id=business_id,
+                external_id=external_id,
+                contact_id=contact_id,
+                external_customer_ref=external_customer_ref,
+                limit=limit,
             )
         return orders
 
@@ -83,6 +90,8 @@ async def test_check_order_by_contact(monkeypatch):
     assert "ORD-1" in res.llm_view and "shipped" in res.llm_view and "RO123456789" in res.llm_view
     # izolare: lookup scoped pe contactul curent, fără order_ref → ultimele 3
     assert sink["contact_id"] == "c" and sink["external_id"] is None and sink["limit"] == 3
+    # NX-130: canal identificat (fără login passthrough) → pe contact_id, NU pe customer_ref
+    assert sink["external_customer_ref"] is None
 
 
 async def test_check_order_by_ref_is_contact_scoped(monkeypatch):
@@ -172,3 +181,92 @@ async def test_non_sales_non_order_is_noop():
     ctx = _ctx(route=Route.SIMPLE)
     await agent_stage(ctx, _deps(_FakeLLM(final="x")))
     assert ctx.reply is None  # agentul nu rulează pe alte rute
+
+
+# --- NX-128: poarta de comandă/retur pe web anonim ---------------------------
+
+
+def _web_ctx(*, route=Route.ORDER, body="vreau să fac retur") -> TurnContext:
+    ctx = TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="b", slug="d", name="D"),
+        contact=Contact(id="c", business_id="b"),
+        message=InboundMessage(provider_msg_id="m", body=body, channel_kind="webchat"),
+        conversation_id="conv",
+    )
+    if route is not None:
+        ctx.route = RouteDecision(route=route)
+    return ctx
+
+
+class _SpyLLM(_FakeLLM):
+    """Marchează dacă bucla de tool a fost atinsă (ca să dovedim scurtcircuitul gate-ului)."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.loop_called = False
+
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+        self.loop_called = True
+        return await super().run_tool_loop(
+            system, user, tools, execute, max_steps=max_steps, model=model
+        )
+
+
+async def test_web_order_gated_to_login_no_llm(monkeypatch):
+    calls = {"n": 0}
+
+    async def spy(*a, **k):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(om, "get_orders_status", spy)
+    ctx = _web_ctx()
+    llm = _SpyLLM(tool_calls=[("check_order", {"order_ref": None})], final="x")
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None
+    assert ctx.reply.text == login_required_message("ro")  # mesaj de login determinist
+    assert ctx.reply.cacheable is False  # context-relativ → nu otrăvește cache-ul
+    assert llm.loop_called is False  # scurtcircuit ÎNAINTE de bucla LLM (cost $0)
+    assert calls["n"] == 0  # check_order nici nu e chemat
+
+
+async def test_web_order_login_offers_handoff_when_enabled():
+    ctx = _web_ctx()
+    ctx.business.settings = {"tools": {"request_human": True}}  # tenant CU operator
+    await agent_stage(ctx, _deps(_FakeLLM(final="x")))
+    assert ctx.reply is not None
+    assert ctx.reply.text == login_required_message("ro", with_handoff=True)
+    assert "coleg" in ctx.reply.text  # oferta de handoff prezentă
+
+
+async def test_no_orders_message_is_channel_aware(monkeypatch):
+    _patch_orders(monkeypatch, [])  # canal identificat (whatsapp), fără comenzi
+    res = await om.check_order_tool(_ctx(), _deps(), {"order_ref": "GHOST"})
+    assert res.ok is False and res.error == "not_found"
+    # onest „pe contul tău" (telefon = cont), NU „pe acest cont" (cont căutat inexistent)
+    assert "contul tău" in res.llm_view and "acest cont" not in res.llm_view
+
+
+async def test_web_order_verified_reaches_tool_loop(monkeypatch):
+    # NX-129: web cu login passthrough verificat (verified_customer_ref) NU mai e gated → ajunge la
+    # bucla de tool (check_order). (Lookup-ul real pe customer_ref e NX-130; aici doar poarta.)
+    _patch_orders(monkeypatch, [ORDER])
+    ctx = _web_ctx()
+    ctx.verified_customer_ref = "cust_1"
+    llm = _SpyLLM(tool_calls=[("check_order", {"order_ref": None})], final="Comanda ta e ok.")
+    await agent_stage(ctx, _deps(llm))
+    assert llm.loop_called is True  # identitate verificată → NU scurtcircuitat de poartă
+
+
+async def test_verified_web_looks_up_by_customer_ref(monkeypatch):
+    # NX-130: web cu identitate verificată → check_order caută pe customer_ref (din sesiunea
+    # verificată), NU pe contactul throwaway. Un order_ref în args doar îngustează, nu sare peste.
+    sink: dict = {}
+    _patch_orders(monkeypatch, [ORDER], sink)
+    ctx = _web_ctx(body="unde e comanda mea?")
+    ctx.verified_customer_ref = "cust_42"
+    res = await om.check_order_tool(ctx, _deps(), {"order_ref": None})
+    assert res.ok is True
+    assert sink["external_customer_ref"] == "cust_42"  # cheia = customer_ref verificat (din ctx)
+    assert sink["contact_id"] is None  # NU contactul web (comenzile reale nu-s legate de el)

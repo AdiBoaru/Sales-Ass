@@ -442,6 +442,10 @@ class TurnContext:
     language: str = "ro"
     bot_active: bool = True  # owner: processor (din conversations.bot_active)
     handoff_until: datetime | None = None  # owner: processor (conversations.handoff_until)
+    # NX-129: customer_ref verificat (login passthrough web) — id stabil de client din eshop,
+    # stabilit la marginea de canal și rezolvat de processor în contact verificat. None = anonim.
+    # Owner: processor. Citit de order_gate (poarta de comandă) și de check_order (NX-130: lookup).
+    verified_customer_ref: str | None = None
     route: RouteDecision | None = None  # owner: Triaj
     retrieval: RetrievalResult | None = None  # owner: Retrieval
     reply: Reply | None = None  # owner: orice stagiu (early exit)

@@ -46,6 +46,13 @@ CAPABILITY_METHODS: dict[Capability, str] = {
 }
 
 
+# Canale cu identitate „de facto" stabilă: id-ul de canal ESTE userul (telefon E.164 la WhatsApp,
+# chat id la Telegram). Web (`webchat`) e ANONIM by design (src/web/session.py) → identitatea vine
+# doar dintr-un login passthrough verificat (NX-129). Consumatori: plafon cost per-contact (NX-125),
+# poarta de comandă/retur (NX-128). Un singur loc de adevăr ca să nu diverge între module.
+IDENTIFIED_CHANNELS: tuple[str, ...] = ("whatsapp", "telegram")
+
+
 @dataclass
 class InboundEvent:
     """Un mesaj inbound NORMALIZAT (envelope neutru de canal), serializabil JSON.
@@ -62,6 +69,10 @@ class InboundEvent:
     body: str | None = None
     media_id: str | None = None
     sender_name: str | None = None
+    # NX-129: identitate STABILĂ verificată a sender-ului, stabilită la marginea de canal (login
+    # passthrough web → customer_ref din JWT). None = anonim. Neutru de canal: orice canal care
+    # poate dovedi un client o pune aici; worker-ul rezolvă contactul pe ea (verified=true).
+    verified_customer_ref: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

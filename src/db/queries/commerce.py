@@ -83,18 +83,26 @@ async def upsert_order(
     attribution: str,
     attributed_checkout_link_id: str | None,
     payload: dict[str, Any],
+    external_customer_ref: str | None = None,
 ) -> dict[str, Any]:
     """Inserează (idempotent pe `business_id+external_id`) o comandă. La re-livrare
     actualizează DOAR status/total/updated_at — atribuirea + contactul NU se downgradează.
-    Întoarce `{id, inserted}` (`inserted` = a fost insert nou, via `xmax = 0`)."""
+    Întoarce `{id, inserted}` (`inserted` = a fost insert nou, via `xmax = 0`).
+
+    `external_customer_ref` (NX-130): id-ul OPAC de client din eshop (sau hash de email — NU PII,
+    P12), pe care login passthrough-ul web (NX-129) îl folosește la lookup. No-downgrade la conflict
+    (`coalesce(existent, nou)`): o re-livrare poate BACKFILL-a un NULL, dar nu șterge o valoare."""
     row = await conn.fetchrow(
         """
         insert into orders
             (business_id, contact_id, external_id, status, total, currency,
-             attributed_checkout_link_id, attribution, payload, placed_at)
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+             attributed_checkout_link_id, attribution, payload, placed_at, external_customer_ref)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
         on conflict (business_id, external_id) do update
-            set status = excluded.status, total = excluded.total, updated_at = now()
+            set status = excluded.status, total = excluded.total, updated_at = now(),
+                external_customer_ref = coalesce(
+                    orders.external_customer_ref, excluded.external_customer_ref
+                )
         returning id::text as id, (xmax = 0) as inserted
         """,
         business_id,
@@ -107,6 +115,7 @@ async def upsert_order(
         attribution,
         json.dumps(payload),
         placed_at,
+        external_customer_ref,
     )
     return dict(row)
 
@@ -224,11 +233,13 @@ async def get_orders_status(
     *,
     external_id: str | None = None,
     contact_id: str | None = None,
+    external_customer_ref: str | None = None,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
     """Comenzile (status + tracking) pentru tool-ul `check_order`. UN singur SELECT cu lateral
     `order_items` (jsonb_agg, fără N+1) + ultimul `shipment` (după updated_at). Filtrare DURĂ pe
-    `business_id` ȘI (opțional) `external_id`/`contact_id` — izolarea pe contact se face ÎN SQL
+    `business_id` ȘI (opțional) `external_id`/`contact_id`/`external_customer_ref` (NX-130: login
+    passthrough caută pe customer_ref, nu pe contactul throwaway) — izolarea se face ÎN SQL
     (defense-in-depth), nu doar în cod. `order_items` n-are `business_id` → izolare tranzitivă prin
     rândul părinte `orders` (deja tenant-scoped). Ordine: cele mai recente comenzi întâi."""
     rows = await conn.fetch(
@@ -254,12 +265,14 @@ async def get_orders_status(
         where o.business_id = $1
           and ($2::text is null or o.external_id = $2)
           and ($3::uuid is null or o.contact_id = $3)
+          and ($4::text is null or o.external_customer_ref = $4)
         order by o.placed_at desc
-        limit $4
+        limit $5
         """,
         business_id,
         external_id,
         contact_id,
+        external_customer_ref,
         min(limit, 6),
     )
     out: list[dict[str, Any]] = []

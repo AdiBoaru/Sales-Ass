@@ -55,6 +55,10 @@ class OrderIn(BaseModel):
     ref: str | None = None
     placed_at: datetime
     items: list[OrderItemIn] = Field(default_factory=list)
+    # NX-130: id-ul STABIL de client din eshop (opac, sau hash de email — NU PII, P12). Login
+    # passthrough-ul web (NX-129) caută comenzile pe el. Trebuie să fie ACEEAȘI cheie pe care
+    # backend-ul gazdei o pune în `sub`-ul JWT-ului. Absent → comandă fără identitate de client.
+    customer_ref: str | None = Field(default=None, max_length=128)
 
 
 async def process_order(
@@ -90,6 +94,7 @@ async def process_order(
         attribution=attribution,
         attributed_checkout_link_id=checkout_link_id,
         payload=order,
+        external_customer_ref=o.customer_ref,
     )
     order_id = row["id"]
     inserted = bool(row["inserted"])
