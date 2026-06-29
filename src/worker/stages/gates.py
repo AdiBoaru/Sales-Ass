@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 import asyncpg
 
 from src.agent.llm import VISION_NOT_PRODUCT
-from src.config import INBOUND_BODY_MAX, get_settings
+from src.config import INBOUND_BODY_MAX, get_settings, handoff_enabled_for
 from src.db.queries.contacts import block_contact
 from src.db.queries.conversations import set_handoff
 from src.models import TurnContext
@@ -429,14 +429,19 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if await _moderation_blocked(ctx, deps):
         return
 
-    # 6. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (3).
+    # 6. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (3). DOAR pe canale
+    #    cu handoff activ: pe web (fără operator) NU escaladăm și NU întrerupem — mesajul curge
+    #    normal spre triaj/agent (botul asistă singur; flux normal, fără mesaj special; P6).
     reason = detect_risk(ctx.message.body)
     if reason:
-        await request_human(deps.conn, ctx, reason, source="risk")
-        # NX-126: necacheabil — un mesaj de escaladare scris în semantic_cache ar fi servit altui
-        # user FĂRĂ ca vreun om să fie notificat (cache poisoning → tăcere de facto, încalcă P6).
-        ctx.set_reply("Te conectez cu un coleg, revin imediat 🙂", cacheable=False)
-        return
+        if not handoff_enabled_for(ctx.message.channel_kind):
+            ctx.emit("handoff_suppressed", reason=reason, source="risk")
+        else:
+            await request_human(deps.conn, ctx, reason, source="risk")
+            # NX-126: necacheabil — escaladarea scrisă în semantic_cache ar fi servită altui user
+            # FĂRĂ ca un om să fie notificat (cache poisoning → tăcere de facto, încalcă P6).
+            ctx.set_reply("Te conectez cu un coleg, revin imediat 🙂", cacheable=False)
+            return
 
     # 7. media routing (NX-76): poză → Vision → descriere ca text de căutare, apoi pipeline normal.
     #    DUPĂ rate-limit/moderare (nu cheltui Vision pe un contact throttled/blocat); NU early-exit

@@ -12,7 +12,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from src.models import Route, TurnContext
+from src.config import handoff_enabled_for
+from src.models import Route, RouteDecision, TurnContext
 from src.tools.handoff_tools import notify_operator
 from src.worker.stages.gates import request_human
 
@@ -25,11 +26,19 @@ _HANDOFF_REPLY = "Te conectez cu un coleg din echipă — îți răspunde cineva
 
 
 async def handoff_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Pe `Route.HANDOFF`: escaladează + confirmă clientului. No-op pe orice altă rută."""
+    """Pe `Route.HANDOFF`: escaladează + confirmă clientului. No-op pe orice altă rută.
+
+    Pe canale FĂRĂ handoff (web, fără operator): nu escaladăm și NU trimitem mesaj de „coleg" —
+    rescriem ruta la SALES ca agentul (stagiul următor) să răspundă normal (flux normal, fără mesaj
+    special; P6). Acoperă HANDOFF din triaj ȘI escaladarea din clarify (ambele ajung aici)."""
     route = ctx.route
     if route is None or route.route != Route.HANDOFF:
         return
     if ctx.reply is not None:  # un stagiu anterior a servit deja → nu suprascriem (P3)
+        return
+    if not handoff_enabled_for(ctx.message.channel_kind):
+        ctx.route = RouteDecision(route=Route.SALES)  # agentul preia (P6), niciun mesaj de operator
+        ctx.emit("handoff_suppressed", source="triage")
         return
     try:
         await request_human(deps.conn, ctx, "user_request", source="triage")

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent import prompt_builder
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
-from src.config import get_settings
+from src.config import get_settings, handoff_enabled_for
 from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
@@ -630,7 +630,11 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # determinist de login, ÎNAINTE de bucla LLM (cost $0). Oferta de handoff doar dacă tenantul
     # are operator (`request_human` opt-in). NX-129 va lăsa web-ul cu login verificat să treacă.
     if is_order and web_unidentified(ctx):
-        with_handoff = "request_human" in enabled_tools(ctx.business)
+        # Oferta de operator doar dacă tenantul are `request_human` ȘI canalul permite handoff
+        # (web off → nu promitem un coleg care nu există; codul rămâne, doar gardat).
+        with_handoff = "request_human" in enabled_tools(ctx.business) and handoff_enabled_for(
+            ctx.message.channel_kind
+        )
         ctx.emit(
             "order_lookup_gated", channel_kind=ctx.message.channel_kind, reason="web_unidentified"
         )

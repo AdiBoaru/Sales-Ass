@@ -8,6 +8,7 @@ Fără DB/rețea: set_handoff / notify_operator / request_human monkeypatch-uite
 from types import SimpleNamespace
 
 import src.tools.handoff_tools  # noqa: F401 — înregistrează request_human în TOOL_REGISTRY
+from src.config import handoff_enabled_for
 from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDecision, TurnContext
 from src.tools import handoff_tools as ht
 from src.tools.base import enabled_tools, run_tool
@@ -16,12 +17,14 @@ from src.worker.stages import handoff as hs
 from src.worker.stages.handoff import handoff_stage
 
 
-def _ctx(route=Route.HANDOFF) -> TurnContext:
+def _ctx(route=Route.HANDOFF, *, channel="whatsapp") -> TurnContext:
     ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
         contact=Contact(id="c", business_id="b"),
-        message=InboundMessage(provider_msg_id="m", body="vreau să vorbesc cu un om"),
+        message=InboundMessage(
+            provider_msg_id="m", body="vreau să vorbesc cu un om", channel_kind=channel
+        ),
         conversation_id="conv",
     )
     if route is not None:
@@ -103,6 +106,37 @@ async def test_handoff_stage_replies_even_if_escalation_fails(monkeypatch):
 
 async def _unreachable(*a, **k):
     raise AssertionError("nu trebuie chemat")
+
+
+# --- handoff per-canal: web OFF (cod păstrat, doar gardat) -------------------
+
+
+def test_handoff_enabled_for_channel():
+    # WhatsApp/Telegram permit handoff; web (`webchat`) e exclus by default.
+    assert handoff_enabled_for("whatsapp") is True
+    assert handoff_enabled_for("telegram") is True
+    assert handoff_enabled_for("webchat") is False
+
+
+async def test_handoff_stage_suppressed_on_web(monkeypatch):
+    # Web: NU escaladează, niciun mesaj „coleg"; rescrie ruta la SALES (agentul preia, P6).
+    monkeypatch.setattr(hs, "request_human", _unreachable)
+    monkeypatch.setattr(hs, "notify_operator", _unreachable)
+    ctx = _ctx(route=Route.HANDOFF, channel="webchat")
+    await handoff_stage(ctx, _deps())
+    assert ctx.reply is None
+    assert ctx.route.route == Route.SALES
+    assert any(e.type == "handoff_suppressed" for e in ctx.events)
+
+
+async def test_request_human_tool_suppressed_on_web(monkeypatch):
+    # Tool-ul agentului: no-op pe web (nu cheamă set_handoff), dar răspunde ok ca modelul să asiste.
+    monkeypatch.setattr(ht, "set_handoff", _unreachable)
+    monkeypatch.setattr(ht, "notify_operator", _unreachable)
+    ctx = _ctx(route=Route.SALES, channel="webchat")
+    res = await run_tool(ctx, _deps(), "request_human", {"reason": "client nemulțumit"})
+    assert res.ok is True
+    assert any(e.type == "handoff_suppressed" for e in ctx.events)
 
 
 # --- tool request_human (NX-82) ----------------------------------------------

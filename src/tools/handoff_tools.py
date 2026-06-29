@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from pydantic import BaseModel, Field
 
-from src.config import get_settings
+from src.config import get_settings, handoff_enabled_for
 from src.db.queries.conversations import set_handoff
 from src.tools.base import ToolResult, register
 
@@ -57,7 +57,19 @@ async def request_human_tool(
 ) -> ToolResult:
     """Escaladează conversația la un operator uman (NX-82). Setează `handoff_until` (botul tace
     turul următor) + notifică operatorul. `reason` (din model) ajunge la operator, NU în event
-    (P12: eventul folosește un token fix `agent_request`, fără fragmente de conversație)."""
+    (P12: eventul folosește un token fix `agent_request`, fără fragmente de conversație).
+
+    Pe canale FĂRĂ handoff (web, fără operator): no-op — nu escaladăm, modelul continuă să asiste
+    direct (P6). Nu promitem un coleg care nu există."""
+    if not handoff_enabled_for(ctx.message.channel_kind):
+        ctx.emit("handoff_suppressed", source="agent")
+        return ToolResult(
+            ok=True,
+            llm_view=(
+                "Transferul către un coleg uman nu e disponibil pe acest canal. Continuă să ajuți "
+                "clientul direct, cât poți de bine."
+            ),
+        )
     a = RequestHumanArgs(**args)
     await set_handoff(
         deps.conn,

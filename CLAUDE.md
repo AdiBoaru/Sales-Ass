@@ -64,7 +64,9 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
 [3] GATES (cod pur, fără LLM)
     • bot_active check (conversations.bot_active) → early exit cu handoff dacă false
     • handoff_until check → dacă în viitor, tăcere (om preia)
-    • risc detection (pattern-uri) → request_human dacă necesar
+    • risc detection (pattern-uri) → request_human dacă necesar — DOAR pe canale cu
+      handoff activ (config.handoff_enabled_channels). Web exclus by default: fără
+      operator → nu escaladăm/nu tăcem, mesajul curge normal (botul asistă singur)
     • media routing: vocale → STT (Whisper), poze → Vision (match catalog)
     • language detect → RO / HU / EN (setează ctx.language; TOATE
       lookup-urile în faqs / semantic_cache / wa_templates includ locale)
