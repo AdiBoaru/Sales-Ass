@@ -70,6 +70,17 @@ async def embed_products_run() -> None:
         await embed_products.embed_pending(conn, llm)
 
 
+async def proactive_initiators_run() -> None:
+    """PL-1: scanează sursele persistente și CREEAZĂ proactive_jobs (coș abandonat + back-in-stock).
+    Control-plane (admin) + per-tenant (RLS) sunt în `run_initiators` — aici doar pool + log."""
+    from src.db.connection import get_pool
+    from src.proactive import initiators
+
+    pool = await get_pool()
+    counts = await initiators.run_initiators(pool)
+    log.info("proactive initiators: %s", counts)
+
+
 # --------------------------------------------------------------------------- #
 # Bucla
 # --------------------------------------------------------------------------- #
@@ -117,6 +128,14 @@ def _build_jobs() -> list[Job]:
                 "embed_products",
                 embed_products_run,
                 interval_seconds=s.scheduler_embed_interval_seconds,
+            )
+        )
+    if s.proactive_enabled and s.proactive_initiators_enabled:  # PL-1: hrănește motorul proactiv
+        jobs.append(
+            Job(
+                "proactive_initiators",
+                proactive_initiators_run,
+                interval_seconds=s.proactive_initiators_interval_s,
             )
         )
     return jobs

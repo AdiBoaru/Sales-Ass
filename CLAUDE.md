@@ -469,8 +469,11 @@ nativx-assistant/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
 │   │   └── tool_definitions.py  ← OpenAI tool schemas
 │   ├── proactive/
-│   │   ├── scheduler.py         ← proactive_jobs (AWB / back-in-stock / coș abandonat)
-│   │   └── templates.py         ← wa_templates + 24h window + consent check
+│   │   ├── scheduler.py         ← proactive_jobs → outbox (motor NX-70; calea template LIVE, PR #142)
+│   │   ├── initiators.py        ← PL-1: sweeper-e care CREEAZĂ proactive_jobs (coș abandonat +
+│   │   │                          back-in-stock) + seam-uri awb/follow_up; rulate de jobs/scheduler
+│   │   ├── builders.py          ← text per kind (free_text + template_name + variables)
+│   │   └── templates.py         ← wa_templates + 24h window + consent check (poartă NX-71)
 │   ├── gdpr/
 │   │   └── erase.py             ← gdpr_erase_contact + export
 │   ├── evals/                   ← G8-1: harness golden (regresii de pipeline)

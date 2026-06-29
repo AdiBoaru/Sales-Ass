@@ -258,10 +258,32 @@ class Settings(BaseSettings):
 
     # --- Motor proactiv (NX-70, scheduler separat peste proactive_jobs) ---
     # Producătorul pentru outbox: AWB / back-in-stock / coș abandonat / follow-up.
-    # Gating-ul (consent / fereastră 24h / template) e poarta NX-71. v1 = doar type=text.
+    # Gating-ul (consent / fereastră 24h / template) e poarta NX-71. Calea template = PR #142.
     proactive_enabled: bool = Field(default=True, validation_alias="PROACTIVE_ENABLED")
     proactive_batch_size: int = Field(default=20, validation_alias="PROACTIVE_BATCH_SIZE")
     proactive_idle_sleep_s: float = Field(default=5.0, validation_alias="PROACTIVE_IDLE_SLEEP_S")
+
+    # --- Inițiatori proactivi (PL-1): sweeper-e care CREEAZĂ proactive_jobs ---
+    # Până la PR2, NIMENI nu insera joburi → zero proactiv în prod (gap CRITICAL). Sweeper-ele
+    # (coș abandonat + back-in-stock) rulează în mini-scheduler-ul intern (src/jobs/scheduler.py),
+    # gardat ȘI de `proactive_enabled`. OFF → niciun job nou creat (motorul rămâne, dar fără hrană).
+    proactive_initiators_enabled: bool = Field(
+        default=True, validation_alias="PROACTIVE_INITIATORS_ENABLED"
+    )
+    proactive_initiators_interval_s: int = Field(
+        default=900, validation_alias="PROACTIVE_INITIATORS_INTERVAL_S"
+    )
+    proactive_initiators_batch: int = Field(
+        default=200, validation_alias="PROACTIVE_INITIATORS_BATCH"
+    )
+    # Coș abandonat: reamintim după `after` de la creare, dar NU coșuri mai vechi de `max_age`
+    # (stale → spam). Default: reminder după 1h, ignoră > 7 zile.
+    abandoned_cart_after_seconds: int = Field(
+        default=3600, validation_alias="ABANDONED_CART_AFTER_SECONDS"
+    )
+    abandoned_cart_max_age_seconds: int = Field(
+        default=604800, validation_alias="ABANDONED_CART_MAX_AGE_SECONDS"
+    )
 
     # --- Validator cifre bare (NX-91, stagiul 8 inline în agent) ---
     # Pe lângă prețurile cu valută (_PRICE_RE), validatorul prinde și cifrele «grele» FĂRĂ valută

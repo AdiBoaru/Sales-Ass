@@ -64,6 +64,7 @@ services:
   #  • rollup_usage zilnic (facturare/dashboard din usage_daily)
   #  • cleanup_dedupe la 6h (purjă inbound_dedupe >48h)
   #  • embed_products orar incremental (doar dacă OPENAI_API_KEY e setat)
+  #  • proactive_initiators (PL-1): creează proactive_jobs (coș abandonat + back-in-stock)
   # Folosește DOAR DB-ul (admin_conn), nu Redis. Healthcheck pe heartbeat file; restart automat.
   scheduler:
     build: .
