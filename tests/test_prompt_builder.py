@@ -36,6 +36,17 @@ def test_vertical_injected_beauty():
     assert "search_products" in s and "Maxim 3 apeluri" in s  # blocul de tool-uri + reguli
 
 
+def test_anti_invented_need_in_prose_and_rich():
+    """Val1: regula anti-nevoie-inventată + hedge e în prompturile de proză ȘI bogat."""
+    prose = build_agent_system(_inp())
+    rich = build_rich_system(_inp())
+    for s in (prose, rich):
+        low = s.lower()
+        assert "atribute despre client" in low  # nu inventa atribute nespuse
+    assert "ipotez" in prose.lower()  # proza cere formulare ca ipoteză (hedge)
+    assert "formulă blândă" in rich or "formula blanda" in rich.lower()  # leagă de produs
+
+
 # --- NX-114: moneda din DomainPack în prompt ---------------------------------
 
 

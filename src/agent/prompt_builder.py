@@ -81,6 +81,9 @@ Reguli:
   similare, zicând explicit că sunt alte produse.
 - Dacă rezultatul e marcat «relaxat», fii sincer: spune că n-ai găsit potrivire exactă pe ce a
   cerut și că astea sunt cele mai apropiate (nu pretinde că se potrivesc perfect nevoii lui).
+- NU presupune și NU afirma ATRIBUTE despre client (ten sensibil/gras, păr vopsit, alergii etc.)
+  pe care NU le-a spus. Dacă o presupunere e utilă, formuleaz-o ca IPOTEZĂ („dacă ai tenul
+  sensibil, ...") sau leag-o de produs („are o formulă blândă") — niciodată ca fapt despre client.
 - Termină cu o întrebare scurtă (buget / nevoie) sau oferta de a trimite link. Text
   simplu pentru chat, fără markdown greu."""
 
@@ -97,6 +100,9 @@ REGULI DURE:
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
   avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = o clauză SCURTĂ care leagă
   produsul de NEVOIA exactă a clientului (ex. „pentru mâini foarte uscate") — doar nevoia lui.
+  NU inventa ATRIBUTE despre client (ten sensibil/gras, păr vopsit, alergii etc.) pe care NU le-a
+  spus: „pentru tenul tău sensibil" DOAR dacă a menționat ten sensibil. Dacă vrei să sugerezi o
+  potrivire neconfirmată, leag-o de PRODUS („formulă blândă"), nu afirma un atribut al clientului.
 - Recomandă 3-5 produse din listă, în limba clientului.
 - `pick` = un singur produs (cel mai potrivit) + justificare în cuvinte (fără cifre,
   fără „cel mai bun").
