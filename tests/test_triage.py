@@ -203,3 +203,30 @@ async def test_intent_detected_includes_confidence():
     await triage_stage(ctx, _deps(llm))
     ev = next(e for e in ctx.events if e.type == "intent_detected")
     assert ev.properties["confidence"] == "high"
+
+
+async def test_purchase_intent_set_on_sales():
+    """A2: purchase_intent=true pe sales → propagat în RouteDecision + intent_detected."""
+    ctx = _ctx("îl iau, adaugă în coș")
+    llm = FakeLLM({"route": "sales", "category_key": "creme-fata", "purchase_intent": True})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.purchase_intent is True
+    ev = next(e for e in ctx.events if e.type == "intent_detected")
+    assert ev.properties["purchase_intent"] is True
+
+
+async def test_purchase_intent_forced_false_off_sales():
+    """A2: purchase_intent are sens DOAR pe sales — pe clarify e forțat False."""
+    ctx = _ctx("ceva")
+    llm = FakeLLM({"route": "clarify", "missing_field": "produs", "purchase_intent": True})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.CLARIFY
+    assert ctx.route.purchase_intent is False
+
+
+async def test_purchase_intent_backcompat_defaults_false():
+    """Nano vechi fără câmp → purchase_intent False (back-compat)."""
+    ctx = _ctx("vreau o crema")
+    llm = FakeLLM({"route": "sales", "category_key": "creme-fata"})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.purchase_intent is False
