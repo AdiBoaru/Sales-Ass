@@ -111,7 +111,8 @@ Format JSON de răspuns:
  "confidence": "<low|med|high>",
  "slots": {"budget_max": <număr sau null>, "concerns": [<termeni din lista de nevoi sau []>],
            "suitable_for": <text scurt sau null>, "brand": <nume brand sau null>},
- "suggestions": [<2-4 opțiuni scurte de apăsat pt clarify (ex. idei de cadou), altfel []>]}
+ "suggestions": [<2-4 opțiuni scurte de apăsat pt clarify (ex. idei de cadou), altfel []>],
+ "purchase_intent": <true|false>}
 
 Reguli:
 - "confidence": "high" = intenție ȘI categorie clare; "med" = rezonabil de clar; "low" = nu e
@@ -129,6 +130,10 @@ Reguli:
 - Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și pentru păr?"),
   folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
   „sales"), NU „clarify".
+- "purchase_intent": true DOAR când clientul vrea să CUMPERE ACUM un produs deja discutat/arătat
+  („îl iau", „o cumpăr", „cumpăr acum", „adaugă în coș", „vreau să comand asta"). Ruta rămâne
+  „sales". Doar interes/explorare („îmi place", „mai zi-mi", „cât costă") → false. Folosește
+  contextul: „da" după ce ai oferit linkul/coșul = purchase_intent true.
 - O cerere de cumpărare FĂRĂ tip de produs — doar „un cadou" / „ceva" / „ceva sub 100 lei" (numai
   buget), fără să spună CE produs — e „clarify": întreabă scurt ce tip de produs și, dacă e cadou,
   pentru cine și cu ce ocazie. DAR „cremă"/„ser"/„parfum"/„șampon" SUNT tipuri de produs → „sales"
@@ -159,6 +164,8 @@ class TriageOut(BaseModel):
     # Chips pe care clientul le poate apăsa la o întrebare de clarificare (ex. idei de cadou). DOAR
     # pentru route="clarify"; altă rută → []. Voce de client → reintră ca tur nou (fără scrub).
     suggestions: list[str] = []
+    # A2 (Val1): clientul vrea să CUMPERE ACUM (nu doar să exploreze). Back-compat: lipsă → False.
+    purchase_intent: bool = False
 
 
 async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -228,13 +235,22 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # NX-116: sloturile normalizate în cod populează RouteDecision.filters (azi câmp mort) →
     # agentul pornește search-ul de la constrângeri structurate, nu reparsate din proză.
     filters = _normalize_slots(out.slots, ctx.business.domain_pack)
+    # A2: purchase_intent are sens DOAR pe sales (a cumpăra un produs); pe alte rute → False.
+    purchase_intent = bool(out.purchase_intent) and route == Route.SALES
     ctx.route = RouteDecision(
         route=route,
         category_key=category_key,
         filters=filters,
         missing_field=out.missing_field,
+        purchase_intent=purchase_intent,
     )
-    ctx.emit("intent_detected", route=route.value, category=category_key, confidence=out.confidence)
+    ctx.emit(
+        "intent_detected",
+        route=route.value,
+        category=category_key,
+        confidence=out.confidence,
+        purchase_intent=purchase_intent,
+    )
 
     # simple / clarify: nano a compus răspunsul → early exit la Sender.
     # simple = răspuns static reutilizabil (cacheabil); clarify = specific contextului.

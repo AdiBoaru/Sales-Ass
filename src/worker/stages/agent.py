@@ -819,9 +819,20 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
     cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
     filters_hint = _filters_hint(route.filters)  # NX-116: seed structurat din triaj (P3 respectat)
+    # A2 (Val1): semnal de CUMPĂRARE → onorează intenția (checkout_link + confirmă stocul), nu
+    # re-recomanda. Hint per-tur (în USER, nu în prefixul cached). Leagă tool-urile existente de
+    # intenția detectată de triaj (gap-ul „tool-uri există dar nelegate").
+    purchase_hint = (
+        "Semnal: clientul vrea să CUMPERE acum. Dacă produsul e deja arătat (din produsele "
+        "discutate), cheamă checkout_link pe el și confirmă disponibilitatea/stocul; dacă nu e pe "
+        "stoc, oferă subscribe_back_in_stock. Altfel caută-l întâi, apoi oferă linkul de checkout. "
+        "NU re-recomanda inutil.\n"
+        if route.purchase_intent
+        else ""
+    )
     user = (
-        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{context_block}{history_block}"
-        f"Mesaj client: {query}"
+        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{purchase_hint}"
+        f"{context_block}{history_block}Mesaj client: {query}"
     )
 
     try:

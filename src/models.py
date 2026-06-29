@@ -236,6 +236,10 @@ class RouteDecision:
     # = Triaj (din `slots` validate); citit de agent ca seed pentru search_products (hint, P3).
     filters: dict[str, Any] = field(default_factory=dict)
     missing_field: str | None = None
+    # A2 (Val1): clientul vrea să CUMPERE ACUM un produs deja discutat („îl iau", „cumpăr",
+    # „adaugă în coș"). Triajul (nano, model+context — NU wordlist) îl setează; agentul îl
+    # citește ca semnal să onoreze cumpărarea (checkout_link + confirmă stocul), nu să re-recomande.
+    purchase_intent: bool = False
 
 
 @dataclass
