@@ -78,23 +78,39 @@ async def test_create_proactive_job_dedup(pool):
         contact_id, conv_id = await _contact_conv(conn, channel_id)
         key = f"abandoned_cart:{uuid4().hex[:8]}"
         j1 = await create_proactive_job(
-            conn, DEMO_BIZ, contact_id=contact_id, conversation_id=conv_id,
-            kind="abandoned_cart", dedupe_key=key,
+            conn,
+            DEMO_BIZ,
+            contact_id=contact_id,
+            conversation_id=conv_id,
+            kind="abandoned_cart",
+            dedupe_key=key,
         )
         j2 = await create_proactive_job(
-            conn, DEMO_BIZ, contact_id=contact_id, conversation_id=conv_id,
-            kind="abandoned_cart", dedupe_key=key,
+            conn,
+            DEMO_BIZ,
+            contact_id=contact_id,
+            conversation_id=conv_id,
+            kind="abandoned_cart",
+            dedupe_key=key,
         )
         assert j1 is not None and j2 is None  # al doilea = deduplicat (ON CONFLICT DO NOTHING)
 
         # fără dedupe_key → mereu insert (NULL nu intră în indexul parțial)
         n1 = await create_proactive_job(
-            conn, DEMO_BIZ, contact_id=contact_id, conversation_id=conv_id,
-            kind="back_in_stock", payload={"product_id": "x"},
+            conn,
+            DEMO_BIZ,
+            contact_id=contact_id,
+            conversation_id=conv_id,
+            kind="back_in_stock",
+            payload={"product_id": "x"},
         )
         n2 = await create_proactive_job(
-            conn, DEMO_BIZ, contact_id=contact_id, conversation_id=conv_id,
-            kind="back_in_stock", payload={"product_id": "x"},
+            conn,
+            DEMO_BIZ,
+            contact_id=contact_id,
+            conversation_id=conv_id,
+            kind="back_in_stock",
+            payload={"product_id": "x"},
         )
         assert n1 is not None and n2 is not None
 

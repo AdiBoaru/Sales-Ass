@@ -175,8 +175,13 @@ async def test_schedule_awb_update(monkeypatch):
 
     monkeypatch.setattr(initiators, "create_proactive_job", f_create)
     out = await initiators.schedule_awb_update(
-        FakeConn(), "b1", contact_id="c1", conversation_id="v1", order_id="o1",
-        awb="AWB9", carrier="FAN",
+        FakeConn(),
+        "b1",
+        contact_id="c1",
+        conversation_id="v1",
+        order_id="o1",
+        awb="AWB9",
+        carrier="FAN",
     )
     assert out == "job1"
     assert created[0]["kind"] == "awb_update"
@@ -193,8 +198,13 @@ async def test_schedule_follow_up(monkeypatch):
 
     monkeypatch.setattr(initiators, "create_proactive_job", f_create)
     await initiators.schedule_follow_up(
-        FakeConn(), "b1", contact_id="c1", conversation_id="v1", body="salut",
-        scheduled_at=None, variables={"x": "1"},
+        FakeConn(),
+        "b1",
+        contact_id="c1",
+        conversation_id="v1",
+        body="salut",
+        scheduled_at=None,
+        variables={"x": "1"},
     )
     assert created[0]["kind"] == "follow_up"
     assert created[0]["payload"] == {"body": "salut", "variables": {"x": "1"}}
