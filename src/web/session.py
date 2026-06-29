@@ -34,11 +34,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class WebSession:
-    """O sesiune web VERIFICATĂ. `visitor_id` = id-ul vizitatorului (PII de canal)."""
+    """O sesiune web VERIFICATĂ. `visitor_id` = id-ul vizitatorului (PII de canal).
+
+    `identity_secret` (NX-129, opțional) = cheia per-tenant cu care marginea verifică JWT-ul de
+    login passthrough; None = passthrough inactiv pe tenant (rămâne sesiune anonimă)."""
 
     business_id: str
     token: str
     visitor_id: str
+    identity_secret: str | None = None
 
 
 def _compute_sig(token: str, visitor_id: str, secret: str) -> str:
@@ -108,4 +112,9 @@ async def verify_web_session(
         return None
     if not verify_sig(token, visitor_id, sig, resolved["session_secret"]):
         return None
-    return WebSession(business_id=resolved["business_id"], token=token, visitor_id=visitor_id)
+    return WebSession(
+        business_id=resolved["business_id"],
+        token=token,
+        visitor_id=visitor_id,
+        identity_secret=resolved.get("identity_secret"),  # NX-129; absent pe seed-uri vechi
+    )

@@ -438,6 +438,11 @@ async def handle_turn(
     channel_kind = event.get("channel_kind", "whatsapp")
     sender_external_id = event["sender_external_id"]
     provider_msg_id = event.get("provider_msg_id")
+    # NX-129: login passthrough — dacă marginea de canal a verificat o identitate stabilă
+    # (`customer_ref` din JWT host-signed), rezolvăm contactul pe EA (verified=true → contact stabil
+    # peste sesiuni/device-uri), nu pe visitor_id-ul anonim. Absent → comportament anonim (ca azi).
+    verified_customer_ref = event.get("verified_customer_ref")
+    identity_external_id = verified_customer_ref or sender_external_id
 
     # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
     # Guard ÎNAINTE de orice scriere — un duplicat nu produce mesaj, nici outbox.
@@ -452,8 +457,9 @@ async def handle_turn(
         conn,
         business.id,
         channel_kind,
-        sender_external_id,
+        identity_external_id,
         display_name=event.get("sender_name"),
+        verified=bool(verified_customer_ref),
     )
     conv = await get_or_create_conversation(
         conn,
@@ -496,7 +502,16 @@ async def handle_turn(
         language=conv["locale"] or business.default_locale,
         bot_active=conv["bot_active"],
         handoff_until=conv["handoff_until"],
+        verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
+
+    # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
+    if verified_customer_ref:
+        ctx.emit("web_identity_verified")
+    else:
+        reject = (event.get("payload") or {}).get("identity_rejected")
+        if reject:
+            ctx.emit("web_identity_rejected", reason=reject)
 
     # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
     # NX-125: reseed LAZY al contorului zilei din usage_daily (supraviețuiește pierderii Redis),

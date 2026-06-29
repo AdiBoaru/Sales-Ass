@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     web_cost_cap_per_visitor_usd: float = Field(
         default=0.50, validation_alias="WEB_COST_CAP_PER_VISITOR_USD"
     )
+    # NX-129 (login passthrough): web-ul devine „identificat" când site-ul gazdă pasează un JWT
+    # HS256 semnat cu `identity_secret`-ul per-tenant (din channels.settings). Verificat la marginea
+    # web → `sub` = customer_ref. Default OFF (feature opt-in, ca web_enabled). Leeway de ceas pt
+    # `exp` (toleranță mică la drift între gazdă și bot).
+    web_identity_enabled: bool = Field(default=False, validation_alias="WEB_IDENTITY_ENABLED")
+    web_identity_leeway_s: int = Field(default=30, validation_alias="WEB_IDENTITY_LEEWAY_S")
 
     @property
     def web_cors_origins_list(self) -> list[str]:

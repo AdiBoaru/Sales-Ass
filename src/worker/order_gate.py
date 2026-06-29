@@ -23,9 +23,12 @@ if TYPE_CHECKING:
 
 def web_unidentified(ctx: TurnContext) -> bool:
     """True dacă turul vine pe un canal ANONIM (web) fără identitate verificată → nu poate avea
-    comenzi legate de contact. Canalele identificate (WhatsApp/Telegram: id-ul de canal = userul)
-    → False. NX-129 va adăuga „și fără login passthrough verificat" pentru web."""
-    return ctx.message.channel_kind not in IDENTIFIED_CHANNELS
+    comenzi legate de contact. Canalele identificate (WhatsApp/Telegram: id-ul de canal = userul) →
+    False. NX-129: web-ul cu login passthrough verificat (`ctx.verified_customer_ref`) trece de
+    poartă (e identificat), deci poate ajunge la `check_order`."""
+    if ctx.message.channel_kind in IDENTIFIED_CHANNELS:
+        return False
+    return not getattr(ctx, "verified_customer_ref", None)
 
 
 _LOGIN_REQUIRED: dict[str, str] = {

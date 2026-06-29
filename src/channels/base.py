@@ -69,6 +69,10 @@ class InboundEvent:
     body: str | None = None
     media_id: str | None = None
     sender_name: str | None = None
+    # NX-129: identitate STABILĂ verificată a sender-ului, stabilită la marginea de canal (login
+    # passthrough web → customer_ref din JWT). None = anonim. Neutru de canal: orice canal care
+    # poate dovedi un client o pune aici; worker-ul rezolvă contactul pe ea (verified=true).
+    verified_customer_ref: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

@@ -15,16 +15,21 @@ import json
 import asyncpg
 
 
-async def resolve_web_session(conn: asyncpg.Connection, public_token: str) -> dict[str, str] | None:
-    """`public_token → {business_id, session_secret}` pentru un canal `webchat` ACTIV (NX-20).
+async def resolve_web_session(
+    conn: asyncpg.Connection, public_token: str
+) -> dict[str, str | None] | None:
+    """`public_token → {business_id, session_secret, identity_secret}` pt un canal `webchat` ACTIV.
 
     Control plane (`admin_conn`): derivă tenantul ÎNAINTE de a-l ști, ca `resolve_channel`.
-    `session_secret` din `channels.settings` (per tenant, semnează `visitor_id`-ul). None dacă
-    tokenul nu mapează la un canal activ SAU canalul n-are secret configurat (seed incomplet)."""
+    `session_secret` (NX-20) semnează `visitor_id`-ul anonim; `identity_secret` (NX-129, opțional)
+    verifică JWT-ul de login passthrough — DOUĂ chei separate. None dacă tokenul nu mapează la un
+    canal activ SAU canalul n-are `session_secret` (seed incomplet); `identity_secret` lipsă =
+    login passthrough inactiv pe acel tenant (nu invalidează sesiunea anonimă)."""
     row = await conn.fetchrow(
         """
         select business_id::text as business_id,
-               settings->>'session_secret' as session_secret
+               settings->>'session_secret' as session_secret,
+               settings->>'identity_secret' as identity_secret
         from channels
         where kind = 'webchat'
           and provider_account_id = $1
@@ -34,7 +39,11 @@ async def resolve_web_session(conn: asyncpg.Connection, public_token: str) -> di
     )
     if row is None or not row["session_secret"]:
         return None
-    return {"business_id": row["business_id"], "session_secret": row["session_secret"]}
+    return {
+        "business_id": row["business_id"],
+        "session_secret": row["session_secret"],
+        "identity_secret": row["identity_secret"],
+    }
 
 
 async def resolve_channel(

@@ -238,3 +238,14 @@ async def test_no_orders_message_is_channel_aware(monkeypatch):
     assert res.ok is False and res.error == "not_found"
     # onest „pe contul tău" (telefon = cont), NU „pe acest cont" (cont căutat inexistent)
     assert "contul tău" in res.llm_view and "acest cont" not in res.llm_view
+
+
+async def test_web_order_verified_reaches_tool_loop(monkeypatch):
+    # NX-129: web cu login passthrough verificat (verified_customer_ref) NU mai e gated → ajunge la
+    # bucla de tool (check_order). (Lookup-ul real pe customer_ref e NX-130; aici doar poarta.)
+    _patch_orders(monkeypatch, [ORDER])
+    ctx = _web_ctx()
+    ctx.verified_customer_ref = "cust_1"
+    llm = _SpyLLM(tool_calls=[("check_order", {"order_ref": None})], final="Comanda ta e ok.")
+    await agent_stage(ctx, _deps(llm))
+    assert llm.loop_called is True  # identitate verificată → NU scurtcircuitat de poartă

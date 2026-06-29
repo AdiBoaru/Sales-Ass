@@ -27,6 +27,15 @@ Pe SSE evenimentul are în plus `"id"` și `"type": "rich"`; restul cheilor sunt
 **Regulă generală:** cheile opționale **lipsesc** când nu există date (NU vin ca `null`). Frontendul
 trebuie să citească defensiv (`card.badge && ...`), nu să presupună prezența lor.
 
+### Input — login passthrough (NX-129)
+
+Pe lângă `token`/`visitor_id`/`sig`, requesturile (`/web/bootstrap`, `/web/messages`, `/web/chat`)
+acceptă un câmp opțional **`id_token`** (JWT host-signed). Când pagina gazdă are un client LOGAT,
+ea îl emite (semnat cu `identity_secret`-ul tenantului) și widgetul îl **forwardează** ca atare —
+frontendul NU îl generează și NU îl interpretează, doar îl trece mai departe. Backendul îl verifică
+și deblochează verificarea de comandă/retur. Fluxul complet + exemplul de semnare: vezi
+[`web-widget-embed.md`](web-widget-embed.md) § „Login passthrough".
+
 ---
 
 ## 2. Card de produs (`products[]`) — câmpuri NOI evidențiate

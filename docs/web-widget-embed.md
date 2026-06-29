@@ -69,6 +69,43 @@ POST /web/chat
 recomandare (frontendul afișează doar textul). Carduri ⇐ `reply.rich.items` (au `rating`/`reason`)
 sau `reply.products`; `suggestions` ⇐ chip-urile de follow-up.
 
+## Login passthrough — verificare comandă/retur (NX-129)
+
+Web-ul e anonim by design, deci un vizitator NU poate verifica o comandă sau cere un retur (nu există
+cont). Ca un client **logat pe site** să-și vadă comenzile în chat, site-ul gazdă îi pasează o
+identitate semnată — pattern-ul de producție pentru widget-uri (Intercom „Identity Verification" /
+Zendesk JWT). Fără asta, intenția de comandă/retur primește un mesaj „loghează-te pe site" (NX-128).
+
+**Fluxul:**
+1. Backend-ul gazdei (NU browserul), pentru un client autentificat, emite un **JWT HS256** semnat cu
+   `identity_secret`-ul per-tenant: `{"sub": "<customer_ref>", "exp": <now+5min>}`. `customer_ref` =
+   id-ul STABIL de client din eshop (id opac, **nu** email/telefon — vezi P12).
+2. Widgetul pasează `id_token` (JWT-ul) la `GET /web/bootstrap` și pe fiecare mesaj
+   (`POST /web/messages` / `POST /web/chat`), pe lângă `token`+`visitor_id`+`sig`.
+3. Gateway-ul verifică server-side semnătura + `exp` + `alg=HS256` (respinge `alg=none`) → `sub` =
+   `customer_ref` → leagă o identitate **verificată** stabilă (`channel_identities`, `verified=true`)
+   → `check_order` poate găsi comenzile clientului (NX-130).
+
+```python
+# backend gazdă (Python) — la randarea paginii pentru un client logat
+import base64, hashlib, hmac, json, time
+def _b64(b): return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+def mint_id_token(customer_ref: str, identity_secret: str, ttl_s: int = 300) -> str:
+    h = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    p = _b64(json.dumps({"sub": customer_ref, "exp": int(time.time()) + ttl_s}).encode())
+    s = hmac.new(identity_secret.encode(), f"{h}.{p}".encode(), hashlib.sha256).digest()
+    return f"{h}.{p}.{_b64(s)}"
+```
+
+- **Token scurt** (`exp` ~5 min); widgetul îl reîmprospătează din pagina gazdă. `id_token` invalid/
+  expirat/absent → NU blochează chat-ul, doar rămâne anonim (feature-ul de comandă cere login).
+- **Secretul** (`identity_secret`) stă DOAR pe backend-ul gazdei + control plane (`channels.settings`),
+  niciodată în browser/HTML/loguri. Separat de `session_secret` (semnătura de vizitator anonim).
+- **Contractul cu ingestia de comenzi (NX-130):** `customer_ref` din `sub` trebuie să fie ACEEAȘI
+  cheie pe care webhook-ul de comenzi o trimite în `orders.external_customer_ref`. Altfel identitatea
+  e verificată, dar nu mapează la nicio comandă.
+- **Activare:** `WEB_IDENTITY_ENABLED=true` + `identity_secret` seedat pe canal (vezi provisioning).
+
 ## Izolare & conformitate
 
 - **Shadow DOM** — tot UI-ul trăiește într-un `shadowRoot` (mode open); zero conflict CSS cu
@@ -94,3 +131,7 @@ EventSource interceptate) → demonstrează widgetul și izolarea fără backend
 Tokenul public + secretul de sesiune se seedează pe canalul `webchat` al tenantului
 (`channels.kind='webchat'`, `provider_account_id=<public_token>`, `settings.session_secret`) —
 vezi `scripts/seed_web_channel.py` (NX-20a) și `docs` gateway.
+
+Pentru login passthrough (NX-129), adaugă pe ACELAȘI canal `settings.identity_secret` (o cheie
+aleatoare per-tenant, SEPARATĂ de `session_secret`) și partajeaz-o cu backend-ul gazdei (care semnează
+JWT-urile). Absența ei = login passthrough inactiv pe tenant (sesiunea anonimă rămâne neatinsă).
