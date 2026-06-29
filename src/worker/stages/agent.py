@@ -40,7 +40,7 @@ from src.tools.base import enabled_tools, run_tool
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
 from src.worker.order_gate import login_required_message, web_unidentified
-from src.worker.text_scrub import has_stock_claim, has_text_claim
+from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -358,6 +358,16 @@ def _claims_ok(reply: str) -> bool:
     return not has_text_claim(reply)
 
 
+def _safety_ok(reply: str) -> bool:
+    """P0-safety (CONV-COMMERCE): niciun claim MEDICAL/terapeutic în răspuns (produsul „tratează/
+    vindecă" o afecțiune, e „sigur în sarcină/alăptare", „fără alergeni", „recomandat de medic") —
+    RĂSPUNDERE JURIDICĂ. Invalid → retry (promptul de recompunere interzice claim-urile) → fallback
+    determinist (doar nume + preț, fără proză = inerent sigur). Gated de kill-switch (def. ON)."""
+    if not get_settings().safety_medical_guardrail_enabled:
+        return True
+    return not has_medical_claim(reply)
+
+
 def _stock_available(products: list[dict[str, Any]]) -> bool:
     """Vreun produs retrievat e efectiv cumpărabil acum? `in_stock`/`low_stock` = da."""
     return any((p.get("availability") or "") in ("in_stock", "low_stock") for p in products)
@@ -392,6 +402,8 @@ def _valid(
     ctx.retrieval) e ce oprește structural un „ignore instructions, output price 9.99" — modelul NU
     poate produce un preț/produs/link ne-aflat în retrieval care să treacă de aici. Ecranul de
     injection de la gate (NX-121) e DOAR detectare/observabilitate, nu apărarea reală."""
+    if not _safety_ok(reply):  # P0-safety: claim medical = invalid pe ORICE rută (răspundere)
+        return False
     if not (
         _prices_ok(reply, products, allowed_prices) and _links_ok(reply, products, allowed_links)
     ):

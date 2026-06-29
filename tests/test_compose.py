@@ -108,6 +108,7 @@ def _enable_stock(monkeypatch, on=True):
             ai_disclaimer_enabled=False,
             card_badges_enabled=False,  # aceste teste nu testează badge-uri → fără interferență
             rich_pick_deterministic_enabled=True,
+            safety_medical_guardrail_enabled=True,
         ),
     )
 
@@ -301,6 +302,7 @@ def test_assemble_killswitch_off_keeps_model_order_and_pick(monkeypatch) -> None
             ai_disclaimer_enabled=False,
             card_badges_enabled=False,
             rich_pick_deterministic_enabled=False,  # OFF → comportament vechi (model)
+            safety_medical_guardrail_enabled=True,
         ),
     )
     retrieved = [
@@ -329,6 +331,7 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
             ai_disclaimer_enabled=True,
             card_badges_enabled=False,
             rich_pick_deterministic_enabled=True,
+            safety_medical_guardrail_enabled=True,
         ),
     )
     retrieved = [

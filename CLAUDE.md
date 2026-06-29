@@ -106,6 +106,9 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • fiecare preț din reply există în ctx.retrieval
     • fiecare produs menționat există în ctx.retrieval
     • linkurile sunt din catalog (products.product_url, nu inventate)
+    • P0-safety: niciun claim MEDICAL/terapeutic (tratează afecțiuni / sigur în sarcină /
+      fără alergeni / recomandat de medic) — proză: invalid→retry→fallback; bogată: scrub→DROP
+      (has_medical_claim, kill-switch safety_medical_guardrail_enabled). Răspundere juridică.
     • invalid → 1 retry cu feedback → formulare fără cifre
     • ZERO prețuri inventate structural
 

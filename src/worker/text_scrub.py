@@ -17,6 +17,7 @@ Trei niveluri (calea bogată vs proză au verificări de cifre diferite):
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _DIGIT = re.compile(r"\d")
 _PCT = re.compile(r"%|\bla sută\b", re.IGNORECASE)
@@ -81,3 +82,64 @@ def has_stock_claim(text: str | None) -> bool:
             continue  # negat / viitor → nu e afirmație pozitivă de disponibilitate
         return True
     return False
+
+
+# --------------------------------------------------------------------------- #
+# P0-safety (CONV-COMMERCE) — claim MEDICAL/terapeutic nepermis (răspundere juridică, beauty).
+# Detector PUR, normalizat (cu/fără diacritice). Țintește 4 categorii de claim periculos, FĂRĂ a
+# prinde claim-uri cosmetice legitime („hidratează", „pentru ten uscat", „reduce ridurile") sau
+# redirectarea SIGURĂ („pentru acnee, consultă un dermatolog" — fără verb terapeutic). Caller-ul
+# gardează cu kill-switch (`safety_medical_guardrail_enabled`); aici e doar predicatul.
+# --------------------------------------------------------------------------- #
+
+# AFECȚIUNI medicale (nu nevoi cosmetice). „verb terapeutic + afecțiune" = claim de tratament.
+_MED_CONDITION = re.compile(
+    r"acne|eczem|psoriaz|rozacee|rosacea|dermatit|micoz|fungic|ciuperc|negi|veruci|wart"
+    r"|herpes|melasma|vitiligo|alopeci|matreat|seboree|seborrh|celulit|vergetur|stretch mark"
+    r"|cicatric|infect|inflamat|inflammat|alergi|allerg|iritat|cupero|impetigo"
+)
+_TREAT_VERB = re.compile(
+    r"trateaz|tratament|vindec|cureaz|elimina|scapa de|combate"
+    r"|treat|cure|heal|clears up|gets rid of|fights"
+)
+# Verdict de SIGURANȚĂ în sarcină/alăptare (ambele ordine). „recomandat" NU e cuvânt de siguranță:
+# ar prinde redirectarea SIGURĂ „îți recomand să consulți medicul în sarcină" (fals-pozitiv).
+_PREG_SAFE = re.compile(
+    r"(sigur|safe|fara risc|poti folosi|se poate folosi)\b.{0,30}"
+    r"(sarcin|insarcin|alaptar|pregnan|breastfeed|nursing)"
+    r"|(sarcin|insarcin|alaptar|pregnan|breastfeed|nursing).{0,30}"
+    r"(sigur|safe|fara risc|poti folosi|se poate folosi)"
+)
+# Garanție ABSOLUTĂ de inocuitate (nu „testat dermatologic", care e claim cosmetic uzual).
+_ALLERGEN_FREE = re.compile(
+    r"fara alergeni|fara niciun alergen|allergen[ -]?free|fara efecte adverse"
+    r"|fara efecte secundare|no side effects|nu provoaca alergii|nu provoaca reactii"
+    r"|nu da reactii alergice|100% hipoalergenic|garantat hipoalergenic"
+)
+# Falsă autoritate medicală (nu „consultă un medic", care e redirect SIGUR). `\w*` prinde
+# inflexiunile RO (recomandat/recomandată/recomandate). NU „testat dermatologic" (claim cosmetic).
+_MED_AUTHORITY = re.compile(
+    r"recomandat\w* de (medic|dermatolog|specialist|doctor)|recomandat\w* medical"
+    r"|prescris\w* de medic|aprobat\w* medical|dovedit\w* clinic|clinically proven"
+    r"|doctor recommended|dermatologist recommended"
+)
+
+
+def _norm_claim(text: str) -> str:
+    """Lowercase + fără diacritice (NFKD) → match robust pe text generat (cu/fără diacritice)."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def has_medical_claim(text: str | None) -> bool:
+    """P0-safety: textul face un claim MEDICAL/terapeutic nepermis (răspundere juridică, beauty)?
+    Patru categorii: (1) produsul TRATEAZĂ/VINDECĂ o afecțiune (verb terapeutic + afecțiune),
+    (2) e „sigur în sarcină/alăptare", (3) „fără alergeni / fără efecte adverse", (4) „recomandat
+    de medic/dermatolog". NU prinde claim-uri COSMETICE legitime (hidratează, ten uscat, riduri)
+    și NICI redirectarea SIGURĂ („pentru acnee, consultă un dermatolog"). Pur, normalizat."""
+    if not text:
+        return False
+    t = _norm_claim(text)
+    if _TREAT_VERB.search(t) and _MED_CONDITION.search(t):
+        return True
+    return bool(_PREG_SAFE.search(t) or _ALLERGEN_FREE.search(t) or _MED_AUTHORITY.search(t))

@@ -40,6 +40,7 @@ def _enable(monkeypatch, on=True, *, claims=False):
             validator_bare_numbers_enabled=on,
             validator_claims_enabled=claims,
             validator_stock_claims_enabled=claims,
+            safety_medical_guardrail_enabled=True,  # P0-safety ON (replicile NX-91: fără medical)
         ),
     )
 

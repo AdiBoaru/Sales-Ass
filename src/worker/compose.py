@@ -30,7 +30,12 @@ from src.models import (
     RichReply,
 )
 from src.worker.badges import derive_badge
-from src.worker.text_scrub import has_marketing_claim, has_stock_claim, has_unverifiable_claim
+from src.worker.text_scrub import (
+    has_marketing_claim,
+    has_medical_claim,
+    has_stock_claim,
+    has_unverifiable_claim,
+)
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -46,16 +51,25 @@ _DISCLAIMER: dict[str, str] = {
 # NX-117: pattern-urile trăiesc în `text_scrub` (loc canonic partajat cu calea de proză).
 
 
+def _unsafe_medical(t: str) -> bool:
+    """P0-safety (CONV-COMMERCE): claim MEDICAL în proza modelului (tratează afecțiuni / sigur în
+    sarcină / fără alergeni / recomandat de medic) → câmpul se DROP-uiește (cardul rămâne real,
+    fără claim periculos). Gated de kill-switch (default ON). Răspundere juridică (beauty)."""
+    return get_settings().safety_medical_guardrail_enabled and has_medical_claim(t)
+
+
 def scrub_prose(s: str | None) -> str | None:
     """Proza LLM poate referi NEVOIA clientului, nu fapte cuantificate. Strecoară cifre /
     procente / claim-uri / superlative neverificabile → DROP (None). Faptele reale vin
-    din card, randate de cod. Drop, nu retry (degradare grațioasă)."""
+    din card, randate de cod. Drop, nu retry (P0-safety: claim medical → DROP)."""
     if not s:
         return None
     t = " ".join(s.split())
     if not t:
         return None
     if has_unverifiable_claim(t):  # NX-117: digit + pct + claim + super (semantică neschimbată)
+        return None
+    if _unsafe_medical(t):  # P0-safety: sfat medical/terapeutic → DROP câmpul
         return None
     return t
 
@@ -84,9 +98,8 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
     if not t:
         return None
     unknown = [n for n in re.findall(r"\d+", t) if n not in allowed_numbers]
-    if unknown or has_marketing_claim(
-        t
-    ):  # NX-117: pct + claim + super (cifrele clientului permise)
+    if unknown or has_marketing_claim(t) or _unsafe_medical(t):
+        # NX-117: pct + claim + super (cifrele clientului permise). P0-safety: claim medical → DROP.
         return None
     return t
 

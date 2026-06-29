@@ -285,6 +285,15 @@ class Settings(BaseSettings):
     validator_stock_claims_enabled: bool = Field(
         default=False, validation_alias="VALIDATOR_STOCK_CLAIMS_ENABLED"
     )
+    # P0-safety (CONV-COMMERCE): guardrail pe sfat MEDICAL/beauty — RĂSPUNDERE JURIDICĂ. Blochează
+    # structural claim-urile periculoase din răspuns (produsul „tratează/vindecă" o afecțiune, e
+    # „sigur în sarcină/alăptare", „fără alergeni / efecte adverse", „recomandat de medic") pe
+    # AMBELE căi: proză (invalid → retry → fallback determinist) + bogată (scrub câmp → DROP).
+    # Promptul interzice preventiv claim-urile; ăsta e plasa structurală (P8). DEFAULT ON: la
+    # fals-pozitive în prod, dezactivează fără redeploy (degradare la formulare cosmetică sigură).
+    safety_medical_guardrail_enabled: bool = Field(
+        default=True, validation_alias="SAFETY_MEDICAL_GUARDRAIL_ENABLED"
+    )
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
