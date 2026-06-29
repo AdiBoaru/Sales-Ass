@@ -28,7 +28,7 @@ from src.db.queries.catalog import (
     list_routing_aliases,
     search_cheaper_than,
 )
-from src.models import RetrievalResult, Route, RouteDecision, TurnContext
+from src.models import Offer, RetrievalResult, Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
@@ -137,6 +137,62 @@ _NO_MORE_RESULTS: dict[str, str] = {
 
 def _no_more_msg(language: str | None) -> str:
     return _NO_MORE_RESULTS.get(language or "ro") or _NO_MORE_RESULTS["ro"]
+
+
+# NX-131: cerere de LINK la un produs DEJA arătat („trimite-mi linkul / dă-mi link direct / unde-l
+# cumpăr"). Intenție DETERMINISTĂ (ca _CHEAPER_RE/_MORE_RE): calea rich INTERZICE structural
+# modelului linkurile (regulile rich) → o cerere de link cădea în re-randarea bogată cu coaching
+# repetat (bug live: „partea asta e foarte repetitiva"). Ancorat pe „link" (link/linkul/linkuri,
+# RO/EN) + fraze de cumpărare. `\blink\w*` NU prinde „hyperlink"/„blink" (fără boundary înainte).
+# Gated în agent_stage pe displayed_products + SALES + fără filtre noi (cu filtre = căutare nouă).
+_LINK_RE = re.compile(
+    r"\blink\w*"
+    r"|\bunde\s+(?:o\s+|[îi]l\s+|le\s+)?(?:pot\s+)?(?:cump[ăa]r|comand|g[ăa]sesc)\w*"
+    r"|\bwhere\s+(?:can\s+i\s+|to\s+)?(?:buy|get|find)\b"
+    r"|\bhol\s+(?:tudom\s+)?(?:veszem|vehetem|megvenni|megveszem)\b",
+    re.IGNORECASE,
+)
+
+# Lead-uri SCURTE per-locale pt răspunsul de link (linkul REAL vine ca Offer(open_url)/card, NU în
+# proză — validatorul ar respinge un url inventat oricum). Unul vs mai multe produse țintă.
+_LINK_LEAD_ONE: dict[str, str] = {
+    "ro": "Sigur! 🙂 Uite linkul direct 👇",
+    "en": "Sure! 🙂 Here's the direct link 👇",
+    "hu": "Persze! 🙂 Itt a közvetlen link 👇",
+}
+_LINK_LEAD_MANY: dict[str, str] = {
+    "ro": "Sigur! Uite linkurile direct la produsele de mai sus 👇",
+    "en": "Sure! Here are the direct links to the products above 👇",
+    "hu": "Persze! Itt a fenti termékek közvetlen linkjei 👇",
+}
+# product_url absent (gaură de date pe demo) → ONEST, fără link inventat (PP-F4). Channel-neutru
+# (pipeline-ul nu știe de „butonul Adaugă" al web-ului); oferim pasul care EXISTĂ. cacheable=False.
+_NO_LINK: dict[str, str] = {
+    "ro": "Momentan nu am o pagină de produs pe care să ți-o deschid direct, dar te pot ajuta "
+    "să-l comanzi pas cu pas. Vrei?",
+    "en": "I don't have a product page I can open directly right now, but I can help you order "
+    "it step by step. Want me to?",
+    "hu": "Most nincs külön termékoldalam, amit közvetlenül megnyithatnék, de segíthetek "
+    "lépésről lépésre megrendelni. Szeretnéd?",
+}
+_VIEW_LABEL: dict[str, str] = {
+    "ro": "Vezi produsul",
+    "en": "View product",
+    "hu": "Termék megtekintése",
+}
+
+
+def _link_lead(language: str | None, *, many: bool) -> str:
+    d = _LINK_LEAD_MANY if many else _LINK_LEAD_ONE
+    return d.get(language or "ro") or d["ro"]
+
+
+def _no_link_msg(language: str | None) -> str:
+    return _NO_LINK.get(language or "ro") or _NO_LINK["ro"]
+
+
+def _view_label(language: str | None) -> str:
+    return _VIEW_LABEL.get(language or "ro") or _VIEW_LABEL["ro"]
 
 
 # NX-91: cifre «grele» FĂRĂ valută (preț/stoc/rating inventat). ≥2 cifre SAU cu zecimale → sărim
@@ -611,6 +667,35 @@ def _safe_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
+    """Servește o cerere de LINK pe produsele DEJA arătate, FĂRĂ bucla LLM (NX-131) — ca
+    show_more/cheaper. State ține doar ref-uri (P8) → fetch `product_url` PROASPĂT din catalog
+    (sursa de adevăr). Link real → Offer(open_url) + card(uri); `product_url` NULL (gaură de date
+    demo) → mesaj ONEST, NU link inventat (PP-F4). Mereu setează un reply (P6, niciodată tăcere)."""
+    ids = [p.product_id for p in ctx.state.displayed_products]
+    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+    ctx.retrieval = RetrievalResult(products=products, source="link_intent")
+    with_url = [p for p in products if p.get("url")]
+    if not with_url:
+        # Fără product_url → onest + pasul care există. NU re-afișăm cardul (ar repeta exact ce a
+        # frustrat clientul în bucla veche); doar mesajul onest. cacheable=False (context-specific).
+        ctx.emit("link_intent", served=0, in_context=len(products))
+        ctx.set_reply(_no_link_msg(ctx.language), cacheable=False)
+        return
+    ctx.emit("link_intent", served=len(with_url))
+    cards = _card_products(with_url, n=6)
+    if len(with_url) == 1:
+        # Un singur produs țintă → buton CTA (open_url). set_reply ÎNTÂI (creează reply-ul), apoi
+        # set_offer (îl mută pe el — ordinea contează: set_offer cere un reply deja setat).
+        ctx.set_reply(_link_lead(ctx.language, many=False), products=cards, cacheable=False)
+        ctx.set_offer(
+            Offer(kind="open_url", label=_view_label(ctx.language), url=with_url[0]["url"])
+        )
+    else:
+        # Mai multe → cardurile SUNT linkurile (fiecare cu url-ul lui); fără un buton unic arbitrar.
+        ctx.set_reply(_link_lead(ctx.language, many=True), products=cards, cacheable=False)
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -641,6 +726,24 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.set_reply(
             login_required_message(ctx.language, with_handoff=with_handoff), cacheable=False
         )
+        return
+
+    # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") =
+    # intenție DETERMINISTĂ (ca cheaper/show_more), NU re-recomandare. Calea rich interzice
+    # modelului linkurile (reguli rich) → cererea de link cădea în re-randarea bogată cu coaching
+    # repetat. O servim direct din state → product_url proaspăt → Offer(open_url) + card, $0
+    # inferență. Doar SALES, doar cu produse afișate, FĂRĂ filtre noi (cu filtre = căutare nouă →
+    # lasă bucla LLM să caute fresh), NU „link la ceva mai ieftin" (= cheaper_intent).
+    link_intent = (
+        not is_order
+        and get_settings().link_intent_enabled
+        and bool(ctx.state.displayed_products)
+        and not route.filters
+        and _LINK_RE.search(query) is not None
+        and _CHEAPER_RE.search(query) is None
+    )
+    if link_intent:
+        await _handle_link_intent(ctx, deps)
         return
 
     # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (fără bucla LLM, cost $0

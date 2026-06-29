@@ -319,6 +319,10 @@ class Settings(BaseSettings):
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
+    # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") →
+    # servită DETERMINIST (Offer open_url + card din product_url proaspăt), nu prin calea rich (care
+    # interzice modelului linkurile → bucla de coaching repetat). OFF → cade pe bucla LLM (vechi).
+    link_intent_enabled: bool = Field(default=True, validation_alias="LINK_INTENT_ENABLED")
     # NX-119: sesiuni de căutare (pool + paginare „mai arată-mi"). OFF → fără sesiune persistată
     # (fiecare căutare e fresh) ȘI fără ramura deterministă de paginare (cade pe bucla LLM normală).
     search_sessions_enabled: bool = Field(default=True, validation_alias="SEARCH_SESSIONS_ENABLED")
