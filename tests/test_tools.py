@@ -322,6 +322,72 @@ async def test_search_brand_truly_absent_still_denies(monkeypatch):
     assert "Nu am găsit niciun produs de la brandul «Chanel»" in res.llm_view
 
 
+async def test_named_product_found_helper():
+    """A1 unit: cele mai lungi tokenuri distinctive trebuie să apară într-un produs întors."""
+    assert ct._named_product_found("Hidra Boost Ultra", [{"name": "Hidra Boost Ultra Cream"}])
+    assert not ct._named_product_found("Hidra Boost", [{"name": "Crema A"}, {"name": "Ser B"}])
+    assert not ct._named_product_found("Hidra Boost", [])  # zero rezultate
+    assert ct._named_product_found("ser", [{"name": "Crema A"}])  # niciun token distinctiv
+
+
+async def test_search_named_product_not_found_discloses(monkeypatch):
+    """A1: produs NUMIT inexistent → disclosure «nu există ca atare», dar arată alternative."""
+
+    async def fake_lex(conn, business_id, **k):
+        return PRODUCTS  # Crema A / Ser B — niciunul nu e «Hidra Boost Ultra»
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx,
+        _deps(_LLM()),
+        "search_products",
+        {"query": "hidra boost", "product_name": "Hidra Boost Ultra"},
+    )
+    assert res.ok and len(res.products) == 2  # alternativele rămân
+    assert "nu există ca atare" in res.llm_view
+    assert any(e.type == "named_product_not_found" for e in ctx.events)
+
+
+async def test_search_named_product_found_no_disclosure(monkeypatch):
+    """A1: produsul numit CHIAR e printre rezultate → fără disclosure falsă."""
+    prod = [{**PRODUCTS[0], "id": "px", "name": "Hidra Boost Ultra Cream"}]
+
+    async def fake_lex(conn, business_id, **k):
+        return prod
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx,
+        _deps(_LLM()),
+        "search_products",
+        {"query": "hidra boost", "product_name": "Hidra Boost Ultra"},
+    )
+    assert res.ok and "nu există ca atare" not in res.llm_view
+    assert not any(e.type == "named_product_not_found" for e in ctx.events)
+
+
+async def test_search_relaxed_discloses(monkeypatch):
+    """Relaxare: treapta strictă (cu category) goală → treapta relaxată (fără) cu rezultate →
+    llm_view marcat «relaxat» + flag relaxed în event (agentul e sincer că nu e match exact)."""
+
+    async def fake_lex(conn, business_id, **k):
+        return [] if k.get("category") else PRODUCTS
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx, _deps(_LLM()), "search_products", {"query": "x", "category": "skincare"}
+    )
+    assert res.ok and res.products  # rezultate de la treapta relaxată
+    assert "relaxat" in res.llm_view
+    assert _search_event(ctx).properties["relaxed"] is True
+
+
 async def test_search_mode_lexical_when_all_vector_deduped(monkeypatch):
     """Fix NX-113b: mode=lexical dacă toate hiturile vector sunt eliminate de dedup (deși vectorul
     a întors ceva) — analytics-ul reflectă setul ÎNTORS, nu ce-a întors vectorul brut."""

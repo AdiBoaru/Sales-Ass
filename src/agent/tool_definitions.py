@@ -69,6 +69,14 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                             "altfel false."
                         ),
                     },
+                    "product_name": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Numele EXACT al unui produs ANUME cerut de client (ex. „Hidra "
+                            "Boost Ultra”). Completează DOAR când numește un produs specific, "
+                            "nu o nevoie sau categorie; altfel null."
+                        ),
+                    },
                 },
                 "required": [
                     "query",
@@ -79,6 +87,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     "limit",
                     "sort_mode",
                     "in_stock_only",
+                    "product_name",
                 ],
             },
         },

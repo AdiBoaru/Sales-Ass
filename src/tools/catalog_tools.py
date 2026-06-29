@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
@@ -53,6 +55,10 @@ class SearchArgs(BaseModel):
     sort_mode: str = "relevance"  # relevance | price_asc | price_desc | rating_desc (clamp în SQL)
     in_stock_only: bool = False
     limit: int = Field(default=6, ge=1, le=6)
+    # A1 (Val1): numele EXACT al unui produs ANUME cerut de client (ex. „Hidra Boost Ultra"). DOAR
+    # când clientul numește un produs specific, nu o nevoie. Dacă search NU întoarce un produs care
+    # să-l conțină → disclosure „nu există ca atare" (anti-bait-and-switch, ca brand-not-found).
+    product_name: str | None = None
 
 
 class DetailArgs(BaseModel):
@@ -64,6 +70,28 @@ class CompareArgs(BaseModel):
 
 
 # --- vederi compacte pentru model (≤6×8, fără PII) ---------------------------
+
+
+def _normname(s: str) -> str:
+    """Lowercase + fără diacritice → match robust de nume produs (A1)."""
+    d = unicodedata.normalize("NFKD", (s or "").lower())
+    return "".join(c for c in d if not unicodedata.combining(c))
+
+
+def _named_product_found(name: str, products: list[dict[str, Any]]) -> bool:
+    """A1: vreun produs ÎNTORS chiar e produsul NUMIT de client? Heuristică deterministă, fără
+    wordlist: cele mai LUNGI ≤2 tokenuri distinctive (≥4 litere — brand/model, nu „crema"/„ser")
+    trebuie să apară TOATE în numele unui produs. Conservator spre „găsit" (evită disclosure fals):
+    declară lipsă DOAR când tokenurile distinctive nu apar în niciun produs (zero incluse)."""
+    toks = sorted(
+        {t for t in re.findall(r"[a-z0-9]+", _normname(name)) if len(t) >= 4},
+        key=len,
+        reverse=True,
+    )
+    key = toks[:2]
+    if not key:
+        return True  # nimic distinctiv de verificat → nu disclose
+    return any(all(t in _normname(p.get("name") or "") for t in key) for p in products)
 
 
 def _brief(products: list[dict[str, Any]]) -> str:
@@ -433,7 +461,27 @@ async def search_products_tool(
                 f"branduri, dar spune explicit că sunt alt brand."
             ),
         )
-    return ToolResult(ok=True, products=products, llm_view=_brief(products))
+
+    # A1: produs NUMIT inexistent (nu doar brand) → disclosure anti-bait-and-switch. Produsele
+    # întoarse (dacă există) rămân ALTERNATIVE, dar agentul spune clar că nu e cel cerut.
+    notes: list[str] = []
+    if a.product_name and not _named_product_found(a.product_name, products):
+        ctx.emit("named_product_not_found", alternatives=len(products))
+        notes.append(
+            f"(produsul «{a.product_name}» nu există ca atare în catalog — NU prezenta alt produs "
+            f"ca fiind «{a.product_name}»; cele de mai jos sunt ALTERNATIVE similare, spune clar)"
+        )
+    # Relaxare cu disclosure: search a renunțat la o constrângere SOFT (nevoie/categorie) ca să iasă
+    # ceva → agentul trebuie să fie sincer că nu e potrivire exactă pe ce a cerut (P6, nu tăcere).
+    if relaxed:
+        notes.append(
+            "(relaxat: n-am găsit potrivire exactă pe nevoia/categoria cerută; cele de mai jos "
+            "sunt cele mai apropiate — spune sincer clientului că nu e match exact)"
+        )
+    view = _brief(products)
+    if notes:
+        view = "\n".join(notes) + "\n" + view
+    return ToolResult(ok=True, products=products, llm_view=view)
 
 
 @register("get_product_details")
