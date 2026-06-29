@@ -83,6 +83,46 @@ async def mark_job(conn: asyncpg.Connection, business_id: str, job_id: str, stat
     )
 
 
+async def create_proactive_job(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    contact_id: str,
+    conversation_id: str,
+    kind: str,
+    payload: dict[str, Any] | None = None,
+    scheduled_at: Any = None,  # None → now() (fire ASAP); altfel timestamptz
+    template_id: str | None = None,
+    dedupe_key: str | None = None,
+) -> str | None:
+    """Inserează un job proactiv (PL-1) — primitivul lipsă: până acum NIMENI nu insera joburi.
+
+    Idempotent prin `dedupe_key` (index unic parțial, 019): re-rularea unui sweeper pe aceeași
+    sursă (același coș abandonat) NU duplică jobul → `ON CONFLICT DO NOTHING` întoarce `None`.
+    `dedupe_key=None` (back_in_stock gardat de `notified_at`; follow_up ad-hoc) sare peste index
+    (NULL nu intră în index parțial) → insert mereu. `scheduled_at=None` → `now()` (motorul îl
+    revendică imediat). `conn` deja tenant-scoped (RLS `with check business_id`). Întoarce id sau
+    `None` (deduplicat)."""
+    return await conn.fetchval(
+        """
+        insert into proactive_jobs
+            (business_id, contact_id, conversation_id, kind, scheduled_at,
+             payload, template_id, dedupe_key)
+        values ($1, $2, $3, $4, coalesce($5, now()), $6::jsonb, $7, $8)
+        on conflict (business_id, dedupe_key) where dedupe_key is not null do nothing
+        returning id::text
+        """,
+        business_id,
+        contact_id,
+        conversation_id,
+        kind,
+        scheduled_at,
+        json.dumps(payload or {}),
+        template_id,
+        dedupe_key,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Read-uri pentru rutare + construirea payload-ului (toate cu business_id = $1)
 # --------------------------------------------------------------------------- #
@@ -175,3 +215,129 @@ async def get_latest_checkout(
         conversation_id,
     )
     return dict(row) if row else None
+
+
+# --------------------------------------------------------------------------- #
+# INIȚIATORI (PL-1) — candidați pentru sweeper-ele care creează proactive_jobs.
+# Control-plane (admin_conn, cross-tenant, non-PII) → tenanți cu candidați; apoi
+# per-tenant (tenant_conn, RLS) → rândurile efective. Toate cu business_id (P7).
+# --------------------------------------------------------------------------- #
+
+
+async def business_ids_with_abandoned_carts(
+    conn: asyncpg.Connection,
+    *,
+    older_than_seconds: int,
+    max_age_seconds: int,
+    limit: int = 100,
+) -> list[str]:
+    """Tenanți cu coșuri abandonate eligibile — CONTROL PLANE (admin_conn). Coș abandonat =
+    checkout_link neconvertit, neexpirat, abandonat de ÎNTRE `older_than` și `max_age` (nu
+    reamintim coșuri ancestrale). Non-PII (doar business_id), ca `business_ids_with_due_outbox`."""
+    rows = await conn.fetch(
+        """
+        select distinct business_id::text as business_id
+        from checkout_links
+        where converted_order_id is null
+          and (expires_at is null or expires_at > now())
+          and created_at <= now() - make_interval(secs => $1)
+          and created_at >= now() - make_interval(secs => $2)
+        limit $3
+        """,
+        older_than_seconds,
+        max_age_seconds,
+        limit,
+    )
+    return [r["business_id"] for r in rows]
+
+
+async def find_abandoned_carts(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    older_than_seconds: int,
+    max_age_seconds: int,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Coșurile abandonate ale tenantului (checkout_links neconvertite/neexpirate, abandonate
+    de > prag). `business_id = $1` (P7). Întoarce id/contact_id/conversation_id (fără PII)."""
+    rows = await conn.fetch(
+        """
+        select id::text as id, contact_id::text as contact_id,
+               conversation_id::text as conversation_id
+        from checkout_links
+        where business_id = $1
+          and converted_order_id is null
+          and (expires_at is null or expires_at > now())
+          and created_at <= now() - make_interval(secs => $2)
+          and created_at >= now() - make_interval(secs => $3)
+        order by created_at
+        limit $4
+        """,
+        business_id,
+        older_than_seconds,
+        max_age_seconds,
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def business_ids_with_restocks(conn: asyncpg.Connection, *, limit: int = 100) -> list[str]:
+    """Tenanți cu abonamente back-in-stock de notificat — CONTROL PLANE (admin_conn). Eligibil =
+    `notified_at IS NULL` (re-subscribe re-armează la NULL) ȘI produsul e iar disponibil."""
+    rows = await conn.fetch(
+        """
+        select distinct s.business_id::text as business_id
+        from back_in_stock_subscriptions s
+        join products p on p.id = s.product_id and p.business_id = s.business_id
+        where s.notified_at is null
+          and p.availability in ('in_stock', 'low_stock')
+        limit $1
+        """,
+        limit,
+    )
+    return [r["business_id"] for r in rows]
+
+
+async def find_restocked_subscriptions(
+    conn: asyncpg.Connection, business_id: str, *, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Abonamentele de notificat ale tenantului + conversația prin care rutăm. Abonamentul n-are
+    conversație → luăm cea mai recentă conversație a contactului (după ultimul mesaj). `None` dacă
+    contactul n-are niciuna (sweeper-ul o marchează notificată ca să nu re-scaneze). `business_id`
+    (P7)."""
+    rows = await conn.fetch(
+        """
+        select s.id::text as id, s.contact_id::text as contact_id,
+               s.product_id::text as product_id,
+               (
+                 select c.id::text from conversations c
+                 where c.business_id = s.business_id and c.contact_id = s.contact_id
+                 order by coalesce(c.last_inbound_at, c.last_outbound_at) desc nulls last
+                 limit 1
+               ) as conversation_id
+        from back_in_stock_subscriptions s
+        join products p on p.id = s.product_id and p.business_id = s.business_id
+        where s.business_id = $1
+          and s.notified_at is null
+          and p.availability in ('in_stock', 'low_stock')
+        order by s.created_at
+        limit $2
+        """,
+        business_id,
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def mark_subscription_notified(
+    conn: asyncpg.Connection, business_id: str, subscription_id: str
+) -> None:
+    """Marchează abonamentul ca notificat (`notified_at = now()`) → iese din setul de candidați.
+    Re-subscribe (commerce.subscribe_back_in_stock) îl re-armează la NULL. `business_id` (P7)."""
+    await conn.execute(
+        "update back_in_stock_subscriptions set notified_at = now() "
+        "where business_id = $1 and id = $2",
+        business_id,
+        subscription_id,
+    )

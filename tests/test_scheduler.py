@@ -12,13 +12,16 @@ from src.jobs import scheduler as sch
 from src.jobs.scheduler import Job, _build_jobs, _compute_next, _run_due, _safe_run
 
 
-def _settings(*, key="sk-x", embed=True):
+def _settings(*, key="sk-x", embed=True, proactive=True, initiators=True):
     return SimpleNamespace(
         openai_api_key=key,
         embed_job_enabled=embed,
         scheduler_rollup_hour_utc=0,
         scheduler_dedupe_interval_seconds=21600,
         scheduler_embed_interval_seconds=3600,
+        proactive_enabled=proactive,
+        proactive_initiators_enabled=initiators,
+        proactive_initiators_interval_s=900,
     )
 
 
@@ -78,18 +81,40 @@ async def test_safe_run_runs_ok():
 
 def test_build_jobs_includes_embed_with_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="sk-x", embed=True))
-    assert [j.name for j in _build_jobs()] == ["rollup_usage", "cleanup_dedupe", "embed_products"]
+    assert [j.name for j in _build_jobs()] == [
+        "rollup_usage",
+        "cleanup_dedupe",
+        "embed_products",
+        "proactive_initiators",
+    ]
 
 
 def test_build_jobs_excludes_embed_without_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="", embed=True))
     names = [j.name for j in _build_jobs()]
-    assert names == ["rollup_usage", "cleanup_dedupe"]  # rollup + cleanup chiar fără cheie
+    # rollup + cleanup + initiators chiar fără cheie OpenAI (doar embed cere cheie)
+    assert names == ["rollup_usage", "cleanup_dedupe", "proactive_initiators"]
 
 
 def test_build_jobs_excludes_embed_when_disabled(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="sk-x", embed=False))
     assert "embed_products" not in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_includes_proactive_initiators(monkeypatch):
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings())
+    assert "proactive_initiators" in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_excludes_initiators_when_disabled(monkeypatch):
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings(initiators=False))
+    assert "proactive_initiators" not in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_excludes_initiators_when_proactive_off(monkeypatch):
+    # gardat ȘI de proactive_enabled: dacă motorul e oprit, nu mai creăm joburi
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings(proactive=False))
+    assert "proactive_initiators" not in [j.name for j in _build_jobs()]
 
 
 # --------------------------------------------------------------------------- #
