@@ -38,13 +38,23 @@ from src.redis_bus import close_redis, get_redis
 log = logging.getLogger(__name__)
 
 
-_DELIVERED = {"rich": "rich", "carousel": "carousel", "products": "cards", "edit": "edit"}
+_DELIVERED = {
+    "rich": "rich",
+    "carousel": "carousel",
+    "products": "cards",
+    "edit": "edit",
+    "template": "template",
+}
 
 
 def _requested_render(payload: dict, ptype: str | None) -> str:
     """Randarea CERUTĂ de pipeline (taxonomie aliniată cu `_DELIVERED` ca să nu raportăm un
     carousel→carousel reușit drept degradare). rich > carousel > cards > text. IZI-compare:
-    `comparison` se cere ca `rich` (web îl livrează prin `send_rich`; canalele text → degradare)."""
+    `comparison` se cere ca `rich` (web îl livrează prin `send_rich`; canalele text → degradare).
+    `template` (proactiv, PL-1) e propria cerere → degradarea template→text e vizibilă în
+    render_path."""
+    if ptype == "template":
+        return "template"
     if payload.get("rich") or payload.get("comparison"):
         return "rich"
     if not payload.get("products"):
@@ -103,6 +113,10 @@ def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability])
         return "rich"
     if payload.get("rich") and Capability.RICH in caps:
         return "rich"
+    if ptype == "template":
+        # Proactiv în afara ferestrei 24h (PL-1): doar canalele cu TEMPLATE (WhatsApp). Altundeva
+        # degradăm grațios la text (floor = `payload['text']`, textul randat) — P6, fără tăcere.
+        return "template" if Capability.TEMPLATE in caps else "text"
     if ptype == "edit_media":
         return "edit" if Capability.EDIT in caps else "edit_unsupported"
     if ptype == "carousel" and payload.get("products") and Capability.CAROUSEL in caps:
@@ -127,8 +141,9 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
         "products",
         "carousel",
         "edit_media",
+        "template",
     ):
-        # text/products/carousel/edit_media; template/interactive/typing → follow-up.
+        # text/products/carousel/edit_media/template; interactive/typing → follow-up.
         log.warning(
             "outbox %s: kind/type nesuportat (%s/%s) — marcat dead",
             row["id"],
@@ -156,7 +171,17 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
 
     try:
         account_id = row["channel_account_id"]
-        if branch == "rich":
+        if branch == "template":
+            # Proactiv în afara ferestrei 24h (PL-1): template Meta aprobat (poarta NX-71 a validat
+            # consent + status). Trimitem name/language/params (NU textul randat — Meta randează).
+            provider_id = await sender.send_template(
+                account_id,
+                payload["to"],
+                payload["template_name"],
+                payload["language"],
+                payload.get("params") or [],
+            )
+        elif branch == "rich":
             # Recomandare bogată (model iZi): intro + carduri + pick + chips. Canalele fără RICH
             # au degradat deja la 'text' în choose_render (aplatizare — payload['text']).
             provider_id = await sender.send_rich(account_id, payload["to"], payload)
