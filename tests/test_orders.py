@@ -118,6 +118,20 @@ async def test_idempotent_no_duplicate_items(monkeypatch):
     assert "items" not in sink  # nu re-inserăm liniile
 
 
+async def test_customer_ref_carried_to_upsert(monkeypatch):
+    # NX-130: id-ul de client din payload → orders.external_customer_ref (login passthrough lookup)
+    sink = _patch_queries(monkeypatch, link=None, inserted=True)
+    await om.process_order(object(), "b", _order(customer_ref="cust_42"))
+    assert sink["upsert"]["external_customer_ref"] == "cust_42"
+
+
+async def test_customer_ref_absent_is_none(monkeypatch):
+    # comandă fără id de client (platformă care nu-l trimite) → NULL, nu crash
+    sink = _patch_queries(monkeypatch, link=None, inserted=True)
+    await om.process_order(object(), "b", _order())
+    assert sink["upsert"]["external_customer_ref"] is None
+
+
 async def test_invalid_order_raises(monkeypatch):
     _patch_queries(monkeypatch)
     with pytest.raises(ValidationError):

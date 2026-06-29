@@ -44,10 +44,16 @@ def _deps(llm=None) -> PipelineDeps:
 
 
 def _patch_orders(monkeypatch, orders, sink=None):
-    async def fake(conn, business_id, *, external_id=None, contact_id=None, limit=3):
+    async def fake(
+        conn, business_id, *, external_id=None, contact_id=None, external_customer_ref=None, limit=3
+    ):
         if sink is not None:
             sink.update(
-                business_id=business_id, external_id=external_id, contact_id=contact_id, limit=limit
+                business_id=business_id,
+                external_id=external_id,
+                contact_id=contact_id,
+                external_customer_ref=external_customer_ref,
+                limit=limit,
             )
         return orders
 
@@ -84,6 +90,8 @@ async def test_check_order_by_contact(monkeypatch):
     assert "ORD-1" in res.llm_view and "shipped" in res.llm_view and "RO123456789" in res.llm_view
     # izolare: lookup scoped pe contactul curent, fără order_ref → ultimele 3
     assert sink["contact_id"] == "c" and sink["external_id"] is None and sink["limit"] == 3
+    # NX-130: canal identificat (fără login passthrough) → pe contact_id, NU pe customer_ref
+    assert sink["external_customer_ref"] is None
 
 
 async def test_check_order_by_ref_is_contact_scoped(monkeypatch):
@@ -249,3 +257,16 @@ async def test_web_order_verified_reaches_tool_loop(monkeypatch):
     llm = _SpyLLM(tool_calls=[("check_order", {"order_ref": None})], final="Comanda ta e ok.")
     await agent_stage(ctx, _deps(llm))
     assert llm.loop_called is True  # identitate verificată → NU scurtcircuitat de poartă
+
+
+async def test_verified_web_looks_up_by_customer_ref(monkeypatch):
+    # NX-130: web cu identitate verificată → check_order caută pe customer_ref (din sesiunea
+    # verificată), NU pe contactul throwaway. Un order_ref în args doar îngustează, nu sare peste.
+    sink: dict = {}
+    _patch_orders(monkeypatch, [ORDER], sink)
+    ctx = _web_ctx(body="unde e comanda mea?")
+    ctx.verified_customer_ref = "cust_42"
+    res = await om.check_order_tool(ctx, _deps(), {"order_ref": None})
+    assert res.ok is True
+    assert sink["external_customer_ref"] == "cust_42"  # cheia = customer_ref verificat (din ctx)
+    assert sink["contact_id"] is None  # NU contactul web (comenzile reale nu-s legate de el)

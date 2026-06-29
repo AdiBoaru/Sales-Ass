@@ -64,12 +64,17 @@ async def check_order_tool(
 ) -> ToolResult:
     """Status + tracking pentru comanda cerută (după nr) sau ultimele comenzi ale contactului."""
     a = CheckOrderArgs(**args)
-    # Izolare: ÎNTOTDEAUNA scoped pe contactul curent (în SQL). `order_ref` doar îngustează.
+    # Izolare: cheia de lookup vine din CONTEXT (verificat server-side), NU din args — `order_ref`
+    # doar îngustează. NX-130: web cu login passthrough verificat (`ctx.verified_customer_ref`) →
+    # caută pe customer_ref (comenzile reale, NElegate de contactul web throwaway); canalele
+    # identificate (telefon/chat = cont) → pe contact_id, ca azi. customer_ref din args = ignorat.
+    customer_ref = ctx.verified_customer_ref
     orders = await get_orders_status(
         deps.conn,
         ctx.business.id,
         external_id=a.order_ref,
-        contact_id=ctx.contact.id,
+        contact_id=None if customer_ref else ctx.contact.id,
+        external_customer_ref=customer_ref,
         limit=1 if a.order_ref else 3,
     )
     if not orders:
