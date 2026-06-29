@@ -27,6 +27,7 @@ class Capability(str, Enum):
     EDIT = "edit"  # edit_message_media — navigare carusel (R2)
     TYPING = "typing"  # mark_typing — semnal inbound (NX-90)
     MEDIA = "media"  # fetch_media — download inbound (informativ aici)
+    TEMPLATE = "template"  # send_template — proactiv în afara ferestrei 24h (template Meta aprobat)
     OFFER = "offer"  # randare nativă Reply.offer (NX-114); fără ea → floor aplatizat în text
     # IZI-compare: randare nativă a tabelului `Reply.comparison` (web). Fără ea → floor aplatizat
     # (tabelul ca text) prin send_text. Randat tot prin `send_rich` (ca OFFER), nu metodă dedicată.
@@ -43,6 +44,7 @@ CAPABILITY_METHODS: dict[Capability, str] = {
     Capability.EDIT: "edit_message_media",
     Capability.TYPING: "mark_typing",
     Capability.MEDIA: "fetch_media",
+    Capability.TEMPLATE: "send_template",
 }
 
 
@@ -138,7 +140,8 @@ class ChannelSender(Protocol):
 
     # Metode OPȚIONALE, gardate de CAPABILITY (nu `hasattr`): send_rich (RICH), send_products
     # (CARDS), send_carousel_card (CAROUSEL), edit_message_media (EDIT), mark_typing (TYPING),
-    # fetch_media (MEDIA). Testul de consistență (test_dispatcher) verifică declarat ⇔ metodă reală.
+    # fetch_media (MEDIA), send_template (TEMPLATE). Testul de consistență (test_channel_caps)
+    # verifică declarat ⇔ metodă reală.
 
 
 class ChannelSenderRegistry:

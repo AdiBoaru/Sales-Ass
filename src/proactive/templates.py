@@ -29,7 +29,7 @@ telefon / body randat / valorile variabilelor (pot conține AWB/adresă).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.db.queries.conversations import is_in_24h_window
 from src.db.queries.wa_templates import get_approved_template
@@ -42,7 +42,10 @@ _MARKETING_KINDS = frozenset({"abandoned_cart", "follow_up"})
 @dataclass(frozen=True)
 class ProactiveDecision:
     """Verdictul porții. `rendered_text` e textul gata de trimis (liber SAU template
-    randat); `template_id`/`provider_template_id` sunt setate DOAR pentru `mode='template'`."""
+    randat — folosit ca floor de degradare pe canale fără TEMPLATE). Câmpurile `template_*`
+    sunt setate DOAR pentru `mode='template'`: `template_name`/`template_language` identifică
+    template-ul APROBAT la Meta, iar `template_params` sunt valorile poziționale ({{n}}) în
+    ordinea din `wa_templates.variables` — exact ce-i trebuie `MetaClient.send_template`."""
 
     allowed: bool
     mode: str  # 'free' | 'template' | 'blocked'
@@ -50,6 +53,9 @@ class ProactiveDecision:
     rendered_text: str | None = None
     template_id: str | None = None
     provider_template_id: str | None = None
+    template_name: str | None = None
+    template_language: str | None = None
+    template_params: list[str] = field(default_factory=list)
 
 
 def _has_optin(consent: dict, kind: str) -> bool:
@@ -109,7 +115,11 @@ async def decide_proactive(
     if tmpl is None:
         return ProactiveDecision(allowed=False, mode="blocked", reason="no_window_no_template")
 
-    text = render_template(tmpl["body"], tmpl["variables"], variables)
+    var_names = tmpl["variables"]
+    text = render_template(tmpl["body"], var_names, variables)
+    # Valorile poziționale ({{1}},{{2}}...) în ordinea numelor din `wa_templates.variables` —
+    # exact ce trimite Meta în componenta `body` (NU textul randat, P11). Lipsă → string gol.
+    params = [str(variables.get(name, "")) for name in var_names]
     return ProactiveDecision(
         allowed=True,
         mode="template",
@@ -117,4 +127,7 @@ async def decide_proactive(
         rendered_text=text,
         template_id=tmpl["id"],
         provider_template_id=tmpl["provider_template_id"],
+        template_name=tmpl["name"],
+        template_language=tmpl["language"],
+        template_params=params,
     )

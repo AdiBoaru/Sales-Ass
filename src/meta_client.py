@@ -29,7 +29,10 @@ class MetaClient:
     """Wrapper subțire peste Graph API /{phone_number_id}/messages."""
 
     # NX-115: WhatsApp = text + typing + media (download). OFFER (CTA nativ) = follow-up; azi floor.
-    capabilities = frozenset({Capability.TEXT, Capability.TYPING, Capability.MEDIA})
+    # TEMPLATE (PL-1): singurul canal cu fereastră 24h → proactivul în afara ei trimite template.
+    capabilities = frozenset(
+        {Capability.TEXT, Capability.TYPING, Capability.MEDIA, Capability.TEMPLATE}
+    )
     max_text_len = _WA_TEXT_MAX
     max_caption_len: int | None = None
 
@@ -60,6 +63,48 @@ class MetaClient:
                 "to": to,
                 "type": "text",
                 "text": {"body": _clamp(text, _WA_TEXT_MAX)},  # NX-115: clamp transport
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        try:
+            return data["messages"][0]["id"]
+        except (KeyError, IndexError, TypeError) as e:
+            raise MetaSendError(f"răspuns Meta fără message id: {data}") from e
+
+    async def send_template(
+        self,
+        account_id: str,
+        to: str,
+        name: str,
+        language: str,
+        params: list[str] | None = None,
+    ) -> str:
+        """Trimite un mesaj de tip TEMPLATE (PL-1) — singura cale permisă de Meta în afara
+        ferestrei de 24h. `name`/`language` identifică template-ul APROBAT la Meta (NU trimitem
+        textul randat: Meta îl randează server-side din template); `params` = valorile poziționale
+        ({{1}},{{2}}...) pentru componenta `body`, în ordinea din `wa_templates.variables`. Poarta
+        NX-71 a verificat deja consent + status='approved'; aici doar transmitem. Întoarce wamid-ul.
+
+        Implementează `ChannelSender` (capabilitatea TEMPLATE). Fără `params` → template fără
+        variabile (componente omise). Ridică la eroare HTTP / răspuns fără message id."""
+        template: dict = {"name": name, "language": {"code": language}}
+        if params:
+            template["components"] = [
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": str(p)} for p in params],
+                }
+            ]
+        resp = await self._http.post(
+            f"{self._base}/{account_id}/messages",
+            headers={"Authorization": f"Bearer {self._token}"},
+            json={
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to,
+                "type": "template",
+                "template": template,
             },
         )
         resp.raise_for_status()

@@ -51,6 +51,57 @@ async def test_send_text_raises_on_unexpected_payload():
         await meta.send_text("PNID", "40712", "x")
 
 
+async def test_send_template_builds_meta_payload():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"messages": [{"id": "wamid.TMPL1"}]})
+
+    meta = _client(handler)
+    wamid = await meta.send_template("PNID-send", "40712345678", "awb_update", "ro", ["123", "FAN"])
+
+    assert wamid == "wamid.TMPL1"
+    assert captured["url"] == "https://graph.test/v21.0/PNID-send/messages"
+    body = captured["body"]
+    assert body["type"] == "template"
+    assert body["template"]["name"] == "awb_update"
+    assert body["template"]["language"] == {"code": "ro"}
+    # parametrii poziționali ({{1}},{{2}}) în componenta body, în ordine
+    [comp] = body["template"]["components"]
+    assert comp["type"] == "body"
+    assert comp["parameters"] == [
+        {"type": "text", "text": "123"},
+        {"type": "text", "text": "FAN"},
+    ]
+
+
+async def test_send_template_omits_components_without_params():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"messages": [{"id": "wamid.TMPL2"}]})
+
+    meta = _client(handler)
+    await meta.send_template("PNID", "40712", "promo_simple", "en", [])
+    assert "components" not in captured["body"]["template"]
+
+
+async def test_send_template_raises_on_unexpected_payload():
+    def handler(request):
+        return httpx.Response(200, json={"weird": True})
+
+    meta = _client(handler)
+    with pytest.raises(MetaSendError):
+        await meta.send_template("PNID", "40712", "awb_update", "ro", ["x"])
+
+
 async def test_mark_typing_sends_read_and_typing():
     captured = {}
 

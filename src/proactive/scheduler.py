@@ -8,8 +8,9 @@ Jobul devine `sent` (enqueue reușit) / `skipped_*` / `cancelled` / `failed`, AT
 Arhitectură (ca dispatcher-ul): control plane (admin_conn) → ce tenanți au joburi
 scadente → per tenant (tenant_conn, RLS) → claim (`FOR UPDATE SKIP LOCKED`) → procesare.
 
-v1 emite DOAR `type=text` (fereastra 24h): dispatcher-ul nu trimite încă `type=template`.
-Dacă poarta cere template (în afara ferestrei), motorul marchează `skipped_no_window`.
+Emite `type=text` (în fereastra 24h) SAU `type=template` (în afara ei, PL-1): poarta NX-71
+decide care, motorul pune payload-ul în outbox → dispatcher-ul rutează după `payload.type`
+(template → canalul cu capabilitatea TEMPLATE; canalele fără ea degradează grațios la text).
 
     python -m src.proactive.scheduler
 """
@@ -98,24 +99,34 @@ async def _process_job(conn, business_id: str, job: dict[str, Any], events: list
         events.append(Event("proactive_skipped", {"kind": kind, "reason": decision.reason}))
         return
 
-    if decision.mode == "template":
-        # v1: dispatcher-ul nu trimite template → blocăm calea (skip), nu enqueue ce ar muri 'dead'.
-        await mark_job(conn, business_id, job_id, "skipped_no_window")
-        events.append(
-            Event("proactive_skipped", {"kind": kind, "reason": "template_path_unsupported"})
-        )
-        return
-
-    # mode == 'free' → mesaj liber în fereastra 24h. Enqueue + mark, ATOMIC.
-    # outbox.kind = 'message' (transport): CHECK-ul permite doar message/template/typing/reaction,
-    # iar dispatcher-ul acceptă message/text. Natura proactivă e deja în idempotency_key +
+    # Enqueue + mark, ATOMIC (free SAU template — PL-1: calea template e LIVE acum).
+    # outbox.kind = 'message' (transport): CHECK-ul permite message/template/typing/reaction,
+    # iar dispatcher-ul rutează după `payload.type`. Natura proactivă e deja în idempotency_key +
     # payload.type — NU în kind (care e strategia de transport, nu clasificarea mesajului).
-    payload = {"type": "text", "to": to, "text": decision.rendered_text}
+    if decision.mode == "template":
+        # În afara ferestrei 24h → template Meta aprobat. `text` = textul randat (floor de
+        # degradare pe canale fără TEMPLATE); `template_name`/`language`/`params` → send_template.
+        payload = {
+            "type": "template",
+            "to": to,
+            "text": decision.rendered_text,
+            "template_name": decision.template_name,
+            "language": decision.template_language,
+            "params": decision.template_params,
+        }
+    else:
+        # mode == 'free' → mesaj liber în fereastra 24h.
+        payload = {"type": "text", "to": to, "text": decision.rendered_text}
     new_id = await enqueue_outbox(
         conn, business_id, conv_id, f"proactive:{job_id}", payload, kind="message"
     )
     await mark_job(conn, business_id, job_id, "sent")
-    events.append(Event("proactive_enqueued", {"kind": kind, "deduped": new_id is None}))
+    events.append(
+        Event(
+            "proactive_enqueued",
+            {"kind": kind, "deduped": new_id is None, "mode": decision.mode},
+        )
+    )
 
 
 async def _process_tenant(business_id: str, *, batch: int) -> int:

@@ -18,6 +18,7 @@ RICH_CAPS = frozenset(
     {Capability.TEXT, Capability.RICH, Capability.CARDS, Capability.CAROUSEL, Capability.EDIT}
 )
 CARDS_ONLY = frozenset({Capability.TEXT, Capability.CARDS})
+TEMPLATE_CAPS = frozenset({Capability.TEXT, Capability.TEMPLATE})
 
 REAL_SENDERS = [MetaClient, TelegramClient, WebSender]
 
@@ -59,6 +60,18 @@ def test_edit_media_unsupported_without_edit_cap():
 
 def test_plain_text_branch():
     assert choose_render({"text": "salut"}, "text", TEXT_ONLY) == "text"
+
+
+def test_template_branch_when_capable():
+    # PL-1: proactiv în afara ferestrei 24h pe canal cu TEMPLATE (WhatsApp).
+    p = {"type": "template", "to": "u", "text": "floor", "template_name": "awb_update"}
+    assert choose_render(p, "template", TEMPLATE_CAPS) == "template"
+
+
+def test_template_degrades_to_text_without_cap():
+    # Canal fără TEMPLATE → degradare grațioasă la text (floor = textul randat), P6.
+    p = {"type": "template", "to": "u", "text": "floor", "template_name": "awb_update"}
+    assert choose_render(p, "template", TEXT_ONLY) == "text"
 
 
 # --- consistență caps↔metode (contract) --------------------------------------
@@ -128,6 +141,10 @@ class _FakeSender:
     async def edit_message_media(self, account_id, to, card_message_id, products, index):
         self.calls.append("edit")
         return "id-edit"
+
+    async def send_template(self, account_id, to, name, language, params):
+        self.calls.append("send_template")
+        return "id-template"
 
 
 def _reg(sender, kind="telegram"):
@@ -201,6 +218,38 @@ async def test_dispatch_carousel_degrades_to_products_with_cards(_stub_outbox):
     }
     status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
     assert status == "sent" and sender.calls == ["send_products"]
+
+
+async def test_dispatch_template_calls_send_template(_stub_outbox):
+    # PL-1: payload `type=template` pe canal cu TEMPLATE → send_template (name/language/params).
+    sender = _FakeSender(TEMPLATE_CAPS)
+    payload = {
+        "type": "template",
+        "to": "u",
+        "text": "AWB 123 la FAN",
+        "template_name": "awb_update",
+        "language": "ro",
+        "params": ["123", "FAN"],
+        "message_id": "m",
+    }
+    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    assert status == "sent" and sender.calls == ["send_template"]
+
+
+async def test_dispatch_template_degrades_to_text_without_cap(_stub_outbox):
+    # Canal fără TEMPLATE → trimite textul randat ca floor (degradare grațioasă, P6).
+    sender = _FakeSender(TEXT_ONLY)
+    payload = {
+        "type": "template",
+        "to": "u",
+        "text": "AWB 123 la FAN",
+        "template_name": "awb_update",
+        "language": "ro",
+        "params": ["123", "FAN"],
+        "message_id": "m",
+    }
+    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    assert status == "sent" and sender.calls == ["send_text"]
 
 
 async def test_dispatch_edit_media_dead_without_edit_cap(_stub_outbox):

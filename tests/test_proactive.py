@@ -114,7 +114,7 @@ async def test_free_enqueues_text_and_marks_sent(monkeypatch):
     ]
     assert calls["mark"] == [("job1", "sent")]
     assert events[0].type == "proactive_enqueued"
-    assert events[0].properties == {"kind": "awb_update", "deduped": False}
+    assert events[0].properties == {"kind": "awb_update", "deduped": False, "mode": "free"}
 
 
 async def test_rerun_deduped_when_enqueue_returns_none(monkeypatch):
@@ -145,23 +145,43 @@ async def test_no_window_no_template_skips(monkeypatch):
     assert calls["mark"] == [("job1", "skipped_no_window")]
 
 
-async def test_template_mode_blocked_in_v1(monkeypatch):
+async def test_template_mode_enqueues_template(monkeypatch):
+    """PL-1: calea template e LIVE — în afara ferestrei 24h, motorul pune un payload
+    `type=template` în outbox (name/language/params), nu mai dă skip."""
     calls = _patch_engine(
         monkeypatch,
         decision=ProactiveDecision(
             True,
             "template",
             "ok_template",
-            rendered_text="t",
+            rendered_text="AWB 123 la FAN",
             template_id="x",
             provider_template_id="y",
+            template_name="awb_update",
+            template_language="ro",
+            template_params=["123", "FAN"],
         ),
     )
     events: list[Event] = []
     await scheduler._process_job(FakeConn(), "b1", _job(), events)
-    assert calls["enqueue"] == []  # dispatcher-ul nu trimite template în v1
-    assert calls["mark"] == [("job1", "skipped_no_window")]
-    assert events[0].properties["reason"] == "template_path_unsupported"
+    assert calls["enqueue"] == [
+        (
+            "conv1",
+            "proactive:job1",
+            {
+                "type": "template",
+                "to": "chat-9",
+                "text": "AWB 123 la FAN",  # floor de degradare pe canale fără TEMPLATE
+                "template_name": "awb_update",
+                "language": "ro",
+                "params": ["123", "FAN"],
+            },
+            "message",
+        )
+    ]
+    assert calls["mark"] == [("job1", "sent")]
+    assert events[0].type == "proactive_enqueued"
+    assert events[0].properties == {"kind": "awb_update", "deduped": False, "mode": "template"}
 
 
 async def test_cancel_when_spec_cancel(monkeypatch):
