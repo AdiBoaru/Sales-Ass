@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from src.db.queries.commerce import get_orders_status
 from src.tools.base import ToolResult, register
+from src.worker.order_gate import no_orders_message
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -72,9 +73,10 @@ async def check_order_tool(
         limit=1 if a.order_ref else 3,
     )
     if not orders:
-        return ToolResult(
-            ok=False, error="not_found", llm_view="Nu am găsit nicio comandă pe acest cont."
-        )
+        # NX-128: mesaj onest, conștient de canal. Web anonim e scurtcircuitat în agent_stage
+        # (mesaj de login) ÎNAINTE de tool → aici ajung doar canalele identificate (telefon/chat =
+        # cont), unde „pe contul tău" e corect, nu „pe acest cont" (cont căutat inexistent).
+        return ToolResult(ok=False, error="not_found", llm_view=no_orders_message(ctx))
     return ToolResult(
         ok=True,
         products=[],  # nu-s produse de catalog → nu poluează validatorul de preț

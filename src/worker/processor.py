@@ -22,6 +22,7 @@ from src.agent import usage
 from src.agent.llm import get_llm
 from src.agent.pricing import savings_for
 from src.cache.canonical import canonicalize, classify_volatility
+from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.db.queries.analytics import insert_events
@@ -304,11 +305,6 @@ async def _extract_profile_and_score(
         log.exception("extractor profil a eșuat (turul continuă)")
 
 
-# Canale IDENTIFICATE (contact stabil) → plafon per-contact. Web (`webchat`) e anonim și are deja
-# plafon per-vizitor pe calea sincronă (NX-120) → nu-l dublăm aici (NX-125).
-_IDENTIFIED_CHANNELS = ("whatsapp", "telegram")
-
-
 async def _llm_within_budget(
     ctx: TurnContext, redis: Redis | None, business: BusinessConfig, *, channel_kind: str
 ):
@@ -333,7 +329,7 @@ async def _llm_within_budget(
             )
             return None
         # NX-125: plafon SOFT per-contact (canale identificate; web = NX-120). Pre-check read-only.
-        if contact_cap and channel_kind in _IDENTIFIED_CHANNELS:
+        if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_capped(redis, scope, contact_cap):
                 ctx.emit("contact_spend_capped", cap_usd=contact_cap)
@@ -374,7 +370,7 @@ async def _record_turn_cost(
         log.warning("cost guard: add eșuat (%s)", type(e).__name__)
     # NX-125: plafon per-contact (canale identificate; web = NX-120). Increment atomic + compară.
     contact_cap = settings.contact_daily_cost_cap_usd
-    if contact_cap and channel_kind in _IDENTIFIED_CHANNELS:
+    if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
         try:
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_over_cap(redis, scope, cost, contact_cap, CONTACT_COST_WINDOW_S):
