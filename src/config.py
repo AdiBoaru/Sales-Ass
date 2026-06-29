@@ -326,6 +326,21 @@ class Settings(BaseSettings):
     # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).
     # Determinist, NU inventat. OFF → doar badge-uri pre-seedate curate (comportament vechi).
     card_badges_enabled: bool = Field(default=True, validation_alias="CARD_BADGES_ENABLED")
+    # ARCH-2026 P0: pe `relevance`, scor de ranking BLENDED determinist (RRF + social-proof shrunk
+    # rating + disponibilitate + reducere + concern), nu RRF pur cu rating doar pe tie. Repară „un
+    # produs mai bine cotat (4.6×148) ajunge sub unul mai slab (4.4×28)". Ponderile din
+    # DomainPack.rank_weights (override per-vertical), fallback pe RANK_WEIGHTS (fusion.py). OFF
+    # (fail-safe) → fuziunea cade pe `deterministic_rerank` (RRF pur, byte-identic).
+    search_blended_rank_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_BLENDED_RANK_ENABLED"
+    )
+    # ARCH-2026 P0: cardurile rich sunt ORDONATE de rankingul de retrieval (determinist), iar
+    # „Recomandarea mea" = produsul cel mai bine clasat afișat — NU alegerea liberă a modelului
+    # (popularity/position bias). Modelul doar NAREAZĂ (justificare/fit). OFF (fail-safe) →
+    # ordinea + pick-ul modelului (comportament vechi).
+    rich_pick_deterministic_enabled: bool = Field(
+        default=True, validation_alias="RICH_PICK_DETERMINISTIC_ENABLED"
+    )
     # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
     # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
     # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.

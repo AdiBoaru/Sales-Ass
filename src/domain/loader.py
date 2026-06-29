@@ -139,12 +139,14 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
             s for s in (merged.get("settled_order_statuses") or []) if isinstance(s, str)
         ),
         currency=str(currency),
-        badge_rules=_norm_badge_rules(merged.get("badge_rules")),
+        badge_rules=_norm_numeric_map(merged.get("badge_rules")),
+        rank_weights=_norm_numeric_map(merged.get("rank_weights")),
     )
 
 
-def _norm_badge_rules(raw: Any) -> dict[str, float]:
-    """Praguri badge: chei str → valori numerice (float). Orice gunoi → ignorat (fail-safe, P6)."""
+def _norm_numeric_map(raw: Any) -> dict[str, float]:
+    """Map chei str → valori numerice (float). Orice gunoi → ignorat (fail-safe, P6). Folosit de
+    badge_rules (praguri badge) + rank_weights (ARCH-2026 P0 — ponderi de ranking per-vertical)."""
     if not isinstance(raw, dict):
         return {}
     out: dict[str, float] = {}
