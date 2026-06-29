@@ -38,3 +38,8 @@ class DomainPack:
     # IZI: praguri pt badge-ul DERIVAT de card (top_rating/top_reviews/deal_discount_pct). Gol →
     # default-uri agnostice de vertical din `src/worker/badges.py`. Override per-tenant în settings.
     badge_rules: dict[str, float] = field(default_factory=dict)
+    # ARCH-2026 P0: ponderile scorului de ranking blended (relevance/rating/availability/sale/
+    # concern). Gol → default-uri agnostice de vertical din `fusion.py` (`RANK_WEIGHTS`). Override
+    # (parțial) per-tenant în settings → merge peste default-uri (un vertical „deal-driven" poate
+    # urca `sale`, unul „premium" poate urca `rating`). Ne-hardcodat (P9).
+    rank_weights: dict[str, float] = field(default_factory=dict)

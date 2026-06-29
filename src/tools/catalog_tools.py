@@ -157,6 +157,17 @@ def _relax_ladder(
     return steps
 
 
+def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
+    """Ponderile scorului de ranking BLENDED (ARCH-2026 P0) pentru `fuse_candidates`: din
+    `DomainPack.rank_weights` (override per-vertical, parțial), altfel `{}` → default-urile din
+    fusion.py (`RANK_WEIGHTS`, merge acolo). `None` când kill-switch-ul e OFF → fuziunea cade pe
+    `deterministic_rerank` (RRF pur, rating doar pe tie — byte-identic). Determinist, fără I/O."""
+    if not get_settings().search_blended_rank_enabled:
+        return None
+    pack = getattr(ctx.business, "domain_pack", None)
+    return (pack.rank_weights if pack else None) or {}
+
+
 def _displayed_ids(ctx: TurnContext) -> set[str]:
     """Id-urile produselor deja afișate (din `state.displayed_products`, ref-uri P8) — pentru
     dedup la „arată-mi altele". State gol / lipsă → set gol (fără efect)."""
@@ -302,6 +313,9 @@ async def search_products_tool(
         except Exception:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
             query_vec = None
 
+    # ARCH-2026 P0: ponderile scorului blended (din DomainPack / defaults); None = kill-switch OFF
+    # (RRF pur). Calculate O DATĂ (nu se schimbă între treptele de relaxare).
+    rank_weights = _rank_weights(ctx)
     ranked_final: list[dict[str, Any]] = []  # ordinea fuzionată+re-rankată la treapta care a produs
     vector_final: list[dict[str, Any]] = []
     relaxed = False
@@ -343,7 +357,9 @@ async def search_products_tool(
         cosines = [p["cosine_distance"] for p in vector if p.get("cosine_distance") is not None]
         if cosines:
             top_cosine = min(cosines)
-        ranked = fuse_candidates(lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys)
+        ranked = fuse_candidates(
+            lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys, weights=rank_weights
+        )
         had_any_match = had_any_match or bool(ranked)
         if ranked:
             ranked_final = ranked

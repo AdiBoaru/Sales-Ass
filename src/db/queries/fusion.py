@@ -18,6 +18,20 @@ RRF_K = 60
 # Disponibilitate considerată „pe stoc" pentru boost-ul de rerank (oglindă a filtrului din catalog).
 _IN_STOCK = frozenset({"in_stock", "low_stock"})
 
+# ARCH-2026 P0: ponderile scorului de ranking BLENDED (`blended_rerank`). Fiecare semnal e
+# min-max-normalizat în [0,1] PE SETUL de candidați, apoi ponderat — așa greutățile sunt direct
+# „importanța relativă". Relevanța (RRF) e dominantă; social-proof-ul (rating shrunk) e secundar
+# dar real (reparația pt „4.6×148 sub 4.4×28"); disponibilitate/reducere/concern = nuanțe. Generic
+# pe verticale; override per-vertical prin DomainPack.rank_weights (merge peste astea). NB: un
+# semnal cu greutate 0 dispare → tunabil fără cod.
+RANK_WEIGHTS: dict[str, float] = {
+    "relevance": 1.0,  # RRF (lexical+vector) normalizat — primar
+    "rating": 0.35,  # rating Bayesian shrunk normalizat — social proof
+    "availability": 0.15,  # in_stock (1/0)
+    "sale": 0.08,  # la reducere (1/0)
+    "concern": 0.20,  # fracția de concerns cerute care apar pe produs
+}
+
 
 def _pid(item: Any) -> str:
     """Id-ul unui candidat: dict de produs (`id`) sau direct un id (string)."""
@@ -117,6 +131,61 @@ def deterministic_rerank(
     return sorted(products, key=lambda p: (-scores.get(_pid(p), 0.0), -_boost(p), _pid(p)))
 
 
+def _minmax_norm(values: dict[str, float]) -> dict[str, float]:
+    """Normalizează min-max un map `{id: valoare}` în [0,1]. Degenerat (gol / toate egale) → 1.0
+    pentru toate: un termen CONSTANT nu schimbă ordinea, deci semnalul „dispare" cuminte în loc să
+    împartă la zero. Pur."""
+    if not values:
+        return {}
+    lo = min(values.values())
+    hi = max(values.values())
+    span = hi - lo
+    if span <= 0:
+        return {k: 1.0 for k in values}
+    return {k: (v - lo) / span for k, v in values.items()}
+
+
+def _concern_fraction(p: dict[str, Any], cset: set[str]) -> float:
+    """Fracția de concerns CERUTE (cset) care apar pe produs (0..1). Fără concerns cerute → 0."""
+    if not cset:
+        return 0.0
+    return len(cset & _product_concerns(p)) / len(cset)
+
+
+def blended_rerank(
+    products: list[dict[str, Any]],
+    scores: dict[str, float],
+    *,
+    weights: dict[str, float] | None = None,
+    concerns: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Rerank pe un SCOR BLENDED determinist (ARCH-2026 P0, ZERO LLM): relevanța (RRF) dominantă +
+    social proof (rating shrunk) + disponibilitate + reducere + concern-overlap, fiecare
+    min-max-normalizat PE SET și ponderat (`RANK_WEIGHTS`, override per-vertical prin `weights`).
+
+    Diferența față de `deterministic_rerank`: acolo rating-ul conta DOAR la egalitate de RRF (≈
+    niciodată) → un produs mai bine cotat (4.6 din 148 recenzii) se îngropa sub unul mai slab (4.4
+    din 28). Aici social-proof-ul are voce în scorul PRIMAR, dar relevanța rămâne dominantă (pondere
+    mare + normalizare pe set). Modelul NU clasează niciodată — asta o face codul. Tie-break stabil
+    pe id. Pur (testabil fără DB/LLM)."""
+    w = {**RANK_WEIGHTS, **(weights or {})}
+    cset = {_norm_concern(c) for c in (concerns or [])}
+    rrf_norm = _minmax_norm({_pid(p): scores.get(_pid(p), 0.0) for p in products})
+    rating_norm = _minmax_norm({_pid(p): _shrunk_rating(p) for p in products})
+
+    def _score(p: dict[str, Any]) -> float:
+        pid = _pid(p)
+        return (
+            w["relevance"] * rrf_norm.get(pid, 0.0)
+            + w["rating"] * rating_norm.get(pid, 0.0)
+            + w["availability"] * (1.0 if p.get("availability") in _IN_STOCK else 0.0)
+            + w["sale"] * (1.0 if p.get("on_sale") else 0.0)
+            + w["concern"] * _concern_fraction(p, cset)
+        )
+
+    return sorted(products, key=lambda p: (-_score(p), _pid(p)))
+
+
 def _merge_by_sort(
     lexical: list[dict[str, Any]],
     vector: list[dict[str, Any]],
@@ -150,13 +219,16 @@ def fuse_candidates(
     sort_mode: str = "relevance",
     concerns: list[str] | None = None,
     k: int = RRF_K,
+    weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Fuzionează cele două pool-uri într-o listă ordonată de produse (dict-uri).
 
-    `relevance` → RRF pe ranguri + rerank determinist (in-stock/sale/concern ca departajator pe
-    egalitate). Sort explicit (preț/rating) → re-sort determinist pe cheie (RRF/rerank nu se aplică:
-    ordinea de preț e deja construită determinist și nu trebuie amestecată). Trunchierea la 6 NU se
-    face aici (rămâne în orchestrator, după dedup vs displayed_products)."""
+    `relevance` → RRF pe ranguri, apoi: cu `weights` (ARCH-2026 P0, kill-switch ON la apelant) scor
+    BLENDED determinist (`blended_rerank` — social-proof în scorul primar); fără (`weights=None`,
+    kill-switch OFF) `deterministic_rerank` clasic (RRF pur, rating doar pe tie — byte-identic).
+    Sort explicit (preț/rating) → re-sort determinist pe cheie (RRF/blend NU se aplică: ordin preț
+    e deja construită determinist). Trunchierea la 6 NU se face aici (rămâne în orchestrator, după
+    dedup vs displayed_products)."""
     if sort_mode == "relevance":
         by_id: dict[str, dict[str, Any]] = {}
         for p in lexical:
@@ -164,5 +236,8 @@ def fuse_candidates(
         for p in vector:
             by_id.setdefault(_pid(p), p)
         scores = rrf_scores(lexical, vector, k=k)
-        return deterministic_rerank(list(by_id.values()), scores, concerns=concerns)
+        products = list(by_id.values())
+        if weights is not None:
+            return blended_rerank(products, scores, weights=weights, concerns=concerns)
+        return deterministic_rerank(products, scores, concerns=concerns)
     return _merge_by_sort(lexical, vector, sort_mode=sort_mode)

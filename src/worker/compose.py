@@ -175,6 +175,42 @@ def _drop_unfounded_stock(text: str | None, stock_present: bool) -> str | None:
     return None if has_stock_claim(text) else text
 
 
+def _select_pick(
+    j: dict[str, Any],
+    facts: dict[str, dict[str, Any]],
+    items: list[RichItem],
+    stock_present: bool,
+    deterministic: bool,
+) -> tuple[str, str] | None:
+    """„Recomandarea mea" (pick). ARCH-2026 P0 (determinist): produsul cel mai bine CLASAT afișat
+    (`items[0]`, deja în ordinea de ranking) — NU alegerea liberă a modelului (popularity/position
+    bias: ar pune cel mai ieftin/primul în prompt). Reia justificarea modelului DOAR dacă a ales
+    același produs; altfel ancora reală (top_pro din recenzii). Kill-switch OFF → pick-ul liber al
+    modelului (byte-identic). Motiv gol după scrub/stoc → fără pick (degradare, nu pick fals)."""
+    pj = j.get("pick")
+    if deterministic:
+        if not items:
+            return None
+        top = items[0]
+        just = (
+            scrub_prose(pj.get("justification"))
+            if isinstance(pj, dict) and pj.get("product_id") == top.product_id
+            else None
+        )
+        anchor = (_pros(facts[top.product_id]) or [None])[0]
+        reason = _drop_unfounded_stock(_join_reason(just, anchor), stock_present)
+        return (top.product_id, reason) if reason else None
+    # Legacy (kill-switch OFF): pick-ul liber al modelului, ancorat pe un pro real.
+    if isinstance(pj, dict) and pj.get("product_id") in facts:
+        anchor = (_pros(facts[pj["product_id"]]) or [None])[0]
+        reason = _drop_unfounded_stock(
+            _join_reason(scrub_prose(pj.get("justification")), anchor), stock_present
+        )
+        if reason:
+            return (pj["product_id"], reason)
+    return None
+
+
 def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]]) -> RichReply:
     """Asamblează `RichReply` din JSON-ul modelului + produsele retrievate. Hidratează
     fiecare card din `facts` (preț/rating/link/badge), motivul = fit scrubuit + pro real;
@@ -188,14 +224,30 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     badges_on = get_settings().card_badges_enabled
     pack = getattr(ctx.business, "domain_pack", None)
     badge_rules = pack.badge_rules if pack else None
-    items: list[RichItem] = []
-    seen: set[str] = set()
+    # Modelul NAREAZĂ per-produs (fit_clause/pro_index), keyed pe product_id; CODUL decide ORDINEA.
+    # Membership (P1): id care nu e în retrieval → ignorat tăcut. Dedupe pe prima apariție.
+    llm_items: dict[str, dict[str, Any]] = {}
+    llm_order: list[str] = []
     for it in j.get("items") or []:
         pid = it.get("product_id")
-        p = facts.get(pid)
-        if p is None or pid in seen:
-            continue
-        seen.add(pid)
+        if pid in facts and pid not in llm_items:
+            llm_items[pid] = it
+            llm_order.append(pid)
+
+    # ARCH-2026 P0: ordinea cardurilor = RANKINGUL de retrieval (determinist), nu ordinea liberă a
+    # modelului (position bias). Modelul CURATEAZĂ ce produse intră (setul lui de items), rankingul
+    # decide ORDINEA. `retrieved` vine deja rankat (fuziune blended P0). Kill-switch OFF → ordinea
+    # modelului (byte-identic).
+    deterministic = get_settings().rich_pick_deterministic_enabled
+    ordered_ids = (
+        [str(p["id"]) for p in retrieved if p.get("id") in llm_items]
+        if deterministic
+        else llm_order
+    )
+
+    def _build(pid: str) -> RichItem:
+        p = facts[pid]
+        it = llm_items[pid]
         pros = _pros(p)
         idx = it.get("pro_index")
         in_range = isinstance(idx, int) and 0 <= idx < len(pros)
@@ -203,35 +255,24 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         rc = p.get("review_count")
         eff = float(p["price"])
         lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
-        items.append(
-            RichItem(
-                product_id=pid,
-                name=p["name"],
-                price=eff,
-                reason=_drop_unfounded_stock(
-                    _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
-                ),
-                url=p.get("url"),
-                image=p.get("image"),
-                rating=float(p["rating"]) if p.get("rating") is not None else None,
-                review_count=int(rc) if rc else None,
-                badge=_safe_badge(p.get("badge"))
-                or (derive_badge(p, ctx.language, badge_rules) if badges_on else None),
-                list_price=float(lp) if lp is not None and float(lp) > eff else None,
-            )
+        return RichItem(
+            product_id=pid,
+            name=p["name"],
+            price=eff,
+            reason=_drop_unfounded_stock(
+                _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
+            ),
+            url=p.get("url"),
+            image=p.get("image"),
+            rating=float(p["rating"]) if p.get("rating") is not None else None,
+            review_count=int(rc) if rc else None,
+            badge=_safe_badge(p.get("badge"))
+            or (derive_badge(p, ctx.language, badge_rules) if badges_on else None),
+            list_price=float(lp) if lp is not None and float(lp) > eff else None,
         )
-        if len(items) >= 6:
-            break
 
-    pick: tuple[str, str] | None = None
-    pj = j.get("pick")
-    if isinstance(pj, dict) and pj.get("product_id") in facts:
-        anchor = (_pros(facts[pj["product_id"]]) or [None])[0]
-        reason = _drop_unfounded_stock(
-            _join_reason(scrub_prose(pj.get("justification")), anchor), stock_present
-        )
-        if reason:
-            pick = (pj["product_id"], reason)
+    items: list[RichItem] = [_build(pid) for pid in ordered_ids[:6]]
+    pick = _select_pick(j, facts, items, stock_present, deterministic)
 
     return RichReply(
         intro=_drop_unfounded_stock(

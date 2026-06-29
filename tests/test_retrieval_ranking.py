@@ -320,3 +320,100 @@ def test_fuse_relevance_applies_rerank_on_tie():
     vector = [{"id": "hi", "availability": "in_stock"}]
     out = fuse_candidates(lexical, vector, sort_mode="relevance")
     assert out[0]["id"] == "hi"
+
+
+# --- ARCH-2026 P0: scor BLENDED (social proof în scorul primar) -------------------
+
+
+def test_minmax_norm_degenerate_and_empty():
+    from src.db.queries.fusion import _minmax_norm
+
+    assert _minmax_norm({}) == {}
+    assert _minmax_norm({"a": 5.0, "b": 5.0}) == {"a": 1.0, "b": 1.0}  # toate egale → constant 1.0
+    n = _minmax_norm({"lo": 0.0, "hi": 10.0, "mid": 5.0})
+    assert n["lo"] == 0.0 and n["hi"] == 1.0 and n["mid"] == 0.5
+
+
+def test_blended_rerank_social_proof_lifts_better_rated():
+    """Reparația centrală: la relevanță egală (RRF), un produs MAI BINE COTAT (4.6 din 148 recenzii)
+    urcă peste unul mai slab (4.4 din 28) — chiar dacă id-ul l-ar pune sub (alpha<zeta)."""
+    from src.db.queries.fusion import blended_rerank
+
+    weaker = {"id": "alpha", "rating": 4.4, "review_count": 28, "availability": "in_stock"}
+    better = {"id": "zeta", "rating": 4.6, "review_count": 148, "availability": "in_stock"}
+    out = blended_rerank([weaker, better], {"alpha": 0.5, "zeta": 0.5})  # RRF egal
+    assert [p["id"] for p in out] == ["zeta", "alpha"]  # social proof urcă, NU id-ul (tie vechi)
+
+
+def test_blended_rerank_relevance_stays_dominant():
+    """Relevanța (pondere 1.0) domină social-proof-ul (0.35): un produs mult mai relevant dar cu
+    rating mic NU e răsturnat de unul slab relevant dar mai bine cotat."""
+    from src.db.queries.fusion import blended_rerank
+
+    relevant = {"id": "rel", "rating": 4.0, "review_count": 200}
+    rated = {"id": "rat", "rating": 5.0, "review_count": 200}
+    out = blended_rerank([relevant, rated], {"rel": 1.0, "rat": 0.0})  # RRF: rel >> rat
+    assert out[0]["id"] == "rel"
+
+
+def test_blended_rerank_weight_override_can_flip():
+    """Ponderile sunt tunabile (per-vertical): cu `rating` urcat suficient, social-proof-ul poate
+    învinge o diferență mică de relevanță (un vertical „premium")."""
+    from src.db.queries.fusion import blended_rerank
+
+    relevant = {"id": "rel", "rating": 4.0, "review_count": 200}
+    rated = {"id": "rat", "rating": 5.0, "review_count": 200}
+    # diferență MICĂ de RRF + pondere rating mare → rating răstoarnă
+    out = blended_rerank(
+        [relevant, rated], {"rel": 0.51, "rat": 0.5}, weights={"relevance": 1.0, "rating": 5.0}
+    )
+    assert out[0]["id"] == "rat"
+
+
+def test_fuse_relevance_blended_with_weights_uses_rating():
+    from src.db.queries.fusion import fuse_candidates
+
+    # fiecare la rang 1 într-o listă → RRF egal; cu `weights` → blend pe rating (zeta urcă)
+    weaker = {"id": "alpha", "rating": 4.4, "review_count": 28}
+    better = {"id": "zeta", "rating": 4.6, "review_count": 148}
+    out = fuse_candidates([weaker], [better], sort_mode="relevance", weights={})
+    assert [p["id"] for p in out] == ["zeta", "alpha"]
+
+
+def test_fuse_relevance_none_weights_is_legacy_rrf():
+    from src.db.queries.fusion import fuse_candidates
+
+    # weights=None (kill-switch OFF) → deterministic_rerank: RRF egal → tie pe id, rating IGNORAT
+    weaker = {"id": "alpha", "rating": 4.4, "review_count": 28}
+    better = {"id": "zeta", "rating": 4.6, "review_count": 148}
+    out = fuse_candidates([weaker], [better], sort_mode="relevance", weights=None)
+    assert [p["id"] for p in out] == ["alpha", "zeta"]  # id tie-break, NU rating (legacy RRF)
+
+
+# --- _rank_weights (sursa ponderilor: DomainPack / default / kill-switch) ----------
+
+
+def test_rank_weights_none_when_flag_off(monkeypatch):
+    from types import SimpleNamespace
+
+    from src.tools import catalog_tools
+
+    monkeypatch.setattr(get_settings(), "search_blended_rank_enabled", False)
+    ctx = SimpleNamespace(business=SimpleNamespace(domain_pack=None))
+    assert catalog_tools._rank_weights(ctx) is None
+
+
+def test_rank_weights_dict_when_flag_on(monkeypatch):
+    from types import SimpleNamespace
+
+    from src.domain.pack import DomainPack
+    from src.tools import catalog_tools
+
+    monkeypatch.setattr(get_settings(), "search_blended_rank_enabled", True)
+    # fără pack → {} (blend cade pe default-urile RANK_WEIGHTS)
+    ctx0 = SimpleNamespace(business=SimpleNamespace(domain_pack=None))
+    assert catalog_tools._rank_weights(ctx0) == {}
+    # cu pack.rank_weights → override per-vertical
+    pack = DomainPack(vertical="beauty_salon", rank_weights={"sale": 0.5})
+    ctx1 = SimpleNamespace(business=SimpleNamespace(domain_pack=pack))
+    assert catalog_tools._rank_weights(ctx1) == {"sale": 0.5}

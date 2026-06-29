@@ -107,6 +107,7 @@ def _enable_stock(monkeypatch, on=True):
             validator_stock_claims_enabled=on,
             ai_disclaimer_enabled=False,
             card_badges_enabled=False,  # aceste teste nu testează badge-uri → fără interferență
+            rich_pick_deterministic_enabled=True,
         ),
     )
 
@@ -249,6 +250,75 @@ def test_assemble_invalid_pro_index_falls_back_to_first() -> None:
     assert rich.items[0].reason == "bun — primul"
 
 
+# --- ARCH-2026 P0: ordine de carduri + pick DETERMINISTE (model narează, cod clasează) ----------
+
+
+def test_assemble_orders_cards_by_retrieval_rank_not_model() -> None:
+    # retrieved e RANKAT (B primul, mai bine clasat; A al doilea). Modelul le dă în ordine INVERSĂ
+    # și alege A ca pick. Codul trebuie să respecte rankingul de retrieval, nu modelul.
+    retrieved = [
+        {"id": "B", "name": "Produs B", "price": 50.0, "top_pros": ["b1"]},
+        {"id": "A", "name": "Produs A", "price": 40.0, "top_pros": ["a1"]},
+    ]
+    j = {
+        "items": [
+            {"product_id": "A", "pro_index": 0, "fit_clause": "a"},
+            {"product_id": "B", "pro_index": 0, "fit_clause": "b"},
+        ],
+        "pick": {"product_id": "A", "justification": "modelul vrea A"},
+    }
+    rich = compose.assemble(_ctx(), j, retrieved)
+    assert [it.product_id for it in rich.items] == ["B", "A"]  # ordinea de retrieval, nu modelul
+    assert rich.pick[0] == "B"  # pick = cel mai bine clasat AFIȘAT, nu alegerea liberă a modelului
+    assert rich.pick[1] == "b1"  # model-pick ≠ top → ancora reală a top-ului (top_pro)
+
+
+def test_assemble_pick_reuses_model_justification_when_agrees() -> None:
+    # modelul alege TOP (= cel mai bine clasat) → îi păstrăm justificarea (copy mai bun) + ancoră
+    retrieved = [
+        {"id": "TOP", "name": "Top", "price": 50.0, "top_pros": ["pro real"]},
+        {"id": "OTHER", "name": "Other", "price": 40.0, "top_pros": ["x"]},
+    ]
+    j = {
+        "items": [
+            {"product_id": "TOP", "pro_index": 0, "fit_clause": "t"},
+            {"product_id": "OTHER", "pro_index": 0, "fit_clause": "o"},
+        ],
+        "pick": {"product_id": "TOP", "justification": "intră repede în piele"},
+    }
+    rich = compose.assemble(_ctx(), j, retrieved)
+    assert rich.pick[0] == "TOP"
+    assert "intră repede în piele" in rich.pick[1]  # justificarea modelului (non-superlativ)
+    assert "pro real" in rich.pick[1]  # + ancora factuală reală
+
+
+def test_assemble_killswitch_off_keeps_model_order_and_pick(monkeypatch) -> None:
+    monkeypatch.setattr(
+        compose,
+        "get_settings",
+        lambda: SimpleNamespace(
+            validator_stock_claims_enabled=False,
+            ai_disclaimer_enabled=False,
+            card_badges_enabled=False,
+            rich_pick_deterministic_enabled=False,  # OFF → comportament vechi (model)
+        ),
+    )
+    retrieved = [
+        {"id": "B", "name": "Produs B", "price": 50.0, "top_pros": ["b1"]},
+        {"id": "A", "name": "Produs A", "price": 40.0, "top_pros": ["a1"]},
+    ]
+    j = {
+        "items": [
+            {"product_id": "A", "pro_index": 0, "fit_clause": "a"},
+            {"product_id": "B", "pro_index": 0, "fit_clause": "b"},
+        ],
+        "pick": {"product_id": "A", "justification": "alegere bună"},
+    }
+    rich = compose.assemble(_ctx(), j, retrieved)
+    assert [it.product_id for it in rich.items] == ["A", "B"]  # ordinea modelului (legacy)
+    assert rich.pick[0] == "A"  # pick-ul liber al modelului (legacy)
+
+
 def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
     # disclaimer-ul e OFF default → îl PORNIM aici ca să verificăm că `flatten` îl randează când e.
     monkeypatch.setattr(
@@ -258,6 +328,7 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
             validator_stock_claims_enabled=False,
             ai_disclaimer_enabled=True,
             card_badges_enabled=False,
+            rich_pick_deterministic_enabled=True,
         ),
     )
     retrieved = [
