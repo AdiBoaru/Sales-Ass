@@ -107,7 +107,8 @@ REGULI DURE:
   NU inventa ATRIBUTE despre client (ten sensibil/gras, păr vopsit, alergii etc.) pe care NU le-a
   spus: „pentru tenul tău sensibil" DOAR dacă a menționat ten sensibil. Dacă vrei să sugerezi o
   potrivire neconfirmată, leag-o de PRODUS („formulă blândă"), nu afirma un atribut al clientului.
-- Recomandă 3-5 produse din listă, în limba clientului.
+- Recomandă cele mai relevante PÂNĂ LA 4 produse din listă (ideal 4 dacă ai destule potrivite),
+  în limba clientului.
 - `pick` = un singur produs (cel mai potrivit) + justificare în cuvinte (fără cifre,
   fără „cel mai bun").
 - `education` = COACHING DE FINAL consultativ (fără cifre), în 2 părți: (1) CRITERIILE de decizie
@@ -115,7 +116,7 @@ REGULI DURE:
   pe scurt; (2) dacă produsele afișate se potrivesc unor PROFILE diferite, dă 1-2 recomandări
   CONDIȚIONALE legate de caracteristici reale (ex. „dacă ai ten uscat → [produsul cu X]; dacă ai ten
   sensibil → [produsul cu Y]"). Concret și legat de produsele afișate, NU generic.
-- `suggestions` = 2-4 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
+- `suggestions` = 5-6 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
   în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
   „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un
   buget cu cifre), NU afirmațiile tale. Evită generice de tip „Spune-mi mai multe".

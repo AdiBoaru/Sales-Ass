@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from src.db.queries.commerce import get_orders_status
 from src.tools.base import ToolResult, register
-from src.worker.order_gate import no_orders_message
+from src.worker.order_gate import login_required_for_ctx, no_orders_message, web_unidentified
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -64,6 +64,16 @@ async def check_order_tool(
 ) -> ToolResult:
     """Status + tracking pentru comanda cerută (după nr) sau ultimele comenzi ale contactului."""
     a = CheckOrderArgs(**args)
+    # NX-128++ (FAQ-first): pe web ANONIM (fără identitate verificată) lookup-ul de comandă e scoped
+    # pe un contact throwaway → garantat gol, oricât de corect ar fi numărul. În loc de „n-am găsit"
+    # (înșelător) + buclă, întoarcem DETERMINIST mesajul de login. Apare DOAR fiindcă modelul cere
+    # chiar un lookup de comandă — o întrebare de proces/politică folosește `faq_lookup`, nu ajunge
+    # aici. Izolarea pe contact_id rămâne neatinsă; canalele identificate / web verificat trec jos.
+    if web_unidentified(ctx):
+        ctx.emit(
+            "order_lookup_gated", channel_kind=ctx.message.channel_kind, reason="web_unidentified"
+        )
+        return ToolResult(ok=False, error="login_required", llm_view=login_required_for_ctx(ctx))
     # Izolare: cheia de lookup vine din CONTEXT (verificat server-side), NU din args — `order_ref`
     # doar îngustează. NX-130: web cu login passthrough verificat (`ctx.verified_customer_ref`) →
     # caută pe customer_ref (comenzile reale, NElegate de contactul web throwaway); canalele
