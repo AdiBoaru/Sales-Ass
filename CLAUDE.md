@@ -507,11 +507,11 @@ nativx-assistant/
 **business_id**: `6098812a-50fc-44bd-a1ba-bc77e6399158`
 **Slug**: `nativex-demo` (name „Sole Demo")
 **Vertical**: `beauty`
-**Date reale în Supabase** (verificat 2026-06-13): 500 produse seedate.
-⚠️ `product_embeddings` = 0 (produsele NU sunt încă embed-uite — `search_products`
-semantic merge după jobul `embed_products`, încă de scris; **deblocat** acum că
-cheia OpenAI e validată). ⚠️ `products.product_url` = 0 (toate NULL → agentul n-are
-linkuri de produs; gaură de DATE, nu de cod). `ai_summary` = 500 (templat). `faqs` = 0.
+**Date reale în Supabase** (re-verificat 2026-06-30): 500 produse seedate, catalog re-seedat.
+✅ `products.product_url` = 500 (toate populate, `shop.sole-demo.ro/p/<slug>`), `rating` variat
+4.3–4.9 (0 la 5.0), `review_count` populat, `attributes.concerns` populat. `ai_summary` = 500
+(templat). ⚠️ Singura coadă de DATE Val2: NUME cu ID rezidual de seed (ex. „…348") — curățat de
+`scripts/reseed_product_names.py --apply` (idempotent, derivat din slug; NU atinge slug/url). `faqs` = 0.
 **Canale**: ✅ Telegram seedat — `@solechat_bot` (kind='telegram', provider_account_id
 = bot id, prin `scripts/seed_telegram_channel.py`). **Echo e2e LIVE confirmat** pe
 Telegram (long polling, fără HTTPS). WhatsApp încă 0 — cere T013 (Meta phone_number_id).
