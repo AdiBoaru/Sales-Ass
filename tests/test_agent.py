@@ -32,8 +32,14 @@ def _stub_prompt_inputs(monkeypatch):
     async def _aliases(conn, business_id, **k):
         return []
 
+    # #7b: cart_add declanșează un lookup de produse complementare (DB). Default → fără
+    # complementare (cross-sell cade în flux normal); testele de cross-sell îl mock-uiesc separat.
+    async def _no_complementary(conn, business_id, anchor_id, **k):
+        return []
+
     monkeypatch.setattr(agent_mod, "list_category_names", _cats)
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _aliases)
+    monkeypatch.setattr(agent_mod, "get_complementary_products", _no_complementary)
 
 
 PRODUCTS = [

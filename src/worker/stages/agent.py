@@ -23,6 +23,7 @@ from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
 from src.config import get_settings, handoff_enabled_for
 from src.db.queries.catalog import (
+    get_complementary_products,
     get_products_by_ids,
     list_category_names,
     list_routing_aliases,
@@ -83,6 +84,38 @@ _CHEAPEST_ALREADY: dict[str, str] = {
 
 def _cheapest_already_msg(language: str | None) -> str:
     return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
+
+
+# #7b — cross-sell la add-to-cart (model iZi). Confirmarea coșului e DETERMINISTĂ (per-locale, NU
+# scrubuită → robustă la nume de produs cu cifre, ex. „30 ml"); produsele complementare + fit-ul
+# lor vin din calea rich. `_CROSS_SELL_QUERY` = instrucțiunea către modelul rich (complement, nu
+# alternativă). Generic pe vertical (formularea nu e specifică beauty).
+_CART_CONFIRM: dict[str, str] = {
+    "ro": "Gata, am adăugat {name} în coș 🛒 Iată ce merge bine cu el:",
+    "en": "Done — I added {name} to your cart 🛒 Here's what pairs well with it:",
+    "hu": "Kész, betettem a kosaradba: {name} 🛒 Íme, ami jól illik hozzá:",
+}
+_CROSS_SELL_QUERY: dict[str, str] = {
+    "ro": "Clientul tocmai a adăugat în coș «{name}». Recomandă produsele de mai jos ca fiind "
+    "COMPLEMENTARE (merg bine împreună / completează rutina sau alegerea), NU ca alternative. "
+    "Pentru fiecare, spune SCURT de ce se potrivește cu «{name}».",
+    "en": "The customer just added «{name}» to the cart. Recommend the products below as "
+    "COMPLEMENTARY (they pair well / complete the routine or choice), NOT as alternatives. For "
+    "each, briefly say why it fits with «{name}».",
+    "hu": "Az ügyfél most tette a kosárba: «{name}». Ajánld az alábbi termékeket KIEGÉSZÍTŐKÉNT "
+    "(jól illenek együtt / kiegészítik a választást), NEM alternatívaként. Mindegyiknél mondd el "
+    "röviden, miért illik «{name}»-hez.",
+}
+
+
+def _cart_confirm_msg(added: dict[str, Any], language: str | None) -> str:
+    tmpl = _CART_CONFIRM.get(language or "ro") or _CART_CONFIRM["ro"]
+    return tmpl.format(name=added.get("name") or "produsul")
+
+
+def _cross_sell_query(added: dict[str, Any], language: str | None) -> str:
+    tmpl = _CROSS_SELL_QUERY.get(language or "ro") or _CROSS_SELL_QUERY["ro"]
+    return tmpl.format(name=added.get("name") or "produsul")
 
 
 # IZI-compare: chips deterministe pe un tabel comparativ (voce de client → reintră ca tur nou:
@@ -800,6 +833,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     grounded_prices: set[float] = set()  # sume din DB (total comandă/checkout) → validator
     order_views: list[str] = []  # vederi grounded de comandă, pt fallback-ul de status
     compared: list[dict[str, Any]] = []  # IZI-compare: setul EXPLICIT comparat (compare_products)
+    added_cart: dict[str, Any] = {"product": None}  # #7b: ultimul produs adăugat în coș (cart_add)
 
     async def execute(name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
@@ -816,6 +850,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
             ctx.state_patch.update(result.state_patch)
+        if name == "cart_add" and result.ok and result.products:
+            added_cart["product"] = result.products[0]  # #7b: ancora pentru cross-sell
         if name == "check_order" and result.ok and result.llm_view:
             order_views.append(result.llm_view)
         # NX-122: args whitelisted + count + latență + clasă de eroare (NU corpul). Corelat
@@ -876,6 +912,45 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
+
+    # #7b — cross-sell „merge bine cu" (model iZi): clientul tocmai a adăugat un produs în coș →
+    # sugerăm produse COMPLEMENTARE (rutină/accesorii) ca CARDURI, prin calea rich existentă.
+    # Retrieval DETERMINIST (brand/concern, categorie DIFERITĂ = complement, nu substitut); copy
+    # de la model (fit per produs, scrubuit); intro = confirmare DETERMINISTĂ a coșului (robustă la
+    # scrub pe nume cu cifre) + pick scos (n-are sens un „pick" între complementare). Gated de
+    # kill-switch; fără complementare / rich eșuat → cade în flux normal (confirmarea de coș).
+    added = added_cart["product"]
+    if (
+        not is_order
+        and added is not None
+        and not generated_links  # checkout link creat în acest tur → arată linkul, nu cross-sell
+        and get_settings().cross_sell_enabled
+    ):
+        cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
+        exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
+        complementary = await get_complementary_products(
+            deps.conn, ctx.business.id, str(added["id"]), exclude_ids=exclude_ids, limit=4
+        )
+        if complementary:
+            ctx.retrieval = RetrievalResult(products=complementary, source="cross_sell")
+            rich = await _finalize_rich(
+                deps.llm,
+                prompt_builder.build_rich_system(inp),
+                _cross_sell_query(added, ctx.language),
+                complementary,
+                ctx,
+                history,
+            )
+            if rich is not None and rich.items:
+                rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
+                rich.pick = None  # fără „Recomandarea mea" între complementare
+                ctx.set_rich_reply(
+                    rich, text=compose.flatten(rich), products=compose.card_products(rich.items)
+                )
+                ctx.emit("cross_sell", added=str(added["id"]), n=len(rich.items))
+                return
+        ctx.emit("cross_sell", added=str(added["id"]), n=0)
+        # niciun complement / rich eșuat → cade în fluxul normal (confirmarea de coș a agentului)
 
     products = _dedupe(retrieved)
     # P1 (ARCH-product-retrieval): follow-up „mai ieftin" pe un set deja afișat → re-căutare
