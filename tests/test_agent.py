@@ -18,7 +18,7 @@ from src.models import (
 from src.tools import catalog_tools as ct
 from src.worker.runner import PipelineDeps
 from src.worker.stages import agent as agent_mod
-from src.worker.stages.agent import _budget, _links_ok, _prices_ok, agent_stage
+from src.worker.stages.agent import _budget, _links_ok, _prices_ok, _rich_bundle, agent_stage
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +137,28 @@ def test_links_ok():
     assert _links_ok("vezi https://shop/p1 aici", PRODUCTS) is True
     assert _links_ok("link inventat https://evil/x", PRODUCTS) is False
     assert _links_ok("fără link", PRODUCTS) is True
+
+
+def test_rich_bundle_includes_description():
+    # PR-3: bundle-ul rich duce ai_summary (componente reale) → modelul scrie fit SPECIFIC.
+    out = _rich_bundle(
+        [
+            {
+                "id": "p1",
+                "name": "Ser X",
+                "price": 99.0,
+                "rating": 4.5,
+                "top_pros": ["bun"],
+                "ai_summary": "cu acid hialuronic, pentru ten uscat",
+            }
+        ]
+    )
+    assert "[p1]" in out and "descriere: cu acid hialuronic, pentru ten uscat" in out
+
+
+def test_rich_bundle_omits_empty_description():
+    out = _rich_bundle([{"id": "p1", "name": "Ser X", "price": 99.0, "top_pros": ["bun"]}])
+    assert "descriere" not in out  # date sărace → fără segment gol
 
 
 # --- agent_stage -------------------------------------------------------------
