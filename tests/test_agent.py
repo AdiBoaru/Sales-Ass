@@ -447,3 +447,39 @@ async def test_show_more_with_refinement_falls_through_to_llm(monkeypatch):
     assert ctx.reply is not None
     served = {p["id"] for p in (ctx.retrieval.products if ctx.retrieval else [])}
     assert "p6" not in served and "p7" not in served  # NU pagina sesiunii vechi (refinarea câștigă)
+
+
+# --- Val3: _lead_score_hint (lead_score citit de agent) ----------------------
+
+
+def _settings_lead(monkeypatch, *, enabled=True, threshold=70.0):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        agent_mod,
+        "get_settings",
+        lambda: SimpleNamespace(
+            lead_score_hint_enabled=enabled, lead_score_high_threshold=threshold
+        ),
+    )
+
+
+def test_lead_score_hint_high_injects_nudge(monkeypatch):
+    _settings_lead(monkeypatch)
+    ctx = _ctx()
+    ctx.contact.lead_score = 80.0
+    assert "intenție mare" in agent_mod._lead_score_hint(ctx)
+
+
+def test_lead_score_hint_low_is_empty(monkeypatch):
+    _settings_lead(monkeypatch)
+    ctx = _ctx()
+    ctx.contact.lead_score = 20.0
+    assert agent_mod._lead_score_hint(ctx) == ""
+
+
+def test_lead_score_hint_disabled_is_empty(monkeypatch):
+    _settings_lead(monkeypatch, enabled=False)
+    ctx = _ctx()
+    ctx.contact.lead_score = 95.0
+    assert agent_mod._lead_score_hint(ctx) == ""
