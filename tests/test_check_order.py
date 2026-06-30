@@ -74,7 +74,9 @@ def test_enabled_tools_route_aware():
         "subscribe_back_in_stock",
         "faq_lookup",
     }
-    assert set(enabled_tools(None, "order")) == {"check_order"}
+    # ORDER: status comandă + faq_lookup (o întrebare de proces/politică rutată aici e răspunsă
+    # din baza de cunoștințe, FĂRĂ cont — nu cade în zidul de login).
+    assert set(enabled_tools(None, "order")) == {"check_order", "faq_lookup"}
     assert "check_order" not in enabled_tools(None, "sales")  # nu pe SALES
 
 
@@ -183,7 +185,7 @@ async def test_non_sales_non_order_is_noop():
     assert ctx.reply is None  # agentul nu rulează pe alte rute
 
 
-# --- NX-128: poarta de comandă/retur pe web anonim ---------------------------
+# --- NX-128++: poarta de comandă/retur pe web anonim (FAQ-first) -------------
 
 
 def _web_ctx(*, route=Route.ORDER, body="vreau să fac retur") -> TurnContext:
@@ -200,7 +202,7 @@ def _web_ctx(*, route=Route.ORDER, body="vreau să fac retur") -> TurnContext:
 
 
 class _SpyLLM(_FakeLLM):
-    """Marchează dacă bucla de tool a fost atinsă (ca să dovedim scurtcircuitul gate-ului)."""
+    """Marchează dacă bucla de tool a fost atinsă."""
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -213,7 +215,10 @@ class _SpyLLM(_FakeLLM):
         )
 
 
-async def test_web_order_gated_to_login_no_llm(monkeypatch):
+async def test_web_order_check_order_gated_to_login(monkeypatch):
+    # NX-128++ (FAQ-first): zidul de login NU mai e un scurtcircuit pe toată ruta. Agentul RULEAZĂ;
+    # dacă modelul cere chiar un lookup de comandă (check_order) pe web anonim, tool-ul îl gateuie
+    # ÎNAINTE de orice DB → servim login determinist. (Un FAQ/altă cerere → nu ajunge aici.)
     calls = {"n": 0}
 
     async def spy(*a, **k):
@@ -225,10 +230,21 @@ async def test_web_order_gated_to_login_no_llm(monkeypatch):
     llm = _SpyLLM(tool_calls=[("check_order", {"order_ref": None})], final="x")
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None
-    assert ctx.reply.text == login_required_message("ro")  # mesaj de login determinist
+    assert ctx.reply.text == login_required_message("ro")  # mesaj de login determinist, nu „x"
     assert ctx.reply.cacheable is False  # context-relativ → nu otrăvește cache-ul
-    assert llm.loop_called is False  # scurtcircuit ÎNAINTE de bucla LLM (cost $0)
-    assert calls["n"] == 0  # check_order nici nu e chemat
+    assert llm.loop_called is True  # agentul rulează (FAQ-first) — nu mai scurtcircuităm pre-buclă
+    assert calls["n"] == 0  # gating ÎNAINTE de DB: nu interogăm comenzi pe web anonim
+
+
+async def test_web_order_faq_answer_not_gated_to_login():
+    # Cheia cererii Adi: pe ruta ORDER + web anonim, dacă modelul răspunde FĂRĂ să ceară un lookup
+    # de cont (ex. „cum comand" → răspuns de proces, fără check_order), NU apare zidul de login.
+    ctx = _web_ctx(body="cum comand un produs?")
+    answer = "Adaugi produsul în coș, apoi mergi la checkout și completezi adresa."
+    await agent_stage(ctx, _deps(_FakeLLM(tool_calls=[], final=answer)))
+    assert ctx.reply is not None
+    assert ctx.reply.text == answer  # răspunsul de proces servit, FĂRĂ login
+    assert "intră în contul tău" not in ctx.reply.text
 
 
 async def test_web_order_login_no_handoff_offer_on_web():
@@ -236,7 +252,8 @@ async def test_web_order_login_no_handoff_offer_on_web():
     # (Codul `with_handoff`/sufixul rămâne — doar gardat pe canal; reversibil din env.)
     ctx = _web_ctx()
     ctx.business.settings = {"tools": {"request_human": True}}  # tenant CU operator
-    await agent_stage(ctx, _deps(_FakeLLM(final="x")))
+    llm = _FakeLLM(tool_calls=[("check_order", {"order_ref": None})], final="x")
+    await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None
     assert ctx.reply.text == login_required_message("ro")  # fără sufix de „coleg"
     assert "coleg" not in ctx.reply.text
@@ -272,3 +289,50 @@ async def test_verified_web_looks_up_by_customer_ref(monkeypatch):
     assert res.ok is True
     assert sink["external_customer_ref"] == "cust_42"  # cheia = customer_ref verificat (din ctx)
     assert sink["contact_id"] is None  # NU contactul web (comenzile reale nu-s legate de el)
+
+
+# --- NX-128++: zidul de login e la marginea TOOL-ului de cont (nu pe toată ruta) --------------
+
+
+async def test_check_order_tool_walls_web_anonymous(monkeypatch):
+    # Apel direct: pe web anonim, check_order NU interoghează DB (contact throwaway = gol garantat),
+    # întoarce DETERMINIST mesajul de login + emite `order_lookup_gated`.
+    calls = {"n": 0}
+
+    async def spy(*a, **k):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(om, "get_orders_status", spy)
+    ctx = _web_ctx(body="unde e comanda mea?")
+    res = await om.check_order_tool(ctx, _deps(), {"order_ref": "ORD-1"})
+    assert res.ok is False and res.error == "login_required"
+    assert res.llm_view == login_required_message("ro")
+    assert calls["n"] == 0  # ZERO lookup pe web anonim
+    assert any(e.type == "order_lookup_gated" for e in ctx.events)
+
+
+async def test_reorder_tool_walls_web_anonymous(monkeypatch):
+    # Re-comanda e legată de contul clientului → pe web anonim, login, nu „n-ai comenzi anterioare".
+    from src.tools import commerce_tools as cm
+
+    calls = {"n": 0}
+
+    async def spy(*a, **k):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(cm, "get_orders_status", spy)
+    ctx = _web_ctx(body="vreau să comand iar ce am luat data trecută")
+    res = await cm.reorder_tool(ctx, _deps(), {})
+    assert res.ok is False and res.error == "login_required"
+    assert res.llm_view == login_required_message("ro")
+    assert calls["n"] == 0
+
+
+async def test_check_order_tool_identified_channel_not_walled(monkeypatch):
+    # Canal identificat (whatsapp = telefon = cont): NU se aplică zidul de login — lookup normal.
+    sink: dict = {}
+    _patch_orders(monkeypatch, [ORDER], sink)
+    res = await om.check_order_tool(_ctx(), _deps(), {"order_ref": None})  # _ctx → channel whatsapp
+    assert res.ok is True and "ORD-1" in res.llm_view

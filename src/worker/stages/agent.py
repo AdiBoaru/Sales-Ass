@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent import prompt_builder
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
-from src.config import get_settings, handoff_enabled_for
+from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
@@ -39,7 +39,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
 from src.tools.base import enabled_tools, run_tool
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
-from src.worker.order_gate import login_required_message, web_unidentified
+from src.worker.order_gate import login_required_for_ctx, web_unidentified
 from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
 
 if TYPE_CHECKING:
@@ -741,24 +741,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return
     is_order = route.route == Route.ORDER
 
-    # NX-128: pe web ANONIM (fără cont), o cerere de comandă/retur nu poate găsi comenzi —
-    # `check_order` e scoped pe contactul throwaway (src/web/session.py). În loc de „nu am găsit
-    # comanda pe acest cont" (înșelător) + buclă (modelul ar cere nr/email inutil), răspuns
-    # determinist de login, ÎNAINTE de bucla LLM (cost $0). Oferta de handoff doar dacă tenantul
-    # are operator (`request_human` opt-in). NX-129 va lăsa web-ul cu login verificat să treacă.
-    if is_order and web_unidentified(ctx):
-        # Oferta de operator doar dacă tenantul are `request_human` ȘI canalul permite handoff
-        # (web off → nu promitem un coleg care nu există; codul rămâne, doar gardat).
-        with_handoff = "request_human" in enabled_tools(ctx.business) and handoff_enabled_for(
-            ctx.message.channel_kind
-        )
-        ctx.emit(
-            "order_lookup_gated", channel_kind=ctx.message.channel_kind, reason="web_unidentified"
-        )
-        ctx.set_reply(
-            login_required_message(ctx.language, with_handoff=with_handoff), cacheable=False
-        )
-        return
+    # NX-128++ (FAQ-first, cererea Adi): zidul de login NU mai e scurtcircuit pe toată ruta ORDER.
+    # Răspunde la FAQ chiar nelogat; cere login doar pentru ce ține de contul lui (status/retur).
+    # O întrebare de proces/politică (cum comand, ce retur, cât e livrarea) trebuie răspunsă fără
+    # cont — la stratul FAQ (înainte de poartă) sau de agent prin `faq_lookup`. Lăsăm agentul să
+    # ruleze; zidul apare DOAR dacă modelul cheamă `check_order` pe web anonim (lookup care chiar
+    # are nevoie de cont). Tool-ul semnalează `login_required`; servim mesajul determinist după
+    # buclă (cacheable=False) — nu parafraza modelului. NX-129: web cu login verificat trece.
 
     # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") =
     # intenție DETERMINISTĂ (ca cheaper/show_more), NU re-recomandare. Calea rich interzice
@@ -800,6 +789,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     grounded_prices: set[float] = set()  # sume din DB (total comandă/checkout) → validator
     order_views: list[str] = []  # vederi grounded de comandă, pt fallback-ul de status
     compared: list[dict[str, Any]] = []  # IZI-compare: setul EXPLICIT comparat (compare_products)
+    order_gated = {"login": False}  # web anonim a încercat un lookup de comandă → login wall
 
     async def execute(name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
@@ -816,8 +806,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
             ctx.state_patch.update(result.state_patch)
-        if name == "check_order" and result.ok and result.llm_view:
-            order_views.append(result.llm_view)
+        if name == "check_order":
+            if result.ok and result.llm_view:
+                order_views.append(result.llm_view)
+            elif result.error == "login_required":
+                # Web anonim: lookup-ul de comandă a fost gated în tool → servim mesajul de login
+                # determinist după buclă (nu lăsăm modelul să-l parafrazeze / să ceară nr comandă).
+                order_gated["login"] = True
         # NX-122: args whitelisted + count + latență + clasă de eroare (NU corpul). Corelat
         # cu restul turului prin `turn_id` injectat automat în emit() → traiectorie rejucabilă.
         ctx.emit(
@@ -875,6 +870,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             )
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
+        return
+
+    # FAQ-first: dacă modelul a cerut chiar un lookup de comandă pe web anonim (check_order →
+    # login_required), servim mesajul de login DETERMINIST. Apare DOAR acum (nu pe toată ruta), după
+    # ce agentul a avut șansa să răspundă din FAQ/catalog. cacheable=False (context-relativ).
+    if order_gated["login"]:
+        ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
         return
 
     products = _dedupe(retrieved)
@@ -1005,5 +1007,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
             # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
             ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
+    elif is_order and web_unidentified(ctx):
+        # ORDER pe web anonim, fără rezultat (modelul n-a chemat un tool) → login, NU „dă-mi numărul
+        # comenzii" (ar relua bucla NX-128 pe un canal unde lookup-ul nu poate reuși).
+        ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
     else:
         ctx.set_reply(_no_result_msg(is_order), cacheable=False)
