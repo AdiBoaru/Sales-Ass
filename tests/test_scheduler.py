@@ -12,7 +12,7 @@ from src.jobs import scheduler as sch
 from src.jobs.scheduler import Job, _build_jobs, _compute_next, _run_due, _safe_run
 
 
-def _settings(*, key="sk-x", embed=True, proactive=True, initiators=True):
+def _settings(*, key="sk-x", embed=True, proactive=True, initiators=True, lifecycle=True):
     return SimpleNamespace(
         openai_api_key=key,
         embed_job_enabled=embed,
@@ -22,6 +22,9 @@ def _settings(*, key="sk-x", embed=True, proactive=True, initiators=True):
         proactive_enabled=proactive,
         proactive_initiators_enabled=initiators,
         proactive_initiators_interval_s=900,
+        lifecycle_job_enabled=lifecycle,
+        lifecycle_hour_utc=2,
+        lifecycle_churn_days=30,
     )
 
 
@@ -86,14 +89,15 @@ def test_build_jobs_includes_embed_with_key(monkeypatch):
         "cleanup_dedupe",
         "embed_products",
         "proactive_initiators",
+        "lifecycle",
     ]
 
 
 def test_build_jobs_excludes_embed_without_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="", embed=True))
     names = [j.name for j in _build_jobs()]
-    # rollup + cleanup + initiators chiar fără cheie OpenAI (doar embed cere cheie)
-    assert names == ["rollup_usage", "cleanup_dedupe", "proactive_initiators"]
+    # rollup + cleanup + initiators + lifecycle chiar fără cheie OpenAI (doar embed cere cheie)
+    assert names == ["rollup_usage", "cleanup_dedupe", "proactive_initiators", "lifecycle"]
 
 
 def test_build_jobs_excludes_embed_when_disabled(monkeypatch):
@@ -115,6 +119,17 @@ def test_build_jobs_excludes_initiators_when_proactive_off(monkeypatch):
     # gardat ȘI de proactive_enabled: dacă motorul e oprit, nu mai creăm joburi
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(proactive=False))
     assert "proactive_initiators" not in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_includes_lifecycle_anchored_nightly(monkeypatch):
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings())
+    lc = next(j for j in _build_jobs() if j.name == "lifecycle")
+    assert lc.at_hour_utc == 2 and lc.interval_seconds == 86400  # nocturn, ancorat la oră
+
+
+def test_build_jobs_excludes_lifecycle_when_disabled(monkeypatch):
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings(lifecycle=False))
+    assert "lifecycle" not in [j.name for j in _build_jobs()]
 
 
 # --------------------------------------------------------------------------- #
