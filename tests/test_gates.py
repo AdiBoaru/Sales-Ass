@@ -29,10 +29,28 @@ def test_detect_risk_legal_complaint():
     assert detect_risk("vă dau în judecată") == "legal_complaint"
 
 
+def test_detect_risk_human_request_hu_en():
+    """Val3: paritate HU/EN pentru escaladarea la om (RO era solid, HU/EN „fără risk_terms")."""
+    assert detect_risk("szeretnék beszélni egy emberrel") == "human_request"  # HU
+    assert detect_risk("kérek egy ügyintézőt") == "human_request"  # HU
+    assert detect_risk("I want to talk to a human") == "human_request"  # EN
+    assert detect_risk("can I speak to a real person?") == "human_request"  # EN
+
+
+def test_detect_risk_legal_complaint_hu_en():
+    assert detect_risk("hívom az ügyvédet") == "legal_complaint"  # HU (avocat)
+    assert detect_risk("panaszt teszek") == "legal_complaint"  # HU (plângere)
+    assert detect_risk("I'll call my lawyer") == "legal_complaint"  # EN
+    assert detect_risk("I will take legal action") == "legal_complaint"  # EN
+
+
 def test_detect_risk_negative():
     assert detect_risk("caut o cremă pentru ten uscat") is None
     assert detect_risk("") is None
     assert detect_risk(None) is None
+    # negative HU/EN — produse normale, fără risk terms
+    assert detect_risk("keresek egy arckrémet száraz bőrre") is None  # HU
+    assert detect_risk("looking for a face cream for dry skin") is None  # EN
 
 
 # --- gates_stage -------------------------------------------------------------

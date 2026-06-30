@@ -56,10 +56,12 @@ THROTTLE_MSG = (
     "Primesc multe mesaje deodată 🙂 Îți răspund imediat, mai trimite-mi în câteva secunde."
 )
 
-# Pattern-uri de risc (RO, normalizate fără diacritice/uppercase). Determinist, NU LLM.
-# Extensibil per-business din settings = follow-up.
+# Pattern-uri de risc (RO + HU + EN, normalizate fără diacritice/uppercase). Determinist, NU LLM.
+# Val3 (CONV-COMMERCE): RO era solid, HU/EN „fără risk_terms" → un client HU/EN nu putea escalada
+# la om / nu era detectat un caz legal. Paritate multilingvă. Extensibil per-business = follow-up.
 RISK_PATTERNS: dict[str, list[str]] = {
     "human_request": [
+        # RO
         "vreau sa vorbesc cu un om",
         "vorbesc cu un om",
         "cu un operator",
@@ -67,8 +69,25 @@ RISK_PATTERNS: dict[str, list[str]] = {
         "agent uman",
         "om real",
         "persoana reala",
+        # HU
+        "emberrel",  # „beszélni egy emberrel" (să vorbesc cu un om)
+        "operatorral",
+        "operatorhoz",
+        "ugyintezo",  # ügyintéző (operator/agent)
+        "valodi szemely",  # valódi személy
+        "elo szemely",  # élő személy
+        # EN
+        "talk to a human",
+        "speak to a human",
+        "speak to a person",
+        "real person",
+        "human agent",
+        "live agent",
+        "human representative",
+        "speak to someone",
     ],
     "legal_complaint": [
+        # RO
         "avocat",
         "anaf",
         "protectia consumatorului",
@@ -76,6 +95,20 @@ RISK_PATTERNS: dict[str, list[str]] = {
         "instanta",
         "te dau in judecata",
         "in judecata",
+        # HU
+        "ugyved",  # ügyvéd (avocat)
+        "panasz",  # plângere
+        "fogyasztovedelem",  # protecția consumatorului
+        "birosag",  # bíróság (instanță)
+        "perelni",  # a da în judecată
+        # EN
+        "lawyer",
+        "attorney",
+        "consumer protection",
+        "file a complaint",
+        "sue you",
+        "take you to court",
+        "legal action",
     ],
 }
 
