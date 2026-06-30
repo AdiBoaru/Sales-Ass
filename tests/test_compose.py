@@ -7,7 +7,7 @@ avantaj REAL (top_pro). Pur, fără I/O — zero DB/LLM.
 
 from types import SimpleNamespace
 
-from src.models import Direction
+from src.models import Direction, RichItem, RichReply
 from src.worker import compose
 
 
@@ -207,7 +207,7 @@ def test_assemble_hydrates_facts_and_drops_unknown_ids() -> None:
     assert any("Compară" in lbl for lbl in labels)
 
 
-def test_suggestion_chips_are_normalized_not_hardcoded() -> None:
+def test_suggestion_chips_are_normalized_capped_not_hardcoded() -> None:
     chips = compose._suggestion_chips(
         [
             "Vreau una mai ieftină",
@@ -215,12 +215,16 @@ def test_suggestion_chips_are_normalized_not_hardcoded() -> None:
             "Compară CeraVe cu La Roche-Posay Cicaplast pentru mâinile foarte uscate ale tale",
             "Ceva fără parfum",
             "Hidratant de corp",
-            "a cincea peste cap",
+            "Pentru ten sensibil",
+            "Are protecție SPF?",  # al 6-lea unic → cap atins aici
+            "Cum îl folosesc?",  # peste cap → exclus
+            "a noua peste cap",  # peste cap → exclus
         ]
     )
     labels = [c.label for c in chips]
-    assert len(chips) == 4  # cap 4
+    assert len(chips) == 6  # cap 6 (IZI-parity), nu 4
     assert labels.count("Vreau una mai ieftină") == 1  # de-duplicat
+    assert "Cum îl folosesc?" not in labels and "a noua peste cap" not in labels  # peste cap
     assert any(lbl.endswith("…") for lbl in labels)  # cea lungă e scurtată
     assert all(c.payload == c.label for c in chips)  # tap → trimite labelul ca mesaj nou
 
@@ -387,8 +391,9 @@ def test_flatten_framing_light_and_variable_single_item() -> None:
     assert "1. Crema A" not in text and "Poți cere și" not in text
 
 
-def test_flatten_framing_pick_only_when_multiple_items() -> None:
-    """„Recomandarea mea" apare DOAR când departajează între ≥2 produse (#4)."""
+def test_flatten_framing_hides_pick_on_web_by_default() -> None:
+    """IZI-parity (feedback Adi 2026-06-30): pe WEB pick-ul („Recomandarea mea") e ASCUNS by
+    default — rămân intro + education (advisory-ul), cardurile + chips fac restul."""
     retrieved = [
         {"id": "A", "name": "Crema A", "price": 34.99, "top_pros": ["x"]},
         {"id": "B", "name": "Crema B", "price": 48.99, "top_pros": ["y"]},
@@ -404,8 +409,29 @@ def test_flatten_framing_pick_only_when_multiple_items() -> None:
         "suggestions": [],
     }
     text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
-    assert "Recomandarea mea: Crema A" in text  # ≥2 produse → pick prezent
-    assert "Educație." in text  # IZI: coaching de final prezent pe widget (era omis, NX-134)
+    assert "Recomandarea mea" not in text  # pick ascuns pe web (default)
+    assert "Două variante:" in text and "Educație." in text  # intro + coaching rămân
+
+
+def test_flatten_framing_shows_pick_when_web_flag_on(monkeypatch) -> None:
+    """Kill-switch `rich_pick_web_enabled` ON → pick-ul revine în framing (comportament vechi)."""
+    rich = RichReply(
+        intro="Două variante:",
+        items=[
+            RichItem(product_id="A", name="Crema A", price=34.99, reason="a"),
+            RichItem(product_id="B", name="Crema B", price=48.99, reason="b"),
+        ],
+        pick=("A", "alegere bună"),
+        education="Educație.",
+        chips=[],
+        disclaimer="",
+    )
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=True)
+    )
+    text = compose.flatten_framing(rich)
+    assert "Recomandarea mea: Crema A" in text  # flag ON → pick prezent
+    assert "alegere bună" in text
 
 
 def test_card_products_has_signature_keys() -> None:
