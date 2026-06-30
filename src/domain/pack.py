@@ -16,6 +16,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class FacetSpec:
+    """O fațetă de DOMENIU surfacing-uită în comparație (Tier 2, IZI-parity). GENERIC: `key` =
+    cheia din `products.attributes` (ex. „concerns", „finish", „material", „spf"); `labels` =
+    eticheta rândului per-locale; `value_labels` = traduceri OPȚIONALE cod→locale pentru valori
+    canonice (ex. „oily"→„ten gras"). Valoare fără traducere → afișată ca atare (atribut deja
+    display-ready). Zero hardcodat de vertical — totul din DomainPack (defaults JSON + override)."""
+
+    key: str
+    labels: dict[str, str] = field(default_factory=dict)  # locale → eticheta rândului
+    value_labels: dict[str, dict[str, str]] = field(default_factory=dict)  # cod → locale → text
+
+
+@dataclass(frozen=True)
 class DomainPack:
     """Config per-(business, vertical). Owner: `load_domain_pack` (atașat pe BusinessConfig).
     Toate câmpurile au default-uri agnostice de vertical (P6 — un pack incomplet nu crapă)."""
@@ -43,3 +56,8 @@ class DomainPack:
     # (parțial) per-tenant în settings → merge peste default-uri (un vertical „deal-driven" poate
     # urca `sale`, unul „premium" poate urca `rating`). Ne-hardcodat (P9).
     rank_weights: dict[str, float] = field(default_factory=dict)
+    # Tier 2 (IZI-parity): fațete de DOMENIU pentru tabelul de comparație (rânduri finish/acoperire/
+    # potrivit-pentru/material/..., din `products.attributes`). Ordinea = ordinea de afișare. Gol →
+    # tabelul are doar rândurile generice (preț/rating/avantaje/brand) ca azi. Auto-scalează: când
+    # `attributes` crește, rândurile apar fără schimbare de cod. Per-vertical (defaults JSON).
+    comparison_facets: tuple[FacetSpec, ...] = ()

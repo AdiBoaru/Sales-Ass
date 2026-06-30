@@ -56,8 +56,9 @@ _VARIANTS_AGG = """
 
 
 def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
-    """`dict(r)` + decodează `variants` (NX-118). asyncpg întoarce jsonb ca STR (fără codec) →
-    `json.loads` la `list[dict]`; NULL (produs fără variante) → `[]`. Orice altă coloană intactă."""
+    """`dict(r)` + decodează jsonb (NX-118). asyncpg întoarce jsonb ca STR (fără codec) →
+    `json.loads`: `variants` → `list[dict]` (NULL → `[]`); `attributes` → `dict` (NULL → `{}`,
+    pentru fațetele de comparație, Tier 2). Orice altă coloană intactă."""
     d = dict(r)
     if "variants" in d:
         v = d["variants"]
@@ -68,6 +69,15 @@ def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
                 d["variants"] = []
         elif v is None:
             d["variants"] = []
+    if "attributes" in d:
+        a = d["attributes"]
+        if isinstance(a, str):
+            try:
+                d["attributes"] = json.loads(a)
+            except (ValueError, TypeError):
+                d["attributes"] = {}
+        elif a is None:
+            d["attributes"] = {}
     return d
 
 
@@ -284,6 +294,7 @@ _DETAIL_SELECT = f"""
         img.url                     as image,
         p.rating::float8            as rating,
         p.review_count              as review_count,
+        p.attributes                as attributes,
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
         (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
                                     as list_price,

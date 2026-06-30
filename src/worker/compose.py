@@ -38,6 +38,9 @@ from src.worker.text_scrub import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from src.domain.pack import FacetSpec
     from src.models import TurnContext
 
 # Disclaimer per-locale (ține în sync cu greeting._WELCOME[..]['disclaimer'], art. 50 AI Act).
@@ -514,10 +517,53 @@ def _comparison_lead(chosen: list[dict[str, Any]], language: str | None) -> str:
     return " ".join(parts)
 
 
-def build_comparison(products: list[dict[str, Any]], language: str | None) -> Comparison | None:
+def _facet_value_label(facet: FacetSpec, code: Any, language: str | None) -> str | None:
+    """O valoare de fațetă → text afișabil (Tier 2). Cod canonic cu traducere în `value_labels` →
+    eticheta per-locale (fallback 'ro' → cod). Fără traducere (atribut display-ready) → valoarea ca
+    atare. Gol/None → None."""
+    if code is None:
+        return None
+    s = str(code).strip()
+    if not s:
+        return None
+    trans = facet.value_labels.get(s)
+    if trans:
+        return trans.get(language or "ro") or trans.get("ro") or s
+    return s
+
+
+def _facet_cell(facet: FacetSpec, attributes: Any, language: str | None) -> str | None:
+    """Celula de fațetă pentru un produs: citește `attributes[facet.key]` (listă → etichete unite,
+    scalar → o etichetă). Lipsă/gol → None (randat „—"; rândul TOT-gol e sărit). Fapt din date, zero
+    LLM → zero halucinație (aceeași garanție ca restul tabelului)."""
+    if not isinstance(attributes, dict):
+        return None
+    raw = attributes.get(facet.key)
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        labels = [_facet_value_label(facet, v, language) for v in raw]
+        labels = [lbl for lbl in labels if lbl]
+        return ", ".join(labels[:4]) or None
+    return _facet_value_label(facet, raw, language)
+
+
+def _facet_label(facet: FacetSpec, language: str | None) -> str:
+    return facet.labels.get(language or "ro") or facet.labels.get("ro") or facet.key
+
+
+def build_comparison(
+    products: list[dict[str, Any]],
+    language: str | None,
+    facets: Sequence[FacetSpec] = (),
+) -> Comparison | None:
     """Tabel comparativ STRUCTURAT din 2-3 produse retrievate (get_products_by_ids). Determinist:
     fiecare celulă e un fapt real (preț/rating/disponibilitate/avantaje-minusuri din recenzii/brand)
     — NICIUN text LLM → zero halucinație prin construcție. `None` dacă < 2 produse valide.
+
+    Tier 2 (IZI-parity): `facets` = fațete de DOMENIU din DomainPack (finish/acoperire/potrivit-
+    pentru/material/...), randate ca rânduri din `products.attributes`. Generic (nimic hardcodat de
+    vertical); un rând TOT-gol e sărit (date sărace → tabel ca azi). Gol → comportament neschimbat.
 
     Anchor preț redus (PR2): dacă produsul are `list_price` > prețul efectiv, coloana ține prețul
     de listă + `sale_price` = efectivul (frontendul taie listul). Forward-compatible: fără
@@ -560,12 +606,22 @@ def build_comparison(products: list[dict[str, Any]], language: str | None) -> Co
             return f"{eff:.2f} lei (de la {float(lp):.2f})"
         return f"{eff:.2f} lei"
 
+    # Tier 2: rânduri de DOMENIU (finish/acoperire/potrivit-pentru/..., din `attributes`), între
+    # Rating și Disponibilitate. Generice (din DomainPack), deterministe; un rând TOT-gol e sărit.
+    facet_rows = [
+        _row(
+            _facet_label(f, language),
+            [_facet_cell(f, p.get("attributes"), language) for p in chosen],
+        )
+        for f in facets
+    ]
     candidate_rows = [
         ComparisonRow(label=L["price"], values=[_price_cell(p) for p in chosen]),
         _row(
             L["rating"],
             [f"{float(p['rating']):.1f}★" if p.get("rating") is not None else None for p in chosen],
         ),
+        *facet_rows,
         _row(L["avail"], [AV.get(p.get("availability") or "") or None for p in chosen]),
         _row(L["pros"], [_join_list(p.get("top_pros"), 3) for p in chosen]),
         _row(L["cons"], [_join_list(p.get("top_cons"), 2) for p in chosen]),

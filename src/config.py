@@ -379,6 +379,13 @@ class Settings(BaseSettings):
     # OFF → cade
     # pe bucla LLM (modelul decide dacă compară).
     compare_intent_enabled: bool = Field(default=True, validation_alias="COMPARE_INTENT_ENABLED")
+    # IZI-parity (Tier 2): rânduri de FAȚETĂ de domeniu în tabelul de comparație (finish/acoperire/
+    # potrivit-pentru/..., din products.attributes), config din DomainPack.comparison_facets.
+    # Generic pe vertical; rândul TOT-gol e sărit (date sărace → tabel ca azi). OFF → doar rândurile
+    # generice (preț/rating/avantaje/brand), byte-identic cu înainte de Tier 2.
+    comparison_facets_enabled: bool = Field(
+        default=True, validation_alias="COMPARISON_FACETS_ENABLED"
+    )
     # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") →
     # servită DETERMINIST (Offer open_url + card din product_url proaspăt), nu prin calea rich (care
     # interzice modelului linkurile → bucla de coaching repetat). OFF → cade pe bucla LLM (vechi).
