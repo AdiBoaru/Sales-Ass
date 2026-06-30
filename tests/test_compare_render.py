@@ -13,6 +13,7 @@ from dataclasses import asdict
 from src.channels.base import Capability
 from src.channels.web.render import render_web, reply_from_outbox
 from src.channels.web.sender import WebSender
+from src.domain.pack import FacetSpec
 from src.models import Reply
 from src.worker.compose import build_comparison, comparison_cards, flatten_comparison
 from src.worker.dispatcher import _requested_render, choose_render
@@ -92,6 +93,56 @@ def test_build_comparison_list_price_anchor():
     col = cmp.columns[0]
     # convenție unică: `price` = CURENT (58.99), `list_price` = ORIGINAL tăiat (79.99)
     assert col.price == 58.99 and col.list_price == 79.99
+
+
+# --- Tier 2: fațete de DOMENIU în tabel (din products.attributes, generic DomainPack) ----------
+
+
+def _concerns_facet() -> FacetSpec:
+    return FacetSpec(
+        key="concerns",
+        labels={"ro": "Potrivit pentru", "en": "Suitable for"},
+        value_labels={"oily": {"ro": "ten gras", "en": "oily skin"}, "dry": {"ro": "ten uscat"}},
+    )
+
+
+def test_build_comparison_facet_row_from_attributes():
+    prods = _products()
+    prods[0]["attributes"] = {"concerns": ["oily", "dry"]}
+    prods[1]["attributes"] = {"concerns": ["dry"]}
+    cmp = build_comparison(prods, "ro", [_concerns_facet()])
+    row = next(r for r in cmp.rows if r.label == "Potrivit pentru")
+    assert row.values == ["ten gras, ten uscat", "ten uscat"]  # listă → etichete unite, per-locale
+    labels = [r.label for r in cmp.rows]
+    assert labels.index("Potrivit pentru") < labels.index(
+        "Disponibilitate"
+    )  # între Rating și Avail
+
+
+def test_build_comparison_facet_raw_value_and_en_label():
+    prods = _products()
+    f = FacetSpec(key="finish", labels={"ro": "Finisaj", "en": "Finish"})  # fără value_labels
+    prods[0]["attributes"] = {"finish": "mat"}
+    prods[1]["attributes"] = {"finish": "satinat"}
+    cmp = build_comparison(prods, "en", [f])
+    row = next(r for r in cmp.rows if r.label == "Finish")  # eticheta EN
+    assert row.values == ["mat", "satinat"]  # display-ready → valoarea ca atare
+
+
+def test_build_comparison_facet_all_empty_dropped_partial_dash():
+    prods = _products()
+    prods[0]["attributes"] = {"concerns": ["oily"]}
+    prods[1]["attributes"] = {}  # lipsă pe coloana a doua
+    spf = FacetSpec(key="spf", labels={"ro": "SPF"})  # niciun produs n-are spf
+    cmp = build_comparison(prods, "ro", [_concerns_facet(), spf])
+    assert all(r.label != "SPF" for r in cmp.rows)  # TOT-gol → rând sărit
+    row = next(r for r in cmp.rows if r.label == "Potrivit pentru")
+    assert row.values == ["ten gras", None]  # parțial gol → None („—" pe frontend)
+
+
+def test_build_comparison_no_facets_unchanged():
+    cmp = build_comparison(_products(), "ro")  # facets implicit () → tabel ca azi
+    assert all(r.label not in ("Potrivit pentru", "Finisaj", "SPF") for r in cmp.rows)
 
 
 # --- flatten_comparison: floor pt canale fără tabel --------------------------

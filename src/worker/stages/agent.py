@@ -786,6 +786,16 @@ async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.set_reply(_link_lead(ctx.language, many=True), products=cards, cacheable=False)
 
 
+def _comparison_facets(ctx: TurnContext) -> tuple:
+    """Tier 2 (IZI-parity): fațetele de DOMENIU din DomainPack pentru tabelul de comparație
+    (finish/acoperire/potrivit-pentru/..., din products.attributes), gated de kill-switch. OFF /
+    fără pack → () → tabelul are doar rândurile generice (preț/rating/avantaje/brand), ca azi."""
+    if not get_settings().comparison_facets_enabled:
+        return ()
+    pack = getattr(ctx.business, "domain_pack", None)
+    return pack.comparison_facets if pack else ()
+
+
 async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> bool:
     """Servește o COMPARAȚIE pe produsele DEJA afișate, FĂRĂ bucla LLM (G2, IZI-parity) — ca
     link/show_more/cheaper. State ține doar ref-uri (P8) → re-fetch detaliile proaspete (preț/
@@ -796,7 +806,7 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     n = 3 if _THREE_RE.search(query) else 2
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
     products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
-    comparison = compose.build_comparison(products, ctx.language)
+    comparison = compose.build_comparison(products, ctx.language, _comparison_facets(ctx))
     if comparison is None:
         return False
     ctx.retrieval = RetrievalResult(products=products, source="compare_intent")
@@ -1070,7 +1080,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # calea rich de recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele
     # două" care doar re-lista produsele). Sare peste rich/proză pentru acest tur.
     if compared and not is_order:
-        comparison = compose.build_comparison(compared, ctx.language)
+        comparison = compose.build_comparison(compared, ctx.language, _comparison_facets(ctx))
         if comparison is not None:
             ctx.set_comparison_reply(
                 comparison,
