@@ -589,16 +589,25 @@ def _no_result_msg(is_order: bool) -> str:
 
 def _rich_bundle(products: list[dict[str, Any]]) -> str:
     """Lista de produse pentru apelul structurat: id + preț + rating + avantaje INDEXATE
-    (pentru `pro_index`). Modelul VEDE prețul (ca să ordoneze/aleagă) dar NU-l emite."""
+    (pentru `pro_index`) + DESCRIERE (ai_summary). Modelul VEDE prețul (ca să ordoneze/aleagă) dar
+    NU-l emite.
+
+    PR-3 (IZI-parity consultativ): `descriere` aduce caracteristicile REALE ale produsului
+    (componente cheie / ingrediente / pentru ce ten/uz, ce conține ai_summary-ul) ca modelul să
+    scrie un fit SPECIFIC („cu acid hialuronic, pentru ten uscat"), NU tautologic („hidratant care
+    hidratează"). GENERIC pe vertical: e textul descriptiv al catalogului, oricare ar fi domeniul
+    (ingrediente la beauty, specificații la electronice). Gol (date sărace) → degradare lină."""
     lines = []
     for p in products:
         raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
         pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()][:3]
         pros_str = "; ".join(f"{i}) {pr}" for i, pr in enumerate(pros)) or "(fără avantaje listate)"
         rating = f"{float(p['rating']):.1f}★" if p.get("rating") else "-"
+        desc = " ".join((p.get("ai_summary") or "").split())[:160]
+        desc_str = f" | descriere: {desc}" if desc else ""
         lines.append(
             f"[{p['id']}] {p['name']} | preț {float(p['price']):.2f} lei | "
-            f"rating {rating} | avantaje: {pros_str}"
+            f"rating {rating} | avantaje: {pros_str}{desc_str}"
         )
     return "\n".join(lines)
 
