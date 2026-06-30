@@ -403,6 +403,11 @@ class Settings(BaseSettings):
     # deci „uite ce-ți recomand" chiar ajută). OFF (default) → pick ascuns pe web; ON → comportament
     # vechi (pick în framing). Reversibil din env, fără cod.
     rich_pick_web_enabled: bool = Field(default=False, validation_alias="RICH_PICK_WEB_ENABLED")
+    # #7b (IZI-parity): după ce clientul adaugă un produs în coș, sugerăm produse COMPLEMENTARE
+    # (rutină/accesorii — ca iZi: contur ochi + cremă din aceeași gamă) ca CARDURI. Retrieval
+    # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell
+    # (rămâne confirmarea de coș a agentului, comportament vechi).
+    cross_sell_enabled: bool = Field(default=True, validation_alias="CROSS_SELL_ENABLED")
     # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
     # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
     # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.

@@ -371,6 +371,46 @@ async def search_cheaper_than(
     return [_row_to_product(r) for r in rows]
 
 
+async def get_complementary_products(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_id: str,
+    *,
+    exclude_ids: list[str] | None = None,
+    limit: int = 4,
+) -> list[dict[str, Any]]:
+    """Produse COMPLEMENTARE produsului `anchor_id` (cross-sell „merge bine cu" / rutină, #7b).
+
+    Generic pe vertical (NU doar beauty): produse din ACELAȘI brand (gama/rutina, ca iZi: contur
+    ochi + cremă din aceeași gamă) SAU care împart un `concern` cu ancora, dar dintr-o categorie
+    DIFERITĂ (complement, NU substitut — alt ser nu „merge bine cu" un ser). Doar CUMPĂRABILE (în
+    stoc), excluzând ancora + ce e deja în coș (`exclude_ids`). Same-brand întâi, apoi rating shrunk
+    (cold-start safe). Gol = niciun semnal complementar (→ fără cross-sell, flux normal).
+    `business_id = $1` (izolare; RLS plasă). Hard cap 6."""
+    limit = min(limit, 6)
+    exclude = list(dict.fromkeys([anchor_id, *(exclude_ids or [])]))
+    same_brand = "(select brand_id from products where business_id = $1 and id = $2)"
+    # concern-urile ancorei ca text[] (gol → '{}' → fără overlap, cade pe same-brand). `?|` oricare.
+    anchor_concerns = (
+        "coalesce((select array(select jsonb_array_elements_text(pa.attributes->'concerns'))"
+        "          from products pa where pa.business_id = $1 and pa.id = $2), '{}')::text[]"
+    )
+    sql = (
+        _SELECT
+        + " where p.business_id = $1 and p.status = 'active'"
+        + " and p.availability in ('in_stock', 'low_stock')"
+        + " and p.id <> all($3::uuid[])"  # exclude ancora + ce e în coș
+        # categorie DIFERITĂ (complement, NU substitut — alt ser nu „merge bine cu" un ser):
+        + " and p.primary_category_id is distinct from"
+        + "     (select primary_category_id from products where business_id = $1 and id = $2)"
+        + f" and (p.brand_id = {same_brand} or (p.attributes->'concerns') ?| {anchor_concerns})"
+        + f" order by (p.brand_id = {same_brand}) desc nulls last, {_SHRUNK_RATING} desc, p.id"
+        + " limit $4"
+    )
+    rows = await conn.fetch(sql, business_id, anchor_id, exclude, limit)
+    return [_row_to_product(r) for r in rows]
+
+
 async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
     """Slug-urile categoriilor active ale tenantului — pentru groundarea triajului.
 
