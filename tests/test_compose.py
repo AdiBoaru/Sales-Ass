@@ -391,9 +391,10 @@ def test_flatten_framing_light_and_variable_single_item() -> None:
     assert "1. Crema A" not in text and "Poți cere și" not in text
 
 
-def test_flatten_framing_hides_pick_on_web_by_default() -> None:
-    """IZI-parity (feedback Adi 2026-06-30): pe WEB pick-ul („Recomandarea mea") e ASCUNS by
-    default — rămân intro + education (advisory-ul), cardurile + chips fac restul."""
+def test_flatten_framing_shows_pick_on_web_by_default() -> None:
+    """IZI-parity (Tier 1, G1): pe WEB pick-ul („Recomandarea mea") e VIZIBIL by default — ca iZi
+    care se angajează la o recomandare clară (fără el răspunsul părea mai „subțire"). Intro +
+    education + carduri rămân; pick-ul îl ancorează."""
     retrieved = [
         {"id": "A", "name": "Crema A", "price": 34.99, "top_pros": ["x"]},
         {"id": "B", "name": "Crema B", "price": 48.99, "top_pros": ["y"]},
@@ -409,12 +410,13 @@ def test_flatten_framing_hides_pick_on_web_by_default() -> None:
         "suggestions": [],
     }
     text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
-    assert "Recomandarea mea" not in text  # pick ascuns pe web (default)
+    assert "Recomandarea mea: Crema A" in text  # pick vizibil pe web (default G1)
     assert "Două variante:" in text and "Educație." in text  # intro + coaching rămân
 
 
-def test_flatten_framing_shows_pick_when_web_flag_on(monkeypatch) -> None:
-    """Kill-switch `rich_pick_web_enabled` ON → pick-ul revine în framing (comportament vechi)."""
+def test_flatten_framing_hides_pick_when_web_flag_off(monkeypatch) -> None:
+    """Kill-switch `rich_pick_web_enabled=OFF` → pick ascuns pe web (varianta din feedback-ul
+    2026-06-30, reversibilă din env)."""
     rich = RichReply(
         intro="Două variante:",
         items=[
@@ -427,11 +429,44 @@ def test_flatten_framing_shows_pick_when_web_flag_on(monkeypatch) -> None:
         disclaimer="",
     )
     monkeypatch.setattr(
-        compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=True)
+        compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=False)
     )
     text = compose.flatten_framing(rich)
-    assert "Recomandarea mea: Crema A" in text  # flag ON → pick prezent
-    assert "alegere bună" in text
+    assert "Recomandarea mea" not in text  # flag OFF → pick ascuns
+    assert "Două variante:" in text and "Educație." in text  # intro + coaching rămân
+
+
+def test_flatten_pick_label_localized() -> None:
+    """G1: eticheta pick-ului urmează limba clientului (un bot EN/HU nu mai scoate „Recomandarea
+    mea"). `flatten` (floor WhatsApp) randează pick-ul indiferent de numărul de produse."""
+    rich = RichReply(
+        intro=None,
+        items=[RichItem(product_id="A", name="Cream A", price=10.0, reason="r")],
+        pick=("A", "good pick"),
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    assert "My pick: Cream A" in compose.flatten(rich, "en")
+    assert "Az ajánlatom: Cream A" in compose.flatten(rich, "hu")
+    assert "Recomandarea mea: Cream A" in compose.flatten(rich, "ro")
+    assert "Recomandarea mea: Cream A" in compose.flatten(rich)  # fallback ro (back-compat)
+
+
+def test_scrub_education_keeps_safe_sentences_drops_unsafe() -> None:
+    """G4: scrub la nivel de PROPOZIȚIE — păstrăm sfatul sigur, aruncăm doar propoziția „murdară"
+    (înainte, un singur număr/claim ucidea tot paragraful → coaching-ul dispărea des). stock_present
+    =True izolează validatorul de stoc; testăm cifre/procente/claim-uri."""
+    assert (
+        compose.scrub_education("Alege după textură. Are 30% reducere.", True)
+        == "Alege după textură."
+    )
+    assert (
+        compose.scrub_education("Are 30% reducere.", True) is None
+    )  # toate pică → None (no filler)
+    assert compose.scrub_education("Contează nevoia ta.", True) == "Contează nevoia ta."
+    assert compose.scrub_education(None, True) is None
+    assert compose.scrub_education("", True) is None
 
 
 def test_card_products_has_signature_keys() -> None:

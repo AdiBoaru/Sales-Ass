@@ -18,7 +18,14 @@ from src.models import (
 from src.tools import catalog_tools as ct
 from src.worker.runner import PipelineDeps
 from src.worker.stages import agent as agent_mod
-from src.worker.stages.agent import _budget, _links_ok, _prices_ok, _rich_bundle, agent_stage
+from src.worker.stages.agent import (
+    _COMPARE_RE,
+    _budget,
+    _links_ok,
+    _prices_ok,
+    _rich_bundle,
+    agent_stage,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -167,6 +174,21 @@ def test_rich_bundle_omits_empty_description():
     assert "descriere" not in out  # date sărace → fără segment gol
 
 
+def test_compare_re_matches_intent_not_face():
+    # IZI-parity G2: ÎNALTĂ PRECIZIE — verbul de comparație (RO/EN/HU) + vs/versus; generic.
+    assert _COMPARE_RE.search("Compară-mi primele două")
+    assert _COMPARE_RE.search("Compară-mi primele două variante Velvet")
+    assert _COMPARE_RE.search("compare these two")
+    assert _COMPARE_RE.search("Crema A vs Crema B")
+    assert _COMPARE_RE.search("hasonlítsd össze a kettőt")
+    # fals-pozitive de evitat (gate-ul n-are recurs la model): policy „diferența", „compartiment",
+    # „față" (zona feței). Frazele laxe de tip „ce diferență" cad intenționat pe calea model-driven.
+    assert not _COMPARE_RE.search("care e diferența dintre garanție și retur")
+    assert not _COMPARE_RE.search("are un compartiment mare")
+    assert not _COMPARE_RE.search("recomandă-mi un ser pentru față")
+    assert not _COMPARE_RE.search("vreau ceva pentru ten gras")
+
+
 # --- agent_stage -------------------------------------------------------------
 
 
@@ -182,6 +204,48 @@ async def test_no_llm_is_noop():
     ctx = _ctx()
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=None))
     assert ctx.reply is None
+
+
+async def test_compare_intent_serves_table_deterministically(monkeypatch):
+    """IZI-parity G2: „compară primele două" pe un set deja afișat → tabel structurat DETERMINIST,
+    fără bucla LLM (nu depinde de model să cheme compare_products). Agnostic de vertical."""
+
+    async def fake_by_ids(conn, business_id, ids, *, limit=6):
+        return [p for p in PRODUCTS if p["id"] in ids][:limit]
+
+    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids)
+    ctx = _ctx(body="compară primele două")
+    ctx.state.displayed_products = [
+        ProductRef(product_id="p1", name="Crema Hidratantă", price=82.99),
+        ProductRef(product_id="p2", name="Ser Calmant", price=120.50),
+    ]
+    llm = FakeLLM(final="NU ar trebui folosit textul modelului")
+    await agent_stage(ctx, _deps(llm))
+
+    assert ctx.reply is not None and ctx.reply.comparison is not None
+    assert len(ctx.reply.comparison.columns) == 2  # tabel pe primele 2 afișate, ordinea păstrată
+    assert ctx.reply.comparison.columns[0].product_id == "p1"
+    assert llm.complete_calls == 0  # determinist → ZERO inferență LLM
+
+
+async def test_compare_intent_falls_through_when_under_two_displayed(monkeypatch):
+    """<2 produse afișate → NU intră pe calea deterministă de comparație (lasă bucla LLM)."""
+
+    async def fake_by_ids(conn, business_id, ids, *, limit=6):  # n-ar trebui chemat
+        raise AssertionError("get_products_by_ids nu trebuie chemat sub 2 produse afișate")
+
+    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids)
+    _patch_search(monkeypatch, PRODUCTS)
+    ctx = _ctx(body="compară-le")
+    ctx.state.displayed_products = [
+        ProductRef(product_id="p1", name="Crema Hidratantă", price=82.99)
+    ]
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "x", "price_max": None, "limit": 6})],
+        final="Îți recomand Crema Hidratantă la 82.99 lei.",
+    )
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None and ctx.reply.comparison is None  # nu e tabel determinist
 
 
 async def test_sales_recommends_via_tool(monkeypatch):

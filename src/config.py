@@ -371,6 +371,14 @@ class Settings(BaseSettings):
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
+    # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat („compară primele două",
+    # „ce diferență e între ele") → tabel structurat DETERMINIST pe produsele afișate (re-fetch +
+    # build_comparison), ca link/show_more/cheaper — fără să depindem de modelul care cheamă
+    # `compare_products` (dacă narativiza în loc de tool-call, dădea proză în loc de tabel).
+    # Agnostic de vertical (rânduri = preț/rating/disponibilitate/avantaje/brand din retrieval).
+    # OFF → cade
+    # pe bucla LLM (modelul decide dacă compară).
+    compare_intent_enabled: bool = Field(default=True, validation_alias="COMPARE_INTENT_ENABLED")
     # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") →
     # servită DETERMINIST (Offer open_url + card din product_url proaspăt), nu prin calea rich (care
     # interzice modelului linkurile → bucla de coaching repetat). OFF → cade pe bucla LLM (vechi).
@@ -397,12 +405,13 @@ class Settings(BaseSettings):
     rich_pick_deterministic_enabled: bool = Field(
         default=True, validation_alias="RICH_PICK_DETERMINISTIC_ENABLED"
     )
-    # IZI-parity (feedback Adi 2026-06-30): pe WEB ascundem „👉 Recomandarea mea" (pick-ul din
-    # framing). Cardurile + `education` SUNT advisory-ul; un pick împins în față e redundant/agresiv
-    # pe widget. Doar pe web — floor-ul WhatsApp (`flatten`) îl păstrează (acolo nu există carduri,
-    # deci „uite ce-ți recomand" chiar ajută). OFF (default) → pick ascuns pe web; ON → comportament
-    # vechi (pick în framing). Reversibil din env, fără cod.
-    rich_pick_web_enabled: bool = Field(default=False, validation_alias="RICH_PICK_WEB_ENABLED")
+    # IZI-parity (Tier 1, G1): pe WEB ARĂTĂM „👉 Recomandarea mea" (pick-ul angajat din framing), ca
+    # iZi care se angajează la o recomandare clară („ți-aș recomanda în primul rând X"). Pick-ul e
+    # DETERMINIST (cel mai bine clasat afișat) + justificare ancorată pe un avantaj real → nu e
+    # „împins agresiv", e advisory-ul consultativ care lipsea (răspunsul părea mai subțire ca iZi).
+    # Floor-ul WhatsApp (`flatten`) îl păstra oricum. ON (default) → pick vizibil pe web; OFF →
+    # pick ascuns (varianta din feedback-ul 2026-06-30). Reversibil din env, fără cod.
+    rich_pick_web_enabled: bool = Field(default=True, validation_alias="RICH_PICK_WEB_ENABLED")
     # #7b (IZI-parity): după ce clientul adaugă un produs în coș, sugerăm produse COMPLEMENTARE
     # (rutină/accesorii — ca iZi: contur ochi + cremă din aceeași gamă) ca CARDURI. Retrieval
     # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell

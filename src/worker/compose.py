@@ -47,6 +47,20 @@ _DISCLAIMER: dict[str, str] = {
     "hu": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
 }
 
+# Eticheta pick-ului („Recomandarea mea") per-locale — text de UI pus de COD; numele + motivul vin
+# din date / proza LLM scrubuită. Fallback pe 'ro'. (IZI-parity G1: pick-ul e vizibil pe web acum,
+# deci eticheta trebuie să urmeze limba clientului — un bot HU/EN nu mai scoate „Recomandarea mea".)
+_PICK_LABEL: dict[str, str] = {
+    "ro": "👉 Recomandarea mea: ",
+    "en": "👉 My pick: ",
+    "hu": "👉 Az ajánlatom: ",
+}
+
+
+def _pick_label(language: str | None) -> str:
+    return _PICK_LABEL.get(language or "ro") or _PICK_LABEL["ro"]
+
+
 # IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
 # Constante de PRODUS (decizii de UX, nu ops-tuning) — pick-ul pe web e separat un kill-switch în
 # config (`rich_pick_web_enabled`). `_MAX_RICH_ITEMS` = câte carduri (modelul curează, codul taie la
@@ -195,6 +209,28 @@ def _drop_unfounded_stock(text: str | None, stock_present: bool) -> str | None:
     return None if has_stock_claim(text) else text
 
 
+def scrub_education(s: str | None, stock_present: bool) -> str | None:
+    """Coaching de final (`education`), scrubuit la nivel de PROPOZIȚIE (IZI-parity, G4). Vechiul
+    comportament arunca TOT paragraful la o singură propoziție „murdară" (un „SPF 30" ucidea și
+    sfatul util de lângă) → coaching-ul dispărea des, iar răspunsul părea mai subțire decât iZi
+    (care consultă la fiecare tur). Granular = păstrăm propozițiile SIGURE, aruncăm doar pe cele cu
+    cifre/procente/claim/superlativ/medical (`scrub_prose`) sau cu o afirmație de stoc nefondată
+    (`_drop_unfounded_stock`). Aceeași siguranță, mai mult sfat REAL păstrat. Agnostic de vertical
+    (nu injectează filler — toate pică → None). O singură propoziție = identic cu vechiul
+    comportament."""
+    if not s:
+        return None
+    t = " ".join(s.split())
+    if not t:
+        return None
+    kept: list[str] = []
+    for sent in re.split(r"(?<=[.!?])\s+", t):
+        safe = _drop_unfounded_stock(scrub_prose(sent), stock_present)
+        if safe:
+            kept.append(safe)
+    return " ".join(kept) or None
+
+
 def _select_pick(
     j: dict[str, Any],
     facts: dict[str, dict[str, Any]],
@@ -300,7 +336,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         ),
         items=items,
         pick=pick,
-        education=_drop_unfounded_stock(scrub_prose(j.get("education")), stock_present),
+        education=scrub_education(j.get("education"), stock_present),
         chips=_suggestion_chips(j.get("suggestions") or []),
         disclaimer=disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None,
     )
@@ -335,9 +371,10 @@ def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:
     ]
 
 
-def flatten(rich: RichReply) -> str:
+def flatten(rich: RichReply, language: str | None = None) -> str:
     """Aplatizare deterministă în text — floor-ul pentru canale fără rich (WhatsApp),
-    messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză."""
+    messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză. `language` →
+    eticheta pick-ului în limba clientului (fallback 'ro' = byte-identic cu vechiul comport.)."""
     lines: list[str] = []
     if rich.intro:
         lines += [rich.intro, ""]
@@ -354,7 +391,7 @@ def flatten(rich: RichReply) -> str:
             lines.append(f"   {it.reason}")
     if rich.pick:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
-        head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
+        head = f"{_pick_label(language)}{name} — " if name else "👉 "
         lines += ["", head + rich.pick[1]]
     if rich.education:
         lines += ["", rich.education]
@@ -365,17 +402,17 @@ def flatten(rich: RichReply) -> str:
     return "\n".join(lines).strip()
 
 
-def flatten_framing(rich: RichReply) -> str:
+def flatten_framing(rich: RichReply, language: str | None = None) -> str:
     """Aplatizare pentru canalele care randează produsele ca CARDURI (widget web, /web/chat):
     framing conversațional UȘOR și VARIABIL ca structură (#4 — evită tiparul identic la fiecare
     mesaj): intro + (opțional) recomandarea („pick") + coaching de final.
 
     OMITE: enumerarea numerotată (o fac cardurile) și linia „Poți cere și:" (o fac chips-urile).
 
-    IZI-parity (feedback Adi 2026-06-30): pe WEB pick-ul („Recomandarea mea") e ASCUNS by default —
-    cardurile + `education` sunt advisory-ul; un pick împins în față e redundant/agresiv pe widget.
-    Gated de `rich_pick_web_enabled` (OFF). Floor-ul WhatsApp (`flatten`) îl păstrează (acolo nu
-    există carduri). La un SINGUR produs nu se pune oricum (cardul ESTE recomandarea).
+    IZI-parity (Tier 1, G1): pe WEB pick-ul („Recomandarea mea") e VIZIBIL by default — ca iZi care
+    se angajează la o recomandare clară (răspunsul fără el părea mai „subțire"). Gated de
+    `rich_pick_web_enabled` (ON; OFF → ascuns, varianta din 2026-06-30). Eticheta urmează
+    `language`. La un SINGUR produs nu se pune oricum (cardul ESTE recomandarea).
 
     IZI-coaching: `education` (paragraful „cum alegi" + cross-sell) revine ca PARAGRAF DE FINAL pe
     widget (gap-ul iZi — botul listează, nu consultă). E scrub-uit (fără cifre/claim-uri), deci
@@ -387,7 +424,7 @@ def flatten_framing(rich: RichReply) -> str:
     # cardul vorbește de la sine). Pe WhatsApp `flatten` îl pune oricum — vezi docstring.
     if get_settings().rich_pick_web_enabled and rich.pick and len(rich.items) > 1:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
-        head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
+        head = f"{_pick_label(language)}{name} — " if name else "👉 "
         blocks.append(head + rich.pick[1])
     if rich.education:  # coaching de final (model iZi) — randat și pe widget acum
         blocks.append(rich.education)
