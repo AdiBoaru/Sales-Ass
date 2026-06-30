@@ -10,6 +10,7 @@ să dovedim fluxul cap-coadă. Stagiile adevărate (gates → free_layers → tr
 context → agent → validator → sender) se adaugă în ordine în G3+.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import perf_counter
@@ -21,7 +22,10 @@ from src.agent import usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
+from src.config import get_settings
 from src.models import TurnContext, TurnUsage
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,6 +56,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     acc, token = usage.push()
     turn_started = perf_counter()
     by_stage: dict[str, dict] = {}
+    stage_latencies: dict[str, float] = {}  # P0-budget: latența TUTUROR stagiilor (și non-LLM)
     try:
         for stage in stages:
             name = getattr(stage, "__name__", "stage")
@@ -60,6 +65,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             await stage(ctx, deps)
             latency_ms = round((perf_counter() - started) * 1000, 1)
             ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
+            stage_latencies[name] = stage_latencies.get(name, 0.0) + latency_ms
             _record_stage_delta(by_stage, name, before, acc.snapshot(), latency_ms)
             # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
             if ctx.reply is not None or ctx.halt:
@@ -70,26 +76,33 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     finally:
         usage.pop(token)
         latency_ms = round((perf_counter() - turn_started) * 1000, 1)
+        savings = (
+            sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
+            if acc.calls
+            else 0.0
+        )
+        # CONV-COMMERCE: ORICE tur primește `TurnUsage` (nu doar cele cu LLM) → fiecare mesaj
+        # outbound salvează timp + tokeni + cost în DB (tokeni/cost = 0 când n-a fost apel LLM:
+        # cache/free-layer/welcome). Latența e wall-clock-ul real al turului.
+        ctx.usage = TurnUsage(
+            tokens_in=acc.tokens_in,
+            tokens_out=acc.tokens_out,
+            cached_tokens=acc.cached_tokens,
+            cost_usd=acc.cost_usd,
+            calls=acc.calls,
+            savings_usd=savings,
+            latency_ms=latency_ms,
+            models=sorted(acc.by_model),
+            by_stage=by_stage,
+            by_model=acc.by_model,
+        )
         if acc.calls:
-            savings = sum(
-                savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items()
-            )
-            ctx.usage = TurnUsage(
-                tokens_in=acc.tokens_in,
-                tokens_out=acc.tokens_out,
-                cached_tokens=acc.cached_tokens,
-                cost_usd=acc.cost_usd,
-                calls=acc.calls,
-                savings_usd=savings,
-                latency_ms=latency_ms,
-                models=sorted(acc.by_model),
-                by_stage=by_stage,
-                by_model=acc.by_model,
-            )
-            # tokens_in/out/cost_usd → coloane dedicate (insert_events); cached_tokens/savings/
-            # defalcări → properties jsonb (rollup le citește de acolo). Principiul 10.
-            # phase='turn' (reply) vs 'post_turn' (summarizer/profil, emis de processor).
+            # Event `llm_usage` DOAR la apel LLM real → rollup/billing fără zero-rows. tokens/cost
+            # pe coloane dedicate (insert_events); cached/savings/defalcări în properties (P10).
             ctx.emit("llm_usage", phase="turn", **ctx.usage.as_event_props())
+        # P0-budget: alertă per-tur (latență end-to-end SAU cost LLM peste buget) — pt ORICE tur
+        # (inclusiv cache/free-layer), nu doar cele cu LLM. Observabilitate, nu schimbă turul (P6).
+        _emit_turn_budget(ctx, latency_ms, acc.cost_usd, stage_latencies)
 
 
 def _record_stage_delta(
@@ -114,6 +127,43 @@ def _record_stage_delta(
     row["cached_tokens"] += after[3] - before[3]
     row["cost_usd"] += round(after[4] - before[4], 6)
     row["latency_ms"] = row.get("latency_ms", 0.0) + latency_ms
+
+
+def _emit_turn_budget(
+    ctx: TurnContext, latency_ms: float, cost_usd: float, stage_latencies: dict[str, float]
+) -> None:
+    """CONV-COMMERCE P0: emite `turn_over_budget` când turul depășește bugetul de latență
+    (wall-clock end-to-end) SAU cost (LLM). Pur observabilitate (P10): runner-ul măsoară, stagiile
+    nu știu. NU schimbă turul (P6) — doar alertează + loghează, cu stagiul cel mai lent (din TOATE
+    stagiile, inclusiv non-LLM, ex. retrieval/Vision). Gated de `turn_budget_alerts_enabled`."""
+    s = get_settings()
+    if not s.turn_budget_alerts_enabled:
+        return
+    over_latency = latency_ms > s.turn_latency_budget_ms
+    over_cost = cost_usd > s.turn_cost_budget_usd
+    if not (over_latency or over_cost):
+        return
+    slow_name, slow_ms = max(stage_latencies.items(), key=lambda kv: kv[1], default=(None, 0.0))
+    ctx.emit(
+        "turn_over_budget",
+        latency_ms=round(latency_ms),
+        cost_usd=round(cost_usd, 6),
+        over_latency=over_latency,
+        over_cost=over_cost,
+        budget_latency_ms=s.turn_latency_budget_ms,
+        budget_cost_usd=s.turn_cost_budget_usd,
+        slowest_stage=slow_name,
+        slowest_stage_ms=round(slow_ms),
+    )
+    log.warning(
+        "tur peste buget: %dms (buget %dms), cost $%.4f (buget $%.4f), stagiu lent=%s (%dms)",
+        round(latency_ms),
+        s.turn_latency_budget_ms,
+        cost_usd,
+        s.turn_cost_budget_usd,
+        slow_name,
+        round(slow_ms),
+    )
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

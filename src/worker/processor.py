@@ -382,8 +382,12 @@ async def _record_turn_cost(
 def _message_usage_kwargs(turn_usage: TurnUsage | None) -> dict:
     """Câmpurile de observabilitate (NX-103) atașate pe rândul `messages` outbound al botului:
     tokeni/cost/latență/model. DOAR pe primul fragment al reply-ului (split-ul e același reply).
-    None/zero apeluri → {} (mesaj fără cost: cache/free-layer/welcome — corect 0, nu NULL fals)."""
-    if turn_usage is None or turn_usage.calls == 0:
+
+    CONV-COMMERCE: salvăm pentru ORICE tur (nu doar cele cu LLM) — timpul + tokenii + costul intră
+    în DB la FIECARE răspuns. Tokeni/cost = 0 când n-a fost apel LLM (cache/free-layer/welcome —
+    corect 0, nu NULL); `model_route` = modelele folosite sau None. `None` = niciun tur prin runner
+    (ex. mesaj proactiv pus direct în outbox)."""
+    if turn_usage is None:
         return {}
     return {
         "model_route": ",".join(turn_usage.models) or None,
