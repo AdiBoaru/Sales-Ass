@@ -443,7 +443,7 @@ def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _card_products(products: list[dict[str, Any]], n: int = 3) -> list[dict[str, Any]]:
+def _card_products(products: list[dict[str, Any]], n: int = 4) -> list[dict[str, Any]]:
     """Câmpuri compacte pentru cardurile de produs (W1 + carusel R2)."""
     return [
         {

@@ -94,8 +94,10 @@ def test_render_web_rich_shape():
     out = render_web(_rich_reply(), "ro")
     assert len(out["products"]) == 2
     assert out["suggestions"] == ["Mai ieftin"]
-    # content = DOAR framing (intro + pick + educație + disclaimer), nu enumerarea produselor
-    assert "Pentru tenul tău" in out["content"] and "alegere bună" in out["content"]
+    # content = framing (intro + educație + disclaimer), nu enumerarea produselor. IZI-parity
+    # (feedback Adi 2026-06-30): pick-ul („Recomandarea mea") e ASCUNS pe web by default.
+    assert "Pentru tenul tău" in out["content"] and "contează ingredientele" in out["content"]
+    assert "alegere bună" not in out["content"]  # pick ascuns pe web
     assert "inteligență artificială" in out["content"]  # disclaimer prezent
     assert out["products"][0]["product_id"] == "p1" and out["products"][0]["image_url"] == "i1"
 
