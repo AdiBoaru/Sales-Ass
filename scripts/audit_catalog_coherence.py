@@ -40,21 +40,61 @@ FAMILIES: dict[str, list[str]] = {
     "unelte": ["pensula", "burete machiaj", "buretel", "aplicator", "set pensule"],
     "parfum": ["apa parfumata", "apa de toaleta", "apa de parfum", "eau de", "parfum"],
     "par": [
-        "sampon", "balsam de par", "masca de par", "vopsea", "fixativ", "spuma de par",
-        "ulei de par", "tratament de par", "ser de par", "spray de par",
+        "sampon",
+        "balsam de par",
+        "masca de par",
+        "vopsea",
+        "fixativ",
+        "spuma de par",
+        "ulei de par",
+        "tratament de par",
+        "ser de par",
+        "spray de par",
     ],
     "machiaj": [
-        "fond de ten", "pudra", "ruj", "luciu de buze", "creion de", "rimel", "mascara",
-        "fard", "paleta", "corector", "anticearcan", "iluminator", "primer", "tus de ochi",
+        "fond de ten",
+        "pudra",
+        "ruj",
+        "luciu de buze",
+        "creion de",
+        "rimel",
+        "mascara",
+        "fard",
+        "paleta",
+        "corector",
+        "anticearcan",
+        "iluminator",
+        "primer",
+        "tus de ochi",
     ],
     "ingrijire_corp": [
-        "gel de dus", "lotiune de corp", "ulei de corp", "scrub de corp", "unt de corp",
-        "crema de corp", "crema de maini", "sapun", "deodorant", "spuma de baie",
+        "gel de dus",
+        "lotiune de corp",
+        "ulei de corp",
+        "scrub de corp",
+        "unt de corp",
+        "crema de corp",
+        "crema de maini",
+        "sapun",
+        "deodorant",
+        "spuma de baie",
     ],
     "ingrijire_fata": [
-        "ser", "contur ochi", "apa micelara", "tonic", "demachiant", "masca de fata",
-        "crema de fata", "gel de curatare", "exfoliant", "crema hidratanta", "spf",
-        "protectie solara", "crema anti", "crema de zi", "crema de noapte",
+        "ser",
+        "contur ochi",
+        "apa micelara",
+        "tonic",
+        "demachiant",
+        "masca de fata",
+        "crema de fata",
+        "gel de curatare",
+        "exfoliant",
+        "crema hidratanta",
+        "spf",
+        "protectie solara",
+        "crema anti",
+        "crema de zi",
+        "crema de noapte",
     ],
 }
 
@@ -170,9 +210,23 @@ async def main() -> None:
 
     # --- VERIFICARE: nume INTERN incoerent (tip unelte/parfum/păr + beneficiu de skincare-față) ---
     skin_benefit = [
-        "hidrat", "calmar", "ridur", "anti-rid", "anti-aging", "luminoz", "uniformiz",
-        "ten gras", "ten uscat", "ten sensibil", "acnee", "pete", "pori", "cearcan",
-        "fermitate", "exfoliere", "anti-imbatranire",
+        "hidrat",
+        "calmar",
+        "ridur",
+        "anti-rid",
+        "anti-aging",
+        "luminoz",
+        "uniformiz",
+        "ten gras",
+        "ten uscat",
+        "ten sensibil",
+        "acnee",
+        "pete",
+        "pori",
+        "cearcan",
+        "fermitate",
+        "exfoliere",
+        "anti-imbatranire",
     ]
 
     def _incoherent(name: str) -> bool:
@@ -184,7 +238,8 @@ async def main() -> None:
 
     incoherent = [r for r in rows if _incoherent(r["name"])]
     coherent_core = [
-        r for r in rows
+        r
+        for r in rows
         if _family(r["name"]) == "ingrijire_fata"
         and "pentru" in _norm(r["name"])
         and any(b in _norm(r["name"]) for b in skin_benefit)
