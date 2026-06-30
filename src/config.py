@@ -245,6 +245,11 @@ class Settings(BaseSettings):
     scheduler_embed_interval_seconds: int = Field(
         default=3600, validation_alias="SCHEDULER_EMBED_INTERVAL_SECONDS"
     )
+    # Val3 (CONV-COMMERCE): job nocturn de LIFECYCLE — scrie contacts.lifecycle determinist
+    # (new/engaged/customer/repeat/churn_risk) din comenzi + recență. Era nescris → toți „new".
+    lifecycle_job_enabled: bool = Field(default=True, validation_alias="LIFECYCLE_JOB_ENABLED")
+    lifecycle_hour_utc: int = Field(default=2, validation_alias="LIFECYCLE_HOUR_UTC")
+    lifecycle_churn_days: int = Field(default=30, validation_alias="LIFECYCLE_CHURN_DAYS")
 
     # --- Extractor profil + lead_score (NX-88, post-tur stagiul 9) ---
     # Botul „învață" clientul: nano extrage semnale de profil → patch whitelist pe

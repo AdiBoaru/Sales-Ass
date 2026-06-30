@@ -70,6 +70,18 @@ async def embed_products_run() -> None:
         await embed_products.embed_pending(conn, llm)
 
 
+async def lifecycle_run() -> None:
+    """Val3: reclasifică contacts.lifecycle (nocturn, admin). Un singur UPDATE determinist."""
+    from src.db.connection import admin_conn, get_pool
+    from src.jobs import lifecycle
+
+    s = get_settings()
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        n = await lifecycle.run_lifecycle(conn, churn_days=s.lifecycle_churn_days)
+    log.info("lifecycle: %d contacte reclasificate", n)
+
+
 async def proactive_initiators_run() -> None:
     """PL-1: scanează sursele persistente și CREEAZĂ proactive_jobs (coș abandonat + back-in-stock).
     Control-plane (admin) + per-tenant (RLS) sunt în `run_initiators` — aici doar pool + log."""
@@ -136,6 +148,15 @@ def _build_jobs() -> list[Job]:
                 "proactive_initiators",
                 proactive_initiators_run,
                 interval_seconds=s.proactive_initiators_interval_s,
+            )
+        )
+    if s.lifecycle_job_enabled:  # Val3: reclasificare nocturnă a lifecycle
+        jobs.append(
+            Job(
+                "lifecycle",
+                lifecycle_run,
+                interval_seconds=86400,
+                at_hour_utc=s.lifecycle_hour_utc,
             )
         )
     return jobs
