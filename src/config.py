@@ -207,6 +207,16 @@ class Settings(BaseSettings):
     contact_daily_cost_cap_usd: float = Field(
         default=0.0, validation_alias="CONTACT_DAILY_COST_CAP_USD"
     )
+    # Buget de LATENȚĂ/COST PER TUR (CONV-COMMERCE P0): plafonul ZILNIC (cost guard) e separat —
+    # ăsta e OBSERVABILITATE per-tur. Când un tur depășește bugetul (wall-clock end-to-end SAU
+    # cost LLM), runner-ul emite `turn_over_budget` (cu stagiul cel mai lent) → vezi tururile
+    # lente/scumpe ÎNAINTE să se plângă clientul. NU schimbă comportamentul (nu taie turul, P6).
+    # Default 5000ms (doc: pipeline-ul poate face 5-8s, iZi 2-3s) → strânge pragul când optimizezi.
+    turn_budget_alerts_enabled: bool = Field(
+        default=True, validation_alias="TURN_BUDGET_ALERTS_ENABLED"
+    )
+    turn_latency_budget_ms: int = Field(default=5000, validation_alias="TURN_LATENCY_BUDGET_MS")
+    turn_cost_budget_usd: float = Field(default=0.01, validation_alias="TURN_COST_BUDGET_USD")
     # Rate limit per contact: max mesaje într-o fereastră (peste debounce R1).
     rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")
     rate_limit_max: int = Field(default=20, validation_alias="RATE_LIMIT_MAX")
