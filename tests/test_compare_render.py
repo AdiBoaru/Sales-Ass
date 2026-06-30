@@ -204,8 +204,10 @@ def test_choose_render_comparison_web_vs_text():
 
 
 async def test_agent_stage_builds_comparison_not_recommendation(monkeypatch):
-    """Modelul cheamă compare_products (rezolvă „primele două" din displayed) → turul devine o
-    COMPARAȚIE structurată, NU o re-recomandare (bug-ul iZi). reply.comparison setat."""
+    """Calea MODEL-DRIVEN: când mesajul NU declanșează gate-ul determinist de comparație (G2), dar
+    modelul DECIDE să cheme compare_products (rezolvă „astea două" din displayed) → turul devine o
+    COMPARAȚIE structurată, NU o re-recomandare (bug-ul iZi). reply.comparison setat. (Calea
+    deterministă „compară primele două" e acoperită în test_agent.py.)"""
     from src.models import (
         BusinessConfig,
         Contact,
@@ -250,7 +252,8 @@ async def test_agent_stage_builds_comparison_not_recommendation(monkeypatch):
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
         contact=Contact(id="c", business_id="b"),
-        message=InboundMessage(provider_msg_id="m", body="compară primele două"),
+        # frazare care NU declanșează _COMPARE_RE (gate determinist) → exersează calea model-driven.
+        message=InboundMessage(provider_msg_id="m", body="care din astea două mi se potrivește?"),
         conversation_id="conv",
         state=ConversationState(
             displayed_products=[

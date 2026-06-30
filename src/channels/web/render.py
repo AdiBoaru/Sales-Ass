@@ -132,7 +132,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
             for it in reply.rich.items
         ]
         suggestions = [c.label for c in reply.rich.chips]
-        content = ensure_disclaimer(flatten_framing(reply.rich), lang)
+        content = ensure_disclaimer(flatten_framing(reply.rich, lang), lang)
     elif reply.products:
         products = [
             _card(

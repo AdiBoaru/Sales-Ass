@@ -72,6 +72,22 @@ _CHEAPER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat → tabel DETERMINIST (ca
+# cheaper/show_more/link), fără să depindem de modelul care cheamă `compare_products`. RO/EN/HU,
+# agnostic de vertical. ÎNALTĂ PRECIZIE deliberat (gate-ul n-are recurs la model pe fals-pozitiv):
+# DOAR verbul „a compara" + „versus/vs" + verbul HU. `compar[aăie]\w*` prinde compara/compară/
+# comparați/comparație ȘI EN compare/comparison/comparing, dar NU „compartiment" (compar+t). Frazele
+# laxe („ce diferență e între ele") cad pe calea model-driven (modelul cheamă compare_products) — nu
+# le prindem determinist ca să nu confundăm „diferența dintre garanție și retur" cu o comparație.
+_COMPARE_RE = re.compile(
+    r"\bcompar[aăie]\w*"
+    r"|\bversus\b|\bvs\.?\b"
+    r"|\b[öo]sszehasonl\w*|\bhasonl[íi]ts\w*",
+    re.IGNORECASE,
+)
+# „trei/three/3/három" în cerere → comparăm 3; altfel 2 (perechea = cazul dominant „primele două").
+_THREE_RE = re.compile(r"\btrei\b|\bthree\b|\b3\b|\bh[áa]rom\b", re.IGNORECASE)
+
 # Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
 _CHEAPEST_ALREADY: dict[str, str] = {
     "ro": "Momentan asta e cea mai ieftină opțiune pe care o am pentru tine. "
@@ -770,6 +786,30 @@ async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.set_reply(_link_lead(ctx.language, many=True), products=cards, cacheable=False)
 
 
+async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> bool:
+    """Servește o COMPARAȚIE pe produsele DEJA afișate, FĂRĂ bucla LLM (G2, IZI-parity) — ca
+    link/show_more/cheaper. State ține doar ref-uri (P8) → re-fetch detaliile proaspete (preț/
+    rating/avantaje/minusuri/disponibilitate/brand) → tabel structurat DETERMINIST (build_comparison
+    → zero proză LLM în celule). Implicit primele 2 (perechea = cazul dominant „compară primele
+    două"); „trei/3/három" → 3. `get_products_by_ids` păstrează ORDINEA afișată (deixis ordinal
+    corect). <2 valide → False → cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
+    n = 3 if _THREE_RE.search(query) else 2
+    ids = [p.product_id for p in ctx.state.displayed_products][:n]
+    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
+    comparison = compose.build_comparison(products, ctx.language)
+    if comparison is None:
+        return False
+    ctx.retrieval = RetrievalResult(products=products, source="compare_intent")
+    ctx.set_comparison_reply(
+        comparison,
+        text=compose.flatten_comparison(comparison, ctx.language),
+        products=compose.comparison_cards(comparison),
+        chips=_compare_chips(comparison.columns, ctx.language),
+    )
+    ctx.emit("agent_compared", n=len(comparison.columns), deterministic=True)
+    return True
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -807,6 +847,22 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
     if link_intent:
         await _handle_link_intent(ctx, deps)
+        return
+
+    # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe setul deja afișat → tabel structurat
+    # DETERMINIST (ca link/show_more/cheaper), fără să depindem de model să cheme compare_products
+    # (dacă narativiza, dădea proză în loc de tabel — „compară primele două" care doar re-lista). ≥2
+    # produse afișate; FĂRĂ filtre noi (cu filtre = comparație cu o căutare nouă → lasă modelul); NU
+    # pe „mai ieftin" (cheaper_intent). <2 valide la fetch → handler-ul întoarce False → bucla LLM.
+    compare_intent = (
+        not is_order
+        and get_settings().compare_intent_enabled
+        and len(ctx.state.displayed_products) >= 2
+        and not route.filters
+        and _COMPARE_RE.search(query) is not None
+        and _CHEAPER_RE.search(query) is None
+    )
+    if compare_intent and await _handle_compare_intent(ctx, deps, query):
         return
 
     # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (fără bucla LLM, cost $0
@@ -956,7 +1012,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
                 rich.pick = None  # fără „Recomandarea mea" între complementare
                 ctx.set_rich_reply(
-                    rich, text=compose.flatten(rich), products=compose.card_products(rich.items)
+                    rich,
+                    text=compose.flatten(rich, ctx.language),
+                    products=compose.card_products(rich.items),
                 )
                 ctx.emit("cross_sell", added=str(added["id"]), n=len(rich.items))
                 return
@@ -1033,7 +1091,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             if rich is not None and rich.items:
                 ctx.set_rich_reply(
                     rich,
-                    text=compose.flatten(rich),
+                    text=compose.flatten(rich, ctx.language),
                     products=compose.card_products(rich.items),
                 )
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
