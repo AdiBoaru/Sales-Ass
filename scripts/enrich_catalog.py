@@ -1,18 +1,19 @@
 """Îmbogățire catalog cu LLM (mini) — levierul de CALITATE al demo-ului.
 
-Pentru fiecare produs, mini generează din nume+categorie:
+Pentru fiecare produs ACTIV, mini generează din nume+categorie:
   • o DESCRIERE reală, naturală în RO (înlocuiește ai_summary formulaic) — copy de
-    magazin, fără ingrediente/procente inventate;
+    magazin, cu 1-2 INGREDIENTE/componente PLAUZIBILE pentru categorie (acid hialuronic
+    la hidratant etc.), fără procente/preț/brand inventate, fără claim medical;
   • TAG-uri `concerns` dintr-un VOCABULAR CONTROLAT (consistență → filtrare fiabilă
     în search), + un `key_benefit` scurt.
 
-Scrie:
+Scrie (DOAR produse `status='active'` — cele arhivate de fix_catalog_coherence sunt sărite):
   • products.ai_summary  = descrierea
-  • products.attributes  = attributes || {concerns, key_benefit, enrich_v:1}
+  • products.attributes  = attributes || {concerns, key_benefit, enrich_v:2}
     (păstrează cheile existente — EAN etc.)
 
 Self-contained (apel OpenAI direct, ca check_openai.py) — script one-off de date,
-nu cod de runtime. Idempotent: produsele cu attributes.enrich_v='1' sunt sărite
+nu cod de runtime. Idempotent: produsele cu attributes.enrich_v='2' sunt sărite
 (re-rulare gratuită), dacă nu dai --force. Rulează ca ADMIN. Necesită OPENAI_API_KEY.
 
     python scripts/enrich_catalog.py --limit 3     # test pe 3 (verifici calitatea)
@@ -78,11 +79,15 @@ _SYSTEM = (
     "Ești copywriter pentru un magazin de beauty online din România. Primești numele "
     "și categoria unui produs și scrii conținut de magazin CREDIBIL, în limba română.\n"
     "Răspunzi DOAR cu JSON:\n"
-    '{"description": "<2-3 fraze, ton de magazin, natural>", '
+    '{"description": "<2-3 fraze, ton de magazin, natural; include 1-2 INGREDIENTE/componente '
+    "TIPICE categoriei (plauzibile: acid hialuronic/glicerină la hidratant, niacinamidă la ten "
+    "gras, retinol/peptide la anti-aging, filtre UV la SPF, vitamina C la luminozitate) ȘI "
+    'pentru ce tip de ten/uz se potrivește>", '
     '"concerns": ["<2-4 valori DOAR din vocabularul dat>"], '
     '"key_benefit": "<o frază foarte scurtă>"}\n'
-    "Reguli: NU inventa ingrediente specifice, procente, preț sau brand. "
-    "concerns DOAR din vocabular, relevante pentru produs. Fără superlative goale."
+    "Reguli: ingredientele să fie PLAUZIBILE pentru categorie (catalog DEMO), dar NU inventa "
+    "procente, preț sau brand. NU face afirmații MEDICALE (fără «tratează/vindecă», fără «sigur în "
+    "sarcină»). concerns DOAR din vocabular, relevante. Fără superlative goale."
 )
 
 
@@ -127,7 +132,7 @@ async def _enrich_one(client, conn, sem, lock, row, *, verbose=False) -> bool:
             print(f"  ! eșuat {row['name'][:40]}: {type(e).__name__}: {e}")
             return False
 
-        patch = json.dumps({"concerns": concerns, "key_benefit": benefit, "enrich_v": 1})
+        patch = json.dumps({"concerns": concerns, "key_benefit": benefit, "enrich_v": 2})
         async with lock:  # o singură scriere pe conexiune odată (asyncpg nu e concurent-safe)
             await conn.execute(
                 "update products set ai_summary = $2, attributes = attributes || $3::jsonb "
@@ -158,14 +163,14 @@ async def main() -> None:
 
     conn = await _connect()
     try:
-        where = "" if args.force else "and (attributes->>'enrich_v') is distinct from '1'"
+        where = "" if args.force else "and (attributes->>'enrich_v') is distinct from '2'"
         limit = f"limit {args.limit}" if args.limit else ""
         rows = await conn.fetch(
             f"""
             select p.id::text as id, p.name, coalesce(c.name,'') as category
             from products p
             left join categories c on c.id = p.primary_category_id
-            where p.business_id = $1 {where}
+            where p.business_id = $1 and p.status = 'active' {where}
             order by p.name {limit}
             """,
             BIZ,
