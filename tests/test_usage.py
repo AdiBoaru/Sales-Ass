@@ -277,14 +277,17 @@ async def test_runner_sets_ctx_usage_and_by_stage():
     assert ctx.usage.by_stage["llm_stage"]["tokens_in"] == 500
 
 
-async def test_runner_no_llm_usage_when_no_calls():
+async def test_runner_no_llm_event_but_usage_recorded_when_no_calls():
     async def noop_stage(ctx, deps):
         pass
 
     ctx = _ctx()
     await run_pipeline(ctx, PipelineDeps(conn=None), [noop_stage])
+    # fără EVENT llm_usage (zero apeluri LLM → rollup/billing fără zero-rows)
     assert not any(e.type == "llm_usage" for e in ctx.events)
-    assert ctx.usage is None
+    # CONV-COMMERCE: dar ctx.usage E setat (latență reală + cost/tokeni 0) → mesajul salvează timpul
+    assert ctx.usage is not None and ctx.usage.calls == 0
+    assert ctx.usage.latency_ms >= 0 and ctx.usage.cost_usd == 0.0
 
 
 # --- atașarea pe mesaj + props post-tur (processor) --------------------------
@@ -306,9 +309,18 @@ def test_message_usage_kwargs_maps_fields():
     assert kw["cost_usd"] == round(0.000123, 6)
 
 
-def test_message_usage_kwargs_empty_when_no_llm():
+def test_message_usage_kwargs_none_is_empty():
+    # None = niciun tur prin runner (ex. mesaj proactiv direct în outbox) → fără câmpuri.
     assert _message_usage_kwargs(None) == {}
-    assert _message_usage_kwargs(TurnUsage()) == {}  # calls == 0 → mesaj fără cost
+
+
+def test_message_usage_kwargs_records_non_llm_turn():
+    # CONV-COMMERCE: și un tur FĂRĂ LLM (cache/free) salvează timp + tokeni(0) + cost(0).
+    tu = TurnUsage(calls=0, latency_ms=820.4, tokens_in=0, tokens_out=0, cost_usd=0.0)
+    kw = _message_usage_kwargs(tu)
+    assert kw["latency_ms"] == 820  # timpul real, nu NULL
+    assert kw["tokens_in"] == 0 and kw["tokens_out"] == 0 and kw["cost_usd"] == 0.0
+    assert kw["model_route"] is None  # niciun model LLM
 
 
 def test_usage_event_props_post_turn_phase():

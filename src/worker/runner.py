@@ -76,25 +76,29 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     finally:
         usage.pop(token)
         latency_ms = round((perf_counter() - turn_started) * 1000, 1)
+        savings = (
+            sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
+            if acc.calls
+            else 0.0
+        )
+        # CONV-COMMERCE: ORICE tur primește `TurnUsage` (nu doar cele cu LLM) → fiecare mesaj
+        # outbound salvează timp + tokeni + cost în DB (tokeni/cost = 0 când n-a fost apel LLM:
+        # cache/free-layer/welcome). Latența e wall-clock-ul real al turului.
+        ctx.usage = TurnUsage(
+            tokens_in=acc.tokens_in,
+            tokens_out=acc.tokens_out,
+            cached_tokens=acc.cached_tokens,
+            cost_usd=acc.cost_usd,
+            calls=acc.calls,
+            savings_usd=savings,
+            latency_ms=latency_ms,
+            models=sorted(acc.by_model),
+            by_stage=by_stage,
+            by_model=acc.by_model,
+        )
         if acc.calls:
-            savings = sum(
-                savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items()
-            )
-            ctx.usage = TurnUsage(
-                tokens_in=acc.tokens_in,
-                tokens_out=acc.tokens_out,
-                cached_tokens=acc.cached_tokens,
-                cost_usd=acc.cost_usd,
-                calls=acc.calls,
-                savings_usd=savings,
-                latency_ms=latency_ms,
-                models=sorted(acc.by_model),
-                by_stage=by_stage,
-                by_model=acc.by_model,
-            )
-            # tokens_in/out/cost_usd → coloane dedicate (insert_events); cached_tokens/savings/
-            # defalcări → properties jsonb (rollup le citește de acolo). Principiul 10.
-            # phase='turn' (reply) vs 'post_turn' (summarizer/profil, emis de processor).
+            # Event `llm_usage` DOAR la apel LLM real → rollup/billing fără zero-rows. tokens/cost
+            # pe coloane dedicate (insert_events); cached/savings/defalcări în properties (P10).
             ctx.emit("llm_usage", phase="turn", **ctx.usage.as_event_props())
         # P0-budget: alertă per-tur (latență end-to-end SAU cost LLM peste buget) — pt ORICE tur
         # (inclusiv cache/free-layer), nu doar cele cu LLM. Observabilitate, nu schimbă turul (P6).
