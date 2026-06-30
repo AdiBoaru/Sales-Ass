@@ -622,6 +622,26 @@ def _filters_hint(filters: dict[str, Any]) -> str:
     return "Constrângeri detectate (folosește-le în search_products): " + "; ".join(parts) + "\n"
 
 
+def _lead_score_hint(ctx: TurnContext) -> str:
+    """Val3: lead_score (0..100, cross-tur, calculat post-tur NX-88) era câmp MORT — agentul nu-l
+    citea. La scor RIDICAT (≥ prag, semnal de intenție acumulată) injectează un nudge per-tur spre
+    finalizare (bias checkout), fără să forțeze. Hint în USER (nu în prefixul cached). Gated."""
+    s = get_settings()
+    if not s.lead_score_hint_enabled:
+        return ""
+    try:
+        score = float(ctx.contact.lead_score)
+    except (TypeError, ValueError):
+        return ""
+    if score < s.lead_score_high_threshold:
+        return ""
+    return (
+        "Semnal: client cu intenție mare de cumpărare (din interacțiunile anterioare) — fii "
+        "proactiv spre finalizare: când e firesc, oferă linkul de checkout sau adăugarea în coș, "
+        "fără să forțezi.\n"
+    )
+
+
 # NX-122: whitelist de chei per tool pentru `tool_call` în analytics, ALINIATĂ la arg-urile
 # REALE ale tool-urilor (SearchArgs/CartAddArgs/...). NICIUN fallback „pune tot ce e acolo" —
 # tool necunoscut sau cheie ne-listată → omis (P12: analytics nu primește text liber / PII).
@@ -830,8 +850,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         if route.purchase_intent
         else ""
     )
+    lead_hint = _lead_score_hint(ctx)  # Val3: nudge la lead_score ridicat (câmp altfel mort)
     user = (
-        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{purchase_hint}"
+        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{purchase_hint}{lead_hint}"
         f"{context_block}{history_block}Mesaj client: {query}"
     )
 

@@ -260,6 +260,12 @@ class Settings(BaseSettings):
     profile_extraction_enabled: bool = Field(
         default=True, validation_alias="PROFILE_EXTRACTION_ENABLED"
     )
+    # Val3 (CONV-COMMERCE): lead_score (0..100, calculat post-tur) era NEcitit de agent. La scor
+    # RIDICAT (≥ prag) injectăm un hint per-tur spre finalizare (bias checkout). Câmp mort → viu.
+    lead_score_hint_enabled: bool = Field(default=True, validation_alias="LEAD_SCORE_HINT_ENABLED")
+    lead_score_high_threshold: float = Field(
+        default=70.0, validation_alias="LEAD_SCORE_HIGH_THRESHOLD"
+    )
 
     # --- Motor proactiv (NX-70, scheduler separat peste proactive_jobs) ---
     # Producătorul pentru outbox: AWB / back-in-stock / coș abandonat / follow-up.
