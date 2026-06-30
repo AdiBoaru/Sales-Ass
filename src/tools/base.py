@@ -55,7 +55,7 @@ def register(name: str) -> Callable[[ToolFn], ToolFn]:
     return deco
 
 
-# Toolset PER RUTĂ (G7-3): pe SALES oferim catalogul + comerțul; pe ORDER doar status comandă.
+# Toolset PER RUTĂ (G7-3): pe SALES catalogul + comerțul; pe ORDER status comandă + cunoștințe.
 # A nu oferi search pe ORDER (și invers) ține modelul focusat pe sarcina rutei.
 _SALES_TOOLS = (
     "search_products",
@@ -67,7 +67,10 @@ _SALES_TOOLS = (
     "subscribe_back_in_stock",  # NX-80: notificare la restock (WRITE; citit de proactiv NX-70)
     "faq_lookup",
 )
-_ORDER_TOOLS = ("check_order",)
+# `faq_lookup` și pe ORDER: o întrebare de PROCES/POLITICĂ rutată aici (cum comand, ce retur, cât e
+# livrarea) primește un răspuns grounded din baza de cunoștințe — FĂRĂ cont — în loc să cadă în
+# zidul de login. `check_order` rămâne singurul lookup care CHIAR are nevoie de contul clientului.
+_ORDER_TOOLS = ("check_order", "faq_lookup")
 
 
 # Tool-uri OPT-IN per business (NX-82): nu se oferă decât dacă tenantul le activează în

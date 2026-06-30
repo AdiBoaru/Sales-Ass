@@ -397,6 +397,12 @@ class Settings(BaseSettings):
     rich_pick_deterministic_enabled: bool = Field(
         default=True, validation_alias="RICH_PICK_DETERMINISTIC_ENABLED"
     )
+    # IZI-parity (feedback Adi 2026-06-30): pe WEB ascundem „👉 Recomandarea mea" (pick-ul din
+    # framing). Cardurile + `education` SUNT advisory-ul; un pick împins în față e redundant/agresiv
+    # pe widget. Doar pe web — floor-ul WhatsApp (`flatten`) îl păstrează (acolo nu există carduri,
+    # deci „uite ce-ți recomand" chiar ajută). OFF (default) → pick ascuns pe web; ON → comportament
+    # vechi (pick în framing). Reversibil din env, fără cod.
+    rich_pick_web_enabled: bool = Field(default=False, validation_alias="RICH_PICK_WEB_ENABLED")
     # #7b (IZI-parity): după ce clientul adaugă un produs în coș, sugerăm produse COMPLEMENTARE
     # (rutină/accesorii — ca iZi: contur ochi + cremă din aceeași gamă) ca CARDURI. Retrieval
     # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell

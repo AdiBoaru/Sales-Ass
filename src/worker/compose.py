@@ -47,6 +47,13 @@ _DISCLAIMER: dict[str, str] = {
     "hu": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
 }
 
+# IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
+# Constante de PRODUS (decizii de UX, nu ops-tuning) — pick-ul pe web e separat un kill-switch în
+# config (`rich_pick_web_enabled`). `_MAX_RICH_ITEMS` = câte carduri (modelul curează, codul taie la
+# cap); `_MAX_CHIPS` = câte sugestii de follow-up (ca iZi: ~5-6, nu 3).
+_MAX_RICH_ITEMS = 4
+_MAX_CHIPS = 6
+
 # --- scrub proză LLM (validatorul de proză) ----------------------------------
 # NX-117: pattern-urile trăiesc în `text_scrub` (loc canonic partajat cu calea de proză).
 
@@ -170,7 +177,7 @@ def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
             continue
         seen.add(key)
         out.append(Chip(label=label, payload=label))
-        if len(out) >= 4:
+        if len(out) >= _MAX_CHIPS:
             break
     return out
 
@@ -284,7 +291,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             list_price=float(lp) if lp is not None and float(lp) > eff else None,
         )
 
-    items: list[RichItem] = [_build(pid) for pid in ordered_ids[:6]]
+    items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
     pick = _select_pick(j, facts, items, stock_present, deterministic)
 
     return RichReply(
@@ -361,10 +368,14 @@ def flatten(rich: RichReply) -> str:
 def flatten_framing(rich: RichReply) -> str:
     """Aplatizare pentru canalele care randează produsele ca CARDURI (widget web, /web/chat):
     framing conversațional UȘOR și VARIABIL ca structură (#4 — evită tiparul identic la fiecare
-    mesaj): intro + recomandarea („pick") DOAR când sunt ≥2 produse de departajat.
+    mesaj): intro + (opțional) recomandarea („pick") + coaching de final.
 
-    OMITE: enumerarea numerotată (o fac cardurile) și linia „Poți cere și:" (o fac chips-urile). La
-    un SINGUR produs nu mai punem „Recomandarea mea" (cardul ESTE recomandarea → ar dubla).
+    OMITE: enumerarea numerotată (o fac cardurile) și linia „Poți cere și:" (o fac chips-urile).
+
+    IZI-parity (feedback Adi 2026-06-30): pe WEB pick-ul („Recomandarea mea") e ASCUNS by default —
+    cardurile + `education` sunt advisory-ul; un pick împins în față e redundant/agresiv pe widget.
+    Gated de `rich_pick_web_enabled` (OFF). Floor-ul WhatsApp (`flatten`) îl păstrează (acolo nu
+    există carduri). La un SINGUR produs nu se pune oricum (cardul ESTE recomandarea).
 
     IZI-coaching: `education` (paragraful „cum alegi" + cross-sell) revine ca PARAGRAF DE FINAL pe
     widget (gap-ul iZi — botul listează, nu consultă). E scrub-uit (fără cifre/claim-uri), deci
@@ -372,8 +383,9 @@ def flatten_framing(rich: RichReply) -> str:
     blocks: list[str] = []
     if rich.intro:
         blocks.append(rich.intro)
-    # „pick" doar când departajează între ≥2 produse; la unul singur cardul vorbește de la sine.
-    if rich.pick and len(rich.items) > 1:
+    # „pick" doar dacă e PORNIT pe web (default OFF) ȘI departajează ≥2 produse (la unul singur
+    # cardul vorbește de la sine). Pe WhatsApp `flatten` îl pune oricum — vezi docstring.
+    if get_settings().rich_pick_web_enabled and rich.pick and len(rich.items) > 1:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
         head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
         blocks.append(head + rich.pick[1])
