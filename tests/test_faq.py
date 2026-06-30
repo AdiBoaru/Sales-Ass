@@ -219,7 +219,9 @@ def _deps(llm=None):
 
 def test_faq_lookup_in_sales_toolset():
     assert "faq_lookup" in enabled_tools(None, "sales")
-    assert "faq_lookup" not in enabled_tools(None, "order")  # nu pe ORDER
+    # NX-128++ (FAQ-first): `faq_lookup` ȘI pe ORDER — o întrebare de proces/politică rutată acolo
+    # (cum comand, ce retur, cât e livrarea) primește răspuns din baza de cunoștințe, FĂRĂ cont.
+    assert "faq_lookup" in enabled_tools(None, "order")
 
 
 async def test_tool_hit_returns_answer(monkeypatch):
