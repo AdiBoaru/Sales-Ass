@@ -55,9 +55,14 @@ def test_offer_currency_from_settings():
 
 def test_beauty_salon_comparison_facets_parsed():
     pack = load_domain_pack(_biz("beauty_salon"))
+    # ordinea = ordinea de afișare a rândurilor (populate azi: key_benefit + concerns 500/500;
+    # key_ingredients derivat din INCI de scripts/enrich_key_ingredients.py).
+    assert [f.key for f in pack.comparison_facets] == ["key_benefit", "key_ingredients", "concerns"]
+    kb = next(f for f in pack.comparison_facets if f.key == "key_benefit")
+    assert kb.labels["ro"] == "Beneficiu principal"
     concerns = next(f for f in pack.comparison_facets if f.key == "concerns")
     assert concerns.labels["ro"] == "Potrivit pentru" and concerns.labels["en"] == "Suitable for"
-    assert concerns.value_labels["oily"]["ro"] == "ten gras"
+    assert concerns.value_labels == {}  # valori deja RO display-ready → fără traduceri cod→label
 
 
 def test_comparison_facets_override_replaces_and_skips_garbage():

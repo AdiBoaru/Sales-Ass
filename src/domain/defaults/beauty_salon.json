@@ -62,21 +62,10 @@
   },
   "greetings": {},
   "settled_order_statuses": ["delivered", "completed", "closed"],
-  "_comparison_facets_note": "Tier 2 IZI-parity: rânduri de DOMENIU în tabelul de comparație, din products.attributes. `concerns` e populat azi (search filtrează pe el); finish/texture apar AUTOMAT când attributes se îmbogățește (key nou aici + date). Generic — nimic hardcodat în cod.",
+  "_comparison_facets_note": "Tier 2 IZI-parity: rânduri de DOMENIU în tabel, din products.attributes. key_benefit + concerns sunt populate 500/500 (valori RO display-ready → fără value_labels). key_ingredients derivat din INCI de scripts/enrich_key_ingredients.py. Generic — nimic hardcodat în cod; un atribut nou (finish/SPF) apare adăugând o fațetă aici.",
   "comparison_facets": [
-    {
-      "key": "concerns",
-      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" },
-      "value_labels": {
-        "oily": { "ro": "ten gras", "en": "oily skin", "hu": "zsíros bőr" },
-        "dry": { "ro": "ten uscat", "en": "dry skin", "hu": "száraz bőr" },
-        "sensitive": { "ro": "ten sensibil", "en": "sensitive skin", "hu": "érzékeny bőr" },
-        "combination": { "ro": "ten mixt", "en": "combination skin", "hu": "kombinált bőr" },
-        "acne": { "ro": "acnee", "en": "acne-prone", "hu": "aknés bőr" },
-        "anti_aging": { "ro": "anti-îmbătrânire", "en": "anti-aging", "hu": "öregedésgátló" },
-        "hyperpigmentation": { "ro": "pete pigmentare", "en": "hyperpigmentation", "hu": "pigmentfoltok" },
-        "hydration": { "ro": "hidratare", "en": "hydration", "hu": "hidratálás" }
-      }
-    }
+    { "key": "key_benefit", "labels": { "ro": "Beneficiu principal", "en": "Key benefit", "hu": "Fő előny" } },
+    { "key": "key_ingredients", "labels": { "ro": "Ingrediente cheie", "en": "Key ingredients", "hu": "Fő összetevők" } },
+    { "key": "concerns", "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" } }
   ]
 }
