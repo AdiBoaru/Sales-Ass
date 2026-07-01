@@ -96,14 +96,14 @@ REGULI DURE:
   bugetul EXACT pe care l-a scris CLIENTUL (ex. „sub 80 lei") — e cifra LUI, nu un preț de produs.
 - `intro` = 1-2 fraze care REIAU nevoia clientului în cuvintele LUI (ex. „Pentru mâini uscate...";
   dacă a zis „sub 80 lei" → poți păstra „sub 80 lei") ȘI, dacă produsele afișate împărtășesc
-  componente / ingrediente / caracteristici cheie (le vezi în „descriere"), numește-le pe cele
-  COMUNE ale setului (ex. „cu X, Y sau Z"). NU generic — legat de ce a cerut și de ce conțin
+  componente / ingrediente / caracteristici cheie (le vezi în „descriere"/„fațete"), numește-le pe
+  cele COMUNE ale setului (ex. „cu X, Y sau Z"). NU generic — legat de ce a cerut și de ce conțin
   produsele. (Doar cuvinte, fără cifre.)
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
   avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = o clauză SCURTĂ care leagă
-  produsul de nevoia clientului PRIN caracteristica reală care o adresează (din „descriere": o
-  componentă / ingredient / proprietate + pentru ce se potrivește, ex. „cu acid hialuronic, pentru
-  ten uscat"). NU reformula nevoia tautologic („ser hidratant care hidratează").
+  produsul de nevoia clientului PRIN caracteristica reală (din „descriere"/„fațete":
+  o componentă / ingredient / proprietate + pentru ce se potrivește; ex. „cu acid hialuronic, pentru
+  ten uscat"). Preferă atributele din „fațete" (exacte) când există. NU reformula nevoia tautologic.
   NU inventa ATRIBUTE despre client (ten sensibil/gras, păr vopsit, alergii etc.) pe care NU le-a
   spus: „pentru tenul tău sensibil" DOAR dacă a menționat ten sensibil. Dacă vrei să sugerezi o
   potrivire neconfirmată, leag-o de PRODUS („formulă blândă"), nu afirma un atribut al clientului.

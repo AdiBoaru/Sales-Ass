@@ -15,7 +15,12 @@ from src.channels.web.render import render_web, reply_from_outbox
 from src.channels.web.sender import WebSender
 from src.domain.pack import FacetSpec
 from src.models import Reply
-from src.worker.compose import build_comparison, comparison_cards, flatten_comparison
+from src.worker.compose import (
+    build_comparison,
+    comparison_cards,
+    facet_summary,
+    flatten_comparison,
+)
 from src.worker.dispatcher import _requested_render, choose_render
 
 
@@ -143,6 +148,35 @@ def test_build_comparison_facet_all_empty_dropped_partial_dash():
 def test_build_comparison_no_facets_unchanged():
     cmp = build_comparison(_products(), "ro")  # facets implicit () → tabel ca azi
     assert all(r.label not in ("Potrivit pentru", "Finisaj", "SPF") for r in cmp.rows)
+
+
+# --- Tier 2b: facet_summary (fațete în bundle-ul rich = input pentru model) ---------------------
+
+
+def test_facet_summary_compact_grounded_and_localized():
+    facets = [
+        FacetSpec(key="key_ingredients", labels={"ro": "Ingrediente cheie"}),
+        FacetSpec(key="spf", labels={"ro": "SPF"}),  # lipsă pe produs → sărit
+        FacetSpec(
+            key="concerns",
+            labels={"ro": "Potrivit pentru"},
+            value_labels={"oily": {"ro": "ten gras"}},
+        ),
+    ]
+    prod = {
+        "attributes": {"key_ingredients": ["acid hialuronic"], "concerns": ["oily", "ten uscat"]}
+    }
+    # „oily" → value_label „ten gras"; „ten uscat" fără mapare → ca atare; SPF absent → omis
+    assert (
+        facet_summary(prod, facets, "ro")
+        == "Ingrediente cheie: acid hialuronic; Potrivit pentru: ten gras, ten uscat"
+    )
+
+
+def test_facet_summary_empty_on_sparse_data():
+    facets = [FacetSpec(key="key_ingredients", labels={"ro": "Ingrediente cheie"})]
+    assert facet_summary({}, facets, "ro") == ""  # fără attributes
+    assert facet_summary({"attributes": {}}, facets, "ro") == ""  # attributes gol
 
 
 # --- flatten_comparison: floor pt canale fără tabel --------------------------
