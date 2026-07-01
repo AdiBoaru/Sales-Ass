@@ -400,7 +400,9 @@ def flatten(rich: RichReply, language: str | None = None) -> str:
         lines.append(head)
         if it.reason:
             lines.append(f"   {it.reason}")
-    if rich.pick:
+    # Linia „👉 Recomandarea mea" e OFF pe TOATE canalele (preferința fermă a userului) — gate ȘI pe
+    # floor (WhatsApp/Telegram/cache), nu doar pe web (`flatten_framing`). Reactivabil din env.
+    if rich.pick and get_settings().rich_pick_web_enabled:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
         head = f"{_pick_label(language)}{name} — " if name else "👉 "
         lines += ["", head + rich.pick[1]]
