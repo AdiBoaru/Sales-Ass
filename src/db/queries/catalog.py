@@ -128,6 +128,7 @@ _SELECT = f"""
         (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
                                     as list_price,
         p.attributes->'concerns'    as concerns,
+        p.attributes                as attributes,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id

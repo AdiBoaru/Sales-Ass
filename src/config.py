@@ -386,6 +386,11 @@ class Settings(BaseSettings):
     comparison_facets_enabled: bool = Field(
         default=True, validation_alias="COMPARISON_FACETS_ENABLED"
     )
+    # IZI-parity (Tier 2b): fațetele de domeniu (aceleași DomainPack.comparison_facets) intră și în
+    # BUNDLE-ul rich → modelul VEDE ingredientele/beneficiul/potrivirea reale și scrie fit_clause
+    # grounded („cu acid hialuronic, pentru ten uscat"), nu tautologic. Generic pe vertical; date
+    # sărace → segment gol (degradare lină). OFF → bundle ca înainte (doar descriere/ai_summary).
+    rich_facets_enabled: bool = Field(default=True, validation_alias="RICH_FACETS_ENABLED")
     # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") →
     # servită DETERMINIST (Offer open_url + card din product_url proaspăt), nu prin calea rich (care
     # interzice modelului linkurile → bucla de coaching repetat). OFF → cade pe bucla LLM (vechi).

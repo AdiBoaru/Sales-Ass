@@ -603,16 +603,29 @@ def _no_result_msg(is_order: bool) -> str:
     )
 
 
-def _rich_bundle(products: list[dict[str, Any]]) -> str:
+def _rich_facets(ctx: TurnContext) -> tuple:
+    """Tier 2b: fațetele de domeniu (DomainPack.comparison_facets) pentru BUNDLE-ul rich, gated de
+    kill-switch propriu. OFF / fără pack → () → bundle ca înainte (doar descriere)."""
+    if not get_settings().rich_facets_enabled:
+        return ()
+    pack = getattr(ctx.business, "domain_pack", None)
+    return pack.comparison_facets if pack else ()
+
+
+def _rich_bundle(
+    products: list[dict[str, Any]], facets: tuple = (), language: str | None = None
+) -> str:
     """Lista de produse pentru apelul structurat: id + preț + rating + avantaje INDEXATE
-    (pentru `pro_index`) + DESCRIERE (ai_summary). Modelul VEDE prețul (ca să ordoneze/aleagă) dar
-    NU-l emite.
+    (pentru `pro_index`) + DESCRIERE (ai_summary) + FAȚETE (Tier 2b). Modelul VEDE prețul (ca să
+    ordoneze/aleagă) dar NU-l emite.
 
     PR-3 (IZI-parity consultativ): `descriere` aduce caracteristicile REALE ale produsului
     (componente cheie / ingrediente / pentru ce ten/uz, ce conține ai_summary-ul) ca modelul să
     scrie un fit SPECIFIC („cu acid hialuronic, pentru ten uscat"), NU tautologic („hidratant care
-    hidratează"). GENERIC pe vertical: e textul descriptiv al catalogului, oricare ar fi domeniul
-    (ingrediente la beauty, specificații la electronice). Gol (date sărace) → degradare lină."""
+    hidratează"). Tier 2b: `fațete` aduce ACELEAȘI atribute STRUCTURATE ca tabelul de comparație
+    (Ingrediente cheie/Beneficiu/Potrivit pentru din `attributes`) — mai precise decât proza
+    din ai_summary („ingrediente TIPICE precum") → fit grounded pe ce e REAL în formulă. GENERIC pe
+    vertical (config DomainPack). Gol (date sărace / fără fațete) → degradare lină."""
     lines = []
     for p in products:
         raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
@@ -621,9 +634,11 @@ def _rich_bundle(products: list[dict[str, Any]]) -> str:
         rating = f"{float(p['rating']):.1f}★" if p.get("rating") else "-"
         desc = " ".join((p.get("ai_summary") or "").split())[:160]
         desc_str = f" | descriere: {desc}" if desc else ""
+        fac = compose.facet_summary(p, facets, language) if facets else ""
+        fac_str = f" | fațete: {fac}" if fac else ""
         lines.append(
             f"[{p['id']}] {p['name']} | preț {float(p['price']):.2f} lei | "
-            f"rating {rating} | avantaje: {pros_str}{desc_str}"
+            f"rating {rating} | avantaje: {pros_str}{desc_str}{fac_str}"
         )
     return "\n".join(lines)
 
@@ -639,7 +654,7 @@ async def _finalize_rich(
     user = (
         f"Limba clientului: {ctx.language}\n{history_block}"
         f"Nevoia clientului: {query}\n\nProduse disponibile (alege dintre acestea):\n"
-        f"{_rich_bundle(products)}"
+        f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
     try:
         j = await llm.complete_schema(rich_system, user, _RICH_SCHEMA)

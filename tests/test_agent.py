@@ -174,6 +174,51 @@ def test_rich_bundle_omits_empty_description():
     assert "descriere" not in out  # date sărace → fără segment gol
 
 
+def test_rich_bundle_includes_facets():
+    # Tier 2b: fațetele STRUCTURATE (din attributes) ajung în bundle → model scrie fit grounded.
+    from src.domain.pack import FacetSpec
+
+    facets = (
+        FacetSpec(key="key_ingredients", labels={"ro": "Ingrediente cheie"}),
+        FacetSpec(key="concerns", labels={"ro": "Potrivit pentru"}),
+    )
+    out = _rich_bundle(
+        [
+            {
+                "id": "p1",
+                "name": "Ser X",
+                "price": 99.0,
+                "top_pros": ["bun"],
+                "attributes": {
+                    "key_ingredients": ["acid hialuronic", "niacinamidă"],
+                    "concerns": ["ten uscat"],
+                },
+            }
+        ],
+        facets,
+        "ro",
+    )
+    assert "fațete:" in out
+    assert "Ingrediente cheie: acid hialuronic, niacinamidă" in out
+    assert "Potrivit pentru: ten uscat" in out
+
+
+def test_rich_bundle_no_facets_unchanged():
+    # fără facets pasate (default) → segment absent (back-compat cu apelurile vechi).
+    out = _rich_bundle(
+        [
+            {
+                "id": "p1",
+                "name": "Ser X",
+                "price": 99.0,
+                "top_pros": ["bun"],
+                "attributes": {"key_ingredients": ["x"]},
+            }
+        ]
+    )
+    assert "fațete" not in out
+
+
 def test_compare_re_matches_intent_not_face():
     # IZI-parity G2: ÎNALTĂ PRECIZIE — verbul de comparație (RO/EN/HU) + vs/versus; generic.
     assert _COMPARE_RE.search("Compară-mi primele două")

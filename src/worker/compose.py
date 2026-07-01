@@ -552,6 +552,21 @@ def _facet_label(facet: FacetSpec, language: str | None) -> str:
     return facet.labels.get(language or "ro") or facet.labels.get("ro") or facet.key
 
 
+def facet_summary(
+    product: dict[str, Any], facets: Sequence[FacetSpec], language: str | None
+) -> str:
+    """Tier 2b: rezumat compact al fațetelor unui produs pentru BUNDLE-ul rich (input pentru model):
+    „Label: val; Label: val". Fapt din `attributes` (`_facet_cell`) → grounded, nu inventat.
+    Fațetele fără valoare sunt sărite; niciuna → "" (degradare lină pe date sărace)."""
+    attrs = product.get("attributes")
+    parts = [
+        f"{_facet_label(f, language)}: {cell}"
+        for f in facets
+        if (cell := _facet_cell(f, attrs, language))
+    ]
+    return "; ".join(parts)
+
+
 def build_comparison(
     products: list[dict[str, Any]],
     language: str | None,
