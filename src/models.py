@@ -275,6 +275,12 @@ class RichItem:
     # IZI-anchor: prețul ORIGINAL (de listă), randat tăiat pe card DOAR la reducere reală (on_sale).
     # `price` rămâne CURENTUL; `list_price > price` ⇒ reducere. Din date (compose), nu LLM.
     list_price: float | None = None
+    # Full-eMAG (contract FE extins): tonul semantic al badge-ului (info/danger/...) pentru
+    # `badges:[{label,tone}]`; moneda (DomainPack); `details` = descriere extinsă („Spune-mi mai
+    # multe"), din ai_summary (catalog, medical-guarded). Toate din DATE, nu LLM per-tur.
+    badge_tone: str | None = None
+    currency: str | None = None
+    details: str | None = None
 
 
 @dataclass
