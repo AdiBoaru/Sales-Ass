@@ -7,7 +7,7 @@ avantaj REAL (top_pro). Pur, fără I/O — zero DB/LLM.
 
 from types import SimpleNamespace
 
-from src.models import Direction, RichItem, RichReply
+from src.models import Direction, Relevance, RichItem, RichReply
 from src.worker import compose
 
 
@@ -532,3 +532,123 @@ def test_card_products_has_signature_keys() -> None:
     }
     cards = compose.card_products(compose.assemble(_ctx(), j, retrieved).items)
     assert cards[0]["product_id"] == "A" and cards[0]["price"] == 10.0
+
+
+# --- izi-parity hardening: gate OFF-CATEGORY (suprimă pick + redirect onest) --
+
+
+def _settings(**over):
+    """Settings hermetic pentru gate-ul de relevanță (toate câmpurile citite de assemble)."""
+    base = dict(
+        validator_stock_claims_enabled=False,
+        ai_disclaimer_enabled=False,
+        card_badges_enabled=False,
+        rich_pick_deterministic_enabled=True,
+        safety_medical_guardrail_enabled=True,
+        rich_pick_relevance_gate_enabled=True,
+        rich_pick_relevance_cosine_max=0.6,
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def _ctx_rel(relevance, language: str = "ro", body: str = "caut fond de ten") -> SimpleNamespace:
+    """ctx cu retrieval.relevance + emit (capturat) pentru testele de gate off-category."""
+    events: list = []
+    ctx = _ctx(language=language, body=body)
+    ctx.retrieval = SimpleNamespace(relevance=relevance)
+    ctx.emit = lambda type_, **props: events.append((type_, props))
+    ctx.events = events
+    return ctx
+
+
+def _reco_j():
+    return {
+        "intro": "Am ales pentru tine:",
+        "items": [
+            {"product_id": "A", "pro_index": 0, "fit_clause": "pentru calmare"},
+            {"product_id": "B", "pro_index": 0, "fit_clause": "pentru hidratare"},
+        ],
+        "pick": {"product_id": "A", "justification": "se potrivește"},
+        "education": "Contează nevoia ta.",
+        "suggestions": ["Ceva mai ieftin"],
+    }
+
+
+_RECO_RETRIEVED = [
+    {
+        "id": "A",
+        "name": "Ser A",
+        "price": 24.99,
+        "rating": 4.6,
+        "top_pros": ["calmează"],
+        "availability": "in_stock",
+    },
+    {
+        "id": "B",
+        "name": "Toner B",
+        "price": 39.99,
+        "rating": 4.4,
+        "top_pros": ["hidratează"],
+        "availability": "in_stock",
+    },
+]
+
+
+def test_off_category_suppresses_pick_and_redirects(monkeypatch) -> None:
+    """category_dropped → pick suprimat + intro = redirect onest; cardurile RĂMÂN (alternative)."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(Relevance(relaxed=True, category_dropped=True, top_cosine=0.3))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is None  # NU mai recomandăm ferm un produs din categoria greșită
+    assert rich.intro == compose._off_category_intro("ro")  # mesaj onest determinist
+    assert [it.product_id for it in rich.items] == ["A", "B"]  # alternativele rămân
+    assert (
+        "pick_suppressed",
+        {"reason": "off_category", "category_dropped": True, "top_cosine": 0.3},
+    ) in ctx.events
+
+
+def test_off_category_via_cosine_floor(monkeypatch) -> None:
+    """Free-text fără categorie (category_dropped=False) dar vector departe (> prag) → suprimat."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(Relevance(relaxed=False, category_dropped=False, top_cosine=0.72))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is None
+    assert rich.intro == compose._off_category_intro("ro")
+
+
+def test_relevance_below_floor_keeps_pick(monkeypatch) -> None:
+    """Potrivire bună (cosine mic, fără category_dropped) → pick + intro normale."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(Relevance(relaxed=False, category_dropped=False, top_cosine=0.3))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is not None and rich.pick[0] == "A"
+    assert rich.intro == "Am ales pentru tine:"
+    assert ctx.events == []  # gate nu s-a declanșat → fără eveniment
+
+
+def test_relevance_none_is_fail_open(monkeypatch) -> None:
+    """Fără semnal de relevanță (paginare/mai-ieftin/re-hidratare) → pick păstrat."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(None)
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is not None and rich.pick[0] == "A"
+
+
+def test_off_category_gate_kill_switch_off(monkeypatch) -> None:
+    """Kill-switch OFF → pick păstrat chiar și pe category_dropped (byte-identic cu vechiul)."""
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: _settings(rich_pick_relevance_gate_enabled=False)
+    )
+    ctx = _ctx_rel(Relevance(relaxed=True, category_dropped=True, top_cosine=0.9))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is not None and rich.pick[0] == "A"
+    assert rich.intro == "Am ales pentru tine:"
+
+
+def test_off_category_intro_localized() -> None:
+    assert compose._off_category_intro("en").startswith("To be honest")
+    assert compose._off_category_intro("hu").startswith("Őszintén")
+    assert compose._off_category_intro("ro").startswith("Ca să fiu sincer")
+    assert compose._off_category_intro(None) == compose._off_category_intro("ro")

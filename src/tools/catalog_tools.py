@@ -25,7 +25,7 @@ from src.db.queries.catalog import (
 )
 from src.db.queries.fusion import fuse_candidates
 from src.domain.normalize import normalize
-from src.models import MAX_SEARCH_POOL
+from src.models import MAX_SEARCH_POOL, Relevance
 from src.tools.base import ToolResult, register
 from src.tools.taxonomy import map_concerns
 
@@ -376,6 +376,7 @@ async def search_products_tool(
     ranked_final: list[dict[str, Any]] = []  # ordinea fuzionată+re-rankată la treapta care a produs
     vector_final: list[dict[str, Any]] = []
     relaxed = False
+    winning_step: dict[str, Any] | None = None  # treapta din ladder care a produs rezultate
     had_any_match = False  # vreun retriever a întors ceva (semnal brand-not-found)
     relax_depth = 0  # treapta de relaxare la care s-a oprit (0 = filtre stricte)
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
@@ -426,6 +427,7 @@ async def search_products_tool(
             ranked_final = ranked
             vector_final = vector
             relaxed = i > 0
+            winning_step = f
             break
 
     # Pool-ul sesiunii = ordinea fuzionată COMPLETĂ (top MAX_SEARCH_POOL), NU dedup-uită: dacă l-am
@@ -514,7 +516,15 @@ async def search_products_tool(
     view = _brief(products)
     if notes:
         view = "\n".join(notes) + "\n" + view
-    return ToolResult(ok=True, products=products, llm_view=view)
+    # izi-parity hardening: semnal de RELEVANȚĂ pentru compose (suprimă „Recomandarea mea"
+    # off-category). `category_dropped` = filtrul de categorie cerut a fost renunțat ca să iasă ceva
+    # (categorie inexistentă). `top_cosine` = cât de departe e cel mai apropiat vector (prinde
+    # free-text fără categorie). Determinist, fără LLM. Fail-open la consumator (None ⇒ exact).
+    category_dropped = bool(a.category) and (
+        winning_step is not None and winning_step.get("category") is None
+    )
+    relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
+    return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 
 
 @register("get_product_details")
