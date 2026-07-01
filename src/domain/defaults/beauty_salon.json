@@ -66,7 +66,20 @@
   "comparison_facets": [
     { "key": "key_benefit", "labels": { "ro": "Beneficiu principal", "en": "Key benefit", "hu": "Fő előny" } },
     { "key": "key_ingredients", "labels": { "ro": "Ingrediente cheie", "en": "Key ingredients", "hu": "Fő összetevők" } },
-    { "key": "concerns", "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" } }
+    {
+      "key": "concerns",
+      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" },
+      "value_labels": {
+        "oily": { "ro": "ten gras", "en": "oily skin", "hu": "zsíros bőr" },
+        "dry": { "ro": "ten uscat", "en": "dry skin", "hu": "száraz bőr" },
+        "sensitive": { "ro": "ten sensibil", "en": "sensitive skin", "hu": "érzékeny bőr" },
+        "combination": { "ro": "ten mixt", "en": "combination skin", "hu": "kombinált bőr" },
+        "acne": { "ro": "acnee", "en": "acne-prone", "hu": "aknés bőr" },
+        "anti_aging": { "ro": "anti-îmbătrânire", "en": "anti-aging", "hu": "öregedésgátló" },
+        "hyperpigmentation": { "ro": "pete pigmentare", "en": "hyperpigmentation", "hu": "pigmentfoltok" },
+        "hydration": { "ro": "hidratare", "en": "hydration", "hu": "hidratálás" }
+      }
+    }
   ],
   "_searchable_facets_note": "Tier 2b p2: atribute pe care search-ul le filtreaza la cerere (ex. ceva cu niacinamida). key_ingredients e derivat din INCI de enrich_key_ingredients.py; match normalizat.",
   "searchable_facets": ["key_ingredients"]
