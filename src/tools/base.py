@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.models import TurnContext
+    from src.models import Relevance, TurnContext
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
@@ -38,6 +38,10 @@ class ToolResult:
     # Mutație de state cerută de tool (NX-79, ex. cart_add → {"cart": [...]}). Stagiul Agent
     # o acumulează în `ctx.state_patch`; processor-ul o persistă. Tool-urile NU scriu ctx direct.
     state_patch: dict[str, Any] = field(default_factory=dict)
+    # izi-parity hardening: semnal de RELEVANȚĂ al retrievalului (search_products atașează
+    # relaxed/category_dropped/top_cosine). Agentul îl propagă pe `ctx.retrieval.relevance` →
+    # compose suprimă „Recomandarea mea" pe rezultate off-category. None ⇒ potrivire exactă.
+    relevance: Relevance | None = None
 
 
 ToolFn = Callable[["TurnContext", "PipelineDeps", dict[str, Any]], Awaitable[ToolResult]]

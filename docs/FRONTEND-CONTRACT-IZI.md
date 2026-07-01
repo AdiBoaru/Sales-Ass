@@ -27,6 +27,13 @@ Pe SSE evenimentul are în plus `"id"` și `"type": "rich"`; restul cheilor sunt
 **Regulă generală:** cheile opționale **lipsesc** când nu există date (NU vin ca `null`). Frontendul
 trebuie să citească defensiv (`card.badge && ...`), nu să presupună prezența lor.
 
+> **Off-category (redirect onest) — fără câmp nou:** când retrievalul e o potrivire din categoria
+> GREȘITĂ (ex. clientul cere „fond de ten" pe un catalog fără fonduri), backendul NU mai emite
+> „👉 Recomandarea mea"; `content` devine un mesaj onest de redirect („nu am exact ce cauți, dar
+> astea sunt cele mai apropiate…"), iar `products[]` rămân prezente ca **alternative apropiate**,
+> nu ca match exact. Contract identic (doar text de `content`) — FE nu are nimic de schimbat; e util
+> de știut că uneori cardurile sunt „cele mai apropiate", nu „exact ce ai cerut".
+
 ### Input — login passthrough (NX-129)
 
 Pe lângă `token`/`visitor_id`/`sig`, requesturile (`/web/bootstrap`, `/web/messages`, `/web/chat`)
