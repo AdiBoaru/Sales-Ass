@@ -88,6 +88,19 @@ _COMPARE_RE = re.compile(
 # „trei/three/3/három" în cerere → comparăm 3; altfel 2 (perechea = cazul dominant „primele două").
 _THREE_RE = re.compile(r"\btrei\b|\bthree\b|\b3\b|\bh[áa]rom\b", re.IGNORECASE)
 
+# MOD SUPERLATIV (IZI): întrebare despre setul AFIȘAT de tip „care dintre ele e cea mai X". ÎNALTĂ
+# precizie (ca _COMPARE_RE): „care" + „cea/cel/cele mai" în aceeași frază, SAU „care dintre ele/
+# acestea", SAU „cea mai <atribut> dintre ele". Prinde „care e cea mai ușoară/ieftină" (superlativ
+# pe setul afișat), NU o căutare nouă („arată-mi ceva mai ieftin" = cheaper). RO/EN/HU.
+_ATTR_QUERY_RE = re.compile(
+    r"\bcare\b[^?]{0,40}\b(cea|cel|cele|cei)\s+mai\b"
+    r"|\bcare\s+dintre\s+(ele|acestea|astea|aceste)\b"
+    r"|\b(cea|cel|cele|cei)\s+mai\s+\w+\s+dintre\s+(ele|acestea|astea)\b"
+    r"|\bwhich\s+of\s+(these|them)\b|\bwhich\b[^?]{0,40}\b(most|best|cheapest|lightest)\b"
+    r"|\bmelyik\b[^?]{0,40}\bleg\w+",
+    re.IGNORECASE,
+)
+
 # Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
 _CHEAPEST_ALREADY: dict[str, str] = {
     "ro": "Momentan asta e cea mai ieftină opțiune pe care o am pentru tine. "
@@ -631,6 +644,12 @@ def _rich_bundle(
         raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
         pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()][:3]
         pros_str = "; ".join(f"{i}) {pr}" for i, pr in enumerate(pros)) or "(fără avantaje listate)"
+        # DETALII (IZI): minusurile reale → modelul poate scrie un AVERTISMENT onest grounded
+        # («de luat în calcul») în deep-dive-ul de produs. Prezent mai ales pe get_product_details
+        # (get_products_by_ids întoarce top_cons); pe listă (search) e des absent → fără linie.
+        raw_cons = p.get("top_cons") or []
+        cons = [s.strip() for s in raw_cons if isinstance(s, str) and s.strip()][:2]
+        cons_str = f" | de_luat_in_calcul: {'; '.join(cons)}" if cons else ""
         rating = f"{float(p['rating']):.1f}★" if p.get("rating") else "-"
         desc = " ".join((p.get("ai_summary") or "").split())[:160]
         desc_str = f" | descriere: {desc}" if desc else ""
@@ -638,7 +657,7 @@ def _rich_bundle(
         fac_str = f" | fațete: {fac}" if fac else ""
         lines.append(
             f"[{p['id']}] {p['name']} | preț {float(p['price']):.2f} lei | "
-            f"rating {rating} | avantaje: {pros_str}{desc_str}{fac_str}"
+            f"rating {rating} | avantaje: {pros_str}{cons_str}{desc_str}{fac_str}"
         )
     return "\n".join(lines)
 
@@ -1048,14 +1067,34 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # niciun complement / rich eșuat → cade în fluxul normal (confirmarea de coș a agentului)
 
     products = _dedupe(retrieved)
+    # MOD SUPERLATIV (IZI): întrebare „care dintre ele e cea mai X" pe setul AFIȘAT → re-hidratează
+    # ÎNTREGUL set afișat (nu o căutare nouă, nu 1 produs) ca modelul să RĂSPUNDĂ la superlativ
+    # peste toate candidatele reale (fațete/descriere în bundle). Precede cheaper: „care dintre
+    # ACESTEA e cea mai ieftină" = min-ul setului afișat, NU „ceva mai ieftin" (căutare nouă).
+    # ≥2 afișate, fără filtre noi (cu filtre = căutare/rafinare → bucla LLM). Kill-switch propriu.
+    attr_query = (
+        not is_order
+        and get_settings().attr_query_enabled
+        and len(ctx.state.displayed_products) >= 2
+        and not route.filters
+        and _ATTR_QUERY_RE.search(query) is not None
+    )
+    if attr_query:
+        ids = [p.product_id for p in ctx.state.displayed_products]
+        hydrated = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+        if hydrated:
+            products = _dedupe(hydrated)
+        ctx.emit("attr_query", n=len(products))
     # P1 (ARCH-product-retrieval): follow-up „mai ieftin" pe un set deja afișat → re-căutare
     # DETERMINISTĂ a produselor strict mai ieftine decât cel mai ieftin afișat, în aceeași categorie
     # (search_cheaper_than) — NU re-rank pe setul afișat (bug-ul „cea mai ieftină 80.99 când există
     # 18.99"). Arată DOAR ce e mai ieftin (1 dacă e 1, zero padding); nimic mai ieftin → mesaj
     # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
+    # NU pe attr_query („care dintre acestea e cea mai ieftină" = superlativ pe set, nu căutare).
     cheaper_intent = (
         not is_order
         and not show_more  # „mai arată-mi" deja paginat determinist mai sus
+        and not attr_query
         and get_settings().cheaper_intent_enabled
         and bool(ctx.state.displayed_products)
         and _CHEAPER_RE.search(query) is not None

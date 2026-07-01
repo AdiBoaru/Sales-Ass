@@ -89,6 +89,24 @@ def test_assemble_intro_keeps_budget_from_client_message() -> None:
     assert rich.intro == "Pentru ten gras sub 80 lei, am ales:"
 
 
+def test_join_reason_dedupes_quasi_duplicate() -> None:
+    # bug live: clauza modelului ≈ avantajul real → nu „X — X", doar clauza
+    assert (
+        compose._join_reason(
+            "lasă pielea mai confortabilă și calmă, pentru pregătirea pielii",
+            "lasă pielea mai confortabilă și calmă",
+        )
+        == "lasă pielea mai confortabilă și calmă, pentru pregătirea pielii"
+    )
+    # distincte → se lipesc normal (comportament păstrat)
+    assert (
+        compose._join_reason("pentru hidratare zilnică", "hidratează intens")
+        == "pentru hidratare zilnică — hidratează intens"
+    )
+    assert compose._join_reason("doar fit", None) == "doar fit"
+    assert compose._join_reason(None, "doar anchor") == "doar anchor"
+
+
 def test_safe_badge_drops_discount_keeps_curation() -> None:
     assert compose._safe_badge("-50%") is None
     assert compose._safe_badge("Reducere") is None

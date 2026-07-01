@@ -379,6 +379,11 @@ class Settings(BaseSettings):
     # OFF → cade
     # pe bucla LLM (modelul decide dacă compară).
     compare_intent_enabled: bool = Field(default=True, validation_alias="COMPARE_INTENT_ENABLED")
+    # IZI-parity: întrebare de tip SUPERLATIV pe setul AFIȘAT („care dintre ele e cea mai
+    # ușoară/ieftină/hidratantă") → re-hidratează ÎNTREGUL set afișat și lasă modelul să RĂSPUNDĂ
+    # la superlativ peste toate candidatele (nu o căutare nouă, nu 1 produs). Precede cheaper.
+    # OFF → cade pe R3 (re-hidratare doar când modelul n-a retrievat) / bucla LLM.
+    attr_query_enabled: bool = Field(default=True, validation_alias="ATTR_QUERY_ENABLED")
     # IZI-parity (Tier 2): rânduri de FAȚETĂ de domeniu în tabelul de comparație (finish/acoperire/
     # potrivit-pentru/..., din products.attributes), config din DomainPack.comparison_facets.
     # Generic pe vertical; rândul TOT-gol e sărit (date sărace → tabel ca azi). OFF → doar rândurile

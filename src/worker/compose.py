@@ -150,8 +150,15 @@ def _pros(p: dict[str, Any]) -> list[str]:
 
 
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:
-    """Motivul cardului = clauza de potrivire (LLM, scrubuită) — avantaj real (dată)."""
+    """Motivul cardului = clauza de potrivire (LLM, scrubuită) — avantaj real (dată). Dedup:
+    dacă clauza modelului și avantajul real sunt cvasi-identice (unul îl conține pe altul, după
+    lower+collapse), NU le lipi „X — X" (bug live: „…confortabilă și calmă — …confortabilă și
+    calmă") — păstrează clauza modelului (mai contextuală)."""
     if fit and anchor:
+        nf = " ".join(fit.lower().split())
+        na = " ".join(anchor.lower().split())
+        if na in nf or nf in na:  # cvasi-duplicat → o singură dată
+            return fit
         return f"{fit} — {anchor}"
     return fit or anchor
 
