@@ -523,9 +523,7 @@ async def search_products_tool(
     category_dropped = bool(a.category) and (
         winning_step is not None and winning_step.get("category") is None
     )
-    relevance = Relevance(
-        relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine
-    )
+    relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
     return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 
 

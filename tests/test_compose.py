@@ -558,10 +558,22 @@ def _reco_j():
 
 
 _RECO_RETRIEVED = [
-    {"id": "A", "name": "Ser A", "price": 24.99, "rating": 4.6, "top_pros": ["calmează"],
-     "availability": "in_stock"},
-    {"id": "B", "name": "Toner B", "price": 39.99, "rating": 4.4, "top_pros": ["hidratează"],
-     "availability": "in_stock"},
+    {
+        "id": "A",
+        "name": "Ser A",
+        "price": 24.99,
+        "rating": 4.6,
+        "top_pros": ["calmează"],
+        "availability": "in_stock",
+    },
+    {
+        "id": "B",
+        "name": "Toner B",
+        "price": 39.99,
+        "rating": 4.4,
+        "top_pros": ["hidratează"],
+        "availability": "in_stock",
+    },
 ]
 
 
@@ -573,8 +585,10 @@ def test_off_category_suppresses_pick_and_redirects(monkeypatch) -> None:
     assert rich.pick is None  # NU mai recomandăm ferm un produs din categoria greșită
     assert rich.intro == compose._off_category_intro("ro")  # mesaj onest determinist
     assert [it.product_id for it in rich.items] == ["A", "B"]  # alternativele rămân
-    assert ("pick_suppressed", {"reason": "off_category", "category_dropped": True,
-                                 "top_cosine": 0.3}) in ctx.events
+    assert (
+        "pick_suppressed",
+        {"reason": "off_category", "category_dropped": True, "top_cosine": 0.3},
+    ) in ctx.events
 
 
 def test_off_category_via_cosine_floor(monkeypatch) -> None:

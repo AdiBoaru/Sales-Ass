@@ -107,11 +107,7 @@ def _off_category(relevance: Relevance | None) -> bool:
     if relevance.category_dropped:
         return True
     floor = s.rich_pick_relevance_cosine_max
-    return (
-        floor is not None
-        and relevance.top_cosine is not None
-        and relevance.top_cosine > floor
-    )
+    return floor is not None and relevance.top_cosine is not None and relevance.top_cosine > floor
 
 
 # IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
