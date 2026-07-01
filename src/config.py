@@ -422,13 +422,12 @@ class Settings(BaseSettings):
     rich_pick_deterministic_enabled: bool = Field(
         default=True, validation_alias="RICH_PICK_DETERMINISTIC_ENABLED"
     )
-    # IZI-parity (Tier 1, G1): pe WEB ARĂTĂM „👉 Recomandarea mea" (pick-ul angajat din framing), ca
-    # iZi care se angajează la o recomandare clară („ți-aș recomanda în primul rând X"). Pick-ul e
-    # DETERMINIST (cel mai bine clasat afișat) + justificare ancorată pe un avantaj real → nu e
-    # „împins agresiv", e advisory-ul consultativ care lipsea (răspunsul părea mai subțire ca iZi).
-    # Floor-ul WhatsApp (`flatten`) îl păstra oricum. ON (default) → pick vizibil pe web; OFF →
-    # pick ascuns (varianta din feedback-ul 2026-06-30). Reversibil din env, fără cod.
-    rich_pick_web_enabled: bool = Field(default=True, validation_alias="RICH_PICK_WEB_ENABLED")
+    # Linia „👉 Recomandarea mea" (pick angajat din framing). PREFERINȚA FERMĂ A CLIENTULUI (Adi,
+    # repetat): NU o vrea în NICIUN mesaj — o simțea „aruncată" / redundantă cu cardurile. Default
+    # OFF pe TOATE canalele (gate în `flatten_framing` web ȘI `flatten` floor WhatsApp/Telegram).
+    # (Fusese pornit temporar pt „iZi-parity Tier 1 G1"; cererea userului îl anulează.) Reactivare
+    # DOAR explicit din env `RICH_PICK_WEB_ENABLED=true` (reversibil) — nu-l re-porni default.
+    rich_pick_web_enabled: bool = Field(default=False, validation_alias="RICH_PICK_WEB_ENABLED")
     # #7b (IZI-parity): după ce clientul adaugă un produs în coș, sugerăm produse COMPLEMENTARE
     # (rutină/accesorii — ca iZi: contur ochi + cremă din aceeași gamă) ca CARDURI. Retrieval
     # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell
