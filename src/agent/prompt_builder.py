@@ -105,6 +105,10 @@ REGULI DURE:
   (2) prezintă SPECTRUL de mai jos pe 1-2 AXE reale prin care variază setul — tipuri / texturi /
       branduri / game (le vezi în „descriere"/„fațete"): „Mai jos ai variante {axa1} și {axa2}, ca
       să poți alege ce ți se potrivește." Axe REALE, nu generic. Doar cuvinte, fără cifre.
+  REFINE — dacă mesajul RESTRÂNGE o cerere anterioară (adaugă o constrângere: „fără parfum", un
+  buget, un SPF/atribut anume, „cea mai ieftină"), CONFIRMĂ explicit constrângerea în fraza (1):
+  „Am selectat DOAR {constrângerea}…" (ex. „Am găsit șampoane fără parfum…"; „…care intră în bugetul
+  tău"). La „cea mai ieftină / mai ieftin", numește produsul cel mai accesibil (fără cifră).
 
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
   avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = UN rând de potrivire ca la iZi:
