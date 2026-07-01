@@ -29,7 +29,7 @@ from src.models import (
     RichItem,
     RichReply,
 )
-from src.worker.badges import derive_badge
+from src.worker.badges import BADGE_TONE, badge_label, derive_badge_kind
 from src.worker.text_scrub import (
     has_marketing_claim,
     has_medical_claim,
@@ -283,6 +283,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     badges_on = get_settings().card_badges_enabled
     pack = getattr(ctx.business, "domain_pack", None)
     badge_rules = pack.badge_rules if pack else None
+    currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
     # Modelul NAREAZĂ per-produs (fit_clause/pro_index), keyed pe product_id; CODUL decide ORDINEA.
     # Membership (P1): id care nu e în retrieval → ignorat tăcut. Dedupe pe prima apariție.
     llm_items: dict[str, dict[str, Any]] = {}
@@ -314,6 +315,11 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         rc = p.get("review_count")
         eff = float(p["price"])
         lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
+        # Full-eMAG: badge cu TON semantic (deal→danger, top→info) + `details` extins din ai_summary
+        # (catalog, medical-guarded, cap 400). `seeded` (badge pre-curat) n-are kind → fără ton.
+        seeded = _safe_badge(p.get("badge"))
+        kind = derive_badge_kind(p, badge_rules) if (badges_on and not seeded) else None
+        ai = " ".join((p.get("ai_summary") or "").split())[:400]
         return RichItem(
             product_id=pid,
             name=p["name"],
@@ -325,9 +331,11 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             image=p.get("image"),
             rating=float(p["rating"]) if p.get("rating") is not None else None,
             review_count=int(rc) if rc else None,
-            badge=_safe_badge(p.get("badge"))
-            or (derive_badge(p, ctx.language, badge_rules) if badges_on else None),
+            badge=seeded or badge_label(kind, ctx.language),
+            badge_tone=BADGE_TONE.get(kind) if kind else None,
             list_price=float(lp) if lp is not None and float(lp) > eff else None,
+            currency=currency,
+            details=ai if (ai and not _unsafe_medical(ai)) else None,
         )
 
     items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
