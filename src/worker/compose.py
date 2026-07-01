@@ -26,6 +26,7 @@ from src.models import (
     ComparisonColumn,
     ComparisonRow,
     Direction,
+    Relevance,
     RichItem,
     RichReply,
 )
@@ -62,6 +63,55 @@ _PICK_LABEL: dict[str, str] = {
 
 def _pick_label(language: str | None) -> str:
     return _PICK_LABEL.get(language or "ro") or _PICK_LABEL["ro"]
+
+
+# izi-parity hardening — mesajul ONEST de redirect când retrievalul e OFF-CATEGORY (categoria
+# greșită): întâi „nu am exact ce cauți", apoi „dar astea sunt cele mai apropiate + spune-mi".
+# Determinist (proprietar UNIC al onestității → nu se contrazice cu proza modelului), per-locale.
+# Cardurile rămân (alternative); pick-ul e suprimat (nu recomandăm ferm un produs din altă gamă).
+_OFF_CATEGORY_INTRO: dict[str, str] = {
+    "ro": (
+        "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele "
+        "mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în "
+        "direcția bună sau caut cu totul altceva."
+    ),
+    "en": (
+        "To be honest, I don't have exactly what you're looking for in the current range. Still, "
+        "here are the closest options I could find — they might suit you. Tell me if any of these "
+        "is heading in the right direction, or I'll look for something else entirely."
+    ),
+    "hu": (
+        "Őszintén szólva, pontosan azt, amit keresel, most nincs a kínálatban. De összeszedtem a "
+        "legközelebbi lehetőségeket — lehet, hogy megfelelnek. Mondd meg, ha valamelyik jó irányba "
+        "mutat, vagy keresek valami egészen mást."
+    ),
+}
+
+
+def _off_category_intro(language: str | None) -> str:
+    return _OFF_CATEGORY_INTRO.get(language or "ro") or _OFF_CATEGORY_INTRO["ro"]
+
+
+def _off_category(relevance: Relevance | None) -> bool:
+    """izi-parity hardening: rezultatul e OFF-CATEGORY (categoria greșită)? True ⇒ `assemble`
+    suprimă „👉 Recomandarea mea" + pune mesajul onest de redirect. Două semnale independente:
+    `category_dropped` (filtrul de categorie cerut a fost renunțat — categorie inexistentă) SAU
+    `top_cosine` peste prag (cel mai apropiat vector e semantic departe — prinde free-text fără
+    filtru de categorie). Gated de kill-switch; `None`/OFF ⇒ False (fail-open). Jumătatea cosine
+    e dezactivată dacă pragul e None sau distanța lipsește (calea lexical-only)."""
+    if relevance is None:  # verificat ÎNAINTE de get_settings (fail-open fără a atinge configul)
+        return False
+    s = get_settings()
+    if not s.rich_pick_relevance_gate_enabled:
+        return False
+    if relevance.category_dropped:
+        return True
+    floor = s.rich_pick_relevance_cosine_max
+    return (
+        floor is not None
+        and relevance.top_cosine is not None
+        and relevance.top_cosine > floor
+    )
 
 
 # IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
@@ -339,12 +389,31 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         )
 
     items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
-    pick = _select_pick(j, facts, items, stock_present, deterministic)
+
+    # izi-parity hardening: retrieval OFF-CATEGORY (produse din categoria greșită — ex. „fond de
+    # ten" pe catalog skincare) → NU pretinde o recomandare. Suprimă pick-ul ȘI înlocuiește intro-ul
+    # cu mesajul ONEST de redirect (un SINGUR proprietar al onestității → dispare contradicția
+    # „nu am fond de ten" din proza modelului vs „👉 Recomandarea mea: <alt produs>" din cod).
+    # Cardurile rămân ca ALTERNATIVE apropiate. Fail-open: fără semnal / gate OFF ⇒ vechi.
+    retrieval = getattr(ctx, "retrieval", None)
+    relevance = getattr(retrieval, "relevance", None) if retrieval is not None else None
+    if _off_category(relevance):
+        ctx.emit(
+            "pick_suppressed",
+            reason="off_category",
+            category_dropped=bool(relevance and relevance.category_dropped),
+            top_cosine=(relevance.top_cosine if relevance else None),
+        )
+        pick = None
+        intro = _off_category_intro(ctx.language)
+    else:
+        pick = _select_pick(j, facts, items, stock_present, deterministic)
+        intro = _drop_unfounded_stock(
+            scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)), stock_present
+        )
 
     return RichReply(
-        intro=_drop_unfounded_stock(
-            scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)), stock_present
-        ),
+        intro=intro,
         items=items,
         pick=pick,
         education=scrub_education(j.get("education"), stock_present),

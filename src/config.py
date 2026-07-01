@@ -429,6 +429,23 @@ class Settings(BaseSettings):
     # Floor-ul WhatsApp (`flatten`) îl păstra oricum. ON (default) → pick vizibil pe web; OFF →
     # pick ascuns (varianta din feedback-ul 2026-06-30). Reversibil din env, fără cod.
     rich_pick_web_enabled: bool = Field(default=True, validation_alias="RICH_PICK_WEB_ENABLED")
+    # izi-parity (hardening): dacă retrievalul e o potrivire OFF-CATEGORY (categoria cerută a fost
+    # renunțată în relaxare SAU cel mai apropiat vector e peste pragul de distanță), NU mai emitem
+    # „👉 Recomandarea mea" pe un produs din categoria greșită; în loc, un mesaj ONEST de redirect
+    # („nu am exact ce cauți, dar astea sunt cele mai apropiate"). Cardurile rămân (alternative).
+    # Fail-open: fără semnal ⇒ comportament vechi. Reversibil din env, fără cod.
+    rich_pick_relevance_gate_enabled: bool = Field(
+        default=True, validation_alias="RICH_PICK_RELEVANCE_GATE_ENABLED"
+    )
+    # Pragul de distanță cosine peste care cel mai apropiat produs vector e considerat OFF-CATEGORY
+    # (semnalul care prinde căutarea free-text FĂRĂ filtru de categorie — ex. „fond de ten" pe
+    # catalog skincare, unde category_dropped e False). CONSERVATOR (mare) → suprimă DOAR rezultate
+    # clar depărtate (fail spre a ARĂTA pick-ul, evită over-refusal). Tunabil din env pe date live
+    # (vezi analytics: product_search.top_cosine_distance). None ⇒ dezactivează jumătatea cosine
+    # (rămâne doar category_dropped).
+    rich_pick_relevance_cosine_max: float | None = Field(
+        default=0.6, validation_alias="RICH_PICK_RELEVANCE_COSINE_MAX"
+    )
     # #7b (IZI-parity): după ce clientul adaugă un produs în coș, sugerăm produse COMPLEMENTARE
     # (rutină/accesorii — ca iZi: contur ochi + cremă din aceeași gamă) ca CARDURI. Retrieval
     # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell

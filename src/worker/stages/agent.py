@@ -915,6 +915,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     compared: list[dict[str, Any]] = []  # IZI-compare: setul EXPLICIT comparat (compare_products)
     order_gated = {"login": False}  # web anonim a încercat un lookup de comandă → login wall
     added_cart: dict[str, Any] = {"product": None}  # #7b: ultimul produs adăugat în coș (cart_add)
+    search_rel: dict[str, Any] = {"meta": None}  # izi-parity: relevanța ultimului search_products
 
     async def execute(name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
@@ -927,6 +928,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # reține setul comparat ÎN ORDINEA cerută (get_products_by_ids o păstrează) → tabel.
         if name == "compare_products" and result.ok and result.products:
             compared[:] = result.products
+        # izi-parity hardening: reține relevanța ULTIMULUI search_products (off-category signal) →
+        # o punem pe ctx.retrieval mai jos, ca compose să suprime pick-ul pe categoria greșită.
+        if name == "search_products" and result.relevance is not None:
+            search_rel["meta"] = result.relevance
         generated_links.update(result.links)
         grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
@@ -1077,6 +1082,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, NU pe intenția de preț (aia o
     # tratează cheaper_intent mai sus), doar cu id-uri în state, și DOAR când textul singur ar pica
     # (gol sau preț negroundat). Rămâne plasa de grounding pentru follow-up-urile neclasificate.
+    rehydrated = False
     if (
         not products
         and not is_order
@@ -1087,7 +1093,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ):
         ids = [p.product_id for p in ctx.state.displayed_products]
         products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
-    ctx.retrieval = RetrievalResult(products=products, source="tools")
+        rehydrated = True
+    # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
+    # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
+    # setează semnalul → compose tratează ca potrivire exactă (fail-open, fără suprimare falsă).
+    relevance = None if (cheaper_intent or rehydrated) else search_rel["meta"]
+    ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
 
     # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
     # Tabel structurat DETERMINIST din setul comparat (ordinea cerută păstrată) — fapte din

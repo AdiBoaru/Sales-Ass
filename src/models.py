@@ -243,11 +243,35 @@ class RouteDecision:
 
 
 @dataclass
+class Relevance:
+    """Semnal STRUCTURAT de relevanță al retrievalului (izi-parity, hardening). Scris de
+    `search_products_tool`, citit de `compose.assemble` ca să SUPRIME „👉 Recomandarea mea" pe
+    un rezultat OFF-CATEGORY (produs din categoria greșită) + să pună un mesaj onest de redirect.
+
+    Două semnale independente, deterministe:
+      • `category_dropped` — filtrul de CATEGORIE a fost renunțat în scara de relaxare (modelul a
+        cerut o categorie inexistentă → search a scos-o ca să iasă ceva). Boolean, robust.
+      • `top_cosine` — cea mai mică distanță cosine (cel mai apropiat vector). MARE = semantic
+        departe → prinde căutarea free-text FĂRĂ filtru de categorie („fond de ten" pe catalog
+        skincare), unde `category_dropped` e False. `None` pe calea lexical-only (fără embeddings).
+
+    Fail-open: absent (`None` pe `RetrievalResult`) ⇒ tratat ca potrivire exactă (fără suprimare) —
+    paginare / „mai ieftin" / re-hidratare din state nu-l setează, deci nu declanșează gate-ul."""
+
+    relaxed: bool = False
+    category_dropped: bool = False
+    top_cosine: float | None = None
+
+
+@dataclass
 class RetrievalResult:
     """Scris DOAR de stagiul de Retrieval/tools. Produse = câmpuri minime."""
 
     products: list[dict[str, Any]] = field(default_factory=list)
     source: str | None = None
+    # izi-parity hardening: semnal de relevanță (off-category) → compose suprimă pick-ul + pune
+    # mesaj onest de redirect. Fail-open: None ⇒ potrivire exactă (comportament vechi).
+    relevance: Relevance | None = None
 
 
 # ---------------------------------------------------------------------------
