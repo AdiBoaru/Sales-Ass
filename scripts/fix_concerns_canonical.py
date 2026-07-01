@@ -59,8 +59,12 @@ async def _connect() -> asyncpg.Connection:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     return await asyncpg.connect(
-        host=ip, port=p.port or 5432, user=unquote(p.username), password=unquote(p.password),
-        database=(p.path or "/postgres").lstrip("/"), ssl=ctx,
+        host=ip,
+        port=p.port or 5432,
+        user=unquote(p.username),
+        password=unquote(p.password),
+        database=(p.path or "/postgres").lstrip("/"),
+        ssl=ctx,
     )
 
 
