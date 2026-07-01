@@ -15,6 +15,7 @@ turul (principiul 6). Câmpuri TurnContext scrise: `ctx.reply` (via set_reply) +
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from src.cache.canonical import canonicalize
@@ -26,6 +27,19 @@ if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
+
+# Întrebare CLARĂ de politică/logistică (livrare/plată/retur/garanție), chiar AMESTECATĂ cu interes
+# de produs („rituals suna bine, aveti livrare?"). Partea de produs „diluează" embedding-ul
+# → similaritatea la FAQ-ul de livrare cade sub faq_tau_high (măsurat ~0.56) și întrebarea NU se
+# aprindea niciodată, iar agentul re-recomanda (bug „copy-paste"). Regexul = precizie → permite prag
+# FAQ RELAXAT (faq_tau_policy) DOAR pe aceste mesaje. Matchat pe textul CANONIC (fără diacritice, ca
+# embedding-ul). Generic (livrare/plată/retur/garanție = politici standard de magazin, nu vertical).
+_POLICY_RE = re.compile(
+    r"\blivrar\w*|\bin\s+cat\s+timp\b|\bcand\s+ajung\w*|\bcate\s+zile\b|\bcat\s+dureaz\w*"
+    r"|\bcurier\w*|\btransport\w*|\bexped\w*|\bramburs\w*|\bretur\w*|\bgarant\w*|\beasybox\b"
+    r"|\bcat\s+cost\w*\s+livr|\bmetode\s+de\s+plat\w*",
+    re.IGNORECASE,
+)
 
 
 async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -40,16 +54,23 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     try:
         # NX-124a: embed pe `canonicalize(body)` (fără diacritice + punctuație) — paritate cu seed
         # FAQ (care embed-uiește tot canonical) → „cat e livrarea" matchează „Cât costă livrarea?".
-        emb = (await deps.llm.embed([canonicalize(body)[0]]))[0]
+        canon = canonicalize(body)[0]
+        emb = (await deps.llm.embed([canon]))[0]
         model = s.model_embed  # NX-124a: filtrăm pe modelul curent (vectori de alt model = zgomot)
         hit = await semantic_lookup(
             deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model
         )
         sim = float(hit["similarity"]) if hit else 0.0
-        if hit is not None and sim >= s.faq_tau_high:
-            # Răspuns static reutilizabil → cacheable (G5b îl poate prinde data viitoare).
-            ctx.set_reply(hit["answer"])
-            ctx.emit("faq_hit", faq_id=hit["id"], similarity=round(sim, 4))
+        # Prag RELAXAT pe întrebări de politică/livrare (regex = precizie): mesajele mixte
+        # („rituals suna bine, aveti livrare?") diluează embedding-ul sub faq_tau_high → altfel
+        # întrebarea de livrare pică la agent, care re-recomandă (bug „copy-paste"). Vezi config.
+        is_policy = _POLICY_RE.search(canon) is not None
+        tau = s.faq_tau_policy if is_policy else s.faq_tau_high
+        if hit is not None and sim >= tau:
+            # Cacheable DOAR la hit de încredere mare (tau_high). Hit relaxat pe mesaj MIXT →
+            # cacheable=False: query-ul mixt ar otrăvi semantic_cache pt alte mesaje similare.
+            ctx.set_reply(hit["answer"], cacheable=(sim >= s.faq_tau_high))
+            ctx.emit("faq_hit", faq_id=hit["id"], similarity=round(sim, 4), policy=is_policy)
             return
         # NX-124a: fallback de locale (gated) — user pe o limbă fără cunoștințe seedate, dar
         # `default_locale` le are. Prag STRICT (precision-first; NU traducem, servim cunoștința
