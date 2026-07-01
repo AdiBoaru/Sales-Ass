@@ -49,6 +49,15 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                             "„piele sensibilă”, „acnee”); altfel null."
                         ),
                     },
+                    "features": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": (
+                            "Ingrediente / caracteristici cheie cerute EXPLICIT de client (ex. "
+                            "„cu niacinamidă”, „cu retinol”, „finisaj mat”). DOAR când cere o "
+                            "componentă/proprietate anume, nu o nevoie; altfel null."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Câte produse (1-6).",
@@ -84,6 +93,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     "category",
                     "brand",
                     "concerns",
+                    "features",
                     "limit",
                     "sort_mode",
                     "in_stock_only",

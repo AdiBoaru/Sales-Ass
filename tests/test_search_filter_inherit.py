@@ -67,6 +67,7 @@ def _capture_lexical(monkeypatch):
         sort_mode,
         in_stock_only,
         pool,
+        **kwargs,  # Tier 2b p2: features / searchable_facets (tolerate noii parametri)
     ):
         seen["category"] = category
         seen["concerns"] = concerns

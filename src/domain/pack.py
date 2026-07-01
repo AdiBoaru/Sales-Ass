@@ -61,3 +61,7 @@ class DomainPack:
     # tabelul are doar rândurile generice (preț/rating/avantaje/brand) ca azi. Auto-scalează: când
     # `attributes` crește, rândurile apar fără schimbare de cod. Per-vertical (defaults JSON).
     comparison_facets: tuple[FacetSpec, ...] = ()
+    # Tier 2b p2: cheile din `attributes` (ARRAY) pe care le poate FILTRA search-ul de feature
+    # („ceva cu niacinamidă" → key_ingredients). Match NORMALIZAT (lower + strip diacritice). Gol →
+    # fără filtru de feature. Separat de concern_map (concerns are calea lor de mapare).
+    searchable_facets: tuple[str, ...] = ()

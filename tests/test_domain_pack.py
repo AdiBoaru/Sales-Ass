@@ -62,7 +62,8 @@ def test_beauty_salon_comparison_facets_parsed():
     assert kb.labels["ro"] == "Beneficiu principal"
     concerns = next(f for f in pack.comparison_facets if f.key == "concerns")
     assert concerns.labels["ro"] == "Potrivit pentru" and concerns.labels["en"] == "Suitable for"
-    assert concerns.value_labels == {}  # valori deja RO display-ready → fără traduceri cod→label
+    # DB stochează CANONICAL (aliniat cu map_concerns → filtrul prinde); afișarea re-mapează la RO.
+    assert concerns.value_labels["dry"]["ro"] == "ten uscat"
 
 
 def test_comparison_facets_override_replaces_and_skips_garbage():
@@ -87,6 +88,17 @@ def test_comparison_facets_override_replaces_and_skips_garbage():
 def test_ecommerce_default_has_no_facets():
     pack = load_domain_pack(_biz("ecommerce"))
     assert pack.comparison_facets == ()  # default fără fațete → tabel generic (ca azi)
+
+
+def test_beauty_salon_searchable_facets():
+    # Tier 2b p2: search-ul poate filtra pe key_ingredients („ceva cu niacinamidă").
+    pack = load_domain_pack(_biz("beauty_salon"))
+    assert pack.searchable_facets == ("key_ingredients",)
+
+
+def test_ecommerce_no_searchable_facets():
+    pack = load_domain_pack(_biz("ecommerce"))
+    assert pack.searchable_facets == ()  # fără filtru de feature (default)
 
 
 # --- locale-keyed (P11) -----------------------------------------------------

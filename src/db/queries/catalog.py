@@ -149,6 +149,25 @@ _SELECT = f"""
 """
 
 
+def _feature_clause(facet_keys: tuple[str, ...], values: list[str], placeholder: Any) -> str:
+    """Tier 2b p2: condiție SQL „produsul ARE una din valorile cerute", în UNIUNEA atributelor-array
+    din `facet_keys` (ex. key_ingredients), cu match NORMALIZAT (lower + strip diacritice RO, ca
+    `normalize`) → „niacinamida"/„niacinamidă" se potrivesc. Chei PARAMETRIZATE (safe). `values`
+    deja normalizate de caller."""
+    arrays = []
+    for k in facet_keys:
+        kp = placeholder(k)
+        arrays.append(
+            f"(case when jsonb_typeof(p.attributes->{kp})='array' "
+            f"then p.attributes->{kp} else '[]'::jsonb end)"
+        )
+    union = " || ".join(arrays)
+    return (
+        f"exists (select 1 from jsonb_array_elements_text({union}) fe "
+        f"where translate(lower(fe), 'ăâîșț', 'aaist') = any({placeholder(values)}::text[]))"
+    )
+
+
 async def search_products(
     conn: asyncpg.Connection,
     business_id: str,
@@ -156,6 +175,8 @@ async def search_products(
     category: str | None = None,
     brand: str | None = None,
     concerns: list[str] | None = None,
+    features: list[str] | None = None,
+    searchable_facets: tuple[str, ...] = (),
     price_max: float | None = None,
     query_text: str | None = None,
     sort_mode: str = "relevance",
@@ -190,6 +211,8 @@ async def search_products(
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if features and searchable_facets:
+        conds.append(_feature_clause(searchable_facets, features, placeholder))
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if in_stock_only:
@@ -217,6 +240,8 @@ async def search_products_lexical(
     category: str | None = None,
     brand: str | None = None,
     concerns: list[str] | None = None,
+    features: list[str] | None = None,
+    searchable_facets: tuple[str, ...] = (),
     price_max: float | None = None,
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
@@ -248,6 +273,8 @@ async def search_products_lexical(
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if features and searchable_facets:
+        conds.append(_feature_clause(searchable_facets, features, placeholder))
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if in_stock_only:
@@ -471,6 +498,8 @@ async def search_products_semantic(
     *,
     price_max: float | None = None,
     concerns: list[str] | None = None,
+    features: list[str] | None = None,
+    searchable_facets: tuple[str, ...] = (),
     category: str | None = None,
     brand: str | None = None,
     sort_mode: str = "relevance",
@@ -514,6 +543,8 @@ async def search_products_semantic(
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if features and searchable_facets:
+        conds.append(_feature_clause(searchable_facets, features, placeholder))
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
 
