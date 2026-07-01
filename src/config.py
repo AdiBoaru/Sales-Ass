@@ -391,6 +391,11 @@ class Settings(BaseSettings):
     # grounded („cu acid hialuronic, pentru ten uscat"), nu tautologic. Generic pe vertical; date
     # sărace → segment gol (degradare lină). OFF → bundle ca înainte (doar descriere/ai_summary).
     rich_facets_enabled: bool = Field(default=True, validation_alias="RICH_FACETS_ENABLED")
+    # IZI-parity (Tier 2b p2): filtru de FAȚETĂ în search — „ceva cu niacinamidă" → match NORMALIZAT
+    # pe atributele din DomainPack.searchable_facets (ex. key_ingredients). Dedicat (NU prin
+    # map_concerns, care aruncă termenii non-concern). Relaxează ULTIMUL în ladder (P6). Generic pe
+    # vertical. OFF / fără searchable_facets → fără filtru de feature (byte-identic cu înainte).
+    facet_search_enabled: bool = Field(default=True, validation_alias="FACET_SEARCH_ENABLED")
     # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") →
     # servită DETERMINIST (Offer open_url + card din product_url proaspăt), nu prin calea rich (care
     # interzice modelului linkurile → bucla de coaching repetat). OFF → cade pe bucla LLM (vechi).

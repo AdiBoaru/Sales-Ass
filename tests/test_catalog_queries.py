@@ -75,3 +75,32 @@ def test_row_to_product_without_variants_key_untouched():
     from src.db.queries.catalog import _row_to_product
 
     assert "variants" not in _row_to_product({"id": "p1", "price": 10.0})
+
+
+def test_row_to_product_decodes_attributes():
+    from src.db.queries.catalog import _row_to_product
+
+    out = _row_to_product({"id": "p1", "attributes": '{"key_ingredients": ["acid hialuronic"]}'})
+    assert out["attributes"] == {"key_ingredients": ["acid hialuronic"]}
+    assert _row_to_product({"id": "p1", "attributes": None})["attributes"] == {}
+
+
+# --- Tier 2b p2: _feature_clause (filtru de feature normalizat, chei parametrizate) ------------
+
+
+def test_feature_clause_normalized_and_parameterized():
+    from src.db.queries.catalog import _feature_clause
+
+    params: list = []
+
+    def placeholder(v):
+        params.append(v)
+        return f"${len(params)}"
+
+    sql = _feature_clause(("key_ingredients", "concerns"), ["niacinamida"], placeholder)
+    assert "jsonb_array_elements_text" in sql  # expandă array-urile
+    assert "translate(lower(fe), 'ăâîșț', 'aaist')" in sql  # match NORMALIZAT (RO)
+    assert "||" in sql  # uniunea fațetelor căutabile
+    assert sql.count("case when jsonb_typeof") == 2  # o expresie array / cheie
+    # chei PARAMETRIZATE (safe) + valorile la final
+    assert params == ["key_ingredients", "concerns", ["niacinamida"]]

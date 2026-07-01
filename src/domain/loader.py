@@ -182,6 +182,9 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         badge_rules=_norm_numeric_map(merged.get("badge_rules")),
         rank_weights=_norm_numeric_map(merged.get("rank_weights")),
         comparison_facets=_norm_comparison_facets(merged.get("comparison_facets")),
+        searchable_facets=tuple(
+            k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
+        ),
     )
 
 

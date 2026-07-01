@@ -89,6 +89,17 @@ def test_ecommerce_default_has_no_facets():
     assert pack.comparison_facets == ()  # default fără fațete → tabel generic (ca azi)
 
 
+def test_beauty_salon_searchable_facets():
+    # Tier 2b p2: search-ul poate filtra pe key_ingredients („ceva cu niacinamidă").
+    pack = load_domain_pack(_biz("beauty_salon"))
+    assert pack.searchable_facets == ("key_ingredients",)
+
+
+def test_ecommerce_no_searchable_facets():
+    pack = load_domain_pack(_biz("ecommerce"))
+    assert pack.searchable_facets == ()  # fără filtru de feature (default)
+
+
 # --- locale-keyed (P11) -----------------------------------------------------
 
 

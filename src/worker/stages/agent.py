@@ -727,6 +727,7 @@ _TOOL_ARG_WHITELIST: dict[str, tuple[str, ...]] = {
         "category",
         "brand",
         "concerns",
+        "features",
         "price_max",
         "sort_mode",
         "in_stock_only",

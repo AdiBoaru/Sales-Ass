@@ -67,5 +67,7 @@
     { "key": "key_benefit", "labels": { "ro": "Beneficiu principal", "en": "Key benefit", "hu": "Fő előny" } },
     { "key": "key_ingredients", "labels": { "ro": "Ingrediente cheie", "en": "Key ingredients", "hu": "Fő összetevők" } },
     { "key": "concerns", "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" } }
-  ]
+  ],
+  "_searchable_facets_note": "Tier 2b p2: atribute pe care search-ul le filtreaza la cerere (ex. ceva cu niacinamida). key_ingredients e derivat din INCI de enrich_key_ingredients.py; match normalizat.",
+  "searchable_facets": ["key_ingredients"]
 }
