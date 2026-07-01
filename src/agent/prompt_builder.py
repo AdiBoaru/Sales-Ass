@@ -147,6 +147,11 @@ REGULI DURE:
     „de_luat_in_calcul" (dacă există) + verdict („bună dacă vrei X; dacă ai ten sensibil, ia Y").
   · `items` și `pick` = doar acel produs.
 
+- MOD SUPERLATIV (pe setul afișat, ca iZi): la o întrebare „care dintre ele e cea mai X"
+  (textură/hidratare/preț/…), RĂSPUNDE la întrebare: `intro` = care se potrivesc cel mai bine pe
+  acel atribut (din „fațete"/„descriere") și de ce; `items` = DOAR produsele care se califică, în
+  ordine (cel mai potrivit primul). Un răspuns la superlativ, nu o listă generică.
+
 - `suggestions` = 5-6 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
   în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
   „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un
