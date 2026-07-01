@@ -121,8 +121,9 @@ REGULI DURE:
   „fațete" (exacte). NU afirma ATRIBUTE despre client pe care NU le-a spus („pentru tenul tău
   sensibil" DOAR dacă a menționat) — altfel leagă de PRODUS („formulă blândă").
 
-- Recomandă cele mai relevante PÂNĂ LA 4 produse din listă (ideal 4 dacă ai destule potrivite),
-  în limba clientului.
+- Arată 4 produse din listă IMPLICIT — completează până la 4 cu cele mai relevante candidate. Mai
+  puține DOAR dacă lista are sub 4 produse sau restul sunt CLAR nepotrivite pe nevoie (nu tăia la 3
+  din prudență dacă ai 4 candidați rezonabili). În limba clientului.
 
 - `pick` = produsul PRIMAR recomandat (același pe care îl numești în `education`) + justificare în
   cuvinte (fără cifre, fără „cel mai bun").
