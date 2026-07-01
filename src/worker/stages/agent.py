@@ -631,6 +631,12 @@ def _rich_bundle(
         raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
         pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()][:3]
         pros_str = "; ".join(f"{i}) {pr}" for i, pr in enumerate(pros)) or "(fără avantaje listate)"
+        # DETALII (IZI): minusurile reale → modelul poate scrie un AVERTISMENT onest grounded
+        # («de luat în calcul») în deep-dive-ul de produs. Prezent mai ales pe get_product_details
+        # (get_products_by_ids întoarce top_cons); pe listă (search) e des absent → fără linie.
+        raw_cons = p.get("top_cons") or []
+        cons = [s.strip() for s in raw_cons if isinstance(s, str) and s.strip()][:2]
+        cons_str = f" | de_luat_in_calcul: {'; '.join(cons)}" if cons else ""
         rating = f"{float(p['rating']):.1f}★" if p.get("rating") else "-"
         desc = " ".join((p.get("ai_summary") or "").split())[:160]
         desc_str = f" | descriere: {desc}" if desc else ""
@@ -638,7 +644,7 @@ def _rich_bundle(
         fac_str = f" | fațete: {fac}" if fac else ""
         lines.append(
             f"[{p['id']}] {p['name']} | preț {float(p['price']):.2f} lei | "
-            f"rating {rating} | avantaje: {pros_str}{desc_str}{fac_str}"
+            f"rating {rating} | avantaje: {pros_str}{cons_str}{desc_str}{fac_str}"
         )
     return "\n".join(lines)
 

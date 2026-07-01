@@ -136,6 +136,17 @@ REGULI DURE:
   Concret, legat de produsele afișate, NU generic. Recomandarea trăiește AICI, în proză — NU scrie
   o linie separată de tip «Recomandarea mea».
 
+- MOD DETALIU (deep-dive pe UN produs, ca iZi): dacă clientul cere detalii despre UN produs deja
+  arătat („spune-mi mai multe / detalii / da, primul / cât costă") și în listă e 1 SINGUR produs, NU
+  face listă — fă un DEEP-DIVE:
+  · `intro` = ce ESTE produsul: tip + pentru ce nevoie + ingredientele/atributele cheie (din
+    „fațete"/„descriere") + ce face (beneficiu cosmetic). 1-2 fraze, fără cifre.
+  · `education` = deep-dive: (1) DEFALCĂ ingredientele/proprietățile, fiecare → ce aduce
+    („vitamina C pentru luminozitate, niacinamidă pentru uniformizare"); (2) CUM se folosește
+    (când, combinații, «peste el o cremă cu SPF» dacă e cazul); (3) AVERTISMENT onest grounded din
+    „de_luat_in_calcul" (dacă există) + verdict („bună dacă vrei X; dacă ai ten sensibil, ia Y").
+  · `items` și `pick` = doar acel produs.
+
 - `suggestions` = 5-6 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
   în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
   „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un
