@@ -123,6 +123,7 @@ def _enable_stock(monkeypatch, on=True):
         "get_settings",
         lambda: SimpleNamespace(
             validator_stock_claims_enabled=on,
+            spec_digits_grounded_enabled=True,  # NX-139
             ai_disclaimer_enabled=False,
             card_badges_enabled=False,  # aceste teste nu testează badge-uri → fără interferență
             rich_pick_deterministic_enabled=True,
@@ -321,6 +322,7 @@ def test_assemble_killswitch_off_keeps_model_order_and_pick(monkeypatch) -> None
         "get_settings",
         lambda: SimpleNamespace(
             validator_stock_claims_enabled=False,
+            spec_digits_grounded_enabled=True,  # NX-139
             ai_disclaimer_enabled=False,
             card_badges_enabled=False,
             rich_pick_deterministic_enabled=False,  # OFF → comportament vechi (model)
@@ -350,6 +352,7 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
         "get_settings",
         lambda: SimpleNamespace(
             validator_stock_claims_enabled=False,
+            spec_digits_grounded_enabled=True,  # NX-139
             ai_disclaimer_enabled=True,
             card_badges_enabled=False,
             rich_pick_deterministic_enabled=True,
@@ -547,6 +550,7 @@ def _settings(**over):
         safety_medical_guardrail_enabled=True,
         rich_pick_relevance_gate_enabled=True,
         rich_pick_relevance_cosine_max=0.6,
+        spec_digits_grounded_enabled=True,  # NX-139
     )
     base.update(over)
     return SimpleNamespace(**base)
