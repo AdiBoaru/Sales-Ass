@@ -701,9 +701,26 @@ async def _finalize_rich(
     Întoarce `RichReply` sau None (→ fallback pe proză)."""
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     notes_block = f"NB: {notes}\n" if notes else ""
+    # NX-139: axele pe care VARIAZĂ setul (fațete DomainPack cu dispersie + interval de preț) —
+    # input grounded ca intro-ul să numească axe REALE (tip de ten/fitment/material, per vertical),
+    # nu superficiale („cremă vs stick"), iar education să segmenteze pe ele. Gated; gol → fără.
+    axes_block = ""
+    if get_settings().decision_axes_enabled:
+        axes = compose.decision_axes(products, _rich_facets(ctx), ctx.language)
+        if axes:
+            ctx.emit(
+                "decision_axes",
+                n_axes=len(axes),
+                keys=[a.split(":", 1)[0] for a in axes],  # cheile, nu valorile (minimal, P12)
+            )
+            axes_block = (
+                "Axe pe care variază setul (folosește-le în intro și la segmentare): "
+                + " | ".join(axes)
+                + "\n"
+            )
     user = (
         f"Limba clientului: {ctx.language}\n{notes_block}{history_block}"
-        f"Nevoia clientului: {query}\n\nProduse disponibile (alege dintre acestea):\n"
+        f"Nevoia clientului: {query}\n{axes_block}\nProduse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
     try:

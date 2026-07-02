@@ -433,6 +433,17 @@ class Settings(BaseSettings):
     search_blended_rank_enabled: bool = Field(
         default=True, validation_alias="SEARCH_BLENDED_RANK_ENABLED"
     )
+    # NX-139: axele de decizie DERIVATE din setul afișat (fațete DomainPack cu ≥2 valori distincte
+    # + interval de preț) intră ca input grounded în compunerea rich → intro-ul numește axe REALE
+    # (tip de ten / fitment / material — per vertical), nu superficiale. OFF → fără linia de axe
+    # (prompturile devin inerte pe partea asta), byte-identic cu azi.
+    decision_axes_enabled: bool = Field(default=True, validation_alias="DECISION_AXES_ENABLED")
+    # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
+    # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
+    # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).
+    spec_digits_grounded_enabled: bool = Field(
+        default=True, validation_alias="SPEC_DIGITS_GROUNDED_ENABLED"
+    )
     # NX-134 (IZI-parity P2): prima pagină de rezultate (pe `relevance`) se DIVERSIFICĂ — scară de
     # preț (terțe) + max 2 produse per brand — în loc de top-N aproape identice. Selecție greedy
     # deterministă peste candidații DEJA rankați (top-1/pick neschimbat). OFF (fail-safe) → ordinea
