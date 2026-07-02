@@ -326,7 +326,7 @@ def _select_pick(
 def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]]) -> RichReply:
     """Asamblează `RichReply` din JSON-ul modelului + produsele retrievate. Hidratează
     fiecare card din `facts` (preț/rating/link/badge), motivul = fit scrubuit + pro real;
-    id necunoscut → drop tăcut; cap 6, dedupe."""
+    id necunoscut → drop tăcut; cap la `_MAX_RICH_ITEMS`, dedupe."""
     facts = {p["id"]: p for p in retrieved if p.get("id")}
     # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
     # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).

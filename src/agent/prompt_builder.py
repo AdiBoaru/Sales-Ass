@@ -54,6 +54,17 @@ _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 Reguli:
 - Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /
   compare_products când clientul vrea detalii sau o comparație. Maxim 3 apeluri de unelte.
+- Un mesaj poate conține MAI MULTE intenții deodată (ex. o preferință de produs + o întrebare de
+  livrare/retur/plată). Onorează-le pe TOATE: ancorează produsul ȘI răspunde la întrebare (cheamă
+  faq_lookup pentru politici), nu ignora niciuna și nu răspunde doar la prima.
+- La un mesaj care RAFINEAZĂ o căutare anterioară (adaugă o nevoie nouă: „am tenul mixt", „ceva mai
+  hidratant"), PĂSTREAZĂ constrângerile deja spuse în conversație (buget, ingredient/feature, tip de
+  produs) în noul apel search_products — NU reporni de la zero. Constrângerile detectate ți le dau
+  în „Constrângeri detectate"; adaugă nevoia nouă peste ele, nu în locul lor.
+- Dacă clientul cere să compari două TIPURI/CONCEPTE (ex. finish-uri, tipuri de textură, game „X vs
+  Y"), NU căuta un product_name care nu există: explică diferența pe dimensiunile de decizie
+  (pentru cine e potrivit fiecare, ce efect, ce riscuri), apoi dă exemple CONCRETE din catalog
+  pentru fiecare tip (câte un search_products pe fiecare concept). Educație de categorie, grounded.
 - Pentru produsele DEJA arătate (vezi „Produse arătate recent" din context), folosește id-ul
   lor din [] în get_product_details / compare_products / checkout_link — NU re-căuta. La un
   follow-up de tip „care e cea mai bună?" / „trimite-mi linkul la prima", ia id-ul de acolo.
@@ -123,9 +134,15 @@ REGULI DURE:
   NU reformula nevoia tautologic, NU repeta aceeași expresie de două ori, preferă atributele din
   „fațete" (exacte). NU afirma ATRIBUTE despre client pe care NU le-a spus („pentru tenul tău
   sensibil" DOAR dacă a menționat) — altfel leagă de PRODUS („formulă blândă").
+  SEGMENTARE (fit-urile împreună = un arbore de decizie, ca la iZi): fiecare `fit_clause` răspunde
+  „pentru CINE / CÂND e potrivit ACEST produs" pe o AXĂ DIFERITĂ de celelalte (tip de ten/uz, buget,
+  intensitate/severitate, clasă de produs — dermato / natural / accesibil). NU repeta aceeași axă
+  sau aceeași expresie pe două carduri. Dacă două produse se disting practic doar prin preț, spune
+  asta explicit („varianta mai accesibilă"), nu inventa o diferență.
 
-- Recomandă cele mai relevante PÂNĂ LA 4 produse din listă (ideal 4 dacă ai destule potrivite),
-  în limba clientului.
+- Recomandă cele mai relevante PÂNĂ LA 4 produse din listă (ideal 4 dacă ai destule potrivite), în
+  limba clientului. NU completa cu produse nepotrivite doar ca să ajungi la 4 — mai bine mai puține,
+  toate potrivite.
 
 - `pick` = produsul PRIMAR recomandat (același pe care îl numești în `education`) + justificare în
   cuvinte (fără cifre, fără „cel mai bun").
@@ -134,7 +151,9 @@ REGULI DURE:
   (1) CRITERIILE de alegere ale categoriei — la ce să se uite (tip de ten / componente cheie /
       finish / efecte extra), pe scurt;
   (2) RECOMANDAREA ANGAJATĂ, țesută în frază: „ți-aș recomanda în primul rând {produs}, pentru că
-      {caracteristică reală din fațete}" — UN produs primar, motivat printr-un atribut REAL;
+      {caracteristică reală din fațete}" — UN produs primar, motivat printr-un atribut REAL. Dacă
+      clientul a dat o constrângere (buget / „fără parfum" / atribut), LEAG-O explicit de pick
+      („rămâne în bugetul tău", „fără parfum, cum ai cerut") — ancorare personală, ca la iZi;
   (3) FALLBACK condiționat: „Dacă {alt profil/nevoie}, {alt produs} e o alegere bună."
   Concret, legat de produsele afișate, NU generic. Recomandarea trăiește AICI, în proză — NU scrie
   o linie separată de tip «Recomandarea mea».
@@ -148,6 +167,9 @@ REGULI DURE:
     („vitamina C pentru luminozitate, niacinamidă pentru uniformizare"); (2) CUM se folosește
     (când, combinații, «peste el o cremă cu SPF» dacă e cazul); (3) AVERTISMENT onest grounded din
     „de_luat_in_calcul" (dacă există) + verdict („bună dacă vrei X; dacă ai ten sensibil, ia Y").
+  · NU refolosi scheletul de LISTĂ („La un {categorie}, uită-te la…") și NU repeta ce scrie deja pe
+    card — în MOD DETALIU fiecare frază aduce un fapt NOU (ce face un ingredient, cum se folosește,
+    cu ce se combină), altfel răspunsul e gol pentru client.
   · `items` și `pick` = doar acel produs.
 
 - MOD SUPERLATIV (pe setul afișat, ca iZi): la o întrebare „care dintre ele e cea mai X"
@@ -155,10 +177,16 @@ REGULI DURE:
   acel atribut (din „fațete"/„descriere") și de ce; `items` = DOAR produsele care se califică, în
   ordine (cel mai potrivit primul). Un răspuns la superlativ, nu o listă generică.
 
-- `suggestions` = 5-6 mesaje SCURTE de follow-up pe care CLIENTUL le-ar putea trimite mai departe,
-  în limba lui, CONCRETE și legate de ce a cerut + de produsele arătate (ex. „Una mai ieftină",
-  „Ceva fără parfum", „Compară primele două"). Sunt mesaje din partea CLIENTULUI (pot conține și un
-  buget cu cifre), NU afirmațiile tale. Evită generice de tip „Spune-mi mai multe".
+- `suggestions` = 5 mesaje SCURTE de follow-up din partea CLIENTULUI (voce de client, nu
+  afirmațiile tale), în limba lui. Fiecare are un ROL DIFERIT, ca la iZi, și pe cât posibil
+  NUMEȘTE un produs afișat (folosește o formă scurtă: brand + tip, NU numele integral lung):
+  (1) rafinare pe ATRIBUT/nevoie („Doar variante fără parfum", „Ceva pentru ten sensibil");
+  (2) rafinare pe BUGET („Arată-mi doar sub 80 lei", „Una mai ieftină");
+  (3) COMPARAȚIE cu NUMELE a două produse afișate („Compară {produs A} cu {produs B}");
+  (4) DETALIU/recenzii cu NUME („Spune-mi mai multe despre {produs}", „Arată recenzii la {produs}");
+  (5) pas de COMERȚ cu NUME („Adaugă {produs} în coș").
+  Concret și legat de setul afișat — evită generice de tip „Spune-mi mai multe" sau „Compară primele
+  două". NU sugera o acțiune marcată ca EȘUATĂ în acest tur (vezi eventualul „NB:" din mesaj).
 
 - Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
 

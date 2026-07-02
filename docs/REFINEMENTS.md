@@ -116,6 +116,27 @@ ce strategia de seed FAQ per client e stabilă.
 
 ---
 
+### R7 — Mesaj MIXT produs+politică: stratul FAQ deflectează, pierde intenția de produs · P1
+
+**Observat:** 2026-07-02, sim live (NX-132). „Caut o cremă hidratantă pentru ten uscat. Și în cât
+timp ajunge livrarea?" → prins de `faq_stage` (prag relaxat pe politică, #171) → răspuns generic
+„spune-mi tipul de ten", ignorând ȘI produsul cerut ȘI întrebarea de livrare.
+
+**Cauză:** stratul gratuit FAQ rulează ÎNAINTE de triaj/agent și face early-exit pe orice mesaj cu
+keyword de politică (`_POLICY_RE`). #171 a relaxat pragul TOCMAI ca mesajele mixte să prindă FAQ-ul
+de livrare — dar efectul secundar e că un mesaj care e ÎN PRIMUL RÂND o cerere de produs (+ o
+întrebare de politică) e deflectat la răspunsul de politică, pierzând produsul. Regula multi-intent
+din NX-132 trăiește în promptul AGENTULUI → nu se aplică dacă FAQ prinde mesajul întâi.
+
+**Fix planificat:** gate în `faq_stage` — dacă mesajul conține ȘI un semnal clar de cerere de
+produs (categorie/tip de produs detectat), NU face early-exit; lasă-l la agent, care onorează
+ambele intenții (produs + faq_lookup). Sau: prag mai strict pe politică când există co-semnal de
+produs. E aliniat cu patternul P8 (iZi: „Cofeina sună bine. Aveți livrare?" → onorează ambele).
+Cod în `faq_stage`, nu prompt — de prioritizat împreună cu stiva de constrângeri (NX-133) sau ca
+follow-up dedicat.
+
+---
+
 ## ✅ Implementate
 
 - **W1 v1 — carduri compacte** (listă text + butoane-link), 2026-06-14. Înlocuiește
