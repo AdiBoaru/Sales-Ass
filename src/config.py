@@ -193,6 +193,13 @@ class Settings(BaseSettings):
     # aprindea NICIODATĂ, iar agentul re-recomanda (bug „copy-paste"). Regexul dă precizia; 0.45
     # lasă întrebarea de livrare să prindă FAQ-ul real. Tunabil din env.
     faq_tau_policy: float = Field(default=0.45, validation_alias="FAQ_TAU_POLICY")
+    # NX-138 (R7): pragul relaxat de politică se aplică DOAR dacă FAQ-ul potrivit e el însuși de
+    # politică (întrebarea lui match-uiește regexul). Fără asta, pragul jos „salva" un FAQ de
+    # CONSULTANȚĂ produs pe un mesaj MIXT (produs + livrare) → deflecta cererea de produs (live).
+    # OFF (False) → comportamentul #171 (relaxare pe orice FAQ dacă mesajul e de politică).
+    faq_policy_gate_on_faq_kind: bool = Field(
+        default=True, validation_alias="FAQ_POLICY_GATE_ON_FAQ_KIND"
+    )
     # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
     # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
     # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).
