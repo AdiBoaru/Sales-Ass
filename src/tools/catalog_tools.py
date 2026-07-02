@@ -204,6 +204,82 @@ def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
     return (pack.rank_weights if pack else None) or {}
 
 
+# NX-134: diversificare sortiment. Max produse per brand în prima pagină + acoperirea terțelor de
+# preț → sortiment ca un arbore de decizie (ieftin/mediu/scump, mărci diferite), nu top-N clone.
+_MAX_PER_BRAND = 2
+
+
+def _price_tertile(price: float, lo: float, hi: float) -> int:
+    """Terța de preț (0=ieftin, 1=mediu, 2=scump) a unui preț în intervalul [lo, hi] al setului.
+    Interval degenerat (hi<=lo) → 0 (o singură terță)."""
+    if hi <= lo:
+        return 0
+    frac = (price - lo) / (hi - lo)
+    return 0 if frac < 1 / 3 else (1 if frac < 2 / 3 else 2)
+
+
+def diversify_pool(
+    candidates: list[dict[str, Any]], limit: int, *, max_per_brand: int = _MAX_PER_BRAND
+) -> list[dict[str, Any]]:
+    """Reordonează candidații (DEJA ordonați pe relevanță) ca PRIMELE `limit` să fie DIVERSE — scară
+    de preț (terțe) + max `max_per_brand` per brand — păstrând top-1 primul și ordinea de relevanță
+    ÎN INTERIORUL selecției. Restul pool-ului urmează în ordinea de relevanță (pt paginare). Greedy
+    DETERMINIST (fără random). `len <= limit` → neschimbat (nimic de diversificat).
+
+    Fază 1: acoperă terțele de preț prezente (câte una întâi), respectând cota de brand. Fază 2:
+    umple sloturile rămase pe relevanță, relaxând cota când brandurile nu ajung (ex. toate produsele
+    de la un singur brand → tot `limit` rezultate, nu 2)."""
+    n = len(candidates)
+    if limit <= 0 or n <= limit:
+        return list(candidates)
+
+    prices = [p["price"] for p in candidates if p.get("price") is not None]
+    lo, hi = (min(prices), max(prices)) if prices else (0.0, 0.0)
+    tert = [
+        None if p.get("price") is None else _price_tertile(float(p["price"]), lo, hi)
+        for p in candidates
+    ]
+    present = {t for t in tert if t is not None}
+
+    selected: list[int] = [0]
+    brand_count: dict[Any, int] = {}
+    covered: set[int] = set()
+    if candidates[0].get("brand"):
+        brand_count[candidates[0]["brand"]] = 1
+    if tert[0] is not None:
+        covered.add(tert[0])
+
+    # Fază 1: greedy pe acoperirea terțelor de preț, sub cota de brand.
+    for i in range(1, n):
+        if len(selected) >= limit:
+            break
+        brand = candidates[i].get("brand")
+        if brand and brand_count.get(brand, 0) >= max_per_brand:
+            continue
+        all_covered = present <= covered  # toate terțele prezente deja acoperite
+        if tert[i] is None or tert[i] not in covered or all_covered:
+            selected.append(i)
+            if brand:
+                brand_count[brand] = brand_count.get(brand, 0) + 1
+            if tert[i] is not None:
+                covered.add(tert[i])
+
+    # Fază 2: umple pe relevanță (relaxează cota) → niciodată < limit când există candidați.
+    if len(selected) < limit:
+        chosen = set(selected)
+        for i in range(1, n):
+            if len(selected) >= limit:
+                break
+            if i not in chosen:
+                selected.append(i)
+                chosen.add(i)
+
+    selected_set = set(selected)
+    front = [candidates[i] for i in sorted(selected_set)]  # ordinea de relevanță (top-1 primul)
+    rest = [candidates[i] for i in range(n) if i not in selected_set]
+    return front + rest
+
+
 def _searchable_facets(ctx: TurnContext) -> tuple[str, ...]:
     """Tier 2b p2: cheile de attributes filtrabile de search (DomainPack.searchable_facets), gated
     de kill-switch. OFF / fără pack → () → fără filtru de feature."""
@@ -430,6 +506,19 @@ async def search_products_tool(
             winning_step = f
             break
 
+    # NX-134: diversificare sortiment — reordonează pool-ul ca prima pagină să acopere scara de preț
+    # + branduri (nu top-N clone). DOAR pe `relevance` (sort explicit = ordinea cerută de client,
+    # neatinsă) și NU pe produs numit (A1: căutăm exact acel produs). Top-1/pick-ul nu se mișcă.
+    diversified = False
+    if (
+        get_settings().search_diversify_enabled
+        and a.sort_mode == "relevance"
+        and a.product_name is None
+        and len(ranked_final) > a.limit
+    ):
+        ranked_final = diversify_pool(ranked_final, a.limit)
+        diversified = True
+
     # Pool-ul sesiunii = ordinea fuzionată COMPLETĂ (top MAX_SEARCH_POOL), NU dedup-uită: dacă l-am
     # semăna din setul minus-displayed, produsele deja afișate ar fi excluse PERMANENT din sesiune +
     # epuizare falsă (review #1). Prima pagină se servește prin ACELAȘI `_next_page` ca paginarea
@@ -462,6 +551,8 @@ async def search_products_tool(
         relax_depth=relax_depth,
         zero_result=not products,
         top_cosine_distance=top_cosine,
+        diversified=diversified,  # NX-134: prima pagină a fost re-compusă divers
+        brands_in_result=len({p.get("brand") for p in products if p.get("brand")}),
     )
     # NX-119: semează sesiunea de căutare — DOAR id-uri (pool, cap MAX_SEARCH_POOL) + cursor + fp +
     # filtre mici (P8). Următorul „mai arată-mi" (fp identic) paginează din pool fără re-fetch. Doar
