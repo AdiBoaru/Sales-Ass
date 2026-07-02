@@ -97,6 +97,25 @@ agent). Card existent, gata de implementat.
 
 ---
 
+### R6 — FAQ policy: matching-ul pe prag relaxat alege uneori FAQ-ul vecin · P2
+
+**Observat:** 2026-07-02, sim live (NX-137, după fix-ul de codec pgvector). „În câte zile
+primesc comanda?" → hit corect (FAQ-ul de durată). Dar „Și în cât timp ajunge livrarea?" →
+hit pe FAQ-ul de **livrare gratuită** („gratuită peste 200 lei"), nu pe cel de durată —
+răspuns grounded, dar pe lângă întrebare.
+
+**Cauză:** pragul relaxat pe întrebări de politică (#171, `faq_tau_policy`) acceptă cel mai
+apropiat FAQ chiar când formularea clientului e la distanță de toate variantele seedate;
+top-1 cosine nu e mereu cel semantic corect între FAQ-uri APROPIATE tematic (livrare-durată
+vs livrare-cost).
+
+**Fix planificat:** (a) mai multe variante de formulare în seed pe FAQ-ul de durată („în cât
+timp ajunge", „când ajunge coletul"); (b) opțional, la prag relaxat: dacă top-2 sunt aproape
+egale, servește-le combinat sau alege pe cuvinte-cheie (durată vs cost). De prioritizat după
+ce strategia de seed FAQ per client e stabilă.
+
+---
+
 ## ✅ Implementate
 
 - **W1 v1 — carduri compacte** (listă text + butoane-link), 2026-06-14. Înlocuiește

@@ -159,6 +159,10 @@ async def test_checkout_link_no_base_url(monkeypatch):
         ctx, _deps(), {"cart_items": [{"product_id": "p1", "variant_id": None, "quantity": 1}]}
     )
     assert res.ok is False and res.error == "no_checkout_url"
+    # NX-137: llm_view instructiv — modelul află că doar LINKUL lipsește, coșul funcționează
+    # (vechiul „Checkout indisponibil momentan." îl făcea să generalizeze refuzul la cart_add).
+    assert "cart_add" in res.llm_view
+    assert "NU promite" in res.llm_view
 
 
 async def test_checkout_link_business_setting_overrides(monkeypatch):

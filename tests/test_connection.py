@@ -57,6 +57,12 @@ def test_vector_encode_decode_roundtrip():
     assert _vector_decode("[]") == [] and _vector_decode("") == []
 
 
+def test_vector_encode_accepts_preformatted_literal():
+    # NX-137: faqs/semantic_cache pre-formatează cu `_vec()` (str) — codecul îl lasă să treacă.
+    # Fără asta: `float('[')` → DataError → straturile gratuite FAQ+cache mureau tăcut (miss).
+    assert _vector_encode("[0.1,0.2]") == "[0.1,0.2]"
+
+
 class _CodecConn:
     """Stub: `fetchval` întoarce schema tipului `vector`; `set_type_codec` capturează schema primită
     (sau aruncă, pentru testul defensiv). `ns=None` simulează tipul absent."""
