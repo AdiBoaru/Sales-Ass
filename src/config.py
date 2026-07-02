@@ -433,6 +433,13 @@ class Settings(BaseSettings):
     search_blended_rank_enabled: bool = Field(
         default=True, validation_alias="SEARCH_BLENDED_RANK_ENABLED"
     )
+    # NX-134 (IZI-parity P2): prima pagină de rezultate (pe `relevance`) se DIVERSIFICĂ — scară de
+    # preț (terțe) + max 2 produse per brand — în loc de top-N aproape identice. Selecție greedy
+    # deterministă peste candidații DEJA rankați (top-1/pick neschimbat). OFF (fail-safe) → ordinea
+    # de relevanță pură, byte-identic cu azi. Nu se aplică pe sort explicit / produs numit.
+    search_diversify_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_DIVERSIFY_ENABLED"
+    )
     # ARCH-2026 P0: cardurile rich sunt ORDONATE de rankingul de retrieval (determinist), iar
     # „Recomandarea mea" = produsul cel mai bine clasat afișat — NU alegerea liberă a modelului
     # (popularity/position bias). Modelul doar NAREAZĂ (justificare/fit). OFF (fail-safe) →

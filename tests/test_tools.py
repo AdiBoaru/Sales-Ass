@@ -667,3 +667,87 @@ async def test_compare_invalid_args_one_id():
     # un singur id → CompareArgs (min 2) respinge → ok=False (nu aruncă)
     res = await run_tool(_ctx(), _deps(), "compare_products", {"product_ids": ["p1"]})
     assert res.ok is False
+
+
+# --- NX-134: diversify_pool (funcție pură) -----------------------------------
+
+
+def _c(pid: str, brand: str | None, price: float | None) -> dict:
+    return {"id": pid, "name": pid, "brand": brand, "price": price}
+
+
+def test_diversify_spread_price_and_brands():
+    # 9 candidați relevanță-ordonați: primii 3 = același brand + preț mic (clone). diversify trebuie
+    # să floteze branduri + terțe de preț diferite în primele `limit`, păstrând top-1.
+    cands = [
+        _c("a1", "A", 20.0),
+        _c("a2", "A", 22.0),
+        _c("a3", "A", 24.0),  # 3× brand A, ieftin (clone)
+        _c("b1", "B", 60.0),
+        _c("c1", "C", 118.0),
+        _c("d1", "D", 65.0),
+        _c("e1", "E", 119.0),
+        _c("b2", "B", 25.0),
+        _c("c2", "C", 115.0),
+    ]
+    out = ct.diversify_pool(cands, 6)
+    page = out[:6]
+    assert page[0]["id"] == "a1"  # top-1 (relevanță) neschimbat
+    # max 2 per brand în pagină
+    from collections import Counter
+
+    bc = Counter(p["brand"] for p in page)
+    assert all(v <= 2 for v in bc.values())
+    # acoperă cele 3 terțe de preț (min 20, max 119 → ieftin/mediu/scump)
+    lo, hi = 20.0, 119.0
+    terts = {ct._price_tertile(p["price"], lo, hi) for p in page}
+    assert terts == {0, 1, 2}
+    # pool complet păstrat (doar reordonat), fără pierderi/dubluri
+    assert sorted(p["id"] for p in out) == sorted(p["id"] for p in cands)
+
+
+def test_diversify_noop_when_pool_not_larger_than_limit():
+    cands = [_c("a", "A", 10.0), _c("b", "B", 20.0)]
+    assert ct.diversify_pool(cands, 6) == cands  # n <= limit → neschimbat
+
+
+def test_diversify_all_same_brand_fills_to_limit():
+    # toate de la un brand → cota imposibilă → fallback pe relevanță (limit rezultate, nu 2)
+    cands = [_c(f"a{i}", "A", 10.0 + i) for i in range(9)]
+    page = ct.diversify_pool(cands, 6)[:6]
+    assert len(page) == 6 and page[0]["id"] == "a0"
+
+
+def test_diversify_all_same_price_keeps_brand_diversity():
+    # preț uniform → terță degenerată; totuși cota de brand se aplică (nu 3 clone de brand)
+    cands = [
+        _c("a1", "A", 50.0),
+        _c("a2", "A", 50.0),
+        _c("a3", "A", 50.0),
+        _c("b1", "B", 50.0),
+        _c("c1", "C", 50.0),
+        _c("d1", "D", 50.0),
+        _c("e1", "E", 50.0),
+    ]
+    page = ct.diversify_pool(cands, 6)[:6]
+    from collections import Counter
+
+    assert all(v <= 2 for v in Counter(p["brand"] for p in page).values())
+    assert page[0]["id"] == "a1"
+
+
+def test_diversify_no_brand_does_not_consume_quota():
+    cands = [_c(f"n{i}", None, 10.0 + i) for i in range(9)]
+    page = ct.diversify_pool(cands, 6)[:6]
+    assert len(page) == 6  # produse fără brand nu consumă cotă → pot apărea >2
+
+
+def test_diversify_limit_one_is_top_one_only():
+    cands = [_c("a", "A", 10.0), _c("b", "B", 20.0), _c("c", "C", 30.0)]
+    out = ct.diversify_pool(cands, 1)
+    assert out[0]["id"] == "a" and len(out) == 3  # top-1 primul, pool întreg păstrat
+
+
+def test_diversify_deterministic():
+    cands = [_c(f"p{i}", chr(65 + i % 4), 10.0 + i * 7) for i in range(12)]
+    assert ct.diversify_pool(cands, 6) == ct.diversify_pool(cands, 6)
