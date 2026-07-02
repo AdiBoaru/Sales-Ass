@@ -116,7 +116,14 @@ async def _init_bot_conn_compat(conn: asyncpg.Connection) -> None:
 
 
 def _vector_encode(value) -> str:
-    """list[float] → literal text pgvector `[a,b,c]` (formatul trimis ca `::vector`)."""
+    """list[float] → literal text pgvector `[a,b,c]` (formatul trimis ca `::vector`).
+
+    NX-137: acceptă ȘI un literal DEJA formatat (str) — `faqs.py`/`semantic_cache.py` pre-formatau
+    cu `_vec()` (convenția pre-NX-113c), iar codecul făcea `float('[')` → DataError pe ORICE
+    lookup FAQ/cache → ambele straturi gratuite mureau TĂCUT (best-effort → miss). Nedetectat cât
+    `faqs` era gol pe demo; a ieșit la iveală la primul seed real (diagnostic live pe sim)."""
+    if isinstance(value, str):
+        return value
     return "[" + ",".join(f"{float(x):.7f}" for x in value) + "]"
 
 

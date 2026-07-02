@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.models import TurnContext
+    from src.models import Relevance, TurnContext
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
@@ -38,6 +38,10 @@ class ToolResult:
     # Mutație de state cerută de tool (NX-79, ex. cart_add → {"cart": [...]}). Stagiul Agent
     # o acumulează în `ctx.state_patch`; processor-ul o persistă. Tool-urile NU scriu ctx direct.
     state_patch: dict[str, Any] = field(default_factory=dict)
+    # izi-parity hardening: semnal de RELEVANȚĂ al retrievalului (search_products atașează
+    # relaxed/category_dropped/top_cosine). Agentul îl propagă pe `ctx.retrieval.relevance` →
+    # compose suprimă „Recomandarea mea" pe rezultate off-category. None ⇒ potrivire exactă.
+    relevance: Relevance | None = None
 
 
 ToolFn = Callable[["TurnContext", "PipelineDeps", dict[str, Any]], Awaitable[ToolResult]]
@@ -55,7 +59,7 @@ def register(name: str) -> Callable[[ToolFn], ToolFn]:
     return deco
 
 
-# Toolset PER RUTĂ (G7-3): pe SALES oferim catalogul + comerțul; pe ORDER doar status comandă.
+# Toolset PER RUTĂ (G7-3): pe SALES catalogul + comerțul; pe ORDER status comandă + cunoștințe.
 # A nu oferi search pe ORDER (și invers) ține modelul focusat pe sarcina rutei.
 _SALES_TOOLS = (
     "search_products",
@@ -67,7 +71,10 @@ _SALES_TOOLS = (
     "subscribe_back_in_stock",  # NX-80: notificare la restock (WRITE; citit de proactiv NX-70)
     "faq_lookup",
 )
-_ORDER_TOOLS = ("check_order",)
+# `faq_lookup` și pe ORDER: o întrebare de PROCES/POLITICĂ rutată aici (cum comand, ce retur, cât e
+# livrarea) primește un răspuns grounded din baza de cunoștințe — FĂRĂ cont — în loc să cadă în
+# zidul de login. `check_order` rămâne singurul lookup care CHIAR are nevoie de contul clientului.
+_ORDER_TOOLS = ("check_order", "faq_lookup")
 
 
 # Tool-uri OPT-IN per business (NX-82): nu se oferă decât dacă tenantul le activează în

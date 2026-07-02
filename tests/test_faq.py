@@ -64,14 +64,29 @@ async def test_miss_below_threshold_continues(monkeypatch):
             "id": "f2",
             "question": "x",
             "answer": "y",
-            "similarity": 0.60,
-        }  # sub faq_tau_high (0.78)
+            "similarity": 0.40,
+        }  # sub faq_tau_policy (0.45) — FAQ_Q („retur") e politică → prag relaxat; 0.40 tot pică
 
     monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
     ctx = _ctx(FAQ_Q)
     await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
     assert ctx.reply is None  # miss → pipeline continuă spre triaj
     assert any(e.type == "faq_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
+
+
+async def test_policy_question_relaxed_threshold_hits(monkeypatch):
+    # FAQ_Q = „...retur" → întrebare de POLITICĂ → prag relaxat faq_tau_policy (0.45). 0.60 e SUB
+    # faq_tau_high (0.78) dar PESTE 0.45 → HIT. Repară bug-ul „copy-paste": întrebarea de livrare/
+    # politică (diluată de partea de produs) nu mai pică la agent, care re-recomanda.
+    async def fake_lookup(conn, bid, locale, emb, **k):
+        return {"id": "f3", "question": "x", "answer": "Retur în 14 zile.", "similarity": 0.60}
+
+    monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
+    ctx = _ctx(FAQ_Q)
+    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
+    assert ctx.reply is not None and ctx.reply.text == "Retur în 14 zile."
+    assert ctx.reply.cacheable is False  # hit relaxat pe mesaj de politică → NU se cache-uiește
+    assert any(e.type == "faq_hit" and e.properties.get("policy") is True for e in ctx.events)
 
 
 async def test_zero_rows_miss(monkeypatch):
@@ -131,6 +146,7 @@ def _fallback_settings(**over):
     base = dict(
         faq_enabled=True,
         faq_tau_high=0.78,
+        faq_tau_policy=0.45,
         faq_fallback_tau=0.85,
         faq_locale_fallback_enabled=True,
         model_embed="m1",
@@ -219,7 +235,9 @@ def _deps(llm=None):
 
 def test_faq_lookup_in_sales_toolset():
     assert "faq_lookup" in enabled_tools(None, "sales")
-    assert "faq_lookup" not in enabled_tools(None, "order")  # nu pe ORDER
+    # NX-128++ (FAQ-first): `faq_lookup` ȘI pe ORDER — o întrebare de proces/politică rutată acolo
+    # (cum comand, ce retur, cât e livrarea) primește răspuns din baza de cunoștințe, FĂRĂ cont.
+    assert "faq_lookup" in enabled_tools(None, "order")
 
 
 async def test_tool_hit_returns_answer(monkeypatch):

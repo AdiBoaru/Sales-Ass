@@ -25,6 +25,7 @@ from src.db.queries.commerce import (
     subscribe_back_in_stock,
 )
 from src.tools.base import ToolResult, register
+from src.worker.order_gate import login_required_for_ctx, web_unidentified
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -69,8 +70,17 @@ async def checkout_link_tool(
 
     base = _checkout_base(ctx)
     if not base:
+        # NX-137: llm_view instructiv — „Checkout indisponibil" gol făcea modelul să GENERALIZEZE
+        # refuzul („nu pot nici să adaug în coș"), deși cart_add nu depinde de URL. Spunem explicit
+        # ce funcționează, ca răspunsul către client să ofere pasul următor, nu un refuz total.
         return ToolResult(
-            ok=False, error="no_checkout_url", llm_view="Checkout indisponibil momentan."
+            ok=False,
+            error="no_checkout_url",
+            llm_view=(
+                "Linkul de plată nu e configurat pentru acest magazin — NU promite și NU inventa "
+                "un link. Coșul FUNCȚIONEAZĂ separat: adaugă produsul cu cart_add și spune-i "
+                "clientului că finalizarea se face pe site."
+            ),
         )
 
     # Validăm produsele contra catalogului (scoped pe business) — nu linkuim ce nu există.
@@ -213,6 +223,15 @@ async def reorder_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any
     Citire pură (NU scrie coș/link). Numele + prețurile vin din `orders` (date reale ale
     tenantului, ca `check_order`) → `prices` grounded; produsele istorice pot fi inactive, deci
     NU le validăm contra catalogului."""
+    # Re-comanda e legată de contul clientului (istoricul LUI). Pe web anonim contactul e throwaway
+    # → niciun istoric; întoarcem mesajul de login în loc de „n-ai comenzi anterioare" (înșelător).
+    if web_unidentified(ctx):
+        ctx.emit(
+            "order_lookup_gated",
+            channel_kind=ctx.message.channel_kind,
+            reason="web_unidentified_reorder",
+        )
+        return ToolResult(ok=False, error="login_required", llm_view=login_required_for_ctx(ctx))
     orders = await get_orders_status(deps.conn, ctx.business.id, contact_id=ctx.contact.id, limit=3)
     if not orders:
         return ToolResult(

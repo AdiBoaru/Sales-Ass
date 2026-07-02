@@ -177,6 +177,11 @@ class ConversationState:
     # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
+    # NX-133: STIVA de constrângeri de căutare multi-tur (buget/concerns/brand/suitable_for +
+    # category_key pt reset). Distinct de `constraints` (acela = slot-fill din clarify, NX-112).
+    # Owner la scriere: stagiul agent (`merge_constraints`, după triaj); persistat de processor.
+    # Ref-uri scalare + listă scurtă de termeni (P8); cap 6 chei / concerns ≤5 (P4).
+    search_constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
     # owner la scriere: Sender (processor, din `ctx.state_patch`). Cap 10 linii (impus în cart_add).
     cart: list[dict[str, Any]] = field(default_factory=list)
@@ -216,6 +221,12 @@ class ConversationState:
             # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
             asked_intents=(raw.get("asked_intents") or [])[-8:],
             constraints=raw.get("constraints") or {},
+            # NX-133: back-compat — state vechi fără cheia asta / corupt (non-dict) → stivă goală.
+            search_constraints=(
+                raw.get("search_constraints")
+                if isinstance(raw.get("search_constraints"), dict)
+                else {}
+            ),
             cart=cart,
             state_version=int(raw.get("state_version") or 0),
         )
@@ -243,11 +254,35 @@ class RouteDecision:
 
 
 @dataclass
+class Relevance:
+    """Semnal STRUCTURAT de relevanță al retrievalului (izi-parity, hardening). Scris de
+    `search_products_tool`, citit de `compose.assemble` ca să SUPRIME „👉 Recomandarea mea" pe
+    un rezultat OFF-CATEGORY (produs din categoria greșită) + să pună un mesaj onest de redirect.
+
+    Două semnale independente, deterministe:
+      • `category_dropped` — filtrul de CATEGORIE a fost renunțat în scara de relaxare (modelul a
+        cerut o categorie inexistentă → search a scos-o ca să iasă ceva). Boolean, robust.
+      • `top_cosine` — cea mai mică distanță cosine (cel mai apropiat vector). MARE = semantic
+        departe → prinde căutarea free-text FĂRĂ filtru de categorie („fond de ten" pe catalog
+        skincare), unde `category_dropped` e False. `None` pe calea lexical-only (fără embeddings).
+
+    Fail-open: absent (`None` pe `RetrievalResult`) ⇒ tratat ca potrivire exactă (fără suprimare) —
+    paginare / „mai ieftin" / re-hidratare din state nu-l setează, deci nu declanșează gate-ul."""
+
+    relaxed: bool = False
+    category_dropped: bool = False
+    top_cosine: float | None = None
+
+
+@dataclass
 class RetrievalResult:
     """Scris DOAR de stagiul de Retrieval/tools. Produse = câmpuri minime."""
 
     products: list[dict[str, Any]] = field(default_factory=list)
     source: str | None = None
+    # izi-parity hardening: semnal de relevanță (off-category) → compose suprimă pick-ul + pune
+    # mesaj onest de redirect. Fail-open: None ⇒ potrivire exactă (comportament vechi).
+    relevance: Relevance | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +310,12 @@ class RichItem:
     # IZI-anchor: prețul ORIGINAL (de listă), randat tăiat pe card DOAR la reducere reală (on_sale).
     # `price` rămâne CURENTUL; `list_price > price` ⇒ reducere. Din date (compose), nu LLM.
     list_price: float | None = None
+    # Full-eMAG (contract FE extins): tonul semantic al badge-ului (info/danger/...) pentru
+    # `badges:[{label,tone}]`; moneda (DomainPack); `details` = descriere extinsă („Spune-mi mai
+    # multe"), din ai_summary (catalog, medical-guarded). Toate din DATE, nu LLM per-tur.
+    badge_tone: str | None = None
+    currency: str | None = None
+    details: str | None = None
 
 
 @dataclass

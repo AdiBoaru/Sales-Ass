@@ -26,10 +26,11 @@ from src.models import (
     ComparisonColumn,
     ComparisonRow,
     Direction,
+    Relevance,
     RichItem,
     RichReply,
 )
-from src.worker.badges import derive_badge
+from src.worker.badges import BADGE_TONE, badge_label, derive_badge_kind
 from src.worker.text_scrub import (
     has_marketing_claim,
     has_medical_claim,
@@ -38,6 +39,9 @@ from src.worker.text_scrub import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from src.domain.pack import FacetSpec
     from src.models import TurnContext
 
 # Disclaimer per-locale (ține în sync cu greeting._WELCOME[..]['disclaimer'], art. 50 AI Act).
@@ -46,6 +50,72 @@ _DISCLAIMER: dict[str, str] = {
     "en": "I run on artificial intelligence, so I can be wrong sometimes.",
     "hu": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
 }
+
+# Eticheta pick-ului („Recomandarea mea") per-locale — text de UI pus de COD; numele + motivul vin
+# din date / proza LLM scrubuită. Fallback pe 'ro'. (IZI-parity G1: pick-ul e vizibil pe web acum,
+# deci eticheta trebuie să urmeze limba clientului — un bot HU/EN nu mai scoate „Recomandarea mea".)
+_PICK_LABEL: dict[str, str] = {
+    "ro": "👉 Recomandarea mea: ",
+    "en": "👉 My pick: ",
+    "hu": "👉 Az ajánlatom: ",
+}
+
+
+def _pick_label(language: str | None) -> str:
+    return _PICK_LABEL.get(language or "ro") or _PICK_LABEL["ro"]
+
+
+# izi-parity hardening — mesajul ONEST de redirect când retrievalul e OFF-CATEGORY (categoria
+# greșită): întâi „nu am exact ce cauți", apoi „dar astea sunt cele mai apropiate + spune-mi".
+# Determinist (proprietar UNIC al onestității → nu se contrazice cu proza modelului), per-locale.
+# Cardurile rămân (alternative); pick-ul e suprimat (nu recomandăm ferm un produs din altă gamă).
+_OFF_CATEGORY_INTRO: dict[str, str] = {
+    "ro": (
+        "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele "
+        "mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în "
+        "direcția bună sau caut cu totul altceva."
+    ),
+    "en": (
+        "To be honest, I don't have exactly what you're looking for in the current range. Still, "
+        "here are the closest options I could find — they might suit you. Tell me if any of these "
+        "is heading in the right direction, or I'll look for something else entirely."
+    ),
+    "hu": (
+        "Őszintén szólva, pontosan azt, amit keresel, most nincs a kínálatban. De összeszedtem a "
+        "legközelebbi lehetőségeket — lehet, hogy megfelelnek. Mondd meg, ha valamelyik jó irányba "
+        "mutat, vagy keresek valami egészen mást."
+    ),
+}
+
+
+def _off_category_intro(language: str | None) -> str:
+    return _OFF_CATEGORY_INTRO.get(language or "ro") or _OFF_CATEGORY_INTRO["ro"]
+
+
+def _off_category(relevance: Relevance | None) -> bool:
+    """izi-parity hardening: rezultatul e OFF-CATEGORY (categoria greșită)? True ⇒ `assemble`
+    suprimă „👉 Recomandarea mea" + pune mesajul onest de redirect. Două semnale independente:
+    `category_dropped` (filtrul de categorie cerut a fost renunțat — categorie inexistentă) SAU
+    `top_cosine` peste prag (cel mai apropiat vector e semantic departe — prinde free-text fără
+    filtru de categorie). Gated de kill-switch; `None`/OFF ⇒ False (fail-open). Jumătatea cosine
+    e dezactivată dacă pragul e None sau distanța lipsește (calea lexical-only)."""
+    if relevance is None:  # verificat ÎNAINTE de get_settings (fail-open fără a atinge configul)
+        return False
+    s = get_settings()
+    if not s.rich_pick_relevance_gate_enabled:
+        return False
+    if relevance.category_dropped:
+        return True
+    floor = s.rich_pick_relevance_cosine_max
+    return floor is not None and relevance.top_cosine is not None and relevance.top_cosine > floor
+
+
+# IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
+# Constante de PRODUS (decizii de UX, nu ops-tuning) — pick-ul pe web e separat un kill-switch în
+# config (`rich_pick_web_enabled`). `_MAX_RICH_ITEMS` = câte carduri (modelul curează, codul taie la
+# cap); `_MAX_CHIPS` = câte sugestii de follow-up (ca iZi: ~5-6, nu 3).
+_MAX_RICH_ITEMS = 4
+_MAX_CHIPS = 6
 
 # --- scrub proză LLM (validatorul de proză) ----------------------------------
 # NX-117: pattern-urile trăiesc în `text_scrub` (loc canonic partajat cu calea de proză).
@@ -126,8 +196,15 @@ def _pros(p: dict[str, Any]) -> list[str]:
 
 
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:
-    """Motivul cardului = clauza de potrivire (LLM, scrubuită) — avantaj real (dată)."""
+    """Motivul cardului = clauza de potrivire (LLM, scrubuită) — avantaj real (dată). Dedup:
+    dacă clauza modelului și avantajul real sunt cvasi-identice (unul îl conține pe altul, după
+    lower+collapse), NU le lipi „X — X" (bug live: „…confortabilă și calmă — …confortabilă și
+    calmă") — păstrează clauza modelului (mai contextuală)."""
     if fit and anchor:
+        nf = " ".join(fit.lower().split())
+        na = " ".join(anchor.lower().split())
+        if na in nf or nf in na:  # cvasi-duplicat → o singură dată
+            return fit
         return f"{fit} — {anchor}"
     return fit or anchor
 
@@ -170,7 +247,7 @@ def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
             continue
         seen.add(key)
         out.append(Chip(label=label, payload=label))
-        if len(out) >= 4:
+        if len(out) >= _MAX_CHIPS:
             break
     return out
 
@@ -186,6 +263,28 @@ def _drop_unfounded_stock(text: str | None, stock_present: bool) -> str | None:
     if not text or stock_present or not get_settings().validator_stock_claims_enabled:
         return text
     return None if has_stock_claim(text) else text
+
+
+def scrub_education(s: str | None, stock_present: bool) -> str | None:
+    """Coaching de final (`education`), scrubuit la nivel de PROPOZIȚIE (IZI-parity, G4). Vechiul
+    comportament arunca TOT paragraful la o singură propoziție „murdară" (un „SPF 30" ucidea și
+    sfatul util de lângă) → coaching-ul dispărea des, iar răspunsul părea mai subțire decât iZi
+    (care consultă la fiecare tur). Granular = păstrăm propozițiile SIGURE, aruncăm doar pe cele cu
+    cifre/procente/claim/superlativ/medical (`scrub_prose`) sau cu o afirmație de stoc nefondată
+    (`_drop_unfounded_stock`). Aceeași siguranță, mai mult sfat REAL păstrat. Agnostic de vertical
+    (nu injectează filler — toate pică → None). O singură propoziție = identic cu vechiul
+    comportament."""
+    if not s:
+        return None
+    t = " ".join(s.split())
+    if not t:
+        return None
+    kept: list[str] = []
+    for sent in re.split(r"(?<=[.!?])\s+", t):
+        safe = _drop_unfounded_stock(scrub_prose(sent), stock_present)
+        if safe:
+            kept.append(safe)
+    return " ".join(kept) or None
 
 
 def _select_pick(
@@ -227,7 +326,7 @@ def _select_pick(
 def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]]) -> RichReply:
     """Asamblează `RichReply` din JSON-ul modelului + produsele retrievate. Hidratează
     fiecare card din `facts` (preț/rating/link/badge), motivul = fit scrubuit + pro real;
-    id necunoscut → drop tăcut; cap 6, dedupe."""
+    id necunoscut → drop tăcut; cap la `_MAX_RICH_ITEMS`, dedupe."""
     facts = {p["id"]: p for p in retrieved if p.get("id")}
     # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
     # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).
@@ -237,6 +336,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     badges_on = get_settings().card_badges_enabled
     pack = getattr(ctx.business, "domain_pack", None)
     badge_rules = pack.badge_rules if pack else None
+    currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
     # Modelul NAREAZĂ per-produs (fit_clause/pro_index), keyed pe product_id; CODUL decide ORDINEA.
     # Membership (P1): id care nu e în retrieval → ignorat tăcut. Dedupe pe prima apariție.
     llm_items: dict[str, dict[str, Any]] = {}
@@ -268,6 +368,11 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         rc = p.get("review_count")
         eff = float(p["price"])
         lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
+        # Full-eMAG: badge cu TON semantic (deal→danger, top→info) + `details` extins din ai_summary
+        # (catalog, medical-guarded, cap 400). `seeded` (badge pre-curat) n-are kind → fără ton.
+        seeded = _safe_badge(p.get("badge"))
+        kind = derive_badge_kind(p, badge_rules) if (badges_on and not seeded) else None
+        ai = " ".join((p.get("ai_summary") or "").split())[:400]
         return RichItem(
             product_id=pid,
             name=p["name"],
@@ -279,21 +384,42 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             image=p.get("image"),
             rating=float(p["rating"]) if p.get("rating") is not None else None,
             review_count=int(rc) if rc else None,
-            badge=_safe_badge(p.get("badge"))
-            or (derive_badge(p, ctx.language, badge_rules) if badges_on else None),
+            badge=seeded or badge_label(kind, ctx.language),
+            badge_tone=BADGE_TONE.get(kind) if kind else None,
             list_price=float(lp) if lp is not None and float(lp) > eff else None,
+            currency=currency,
+            details=ai if (ai and not _unsafe_medical(ai)) else None,
         )
 
-    items: list[RichItem] = [_build(pid) for pid in ordered_ids[:6]]
-    pick = _select_pick(j, facts, items, stock_present, deterministic)
+    items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
+
+    # izi-parity hardening: retrieval OFF-CATEGORY (produse din categoria greșită — ex. „fond de
+    # ten" pe catalog skincare) → NU pretinde o recomandare. Suprimă pick-ul ȘI înlocuiește intro-ul
+    # cu mesajul ONEST de redirect (un SINGUR proprietar al onestității → dispare contradicția
+    # „nu am fond de ten" din proza modelului vs „👉 Recomandarea mea: <alt produs>" din cod).
+    # Cardurile rămân ca ALTERNATIVE apropiate. Fail-open: fără semnal / gate OFF ⇒ vechi.
+    retrieval = getattr(ctx, "retrieval", None)
+    relevance = getattr(retrieval, "relevance", None) if retrieval is not None else None
+    if _off_category(relevance):
+        ctx.emit(
+            "pick_suppressed",
+            reason="off_category",
+            category_dropped=bool(relevance and relevance.category_dropped),
+            top_cosine=(relevance.top_cosine if relevance else None),
+        )
+        pick = None
+        intro = _off_category_intro(ctx.language)
+    else:
+        pick = _select_pick(j, facts, items, stock_present, deterministic)
+        intro = _drop_unfounded_stock(
+            scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)), stock_present
+        )
 
     return RichReply(
-        intro=_drop_unfounded_stock(
-            scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)), stock_present
-        ),
+        intro=intro,
         items=items,
         pick=pick,
-        education=_drop_unfounded_stock(scrub_prose(j.get("education")), stock_present),
+        education=scrub_education(j.get("education"), stock_present),
         chips=_suggestion_chips(j.get("suggestions") or []),
         disclaimer=disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None,
     )
@@ -328,9 +454,10 @@ def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:
     ]
 
 
-def flatten(rich: RichReply) -> str:
+def flatten(rich: RichReply, language: str | None = None) -> str:
     """Aplatizare deterministă în text — floor-ul pentru canale fără rich (WhatsApp),
-    messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză."""
+    messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză. `language` →
+    eticheta pick-ului în limba clientului (fallback 'ro' = byte-identic cu vechiul comport.)."""
     lines: list[str] = []
     if rich.intro:
         lines += [rich.intro, ""]
@@ -345,9 +472,11 @@ def flatten(rich: RichReply) -> str:
         lines.append(head)
         if it.reason:
             lines.append(f"   {it.reason}")
-    if rich.pick:
+    # Linia „👉 Recomandarea mea" e OFF pe TOATE canalele (preferința fermă a userului) — gate ȘI pe
+    # floor (WhatsApp/Telegram/cache), nu doar pe web (`flatten_framing`). Reactivabil din env.
+    if rich.pick and get_settings().rich_pick_web_enabled:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
-        head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
+        head = f"{_pick_label(language)}{name} — " if name else "👉 "
         lines += ["", head + rich.pick[1]]
     if rich.education:
         lines += ["", rich.education]
@@ -358,13 +487,17 @@ def flatten(rich: RichReply) -> str:
     return "\n".join(lines).strip()
 
 
-def flatten_framing(rich: RichReply) -> str:
+def flatten_framing(rich: RichReply, language: str | None = None) -> str:
     """Aplatizare pentru canalele care randează produsele ca CARDURI (widget web, /web/chat):
     framing conversațional UȘOR și VARIABIL ca structură (#4 — evită tiparul identic la fiecare
-    mesaj): intro + recomandarea („pick") DOAR când sunt ≥2 produse de departajat.
+    mesaj): intro + (opțional) recomandarea („pick") + coaching de final.
 
-    OMITE: enumerarea numerotată (o fac cardurile) și linia „Poți cere și:" (o fac chips-urile). La
-    un SINGUR produs nu mai punem „Recomandarea mea" (cardul ESTE recomandarea → ar dubla).
+    OMITE: enumerarea numerotată (o fac cardurile) și linia „Poți cere și:" (o fac chips-urile).
+
+    IZI-parity (Tier 1, G1): pe WEB pick-ul („Recomandarea mea") e VIZIBIL by default — ca iZi care
+    se angajează la o recomandare clară (răspunsul fără el părea mai „subțire"). Gated de
+    `rich_pick_web_enabled` (ON; OFF → ascuns, varianta din 2026-06-30). Eticheta urmează
+    `language`. La un SINGUR produs nu se pune oricum (cardul ESTE recomandarea).
 
     IZI-coaching: `education` (paragraful „cum alegi" + cross-sell) revine ca PARAGRAF DE FINAL pe
     widget (gap-ul iZi — botul listează, nu consultă). E scrub-uit (fără cifre/claim-uri), deci
@@ -372,10 +505,11 @@ def flatten_framing(rich: RichReply) -> str:
     blocks: list[str] = []
     if rich.intro:
         blocks.append(rich.intro)
-    # „pick" doar când departajează între ≥2 produse; la unul singur cardul vorbește de la sine.
-    if rich.pick and len(rich.items) > 1:
+    # „pick" doar dacă e PORNIT pe web (default OFF) ȘI departajează ≥2 produse (la unul singur
+    # cardul vorbește de la sine). Pe WhatsApp `flatten` îl pune oricum — vezi docstring.
+    if get_settings().rich_pick_web_enabled and rich.pick and len(rich.items) > 1:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
-        head = f"👉 Recomandarea mea: {name} — " if name else "👉 "
+        head = f"{_pick_label(language)}{name} — " if name else "👉 "
         blocks.append(head + rich.pick[1])
     if rich.education:  # coaching de final (model iZi) — randat și pe widget acum
         blocks.append(rich.education)
@@ -465,10 +599,68 @@ def _comparison_lead(chosen: list[dict[str, Any]], language: str | None) -> str:
     return " ".join(parts)
 
 
-def build_comparison(products: list[dict[str, Any]], language: str | None) -> Comparison | None:
+def _facet_value_label(facet: FacetSpec, code: Any, language: str | None) -> str | None:
+    """O valoare de fațetă → text afișabil (Tier 2). Cod canonic cu traducere în `value_labels` →
+    eticheta per-locale (fallback 'ro' → cod). Fără traducere (atribut display-ready) → valoarea ca
+    atare. Gol/None → None."""
+    if code is None:
+        return None
+    s = str(code).strip()
+    if not s:
+        return None
+    trans = facet.value_labels.get(s)
+    if trans:
+        return trans.get(language or "ro") or trans.get("ro") or s
+    return s
+
+
+def _facet_cell(facet: FacetSpec, attributes: Any, language: str | None) -> str | None:
+    """Celula de fațetă pentru un produs: citește `attributes[facet.key]` (listă → etichete unite,
+    scalar → o etichetă). Lipsă/gol → None (randat „—"; rândul TOT-gol e sărit). Fapt din date, zero
+    LLM → zero halucinație (aceeași garanție ca restul tabelului)."""
+    if not isinstance(attributes, dict):
+        return None
+    raw = attributes.get(facet.key)
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        labels = [_facet_value_label(facet, v, language) for v in raw]
+        labels = [lbl for lbl in labels if lbl]
+        return ", ".join(labels[:4]) or None
+    return _facet_value_label(facet, raw, language)
+
+
+def _facet_label(facet: FacetSpec, language: str | None) -> str:
+    return facet.labels.get(language or "ro") or facet.labels.get("ro") or facet.key
+
+
+def facet_summary(
+    product: dict[str, Any], facets: Sequence[FacetSpec], language: str | None
+) -> str:
+    """Tier 2b: rezumat compact al fațetelor unui produs pentru BUNDLE-ul rich (input pentru model):
+    „Label: val; Label: val". Fapt din `attributes` (`_facet_cell`) → grounded, nu inventat.
+    Fațetele fără valoare sunt sărite; niciuna → "" (degradare lină pe date sărace)."""
+    attrs = product.get("attributes")
+    parts = [
+        f"{_facet_label(f, language)}: {cell}"
+        for f in facets
+        if (cell := _facet_cell(f, attrs, language))
+    ]
+    return "; ".join(parts)
+
+
+def build_comparison(
+    products: list[dict[str, Any]],
+    language: str | None,
+    facets: Sequence[FacetSpec] = (),
+) -> Comparison | None:
     """Tabel comparativ STRUCTURAT din 2-3 produse retrievate (get_products_by_ids). Determinist:
     fiecare celulă e un fapt real (preț/rating/disponibilitate/avantaje-minusuri din recenzii/brand)
     — NICIUN text LLM → zero halucinație prin construcție. `None` dacă < 2 produse valide.
+
+    Tier 2 (IZI-parity): `facets` = fațete de DOMENIU din DomainPack (finish/acoperire/potrivit-
+    pentru/material/...), randate ca rânduri din `products.attributes`. Generic (nimic hardcodat de
+    vertical); un rând TOT-gol e sărit (date sărace → tabel ca azi). Gol → comportament neschimbat.
 
     Anchor preț redus (PR2): dacă produsul are `list_price` > prețul efectiv, coloana ține prețul
     de listă + `sale_price` = efectivul (frontendul taie listul). Forward-compatible: fără
@@ -511,12 +703,22 @@ def build_comparison(products: list[dict[str, Any]], language: str | None) -> Co
             return f"{eff:.2f} lei (de la {float(lp):.2f})"
         return f"{eff:.2f} lei"
 
+    # Tier 2: rânduri de DOMENIU (finish/acoperire/potrivit-pentru/..., din `attributes`), între
+    # Rating și Disponibilitate. Generice (din DomainPack), deterministe; un rând TOT-gol e sărit.
+    facet_rows = [
+        _row(
+            _facet_label(f, language),
+            [_facet_cell(f, p.get("attributes"), language) for p in chosen],
+        )
+        for f in facets
+    ]
     candidate_rows = [
         ComparisonRow(label=L["price"], values=[_price_cell(p) for p in chosen]),
         _row(
             L["rating"],
             [f"{float(p['rating']):.1f}★" if p.get("rating") is not None else None for p in chosen],
         ),
+        *facet_rows,
         _row(L["avail"], [AV.get(p.get("availability") or "") or None for p in chosen]),
         _row(L["pros"], [_join_list(p.get("top_pros"), 3) for p in chosen]),
         _row(L["cons"], [_join_list(p.get("top_cons"), 2) for p in chosen]),

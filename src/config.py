@@ -187,6 +187,12 @@ class Settings(BaseSettings):
     # aproximativ e util. NX-124a: 0.66 după paritate + variante de formulare (recall RO bun;
     # agentul decide dacă folosește hint-ul).
     faq_tau_tool: float = Field(default=0.66, validation_alias="FAQ_TAU_TOOL")
+    # τ POLICY: prag relaxat DOAR când mesajul conține o întrebare CLARĂ de livrare/plată/retur/
+    # garanție (regex în faq_stage). Măsurat live: „aveti livrare in cat timp ajunge" atinge doar
+    # ~0.56 cosine față de FAQ-urile de livrare (chiar și pur ~0.62), sub faq_tau_high=0.78 → nu se
+    # aprindea NICIODATĂ, iar agentul re-recomanda (bug „copy-paste"). Regexul dă precizia; 0.45
+    # lasă întrebarea de livrare să prindă FAQ-ul real. Tunabil din env.
+    faq_tau_policy: float = Field(default=0.45, validation_alias="FAQ_TAU_POLICY")
     # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
     # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
     # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).
@@ -371,6 +377,36 @@ class Settings(BaseSettings):
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
+    # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat („compară primele două",
+    # „ce diferență e între ele") → tabel structurat DETERMINIST pe produsele afișate (re-fetch +
+    # build_comparison), ca link/show_more/cheaper — fără să depindem de modelul care cheamă
+    # `compare_products` (dacă narativiza în loc de tool-call, dădea proză în loc de tabel).
+    # Agnostic de vertical (rânduri = preț/rating/disponibilitate/avantaje/brand din retrieval).
+    # OFF → cade
+    # pe bucla LLM (modelul decide dacă compară).
+    compare_intent_enabled: bool = Field(default=True, validation_alias="COMPARE_INTENT_ENABLED")
+    # IZI-parity: întrebare de tip SUPERLATIV pe setul AFIȘAT („care dintre ele e cea mai
+    # ușoară/ieftină/hidratantă") → re-hidratează ÎNTREGUL set afișat și lasă modelul să RĂSPUNDĂ
+    # la superlativ peste toate candidatele (nu o căutare nouă, nu 1 produs). Precede cheaper.
+    # OFF → cade pe R3 (re-hidratare doar când modelul n-a retrievat) / bucla LLM.
+    attr_query_enabled: bool = Field(default=True, validation_alias="ATTR_QUERY_ENABLED")
+    # IZI-parity (Tier 2): rânduri de FAȚETĂ de domeniu în tabelul de comparație (finish/acoperire/
+    # potrivit-pentru/..., din products.attributes), config din DomainPack.comparison_facets.
+    # Generic pe vertical; rândul TOT-gol e sărit (date sărace → tabel ca azi). OFF → doar rândurile
+    # generice (preț/rating/avantaje/brand), byte-identic cu înainte de Tier 2.
+    comparison_facets_enabled: bool = Field(
+        default=True, validation_alias="COMPARISON_FACETS_ENABLED"
+    )
+    # IZI-parity (Tier 2b): fațetele de domeniu (aceleași DomainPack.comparison_facets) intră și în
+    # BUNDLE-ul rich → modelul VEDE ingredientele/beneficiul/potrivirea reale și scrie fit_clause
+    # grounded („cu acid hialuronic, pentru ten uscat"), nu tautologic. Generic pe vertical; date
+    # sărace → segment gol (degradare lină). OFF → bundle ca înainte (doar descriere/ai_summary).
+    rich_facets_enabled: bool = Field(default=True, validation_alias="RICH_FACETS_ENABLED")
+    # IZI-parity (Tier 2b p2): filtru de FAȚETĂ în search — „ceva cu niacinamidă" → match NORMALIZAT
+    # pe atributele din DomainPack.searchable_facets (ex. key_ingredients). Dedicat (NU prin
+    # map_concerns, care aruncă termenii non-concern). Relaxează ULTIMUL în ladder (P6). Generic pe
+    # vertical. OFF / fără searchable_facets → fără filtru de feature (byte-identic cu înainte).
+    facet_search_enabled: bool = Field(default=True, validation_alias="FACET_SEARCH_ENABLED")
     # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") →
     # servită DETERMINIST (Offer open_url + card din product_url proaspăt), nu prin calea rich (care
     # interzice modelului linkurile → bucla de coaching repetat). OFF → cade pe bucla LLM (vechi).
@@ -396,6 +432,41 @@ class Settings(BaseSettings):
     # ordinea + pick-ul modelului (comportament vechi).
     rich_pick_deterministic_enabled: bool = Field(
         default=True, validation_alias="RICH_PICK_DETERMINISTIC_ENABLED"
+    )
+    # Linia „👉 Recomandarea mea" (pick angajat din framing). PREFERINȚA FERMĂ A CLIENTULUI (Adi,
+    # repetat): NU o vrea în NICIUN mesaj — o simțea „aruncată" / redundantă cu cardurile. Default
+    # OFF pe TOATE canalele (gate în `flatten_framing` web ȘI `flatten` floor WhatsApp/Telegram).
+    # (Fusese pornit temporar pt „iZi-parity Tier 1 G1"; cererea userului îl anulează.) Reactivare
+    # DOAR explicit din env `RICH_PICK_WEB_ENABLED=true` (reversibil) — nu-l re-porni default.
+    rich_pick_web_enabled: bool = Field(default=False, validation_alias="RICH_PICK_WEB_ENABLED")
+    # izi-parity (hardening): dacă retrievalul e o potrivire OFF-CATEGORY (categoria cerută a fost
+    # renunțată în relaxare SAU cel mai apropiat vector e peste pragul de distanță), NU mai emitem
+    # „👉 Recomandarea mea" pe un produs din categoria greșită; în loc, un mesaj ONEST de redirect
+    # („nu am exact ce cauți, dar astea sunt cele mai apropiate"). Cardurile rămân (alternative).
+    # Fail-open: fără semnal ⇒ comportament vechi. Reversibil din env, fără cod.
+    rich_pick_relevance_gate_enabled: bool = Field(
+        default=True, validation_alias="RICH_PICK_RELEVANCE_GATE_ENABLED"
+    )
+    # Pragul de distanță cosine peste care cel mai apropiat produs vector e considerat OFF-CATEGORY
+    # (semnalul care prinde căutarea free-text FĂRĂ filtru de categorie — ex. „fond de ten" pe
+    # catalog skincare, unde category_dropped e False). CONSERVATOR (mare) → suprimă DOAR rezultate
+    # clar depărtate (fail spre a ARĂTA pick-ul, evită over-refusal). Tunabil din env pe date live
+    # (vezi analytics: product_search.top_cosine_distance). None ⇒ dezactivează jumătatea cosine
+    # (rămâne doar category_dropped).
+    rich_pick_relevance_cosine_max: float | None = Field(
+        default=0.6, validation_alias="RICH_PICK_RELEVANCE_COSINE_MAX"
+    )
+    # #7b (IZI-parity): după ce clientul adaugă un produs în coș, sugerăm produse COMPLEMENTARE
+    # (rutină/accesorii — ca iZi: contur ochi + cremă din aceeași gamă) ca CARDURI. Retrieval
+    # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell
+    # (rămâne confirmarea de coș a agentului, comportament vechi).
+    cross_sell_enabled: bool = Field(default=True, validation_alias="CROSS_SELL_ENABLED")
+    # NX-137: purchase_intent onorat determinist — clientul a cerut cumpărarea, coșul are linii,
+    # dar modelul n-a chemat checkout_link (non-compliance observat live pe sim) → codul creează
+    # linkul (ref=turn_id, idempotent per tur) și îl atașează ca Offer(open_url). OFF →
+    # comportamentul vechi (linkul apare doar dacă modelul cheamă tool-ul).
+    checkout_intent_fallback_enabled: bool = Field(
+        default=True, validation_alias="CHECKOUT_INTENT_FALLBACK_ENABLED"
     )
     # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
     # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`

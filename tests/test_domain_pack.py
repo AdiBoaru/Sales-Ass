@@ -50,6 +50,57 @@ def test_offer_currency_from_settings():
     assert pack.currency == "EUR"
 
 
+# --- Tier 2: comparison_facets (fațete de domeniu, generic) -------------------
+
+
+def test_beauty_salon_comparison_facets_parsed():
+    pack = load_domain_pack(_biz("beauty_salon"))
+    # ordinea = ordinea de afișare a rândurilor (populate azi: key_benefit + concerns 500/500;
+    # key_ingredients derivat din INCI de scripts/enrich_key_ingredients.py).
+    assert [f.key for f in pack.comparison_facets] == ["key_benefit", "key_ingredients", "concerns"]
+    kb = next(f for f in pack.comparison_facets if f.key == "key_benefit")
+    assert kb.labels["ro"] == "Beneficiu principal"
+    concerns = next(f for f in pack.comparison_facets if f.key == "concerns")
+    assert concerns.labels["ro"] == "Potrivit pentru" and concerns.labels["en"] == "Suitable for"
+    # DB stochează CANONICAL (aliniat cu map_concerns → filtrul prinde); afișarea re-mapează la RO.
+    assert concerns.value_labels["dry"]["ro"] == "ten uscat"
+
+
+def test_comparison_facets_override_replaces_and_skips_garbage():
+    pack = load_domain_pack(
+        _biz(
+            "beauty_salon",
+            {
+                "domain_pack": {
+                    "comparison_facets": [
+                        {"key": "finish", "labels": {"ro": "Finisaj"}},
+                        {"no_key": "x"},  # fără `key` → sărit (fail-safe)
+                        "nu e dict",  # ne-dict → sărit
+                    ]
+                }
+            },
+        )
+    )
+    # override pe o LISTĂ înlocuiește (semantica deep-merge); doar intrarea validă rămâne
+    assert [f.key for f in pack.comparison_facets] == ["finish"]
+
+
+def test_ecommerce_default_has_no_facets():
+    pack = load_domain_pack(_biz("ecommerce"))
+    assert pack.comparison_facets == ()  # default fără fațete → tabel generic (ca azi)
+
+
+def test_beauty_salon_searchable_facets():
+    # Tier 2b p2: search-ul poate filtra pe key_ingredients („ceva cu niacinamidă").
+    pack = load_domain_pack(_biz("beauty_salon"))
+    assert pack.searchable_facets == ("key_ingredients",)
+
+
+def test_ecommerce_no_searchable_facets():
+    pack = load_domain_pack(_biz("ecommerce"))
+    assert pack.searchable_facets == ()  # fără filtru de feature (default)
+
+
 # --- locale-keyed (P11) -----------------------------------------------------
 
 

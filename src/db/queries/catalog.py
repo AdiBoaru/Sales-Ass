@@ -56,8 +56,9 @@ _VARIANTS_AGG = """
 
 
 def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
-    """`dict(r)` + decodează `variants` (NX-118). asyncpg întoarce jsonb ca STR (fără codec) →
-    `json.loads` la `list[dict]`; NULL (produs fără variante) → `[]`. Orice altă coloană intactă."""
+    """`dict(r)` + decodează jsonb (NX-118). asyncpg întoarce jsonb ca STR (fără codec) →
+    `json.loads`: `variants` → `list[dict]` (NULL → `[]`); `attributes` → `dict` (NULL → `{}`,
+    pentru fațetele de comparație, Tier 2). Orice altă coloană intactă."""
     d = dict(r)
     if "variants" in d:
         v = d["variants"]
@@ -68,6 +69,15 @@ def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
                 d["variants"] = []
         elif v is None:
             d["variants"] = []
+    if "attributes" in d:
+        a = d["attributes"]
+        if isinstance(a, str):
+            try:
+                d["attributes"] = json.loads(a)
+            except (ValueError, TypeError):
+                d["attributes"] = {}
+        elif a is None:
+            d["attributes"] = {}
     return d
 
 
@@ -118,6 +128,7 @@ _SELECT = f"""
         (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
                                     as list_price,
         p.attributes->'concerns'    as concerns,
+        p.attributes                as attributes,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
@@ -138,6 +149,25 @@ _SELECT = f"""
 """
 
 
+def _feature_clause(facet_keys: tuple[str, ...], values: list[str], placeholder: Any) -> str:
+    """Tier 2b p2: condiție SQL „produsul ARE una din valorile cerute", în UNIUNEA atributelor-array
+    din `facet_keys` (ex. key_ingredients), cu match NORMALIZAT (lower + strip diacritice RO, ca
+    `normalize`) → „niacinamida"/„niacinamidă" se potrivesc. Chei PARAMETRIZATE (safe). `values`
+    deja normalizate de caller."""
+    arrays = []
+    for k in facet_keys:
+        kp = placeholder(k)
+        arrays.append(
+            f"(case when jsonb_typeof(p.attributes->{kp})='array' "
+            f"then p.attributes->{kp} else '[]'::jsonb end)"
+        )
+    union = " || ".join(arrays)
+    return (
+        f"exists (select 1 from jsonb_array_elements_text({union}) fe "
+        f"where translate(lower(fe), 'ăâîșț', 'aaist') = any({placeholder(values)}::text[]))"
+    )
+
+
 async def search_products(
     conn: asyncpg.Connection,
     business_id: str,
@@ -145,6 +175,8 @@ async def search_products(
     category: str | None = None,
     brand: str | None = None,
     concerns: list[str] | None = None,
+    features: list[str] | None = None,
+    searchable_facets: tuple[str, ...] = (),
     price_max: float | None = None,
     query_text: str | None = None,
     sort_mode: str = "relevance",
@@ -179,6 +211,8 @@ async def search_products(
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if features and searchable_facets:
+        conds.append(_feature_clause(searchable_facets, features, placeholder))
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if in_stock_only:
@@ -206,6 +240,8 @@ async def search_products_lexical(
     category: str | None = None,
     brand: str | None = None,
     concerns: list[str] | None = None,
+    features: list[str] | None = None,
+    searchable_facets: tuple[str, ...] = (),
     price_max: float | None = None,
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
@@ -237,6 +273,8 @@ async def search_products_lexical(
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if features and searchable_facets:
+        conds.append(_feature_clause(searchable_facets, features, placeholder))
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if in_stock_only:
@@ -284,6 +322,7 @@ _DETAIL_SELECT = f"""
         img.url                     as image,
         p.rating::float8            as rating,
         p.review_count              as review_count,
+        p.attributes                as attributes,
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
         (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
                                     as list_price,
@@ -371,6 +410,46 @@ async def search_cheaper_than(
     return [_row_to_product(r) for r in rows]
 
 
+async def get_complementary_products(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_id: str,
+    *,
+    exclude_ids: list[str] | None = None,
+    limit: int = 4,
+) -> list[dict[str, Any]]:
+    """Produse COMPLEMENTARE produsului `anchor_id` (cross-sell „merge bine cu" / rutină, #7b).
+
+    Generic pe vertical (NU doar beauty): produse din ACELAȘI brand (gama/rutina, ca iZi: contur
+    ochi + cremă din aceeași gamă) SAU care împart un `concern` cu ancora, dar dintr-o categorie
+    DIFERITĂ (complement, NU substitut — alt ser nu „merge bine cu" un ser). Doar CUMPĂRABILE (în
+    stoc), excluzând ancora + ce e deja în coș (`exclude_ids`). Same-brand întâi, apoi rating shrunk
+    (cold-start safe). Gol = niciun semnal complementar (→ fără cross-sell, flux normal).
+    `business_id = $1` (izolare; RLS plasă). Hard cap 6."""
+    limit = min(limit, 6)
+    exclude = list(dict.fromkeys([anchor_id, *(exclude_ids or [])]))
+    same_brand = "(select brand_id from products where business_id = $1 and id = $2)"
+    # concern-urile ancorei ca text[] (gol → '{}' → fără overlap, cade pe same-brand). `?|` oricare.
+    anchor_concerns = (
+        "coalesce((select array(select jsonb_array_elements_text(pa.attributes->'concerns'))"
+        "          from products pa where pa.business_id = $1 and pa.id = $2), '{}')::text[]"
+    )
+    sql = (
+        _SELECT
+        + " where p.business_id = $1 and p.status = 'active'"
+        + " and p.availability in ('in_stock', 'low_stock')"
+        + " and p.id <> all($3::uuid[])"  # exclude ancora + ce e în coș
+        # categorie DIFERITĂ (complement, NU substitut — alt ser nu „merge bine cu" un ser):
+        + " and p.primary_category_id is distinct from"
+        + "     (select primary_category_id from products where business_id = $1 and id = $2)"
+        + f" and (p.brand_id = {same_brand} or (p.attributes->'concerns') ?| {anchor_concerns})"
+        + f" order by (p.brand_id = {same_brand}) desc nulls last, {_SHRUNK_RATING} desc, p.id"
+        + " limit $4"
+    )
+    rows = await conn.fetch(sql, business_id, anchor_id, exclude, limit)
+    return [_row_to_product(r) for r in rows]
+
+
 async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
     """Slug-urile categoriilor active ale tenantului — pentru groundarea triajului.
 
@@ -419,6 +498,8 @@ async def search_products_semantic(
     *,
     price_max: float | None = None,
     concerns: list[str] | None = None,
+    features: list[str] | None = None,
+    searchable_facets: tuple[str, ...] = (),
     category: str | None = None,
     brand: str | None = None,
     sort_mode: str = "relevance",
@@ -462,6 +543,8 @@ async def search_products_semantic(
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if features and searchable_facets:
+        conds.append(_feature_clause(searchable_facets, features, placeholder))
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
 

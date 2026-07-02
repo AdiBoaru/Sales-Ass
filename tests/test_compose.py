@@ -7,7 +7,7 @@ avantaj REAL (top_pro). Pur, fără I/O — zero DB/LLM.
 
 from types import SimpleNamespace
 
-from src.models import Direction
+from src.models import Direction, Relevance, RichItem, RichReply
 from src.worker import compose
 
 
@@ -87,6 +87,24 @@ def test_assemble_intro_keeps_budget_from_client_message() -> None:
     }
     rich = compose.assemble(ctx, j, [])
     assert rich.intro == "Pentru ten gras sub 80 lei, am ales:"
+
+
+def test_join_reason_dedupes_quasi_duplicate() -> None:
+    # bug live: clauza modelului ≈ avantajul real → nu „X — X", doar clauza
+    assert (
+        compose._join_reason(
+            "lasă pielea mai confortabilă și calmă, pentru pregătirea pielii",
+            "lasă pielea mai confortabilă și calmă",
+        )
+        == "lasă pielea mai confortabilă și calmă, pentru pregătirea pielii"
+    )
+    # distincte → se lipesc normal (comportament păstrat)
+    assert (
+        compose._join_reason("pentru hidratare zilnică", "hidratează intens")
+        == "pentru hidratare zilnică — hidratează intens"
+    )
+    assert compose._join_reason("doar fit", None) == "doar fit"
+    assert compose._join_reason(None, "doar anchor") == "doar anchor"
 
 
 def test_safe_badge_drops_discount_keeps_curation() -> None:
@@ -207,7 +225,7 @@ def test_assemble_hydrates_facts_and_drops_unknown_ids() -> None:
     assert any("Compară" in lbl for lbl in labels)
 
 
-def test_suggestion_chips_are_normalized_not_hardcoded() -> None:
+def test_suggestion_chips_are_normalized_capped_not_hardcoded() -> None:
     chips = compose._suggestion_chips(
         [
             "Vreau una mai ieftină",
@@ -215,12 +233,16 @@ def test_suggestion_chips_are_normalized_not_hardcoded() -> None:
             "Compară CeraVe cu La Roche-Posay Cicaplast pentru mâinile foarte uscate ale tale",
             "Ceva fără parfum",
             "Hidratant de corp",
-            "a cincea peste cap",
+            "Pentru ten sensibil",
+            "Are protecție SPF?",  # al 6-lea unic → cap atins aici
+            "Cum îl folosesc?",  # peste cap → exclus
+            "a noua peste cap",  # peste cap → exclus
         ]
     )
     labels = [c.label for c in chips]
-    assert len(chips) == 4  # cap 4
+    assert len(chips) == 6  # cap 6 (IZI-parity), nu 4
     assert labels.count("Vreau una mai ieftină") == 1  # de-duplicat
+    assert "Cum îl folosesc?" not in labels and "a noua peste cap" not in labels  # peste cap
     assert any(lbl.endswith("…") for lbl in labels)  # cea lungă e scurtată
     assert all(c.payload == c.label for c in chips)  # tap → trimite labelul ca mesaj nou
 
@@ -331,6 +353,7 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
             ai_disclaimer_enabled=True,
             card_badges_enabled=False,
             rich_pick_deterministic_enabled=True,
+            rich_pick_web_enabled=True,  # PORNIT explicit aici ca să verificăm randarea pick-ului
             safety_medical_guardrail_enabled=True,
         ),
     )
@@ -353,7 +376,7 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
     }
     text = compose.flatten(compose.assemble(_ctx(), j, retrieved))
     assert "34.99 lei" in text and "⭐4.7" in text
-    assert "Recomandarea mea: Crema A" in text
+    assert "Recomandarea mea: Crema A" in text  # cu flag ON, pick-ul apare în floor
     assert "Funcționez cu inteligență" in text
 
 
@@ -387,25 +410,115 @@ def test_flatten_framing_light_and_variable_single_item() -> None:
     assert "1. Crema A" not in text and "Poți cere și" not in text
 
 
-def test_flatten_framing_pick_only_when_multiple_items() -> None:
-    """„Recomandarea mea" apare DOAR când departajează între ≥2 produse (#4)."""
-    retrieved = [
-        {"id": "A", "name": "Crema A", "price": 34.99, "top_pros": ["x"]},
-        {"id": "B", "name": "Crema B", "price": 48.99, "top_pros": ["y"]},
-    ]
-    j = {
-        "intro": "Două variante:",
-        "items": [
-            {"product_id": "A", "pro_index": 0, "fit_clause": "a"},
-            {"product_id": "B", "pro_index": 0, "fit_clause": "b"},
+def test_flatten_framing_hides_pick_by_default() -> None:
+    """Preferința fermă a userului: linia „👉 Recomandarea mea" e ASCUNSĂ by default pe TOATE
+    canalele (default `rich_pick_web_enabled=False`). Intro + education + carduri rămân — cardurile
+    SUNT recomandarea; nu mai punem o linie separată „aruncată"."""
+    rich = RichReply(
+        intro="Două variante:",
+        items=[
+            RichItem(product_id="A", name="Crema A", price=34.99, reason="a"),
+            RichItem(product_id="B", name="Crema B", price=48.99, reason="b"),
         ],
-        "pick": {"product_id": "A", "justification": "alegere bună"},
-        "education": "Educație.",
-        "suggestions": [],
-    }
-    text = compose.flatten_framing(compose.assemble(_ctx(), j, retrieved))
-    assert "Recomandarea mea: Crema A" in text  # ≥2 produse → pick prezent
-    assert "Educație." in text  # IZI: coaching de final prezent pe widget (era omis, NX-134)
+        pick=("A", "alegere bună"),
+        education="Educație.",
+        chips=[],
+        disclaimer="",
+    )
+    text = compose.flatten_framing(rich)  # settings reale → default OFF
+    assert "Recomandarea mea" not in text  # pick ascuns by default (cererea userului)
+    assert "Două variante:" in text and "Educație." in text  # intro + coaching rămân
+
+
+def test_flatten_framing_shows_pick_when_flag_on(monkeypatch) -> None:
+    """Reactivare explicită din env (`RICH_PICK_WEB_ENABLED=true`) → pick-ul revine (reversibil)."""
+    rich = RichReply(
+        intro="Două variante:",
+        items=[
+            RichItem(product_id="A", name="Crema A", price=34.99, reason="a"),
+            RichItem(product_id="B", name="Crema B", price=48.99, reason="b"),
+        ],
+        pick=("A", "alegere bună"),
+        education="Educație.",
+        chips=[],
+        disclaimer="",
+    )
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=True)
+    )
+    text = compose.flatten_framing(rich)
+    assert "Recomandarea mea: Crema A" in text  # flag ON → pick vizibil
+
+
+def test_flatten_framing_hides_pick_when_web_flag_off(monkeypatch) -> None:
+    """Kill-switch `rich_pick_web_enabled=OFF` → pick ascuns pe web (varianta din feedback-ul
+    2026-06-30, reversibilă din env)."""
+    rich = RichReply(
+        intro="Două variante:",
+        items=[
+            RichItem(product_id="A", name="Crema A", price=34.99, reason="a"),
+            RichItem(product_id="B", name="Crema B", price=48.99, reason="b"),
+        ],
+        pick=("A", "alegere bună"),
+        education="Educație.",
+        chips=[],
+        disclaimer="",
+    )
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=False)
+    )
+    text = compose.flatten_framing(rich)
+    assert "Recomandarea mea" not in text  # flag OFF → pick ascuns
+    assert "Două variante:" in text and "Educație." in text  # intro + coaching rămân
+
+
+def test_flatten_pick_label_localized(monkeypatch) -> None:
+    """Când pick-ul e PORNIT explicit, eticheta lui urmează limba clientului (EN/HU/RO). `flatten`
+    (floor) e gated pe `rich_pick_web_enabled` — îl pornim aici ca să-l verificăm."""
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=True)
+    )
+    rich = RichReply(
+        intro=None,
+        items=[RichItem(product_id="A", name="Cream A", price=10.0, reason="r")],
+        pick=("A", "good pick"),
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    assert "My pick: Cream A" in compose.flatten(rich, "en")
+    assert "Az ajánlatom: Cream A" in compose.flatten(rich, "hu")
+    assert "Recomandarea mea: Cream A" in compose.flatten(rich, "ro")
+    assert "Recomandarea mea: Cream A" in compose.flatten(rich)  # fallback ro (back-compat)
+
+
+def test_flatten_hides_pick_by_default() -> None:
+    """Floor (WhatsApp/Telegram/cache): fără flag, pick-ul NU se randează (default OFF, ca web)."""
+    rich = RichReply(
+        intro=None,
+        items=[RichItem(product_id="A", name="Cream A", price=10.0, reason="r")],
+        pick=("A", "good pick"),
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    assert "Recomandarea mea" not in compose.flatten(rich, "ro")  # settings reale → default OFF
+
+
+def test_scrub_education_keeps_safe_sentences_drops_unsafe() -> None:
+    """G4: scrub la nivel de PROPOZIȚIE — păstrăm sfatul sigur, aruncăm doar propoziția „murdară"
+    (înainte, un singur număr/claim ucidea tot paragraful → coaching-ul dispărea des). stock_present
+    =True izolează validatorul de stoc; testăm cifre/procente/claim-uri."""
+    assert (
+        compose.scrub_education("Alege după textură. Are 30% reducere.", True)
+        == "Alege după textură."
+    )
+    assert (
+        compose.scrub_education("Are 30% reducere.", True) is None
+    )  # toate pică → None (no filler)
+    assert compose.scrub_education("Contează nevoia ta.", True) == "Contează nevoia ta."
+    assert compose.scrub_education(None, True) is None
+    assert compose.scrub_education("", True) is None
 
 
 def test_card_products_has_signature_keys() -> None:
@@ -419,3 +532,123 @@ def test_card_products_has_signature_keys() -> None:
     }
     cards = compose.card_products(compose.assemble(_ctx(), j, retrieved).items)
     assert cards[0]["product_id"] == "A" and cards[0]["price"] == 10.0
+
+
+# --- izi-parity hardening: gate OFF-CATEGORY (suprimă pick + redirect onest) --
+
+
+def _settings(**over):
+    """Settings hermetic pentru gate-ul de relevanță (toate câmpurile citite de assemble)."""
+    base = dict(
+        validator_stock_claims_enabled=False,
+        ai_disclaimer_enabled=False,
+        card_badges_enabled=False,
+        rich_pick_deterministic_enabled=True,
+        safety_medical_guardrail_enabled=True,
+        rich_pick_relevance_gate_enabled=True,
+        rich_pick_relevance_cosine_max=0.6,
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def _ctx_rel(relevance, language: str = "ro", body: str = "caut fond de ten") -> SimpleNamespace:
+    """ctx cu retrieval.relevance + emit (capturat) pentru testele de gate off-category."""
+    events: list = []
+    ctx = _ctx(language=language, body=body)
+    ctx.retrieval = SimpleNamespace(relevance=relevance)
+    ctx.emit = lambda type_, **props: events.append((type_, props))
+    ctx.events = events
+    return ctx
+
+
+def _reco_j():
+    return {
+        "intro": "Am ales pentru tine:",
+        "items": [
+            {"product_id": "A", "pro_index": 0, "fit_clause": "pentru calmare"},
+            {"product_id": "B", "pro_index": 0, "fit_clause": "pentru hidratare"},
+        ],
+        "pick": {"product_id": "A", "justification": "se potrivește"},
+        "education": "Contează nevoia ta.",
+        "suggestions": ["Ceva mai ieftin"],
+    }
+
+
+_RECO_RETRIEVED = [
+    {
+        "id": "A",
+        "name": "Ser A",
+        "price": 24.99,
+        "rating": 4.6,
+        "top_pros": ["calmează"],
+        "availability": "in_stock",
+    },
+    {
+        "id": "B",
+        "name": "Toner B",
+        "price": 39.99,
+        "rating": 4.4,
+        "top_pros": ["hidratează"],
+        "availability": "in_stock",
+    },
+]
+
+
+def test_off_category_suppresses_pick_and_redirects(monkeypatch) -> None:
+    """category_dropped → pick suprimat + intro = redirect onest; cardurile RĂMÂN (alternative)."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(Relevance(relaxed=True, category_dropped=True, top_cosine=0.3))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is None  # NU mai recomandăm ferm un produs din categoria greșită
+    assert rich.intro == compose._off_category_intro("ro")  # mesaj onest determinist
+    assert [it.product_id for it in rich.items] == ["A", "B"]  # alternativele rămân
+    assert (
+        "pick_suppressed",
+        {"reason": "off_category", "category_dropped": True, "top_cosine": 0.3},
+    ) in ctx.events
+
+
+def test_off_category_via_cosine_floor(monkeypatch) -> None:
+    """Free-text fără categorie (category_dropped=False) dar vector departe (> prag) → suprimat."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(Relevance(relaxed=False, category_dropped=False, top_cosine=0.72))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is None
+    assert rich.intro == compose._off_category_intro("ro")
+
+
+def test_relevance_below_floor_keeps_pick(monkeypatch) -> None:
+    """Potrivire bună (cosine mic, fără category_dropped) → pick + intro normale."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(Relevance(relaxed=False, category_dropped=False, top_cosine=0.3))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is not None and rich.pick[0] == "A"
+    assert rich.intro == "Am ales pentru tine:"
+    assert ctx.events == []  # gate nu s-a declanșat → fără eveniment
+
+
+def test_relevance_none_is_fail_open(monkeypatch) -> None:
+    """Fără semnal de relevanță (paginare/mai-ieftin/re-hidratare) → pick păstrat."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx_rel(None)
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is not None and rich.pick[0] == "A"
+
+
+def test_off_category_gate_kill_switch_off(monkeypatch) -> None:
+    """Kill-switch OFF → pick păstrat chiar și pe category_dropped (byte-identic cu vechiul)."""
+    monkeypatch.setattr(
+        compose, "get_settings", lambda: _settings(rich_pick_relevance_gate_enabled=False)
+    )
+    ctx = _ctx_rel(Relevance(relaxed=True, category_dropped=True, top_cosine=0.9))
+    rich = compose.assemble(ctx, _reco_j(), _RECO_RETRIEVED)
+    assert rich.pick is not None and rich.pick[0] == "A"
+    assert rich.intro == "Am ales pentru tine:"
+
+
+def test_off_category_intro_localized() -> None:
+    assert compose._off_category_intro("en").startswith("To be honest")
+    assert compose._off_category_intro("hu").startswith("Őszintén")
+    assert compose._off_category_intro("ro").startswith("Ca să fiu sincer")
+    assert compose._off_category_intro(None) == compose._off_category_intro("ro")

@@ -94,10 +94,86 @@ def test_render_web_rich_shape():
     out = render_web(_rich_reply(), "ro")
     assert len(out["products"]) == 2
     assert out["suggestions"] == ["Mai ieftin"]
-    # content = DOAR framing (intro + pick + educație + disclaimer), nu enumerarea produselor
-    assert "Pentru tenul tău" in out["content"] and "alegere bună" in out["content"]
+    # content = framing (intro + educație + disclaimer). Linia „👉 Recomandarea mea" e ASCUNSĂ
+    # by default (preferința userului) — cardurile SUNT recomandarea.
+    assert "Pentru tenul tău" in out["content"] and "contează ingredientele" in out["content"]
+    assert "Recomandarea mea" not in out["content"]  # pick ascuns by default (cererea userului)
     assert "inteligență artificială" in out["content"]  # disclaimer prezent
     assert out["products"][0]["product_id"] == "p1" and out["products"][0]["image_url"] == "i1"
+
+
+def test_render_web_emag_card_fields():
+    # Full-eMAG (contract extins): badges[{label,tone}] + badge legacy + currency + details.
+    rich = RichReply(
+        intro="Pentru ten gras 👇",
+        items=[
+            RichItem(
+                product_id="p1",
+                name="Fluid X",
+                price=82.5,
+                list_price=99.0,
+                rating=4.81,
+                review_count=1234,
+                reason="controlează sebumul",
+                badge="Super Preț",
+                badge_tone="danger",
+                currency="RON",
+                details="Compoziție: acid salicilic + zinc.",
+                url="https://x/p1",
+                image="https://x/x.jpg",
+            )
+        ],
+        pick=None,
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    card = render_web(Reply(text="floor", rich=rich), "ro")["products"][0]
+    assert card["badge"] == "Super Preț"  # legacy string (FE de bază)
+    assert card["badges"] == [{"label": "Super Preț", "tone": "danger"}]  # Full-eMAG (cu ton)
+    assert card["currency"] == "RON"
+    assert card["details"] == "Compoziție: acid salicilic + zinc."
+    assert card["list_price"] == 99.0
+
+
+def test_render_web_omits_emag_fields_when_absent():
+    # Card minimal → cheile eMAG lipsesc (degradare grațioasă, ca fixturile FE).
+    rich = RichReply(
+        intro=None,
+        items=[RichItem(product_id="p1", name="A", price=30.0)],
+        pick=None,
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    card = render_web(Reply(text="", rich=rich), "ro")["products"][0]
+    assert all(k not in card for k in ("badge", "badges", "currency", "details"))
+
+
+def test_render_web_emag_fields_survive_async_roundtrip():
+    # asdict → reply_from_outbox → render_web păstrează câmpurile noi (paritate sync/async).
+    rich = RichReply(
+        intro="x",
+        items=[
+            RichItem(
+                product_id="p1",
+                name="A",
+                price=50.0,
+                badge="Top Favorit",
+                badge_tone="info",
+                currency="RON",
+                details="detalii",
+            )
+        ],
+        pick=None,
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    sync = render_web(Reply(text="f", rich=rich), "ro")
+    rebuilt = render_web(reply_from_outbox({"rich": asdict(rich), "text": "f"}), "ro")
+    assert rebuilt["products"] == sync["products"]
+    assert rebuilt["products"][0]["badges"] == [{"label": "Top Favorit", "tone": "info"}]
 
 
 def test_render_web_surfaces_clarify_suggestions():

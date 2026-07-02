@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.config import get_settings
 from src.domain.normalize import normalize
-from src.domain.pack import DomainPack
+from src.domain.pack import DomainPack, FacetSpec
 
 if TYPE_CHECKING:
     from src.models import BusinessConfig
@@ -114,6 +114,46 @@ def _norm_injection_patterns(raw: Any) -> dict[str, list[str]]:
     return out
 
 
+def _norm_str_map(raw: Any) -> dict[str, str]:
+    """Map locale → text (etichete). Orice gunoi ignorat (fail-safe, P6)."""
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def _norm_comparison_facets(raw: Any) -> tuple[FacetSpec, ...]:
+    """Tier 2: listă de fațete de comparație din JSON → tuple[FacetSpec]. Fiecare element valid =
+    `{key, labels:{locale:str}, value_labels?:{cod:{locale:str}}}`. `key` lipsă/ne-string → sărit
+    (fail-safe). NU normalizăm `key` (e cheia EXACTĂ din attributes). Ordinea = păstrată."""
+    if not isinstance(raw, list):
+        return ()
+    out: list[FacetSpec] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("key")
+        if not isinstance(key, str) or not key:
+            continue
+        value_labels_raw = item.get("value_labels")
+        value_labels = (
+            {
+                code: _norm_str_map(trans)
+                for code, trans in value_labels_raw.items()
+                if isinstance(code, str)
+            }
+            if isinstance(value_labels_raw, dict)
+            else {}
+        )
+        out.append(
+            FacetSpec(
+                key=key,
+                labels=_norm_str_map(item.get("labels")),
+                value_labels={c: v for c, v in value_labels.items() if v},
+            )
+        )
+    return tuple(out)
+
+
 def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
     """Construiește DomainPack-ul tenantului. None dacă kill-switch-ul e OFF (fail-safe:
     consumatorii cad pe constantele de cod). Owner unic = loader-ul (apelat din load_business)."""
@@ -141,6 +181,10 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         currency=str(currency),
         badge_rules=_norm_numeric_map(merged.get("badge_rules")),
         rank_weights=_norm_numeric_map(merged.get("rank_weights")),
+        comparison_facets=_norm_comparison_facets(merged.get("comparison_facets")),
+        searchable_facets=tuple(
+            k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
+        ),
     )
 
 

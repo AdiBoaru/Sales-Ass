@@ -5,10 +5,16 @@ PII"), deci `check_order` (scoped pe `contact_id`) NU poate găsi nicio comandă
 fi numărul. Mesajul vechi „nu am găsit comanda pe acest cont" e înșelător (implică un cont căutat),
 iar fluxul intră în buclă (modelul cere nr/email pe care tool-ul nu le poate folosi). Aici ținem un
 predicat de identitate + mesajele deterministe, partajate de:
-  • stagiul agent — scurtcircuit ÎNAINTE de bucla LLM (cost $0) pe web anonim;
-  • tool-ul `check_order` — mesajul „fără comenzi" pe canalele IDENTIFICATE (telefon/chat = cont).
+  • tool-urile `check_order`/`reorder` — pe web anonim întorc DETERMINIST mesajul de login (cont
+    necesar), afișat DOAR când modelul cere chiar un lookup de cont; pe canalele IDENTIFICATE,
+    mesajul onest „fără comenzi" (telefon/chat = cont);
+  • stagiul agent — servește mesajul de login (cacheable=False) când `check_order` l-a semnalat.
 
-NX-129 va RAFINA `web_unidentified` ca web-ul cu login passthrough verificat să treacă de poartă.
+FAQ-first (cererea Adi): zidul de login NU mai e un scurtcircuit pe TOATĂ ruta ORDER. O întrebare
+de proces/politică (cum comand, ce retur, cât e livrarea) e răspunsă fără cont — la stratul FAQ
+(rulează ÎNAINTE de poartă) sau de agent prin `faq_lookup` — și nu ajunge la `check_order`. Zidul
+apare DOAR pentru cereri care chiar au nevoie de contul clientului (statusul/returul comenzii LUI).
+NX-129 a rafinat `web_unidentified` (web cu login passthrough verificat → trece de poartă).
 """
 
 from __future__ import annotations
@@ -63,6 +69,22 @@ def login_required_message(language: str | None, *, with_handoff: bool = False) 
     oferta de operator DOAR când tenantul are `request_human` activ — nu promitem ce nu există."""
     msg = _pick(_LOGIN_REQUIRED, language)
     return msg + _pick(_HANDOFF_SUFFIX, language) if with_handoff else msg
+
+
+def login_required_for_ctx(ctx: TurnContext) -> str:
+    """Mesajul de login pentru contextul curent: oferta de operator DOAR dacă tenantul are
+    `request_human` activ ȘI canalul permite handoff (web off by default → nu promitem un coleg
+    inexistent). Folosit la marginea tool-urilor de cont (`check_order`/`reorder`) pe web anonim —
+    mesajul apare DOAR fiindcă modelul a cerut un lookup care chiar are nevoie de cont."""
+    # Import lazy: evită un ciclu la încărcarea modulului (src.tools.base → ... → order_gate).
+    from src.config import handoff_enabled_for
+    from src.tools.base import enabled_tools
+
+    channel_kind = getattr(ctx.message, "channel_kind", "") or ""
+    with_handoff = "request_human" in enabled_tools(ctx.business) and handoff_enabled_for(
+        channel_kind
+    )
+    return login_required_message(getattr(ctx, "language", None), with_handoff=with_handoff)
 
 
 def no_orders_message(ctx: TurnContext) -> str:

@@ -27,6 +27,13 @@ Pe SSE evenimentul are în plus `"id"` și `"type": "rich"`; restul cheilor sunt
 **Regulă generală:** cheile opționale **lipsesc** când nu există date (NU vin ca `null`). Frontendul
 trebuie să citească defensiv (`card.badge && ...`), nu să presupună prezența lor.
 
+> **Off-category (redirect onest) — fără câmp nou:** când retrievalul e o potrivire din categoria
+> GREȘITĂ (ex. clientul cere „fond de ten" pe un catalog fără fonduri), backendul NU mai emite
+> „👉 Recomandarea mea"; `content` devine un mesaj onest de redirect („nu am exact ce cauți, dar
+> astea sunt cele mai apropiate…"), iar `products[]` rămân prezente ca **alternative apropiate**,
+> nu ca match exact. Contract identic (doar text de `content`) — FE nu are nimic de schimbat; e util
+> de știut că uneori cardurile sunt „cele mai apropiate", nu „exact ce ai cerut".
+
 ### Input — login passthrough (NX-129)
 
 Pe lângă `token`/`visitor_id`/`sig`, requesturile (`/web/bootstrap`, `/web/messages`, `/web/chat`)
@@ -56,17 +63,30 @@ frontendul NU îl generează și NU îl interpretează, doar îl trece mai depar
   "review_count": 120,       // opțional — nr. recenzii. Prezent doar > 0. Randează „(120 recenzii)".
   "reason": "string"         // opțional — de ce se potrivește (1 rând sub card, deja prezent)
                              //   ⚠ în transcript apărea gol pe carduri — acum vine populat per card.
-  "badge": "Top Favorit"     // opțional — etichetă scurtă (chip/tag colțul cardului).
+  "badge": "Top Favorit",    // opțional — etichetă scurtă (chip/tag colțul cardului).
                              //   Valori posibile azi: „Top Favorit", „Super Preț" (+ locale EN/HU).
+
+  // ——— Full-eMAG (contract EXTINS, aditiv — se aprind pe măsură ce backendul le emite) ———
+  "badges": [{ "label": "Super Preț", "tone": "danger" }], // opțional — badge-uri CU ton semantic
+                             //   `tone` ∈ info|danger (azi): deal→danger, top→info. `badge` (string)
+                             //   rămâne emis în paralel pt FE-ul de bază. Randează `badges` dacă există.
+  "currency": "RON",         // opțional — moneda cardului (din DomainPack); FE mapează RON→„Lei".
+  "details": "string"        // opțional — descriere EXTINSĂ („Spune-mi mai multe"), din ai_summary
+                             //   (catalog, medical-guarded). Randează colapsat/expandabil, NU în card.
 }
 ```
+
+> **Neemis încă (blocat pe DATE):** `highlights:[{text,tone,icon}]` (livrare urgentă, „-100 Lei în coș")
+> și `meta:[{label,value}]` („Livrare: Marți, 7 Iul.") — cer ETA livrare (curier/ERP) + promo engine.
+> `offer.kind` = doar `open_url` azi (checkout/book/quick_reply = contract-ready, neemise).
 
 ### Cum se randează (recomandat, ca iZi)
 - **`list_price`**: `price` mare/bold + `list_price` tăiat (`<s>79,99 lei</s>`), opțional „-25%" calculat
   în FE = `round((list_price - price) / list_price * 100)`. (Backendul NU trimite procentul — derivă-l tu.)
-- **`badge`**: tag colorat în colțul cardului (ex. „Super Preț" verde, „Top Favorit" portocaliu).
+- **`badge`** / **`badges`**: tag colorat în colțul cardului. Preferă `badges[]` (are `tone` → culoare);
+  fallback pe `badge` (string). Ex. „Super Preț" (danger/roșu), „Top Favorit" (info/albastru).
 - **`review_count`** + **`rating`**: `4.8 ★ (120)`.
-- **`reason`**: un rând discret sub nume.
+- **`reason`**: un rând discret sub nume. **`details`**: expandabil „Spune-mi mai multe".
 
 ---
 

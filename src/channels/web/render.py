@@ -40,11 +40,18 @@ def _card(
     review_count: Any = None,
     badge: Any = None,
     list_price: Any = None,
+    badge_tone: Any = None,
+    currency: Any = None,
+    details: Any = None,
 ) -> dict[str, Any]:
     """Un card de produs pt widget. Câmpuri compacte (P8); cheile lipsesc dacă datele nu există
     (NU inventăm `null`-uri). Frontendul randează ce primește. `price` = prețul CURENT; `list_price`
     (preț original tăiat) se emite DOAR când e strict peste `price` (reducere reală); `review_count`
-    doar > 0; `badge` doar curat (data-gated în compose). Vezi docs/FRONTEND-CONTRACT-IZI.md."""
+    doar > 0; `badge` doar curat (data-gated în compose).
+
+    Full-eMAG (contract FE extins, aditiv): `badges:[{label,tone}]` (păstrăm și `badge` string pt
+    FE-ul de bază); `currency`; `details` (descriere extinsă „Spune-mi mai multe"). Absent → cheia
+    lipsește (degradare grațioasă). Vezi docs/FRONTEND-CONTRACT-IZI.md + fixturile FE."""
     card: dict[str, Any] = {"product_id": product_id, "name": name, "price": price}
     if image:
         card["image_url"] = image
@@ -57,9 +64,14 @@ def _card(
     if review_count and review_count > 0:
         card["review_count"] = review_count
     if badge:
-        card["badge"] = badge
+        card["badge"] = badge  # legacy (FE de bază citește string-ul)
+        card["badges"] = [{"label": badge, "tone": badge_tone or "info"}]  # Full-eMAG (cu ton)
     if list_price and price and list_price > price:
         card["list_price"] = list_price
+    if currency:
+        card["currency"] = currency
+    if details:
+        card["details"] = details
     return card
 
 
@@ -128,11 +140,14 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
                 review_count=it.review_count,
                 badge=it.badge,
                 list_price=getattr(it, "list_price", None),
+                badge_tone=getattr(it, "badge_tone", None),
+                currency=getattr(it, "currency", None),
+                details=getattr(it, "details", None),
             )
             for it in reply.rich.items
         ]
         suggestions = [c.label for c in reply.rich.chips]
-        content = ensure_disclaimer(flatten_framing(reply.rich), lang)
+        content = ensure_disclaimer(flatten_framing(reply.rich, lang), lang)
     elif reply.products:
         products = [
             _card(

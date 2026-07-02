@@ -24,7 +24,8 @@ from src.db.queries.catalog import (
     search_products_semantic,
 )
 from src.db.queries.fusion import fuse_candidates
-from src.models import MAX_SEARCH_POOL
+from src.domain.normalize import normalize
+from src.models import MAX_SEARCH_POOL, Relevance
 from src.tools.base import ToolResult, register
 from src.tools.taxonomy import map_concerns
 
@@ -52,6 +53,9 @@ class SearchArgs(BaseModel):
     category: str | None = None
     brand: str | None = None
     concerns: list[str] | None = None
+    # Tier 2b p2: ingrediente/caracteristici cerute EXPLICIT („cu niacinamidă") → filtru pe
+    # DomainPack.searchable_facets (key_ingredients), match normalizat. Altfel [] (fără filtru).
+    features: list[str] | None = None
     sort_mode: str = "relevance"  # relevance | price_asc | price_desc | rating_desc (clamp în SQL)
     in_stock_only: bool = False
     limit: int = Field(default=6, ge=1, le=6)
@@ -154,6 +158,7 @@ def _relax_ladder(
     concerns: list[str] | None,
     category: str | None,
     in_stock_only: bool,
+    features: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
     (P6). Brand-ul NU se relaxează niciodată.
@@ -167,6 +172,7 @@ def _relax_ladder(
         "concerns": concerns,
         "category": category,
         "in_stock_only": in_stock_only,
+        "features": features,  # Tier 2b p2: relaxat ULTIMUL (hard requirement „cu niacinamidă")
     }
     steps: list[dict[str, Any]] = [base]
     if get_settings().search_sort_mode_enabled:
@@ -182,6 +188,8 @@ def _relax_ladder(
             steps.append({**steps[-1], "concerns": None})
         if category:
             steps.append({**steps[-1], "category": None})
+    if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
+        steps.append({**steps[-1], "features": None})
     return steps
 
 
@@ -196,6 +204,15 @@ def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
     return (pack.rank_weights if pack else None) or {}
 
 
+def _searchable_facets(ctx: TurnContext) -> tuple[str, ...]:
+    """Tier 2b p2: cheile de attributes filtrabile de search (DomainPack.searchable_facets), gated
+    de kill-switch. OFF / fără pack → () → fără filtru de feature."""
+    if not get_settings().facet_search_enabled:
+        return ()
+    pack = getattr(ctx.business, "domain_pack", None)
+    return pack.searchable_facets if pack else ()
+
+
 def _displayed_ids(ctx: TurnContext) -> set[str]:
     """Id-urile produselor deja afișate (din `state.displayed_products`, ref-uri P8) — pentru
     dedup la „arată-mi altele". State gol / lipsă → set gol (fără efect)."""
@@ -205,14 +222,17 @@ def _displayed_ids(ctx: TurnContext) -> set[str]:
     return {str(p.product_id) for p in getattr(state, "displayed_products", [])}
 
 
-def _session_filters(a: SearchArgs, concern_keys: list[str] | None) -> dict[str, Any]:
+def _session_filters(
+    a: SearchArgs, concern_keys: list[str] | None, features: list[str] | None = None
+) -> dict[str, Any]:
     """Setul canonic de filtre care DEFINEȘTE o sesiune de căutare (baza fp-ului). Rafinarea
-    oricăruia (preț, concerns, brand...) schimbă fp → sesiune nouă pe filtrele rafinate (NX-119)."""
+    oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119)."""
     return {
         "query": a.query,
         "category": a.category,
         "brand": a.brand,
         "concerns": concern_keys,
+        "features": features,
         "price_max": a.price_max,
         "sort_mode": a.sort_mode,
         "in_stock_only": a.in_stock_only,
@@ -294,6 +314,14 @@ async def search_products_tool(
     # NX-124: maparea vine din DomainPack (config DB per-vertical), nu hardcodat beauty → generic.
     # Determinist (P2); necunoscutele/pack lipsă → fără filtru fals care golește (P6).
     concern_keys = map_concerns(ctx.business.domain_pack, a.concerns) or None
+    # Tier 2b p2: features („cu niacinamidă") → filtru pe searchable_facets, NORMALIZAT (lower+strip
+    # diacritice, ca SQL) → „niacinamida"/„niacinamidă" se potrivesc. Fără searchable_facets → None.
+    searchable_facets = _searchable_facets(ctx)
+    norm_features: list[str] | None = None
+    if searchable_facets and a.features:
+        norm_features = [
+            normalize(f) for f in a.features if isinstance(f, str) and f.strip()
+        ] or None
     sessions_on = (
         get_settings().search_sessions_enabled
     )  # kill-switch (OFF → fiecare căutare fresh)
@@ -315,7 +343,7 @@ async def search_products_tool(
         if inherited:
             ctx.emit("search_filter_inherited", fields=inherited)
     seen = _displayed_ids(ctx)
-    filters = _session_filters(a, concern_keys)
+    filters = _session_filters(a, concern_keys, norm_features)
     fp = _fp(filters)
     sess = ctx.state.active_search or {}
 
@@ -330,6 +358,7 @@ async def search_products_tool(
         concerns=concern_keys,
         category=a.category,
         in_stock_only=a.in_stock_only,
+        features=norm_features,
     )
 
     # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
@@ -347,6 +376,7 @@ async def search_products_tool(
     ranked_final: list[dict[str, Any]] = []  # ordinea fuzionată+re-rankată la treapta care a produs
     vector_final: list[dict[str, Any]] = []
     relaxed = False
+    winning_step: dict[str, Any] | None = None  # treapta din ladder care a produs rezultate
     had_any_match = False  # vreun retriever a întors ceva (semnal brand-not-found)
     relax_depth = 0  # treapta de relaxare la care s-a oprit (0 = filtre stricte)
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
@@ -358,6 +388,8 @@ async def search_products_tool(
             query_text=a.query,
             price_max=f["price_max"],
             concerns=f["concerns"],
+            features=f["features"],
+            searchable_facets=searchable_facets,
             category=f["category"],
             brand=a.brand,
             sort_mode=a.sort_mode,
@@ -373,6 +405,8 @@ async def search_products_tool(
                     query_vec,
                     price_max=f["price_max"],
                     concerns=f["concerns"],
+                    features=f["features"],
+                    searchable_facets=searchable_facets,
                     category=f["category"],
                     brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
                     sort_mode=a.sort_mode,
@@ -393,6 +427,7 @@ async def search_products_tool(
             ranked_final = ranked
             vector_final = vector
             relaxed = i > 0
+            winning_step = f
             break
 
     # Pool-ul sesiunii = ordinea fuzionată COMPLETĂ (top MAX_SEARCH_POOL), NU dedup-uită: dacă l-am
@@ -481,7 +516,15 @@ async def search_products_tool(
     view = _brief(products)
     if notes:
         view = "\n".join(notes) + "\n" + view
-    return ToolResult(ok=True, products=products, llm_view=view)
+    # izi-parity hardening: semnal de RELEVANȚĂ pentru compose (suprimă „Recomandarea mea"
+    # off-category). `category_dropped` = filtrul de categorie cerut a fost renunțat ca să iasă ceva
+    # (categorie inexistentă). `top_cosine` = cât de departe e cel mai apropiat vector (prinde
+    # free-text fără categorie). Determinist, fără LLM. Fail-open la consumator (None ⇒ exact).
+    category_dropped = bool(a.category) and (
+        winning_step is not None and winning_step.get("category") is None
+    )
+    relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
+    return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 
 
 @register("get_product_details")

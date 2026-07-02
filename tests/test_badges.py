@@ -60,6 +60,19 @@ def test_malformed_fields_no_crash():
     assert derive_badge({"id": "x", "rating": "n/a", "review_count": None}, "ro") is None
 
 
+# --- Full-eMAG: kind semantic + ton -----------------------------------------
+
+
+def test_derive_badge_kind_and_tone():
+    from src.worker.badges import BADGE_TONE, badge_label, derive_badge_kind
+
+    assert derive_badge_kind(_prod(price=60.0, list_price=80.0)) == "deal"  # 25% reducere
+    assert derive_badge_kind(_prod(rating=4.8, review_count=120)) == "top"
+    assert derive_badge_kind(_prod(rating=4.5, review_count=30)) is None
+    assert BADGE_TONE == {"deal": "danger", "top": "info"}  # reducere = accent tare
+    assert badge_label("deal", "en") == "Great Deal" and badge_label(None, "ro") is None
+
+
 # --- integrare în compose.assemble ------------------------------------------
 
 
@@ -102,3 +115,12 @@ def test_assemble_killswitch_off_no_derivation(monkeypatch):
     retrieved = [_prod(rating=4.8, review_count=120, url="u")]
     rich = assemble(_ctx(), _j(), retrieved)
     assert rich.items[0].badge is None  # derivare oprită → fără badge (comportament vechi)
+
+
+def test_assemble_sets_badge_tone_and_details():
+    # Full-eMAG: badge deal → ton „danger"; `details` din ai_summary (medical-guarded).
+    retrieved = [_prod(price=60.0, list_price=80.0, ai_summary="Fluid matifiant cu zinc.", url="u")]
+    rich = assemble(_ctx(), _j(), retrieved)
+    it = rich.items[0]
+    assert it.badge == "Super Preț" and it.badge_tone == "danger"
+    assert it.details == "Fluid matifiant cu zinc."
