@@ -86,6 +86,15 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                             "nu o nevoie sau categorie; altfel null."
                         ),
                     },
+                    "variant_label": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Eticheta EXACTĂ de variantă cerută de client (nuanță/mărime, ex. "
+                            "„Warm Beige”, „03”, „50 ml”). Completează DOAR când cauți produse "
+                            "care AU acea variantă (fallback: alte game care chiar au nuanța "
+                            "cerută); altfel null."
+                        ),
+                    },
                 },
                 "required": [
                     "query",
@@ -98,6 +107,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     "sort_mode",
                     "in_stock_only",
                     "product_name",
+                    "variant_label",
                 ],
             },
         },

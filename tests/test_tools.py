@@ -751,3 +751,81 @@ def test_diversify_limit_one_is_top_one_only():
 def test_diversify_deterministic():
     cands = [_c(f"p{i}", chr(65 + i % 4), 10.0 + i * 7) for i in range(12)]
     assert ct.diversify_pool(cands, 6) == ct.diversify_pool(cands, 6)
+
+
+# --- NX-135: fallback gradat pe variantă (variant_label) ---------------------
+
+
+def test_variant_label_clause_sql():
+    """SQL-ul de variantă e parametrizat (safe) + normalizat pe diacritice, corelat pe produs."""
+    from src.db.queries import catalog as cq
+
+    params = []
+
+    def ph(v):
+        params.append(v)
+        return f"${len(params)}"
+
+    sql = cq._variant_label_clause("Warm Beige", ph)
+    assert "product_variants v" in sql and "v.product_id = p.id" in sql
+    assert "translate(lower(v.label)" in sql  # match normalizat RO (ăâîșț→aaist)
+    assert "like" in sql.lower()
+    assert params == ["Warm Beige"]  # valoarea trece ca PARAMETRU, nu inline (anti-injection)
+
+
+async def test_search_passes_variant_label_and_marks_match(monkeypatch):
+    """NX-135: `variant_label` ajunge la AMBELE retrievere; rezultatele-s marcate variant_match."""
+    captured = {}
+
+    async def fake_sem(conn, business_id, vec, **k):
+        captured["sem_vl"] = k.get("variant_label")
+        return [dict(PRODUCTS[0])]
+
+    async def fake_lex(conn, business_id, **k):
+        captured["lex_vl"] = k.get("variant_label")
+        return []
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx,
+        _deps(_LLM()),
+        "search_products",
+        {"query": "fond de ten", "variant_label": "Warm Beige"},
+    )
+    assert res.ok
+    assert captured["sem_vl"] == "Warm Beige" and captured["lex_vl"] == "Warm Beige"
+    assert res.products[0].get("variant_match") is True
+    assert "are varianta cerută" in res.llm_view  # brief semnalează → fit grounded
+    assert _search_event(ctx).properties["had_variant_label"] is True
+
+
+async def test_search_without_variant_label_is_unchanged(monkeypatch):
+    """Fără variant_label → retrievere primesc None, fără marcaj (back-compat, byte-identic)."""
+    captured = {}
+
+    async def fake_sem(conn, business_id, vec, **k):
+        captured["sem_vl"] = k.get("variant_label")
+        return [dict(PRODUCTS[0])]
+
+    async def fake_lex(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "cremă"})
+    assert captured["sem_vl"] is None
+    assert res.products[0].get("variant_match") is None  # nemarcat
+    assert "are varianta cerută" not in res.llm_view
+    assert _search_event(ctx).properties["had_variant_label"] is False
+
+
+async def test_variant_label_too_long_is_rejected():
+    # cap Pydantic (max_length 80) → args invalide → ok=False (nu crash, nu query pe frază)
+    long = "x" * 200
+    res = await run_tool(_ctx(), _deps(), "search_products", {"query": "y", "variant_label": long})
+    assert res.ok is False
