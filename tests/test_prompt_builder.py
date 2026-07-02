@@ -124,6 +124,37 @@ def test_order_reco_is_vertical_neutral():
     assert "beauty" not in ORDER_RECO_SYSTEM and "comenzii" in ORDER_RECO_SYSTEM
 
 
+# --- NX-132: gramatica iZi în prompturi --------------------------------------
+
+
+def test_rich_suggestions_five_anchored_roles():
+    # chips-urile cer 5 roluri DISTINCTE ancorate pe nume; genericele sunt marcate ca DE EVITAT.
+    r = build_rich_system(_inp())
+    assert "ROL DIFERIT" in r
+    for role in ("rafinare pe ATRIBUT", "COMPARAȚIE cu NUMELE", "pas de COMERȚ cu NUME"):
+        assert role in r
+    # „Compară primele două" apare DOAR ca exemplu de evitat (nu ca șablon de urmat)
+    assert "evită generice" in r
+
+
+def test_rich_segmentation_and_constraint_echo():
+    r = build_rich_system(_inp())
+    assert "SEGMENTARE" in r and "AXĂ DIFERITĂ" in r  # motivele = arbore de decizie (P1)
+    assert "rămâne în bugetul tău" in r  # ecoul constrângerii în pick (P4)
+    assert "PÂNĂ LA 4 produse" in r  # decizia Adi: capul rămâne 4 (aliniat cu _MAX_RICH_ITEMS)
+
+
+def test_rich_detail_mode_forbids_list_skeleton():
+    r = build_rich_system(_inp())
+    assert "NU refolosi scheletul de LISTĂ" in r  # MOD DETALIU aduce fapte noi, nu coaching repetat
+
+
+def test_tools_block_multi_intent_and_concept_compare():
+    s = build_agent_system(_inp())
+    assert "MAI MULTE intenții" in s  # onorează toate intențiile unui mesaj (P8)
+    assert "TIPURI/CONCEPTE" in s  # comparație de concepte, nu căutare de product_name inexistent
+
+
 def test_build_defaults_tolerant():
     inp = PromptInputs.build("", "", "", [], [])
     assert inp.vertical == "ecommerce" and inp.business_name and inp.locale == "ro"
