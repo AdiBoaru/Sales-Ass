@@ -177,6 +177,11 @@ class ConversationState:
     # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
+    # NX-133: STIVA de constrângeri de căutare multi-tur (buget/concerns/brand/suitable_for +
+    # category_key pt reset). Distinct de `constraints` (acela = slot-fill din clarify, NX-112).
+    # Owner la scriere: stagiul agent (`merge_constraints`, după triaj); persistat de processor.
+    # Ref-uri scalare + listă scurtă de termeni (P8); cap 6 chei / concerns ≤5 (P4).
+    search_constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
     # owner la scriere: Sender (processor, din `ctx.state_patch`). Cap 10 linii (impus în cart_add).
     cart: list[dict[str, Any]] = field(default_factory=list)
@@ -216,6 +221,12 @@ class ConversationState:
             # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
             asked_intents=(raw.get("asked_intents") or [])[-8:],
             constraints=raw.get("constraints") or {},
+            # NX-133: back-compat — state vechi fără cheia asta / corupt (non-dict) → stivă goală.
+            search_constraints=(
+                raw.get("search_constraints")
+                if isinstance(raw.get("search_constraints"), dict)
+                else {}
+            ),
             cart=cart,
             state_version=int(raw.get("state_version") or 0),
         )
