@@ -168,6 +168,19 @@ def _feature_clause(facet_keys: tuple[str, ...], values: list[str], placeholder:
     )
 
 
+def _variant_label_clause(label: str, placeholder: Any) -> str:
+    """NX-135: produsul are o VARIANTĂ cu eticheta cerută (nuanță/mărime) — filtru DUR pentru
+    fallback-ul gradat („alte game care CHIAR au Warm Beige"). Match NORMALIZAT (lower + strip
+    diacritice RO, ca `_feature_clause`/`normalize`) + substring → „warm beige" prinde „Warm Beige".
+    Corelat pe produsul din SELECT (`v.product_id = p.id`); scope moștenit din `business_id`."""
+    lp = placeholder(label)
+    return (
+        "exists (select 1 from product_variants v where v.product_id = p.id "
+        f"and translate(lower(v.label), 'ăâîșț', 'aaist') "
+        f"like '%' || translate(lower({lp}), 'ăâîșț', 'aaist') || '%')"
+    )
+
+
 async def search_products(
     conn: asyncpg.Connection,
     business_id: str,
@@ -242,6 +255,7 @@ async def search_products_lexical(
     concerns: list[str] | None = None,
     features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
+    variant_label: str | None = None,
     price_max: float | None = None,
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
@@ -275,6 +289,8 @@ async def search_products_lexical(
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
+    if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)
+        conds.append(_variant_label_clause(variant_label, placeholder))
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if in_stock_only:
@@ -526,6 +542,7 @@ async def search_products_semantic(
     concerns: list[str] | None = None,
     features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
+    variant_label: str | None = None,
     category: str | None = None,
     brand: str | None = None,
     sort_mode: str = "relevance",
@@ -571,6 +588,8 @@ async def search_products_semantic(
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
+    if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)
+        conds.append(_variant_label_clause(variant_label, placeholder))
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
 

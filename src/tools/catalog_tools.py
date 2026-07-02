@@ -63,6 +63,10 @@ class SearchArgs(BaseModel):
     # când clientul numește un produs specific, nu o nevoie. Dacă search NU întoarce un produs care
     # să-l conțină → disclosure „nu există ca atare" (anti-bait-and-switch, ca brand-not-found).
     product_name: str | None = None
+    # NX-135: eticheta EXACTĂ de variantă cerută de client (nuanță/mărime, ex. „Warm Beige", „03").
+    # Filtru DUR → doar produse care AU o variantă cu eticheta asta (fallback gradat, nivelul 3:
+    # „alte game care chiar au Warm Beige"). Cap de lungime = o etichetă, nu o frază.
+    variant_label: str | None = Field(default=None, max_length=80)
 
 
 class DetailArgs(BaseModel):
@@ -106,9 +110,12 @@ def _brief(products: list[dict[str, Any]]) -> str:
         rating = f" | {float(p['rating']):.1f}★" if p.get("rating") else ""
         # NX-118: tokenul de stoc → modelul nu mai scrie „este pe stoc" fără bază pe ruta de search.
         avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
+        # NX-135: produsul are varianta cerută (search pe variant_label) → fit grounded.
+        vmatch = " | are varianta cerută" if p.get("variant_match") else ""
+        summ = (p.get("ai_summary") or "")[:120]
         lines.append(
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
-            f"{float(p['price']):.2f} lei{rating}{avail} | {(p.get('ai_summary') or '')[:120]}"
+            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch} | {summ}"
         )
     return "\n".join(lines)
 
@@ -466,6 +473,7 @@ async def search_products_tool(
             concerns=f["concerns"],
             features=f["features"],
             searchable_facets=searchable_facets,
+            variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
             category=f["category"],
             brand=a.brand,
             sort_mode=a.sort_mode,
@@ -483,6 +491,7 @@ async def search_products_tool(
                     concerns=f["concerns"],
                     features=f["features"],
                     searchable_facets=searchable_facets,
+                    variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă
                     category=f["category"],
                     brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
                     sort_mode=a.sort_mode,
@@ -527,6 +536,11 @@ async def search_products_tool(
     by_id = {str(p["id"]): p for p in ranked_final}
     page_ids, cursor = _next_page(pool_ids, 0, seen, a.limit)
     products = [by_id[i] for i in page_ids]
+    # NX-135: search filtrat pe variant_label → TOATE rezultatele au varianta cerută (construcție).
+    # Marcăm fiecare produs → `_brief` îl semnalează → modelul scrie fit grounded, nu inventat.
+    if a.variant_label:
+        for p in products:
+            p["variant_match"] = True
     # mode=semantic DOAR dacă un produs din vector a SUPRAVIEȚUIT în pagina întoarsă (nu doar
     # „vectorul a întors ceva"): dedup/RRF pot elimina toate hiturile vector → altfel minte.
     vector_ids = {str(v["id"]) for v in vector_final}
@@ -551,6 +565,8 @@ async def search_products_tool(
         relax_depth=relax_depth,
         zero_result=not products,
         top_cosine_distance=top_cosine,
+        had_variant_label=a.variant_label
+        is not None,  # NX-135: căutare de variantă (nuanță/mărime)
         diversified=diversified,  # NX-134: prima pagină a fost re-compusă divers
         brands_in_result=len({p.get("brand") for p in products if p.get("brand")}),
     )
