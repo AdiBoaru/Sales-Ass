@@ -581,6 +581,9 @@ async def handle_turn(
             **new_state,
             "constraints": ctx.state.constraints,
             "asked_intents": ctx.state.asked_intents,
+            # NX-133: stiva de constrângeri de căutare (mutată in-place de agent) — la fel ca
+            # `constraints`, trebuie merge-uită canonic aici, altfel se pierde la write-back.
+            "search_constraints": ctx.state.search_constraints,
         }
         # NX-119b: resetează sesiunea de căutare dacă reply-ul NU e o căutare de produse (fără
         # sesiuni zombi — un „mai arată-mi" ulterior nu trebuie să reia o sesiune veche, fără

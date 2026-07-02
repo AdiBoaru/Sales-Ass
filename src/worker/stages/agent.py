@@ -725,10 +725,61 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     )
 
 
+# NX-133: stiva de constrângeri multi-tur. Cheile scalare peste care merge-ul suprascrie/păstrează;
+# `concerns` are tratament de UNION separat. `category_key` = trigger de reset, nu constrângere de
+# search (o vede _filters_hint dar o ignoră). Cap dur (P4): 5 termeni concerns, ≤6 chei total.
+_CONSTRAINT_SCALAR_KEYS = ("budget_max", "suitable_for", "brand")
+_MAX_CONCERNS = 5
+
+
+def merge_constraints(
+    stored: Any, filters: dict[str, Any] | None, category_key: str | None
+) -> tuple[dict[str, Any], bool]:
+    """Funcție PURĂ: împacă stiva stocată cu sloturile turului curent (`filters` din triaj), pt ca
+    o RAFINARE („am tenul mixt") să NU piardă constrângerile deja spuse („ser cu vitamina C sub
+    150"). Regulă (P5, runda 2):
+    - slot scalar NOU (buget/brand/suitable_for) → SUPRASCRIE; absent → păstrează din stivă;
+    - `concerns` → UNION (recent întâi), dedupe case-insensitive, cap 5;
+    - RESET total când `category_key` e set ȘI diferă de cel stocat (subiect nou: alt tip produs).
+      `category_key` null (follow-up neancorat) → stiva se PĂSTREAZĂ — exact cazul rafinării.
+    Întoarce `(merged, reset)`. Robust la stored corupt (non-dict → {})."""
+    stored = stored if isinstance(stored, dict) else {}
+    filters = filters if isinstance(filters, dict) else {}
+    prev_cat = stored.get("category_key")
+    reset = bool(category_key) and bool(prev_cat) and category_key != prev_cat
+    base = {} if reset else dict(stored)
+    merged: dict[str, Any] = {}
+
+    for k in _CONSTRAINT_SCALAR_KEYS:
+        v = filters.get(k)
+        if v is not None and v != "":
+            merged[k] = v
+        elif base.get(k) not in (None, ""):
+            merged[k] = base[k]
+
+    seen: set[str] = set()
+    unioned: list[str] = []
+    for c in [*(filters.get("concerns") or []), *(base.get("concerns") or [])]:
+        if not isinstance(c, str):
+            continue
+        key = c.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            unioned.append(c.strip())
+    if unioned:
+        merged["concerns"] = unioned[:_MAX_CONCERNS]
+
+    cat = category_key or (None if reset else prev_cat)
+    if cat:
+        merged["category_key"] = cat
+    return merged, reset
+
+
 def _filters_hint(filters: dict[str, Any]) -> str:
     """NX-116: constrângerile structurate din triaj (`RouteDecision.filters`) ca HINT determinist
     pentru primul `search_products` — agentul nu le reparsează din proză. Args rămân ale modelului
-    (P3); hint-ul doar îl seedează cu ce a extras nano."""
+    (P3); hint-ul doar îl seedează cu ce a extras nano. NX-133: primește stiva MERGED (nu doar
+    turul curent) → hint-ul cară constrângerile deja spuse."""
     if not filters:
         return ""
     parts: list[str] = []
@@ -1024,7 +1075,25 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
     cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
-    filters_hint = _filters_hint(route.filters)  # NX-116: seed structurat din triaj (P3 respectat)
+    # NX-133: stiva de constrângeri multi-tur — DOAR pe SALES (order/handoff nu ating stiva).
+    # Filters curente merged peste ce s-a spus deja → rafinarea nu resetează căutarea. Scriere pe
+    # ctx.state (owner = agent); persistat de processor (merge canonic, ca `constraints`).
+    if is_order:
+        merged_constraints = route.filters
+    else:
+        merged_constraints, cons_reset = merge_constraints(
+            ctx.state.search_constraints, route.filters, route.category_key
+        )
+        ctx.state.search_constraints = merged_constraints
+        current = route.filters or {}
+        carried = sum(1 for k in merged_constraints if k != "category_key" and k not in current)
+        ctx.emit(
+            "constraints_merged",
+            keys=sorted(merged_constraints),
+            reset=cons_reset,
+            carried=carried,
+        )
+    filters_hint = _filters_hint(merged_constraints)  # NX-116/133: seed structurat (stiva merged)
     # A2 (Val1): semnal de CUMPĂRARE → onorează intenția (checkout_link + confirmă stocul), nu
     # re-recomanda. Hint per-tur (în USER, nu în prefixul cached). Leagă tool-urile existente de
     # intenția detectată de triaj (gap-ul „tool-uri există dar nelegate").
