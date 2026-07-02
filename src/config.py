@@ -488,6 +488,10 @@ class Settings(BaseSettings):
     triage_factual_guard_enabled: bool = Field(
         default=True, validation_alias="TRIAGE_FACTUAL_GUARD_ENABLED"
     )
+    # NX-136 (IZI-parity P12): la ÎNCHIDERE („mulțumesc, asta vreau") triajul atașează chips pe
+    # categorii ADIACENTE celei discutate (cross-sell prin rutină). OFF → mesajul cald simplu, fără
+    # chips (byte-identic cu azi pe `simple`).
+    closure_chips_enabled: bool = Field(default=True, validation_alias="CLOSURE_CHIPS_ENABLED")
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")

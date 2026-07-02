@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ValidationError
 
 from src.config import get_settings
-from src.db.queries.catalog import list_category_slugs
+from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
 from src.models import Route, RouteDecision, TurnContext
 from src.worker.context import context_blocks, conversation_transcript
@@ -40,6 +40,30 @@ _CLARIFY_FALLBACK = {
     "en": "To help you better, could you tell me a bit more about what you're looking for?",
     "hu": "Hogy jobban segíthessek, elmondanád pontosabban, mit keresel?",
 }
+
+# NX-136: șablonul chip-ului de închidere per-locale (voce de client → reintră ca tur nou). `{}` =
+# numele categoriei surori. Fallback pe 'ro'.
+_CLOSURE_CHIP = {
+    "ro": "Recomandă-mi și {}",
+    "en": "Also recommend {}",
+    "hu": "Ajánlj még {}",
+}
+
+
+async def _closure_chips(deps: PipelineDeps, ctx: TurnContext) -> tuple[list[str], str | None]:
+    """NX-136: chips DETERMINISTE pe categorii ADIACENTE celei discutate (cross-sell prin rutină).
+    Sursa categoriei = `state.search_constraints.category_key` (NX-133, ultima categorie discutată).
+    Fără categorie → fără chips (mesaj cald simplu, P6). Query eșuat → fără chips (best-effort)."""
+    slug = (getattr(ctx.state, "search_constraints", None) or {}).get("category_key")
+    if not slug:
+        return [], None
+    try:
+        names = await sibling_categories(deps.conn, ctx.business.id, slug, limit=4)
+    except Exception as e:  # noqa: BLE001 — best-effort: DB pică → doar mesajul cald (fără chips)
+        log.warning("closure: sibling_categories eșuat (%s) → fără chips", type(e).__name__)
+        return [], slug
+    tmpl = _CLOSURE_CHIP.get(ctx.language) or _CLOSURE_CHIP["ro"]
+    return [tmpl.format(n) for n in names], slug
 
 
 def _normalize_slots(slots: Any, domain_pack: DomainPack | None) -> dict[str, Any]:
@@ -115,7 +139,7 @@ Format JSON de răspuns:
  "slots": {"budget_max": <număr sau null>, "concerns": [<termeni din lista de nevoi sau []>],
            "suitable_for": <text scurt sau null>, "brand": <nume brand sau null>},
  "suggestions": [<2-4 opțiuni scurte de apăsat pt clarify (ex. idei de cadou), altfel []>],
- "purchase_intent": <true|false>}
+ "purchase_intent": <true|false>, "closure": <true|false>}
 
 Reguli:
 - "confidence": "high" = intenție ȘI categorie clare; "med" = rezonabil de clar; "low" = nu e
@@ -137,6 +161,12 @@ Reguli:
   („îl iau", „o cumpăr", „cumpăr acum", „adaugă în coș", „vreau să comand asta"). Ruta rămâne
   „sales". Doar interes/explorare („îmi place", „mai zi-mi", „cât costă") → false. Folosește
   contextul: „da" după ce ai oferit linkul/coșul = purchase_intent true.
+- "closure": true DOAR când clientul ÎNCHIDE conversația după ce i-ai arătat produse — mulțumire /
+  confirmare de final FĂRĂ nicio acțiune cerută („mulțumesc, asta vreau", „perfect, gata", „super,
+  mersi"). Ruta = „simple", iar "reply" = un mesaj scurt cald de încheiere. DISTINCȚIE critică:
+  „asta vreau, ADAUGĂ-O în coș" cere o ACȚIUNE → purchase_intent=true, route=„sales", closure=false.
+  „mulțumesc! și pentru păr aveți ceva?" = întrebare NOUĂ → route=„sales", closure=false. Fără
+  produse arătate anterior, un simplu „mulțumesc" e tot simple, dar closure=false (nimic de închis).
 - O cerere de cumpărare FĂRĂ tip de produs — doar „un cadou" / „ceva" / „ceva sub 100 lei" (numai
   buget), fără să spună CE produs — e „clarify": întreabă scurt ce tip de produs și, dacă e cadou,
   pentru cine și cu ce ocazie. DAR „cremă"/„ser"/„parfum"/„șampon" SUNT tipuri de produs → „sales"
@@ -174,6 +204,9 @@ class TriageOut(BaseModel):
     suggestions: list[str] = []
     # A2 (Val1): clientul vrea să CUMPERE ACUM (nu doar să exploreze). Back-compat: lipsă → False.
     purchase_intent: bool = False
+    # NX-136: clientul ÎNCHIDE conversația (mulțumire de final după produse arătate) → mesaj cald +
+    # chips pe categorii adiacente (cross-sell prin rutină). Back-compat: nano vechi/lipsă → False.
+    closure: bool = False
 
 
 async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -263,7 +296,16 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # simple / clarify: nano a compus răspunsul → early exit la Sender.
     # simple = răspuns static reutilizabil (cacheabil); clarify = specific contextului.
     if route == Route.SIMPLE and out.reply:
-        ctx.set_reply(out.reply)
+        # NX-136: ÎNCHIDERE („mulțumesc, asta vreau") → mesaj cald + chips pe categorii ADIACENTE
+        # (cross-sell prin rutină, ca iZi), nu fundătură. Chips DETERMINISTE din cod (nu nano) →
+        # reply necacheabil (depinde de categoria discutată, nu otrăvește cache-ul).
+        if out.closure and get_settings().closure_chips_enabled:
+            chips, cat = await _closure_chips(deps, ctx)
+            ctx.set_reply(out.reply, cacheable=False)
+            ctx.reply.suggestions = chips
+            ctx.emit("closure_served", chips=len(chips), category=cat)
+        else:
+            ctx.set_reply(out.reply)
     elif route == Route.CLARIFY:
         # NX-130: persistă slotul cerut → turul următor îl reia determinist (clarify_resume_stage).
         # NX-116: dacă nano n-a compus o întrebare (low-confidence forțat din sales/order), folosim

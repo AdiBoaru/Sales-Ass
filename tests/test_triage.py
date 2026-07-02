@@ -230,3 +230,82 @@ async def test_purchase_intent_backcompat_defaults_false():
     llm = FakeLLM({"route": "sales", "category_key": "creme-fata"})
     await triage_stage(ctx, _deps(llm))
     assert ctx.route.purchase_intent is False
+
+
+# --- NX-136: închidere conversațională + chips pe categorii adiacente ---------
+
+
+async def test_closure_attaches_sibling_chips(monkeypatch):
+    """Închidere după produse → mesaj cald + chips pe categorii surori, reply necacheabil."""
+    from src.models import ConversationState
+    from src.worker.stages import triage as triage_mod
+
+    async def fake_siblings(conn, business_id, slug, *, limit=4):
+        assert slug == "creme-fata"  # sursa = state.search_constraints.category_key
+        return ["Geluri de curățare", "Tonere"]
+
+    monkeypatch.setattr(triage_mod, "sibling_categories", fake_siblings)
+
+    ctx = _ctx("mulțumesc, asta vreau!")
+    ctx.state = ConversationState(search_constraints={"category_key": "creme-fata"})
+    llm = FakeLLM({"route": "simple", "reply": "Mă bucur că ai găsit ce trebuie!", "closure": True})
+    await triage_stage(ctx, _deps(llm))
+
+    assert ctx.route.route == Route.SIMPLE
+    assert ctx.reply.text == "Mă bucur că ai găsit ce trebuie!"
+    assert ctx.reply.cacheable is False  # depinde de categorie → nu otrăvește cache-ul
+    assert ctx.reply.suggestions == ["Recomandă-mi și Geluri de curățare", "Recomandă-mi și Tonere"]
+    ev = [e for e in ctx.events if e.type == "closure_served"]
+    assert ev and ev[0].properties == {"chips": 2, "category": "creme-fata", "turn_id": ctx.turn_id}
+
+
+async def test_closure_without_category_is_warm_message_only(monkeypatch):
+    """Închidere fără categorie discutată (state gol) → mesaj cald, ZERO chips (P6), fără crash."""
+    from src.worker.stages import triage as triage_mod
+
+    async def boom(*a, **k):
+        raise AssertionError("fără category_key → nu interoga surorile")
+
+    monkeypatch.setattr(triage_mod, "sibling_categories", boom)
+
+    ctx = _ctx("mersi, gata!")  # ctx.state implicit → search_constraints = {}
+    llm = FakeLLM({"route": "simple", "reply": "Cu drag! O zi bună!", "closure": True})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.reply.text == "Cu drag! O zi bună!"
+    assert ctx.reply.suggestions == []
+    ev = [e for e in ctx.events if e.type == "closure_served"]
+    assert ev and ev[0].properties["chips"] == 0 and ev[0].properties["category"] is None
+
+
+async def test_simple_non_closure_has_no_chips():
+    """`simple` fără closure (salut normal) → reply cacheabil, fără chips (byte-identic cu azi)."""
+    ctx = _ctx("salut")
+    llm = FakeLLM({"route": "simple", "reply": "Bună! Cu ce te pot ajuta?", "closure": False})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.reply.cacheable is True and ctx.reply.suggestions == []
+    assert not any(e.type == "closure_served" for e in ctx.events)
+
+
+async def test_closure_kill_switch_off(monkeypatch):
+    """Kill-switch OFF → mesajul cald simplu, fără chips (comportamentul vechi pe `simple`)."""
+    from src.config import get_settings
+    from src.models import ConversationState
+
+    monkeypatch.setattr(get_settings(), "closure_chips_enabled", False)
+    ctx = _ctx("mulțumesc, asta vreau!")
+    ctx.state = ConversationState(search_constraints={"category_key": "creme-fata"})
+    llm = FakeLLM({"route": "simple", "reply": "Cu plăcere!", "closure": True})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.reply.cacheable is True and ctx.reply.suggestions == []
+    assert not any(e.type == "closure_served" for e in ctx.events)
+
+
+async def test_purchase_intent_stays_sales_not_closure():
+    """„asta vreau, adaugă în coș" = purchase_intent (sales), NU closure."""
+    ctx = _ctx("asta vreau, adaugă în coș")
+    llm = FakeLLM(
+        {"route": "sales", "category_key": "creme-fata", "purchase_intent": True, "closure": False}
+    )
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.SALES and ctx.route.purchase_intent is True
+    assert not any(e.type == "closure_served" for e in ctx.events)

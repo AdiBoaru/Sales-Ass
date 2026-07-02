@@ -463,6 +463,32 @@ async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> lis
     return [r["slug"] for r in rows]
 
 
+async def sibling_categories(
+    conn: asyncpg.Connection, business_id: str, slug: str, *, limit: int = 4
+) -> list[str]:
+    """NX-136: numele categoriilor SURORI (același `parent_id`) ale categoriei cu `slug`, pentru
+    chips-urile de închidere („recomandă un gel de curățare" după o cremă). Dublu-scoped pe
+    `business_id` (c1 ȘI c2, P7). `is not distinct from` tratează `parent_id` NULL = NULL → o
+    categorie TOP-LEVEL primește celelalte top-level ca surori. `conn` tenant-scoped."""
+    rows = await conn.fetch(
+        """
+        select c2.name
+        from categories c1
+        join categories c2
+          on c2.business_id = c1.business_id
+         and c2.parent_id is not distinct from c1.parent_id
+         and c2.id <> c1.id
+        where c1.business_id = $1 and c1.slug = $2
+        order by c2.name
+        limit $3
+        """,
+        business_id,
+        slug,
+        limit,
+    )
+    return [r["name"] for r in rows]
+
+
 async def list_category_names(conn: asyncpg.Connection, business_id: str) -> list[str]:
     """Numele categoriilor TOP-LEVEL ale tenantului — pentru groundarea promptului agentului
     (NX-78, principiul 9). `order by name` → ordine deterministă (prefix de cache stabil).
