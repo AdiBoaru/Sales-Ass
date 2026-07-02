@@ -187,6 +187,12 @@ class Settings(BaseSettings):
     # aproximativ e util. NX-124a: 0.66 după paritate + variante de formulare (recall RO bun;
     # agentul decide dacă folosește hint-ul).
     faq_tau_tool: float = Field(default=0.66, validation_alias="FAQ_TAU_TOOL")
+    # τ POLICY: prag relaxat DOAR când mesajul conține o întrebare CLARĂ de livrare/plată/retur/
+    # garanție (regex în faq_stage). Măsurat live: „aveti livrare in cat timp ajunge" atinge doar
+    # ~0.56 cosine față de FAQ-urile de livrare (chiar și pur ~0.62), sub faq_tau_high=0.78 → nu se
+    # aprindea NICIODATĂ, iar agentul re-recomanda (bug „copy-paste"). Regexul dă precizia; 0.45
+    # lasă întrebarea de livrare să prindă FAQ-ul real. Tunabil din env.
+    faq_tau_policy: float = Field(default=0.45, validation_alias="FAQ_TAU_POLICY")
     # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
     # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
     # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).
