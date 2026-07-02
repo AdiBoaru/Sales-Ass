@@ -70,8 +70,17 @@ async def checkout_link_tool(
 
     base = _checkout_base(ctx)
     if not base:
+        # NX-137: llm_view instructiv — „Checkout indisponibil" gol făcea modelul să GENERALIZEZE
+        # refuzul („nu pot nici să adaug în coș"), deși cart_add nu depinde de URL. Spunem explicit
+        # ce funcționează, ca răspunsul către client să ofere pasul următor, nu un refuz total.
         return ToolResult(
-            ok=False, error="no_checkout_url", llm_view="Checkout indisponibil momentan."
+            ok=False,
+            error="no_checkout_url",
+            llm_view=(
+                "Linkul de plată nu e configurat pentru acest magazin — NU promite și NU inventa "
+                "un link. Coșul FUNCȚIONEAZĂ separat: adaugă produsul cu cart_add și spune-i "
+                "clientului că finalizarea se face pe site."
+            ),
         )
 
     # Validăm produsele contra catalogului (scoped pe business) — nu linkuim ce nu există.

@@ -242,11 +242,34 @@ _VIEW_LABEL: dict[str, str] = {
     "en": "View product",
     "hu": "Termék megtekintése",
 }
+# NX-137: eticheta CTA-ului de plată (Offer pe linkul de checkout creat în acest tur).
+_CHECKOUT_LABEL: dict[str, str] = {
+    "ro": "Finalizează comanda",
+    "en": "Complete your order",
+    "hu": "Rendelés befejezése",
+}
 
 
 def _link_lead(language: str | None, *, many: bool) -> str:
     d = _LINK_LEAD_MANY if many else _LINK_LEAD_ONE
     return d.get(language or "ro") or d["ro"]
+
+
+def _checkout_label(language: str | None) -> str:
+    return _CHECKOUT_LABEL.get(language or "ro") or _CHECKOUT_LABEL["ro"]
+
+
+def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
+    """NX-137: linkul de checkout creat în ACEST tur ajunge GARANTAT la client, pe orice cale de
+    compunere. Root cause (găsit live pe sim): pe calea RICH (web) modelul are INTERZIS structural
+    să scrie linkuri (regulile rich) → linkul era creat în DB (`checkout_link_created`) și apoi
+    murea tăcut — reply fără URL. Offer e neutru de canal (NX-114): marginile bogate randează
+    buton/CTA; floor-ul din `set_offer` lipește URL-ul la text DOAR dacă nu e deja acolo (proza
+    de WhatsApp îl poate conține deja — fără dublare)."""
+    if not url or ctx.reply is None:
+        return
+    ctx.set_offer(Offer(kind="open_url", label=_checkout_label(ctx.language), url=url))
+    ctx.emit("checkout_offer_attached")
 
 
 def _no_link_msg(language: str | None) -> str:
@@ -663,15 +686,23 @@ def _rich_bundle(
 
 
 async def _finalize_rich(
-    llm, rich_system: str, query: str, products: list[dict[str, Any]], ctx, history: str
+    llm,
+    rich_system: str,
+    query: str,
+    products: list[dict[str, Any]],
+    ctx,
+    history: str,
+    notes: str = "",
 ):
     """Compune recomandarea STRUCTURATĂ (model iZi). Modelul emite intro + referințe
     product_id/pro_index/fit_clause + pick + education + chip_intents (enum închis); codul
-    (compose) hidratează faptele. `rich_system` = system generat din DB (NX-78). Întoarce
-    `RichReply` sau None (→ fallback pe proză)."""
+    (compose) hidratează faptele. `rich_system` = system generat din DB (NX-78). `notes` =
+    context per-tur din bucla de tool-uri (NX-137: ex. checkout eșuat → fără chips de coș).
+    Întoarce `RichReply` sau None (→ fallback pe proză)."""
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
+    notes_block = f"NB: {notes}\n" if notes else ""
     user = (
-        f"Limba clientului: {ctx.language}\n{history_block}"
+        f"Limba clientului: {ctx.language}\n{notes_block}{history_block}"
         f"Nevoia clientului: {query}\n\nProduse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
@@ -926,7 +957,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         and _CHEAPER_RE.search(query) is None
     )
 
-    tools = tool_schemas(enabled_tools(ctx.business, route.route.value))
+    tool_names = enabled_tools(ctx.business, route.route.value)
+    tools = tool_schemas(tool_names)
     retrieved: list[dict[str, Any]] = []
     generated_links: set[str] = set()  # linkuri create de bot (checkout_link) → validator
     grounded_prices: set[float] = set()  # sume din DB (total comandă/checkout) → validator
@@ -935,6 +967,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     order_gated = {"login": False}  # web anonim a încercat un lookup de comandă → login wall
     added_cart: dict[str, Any] = {"product": None}  # #7b: ultimul produs adăugat în coș (cart_add)
     search_rel: dict[str, Any] = {"meta": None}  # izi-parity: relevanța ultimului search_products
+    failed_commerce: set[str] = set()  # NX-137: cart/checkout eșuate → chips fără contradicții
+    checkout_offer: dict[str, Any] = {"url": None}  # NX-137: linkul REAL creat în acest tur → CTA
 
     async def execute(name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
@@ -957,6 +991,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             ctx.state_patch.update(result.state_patch)
         if name == "cart_add" and result.ok and result.products:
             added_cart["product"] = result.products[0]  # #7b: ancora pentru cross-sell
+        # NX-137: un eșec de comerț în ACEST tur → compunerea nu are voie să sugereze chips-ul
+        # exact refuzat în mesaj („Adaugă-l în coș" sub un „nu pot adăuga în coș" — runda 2, iZi).
+        if name in ("cart_add", "checkout_link") and not result.ok:
+            failed_commerce.add(name)
+        if name == "checkout_link" and result.ok and result.links:
+            checkout_offer["url"] = result.links[0]  # NX-137: → Offer(open_url) pe reply
         if name == "check_order":
             if result.ok and result.llm_view:
                 order_views.append(result.llm_view)
@@ -1030,6 +1070,45 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
         return
 
+    # NX-137: nota de comerț pentru compunere — un cart_add/checkout_link eșuat în acest tur
+    # interzice chips-urile care promit exact acțiunea refuzată (contradicția din runda 2 iZi).
+    commerce_note = (
+        "coșul/linkul de plată au EȘUAT în acest tur — în `suggestions` NU propune mesaje de tip "
+        "«adaugă în coș» sau «dă-mi link de plată»; oferă alternative (detalii, comparație, "
+        "similare)."
+        if failed_commerce
+        else ""
+    )
+
+    # NX-137: purchase_intent onorat DETERMINIST (CALM — codul decide). Observat live pe sim:
+    # clientul cere EXPLICIT „adaugă în coș și dă-mi link de plată", modelul cheamă doar cart_add,
+    # iar turul e deturnat de cross-sell — fără link. Dacă intenția de cumpărare e detectată, coșul
+    # are linii și modelul n-a creat linkul, îl creează codul, prin ACELAȘI `execute` (analytics,
+    # generated_links → cross-sell sare, checkout_offer → CTA pe reply; bookkeeping identic).
+    if (
+        not is_order
+        and not show_more
+        and route.purchase_intent
+        and checkout_offer["url"] is None
+        and "checkout_link" not in failed_commerce
+        and "checkout_link" in tool_names
+        and get_settings().checkout_intent_fallback_enabled
+    ):
+        # state_patch["cart"] = coșul COMPLET merged de cart_add în acest tur; altfel cel din state.
+        cart_lines = list(ctx.state_patch.get("cart") or ctx.state.cart or [])
+        items = [
+            {
+                "product_id": str(line["product_id"]),
+                "variant_id": line.get("variant_id"),
+                "quantity": int(line.get("quantity") or 1),
+            }
+            for line in cart_lines
+            if line.get("product_id")
+        ][:10]
+        if items:
+            await execute("checkout_link", {"cart_items": items})
+            ctx.emit("checkout_intent_fallback", items=len(items))
+
     # #7b — cross-sell „merge bine cu" (model iZi): clientul tocmai a adăugat un produs în coș →
     # sugerăm produse COMPLEMENTARE (rutină/accesorii) ca CARDURI, prin calea rich existentă.
     # Retrieval DETERMINIST (brand/concern, categorie DIFERITĂ = complement, nu substitut); copy
@@ -1057,6 +1136,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 complementary,
                 ctx,
                 history,
+                notes=commerce_note,
             )
             if rich is not None and rich.items:
                 rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
@@ -1162,7 +1242,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
             rich = await _finalize_rich(
-                deps.llm, prompt_builder.build_rich_system(inp), query, products, ctx, history
+                deps.llm,
+                prompt_builder.build_rich_system(inp),
+                query,
+                products,
+                ctx,
+                history,
+                notes=commerce_note,
             )
             if rich is not None and rich.items:
                 ctx.set_rich_reply(
@@ -1170,6 +1256,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                     text=compose.flatten(rich, ctx.language),
                     products=compose.card_products(rich.items),
                 )
+                # NX-137: regulile rich INTERZIC linkuri în proza modelului → fără atașarea asta,
+                # linkul de checkout creat în acest tur nu ajungea NICIODATĂ la client pe web.
+                _attach_checkout_offer(ctx, checkout_offer["url"])
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
                 return
             # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
@@ -1202,6 +1291,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             grounded_prices,
         )
         ctx.set_reply(reply, products=_card_products(products))
+        # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
+        # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
+        _attach_checkout_offer(ctx, checkout_offer["url"])
         ctx.emit("agent_recommended", n=len(products))
     elif final:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă

@@ -251,6 +251,153 @@ async def test_no_llm_is_noop():
     assert ctx.reply is None
 
 
+# --- NX-137: eșec de comerț → nota NB în compunerea rich ----------------------
+
+
+async def test_finalize_rich_notes_reach_user():
+    """`notes` (NX-137) devine linie „NB:" în mesajul user al compunerii; fără notes → absentă."""
+    captured: list[str] = []
+
+    class _CapSchemaLLM(FakeLLM):
+        async def complete_schema(self, system, user, schema, *, model=None):
+            captured.append(user)
+            raise RuntimeError("stop")  # nu testăm assemble-ul, doar prompt-ul compus
+
+    ctx = _ctx()
+    out = await agent_mod._finalize_rich(
+        _CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "", notes="fără chips de coș"
+    )
+    assert out is None  # excepție la apel → fallback pe proză (comportament existent)
+    assert "NB: fără chips de coș" in captured[0]
+
+    await agent_mod._finalize_rich(_CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "")
+    assert "NB:" not in captured[1]  # fără notes → prompt byte-identic cu înainte
+
+
+async def test_checkout_link_attached_as_offer(monkeypatch):
+    """NX-137 root cause (găsit live pe sim): checkout_link REUȘEA (link creat în DB), dar linkul
+    nu ajungea la client — regulile rich interzic linkuri în proza modelului. Fix: Offer(open_url)
+    atașat pe reply → buton pe web, URL în text pe canalele fără CTA (floor-ul din set_offer)."""
+    import src.tools.commerce_tools as cm
+
+    async def fake_by_ids(conn, business_id, ids, *, limit=6):
+        return [p for p in PRODUCTS if p["id"] in set(ids)]
+
+    async def fake_create(conn, business_id, conversation_id, contact_id, ref, cart, url, exp):
+        return {"id": "cl1", "ref_code": ref, "url": url}
+
+    monkeypatch.setattr(cm, "get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr(cm, "create_checkout_link", fake_create)
+
+    ctx = _ctx(body="da, cumpăr prima, dă-mi checkout")
+    ctx.business = BusinessConfig(
+        id="b", slug="d", name="D", settings={"checkout_url": "https://shop.example/checkout"}
+    )
+    llm = FakeLLM(
+        tool_calls=[
+            (
+                "checkout_link",
+                {"cart_items": [{"product_id": "p1", "variant_id": None, "quantity": 1}]},
+            )
+        ],
+        final="",
+    )
+    await agent_stage(ctx, _deps(llm))
+
+    assert ctx.reply is not None and ctx.reply.offer is not None
+    assert ctx.reply.offer.kind == "open_url"
+    assert ctx.reply.offer.url == "https://shop.example/checkout?ref=t"
+    # floor-ul (canale fără buton): URL-ul e garantat și în text, o singură dată
+    assert ctx.reply.text.count("https://shop.example/checkout?ref=t") == 1
+    assert any(e.type == "checkout_offer_attached" for e in ctx.events)
+
+
+async def test_purchase_intent_checkout_fallback(monkeypatch):
+    """NX-137 (găsit live pe sim): la „adaugă în coș și dă-mi link de plată" modelul cheamă doar
+    cart_add, iar turul e deturnat de cross-sell — fără link. Cu purchase_intent + coș + fără link
+    creat de model → CODUL cheamă checkout_link determinist și atașează Offer-ul."""
+    import src.tools.commerce_tools as cm
+
+    async def fake_by_ids(conn, business_id, ids, *, limit=6):
+        return [p for p in PRODUCTS if p["id"] in set(ids)]
+
+    async def fake_create(conn, business_id, conversation_id, contact_id, ref, cart, url, exp):
+        return {"id": "cl1", "ref_code": ref, "url": url}
+
+    monkeypatch.setattr(cm, "get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr(cm, "create_checkout_link", fake_create)
+
+    ctx = _ctx(body="da, adaugă primul în coș și dă-mi linkul de plată")
+    ctx.business = BusinessConfig(
+        id="b", slug="d", name="D", settings={"checkout_url": "https://shop.example/checkout"}
+    )
+    ctx.route = RouteDecision(route=Route.SALES, purchase_intent=True)
+    # modelul cheamă DOAR cart_add (non-compliance) — codul trebuie să completeze checkout-ul
+    llm = FakeLLM(
+        tool_calls=[("cart_add", {"product_id": "p1", "variant_id": None, "quantity": 1})],
+        final="",
+    )
+    await agent_stage(ctx, _deps(llm))
+
+    assert ctx.reply is not None and ctx.reply.offer is not None
+    assert ctx.reply.offer.url == "https://shop.example/checkout?ref=t"
+    assert any(e.type == "checkout_intent_fallback" for e in ctx.events)
+    # checkout creat → cross-sell NU deturnează turul (generated_links îl blochează)
+    assert not any(e.type == "cross_sell" for e in ctx.events)
+
+
+async def test_purchase_intent_no_cart_no_fallback(monkeypatch):
+    """purchase_intent fără coș (nicio linie) → fallback-ul NU inventează un checkout gol."""
+    _patch_search(monkeypatch, PRODUCTS)
+    ctx = _ctx(body="vreau să cumpăr ceva bun")
+    ctx.route = RouteDecision(route=Route.SALES, purchase_intent=True)
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "cremă", "price_max": None, "limit": 6})],
+        final="",
+    )
+    await agent_stage(ctx, _deps(llm))
+    assert ctx.reply is not None and ctx.reply.offer is None
+    assert not any(e.type == "checkout_intent_fallback" for e in ctx.events)
+
+
+async def test_failed_checkout_injects_commerce_note(monkeypatch):
+    """NX-137 e2e: checkout_link eșuat (no_checkout_url) în același tur → compunerea rich
+    primește NB-ul anti-contradicție (fără chips «adaugă în coș» sub un mesaj care refuză coșul)."""
+    import src.tools.commerce_tools as cm  # populează TOOL_REGISTRY cu checkout_link
+
+    _patch_search(monkeypatch, PRODUCTS)
+    monkeypatch.setattr(cm.get_settings(), "checkout_base_url", "", raising=False)
+
+    captured: list[str] = []
+
+    class _CapSchemaLLM(FakeLLM):
+        async def complete_schema(self, system, user, schema, *, model=None):
+            captured.append(user)
+            raise RuntimeError("stop")
+
+    llm = _CapSchemaLLM(
+        tool_calls=[
+            ("search_products", {"query": "cremă", "price_max": None, "limit": 6}),
+            (
+                "checkout_link",
+                {"cart_items": [{"product_id": "p1", "variant_id": None, "quantity": 1}]},
+            ),
+        ],
+        final="",
+    )
+    ctx = _ctx(body="vreau să cumpăr crema")
+    await agent_stage(ctx, _deps(llm))
+
+    assert captured, "calea rich nu a rulat (products goale?)"
+    assert "NB:" in captured[0] and "adaugă în coș" in captured[0]
+    # eșecul e vizibil și în analytics (tool_call cu ok=False, error=no_checkout_url)
+    ev = [
+        e for e in ctx.events if e.type == "tool_call" and e.properties["name"] == "checkout_link"
+    ]
+    assert ev and ev[0].properties["ok"] is False
+    assert ev[0].properties["error"] == "no_checkout_url"
+
+
 async def test_compare_intent_serves_table_deterministically(monkeypatch):
     """IZI-parity G2: „compară primele două" pe un set deja afișat → tabel structurat DETERMINIST,
     fără bucla LLM (nu depinde de model să cheme compare_products). Agnostic de vertical."""

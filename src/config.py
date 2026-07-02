@@ -461,6 +461,13 @@ class Settings(BaseSettings):
     # determinist (brand/concern, categorie diferită), copy prin calea rich. OFF → fără cross-sell
     # (rămâne confirmarea de coș a agentului, comportament vechi).
     cross_sell_enabled: bool = Field(default=True, validation_alias="CROSS_SELL_ENABLED")
+    # NX-137: purchase_intent onorat determinist — clientul a cerut cumpărarea, coșul are linii,
+    # dar modelul n-a chemat checkout_link (non-compliance observat live pe sim) → codul creează
+    # linkul (ref=turn_id, idempotent per tur) și îl atașează ca Offer(open_url). OFF →
+    # comportamentul vechi (linkul apare doar dacă modelul cheamă tool-ul).
+    checkout_intent_fallback_enabled: bool = Field(
+        default=True, validation_alias="CHECKOUT_INTENT_FALLBACK_ENABLED"
+    )
     # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
     # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
     # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.
