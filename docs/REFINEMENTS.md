@@ -135,6 +135,27 @@ produs. E aliniat cu patternul P8 (iZi: „Cofeina sună bine. Aveți livrare?" 
 Cod în `faq_stage`, nu prompt — de prioritizat împreună cu stiva de constrângeri (NX-133) sau ca
 follow-up dedicat.
 
+**✅ REZOLVAT (RUTAREA) — NX-138 (2026-07-02).** Cauza reală: pragul relaxat de politică (#171)
+„salva" un FAQ de CONSULTANȚĂ produs (nu de politică) pe un mesaj mixt, pentru că „livrare" aprindea
+regexul. Fix: relaxarea se aplică DOAR când FAQ-ul potrivit e el însuși de politică (`_POLICY_RE` pe
+întrebarea FAQ-ului). Verificat live: mixtul ajunge la agent (produs tratat), politica pură tot
+prinde FAQ. Reziduu → R8.
+
+### R8 — Mesaj mixt: răspunsul de politică nu apare lângă cardurile de produs · P2
+
+**Observat:** 2026-07-02, sim live (NX-138). După fix-ul de rutare (R7), mesajul mixt „caut o cremă…
+și cât durează livrarea?" ajunge la agent și primește carduri de PRODUS, dar partea de LIVRARE nu
+apare în răspuns.
+
+**Cauză:** formatul rich (intro/items/education/suggestions) n-are slot pentru un răspuns de politică
+grounded; `education` e scrubuit de cifre (nu poate căra „1-3 zile"). Chiar dacă agentul cheamă
+faq_lookup, răspunsul n-are unde ateriza pe calea rich.
+
+**Fix planificat:** rich reply cu o NOTĂ grounded (din faq_lookup llm_view), randată înainte/după
+carduri — plumbing similar cu Offer-ul de checkout (NX-137): captează rezultatul faq_lookup din
+bucla de tool-uri, pasează-l la compose ca notă. Cod în agent.py + compose + contractul de render
+web (FE). Follow-up dedicat.
+
 ---
 
 ## ✅ Implementate

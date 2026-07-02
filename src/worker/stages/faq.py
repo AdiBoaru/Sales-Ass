@@ -64,7 +64,15 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # Prag RELAXAT pe întrebări de politică/livrare (regex = precizie): mesajele mixte
         # („rituals suna bine, aveti livrare?") diluează embedding-ul sub faq_tau_high → altfel
         # întrebarea de livrare pică la agent, care re-recomandă (bug „copy-paste"). Vezi config.
-        is_policy = _POLICY_RE.search(canon) is not None
+        # NX-138 (R7): relaxarea se aplică DOAR dacă FAQ-ul potrivit e el ÎNSUȘI de politică
+        # (întrebarea lui match-uiește regexul). Altfel pragul jos „salva" un FAQ de CONSULTANȚĂ
+        # produs pe un mesaj mixt produs+livrare, deflectând cererea de produs (bug live). Un mesaj
+        # de politică pe un FAQ de politică = intenția #171, păstrată. Kill-switch fail-open.
+        msg_is_policy = _POLICY_RE.search(canon) is not None
+        faq_is_policy = (
+            hit is not None and _POLICY_RE.search(canonicalize(hit["question"])[0]) is not None
+        )
+        is_policy = msg_is_policy and (faq_is_policy or not s.faq_policy_gate_on_faq_kind)
         tau = s.faq_tau_policy if is_policy else s.faq_tau_high
         if hit is not None and sim >= tau:
             # Cacheable DOAR la hit de încredere mare (tau_high). Hit relaxat pe mesaj MIXT →

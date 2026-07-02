@@ -78,8 +78,14 @@ async def test_policy_question_relaxed_threshold_hits(monkeypatch):
     # FAQ_Q = „...retur" → întrebare de POLITICĂ → prag relaxat faq_tau_policy (0.45). 0.60 e SUB
     # faq_tau_high (0.78) dar PESTE 0.45 → HIT. Repară bug-ul „copy-paste": întrebarea de livrare/
     # politică (diluată de partea de produs) nu mai pică la agent, care re-recomanda.
+    # NX-138: FAQ-ul potrivit e el ÎNSUȘI de politică („cum returnez") → relaxarea se aplică.
     async def fake_lookup(conn, bid, locale, emb, **k):
-        return {"id": "f3", "question": "x", "answer": "Retur în 14 zile.", "similarity": 0.60}
+        return {
+            "id": "f3",
+            "question": "cum returnez un produs",
+            "answer": "Retur în 14 zile.",
+            "similarity": 0.60,
+        }
 
     monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
     ctx = _ctx(FAQ_Q)
@@ -87,6 +93,39 @@ async def test_policy_question_relaxed_threshold_hits(monkeypatch):
     assert ctx.reply is not None and ctx.reply.text == "Retur în 14 zile."
     assert ctx.reply.cacheable is False  # hit relaxat pe mesaj de politică → NU se cache-uiește
     assert any(e.type == "faq_hit" and e.properties.get("policy") is True for e in ctx.events)
+
+
+async def test_mixed_message_nonpolicy_faq_defers_to_agent(monkeypatch):
+    # NX-138 (R7): mesaj MIXT produs+politică („caut o cremă… și cât durează livrarea?") — „livrare"
+    # aprinde regexul de politică, DAR cel mai apropiat FAQ e unul de CONSULTANȚĂ produs („cum aleg
+    # crema"), nu de politică. Fără fix, pragul relaxat (0.45) l-ar servi → deflecta cererea de
+    # produs. Cu fix: FAQ-ul nu e de politică → prag HIGH (0.78) → 0.60 pică → merge la agent.
+    async def fake_lookup(conn, bid, locale, emb, **k):
+        return {
+            "id": "f4",
+            "question": "cum aleg crema potrivita pentru tenul meu",
+            "answer": "Spune-mi tipul de ten…",
+            "similarity": 0.60,
+        }
+
+    monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
+    ctx = _ctx("caut o crema pentru ten uscat si cat dureaza livrarea")
+    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
+    assert ctx.reply is None  # NU deflectează → pipeline continuă spre triaj/agent (multi-intent)
+    assert any(e.type == "faq_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
+
+
+async def test_kill_switch_off_restores_171_behavior(monkeypatch):
+    # Kill-switch OFF → comportamentul #171 (relaxare pe orice FAQ dacă mesajul e de politică).
+    monkeypatch.setattr(get_settings(), "faq_policy_gate_on_faq_kind", False)
+
+    async def fake_lookup(conn, bid, locale, emb, **k):
+        return {"id": "f5", "question": "cum aleg crema", "answer": "x", "similarity": 0.60}
+
+    monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
+    ctx = _ctx("caut o crema pentru ten uscat si cat dureaza livrarea")
+    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
+    assert ctx.reply is not None  # OFF → prag relaxat pe FAQ non-politică (ca înainte de NX-138)
 
 
 async def test_zero_rows_miss(monkeypatch):
@@ -147,6 +186,7 @@ def _fallback_settings(**over):
         faq_enabled=True,
         faq_tau_high=0.78,
         faq_tau_policy=0.45,
+        faq_policy_gate_on_faq_kind=True,
         faq_fallback_tau=0.85,
         faq_locale_fallback_enabled=True,
         model_embed="m1",

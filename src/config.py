@@ -193,6 +193,13 @@ class Settings(BaseSettings):
     # aprindea NICIODATĂ, iar agentul re-recomanda (bug „copy-paste"). Regexul dă precizia; 0.45
     # lasă întrebarea de livrare să prindă FAQ-ul real. Tunabil din env.
     faq_tau_policy: float = Field(default=0.45, validation_alias="FAQ_TAU_POLICY")
+    # NX-138 (R7): pragul relaxat de politică se aplică DOAR dacă FAQ-ul potrivit e el însuși de
+    # politică (întrebarea lui match-uiește regexul). Fără asta, pragul jos „salva" un FAQ de
+    # CONSULTANȚĂ produs pe un mesaj MIXT (produs + livrare) → deflecta cererea de produs (live).
+    # OFF (False) → comportamentul #171 (relaxare pe orice FAQ dacă mesajul e de politică).
+    faq_policy_gate_on_faq_kind: bool = Field(
+        default=True, validation_alias="FAQ_POLICY_GATE_ON_FAQ_KIND"
+    )
     # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
     # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
     # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).
@@ -425,6 +432,13 @@ class Settings(BaseSettings):
     # (fail-safe) → fuziunea cade pe `deterministic_rerank` (RRF pur, byte-identic).
     search_blended_rank_enabled: bool = Field(
         default=True, validation_alias="SEARCH_BLENDED_RANK_ENABLED"
+    )
+    # NX-134 (IZI-parity P2): prima pagină de rezultate (pe `relevance`) se DIVERSIFICĂ — scară de
+    # preț (terțe) + max 2 produse per brand — în loc de top-N aproape identice. Selecție greedy
+    # deterministă peste candidații DEJA rankați (top-1/pick neschimbat). OFF (fail-safe) → ordinea
+    # de relevanță pură, byte-identic cu azi. Nu se aplică pe sort explicit / produs numit.
+    search_diversify_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_DIVERSIFY_ENABLED"
     )
     # ARCH-2026 P0: cardurile rich sunt ORDONATE de rankingul de retrieval (determinist), iar
     # „Recomandarea mea" = produsul cel mai bine clasat afișat — NU alegerea liberă a modelului
