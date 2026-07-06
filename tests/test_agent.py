@@ -405,7 +405,7 @@ async def test_compare_intent_serves_table_deterministically(monkeypatch):
     async def fake_by_ids(conn, business_id, ids, *, limit=6):
         return [p for p in PRODUCTS if p["id"] in ids][:limit]
 
-    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr("src.agent.deterministic.get_products_by_ids", fake_by_ids)
     ctx = _ctx(body="compară primele două")
     ctx.state.displayed_products = [
         ProductRef(product_id="p1", name="Crema Hidratantă", price=82.99),
@@ -426,7 +426,7 @@ async def test_compare_intent_falls_through_when_under_two_displayed(monkeypatch
     async def fake_by_ids(conn, business_id, ids, *, limit=6):  # n-ar trebui chemat
         raise AssertionError("get_products_by_ids nu trebuie chemat sub 2 produse afișate")
 
-    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr("src.agent.deterministic.get_products_by_ids", fake_by_ids)
     _patch_search(monkeypatch, PRODUCTS)
     ctx = _ctx(body="compară-le")
     ctx.state.displayed_products = [
