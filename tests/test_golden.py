@@ -164,7 +164,12 @@ def test_all_seed_cases_present():
 async def _disable_guard(monkeypatch, which: str) -> None:
     """Dezactivează un guard determinist (pt proba că un caz de injection e load-bearing)."""
     if which == "validator":
+        # NX-144: guardul de proză trăiește și în agent_stage (check direct) și în `finalize`
+        # (`_finalize*`) → dezactivăm `_valid` în AMBELE, altfel atacul rămâne blocat de finalize.
+        from src.agent import finalize as finalize_mod
+
         monkeypatch.setattr(agent_mod, "_valid", lambda *a, **k: True)  # acceptă orice text
+        monkeypatch.setattr(finalize_mod, "_valid", lambda *a, **k: True)
     elif which == "moderation":
 
         async def _no_block(ctx, deps):
