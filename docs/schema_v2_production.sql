@@ -235,6 +235,7 @@ create table outbox (
   kind            text not null default 'message'
                   check (kind in ('message','template','typing','reaction')),
   payload         jsonb not null,
+  priority        smallint not null default 50, -- lower = more urgent (user=10, transactional=20, marketing=80)
   status          text not null default 'pending'
                   check (status in ('pending','dispatching','sent','failed','dead')),
   attempts        integer not null default 0,
@@ -246,6 +247,8 @@ create table outbox (
 );
 create index idx_outbox_due on outbox(next_attempt_at)
   where status in ('pending','failed');
+create index idx_outbox_due_priority on outbox(business_id, priority, next_attempt_at, id)
+  where status in ('pending','failed','dispatching');
 
 -- TEMPLATE MANAGER — ciclul de viață al template-urilor Meta
 create table wa_templates (

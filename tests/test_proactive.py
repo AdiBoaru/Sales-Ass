@@ -82,7 +82,7 @@ def _patch_engine(
             allowed=True, mode="free", reason="ok_free", rendered_text="hi"
         )
 
-    async def f_enqueue(conn, biz, conv, idem, payload, *, kind):
+    async def f_enqueue(conn, biz, conv, idem, payload, *, kind, priority=None):
         calls["enqueue"].append((conv, idem, payload, kind))
         return enqueue_id
 

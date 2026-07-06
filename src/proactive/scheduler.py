@@ -25,7 +25,11 @@ from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.analytics import insert_events
 from src.db.queries.contacts import get_contact_by_id
-from src.db.queries.outbox import enqueue_outbox
+from src.db.queries.outbox import (
+    OUTBOX_PRIORITY_MARKETING,
+    OUTBOX_PRIORITY_TRANSACTIONAL,
+    enqueue_outbox,
+)
 from src.db.queries.proactive import (
     business_ids_with_due_jobs,
     claim_due_jobs,
@@ -44,6 +48,13 @@ _SKIP_STATUS = {
     "no_optin": "skipped_no_optin",
     "no_window_no_template": "skipped_no_window",
 }
+
+
+def _outbox_priority_for_job(kind: str) -> int:
+    """Transactional notices should outrank marketing nudges in the dispatcher queue."""
+    if kind == "awb_update":
+        return OUTBOX_PRIORITY_TRANSACTIONAL
+    return OUTBOX_PRIORITY_MARKETING
 
 
 class ProactiveRouteError(RuntimeError):
@@ -118,7 +129,13 @@ async def _process_job(conn, business_id: str, job: dict[str, Any], events: list
         # mode == 'free' → mesaj liber în fereastra 24h.
         payload = {"type": "text", "to": to, "text": decision.rendered_text}
     new_id = await enqueue_outbox(
-        conn, business_id, conv_id, f"proactive:{job_id}", payload, kind="message"
+        conn,
+        business_id,
+        conv_id,
+        f"proactive:{job_id}",
+        payload,
+        kind="message",
+        priority=_outbox_priority_for_job(kind),
     )
     await mark_job(conn, business_id, job_id, "sent")
     events.append(
