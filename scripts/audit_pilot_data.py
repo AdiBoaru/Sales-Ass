@@ -148,9 +148,13 @@ async def _audit(conn: asyncpg.Connection, args: argparse.Namespace) -> dict:
     has_aliases = await _table_exists(conn, "intent_aliases")
 
     active = await _count(
-        conn, "select count(*) from products where business_id = $1 and status = 'active'", args.business
+        conn,
+        "select count(*) from products where business_id = $1 and status = 'active'",
+        args.business,
     )
-    total_products = await _count(conn, "select count(*) from products where business_id = $1", args.business)
+    total_products = await _count(
+        conn, "select count(*) from products where business_id = $1", args.business
+    )
     with_url = await _count(
         conn,
         """
@@ -171,7 +175,8 @@ async def _audit(conn: asyncpg.Connection, args: argparse.Namespace) -> dict:
     )
     with_price = await _count(
         conn,
-        "select count(*) from products where business_id = $1 and status = 'active' and price is not null",
+        "select count(*) from products where business_id = $1 and status = 'active' "
+        "and price is not null",
         args.business,
     )
     with_category = await _count(
@@ -383,7 +388,9 @@ async def _audit(conn: asyncpg.Connection, args: argparse.Namespace) -> dict:
             )
         ]
 
-    categories = await _count(conn, "select count(*) from categories where business_id = $1", args.business)
+    categories = await _count(
+        conn, "select count(*) from categories where business_id = $1", args.business
+    )
     active_categories_used = await _count(
         conn,
         """
@@ -545,15 +552,24 @@ def _next_actions(gates: list[Gate]) -> list[str]:
     failed = {g.name for g in gates if not g.ok}
     actions: list[str] = []
     if "active products" in failed or "top " in " ".join(failed):
-        actions.append("Import/curate at least the top pilot products with image, product_url, price, category.")
+        actions.append(
+            "Import/curate the top pilot products with image, product_url, price, category."
+        )
     if "product embeddings" in failed:
-        actions.append("Run product embedding job after catalog is stable: python -m src.jobs.embed_products --force")
+        actions.append(
+            "Run product embedding job after catalog is stable: "
+            "python -m src.jobs.embed_products --force"
+        )
     if "active FAQ" in failed or "embedded FAQ" in failed:
         actions.append("Seed curated FAQ: python -m src.jobs.seed_faqs --business <business_id>")
     if "approved aliases" in failed:
-        actions.append("Seed/approve intent_aliases for frequent web questions and category synonyms.")
+        actions.append(
+            "Seed/approve intent_aliases for frequent web questions and category synonyms."
+        )
     if "product summaries" in failed:
-        actions.append("Enrich product ai_summary/details for at least the representative demo subset.")
+        actions.append(
+            "Enrich product ai_summary/details for at least the representative demo subset."
+        )
     return actions
 
 
@@ -575,7 +591,8 @@ def _render_markdown(report: dict) -> str:
     for gate in report["gates"]:
         status = "PASS" if gate["ok"] else "FAIL"
         lines.append(
-            f"| {gate['name']} | {status} | {gate['actual']} | {gate['expected']} | {gate['severity']} |"
+            f"| {gate['name']} | {status} | {gate['actual']} "
+            f"| {gate['expected']} | {gate['severity']} |"
         )
 
     lines += [
@@ -620,7 +637,9 @@ def _render_markdown(report: dict) -> str:
         lines.append("- none in sampled top products")
     else:
         for item in gaps:
-            lines.append(f"- `{item['name']}` (`{item['id']}`): missing {', '.join(item['missing'])}")
+            lines.append(
+                f"- `{item['name']}` (`{item['id']}`): missing {', '.join(item['missing'])}"
+            )
 
     lines += ["", "## Next Actions", ""]
     lines.extend([f"- {a}" for a in report["next_actions"]] or ["- none"])

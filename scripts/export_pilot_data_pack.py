@@ -1,7 +1,8 @@
 """Export the pilot data pack as JSON (NX-155).
 
 Usage:
-    python scripts/export_pilot_data_pack.py --business <business_id> --output reports/pilot-data-pack.json
+    python scripts/export_pilot_data_pack.py --business <business_id> \
+        --output reports/pilot-data-pack.json
 
 The export is read-only. It intentionally omits raw vector payloads; embeddings
 should be regenerated after import, while this file keeps the embedding manifest.
