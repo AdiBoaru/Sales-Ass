@@ -196,8 +196,10 @@ async def _run(conn: asyncpg.Connection, business_id: str, dry_run: bool) -> Non
         business_id,
     )
     renames, residual = _plan(rows)
-    print(f"business={business_id}  active={len(rows)}  renames={len(renames)}  "
-          f"residual={len(residual)}  dry_run={dry_run}")
+    print(
+        f"business={business_id}  active={len(rows)}  renames={len(renames)}  "
+        f"residual={len(residual)}  dry_run={dry_run}"
+    )
     for _id, old, new in renames[:20]:
         print(f"  '{old}'\n    -> '{new}'")
     if len(renames) > 20:
