@@ -6,8 +6,8 @@ filtrul de zgomot (procente, numere mici de proză, whitelist), și kill-switch-
 
 from types import SimpleNamespace
 
-from src.worker.stages import agent as ag
-from src.worker.stages.agent import _allowed_numbers, _bad_bare_numbers, _valid
+from src.agent import validator as val  # NX-142: kill-switch-urile se citesc din validator
+from src.worker.stages.agent import _allowed_numbers, _bad_bare_numbers, _valid  # re-export
 
 PRODUCTS = [
     {
@@ -34,7 +34,7 @@ def _enable(monkeypatch, on=True, *, claims=False):
     # incidental cuvinte-claim ca „rating"/„ore"/„in stock"). Testele NX-117 setează claims=True.
     # NX-118: guard-ul de stoc urmează `claims` (stoc availability-aware pe calea de proză).
     monkeypatch.setattr(
-        ag,
+        val,
         "get_settings",
         lambda: SimpleNamespace(
             validator_bare_numbers_enabled=on,
