@@ -15,12 +15,37 @@ from __future__ import annotations
 
 import logging
 import re
-from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
+from src.agent.deterministic import (
+    _CHEAPER_RE,
+    _COMPARE_RE,  # noqa: F401 — re-export (teste)
+    _LINK_RE,  # noqa: F401 — re-export (teste)
+    _MORE_RE,  # noqa: F401 — re-export (teste)
+    _comparison_facets,
+    is_show_more,
+    try_pre_intents,
+)
+from src.agent.fallbacks import (
+    _card_products,
+    _cart_confirm_msg,
+    _cheapest_already_msg,
+    _checkout_label,
+    _compare_chips,
+    _cross_sell_query,
+    _dedupe,
+    _deterministic_reply,
+    _no_more_msg,
+    _products_brief,
+)
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
+from src.agent.tool_executor import (
+    ToolRun,
+    _safe_tool_args,  # noqa: F401 — re-export (teste)
+    _trunc,  # noqa: F401 — re-export (teste)
+)
 from src.agent.validator import (
     ValidationResult,  # noqa: F401 — re-export (consumatori/teste)
     _allowed_numbers,  # noqa: F401 — re-export (teste)
@@ -53,7 +78,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     handoff_tools,
     orders_tools,
 )
-from src.tools.base import enabled_tools, run_tool
+from src.tools.base import enabled_tools
 from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
@@ -67,32 +92,9 @@ log = logging.getLogger(__name__)
 # `_URL_RE`/`_BARE_NUM_RE`/`_SAFE_BARE` trăiesc în `src/agent/validator.py` (NX-142) și sunt
 # importate mai sus. `_finalize*` orchestrează retry/fallback pe baza lor (regia rămâne aici).
 
-# P1 (ARCH-product-retrieval): follow-up de PREȚ pe un set deja afișat → re-căutare DETERMINISTĂ a
-# produselor strict mai ieftine (search_cheaper_than), NU re-rank pe setul afișat (R3). Precizie
-# mare RO/HU/EN (comparativ/superlativ de preț). Un miss cade grațios pe comportamentul vechi (R3).
-_CHEAPER_RE = re.compile(
-    r"\bmai\s+ieftin\w*|\bcea\s+mai\s+ieftin\w*|\bmai\s+accesibil\w*"
-    r"|\bpre[țt]\s+mai\s+mic|\bmai\s+mic\s+la\s+pre[țt]|\bbuget\s+mai\s+mic"
-    r"|\bprea\s+scump\w*|\bcam\s+scump\w*"
-    r"|\bcheaper\b|\bcheapest\b|\bolcs[óo]bb\w*|\blegolcs[óo]bb\w*",
-    re.IGNORECASE,
-)
-
-# IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat → tabel DETERMINIST (ca
-# cheaper/show_more/link), fără să depindem de modelul care cheamă `compare_products`. RO/EN/HU,
-# agnostic de vertical. ÎNALTĂ PRECIZIE deliberat (gate-ul n-are recurs la model pe fals-pozitiv):
-# DOAR verbul „a compara" + „versus/vs" + verbul HU. `compar[aăie]\w*` prinde compara/compară/
-# comparați/comparație ȘI EN compare/comparison/comparing, dar NU „compartiment" (compar+t). Frazele
-# laxe („ce diferență e între ele") cad pe calea model-driven (modelul cheamă compare_products) — nu
-# le prindem determinist ca să nu confundăm „diferența dintre garanție și retur" cu o comparație.
-_COMPARE_RE = re.compile(
-    r"\bcompar[aăie]\w*"
-    r"|\bversus\b|\bvs\.?\b"
-    r"|\b[öo]sszehasonl\w*|\bhasonl[íi]ts\w*",
-    re.IGNORECASE,
-)
-# „trei/three/3/három" în cerere → comparăm 3; altfel 2 (perechea = cazul dominant „primele două").
-_THREE_RE = re.compile(r"\btrei\b|\bthree\b|\b3\b|\bh[áa]rom\b", re.IGNORECASE)
+# Regexurile intențiilor deterministe PRE-loop (`_LINK_RE`/`_COMPARE_RE`/`_THREE_RE`/`_MORE_RE`) +
+# `_CHEAPER_RE` (partajat) trăiesc în `src/agent/deterministic.py` (NX-143). `_ATTR_QUERY_RE` rămâne
+# aici (intenție POST-loop, faza E → planner NX-144).
 
 # MOD SUPERLATIV (IZI): întrebare despre setul AFIȘAT de tip „care dintre ele e cea mai X". ÎNALTĂ
 # precizie (ca _COMPARE_RE): „care" + „cea/cel/cele mai" în aceeași frază, SAU „care dintre ele/
@@ -107,163 +109,6 @@ _ATTR_QUERY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
-_CHEAPEST_ALREADY: dict[str, str] = {
-    "ro": "Momentan asta e cea mai ieftină opțiune pe care o am pentru tine. "
-    "Vrei să-ți arăt altceva sau o altă categorie?",
-    "en": "This is the cheapest option I have right now. "
-    "Want me to show you something else or another category?",
-    "hu": "Jelenleg ez a legolcsóbb lehetőség, amim van. Mutassak mást vagy egy másik kategóriát?",
-}
-
-
-def _cheapest_already_msg(language: str | None) -> str:
-    return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
-
-
-# #7b — cross-sell la add-to-cart (model iZi). Confirmarea coșului e DETERMINISTĂ (per-locale, NU
-# scrubuită → robustă la nume de produs cu cifre, ex. „30 ml"); produsele complementare + fit-ul
-# lor vin din calea rich. `_CROSS_SELL_QUERY` = instrucțiunea către modelul rich (complement, nu
-# alternativă). Generic pe vertical (formularea nu e specifică beauty).
-_CART_CONFIRM: dict[str, str] = {
-    "ro": "Gata, am adăugat {name} în coș 🛒 Iată ce merge bine cu el:",
-    "en": "Done — I added {name} to your cart 🛒 Here's what pairs well with it:",
-    "hu": "Kész, betettem a kosaradba: {name} 🛒 Íme, ami jól illik hozzá:",
-}
-_CROSS_SELL_QUERY: dict[str, str] = {
-    "ro": "Clientul tocmai a adăugat în coș «{name}». Recomandă produsele de mai jos ca fiind "
-    "COMPLEMENTARE (merg bine împreună / completează rutina sau alegerea), NU ca alternative. "
-    "Pentru fiecare, spune SCURT de ce se potrivește cu «{name}».",
-    "en": "The customer just added «{name}» to the cart. Recommend the products below as "
-    "COMPLEMENTARY (they pair well / complete the routine or choice), NOT as alternatives. For "
-    "each, briefly say why it fits with «{name}».",
-    "hu": "Az ügyfél most tette a kosárba: «{name}». Ajánld az alábbi termékeket KIEGÉSZÍTŐKÉNT "
-    "(jól illenek együtt / kiegészítik a választást), NEM alternatívaként. Mindegyiknél mondd el "
-    "röviden, miért illik «{name}»-hez.",
-}
-
-
-def _cart_confirm_msg(added: dict[str, Any], language: str | None) -> str:
-    tmpl = _CART_CONFIRM.get(language or "ro") or _CART_CONFIRM["ro"]
-    return tmpl.format(name=added.get("name") or "produsul")
-
-
-def _cross_sell_query(added: dict[str, Any], language: str | None) -> str:
-    tmpl = _CROSS_SELL_QUERY.get(language or "ro") or _CROSS_SELL_QUERY["ro"]
-    return tmpl.format(name=added.get("name") or "produsul")
-
-
-# IZI-compare: chips deterministe pe un tabel comparativ (voce de client → reintră ca tur nou:
-# „Adaugă X" → cart_add; „Ceva mai ieftin" → cheaper). Etichete per-locale (text UI, nu rutare).
-_ADD_LABEL: dict[str, str] = {"ro": "Adaugă", "en": "Add", "hu": "Hozzáad"}
-_CHEAPER_CHIP: dict[str, str] = {
-    "ro": "Ceva mai ieftin",
-    "en": "Something cheaper",
-    "hu": "Valami olcsóbb",
-}
-
-
-def _compare_chips(columns: list[Any], language: str | None) -> list[str]:
-    """Follow-up-uri deterministe după o comparație: „Adaugă <produs>" pentru primele 2 + „mai
-    ieftin". Numele lungi se scurtează (butonul are limită). Voce de client (fără scrub)."""
-    lang = language or "ro"
-    add = _ADD_LABEL.get(lang) or _ADD_LABEL["ro"]
-    chips: list[str] = []
-    for c in columns[:2]:
-        name = c.name if len(c.name) <= 28 else c.name[:27].rstrip() + "…"
-        chips.append(f"{add} {name}")
-    chips.append(_CHEAPER_CHIP.get(lang) or _CHEAPER_CHIP["ro"])
-    return chips
-
-
-# NX-119b: „mai arată-mi"/„show more" = INTENȚIE de PAGINARE (NU un tool nou). Pe o sesiune activă
-# → pagina următoare DETERMINIST, fără bucla LLM. NU prinde „mai ieftin" (= cheaper_intent). Ancorat
-# pe sensul de paginare: „mai multe" PLURAL bare/terminal sau + obiect de listă — NU „mai multă/mult
-# X" (rafinare „mai multă hidratare") și nu „și alte INGREDIENTE" (rafinare). Rafinările cu cuvânt
-# „more" sunt prinse oricum de gate-ul `not route.filters` (cad pe bucla LLM → sesiune nouă).
-_MORE_RE = re.compile(
-    r"\bmai\s+arat\w*"  # „mai arată-mi"
-    r"|\bmai\s+multe\b(?!\s+\w)"  # „mai multe" bare/terminal (NU „mai multă/mult X")
-    r"|\bmai\s+multe\s+(?:produse|op[țt]iuni|variante|rezultate|exemple)\b"
-    r"|\balte\s+(?:op[țt]iuni|variante|produse)\b|\b[șs]i\s+alte\s+(?:op[țt]iuni|variante|produse)\b"
-    r"|\baltele\b|\bmai\s+vreau\b"
-    r"|\bshow\s+more\b|\bmore\s+(?:options|products|results)\b|\bother\s+(?:options|ones)\b"
-    r"|\bt[öo]bbet\b",  # HU: többet (mai mult)
-    re.IGNORECASE,
-)
-
-# Pool epuizat pe „mai arată-mi" → mesaj determinist per-locale (P6, fără tăcere; cacheable=False
-# fiindcă e relativ la sesiunea ACESTUI contact — un cache hit l-ar servi altui context).
-_NO_MORE_RESULTS: dict[str, str] = {
-    "ro": "Astea sunt toate opțiunile pe care le am pe criteriile astea. "
-    "Vrei să căutăm altceva sau să schimbăm filtrele?",
-    "en": "That's everything I have for these criteria. "
-    "Want to search for something else or adjust the filters?",
-    "hu": "Ez minden, amim ezekre a feltételekre van. Keressünk mást vagy módosítsuk a szűrőket?",
-}
-
-
-def _no_more_msg(language: str | None) -> str:
-    return _NO_MORE_RESULTS.get(language or "ro") or _NO_MORE_RESULTS["ro"]
-
-
-# NX-131: cerere de LINK la un produs DEJA arătat („trimite-mi linkul / dă-mi link direct / unde-l
-# cumpăr"). Intenție DETERMINISTĂ (ca _CHEAPER_RE/_MORE_RE): calea rich INTERZICE structural
-# modelului linkurile (regulile rich) → o cerere de link cădea în re-randarea bogată cu coaching
-# repetat (bug live: „partea asta e foarte repetitiva"). Ancorat pe „link" (link/linkul/linkuri,
-# RO/EN) + fraze de cumpărare. `\blink\w*` NU prinde „hyperlink"/„blink" (fără boundary înainte).
-# Gated în agent_stage pe displayed_products + SALES + fără filtre noi (cu filtre = căutare nouă).
-_LINK_RE = re.compile(
-    r"\blink\w*"
-    r"|\bunde\s+(?:o\s+|[îi]l\s+|le\s+)?(?:pot\s+)?(?:cump[ăa]r|comand|g[ăa]sesc)\w*"
-    r"|\bwhere\s+(?:can\s+i\s+|to\s+)?(?:buy|get|find)\b"
-    r"|\bhol\s+(?:tudom\s+)?(?:veszem|vehetem|megvenni|megveszem)\b",
-    re.IGNORECASE,
-)
-
-# Lead-uri SCURTE per-locale pt răspunsul de link (linkul REAL vine ca Offer(open_url)/card, NU în
-# proză — validatorul ar respinge un url inventat oricum). Unul vs mai multe produse țintă.
-_LINK_LEAD_ONE: dict[str, str] = {
-    "ro": "Sigur! 🙂 Uite linkul direct 👇",
-    "en": "Sure! 🙂 Here's the direct link 👇",
-    "hu": "Persze! 🙂 Itt a közvetlen link 👇",
-}
-_LINK_LEAD_MANY: dict[str, str] = {
-    "ro": "Sigur! Uite linkurile direct la produsele de mai sus 👇",
-    "en": "Sure! Here are the direct links to the products above 👇",
-    "hu": "Persze! Itt a fenti termékek közvetlen linkjei 👇",
-}
-# product_url absent (gaură de date pe demo) → ONEST, fără link inventat (PP-F4). Channel-neutru
-# (pipeline-ul nu știe de „butonul Adaugă" al web-ului); oferim pasul care EXISTĂ. cacheable=False.
-_NO_LINK: dict[str, str] = {
-    "ro": "Momentan nu am o pagină de produs pe care să ți-o deschid direct, dar te pot ajuta "
-    "să-l comanzi pas cu pas. Vrei?",
-    "en": "I don't have a product page I can open directly right now, but I can help you order "
-    "it step by step. Want me to?",
-    "hu": "Most nincs külön termékoldalam, amit közvetlenül megnyithatnék, de segíthetek "
-    "lépésről lépésre megrendelni. Szeretnéd?",
-}
-_VIEW_LABEL: dict[str, str] = {
-    "ro": "Vezi produsul",
-    "en": "View product",
-    "hu": "Termék megtekintése",
-}
-# NX-137: eticheta CTA-ului de plată (Offer pe linkul de checkout creat în acest tur).
-_CHECKOUT_LABEL: dict[str, str] = {
-    "ro": "Finalizează comanda",
-    "en": "Complete your order",
-    "hu": "Rendelés befejezése",
-}
-
-
-def _link_lead(language: str | None, *, many: bool) -> str:
-    d = _LINK_LEAD_MANY if many else _LINK_LEAD_ONE
-    return d.get(language or "ro") or d["ro"]
-
-
-def _checkout_label(language: str | None) -> str:
-    return _CHECKOUT_LABEL.get(language or "ro") or _CHECKOUT_LABEL["ro"]
-
 
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
     """NX-137: linkul de checkout creat în ACEST tur ajunge GARANTAT la client, pe orice cale de
@@ -276,14 +121,6 @@ def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
         return
     ctx.set_offer(Offer(kind="open_url", label=_checkout_label(ctx.language), url=url))
     ctx.emit("checkout_offer_attached")
-
-
-def _no_link_msg(language: str | None) -> str:
-    return _NO_LINK.get(language or "ro") or _NO_LINK["ro"]
-
-
-def _view_label(language: str | None) -> str:
-    return _VIEW_LABEL.get(language or "ro") or _VIEW_LABEL["ro"]
 
 
 # System prompt-urile sunt GENERATE din DB per (business, locale) — vezi `prompt_builder`
@@ -333,61 +170,6 @@ _RICH_SCHEMA: dict[str, Any] = {
         },
     },
 }
-
-
-def _products_brief(products: list[dict[str, Any]]) -> str:
-    lines = []
-    for p in products:
-        summary = (p.get("ai_summary") or "")[:140]
-        extra = ""
-        if p.get("rating"):
-            extra += f" | {float(p['rating']):.1f}★"
-        if p.get("review_summary") or p.get("review_pro"):
-            laud = p.get("review_pro") or (p.get("top_pros") or [""])[0]
-            if laud:
-                extra += f" | clienții laudă: {laud}"
-        lines.append(
-            f"- {p['name']} | brand: {p.get('brand') or '-'} | "
-            f"preț: {float(p['price']):.2f} lei{extra} | url: {p.get('url') or '-'} | {summary}"
-        )
-    return "\n".join(lines)
-
-
-def _deterministic_reply(products: list[dict[str, Any]]) -> str:
-    lines = ["Îți recomand:"]
-    for p in products[:3]:
-        lines.append(f"• {p['name']} — {float(p['price']):.2f} lei")
-    lines.append("Vrei detalii sau linkul la vreunul?")
-    return "\n".join(lines)
-
-
-def _card_products(products: list[dict[str, Any]], n: int = 4) -> list[dict[str, Any]]:
-    """Câmpuri compacte pentru cardurile de produs (W1 + carusel R2)."""
-    return [
-        {
-            "product_id": p["id"],
-            "name": p["name"],
-            "price": float(p["price"]),
-            "url": p.get("url"),
-            "image": p.get("image"),
-        }
-        for p in products[:n]
-    ]
-
-
-def _dedupe(products: list[dict[str, Any]], cap: int = 6) -> list[dict[str, Any]]:
-    """Produse unice (după id), ordine păstrată, max `cap` (principiul: ≤6 produse)."""
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
-    for p in products:
-        pid = p.get("id")
-        if pid in seen:
-            continue
-        seen.add(pid)
-        out.append(p)
-        if len(out) >= cap:
-            break
-    return out
 
 
 async def _finalize(
@@ -673,120 +455,6 @@ def _lead_score_hint(ctx: TurnContext) -> str:
 # fraza userului) — păstrăm doar FILTRELE structurate (category/concerns/price_max...) care
 # răspund la „de ce a căutat în categoria greșită". `check_order` e special (vezi _safe_tool_args).
 # Tool-urile cu arg-uri PII (faq_lookup.query, reorder, request_human) NU-s în whitelist → `{}`.
-_TOOL_ARG_WHITELIST: dict[str, tuple[str, ...]] = {
-    "search_products": (
-        "category",
-        "brand",
-        "concerns",
-        "features",
-        "price_max",
-        "sort_mode",
-        "in_stock_only",
-        "limit",
-    ),
-    "get_product_details": ("product_id",),
-    "compare_products": ("product_ids",),
-    "cart_add": ("product_id", "variant_id", "quantity"),
-    "checkout_link": ("cart_items",),  # listă de {product_id, variant_id, quantity} — fără PII
-    "subscribe_back_in_stock": ("product_id", "variant_id"),
-}
-
-
-def _trunc(v: Any) -> Any:
-    """Trunchiere defensivă a unei valori de arg pentru tracing: scalari / liste scurte /
-    dict mic (ex. `filters`). Stringuri tăiate la 64 de caractere, liste la 8 elemente,
-    dict la 8 chei — nimic care să poarte text liber lung al userului în analytics."""
-    if isinstance(v, str):
-        return v[:64]
-    if isinstance(v, list):
-        # recursiv: elementele pot fi dict-uri (ex. cart_items) → bornăm și ele (string cap +
-        # 8-key cap), nu doar string-urile top-level. Altfel un dict în listă scăpa neplafonat.
-        return [_trunc(s) for s in v[:8]]
-    if isinstance(v, dict):
-        return {k: _trunc(val) for k, val in list(v.items())[:8]}
-    return v  # int / float / bool / None — neschimbat
-
-
-def _safe_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """NX-122: args sanitizate pentru event-ul `tool_call` (whitelist per tool, fără PII — P12).
-    `check_order` → DOAR `{has_arg}` (numărul/contactul nu ajung niciodată în analytics); tool
-    necunoscut / fără chei whitelisted → `{}`."""
-    if name == "check_order":
-        return {"has_arg": bool(args)}
-    allowed = _TOOL_ARG_WHITELIST.get(name)
-    if not allowed:
-        return {}
-    out: dict[str, Any] = {}
-    for k in allowed:
-        val = args.get(k)
-        if val is not None:
-            out[k] = _trunc(val)
-    return out
-
-
-async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Servește o cerere de LINK pe produsele DEJA arătate, FĂRĂ bucla LLM (NX-131) — ca
-    show_more/cheaper. State ține doar ref-uri (P8) → fetch `product_url` PROASPĂT din catalog
-    (sursa de adevăr). Link real → Offer(open_url) + card(uri); `product_url` NULL (gaură de date
-    demo) → mesaj ONEST, NU link inventat (PP-F4). Mereu setează un reply (P6, niciodată tăcere)."""
-    ids = [p.product_id for p in ctx.state.displayed_products]
-    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
-    ctx.retrieval = RetrievalResult(products=products, source="link_intent")
-    with_url = [p for p in products if p.get("url")]
-    if not with_url:
-        # Fără product_url → onest + pasul care există. NU re-afișăm cardul (ar repeta exact ce a
-        # frustrat clientul în bucla veche); doar mesajul onest. cacheable=False (context-specific).
-        ctx.emit("link_intent", served=0, in_context=len(products))
-        ctx.set_reply(_no_link_msg(ctx.language), cacheable=False)
-        return
-    ctx.emit("link_intent", served=len(with_url))
-    cards = _card_products(with_url, n=6)
-    if len(with_url) == 1:
-        # Un singur produs țintă → buton CTA (open_url). set_reply ÎNTÂI (creează reply-ul), apoi
-        # set_offer (îl mută pe el — ordinea contează: set_offer cere un reply deja setat).
-        ctx.set_reply(_link_lead(ctx.language, many=False), products=cards, cacheable=False)
-        ctx.set_offer(
-            Offer(kind="open_url", label=_view_label(ctx.language), url=with_url[0]["url"])
-        )
-    else:
-        # Mai multe → cardurile SUNT linkurile (fiecare cu url-ul lui); fără un buton unic arbitrar.
-        ctx.set_reply(_link_lead(ctx.language, many=True), products=cards, cacheable=False)
-
-
-def _comparison_facets(ctx: TurnContext) -> tuple:
-    """Tier 2 (IZI-parity): fațetele de DOMENIU din DomainPack pentru tabelul de comparație
-    (finish/acoperire/potrivit-pentru/..., din products.attributes), gated de kill-switch. OFF /
-    fără pack → () → tabelul are doar rândurile generice (preț/rating/avantaje/brand), ca azi."""
-    if not get_settings().comparison_facets_enabled:
-        return ()
-    pack = getattr(ctx.business, "domain_pack", None)
-    return pack.comparison_facets if pack else ()
-
-
-async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> bool:
-    """Servește o COMPARAȚIE pe produsele DEJA afișate, FĂRĂ bucla LLM (G2, IZI-parity) — ca
-    link/show_more/cheaper. State ține doar ref-uri (P8) → re-fetch detaliile proaspete (preț/
-    rating/avantaje/minusuri/disponibilitate/brand) → tabel structurat DETERMINIST (build_comparison
-    → zero proză LLM în celule). Implicit primele 2 (perechea = cazul dominant „compară primele
-    două"); „trei/3/három" → 3. `get_products_by_ids` păstrează ORDINEA afișată (deixis ordinal
-    corect). <2 valide → False → cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
-    n = 3 if _THREE_RE.search(query) else 2
-    ids = [p.product_id for p in ctx.state.displayed_products][:n]
-    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
-    comparison = compose.build_comparison(products, ctx.language, _comparison_facets(ctx))
-    if comparison is None:
-        return False
-    ctx.retrieval = RetrievalResult(products=products, source="compare_intent")
-    ctx.set_comparison_reply(
-        comparison,
-        text=compose.flatten_comparison(comparison, ctx.language),
-        products=compose.comparison_cards(comparison),
-        chips=_compare_chips(comparison.columns, ctx.language),
-    )
-    ctx.emit("agent_compared", n=len(comparison.columns), deterministic=True)
-    return True
-
-
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -808,115 +476,20 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # are nevoie de cont). Tool-ul semnalează `login_required`; servim mesajul determinist după
     # buclă (cacheable=False) — nu parafraza modelului. NX-129: web cu login verificat trece.
 
-    # NX-131: cerere de LINK pe un produs deja arătat („trimite-mi linkul / dă-mi link direct") =
-    # intenție DETERMINISTĂ (ca cheaper/show_more), NU re-recomandare. Calea rich interzice
-    # modelului linkurile (reguli rich) → cererea de link cădea în re-randarea bogată cu coaching
-    # repetat. O servim direct din state → product_url proaspăt → Offer(open_url) + card, $0
-    # inferență. Doar SALES, doar cu produse afișate, FĂRĂ filtre noi (cu filtre = căutare nouă →
-    # lasă bucla LLM să caute fresh), NU „link la ceva mai ieftin" (= cheaper_intent).
-    link_intent = (
-        not is_order
-        and get_settings().link_intent_enabled
-        and bool(ctx.state.displayed_products)
-        and not route.filters
-        and _LINK_RE.search(query) is not None
-        and _CHEAPER_RE.search(query) is None
-    )
-    if link_intent:
-        await _handle_link_intent(ctx, deps)
+    # Faza B (NX-143): intenții deterministe PRE-loop (link/compare) → early-exit, $0 inferență.
+    if await try_pre_intents(ctx, deps):
         return
 
-    # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe setul deja afișat → tabel structurat
-    # DETERMINIST (ca link/show_more/cheaper), fără să depindem de model să cheme compare_products
-    # (dacă narativiza, dădea proză în loc de tabel — „compară primele două" care doar re-lista). ≥2
-    # produse afișate; FĂRĂ filtre noi (cu filtre = comparație cu o căutare nouă → lasă modelul); NU
-    # pe „mai ieftin" (cheaper_intent). <2 valide la fetch → handler-ul întoarce False → bucla LLM.
-    compare_intent = (
-        not is_order
-        and get_settings().compare_intent_enabled
-        and len(ctx.state.displayed_products) >= 2
-        and not route.filters
-        and _COMPARE_RE.search(query) is not None
-        and _CHEAPER_RE.search(query) is None
-    )
-    if compare_intent and await _handle_compare_intent(ctx, deps, query):
-        return
-
-    # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (fără bucla LLM, cost $0
-    # de inferență). NU pe ORDER/„mai ieftin" (cheaper_intent). Sesiune absentă → flux normal.
-    # `not route.filters`: dacă triajul a extras constrângeri NOI (buget/concerns/brand/categorie),
-    # mesajul e o RAFINARE („mai multe sub 50", „mai multă hidratare"), NU paginare pură → cade pe
-    # bucla LLM (filters_hint → search_products → fp nou → sesiune nouă pe filtrele rafinate). Fără
-    # asta, refinarea ar servi pagina sesiunii VECHI și ar pierde tăcut constrângerile (review).
+    # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (predicatul e în
+    # deterministic.py; paginarea propriu-zisă e mai jos, în GENERATE, via continue_search_session).
     sess = ctx.state.active_search
-    show_more = (
-        not is_order
-        and get_settings().search_sessions_enabled
-        and bool(sess)
-        and not route.filters
-        and _MORE_RE.search(query) is not None
-        and _CHEAPER_RE.search(query) is None
-    )
+    show_more = is_show_more(ctx)
 
     tool_names = enabled_tools(ctx.business, route.route.value)
     tools = tool_schemas(tool_names)
-    retrieved: list[dict[str, Any]] = []
-    generated_links: set[str] = set()  # linkuri create de bot (checkout_link) → validator
-    grounded_prices: set[float] = set()  # sume din DB (total comandă/checkout) → validator
-    order_views: list[str] = []  # vederi grounded de comandă, pt fallback-ul de status
-    compared: list[dict[str, Any]] = []  # IZI-compare: setul EXPLICIT comparat (compare_products)
-    order_gated = {"login": False}  # web anonim a încercat un lookup de comandă → login wall
-    added_cart: dict[str, Any] = {"product": None}  # #7b: ultimul produs adăugat în coș (cart_add)
-    search_rel: dict[str, Any] = {"meta": None}  # izi-parity: relevanța ultimului search_products
-    failed_commerce: set[str] = set()  # NX-137: cart/checkout eșuate → chips fără contradicții
-    checkout_offer: dict[str, Any] = {"url": None}  # NX-137: linkul REAL creat în acest tur → CTA
-
-    async def execute(name: str, args: dict[str, Any]) -> str:
-        """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
-        întoarce vederea compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
-        started = perf_counter()
-        result = await run_tool(ctx, deps, name, args)
-        latency_ms = round((perf_counter() - started) * 1000, 1)
-        retrieved.extend(result.products)
-        # IZI-compare: dacă modelul a chemat compare_products (a înțeles „compară primele două"),
-        # reține setul comparat ÎN ORDINEA cerută (get_products_by_ids o păstrează) → tabel.
-        if name == "compare_products" and result.ok and result.products:
-            compared[:] = result.products
-        # izi-parity hardening: reține relevanța ULTIMULUI search_products (off-category signal) →
-        # o punem pe ctx.retrieval mai jos, ca compose să suprime pick-ul pe categoria greșită.
-        if name == "search_products" and result.relevance is not None:
-            search_rel["meta"] = result.relevance
-        generated_links.update(result.links)
-        grounded_prices.update(result.prices)
-        if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
-            ctx.state_patch.update(result.state_patch)
-        if name == "cart_add" and result.ok and result.products:
-            added_cart["product"] = result.products[0]  # #7b: ancora pentru cross-sell
-        # NX-137: un eșec de comerț în ACEST tur → compunerea nu are voie să sugereze chips-ul
-        # exact refuzat în mesaj („Adaugă-l în coș" sub un „nu pot adăuga în coș" — runda 2, iZi).
-        if name in ("cart_add", "checkout_link") and not result.ok:
-            failed_commerce.add(name)
-        if name == "checkout_link" and result.ok and result.links:
-            checkout_offer["url"] = result.links[0]  # NX-137: → Offer(open_url) pe reply
-        if name == "check_order":
-            if result.ok and result.llm_view:
-                order_views.append(result.llm_view)
-            elif result.error == "login_required":
-                # Web anonim: lookup-ul de comandă a fost gated în tool → servim mesajul de login
-                # determinist după buclă (nu lăsăm modelul să-l parafrazeze / să ceară nr comandă).
-                order_gated["login"] = True
-        # NX-122: args whitelisted + count + latență + clasă de eroare (NU corpul). Corelat
-        # cu restul turului prin `turn_id` injectat automat în emit() → traiectorie rejucabilă.
-        ctx.emit(
-            "tool_call",
-            name=name,
-            ok=result.ok,
-            args=_safe_tool_args(name, args),
-            n_results=len(result.products),
-            latency_ms=latency_ms,
-            error=(result.error if not result.ok else None),
-        )
-        return result.llm_view or (result.error or "(fără rezultat)")
+    # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
+    # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
+    run = ToolRun(ctx, deps)
 
     history = conversation_transcript(ctx.history)
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
@@ -976,8 +549,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             final = ""  # fără text de model — compose-ul rich phrasează din produse mai jos
         else:
             final = await deps.llm.run_tool_loop(
-                prompt_builder.build_agent_system(inp), user, tools, execute
+                prompt_builder.build_agent_system(inp), user, tools, run.execute
             )
+            retrieved = run.retrieved  # produsele acumulate de tool executor în această buclă
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
@@ -985,7 +559,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # FAQ-first: dacă modelul a cerut chiar un lookup de comandă pe web anonim (check_order →
     # login_required), servim mesajul de login DETERMINIST. Apare DOAR acum (nu pe toată ruta), după
     # ce agentul a avut șansa să răspundă din FAQ/catalog. cacheable=False (context-relativ).
-    if order_gated["login"]:
+    if run.order_gated_login:
         ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
         return
 
@@ -995,7 +569,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         "coșul/linkul de plată au EȘUAT în acest tur — în `suggestions` NU propune mesaje de tip "
         "«adaugă în coș» sau «dă-mi link de plată»; oferă alternative (detalii, comparație, "
         "similare)."
-        if failed_commerce
+        if run.failed_commerce
         else ""
     )
 
@@ -1003,13 +577,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # clientul cere EXPLICIT „adaugă în coș și dă-mi link de plată", modelul cheamă doar cart_add,
     # iar turul e deturnat de cross-sell — fără link. Dacă intenția de cumpărare e detectată, coșul
     # are linii și modelul n-a creat linkul, îl creează codul, prin ACELAȘI `execute` (analytics,
-    # generated_links → cross-sell sare, checkout_offer → CTA pe reply; bookkeeping identic).
+    # run.generated_links → cross-sell sare, checkout_offer → CTA pe reply; bookkeeping identic).
     if (
         not is_order
         and not show_more
         and route.purchase_intent
-        and checkout_offer["url"] is None
-        and "checkout_link" not in failed_commerce
+        and run.checkout_url is None
+        and "checkout_link" not in run.failed_commerce
         and "checkout_link" in tool_names
         and get_settings().checkout_intent_fallback_enabled
     ):
@@ -1025,7 +599,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             if line.get("product_id")
         ][:10]
         if items:
-            await execute("checkout_link", {"cart_items": items})
+            await run.execute("checkout_link", {"cart_items": items})
             ctx.emit("checkout_intent_fallback", items=len(items))
 
     # #7b — cross-sell „merge bine cu" (model iZi): clientul tocmai a adăugat un produs în coș →
@@ -1034,11 +608,11 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # de la model (fit per produs, scrubuit); intro = confirmare DETERMINISTĂ a coșului (robustă la
     # scrub pe nume cu cifre) + pick scos (n-are sens un „pick" între complementare). Gated de
     # kill-switch; fără complementare / rich eșuat → cade în flux normal (confirmarea de coș).
-    added = added_cart["product"]
+    added = run.added_product
     if (
         not is_order
         and added is not None
-        and not generated_links  # checkout link creat în acest tur → arată linkul, nu cross-sell
+        and not run.generated_links  # checkout link creat în acest tur → linkul, nu cross-sell
         and get_settings().cross_sell_enabled
     ):
         cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
@@ -1127,7 +701,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         and not cheaper_intent
         and not show_more
         and ctx.state.displayed_products
-        and not (final and _valid(final, [], generated_links, grounded_prices))
+        and not (final and _valid(final, [], run.generated_links, run.grounded_prices))
     ):
         ids = [p.product_id for p in ctx.state.displayed_products]
         products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
@@ -1135,7 +709,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
     # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
     # setează semnalul → compose tratează ca potrivire exactă (fail-open, fără suprimare falsă).
-    relevance = None if (cheaper_intent or rehydrated) else search_rel["meta"]
+    relevance = None if (cheaper_intent or rehydrated) else run.search_relevance
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
 
     # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
@@ -1144,8 +718,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # zero halucinație. Web randează tabelul; canalele text primesc floor-ul aplatizat. Precede
     # calea rich de recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele
     # două" care doar re-lista produsele). Sare peste rich/proză pentru acest tur.
-    if compared and not is_order:
-        comparison = compose.build_comparison(compared, ctx.language, _comparison_facets(ctx))
+    if run.compared and not is_order:
+        comparison = compose.build_comparison(run.compared, ctx.language, _comparison_facets(ctx))
         if comparison is not None:
             ctx.set_comparison_reply(
                 comparison,
@@ -1177,7 +751,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 )
                 # NX-137: regulile rich INTERZIC linkuri în proza modelului → fără atașarea asta,
                 # linkul de checkout creat în acest tur nu ajungea NICIODATĂ la client pe web.
-                _attach_checkout_offer(ctx, checkout_offer["url"])
+                _attach_checkout_offer(ctx, run.checkout_url)
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
                 return
             # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
@@ -1189,7 +763,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             ctx.emit("rich_downgraded", reason=reason)
         # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
         # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
-        bare = _bad_bare_numbers(final, products, grounded_prices) if final else []
+        bare = _bad_bare_numbers(final, products, run.grounded_prices) if final else []
         if bare:
             ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
         # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
@@ -1206,13 +780,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             products,
             ctx.language,
             history,
-            generated_links,
-            grounded_prices,
+            run.generated_links,
+            run.grounded_prices,
         )
         ctx.set_reply(reply, products=_card_products(products))
-        # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
+        # NX-137: pe proză modelul POATE scrie linkul (validat prin run.generated_links), dar dacă
         # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
-        _attach_checkout_offer(ctx, checkout_offer["url"])
+        _attach_checkout_offer(ctx, run.checkout_url)
         ctx.emit("agent_recommended", n=len(products))
     elif final:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
@@ -1222,13 +796,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             reply = await _finalize_grounded(
                 deps.llm,
                 final,
-                "\n".join(order_views),
+                "\n".join(run.order_views),
                 ctx.language,
-                generated_links,
-                grounded_prices,
+                run.generated_links,
+                run.grounded_prices,
             )
             ctx.set_reply(reply)
-        elif _valid(final, [], generated_links, grounded_prices):
+        elif _valid(final, [], run.generated_links, run.grounded_prices):
             # SALES: text fără produse și fără sumă inventată (clarificare) → servim
             ctx.set_reply(final)
         else:
