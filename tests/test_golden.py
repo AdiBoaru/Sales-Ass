@@ -18,7 +18,9 @@ from src.evals.golden import GoldenExpect, evaluate_reply, load_cases, run_case
 from src.models import (
     BusinessConfig,
     Contact,
+    Event,
     InboundMessage,
+    RetrievalResult,
     Route,
     RouteDecision,
     TurnContext,
@@ -267,3 +269,51 @@ def test_evaluate_reply_required_route_but_none_fails():
     res = evaluate_reply(ctx, GoldenExpect(route="sales"), case_id="gated")
     assert res.passed is False
     assert any("route" in f for f in res.failures)
+
+
+def test_evaluate_reply_checks_expected_tools():
+    ctx = _ran_ctx("recomandare", route=Route.SALES)
+    ctx.events.append(Event("tool_call", {"tool": "search_products"}))
+
+    ok = evaluate_reply(
+        ctx, GoldenExpect(expected_tools=["search_products"]), case_id="tool-ok"
+    )
+    bad = evaluate_reply(
+        ctx, GoldenExpect(expected_tools=["compare_products"]), case_id="tool-bad"
+    )
+
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("tool lipsă" in f for f in bad.failures)
+
+
+def test_evaluate_reply_checks_expected_product_ids():
+    ctx = _ran_ctx("Crema A", route=Route.SALES)
+    ctx.retrieval = RetrievalResult(products=[{"id": "p1", "name": "Crema A"}])
+
+    ok = evaluate_reply(ctx, GoldenExpect(expected_product_ids=["p1"]), case_id="pid-ok")
+    bad = evaluate_reply(ctx, GoldenExpect(expected_product_ids=["p2"]), case_id="pid-bad")
+
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("product_id lipsă" in f for f in bad.failures)
+
+
+def test_evaluate_reply_checks_expected_constraints():
+    ctx = _ran_ctx("sub 80", route=Route.SALES)
+    ctx.state.search_constraints = {"budget_max": 80.0, "category_key": "creme"}
+
+    ok = evaluate_reply(
+        ctx,
+        GoldenExpect(expected_constraints={"budget_max": 80.0, "category_key": "creme"}),
+        case_id="constraints-ok",
+    )
+    bad = evaluate_reply(
+        ctx,
+        GoldenExpect(expected_constraints={"budget_max": 50.0}),
+        case_id="constraints-bad",
+    )
+
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("constraint" in f for f in bad.failures)
