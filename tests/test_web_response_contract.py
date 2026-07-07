@@ -132,9 +132,7 @@ def test_web_response_checker_catches_unsourced_stock_and_delivery_claims():
     delivery_ok = validate_web_payload(
         delivery_payload, source_products=SOURCE_PRODUCTS, allow_delivery_claim=True
     )
-    generic_ok = validate_web_payload(
-        generic_delivery_payload, source_products=SOURCE_PRODUCTS
-    )
+    generic_ok = validate_web_payload(generic_delivery_payload, source_products=SOURCE_PRODUCTS)
 
     assert stock_ok.passed is True
     assert delivery_bad.passed is False
