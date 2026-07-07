@@ -34,12 +34,17 @@ class GoldenExpect:
     `forbidden`: subșiruri care TREBUIE / NU AU VOIE să apară în reply
     (case-insensitive, în limba cazului — principiul 11). `expect_reply`: ``True``
     ⇒ un reply produs (P6: niciodată tăcere); ``False`` ⇒ tăcere/halt intenționat.
+    Câmpurile `expected_*` sunt opționale și cresc gate-ul de la "textul pare OK"
+    la "pipeline-ul a folosit instrumentele/datele/constrângerile corecte".
     """
 
     route: str | None = None
     must_include: list[str] = field(default_factory=list)
     forbidden: list[str] = field(default_factory=list)
     expect_reply: bool = True
+    expected_tools: list[str] = field(default_factory=list)
+    expected_product_ids: list[str] = field(default_factory=list)
+    expected_constraints: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,40 @@ class GoldenCase:
     expect: GoldenExpect
     language: str = "ro"
     fixtures: dict[str, Any] = field(default_factory=dict)
+
+
+def _ctx_tool_names(ctx: TurnContext) -> list[str]:
+    """Tool-urile chemate în tur, din evenimentele emise de agent/tool executor."""
+    names: list[str] = []
+    for ev in ctx.events:
+        if ev.type != "tool_call":
+            continue
+        name = ev.properties.get("tool") or ev.properties.get("name")
+        if name:
+            names.append(str(name))
+    return names
+
+
+def _ctx_product_ids(ctx: TurnContext) -> set[str]:
+    """Product IDs observabile în tur: retrieval + reply payload (text/rich/comparison)."""
+    ids: set[str] = set()
+    if ctx.retrieval is not None:
+        for p in ctx.retrieval.products:
+            pid = p.get("product_id") or p.get("id")
+            if pid:
+                ids.add(str(pid))
+    if ctx.reply is not None:
+        for p in ctx.reply.products or []:
+            pid = p.get("product_id") or p.get("id")
+            if pid:
+                ids.add(str(pid))
+        if ctx.reply.rich is not None:
+            ids.update(str(it.product_id) for it in ctx.reply.rich.items if it.product_id)
+        if ctx.reply.comparison is not None:
+            ids.update(
+                str(col.product_id) for col in ctx.reply.comparison.columns if col.product_id
+            )
+    return ids
 
 
 def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> GoldenResult:
@@ -88,6 +127,27 @@ def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> G
         if bad.lower() in haystack:
             failures.append(f"interzis prezent: {bad!r}")
 
+    if expect.expected_tools:
+        tools = _ctx_tool_names(ctx)
+        for tool in expect.expected_tools:
+            if tool not in tools:
+                failures.append(f"tool lipsă: {tool!r} (chemate: {tools!r})")
+
+    if expect.expected_product_ids:
+        product_ids = _ctx_product_ids(ctx)
+        for pid in expect.expected_product_ids:
+            if pid not in product_ids:
+                failures.append(f"product_id lipsă: {pid!r} (observate: {sorted(product_ids)!r})")
+
+    if expect.expected_constraints:
+        constraints = ctx.state.search_constraints or {}
+        for key, expected_value in expect.expected_constraints.items():
+            actual_value = constraints.get(key)
+            if actual_value != expected_value:
+                failures.append(
+                    f"constraint {key!r}: așteptat {expected_value!r}, primit {actual_value!r}"
+                )
+
     return GoldenResult(case_id=case_id, passed=not failures, failures=failures)
 
 
@@ -111,6 +171,9 @@ def _expect_from(raw: dict[str, Any]) -> GoldenExpect:
         must_include=list(raw.get("must_include", [])),
         forbidden=list(raw.get("forbidden", [])),
         expect_reply=bool(raw.get("expect_reply", True)),
+        expected_tools=list(raw.get("expected_tools", [])),
+        expected_product_ids=list(raw.get("expected_product_ids", [])),
+        expected_constraints=dict(raw.get("expected_constraints", {})),
     )
 
 
