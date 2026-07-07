@@ -120,17 +120,25 @@ def test_web_response_checker_catches_unsourced_stock_and_delivery_claims():
         "products": [{"product_id": "p1", "name": "Fluid X", "price": 58.99}],
         "suggestions": [],
     }
+    # livrare GENERICĂ (fără reper de timp) NU e un claim factual → nu se flageaza
+    generic_delivery_payload = {
+        "content": "Avem livrare rapida si transport gratuit.",
+        "products": [{"product_id": "p1", "name": "Fluid X", "price": 58.99}],
+        "suggestions": [],
+    }
 
     stock_ok = validate_web_payload(stock_payload, source_products=SOURCE_PRODUCTS)
     delivery_bad = validate_web_payload(delivery_payload, source_products=SOURCE_PRODUCTS)
     delivery_ok = validate_web_payload(
         delivery_payload, source_products=SOURCE_PRODUCTS, allow_delivery_claim=True
     )
+    generic_ok = validate_web_payload(generic_delivery_payload, source_products=SOURCE_PRODUCTS)
 
     assert stock_ok.passed is True
     assert delivery_bad.passed is False
-    assert any("delivery claim" in f for f in delivery_bad.failures)
+    assert any("delivery ETA claim" in f for f in delivery_bad.failures)
     assert delivery_ok.passed is True
+    assert generic_ok.passed is True
 
 
 def test_web_response_checker_catches_broken_comparison_shape():
@@ -154,3 +162,29 @@ def test_web_response_checker_catches_broken_comparison_shape():
 
     assert result.passed is False
     assert any("values length" in f for f in result.failures)
+
+
+def test_web_response_checker_catches_invented_price_in_text_only_reply():
+    # fara carduri, dar cu sursa (ground truth) → pretul inventat din text tot e prins
+    payload = {
+        "content": "Iti recomand ceva la 999 lei.",
+        "products": [],
+        "suggestions": [],
+    }
+
+    result = validate_web_payload(payload, source_products=SOURCE_PRODUCTS)
+
+    assert result.passed is False
+    assert any("content price" in f for f in result.failures)
+
+
+def test_web_response_checker_allows_empty_content_for_silent_handoff():
+    # tacere intentionata (handoff / degradare) → payload gol e valid cand allow_empty=True
+    payload = {"content": "", "products": [], "suggestions": []}
+
+    strict = validate_web_payload(payload)
+    lenient = validate_web_payload(payload, allow_empty=True)
+
+    assert strict.passed is False
+    assert any("content is empty" in f for f in strict.failures)
+    assert lenient.passed is True
