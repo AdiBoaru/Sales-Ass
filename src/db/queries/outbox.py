@@ -23,6 +23,12 @@ import asyncpg
 _BACKOFF_SECONDS = [5, 30, 120, 300]
 MAX_ATTEMPTS = 6  # după atâtea eșecuri → 'dead' (nu mai reîncearcă)
 
+# NX-147: explicit dispatch urgency. `kind` remains transport type, not priority.
+OUTBOX_PRIORITY_USER_REPLY = 10
+OUTBOX_PRIORITY_TRANSACTIONAL = 20
+OUTBOX_PRIORITY_DEFAULT = 50
+OUTBOX_PRIORITY_MARKETING = 80
+
 # Visibility timeout: la claim, next_attempt_at se împinge cu atât în viitor. Un
 # rând rămas 'dispatching' (dispatcher mort între claim și mark) redevine scadent
 # după acest interval și e re-revendicat — reaper implicit, fără coloană separată.
@@ -34,7 +40,8 @@ _VISIBILITY_TIMEOUT_S = 120
 # dispatcher-ul alege transportul după channel_kind (NX-60).
 _CLAIM_COLS = (
     "o.id::text, o.conversation_id::text, o.idempotency_key, o.kind, "
-    "o.payload, o.attempts, due.channel_kind, due.channel_account_id"
+    "o.payload, o.attempts, o.priority, o.created_at, "
+    "due.channel_kind, due.channel_account_id"
 )
 
 
@@ -52,6 +59,7 @@ async def enqueue_outbox(
     payload: dict[str, Any],
     *,
     kind: str = "message",
+    priority: int = OUTBOX_PRIORITY_USER_REPLY,
 ) -> str | None:
     """Pune un mesaj în coada de ieșire, idempotent.
 
@@ -61,8 +69,8 @@ async def enqueue_outbox(
     """
     new_id = await conn.fetchval(
         """
-        insert into outbox (business_id, conversation_id, idempotency_key, kind, payload)
-        values ($1, $2, $3, $4, $5::jsonb)
+        insert into outbox (business_id, conversation_id, idempotency_key, kind, payload, priority)
+        values ($1, $2, $3, $4, $5::jsonb, $6)
         on conflict (business_id, idempotency_key) do nothing
         returning id::text
         """,
@@ -71,6 +79,7 @@ async def enqueue_outbox(
         idempotency_key,
         kind,
         json.dumps(payload),
+        priority,
     )
     return new_id
 
@@ -108,7 +117,7 @@ async def claim_due(
             where o2.business_id = $1
               and o2.status in ('pending', 'failed', 'dispatching')
               and o2.next_attempt_at <= now()
-            order by o2.next_attempt_at, o2.id
+            order by o2.priority, o2.next_attempt_at, o2.id
             for update of o2 skip locked
             limit $2
           ) due

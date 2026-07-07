@@ -297,6 +297,17 @@ class Settings(BaseSettings):
     proactive_batch_size: int = Field(default=20, validation_alias="PROACTIVE_BATCH_SIZE")
     proactive_idle_sleep_s: float = Field(default=5.0, validation_alias="PROACTIVE_IDLE_SLEEP_S")
 
+    # --- Dispatcher outbox (NX-147) ---
+    # Bounded concurrency keeps user replies responsive without flooding provider APIs or DB pools.
+    dispatcher_batch_size: int = Field(default=10, validation_alias="DISPATCHER_BATCH_SIZE")
+    dispatcher_global_concurrency: int = Field(
+        default=16, validation_alias="DISPATCHER_GLOBAL_CONCURRENCY"
+    )
+    dispatcher_tenant_concurrency: int = Field(
+        default=4, validation_alias="DISPATCHER_TENANT_CONCURRENCY"
+    )
+    dispatcher_idle_sleep_s: float = Field(default=0.5, validation_alias="DISPATCHER_IDLE_SLEEP_S")
+
     # --- Inițiatori proactivi (PL-1): sweeper-e care CREEAZĂ proactive_jobs ---
     # Până la PR2, NIMENI nu insera joburi → zero proactiv în prod (gap CRITICAL). Sweeper-ele
     # (coș abandonat + back-in-stock) rulează în mini-scheduler-ul intern (src/jobs/scheduler.py),
