@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from src.models import Author, Direction, InboundMessage, Message, ProductRef
 from src.worker.runner import run_pipeline
 
 if TYPE_CHECKING:
@@ -57,15 +58,29 @@ class GoldenResult:
 
 
 @dataclass(frozen=True)
+class GoldenTurn:
+    """Un tur dintr-o conversație multi-tur: input + așteptări + fixtures (script LLM +
+    catalog) proprii turului. Fixtures per-tur pentru că comportamentul modelului scriptat
+    și așteptările diferă de la un tur la altul („mai ieftin", „compară primele două")."""
+
+    input: str
+    expect: GoldenExpect
+    fixtures: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class GoldenCase:
     """Un caz golden. `fixtures` = artefacte CI (script LLM + catalog + categorii),
-    OPACE pentru checker (le interpretează doar harness-ul de test, nu `evaluate_reply`)."""
+    OPACE pentru checker (le interpretează doar harness-ul de test, nu `evaluate_reply`).
+    `turns` (opțional) = conversație MULTI-TUR pe aceeași conversație (state-ul curge între
+    tururi); când e nevid, `input`/`expect`/`fixtures` de nivel-caz sunt ignorate."""
 
     id: str
     input: str
     expect: GoldenExpect
     language: str = "ro"
     fixtures: dict[str, Any] = field(default_factory=dict)
+    turns: list[GoldenTurn] = field(default_factory=list)
 
 
 def _ctx_tool_names(ctx: TurnContext) -> list[str]:
@@ -165,6 +180,85 @@ async def run_case(
     return evaluate_reply(ctx, expect, case_id=case_id)
 
 
+def _displayed_from_reply(products: list[dict[str, Any]]) -> list[ProductRef]:
+    """Reply.products (dict-uri) → ref-uri compacte pt state (P8). Defensiv: sare
+    produsele fără id/name/price (ca `ConversationState.from_jsonb`)."""
+    refs: list[ProductRef] = []
+    for p in products:
+        pid = p.get("product_id") or p.get("id")
+        name = p.get("name")
+        price = p.get("price")
+        if pid and name is not None and price is not None:
+            refs.append(ProductRef(product_id=str(pid), name=str(name), price=float(price)))
+    return refs
+
+
+def advance_turn(ctx: TurnContext, message: InboundMessage) -> None:
+    """Mută `ctx` la turul URMĂTOR pe ACEEAȘI conversație. Pliază reply-ul turului curent
+    în `state` + `history` (mimă merge-ul canonic al processor-ului,
+    `src/worker/processor.py:566-598`), apoi resetează câmpurile per-tur.
+
+    Ce PERSISTĂ (memoria scurtă verificată de cazurile multi-tur): `search_constraints` /
+    `constraints` / `asked_intents` (scrise in-place de agent pe `ctx.state`),
+    `displayed_products` (din reply), `cart` / `active_search` (din `state_patch`),
+    `pending_question` (clarify) și `history` (ultimele mesaje). Ce se RESETEAZĂ: rută,
+    retrieval, reply, halt, from_cache, state_patch, events, usage."""
+    reply = ctx.reply
+    # 1. pliază reply → state (displayed_products + pending_question), ca processor-ul
+    if reply is not None and reply.products:
+        ctx.state.displayed_products = _displayed_from_reply(reply.products)
+    ctx.state.pending_question = reply.pending_question if reply is not None else None
+    # 2. state_patch (Agent: cart / active_search) — ultimul, are întâietate (processor:597)
+    patch = ctx.state_patch or {}
+    if "active_search" in patch:
+        ctx.state.active_search = patch["active_search"]
+    if "cart" in patch:
+        ctx.state.cart = list(patch["cart"] or [])
+    # 3. history: inbound-ul turului + outbound-ul botului (context builder vede ultimele 8)
+    ctx.history.append(
+        Message(direction=Direction.INBOUND, author=Author.CONTACT, body=ctx.message.body)
+    )
+    if reply is not None and reply.text:
+        ctx.history.append(
+            Message(direction=Direction.OUTBOUND, author=Author.BOT, body=reply.text)
+        )
+    # 4. reset câmpuri per-tur
+    ctx.message = message
+    ctx.route = None
+    ctx.retrieval = None
+    ctx.reply = None
+    ctx.halt = False
+    ctx.from_cache = False
+    ctx.state_patch = {}
+    ctx.events = []
+    ctx.usage = None
+
+
+async def run_conversation(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    stages: list[Stage],
+    turns: list[GoldenTurn],
+    *,
+    case_id: str,
+    on_turn: Any = None,
+) -> list[GoldenResult]:
+    """Rulează o conversație MULTI-TUR prin pipeline-ul REAL, păstrând `ctx.state` +
+    `history` între tururi (via `advance_turn`). Un `GoldenResult` per tur (id-ul
+    `<case_id>#<n>`). `on_turn(index, turn)` (opțional) e chemat ÎNAINTE de fiecare tur —
+    CI-ul îl folosește ca să re-aplice stub-urile DB + să comute LLM-ul scriptat pe turul
+    curent; în prod nu e nevoie (deps reale, un singur LLM)."""
+    results: list[GoldenResult] = []
+    for i, turn in enumerate(turns):
+        if i > 0:
+            advance_turn(ctx, InboundMessage(provider_msg_id=f"m-{case_id}-{i}", body=turn.input))
+        if on_turn is not None:
+            on_turn(i, turn)
+        await run_pipeline(ctx, deps, stages)
+        results.append(evaluate_reply(ctx, turn.expect, case_id=f"{case_id}#{i}"))
+    return results
+
+
 def _expect_from(raw: dict[str, Any]) -> GoldenExpect:
     return GoldenExpect(
         route=raw.get("route"),
@@ -177,17 +271,30 @@ def _expect_from(raw: dict[str, Any]) -> GoldenExpect:
     )
 
 
+def _turn_from(raw: dict[str, Any]) -> GoldenTurn:
+    return GoldenTurn(
+        input=raw["input"],
+        expect=_expect_from(raw.get("expect", {})),
+        fixtures=raw.get("fixtures", {}),
+    )
+
+
 def load_cases(path: str | Path) -> list[GoldenCase]:
     """Încarcă cazurile din fixture JSON. Format: listă de obiecte
-    ``{id, input, language?, expect{...}, fixtures{...}}``."""
+    ``{id, input, language?, expect{...}, fixtures{...}}`` sau, pentru cazuri MULTI-TUR,
+    ``{id, language?, turns: [{input, expect{...}, fixtures{...}}, ...]}``."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    return [
-        GoldenCase(
-            id=c["id"],
-            input=c["input"],
-            language=c.get("language", "ro"),
-            expect=_expect_from(c.get("expect", {})),
-            fixtures=c.get("fixtures", {}),
+    cases: list[GoldenCase] = []
+    for c in data:
+        turns = [_turn_from(t) for t in c.get("turns", [])]
+        cases.append(
+            GoldenCase(
+                id=c["id"],
+                input=c.get("input", turns[0].input if turns else ""),
+                language=c.get("language", "ro"),
+                expect=_expect_from(c.get("expect", {})),
+                fixtures=c.get("fixtures", {}),
+                turns=turns,
+            )
         )
-        for c in data
-    ]
+    return cases

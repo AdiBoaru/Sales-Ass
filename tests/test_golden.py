@@ -14,7 +14,13 @@ import pytest
 
 from src.agent.llm import ModerationResult
 from src.config import get_settings
-from src.evals.golden import GoldenExpect, evaluate_reply, load_cases, run_case
+from src.evals.golden import (
+    GoldenExpect,
+    evaluate_reply,
+    load_cases,
+    run_case,
+    run_conversation,
+)
 from src.models import (
     BusinessConfig,
     Contact,
@@ -33,6 +39,7 @@ from src.worker.stages import gates as gates_mod
 from src.worker.stages import triage as triage_mod
 
 CASES = load_cases(Path(__file__).parent / "golden" / "cases.json")
+CONVERSATIONS = load_cases(Path(__file__).parent / "golden" / "conversations.json")
 
 
 # --- LLM scriptat (zero apeluri reale) ---------------------------------------
@@ -41,10 +48,17 @@ CASES = load_cases(Path(__file__).parent / "golden" / "cases.json")
 class ScriptedLLM:
     """LLM determinist scriptat din `fixtures`. Implementează exact metodele chemate
     de pipeline: `moderate` (gates), `embed` (cache + tool-uri), `classify_json`
-    (triaj), `run_tool_loop` + `complete` (agent + validator retry)."""
+    (triaj), `run_tool_loop` + `complete` (agent + validator retry).
 
-    def __init__(self, fx: dict) -> None:
-        self._fx = fx
+    `fx` poate fi un dict (caz single-tur) sau un getter fără argumente care întoarce
+    fixtures-ul turului CURENT (caz multi-tur — comutat de `on_turn`)."""
+
+    def __init__(self, fx) -> None:
+        self._get = fx if callable(fx) else (lambda: fx)
+
+    @property
+    def _fx(self) -> dict:
+        return self._get()
 
     async def moderate(self, text, *, model=None):
         m = self._fx.get("moderation", {})
@@ -73,15 +87,19 @@ class ScriptedLLM:
 
 
 def _apply_stubs(monkeypatch, fixtures: dict) -> None:
-    catalog = list(fixtures.get("catalog", []))
-    categories = list(fixtures.get("categories", []))
-    by_id = {p["id"]: p for p in catalog}
+    """Stub-uri DB pentru un caz single-tur (fixtures fix)."""
+    _apply_stubs_dyn(monkeypatch, lambda: fixtures)
+
+
+def _apply_stubs_dyn(monkeypatch, get_fx) -> None:
+    """Stub-uri DB care citesc fixture-urile turului CURENT prin `get_fx()` (multi-tur:
+    catalogul/categoriile pot diferi de la un tur la altul)."""
 
     async def fake_categories(conn, business_id):
-        return list(categories)
+        return list(get_fx().get("categories", []))
 
     async def fake_search(conn, business_id, vec, **kwargs):
-        return list(catalog)
+        return list(get_fx().get("catalog", []))
 
     async def fake_lexical(conn, business_id, **kwargs):  # NX-113b: lexical rulează MEREU (hibrid)
         return []
@@ -90,7 +108,17 @@ def _apply_stubs(monkeypatch, fixtures: dict) -> None:
         return True
 
     async def fake_by_ids(conn, business_id, ids, **kwargs):
+        by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
         return [by_id[i] for i in ids if i in by_id]
+
+    # NX-145 multi-tur: re-hidratarea grounded a produselor AFIȘATE (agent.py:494) cheamă
+    # `get_products_by_ids` importat direct în agent.py (binding propriu, ≠ catalog_tools) →
+    # stub pe modulul agent ca follow-up-urile neclasificate să răspundă din catalogul turului.
+    async def fake_by_ids_direct(conn, business_id, ids, **kwargs):
+        by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
+        return [by_id[i] for i in ids if i in by_id]
+
+    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids_direct)
 
     async def none_lookup(*args, **kwargs):
         return None
@@ -137,6 +165,63 @@ async def test_golden_case(case, monkeypatch):
     result = await run_case(ctx, deps, DEFAULT_STAGES, case.expect, case_id=case.id)
 
     assert result.passed, f"{case.id}: {result.failures}"
+
+
+# --- gate CI: conversații MULTI-TUR (state curge între tururi) ----------------
+
+
+def _build_conv_ctx(case) -> TurnContext:
+    """ctx seed pentru o conversație: primul tur; `advance_turn` mută la tururile 2+."""
+    first = case.turns[0].input if case.turns else case.input
+    return TurnContext(
+        turn_id=f"golden-{case.id}",
+        business=BusinessConfig(id="biz-golden", slug="golden", name="Golden"),
+        contact=Contact(id="contact-golden", business_id="biz-golden"),
+        message=InboundMessage(provider_msg_id=f"m-{case.id}-0", body=first),
+        conversation_id=f"conv-{case.id}",
+        language=case.language,
+    )
+
+
+@pytest.mark.parametrize("case", CONVERSATIONS, ids=[c.id for c in CONVERSATIONS])
+async def test_golden_conversation(case, monkeypatch):
+    """Rulează o conversație multi-tur prin pipeline-ul REAL, comutând fixtures-ul LLM +
+    stub-urile DB pe turul curent. Fiecare tur trebuie să treacă (rută/tool-uri/produse/
+    constrângeri/text) — verifică memoria scurtă care curge prin `ctx.state` + history."""
+    holder = {"fx": case.turns[0].fixtures if case.turns else {}}
+    _apply_stubs_dyn(monkeypatch, lambda: holder["fx"])
+    ctx = _build_conv_ctx(case)
+    deps = PipelineDeps(conn=object(), redis=None, llm=ScriptedLLM(lambda: holder["fx"]))
+
+    def on_turn(i, turn):
+        holder["fx"] = turn.fixtures
+
+    results = await run_conversation(
+        ctx, deps, DEFAULT_STAGES, case.turns, case_id=case.id, on_turn=on_turn
+    )
+
+    for res in results:
+        assert res.passed, f"{res.case_id}: {res.failures}"
+
+
+def test_all_conversations_present():
+    """Plasa de regresie pentru cazurile MULTI-TUR (NX-145 felia 2): ≥10 conversații care
+    acoperă memoria (constraint carry / topic-switch reset), limbi non-RO (HU/EN) și
+    adversarial mid-conversație (preț/produs inventat). Fiecare conversație are ≥1 tur."""
+    ids = {c.id for c in CONVERSATIONS}
+    assert ids == {
+        "conv-greeting-then-sales",
+        "conv-sales-refine-carries-category",
+        "conv-sales-then-injection-price-blocked",
+        "conv-order-then-thanks",
+        "conv-sales-topic-switch-resets-constraints",
+        "conv-sales-no-result-no-invention",
+        "conv-hu-sales-refine",
+        "conv-greeting-sales-refine-3turn",
+        "conv-en-sales-refine",
+        "conv-sales-then-invented-product-blocked",
+    }
+    assert all(c.turns for c in CONVERSATIONS), "orice conversație are ≥1 tur"
 
 
 def test_all_seed_cases_present():
