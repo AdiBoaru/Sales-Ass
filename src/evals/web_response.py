@@ -15,7 +15,14 @@ from typing import Any
 _PRICE_RE = re.compile(r"(?<!\d)(\d+(?:[.,]\d{1,2})?)\s*(?:lei|ron|eur|usd)\b", re.I)
 _URL_RE = re.compile(r"https?://[^\s)>\"]+", re.I)
 _STOCK_RE = re.compile("\\b(?:in stoc|\u00een stoc|pe stoc|available|in stock)\\b", re.I)
-_DELIVERY_RE = re.compile("\\b(?:livrare|livram|livr\u0103m|delivery|ships?|transport)\\b", re.I)
+# Doar un claim CONCRET de livrare (verb de livrare + un reper de timp) cere surs\u0103 \u2014 nu
+# cuvinte generice ("livrare rapid\u0103", "transport gratuit"), care nu sunt claim-uri factuale.
+_DELIVERY_ETA_RE = re.compile(
+    "\\b(?:livr\\w+|delivery|ships?|transport)\\b[^.\n]{0,40}?"
+    "\\b(?:azi|m\u00e2ine|maine|poim\u00e2ine|\\d+\\s*(?:zile|ore|days|hours)|today|tomorrow|"
+    "luni|mar\u021bi|marti|miercuri|joi|vineri|s\u00e2mb\u0103t\u0103|sambata|duminic\u0103)\\b",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -106,11 +113,14 @@ def validate_web_payload(
     source_products: Any = None,
     allow_stock_claim: bool = False,
     allow_delivery_claim: bool = False,
+    allow_empty: bool = False,
 ) -> WebResponseCheck:
     """Validate a rendered web payload against source facts.
 
     `source_products` can be a list of product dicts or a dict keyed by product id.
     When provided, every emitted product id and product price must match it.
+    `allow_empty` permits an empty `content` (intentional silence / handoff — Gates
+    may produce a bot-less reply; that payload is valid, not a hallucination).
     """
     failures: list[str] = []
     if not isinstance(payload, dict):
@@ -118,7 +128,9 @@ def validate_web_payload(
 
     source_by_id = _source_map(source_products)
     content = payload.get("content")
-    if not isinstance(content, str) or not content.strip():
+    if not isinstance(content, str):
+        failures.append("content must be a string")
+    elif not content.strip() and not allow_empty:
         failures.append("content is empty")
 
     products = payload.get("products")
@@ -195,9 +207,17 @@ def validate_web_payload(
                 else:
                     allowed_urls.add(url)
 
+    # Prețuri de referință = cele din carduri + TOATE prețurile din sursă. Când avem sursă (ground
+    # truth), un preț din `content` care nu se potrivește e suspect CHIAR dacă nu există carduri —
+    # cazul text-only cu preț inventat, exact unde lipsește orice grounding.
+    source_prices = {
+        p for src in source_by_id.values() if (p := _price(src.get("price"))) is not None
+    }
+    price_reference = allowed_prices | source_prices
+    have_ground_truth = bool(price_reference) or bool(source_by_id)
     for raw in _PRICE_RE.findall(content or ""):
         value = _price(raw)
-        if value is not None and allowed_prices and not _near(value, allowed_prices):
+        if value is not None and have_ground_truth and not _near(value, price_reference):
             failures.append(f"content price {value} is not in payload/source prices")
 
     for url in _URL_RE.findall(content or ""):
@@ -217,7 +237,7 @@ def validate_web_payload(
             for pid in emitted_ids
         ):
             failures.append("stock claim without source availability/stock_total")
-    if _DELIVERY_RE.search(content or "") and not allow_delivery_claim:
-        failures.append("delivery claim without explicit source")
+    if _DELIVERY_ETA_RE.search(content or "") and not allow_delivery_claim:
+        failures.append("delivery ETA claim without explicit source")
 
     return WebResponseCheck(passed=not failures, failures=failures)
