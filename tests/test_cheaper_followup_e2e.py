@@ -27,6 +27,7 @@ import src.worker.stages.alias as alias_mod
 import src.worker.stages.cache as cache_mod
 import src.worker.stages.faq as faq_mod
 import src.worker.stages.triage as triage_mod
+from src.agent import planner as planner_mod
 from src.models import BusinessConfig, Contact
 from src.tools import catalog_tools as ct
 from src.worker.runner import DEFAULT_STAGES
@@ -392,7 +393,7 @@ async def test_turn1_persists_displayed_then_turn2_cheaper_only(monkeypatch, sto
         captured["ref_ids"] = list(ref_ids)
         return [dict(CHEAPER)]  # UN singur produs strict mai ieftin
 
-    monkeypatch.setattr(agent_mod, "search_cheaper_than", fake_cheaper)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", fake_cheaper)
     llm2 = ScriptedLLM(mode="search", tool_products=SHOWN)  # modelul ar refolosi setul vechi…
     r2 = await _turn(conn, biz, store, "ceva mai ieftin", llm2)
 
@@ -422,7 +423,7 @@ async def test_turn2_empty_cheaper_returns_graceful_msg(monkeypatch, store):
     async def empty_cheaper(conn, business_id, ref_ids, max_excl, *, limit=6):
         return []
 
-    monkeypatch.setattr(agent_mod, "search_cheaper_than", empty_cheaper)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", empty_cheaper)
     llm2 = ScriptedLLM(mode="search", tool_products=SHOWN)
     r2 = await _turn(conn, biz, store, "ceva mai ieftin", llm2)
 

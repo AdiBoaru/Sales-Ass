@@ -4,6 +4,7 @@ bug-ului live „cea mai ieftină 80.99 când există 18.99". LLM + DB mockuite 
 
 import pytest
 
+from src.agent import planner as planner_mod
 from src.config import get_settings
 from src.models import (
     BusinessConfig,
@@ -91,7 +92,7 @@ async def test_cheaper_shows_only_strictly_cheaper_product(monkeypatch):
         captured["ref_ids"] = list(ref_ids)
         return [dict(CHEAPER)]  # un SINGUR produs mai ieftin
 
-    monkeypatch.setattr(agent_mod, "search_cheaper_than", fake_cheaper)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", fake_cheaper)
 
     ctx = _ctx()
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=FakeLLM()))
@@ -109,7 +110,7 @@ async def test_no_cheaper_returns_graceful_message(monkeypatch):
     async def empty_cheaper(conn, business_id, ref_ids, max_excl, *, limit=6):
         return []
 
-    monkeypatch.setattr(agent_mod, "search_cheaper_than", empty_cheaper)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", empty_cheaper)
 
     ctx = _ctx()
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=FakeLLM()))
@@ -131,8 +132,8 @@ async def test_killswitch_off_skips_deterministic_cheaper(monkeypatch):
     async def fake_by_ids(conn, business_id, ids, **k):
         return []  # R3 (calea veche) — nu reutilizează nimic în test
 
-    monkeypatch.setattr(agent_mod, "search_cheaper_than", cheaper_spy)
-    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", cheaper_spy)
+    monkeypatch.setattr(planner_mod, "get_products_by_ids", fake_by_ids)
 
     ctx = _ctx()
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=FakeLLM(final="")))

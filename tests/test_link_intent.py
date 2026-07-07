@@ -179,7 +179,7 @@ async def test_link_intent_skipped_when_no_displayed_products(monkeypatch):
     async def by_ids(conn, business_id, ids, **k):
         return []
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", by_ids)
     ctx = _ctx("trimite-mi linkul")
     ctx.state.displayed_products = []  # nimic afișat
     llm = _RecordLLM()
@@ -196,7 +196,7 @@ async def test_link_with_new_filter_falls_through_to_llm(monkeypatch):
     async def by_ids(conn, business_id, ids, **k):
         return []
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", by_ids)
     ctx = _ctx("trimite-mi linkul la o cremă sub 50 lei")
     ctx.route.filters = {"budget_max": 50}  # triajul a extras o constrângere nouă
     llm = _RecordLLM()
@@ -212,7 +212,7 @@ async def test_link_intent_disabled_falls_through(monkeypatch):
     async def by_ids(conn, business_id, ids, **k):
         return []
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", by_ids)
     monkeypatch.setattr(get_settings(), "link_intent_enabled", False)
     ctx = _ctx("trimite-mi linkul")
     llm = _RecordLLM()

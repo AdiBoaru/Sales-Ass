@@ -14,36 +14,27 @@ docs/agent-tools-architecture.md.
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
 from src.agent.deterministic import (
-    _CHEAPER_RE,
+    _CHEAPER_RE,  # noqa: F401 — re-export (teste)
     _COMPARE_RE,  # noqa: F401 — re-export (teste)
     _LINK_RE,  # noqa: F401 — re-export (teste)
     _MORE_RE,  # noqa: F401 — re-export (teste)
-    _comparison_facets,
     is_show_more,
     try_pre_intents,
 )
 from src.agent.fallbacks import (
-    _card_products,
-    _cart_confirm_msg,
-    _cheapest_already_msg,
-    _checkout_label,
-    _compare_chips,
-    _cross_sell_query,
-    _dedupe,
+    _cart_confirm_msg,  # noqa: F401 — re-export (teste)
+    _cheapest_already_msg,  # noqa: F401 — re-export (teste)
     _no_more_msg,
 )
 from src.agent.finalize import (
-    _finalize,
-    _finalize_grounded,
-    _finalize_rich,
-    _no_result_msg,
     _rich_bundle,  # noqa: F401 — re-export (teste)
+    render,
 )
+from src.agent.planner import build_plan
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
 from src.agent.tool_executor import (
@@ -55,27 +46,24 @@ from src.agent.validator import (
     ValidationResult,  # noqa: F401 — re-export (consumatori/teste)
     _allowed_numbers,  # noqa: F401 — re-export (teste)
     _allowed_prices,  # noqa: F401 — re-export (teste; folosit de finalize)
-    _bad_bare_numbers,
+    _bad_bare_numbers,  # noqa: F401 — re-export (teste)
     _bare_numbers_ok,  # noqa: F401 — re-export (teste)
     _budget,  # noqa: F401 — re-export (teste)
-    _claims_ok,
+    _claims_ok,  # noqa: F401 — re-export (teste)
     _links_ok,  # noqa: F401 — re-export (teste)
     _prices_ok,  # noqa: F401 — re-export (teste)
     _safety_ok,  # noqa: F401 — re-export (teste)
     _stock_available,  # noqa: F401 — re-export (teste)
-    _stock_claim_ok,
-    _valid,
+    _stock_claim_ok,  # noqa: F401 — re-export (teste)
+    _valid,  # noqa: F401 — re-export (teste; patch-uit în test_golden)
     validate_prose,  # noqa: F401 — re-export (consumatori/teste)
 )
 from src.config import get_settings
 from src.db.queries.catalog import (
-    get_complementary_products,
-    get_products_by_ids,
     list_category_names,
     list_routing_aliases,
-    search_cheaper_than,
 )
-from src.models import Offer, RetrievalResult, Route, RouteDecision, TurnContext
+from src.models import Route, RouteDecision, TurnContext
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
@@ -84,53 +72,24 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     orders_tools,
 )
 from src.tools.base import enabled_tools
-from src.worker import compose
 from src.worker.context import context_blocks, conversation_transcript
-from src.worker.order_gate import login_required_for_ctx, web_unidentified
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
 
-# Validatorul de proză (preț/link/număr/claim/stoc/safety) + regexurile `_PRICE_RE`/`_BUDGET_RE`/
-# `_URL_RE`/`_BARE_NUM_RE`/`_SAFE_BARE` trăiesc în `src/agent/validator.py` (NX-142) și sunt
-# importate mai sus. `_finalize*` orchestrează retry/fallback pe baza lor (regia rămâne aici).
-
-# Regexurile intențiilor deterministe PRE-loop (`_LINK_RE`/`_COMPARE_RE`/`_THREE_RE`/`_MORE_RE`) +
-# `_CHEAPER_RE` (partajat) trăiesc în `src/agent/deterministic.py` (NX-143). `_ATTR_QUERY_RE` rămâne
-# aici (intenție POST-loop, faza E → planner NX-144).
-
-# MOD SUPERLATIV (IZI): întrebare despre setul AFIȘAT de tip „care dintre ele e cea mai X". ÎNALTĂ
-# precizie (ca _COMPARE_RE): „care" + „cea/cel/cele mai" în aceeași frază, SAU „care dintre ele/
-# acestea", SAU „cea mai <atribut> dintre ele". Prinde „care e cea mai ușoară/ieftină" (superlativ
-# pe setul afișat), NU o căutare nouă („arată-mi ceva mai ieftin" = cheaper). RO/EN/HU.
-_ATTR_QUERY_RE = re.compile(
-    r"\bcare\b[^?]{0,40}\b(cea|cel|cele|cei)\s+mai\b"
-    r"|\bcare\s+dintre\s+(ele|acestea|astea|aceste)\b"
-    r"|\b(cea|cel|cele|cei)\s+mai\s+\w+\s+dintre\s+(ele|acestea|astea)\b"
-    r"|\bwhich\s+of\s+(these|them)\b|\bwhich\b[^?]{0,40}\b(most|best|cheapest|lightest)\b"
-    r"|\bmelyik\b[^?]{0,40}\bleg\w+",
-    re.IGNORECASE,
-)
-
-
-def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
-    """NX-137: linkul de checkout creat în ACEST tur ajunge GARANTAT la client, pe orice cale de
-    compunere. Root cause (găsit live pe sim): pe calea RICH (web) modelul are INTERZIS structural
-    să scrie linkuri (regulile rich) → linkul era creat în DB (`checkout_link_created`) și apoi
-    murea tăcut — reply fără URL. Offer e neutru de canal (NX-114): marginile bogate randează
-    buton/CTA; floor-ul din `set_offer` lipește URL-ul la text DOAR dacă nu e deja acolo (proza
-    de WhatsApp îl poate conține deja — fără dublare)."""
-    if not url or ctx.reply is None:
-        return
-    ctx.set_offer(Offer(kind="open_url", label=_checkout_label(ctx.language), url=url))
-    ctx.emit("checkout_offer_attached")
+# Validatorul de proză (preț/link/număr/claim/stoc/safety) trăiește în `src/agent/validator.py`
+# (NX-142); `render` (faza F, `src/agent/finalize.py`) orchestrează retry/fallback pe baza lui.
+# Regexurile intențiilor deterministe PRE-loop (`_LINK_RE`/`_COMPARE_RE`/`_MORE_RE` + `_CHEAPER_RE`
+# partajat) trăiesc în `deterministic.py` (NX-143); `_ATTR_QUERY_RE` + shaping-ul determinist
+# post-loop (checkout-fallback/cross-sell/attr/cheaper/rehidratare) s-au mutat în
+# `src/agent/planner.py` (NX-144, `build_plan`). Aici rămâne DOAR regia A→B→C→D → plan → render.
 
 
 # System prompt-urile sunt GENERATE din DB per (business, locale) — vezi `prompt_builder`
 # (NX-78, principiul 9). ZERO vertical hardcodat aici. `agent_stage` construiește `PromptInputs`
-# o dată și pasează prompturile la run_tool_loop / _finalize / _finalize_rich.
+# o dată și pasează prompturile la run_tool_loop / build_plan / render.
 
 
 async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInputs:
@@ -343,263 +302,24 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
 
-    # FAQ-first: dacă modelul a cerut chiar un lookup de comandă pe web anonim (check_order →
-    # login_required), servim mesajul de login DETERMINIST. Apare DOAR acum (nu pe toată ruta), după
-    # ce agentul a avut șansa să răspundă din FAQ/catalog. cacheable=False (context-relativ).
-    if run.order_gated_login:
-        ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
+    # Faza E (NX-144): shaping determinist post-loop (checkout-fallback/cross-sell/attr_query/
+    # cheaper/rehidratare) → `ResponsePlan`. Ramurile care răspund direct (login / cross-sell /
+    # „deja cel mai ieftin") setează `ctx.reply` și întorc `handled=True` → sărim peste render.
+    plan = await build_plan(
+        ctx,
+        deps,
+        run,
+        inp,
+        final=final,
+        retrieved=retrieved,
+        is_order=is_order,
+        show_more=show_more,
+        query=query,
+        history=history,
+        tool_names=tool_names,
+    )
+    if plan.handled:
         return
-
-    # NX-137: nota de comerț pentru compunere — un cart_add/checkout_link eșuat în acest tur
-    # interzice chips-urile care promit exact acțiunea refuzată (contradicția din runda 2 iZi).
-    commerce_note = (
-        "coșul/linkul de plată au EȘUAT în acest tur — în `suggestions` NU propune mesaje de tip "
-        "«adaugă în coș» sau «dă-mi link de plată»; oferă alternative (detalii, comparație, "
-        "similare)."
-        if run.failed_commerce
-        else ""
-    )
-
-    # NX-137: purchase_intent onorat DETERMINIST (CALM — codul decide). Observat live pe sim:
-    # clientul cere EXPLICIT „adaugă în coș și dă-mi link de plată", modelul cheamă doar cart_add,
-    # iar turul e deturnat de cross-sell — fără link. Dacă intenția de cumpărare e detectată, coșul
-    # are linii și modelul n-a creat linkul, îl creează codul, prin ACELAȘI `execute` (analytics,
-    # run.generated_links → cross-sell sare, checkout_offer → CTA pe reply; bookkeeping identic).
-    if (
-        not is_order
-        and not show_more
-        and route.purchase_intent
-        and run.checkout_url is None
-        and "checkout_link" not in run.failed_commerce
-        and "checkout_link" in tool_names
-        and get_settings().checkout_intent_fallback_enabled
-    ):
-        # state_patch["cart"] = coșul COMPLET merged de cart_add în acest tur; altfel cel din state.
-        cart_lines = list(ctx.state_patch.get("cart") or ctx.state.cart or [])
-        items = [
-            {
-                "product_id": str(line["product_id"]),
-                "variant_id": line.get("variant_id"),
-                "quantity": int(line.get("quantity") or 1),
-            }
-            for line in cart_lines
-            if line.get("product_id")
-        ][:10]
-        if items:
-            await run.execute("checkout_link", {"cart_items": items})
-            ctx.emit("checkout_intent_fallback", items=len(items))
-
-    # #7b — cross-sell „merge bine cu" (model iZi): clientul tocmai a adăugat un produs în coș →
-    # sugerăm produse COMPLEMENTARE (rutină/accesorii) ca CARDURI, prin calea rich existentă.
-    # Retrieval DETERMINIST (brand/concern, categorie DIFERITĂ = complement, nu substitut); copy
-    # de la model (fit per produs, scrubuit); intro = confirmare DETERMINISTĂ a coșului (robustă la
-    # scrub pe nume cu cifre) + pick scos (n-are sens un „pick" între complementare). Gated de
-    # kill-switch; fără complementare / rich eșuat → cade în flux normal (confirmarea de coș).
-    added = run.added_product
-    if (
-        not is_order
-        and added is not None
-        and not run.generated_links  # checkout link creat în acest tur → linkul, nu cross-sell
-        and get_settings().cross_sell_enabled
-    ):
-        cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
-        exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
-        complementary = await get_complementary_products(
-            deps.conn, ctx.business.id, str(added["id"]), exclude_ids=exclude_ids, limit=4
-        )
-        if complementary:
-            ctx.retrieval = RetrievalResult(products=complementary, source="cross_sell")
-            rich = await _finalize_rich(
-                deps.llm,
-                prompt_builder.build_rich_system(inp),
-                _cross_sell_query(added, ctx.language),
-                complementary,
-                ctx,
-                history,
-                notes=commerce_note,
-            )
-            if rich is not None and rich.items:
-                rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
-                rich.pick = None  # fără „Recomandarea mea" între complementare
-                ctx.set_rich_reply(
-                    rich,
-                    text=compose.flatten(rich, ctx.language),
-                    products=compose.card_products(rich.items),
-                )
-                ctx.emit("cross_sell", added=str(added["id"]), n=len(rich.items))
-                return
-        ctx.emit("cross_sell", added=str(added["id"]), n=0)
-        # niciun complement / rich eșuat → cade în fluxul normal (confirmarea de coș a agentului)
-
-    products = _dedupe(retrieved)
-    # MOD SUPERLATIV (IZI): întrebare „care dintre ele e cea mai X" pe setul AFIȘAT → re-hidratează
-    # ÎNTREGUL set afișat (nu o căutare nouă, nu 1 produs) ca modelul să RĂSPUNDĂ la superlativ
-    # peste toate candidatele reale (fațete/descriere în bundle). Precede cheaper: „care dintre
-    # ACESTEA e cea mai ieftină" = min-ul setului afișat, NU „ceva mai ieftin" (căutare nouă).
-    # ≥2 afișate, fără filtre noi (cu filtre = căutare/rafinare → bucla LLM). Kill-switch propriu.
-    attr_query = (
-        not is_order
-        and get_settings().attr_query_enabled
-        and len(ctx.state.displayed_products) >= 2
-        and not route.filters
-        and _ATTR_QUERY_RE.search(query) is not None
-    )
-    if attr_query:
-        ids = [p.product_id for p in ctx.state.displayed_products]
-        hydrated = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
-        if hydrated:
-            products = _dedupe(hydrated)
-        ctx.emit("attr_query", n=len(products))
-    # P1 (ARCH-product-retrieval): follow-up „mai ieftin" pe un set deja afișat → re-căutare
-    # DETERMINISTĂ a produselor strict mai ieftine decât cel mai ieftin afișat, în aceeași categorie
-    # (search_cheaper_than) — NU re-rank pe setul afișat (bug-ul „cea mai ieftină 80.99 când există
-    # 18.99"). Arată DOAR ce e mai ieftin (1 dacă e 1, zero padding); nimic mai ieftin → mesaj
-    # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
-    # NU pe attr_query („care dintre acestea e cea mai ieftină" = superlativ pe set, nu căutare).
-    cheaper_intent = (
-        not is_order
-        and not show_more  # „mai arată-mi" deja paginat determinist mai sus
-        and not attr_query
-        and get_settings().cheaper_intent_enabled
-        and bool(ctx.state.displayed_products)
-        and _CHEAPER_RE.search(query) is not None
-    )
-    if cheaper_intent:
-        baseline = min(p.price for p in ctx.state.displayed_products)
-        ref_ids = [p.product_id for p in ctx.state.displayed_products]
-        cheaper = await search_cheaper_than(deps.conn, ctx.business.id, ref_ids, baseline, limit=6)
-        ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
-        if cheaper:
-            products = _dedupe(cheaper)
-        else:
-            # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI
-            # client; un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
-            ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
-            return
-    # R3: follow-up pe produse DEJA arătate („care e cea mai bună?") la care modelul n-a rechemat
-    # un tool → re-hidratează produsele afișate (după id, din state) ca set de retrieval, ca să
-    # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, NU pe intenția de preț (aia o
-    # tratează cheaper_intent mai sus), doar cu id-uri în state, și DOAR când textul singur ar pica
-    # (gol sau preț negroundat). Rămâne plasa de grounding pentru follow-up-urile neclasificate.
-    rehydrated = False
-    if (
-        not products
-        and not is_order
-        and not cheaper_intent
-        and not show_more
-        and ctx.state.displayed_products
-        and not (final and _valid(final, [], run.generated_links, run.grounded_prices))
-    ):
-        ids = [p.product_id for p in ctx.state.displayed_products]
-        products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
-        rehydrated = True
-    # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
-    # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
-    # setează semnalul → compose tratează ca potrivire exactă (fail-open, fără suprimare falsă).
-    relevance = None if (cheaper_intent or rehydrated) else run.search_relevance
-    ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
-
-    # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
-    # Tabel structurat DETERMINIST din setul comparat (ordinea cerută păstrată) — fapte din
-    # retrieval, lead determinist (cel mai ieftin / cel mai bine cotat), ZERO proză LLM în celule →
-    # zero halucinație. Web randează tabelul; canalele text primesc floor-ul aplatizat. Precede
-    # calea rich de recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele
-    # două" care doar re-lista produsele). Sare peste rich/proză pentru acest tur.
-    if run.compared and not is_order:
-        comparison = compose.build_comparison(run.compared, ctx.language, _comparison_facets(ctx))
-        if comparison is not None:
-            ctx.set_comparison_reply(
-                comparison,
-                text=compose.flatten_comparison(comparison, ctx.language),
-                products=compose.comparison_cards(comparison),
-                chips=_compare_chips(comparison.columns, ctx.language),
-            )
-            ctx.emit("agent_compared", n=len(comparison.columns))
-            return
-
-    if products:
-        # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
-        # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
-        if not is_order:
-            rich = await _finalize_rich(
-                deps.llm,
-                prompt_builder.build_rich_system(inp),
-                query,
-                products,
-                ctx,
-                history,
-                notes=commerce_note,
-            )
-            if rich is not None and rich.items:
-                ctx.set_rich_reply(
-                    rich,
-                    text=compose.flatten(rich, ctx.language),
-                    products=compose.card_products(rich.items),
-                )
-                # NX-137: regulile rich INTERZIC linkuri în proza modelului → fără atașarea asta,
-                # linkul de checkout creat în acest tur nu ajungea NICIODATĂ la client pe web.
-                _attach_checkout_offer(ctx, run.checkout_url)
-                ctx.emit("agent_recommended", n=len(rich.items), rich=True)
-                return
-            # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
-            # structurat a eșuat/excepție; `rich.items == []` = toate produsele au picat la
-            # grounding-ul de apartenență. Pur observabilitate (downgrade-ul exista deja, P6).
-            reason = (
-                "all-items-dropped-by-membership" if rich is not None else "structured-call-failed"
-            )
-            ctx.emit("rich_downgraded", reason=reason)
-        # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
-        # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
-        bare = _bad_bare_numbers(final, products, run.grounded_prices) if final else []
-        if bare:
-            ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
-        # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
-        if final and not _claims_ok(final):
-            ctx.emit("validator_rejected", kind="claim")
-        # NX-118: claim de stoc nefondat (niciun produs pe stoc) → semnalează (P12: doar contorul).
-        if final and not _stock_claim_ok(final, products):
-            ctx.emit("validator_rejected", kind="stock_claim")
-        reply = await _finalize(
-            deps.llm,
-            prompt_builder.build_reco_system(inp),
-            query,
-            final,
-            products,
-            ctx.language,
-            history,
-            run.generated_links,
-            run.grounded_prices,
-        )
-        ctx.set_reply(reply, products=_card_products(products))
-        # NX-137: pe proză modelul POATE scrie linkul (validat prin run.generated_links), dar dacă
-        # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
-        _attach_checkout_offer(ctx, run.checkout_url)
-        ctx.emit("agent_recommended", n=len(products))
-    elif final:
-        # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
-        # pe rută — nu trecem o întrebare de vânzare prin fallback-ul de status comandă.
-        if is_order:
-            # ORDER: fără bare-check (numere DB legitime: dată/AWB/cantitate) — vezi _valid.
-            reply = await _finalize_grounded(
-                deps.llm,
-                final,
-                "\n".join(run.order_views),
-                ctx.language,
-                run.generated_links,
-                run.grounded_prices,
-            )
-            ctx.set_reply(reply)
-        elif _valid(final, [], run.generated_links, run.grounded_prices):
-            # SALES: text fără produse și fără sumă inventată (clarificare) → servim
-            ctx.set_reply(final)
-        else:
-            # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
-            # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
-            # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
-            ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
-    elif is_order and web_unidentified(ctx):
-        # ORDER pe web anonim, fără rezultat (modelul n-a chemat un tool) → login, NU „dă-mi numărul
-        # comenzii" (ar relua bucla NX-128 pe un canal unde lookup-ul nu poate reuși).
-        ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
-    else:
-        ctx.set_reply(_no_result_msg(is_order), cacheable=False)
+    # Faza F (NX-144): render pe plan → răspuns final (comparație / rich / proză / order /
+    # fallback), validat + retry + fallback. Singurul punct de ieșire e Sender, via `render`.
+    await render(ctx, deps, plan)
