@@ -275,12 +275,8 @@ def test_evaluate_reply_checks_expected_tools():
     ctx = _ran_ctx("recomandare", route=Route.SALES)
     ctx.events.append(Event("tool_call", {"tool": "search_products"}))
 
-    ok = evaluate_reply(
-        ctx, GoldenExpect(expected_tools=["search_products"]), case_id="tool-ok"
-    )
-    bad = evaluate_reply(
-        ctx, GoldenExpect(expected_tools=["compare_products"]), case_id="tool-bad"
-    )
+    ok = evaluate_reply(ctx, GoldenExpect(expected_tools=["search_products"]), case_id="tool-ok")
+    bad = evaluate_reply(ctx, GoldenExpect(expected_tools=["compare_products"]), case_id="tool-bad")
 
     assert ok.passed is True
     assert bad.passed is False
