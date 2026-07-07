@@ -167,3 +167,33 @@ voce de client). Ex. la o comparație: `["Adaugă Crema A", "Adaugă Crema B", "
 
 Tot ce e mai sus e **aditiv** și opțional: un frontend care ignoră câmpurile noi continuă să
 funcţioneze (degradare grațioasă). Implementarea lor = paritatea vizuală cu iZi.
+
+---
+
+## 7. Production Gate / Fixtures
+
+Contractul este acoperit de fixtures versionate în
+[`tests/fixtures/web_response/payloads.json`](../tests/fixtures/web_response/payloads.json):
+
+- `text_only`
+- `products`
+- `offer`
+- `comparison`
+- `no_match`
+- `fallback_error`
+- `rate_limit`
+
+Backendul validează payloadurile cu checkerul pur
+[`src/evals/web_response.py`](../src/evals/web_response.py). Gate-ul prinde explicit:
+
+- `content` gol sau `products`/`suggestions` cu formă greșită;
+- `product_id` emis dar absent din sursa de produse;
+- preț din card diferit de sursa DB;
+- preț menționat în `content` care nu apare în payload/sursă;
+- URL gol, invalid sau URL în text care nu apare în payload;
+- produs menționat în `content` dar absent din `products`;
+- claim de stoc/livrare fără sursă explicită;
+- tabel `comparison` rupt (coloane/rânduri nealiniate).
+
+Acest gate nu înlocuiește frontendul și nu decide designul. Doar garantează că frontendul primește
+un payload stabil, randabil și grounded.
