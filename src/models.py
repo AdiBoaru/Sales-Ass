@@ -499,6 +499,10 @@ class TurnContext:
     # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al
     # conversației lungi (acoperă mesajele de dinaintea ultimelor 8). Citit de context_blocks.
     summary: str | None = None
+    # NX-148: facts structurate ale contactului (buget/tip piele/brand/…), seed de processor din
+    # conversation_facts (owner: processor, ca `summary`). Ref-uri mici {fact_type, fact_value},
+    # citite de facts_block. Gol dacă memoria e OFF / niciun fact. NICIODATĂ PII (P12).
+    facts: list[dict[str, Any]] = field(default_factory=list)
     # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}). Owner UNIC:
     # stagiul Agent (acumulat din `ToolResult.state_patch` în `execute`); processor-ul îl
     # merge-uiește în `new_state` la scriere (P3 — nu se scrie din două locuri).

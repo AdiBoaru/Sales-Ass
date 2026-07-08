@@ -33,6 +33,12 @@ from src.db.queries.conversations import (
     patch_conversation_state,
     touch_last_inbound,
 )
+from src.db.queries.facts import (
+    fetch_relevant_facts,
+    get_messages_for_extraction,
+    select_whitelisted_facts,
+    upsert_facts,
+)
 from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
 from src.db.queries.messages import (
     count_messages,
@@ -47,6 +53,7 @@ from src.db.queries.summaries import (
     get_summary_for_context,
     insert_conversation_summary,
 )
+from src.domain.loader import load_domain_pack
 from src.models import (
     Author,
     BusinessConfig,
@@ -257,7 +264,19 @@ async def _extract_profile_and_score(
     if not settings.profile_extraction_enabled or llm is None or shadow_mode or ctx.route is None:
         return
     try:
-        delta = await extract_profile(llm, ctx.history, ctx.message, ctx.language)
+        # NX-148: cu memoria ON, extractorul cere ȘI facts (UN singur apel nano, P2) pe o fereastră
+        # mai lată (20 mesaje = 10 tururi) ca să prindă fapte spuse mai devreme. Cu memoria OFF,
+        # feature-flag-ul e COMPLET oprit: fereastra normală de profil (8) + promptul NU cere facts
+        # (nu ardem tokeni pe ceva ce flag-ul promite că e oprit).
+        facts_on = settings.conversation_facts_enabled
+        window = (
+            await get_messages_for_extraction(conn, ctx.business.id, ctx.conversation_id)
+            if facts_on
+            else ctx.history
+        )
+        delta = await extract_profile(
+            llm, window or ctx.history, ctx.message, ctx.language, include_facts=facts_on
+        )
         if delta is None:
             return  # parse/API fail → fail-soft, nimic de scris
         # Apelul nano a avut loc → contabilizează-l în contorul zilnic (G2c), altfel scapă bugetul.
@@ -273,6 +292,33 @@ async def _extract_profile_and_score(
         # NX-122: turn_id stampat explicit (persist out-of-band, vezi summarizer_run) → replay/tur.
         tid = ctx.turn_id
         events = [Event("profile_key_dropped", {"key": k, "turn_id": tid}) for k in dropped]
+
+        # NX-148: facts structurate din ACELAȘI apel nano → whitelist per vertical (fail-closed,
+        # clamp, redactare PII în select_whitelisted_facts) → upsert. Best-effort (savepoint).
+        if settings.conversation_facts_enabled and delta.facts:
+            pack = load_domain_pack(ctx.business)
+            wl = pack.fact_type_whitelist if pack else frozenset()
+            candidates = [
+                {"fact_type": f.fact_type, "fact_value": f.fact_value, "confidence": f.confidence}
+                for f in delta.facts
+            ]
+            kept = select_whitelisted_facts(candidates, wl)
+            if kept:
+                async with conn.transaction():
+                    await upsert_facts(
+                        conn, ctx.business.id, ctx.contact.id, ctx.conversation_id, kept
+                    )
+                events.append(
+                    Event(
+                        "facts_extracted",
+                        {
+                            "n_facts": len(kept),
+                            "types": sorted({f["fact_type"] for f in kept}),  # chei (P12)
+                            "turn_id": tid,
+                        },
+                    )
+                )
+
         if patch or score_changed:
             # Savepoint propriu: UPDATE eșuat → rollback doar la el (turul a răspuns deja).
             async with conn.transaction():
@@ -492,6 +538,16 @@ async def handle_turn(
     )
     await touch_last_inbound(conn, business.id, conv["id"])
 
+    # NX-148: memoria structurată (facts) încărcată o dată, injectată de facts_block. Guardată de
+    # kill-switch (OFF → gol → bloc absent). BEST-EFFORT (ca summary/cache): un fail de citire nu
+    # blochează turul — degradare la history+state (P6). Owner: processor.
+    facts: list = []
+    if get_settings().conversation_facts_enabled:
+        try:
+            facts = await fetch_relevant_facts(conn, business.id, contact.id)
+        except Exception:  # noqa: BLE001 — memoria e opțională, turul răspunde oricum
+            log.exception("încărcarea facts a eșuat (turul continuă)")
+
     ctx = TurnContext(
         turn_id=turn_id,
         business=business,
@@ -508,11 +564,16 @@ async def handle_turn(
         history=await get_recent_messages(conn, business.id, conv["id"]),
         state=ConversationState.from_jsonb(conv["state"]),  # G6-2: agentul vede ce-a afișat
         summary=await get_summary_for_context(conn, business.id, conv["id"]),  # G6-2 felia 2
+        facts=facts,  # NX-148: memorie structurată (facts_block)
         language=conv["locale"] or business.default_locale,
         bot_active=conv["bot_active"],
         handoff_until=conv["handoff_until"],
         verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
+
+    # NX-148: acoperirea memoriei (chei/contoare, nu valori — P12).
+    if facts:
+        ctx.emit("facts_injected", n_injected=len(facts))
 
     # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
     if verified_customer_ref:

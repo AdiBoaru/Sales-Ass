@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from src.models import Author, Direction, Message
 from src.worker.summarizer import _redact_pii
 
 if TYPE_CHECKING:
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
 
 # Cap dur de facts injectate/persistate per contact (P4 — buget de context în cod).
 MAX_FACTS = 10
+# NX-148: fereastra extractorului post-tur de facts — 10 tururi = 20 mesaje (bot+client). Mai
+# lată decât istoricul de context (8, P4), ca memoria să prindă fapte spuse mai devreme.
+EXTRACTION_WINDOW = 20
 
 
 def _clamp01(value: Any) -> float:
@@ -154,3 +158,38 @@ async def fetch_relevant_facts(
             }
         )
     return out
+
+
+async def get_messages_for_extraction(
+    conn: asyncpg.Connection, business_id: str, conversation_id: str, limit: int = EXTRACTION_WINDOW
+) -> list[Message]:
+    """Ultimele `limit` mesaje (cronologic crescător) pentru extractorul post-tur de facts
+    (NX-148). Cap dur la EXTRACTION_WINDOW (20 = 10 tururi). Separat de `get_recent_messages`
+    (contextul agentului rămâne la 8, P4) — fereastra mai lată e DOAR pentru extracția offline."""
+    limit = min(limit, EXTRACTION_WINDOW)
+    rows = await conn.fetch(
+        """
+        select direction, author, body, content_type, created_at
+        from (
+            select direction, author, body, content_type, created_at
+            from messages
+            where business_id = $1 and conversation_id = $2
+            order by created_at desc
+            limit $3
+        ) recent
+        order by created_at asc
+        """,
+        business_id,
+        conversation_id,
+        limit,
+    )
+    return [
+        Message(
+            direction=Direction(r["direction"]),
+            author=Author(r["author"]),
+            body=r["body"],
+            content_type=r["content_type"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]

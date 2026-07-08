@@ -277,9 +277,15 @@ def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
 def _patch(monkeypatch, *, delta, boom_update=False):
     sink: dict = {}
 
-    async def f_extract(llm, history, message, language):
+    async def f_extract(llm, history, message, language, *, include_facts=True):
         sink["extract_called"] = True
+        sink["extract_history_len"] = len(history)
+        sink["include_facts"] = include_facts
         return delta
+
+    async def f_window(conn, business_id, conversation_id, limit=20):
+        # NX-148: fereastra de extracție (20 mesaje) — stub, testele nu ating DB reală.
+        return []
 
     async def f_update(conn, business_id, contact_id, patch, score):
         if boom_update:
@@ -294,6 +300,7 @@ def _patch(monkeypatch, *, delta, boom_update=False):
         sink["events_contact"] = contact_id
 
     monkeypatch.setattr(proc, "extract_profile", f_extract)
+    monkeypatch.setattr(proc, "get_messages_for_extraction", f_window)
     monkeypatch.setattr(proc, "update_contact_profile_and_score", f_update)
     monkeypatch.setattr(proc, "cost_add", f_cost)
     monkeypatch.setattr(proc, "insert_events", f_events)
