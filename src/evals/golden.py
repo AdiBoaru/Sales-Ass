@@ -147,6 +147,11 @@ def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> G
         for tool in expect.expected_tools:
             if tool not in tools:
                 failures.append(f"tool lipsă: {tool!r} (chemate: {tools!r})")
+        unexpected = [t for t in tools if t not in expect.expected_tools]
+        if unexpected:
+            failures.append(
+                f"tool neașteptat: {unexpected!r} (așteptate: {expect.expected_tools!r})"
+            )
 
     if expect.expected_product_ids:
         product_ids = _ctx_product_ids(ctx)

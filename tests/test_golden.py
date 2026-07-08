@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from src.agent import deterministic as deterministic_mod
 from src.agent import planner as planner_mod
 from src.agent.llm import ModerationResult
 from src.config import get_settings
@@ -119,7 +120,17 @@ def _apply_stubs_dyn(monkeypatch, get_fx) -> None:
         by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
         return [by_id[i] for i in ids if i in by_id]
 
+    async def fake_search_cheaper_than(conn, business_id, ref_ids, baseline, **kwargs):
+        return list(get_fx().get("cheaper", []))
+
+    async def fake_complementary(conn, business_id, product_id, **kwargs):
+        return list(get_fx().get("complementary", []))
+
+    # PRE-loop deterministic intents (`link` / `compare`) import `get_products_by_ids` directly.
+    monkeypatch.setattr(deterministic_mod, "get_products_by_ids", fake_by_ids_direct)
     monkeypatch.setattr(planner_mod, "get_products_by_ids", fake_by_ids_direct)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", fake_search_cheaper_than)
+    monkeypatch.setattr(planner_mod, "get_complementary_products", fake_complementary)
 
     async def none_lookup(*args, **kwargs):
         return None
@@ -210,9 +221,10 @@ def test_all_conversations_present():
     acoperă memoria (constraint carry / topic-switch reset), limbi non-RO (HU/EN) și
     adversarial mid-conversație (preț/produs inventat). Fiecare conversație are ≥1 tur."""
     ids = {c.id for c in CONVERSATIONS}
-    assert ids == {
+    required = {
         "conv-greeting-then-sales",
         "conv-sales-refine-carries-category",
+        "conv-sales-cheaper-link-3turn",
         "conv-sales-then-injection-price-blocked",
         "conv-order-then-thanks",
         "conv-sales-topic-switch-resets-constraints",
@@ -222,13 +234,15 @@ def test_all_conversations_present():
         "conv-en-sales-refine",
         "conv-sales-then-invented-product-blocked",
     }
+    assert required <= ids
+    assert len(CONVERSATIONS) >= 10
     assert all(c.turns for c in CONVERSATIONS), "orice conversație are ≥1 tur"
 
 
 def test_all_seed_cases_present():
     """Plasa de regresie: cazurile seed (G8-1) + securitate (NX-16) sunt încărcate."""
     ids = {c.id for c in CASES}
-    assert ids == {
+    required = {
         # G8-1: pipeline de bază (rutare / grounding / anti-halucinație / P6)
         "greeting-simple",
         "sales-grounded",
@@ -244,6 +258,10 @@ def test_all_seed_cases_present():
         "injection-legal-threat-handoff",
         "injection-ignore-instructions-stays-grounded",
     }
+    adversarial = [c for c in CASES if c.id.startswith(("injection-", "adversarial-"))]
+    assert required <= ids
+    assert len(CASES) >= 50
+    assert len(adversarial) >= 8
 
 
 # --- NX-16: proba anti-teatru (fiecare caz PICĂ dacă guard-ul lui e scos) -----
@@ -368,6 +386,20 @@ def test_evaluate_reply_checks_expected_tools():
     assert ok.passed is True
     assert bad.passed is False
     assert any("tool lipsă" in f for f in bad.failures)
+
+
+def test_evaluate_reply_fails_on_unexpected_extra_tool():
+    # P2: tool-urile chemate trebuie să fie ⊆ expected_tools — un tool extra neasteptat pică
+    ctx = _ran_ctx("recomandare", route=Route.SALES)
+    ctx.events.append(Event("tool_call", {"tool": "search_products"}))
+    ctx.events.append(Event("tool_call", {"tool": "cart_add"}))
+
+    res = evaluate_reply(
+        ctx, GoldenExpect(expected_tools=["search_products"]), case_id="tool-extra"
+    )
+
+    assert res.passed is False
+    assert any("tool neasteptat" in f or "tool neașteptat" in f for f in res.failures)
 
 
 def test_evaluate_reply_checks_expected_product_ids():
