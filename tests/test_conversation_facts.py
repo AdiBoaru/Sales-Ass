@@ -7,7 +7,7 @@ from src.db.queries.facts import select_whitelisted_facts
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig
 from src.worker.context import facts_block
-from src.worker.profile import ProfileDelta
+from src.worker.profile import ProfileDelta, build_profile_prompt
 
 WL = frozenset({"budget_band", "skin_type", "fav_brands"})
 
@@ -132,3 +132,18 @@ def test_profile_delta_parses_facts():
 def test_profile_delta_facts_default_empty():
     d = ProfileDelta.model_validate({"profile_patch": {}})
     assert d.facts == []
+
+
+def test_prompt_requests_facts_only_when_enabled():
+    msg = SimpleNamespace(body="caut o cremă sub 100 lei")
+    sys_on, user_on = build_profile_prompt([], msg, "ro", include_facts=True)
+    sys_off, user_off = build_profile_prompt([], msg, "ro", include_facts=False)
+
+    # ON: promptul cere facts (cheia JSON + instrucțiunea din user).
+    assert '"facts"' in sys_on
+    assert "facts" in user_on
+    # OFF (kill-switch): feature-flag COMPLET oprit — nimic despre facts în prompt.
+    assert '"facts"' not in sys_off
+    assert "facts" not in user_off
+    # profile/lead rămân în ambele (extractorul de profil nu e afectat).
+    assert "profile_patch" in sys_off and "lead_signals" in sys_off

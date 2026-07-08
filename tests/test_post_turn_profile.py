@@ -277,9 +277,10 @@ def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
 def _patch(monkeypatch, *, delta, boom_update=False):
     sink: dict = {}
 
-    async def f_extract(llm, history, message, language):
+    async def f_extract(llm, history, message, language, *, include_facts=True):
         sink["extract_called"] = True
         sink["extract_history_len"] = len(history)
+        sink["include_facts"] = include_facts
         return delta
 
     async def f_window(conn, business_id, conversation_id, limit=20):

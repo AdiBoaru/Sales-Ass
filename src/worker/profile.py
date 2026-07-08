@@ -111,6 +111,29 @@ Format:
 {"profile_patch": {<cheie_snake_case>: <valoare scalară scurtă>, ...},
  "lead_signals": {"buying_stage": "browsing|narrowing|comparing|ready_to_buy",
                   "has_budget": <bool>, "asked_price": <bool>,
+                  "mentioned_product": <bool>, "ready_to_buy": <bool>}}
+
+Reguli:
+- profile_patch: DOAR atribute pe care clientul le-a declarat EXPLICIT despre el sau nevoia lui
+  (ex. skin_type, budget_band, fav_brands, concerns). Chei în snake_case ENGLEZĂ, valori scurte.
+  Dacă nimic clar → {} (obiect gol). NU ghici, NU completa din context general.
+- NICIODATĂ date personale de contact (telefon, email, nume, adresă) — nici cheie, nici valoare.
+- buying_stage: cât de avansat e clientul (browsing = doar se uită; ready_to_buy = gata de comandă).
+- Nu inventa produse, prețuri sau preferințe nedeclarate."""
+
+
+# NX-148: varianta CU facts — folosită DOAR când `conversation_facts_enabled` (include_facts=True).
+# Cu flag-ul OFF folosim `_SYSTEM` de bază → modelul NU cere/emite facts (flag-ul e complet OFF,
+# nu doar la persistare — nu arde tokeni pe ceva ce feature-flag-ul promite că e oprit).
+_SYSTEM_WITH_FACTS = """\
+Ești un extractor de profil pentru un asistent de vânzări dintr-un magazin online.
+Primești o conversație scurtă și extragi DOAR fapte STABILE despre client + semnale de cumpărare.
+Răspunzi NUMAI cu JSON, fără text în plus.
+
+Format:
+{"profile_patch": {<cheie_snake_case>: <valoare scalară scurtă>, ...},
+ "lead_signals": {"buying_stage": "browsing|narrowing|comparing|ready_to_buy",
+                  "has_budget": <bool>, "asked_price": <bool>,
                   "mentioned_product": <bool>, "ready_to_buy": <bool>},
  "facts": [{"fact_type": <snake_case>, "fact_value": <valoare scurtă>, "confidence": <0..1>}, ...]}
 
@@ -139,28 +162,35 @@ def _transcript(history: list[Message]) -> str:
     return "\n".join(lines)
 
 
-def build_profile_prompt(history: list[Message], message: Any, language: str) -> tuple[str, str]:
-    """(system, user) pentru apelul de extracție. System static; user = istoric scurt redactat +
-    ultimul mesaj al clientului (subliniat)."""
+def build_profile_prompt(
+    history: list[Message], message: Any, language: str, *, include_facts: bool = True
+) -> tuple[str, str]:
+    """(system, user) pentru apelul de extracție. `include_facts=False` (memoria OFF) →
+    promptul NU menționează facts (system de bază + user fără „facts") → modelul nu emite/nu
+    arde tokeni pe ele. User = istoric scurt redactat + ultimul mesaj (subliniat)."""
     transcript = _transcript(history)
     latest = _redact_pii((getattr(message, "body", None) or "").strip())
+    ask = (
+        "profile_patch + lead_signals + facts" if include_facts else "profile_patch + lead_signals"
+    )
     user = (
         f"Limba clientului: {language}\n"
         f"Conversație recentă:\n{transcript or '(fără istoric)'}\n\n"
         f"Ultimul mesaj al clientului: {latest or '(gol)'}\n\n"
-        "Extrage profile_patch + lead_signals + facts ca JSON."
+        f"Extrage {ask} ca JSON."
     )
-    return _SYSTEM, user
+    return (_SYSTEM_WITH_FACTS if include_facts else _SYSTEM), user
 
 
 async def extract_profile(
-    llm: Any, history: list[Message], message: Any, language: str
+    llm: Any, history: list[Message], message: Any, language: str, *, include_facts: bool = True
 ) -> ProfileDelta | None:
     """Apel NANO (JSON mode) → `ProfileDelta`. `None` la orice fail (parse/validare/API) = fail-soft
-    (hook-ul nu scrie nimic). Nu cheamă modelul dacă nu există conținut de analizat (zero cost)."""
+    (hook-ul nu scrie nimic). Nu cheamă modelul dacă nu există conținut de analizat (zero cost).
+    `include_facts=False` (memoria OFF) → nu se cer facts în prompt (feature-flag complet OFF)."""
     if not history and not (getattr(message, "body", None) or "").strip():
         return None
-    system, user = build_profile_prompt(history, message, language)
+    system, user = build_profile_prompt(history, message, language, include_facts=include_facts)
     try:
         raw = await llm.classify_json(system, user, model=llm.model_triage)
         return ProfileDelta.model_validate(raw)
