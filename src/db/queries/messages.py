@@ -139,13 +139,23 @@ async def get_turn_messages(
     euristica anterioară „ultimele N mesaje ale conversației" (greșită dacă discuția a continuat
     după turul investigat). Tool de suport/ops (`admin_conn`), nu runtime; `business_id = $1`
     (P7). Mesaje mai vechi (insertate înainte de acest fix, fără turn_id în payload) → gol,
-    replay-ul cade pe fallback (fără inbound/reply, restul traiectoriei rămâne intact)."""
+    replay-ul cade pe fallback (fără inbound/reply, restul traiectoriei rămâne intact).
+
+    Ordine DETERMINISTĂ (fix finding Codex pe #199): inbound înainte de outbound, apoi
+    `fragment_index` (stampat în payload) — NU `created_at asc`. Fragmentele outbound (split
+    max 2, NX-90) se scriu în ACEEAȘI tranzacție → `now()` e constant per tranzacție → pot avea
+    `created_at` identic, deci `created_at` singur NU garantează ordinea reasamblării. Mesaje mai
+    vechi fără `fragment_index` în payload → coalesce la 0 (nu rupe ordinea, doar nu
+    diferențiază)."""
     rows = await conn.fetch(
         """
         select direction, author, body, content_type, created_at
         from messages
         where business_id = $1 and conversation_id = $2 and payload->>'turn_id' = $3
-        order by created_at asc
+        order by
+            case direction when 'inbound' then 0 else 1 end,
+            coalesce((payload->>'fragment_index')::int, 0),
+            created_at asc
         """,
         business_id,
         conversation_id,

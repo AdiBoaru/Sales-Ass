@@ -225,6 +225,53 @@ async def test_get_turn_messages_scoped_to_turn_not_last_n(pool):
         assert [m.body for m in msgs] == ["turul 1: caut o cremă", "turul 1: iată Aqua"]
 
 
+async def test_get_turn_messages_orders_outbound_fragments_by_index_not_created_at(pool):
+    """Fix finding Codex pe #199: fragmentele outbound (split max 2, NX-90) se scriu în ACEEAȘI
+    tranzacție ca Sender-ul → `created_at` poate fi IDENTIC (now() e constant per tranzacție) —
+    Postgres NU garantează ordinea pe tie-uri fără tiebreaker, deci un test cu `created_at`
+    identic n-ar fi determinist FALSIFIABIL. Aici forțăm explicit `created_at` INVERS
+    cronologiei corecte (fragmentul 2 mai VECHI decât fragmentul 1, inbound cel mai NOU) — dacă
+    query-ul s-ar baza pe `created_at asc`, ar ieși GREȘIT determinist; cu `fragment_index` +
+    `direction` ca sortare primară, iese CORECT determinist indiferent de `created_at`."""
+    async with tenant_tx(pool) as (conn, channel_id):
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
+        turn_id = str(uuid4())
+        rows = [
+            # (direction, body, fragment_index, offset_secs) — offset invers ordinii corecte.
+            ("outbound", "fragment 2 (index 1)", 1, 0),
+            ("outbound", "fragment 1 (index 0)", 0, 1),
+            ("inbound", "întrebarea clientului", 0, 2),
+        ]
+        for direction, body, fragment_index, offset in rows:
+            await conn.execute(
+                """
+                insert into messages
+                    (business_id, conversation_id, contact_id, direction, author, body,
+                     payload, created_at)
+                values ($1, $2, $3, $4, $5, $6,
+                        jsonb_build_object('turn_id', $7::text, 'fragment_index', $8::int),
+                        now() + make_interval(secs => $9))
+                """,
+                DEMO_BIZ,
+                conv["id"],
+                contact.id,
+                direction,
+                "bot" if direction == "outbound" else "contact",
+                body,
+                turn_id,
+                fragment_index,
+                offset,
+            )
+
+        msgs = await get_turn_messages(conn, DEMO_BIZ, conv["id"], turn_id)
+        assert [m.body for m in msgs] == [
+            "întrebarea clientului",  # inbound întâi
+            "fragment 1 (index 0)",  # apoi outbound, în ordinea fragment_index (nu de inserare)
+            "fragment 2 (index 1)",
+        ]
+
+
 # --------------------------------------------------------------------------- #
 # outbox — enqueue idempotent + claim SKIP LOCKED + mark
 # --------------------------------------------------------------------------- #

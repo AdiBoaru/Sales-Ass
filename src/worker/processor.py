@@ -486,7 +486,9 @@ async def handle_turn(
         media_ref=event.get("media_id"),
         # NX-146 felia 2 (fix): turn_id în payload → Turn Replay citește EXACT mesajele turului,
         # nu o euristică „ultimele N ale conversației" (greșită dacă discuția a continuat).
-        payload={"turn_id": turn_id},
+        # fragment_index=0: un singur mesaj inbound per tur, dar `get_turn_messages` ordonează
+        # uniform pe (direction, fragment_index) — vezi fix-ul de mai jos pe outbound.
+        payload={"turn_id": turn_id, "fragment_index": 0},
     )
     await touch_last_inbound(conn, business.id, conv["id"])
 
@@ -617,8 +619,11 @@ async def handle_turn(
                 # NX-103: cost/tokeni/latență/model pe PRIMUL fragment (reply-ul botului). Split-ul
                 # (frag 2) e același reply → nu dublăm costul. messages.cost_usd devine real.
                 **(_message_usage_kwargs(ctx.usage) if i == 0 else {}),
-                # NX-146 felia 2 (fix): turn_id în payload — vezi insert-ul inbound de mai sus.
-                payload={"turn_id": turn_id},
+                # NX-146 felia 2 (fix, corectat pe finding Codex): turn_id + fragment_index în
+                # payload. Fragmentele outbound se scriu în ACEEAȘI tranzacție → `created_at` poate
+                # fi identic (now() e constant per tranzacție) → `created_at asc` NU garantează
+                # ordinea. `fragment_index` = poziția reală a fragmentului (split NX-90, max 2).
+                payload={"turn_id": turn_id, "fragment_index": i},
             )
             if not deliver:
                 # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
