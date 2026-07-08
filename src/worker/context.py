@@ -56,6 +56,25 @@ def customer_profile_block(contact: Contact, *, max_chars: int = 300) -> str:
     return ("Profil client: " + "; ".join(parts))[:max_chars]
 
 
+def facts_block(ctx: TurnContext, *, max_facts: int = 6, max_chars: int = 400) -> str:
+    """NX-148: bloc compact de facts STABILE știute despre client (buget/tip piele/brand/…),
+    memoria structurată peste mesajele care au ieșit din istoricul de 8. Ref-uri mici
+    (`fact_type: fact_value`), bugetat (P4). Seed de processor în `ctx.facts` (gol când memoria
+    e OFF → bloc gol, degradare). Fără PII (P12 — apărat la extracție + persistare)."""
+    parts: list[str] = []
+    for f in (ctx.facts or [])[:max_facts]:
+        ftype = f.get("fact_type")
+        value = f.get("fact_value")
+        if not ftype or value in (None, "", [], {}):
+            continue
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value[:4])
+        parts.append(f"{ftype}: {value}")
+    if not parts:
+        return ""
+    return ("Ce știu despre client: " + "; ".join(parts))[:max_chars]
+
+
 def state_block(state: ConversationState, *, max_products: int = 3, max_chars: int = 600) -> str:
     """Bloc de state references: produse arătate recent (id + nume + preț, ref-uri — principiul 8)
     + constrângeri știute (buget, tip de ten…). Memoria scurtă pt follow-up coerent. Gol → "".
@@ -99,7 +118,12 @@ def context_blocks(ctx: TurnContext) -> str:
     transcriptul ultimelor 8 e concatenat downstream (în triage/agent), deci rezumat→…→recent.
     Stă în mesajul USER (dinamic), nu în system — promptul static rămâne byte-identic (prompt
     caching neatins). Gol → "" (nimic de adăugat)."""
-    blocks = [summary_block(ctx), customer_profile_block(ctx.contact), state_block(ctx.state)]
+    blocks = [
+        summary_block(ctx),
+        customer_profile_block(ctx.contact),
+        facts_block(ctx),  # NX-148: memorie structurată (după profil, înainte de state)
+        state_block(ctx.state),
+    ]
     return "\n".join(b for b in blocks if b)
 
 

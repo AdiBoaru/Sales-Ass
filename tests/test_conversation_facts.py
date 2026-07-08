@@ -1,8 +1,13 @@
-"""NX-148 felia 1 — teste pure (fără DB) pentru conversation_facts: whitelist + DomainPack."""
+"""NX-148 — teste pure (fără DB): whitelist + DomainPack (felia 1) + facts_block + extractor
+parsing (felia 2)."""
+
+from types import SimpleNamespace
 
 from src.db.queries.facts import select_whitelisted_facts
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig
+from src.worker.context import facts_block
+from src.worker.profile import ProfileDelta
 
 WL = frozenset({"budget_band", "skin_type", "fav_brands"})
 
@@ -84,3 +89,46 @@ def test_domain_pack_loads_fact_type_whitelist():
     assert "budget_band" in pack.fact_type_whitelist
     # profile_whitelist rămâne separat (mecanisme distincte, chiar dacă se suprapun parțial)
     assert isinstance(pack.fact_type_whitelist, frozenset)
+
+
+# --- felia 2: facts_block (injectare) + extractor parsing --------------------
+
+
+def test_facts_block_formats_and_budgets():
+    ctx = SimpleNamespace(
+        facts=[
+            {"fact_type": "budget_band", "fact_value": "100-200"},
+            {"fact_type": "skin_type", "fact_value": "sensitive"},
+        ]
+    )
+    out = facts_block(ctx)
+    assert out.startswith("Ce știu despre client:")
+    assert "budget_band: 100-200" in out
+    assert "skin_type: sensitive" in out
+
+
+def test_facts_block_empty_when_no_facts():
+    assert facts_block(SimpleNamespace(facts=[])) == ""
+    assert facts_block(SimpleNamespace(facts=None)) == ""
+
+
+def test_facts_block_skips_empty_values():
+    ctx = SimpleNamespace(facts=[{"fact_type": "budget_band", "fact_value": ""}])
+    assert facts_block(ctx) == ""
+
+
+def test_profile_delta_parses_facts():
+    d = ProfileDelta.model_validate(
+        {
+            "profile_patch": {"skin_type": "dry"},
+            "facts": [{"fact_type": "budget_band", "fact_value": "100", "confidence": 0.8}],
+        }
+    )
+    assert len(d.facts) == 1
+    assert d.facts[0].fact_type == "budget_band"
+    assert d.facts[0].confidence == 0.8
+
+
+def test_profile_delta_facts_default_empty():
+    d = ProfileDelta.model_validate({"profile_patch": {}})
+    assert d.facts == []

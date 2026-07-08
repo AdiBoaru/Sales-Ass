@@ -79,15 +79,28 @@ class LeadSignals(BaseModel):
     ready_to_buy: bool = False
 
 
+class FactCandidate(BaseModel):
+    """NX-148: un fact structurat CANDIDAT (filtrat apoi pe `fact_type_whitelist` per vertical +
+    redactat de `select_whitelisted_facts`). `fact_value` liber (`Any`) — o valoare proastă nu
+    invalidează restul; confidence 0..1 (clampat aval)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    fact_type: str
+    fact_value: Any = None
+    confidence: float = 0.5
+
+
 class ProfileDelta(BaseModel):
     """Output-ul extractorului. `profile_patch` = chei CANDIDATE (filtrate apoi pe whitelist);
     tipăm valorile liber (`Any`) ca o singură valoare proastă să nu invalideze tot patch-ul —
-    `filter_profile_patch` aruncă non-scalarii."""
+    `filter_profile_patch` aruncă non-scalarii. `facts` (NX-148) = memorie structurată candidată."""
 
     model_config = ConfigDict(extra="ignore")
 
     profile_patch: dict[str, Any] = Field(default_factory=dict)
     lead_signals: LeadSignals = Field(default_factory=LeadSignals)
+    facts: list[FactCandidate] = Field(default_factory=list)
 
 
 _SYSTEM = """Ești un extractor de profil pentru un asistent de vânzări dintr-un magazin online.
@@ -98,12 +111,17 @@ Format:
 {"profile_patch": {<cheie_snake_case>: <valoare scalară scurtă>, ...},
  "lead_signals": {"buying_stage": "browsing|narrowing|comparing|ready_to_buy",
                   "has_budget": <bool>, "asked_price": <bool>,
-                  "mentioned_product": <bool>, "ready_to_buy": <bool>}}
+                  "mentioned_product": <bool>, "ready_to_buy": <bool>},
+ "facts": [{"fact_type": <snake_case>, "fact_value": <valoare scurtă>, "confidence": <0..1>}, ...]}
 
 Reguli:
 - profile_patch: DOAR atribute pe care clientul le-a declarat EXPLICIT despre el sau nevoia lui
   (ex. skin_type, budget_band, fav_brands, concerns). Chei în snake_case ENGLEZĂ, valori scurte.
   Dacă nimic clar → {} (obiect gol). NU ghici, NU completa din context general.
+- facts: fapte STABILE, reutilizabile despre client (buget, tip de piele/păr, mărime, brand
+  preferat, restricții). `fact_type` în snake_case ENGLEZĂ; `confidence` = cât de sigur ești
+  (0..1). Doar ce a spus EXPLICIT; nimic → [] (listă goală). Pot fi aceleași semnale ca în
+  profile_patch, modelate ca fapte cu încredere.
 - NICIODATĂ date personale de contact (telefon, email, nume, adresă) — nici cheie, nici valoare.
 - buying_stage: cât de avansat e clientul (browsing = doar se uită; ready_to_buy = gata de comandă).
 - Nu inventa produse, prețuri sau preferințe nedeclarate."""
@@ -130,7 +148,7 @@ def build_profile_prompt(history: list[Message], message: Any, language: str) ->
         f"Limba clientului: {language}\n"
         f"Conversație recentă:\n{transcript or '(fără istoric)'}\n\n"
         f"Ultimul mesaj al clientului: {latest or '(gol)'}\n\n"
-        "Extrage profile_patch + lead_signals ca JSON."
+        "Extrage profile_patch + lead_signals + facts ca JSON."
     )
     return _SYSTEM, user
 
