@@ -264,10 +264,19 @@ async def _extract_profile_and_score(
     if not settings.profile_extraction_enabled or llm is None or shadow_mode or ctx.route is None:
         return
     try:
-        # NX-148: fereastră mai lată (20 mesaje = 10 tururi) pentru extractor decât istoricul de
-        # context (8) — memoria prinde fapte spuse mai devreme. UN singur apel nano (P2).
-        window = await get_messages_for_extraction(conn, ctx.business.id, ctx.conversation_id)
-        delta = await extract_profile(llm, window or ctx.history, ctx.message, ctx.language)
+        # NX-148: cu memoria ON, extractorul cere ȘI facts (UN singur apel nano, P2) pe o fereastră
+        # mai lată (20 mesaje = 10 tururi) ca să prindă fapte spuse mai devreme. Cu memoria OFF,
+        # feature-flag-ul e COMPLET oprit: fereastra normală de profil (8) + promptul NU cere facts
+        # (nu ardem tokeni pe ceva ce flag-ul promite că e oprit).
+        facts_on = settings.conversation_facts_enabled
+        window = (
+            await get_messages_for_extraction(conn, ctx.business.id, ctx.conversation_id)
+            if facts_on
+            else ctx.history
+        )
+        delta = await extract_profile(
+            llm, window or ctx.history, ctx.message, ctx.language, include_facts=facts_on
+        )
         if delta is None:
             return  # parse/API fail → fail-soft, nimic de scris
         # Apelul nano a avut loc → contabilizează-l în contorul zilnic (G2c), altfel scapă bugetul.
