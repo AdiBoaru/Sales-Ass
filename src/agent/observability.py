@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from src.agent.validator import ValidationResult
 from src.worker.summarizer import _redact_pii
 
 
@@ -28,13 +29,20 @@ def _retrieval_ids(retrieved: Any) -> list[str]:
 
 
 def agent_prompt_event(
-    system: str, user: str, retrieved: Any, *, store_prompt: bool = False
+    system: str,
+    user: str,
+    retrieved: Any,
+    *,
+    store_prompt: bool = False,
+    validator: ValidationResult | None = None,
 ) -> dict[str, Any]:
     """Proprietățile evenimentului `agent_prompt` (PUR, fără I/O).
 
     `prompt_hash` = sha256(system + "\\n" + user) — corelare cu o versiune de prompt, fără
     corpul în DB. `retrieval_ids` = grounding-ul. `prompt_rendered` (redactat) DOAR când
-    `store_prompt` e True (kill-switch OFF by default)."""
+    `store_prompt` e True (kill-switch OFF by default). `validator_ok`/`validator_reasons`
+    (DOAR când `validator` e dat de caller — rutele fără proză validată, ex. rich/comparație,
+    nu au un `ValidationResult`) = rezultatul validării de la stagiul 8, pentru Turn Replay."""
     rendered = f"{system}\n{user}"
     props: dict[str, Any] = {
         "prompt_hash": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
@@ -42,4 +50,7 @@ def agent_prompt_event(
     }
     if store_prompt:
         props["prompt_rendered"] = _redact_pii(rendered)
+    if validator is not None:
+        props["validator_ok"] = validator.ok
+        props["validator_reasons"] = list(validator.reasons)
     return props

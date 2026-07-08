@@ -319,8 +319,16 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         history=history,
         tool_names=tool_names,
     )
-    # NX-146 felia 2: corelare per-tur prompt↔grounding pentru Turn Replay (P10 — observabilitate
-    # din runner; corpul promptului NU se persistă, doar hash + retrieval IDs, P12).
+    # Faza F (NX-144): render pe plan → răspuns final (comparație / rich / proză / order /
+    # fallback), validat + retry + fallback. Singurul punct de ieșire e Sender, via `render`.
+    # `handled=True` = build_plan a răspuns deja direct (login/cross-sell/„deja cel mai ieftin")
+    # → render sare peste tur (fără ValidationResult de proză).
+    validation: ValidationResult | None = None
+    if not plan.handled:
+        validation = await render(ctx, deps, plan)
+    # NX-146 felia 2 (fix DoD): emis DUPĂ validare (nu înainte) — corelează per-tur prompt↔
+    # grounding↔rezultatul validatorului pentru Turn Replay (P10 — observabilitate din runner;
+    # corpul promptului NU se persistă, doar hash + retrieval IDs, P12).
     if system is not None:
         ctx.emit(
             "agent_prompt",
@@ -329,10 +337,6 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 user,
                 retrieved,
                 store_prompt=get_settings().replay_store_prompt_enabled,
+                validator=validation,
             ),
         )
-    if plan.handled:
-        return
-    # Faza F (NX-144): render pe plan → răspuns final (comparație / rich / proză / order /
-    # fallback), validat + retry + fallback. Singurul punct de ieșire e Sender, via `render`.
-    await render(ctx, deps, plan)

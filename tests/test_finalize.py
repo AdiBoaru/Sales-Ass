@@ -6,6 +6,7 @@ render→validate→recover. ZERO DB; LLM scriptat."""
 from src.agent.finalize import render
 from src.agent.planner import ResponsePlan
 from src.agent.prompt_builder import PromptInputs
+from src.agent.validator import ValidationResult
 from src.models import (
     BusinessConfig,
     Contact,
@@ -79,33 +80,44 @@ def _plan(**kw):
 
 async def test_rich_success_sets_rich_reply():
     ctx = _ctx()
-    await render(ctx, _deps(_LLM(rich=RICH_JSON)), _plan(products=[dict(PROD)], mode="rich"))
+    result = await render(
+        ctx, _deps(_LLM(rich=RICH_JSON)), _plan(products=[dict(PROD)], mode="rich")
+    )
     assert ctx.reply is not None and ctx.reply.rich is not None
     ev = [e for e in ctx.events if e.type == "agent_recommended"]
     assert ev and ev[0].properties.get("rich") is True
+    # calea BOGATĂ nu trece prin `validate_prose` (grounding-ul e la compose/membership).
+    assert result is None
 
 
 async def test_rich_failure_downgrades_to_prose():
     ctx = _ctx()
     # complete_schema aruncă → rich None → downgrade la proză (_finalize).
-    await render(ctx, _deps(_LLM(rich=None)), _plan(products=[dict(PROD)], final="", mode="rich"))
+    result = await render(
+        ctx, _deps(_LLM(rich=None)), _plan(products=[dict(PROD)], final="", mode="rich")
+    )
     assert ctx.reply is not None and ctx.reply.rich is None  # proză, nu rich
     assert any(e.type == "rich_downgraded" for e in ctx.events)
+    # calea de PROZĂ (fallback din rich) TRECE prin `_finalize` → ValidationResult surfaced.
+    assert result == ValidationResult(ok=True, reasons=[])
 
 
 async def test_prose_passthrough_when_no_products_and_valid():
     ctx = _ctx()
     # Fără produse, text de clarificare fără preț inventat → servit verbatim.
-    await render(ctx, _deps(_LLM()), _plan(final="Ce buget ai în minte?", mode="prose"))
+    result = await render(ctx, _deps(_LLM()), _plan(final="Ce buget ai în minte?", mode="prose"))
     assert ctx.reply is not None and ctx.reply.text == "Ce buget ai în minte?"
+    assert result == ValidationResult(ok=True, reasons=[])
 
 
 async def test_invalid_price_no_products_falls_back_safe():
     ctx = _ctx()
     # Preț negroundat fără produse care să-l susțină → mesaj sigur, necacheabil (anti-poisoning).
-    await render(ctx, _deps(_LLM()), _plan(final="Costă doar 999 lei!", mode="fallback"))
+    result = await render(ctx, _deps(_LLM()), _plan(final="Costă doar 999 lei!", mode="fallback"))
     assert ctx.reply is not None and ctx.reply.cacheable is False
     assert "999" not in ctx.reply.text
+    # NX-146 felia 2 fix: motivul respingerii ajunge în ValidationResult (→ agent_prompt).
+    assert result is not None and result.ok is False and "ungrounded_price" in result.reasons
 
 
 async def test_order_grounded_uses_facts():
@@ -113,8 +125,9 @@ async def test_order_grounded_uses_facts():
     plan = _plan(
         is_order=True, final="Comanda ta e livrată.", order_views=["status: livrata"], mode="order"
     )
-    await render(ctx, _deps(_LLM()), plan)
+    result = await render(ctx, _deps(_LLM()), plan)
     assert ctx.reply is not None and ctx.reply.text  # status servit, non-tăcere
+    assert result == ValidationResult(ok=True, reasons=[])
 
 
 async def test_no_products_no_final_no_result():
