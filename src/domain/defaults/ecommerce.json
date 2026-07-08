@@ -3,6 +3,7 @@
   "currency": "RON",
   "concern_map": {},
   "profile_whitelist": ["budget_band", "fav_brands", "concerns"],
+  "fact_type_whitelist": ["budget_band", "fav_brands", "concerns", "size", "restriction"],
   "risk_terms": {
     "ro": {
       "human_request": [

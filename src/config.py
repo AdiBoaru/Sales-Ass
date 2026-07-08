@@ -540,6 +540,11 @@ class Settings(BaseSettings):
     replay_store_prompt_enabled: bool = Field(
         default=False, validation_alias="REPLAY_STORE_PROMPT_ENABLED"
     )
+    # NX-148: extragerea + injectarea de conversation_facts (memorie structurată). OFF →
+    # fără extractor de facts și fără facts_block (degradare la memoria de bază: history + state).
+    conversation_facts_enabled: bool = Field(
+        default=True, validation_alias="CONVERSATION_FACTS_ENABLED"
+    )
 
     @property
     def is_prod(self) -> bool:

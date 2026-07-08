@@ -29,6 +29,15 @@
     "deshidratat": "hydration",
     "hydration": "hydration"
   },
+  "fact_type_whitelist": [
+    "skin_type",
+    "hair_type",
+    "concerns",
+    "budget_band",
+    "fav_brands",
+    "size",
+    "restriction"
+  ],
   "profile_whitelist": [
     "skin_type",
     "hair_type",
