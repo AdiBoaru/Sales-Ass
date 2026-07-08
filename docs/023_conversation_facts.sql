@@ -17,7 +17,7 @@ create table if not exists conversation_facts (
   conversation_id  uuid,
   fact_type        text not null,           -- ex. budget_band, skin_type, brand_pref, size, restriction
   fact_value       jsonb not null,          -- valoare mică structurată (P8); fără PII (P12)
-  confidence       real not null default 0.5,
+  confidence       real not null default 0.5 check (confidence >= 0 and confidence <= 1),
   source_message_id uuid,                   -- trasabilitate: mesajul din care a ieșit
   first_seen_at    timestamptz not null default now(),
   last_seen_at     timestamptz not null default now(),

@@ -72,6 +72,30 @@ async def test_upsert_then_fetch_and_confidence_bump(pool):
         assert float(skin[0]["confidence"]) == pytest.approx(0.95)
 
 
+async def test_lower_confidence_upsert_keeps_high_confidence_value(pool):
+    # cross-tur: „oily @ 0.20" după „sensitive @ 0.95" → valoarea sigură rămâne (last_seen bump).
+    contact = str(uuid4())
+    async with tenant_tx(pool) as conn:
+        await upsert_facts(
+            conn,
+            DEMO_BIZ,
+            contact,
+            None,
+            [{"fact_type": "skin_type", "fact_value": "sensitive", "confidence": 0.95}],
+        )
+        await upsert_facts(
+            conn,
+            DEMO_BIZ,
+            contact,
+            None,
+            [{"fact_type": "skin_type", "fact_value": "oily", "confidence": 0.20}],
+        )
+        got = await fetch_relevant_facts(conn, DEMO_BIZ, contact)
+        skin = next(f for f in got if f["fact_type"] == "skin_type")
+        assert skin["fact_value"] == "sensitive"
+        assert float(skin["confidence"]) == pytest.approx(0.95)
+
+
 async def test_expired_fact_not_returned(pool):
     contact = str(uuid4())
     past = datetime.now(timezone.utc) - timedelta(days=1)
