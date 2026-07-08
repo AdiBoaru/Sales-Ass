@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from src.agent import planner as planner_mod
 from src.agent.llm import ModerationResult
 from src.config import get_settings
 from src.evals.golden import (
@@ -118,7 +119,7 @@ def _apply_stubs_dyn(monkeypatch, get_fx) -> None:
         by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
         return [by_id[i] for i in ids if i in by_id]
 
-    monkeypatch.setattr(agent_mod, "get_products_by_ids", fake_by_ids_direct)
+    monkeypatch.setattr(planner_mod, "get_products_by_ids", fake_by_ids_direct)
 
     async def none_lookup(*args, **kwargs):
         return None
@@ -257,6 +258,7 @@ async def _disable_guard(monkeypatch, which: str) -> None:
 
         monkeypatch.setattr(agent_mod, "_valid", lambda *a, **k: True)  # acceptă orice text
         monkeypatch.setattr(finalize_mod, "_valid", lambda *a, **k: True)
+        monkeypatch.setattr(planner_mod, "_valid", lambda *a, **k: True)
     elif which == "moderation":
 
         async def _no_block(ctx, deps):

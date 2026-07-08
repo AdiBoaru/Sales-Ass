@@ -3,6 +3,7 @@ pipeline cu ScriptedLLM care verifică că hint-ul cară constrângerile dintr-u
 
 import pytest
 
+from src.agent import planner as planner_mod
 from src.models import (
     BusinessConfig,
     Contact,
@@ -97,7 +98,7 @@ def _stub_prompt_inputs(monkeypatch):
 
     monkeypatch.setattr(agent_mod, "list_category_names", _cats)
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _aliases)
-    monkeypatch.setattr(agent_mod, "get_complementary_products", _no_complementary)
+    monkeypatch.setattr(planner_mod, "get_complementary_products", _no_complementary)
 
 
 class _CaptureLLM:

@@ -5,6 +5,7 @@ Acoperă: după ce modelul adaugă un produs în coș, sugerăm produse COMPLEME
 calea rich (intro = confirmare DETERMINISTĂ a coșului, fără pick, produsul adăugat EXCLUS); fără
 complementare → cade în fluxul normal (fără cross-sell)."""
 
+from src.agent import planner as planner_mod
 from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDecision, TurnContext
 from src.tools import commerce_tools as cm
 from src.worker.runner import PipelineDeps
@@ -109,7 +110,7 @@ def _patch_common(monkeypatch, *, complementary):
         return []
 
     monkeypatch.setattr(cm, "get_products_by_ids", _by_ids)
-    monkeypatch.setattr(ag, "get_complementary_products", _complementary)
+    monkeypatch.setattr(planner_mod, "get_complementary_products", _complementary)
     monkeypatch.setattr(ag, "list_category_names", _cats)
     monkeypatch.setattr(ag, "list_routing_aliases", _aliases)
 

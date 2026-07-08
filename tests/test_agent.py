@@ -6,6 +6,8 @@ fallback la preț inventat, răspuns fără produse, helperele de validare."""
 
 import pytest
 
+from src.agent import finalize as finalize_mod
+from src.agent import planner as planner_mod
 from src.models import (
     BusinessConfig,
     Contact,
@@ -46,7 +48,7 @@ def _stub_prompt_inputs(monkeypatch):
 
     monkeypatch.setattr(agent_mod, "list_category_names", _cats)
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _aliases)
-    monkeypatch.setattr(agent_mod, "get_complementary_products", _no_complementary)
+    monkeypatch.setattr(planner_mod, "get_complementary_products", _no_complementary)
 
 
 PRODUCTS = [
@@ -264,13 +266,13 @@ async def test_finalize_rich_notes_reach_user():
             raise RuntimeError("stop")  # nu testăm assemble-ul, doar prompt-ul compus
 
     ctx = _ctx()
-    out = await agent_mod._finalize_rich(
+    out = await finalize_mod._finalize_rich(
         _CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "", notes="fără chips de coș"
     )
     assert out is None  # excepție la apel → fallback pe proză (comportament existent)
     assert "NB: fără chips de coș" in captured[0]
 
-    await agent_mod._finalize_rich(_CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "")
+    await finalize_mod._finalize_rich(_CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "")
     assert "NB:" not in captured[1]  # fără notes → prompt byte-identic cu înainte
 
 
@@ -480,7 +482,7 @@ async def test_sales_rehydrates_displayed_products_when_no_retrieval(monkeypatch
         assert ids == ["p1", "p2"]  # id-urile produselor afișate (din state)
         return PRODUCTS
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", fake_by_ids)
     ctx = _ctx(body="care dintre ele e cea mai bună?")
     ctx.state.displayed_products = [
         ProductRef("p1", "Crema Hidratantă", 82.99),
@@ -504,7 +506,7 @@ async def test_no_rehydrate_when_state_empty(monkeypatch):
     async def boom(conn, business_id, ids, **k):
         raise AssertionError("get_products_by_ids NU trebuie chemat fără displayed_products")
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", boom)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", boom)
     ctx = _ctx(body="care e cea mai bună?")  # state.displayed_products gol (default)
     llm = FakeLLM(tool_calls=[], final="")
     await agent_stage(ctx, _deps(llm))

@@ -13,14 +13,32 @@ Grounding-ul rămâne la `validator` (P2: modelul propune, codul dispune); texte
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
-from src.agent.fallbacks import _deterministic_reply, _products_brief
-from src.agent.validator import _allowed_prices, _valid
+from src.agent.deterministic import _comparison_facets
+from src.agent.fallbacks import (
+    _card_products,
+    _checkout_label,
+    _compare_chips,
+    _deterministic_reply,
+    _products_brief,
+)
+from src.agent.validator import (
+    _allowed_prices,
+    _bad_bare_numbers,
+    _claims_ok,
+    _stock_claim_ok,
+    _valid,
+)
 from src.config import get_settings
-from src.models import TurnContext
+from src.models import Offer, TurnContext
 from src.worker import compose
+from src.worker.order_gate import login_required_for_ctx, web_unidentified
+
+if TYPE_CHECKING:
+    from src.agent.planner import ResponsePlan
+    from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
 
@@ -241,3 +259,131 @@ async def _finalize_rich(
         log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
         return None
     return compose.assemble(ctx, j, products)
+
+
+def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
+    """NX-137: linkul de checkout creat în ACEST tur ajunge GARANTAT la client, pe orice cale de
+    compunere. Root cause (găsit live pe sim): pe calea RICH (web) modelul are INTERZIS structural
+    să scrie linkuri (regulile rich) → linkul era creat în DB (`checkout_link_created`) și apoi
+    murea tăcut — reply fără URL. Offer e neutru de canal (NX-114): marginile bogate randează
+    buton/CTA; floor-ul din `set_offer` lipește URL-ul la text DOAR dacă nu e deja acolo (proza
+    de WhatsApp îl poate conține deja — fără dublare)."""
+    if not url or ctx.reply is None:
+        return
+    ctx.set_offer(Offer(kind="open_url", label=_checkout_label(ctx.language), url=url))
+    ctx.emit("checkout_offer_attached")
+
+
+async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> None:
+    """Faza F: dispatch pe `ResponsePlan` → răspuns final. Byte-identic cu vechiul bloc din
+    `agent_stage`: comparație → recomandare (rich→proză) → status comandă / clarificare / fallback.
+    Păstrează fall-through-urile: `build_comparison` None → cade pe produse; rich eșuat → proză.
+    Grounding-ul rămâne la `validator` (P2); un singur punct de ieșire e Sender via `ctx.set_*`."""
+    is_order = plan.is_order
+    products = plan.products
+    final = plan.final
+
+    # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
+    # Tabel structurat DETERMINIST din setul comparat (ordinea cerută păstrată) — fapte din
+    # retrieval, lead determinist (cel mai ieftin / cel mai bine cotat), ZERO proză LLM în celule →
+    # zero halucinație. Web randează tabelul; canalele text primesc floor-ul aplatizat. Precede
+    # calea rich de recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele
+    # două" care doar re-lista produsele). Sare peste rich/proză pentru acest tur.
+    if plan.compared and not is_order:
+        comparison = compose.build_comparison(plan.compared, ctx.language, _comparison_facets(ctx))
+        if comparison is not None:
+            ctx.set_comparison_reply(
+                comparison,
+                text=compose.flatten_comparison(comparison, ctx.language),
+                products=compose.comparison_cards(comparison),
+                chips=_compare_chips(comparison.columns, ctx.language),
+            )
+            ctx.emit("agent_compared", n=len(comparison.columns))
+            return
+
+    if products:
+        # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
+        # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
+        if not is_order:
+            rich = await _finalize_rich(
+                deps.llm,
+                prompt_builder.build_rich_system(plan.inp),
+                plan.query,
+                products,
+                ctx,
+                plan.history,
+                notes=plan.commerce_note,
+            )
+            if rich is not None and rich.items:
+                ctx.set_rich_reply(
+                    rich,
+                    text=compose.flatten(rich, ctx.language),
+                    products=compose.card_products(rich.items),
+                )
+                # NX-137: regulile rich INTERZIC linkuri în proza modelului → fără atașarea asta,
+                # linkul de checkout creat în acest tur nu ajungea NICIODATĂ la client pe web.
+                _attach_checkout_offer(ctx, plan.checkout_url)
+                ctx.emit("agent_recommended", n=len(rich.items), rich=True)
+                return
+            # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
+            # structurat a eșuat/excepție; `rich.items == []` = toate produsele au picat la
+            # grounding-ul de apartenență. Pur observabilitate (downgrade-ul exista deja, P6).
+            reason = (
+                "all-items-dropped-by-membership" if rich is not None else "structured-call-failed"
+            )
+            ctx.emit("rich_downgraded", reason=reason)
+        # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
+        # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
+        bare = _bad_bare_numbers(final, products, plan.grounded_prices) if final else []
+        if bare:
+            ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
+        # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
+        if final and not _claims_ok(final):
+            ctx.emit("validator_rejected", kind="claim")
+        # NX-118: claim de stoc nefondat (niciun produs pe stoc) → semnalează (P12: doar contorul).
+        if final and not _stock_claim_ok(final, products):
+            ctx.emit("validator_rejected", kind="stock_claim")
+        reply = await _finalize(
+            deps.llm,
+            prompt_builder.build_reco_system(plan.inp),
+            plan.query,
+            final,
+            products,
+            ctx.language,
+            plan.history,
+            plan.generated_links,
+            plan.grounded_prices,
+        )
+        ctx.set_reply(reply, products=_card_products(products))
+        # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
+        # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
+        _attach_checkout_offer(ctx, plan.checkout_url)
+        ctx.emit("agent_recommended", n=len(products))
+    elif final:
+        # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
+        # pe rută — nu trecem o întrebare de vânzare prin fallback-ul de status comandă.
+        if is_order:
+            # ORDER: fără bare-check (numere DB legitime: dată/AWB/cantitate) — vezi _valid.
+            reply = await _finalize_grounded(
+                deps.llm,
+                final,
+                "\n".join(plan.order_views),
+                ctx.language,
+                plan.generated_links,
+                plan.grounded_prices,
+            )
+            ctx.set_reply(reply)
+        elif _valid(final, [], plan.generated_links, plan.grounded_prices):
+            # SALES: text fără produse și fără sumă inventată (clarificare) → servim
+            ctx.set_reply(final)
+        else:
+            # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
+            # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
+            # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
+            ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
+    elif is_order and web_unidentified(ctx):
+        # ORDER pe web anonim, fără rezultat (modelul n-a chemat un tool) → login, NU „dă-mi numărul
+        # comenzii" (ar relua bucla NX-128 pe un canal unde lookup-ul nu poate reuși).
+        ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
+    else:
+        ctx.set_reply(_no_result_msg(is_order), cacheable=False)
