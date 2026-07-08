@@ -34,6 +34,7 @@ from src.agent.finalize import (
     _rich_bundle,  # noqa: F401 — re-export (teste)
     render,
 )
+from src.agent.observability import agent_prompt_event
 from src.agent.planner import build_plan
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
@@ -280,6 +281,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         f"{context_block}{history_block}Mesaj client: {query}"
     )
 
+    system: str | None = None  # NX-146: promptul de sistem rendered (pt agent_prompt event)
     try:
         inp = await _load_prompt_inputs(deps, ctx)  # prompt generat din DB (NX-78, P9)
         if show_more:
@@ -294,9 +296,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             ctx.emit("show_more", served=len(retrieved))
             final = ""  # fără text de model — compose-ul rich phrasează din produse mai jos
         else:
-            final = await deps.llm.run_tool_loop(
-                prompt_builder.build_agent_system(inp), user, tools, run.execute
-            )
+            system = prompt_builder.build_agent_system(inp)
+            final = await deps.llm.run_tool_loop(system, user, tools, run.execute)
             retrieved = run.retrieved  # produsele acumulate de tool executor în această buclă
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
@@ -318,6 +319,18 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         history=history,
         tool_names=tool_names,
     )
+    # NX-146 felia 2: corelare per-tur prompt↔grounding pentru Turn Replay (P10 — observabilitate
+    # din runner; corpul promptului NU se persistă, doar hash + retrieval IDs, P12).
+    if system is not None:
+        ctx.emit(
+            "agent_prompt",
+            **agent_prompt_event(
+                system,
+                user,
+                retrieved,
+                store_prompt=get_settings().replay_store_prompt_enabled,
+            ),
+        )
     if plan.handled:
         return
     # Faza F (NX-144): render pe plan → răspuns final (comparație / rich / proză / order /

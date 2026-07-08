@@ -535,6 +535,11 @@ class Settings(BaseSettings):
     # Dezvăluirea AI (art. 50 AI Act): OFF = NU o adăugăm la mesaje (decizie 2026-06-26 — clientul o
     # consideră repetitivă). Reversibilă: ON o repune (o singură dată, idempotent în Sender).
     ai_disclaimer_enabled: bool = Field(default=False, validation_alias="AI_DISCLAIMER_ENABLED")
+    # NX-146: Turn Replay poate stoca corpul promptului (redactat) în evenimentul agent_prompt.
+    # Default OFF (PII + volum) — se aprinde doar pe dev / TTL scurt pentru debugging profund.
+    replay_store_prompt_enabled: bool = Field(
+        default=False, validation_alias="REPLAY_STORE_PROMPT_ENABLED"
+    )
 
     @property
     def is_prod(self) -> bool:
