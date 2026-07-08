@@ -45,6 +45,9 @@ class DomainPack:
     injection_patterns: dict[str, list[str]] = field(default_factory=dict)
     # chei permise în contacts.profile (peste minimul agnostic). NICIODATĂ PII (telefon/email/nume).
     profile_whitelist: frozenset[str] = frozenset()
+    # NX-148: tipuri permise de conversation_facts per vertical. Extractorul aruncă tipurile
+    # din afara listei (plasă anti-halucinație de memorie). NICIODATĂ PII (P12).
+    fact_type_whitelist: frozenset[str] = frozenset()
     # statusuri „finalizat" pt check_order (ex. delivered/closed) — neutre pe vertical.
     settled_order_statuses: tuple[str, ...] = ()
     currency: str = "RON"  # moneda afișată (din businesses.settings["currency"], fallback RON)

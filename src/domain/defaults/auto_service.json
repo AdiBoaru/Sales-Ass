@@ -2,6 +2,13 @@
   "_note": "NX-114 seed auto_service — schelet; whitelist profil din profile._WHITELIST['auto'].",
   "currency": "RON",
   "concern_map": {},
+  "fact_type_whitelist": [
+    "vehicle_make",
+    "vehicle_model",
+    "part_category",
+    "budget_band",
+    "restriction"
+  ],
   "profile_whitelist": [
     "vehicle_make",
     "vehicle_model",
