@@ -46,6 +46,22 @@ pytest -x -q
 
 Toate trei trebuie să treacă cu zero erori. `ruff format` modifică fișierele — comite după.
 
+### Golden regression (NX-145)
+
+Pentru schimbări de prompt, model, pipeline, tool executor sau planner, rulează gate-ul golden:
+```bash
+pytest tests/test_golden.py tests/test_eval_regression.py -q
+```
+
+Pentru snapshot manual/nocturn:
+```bash
+python scripts/eval_regression.py --out reports/golden_snapshot.json
+python scripts/eval_regression.py --baseline reports/golden_snapshot.json
+```
+
+`eval_regression.py` folosește LLM scriptat și stub-uri DB: zero OpenAI și zero DB real.
+Un diff pe rută, tool-uri, product IDs, cacheable sau pass/fail este regresie de investigat.
+
 ## Pull Requests
 
 - Titlu: același format ca commit-ul principal

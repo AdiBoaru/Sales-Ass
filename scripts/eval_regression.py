@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src.agent import deterministic as deterministic_mod
 from src.agent import planner as planner_mod
 from src.agent.llm import ModerationResult
 from src.config import get_settings
@@ -124,6 +125,12 @@ def _apply_stubs(patch: _Patcher, get_fx) -> None:
         by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
         return [by_id[i] for i in ids if i in by_id]
 
+    async def fake_search_cheaper_than(conn, business_id, ref_ids, baseline, **kwargs):
+        return list(get_fx().get("cheaper", []))
+
+    async def fake_complementary(conn, business_id, product_id, **kwargs):
+        return list(get_fx().get("complementary", []))
+
     async def none_lookup(*args, **kwargs):
         return None
 
@@ -144,7 +151,11 @@ def _apply_stubs(patch: _Patcher, get_fx) -> None:
     patch.setattr(ct, "get_products_by_ids", fake_by_ids)
     # NX-144: re-hidratarea grounded a produselor afisate s-a mutat din agent_stage in
     # src/agent/planner.py (build_plan) => stub pe binding-ul din planner.
+    # PRE-loop deterministic intents (`link` / `compare`) import `get_products_by_ids` direct.
+    patch.setattr(deterministic_mod, "get_products_by_ids", fake_by_ids)
     patch.setattr(planner_mod, "get_products_by_ids", fake_by_ids)
+    patch.setattr(planner_mod, "search_cheaper_than", fake_search_cheaper_than)
+    patch.setattr(planner_mod, "get_complementary_products", fake_complementary)
     patch.setattr(cache_mod, "exact_lookup", none_lookup)
     patch.setattr(cache_mod, "semantic_lookup", none_lookup)
     patch.setattr(gates_mod, "set_handoff", noop_handoff)

@@ -582,5 +582,124 @@
         }
       }
     ]
+  },
+  {
+    "id": "conv-sales-cheaper-link-3turn",
+    "language": "ro",
+    "turns": [
+      {
+        "input": "caut o crema de fata",
+        "expect": {
+          "route": "sales",
+          "must_include": ["82.99"],
+          "expect_reply": true,
+          "expected_tools": ["search_products"],
+          "expected_product_ids": ["p1"],
+          "expected_constraints": { "category_key": "creme-fata" }
+        },
+        "fixtures": {
+          "moderation": { "flagged": false },
+          "categories": ["creme-fata"],
+          "triage": { "route": "sales", "category_key": "creme-fata", "reply": null },
+          "tool_calls": [["search_products", { "query": "crema de fata", "limit": 6 }]],
+          "final": "Iti recomand Crema Hidratanta Aqua la 82.99 lei.",
+          "catalog": [
+            {
+              "id": "p1",
+              "name": "Crema Hidratanta Aqua",
+              "brand": "BrandA",
+              "price": 82.99,
+              "url": "https://shop.sole-demo.ro/p/aqua",
+              "ai_summary": "hidratare pentru ten normal",
+              "availability": "in_stock",
+              "rating": 4.6,
+              "image": "https://placehold.co/aqua.png"
+            },
+            {
+              "id": "p2",
+              "name": "Crema Premium Velvet",
+              "brand": "BrandB",
+              "price": 120.5,
+              "url": "https://shop.sole-demo.ro/p/velvet",
+              "ai_summary": "formula premium",
+              "availability": "in_stock",
+              "rating": 4.7,
+              "image": "https://placehold.co/velvet.png"
+            }
+          ]
+        }
+      },
+      {
+        "input": "ceva mai ieftin",
+        "expect": {
+          "route": "sales",
+          "must_include": ["49.99"],
+          "forbidden": ["82.99", "120.50"],
+          "expect_reply": true,
+          "expected_product_ids": ["pcheap"]
+        },
+        "fixtures": {
+          "moderation": { "flagged": false },
+          "categories": ["creme-fata"],
+          "triage": { "route": "sales", "category_key": null, "reply": null },
+          "tool_calls": [],
+          "final": "",
+          "retry": "O varianta mai accesibila este Crema Light Budget la 49.99 lei.",
+          "catalog": [
+            {
+              "id": "pcheap",
+              "name": "Crema Light Budget",
+              "brand": "BrandC",
+              "price": 49.99,
+              "url": "https://shop.sole-demo.ro/p/cheap",
+              "ai_summary": "crema accesibila pentru rutina zilnica",
+              "availability": "in_stock",
+              "rating": 4.2,
+              "image": "https://placehold.co/cheap.png"
+            }
+          ],
+          "cheaper": [
+            {
+              "id": "pcheap",
+              "name": "Crema Light Budget",
+              "brand": "BrandC",
+              "price": 49.99,
+              "url": "https://shop.sole-demo.ro/p/cheap",
+              "ai_summary": "crema accesibila pentru rutina zilnica",
+              "availability": "in_stock",
+              "rating": 4.2,
+              "image": "https://placehold.co/cheap.png"
+            }
+          ]
+        }
+      },
+      {
+        "input": "da-mi linkul",
+        "expect": {
+          "route": "sales",
+          "must_include": ["https://shop.sole-demo.ro/p/cheap"],
+          "expect_reply": true,
+          "expected_product_ids": ["pcheap"]
+        },
+        "fixtures": {
+          "moderation": { "flagged": false },
+          "categories": ["creme-fata"],
+          "triage": { "route": "sales", "category_key": null, "reply": null },
+          "catalog": [
+            {
+              "id": "pcheap",
+              "name": "Crema Light Budget",
+              "brand": "BrandC",
+              "price": 49.99,
+              "url": "https://shop.sole-demo.ro/p/cheap",
+              "ai_summary": "crema accesibila pentru rutina zilnica",
+              "availability": "in_stock",
+              "rating": 4.2,
+              "image": "https://placehold.co/cheap.png"
+            }
+          ]
+        }
+      }
+    ]
   }
 ]

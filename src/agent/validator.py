@@ -31,9 +31,11 @@ from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_c
 
 # NX-117: prinde valuta în SUFIX („89 lei", „89 de lei", „89 ron") ȘI în PREFIX („RON 89", „lei 89")
 # → un preț real prefixat nu e tratat fals ca cifră bară, iar un preț prefixat negroundat e prins.
+# „leu" (singular, ex. „1 leu") ALĂTURI de „lei" (plural) — altfel un preț halucinat de exact 1
+# scapă structural de validator (nici preț cu valută, nici cifră bară pe o singură cifră).
 _PRICE_RE = re.compile(
-    r"\b(?:lei|ron)\s*(\d{1,6}(?:[.,]\d{1,2})?)"  # prefix-valută
-    r"|(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:de\s+)?(?:lei|ron)\b",  # sufix (+ „de lei")
+    r"\b(?:lei|leu|ron)\s*(\d{1,6}(?:[.,]\d{1,2})?)"  # prefix-valută
+    r"|(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:de\s+)?(?:lei|leu|ron)\b",  # sufix (+ „de lei")
     re.IGNORECASE,
 )
 _BUDGET_RE = re.compile(
