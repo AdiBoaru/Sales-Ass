@@ -21,7 +21,7 @@ from src.db.queries.conversations import (
     patch_conversation_state,
     touch_last_inbound,
 )
-from src.db.queries.messages import get_recent_messages, insert_message
+from src.db.queries.messages import get_recent_messages, get_turn_messages, insert_message
 from src.db.queries.outbox import claim_due, enqueue_outbox, mark_failed, mark_sent
 from src.models import Author, Direction
 
@@ -184,6 +184,45 @@ async def test_history_capped_at_8_oldest_first(pool):
         msgs = await get_recent_messages(conn, DEMO_BIZ, conv["id"])
         assert len(msgs) == 8  # cap dur
         assert [m.body for m in msgs] == [f"m{i}" for i in range(2, 10)]  # ultimele 8, cronologic
+
+
+async def test_get_turn_messages_scoped_to_turn_not_last_n(pool):
+    """NX-146 felia 2 fix: `get_turn_messages` întoarce DOAR mesajele turului cerut, chiar dacă
+    conversația a continuat cu un tur ULTERIOR — spre deosebire de euristica veche (ultimele N
+    mesaje ale conversației), care ar fi întors corpurile turului 2, nu ale turului 1."""
+    async with tenant_tx(pool) as (conn, channel_id):
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
+        turn1, turn2 = str(uuid4()), str(uuid4())
+        rows = [
+            ("inbound", "contact", "turul 1: caut o cremă", turn1, 0),
+            ("outbound", "bot", "turul 1: iată Aqua", turn1, 1),
+            ("inbound", "contact", "turul 2: altceva", turn2, 2),
+            ("outbound", "bot", "turul 2: iată Bora", turn2, 3),
+        ]
+        # now() e constant în tranzacție (vezi test_history_capped_at_8_oldest_first) → decalăm
+        # explicit created_at ca ordinea cronologică să fie deterministă.
+        for direction, author, body, turn_id, offset in rows:
+            await conn.execute(
+                """
+                insert into messages
+                    (business_id, conversation_id, contact_id, direction, author, body,
+                     payload, created_at)
+                values ($1, $2, $3, $4, $5, $6, jsonb_build_object('turn_id', $7::text),
+                        now() + make_interval(secs => $8))
+                """,
+                DEMO_BIZ,
+                conv["id"],
+                contact.id,
+                direction,
+                author,
+                body,
+                turn_id,
+                offset,
+            )
+
+        msgs = await get_turn_messages(conn, DEMO_BIZ, conv["id"], turn1)
+        assert [m.body for m in msgs] == ["turul 1: caut o cremă", "turul 1: iată Aqua"]
 
 
 # --------------------------------------------------------------------------- #

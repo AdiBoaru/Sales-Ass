@@ -462,6 +462,44 @@ async def test_sales_recommends_via_tool(monkeypatch):
     assert "price" in ctx.reply.products[0]
 
 
+async def test_agent_prompt_event_carries_validator_result(monkeypatch):
+    """NX-146 felia 2 fix (DoD): `agent_prompt` trebuie emis DUPĂ validare, cu validator_ok/
+    validator_reasons — nu doar prompt_hash/retrieval_ids. FakeLLM n-are `complete_schema` →
+    downgrade rich→proză → `_finalize` → grounded (82.99 e prețul real din PRODUCTS)."""
+    _patch_search(monkeypatch, PRODUCTS)
+    ctx = _ctx()
+    llm = FakeLLM(
+        tool_calls=[("search_products", {"query": "cremă", "price_max": None, "limit": 6})],
+        final="Îți recomand Crema Hidratantă la 82.99 lei.",
+    )
+    await agent_stage(ctx, _deps(llm))
+
+    prompt_events = [e for e in ctx.events if e.type == "agent_prompt"]
+    assert len(prompt_events) == 1
+    props = prompt_events[0].properties
+    assert props["validator_ok"] is True
+    assert props["validator_reasons"] == []
+    # emis DUPĂ ce reply-ul a fost decis (nu mai devreme în tur).
+    reco_events = [e for e in ctx.events if e.type == "agent_recommended"]
+    assert reco_events
+    assert ctx.events.index(prompt_events[0]) > ctx.events.index(reco_events[0])
+
+
+async def test_agent_prompt_event_surfaces_rejection_reasons(monkeypatch):
+    """Preț halucinat (fără produse care să-l susțină) → fallback determinist; `agent_prompt`
+    raportează DE CE (validator_ok=False + reasons), nu doar hash/retrieval."""
+    _patch_search(monkeypatch, [])
+    ctx = _ctx(body="care e cea mai bună?")  # fără displayed_products → fără re-hidratare (R3)
+    llm = FakeLLM(tool_calls=[], final="Costă doar 999 lei, super ofertă!")
+    await agent_stage(ctx, _deps(llm))
+
+    prompt_events = [e for e in ctx.events if e.type == "agent_prompt"]
+    assert len(prompt_events) == 1
+    props = prompt_events[0].properties
+    assert props["validator_ok"] is False
+    assert "ungrounded_price" in props["validator_reasons"]
+
+
 async def test_no_products_asks_clarify(monkeypatch):
     _patch_search(monkeypatch, [])
     ctx = _ctx()

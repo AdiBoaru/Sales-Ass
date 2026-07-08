@@ -1,6 +1,7 @@
 """NX-146 felia 2 — teste pentru evenimentul agent_prompt (funcție pură)."""
 
 from src.agent.observability import agent_prompt_event
+from src.agent.validator import ValidationResult
 
 
 def test_prompt_hash_stable_and_sensitive():
@@ -37,3 +38,22 @@ def test_prompt_body_gated_by_kill_switch_and_redacted():
 
 def test_empty_retrieved_is_empty_list():
     assert agent_prompt_event("s", "u", None)["retrieval_ids"] == []
+
+
+def test_validator_absent_by_default():
+    # DoD gap fixat: fără `validator`, evenimentul NU inventează un rezultat de validare.
+    ev = agent_prompt_event("s", "u", [])
+    assert "validator_ok" not in ev
+    assert "validator_reasons" not in ev
+
+
+def test_validator_ok_and_reasons_included_when_given():
+    ok = agent_prompt_event("s", "u", [], validator=ValidationResult(ok=True, reasons=[]))
+    assert ok["validator_ok"] is True
+    assert ok["validator_reasons"] == []
+
+    bad = agent_prompt_event(
+        "s", "u", [], validator=ValidationResult(ok=False, reasons=["ungrounded_price"])
+    )
+    assert bad["validator_ok"] is False
+    assert bad["validator_reasons"] == ["ungrounded_price"]

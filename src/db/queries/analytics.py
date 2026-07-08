@@ -75,7 +75,7 @@ async def fetch_turn_events(conn: asyncpg.Connection, business_id: str, turn_id:
                cost_usd, created_at
         from analytics_events
         where business_id = $1 and turn_id = $2
-        order by created_at, event_type
+        order by created_at, id
         """,
         business_id,
         turn_id,

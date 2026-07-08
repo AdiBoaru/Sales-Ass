@@ -127,6 +127,42 @@ async def get_recent_messages(
     ]
 
 
+async def get_turn_messages(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    turn_id: str,
+) -> list[Message]:
+    """Mesajele (inbound + outbound) unui SINGUR tur, pentru Turn Replay (NX-146 felia 2 fix).
+
+    `turn_id` e stampat în `payload` la insert (processor.py) — precis, spre deosebire de
+    euristica anterioară „ultimele N mesaje ale conversației" (greșită dacă discuția a continuat
+    după turul investigat). Tool de suport/ops (`admin_conn`), nu runtime; `business_id = $1`
+    (P7). Mesaje mai vechi (insertate înainte de acest fix, fără turn_id în payload) → gol,
+    replay-ul cade pe fallback (fără inbound/reply, restul traiectoriei rămâne intact)."""
+    rows = await conn.fetch(
+        """
+        select direction, author, body, content_type, created_at
+        from messages
+        where business_id = $1 and conversation_id = $2 and payload->>'turn_id' = $3
+        order by created_at asc
+        """,
+        business_id,
+        conversation_id,
+        turn_id,
+    )
+    return [
+        Message(
+            direction=Direction(r["direction"]),
+            author=Author(r["author"]),
+            body=r["body"],
+            content_type=r["content_type"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+
+
 async def count_messages(conn: asyncpg.Connection, business_id: str, conversation_id: str) -> int:
     """Nr. TOTAL de mesaje pe conversație — declanșatorul de prag al summarizer-ului (G6-2).
     `business_id = $1` (P7). Conversațiile au zeci de mesaje, nu milioane → count(*) acceptabil."""

@@ -25,11 +25,13 @@ from src.agent.fallbacks import (
     _products_brief,
 )
 from src.agent.validator import (
+    ValidationResult,
     _allowed_prices,
     _bad_bare_numbers,
     _claims_ok,
     _stock_claim_ok,
     _valid,
+    validate_prose,
 )
 from src.config import get_settings
 from src.models import Offer, TurnContext
@@ -97,13 +99,19 @@ async def _finalize(
     history: str,
     allowed_links: set[str] | None = None,
     allowed_prices: set[float] | None = None,
-) -> str:
+) -> tuple[str, ValidationResult]:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
     prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
     `reco_system` = system-ul de recompunere generat din DB (NX-78). `allowed_links`/
-    `allowed_prices` = linkuri/sume grounded de bot (checkout_link/check_order)."""
+    `allowed_prices` = linkuri/sume grounded de bot (checkout_link/check_order). Întoarce textul
+    servit ÎMPREUNĂ cu `ValidationResult` (NX-146 felia 2 fix — corelat în `agent_prompt` pt
+    Turn Replay): pe fallback determinist, `reasons` arată DE CE a picat proza LLM-ului.
+
+    Poarta de trecere/eșec rămâne `_valid` (shim monkeypatch-uit de proba anti-teatru NX-121 —
+    `test_golden.test_injection_case_fails_without_its_guard`); `validate_prose` se cheamă
+    SEPARAT doar pe calea de eșec, ca să raporteze motivele fără să schimbe gating-ul testat."""
     if text and _valid(text, products, allowed_links, allowed_prices):
-        return text
+        return text, ValidationResult(ok=True, reasons=[])
 
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     prices = _allowed_prices(products) + sorted(allowed_prices or set())
@@ -119,10 +127,21 @@ async def _finalize(
         log.warning("agent: retry compunere eșuat (%s)", type(e).__name__)
         reply2 = ""
     if reply2 and _valid(reply2, products, allowed_links, allowed_prices):
-        return reply2
+        return reply2, ValidationResult(ok=True, reasons=[])
 
     log.warning("agent: validator a eșuat → fallback determinist")
-    return _deterministic_reply(products)
+    failed_text = reply2 or text
+    reasons = (
+        validate_prose(
+            failed_text,
+            products=products,
+            generated_links=allowed_links,
+            grounded_prices=allowed_prices,
+        ).reasons
+        if failed_text
+        else ["empty_text"]
+    )
+    return _deterministic_reply(products), ValidationResult(ok=False, reasons=reasons)
 
 
 async def _finalize_grounded(
@@ -132,15 +151,17 @@ async def _finalize_grounded(
     language: str,
     allowed_links: set[str],
     allowed_prices: set[float],
-) -> str:
+) -> tuple[str, ValidationResult]:
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
-    NU forma de produs `_deterministic_reply`)."""
+    NU forma de produs `_deterministic_reply`). Întoarce textul servit + `ValidationResult`
+    (NX-146 felia 2 fix). Gating pe `_valid` (monkeypatch-uit de proba NX-121), motivele de eșec
+    raportate separat prin `validate_prose` — vezi docstring-ul `_finalize`."""
     # NX-117: ORDER → fără claims-check (faptele de livrare/stoc din check_order sunt grounded).
     if text and _valid(
         text, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
     ):
-        return text
+        return text, ValidationResult(ok=True, reasons=[])
 
     allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
     user = (
@@ -155,10 +176,26 @@ async def _finalize_grounded(
     if reply2 and _valid(
         reply2, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
     ):
-        return reply2
+        return reply2, ValidationResult(ok=True, reasons=[])
 
     log.warning("agent: validator status comandă a eșuat → fallback sigur")
-    return "Ți-am verificat comanda 🙂 Îți confirm imediat detaliile exacte — revin la tine."
+    failed_text = reply2 or text
+    reasons = (
+        validate_prose(
+            failed_text,
+            products=[],
+            generated_links=allowed_links,
+            grounded_prices=allowed_prices,
+            check_bare=False,
+            check_claims=False,
+        ).reasons
+        if failed_text
+        else ["empty_text"]
+    )
+    return (
+        "Ți-am verificat comanda 🙂 Îți confirm imediat detaliile exacte — revin la tine.",
+        ValidationResult(ok=False, reasons=reasons),
+    )
 
 
 def _no_result_msg(is_order: bool) -> str:
@@ -274,11 +311,18 @@ def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
     ctx.emit("checkout_offer_attached")
 
 
-async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> None:
+async def render(
+    ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan
+) -> ValidationResult | None:
     """Faza F: dispatch pe `ResponsePlan` → răspuns final. Byte-identic cu vechiul bloc din
     `agent_stage`: comparație → recomandare (rich→proză) → status comandă / clarificare / fallback.
     Păstrează fall-through-urile: `build_comparison` None → cade pe produse; rich eșuat → proză.
-    Grounding-ul rămâne la `validator` (P2); un singur punct de ieșire e Sender via `ctx.set_*`."""
+    Grounding-ul rămâne la `validator` (P2); un singur punct de ieșire e Sender via `ctx.set_*`.
+
+    Întoarce `ValidationResult`-ul validatorului de PROZĂ care a decis reply-ul servit (NX-146
+    felia 2 fix — `agent_stage` îl corelează în `agent_prompt` pt Turn Replay). `None` pe căile
+    FĂRĂ proză validată structural (comparație/rich/no-result/login): acolo grounding-ul vine
+    din compose (membership) sau nu există text de validat, nu din `validate_prose`."""
     is_order = plan.is_order
     products = plan.products
     final = plan.final
@@ -299,7 +343,7 @@ async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> No
                 chips=_compare_chips(comparison.columns, ctx.language),
             )
             ctx.emit("agent_compared", n=len(comparison.columns))
-            return
+            return None
 
     if products:
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
@@ -324,7 +368,7 @@ async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> No
                 # linkul de checkout creat în acest tur nu ajungea NICIODATĂ la client pe web.
                 _attach_checkout_offer(ctx, plan.checkout_url)
                 ctx.emit("agent_recommended", n=len(rich.items), rich=True)
-                return
+                return None
             # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
             # structurat a eșuat/excepție; `rich.items == []` = toate produsele au picat la
             # grounding-ul de apartenență. Pur observabilitate (downgrade-ul exista deja, P6).
@@ -333,7 +377,7 @@ async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> No
             )
             ctx.emit("rich_downgraded", reason=reason)
         # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
-        # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza lui _valid.
+        # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza validării.
         bare = _bad_bare_numbers(final, products, plan.grounded_prices) if final else []
         if bare:
             ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
@@ -343,7 +387,7 @@ async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> No
         # NX-118: claim de stoc nefondat (niciun produs pe stoc) → semnalează (P12: doar contorul).
         if final and not _stock_claim_ok(final, products):
             ctx.emit("validator_rejected", kind="stock_claim")
-        reply = await _finalize(
+        reply, result = await _finalize(
             deps.llm,
             prompt_builder.build_reco_system(plan.inp),
             plan.query,
@@ -359,12 +403,13 @@ async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> No
         # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
         _attach_checkout_offer(ctx, plan.checkout_url)
         ctx.emit("agent_recommended", n=len(products))
+        return result
     elif final:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
         # pe rută — nu trecem o întrebare de vânzare prin fallback-ul de status comandă.
         if is_order:
-            # ORDER: fără bare-check (numere DB legitime: dată/AWB/cantitate) — vezi _valid.
-            reply = await _finalize_grounded(
+            # ORDER: fără bare-check (numere DB legitime: dată/AWB/cantitate) — vezi validate_prose.
+            reply, result = await _finalize_grounded(
                 deps.llm,
                 final,
                 "\n".join(plan.order_views),
@@ -373,17 +418,28 @@ async def render(ctx: TurnContext, deps: PipelineDeps, plan: ResponsePlan) -> No
                 plan.grounded_prices,
             )
             ctx.set_reply(reply)
-        elif _valid(final, [], plan.generated_links, plan.grounded_prices):
+            return result
+        # Gating pe `_valid` (monkeypatch-uit de proba anti-teatru NX-121); motivele raportate
+        # separat prin `validate_prose`, fără să schimbe gating-ul testat (vezi `_finalize`).
+        if _valid(final, [], plan.generated_links, plan.grounded_prices):
             # SALES: text fără produse și fără sumă inventată (clarificare) → servim
             ctx.set_reply(final)
-        else:
-            # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
-            # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
-            # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
-            ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
+            return ValidationResult(ok=True, reasons=[])
+        # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
+        # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
+        # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
+        ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
+        return validate_prose(
+            final,
+            products=[],
+            generated_links=plan.generated_links,
+            grounded_prices=plan.grounded_prices,
+        )
     elif is_order and web_unidentified(ctx):
         # ORDER pe web anonim, fără rezultat (modelul n-a chemat un tool) → login, NU „dă-mi numărul
         # comenzii" (ar relua bucla NX-128 pe un canal unde lookup-ul nu poate reuși).
         ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
+        return None
     else:
         ctx.set_reply(_no_result_msg(is_order), cacheable=False)
+        return None

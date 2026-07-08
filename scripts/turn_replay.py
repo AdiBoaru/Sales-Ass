@@ -160,7 +160,7 @@ def render_table(trace: dict[str, Any]) -> str:
 async def _load(business_id: str, turn_id: str) -> dict[str, Any]:
     from src.db.connection import admin_conn, get_pool
     from src.db.queries.analytics import fetch_turn_events
-    from src.db.queries.messages import get_recent_messages
+    from src.db.queries.messages import get_turn_messages
 
     # `bot_runtime` are DOAR INSERT pe analytics_events (append-only, 003) → replay-ul (tool de
     # SUPORT/ops, nu runtime) citește pe `admin_conn` (pool privilegiat). Izolarea rămâne în cod:
@@ -172,13 +172,17 @@ async def _load(business_id: str, turn_id: str) -> dict[str, Any]:
         inbound = reply = None
         conv_id = next((e.get("conversation_id") for e in events if e.get("conversation_id")), None)
         if conv_id:
-            msgs = await get_recent_messages(conn, business_id, conv_id)
-            # heuristică felia 1: mesajele nu poartă turn_id → cel mai recent inbound/outbound.
-            for m in reversed(msgs):
+            # felia 2 fix: mesajele DOAR ale acestui tur (turn_id stampat în payload la insert) —
+            # nu mai o euristică pe „ultimele N ale conversației" (greșită dacă discuția a
+            # continuat după turul investigat).
+            msgs = await get_turn_messages(conn, business_id, conv_id, turn_id)
+            outbound_parts: list[str] = []
+            for m in msgs:
                 if inbound is None and m.direction.value == "inbound":
                     inbound = m.body
-                if reply is None and m.direction.value == "outbound":
-                    reply = m.body
+                if m.direction.value == "outbound" and m.body:
+                    outbound_parts.append(m.body)  # reasamblează fragmentele (split max 2, NX-90)
+            reply = "\n".join(outbound_parts) if outbound_parts else None
     return build_turn_trace(events, turn_id=turn_id, inbound=inbound, reply=reply)
 
 

@@ -484,6 +484,9 @@ async def handle_turn(
         content_type=event.get("content_type", "text"),
         provider_msg_id=event.get("provider_msg_id"),
         media_ref=event.get("media_id"),
+        # NX-146 felia 2 (fix): turn_id în payload → Turn Replay citește EXACT mesajele turului,
+        # nu o euristică „ultimele N ale conversației" (greșită dacă discuția a continuat).
+        payload={"turn_id": turn_id},
     )
     await touch_last_inbound(conn, business.id, conv["id"])
 
@@ -614,6 +617,8 @@ async def handle_turn(
                 # NX-103: cost/tokeni/latență/model pe PRIMUL fragment (reply-ul botului). Split-ul
                 # (frag 2) e același reply → nu dublăm costul. messages.cost_usd devine real.
                 **(_message_usage_kwargs(ctx.usage) if i == 0 else {}),
+                # NX-146 felia 2 (fix): turn_id în payload — vezi insert-ul inbound de mai sus.
+                payload={"turn_id": turn_id},
             )
             if not deliver:
                 # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
