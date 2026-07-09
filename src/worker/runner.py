@@ -18,7 +18,7 @@ from time import perf_counter
 import asyncpg
 from redis.asyncio import Redis
 
-from src.agent import usage
+from src.agent import response_quality, usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
@@ -70,6 +70,8 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
             if ctx.reply is not None or ctx.halt:
                 ctx.emit("pipeline_early_exit", stage=name)
+                if ctx.reply is not None:  # halt (tăcere) n-are reply de măsurat
+                    _emit_response_shape(ctx, name)
                 break
         else:
             ctx.emit("pipeline_complete")
@@ -164,6 +166,23 @@ def _emit_turn_budget(
         slow_name,
         round(slow_ms),
     )
+
+
+def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
+    """NX-159 felia 1: telemetrie de CALITATE a formei răspunsului, GLOBAL post-reply. Emis din
+    runner (P10: runner măsoară, stagiile nu știu) pe TOATE căile cu reply. `response_shape` = forma
+    (lungimi/booleeni/rută/stagiu, ZERO text/PII, P12); `completeness_gap` doar când lipsește ceva
+    (sales/order/clarify). Pur observabilitate, NON-blocant: o excepție NU pică turul (P6)."""
+    if not get_settings().response_telemetry_enabled:
+        return
+    try:
+        ctx.emit("response_shape", **response_quality.reply_shape(ctx, stage))
+        gaps = response_quality.completeness_gaps(ctx)
+        if gaps:
+            intent = ctx.route.route.value if ctx.route and ctx.route.route else None
+            ctx.emit("completeness_gap", intent=intent, missing=gaps)
+    except Exception as e:  # noqa: BLE001 — telemetria nu blochează livrarea
+        log.warning("runner: response_shape a eșuat (%s)", type(e).__name__)
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

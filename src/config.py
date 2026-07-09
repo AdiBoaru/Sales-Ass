@@ -545,6 +545,29 @@ class Settings(BaseSettings):
     conversation_facts_enabled: bool = Field(
         default=True, validation_alias="CONVERSATION_FACTS_ENABLED"
     )
+    # NX-159 felia 1: telemetrie de CALITATE a formei răspunsului (response_shape +
+    # completeness_gap), emisă GLOBAL din runner post-reply pe TOATE căile. Pur observabilitate
+    # (P10), zero LLM, ZERO text/PII (P12). OFF → nu se emit evenimentele (turul neschimbat).
+    response_telemetry_enabled: bool = Field(
+        default=True, validation_alias="RESPONSE_TELEMETRY_ENABLED"
+    )
+    # NX-159 felia 2 (thin-path repair): fiecare cale subțire cu kill-switch propriu.
+    # short-ack guard: un răspuns `simple`/nano SCURT („Da.") pe un context de vânzare deschis
+    # primește chips deterministe (categorii adiacente) → nu mai închide conversația sec.
+    short_ack_guard_enabled: bool = Field(default=True, validation_alias="SHORT_ACK_GUARD_ENABLED")
+    # no-result (sales fără produse): pe lângă întrebare, atașează chips deterministe cu căi
+    # concrete de continuare (popular / alt buget / altă categorie) → nu fundătură generică.
+    no_result_alternatives_enabled: bool = Field(
+        default=True, validation_alias="NO_RESULT_ALTERNATIVES_ENABLED"
+    )
+    # cheapest-already (nimic mai ieftin): atașează aceleași chips de continuare la mesajul
+    # existent (care are deja o întrebare) → opțiuni clickabile, nu doar text.
+    cheapest_alternatives_enabled: bool = Field(
+        default=True, validation_alias="CHEAPEST_ALTERNATIVES_ENABLED"
+    )
+    # NX-159 felia 3: injectează profilul de STIL (DomainPack.response_style) ca ghid în compunerea
+    # NON-rich (proză/order). Rich are deja regulile ei → neatins. OFF / stil gol → byte-identic.
+    response_style_enabled: bool = Field(default=True, validation_alias="RESPONSE_STYLE_ENABLED")
 
     @property
     def is_prod(self) -> bool:

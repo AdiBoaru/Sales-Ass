@@ -24,6 +24,29 @@ def _cheapest_already_msg(language: str | None) -> str:
     return _CHEAPEST_ALREADY.get(language or "ro") or _CHEAPEST_ALREADY["ro"]
 
 
+# NX-159 felia 2: chips deterministe de CONTINUARE pentru căile subțiri (no-result / cheapest-
+# already). Voce de client (reintră ca tur nou: „Schimbă bugetul" → cheaper/refine). Căi CONCRETE,
+# nu fundătură generică. Per-locale. GENERIC pe vertical (formularea nu e specifică beauty).
+_THIN_PATH_CHIPS: dict[str, list[str]] = {
+    "ro": ["Arată-mi ce e popular", "Schimbă bugetul", "Caut altă categorie"],
+    "en": ["Show me what's popular", "Change the budget", "Look in another category"],
+    "hu": ["Mutasd a népszerűeket", "Módosítsd a keretet", "Másik kategória"],
+}
+
+
+def _thin_path_chips(language: str | None) -> list[str]:
+    """Chips deterministe de continuare (căi concrete) pentru un răspuns de cale subțire."""
+    return list(_THIN_PATH_CHIPS.get(language or "ro") or _THIN_PATH_CHIPS["ro"])
+
+
+def _is_short_ack(text: str | None) -> bool:
+    """Răspuns `simple`/nano „subțire": scurt (sub prag) ȘI fără întrebare — semnalul clasic „Da." /
+    „Ok." / „Cu plăcere." care închide conversația sec. Un răspuns scurt DAR cu „?" (nano a întrebat
+    ceva) NU e fundătură → nu-l atingem. Pragul e aliniat cu `SHORT_REPLY_CHARS` din telemetrie."""
+    t = (text or "").strip()
+    return 0 < len(t) < 20 and "?" not in t
+
+
 # #7b — cross-sell la add-to-cart (model iZi). Confirmarea coșului e DETERMINISTĂ (per-locale, NU
 # scrubuită → robustă la nume de produs cu cifre, ex. „30 ml"); produsele complementare + fit-ul
 # lor vin din calea rich. `_CROSS_SELL_QUERY` = instrucțiunea către modelul rich (complement, nu

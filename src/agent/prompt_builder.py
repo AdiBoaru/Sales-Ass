@@ -217,6 +217,30 @@ reduce aspectul ridurilor). Pentru orice problemă de SĂNĂTATE sau întrebare 
 sarcină/alăptare/alergii, recomandă clientului să consulte un medic/specialist."""
 
 
+# NX-159 felia 3: cheile profilului de stil în ordinea de afișare + eticheta RO (blocul e INPUT de
+# model, ca `axes_block` — modelul răspunde în limba clientului). Ordine stabilă → determinist.
+_STYLE_LABELS: tuple[tuple[str, str], ...] = (
+    ("ton", "ton"),
+    ("nivel_detaliu", "nivel de detaliu"),
+    ("reguli_salut", "salut"),
+    ("reguli_upsell", "upsell"),
+    ("disclaimere", "de evitat"),
+)
+
+
+def response_style_block(style: dict[str, str] | None) -> str:
+    """NX-159 felia 3: ghidul de STIL per business (ton/detaliu/salut/upsell/disclaimere) ca bloc
+    compact pentru compunerea NON-rich (proză/order). Determinist, din DomainPack (P9). Gol/None →
+    "" (byte-identic cu azi). Kill-switch-ul îl verifică caller-ul (`render`). Nu e grounding —
+    doar formă/ton; validatorul rămâne poarta pentru cifre/claims (P2)."""
+    if not style:
+        return ""
+    lines = [f"- {label}: {style[key]}" for key, label in _STYLE_LABELS if style.get(key)]
+    if not lines:
+        return ""
+    return "Stil de răspuns (respectă-l, fără să inventezi date):\n" + "\n".join(lines) + "\n"
+
+
 @dataclass(frozen=True)
 class PromptInputs:
     """Datele din care se compune promptul, toate din DB scoped pe business_id. Câmpuri
@@ -229,6 +253,10 @@ class PromptInputs:
     categories: tuple[str, ...] = ()
     aliases: tuple[tuple[str, str], ...] = ()  # (phrase_norm, target) aprobate
     currency: str = "RON"  # NX-114: moneda din DomainPack; afișarea prețurilor în prompt
+    # NX-159 felia 3: profilul de stil per business (DomainPack.response_style), ca tuple HASHABLE
+    # (cheie lru_cache). Injectat în `build_agent_system`/`build_reco_system` (NU rich). Gol → fără
+    # ghid de stil (prefix byte-identic). Sortat determinist → cache stabil.
+    response_style: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def build(
@@ -239,6 +267,7 @@ class PromptInputs:
         categories: list[str],
         aliases: list[tuple[str, str]],
         currency: str = "RON",
+        response_style: dict[str, str] | None = None,
     ) -> PromptInputs:
         """Constructor tolerant: normalizează la tuple + sortează DETERMINIST (chiar dacă DB
         n-ar fi sortat) → același set ⇒ prefix byte-identic indiferent de ordinea rândurilor."""
@@ -249,6 +278,9 @@ class PromptInputs:
             categories=tuple(sorted(c for c in categories if c)),
             aliases=tuple(sorted((p, t) for p, t in aliases if p)),
             currency=currency or "RON",
+            response_style=tuple(
+                sorted((k, v) for k, v in (response_style or {}).items() if k and v)
+            ),
         )
 
 
@@ -283,14 +315,18 @@ def build_agent_system(inp: PromptInputs) -> str:
     block = _TOOLS_BLOCK.replace(
         "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
     )
-    return f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
+    base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
+    # NX-159 felia 3: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR (non-rich),
+    # nu doar la retry. Gol → byte-identic. Rich re-compune cu `build_rich_system` (neatins).
+    style = response_style_block(dict(inp.response_style))
+    return f"{base}\n{style}" if style else base
 
 
 @lru_cache(maxsize=256)
 def build_reco_system(inp: PromptInputs) -> str:
     """System de recompunere/retry (înlocuiește `_RECO_SYSTEM`), tot static per business."""
     cur = _currency_label(inp.currency)  # NX-114: moneda din DomainPack (byte-identic pt RON)
-    return (
+    base = (
         f"{_store_header(inp)}\n"
         "Primești întrebarea clientului și o listă de produse din catalog (cu prețuri REALE).\n"
         "Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis. Pentru "
@@ -301,6 +337,9 @@ def build_reco_system(inp: PromptInputs) -> str:
         "sunt în listă; dacă un brand cerut\nnu apare, spune că nu-l avem. Maxim 3 produse."
         f"\n{_SAFETY_RULES}"
     )
+    # NX-159 felia 3: același ghid de stil pe calea de recompunere/retry (consecvent cu bucla).
+    style = response_style_block(dict(inp.response_style))
+    return f"{base}\n{style}" if style else base
 
 
 @lru_cache(maxsize=256)
