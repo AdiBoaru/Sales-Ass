@@ -118,6 +118,41 @@ async def test_expired_fact_not_returned(pool):
         assert got == []
 
 
+async def test_v2_fetch_returns_only_injectable(pool):
+    # NX-160: read path e a doua plasă — candidate/drop nu ajung în facts_block, chiar persistate.
+    contact = str(uuid4())
+    async with tenant_tx(pool) as conn:
+        await upsert_facts(
+            conn,
+            DEMO_BIZ,
+            contact,
+            None,
+            [
+                {
+                    "raw_key": "budget",
+                    "canonical_key": "budget_band",
+                    "memory_key": "canonical:budget_band",
+                    "fact_value": "100 lei",
+                    "confidence": 0.9,
+                    "safety_class": "safe",
+                    "visibility": "inject",
+                },
+                {
+                    "raw_key": "health_condition",
+                    "canonical_key": None,
+                    "memory_key": "raw:health_condition",
+                    "fact_value": "diabetic",
+                    "confidence": 0.9,
+                    "safety_class": "health",
+                    "visibility": "candidate",
+                },
+            ],
+        )
+        got = await fetch_relevant_facts(conn, DEMO_BIZ, contact)
+        keys = {f["canonical_key"] or f["raw_key"] for f in got}
+        assert keys == {"budget_band"}  # candidate-ul medical NU e returnat pt injectare
+
+
 async def test_tenant_isolation_facts_invisible_cross_business(pool):
     contact = str(uuid4())
     other_biz = str(uuid4())

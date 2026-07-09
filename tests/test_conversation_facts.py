@@ -103,8 +103,9 @@ def test_facts_block_formats_and_budgets():
     )
     out = facts_block(ctx)
     assert out.startswith("Ce știu despre client:")
-    assert "budget_band: 100-200" in out
-    assert "skin_type: sensitive" in out
+    # NX-160: etichete prezentabile (nu snake_case brut) — canonical/raw humanizat.
+    assert "Buget: 100-200" in out
+    assert "Tip de ten: sensitive" in out
 
 
 def test_facts_block_empty_when_no_facts():

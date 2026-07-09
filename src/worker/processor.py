@@ -65,6 +65,7 @@ from src.models import (
     TurnContext,
     TurnUsage,
 )
+from src.worker.canonicalize import canonical_keys_for
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import (
     CONTACT_COST_WINDOW_S,
@@ -76,6 +77,7 @@ from src.worker.limits import (
     spend_capped,
     spend_over_cap,
 )
+from src.worker.memory import process_facts
 from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
@@ -249,7 +251,7 @@ async def _summarize_if_needed(conn, redis, business_id, conversation_id, ctx, l
 
 
 async def _extract_profile_and_score(
-    conn, redis, ctx: TurnContext, llm, *, shadow_mode: bool
+    conn, redis, ctx: TurnContext, llm, *, shadow_mode: bool, source_message_id: str | None = None
 ) -> None:
     """POST-TUR async (NX-88), best-effort — botul „învață" clientul. Un apel NANO extrage semnale →
     patch FILTRAT pe whitelist pe `contacts.profile` + `lead_score` DETERMINIST (formulă în cod,
@@ -269,13 +271,23 @@ async def _extract_profile_and_score(
         # feature-flag-ul e COMPLET oprit: fereastra normală de profil (8) + promptul NU cere facts
         # (nu ardem tokeni pe ceva ce flag-ul promite că e oprit).
         facts_on = settings.conversation_facts_enabled
+        memory_v2 = facts_on and settings.memory_v2_enabled
+        pack = load_domain_pack(ctx.business) if facts_on else None
+        # NX-160: cu Memory v2, oferim modelului cheile canonice ale businessului (P9 — din
+        # DomainPack, generic pe orice vertical) ca să prefere vocabular canonic, nu ca poartă.
+        canonical_keys = canonical_keys_for(pack) if memory_v2 else None
         window = (
             await get_messages_for_extraction(conn, ctx.business.id, ctx.conversation_id)
             if facts_on
             else ctx.history
         )
         delta = await extract_profile(
-            llm, window or ctx.history, ctx.message, ctx.language, include_facts=facts_on
+            llm,
+            window or ctx.history,
+            ctx.message,
+            ctx.language,
+            include_facts=facts_on,
+            canonical_keys=canonical_keys,
         )
         if delta is None:
             return  # parse/API fail → fail-soft, nimic de scris
@@ -293,31 +305,96 @@ async def _extract_profile_and_score(
         tid = ctx.turn_id
         events = [Event("profile_key_dropped", {"key": k, "turn_id": tid}) for k in dropped]
 
-        # NX-148: facts structurate din ACELAȘI apel nano → whitelist per vertical (fail-closed,
-        # clamp, redactare PII în select_whitelisted_facts) → upsert. Best-effort (savepoint).
-        if settings.conversation_facts_enabled and delta.facts:
-            pack = load_domain_pack(ctx.business)
-            wl = pack.fact_type_whitelist if pack else frozenset()
-            candidates = [
-                {"fact_type": f.fact_type, "fact_value": f.fact_value, "confidence": f.confidence}
-                for f in delta.facts
-            ]
-            kept = select_whitelisted_facts(candidates, wl)
-            if kept:
-                async with conn.transaction():
-                    await upsert_facts(
-                        conn, ctx.business.id, ctx.contact.id, ctx.conversation_id, kept
-                    )
+        # Facts structurate din ACELAȘI apel nano. NX-160: pipeline generic
+        # (capture broad → classify safety → canonicalize → persist) când `memory_v2`; altfel
+        # fallback la whitelist fail-closed (NX-148). Best-effort — un fail de persistare NU e tăcut
+        # (P6): emite `facts_persist_failed` în loc să dispară în savepoint.
+        if facts_on and delta.facts:
+            events.append(Event("facts_extract_attempted", {"turn_id": tid}))
+            if memory_v2:
+                candidates = [
+                    {
+                        "raw_key": f.key,
+                        "canonical_key": f.canonical_key
+                        if settings.memory_canonicalize_enabled
+                        else None,
+                        "fact_value": f.fact_value,
+                        "confidence": f.confidence,
+                    }
+                    for f in delta.facts
+                ]
+                proc = process_facts(candidates, pack, source_message_id=source_message_id)
+                events.append(
+                    Event("facts_candidates_extracted", {"n": len(delta.facts), "turn_id": tid})
+                )
                 events.append(
                     Event(
-                        "facts_extracted",
+                        "facts_filtered",
                         {
-                            "n_facts": len(kept),
-                            "types": sorted({f["fact_type"] for f in kept}),  # chei (P12)
+                            "dropped_pii": proc.dropped,
+                            "candidate_sensitive": proc.candidate,
+                            "injectable": proc.injectable,
                             "turn_id": tid,
                         },
                     )
                 )
+                if proc.canonicalized:
+                    events.append(
+                        Event("facts_canonicalized", {"n": proc.canonicalized, "turn_id": tid})
+                    )
+                # captura LARGĂ OFF → păstrăm DOAR facts canonizabile (fără raw candidates).
+                kept = (
+                    proc.rows
+                    if settings.memory_open_capture_enabled
+                    else [r for r in proc.rows if r["canonical_key"]]
+                )
+                # NX-160: contacts.profile = cache al canonical facts (un singur adevăr, nu două).
+                # Facts canonice care-s ȘI chei de profil completează patch-ul — dar `profile_patch`
+                # direct (semnalul explicit) are PRIORITATE (setdefault). Trec prin aceeași igienă.
+                canon_patch = {
+                    r["canonical_key"]: r["fact_value"]
+                    for r in kept
+                    if r.get("canonical_key") and isinstance(r.get("fact_value"), (str, int, float))
+                }
+                canon_kept, _ = filter_profile_patch(canon_patch, ctx.business.vertical)
+                for k, v in canon_kept.items():
+                    patch.setdefault(k, v)
+            else:
+                wl = pack.fact_type_whitelist if pack else frozenset()
+                legacy = [
+                    {"fact_type": f.key, "fact_value": f.fact_value, "confidence": f.confidence}
+                    for f in delta.facts
+                    if f.key
+                ]
+                kept = select_whitelisted_facts(legacy, wl)
+
+            if kept:
+                try:
+                    async with conn.transaction():
+                        await upsert_facts(
+                            conn, ctx.business.id, ctx.contact.id, ctx.conversation_id, kept
+                        )
+                    events.append(
+                        Event(
+                            "facts_extracted",
+                            {
+                                "n_facts": len(kept),
+                                # chei canonice/raw (P12 — chei, nu valori)
+                                "types": sorted(
+                                    {k.get("canonical_key") or k.get("fact_type") for k in kept}
+                                ),
+                                "turn_id": tid,
+                            },
+                        )
+                    )
+                except Exception as e:  # noqa: BLE001 — NX-160: NU tăcere (P6), semnalăm layer mort
+                    log.exception("upsert_facts a eșuat (turul continuă)")
+                    events.append(
+                        Event(
+                            "facts_persist_failed",
+                            {"error_type": type(e).__name__, "turn_id": tid},
+                        )
+                    )
 
         if patch or score_changed:
             # Savepoint propriu: UPDATE eșuat → rollback doar la el (turul a răspuns deja).
@@ -519,7 +596,7 @@ async def handle_turn(
         locale=business.default_locale,
     )
 
-    await insert_message(
+    inbound_msg_id = await insert_message(
         conn,
         business.id,
         conv["id"],
@@ -542,7 +619,10 @@ async def handle_turn(
     # kill-switch (OFF → gol → bloc absent). BEST-EFFORT (ca summary/cache): un fail de citire nu
     # blochează turul — degradare la history+state (P6). Owner: processor.
     facts: list = []
-    if get_settings().conversation_facts_enabled:
+    _s = get_settings()
+    # NX-160: injectăm doar dacă memoria E ON ȘI injectarea safe e permisă (flag separat: facts se
+    # pot persista fără a fi injectate). fetch_relevant_facts întoarce DOAR visibility='inject'.
+    if _s.conversation_facts_enabled and _s.memory_safe_injection_enabled:
         try:
             facts = await fetch_relevant_facts(conn, business.id, contact.id)
         except Exception:  # noqa: BLE001 — memoria e opțională, turul răspunde oricum
@@ -766,7 +846,12 @@ async def handle_turn(
         # Extractor profil + lead_score (NX-88) — nano extrage semnale → patch whitelist pe
         # contacts.profile + scor determinist. Guardat (cost guard / shadow / free-layer → skip).
         await _extract_profile_and_score(
-            conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
+            conn,
+            redis,
+            ctx,
+            llm,
+            shadow_mode=bool(conv.get("shadow_mode")),
+            source_message_id=inbound_msg_id,
         )
     finally:
         usage.pop(post_token)

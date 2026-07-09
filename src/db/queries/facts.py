@@ -72,6 +72,17 @@ def select_whitelisted_facts(
     return ordered[:cap]
 
 
+def _row_memory_key(f: dict[str, Any]) -> str:
+    """Cheia de deduplicare a unui rând de upsert. NX-160: `memory_key` explicit (calea v2 din
+    `memory.process_facts`) sau derivat backcompat din `fact_type` (apelanți vechi / NX-148)."""
+    mk = f.get("memory_key")
+    if mk:
+        return str(mk)
+    base = f.get("canonical_key") or f.get("raw_key") or f.get("fact_type") or ""
+    kind = "canonical" if (f.get("canonical_key") or f.get("fact_type")) else "raw"
+    return f"{kind}:{str(base).strip().lower()}"
+
+
 async def upsert_facts(
     conn: asyncpg.Connection,
     business_id: str,
@@ -79,31 +90,46 @@ async def upsert_facts(
     conversation_id: str | None,
     facts: list[dict[str, Any]],
 ) -> int:
-    """Upsert per (business_id, contact_id, fact_type): un fact re-menționat bump-uie
+    """Upsert per (business_id, contact_id, **memory_key**): un fact re-menționat bump-uie
     `last_seen_at` + `max(confidence)`, nu duplică. Întoarce câte au fost scrise. `WHERE`-ul
-    implicit e `business_id` (P7; RLS ca plasă). `fact_value` serializat în jsonb."""
+    implicit e `business_id` (P7; RLS ca plasă). `fact_value` serializat în jsonb.
+
+    NX-160: scrie coloanele v2 (`raw_key`/`canonical_key`/`memory_key`/`safety_class`/`visibility`).
+    Backcompat: un apelant vechi care dă doar `fact_type` primește defaults sigure
+    (raw=canonical=fact_type, visibility='inject', safety='safe') — comportamentul NX-148."""
     if not facts:
         return 0
-    rows = [
-        (
-            business_id,
-            contact_id,
-            conversation_id,
-            f["fact_type"],
-            json.dumps(_redact_fact_value(f.get("fact_value"))),  # P12: defensiv
-            _clamp01(f.get("confidence") if f.get("confidence") is not None else 0.5),
-            f.get("source_message_id"),
-            f.get("expires_at"),
+    rows = []
+    for f in facts:
+        raw_key = f.get("raw_key") or f.get("fact_type")
+        canonical_key = f.get("canonical_key")
+        # fact_type e NOT NULL în schemă (alias backcompat) — îl ținem populat.
+        fact_type = f.get("fact_type") or canonical_key or raw_key
+        rows.append(
+            (
+                business_id,
+                contact_id,
+                conversation_id,
+                fact_type,
+                raw_key,
+                canonical_key,
+                _row_memory_key(f),
+                json.dumps(_redact_fact_value(f.get("fact_value"))),  # P12: defensiv
+                _clamp01(f.get("confidence") if f.get("confidence") is not None else 0.5),
+                f.get("safety_class") or "safe",
+                f.get("visibility") or "inject",
+                f.get("source_message_id"),
+                f.get("expires_at"),
+            )
         )
-        for f in facts
-    ]
     await conn.executemany(
         """
         insert into conversation_facts as cf
-            (business_id, contact_id, conversation_id, fact_type, fact_value,
-             confidence, source_message_id, expires_at)
-        values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
-        on conflict (business_id, contact_id, fact_type) do update set
+            (business_id, contact_id, conversation_id, fact_type, raw_key, canonical_key,
+             memory_key, fact_value, confidence, safety_class, visibility,
+             source_message_id, expires_at)
+        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13)
+        on conflict (business_id, contact_id, memory_key) do update set
             -- valoarea/sursa/expirarea rămân PERECHE cu confidence-ul CÂȘTIGĂTOR: o observație cu
             -- confidence mai mic bump-uie doar last_seen, NU suprascrie valoarea sigură. `cf` =
             -- rândul existent (conversation_facts), `excluded` = cel nou.
@@ -112,6 +138,17 @@ async def upsert_facts(
                 else cf.fact_value end,
             confidence = greatest(cf.confidence, excluded.confidence),
             conversation_id = excluded.conversation_id,
+            fact_type = excluded.fact_type,
+            raw_key = excluded.raw_key,
+            canonical_key = excluded.canonical_key,
+            -- vizibilitatea/clasa urmează valoarea câștigătoare (o re-observație mai sigură poate
+            -- promova un candidate la inject; una mai slabă nu retrogradează silent).
+            safety_class = case
+                when excluded.confidence >= cf.confidence then excluded.safety_class
+                else cf.safety_class end,
+            visibility = case
+                when excluded.confidence >= cf.confidence then excluded.visibility
+                else cf.visibility end,
             source_message_id = case
                 when excluded.confidence >= cf.confidence then excluded.source_message_id
                 else cf.source_message_id end,
@@ -128,13 +165,18 @@ async def upsert_facts(
 async def fetch_relevant_facts(
     conn: asyncpg.Connection, business_id: str, contact_id: str, *, limit: int = MAX_FACTS
 ) -> list[dict[str, Any]]:
-    """Facts ne-expirate ale unui contact (tenant-scoped), ordonate pe confidence desc →
-    last_seen desc. Pentru injectarea bugetată din `facts_block` (NX-148 felia 2)."""
+    """Facts INJECTABILE ne-expirate ale unui contact (tenant-scoped), ordonate pe confidence
+    desc → last_seen desc. Pentru injectarea bugetată din `facts_block`.
+
+    NX-160: DOAR `visibility='inject'` — PII/financial (drop) nici nu-s stocate, iar semnalele
+    sensibile (`candidate`, ex. condiție medicală) sunt stocate dar NU ajung în prompt. Read
+    path-ul e a doua plasă: chiar dacă ceva sensibil s-a strecurat, nu se injectează."""
     rows = await conn.fetch(
         """
-        select fact_type, fact_value, confidence, last_seen_at, expires_at
+        select fact_type, raw_key, canonical_key, fact_value, confidence, last_seen_at, expires_at
         from conversation_facts
         where business_id = $1 and contact_id = $2
+          and visibility = 'inject'
           and (expires_at is null or expires_at > now())
         order by confidence desc, last_seen_at desc
         limit $3
@@ -150,7 +192,10 @@ async def fetch_relevant_facts(
             value = json.loads(value) if value else None
         out.append(
             {
+                # `fact_type` păstrat pt backcompat; `facts_block` preferă canonical_key/raw_key.
                 "fact_type": r["fact_type"],
+                "raw_key": r["raw_key"],
+                "canonical_key": r["canonical_key"],
                 "fact_value": value,
                 "confidence": r["confidence"],
                 "last_seen_at": r["last_seen_at"],

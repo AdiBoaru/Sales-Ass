@@ -15,6 +15,7 @@ from src.worker.canonicalize import (
     memory_key,
     resolve_canonical,
 )
+from src.worker.memory import process_facts
 from src.worker.memory_safety import classify
 
 
@@ -114,3 +115,61 @@ def test_plain_commercial_facts_inject():
     assert classify("budget_band", "budget_band", "sub 100 lei").visibility == "inject"
     assert classify("fav_brands", "fav_brands", "CeraVe").visibility == "inject"
     assert classify("vehicle_model", "vehicle_model", "Golf 7").visibility == "inject"
+
+
+# --- process_facts (orchestrare capture → classify → canonicalize) -------------------------
+
+
+def test_process_facts_beauty_end_to_end():
+    pack = _pack(vertical="beauty", fact_type_whitelist=frozenset({"skin_type"}))
+    candidates = [
+        {"raw_key": "preferred_brand", "fact_value": "CeraVe", "confidence": 0.86},
+        {"raw_key": "budget_max_lei", "fact_value": "sub 100 lei", "confidence": 0.9},
+        {"raw_key": "fragrance_free_preference", "fact_value": "fără parfum", "confidence": 0.8},
+        {"raw_key": "skin_type", "fact_value": "sensibil", "confidence": 0.95},
+    ]
+    proc = process_facts(candidates, pack, source_message_id="msg-1")
+    # NX-160 vs NX-148: toate 4 supraviețuiesc (whitelist-ul vechi arunca 3 din 4).
+    assert proc.injectable == 4 and proc.dropped == 0
+    canon = {r["canonical_key"] for r in proc.rows}
+    assert {"fav_brands", "budget_band", "restriction", "skin_type"} <= canon
+    assert all(r["source_message_id"] == "msg-1" for r in proc.rows)
+    assert all(r["visibility"] == "inject" for r in proc.rows)
+
+
+def test_process_facts_drops_pii_keeps_rest():
+    proc = process_facts(
+        [
+            {"raw_key": "phone", "fact_value": "0722123456", "confidence": 0.9},
+            {"raw_key": "budget", "fact_value": "100 lei", "confidence": 0.8},
+        ],
+        _pack(),
+    )
+    assert proc.dropped == 1 and proc.injectable == 1
+    assert all(r["safety_class"] != "pii" for r in proc.rows)  # PII nu se persistă deloc
+
+
+def test_process_facts_medical_is_candidate_not_injected():
+    proc = process_facts(
+        [{"raw_key": "health_condition", "fact_value": "diabetic", "confidence": 0.9}], _pack()
+    )
+    assert proc.candidate == 1 and proc.injectable == 0
+    assert proc.rows[0]["visibility"] == "candidate"  # stocat ca semnal, nu injectat
+
+
+def test_process_facts_dedupe_by_memory_key():
+    # două raw_key sinonime → același memory_key → un singur rând (confidence maxim).
+    proc = process_facts(
+        [
+            {"raw_key": "preferred_brand", "fact_value": "CeraVe", "confidence": 0.7},
+            {"raw_key": "brand_preference", "fact_value": "CeraVe", "confidence": 0.9},
+        ],
+        _pack(),
+    )
+    assert len(proc.rows) == 1 and proc.rows[0]["confidence"] == 0.9
+
+
+def test_process_facts_backcompat_fact_type():
+    # un model care încă emite `fact_type` (nu `raw_key`) e tolerat.
+    proc = process_facts([{"fact_type": "budget", "fact_value": "150 lei"}], _pack())
+    assert proc.injectable == 1 and proc.rows[0]["canonical_key"] == "budget_band"

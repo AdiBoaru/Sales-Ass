@@ -56,20 +56,51 @@ def customer_profile_block(contact: Contact, *, max_chars: int = 300) -> str:
     return ("Profil client: " + "; ".join(parts))[:max_chars]
 
 
+# NX-160: etichete prezentabile pt cheile canonice frecvente (RO). Fallback = cheia humanizată
+# (snake_case → „snake case"). GENERIC — o cheie necunoscută nu crapă, doar se afișează humanizat.
+_FACT_LABELS: dict[str, str] = {
+    "budget_band": "Buget",
+    "fav_brands": "Brand preferat",
+    "restriction": "Restricție",
+    "size": "Mărime",
+    "use_case": "Scop",
+    "recipient": "Pentru",
+    "style_pref": "Stil",
+    "preferred_time": "Program preferat",
+    "skin_type": "Tip de ten",
+    "hair_type": "Tip de păr",
+    "concerns": "Nevoie",
+    "vehicle_model": "Mașină",
+    "fuel_type": "Combustibil",
+    "part_category": "Piesă",
+    "diet_preference": "Preferință alimentară",
+}
+
+
+def _fact_label(f: dict) -> str:
+    """Eticheta afișată a unui fact: preferă `canonical_key` (label RO), apoi `raw_key`/`fact_type`
+    humanizat. Nu expunem snake_case brut clientului în prompt."""
+    key = f.get("canonical_key") or f.get("raw_key") or f.get("fact_type") or ""
+    return _FACT_LABELS.get(key, key.replace("_", " ").strip().capitalize())
+
+
 def facts_block(ctx: TurnContext, *, max_facts: int = 6, max_chars: int = 400) -> str:
-    """NX-148: bloc compact de facts STABILE știute despre client (buget/tip piele/brand/…),
-    memoria structurată peste mesajele care au ieșit din istoricul de 8. Ref-uri mici
-    (`fact_type: fact_value`), bugetat (P4). Seed de processor în `ctx.facts` (gol când memoria
-    e OFF → bloc gol, degradare). Fără PII (P12 — apărat la extracție + persistare)."""
+    """Bloc compact de facts STABILE știute despre client (buget/brand/restricții/…), memoria
+    structurată peste mesajele ieșite din istoricul de 8. Bugetat (P4). Seed de processor în
+    `ctx.facts` (gol când memoria e OFF → bloc gol, degradare).
+
+    NX-160: `ctx.facts` conține DOAR facts `visibility='inject'` (PII/medical filtrate la sursă +
+    la citire), formatate cu etichete prezentabile (nu snake_case brut). Fără PII (P12)."""
     parts: list[str] = []
     for f in (ctx.facts or [])[:max_facts]:
-        ftype = f.get("fact_type")
         value = f.get("fact_value")
-        if not ftype or value in (None, "", [], {}):
+        if value in (None, "", [], {}) or not (
+            f.get("canonical_key") or f.get("raw_key") or f.get("fact_type")
+        ):
             continue
         if isinstance(value, list):
             value = ", ".join(str(v) for v in value[:4])
-        parts.append(f"{ftype}: {value}")
+        parts.append(f"{_fact_label(f)}: {value}")
     if not parts:
         return ""
     return ("Ce știu despre client: " + "; ".join(parts))[:max_chars]

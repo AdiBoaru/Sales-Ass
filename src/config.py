@@ -545,6 +545,22 @@ class Settings(BaseSettings):
     conversation_facts_enabled: bool = Field(
         default=True, validation_alias="CONVERSATION_FACTS_ENABLED"
     )
+    # NX-160: Memory v2 generic (capture broad → classify safety → canonicalize → inject safe).
+    # Master kill-switch: OFF → comportament NX-148 (whitelist fail-closed per vertical, fără
+    # captură deschisă/safety/canonicalizare). ON → pipeline-ul generic pe orice business.
+    memory_v2_enabled: bool = Field(default=True, validation_alias="MEMORY_V2_ENABLED")
+    # captura LARGĂ (raw_key liber, nu whitelist fail-closed). OFF → doar cheile canonice.
+    memory_open_capture_enabled: bool = Field(
+        default=True, validation_alias="MEMORY_OPEN_CAPTURE_ENABLED"
+    )
+    # injectarea facts sigure în prompt. OFF → facts se persistă, dar `facts_block` nu injectează.
+    memory_safe_injection_enabled: bool = Field(
+        default=True, validation_alias="MEMORY_SAFE_INJECTION_ENABLED"
+    )
+    # canonicalizarea raw_key → canonical_key. OFF → facts rămân raw (codul nu le mapează).
+    memory_canonicalize_enabled: bool = Field(
+        default=True, validation_alias="MEMORY_CANONICALIZE_ENABLED"
+    )
     # NX-159 felia 1: telemetrie de CALITATE a formei răspunsului (response_shape +
     # completeness_gap), emisă GLOBAL din runner post-reply pe TOATE căile. Pur observabilitate
     # (P10), zero LLM, ZERO text/PII (P12). OFF → nu se emit evenimentele (turul neschimbat).

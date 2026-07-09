@@ -267,7 +267,7 @@ def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
         history=[_msg(Direction.INBOUND, "caut cremă pentru ten uscat, buget 80")],
         message=SimpleNamespace(body="buget 80"),
         conversation_id="conv1",
-        business=SimpleNamespace(id="biz1", vertical=vertical),
+        business=SimpleNamespace(id="biz1", vertical=vertical, settings={}),
         contact=SimpleNamespace(id="contact1", lead_score=lead_score),
         reply=SimpleNamespace(products=products),
         state=SimpleNamespace(displayed_products=[]),
@@ -277,7 +277,9 @@ def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
 def _patch(monkeypatch, *, delta, boom_update=False):
     sink: dict = {}
 
-    async def f_extract(llm, history, message, language, *, include_facts=True):
+    async def f_extract(
+        llm, history, message, language, *, include_facts=True, canonical_keys=None
+    ):
         sink["extract_called"] = True
         sink["extract_history_len"] = len(history)
         sink["include_facts"] = include_facts

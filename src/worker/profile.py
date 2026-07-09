@@ -80,15 +80,24 @@ class LeadSignals(BaseModel):
 
 
 class FactCandidate(BaseModel):
-    """NX-148: un fact structurat CANDIDAT (filtrat apoi pe `fact_type_whitelist` per vertical +
-    redactat de `select_whitelisted_facts`). `fact_value` liber (`Any`) — o valoare proastă nu
-    invalidează restul; confidence 0..1 (clampat aval)."""
+    """Un fact structurat CANDIDAT extras LIBER de model. NX-160: `raw_key` = cheia liberă a
+    modelului; `canonical_key` = slotul canonic sugerat (verificat/rescris determinist aval de
+    `memory.process_facts`). `fact_type` rămâne acceptat ca alias backcompat (NX-148) — dacă
+    modelul emite `fact_type` în loc de `raw_key`, îl folosim ca `raw_key`. `fact_value` liber
+    (`Any`) — o valoare proastă nu invalidează restul; confidence 0..1 (clampat aval)."""
 
     model_config = ConfigDict(extra="ignore")
 
-    fact_type: str
+    raw_key: str | None = None
+    canonical_key: str | None = None
+    fact_type: str | None = None  # alias backcompat (NX-148)
     fact_value: Any = None
     confidence: float = 0.5
+
+    @property
+    def key(self) -> str | None:
+        """Cheia liberă efectivă: `raw_key` sau `fact_type` (backcompat)."""
+        return self.raw_key or self.fact_type
 
 
 class ProfileDelta(BaseModel):
@@ -126,26 +135,35 @@ Reguli:
 # Cu flag-ul OFF folosim `_SYSTEM` de bază → modelul NU cere/emite facts (flag-ul e complet OFF,
 # nu doar la persistare — nu arde tokeni pe ceva ce feature-flag-ul promite că e oprit).
 _SYSTEM_WITH_FACTS = """\
-Ești un extractor de profil pentru un asistent de vânzări dintr-un magazin online.
-Primești o conversație scurtă și extragi DOAR fapte STABILE despre client + semnale de cumpărare.
-Răspunzi NUMAI cu JSON, fără text în plus.
+Ești un extractor de memorie pentru un asistent de vânzări dintr-un magazin online (ORICE
+domeniu: beauty, auto, restaurant, servicii, retail). Primești o conversație scurtă și extragi
+DOAR fapte STABILE despre client + semnale de cumpărare. Răspunzi NUMAI cu JSON, fără text în plus.
 
 Format:
 {"profile_patch": {<cheie_snake_case>: <valoare scalară scurtă>, ...},
  "lead_signals": {"buying_stage": "browsing|narrowing|comparing|ready_to_buy",
                   "has_budget": <bool>, "asked_price": <bool>,
                   "mentioned_product": <bool>, "ready_to_buy": <bool>},
- "facts": [{"fact_type": <snake_case>, "fact_value": <valoare scurtă>, "confidence": <0..1>}, ...]}
+ "facts": [{"raw_key": <snake_case>, "canonical_key": <cheie canonică sau null>,
+            "fact_value": <valoare scurtă>, "confidence": <0..1>}, ...]}
 
 Reguli:
-- profile_patch: DOAR atribute pe care clientul le-a declarat EXPLICIT despre el sau nevoia lui
-  (ex. skin_type, budget_band, fav_brands, concerns). Chei în snake_case ENGLEZĂ, valori scurte.
-  Dacă nimic clar → {} (obiect gol). NU ghici, NU completa din context general.
-- facts: fapte STABILE, reutilizabile despre client (buget, tip de piele/păr, mărime, brand
-  preferat, restricții). `fact_type` în snake_case ENGLEZĂ; `confidence` = cât de sigur ești
-  (0..1). Doar ce a spus EXPLICIT; nimic → [] (listă goală). Pot fi aceleași semnale ca în
-  profile_patch, modelate ca fapte cu încredere.
-- NICIODATĂ date personale de contact (telefon, email, nume, adresă) — nici cheie, nici valoare.
+- profile_patch: DOAR atribute pe care clientul le-a declarat EXPLICIT despre el sau nevoia lui.
+  Chei în snake_case ENGLEZĂ, valori scurte. Dacă nimic clar → {}. NU ghici.
+- facts: fapte STABILE, reutilizabile despre client (buget, brand preferat, restricții/preferințe,
+  mărime, mașină/model, scop, program). `confidence` = cât de sigur ești (0..1). Nimic → [].
+  REGULĂ CHEIE: `raw_key` = DOAR TIPUL faptului (categoria), în snake_case ENGLEZĂ scurt —
+  NICIODATĂ valoarea în cheie. Valoarea concretă merge DOAR în `fact_value`.
+    ✓ {"raw_key":"skin_type","fact_value":"sensibil"}   NU {"raw_key":"skin_type_sensitive",...}
+    ✓ {"raw_key":"budget","fact_value":"100 lei"}       NU {"raw_key":"budget_amount_lei",...}
+    ✓ {"raw_key":"restriction","fact_value":"fără parfum"} NU {"raw_key":"restriction_no_fragrance"}
+  Dacă `raw_key` se potrivește cu una din CHEILE CANONICE oferite în mesaj, pune-o EXACT în
+  `canonical_key`; altfel `canonical_key=null`. Preferă cheile canonice.
+- NICIODATĂ date de contact (telefon, email, nume, adresă) sau financiare (card, IBAN, CNP) — nici
+  cheie, nici valoare.
+- O CONDIȚIE medicală (diabet, sarcină, boală, alergie ca diagnostic) NU e memorie de preferință —
+  NU o extrage ca fapt. DAR o preferință comercială derivată („fără zahăr", „fără gluten") formulată
+  de client ca cerință de produs ESTE un fapt valid (raw_key=restriction).
 - buying_stage: cât de avansat e clientul (browsing = doar se uită; ready_to_buy = gata de comandă).
 - Nu inventa produse, prețuri sau preferințe nedeclarate."""
 
@@ -163,34 +181,57 @@ def _transcript(history: list[Message]) -> str:
 
 
 def build_profile_prompt(
-    history: list[Message], message: Any, language: str, *, include_facts: bool = True
+    history: list[Message],
+    message: Any,
+    language: str,
+    *,
+    include_facts: bool = True,
+    canonical_keys: list[str] | None = None,
 ) -> tuple[str, str]:
     """(system, user) pentru apelul de extracție. `include_facts=False` (memoria OFF) →
     promptul NU menționează facts (system de bază + user fără „facts") → modelul nu emite/nu
-    arde tokeni pe ele. User = istoric scurt redactat + ultimul mesaj (subliniat)."""
+    arde tokeni pe ele. User = istoric scurt redactat + ultimul mesaj + (NX-160) cheile canonice
+    disponibile pentru businessul curent (P9 — din DomainPack, nu hardcodat). Cheile stau în USER
+    (dinamic), NU în system → prefixul static rămâne byte-identic (prompt caching)."""
     transcript = _transcript(history)
     latest = _redact_pii((getattr(message, "body", None) or "").strip())
     ask = (
         "profile_patch + lead_signals + facts" if include_facts else "profile_patch + lead_signals"
     )
+    keys_line = ""
+    if include_facts and canonical_keys:
+        keys_line = (
+            "Chei canonice disponibile (folosește-le în canonical_key dacă se potrivesc): "
+            + ", ".join(canonical_keys)
+            + "\n\n"
+        )
     user = (
         f"Limba clientului: {language}\n"
         f"Conversație recentă:\n{transcript or '(fără istoric)'}\n\n"
         f"Ultimul mesaj al clientului: {latest or '(gol)'}\n\n"
+        f"{keys_line}"
         f"Extrage {ask} ca JSON."
     )
     return (_SYSTEM_WITH_FACTS if include_facts else _SYSTEM), user
 
 
 async def extract_profile(
-    llm: Any, history: list[Message], message: Any, language: str, *, include_facts: bool = True
+    llm: Any,
+    history: list[Message],
+    message: Any,
+    language: str,
+    *,
+    include_facts: bool = True,
+    canonical_keys: list[str] | None = None,
 ) -> ProfileDelta | None:
     """Apel NANO (JSON mode) → `ProfileDelta`. `None` la orice fail (parse/validare/API) = fail-soft
     (hook-ul nu scrie nimic). Nu cheamă modelul dacă nu există conținut de analizat (zero cost).
     `include_facts=False` (memoria OFF) → nu se cer facts în prompt (feature-flag complet OFF)."""
     if not history and not (getattr(message, "body", None) or "").strip():
         return None
-    system, user = build_profile_prompt(history, message, language, include_facts=include_facts)
+    system, user = build_profile_prompt(
+        history, message, language, include_facts=include_facts, canonical_keys=canonical_keys
+    )
     try:
         raw = await llm.classify_json(system, user, model=llm.model_triage)
         return ProfileDelta.model_validate(raw)
