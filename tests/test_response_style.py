@@ -132,9 +132,7 @@ async def _run_load(monkeypatch, *, pack, enabled):
 
     monkeypatch.setattr(ag, "list_category_names", _cats)
     monkeypatch.setattr(ag, "list_routing_aliases", _aliases)
-    monkeypatch.setattr(
-        ag, "get_settings", lambda: SimpleNamespace(response_style_enabled=enabled)
-    )
+    monkeypatch.setattr(ag, "get_settings", lambda: SimpleNamespace(response_style_enabled=enabled))
     ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D", vertical="beauty"),
