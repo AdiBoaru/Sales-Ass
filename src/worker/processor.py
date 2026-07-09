@@ -381,6 +381,18 @@ async def _extract_profile_and_score(
                 kept = select_whitelisted_facts(legacy, wl)
 
             if kept:
+                # chei canonice/raw (P12 — chei, nu valori). Calculat ÎNAINTE de try: un rând raw
+                # safe are raw_key dar nu fact_type/canonical_key → fără raw_key în fallback + fără
+                # filtrul None, `sorted({..., None})` arunca TypeError, prins de except → `facts_
+                # persist_failed` FALS deși upsert-ul reușise (fix review Codex #201).
+                fact_types = sorted(
+                    t
+                    for t in {
+                        k.get("canonical_key") or k.get("raw_key") or k.get("fact_type")
+                        for k in kept
+                    }
+                    if t
+                )
                 try:
                     async with conn.transaction():
                         await upsert_facts(
@@ -389,14 +401,7 @@ async def _extract_profile_and_score(
                     events.append(
                         Event(
                             "facts_extracted",
-                            {
-                                "n_facts": len(kept),
-                                # chei canonice/raw (P12 — chei, nu valori)
-                                "types": sorted(
-                                    {k.get("canonical_key") or k.get("fact_type") for k in kept}
-                                ),
-                                "turn_id": tid,
-                            },
+                            {"n_facts": len(kept), "types": fact_types, "turn_id": tid},
                         )
                     )
                 except Exception as e:  # noqa: BLE001 — NX-160: NU tăcere (P6), semnalăm layer mort

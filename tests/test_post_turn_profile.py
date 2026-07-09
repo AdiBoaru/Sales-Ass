@@ -418,6 +418,39 @@ async def test_dropped_keys_emitted_even_without_db_write(monkeypatch):
     assert sink["events_contact"] == "contact1"
 
 
+async def test_facts_extracted_event_mixes_canonical_and_raw(monkeypatch):
+    # fix review Codex #201: un fact RAW safe (canonical_key=None, fără fact_type) nu trebuie să
+    # bage None în `types` (TypeError la sorted → `facts_persist_failed` FALS). Mix canonical + raw.
+    from src.worker.profile import FactCandidate
+
+    delta = ProfileDelta(
+        profile_patch={},
+        lead_signals=LeadSignals(buying_stage="narrowing"),
+        facts=[
+            FactCandidate(raw_key="preferred_brand", fact_value="CeraVe", confidence=0.9),
+            FactCandidate(raw_key="favorite_color", fact_value="verde", confidence=0.8),  # raw safe
+        ],
+    )
+    sink = _patch(monkeypatch, delta=delta)
+
+    captured: dict = {}
+
+    async def f_upsert(conn, business_id, contact_id, conversation_id, facts):
+        captured["kept"] = facts  # persistarea reușește (fără _FakeConn.executemany)
+        return len(facts)
+
+    monkeypatch.setattr(proc, "upsert_facts", f_upsert)
+    await proc._extract_profile_and_score(
+        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+    )
+    types = [e for e in sink["events"] if e[0] == "facts_extracted"]
+    assert types, "facts_extracted trebuie emis (persistarea a reușit)"
+    assert types[0][1]["types"] == ["fav_brands", "favorite_color"]  # sortat, fără None
+    # NU trebuie să apară persist_failed fals
+    assert not any(e[0] == "facts_persist_failed" for e in sink["events"])
+    assert len(captured["kept"]) == 2
+
+
 async def test_kill_switch_disables_hook(monkeypatch):
     # profile_extraction_enabled=False → hook complet sărit (convenția test_faq.py)
     from src.config import get_settings
