@@ -27,5 +27,13 @@
     }
   },
   "greetings": {},
-  "settled_order_statuses": ["delivered", "completed", "closed"]
+  "settled_order_statuses": ["delivered", "completed", "closed"],
+  "_response_style_note": "NX-159 felia 3: ghid de STIL (ton/detaliu/salut/upsell/disclaimere) pentru compunerea NON-rich (proza/order). INPUT de model; rich are regulile ei. Override per-tenant in businesses.settings.domain_pack.response_style.",
+  "response_style": {
+    "ton": "prietenos, clar, concis",
+    "nivel_detaliu": "standard — 2-3 fraze, la obiect",
+    "reguli_salut": "saluta o singura data per conversatie",
+    "reguli_upsell": "upsell soft, doar daca e relevant — nu insista",
+    "disclaimere": "nu promite stoc, livrare sau reduceri neconfirmate in date"
+  }
 }

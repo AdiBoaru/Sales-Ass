@@ -217,6 +217,30 @@ reduce aspectul ridurilor). Pentru orice problemă de SĂNĂTATE sau întrebare 
 sarcină/alăptare/alergii, recomandă clientului să consulte un medic/specialist."""
 
 
+# NX-159 felia 3: cheile profilului de stil în ordinea de afișare + eticheta RO (blocul e INPUT de
+# model, ca `axes_block` — modelul răspunde în limba clientului). Ordine stabilă → determinist.
+_STYLE_LABELS: tuple[tuple[str, str], ...] = (
+    ("ton", "ton"),
+    ("nivel_detaliu", "nivel de detaliu"),
+    ("reguli_salut", "salut"),
+    ("reguli_upsell", "upsell"),
+    ("disclaimere", "de evitat"),
+)
+
+
+def response_style_block(style: dict[str, str] | None) -> str:
+    """NX-159 felia 3: ghidul de STIL per business (ton/detaliu/salut/upsell/disclaimere) ca bloc
+    compact pentru compunerea NON-rich (proză/order). Determinist, din DomainPack (P9). Gol/None →
+    "" (byte-identic cu azi). Kill-switch-ul îl verifică caller-ul (`render`). Nu e grounding —
+    doar formă/ton; validatorul rămâne poarta pentru cifre/claims (P2)."""
+    if not style:
+        return ""
+    lines = [f"- {label}: {style[key]}" for key, label in _STYLE_LABELS if style.get(key)]
+    if not lines:
+        return ""
+    return "Stil de răspuns (respectă-l, fără să inventezi date):\n" + "\n".join(lines) + "\n"
+
+
 @dataclass(frozen=True)
 class PromptInputs:
     """Datele din care se compune promptul, toate din DB scoped pe business_id. Câmpuri

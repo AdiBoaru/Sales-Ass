@@ -100,6 +100,7 @@ async def _finalize(
     history: str,
     allowed_links: set[str] | None = None,
     allowed_prices: set[float] | None = None,
+    style_block: str = "",
 ) -> tuple[str, ValidationResult]:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
     prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
@@ -118,7 +119,7 @@ async def _finalize(
     prices = _allowed_prices(products) + sorted(allowed_prices or set())
     allowed = ", ".join(f"{p:.2f} lei" for p in prices)
     user = (
-        f"Limba clientului: {language}\n{history_block}"
+        f"Limba clientului: {language}\n{style_block}{history_block}"
         f"Întrebare: {query}\nProduse:\n{_products_brief(products)}\n\n"
         f"FOLOSEȘTE EXACT doar aceste prețuri: {allowed}. Niciun alt preț, niciun link inventat."
     )
@@ -152,6 +153,7 @@ async def _finalize_grounded(
     language: str,
     allowed_links: set[str],
     allowed_prices: set[float],
+    style_block: str = "",
 ) -> tuple[str, ValidationResult]:
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
@@ -166,7 +168,7 @@ async def _finalize_grounded(
 
     allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
     user = (
-        f"Limba clientului: {language}\nDate comandă:\n{facts}\n\n"
+        f"Limba clientului: {language}\n{style_block}Date comandă:\n{facts}\n\n"
         f"FOLOSEȘTE EXACT doar aceste sume: {allowed}. Niciun alt număr, AWB sau link inventat."
     )
     try:
@@ -337,6 +339,14 @@ async def render(
     products = plan.products
     final = plan.final
 
+    # NX-159 felia 3: ghid de STIL per business (DomainPack.response_style) pentru compunerea
+    # NON-rich (proză/order). Rich are deja regulile ei dure → neatins. Gated; pack/stil gol → ""
+    # (byte-identic). Nu e grounding: doar ton/formă — validatorul rămâne poarta pentru cifre (P2).
+    style_block = ""
+    if get_settings().response_style_enabled:
+        pack = getattr(ctx.business, "domain_pack", None)
+        style_block = prompt_builder.response_style_block(pack.response_style if pack else None)
+
     # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
     # Tabel structurat DETERMINIST din setul comparat (ordinea cerută păstrată) — fapte din
     # retrieval, lead determinist (cel mai ieftin / cel mai bine cotat), ZERO proză LLM în celule →
@@ -407,6 +417,7 @@ async def render(
             plan.history,
             plan.generated_links,
             plan.grounded_prices,
+            style_block=style_block,
         )
         ctx.set_reply(reply, products=_card_products(products))
         # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
@@ -426,6 +437,7 @@ async def render(
                 ctx.language,
                 plan.generated_links,
                 plan.grounded_prices,
+                style_block=style_block,
             )
             ctx.set_reply(reply)
             return result

@@ -91,5 +91,13 @@
     }
   ],
   "_searchable_facets_note": "Tier 2b p2: atribute pe care search-ul le filtreaza la cerere (ex. ceva cu niacinamida). key_ingredients e derivat din INCI de enrich_key_ingredients.py; match normalizat.",
-  "searchable_facets": ["key_ingredients"]
+  "searchable_facets": ["key_ingredients"],
+  "_response_style_note": "NX-159 felia 3: ghid de STIL pentru compunerea NON-rich (proza/order). INPUT de model; rich are regulile ei. Override per-tenant in businesses.settings.domain_pack.response_style.",
+  "response_style": {
+    "ton": "cald, consultativ, empatic",
+    "nivel_detaliu": "standard — leaga recomandarea de nevoie/tip de ten, pe scurt",
+    "reguli_salut": "saluta o singura data per conversatie",
+    "reguli_upsell": "upsell soft prin rutina (produs complementar) — nu insista",
+    "disclaimere": "fara promisiuni medicale/terapeutice; nu promite stoc sau livrare neconfirmate"
+  }
 }

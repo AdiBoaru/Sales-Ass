@@ -188,6 +188,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         searchable_facets=tuple(
             k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
         ),
+        response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
     )
 
 
