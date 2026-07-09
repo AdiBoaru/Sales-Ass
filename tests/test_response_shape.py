@@ -60,6 +60,27 @@ def test_shape_rich_reply():
     assert s["route"] == "sales"
 
 
+def test_shape_counts_rich_chips_as_suggestions():
+    # Calea RICH pune follow-up-urile în `rich.chips`, NU în `suggestions` (`set_rich_reply`).
+    # Telemetria trebuie să le vadă — altfel raportează fals „fără suggestions" pe rich.
+    from src.models import Chip
+
+    ctx = _ctx()
+    ctx.route = RouteDecision(route=Route.SALES)
+    rich = RichReply(
+        intro="x",
+        items=[],
+        pick=None,
+        education=None,
+        chips=[Chip(label="Adaugă X", payload="chip:add")],
+        disclaimer="",
+    )
+    ctx.reply = Reply(text="Îți recomand.", rich=rich, products=[{"id": "p1"}])
+    assert rq.reply_shape(ctx, "agent_stage")["has_suggestions"] is True
+    # și NU raportează fals `next_step` lipsă (are chips = are următor pas).
+    assert rq.completeness_gaps(ctx) == []
+
+
 def test_shape_never_leaks_text_or_pii():
     ctx = _ctx()
     ctx.reply = Reply(text="Comanda ta ORD-123 pentru 0722123456 e pe drum.")

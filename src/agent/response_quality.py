@@ -24,6 +24,14 @@ if TYPE_CHECKING:
 SHORT_REPLY_CHARS = 20
 
 
+def _has_suggestions(r) -> bool:
+    """Reply-ul are chips de follow-up? Calea NON-rich le pune în `Reply.suggestions` (clarify/
+    comparație/thin-path); calea RICH le pune în `Reply.rich.chips` (`set_rich_reply` NU populează
+    `suggestions`). Le tratăm pe AMÂNDOUĂ — altfel telemetria raportează fals „fără suggestions"
+    exact pe rich (bug prins la review: web randează `reply.rich.chips`)."""
+    return bool(r.suggestions or (r.rich is not None and r.rich.chips))
+
+
 def reply_shape(ctx: TurnContext, stage: str) -> dict[str, Any]:
     """Forma răspunsului servit, derivată 100% determinist din `ctx.reply` — pt `response_shape`.
     P12: DOAR metadate de formă; niciun fragment de text, niciun câmp cu PII. `ctx.halt` (tăcere
@@ -37,7 +45,7 @@ def reply_shape(ctx: TurnContext, stage: str) -> dict[str, Any]:
         "under_20": n < SHORT_REPLY_CHARS,
         "has_question": "?" in text,
         "has_products": bool(r and r.products),
-        "has_suggestions": bool(r and r.suggestions),
+        "has_suggestions": bool(r and _has_suggestions(r)),
         "is_rich": bool(r and r.rich is not None),
         "is_comparison": bool(r and r.comparison is not None),
         "has_offer": bool(r and r.offer is not None),
@@ -49,11 +57,11 @@ def reply_shape(ctx: TurnContext, stage: str) -> dict[str, Any]:
 
 
 def _has_next_step(r) -> bool:
-    """„Următor pas" = reply-ul lasă clientului o cale de continuare: o întrebare, chips de
-    sugestie, o ofertă/CTA sau un slot de clarificare deschis. Absența TUTUROR = fundătură."""
+    """„Următor pas" = reply-ul lasă clientului o cale de continuare: întrebare, chips de sugestie
+    (inclusiv `rich.chips`), ofertă/CTA sau slot de clarificare. Absența TUTUROR = fundătură."""
     text = r.text or ""
     return bool(
-        "?" in text or r.suggestions or r.offer is not None or r.pending_question is not None
+        "?" in text or _has_suggestions(r) or r.offer is not None or r.pending_question is not None
     )
 
 
