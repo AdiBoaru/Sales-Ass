@@ -115,6 +115,9 @@ class Message:
     body: str | None
     content_type: str = "text"
     created_at: datetime | None = None
+    # NX-160: id-ul DB al mesajului (dacă a fost citit din `messages`) → trasabilitatea sursei
+    # unui fact (source_message_id). None pentru mesaje sintetice (teste / istoric fără id).
+    id: str | None = None
 
 
 # ---------------------------------------------------------------------------
