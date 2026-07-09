@@ -545,6 +545,12 @@ class Settings(BaseSettings):
     conversation_facts_enabled: bool = Field(
         default=True, validation_alias="CONVERSATION_FACTS_ENABLED"
     )
+    # NX-159 felia 1: telemetrie de CALITATE a formei răspunsului (response_shape +
+    # completeness_gap), emisă GLOBAL din runner post-reply pe TOATE căile. Pur observabilitate
+    # (P10), zero LLM, ZERO text/PII (P12). OFF → nu se emit evenimentele (turul neschimbat).
+    response_telemetry_enabled: bool = Field(
+        default=True, validation_alias="RESPONSE_TELEMETRY_ENABLED"
+    )
 
     @property
     def is_prod(self) -> bool:
