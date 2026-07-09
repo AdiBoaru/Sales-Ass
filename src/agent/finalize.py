@@ -23,6 +23,7 @@ from src.agent.fallbacks import (
     _compare_chips,
     _deterministic_reply,
     _products_brief,
+    _thin_path_chips,
 )
 from src.agent.validator import (
     ValidationResult,
@@ -204,6 +205,15 @@ def _no_result_msg(is_order: bool) -> str:
     return (
         "Momentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți (tip de produs, buget)?"
     )
+
+
+def _attach_no_result_alternatives(ctx: TurnContext) -> None:
+    """NX-159 felia 2: pe un no-result de SALES, mesajul are deja o întrebare, dar atașăm chips
+    deterministe cu căi CONCRETE de continuare (popular / alt buget / altă categorie) → nu fundătură
+    generică. DOAR sales (order-ul are propriul flux de câmp cerut). Gated + best-effort."""
+    if ctx.reply is None or not get_settings().no_result_alternatives_enabled:
+        return
+    ctx.reply.suggestions = _thin_path_chips(ctx.language)
 
 
 def _rich_facets(ctx: TurnContext) -> tuple:
@@ -429,6 +439,7 @@ async def render(
         # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
         # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
         ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
+        _attach_no_result_alternatives(ctx)  # NX-159 felia 2: chips de continuare
         return validate_prose(
             final,
             products=[],
@@ -442,4 +453,6 @@ async def render(
         return None
     else:
         ctx.set_reply(_no_result_msg(is_order), cacheable=False)
+        if not is_order:  # NX-159 felia 2: chips de continuare doar pe sales (order cere numărul)
+            _attach_no_result_alternatives(ctx)
         return None

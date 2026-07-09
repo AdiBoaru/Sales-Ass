@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
+from src.agent.fallbacks import _is_short_ack
 from src.config import get_settings
 from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
@@ -304,6 +305,18 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             ctx.set_reply(out.reply, cacheable=False)
             ctx.reply.suggestions = chips
             ctx.emit("closure_served", chips=len(chips), category=cat)
+        elif get_settings().short_ack_guard_enabled and _is_short_ack(out.reply):
+            # NX-159 felia 2: răspuns nano SCURT („Da.") pe un context de vânzare DESCHIS (avem o
+            # categorie discutată) → atașăm chips de continuare (categorii adiacente) ca să nu
+            # închidem sec. Fără context de vânzare (chips gol) → mesajul cald simplu, ca azi.
+            # Necacheabil (chips relative la categoria ACESTUI contact — ca la closure).
+            chips, cat = await _closure_chips(deps, ctx)
+            if chips:
+                ctx.set_reply(out.reply, cacheable=False)
+                ctx.reply.suggestions = chips
+                ctx.emit("short_ack_guarded", chips=len(chips), category=cat)
+            else:
+                ctx.set_reply(out.reply)
         else:
             ctx.set_reply(out.reply)
     elif route == Route.CLARIFY:

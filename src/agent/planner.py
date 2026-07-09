@@ -25,6 +25,7 @@ from src.agent.fallbacks import (
     _cheapest_already_msg,
     _cross_sell_query,
     _dedupe,
+    _thin_path_chips,
 )
 from src.agent.finalize import _finalize_rich
 from src.agent.validator import _valid
@@ -264,6 +265,10 @@ async def build_plan(
             # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI
             # client; un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
             ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
+            # NX-159 felia 2: mesajul are deja o întrebare, dar atașăm chips de continuare
+            # (popular / alt buget / altă categorie) → opțiuni clickabile, nu doar text.
+            if get_settings().cheapest_alternatives_enabled:
+                ctx.reply.suggestions = _thin_path_chips(ctx.language)
             return ResponsePlan(handled=True)
     # R3: follow-up pe produse DEJA arătate („care e cea mai bună?") la care modelul n-a rechemat
     # un tool → re-hidratează produsele afișate (după id, din state) ca set de retrieval, ca să
