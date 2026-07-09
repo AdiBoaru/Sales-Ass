@@ -47,13 +47,22 @@ def process_facts(
     pack: DomainPack | None,
     *,
     source_message_id: str | None = None,
+    ref_map: dict[str, str] | None = None,
+    canonicalize: bool = True,
 ) -> ProcessedFacts:
     """Procesează candidații LIBERI ai extractorului → `ProcessedFacts`. Pentru fiecare:
     1. `raw_key` = cheia liberă a modelului (fallback `fact_type` backcompat); valori goale/prea
        lungi → sărite;
-    2. `canonical_key` = `resolve_canonical(raw_key, pack)` (None dacă nu mapăm sigur);
+    2. `canonical_key` = `resolve_canonical(raw_key, pack)` (None dacă nu mapăm sigur) — DOAR dacă
+       `canonicalize=True` (kill-switch MEMORY_CANONICALIZE_ENABLED); OFF → facts rămân raw;
     3. `SafetyVerdict` = `classify(...)` → `visibility` (drop = sărit, nepersistat);
-    4. dedupe pe `memory_key` în cadrul turului, păstrând confidence maxim.
+    4. `source_message_id` = mesajul-SURSĂ real al factului: `ref_map[source_ref]` dacă modelul a
+       dat un `source_ref` mapabil (transcript numerotat m1/m2/…), altfel fallback la mesajul
+       turului. Astfel un fapt spus acum 5 mesaje trasează la mesajul lui, nu la cel curent;
+    5. dedupe pe `memory_key` în cadrul turului, păstrând confidence maxim.
+
+    Canonicalizarea e DETERMINISTĂ (cod, nu LLM) — `c["canonical_key"]` sugerat de model NU e de
+    încredere; îl recalculăm din `resolve_canonical` (sau îl anulăm când flag-ul e OFF).
     """
     out = ProcessedFacts()
     best: dict[str, dict[str, Any]] = {}
@@ -62,7 +71,7 @@ def process_facts(
         value = c.get("fact_value")
         if not raw_key or value in (None, "", [], {}) or _too_long(value):
             continue
-        canonical_key = resolve_canonical(str(raw_key), pack)
+        canonical_key = resolve_canonical(str(raw_key), pack) if canonicalize else None
         if canonical_key:
             out.canonicalized += 1
         verdict = classify(str(raw_key), canonical_key, value)
@@ -75,6 +84,9 @@ def process_facts(
             out.injectable += 1
         conf = c.get("confidence")
         conf = 0.5 if conf is None else conf
+        # source real: ref → id (mesajul unde s-a spus faptul), fallback la mesajul turului.
+        src_ref = c.get("source_ref")
+        sid = (ref_map.get(str(src_ref)) if (ref_map and src_ref) else None) or source_message_id
         mkey = memory_key(str(raw_key), canonical_key)
         row = {
             "raw_key": str(raw_key).strip().lower(),
@@ -84,7 +96,7 @@ def process_facts(
             "confidence": conf,
             "safety_class": verdict.safety_class,
             "visibility": verdict.visibility,
-            "source_message_id": source_message_id,
+            "source_message_id": sid,
         }
         prev = best.get(mkey)
         # dedupe în tur: o observație cu confidence mai mare câștigă valoarea (ca la persistare).

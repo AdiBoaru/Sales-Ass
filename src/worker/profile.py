@@ -93,6 +93,9 @@ class FactCandidate(BaseModel):
     fact_type: str | None = None  # alias backcompat (NX-148)
     fact_value: Any = None
     confidence: float = 0.5
+    # NX-160: ref-ul mesajului-sursă (m1/m2/… din transcriptul numerotat) unde clientul a spus
+    # faptul → mapat la id-ul real de processor (trasabilitate reală, nu „mesajul curent").
+    source_ref: str | None = None
 
     @property
     def key(self) -> str | None:
@@ -145,7 +148,8 @@ Format:
                   "has_budget": <bool>, "asked_price": <bool>,
                   "mentioned_product": <bool>, "ready_to_buy": <bool>},
  "facts": [{"raw_key": <snake_case>, "canonical_key": <cheie canonică sau null>,
-            "fact_value": <valoare scurtă>, "confidence": <0..1>}, ...]}
+            "fact_value": <valoare scurtă>, "confidence": <0..1>,
+            "source_ref": <ref-ul mesajului m1/m2/… unde clientul a spus faptul>}, ...]}
 
 Reguli:
 - profile_patch: DOAR atribute pe care clientul le-a declarat EXPLICIT despre el sau nevoia lui.
@@ -159,6 +163,8 @@ Reguli:
     ✓ {"raw_key":"restriction","fact_value":"fără parfum"} NU {"raw_key":"restriction_no_fragrance"}
   Dacă `raw_key` se potrivește cu una din CHEILE CANONICE oferite în mesaj, pune-o EXACT în
   `canonical_key`; altfel `canonical_key=null`. Preferă cheile canonice.
+  `source_ref` = ref-ul (m1/m2/…) al mesajului CLIENTULUI din care reiese faptul; dacă nu ești
+  sigur, omite-l.
 - NICIODATĂ date de contact (telefon, email, nume, adresă) sau financiare (card, IBAN, CNP) — nici
   cheie, nici valoare.
 - O CONDIȚIE medicală (diabet, sarcină, boală, alergie ca diagnostic) NU e memorie de preferință —
@@ -168,16 +174,39 @@ Reguli:
 - Nu inventa produse, prețuri sau preferințe nedeclarate."""
 
 
-def _transcript(history: list[Message]) -> str:
-    """Conversația scurtă ca text (cu PII redactat), Client/Asistent per linie."""
+def _numbered_transcript(history: list[Message]) -> tuple[str, dict[str, str]]:
+    """Conversația scurtă ca text (PII redactat), cu fiecare linie PREFIXATĂ de un ref `[m{i}]`
+    (Client/Asistent). Întoarce (text, ref_map) unde `ref_map[m{i}] = message.id` (doar mesajele
+    cu id real din DB). Refs-urile permit modelului să indice mesajul-SURSĂ al fiecărui fapt
+    (`source_ref`), pe care processorul îl mapează la id-ul real (NX-160). Numerotarea sare
+    mesajele goale — IDENTIC în text și în ref_map (același iterator), deci refs-urile coincid."""
     lines: list[str] = []
+    ref_map: dict[str, str] = {}
+    i = 0
     for m in history:
         body = _redact_pii((m.body or "").strip())
         if not body:
             continue
+        i += 1
+        ref = f"m{i}"
         role = "Client" if m.direction == Direction.INBOUND else "Asistent"
-        lines.append(f"{role}: {body}")
-    return "\n".join(lines)
+        lines.append(f"[{ref}] {role}: {body}")
+        mid = getattr(m, "id", None)
+        if mid:
+            ref_map[ref] = mid
+    return "\n".join(lines), ref_map
+
+
+def build_ref_map(history: list[Message]) -> dict[str, str]:
+    """`ref_map` (m{i} → message.id) pentru istoricul dat — folosit de processor ca să mapeze
+    `source_ref`-ul întors de model la id-ul real. Aceeași numerotare ca `_numbered_transcript`
+    (un singur iterator) → refs-urile din prompt și cele din map coincid."""
+    return _numbered_transcript(history)[1]
+
+
+def _transcript(history: list[Message]) -> str:
+    """Doar textul numerotat (compat cu apelurile care nu au nevoie de ref_map)."""
+    return _numbered_transcript(history)[0]
 
 
 def build_profile_prompt(

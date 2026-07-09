@@ -9,6 +9,7 @@ Zero DB / zero LLM. Acoperă direcția `capture broad → classify safety → ca
 from __future__ import annotations
 
 from src.domain.pack import DomainPack
+from src.models import Author, Direction, Message
 from src.worker.canonicalize import (
     UNIVERSAL_CANONICAL,
     canonical_keys_for,
@@ -17,6 +18,7 @@ from src.worker.canonicalize import (
 )
 from src.worker.memory import process_facts
 from src.worker.memory_safety import classify
+from src.worker.profile import build_ref_map
 
 
 def _pack(**kw) -> DomainPack:
@@ -173,3 +175,47 @@ def test_process_facts_backcompat_fact_type():
     # un model care încă emite `fact_type` (nu `raw_key`) e tolerat.
     proc = process_facts([{"fact_type": "budget", "fact_value": "150 lei"}], _pack())
     assert proc.injectable == 1 and proc.rows[0]["canonical_key"] == "budget_band"
+
+
+def test_canonicalize_flag_off_keeps_raw():
+    # fix review Codex #201: MEMORY_CANONICALIZE_ENABLED=false → canonical_key rămâne None REAL.
+    cands = [{"raw_key": "preferred_brand", "fact_value": "CeraVe", "confidence": 0.9}]
+    proc = process_facts(cands, _pack(), canonicalize=False)
+    assert proc.canonicalized == 0
+    assert proc.rows[0]["canonical_key"] is None
+    assert proc.rows[0]["memory_key"] == "raw:preferred_brand"  # nu 'canonical:fav_brands'
+
+
+def test_source_ref_maps_to_real_message_id():
+    # fix review Codex #201: source_ref → id-ul mesajului-sursă, nu al turului.
+    ref_map = {"m1": "id-vechi", "m3": "id-sursa"}
+    proc = process_facts(
+        [{"raw_key": "budget", "fact_value": "100 lei", "confidence": 0.9, "source_ref": "m3"}],
+        _pack(),
+        source_message_id="id-tur-curent",
+        ref_map=ref_map,
+    )
+    assert proc.rows[0]["source_message_id"] == "id-sursa"
+
+
+def test_source_ref_fallback_to_turn_message():
+    # fără source_ref (sau nemapabil) → fallback la mesajul turului (nenul garantat).
+    proc = process_facts(
+        [{"raw_key": "budget", "fact_value": "100 lei", "confidence": 0.9}],
+        _pack(),
+        source_message_id="id-tur-curent",
+        ref_map={"m1": "x"},
+    )
+    assert proc.rows[0]["source_message_id"] == "id-tur-curent"
+
+
+def test_build_ref_map_numbers_only_nonempty_with_id():
+    hist = [
+        Message(direction=Direction.INBOUND, author=Author.CONTACT, body="caut cremă", id="id-1"),
+        Message(direction=Direction.OUTBOUND, author=Author.BOT, body="", id="id-2"),  # gol → sărit
+        Message(direction=Direction.INBOUND, author=Author.CONTACT, body="buget 100", id="id-3"),
+        Message(direction=Direction.INBOUND, author=Author.CONTACT, body="fără id", id=None),
+    ]
+    ref_map = build_ref_map(hist)
+    # gol sărit → „buget 100" e m2, nu m3; mesajul fără id nu apare deloc.
+    assert ref_map == {"m1": "id-1", "m2": "id-3"}

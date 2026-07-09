@@ -78,7 +78,12 @@ from src.worker.limits import (
     spend_over_cap,
 )
 from src.worker.memory import process_facts
-from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
+from src.worker.profile import (
+    build_ref_map,
+    compute_lead_score,
+    extract_profile,
+    filter_profile_patch,
+)
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 from src.worker.summarizer import generate_summary
@@ -312,18 +317,25 @@ async def _extract_profile_and_score(
         if facts_on and delta.facts:
             events.append(Event("facts_extract_attempted", {"turn_id": tid}))
             if memory_v2:
+                # ref_map (m1/m2/… → id real) peste ACEEAȘI fereastră ca promptul → source_ref-ul
+                # modelului mapează la mesajul-sursă real (fallback: mesajul turului).
+                ref_map = build_ref_map(window or ctx.history)
                 candidates = [
                     {
                         "raw_key": f.key,
-                        "canonical_key": f.canonical_key
-                        if settings.memory_canonicalize_enabled
-                        else None,
                         "fact_value": f.fact_value,
                         "confidence": f.confidence,
+                        "source_ref": f.source_ref,
                     }
                     for f in delta.facts
                 ]
-                proc = process_facts(candidates, pack, source_message_id=source_message_id)
+                proc = process_facts(
+                    candidates,
+                    pack,
+                    source_message_id=source_message_id,
+                    ref_map=ref_map,
+                    canonicalize=settings.memory_canonicalize_enabled,
+                )
                 events.append(
                     Event("facts_candidates_extracted", {"n": len(delta.facts), "turn_id": tid})
                 )

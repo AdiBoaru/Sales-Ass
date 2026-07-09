@@ -137,10 +137,20 @@ async def upsert_facts(
                 when excluded.confidence >= cf.confidence then excluded.fact_value
                 else cf.fact_value end,
             confidence = greatest(cf.confidence, excluded.confidence),
+            -- conversation_id = recența (ce conversație a atins ultima dată faptul) → mereu latest.
             conversation_id = excluded.conversation_id,
-            fact_type = excluded.fact_type,
-            raw_key = excluded.raw_key,
-            canonical_key = excluded.canonical_key,
+            -- fact_type/raw_key DESCRIU valoarea → PERECHE cu valoarea câștigătoare (canonical_key
+            -- e deja fix prin memory_key, dar îl ținem consistent). O observație low-confidence NU
+            -- lasă raw_key-ul ei peste valoarea high-confidence a alteia (fix review Codex #201).
+            fact_type = case
+                when excluded.confidence >= cf.confidence then excluded.fact_type
+                else cf.fact_type end,
+            raw_key = case
+                when excluded.confidence >= cf.confidence then excluded.raw_key
+                else cf.raw_key end,
+            canonical_key = case
+                when excluded.confidence >= cf.confidence then excluded.canonical_key
+                else cf.canonical_key end,
             -- vizibilitatea/clasa urmează valoarea câștigătoare (o re-observație mai sigură poate
             -- promova un candidate la inject; una mai slabă nu retrogradează silent).
             safety_class = case
@@ -214,9 +224,9 @@ async def get_messages_for_extraction(
     limit = min(limit, EXTRACTION_WINDOW)
     rows = await conn.fetch(
         """
-        select direction, author, body, content_type, created_at
+        select id::text as id, direction, author, body, content_type, created_at
         from (
-            select direction, author, body, content_type, created_at
+            select id, direction, author, body, content_type, created_at
             from messages
             where business_id = $1 and conversation_id = $2
             order by created_at desc
@@ -230,6 +240,7 @@ async def get_messages_for_extraction(
     )
     return [
         Message(
+            id=r["id"],  # NX-160: id-ul real → source_message_id al facts extrase din fereastră
             direction=Direction(r["direction"]),
             author=Author(r["author"]),
             body=r["body"],
