@@ -3,8 +3,9 @@ post-tur (query-uri monkeypatch-uite). ZERO OpenAI/DB real."""
 
 from datetime import UTC, datetime, timedelta
 
+from src.db.provider import static_db
 from src.models import Author, Direction, Message
-from src.worker import processor as proc
+from src.worker import aftercare as proc
 from src.worker import summarizer as sm
 
 
@@ -128,14 +129,14 @@ def _patch(monkeypatch, *, total, prev, to_summarize, gen="REZUMAT"):
 
 async def test_under_threshold_skips(monkeypatch):
     sink = _patch(monkeypatch, total=19, prev=None, to_summarize=[_msg(Direction.INBOUND, "x")])
-    await proc._summarize_if_needed(_FakeConn(), object(), "b", "conv", _Ctx(), object())
+    await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), object())
     assert "insert" not in sink and "gen_args" not in sink  # nici generare, nici scriere
 
 
 async def test_first_summary_triggers_with_honest_watermark(monkeypatch):
     window = [_msg(Direction.INBOUND, "m1", mins=1), _msg(Direction.OUTBOUND, "m2", mins=2)]
     sink = _patch(monkeypatch, total=20, prev=None, to_summarize=window)
-    await proc._summarize_if_needed(_FakeConn(), object(), "b", "conv", _Ctx(), object())
+    await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), object())
     assert sink["insert"]["summary"] == "REZUMAT"
     assert sink["insert"]["watermark"] == window[-1].created_at  # cel mai nou INCLUS, nu MAX global
     assert sink["after"] is None  # prima generare: de la început
@@ -146,7 +147,7 @@ async def test_regen_skipped_when_too_few_new(monkeypatch):
     prev = {"summary": "vechi", "upto_message_at": datetime(2026, 6, 16, 9, tzinfo=UTC)}
     window = [_msg(Direction.INBOUND, f"m{i}", mins=i) for i in range(5)]  # 5 < delta(12)
     sink = _patch(monkeypatch, total=40, prev=prev, to_summarize=window)
-    await proc._summarize_if_needed(_FakeConn(), object(), "b", "conv", _Ctx(), object())
+    await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), object())
     assert "insert" not in sink  # sub delta → nu ardem un apel nano
 
 
@@ -154,7 +155,7 @@ async def test_regen_triggers_with_prev_summary_fed(monkeypatch):
     prev = {"summary": "vechi", "upto_message_at": datetime(2026, 6, 16, 9, tzinfo=UTC)}
     window = [_msg(Direction.INBOUND, f"m{i}", mins=i) for i in range(12)]  # >= delta
     sink = _patch(monkeypatch, total=40, prev=prev, to_summarize=window)
-    await proc._summarize_if_needed(_FakeConn(), object(), "b", "conv", _Ctx(), object())
+    await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), object())
     assert sink["gen_args"]["prev"] == "vechi"  # rezumatul anterior e dat generatorului
     assert sink["after"] == prev["upto_message_at"]  # fereastra ia de la watermark
     assert "insert" in sink
@@ -162,7 +163,7 @@ async def test_regen_triggers_with_prev_summary_fed(monkeypatch):
 
 async def test_llm_none_skips(monkeypatch):
     sink = _patch(monkeypatch, total=50, prev=None, to_summarize=[_msg(Direction.INBOUND, "x")])
-    await proc._summarize_if_needed(_FakeConn(), object(), "b", "conv", _Ctx(), None)
+    await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), None)
     assert "gen_args" not in sink and "insert" not in sink  # cost guard / fără cheie → skip
 
 
@@ -174,5 +175,5 @@ async def test_best_effort_on_failure(monkeypatch):
 
     monkeypatch.setattr(proc, "insert_conversation_summary", boom)
     # nu trebuie să propage (turul a răspuns deja)
-    await proc._summarize_if_needed(_FakeConn(), object(), "b", "conv", _Ctx(), object())
+    await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), object())
     assert "cost" not in sink  # n-a ajuns la cost_add după eșecul de insert

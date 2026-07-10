@@ -18,19 +18,14 @@ from uuid import uuid4
 import asyncpg
 from redis.asyncio import Redis
 
-from src.agent import usage
 from src.agent.llm import get_llm
-from src.agent.pricing import savings_for
-from src.cache.canonical import canonicalize, classify_volatility
 from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.db.connection import bot_pool_stats
 from src.db.pool_metrics import take_acquire_wait
-from src.db.provider import tenant_db
-from src.db.queries.analytics import insert_events
-from src.db.queries.businesses import get_data_version
-from src.db.queries.contacts import get_or_create_contact, update_contact_profile_and_score
+from src.db.provider import static_db, tenant_db
+from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import (
     get_or_create_conversation,
     patch_conversation_state,
@@ -38,58 +33,39 @@ from src.db.queries.conversations import (
 )
 from src.db.queries.facts import (
     fetch_relevant_facts,
-    get_messages_for_extraction,
-    select_whitelisted_facts,
-    upsert_facts,
 )
 from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
 from src.db.queries.messages import (
-    count_messages,
-    get_messages_for_summary,
     get_recent_messages,
     insert_message,
 )
 from src.db.queries.outbox import enqueue_outbox
-from src.db.queries.semantic_cache import upsert_entry
 from src.db.queries.summaries import (
-    get_latest_summary,
     get_summary_for_context,
-    insert_conversation_summary,
 )
-from src.domain.loader import load_domain_pack
 from src.models import (
     Author,
     BusinessConfig,
     ConversationState,
     Direction,
-    Event,
     InboundMessage,
     Reply,
     TurnContext,
     TurnUsage,
 )
-from src.worker.canonicalize import canonical_keys_for
+from src.worker.aftercare import AftercareWork, _persist_events, run_aftercare
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import (
     CONTACT_COST_WINDOW_S,
     contact_scope_key,
-    cost_add,
     cost_add_and_total,
     cost_over_budget,
     seed_daily_cost,
     spend_capped,
     spend_over_cap,
 )
-from src.worker.memory import process_facts
-from src.worker.profile import (
-    build_ref_map,
-    compute_lead_score,
-    extract_profile,
-    filter_profile_patch,
-)
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
-from src.worker.summarizer import generate_summary
 
 log = logging.getLogger(__name__)
 
@@ -111,341 +87,10 @@ class TurnResult:
     deduped: bool = False
     reply: Reply | None = None  # obiectul complet (sync); None pe calea async (outbox)
     language: str | None = None  # limba turului (pt re-aplicarea disclaimer-ului la mapare sync)
-
-
-async def _persist_events(conn, business_id, conversation_id, contact_id, events) -> None:
-    """Scrie evenimentele turului în analytics_events, best-effort.
-    Observabilitatea NU blochează turul: un eșec se loghează, nu propagă."""
-    if not events:
-        return
-    try:
-        await insert_events(
-            conn,
-            business_id,
-            events,
-            conversation_id=conversation_id,
-            contact_id=contact_id,
-        )
-    except Exception:  # noqa: BLE001 — analytics e best-effort
-        log.exception("persistarea analytics_events a eșuat (turul continuă)")
-
-
-async def _cache_writeback(conn, llm, business_id, locale, body, ctx) -> None:
-    """Write-back gated (G5b), best-effort — scrie răspunsul în semantic_cache ca să
-    serveas tururi viitoare fără LLM. Rulează DUPĂ outbox (nu întârzie livrarea).
-
-    Gate (precision-first): nu re-scriem un hit; doar răspunsuri reutilizabile (cacheable,
-    nu clarify/fallback). Două tiere, după volatilitatea query-ului:
-      • `static` (fără produse) → entry FAQ/generic, TTL în zile (G5b-1).
-      • `dynamic` (recomandare cu produse) → entry cu `retrieval_signature` (snapshot de
-        preț) + `data_version`, TTL scurt în minute (G5b-2). Invalidat la lookup prin
-        price-check, deci sigur de cache-uit (zero preț învechit servit)."""
-    settings = get_settings()
-    reply = ctx.reply
-    if not settings.cache_enabled or ctx.from_cache or reply is None or llm is None:
-        return
-    if not reply.cacheable:
-        return
-    text = (reply.text or "").strip()
-    if not 5 <= len(text) <= 4000:
-        return
-
-    volatility = classify_volatility(body)
-    # Parametrii upsert-ului diferă pe tier; gate-ul de eligibilitate îi decide.
-    kwargs: dict = {}
-    if volatility == "static" and reply.products is None:
-        kwargs = {"ttl_days": settings.cache_ttl_static_days}
-    elif volatility == "dynamic" and reply.products:
-        kwargs = {
-            "ttl_minutes": settings.cache_ttl_dynamic_minutes,
-            "retrieval_signature": [
-                {"product_id": p["product_id"], "price": p["price"]} for p in reply.products
-            ],
-            "data_version": await get_data_version(conn, business_id),
-        }
-    else:
-        # static cu produse / dynamic fără produse / realtime / contextual („mai ieftin",
-        # relativ la setul afișat) → nu se cache-uiește.
-        return
-
-    try:
-        canonical, canonical_hash = canonicalize(body or "")
-        if not canonical:
-            return
-        embedding = (await llm.embed([canonical]))[0]
-        # Savepoint: dacă upsert-ul eșuează (RLS/grant/conflict), rollback DOAR la el —
-        # nu poluează tranzacția apelantului (turul a răspuns deja).
-        async with conn.transaction():
-            await upsert_entry(
-                conn,
-                business_id,
-                locale,
-                canonical_str=canonical,
-                canonical_hash=canonical_hash,
-                embedding=embedding,
-                answer=text,
-                volatility_class=volatility,
-                embedding_model=settings.model_embed,
-                quality_score=1.0,
-                **kwargs,
-            )
-        if volatility == "dynamic":
-            ctx.emit("cache_write", volatility="dynamic", n_products=len(reply.products))
-        else:
-            ctx.emit("cache_write", volatility="static", ttl_days=settings.cache_ttl_static_days)
-    except Exception:  # noqa: BLE001 — write-back best-effort, turul a răspuns deja
-        log.exception("cache write-back a eșuat (turul continuă)")
-
-
-async def _summarize_if_needed(conn, redis, business_id, conversation_id, ctx, llm) -> None:
-    """POST-TUR async (G6-2 felia 2), best-effort — întreține rezumatul rolling al conversației.
-    Rulează DUPĂ outbox (nu întârzie livrarea). NANO (model_triage), în afara pipeline-ului
-    sincron → principiul 2 respectat. Degradare (P6): kill-switch/llm None/eroare → skip, turul
-    a răspuns deja.
-
-    Acoperire CORECTĂ: sumarizează fereastra `get_messages_for_summary` (mesajele care ies din
-    ultimele 8, NU `ctx.history`), iar watermark-ul = cel mai NOU mesaj INCLUS (onest). Anti-
-    regenerare: re-sumarizăm doar la >= `summary_regen_delta` mesaje noi. Cost: apelul nano intră
-    în contorul zilnic G2c (`cost_add`), altfel ar scăpa bugetului."""
-    settings = get_settings()
-    if not settings.summary_enabled or llm is None:
-        return
-    try:
-        total = await count_messages(conn, business_id, conversation_id)
-        if total < settings.summary_threshold:
-            return
-        prev = await get_latest_summary(conn, business_id, conversation_id)
-        watermark = prev["upto_message_at"] if prev else None
-        to_summarize = await get_messages_for_summary(
-            conn, business_id, conversation_id, after=watermark
-        )
-        if not to_summarize:
-            return  # totul nou e încă în fereastra de 8 → nimic de comprimat
-        if prev is not None and len(to_summarize) < settings.summary_regen_delta:
-            return  # prea puține mesaje noi → nu ardem un apel nano (limbo temporar acceptat)
-
-        summary = await generate_summary(
-            llm, to_summarize, prev["summary"] if prev else None, ctx.language
-        )
-        if not summary:
-            return
-        new_watermark = to_summarize[-1].created_at  # cel mai nou mesaj INCLUS (watermark onest)
-        # tranzacție proprie (savepoint dacă rulăm nested, altfel BEGIN): insert eșuat → rollback
-        # doar la el; turul a răspuns deja, restul fluxului nu e afectat.
-        async with conn.transaction():
-            await insert_conversation_summary(
-                conn, business_id, conversation_id, new_watermark, summary
-            )
-        # Cost guard (G2c): apelul nano extra trebuie contabilizat, altfel scapă plafonului zilnic.
-        if redis is not None and settings.cost_guard_enabled:
-            await cost_add(redis, business_id, settings.cost_triage_usd)
-        await insert_events(
-            conn,
-            business_id,
-            # NX-122: persist OUT-OF-BAND (lista proprie, după batch-ul principal ctx.events) →
-            # stampăm turn_id explicit pe event (emit() îl injectează doar pe calea ctx.events)
-            # ca evenimentul să rămână corelat cu turul la replay.
-            [Event("summarizer_run", {"messages": len(to_summarize), "turn_id": ctx.turn_id})],
-            conversation_id=conversation_id,
-        )
-        log.info(
-            "summarizer: rezumat scris conv=%s msgs=%d len=%dch",
-            conversation_id,
-            len(to_summarize),
-            len(summary),
-        )
-    except Exception:  # noqa: BLE001 — best-effort: turul a răspuns deja, nimic nu se rupe
-        log.exception("summarizer a eșuat (turul continuă)")
-
-
-async def _extract_profile_and_score(
-    conn, redis, ctx: TurnContext, llm, *, shadow_mode: bool, source_message_id: str | None = None
-) -> None:
-    """POST-TUR async (NX-88), best-effort — botul „învață" clientul. Un apel NANO extrage semnale →
-    patch FILTRAT pe whitelist pe `contacts.profile` + `lead_score` DETERMINIST (formulă în cod,
-    nu numărul LLM-ului). Rulează DUPĂ outbox (nu întârzie livrarea). Owner EXCLUSIV la runtime pe
-    contacts.profile + contacts.lead_score (P3).
-
-    Degradare/skip (P6): kill-switch / llm None (cost guard, fără cheie) / shadow mode (NX-93) /
-    tur deflectat de free-layer/cache/gates (`ctx.route is None` ⟺ triajul n-a rulat → niciun
-    semnal de profil, n-ar trebui taxat cu un apel nano — card §Cost) / orice eroare → skip.
-    PII (P12): evenimentele logă DOAR chei + contoare, niciodată valori sau corpul mesajului."""
-    settings = get_settings()
-    if not settings.profile_extraction_enabled or llm is None or shadow_mode or ctx.route is None:
-        return
-    try:
-        # NX-148: cu memoria ON, extractorul cere ȘI facts (UN singur apel nano, P2) pe o fereastră
-        # mai lată (20 mesaje = 10 tururi) ca să prindă fapte spuse mai devreme. Cu memoria OFF,
-        # feature-flag-ul e COMPLET oprit: fereastra normală de profil (8) + promptul NU cere facts
-        # (nu ardem tokeni pe ceva ce flag-ul promite că e oprit).
-        facts_on = settings.conversation_facts_enabled
-        memory_v2 = facts_on and settings.memory_v2_enabled
-        pack = load_domain_pack(ctx.business) if facts_on else None
-        # NX-160: cu Memory v2, oferim modelului cheile canonice ale businessului (P9 — din
-        # DomainPack, generic pe orice vertical) ca să prefere vocabular canonic, nu ca poartă.
-        canonical_keys = canonical_keys_for(pack) if memory_v2 else None
-        window = (
-            await get_messages_for_extraction(conn, ctx.business.id, ctx.conversation_id)
-            if facts_on
-            else ctx.history
-        )
-        delta = await extract_profile(
-            llm,
-            window or ctx.history,
-            ctx.message,
-            ctx.language,
-            include_facts=facts_on,
-            canonical_keys=canonical_keys,
-        )
-        if delta is None:
-            return  # parse/API fail → fail-soft, nimic de scris
-        # Apelul nano a avut loc → contabilizează-l în contorul zilnic (G2c), altfel scapă bugetul.
-        if redis is not None and settings.cost_guard_enabled:
-            await cost_add(redis, ctx.business.id, settings.cost_triage_usd)
-
-        patch, dropped = filter_profile_patch(delta.profile_patch, ctx.business.vertical)
-        new_score = compute_lead_score(delta.lead_signals, ctx)
-        old_score = float(ctx.contact.lead_score)
-        score_changed = abs(new_score - old_score) > 1e-9
-
-        # Cheile aruncate sunt un semnal (NX-43) chiar dacă nu scriem nimic altceva.
-        # NX-122: turn_id stampat explicit (persist out-of-band, vezi summarizer_run) → replay/tur.
-        tid = ctx.turn_id
-        events = [Event("profile_key_dropped", {"key": k, "turn_id": tid}) for k in dropped]
-
-        # Facts structurate din ACELAȘI apel nano. NX-160: pipeline generic
-        # (capture broad → classify safety → canonicalize → persist) când `memory_v2`; altfel
-        # fallback la whitelist fail-closed (NX-148). Best-effort — un fail de persistare NU e tăcut
-        # (P6): emite `facts_persist_failed` în loc să dispară în savepoint.
-        if facts_on and delta.facts:
-            events.append(Event("facts_extract_attempted", {"turn_id": tid}))
-            if memory_v2:
-                # ref_map (m1/m2/… → id real) peste ACEEAȘI fereastră ca promptul → source_ref-ul
-                # modelului mapează la mesajul-sursă real (fallback: mesajul turului).
-                ref_map = build_ref_map(window or ctx.history)
-                candidates = [
-                    {
-                        "raw_key": f.key,
-                        "fact_value": f.fact_value,
-                        "confidence": f.confidence,
-                        "source_ref": f.source_ref,
-                    }
-                    for f in delta.facts
-                ]
-                proc = process_facts(
-                    candidates,
-                    pack,
-                    source_message_id=source_message_id,
-                    ref_map=ref_map,
-                    canonicalize=settings.memory_canonicalize_enabled,
-                )
-                events.append(
-                    Event("facts_candidates_extracted", {"n": len(delta.facts), "turn_id": tid})
-                )
-                events.append(
-                    Event(
-                        "facts_filtered",
-                        {
-                            "dropped_pii": proc.dropped,
-                            "candidate_sensitive": proc.candidate,
-                            "injectable": proc.injectable,
-                            "turn_id": tid,
-                        },
-                    )
-                )
-                if proc.canonicalized:
-                    events.append(
-                        Event("facts_canonicalized", {"n": proc.canonicalized, "turn_id": tid})
-                    )
-                # captura LARGĂ OFF → păstrăm DOAR facts canonizabile (fără raw candidates).
-                kept = (
-                    proc.rows
-                    if settings.memory_open_capture_enabled
-                    else [r for r in proc.rows if r["canonical_key"]]
-                )
-                # NX-160: contacts.profile = cache al canonical facts (un singur adevăr, nu două).
-                # Facts canonice care-s ȘI chei de profil completează patch-ul — dar `profile_patch`
-                # direct (semnalul explicit) are PRIORITATE (setdefault). Trec prin aceeași igienă.
-                canon_patch = {
-                    r["canonical_key"]: r["fact_value"]
-                    for r in kept
-                    if r.get("canonical_key") and isinstance(r.get("fact_value"), (str, int, float))
-                }
-                canon_kept, _ = filter_profile_patch(canon_patch, ctx.business.vertical)
-                for k, v in canon_kept.items():
-                    patch.setdefault(k, v)
-            else:
-                wl = pack.fact_type_whitelist if pack else frozenset()
-                legacy = [
-                    {"fact_type": f.key, "fact_value": f.fact_value, "confidence": f.confidence}
-                    for f in delta.facts
-                    if f.key
-                ]
-                kept = select_whitelisted_facts(legacy, wl)
-
-            if kept:
-                # chei canonice/raw (P12 — chei, nu valori). Calculat ÎNAINTE de try: un rând raw
-                # safe are raw_key dar nu fact_type/canonical_key → fără raw_key în fallback + fără
-                # filtrul None, `sorted({..., None})` arunca TypeError, prins de except → `facts_
-                # persist_failed` FALS deși upsert-ul reușise (fix review Codex #201).
-                fact_types = sorted(
-                    t
-                    for t in {
-                        k.get("canonical_key") or k.get("raw_key") or k.get("fact_type")
-                        for k in kept
-                    }
-                    if t
-                )
-                try:
-                    async with conn.transaction():
-                        await upsert_facts(
-                            conn, ctx.business.id, ctx.contact.id, ctx.conversation_id, kept
-                        )
-                    events.append(
-                        Event(
-                            "facts_extracted",
-                            {"n_facts": len(kept), "types": fact_types, "turn_id": tid},
-                        )
-                    )
-                except Exception as e:  # noqa: BLE001 — NX-160: NU tăcere (P6), semnalăm layer mort
-                    log.exception("upsert_facts a eșuat (turul continuă)")
-                    events.append(
-                        Event(
-                            "facts_persist_failed",
-                            {"error_type": type(e).__name__, "turn_id": tid},
-                        )
-                    )
-
-        if patch or score_changed:
-            # Savepoint propriu: UPDATE eșuat → rollback doar la el (turul a răspuns deja).
-            async with conn.transaction():
-                await update_contact_profile_and_score(
-                    conn, ctx.business.id, ctx.contact.id, patch, new_score
-                )
-            if patch:
-                events.append(
-                    Event(
-                        "profile_updated",
-                        {"keys_set": sorted(patch), "dropped": len(dropped), "turn_id": tid},
-                    )
-                )
-            if score_changed:
-                events.append(
-                    Event(
-                        "lead_score_updated",
-                        {"old": round(old_score, 2), "new": round(new_score, 2), "turn_id": tid},
-                    )
-                )
-        if events:
-            await insert_events(
-                conn,
-                ctx.business.id,
-                events,
-                conversation_id=ctx.conversation_id,
-                contact_id=ctx.contact.id,
-            )
-    except Exception:  # noqa: BLE001 — best-effort: turul a răspuns deja, nimic nu se rupe
-        log.exception("extractor profil a eșuat (turul continuă)")
+    # NX-161 F1: cu `defer_aftercare=True`, handle_turn NU rulează aftercare inline — întoarce
+    # AICI munca de făcut, iar apelantul o rulează cu `run_aftercare(tenant_db(biz), ...)` DUPĂ ce a
+    # închis `tenant_conn` (conn eliberat pe durata LLM). None = aftercare deja rulat inline.
+    aftercare: "AftercareWork | None" = None
 
 
 async def _llm_within_budget(
@@ -541,23 +186,6 @@ def _message_usage_kwargs(turn_usage: TurnUsage | None) -> dict:
     }
 
 
-def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
-    """Props pentru un event `llm_usage` dintr-un acumulator (folosit la POST-tur: summarizer +
-    profil + cache write-back embed). Aceeași formă ca runner-ul → rollup-ul/raportul le tratează
-    uniform; `phase` separă reply-ul de fundalul amortizat."""
-    savings = sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
-    return {
-        "phase": phase,
-        "tokens_in": acc.tokens_in,
-        "tokens_out": acc.tokens_out,
-        "cached_tokens": acc.cached_tokens,
-        "cost_usd": round(acc.cost_usd, 6),
-        "savings_usd": round(savings, 6),
-        "llm_calls": acc.calls,
-        "by_model": acc.by_model,
-    }
-
-
 async def handle_turn(
     conn: asyncpg.Connection,
     business: BusinessConfig,
@@ -567,6 +195,7 @@ async def handle_turn(
     redis: Redis | None = None,
     stages: list[Stage] | None = None,
     deliver: bool = True,
+    defer_aftercare: bool = False,
 ) -> TurnResult:
     """Procesează un mesaj inbound pe o conexiune tenant-scoped pe `business.id`.
 
@@ -863,33 +492,24 @@ async def handle_turn(
         len(reply_text),
         outbox_id,
     )
-    # POST-TUR async (cache write-back + summarizer + profil) — după outbox, nu întârzie livrarea.
-    # NX-103: îl învelim într-un acumulator de usage propriu → un al doilea event `llm_usage`
-    # (phase=post_turn) ca embed-ul de cache + apelurile nano de fundal să NU scape rollup-ului
-    # zilnic (altfel costul real al zilei e subestimat). NU intră pe rândul `messages` al reply-ului
-    # (nu e parte din reply); intră doar în analytics_events (rollup + raport de cost).
-    post_acc, post_token = usage.push()
-    try:
-        # Write-back cache (G5b-1). LLM-ul guardat (cost guard): peste buget → None → sărit.
-        await _cache_writeback(conn, llm, business.id, ctx.language, ctx.message.body, ctx)
-        # Summarizer (G6-2 felia 2) — întreține rezumatul rolling. `llm` guardat → None → sare.
-        await _summarize_if_needed(conn, redis, business.id, conv["id"], ctx, llm)
-        # Extractor profil + lead_score (NX-88) — nano extrage semnale → patch whitelist pe
-        # contacts.profile + scor determinist. Guardat (cost guard / shadow / free-layer → skip).
-        await _extract_profile_and_score(
-            conn,
-            redis,
-            ctx,
-            llm,
-            shadow_mode=bool(conv.get("shadow_mode")),
-            source_message_id=inbound_msg_id,
-        )
-    finally:
-        usage.pop(post_token)
-    if post_acc.calls:
-        # NX-122: prin ctx.emit → turn_id atașat (corelează costul post-tur cu turul).
-        ctx.emit("llm_usage", **_usage_event_props(post_acc, phase="post_turn"))
-        await _persist_events(conn, business.id, conv["id"], contact.id, [ctx.events[-1]])
+    # POST-TUR (cache write-back + summarizer + profil/facts) — best-effort, DUPĂ outbox, nu
+    # întârzie livrarea. NX-161 F1: mutat în `run_aftercare(db_provider, ...)`. INLINE (static_db —
+    # calea sync/teste/sim) = comportament vechi (conn viu). DEFERRED (producție, `defer_aftercare`)
+    # → apelantul îl rulează cu `tenant_db(biz)` DUPĂ ce închide `tenant_conn` → conn ELIBERAT pe
+    # durata LLM-ului de fundal. Un eșec NU afectează reply/outbox/completed (deja commise).
+    work = AftercareWork(
+        business=business,
+        conversation_id=conv["id"],
+        contact_id=contact.id,
+        ctx=ctx,
+        inbound_msg_id=inbound_msg_id,
+        shadow_mode=bool(conv.get("shadow_mode")),
+        llm=llm,
+        language=ctx.language,
+    )
+    if not defer_aftercare:
+        await run_aftercare(static_db(conn), redis, work)
+        work = None  # rulat inline → nimic de întors apelantului
     return TurnResult(
         conv["id"],
         contact.id,
@@ -898,4 +518,5 @@ async def handle_turn(
         outbox_id,
         reply=ctx.reply,  # sync: apelantul mapează text+produse+chips în răspunsul HTTP
         language=ctx.language,
+        aftercare=work,  # deferred → apelantul rulează run_aftercare; inline → None
     )

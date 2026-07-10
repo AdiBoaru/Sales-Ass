@@ -417,7 +417,9 @@ async def test_web_chat_returns_reply_synchronously(monkeypatch):
     async def fake_load_business(conn, bid):
         return SimpleNamespace(id=bid, daily_cost_cap_usd=None)  # NX-120: cap citit la admitere
 
-    async def fake_handle_turn(conn, business, channel_id, event, *, redis=None, deliver=True):
+    async def fake_handle_turn(
+        conn, business, channel_id, event, *, redis=None, deliver=True, defer_aftercare=False
+    ):
         captured["deliver"] = deliver
         captured["event"] = event
         reply = Reply(

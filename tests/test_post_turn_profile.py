@@ -10,8 +10,9 @@ Trei straturi, ZERO OpenAI/DB real:
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.db.provider import static_db
 from src.models import Author, Direction, Message
-from src.worker import processor as proc
+from src.worker import aftercare as proc
 from src.worker import profile
 from src.worker.profile import LeadSignals, ProfileDelta
 
@@ -316,7 +317,7 @@ async def test_happy_path_filters_patch_and_scores(monkeypatch):
     )
     sink = _patch(monkeypatch, delta=delta)
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
     # patch FILTRAT pe whitelist (skin_type păstrat, fav_color aruncat)
     assert sink["update"]["patch"] == {"skin_type": "uscat"}
@@ -340,7 +341,7 @@ async def test_score_only_update_when_patch_empty(monkeypatch):
     )
     sink = _patch(monkeypatch, delta=delta)
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
     assert sink["update"]["patch"] == {}
     assert sink["update"]["score"] == 63.0  # comparing 55 + asked_price 8
@@ -353,7 +354,7 @@ async def test_no_write_when_empty_patch_and_score_unchanged(monkeypatch):
     delta = ProfileDelta(profile_patch={}, lead_signals=LeadSignals(buying_stage="browsing"))
     sink = _patch(monkeypatch, delta=delta)
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(lead_score=10.0), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(lead_score=10.0), object(), shadow_mode=False
     )
     assert "update" not in sink
     assert "events" not in sink
@@ -362,13 +363,17 @@ async def test_no_write_when_empty_patch_and_score_unchanged(monkeypatch):
 
 async def test_llm_none_skips_everything(monkeypatch):
     sink = _patch(monkeypatch, delta=ProfileDelta(profile_patch={"skin_type": "uscat"}))
-    await proc._extract_profile_and_score(_FakeConn(), object(), _ctx(), None, shadow_mode=False)
+    await proc._extract_profile_and_score(
+        static_db(_FakeConn()), object(), _ctx(), None, shadow_mode=False
+    )
     assert "extract_called" not in sink and "update" not in sink and "cost" not in sink
 
 
 async def test_shadow_mode_skips(monkeypatch):
     sink = _patch(monkeypatch, delta=ProfileDelta(profile_patch={"skin_type": "uscat"}))
-    await proc._extract_profile_and_score(_FakeConn(), object(), _ctx(), object(), shadow_mode=True)
+    await proc._extract_profile_and_score(
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=True
+    )
     assert "extract_called" not in sink
 
 
@@ -376,7 +381,7 @@ async def test_free_layer_no_route_skips(monkeypatch):
     # ctx.route None ⟺ tur deflectat de free-layer/cache/gates → niciun apel nano
     sink = _patch(monkeypatch, delta=ProfileDelta(profile_patch={"skin_type": "uscat"}))
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(route=None), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(route=None), object(), shadow_mode=False
     )
     assert "extract_called" not in sink
 
@@ -384,7 +389,7 @@ async def test_free_layer_no_route_skips(monkeypatch):
 async def test_extract_returns_none_no_update(monkeypatch):
     sink = _patch(monkeypatch, delta=None)  # parse/API fail → None
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
     assert sink["extract_called"] and "update" not in sink and "cost" not in sink
 
@@ -396,7 +401,7 @@ async def test_db_failure_is_best_effort(monkeypatch):
     sink = _patch(monkeypatch, delta=delta, boom_update=True)
     # NU trebuie să propage (turul a răspuns deja, reply-ul e în outbox)
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
     assert "update" not in sink  # a aruncat → nimic capturat
     assert "events" not in sink  # am sărit la except înainte de insert
@@ -410,7 +415,7 @@ async def test_dropped_keys_emitted_even_without_db_write(monkeypatch):
     )
     sink = _patch(monkeypatch, delta=delta)
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(lead_score=10.0), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(lead_score=10.0), object(), shadow_mode=False
     )
     assert "update" not in sink  # patch gol post-whitelist + scor 10==10 → nicio scriere
     # semnalul NX-43 rămâne (+ turn_id NX-122)
@@ -441,7 +446,7 @@ async def test_facts_extracted_event_mixes_canonical_and_raw(monkeypatch):
 
     monkeypatch.setattr(proc, "upsert_facts", f_upsert)
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
     types = [e for e in sink["events"] if e[0] == "facts_extracted"]
     assert types, "facts_extracted trebuie emis (persistarea a reușit)"
@@ -458,6 +463,6 @@ async def test_kill_switch_disables_hook(monkeypatch):
     monkeypatch.setattr(get_settings(), "profile_extraction_enabled", False)
     sink = _patch(monkeypatch, delta=ProfileDelta(profile_patch={"skin_type": "uscat"}))
     await proc._extract_profile_and_score(
-        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+        static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
     assert "extract_called" not in sink

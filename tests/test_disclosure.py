@@ -8,6 +8,7 @@ import pytest
 
 from src.config import get_settings
 from src.models import BusinessConfig, Contact
+from src.worker import aftercare as ac
 from src.worker import compose
 from src.worker import processor as proc
 from src.worker.compose import ensure_disclaimer
@@ -132,8 +133,11 @@ async def _run(monkeypatch, stage):
     monkeypatch.setattr(proc, "_persist_events", anoop)
     monkeypatch.setattr(proc, "_record_turn_cost", anoop)
     monkeypatch.setattr(proc, "_llm_within_budget", fake_budget)
-    monkeypatch.setattr(proc, "_cache_writeback", fake_cache)
-    monkeypatch.setattr(proc, "_summarize_if_needed", anoop)
+    # NX-161 F1: run_aftercare RULEAZĂ (inline via static_db); patch helperele pe modulul aftercare
+    # — fake_cache CAPTUREAZĂ textul pur pt aserția „cache-ul stochează fără disclaimer".
+    monkeypatch.setattr(ac, "_cache_writeback", fake_cache)
+    monkeypatch.setattr(ac, "_summarize_if_needed", anoop)
+    monkeypatch.setattr(ac, "_extract_profile_and_score", anoop)
 
     business = BusinessConfig(id="biz-1", slug="s", name="n")
     event = {

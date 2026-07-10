@@ -28,6 +28,7 @@ from src.channels.base import Capability, ChannelSenderRegistry
 from src.channels.media import close_media
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
+from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
@@ -41,6 +42,7 @@ from src.redis_bus import (
 )
 from src.webhook.orders import process_order
 from src.worker.admission import get_admission
+from src.worker.aftercare import run_aftercare
 from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
 from src.worker.dispatcher import build_registry
@@ -214,6 +216,7 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
                 admission.inflight,
             )
         try:
+            result = None
             async with tenant_conn(business_id) as conn:
                 business = await load_business(conn, business_id)
                 if business is None:
@@ -223,7 +226,13 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
                     # navigare carusel (R2): drum determinist, NU pipeline LLM.
                     await handle_callback(conn, business, channel["channel_id"], event)
                     return
-                await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
+                result = await handle_turn(
+                    conn, business, channel["channel_id"], event, redis=redis, defer_aftercare=True
+                )
+            # NX-161 F1: conn ELIBERAT ↑ (async with închis) → aftercare-ul rulează cu checkout-uri
+            # scurte proaspete (tenant_db), fără conn ținut pe durata LLM-ului de fundal.
+            if result is not None and result.aftercare is not None:
+                await run_aftercare(tenant_db(business_id), redis, result.aftercare)
         finally:
             if admitted:
                 admission.release(business_id)
