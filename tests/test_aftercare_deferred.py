@@ -137,3 +137,49 @@ async def test_summarize_deferred_releases_conn_across_generate(monkeypatch):
     assert spy_db.max_concurrent == 1
     # generate_summary (LLM) a rulat cu conn ELIBERAT (regula 1).
     assert recorded["db_open_at_llm"] == 0
+
+
+class _FailingDb:
+    """Provider care pică la ORICE checkout (pool epuizat / eroare de conexiune)."""
+
+    def __call__(self):
+        raise RuntimeError("checkout DB pică")
+
+
+class _RecordingLLM:
+    """Mimează adaptorul real: `embed` raportează usage → `post_acc.calls > 0` în run_aftercare."""
+
+    async def embed(self, texts):
+        from src.agent import usage
+
+        usage.record_embeddings(
+            SimpleNamespace(usage=SimpleNamespace(prompt_tokens=5)), "embed-model"
+        )
+        return [[0.1, 0.2, 0.3, 0.4] for _ in texts]
+
+
+async def test_run_aftercare_best_effort_even_if_final_checkout_fails():
+    # Repro review Codex #208: LLM reușește (post_acc.calls > 0 via cache embed), dar checkout-ul DB
+    # pică — INCLUSIV cel final pentru llm_usage. run_aftercare NU trebuie să propage (altfel pe web
+    # sync ar da 500 după ce reply-ul e deja livrat).
+    ctx = TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="biz", slug="s", name="n"),
+        contact=Contact(id="c", business_id="biz"),
+        message=InboundMessage(provider_msg_id="m", body="care e politica de retur"),  # static
+        conversation_id="conv",
+        language="ro",
+    )
+    ctx.reply = Reply(text="Retur în 14 zile.")  # static, cacheable, fără produse
+    work = ac.AftercareWork(
+        business=ctx.business,
+        conversation_id="conv",
+        contact_id="c",
+        ctx=ctx,
+        inbound_msg_id="m",
+        shadow_mode=False,
+        llm=_RecordingLLM(),
+        language="ro",
+    )
+    # NU trebuie să arunce, deși db() pică la FIECARE checkout (inclusiv persistarea llm_usage).
+    await ac.run_aftercare(_FailingDb(), None, work)

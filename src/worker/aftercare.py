@@ -120,24 +120,29 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
         return
 
     volatility = classify_volatility(body)
-    kwargs: dict = {}
-    if volatility == "static" and reply.products is None:
-        kwargs = {"ttl_days": settings.cache_ttl_static_days}
-    elif volatility == "dynamic" and reply.products:
-        async with db() as conn:  # READ scurt (data_version) — eliberat ÎNAINTE de embed
-            data_version = await get_data_version(conn, business_id)
-        kwargs = {
-            "ttl_minutes": settings.cache_ttl_dynamic_minutes,
-            "retrieval_signature": [
-                {"product_id": p["product_id"], "price": p["price"]} for p in reply.products
-            ],
-            "data_version": data_version,
-        }
-    else:
+    # Gate de eligibilitate (fără DB): decide DOAR dacă se cache-uiește. Read-ul de `data_version`
+    # (dynamic) se face în TRY, ca un eșec de CHECKOUT să fie best-effort — nu propage din aftercare
+    # (altfel pe web sync ar da 500 după ce reply-ul e deja livrat — review Codex #208).
+    if not (
+        (volatility == "static" and reply.products is None)
+        or (volatility == "dynamic" and reply.products)
+    ):
         # static cu produse / dynamic fără produse / realtime / contextual → nu se cache-uiește.
         return
 
     try:
+        if volatility == "static":
+            kwargs: dict = {"ttl_days": settings.cache_ttl_static_days}
+        else:  # dynamic (produse garantate de gate)
+            async with db() as conn:  # READ scurt (data_version) — eliberat ÎNAINTE de embed
+                data_version = await get_data_version(conn, business_id)
+            kwargs = {
+                "ttl_minutes": settings.cache_ttl_dynamic_minutes,
+                "retrieval_signature": [
+                    {"product_id": p["product_id"], "price": p["price"]} for p in reply.products
+                ],
+                "data_version": data_version,
+            }
         canonical, canonical_hash = canonicalize(body or "")
         if not canonical:
             return
@@ -429,12 +434,23 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
             shadow_mode=work.shadow_mode,
             source_message_id=work.inbound_msg_id,
         )
+    except Exception:  # noqa: BLE001 — backstop: helperele prind deja, dar aftercare NU are voie
+        log.exception("aftercare a eșuat (turul continuă)")  # să propage (reply e deja commis)
     finally:
         usage.pop(post_token)
     if post_acc.calls:
         # NX-122: prin ctx.emit → turn_id atașat (corelează costul post-tur cu turul).
         work.ctx.emit("llm_usage", **_usage_event_props(post_acc, phase="post_turn"))
-        async with db() as conn:
-            await _persist_events(
-                conn, work.business.id, work.conversation_id, work.contact_id, [work.ctx.events[-1]]
-            )
+        # best-effort: eșecul de CHECKOUT sau de insert NU rupe turul (review Codex #208) — pe web
+        # sync ar da 500 după ce reply-ul a fost deja calculat/livrat.
+        try:
+            async with db() as conn:
+                await _persist_events(
+                    conn,
+                    work.business.id,
+                    work.conversation_id,
+                    work.contact_id,
+                    [work.ctx.events[-1]],
+                )
+        except Exception:  # noqa: BLE001 — persistarea llm_usage e best-effort
+            log.exception("persistarea llm_usage post-tur a eșuat (turul continuă)")
