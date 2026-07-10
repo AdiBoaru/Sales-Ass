@@ -164,10 +164,25 @@ cd /opt/nativextech/nativx
 docker compose ps                 # stare
 docker compose logs -f worker     # loguri (fără PII — redaction în logger)
 docker compose restart worker     # restart un serviciu
-git pull && docker compose up -d --build       # update cod (rebuild imagine imutabilă)
+git pull && docker compose pull && docker compose up -d   # update cod (imagine din ghcr, NU build pe VPS)
 docker compose --profile proactive up -d proactive   # motor proactiv când e nevoie
 docker compose down               # oprește DOAR stack-ul nativx (nu atinge restul VPS-ului)
 ```
+
+## Auto-deploy (CI/CD)
+
+Push pe `main` → `.github/workflows/deploy.yml` construiește imaginea pe runnerele
+GitHub (NU pe VPS — 1 vCPU), o urcă în `ghcr.io/adiboaru/sales-ass`, apoi intră prin
+SSH pe VPS și face `git pull && docker compose pull && up -d`. Zero build pe VPS.
+
+Setup o singură dată:
+- **VPS:** cheia publică de deploy în `~/.ssh/authorized_keys` (perechea privată e în
+  secretul `VPS_SSH_KEY` al repo-ului).
+- **Secrete repo:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`.
+- **Pachet ghcr PUBLIC:** după primul run, fă pachetul `sales-ass` public (repo-ul e
+  oricum public; secretele vin din `.env`, nu din imagine) ca VPS-ul să tragă fără login.
+
+Deploy manual: tab-ul **Actions → Deploy to VPS → Run workflow**.
 
 ## Future
 
