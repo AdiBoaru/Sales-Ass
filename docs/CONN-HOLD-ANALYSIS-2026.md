@@ -246,3 +246,59 @@ Fairness per-tenant complet = **epic separat** cu dependență explicită.
 `src/worker/processor.py`, `src/db/connection.py`, `src/worker/runner.py`, `src/worker/consumer.py`,
 `src/worker/debounce.py`, `src/worker/stages/*`, `src/tools/*`, `src/agent/llm.py`.
 Măsurare: `scripts/sim/pool_probe.py`. Istoric: NX-50/NX-04/NX-86/NX-85, `docs/db_connections.md`.
+
+---
+
+## Anexă A — Schiță de execuție Felia 0B (deps.db() provider + compat + guard CI)
+
+> Schiță de DESIGN (nu cod de producție) — gata de atacat în secunda în care 0A merge. Felia 0B e
+> **PR separat** din `origin/main` actualizat (nu stacking peste 0A). Regulă dură: **zero schimbare
+> de runtime** — providerul EXISTĂ, dar niciun stagiu nu-l apelează încă.
+
+### A.1 Contractul `PipelineDeps` (compat-first)
+`db` (provider) adăugat lângă `conn` (păstrat, deprecated). Puntea de compat trăiește într-un
+`__post_init__`: dacă `db is None` dar `conn` e dat → `db = _static_db(conn)`. Astfel cele **114**
+`PipelineDeps(conn=object())` din teste primesc automat un provider — **zero teste rescrise**.
+
+```
+# formă (design, nu implementare finală)
+@dataclass
+class PipelineDeps:
+    db: DbProvider | None = None
+    conn: Connection | None = None      # DEPRECATED — doar compat până la Felia 7
+    redis: ...; llm: ...; media: ...
+    def __post_init__(self):
+        if self.db is None and self.conn is not None:
+            self.db = _static_db(self.conn)   # compat bridge
+```
+
+### A.2 Providerul — un contract, trei implementări
+`db()` întoarce un **async context manager** care yield-uiește o `Connection`. `business_id` e LEGAT
+la construcție (providerul e tenant-scoped, ca `tenant_conn`) — `db()` nu-l primește ca arg.
+- `TenantDb(business_id)` → `db()` = `async with tenant_conn(business_id) as c: yield c` (PROD: checkout scurt real).
+- `_static_db(conn)` → `db()` = `yield conn` (COMPAT teste: același conn injectat, fără checkout nou).
+- `FakeDb(fake_conn)` → testele NOI (explicit, nu prin `conn=`).
+
+### A.3 Ce NU se schimbă (invariant: zero behavior)
+Processor construiește `PipelineDeps(db=TenantDb(business.id), conn=conn)` — AMBELE. Stagiile
+folosesc încă `deps.conn` (nimic migrat). `handle_turn` byte-identic. Providerul e neapelat → runtime
+identic. Doar Felia 1+ începe să cheme `deps.db()` și să renunțe la `deps.conn`.
+
+### A.4 Guard CI (lenient în 0B, hard-fail la Felia 7)
+`scripts/check_no_raw_conn.py`: caută `PipelineDeps(conn=` + `deps.conn` în `src/` (exclude `tests/`).
+- 0B → exit 0 + **WARN** (stagiile încă pe `deps.conn`); listează câte rămân.
+- Pe măsură ce migrezi felii, numărul scade.
+- Felia 7 → exit 1 (**hard-fail**): `deps.conn` interzis în `src/`. Rulat în workflow lângă `ruff`.
+
+### A.5 Strategie de teste (DoD 0B, per Codex)
+- **static fallback**: `PipelineDeps(conn=fake)` → `db()` yield fake — cele 114 usage-uri, NESCHIMBATE.
+- **fake provider explicit**: teste NOI → `PipelineDeps(db=FakeDb(fake))`.
+- **real**: un integration cu `TenantDb(biz)` pe `tenant_conn` real (izolare + checkout scurt).
+- Gate: zero test legacy rescris · `handle_turn` produce reply identic cu/fără provider · guard CI verde (WARN).
+
+### A.6 Ordine de commit 0B
+1. `DbProvider` + `TenantDb`/`_static_db`/`FakeDb` (modul nou, ex. `src/db/provider.py`).
+2. `PipelineDeps.db` + `__post_init__` compat.
+3. Processor construiește `TenantDb(business.id)` (stagiile rămân pe `deps.conn`).
+4. `scripts/check_no_raw_conn.py` (WARN) + hook în CI.
+5. Teste provider (real/fake/static).
