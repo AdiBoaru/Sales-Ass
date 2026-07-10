@@ -72,6 +72,16 @@ async def test_requeue_over_cap_drops():
     assert r.xadds == [] and "dropped" in status  # peste cap → drop, nu re-enqueue
 
 
+async def test_requeue_admission_never_drops(monkeypatch):
+    # NX-161 F0C (fix Codex #207): admission re-queue NU are cap de drop (P6) — spre deosebire de
+    # _requeue_busy, re-pune ORICÂT (chiar la contor mare) ca un mesaj de client să nu dispară.
+    r = LockRedis()
+    s = SimpleNamespace(admission_requeue_delay_ms=0, admission_requeue_warn_every=20)
+    status = await cons._requeue_admission(r, {"body": "x", "_admission_requeues": 999}, s)
+    assert r.xadds  # re-pus pe stream (NU dropped)
+    assert "requeue" in status and "dropped" not in status
+
+
 # --- integrare process_event -------------------------------------------------
 
 
@@ -102,6 +112,8 @@ def _patch_pipeline(monkeypatch, calls, *, conv_lock_enabled=True):
             conv_lock_ttl_seconds=30,
             conv_lock_requeue_delay_ms=0,
             conv_lock_max_requeues=10,
+            # NX-161 F0C: consumer-ul citește timeout-ul de admission din settings.
+            admission_acquire_timeout_ms=2000,
         ),
     )
 
