@@ -75,8 +75,7 @@ async def _run(monkeypatch, stage, *, initial_state, body="salut"):
     monkeypatch.setattr(proc, "_persist_events", anoop)
     monkeypatch.setattr(proc, "_record_turn_cost", anoop)
     monkeypatch.setattr(proc, "_llm_within_budget", fake_budget)
-    monkeypatch.setattr(proc, "_cache_writeback", anoop)
-    monkeypatch.setattr(proc, "_summarize_if_needed", anoop)
+    monkeypatch.setattr(proc, "run_aftercare", anoop)
 
     business = BusinessConfig(id="biz-1", slug="s", name="n")
     event = {

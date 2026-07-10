@@ -35,12 +35,14 @@ from src.channels.web.render import render_web
 from src.channels.web.sender import backlog_key, out_channel
 from src.config import get_settings
 from src.db.connection import admin_conn, get_pool, tenant_conn
+from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.identity import verify_identity_token
 from src.web.session import WebSession, get_session_cache, issue_visitor, verify_web_session
 from src.webhook.body_limit import enforce_body_cap
+from src.worker.aftercare import run_aftercare
 from src.worker.limits import (
     cost_over_budget,
     incr_window,
@@ -239,8 +241,15 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
         if over_budget:
             raise HTTPException(status_code=429, detail="budget exceeded")
         result = await handle_turn(
-            conn, business, channel["channel_id"], event, redis=redis, deliver=False
+            conn,
+            business,
+            channel["channel_id"],
+            event,
+            redis=redis,
+            deliver=False,
+            defer_aftercare=True,
         )
+    # conn ELIBERAT ↑ (async with închis).
     # NX-120: contor de cost per-vizitator (estimare-plasă de admitere; precizia per-tur = NX-125).
     # Best-effort: un fail de Redis aici NU rupe răspunsul deja calculat.
     try:
@@ -249,6 +258,11 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
         )
     except Exception:  # noqa: BLE001 — best-effort: NU rupem un răspuns deja calculat (orice eroare)
         log.warning("web_cost_add_visitor a eșuat (răspunsul a fost livrat)")
+    # NX-161 F1: aftercare cu conn eliberat (checkout-uri scurte, fără conn pe durata LLM). ATENȚIE
+    # (Codex rule 2): pe web SINCRON asta blochează răspunsul HTTP pe durata aftercare-ului —
+    # acceptabil pt F1 (DB-ul e liber), dar ideal ulterior = background task (nu întârzie clientul).
+    if result.aftercare is not None:
+        await run_aftercare(tenant_db(session.business_id), redis, result.aftercare)
     return _build_chat_response(result)
 
 

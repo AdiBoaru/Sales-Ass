@@ -5,9 +5,10 @@ hit semantic peste/sub prag, bypass dynamic, gate-ul de write-back.
 """
 
 from src.config import get_settings
+from src.db.provider import static_db
 from src.models import BusinessConfig, Contact, InboundMessage, Reply, TurnContext
-from src.worker import processor as proc_mod
-from src.worker.processor import _cache_writeback
+from src.worker import aftercare as ac_mod
+from src.worker.aftercare import _cache_writeback
 from src.worker.runner import PipelineDeps
 from src.worker.stages import cache as cache_mod
 from src.worker.stages.cache import cache_stage
@@ -165,9 +166,9 @@ async def test_writeback_caches_static(monkeypatch):
     async def fake_upsert(conn, bid, locale, **kw):
         written.update(kw)
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", fake_upsert)
+    monkeypatch.setattr(ac_mod, "upsert_entry", fake_upsert)
     ctx = _ctx_reply(STATIC_Q, Reply(text="Retur în 14 zile."))
-    await _cache_writeback(_FakeConn(), _LLM(), "biz-1", "ro", STATIC_Q, ctx)
+    await _cache_writeback(static_db(_FakeConn()), _LLM(), "biz-1", "ro", STATIC_Q, ctx)
     assert written["answer"] == "Retur în 14 zile."
     assert written["volatility_class"] == "static"
 
@@ -176,27 +177,27 @@ async def test_writeback_skips_from_cache(monkeypatch):
     async def boom(*a, **k):
         raise AssertionError("nu re-scrie un hit")
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx_reply(STATIC_Q, Reply(text="raspuns valid"), from_cache=True)
-    await _cache_writeback(None, _LLM(), "biz-1", "ro", STATIC_Q, ctx)  # nu aruncă
+    await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", STATIC_Q, ctx)  # nu aruncă
 
 
 async def test_writeback_skips_products(monkeypatch):
     async def boom(*a, **k):
         raise AssertionError("produsele = dynamic, nu se scriu în v1")
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx_reply(STATIC_Q, Reply(text="recomandare", products=[{"product_id": "p1"}]))
-    await _cache_writeback(None, _LLM(), "biz-1", "ro", STATIC_Q, ctx)
+    await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", STATIC_Q, ctx)
 
 
 async def test_writeback_skips_dynamic_query(monkeypatch):
     async def boom(*a, **k):
         raise AssertionError("query dynamic → nu se scrie")
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx_reply("caut crema sub 80 lei", Reply(text="raspuns oarecare lung"))
-    await _cache_writeback(None, _LLM(), "biz-1", "ro", "caut crema sub 80 lei", ctx)
+    await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", "caut crema sub 80 lei", ctx)
 
 
 async def test_writeback_skips_contextual_query(monkeypatch):
@@ -205,15 +206,15 @@ async def test_writeback_skips_contextual_query(monkeypatch):
     async def boom(*a, **k):
         raise AssertionError("query contextual → nu se scrie")
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx_reply("ceva mai ieftin", Reply(text="Uite o variantă mai ieftină pentru tine."))
-    await _cache_writeback(None, _LLM(), "biz-1", "ro", "ceva mai ieftin", ctx)
+    await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", "ceva mai ieftin", ctx)
 
 
 async def test_writeback_skips_not_cacheable(monkeypatch):
     async def boom(*a, **k):
         raise AssertionError("clarify/fallback → nu se scrie")
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx_reply("ceva ambiguu", Reply(text="ce anume cauți?", cacheable=False))
-    await _cache_writeback(None, _LLM(), "biz-1", "ro", "ceva ambiguu", ctx)
+    await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", "ceva ambiguu", ctx)

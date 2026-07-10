@@ -208,9 +208,10 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
     from datetime import UTC, datetime, timedelta
     from types import SimpleNamespace
 
+    from src.db.provider import static_db
     from src.db.queries.contacts import get_or_create_contact
     from src.db.queries.conversations import get_or_create_conversation
-    from src.worker.processor import _summarize_if_needed
+    from src.worker.aftercare import _summarize_if_needed
 
     class _LLM:
         model_triage = "nano"
@@ -242,7 +243,7 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
             )
 
         await _summarize_if_needed(
-            conn, None, DEMO_BIZ, conv_id, SimpleNamespace(language="ro"), _LLM()
+            static_db(conn), None, DEMO_BIZ, conv_id, SimpleNamespace(language="ro"), _LLM()
         )
 
         row = await conn.fetchrow(

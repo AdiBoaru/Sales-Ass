@@ -8,9 +8,10 @@ dynamic. Integration (DB real): `current_prices`, provenance pe exact_lookup, pr
 
 import pytest
 
+from src.db.provider import static_db
 from src.models import BusinessConfig, Contact, InboundMessage, Reply, TurnContext
-from src.worker import processor as proc_mod
-from src.worker.processor import _cache_writeback
+from src.worker import aftercare as ac_mod
+from src.worker.aftercare import _cache_writeback
 from src.worker.runner import PipelineDeps
 from src.worker.stages import cache as cache_mod
 from src.worker.stages.cache import cache_stage
@@ -268,8 +269,8 @@ async def test_writeback_caches_dynamic(monkeypatch):
     async def fake_dv(conn, bid):
         return 5
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", fake_upsert)
-    monkeypatch.setattr(proc_mod, "get_data_version", fake_dv)
+    monkeypatch.setattr(ac_mod, "upsert_entry", fake_upsert)
+    monkeypatch.setattr(ac_mod, "get_data_version", fake_dv)
 
     reply = Reply(
         text="Îți recomand crema X la 49.90 lei.",
@@ -277,7 +278,7 @@ async def test_writeback_caches_dynamic(monkeypatch):
     )
     ctx = _ctx(DYNAMIC_Q)
     ctx.reply = reply
-    await _cache_writeback(_FakeConn(), _LLM(), "biz-1", "ro", DYNAMIC_Q, ctx)
+    await _cache_writeback(static_db(_FakeConn()), _LLM(), "biz-1", "ro", DYNAMIC_Q, ctx)
 
     assert written["volatility_class"] == "dynamic"
     assert written["retrieval_signature"] == [{"product_id": "p1", "price": 49.9}]
@@ -292,10 +293,10 @@ async def test_writeback_dynamic_without_products_skips(monkeypatch):
     async def boom(*a, **k):
         raise AssertionError("dynamic fără produse → nu se scrie")
 
-    monkeypatch.setattr(proc_mod, "upsert_entry", boom)
+    monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx(DYNAMIC_Q)
     ctx.reply = Reply(text="raspuns dynamic fara produse")  # products None
-    await _cache_writeback(None, _LLM(), "biz-1", "ro", DYNAMIC_Q, ctx)  # nu aruncă
+    await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", DYNAMIC_Q, ctx)  # nu aruncă
 
 
 # --- Integration (DB real) ---------------------------------------------------

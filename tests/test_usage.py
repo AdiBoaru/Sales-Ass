@@ -11,7 +11,8 @@ from src.agent.llm import LLMClient
 from src.agent.pricing import cost_for, rates_for, savings_for
 from src.config import get_settings
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext, TurnUsage
-from src.worker.processor import _message_usage_kwargs, _usage_event_props
+from src.worker.aftercare import _usage_event_props
+from src.worker.processor import _message_usage_kwargs
 from src.worker.runner import PipelineDeps, run_pipeline
 
 # --- fake-uri usage OpenAI ---------------------------------------------------

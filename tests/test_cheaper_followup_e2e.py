@@ -264,10 +264,8 @@ def store(monkeypatch):
     monkeypatch.setattr(proc, "get_summary_for_context", _get_summary)
     monkeypatch.setattr(proc, "enqueue_outbox", _enqueue_outbox)
     monkeypatch.setattr(proc, "patch_conversation_state", _patch_state)
-    monkeypatch.setattr(proc, "insert_events", _insert_events)
-    monkeypatch.setattr(proc, "_cache_writeback", _noop_writeback)
-    monkeypatch.setattr(proc, "_summarize_if_needed", _noop_summarize)
-    monkeypatch.setattr(proc, "_extract_profile_and_score", _noop_profile)
+    monkeypatch.setattr(proc, "_persist_events", _noop_writeback)
+    monkeypatch.setattr(proc, "run_aftercare", _noop_writeback)
 
     # --- straturi gratuite (alias/cache/faq) → MISS, ca să ajungem la triaj+agent -----------
     async def _no_alias(conn, business_id, phrase_norm):
