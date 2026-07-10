@@ -585,6 +585,13 @@ class Settings(BaseSettings):
     # NON-rich (proză/order). Rich are deja regulile ei → neatins. OFF / stil gol → byte-identic.
     response_style_enabled: bool = Field(default=True, validation_alias="RESPONSE_STYLE_ENABLED")
 
+    # --- Pool metrics (NX-161 Felia 0A) — instrumentare bot_pool ---
+    # Emite `pool_metrics` per tur (acquire-wait al checkout-ului + ocuparea pool-ului) → semnalul
+    # de WAIT în prod care declanșează fix-ul conn-per-op (docs/CONN-HOLD-ANALYSIS-2026.md). Pur
+    # observabilitate (P10), ZERO PII (P12 — business_id e UUID de tenant). OFF → nu se emite
+    # evenimentul (gauge-ul inflight din pool_metrics rămâne, folosit și de health).
+    pool_metrics_enabled: bool = Field(default=True, validation_alias="POOL_METRICS_ENABLED")
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
