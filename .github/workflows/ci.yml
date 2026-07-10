@@ -25,6 +25,11 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
 
+      # NX-161: guard conn-per-op. LENIENT în 0B→migrare (raportează câte `deps.conn` rămân în src/,
+      # nu pică). Devine `--strict` (hard-fail) la Felia 7, când src/ nu mai are conn viu.
+      - name: Guard conn-per-op (NX-161, lenient)
+        run: python scripts/check_no_raw_conn.py
+
   test:
     name: Test (pytest)
     runs-on: ubuntu-latest

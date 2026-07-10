@@ -25,6 +25,9 @@ from src.cache.canonical import canonicalize, classify_volatility
 from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
+from src.db.connection import bot_pool_stats
+from src.db.pool_metrics import take_acquire_wait
+from src.db.provider import tenant_db
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import get_data_version
 from src.db.queries.contacts import get_or_create_contact, update_contact_profile_and_score
@@ -32,6 +35,12 @@ from src.db.queries.conversations import (
     get_or_create_conversation,
     patch_conversation_state,
     touch_last_inbound,
+)
+from src.db.queries.facts import (
+    fetch_relevant_facts,
+    get_messages_for_extraction,
+    select_whitelisted_facts,
+    upsert_facts,
 )
 from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
 from src.db.queries.messages import (
@@ -47,6 +56,7 @@ from src.db.queries.summaries import (
     get_summary_for_context,
     insert_conversation_summary,
 )
+from src.domain.loader import load_domain_pack
 from src.models import (
     Author,
     BusinessConfig,
@@ -58,6 +68,7 @@ from src.models import (
     TurnContext,
     TurnUsage,
 )
+from src.worker.canonicalize import canonical_keys_for
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import (
     CONTACT_COST_WINDOW_S,
@@ -69,7 +80,13 @@ from src.worker.limits import (
     spend_capped,
     spend_over_cap,
 )
-from src.worker.profile import compute_lead_score, extract_profile, filter_profile_patch
+from src.worker.memory import process_facts
+from src.worker.profile import (
+    build_ref_map,
+    compute_lead_score,
+    extract_profile,
+    filter_profile_patch,
+)
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
 from src.worker.summarizer import generate_summary
@@ -242,7 +259,7 @@ async def _summarize_if_needed(conn, redis, business_id, conversation_id, ctx, l
 
 
 async def _extract_profile_and_score(
-    conn, redis, ctx: TurnContext, llm, *, shadow_mode: bool
+    conn, redis, ctx: TurnContext, llm, *, shadow_mode: bool, source_message_id: str | None = None
 ) -> None:
     """POST-TUR async (NX-88), best-effort — botul „învață" clientul. Un apel NANO extrage semnale →
     patch FILTRAT pe whitelist pe `contacts.profile` + `lead_score` DETERMINIST (formulă în cod,
@@ -257,7 +274,29 @@ async def _extract_profile_and_score(
     if not settings.profile_extraction_enabled or llm is None or shadow_mode or ctx.route is None:
         return
     try:
-        delta = await extract_profile(llm, ctx.history, ctx.message, ctx.language)
+        # NX-148: cu memoria ON, extractorul cere ȘI facts (UN singur apel nano, P2) pe o fereastră
+        # mai lată (20 mesaje = 10 tururi) ca să prindă fapte spuse mai devreme. Cu memoria OFF,
+        # feature-flag-ul e COMPLET oprit: fereastra normală de profil (8) + promptul NU cere facts
+        # (nu ardem tokeni pe ceva ce flag-ul promite că e oprit).
+        facts_on = settings.conversation_facts_enabled
+        memory_v2 = facts_on and settings.memory_v2_enabled
+        pack = load_domain_pack(ctx.business) if facts_on else None
+        # NX-160: cu Memory v2, oferim modelului cheile canonice ale businessului (P9 — din
+        # DomainPack, generic pe orice vertical) ca să prefere vocabular canonic, nu ca poartă.
+        canonical_keys = canonical_keys_for(pack) if memory_v2 else None
+        window = (
+            await get_messages_for_extraction(conn, ctx.business.id, ctx.conversation_id)
+            if facts_on
+            else ctx.history
+        )
+        delta = await extract_profile(
+            llm,
+            window or ctx.history,
+            ctx.message,
+            ctx.language,
+            include_facts=facts_on,
+            canonical_keys=canonical_keys,
+        )
         if delta is None:
             return  # parse/API fail → fail-soft, nimic de scris
         # Apelul nano a avut loc → contabilizează-l în contorul zilnic (G2c), altfel scapă bugetul.
@@ -273,6 +312,110 @@ async def _extract_profile_and_score(
         # NX-122: turn_id stampat explicit (persist out-of-band, vezi summarizer_run) → replay/tur.
         tid = ctx.turn_id
         events = [Event("profile_key_dropped", {"key": k, "turn_id": tid}) for k in dropped]
+
+        # Facts structurate din ACELAȘI apel nano. NX-160: pipeline generic
+        # (capture broad → classify safety → canonicalize → persist) când `memory_v2`; altfel
+        # fallback la whitelist fail-closed (NX-148). Best-effort — un fail de persistare NU e tăcut
+        # (P6): emite `facts_persist_failed` în loc să dispară în savepoint.
+        if facts_on and delta.facts:
+            events.append(Event("facts_extract_attempted", {"turn_id": tid}))
+            if memory_v2:
+                # ref_map (m1/m2/… → id real) peste ACEEAȘI fereastră ca promptul → source_ref-ul
+                # modelului mapează la mesajul-sursă real (fallback: mesajul turului).
+                ref_map = build_ref_map(window or ctx.history)
+                candidates = [
+                    {
+                        "raw_key": f.key,
+                        "fact_value": f.fact_value,
+                        "confidence": f.confidence,
+                        "source_ref": f.source_ref,
+                    }
+                    for f in delta.facts
+                ]
+                proc = process_facts(
+                    candidates,
+                    pack,
+                    source_message_id=source_message_id,
+                    ref_map=ref_map,
+                    canonicalize=settings.memory_canonicalize_enabled,
+                )
+                events.append(
+                    Event("facts_candidates_extracted", {"n": len(delta.facts), "turn_id": tid})
+                )
+                events.append(
+                    Event(
+                        "facts_filtered",
+                        {
+                            "dropped_pii": proc.dropped,
+                            "candidate_sensitive": proc.candidate,
+                            "injectable": proc.injectable,
+                            "turn_id": tid,
+                        },
+                    )
+                )
+                if proc.canonicalized:
+                    events.append(
+                        Event("facts_canonicalized", {"n": proc.canonicalized, "turn_id": tid})
+                    )
+                # captura LARGĂ OFF → păstrăm DOAR facts canonizabile (fără raw candidates).
+                kept = (
+                    proc.rows
+                    if settings.memory_open_capture_enabled
+                    else [r for r in proc.rows if r["canonical_key"]]
+                )
+                # NX-160: contacts.profile = cache al canonical facts (un singur adevăr, nu două).
+                # Facts canonice care-s ȘI chei de profil completează patch-ul — dar `profile_patch`
+                # direct (semnalul explicit) are PRIORITATE (setdefault). Trec prin aceeași igienă.
+                canon_patch = {
+                    r["canonical_key"]: r["fact_value"]
+                    for r in kept
+                    if r.get("canonical_key") and isinstance(r.get("fact_value"), (str, int, float))
+                }
+                canon_kept, _ = filter_profile_patch(canon_patch, ctx.business.vertical)
+                for k, v in canon_kept.items():
+                    patch.setdefault(k, v)
+            else:
+                wl = pack.fact_type_whitelist if pack else frozenset()
+                legacy = [
+                    {"fact_type": f.key, "fact_value": f.fact_value, "confidence": f.confidence}
+                    for f in delta.facts
+                    if f.key
+                ]
+                kept = select_whitelisted_facts(legacy, wl)
+
+            if kept:
+                # chei canonice/raw (P12 — chei, nu valori). Calculat ÎNAINTE de try: un rând raw
+                # safe are raw_key dar nu fact_type/canonical_key → fără raw_key în fallback + fără
+                # filtrul None, `sorted({..., None})` arunca TypeError, prins de except → `facts_
+                # persist_failed` FALS deși upsert-ul reușise (fix review Codex #201).
+                fact_types = sorted(
+                    t
+                    for t in {
+                        k.get("canonical_key") or k.get("raw_key") or k.get("fact_type")
+                        for k in kept
+                    }
+                    if t
+                )
+                try:
+                    async with conn.transaction():
+                        await upsert_facts(
+                            conn, ctx.business.id, ctx.contact.id, ctx.conversation_id, kept
+                        )
+                    events.append(
+                        Event(
+                            "facts_extracted",
+                            {"n_facts": len(kept), "types": fact_types, "turn_id": tid},
+                        )
+                    )
+                except Exception as e:  # noqa: BLE001 — NX-160: NU tăcere (P6), semnalăm layer mort
+                    log.exception("upsert_facts a eșuat (turul continuă)")
+                    events.append(
+                        Event(
+                            "facts_persist_failed",
+                            {"error_type": type(e).__name__, "turn_id": tid},
+                        )
+                    )
+
         if patch or score_changed:
             # Savepoint propriu: UPDATE eșuat → rollback doar la el (turul a răspuns deja).
             async with conn.transaction():
@@ -473,7 +616,7 @@ async def handle_turn(
         locale=business.default_locale,
     )
 
-    await insert_message(
+    inbound_msg_id = await insert_message(
         conn,
         business.id,
         conv["id"],
@@ -484,8 +627,26 @@ async def handle_turn(
         content_type=event.get("content_type", "text"),
         provider_msg_id=event.get("provider_msg_id"),
         media_ref=event.get("media_id"),
+        # NX-146 felia 2 (fix): turn_id în payload → Turn Replay citește EXACT mesajele turului,
+        # nu o euristică „ultimele N ale conversației" (greșită dacă discuția a continuat).
+        # fragment_index=0: un singur mesaj inbound per tur, dar `get_turn_messages` ordonează
+        # uniform pe (direction, fragment_index) — vezi fix-ul de mai jos pe outbound.
+        payload={"turn_id": turn_id, "fragment_index": 0},
     )
     await touch_last_inbound(conn, business.id, conv["id"])
+
+    # NX-148: memoria structurată (facts) încărcată o dată, injectată de facts_block. Guardată de
+    # kill-switch (OFF → gol → bloc absent). BEST-EFFORT (ca summary/cache): un fail de citire nu
+    # blochează turul — degradare la history+state (P6). Owner: processor.
+    facts: list = []
+    _s = get_settings()
+    # NX-160: injectăm doar dacă memoria E ON ȘI injectarea safe e permisă (flag separat: facts se
+    # pot persista fără a fi injectate). fetch_relevant_facts întoarce DOAR visibility='inject'.
+    if _s.conversation_facts_enabled and _s.memory_safe_injection_enabled:
+        try:
+            facts = await fetch_relevant_facts(conn, business.id, contact.id)
+        except Exception:  # noqa: BLE001 — memoria e opțională, turul răspunde oricum
+            log.exception("încărcarea facts a eșuat (turul continuă)")
 
     ctx = TurnContext(
         turn_id=turn_id,
@@ -503,11 +664,22 @@ async def handle_turn(
         history=await get_recent_messages(conn, business.id, conv["id"]),
         state=ConversationState.from_jsonb(conv["state"]),  # G6-2: agentul vede ce-a afișat
         summary=await get_summary_for_context(conn, business.id, conv["id"]),  # G6-2 felia 2
+        facts=facts,  # NX-148: memorie structurată (facts_block)
         language=conv["locale"] or business.default_locale,
         bot_active=conv["bot_active"],
         handoff_until=conv["handoff_until"],
         verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
+
+    # NX-148: acoperirea memoriei (chei/contoare, nu valori — P12).
+    if facts:
+        ctx.emit("facts_injected", n_injected=len(facts))
+
+    # Felia 0A (NX-161): semnalul de WAIT (acquire-wait al checkout-ului, din tenant_conn prin
+    # ContextVar) + ocuparea pool-ului (in_use/idle/inflight), corelat pe tur. Declanșatorul
+    # deciziei de conn-per-op (docs/CONN-HOLD-ANALYSIS-2026.md §Faza 0A). P10/P12: fără PII.
+    if _s.pool_metrics_enabled:
+        ctx.emit("pool_metrics", acquire_wait_ms=take_acquire_wait(), **bot_pool_stats())
 
     # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
     if verified_customer_ref:
@@ -525,7 +697,12 @@ async def handle_turn(
     llm = await _llm_within_budget(ctx, redis, business, channel_kind=channel_kind)
     # Media routing (NX-76): registry de fetchers (singleton, ca llm) → gate-ul descarcă poza.
     media = get_media_registry()
-    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm, media=media), stages)
+    # NX-161 Felia 0B: providerul tenant-scoped e disponibil pentru stagii (deps.db()), dar în 0B
+    # NICIUN stagiu nu-l apelează încă → stagiile folosesc `conn` (viu, ca înainte) = zero schimbare
+    # de runtime. Feliile următoare migrează gradual la deps.db(). AMBELE trecute intenționat:
+    # __post_init__ NU suprascrie `db` explicit cu static(conn).
+    deps = PipelineDeps(conn=conn, db=tenant_db(business.id), redis=redis, llm=llm, media=media)
+    await run_pipeline(ctx, deps, stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
     await _record_turn_cost(
         redis, business, ctx, llm_used=llm is not None, channel_kind=channel_kind
@@ -614,6 +791,11 @@ async def handle_turn(
                 # NX-103: cost/tokeni/latență/model pe PRIMUL fragment (reply-ul botului). Split-ul
                 # (frag 2) e același reply → nu dublăm costul. messages.cost_usd devine real.
                 **(_message_usage_kwargs(ctx.usage) if i == 0 else {}),
+                # NX-146 felia 2 (fix, corectat pe finding Codex): turn_id + fragment_index în
+                # payload. Fragmentele outbound se scriu în ACEEAȘI tranzacție → `created_at` poate
+                # fi identic (now() e constant per tranzacție) → `created_at asc` NU garantează
+                # ordinea. `fragment_index` = poziția reală a fragmentului (split NX-90, max 2).
+                payload={"turn_id": turn_id, "fragment_index": i},
             )
             if not deliver:
                 # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
@@ -695,7 +877,12 @@ async def handle_turn(
         # Extractor profil + lead_score (NX-88) — nano extrage semnale → patch whitelist pe
         # contacts.profile + scor determinist. Guardat (cost guard / shadow / free-layer → skip).
         await _extract_profile_and_score(
-            conn, redis, ctx, llm, shadow_mode=bool(conv.get("shadow_mode"))
+            conn,
+            redis,
+            ctx,
+            llm,
+            shadow_mode=bool(conv.get("shadow_mode")),
+            source_message_id=inbound_msg_id,
         )
     finally:
         usage.pop(post_token)

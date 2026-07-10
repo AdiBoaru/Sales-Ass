@@ -265,15 +265,18 @@ def _drop_unfounded_stock(text: str | None, stock_present: bool) -> str | None:
     return None if has_stock_claim(text) else text
 
 
-def scrub_education(s: str | None, stock_present: bool) -> str | None:
+def scrub_education(
+    s: str | None, stock_present: bool, allowed_numbers: set[str] | frozenset[str] = frozenset()
+) -> str | None:
     """Coaching de final (`education`), scrubuit la nivel de PROPOZIȚIE (IZI-parity, G4). Vechiul
     comportament arunca TOT paragraful la o singură propoziție „murdară" (un „SPF 30" ucidea și
     sfatul util de lângă) → coaching-ul dispărea des, iar răspunsul părea mai subțire decât iZi
     (care consultă la fiecare tur). Granular = păstrăm propozițiile SIGURE, aruncăm doar pe cele cu
-    cifre/procente/claim/superlativ/medical (`scrub_prose`) sau cu o afirmație de stoc nefondată
-    (`_drop_unfounded_stock`). Aceeași siguranță, mai mult sfat REAL păstrat. Agnostic de vertical
-    (nu injectează filler — toate pică → None). O singură propoziție = identic cu vechiul
-    comportament."""
+    cifre NEpermise/procente/claim/superlativ/medical sau cu o afirmație de stoc nefondată
+    (`_drop_unfounded_stock`). NX-139: `allowed_numbers` (cifrele clientului + cifrele de
+    SPECIFICAȚIE din produsele afișate, `spec_numbers`) supraviețuiesc — „SPF 30" grounded nu mai
+    ucide sfatul (exact ce face iZi expert). Gol → semantica veche, byte-identic. Agnostic de
+    vertical; toate pică → None. O singură propoziție = identic cu vechiul comportament."""
     if not s:
         return None
     t = " ".join(s.split())
@@ -281,7 +284,7 @@ def scrub_education(s: str | None, stock_present: bool) -> str | None:
         return None
     kept: list[str] = []
     for sent in re.split(r"(?<=[.!?])\s+", t):
-        safe = _drop_unfounded_stock(scrub_prose(sent), stock_present)
+        safe = _drop_unfounded_stock(scrub_intro(sent, allowed_numbers), stock_present)
         if safe:
             kept.append(safe)
     return " ".join(kept) or None
@@ -400,6 +403,14 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     # Cardurile rămân ca ALTERNATIVE apropiate. Fail-open: fără semnal / gate OFF ⇒ vechi.
     retrieval = getattr(ctx, "retrieval", None)
     relevance = getattr(retrieval, "relevance", None) if retrieval is not None else None
+    # NX-139: cifrele permise în proză = ale CLIENTULUI (R4) + cifrele de SPECIFICAȚIE din
+    # produsele AFIȘATE (nume/fațete, `spec_numbers` — gated). Prețurile nu intră (nu-s în nume).
+    allowed_numbers = _allowed_client_numbers(ctx)
+    if get_settings().spec_digits_grounded_enabled:
+        pack = getattr(ctx.business, "domain_pack", None)
+        shown = [facts[it.product_id] for it in items if it.product_id in facts]
+        allowed_numbers |= spec_numbers(shown, pack.comparison_facets if pack else (), ctx.language)
+
     if _off_category(relevance):
         ctx.emit(
             "pick_suppressed",
@@ -411,15 +422,13 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         intro = _off_category_intro(ctx.language)
     else:
         pick = _select_pick(j, facts, items, stock_present, deterministic)
-        intro = _drop_unfounded_stock(
-            scrub_intro(j.get("intro"), _allowed_client_numbers(ctx)), stock_present
-        )
+        intro = _drop_unfounded_stock(scrub_intro(j.get("intro"), allowed_numbers), stock_present)
 
     return RichReply(
         intro=intro,
         items=items,
         pick=pick,
-        education=scrub_education(j.get("education"), stock_present),
+        education=scrub_education(j.get("education"), stock_present, allowed_numbers),
         chips=_suggestion_chips(j.get("suggestions") or []),
         disclaimer=disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None,
     )
@@ -647,6 +656,67 @@ def facet_summary(
         if (cell := _facet_cell(f, attrs, language))
     ]
     return "; ".join(parts)
+
+
+def decision_axes(
+    products: list[dict[str, Any]],
+    facets: Sequence[FacetSpec] = (),
+    language: str | None = None,
+    *,
+    max_axes: int = 3,
+) -> list[str]:
+    """NX-139: axele pe care VARIAZĂ efectiv setul afișat — input grounded pentru intro/segmentare
+    (model iZi). 100% GENERIC pe vertical: fațetele vin din DomainPack (beauty=tip de ten/SPF,
+    auto=fitment/material, bijuterii=material/carate) — zero cuvinte de vertical în cod.
+
+    O fațetă e AXĂ DE DECIZIE când setul are ≥2 valori DISTINCTE acoperite de ≥2 produse (un
+    atribut identic pe tot setul nu ajută alegerea). Prețul e axă când spread-ul e ≥1.5× (cifrele
+    sunt OK aici — e INPUT pentru model, care oricum vede prețurile în bundle; regulile rich decid
+    ce cifre pot ieși în proză). Fațete goale / set <2 → [] (degradare lină, ca azi)."""
+    if len(products) < 2:
+        return []
+    axes: list[str] = []
+    for facet in facets:
+        if len(axes) >= max_axes - 1:  # păstrăm un slot pentru axa de preț
+            break
+        vals: list[str] = []
+        seen: set[str] = set()
+        covered = 0
+        for p in products:
+            cell = _facet_cell(facet, p.get("attributes"), language)
+            if not cell:
+                continue
+            covered += 1
+            for v in cell.split(", "):
+                key = v.strip().lower()
+                if key and key not in seen:
+                    seen.add(key)
+                    vals.append(v.strip())
+        if len(vals) >= 2 and covered >= 2:
+            axes.append(f"{_facet_label(facet, language)}: " + " / ".join(vals[:4]))
+    prices = [float(p["price"]) for p in products if p.get("price") is not None]
+    if prices and min(prices) > 0 and max(prices) / min(prices) >= 1.5:
+        # RO e ok: linia e input de model (nu iese spre client); modelul răspunde în limba lui.
+        axes.append(f"Preț: de la {min(prices):.0f} la {max(prices):.0f} lei")
+    return axes[:max_axes]
+
+
+def spec_numbers(
+    products: list[dict[str, Any]], facets: Sequence[FacetSpec] = (), language: str | None = None
+) -> set[str]:
+    """NX-139: cifrele de SPECIFICAȚIE din datele produselor AFIȘATE — numele („Crema SPF 30,
+    50 ml") + valorile de fațete din `attributes`. Grounded prin construcție → permise în
+    intro/education (`scrub_intro`/`scrub_education`). Prețurile NU trec pe aici: ele stau în
+    câmpuri dedicate (price/list_price), hidratate de cod pe card, niciodată în proză."""
+    out: set[str] = set()
+    for p in products:
+        out |= set(re.findall(r"\d+", p.get("name") or ""))
+        attrs = p.get("attributes")
+        for facet in facets:
+            cell = _facet_cell(facet, attrs, language)
+            if cell:
+                out |= set(re.findall(r"\d+", cell))
+    return out
 
 
 def build_comparison(

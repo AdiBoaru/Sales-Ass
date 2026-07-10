@@ -15,9 +15,11 @@
 name: nativx
 
 # Config comun pentru serviciile Python (toate aceeași imagine).
+# Imaginea vine din ghcr (build în CI, NU pe VPS — vezi .github/workflows/deploy.yml).
+# Deploy pe VPS = `docker compose pull && up -d` (fără --build). Pentru build local
+# ad-hoc pe VPS poți încă rula: `docker compose build` (context-ul e în repo).
 x-app: &app
-  image: nativx:prod
-  build: .
+  image: ghcr.io/adiboaru/sales-ass:latest
   env_file: .env
   restart: unless-stopped
   networks: [internal]

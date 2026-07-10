@@ -124,7 +124,7 @@ async def test_link_intent_emits_offer_and_card(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr("src.agent.deterministic.get_products_by_ids", fake_by_ids)
     ctx = _ctx("imi dai linkul direct catre crema asta?")
     await agent_stage(ctx, _deps())
 
@@ -147,7 +147,7 @@ async def test_link_intent_multiple_products_no_single_offer(monkeypatch):
             {"id": "p2", "name": "B", "price": 60.99, "url": "https://shop.ro/p/b"},
         ]
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr("src.agent.deterministic.get_products_by_ids", fake_by_ids)
     ctx = _ctx("trimite-mi linkurile")
     ctx.state.displayed_products = [ProductRef("p1", "A", 31.99), ProductRef("p2", "B", 60.99)]
     await agent_stage(ctx, _deps())
@@ -162,7 +162,7 @@ async def test_link_intent_no_product_url_is_honest(monkeypatch):
     async def fake_by_ids(conn, business_id, ids, **k):
         return [{"id": "p1", "name": "Mira Soft 389", "price": 60.99, "url": None}]
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr("src.agent.deterministic.get_products_by_ids", fake_by_ids)
     ctx = _ctx("trimite-mi linkul, te rog")
     await agent_stage(ctx, _deps())
 
@@ -179,7 +179,7 @@ async def test_link_intent_skipped_when_no_displayed_products(monkeypatch):
     async def by_ids(conn, business_id, ids, **k):
         return []
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", by_ids)
     ctx = _ctx("trimite-mi linkul")
     ctx.state.displayed_products = []  # nimic afișat
     llm = _RecordLLM()
@@ -196,7 +196,7 @@ async def test_link_with_new_filter_falls_through_to_llm(monkeypatch):
     async def by_ids(conn, business_id, ids, **k):
         return []
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", by_ids)
     ctx = _ctx("trimite-mi linkul la o cremă sub 50 lei")
     ctx.route.filters = {"budget_max": 50}  # triajul a extras o constrângere nouă
     llm = _RecordLLM()
@@ -212,7 +212,7 @@ async def test_link_intent_disabled_falls_through(monkeypatch):
     async def by_ids(conn, business_id, ids, **k):
         return []
 
-    monkeypatch.setattr("src.worker.stages.agent.get_products_by_ids", by_ids)
+    monkeypatch.setattr("src.agent.planner.get_products_by_ids", by_ids)
     monkeypatch.setattr(get_settings(), "link_intent_enabled", False)
     ctx = _ctx("trimite-mi linkul")
     llm = _RecordLLM()

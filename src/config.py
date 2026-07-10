@@ -297,6 +297,17 @@ class Settings(BaseSettings):
     proactive_batch_size: int = Field(default=20, validation_alias="PROACTIVE_BATCH_SIZE")
     proactive_idle_sleep_s: float = Field(default=5.0, validation_alias="PROACTIVE_IDLE_SLEEP_S")
 
+    # --- Dispatcher outbox (NX-147) ---
+    # Bounded concurrency keeps user replies responsive without flooding provider APIs or DB pools.
+    dispatcher_batch_size: int = Field(default=10, validation_alias="DISPATCHER_BATCH_SIZE")
+    dispatcher_global_concurrency: int = Field(
+        default=16, validation_alias="DISPATCHER_GLOBAL_CONCURRENCY"
+    )
+    dispatcher_tenant_concurrency: int = Field(
+        default=4, validation_alias="DISPATCHER_TENANT_CONCURRENCY"
+    )
+    dispatcher_idle_sleep_s: float = Field(default=0.5, validation_alias="DISPATCHER_IDLE_SLEEP_S")
+
     # --- Inițiatori proactivi (PL-1): sweeper-e care CREEAZĂ proactive_jobs ---
     # Până la PR2, NIMENI nu insera joburi → zero proactiv în prod (gap CRITICAL). Sweeper-ele
     # (coș abandonat + back-in-stock) rulează în mini-scheduler-ul intern (src/jobs/scheduler.py),
@@ -433,6 +444,17 @@ class Settings(BaseSettings):
     search_blended_rank_enabled: bool = Field(
         default=True, validation_alias="SEARCH_BLENDED_RANK_ENABLED"
     )
+    # NX-139: axele de decizie DERIVATE din setul afișat (fațete DomainPack cu ≥2 valori distincte
+    # + interval de preț) intră ca input grounded în compunerea rich → intro-ul numește axe REALE
+    # (tip de ten / fitment / material — per vertical), nu superficiale. OFF → fără linia de axe
+    # (prompturile devin inerte pe partea asta), byte-identic cu azi.
+    decision_axes_enabled: bool = Field(default=True, validation_alias="DECISION_AXES_ENABLED")
+    # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
+    # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
+    # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).
+    spec_digits_grounded_enabled: bool = Field(
+        default=True, validation_alias="SPEC_DIGITS_GROUNDED_ENABLED"
+    )
     # NX-134 (IZI-parity P2): prima pagină de rezultate (pe `relevance`) se DIVERSIFICĂ — scară de
     # preț (terțe) + max 2 produse per brand — în loc de top-N aproape identice. Selecție greedy
     # deterministă peste candidații DEJA rankați (top-1/pick neschimbat). OFF (fail-safe) → ordinea
@@ -513,6 +535,62 @@ class Settings(BaseSettings):
     # Dezvăluirea AI (art. 50 AI Act): OFF = NU o adăugăm la mesaje (decizie 2026-06-26 — clientul o
     # consideră repetitivă). Reversibilă: ON o repune (o singură dată, idempotent în Sender).
     ai_disclaimer_enabled: bool = Field(default=False, validation_alias="AI_DISCLAIMER_ENABLED")
+    # NX-146: Turn Replay poate stoca corpul promptului (redactat) în evenimentul agent_prompt.
+    # Default OFF (PII + volum) — se aprinde doar pe dev / TTL scurt pentru debugging profund.
+    replay_store_prompt_enabled: bool = Field(
+        default=False, validation_alias="REPLAY_STORE_PROMPT_ENABLED"
+    )
+    # NX-148: extragerea + injectarea de conversation_facts (memorie structurată). OFF →
+    # fără extractor de facts și fără facts_block (degradare la memoria de bază: history + state).
+    conversation_facts_enabled: bool = Field(
+        default=True, validation_alias="CONVERSATION_FACTS_ENABLED"
+    )
+    # NX-160: Memory v2 generic (capture broad → classify safety → canonicalize → inject safe).
+    # Master kill-switch: OFF → comportament NX-148 (whitelist fail-closed per vertical, fără
+    # captură deschisă/safety/canonicalizare). ON → pipeline-ul generic pe orice business.
+    memory_v2_enabled: bool = Field(default=True, validation_alias="MEMORY_V2_ENABLED")
+    # captura LARGĂ (raw_key liber, nu whitelist fail-closed). OFF → doar cheile canonice.
+    memory_open_capture_enabled: bool = Field(
+        default=True, validation_alias="MEMORY_OPEN_CAPTURE_ENABLED"
+    )
+    # injectarea facts sigure în prompt. OFF → facts se persistă, dar `facts_block` nu injectează.
+    memory_safe_injection_enabled: bool = Field(
+        default=True, validation_alias="MEMORY_SAFE_INJECTION_ENABLED"
+    )
+    # canonicalizarea raw_key → canonical_key. OFF → facts rămân raw (codul nu le mapează).
+    memory_canonicalize_enabled: bool = Field(
+        default=True, validation_alias="MEMORY_CANONICALIZE_ENABLED"
+    )
+    # NX-159 felia 1: telemetrie de CALITATE a formei răspunsului (response_shape +
+    # completeness_gap), emisă GLOBAL din runner post-reply pe TOATE căile. Pur observabilitate
+    # (P10), zero LLM, ZERO text/PII (P12). OFF → nu se emit evenimentele (turul neschimbat).
+    response_telemetry_enabled: bool = Field(
+        default=True, validation_alias="RESPONSE_TELEMETRY_ENABLED"
+    )
+    # NX-159 felia 2 (thin-path repair): fiecare cale subțire cu kill-switch propriu.
+    # short-ack guard: un răspuns `simple`/nano SCURT („Da.") pe un context de vânzare deschis
+    # primește chips deterministe (categorii adiacente) → nu mai închide conversația sec.
+    short_ack_guard_enabled: bool = Field(default=True, validation_alias="SHORT_ACK_GUARD_ENABLED")
+    # no-result (sales fără produse): pe lângă întrebare, atașează chips deterministe cu căi
+    # concrete de continuare (popular / alt buget / altă categorie) → nu fundătură generică.
+    no_result_alternatives_enabled: bool = Field(
+        default=True, validation_alias="NO_RESULT_ALTERNATIVES_ENABLED"
+    )
+    # cheapest-already (nimic mai ieftin): atașează aceleași chips de continuare la mesajul
+    # existent (care are deja o întrebare) → opțiuni clickabile, nu doar text.
+    cheapest_alternatives_enabled: bool = Field(
+        default=True, validation_alias="CHEAPEST_ALTERNATIVES_ENABLED"
+    )
+    # NX-159 felia 3: injectează profilul de STIL (DomainPack.response_style) ca ghid în compunerea
+    # NON-rich (proză/order). Rich are deja regulile ei → neatins. OFF / stil gol → byte-identic.
+    response_style_enabled: bool = Field(default=True, validation_alias="RESPONSE_STYLE_ENABLED")
+
+    # --- Pool metrics (NX-161 Felia 0A) — instrumentare bot_pool ---
+    # Emite `pool_metrics` per tur (acquire-wait al checkout-ului + ocuparea pool-ului) → semnalul
+    # de WAIT în prod care declanșează fix-ul conn-per-op (docs/CONN-HOLD-ANALYSIS-2026.md). Pur
+    # observabilitate (P10), ZERO PII (P12 — business_id e UUID de tenant). OFF → nu se emite
+    # evenimentul (gauge-ul inflight din pool_metrics rămâne, folosit și de health).
+    pool_metrics_enabled: bool = Field(default=True, validation_alias="POOL_METRICS_ENABLED")
 
     @property
     def is_prod(self) -> bool:

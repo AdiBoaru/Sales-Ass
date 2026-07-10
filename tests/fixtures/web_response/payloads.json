@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "fixtures": {
+    "text_only": {
+      "content": "Salut! Spune-mi ce cauti si te ajut cu o recomandare.",
+      "products": [],
+      "suggestions": ["Caut o crema", "Vreau un cadou"]
+    },
+    "products": {
+      "content": "Iti recomand Fluid X la 58.99 lei.",
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Fluid X",
+          "price": 58.99,
+          "url": "https://shop.example/p/fluid-x",
+          "image_url": "https://img.example/fluid-x.jpg",
+          "rating": 4.8
+        }
+      ],
+      "suggestions": ["Ceva mai ieftin", "Compara cu alt produs"]
+    },
+    "offer": {
+      "content": "Am pregatit linkul de checkout pentru produsul ales.",
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Fluid X",
+          "price": 58.99,
+          "url": "https://shop.example/p/fluid-x"
+        }
+      ],
+      "suggestions": [],
+      "offer": {
+        "kind": "open_url",
+        "label": "Finalizeaza comanda",
+        "url": "https://shop.example/checkout?ref=t1"
+      }
+    },
+    "comparison": {
+      "content": "Compar primele doua optiuni.",
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Fluid X",
+          "price": 58.99,
+          "url": "https://shop.example/p/fluid-x"
+        },
+        {
+          "product_id": "p2",
+          "name": "Crema Y",
+          "price": 88.99,
+          "url": "https://shop.example/p/crema-y"
+        }
+      ],
+      "suggestions": ["O aleg pe prima", "Ceva mai ieftin"],
+      "comparison": {
+        "columns": [
+          {
+            "product_id": "p1",
+            "name": "Fluid X",
+            "price": 58.99,
+            "url": "https://shop.example/p/fluid-x"
+          },
+          {
+            "product_id": "p2",
+            "name": "Crema Y",
+            "price": 88.99,
+            "url": "https://shop.example/p/crema-y"
+          }
+        ],
+        "rows": [
+          { "label": "Pret", "values": ["58.99 lei", "88.99 lei"] },
+          { "label": "Rating", "values": ["4.8", "4.6"] }
+        ]
+      }
+    },
+    "no_match": {
+      "content": "Nu am gasit un produs care sa respecte exact cerinta. Pot cauta o alternativa apropiata.",
+      "products": [],
+      "suggestions": ["Arata alternative", "Vreau alta categorie"]
+    },
+    "fallback_error": {
+      "content": "Nu pot raspunde sigur acum. Reincearca in cateva momente sau lasa-mi mai multe detalii.",
+      "products": [],
+      "suggestions": []
+    },
+    "rate_limit": {
+      "content": "Ai trimis prea multe mesaje intr-un timp scurt. Reincearca putin mai tarziu.",
+      "products": [],
+      "suggestions": []
+    }
+  }
+}

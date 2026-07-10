@@ -6,6 +6,7 @@ Rollback la final → demo DB curat.
 """
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -90,6 +91,32 @@ async def test_insert_events_writes_rows_with_token_columns(pool):
 async def test_insert_events_empty_is_noop(pool):
     async with tenant_tx(pool) as (conn, _):
         assert await insert_events(conn, DEMO_BIZ, []) == 0
+
+
+async def test_fetch_turn_events_preserves_insertion_order_on_created_at_tie(pool):
+    """NX-146 felia 2 fix: `analytics_events.id` (identity, monotonic la insert) e tiebreaker-ul,
+    NU `event_type` (alfabetic, poate reordona artificial traiectoria unui tur când 2 evenimente
+    au exact același `created_at`, ex. inserate în aceeași tranzacție/batch)."""
+    from src.db.queries.analytics import fetch_turn_events
+
+    turn_id = str(uuid4())
+    async with tenant_tx(pool) as (conn, _):
+        ts = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
+        # „z_event" înainte de „a_event" — dacă tiebreaker-ul ar fi event_type, ordinea ar ieși
+        # inversată alfabetic; cu `id` ca tiebreaker, ordinea de inserare se păstrează.
+        await conn.execute(
+            """
+            insert into analytics_events (business_id, event_type, properties, turn_id, created_at)
+            values ($1, 'z_event', '{}'::jsonb, $2, $3::timestamptz),
+                   ($1, 'a_event', '{}'::jsonb, $2, $3::timestamptz)
+            """,
+            DEMO_BIZ,
+            turn_id,
+            ts,
+        )
+        await conn.execute("reset role")
+        events = await fetch_turn_events(conn, DEMO_BIZ, turn_id)
+        assert [e["event_type"] for e in events] == ["z_event", "a_event"]
 
 
 async def test_handle_turn_persists_runner_events(pool):

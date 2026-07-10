@@ -15,6 +15,7 @@ La epuizarea încercărilor, rândul devine 'dead' (vizibil, nu pierdut tăcut).
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 
 import httpx
 
@@ -96,6 +97,46 @@ async def _emit_render_path(
         )
     except Exception as e:  # noqa: BLE001 — observabilitate best-effort (livrarea a reușit)
         log.warning("render_path emit eșuat (%s)", type(e).__name__)
+
+
+def _outbox_lag_ms(row: dict) -> int | None:
+    created_at = row.get("created_at")
+    if created_at is None:
+        return None
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    return max(0, int((datetime.now(UTC) - created_at).total_seconds() * 1000))
+
+
+async def _emit_outbox_dispatch(
+    conn,
+    business_id: str,
+    row: dict,
+    status: str,
+    *,
+    duration_ms: int,
+) -> None:
+    """NX-147: lag/status event for dispatcher SLOs. Best-effort, never blocks delivery."""
+    props = {
+        "kind": row.get("kind", "message"),
+        "status": status,
+        "attempts": row.get("attempts"),
+        "priority": row.get("priority"),
+        "channel_kind": row.get("channel_kind"),
+        "duration_ms": duration_ms,
+    }
+    lag_ms = _outbox_lag_ms(row)
+    if lag_ms is not None:
+        props["lag_ms"] = lag_ms
+    try:
+        await insert_events(
+            conn,
+            business_id,
+            [Event("outbox_dispatch", props)],
+            conversation_id=row.get("conversation_id"),
+        )
+    except Exception as e:  # noqa: BLE001 - observability best-effort
+        log.warning("outbox_dispatch emit esuat (%s)", type(e).__name__)
 
 
 def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability]) -> str:
@@ -223,30 +264,83 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
     return "sent"
 
 
-async def dispatch_due(pool, registry: ChannelSenderRegistry, *, batch: int = 10) -> int:
+async def _dispatch_claimed_row(
+    business_id: str,
+    registry: ChannelSenderRegistry,
+    row: dict,
+    global_sem: asyncio.Semaphore,
+    tenant_sem: asyncio.Semaphore,
+) -> int:
+    """Dispatch one already-claimed row under bounded global and per-tenant concurrency."""
+    async with tenant_sem:
+        async with global_sem:
+            start = datetime.now(UTC)
+            status = "error"
+            async with tenant_conn(business_id) as conn:
+                try:
+                    status = await dispatch_row(conn, business_id, registry, row)
+                except Exception:  # noqa: BLE001 - one bad row must not stop the batch
+                    log.exception("eroare neasteptata la dispatch outbox %s", row["id"])
+                finally:
+                    duration_ms = int((datetime.now(UTC) - start).total_seconds() * 1000)
+                    await _emit_outbox_dispatch(
+                        conn, business_id, row, status, duration_ms=duration_ms
+                    )
+    return 1
+
+
+async def dispatch_due(
+    pool,
+    registry: ChannelSenderRegistry,
+    *,
+    batch: int = 10,
+    global_concurrency: int = 16,
+    tenant_concurrency: int = 4,
+) -> int:
     """Un ciclu: revendică și trimite rândurile scadente, per tenant. Întoarce
     numărul de rânduri tratate."""
     async with admin_conn(pool) as conn:
         business_ids = await business_ids_with_due_outbox(conn)
 
-    handled = 0
+    global_sem = asyncio.Semaphore(max(1, global_concurrency))
+    tenant_sems: dict[str, asyncio.Semaphore] = {}
+    tasks: list[asyncio.Task[int]] = []
     for business_id in business_ids:
         async with tenant_conn(business_id) as conn:
             rows = await claim_due(conn, business_id, limit=batch)
-            for row in rows:
-                try:
-                    await dispatch_row(conn, business_id, registry, row)
-                except Exception:  # noqa: BLE001 — un rând stricat nu oprește restul
-                    log.exception("eroare neașteptată la dispatch outbox %s", row["id"])
-                handled += 1
-    return handled
+        tenant_sem = tenant_sems.setdefault(
+            business_id, asyncio.Semaphore(max(1, tenant_concurrency))
+        )
+        for row in rows:
+            tasks.append(
+                asyncio.create_task(
+                    _dispatch_claimed_row(business_id, registry, row, global_sem, tenant_sem)
+                )
+            )
+    if not tasks:
+        return 0
+    return sum(await asyncio.gather(*tasks))
 
 
-async def run_dispatcher(pool, registry: ChannelSenderRegistry, *, idle_sleep: float = 2.0) -> None:
+async def run_dispatcher(
+    pool,
+    registry: ChannelSenderRegistry,
+    *,
+    idle_sleep: float = 0.5,
+    batch: int = 10,
+    global_concurrency: int = 16,
+    tenant_concurrency: int = 4,
+) -> None:
     """Bucla principală a dispatcher-ului (rulează până la anulare)."""
     log.info("dispatcher pornit (canale: %s)", registry.kinds())
     while True:
-        handled = await dispatch_due(pool, registry)
+        handled = await dispatch_due(
+            pool,
+            registry,
+            batch=batch,
+            global_concurrency=global_concurrency,
+            tenant_concurrency=tenant_concurrency,
+        )
         if handled == 0:
             await asyncio.sleep(idle_sleep)
 
@@ -282,7 +376,14 @@ async def _main() -> None:
     async with httpx.AsyncClient(timeout=15.0) as http:
         registry = build_registry(http, settings, redis)
         try:
-            await run_dispatcher(pool, registry)
+            await run_dispatcher(
+                pool,
+                registry,
+                idle_sleep=settings.dispatcher_idle_sleep_s,
+                batch=settings.dispatcher_batch_size,
+                global_concurrency=settings.dispatcher_global_concurrency,
+                tenant_concurrency=settings.dispatcher_tenant_concurrency,
+            )
         finally:
             if redis is not None:
                 await close_redis()

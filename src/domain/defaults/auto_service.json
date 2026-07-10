@@ -2,6 +2,13 @@
   "_note": "NX-114 seed auto_service — schelet; whitelist profil din profile._WHITELIST['auto'].",
   "currency": "RON",
   "concern_map": {},
+  "fact_type_whitelist": [
+    "vehicle_make",
+    "vehicle_model",
+    "part_category",
+    "budget_band",
+    "restriction"
+  ],
   "profile_whitelist": [
     "vehicle_make",
     "vehicle_model",
@@ -32,5 +39,13 @@
     }
   },
   "greetings": {},
-  "settled_order_statuses": ["delivered", "completed", "closed"]
+  "settled_order_statuses": ["delivered", "completed", "closed"],
+  "_response_style_note": "NX-159 felia 3: ghid de STIL pentru compunerea NON-rich (proza/order). INPUT de model; rich are regulile ei. Override per-tenant in businesses.settings.domain_pack.response_style.",
+  "response_style": {
+    "ton": "practic, competent, la obiect",
+    "nivel_detaliu": "standard — explica pe scurt compatibilitatea/potrivirea",
+    "reguli_salut": "saluta o singura data per conversatie",
+    "reguli_upsell": "upsell soft (piesa/serviciu complementar) — nu insista",
+    "disclaimere": "nu promite compatibilitate, stoc sau termene neconfirmate in date"
+  }
 }

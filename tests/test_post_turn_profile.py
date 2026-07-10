@@ -267,7 +267,7 @@ def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
         history=[_msg(Direction.INBOUND, "caut cremă pentru ten uscat, buget 80")],
         message=SimpleNamespace(body="buget 80"),
         conversation_id="conv1",
-        business=SimpleNamespace(id="biz1", vertical=vertical),
+        business=SimpleNamespace(id="biz1", vertical=vertical, settings={}),
         contact=SimpleNamespace(id="contact1", lead_score=lead_score),
         reply=SimpleNamespace(products=products),
         state=SimpleNamespace(displayed_products=[]),
@@ -277,9 +277,17 @@ def _ctx(*, vertical="beauty", lead_score=0.0, route="sales", products=None):
 def _patch(monkeypatch, *, delta, boom_update=False):
     sink: dict = {}
 
-    async def f_extract(llm, history, message, language):
+    async def f_extract(
+        llm, history, message, language, *, include_facts=True, canonical_keys=None
+    ):
         sink["extract_called"] = True
+        sink["extract_history_len"] = len(history)
+        sink["include_facts"] = include_facts
         return delta
+
+    async def f_window(conn, business_id, conversation_id, limit=20):
+        # NX-148: fereastra de extracție (20 mesaje) — stub, testele nu ating DB reală.
+        return []
 
     async def f_update(conn, business_id, contact_id, patch, score):
         if boom_update:
@@ -294,6 +302,7 @@ def _patch(monkeypatch, *, delta, boom_update=False):
         sink["events_contact"] = contact_id
 
     monkeypatch.setattr(proc, "extract_profile", f_extract)
+    monkeypatch.setattr(proc, "get_messages_for_extraction", f_window)
     monkeypatch.setattr(proc, "update_contact_profile_and_score", f_update)
     monkeypatch.setattr(proc, "cost_add", f_cost)
     monkeypatch.setattr(proc, "insert_events", f_events)
@@ -407,6 +416,39 @@ async def test_dropped_keys_emitted_even_without_db_write(monkeypatch):
     # semnalul NX-43 rămâne (+ turn_id NX-122)
     assert ("profile_key_dropped", {"key": "fav_color", "turn_id": "turn-1"}) in sink["events"]
     assert sink["events_contact"] == "contact1"
+
+
+async def test_facts_extracted_event_mixes_canonical_and_raw(monkeypatch):
+    # fix review Codex #201: un fact RAW safe (canonical_key=None, fără fact_type) nu trebuie să
+    # bage None în `types` (TypeError la sorted → `facts_persist_failed` FALS). Mix canonical + raw.
+    from src.worker.profile import FactCandidate
+
+    delta = ProfileDelta(
+        profile_patch={},
+        lead_signals=LeadSignals(buying_stage="narrowing"),
+        facts=[
+            FactCandidate(raw_key="preferred_brand", fact_value="CeraVe", confidence=0.9),
+            FactCandidate(raw_key="favorite_color", fact_value="verde", confidence=0.8),  # raw safe
+        ],
+    )
+    sink = _patch(monkeypatch, delta=delta)
+
+    captured: dict = {}
+
+    async def f_upsert(conn, business_id, contact_id, conversation_id, facts):
+        captured["kept"] = facts  # persistarea reușește (fără _FakeConn.executemany)
+        return len(facts)
+
+    monkeypatch.setattr(proc, "upsert_facts", f_upsert)
+    await proc._extract_profile_and_score(
+        _FakeConn(), object(), _ctx(), object(), shadow_mode=False
+    )
+    types = [e for e in sink["events"] if e[0] == "facts_extracted"]
+    assert types, "facts_extracted trebuie emis (persistarea a reușit)"
+    assert types[0][1]["types"] == ["fav_brands", "favorite_color"]  # sortat, fără None
+    # NU trebuie să apară persist_failed fals
+    assert not any(e[0] == "facts_persist_failed" for e in sink["events"])
+    assert len(captured["kept"]) == 2
 
 
 async def test_kill_switch_disables_hook(monkeypatch):

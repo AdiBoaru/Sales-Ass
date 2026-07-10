@@ -18,11 +18,12 @@ from time import perf_counter
 import asyncpg
 from redis.asyncio import Redis
 
-from src.agent import usage
+from src.agent import response_quality, usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
 from src.config import get_settings
+from src.db.provider import DbProvider, static_db
 from src.models import TurnContext, TurnUsage
 
 log = logging.getLogger(__name__)
@@ -30,14 +31,27 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class PipelineDeps:
-    """Resursele pe care le primesc stagiile. Conexiunea e DEJA tenant-scoped.
+    """Resursele pe care le primesc stagiile.
+
+    NX-161 Felia 0B: `db` (provider tenant-scoped) e noul contract — `async with deps.db() as conn`
+    ia o conexiune DOAR cât ține operația. `conn` (DEPRECATED, scos la Felia 7) rămâne pentru compat
+    cât timp stagiile nu-s migrate. Puntea de compat (`__post_init__`): `PipelineDeps(conn=...)` —
+    cele 114 usage-uri din teste — primesc automat un provider static, fără rescriere.
     `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios.
     `media` poate fi None (fără canal cu download configurat) → media routing fail-soft (NX-76)."""
 
-    conn: asyncpg.Connection
+    conn: asyncpg.Connection | None = None  # DEPRECATED (Felia 7 îl scoate) — vezi `db`
     redis: Redis | None = None
     llm: LLMClient | None = None
     media: MediaFetcherRegistry | None = None
+    db: DbProvider | None = None
+
+    def __post_init__(self) -> None:
+        # Puntea de compat: `PipelineDeps(conn=...)` capătă un provider static → `deps.db()`
+        # yield-uiește conn-ul injectat, fără checkout nou. `db` explicit are întâietate (nu-l
+        # suprascriem). `conn=None` (multe teste) → `db` rămâne None (stagiul nu-l atinge oricum).
+        if self.db is None and self.conn is not None:
+            self.db = static_db(self.conn)
 
 
 # Un stagiu: mutează `ctx` pe loc; poate seta ctx.reply pentru early exit.
@@ -70,6 +84,8 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
             if ctx.reply is not None or ctx.halt:
                 ctx.emit("pipeline_early_exit", stage=name)
+                if ctx.reply is not None:  # halt (tăcere) n-are reply de măsurat
+                    _emit_response_shape(ctx, name)
                 break
         else:
             ctx.emit("pipeline_complete")
@@ -164,6 +180,23 @@ def _emit_turn_budget(
         slow_name,
         round(slow_ms),
     )
+
+
+def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
+    """NX-159 felia 1: telemetrie de CALITATE a formei răspunsului, GLOBAL post-reply. Emis din
+    runner (P10: runner măsoară, stagiile nu știu) pe TOATE căile cu reply. `response_shape` = forma
+    (lungimi/booleeni/rută/stagiu, ZERO text/PII, P12); `completeness_gap` doar când lipsește ceva
+    (sales/order/clarify). Pur observabilitate, NON-blocant: o excepție NU pică turul (P6)."""
+    if not get_settings().response_telemetry_enabled:
+        return
+    try:
+        ctx.emit("response_shape", **response_quality.reply_shape(ctx, stage))
+        gaps = response_quality.completeness_gaps(ctx)
+        if gaps:
+            intent = ctx.route.route.value if ctx.route and ctx.route.route else None
+            ctx.emit("completeness_gap", intent=intent, missing=gaps)
+    except Exception as e:  # noqa: BLE001 — telemetria nu blochează livrarea
+        log.warning("runner: response_shape a eșuat (%s)", type(e).__name__)
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.agent import validator as val  # NX-142: safety kill-switch se citește din validator
 from src.agent.prompt_builder import (
     PromptInputs,
     build_agent_system,
@@ -17,8 +18,7 @@ from src.agent.prompt_builder import (
     build_rich_system,
 )
 from src.worker import compose
-from src.worker.stages import agent as ag
-from src.worker.stages.agent import _valid
+from src.worker.stages.agent import _valid  # re-export
 from src.worker.text_scrub import has_medical_claim
 
 # --------------------------------------------------------------------------- #
@@ -67,7 +67,7 @@ _PRODUCTS = [{"id": "p1", "name": "Crema A", "price": 80.0, "url": "https://shop
 
 def _settings(monkeypatch, *, safety=True):
     monkeypatch.setattr(
-        ag,
+        val,
         "get_settings",
         lambda: SimpleNamespace(
             validator_bare_numbers_enabled=False,

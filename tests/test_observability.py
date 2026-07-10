@@ -6,6 +6,7 @@ iar calea agent rulează cu LLM scriptat + tool-uri monkeypatch-uite (ca test_ag
 
 import pytest
 
+from src.agent import finalize as finalize_mod
 from src.db.queries.analytics import insert_events
 from src.models import (
     BusinessConfig,
@@ -233,7 +234,7 @@ def _patch_search(monkeypatch, products):
 async def test_tool_call_event_enriched_on_success(monkeypatch):
     _patch_search(monkeypatch, _PRODUCTS)
     # _finalize_rich → None (fără complete_schema) ar emite rich_downgraded; îl forțăm None curat.
-    monkeypatch.setattr(agent_mod, "_finalize_rich", _none_rich)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _none_rich)
     llm = _FakeLLM(
         tool_calls=[
             (
@@ -262,7 +263,7 @@ async def test_tool_call_event_enriched_on_success(monkeypatch):
 
 
 async def test_tool_call_event_on_failure_has_error_no_pii(monkeypatch):
-    monkeypatch.setattr(agent_mod, "_finalize_rich", _none_rich)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _none_rich)
     # tool inexistent → run_tool întoarce ok=False; args necunoscute → {} (fără PII).
     llm = _FakeLLM(tool_calls=[("necunoscut", {"order_ref": "ORD-9"})], final="ok")
     ctx = _ctx()
@@ -285,7 +286,7 @@ async def _empty_rich(*a, **k):
 
 async def test_rich_downgraded_structured_call_failed(monkeypatch):
     _patch_search(monkeypatch, _PRODUCTS)
-    monkeypatch.setattr(agent_mod, "_finalize_rich", _none_rich)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _none_rich)
     llm = _FakeLLM(
         tool_calls=[("search_products", {"query": "cremă", "category": "creme"})],
         final="Îți recomand aceste produse.",
@@ -298,7 +299,7 @@ async def test_rich_downgraded_structured_call_failed(monkeypatch):
 
 async def test_rich_downgraded_all_items_dropped(monkeypatch):
     _patch_search(monkeypatch, _PRODUCTS)
-    monkeypatch.setattr(agent_mod, "_finalize_rich", _empty_rich)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _empty_rich)
     llm = _FakeLLM(
         tool_calls=[("search_products", {"query": "cremă", "category": "creme"})],
         final="Îți recomand aceste produse.",
@@ -311,7 +312,7 @@ async def test_rich_downgraded_all_items_dropped(monkeypatch):
 
 async def test_all_events_of_a_turn_share_turn_id(monkeypatch):
     _patch_search(monkeypatch, _PRODUCTS)
-    monkeypatch.setattr(agent_mod, "_finalize_rich", _none_rich)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _none_rich)
     llm = _FakeLLM(
         tool_calls=[("search_products", {"query": "cremă", "category": "creme"})],
         final="Îți recomand aceste produse.",

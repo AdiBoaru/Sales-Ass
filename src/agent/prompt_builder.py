@@ -117,15 +117,19 @@ Răspunzi DOAR cu JSON conform schemei.
 
 REGULI DURE:
 - NU scrii prețuri, linkuri, ratinguri, procente, număr de recenzii, termene de livrare sau ORICE
-  cifră. Codul le pune din date. Tu scrii DOAR cuvinte. SINGURA excepție: în `intro` poți relua
-  bugetul EXACT pe care l-a scris CLIENTUL (ex. „sub 80 lei") — e cifra LUI, nu un preț de produs.
+  cifră. Codul le pune din date. Tu scrii DOAR cuvinte. DOUĂ excepții: (a) în `intro` poți relua
+  bugetul EXACT pe care l-a scris CLIENTUL (ex. „sub 80 lei") — e cifra LUI, nu un preț de produs;
+  (b) poți relua o VALOARE DE SPECIFICAȚIE exact cum apare în numele/„fațetele" produselor AFIȘATE
+  (nivel de protecție, gramaj, dimensiune, capacitate — ex. „SPF 30", „50 ml") — NICIODATĂ prețuri,
+  ratinguri, procente sau termene, și NICIODATĂ o valoare care nu apare în datele afișate.
 
 - `intro` = 2 fraze care DESCHID alegerea, ca un consultant:
   (1) reia nevoia clientului în cuvintele LUI + o calitate a setului (ex. „Am ales câteva {produse}
       {potrivite/eficiente} pentru {nevoia lui}"); dacă a dat un buget, poți păstra cifra LUI.
-  (2) prezintă SPECTRUL de mai jos pe 1-2 AXE reale prin care variază setul — tipuri / texturi /
-      branduri / game (le vezi în „descriere"/„fațete"): „Mai jos ai variante {axa1} și {axa2}, ca
-      să poți alege ce ți se potrivește." Axe REALE, nu generic. Doar cuvinte, fără cifre.
+  (2) prezintă SPECTRUL de mai jos pe 1-2 AXE reale prin care variază setul. DACĂ primești linia
+      „Axe pe care variază setul", ia axele DE ACOLO (sunt derivate din date) — nu inventa axe
+      superficiale (formă/ambalaj) când ai axe reale. Fără linie → axele din „descriere"/„fațete":
+      „Mai jos ai variante {axa1} și {axa2}, ca să poți alege ce ți se potrivește."
   REFINE — dacă mesajul RESTRÂNGE o cerere anterioară (adaugă o constrângere: „fără parfum", un
   buget, un SPF/atribut anume, „cea mai ieftină"), CONFIRMĂ explicit constrângerea în fraza (1):
   „Am selectat DOAR {constrângerea}…" (ex. „Am găsit șampoane fără parfum…"; „…care intră în bugetul
@@ -162,6 +166,10 @@ REGULI DURE:
       clientul a dat o constrângere (buget / „fără parfum" / atribut), LEAG-O explicit de pick
       („rămâne în bugetul tău", „fără parfum, cum ai cerut") — ancorare personală, ca la iZi;
   (3) FALLBACK condiționat: „Dacă {alt profil/nevoie}, {alt produs} e o alegere bună."
+  SEGMENTARE (ca iZi): dacă produsele afișate acoperă SEGMENTE diferite pe o axă din „Axe pe care
+  variază setul" (valori diferite ale aceleiași fațete), dă câte o recomandare CONDIȚIONATĂ per
+  segment — „dacă ești/ai {valoarea}, {produsul} e alegerea potrivită" — pentru 2-3 segmente, în
+  loc de un singur fallback generic. Fiecare segment cu produsul LUI din listă.
   Concret, legat de produsele afișate, NU generic. Recomandarea trăiește AICI, în proză — NU scrie
   o linie separată de tip «Recomandarea mea».
 
@@ -209,6 +217,30 @@ reduce aspectul ridurilor). Pentru orice problemă de SĂNĂTATE sau întrebare 
 sarcină/alăptare/alergii, recomandă clientului să consulte un medic/specialist."""
 
 
+# NX-159 felia 3: cheile profilului de stil în ordinea de afișare + eticheta RO (blocul e INPUT de
+# model, ca `axes_block` — modelul răspunde în limba clientului). Ordine stabilă → determinist.
+_STYLE_LABELS: tuple[tuple[str, str], ...] = (
+    ("ton", "ton"),
+    ("nivel_detaliu", "nivel de detaliu"),
+    ("reguli_salut", "salut"),
+    ("reguli_upsell", "upsell"),
+    ("disclaimere", "de evitat"),
+)
+
+
+def response_style_block(style: dict[str, str] | None) -> str:
+    """NX-159 felia 3: ghidul de STIL per business (ton/detaliu/salut/upsell/disclaimere) ca bloc
+    compact pentru compunerea NON-rich (proză/order). Determinist, din DomainPack (P9). Gol/None →
+    "" (byte-identic cu azi). Kill-switch-ul îl verifică caller-ul (`render`). Nu e grounding —
+    doar formă/ton; validatorul rămâne poarta pentru cifre/claims (P2)."""
+    if not style:
+        return ""
+    lines = [f"- {label}: {style[key]}" for key, label in _STYLE_LABELS if style.get(key)]
+    if not lines:
+        return ""
+    return "Stil de răspuns (respectă-l, fără să inventezi date):\n" + "\n".join(lines) + "\n"
+
+
 @dataclass(frozen=True)
 class PromptInputs:
     """Datele din care se compune promptul, toate din DB scoped pe business_id. Câmpuri
@@ -221,6 +253,10 @@ class PromptInputs:
     categories: tuple[str, ...] = ()
     aliases: tuple[tuple[str, str], ...] = ()  # (phrase_norm, target) aprobate
     currency: str = "RON"  # NX-114: moneda din DomainPack; afișarea prețurilor în prompt
+    # NX-159 felia 3: profilul de stil per business (DomainPack.response_style), ca tuple HASHABLE
+    # (cheie lru_cache). Injectat în `build_agent_system`/`build_reco_system` (NU rich). Gol → fără
+    # ghid de stil (prefix byte-identic). Sortat determinist → cache stabil.
+    response_style: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def build(
@@ -231,6 +267,7 @@ class PromptInputs:
         categories: list[str],
         aliases: list[tuple[str, str]],
         currency: str = "RON",
+        response_style: dict[str, str] | None = None,
     ) -> PromptInputs:
         """Constructor tolerant: normalizează la tuple + sortează DETERMINIST (chiar dacă DB
         n-ar fi sortat) → același set ⇒ prefix byte-identic indiferent de ordinea rândurilor."""
@@ -241,6 +278,9 @@ class PromptInputs:
             categories=tuple(sorted(c for c in categories if c)),
             aliases=tuple(sorted((p, t) for p, t in aliases if p)),
             currency=currency or "RON",
+            response_style=tuple(
+                sorted((k, v) for k, v in (response_style or {}).items() if k and v)
+            ),
         )
 
 
@@ -275,14 +315,18 @@ def build_agent_system(inp: PromptInputs) -> str:
     block = _TOOLS_BLOCK.replace(
         "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
     )
-    return f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
+    base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
+    # NX-159 felia 3: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR (non-rich),
+    # nu doar la retry. Gol → byte-identic. Rich re-compune cu `build_rich_system` (neatins).
+    style = response_style_block(dict(inp.response_style))
+    return f"{base}\n{style}" if style else base
 
 
 @lru_cache(maxsize=256)
 def build_reco_system(inp: PromptInputs) -> str:
     """System de recompunere/retry (înlocuiește `_RECO_SYSTEM`), tot static per business."""
     cur = _currency_label(inp.currency)  # NX-114: moneda din DomainPack (byte-identic pt RON)
-    return (
+    base = (
         f"{_store_header(inp)}\n"
         "Primești întrebarea clientului și o listă de produse din catalog (cu prețuri REALE).\n"
         "Recomanzi 2-3 produse potrivite, în limba clientului, prietenos și concis. Pentru "
@@ -293,6 +337,9 @@ def build_reco_system(inp: PromptInputs) -> str:
         "sunt în listă; dacă un brand cerut\nnu apare, spune că nu-l avem. Maxim 3 produse."
         f"\n{_SAFETY_RULES}"
     )
+    # NX-159 felia 3: același ghid de stil pe calea de recompunere/retry (consecvent cu bucla).
+    style = response_style_block(dict(inp.response_style))
+    return f"{base}\n{style}" if style else base
 
 
 @lru_cache(maxsize=256)

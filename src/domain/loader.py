@@ -175,6 +175,9 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         profile_whitelist=frozenset(
             k for k in (merged.get("profile_whitelist") or []) if isinstance(k, str)
         ),
+        fact_type_whitelist=frozenset(
+            k for k in (merged.get("fact_type_whitelist") or []) if isinstance(k, str)
+        ),
         settled_order_statuses=tuple(
             s for s in (merged.get("settled_order_statuses") or []) if isinstance(s, str)
         ),
@@ -185,6 +188,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         searchable_facets=tuple(
             k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
         ),
+        response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
     )
 
 

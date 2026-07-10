@@ -58,3 +58,42 @@ async def insert_events(
         rows,
     )
     return len(rows)
+
+
+async def fetch_turn_events(conn: asyncpg.Connection, business_id: str, turn_id: str) -> list[dict]:
+    """Citește evenimentele unui tur pentru REPLAY/suport (NX-146) — ordonate cronologic.
+
+    Excepție documentată de la „append-only, niciun SELECT din runtime" (vezi docstring-ul
+    modulului): ăsta NU e apel din pipeline, ci un tool de suport/ops. Tenant-scoped (P7:
+    `WHERE business_id = $1 AND turn_id = $2` — indexul `(business_id, turn_id)` face
+    filtrarea ieftină pe tabelul partiționat). Evenimentele sunt deja redactate la emitere
+    (P12); scriptul de replay mai redactează defensiv corpurile de mesaje. `properties` e
+    decodat din jsonb în dict."""
+    rows = await conn.fetch(
+        """
+        select event_type, conversation_id, properties, tokens_in, tokens_out,
+               cost_usd, created_at
+        from analytics_events
+        where business_id = $1 and turn_id = $2
+        order by created_at, id
+        """,
+        business_id,
+        turn_id,
+    )
+    out: list[dict] = []
+    for r in rows:
+        props = r["properties"]
+        if isinstance(props, str):
+            props = json.loads(props) if props else {}
+        out.append(
+            {
+                "event_type": r["event_type"],
+                "conversation_id": r["conversation_id"],
+                "properties": props or {},
+                "tokens_in": r["tokens_in"],
+                "tokens_out": r["tokens_out"],
+                "cost_usd": r["cost_usd"],
+                "created_at": r["created_at"],
+            }
+        )
+    return out

@@ -12,13 +12,23 @@ from pathlib import Path
 
 import pytest
 
+from src.agent import deterministic as deterministic_mod
+from src.agent import planner as planner_mod
 from src.agent.llm import ModerationResult
 from src.config import get_settings
-from src.evals.golden import GoldenExpect, evaluate_reply, load_cases, run_case
+from src.evals.golden import (
+    GoldenExpect,
+    evaluate_reply,
+    load_cases,
+    run_case,
+    run_conversation,
+)
 from src.models import (
     BusinessConfig,
     Contact,
+    Event,
     InboundMessage,
+    RetrievalResult,
     Route,
     RouteDecision,
     TurnContext,
@@ -31,6 +41,7 @@ from src.worker.stages import gates as gates_mod
 from src.worker.stages import triage as triage_mod
 
 CASES = load_cases(Path(__file__).parent / "golden" / "cases.json")
+CONVERSATIONS = load_cases(Path(__file__).parent / "golden" / "conversations.json")
 
 
 # --- LLM scriptat (zero apeluri reale) ---------------------------------------
@@ -39,10 +50,17 @@ CASES = load_cases(Path(__file__).parent / "golden" / "cases.json")
 class ScriptedLLM:
     """LLM determinist scriptat din `fixtures`. Implementează exact metodele chemate
     de pipeline: `moderate` (gates), `embed` (cache + tool-uri), `classify_json`
-    (triaj), `run_tool_loop` + `complete` (agent + validator retry)."""
+    (triaj), `run_tool_loop` + `complete` (agent + validator retry).
 
-    def __init__(self, fx: dict) -> None:
-        self._fx = fx
+    `fx` poate fi un dict (caz single-tur) sau un getter fără argumente care întoarce
+    fixtures-ul turului CURENT (caz multi-tur — comutat de `on_turn`)."""
+
+    def __init__(self, fx) -> None:
+        self._get = fx if callable(fx) else (lambda: fx)
+
+    @property
+    def _fx(self) -> dict:
+        return self._get()
 
     async def moderate(self, text, *, model=None):
         m = self._fx.get("moderation", {})
@@ -71,15 +89,19 @@ class ScriptedLLM:
 
 
 def _apply_stubs(monkeypatch, fixtures: dict) -> None:
-    catalog = list(fixtures.get("catalog", []))
-    categories = list(fixtures.get("categories", []))
-    by_id = {p["id"]: p for p in catalog}
+    """Stub-uri DB pentru un caz single-tur (fixtures fix)."""
+    _apply_stubs_dyn(monkeypatch, lambda: fixtures)
+
+
+def _apply_stubs_dyn(monkeypatch, get_fx) -> None:
+    """Stub-uri DB care citesc fixture-urile turului CURENT prin `get_fx()` (multi-tur:
+    catalogul/categoriile pot diferi de la un tur la altul)."""
 
     async def fake_categories(conn, business_id):
-        return list(categories)
+        return list(get_fx().get("categories", []))
 
     async def fake_search(conn, business_id, vec, **kwargs):
-        return list(catalog)
+        return list(get_fx().get("catalog", []))
 
     async def fake_lexical(conn, business_id, **kwargs):  # NX-113b: lexical rulează MEREU (hibrid)
         return []
@@ -88,7 +110,27 @@ def _apply_stubs(monkeypatch, fixtures: dict) -> None:
         return True
 
     async def fake_by_ids(conn, business_id, ids, **kwargs):
+        by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
         return [by_id[i] for i in ids if i in by_id]
+
+    # NX-145 multi-tur: re-hidratarea grounded a produselor AFIȘATE (agent.py:494) cheamă
+    # `get_products_by_ids` importat direct în agent.py (binding propriu, ≠ catalog_tools) →
+    # stub pe modulul agent ca follow-up-urile neclasificate să răspundă din catalogul turului.
+    async def fake_by_ids_direct(conn, business_id, ids, **kwargs):
+        by_id = {p["id"]: p for p in get_fx().get("catalog", [])}
+        return [by_id[i] for i in ids if i in by_id]
+
+    async def fake_search_cheaper_than(conn, business_id, ref_ids, baseline, **kwargs):
+        return list(get_fx().get("cheaper", []))
+
+    async def fake_complementary(conn, business_id, product_id, **kwargs):
+        return list(get_fx().get("complementary", []))
+
+    # PRE-loop deterministic intents (`link` / `compare`) import `get_products_by_ids` directly.
+    monkeypatch.setattr(deterministic_mod, "get_products_by_ids", fake_by_ids_direct)
+    monkeypatch.setattr(planner_mod, "get_products_by_ids", fake_by_ids_direct)
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", fake_search_cheaper_than)
+    monkeypatch.setattr(planner_mod, "get_complementary_products", fake_complementary)
 
     async def none_lookup(*args, **kwargs):
         return None
@@ -137,10 +179,70 @@ async def test_golden_case(case, monkeypatch):
     assert result.passed, f"{case.id}: {result.failures}"
 
 
+# --- gate CI: conversații MULTI-TUR (state curge între tururi) ----------------
+
+
+def _build_conv_ctx(case) -> TurnContext:
+    """ctx seed pentru o conversație: primul tur; `advance_turn` mută la tururile 2+."""
+    first = case.turns[0].input if case.turns else case.input
+    return TurnContext(
+        turn_id=f"golden-{case.id}",
+        business=BusinessConfig(id="biz-golden", slug="golden", name="Golden"),
+        contact=Contact(id="contact-golden", business_id="biz-golden"),
+        message=InboundMessage(provider_msg_id=f"m-{case.id}-0", body=first),
+        conversation_id=f"conv-{case.id}",
+        language=case.language,
+    )
+
+
+@pytest.mark.parametrize("case", CONVERSATIONS, ids=[c.id for c in CONVERSATIONS])
+async def test_golden_conversation(case, monkeypatch):
+    """Rulează o conversație multi-tur prin pipeline-ul REAL, comutând fixtures-ul LLM +
+    stub-urile DB pe turul curent. Fiecare tur trebuie să treacă (rută/tool-uri/produse/
+    constrângeri/text) — verifică memoria scurtă care curge prin `ctx.state` + history."""
+    holder = {"fx": case.turns[0].fixtures if case.turns else {}}
+    _apply_stubs_dyn(monkeypatch, lambda: holder["fx"])
+    ctx = _build_conv_ctx(case)
+    deps = PipelineDeps(conn=object(), redis=None, llm=ScriptedLLM(lambda: holder["fx"]))
+
+    def on_turn(i, turn):
+        holder["fx"] = turn.fixtures
+
+    results = await run_conversation(
+        ctx, deps, DEFAULT_STAGES, case.turns, case_id=case.id, on_turn=on_turn
+    )
+
+    for res in results:
+        assert res.passed, f"{res.case_id}: {res.failures}"
+
+
+def test_all_conversations_present():
+    """Plasa de regresie pentru cazurile MULTI-TUR (NX-145 felia 2): ≥10 conversații care
+    acoperă memoria (constraint carry / topic-switch reset), limbi non-RO (HU/EN) și
+    adversarial mid-conversație (preț/produs inventat). Fiecare conversație are ≥1 tur."""
+    ids = {c.id for c in CONVERSATIONS}
+    required = {
+        "conv-greeting-then-sales",
+        "conv-sales-refine-carries-category",
+        "conv-sales-cheaper-link-3turn",
+        "conv-sales-then-injection-price-blocked",
+        "conv-order-then-thanks",
+        "conv-sales-topic-switch-resets-constraints",
+        "conv-sales-no-result-no-invention",
+        "conv-hu-sales-refine",
+        "conv-greeting-sales-refine-3turn",
+        "conv-en-sales-refine",
+        "conv-sales-then-invented-product-blocked",
+    }
+    assert required <= ids
+    assert len(CONVERSATIONS) >= 10
+    assert all(c.turns for c in CONVERSATIONS), "orice conversație are ≥1 tur"
+
+
 def test_all_seed_cases_present():
     """Plasa de regresie: cazurile seed (G8-1) + securitate (NX-16) sunt încărcate."""
     ids = {c.id for c in CASES}
-    assert ids == {
+    required = {
         # G8-1: pipeline de bază (rutare / grounding / anti-halucinație / P6)
         "greeting-simple",
         "sales-grounded",
@@ -156,6 +258,10 @@ def test_all_seed_cases_present():
         "injection-legal-threat-handoff",
         "injection-ignore-instructions-stays-grounded",
     }
+    adversarial = [c for c in CASES if c.id.startswith(("injection-", "adversarial-"))]
+    assert required <= ids
+    assert len(CASES) >= 50
+    assert len(adversarial) >= 8
 
 
 # --- NX-16: proba anti-teatru (fiecare caz PICĂ dacă guard-ul lui e scos) -----
@@ -164,7 +270,13 @@ def test_all_seed_cases_present():
 async def _disable_guard(monkeypatch, which: str) -> None:
     """Dezactivează un guard determinist (pt proba că un caz de injection e load-bearing)."""
     if which == "validator":
+        # NX-144: guardul de proză trăiește și în agent_stage (check direct) și în `finalize`
+        # (`_finalize*`) → dezactivăm `_valid` în AMBELE, altfel atacul rămâne blocat de finalize.
+        from src.agent import finalize as finalize_mod
+
         monkeypatch.setattr(agent_mod, "_valid", lambda *a, **k: True)  # acceptă orice text
+        monkeypatch.setattr(finalize_mod, "_valid", lambda *a, **k: True)
+        monkeypatch.setattr(planner_mod, "_valid", lambda *a, **k: True)
     elif which == "moderation":
 
         async def _no_block(ctx, deps):
@@ -262,3 +374,61 @@ def test_evaluate_reply_required_route_but_none_fails():
     res = evaluate_reply(ctx, GoldenExpect(route="sales"), case_id="gated")
     assert res.passed is False
     assert any("route" in f for f in res.failures)
+
+
+def test_evaluate_reply_checks_expected_tools():
+    ctx = _ran_ctx("recomandare", route=Route.SALES)
+    ctx.events.append(Event("tool_call", {"tool": "search_products"}))
+
+    ok = evaluate_reply(ctx, GoldenExpect(expected_tools=["search_products"]), case_id="tool-ok")
+    bad = evaluate_reply(ctx, GoldenExpect(expected_tools=["compare_products"]), case_id="tool-bad")
+
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("tool lipsă" in f for f in bad.failures)
+
+
+def test_evaluate_reply_fails_on_unexpected_extra_tool():
+    # P2: tool-urile chemate trebuie să fie ⊆ expected_tools — un tool extra neasteptat pică
+    ctx = _ran_ctx("recomandare", route=Route.SALES)
+    ctx.events.append(Event("tool_call", {"tool": "search_products"}))
+    ctx.events.append(Event("tool_call", {"tool": "cart_add"}))
+
+    res = evaluate_reply(
+        ctx, GoldenExpect(expected_tools=["search_products"]), case_id="tool-extra"
+    )
+
+    assert res.passed is False
+    assert any("tool neasteptat" in f or "tool neașteptat" in f for f in res.failures)
+
+
+def test_evaluate_reply_checks_expected_product_ids():
+    ctx = _ran_ctx("Crema A", route=Route.SALES)
+    ctx.retrieval = RetrievalResult(products=[{"id": "p1", "name": "Crema A"}])
+
+    ok = evaluate_reply(ctx, GoldenExpect(expected_product_ids=["p1"]), case_id="pid-ok")
+    bad = evaluate_reply(ctx, GoldenExpect(expected_product_ids=["p2"]), case_id="pid-bad")
+
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("product_id lipsă" in f for f in bad.failures)
+
+
+def test_evaluate_reply_checks_expected_constraints():
+    ctx = _ran_ctx("sub 80", route=Route.SALES)
+    ctx.state.search_constraints = {"budget_max": 80.0, "category_key": "creme"}
+
+    ok = evaluate_reply(
+        ctx,
+        GoldenExpect(expected_constraints={"budget_max": 80.0, "category_key": "creme"}),
+        case_id="constraints-ok",
+    )
+    bad = evaluate_reply(
+        ctx,
+        GoldenExpect(expected_constraints={"budget_max": 50.0}),
+        case_id="constraints-bad",
+    )
+
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("constraint" in f for f in bad.failures)

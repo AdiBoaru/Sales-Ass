@@ -1,0 +1,67 @@
+# Auto-deploy nativx pe VPS — VARIANTA B (build în CI, VPS trage imaginea).
+#
+# Flux la push pe `main`:
+#   1. GitHub construiește imaginea (pe runnerele lor, nu pe VPS) și o urcă în
+#      ghcr.io/adiboaru/sales-ass.
+#   2. GitHub intră prin SSH pe VPS și face: git pull → docker compose pull → up -d.
+#      ZERO build pe VPS (esențial pe 1 vCPU) → deploy în secunde, fără spike de CPU.
+#
+# Secrete necesare (Settings → Secrets → Actions):
+#   VPS_HOST=72.62.34.245  ·  VPS_USER=root  ·  VPS_SSH_KEY=<cheia privată de deploy>
+# Imaginea din ghcr trebuie făcută PUBLIC o dată (repo-ul e oricum public) ca VPS-ul
+# s-o poată trage fără login. Vezi DEPLOY.md §Auto-deploy.
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # buton de deploy manual din tab-ul Actions
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write           # push în ghcr
+
+env:
+  IMAGE: ghcr.io/adiboaru/sales-ass
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builder cu driver docker-container — necesar pentru cache-ul gha (type=gha).
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login la GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push imaginea
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy pe VPS (pull + up, fără build)
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'cd /opt/nativextech/nativx && git pull --ff-only && docker compose pull && docker compose up -d && docker compose ps'
