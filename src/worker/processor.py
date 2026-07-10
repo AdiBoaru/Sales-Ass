@@ -25,6 +25,8 @@ from src.cache.canonical import canonicalize, classify_volatility
 from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
+from src.db.connection import bot_pool_stats
+from src.db.pool_metrics import take_acquire_wait
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import get_data_version
 from src.db.queries.contacts import get_or_create_contact, update_contact_profile_and_score
@@ -671,6 +673,12 @@ async def handle_turn(
     # NX-148: acoperirea memoriei (chei/contoare, nu valori — P12).
     if facts:
         ctx.emit("facts_injected", n_injected=len(facts))
+
+    # Felia 0A (NX-161): semnalul de WAIT (acquire-wait al checkout-ului, din tenant_conn prin
+    # ContextVar) + ocuparea pool-ului (in_use/idle/inflight), corelat pe tur. Declanșatorul
+    # deciziei de conn-per-op (docs/CONN-HOLD-ANALYSIS-2026.md §Faza 0A). P10/P12: fără PII.
+    if _s.pool_metrics_enabled:
+        ctx.emit("pool_metrics", acquire_wait_ms=take_acquire_wait(), **bot_pool_stats())
 
     # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
     if verified_customer_ref:

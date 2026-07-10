@@ -30,12 +30,14 @@ import socket
 import ssl
 import sys
 from contextlib import asynccontextmanager
+from time import perf_counter
 from urllib.parse import unquote, urlparse
 
 import asyncpg
 
 from src.config import get_settings
 from src.db.errors import IsolationError
+from src.db.pool_metrics import dec_inflight, inc_inflight, pool_snapshot, record_acquire_wait
 
 log = logging.getLogger(__name__)
 
@@ -232,6 +234,13 @@ async def get_bot_pool() -> asyncpg.Pool:
     return _bot_pool
 
 
+def bot_pool_stats() -> dict:
+    """Felia 0A (NX-161): snapshot al ocupării `bot_pool` (size/idle/in_use/max/inflight). Citește
+    globalul direct (fără await), None-safe. Folosit de `handle_turn` (event `pool_metrics`) și de
+    endpoint-uri de health."""
+    return pool_snapshot(_bot_pool)
+
+
 async def close_pool() -> None:
     """Închide ambele pool-uri (la oprirea procesului)."""
     global _pool, _bot_pool
@@ -266,29 +275,38 @@ async def tenant_conn(business_id: str):
     pentru durata checkout-ului și îl resetăm la release, ca să nu „murdărim"
     conexiunea întoarsă în pool (un checkout ulterior pe alt tenant n-o vede)."""
     pool = await get_bot_pool()
+    # Felia 0A (NX-161): timează pool.acquire() (contenția = semnalul de WAIT care declanșează
+    # conn-per-op, docs/CONN-HOLD-ANALYSIS-2026.md) + gauge de checkout-uri active. Ieftin,
+    # always-on; emiterea evenimentului e gated în handle_turn. Logica de izolare rămâne neatinsă.
+    t_acq = perf_counter()
     async with pool.acquire() as conn:
-        # set_config(..., is_local=false) → ține pe checkout; quoting safe pe param.
-        # Plasa NX-04 (strict): set + verificare ÎNTR-UN SINGUR round-trip —
-        # set_config întoarce valoarea setată, current_user confirmă rolul. Zero
-        # latență în plus față de set-ul pe care oricum îl făceam.
-        if _isolation_enabled():
-            row = await conn.fetchrow(
-                "select set_config('app.business_id', $1, false) as biz, current_user as usr",
-                business_id,
-            )
-            try:
-                _check_isolation(row["usr"], row["biz"], business_id)
-            except IsolationError as e:
-                # alertă maximă: o conexiune neizolată a ajuns la checkout. Logăm
-                # CRITIC (fără PII) și resetăm GUC-ul; NU scriem în analytics_events
-                # (ar fi un write pe exact conexiunea declarată ne-de-încredere).
-                log.critical("isolation_assert_failed: %s", e)
-                await conn.execute("select set_config('app.business_id', '', false)")
-                raise
-        else:
-            await conn.execute("select set_config('app.business_id', $1, false)", business_id)
+        record_acquire_wait((perf_counter() - t_acq) * 1000.0)
+        inc_inflight()
         try:
-            yield conn
+            # set_config(..., is_local=false) → ține pe checkout; quoting safe pe param.
+            # Plasa NX-04 (strict): set + verificare ÎNTR-UN SINGUR round-trip —
+            # set_config întoarce valoarea setată, current_user confirmă rolul. Zero
+            # latență în plus față de set-ul pe care oricum îl făceam.
+            if _isolation_enabled():
+                row = await conn.fetchrow(
+                    "select set_config('app.business_id', $1, false) as biz, current_user as usr",
+                    business_id,
+                )
+                try:
+                    _check_isolation(row["usr"], row["biz"], business_id)
+                except IsolationError as e:
+                    # alertă maximă: o conexiune neizolată a ajuns la checkout. Logăm
+                    # CRITIC (fără PII) și resetăm GUC-ul; NU scriem în analytics_events
+                    # (ar fi un write pe exact conexiunea declarată ne-de-încredere).
+                    log.critical("isolation_assert_failed: %s", e)
+                    await conn.execute("select set_config('app.business_id', '', false)")
+                    raise
+            else:
+                await conn.execute("select set_config('app.business_id', $1, false)", business_id)
+            try:
+                yield conn
+            finally:
+                # echivalent RESET app.business_id → următorul checkout fail-closed
+                await conn.execute("select set_config('app.business_id', '', false)")
         finally:
-            # echivalent RESET app.business_id → următorul checkout fail-closed
-            await conn.execute("select set_config('app.business_id', '', false)")
+            dec_inflight()
