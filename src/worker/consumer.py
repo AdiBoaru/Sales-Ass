@@ -100,6 +100,23 @@ async def _requeue_busy(redis: Redis, event: dict, settings) -> str:
     return f"requeue n={n}"
 
 
+async def _requeue_admission(redis: Redis, event: dict, settings) -> str:
+    """Re-queue de admission — SEPARAT de conv_lock (contor `_admission_requeues`) și FĂRĂ cap de
+    DROP (P6, Codex #207): peste capacitate re-punem cu backoff, NICIODATĂ pierdut tăcut. Diferă de
+    `_requeue_busy` (conv_lock, unde dropul după cap e un compromis acceptat): un mesaj de client
+    care n-a intrat din cauza capacității NU are voie să dispară. Overload SUSȚINUT → WARNING
+    zgomotos periodic (backpressure vizibil + operatorul scalează), nu un drop silențios."""
+    n = int(event.get("_admission_requeues", 0)) + 1
+    every = settings.admission_requeue_warn_every
+    if every and n % every == 0:
+        log.warning(
+            "admission: overload susținut — %d re-puneri pe acest mesaj (scalează capacitatea)", n
+        )
+    await asyncio.sleep(settings.admission_requeue_delay_ms / 1000)
+    await enqueue_inbound(redis, {**event, "_admission_requeues": n})
+    return f"requeue n={n}"
+
+
 async def process_event(pool, redis: Redis, event: dict) -> None:
     """Rezolvă tenantul și rutează evenimentul după `kind` (message | status).
 
@@ -179,8 +196,8 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
             business_id, settings.admission_acquire_timeout_ms / 1000.0
         )
         admitted = wait_ms is not None
-        if not admitted and redis is not None:  # peste capacitate → defer (nu pierdem turul)
-            status = await _requeue_busy(redis, event, settings)
+        if not admitted and redis is not None:  # peste capacitate → defer FĂRĂ drop (P6)
+            status = await _requeue_admission(redis, event, settings)
             log.info(
                 "admission: peste capacitate → re-queue (business=%s, inflight=%d, %s)",
                 business_id,

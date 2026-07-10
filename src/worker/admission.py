@@ -54,6 +54,12 @@ class Admission:
                 await self._sem.acquire()
         except TimeoutError:
             return None  # global saturat peste timeout → defer
+        # Re-check per-business DUPĂ acquire (TOCTOU, Codex #207): alt task pt ACELAȘI business a
+        # putut trece de pre-check și lua sloturi cât așteptam pe semaforul global → cap depășit.
+        # Fără `await` între re-check și increment → atomic în asyncio → cap respectat strict.
+        if self._business_saturated(business_id):
+            self._sem.release()  # dăm slotul global înapoi (nu-l ținem degeaba) → defer
+            return None
         self._inflight += 1
         self._per_business[business_id] = self._per_business.get(business_id, 0) + 1
         return (perf_counter() - t0) * 1000.0

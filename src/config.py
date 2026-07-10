@@ -607,6 +607,15 @@ class Settings(BaseSettings):
     admission_acquire_timeout_ms: int = Field(
         default=2000, validation_alias="ADMISSION_ACQUIRE_TIMEOUT_MS"
     )
+    # Backoff re-queue admission. SEPARAT de conv_lock: admission NU are cap de DROP (P6 — peste
+    # capacitate re-punem la infinit cu backoff, niciodată pierdut tăcut). Overload SUSȚINUT →
+    # WARNING zgomotos la fiecare `admission_requeue_warn_every` re-puneri (operatorul scalează).
+    admission_requeue_delay_ms: int = Field(
+        default=200, validation_alias="ADMISSION_REQUEUE_DELAY_MS"
+    )
+    admission_requeue_warn_every: int = Field(
+        default=20, validation_alias="ADMISSION_REQUEUE_WARN_EVERY"
+    )
 
     @property
     def is_prod(self) -> bool:
