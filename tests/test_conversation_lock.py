@@ -102,6 +102,8 @@ def _patch_pipeline(monkeypatch, calls, *, conv_lock_enabled=True):
             conv_lock_ttl_seconds=30,
             conv_lock_requeue_delay_ms=0,
             conv_lock_max_requeues=10,
+            # NX-161 F0C: consumer-ul citește timeout-ul de admission din settings.
+            admission_acquire_timeout_ms=2000,
         ),
     )
 

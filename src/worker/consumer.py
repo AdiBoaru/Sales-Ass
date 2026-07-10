@@ -40,6 +40,7 @@ from src.redis_bus import (
     release_conv_lock,
 )
 from src.webhook.orders import process_order
+from src.worker.admission import get_admission
 from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
 from src.worker.dispatcher import build_registry
@@ -169,16 +170,46 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
             return
 
     try:
-        async with tenant_conn(business_id) as conn:
-            business = await load_business(conn, business_id)
-            if business is None:
-                log.warning("business %s lipsește — ignorat", business_id)
-                return
-            if kind == "callback":
-                # navigare carusel (R2): drum determinist, NU pipeline LLM.
-                await handle_callback(conn, business, channel["channel_id"], event)
-                return
-            await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
+        # NX-161 Felia 0C: frâna de admission — luată ÎNAINTE de tenant_conn (fără conn ținut cât
+        # aștepți un slot; invariant: NU în interiorul tenant_conn). Peste capacitate → re-queue cu
+        # backoff (P6, nu drop tăcut). Setată > pool → azi nu bindează (poolul bindează primul), dar
+        # e plasa pentru când conn-per-op eliberează poolul din rolul de frână accidentală.
+        admission = get_admission()
+        wait_ms = await admission.acquire(
+            business_id, settings.admission_acquire_timeout_ms / 1000.0
+        )
+        admitted = wait_ms is not None
+        if not admitted and redis is not None:  # peste capacitate → defer (nu pierdem turul)
+            status = await _requeue_busy(redis, event, settings)
+            log.info(
+                "admission: peste capacitate → re-queue (business=%s, inflight=%d, %s)",
+                business_id,
+                admission.inflight,
+                status,
+            )
+            return
+        # admis (slot luat / frână off) sau redis None → fail-open (procesăm, nu pierdem turul).
+        if admitted and wait_ms and wait_ms > 50:  # contenție reală — vizibil, fără spam la wait ~0
+            log.info(
+                "admission: slot după %dms (business=%s, inflight=%d)",
+                round(wait_ms),
+                business_id,
+                admission.inflight,
+            )
+        try:
+            async with tenant_conn(business_id) as conn:
+                business = await load_business(conn, business_id)
+                if business is None:
+                    log.warning("business %s lipsește — ignorat", business_id)
+                    return
+                if kind == "callback":
+                    # navigare carusel (R2): drum determinist, NU pipeline LLM.
+                    await handle_callback(conn, business, channel["channel_id"], event)
+                    return
+                await handle_turn(conn, business, channel["channel_id"], event, redis=redis)
+        finally:
+            if admitted:
+                admission.release(business_id)
     finally:
         if locked is True:
             await release_conv_lock(redis, business_id, sender_key, token)
