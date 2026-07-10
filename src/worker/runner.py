@@ -23,6 +23,7 @@ from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
 from src.config import get_settings
+from src.db.provider import DbProvider, static_db
 from src.models import TurnContext, TurnUsage
 
 log = logging.getLogger(__name__)
@@ -30,14 +31,27 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class PipelineDeps:
-    """Resursele pe care le primesc stagiile. Conexiunea e DEJA tenant-scoped.
+    """Resursele pe care le primesc stagiile.
+
+    NX-161 Felia 0B: `db` (provider tenant-scoped) e noul contract — `async with deps.db() as conn`
+    ia o conexiune DOAR cât ține operația. `conn` (DEPRECATED, scos la Felia 7) rămâne pentru compat
+    cât timp stagiile nu-s migrate. Puntea de compat (`__post_init__`): `PipelineDeps(conn=...)` —
+    cele 114 usage-uri din teste — primesc automat un provider static, fără rescriere.
     `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios.
     `media` poate fi None (fără canal cu download configurat) → media routing fail-soft (NX-76)."""
 
-    conn: asyncpg.Connection
+    conn: asyncpg.Connection | None = None  # DEPRECATED (Felia 7 îl scoate) — vezi `db`
     redis: Redis | None = None
     llm: LLMClient | None = None
     media: MediaFetcherRegistry | None = None
+    db: DbProvider | None = None
+
+    def __post_init__(self) -> None:
+        # Puntea de compat: `PipelineDeps(conn=...)` capătă un provider static → `deps.db()`
+        # yield-uiește conn-ul injectat, fără checkout nou. `db` explicit are întâietate (nu-l
+        # suprascriem). `conn=None` (multe teste) → `db` rămâne None (stagiul nu-l atinge oricum).
+        if self.db is None and self.conn is not None:
+            self.db = static_db(self.conn)
 
 
 # Un stagiu: mutează `ctx` pe loc; poate seta ctx.reply pentru early exit.

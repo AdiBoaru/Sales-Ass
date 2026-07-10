@@ -27,6 +27,7 @@ from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.db.connection import bot_pool_stats
 from src.db.pool_metrics import take_acquire_wait
+from src.db.provider import tenant_db
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import get_data_version
 from src.db.queries.contacts import get_or_create_contact, update_contact_profile_and_score
@@ -696,7 +697,12 @@ async def handle_turn(
     llm = await _llm_within_budget(ctx, redis, business, channel_kind=channel_kind)
     # Media routing (NX-76): registry de fetchers (singleton, ca llm) → gate-ul descarcă poza.
     media = get_media_registry()
-    await run_pipeline(ctx, PipelineDeps(conn=conn, redis=redis, llm=llm, media=media), stages)
+    # NX-161 Felia 0B: providerul tenant-scoped e disponibil pentru stagii (deps.db()), dar în 0B
+    # NICIUN stagiu nu-l apelează încă → stagiile folosesc `conn` (viu, ca înainte) = zero schimbare
+    # de runtime. Feliile următoare migrează gradual la deps.db(). AMBELE trecute intenționat:
+    # __post_init__ NU suprascrie `db` explicit cu static(conn).
+    deps = PipelineDeps(conn=conn, db=tenant_db(business.id), redis=redis, llm=llm, media=media)
+    await run_pipeline(ctx, deps, stages)
     await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
     await _record_turn_cost(
         redis, business, ctx, llm_used=llm is not None, channel_kind=channel_kind
