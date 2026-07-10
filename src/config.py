@@ -592,6 +592,31 @@ class Settings(BaseSettings):
     # evenimentul (gauge-ul inflight din pool_metrics rămâne, folosit și de health).
     pool_metrics_enabled: bool = Field(default=True, validation_alias="POOL_METRICS_ENABLED")
 
+    # --- Admission control (NX-161 Felia 0C) — frâna EXPLICITĂ de concurență a tururilor ---
+    # Semafor GLOBAL: câte tururi procesează SIMULTAN (bounds LLM concurrency). Poolul DB (max 10) e
+    # azi frâna accidentală; conn-per-op o scoate → ĂSTA devine frâna. Setat > pool ca să NU bindeze
+    # înainte de conn-per-op (plasă, nu no-op și nici reducere de throughput). OFF → fără frână.
+    admission_enabled: bool = Field(default=True, validation_alias="ADMISSION_ENABLED")
+    admission_max_inflight: int = Field(default=24, validation_alias="ADMISSION_MAX_INFLIGHT")
+    # Plafon OPȚIONAL per-business (fairness minimă — un tenant nu monopolizează sloturile). 0 = off
+    # (fairness complet per-tenant = epic separat). Peste plafon → re-queue (nu așteaptă slot).
+    admission_max_per_business: int = Field(
+        default=0, validation_alias="ADMISSION_MAX_PER_BUSINESS"
+    )
+    # Cât aștept un slot înainte de re-queue cu backoff (P6, nu drop). Sub TTL conv_lock (30s).
+    admission_acquire_timeout_ms: int = Field(
+        default=2000, validation_alias="ADMISSION_ACQUIRE_TIMEOUT_MS"
+    )
+    # Backoff re-queue admission. SEPARAT de conv_lock: admission NU are cap de DROP (P6 — peste
+    # capacitate re-punem la infinit cu backoff, niciodată pierdut tăcut). Overload SUSȚINUT →
+    # WARNING zgomotos la fiecare `admission_requeue_warn_every` re-puneri (operatorul scalează).
+    admission_requeue_delay_ms: int = Field(
+        default=200, validation_alias="ADMISSION_REQUEUE_DELAY_MS"
+    )
+    admission_requeue_warn_every: int = Field(
+        default=20, validation_alias="ADMISSION_REQUEUE_WARN_EVERY"
+    )
+
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
