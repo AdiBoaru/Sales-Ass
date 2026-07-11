@@ -319,6 +319,8 @@ class RichItem:
     badge_tone: str | None = None
     currency: str | None = None
     details: str | None = None
+    # NX-166: selector de variante/nuanțe în cardul FE. Compact, aditiv; state-ul rămâne ref-uri.
+    variants: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass

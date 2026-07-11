@@ -41,8 +41,20 @@ _VARIANTS_AGG = """
     left join lateral (
         select jsonb_agg(
             jsonb_build_object(
-                'id', v.id::text, 'label', v.label, 'sku', v.sku,
-                'price', coalesce(v.sale_price, v.price)::float8, 'stock', v.stock
+                'id', v.id::text,
+                'variant_id', v.id::text,
+                'label', v.label,
+                'sku', v.sku,
+                'price', coalesce(v.sale_price, v.price)::float8,
+                'list_price',
+                    (case when v.sale_price is not null and v.sale_price < v.price
+                          then v.price end)::float8,
+                'stock', v.stock,
+                'color_hex', v.color_hex,
+                'attributes', coalesce(v.attributes, '{}'::jsonb),
+                'shade', v.attributes->>'shade',
+                'undertone', v.attributes->>'undertone',
+                'depth', v.attributes->>'depth'
             ) order by coalesce(v.sale_price, v.price) asc
         ) as variants
         from (

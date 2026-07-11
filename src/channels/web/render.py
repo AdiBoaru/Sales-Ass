@@ -43,6 +43,7 @@ def _card(
     badge_tone: Any = None,
     currency: Any = None,
     details: Any = None,
+    variants: Any = None,
 ) -> dict[str, Any]:
     """Un card de produs pt widget. Câmpuri compacte (P8); cheile lipsesc dacă datele nu există
     (NU inventăm `null`-uri). Frontendul randează ce primește. `price` = prețul CURENT; `list_price`
@@ -72,6 +73,8 @@ def _card(
         card["currency"] = currency
     if details:
         card["details"] = details
+    if variants:
+        card["variants"] = variants
     return card
 
 
@@ -143,6 +146,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
                 badge_tone=getattr(it, "badge_tone", None),
                 currency=getattr(it, "currency", None),
                 details=getattr(it, "details", None),
+                variants=getattr(it, "variants", None),
             )
             for it in reply.rich.items
         ]
@@ -156,6 +160,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
                 p.get("image"),
                 p.get("url"),
                 product_id=p.get("product_id"),
+                variants=p.get("variants"),
             )
             for p in reply.products
         ]

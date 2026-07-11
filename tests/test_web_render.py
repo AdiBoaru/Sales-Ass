@@ -176,6 +176,46 @@ def test_render_web_emag_fields_survive_async_roundtrip():
     assert rebuilt["products"][0]["badges"] == [{"label": "Top Favorit", "tone": "info"}]
 
 
+def test_render_web_surfaces_variants_on_rich_and_async_roundtrip():
+    rich = RichReply(
+        intro="x",
+        items=[
+            RichItem(
+                product_id="p1",
+                name="Foundation",
+                price=89.0,
+                variants=[
+                    {
+                        "variant_id": "v07",
+                        "label": "Medium Warm 07",
+                        "price": 89.0,
+                        "stock": 6,
+                        "color_hex": "#C89463",
+                        "attributes": {"shade": "07", "undertone": "warm", "depth": "medium"},
+                    },
+                    {
+                        "variant_id": "v08",
+                        "label": "Tan Warm 08",
+                        "price": 89.0,
+                        "stock": 0,
+                        "color_hex": "#A66B42",
+                        "attributes": {"shade": "08", "undertone": "warm", "depth": "tan"},
+                    },
+                ],
+            )
+        ],
+        pick=None,
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    sync = render_web(Reply(text="f", rich=rich), "ro")
+    rebuilt = render_web(reply_from_outbox({"rich": asdict(rich), "text": "f"}), "ro")
+    assert rebuilt["products"] == sync["products"]
+    assert sync["products"][0]["variants"][1]["stock"] == 0
+    assert sync["products"][0]["variants"][0]["attributes"]["shade"] == "07"
+
+
 def test_render_web_surfaces_clarify_suggestions():
     # reply NON-rich (clarify) cu chips → widget-ul le primește ca `suggestions` (idei de cadou).
     reply = Reply(text="Pentru cine e cadoul?", suggestions=["Cadou pentru ea", "Cadou pentru el"])
@@ -232,6 +272,24 @@ async def test_send_products_publishes_cards_no_suggestions():
     await s.send_products("tok", "v1", "Recomandările mele:", products)
     evt = json.loads(r.published[0][1])
     assert evt["type"] == "rich" and len(evt["products"]) == 1 and evt["suggestions"] == []
+
+
+async def test_send_products_preserves_variant_payload():
+    r = _FakeRedis()
+    s = WebSender(r)
+    products = [
+        {
+            "product_id": "p1",
+            "name": "Foundation",
+            "price": 89.0,
+            "variants": [{"variant_id": "v08", "label": "Tan Warm 08", "stock": 0}],
+        }
+    ]
+    await s.send_products("tok", "v1", "Recomandările mele:", products)
+    evt = json.loads(r.published[0][1])
+    assert evt["products"][0]["variants"] == [
+        {"variant_id": "v08", "label": "Tan Warm 08", "stock": 0}
+    ]
 
 
 # --- backlog atomic + fail-open (P6) ----------------------------------------

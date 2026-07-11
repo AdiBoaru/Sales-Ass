@@ -56,6 +56,42 @@ def test_card_products_shape_and_cap():
     assert set(cards[0]) == {"product_id", "name", "price", "url", "image"}
 
 
+def test_card_products_include_variant_payload_with_oos_stock():
+    cards = _card_products(
+        [
+            {
+                "id": "p1",
+                "name": "Foundation",
+                "price": 89.0,
+                "url": None,
+                "image": None,
+                "variants": [
+                    {
+                        "id": "v07",
+                        "label": "Medium Warm 07",
+                        "price": 89.0,
+                        "stock": 8,
+                        "color_hex": "#C89463",
+                        "attributes": {"shade": "07", "undertone": "warm", "depth": "medium"},
+                    },
+                    {
+                        "variant_id": "v08",
+                        "label": "Tan Warm 08",
+                        "price": 89.0,
+                        "stock": 0,
+                        "color_hex": "#A66B42",
+                        "attributes": {"shade": "08", "undertone": "warm", "depth": "tan"},
+                    },
+                ],
+            }
+        ]
+    )
+    variants = cards[0]["variants"]
+    assert variants[0]["variant_id"] == "v07"
+    assert variants[0]["attributes"] == {"shade": "07", "undertone": "warm", "depth": "medium"}
+    assert variants[1]["label"] == "Tan Warm 08" and variants[1]["stock"] == 0
+
+
 def test_dedupe_keeps_order_and_caps():
     prods = [{"id": "a"}, {"id": "a"}, {"id": "b"}, {"id": "c"}]
     out = _dedupe(prods, cap=6)

@@ -195,18 +195,54 @@ def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _card_variants(product: dict[str, Any], n: int = 16) -> list[dict[str, Any]]:
+    """Compact variant payload for product cards (shade/size stock, color and attributes)."""
+    out: list[dict[str, Any]] = []
+    for raw in (product.get("variants") or [])[:n]:
+        if not isinstance(raw, dict):
+            continue
+        variant_id = raw.get("variant_id") or raw.get("id")
+        label = raw.get("label")
+        if not variant_id or not label:
+            continue
+        item: dict[str, Any] = {"variant_id": str(variant_id), "label": label}
+        if raw.get("price") is not None:
+            item["price"] = float(raw["price"])
+        if raw.get("list_price") is not None:
+            item["list_price"] = float(raw["list_price"])
+        if raw.get("stock") is not None:
+            item["stock"] = int(raw["stock"])
+        if raw.get("color_hex"):
+            item["color_hex"] = raw["color_hex"]
+        attrs = raw.get("attributes") if isinstance(raw.get("attributes"), dict) else {}
+        compact_attrs = {
+            k: attrs.get(k) for k in ("shade", "undertone", "depth") if attrs.get(k) is not None
+        }
+        for key in ("shade", "undertone", "depth"):
+            if raw.get(key) is not None and key not in compact_attrs:
+                compact_attrs[key] = raw[key]
+        if compact_attrs:
+            item["attributes"] = compact_attrs
+        out.append(item)
+    return out
+
+
 def _card_products(products: list[dict[str, Any]], n: int = 4) -> list[dict[str, Any]]:
     """Câmpuri compacte pentru cardurile de produs (W1 + carusel R2)."""
-    return [
-        {
+    cards: list[dict[str, Any]] = []
+    for p in products[:n]:
+        card = {
             "product_id": p["id"],
             "name": p["name"],
             "price": float(p["price"]),
             "url": p.get("url"),
             "image": p.get("image"),
         }
-        for p in products[:n]
-    ]
+        variants = _card_variants(p)
+        if variants:
+            card["variants"] = variants
+        cards.append(card)
+    return cards
 
 
 def _dedupe(products: list[dict[str, Any]], cap: int = 6) -> list[dict[str, Any]]:

@@ -610,8 +610,8 @@ async def test_get_product_details_lists_variants(monkeypatch):
     prod = {
         **PRODUCTS[0],
         "variants": [
-            {"id": "v1", "label": "50ml", "price": 82.99},
-            {"id": "v2", "label": "100ml", "price": 149.0},
+            {"id": "v1", "label": "50ml", "price": 82.99, "stock": 4},
+            {"id": "v2", "label": "100ml", "price": 149.0, "stock": 0},
         ],
     }
 
@@ -622,6 +622,7 @@ async def test_get_product_details_lists_variants(monkeypatch):
     res = await run_tool(_ctx(), _deps(), "get_product_details", {"product_id": "p1"})
     assert "variante:" in res.llm_view and "50ml" in res.llm_view and "100ml" in res.llm_view
     assert "149.00 lei" in res.llm_view  # prețul per-variantă vizibil modelului
+    assert "stoc 0" in res.llm_view  # OOS per-variantă vizibil agentului
 
 
 async def test_get_product_details_not_found(monkeypatch):

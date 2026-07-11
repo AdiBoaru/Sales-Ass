@@ -180,3 +180,23 @@ async def test_active_search_kept_on_product_reply(monkeypatch):
 
     new_state = await _run(monkeypatch, stage, initial_state={})
     assert new_state["active_search"]["fp"] == "y"
+
+
+async def test_displayed_products_persist_compact_refs_without_variants(monkeypatch):
+    async def stage(ctx, deps):
+        ctx.set_reply(
+            "Uite",
+            products=[
+                {
+                    "product_id": "p2",
+                    "name": "P2",
+                    "price": 9.0,
+                    "url": "https://shop/p2",
+                    "image": "https://img/p2.jpg",
+                    "variants": [{"variant_id": "v08", "label": "Tan Warm 08", "stock": 0}],
+                }
+            ],
+        )
+
+    new_state = await _run(monkeypatch, stage, initial_state={})
+    assert new_state["displayed_products"] == [{"product_id": "p2", "name": "P2", "price": 9.0}]

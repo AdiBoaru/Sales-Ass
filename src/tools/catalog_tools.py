@@ -113,12 +113,39 @@ def _brief(products: list[dict[str, Any]]) -> str:
         avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
         # NX-135: produsul are varianta cerută (search pe variant_label) → fit grounded.
         vmatch = " | are varianta cerută" if p.get("variant_match") else ""
+        variants = _variant_view(p.get("variants"), limit=4)
+        vline = f" | variante: {variants}" if variants else ""
         summ = (p.get("ai_summary") or "")[:120]
         lines.append(
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
-            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch} | {summ}"
+            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch}{vline} | {summ}"
         )
     return "\n".join(lines)
+
+
+def _variant_view(raw_variants: Any, *, limit: int) -> str:
+    """Compact variant labels for the model, including per-variant stock when present."""
+    labels: list[str] = []
+    for v in (raw_variants or [])[:limit]:
+        if not isinstance(v, dict):
+            continue
+        lbl = v.get("label")
+        vid = v.get("variant_id") or v.get("id")
+        if not lbl or not vid:
+            continue
+        pr = v.get("price")
+        price_str = f", {float(pr):.2f} lei" if pr is not None else ""
+        stock = v.get("stock")
+        stock_str = f", stoc {int(stock)}" if stock is not None else ""
+        attrs = v.get("attributes") if isinstance(v.get("attributes"), dict) else {}
+        bits = [
+            str(attrs.get(k) or v.get(k))
+            for k in ("shade", "undertone", "depth")
+            if attrs.get(k) or v.get(k)
+        ]
+        attrs_str = f", {'/'.join(bits)}" if bits else ""
+        labels.append(f"[{vid}] {lbl}{attrs_str}{price_str}{stock_str}")
+    return ", ".join(labels)
 
 
 def _detail_view(p: dict[str, Any]) -> str:
@@ -139,17 +166,8 @@ def _detail_view(p: dict[str, Any]) -> str:
     # NX-118: variante (nuanțe/mărimi) cu id + PREȚ real → modelul răspunde grounded la „aveți
     # nuanța 03?", recomandă un preț per-variantă acceptat de validator, și poate trimite un
     # `variant_id` REAL la cart_add (membership-ul rămâne plasa). Format `[id] etichetă (preț)`.
-    vlabels: list[str] = []
-    for v in (p.get("variants") or [])[:8]:
-        lbl = v.get("label")
-        vid = v.get("id")
-        if not lbl or not vid:
-            continue
-        pr = v.get("price")
-        price_str = f" ({float(pr):.2f} lei)" if pr is not None else ""
-        vlabels.append(f"[{vid}] {lbl}{price_str}")
-    if vlabels:
-        parts.append("variante: " + ", ".join(vlabels))
+    if variants := _variant_view(p.get("variants"), limit=8):
+        parts.append("variante: " + variants)
     return " | ".join(parts)
 
 
