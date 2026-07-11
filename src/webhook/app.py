@@ -17,9 +17,15 @@ from src.config import get_settings
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
 from src.webhook.body_limit import enforce_body_cap
 from src.webhook.meta import parse_statuses, parse_webhook
+from src.webhook.redirect import router as redirect_router
 from src.webhook.signature import verify_meta_signature, verify_orders_signature
 
 app = FastAPI(title="Nativx Assistant — webhook")
+
+# NX-162: redirect de atribuire click (/r/{business_id}/{ref_code}) — montat necondiționat
+# (funnel-ul de checkout e valabil pe orice canal, nu doar web). Face DB sincron (nu e margine
+# subțire ca webhook-ul Meta) — vezi src/webhook/redirect.py.
+app.include_router(redirect_router)
 
 
 @app.middleware("http")
