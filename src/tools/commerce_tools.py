@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.analytics.demand import clean_ids
 from src.config import get_settings
 from src.db.queries.catalog import get_products_by_ids
 from src.db.queries.commerce import (
@@ -135,7 +136,14 @@ async def checkout_link_tool(
         expires_at,
     )
     total = round(total, 2)
-    ctx.emit("checkout_link_created", items=len(cart), value=total)
+    # NX-163: ce a ajuns în checkout, ca ref-uri (P8) — leagă recomandare→coș→comandă în raportul de
+    # cerere (NX-164). Doar product_id-uri, fără PII.
+    ctx.emit(
+        "checkout_link_created",
+        items=len(cart),
+        value=total,
+        product_ids=clean_ids(c["product_id"] for c in cart),
+    )
 
     lines = ", ".join(f"{c['name']} ×{c['quantity']} ({c['price']:.2f} lei)" for c in cart)
     llm_view = f"Link de checkout creat: {url}\nCoș: {lines} | total {total:.2f} lei"
@@ -202,7 +210,13 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
         )
     cart = cart[:_CART_MAX_LINES]
     total = round(sum(line["price"] * line["quantity"] for line in cart), 2)
-    ctx.emit("cart_updated", lines=len(cart), value=total)
+    # NX-163: ce s-a adăugat în coș, ca ref-uri (P8) — semnal de add-to-cart per produs (NX-164).
+    ctx.emit(
+        "cart_updated",
+        lines=len(cart),
+        value=total,
+        product_ids=clean_ids(line["product_id"] for line in cart),
+    )
 
     summary = ", ".join(f"{line['name']} ×{line['quantity']}" for line in cart)
     return ToolResult(

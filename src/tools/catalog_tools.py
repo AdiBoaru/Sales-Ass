@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.analytics.demand import product_ids_from_dicts
 from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
@@ -550,6 +551,9 @@ async def search_products_tool(
     # vectorul a contribuit la setul ÎNTORS. `fused` = ambele retrievere au întors candidați la
     # treapta finală. FĂRĂ `query`/`concerns` text (P12 — doar flag-uri/counts/distanță numerică).
     mode = "semantic" if vector_contributed else "lexical"
+    # NX-163: produs NUMIT cerut dar absent din setul întors — precomputat aici (o dată) fiindcă e
+    # și semnalul de unmet «named_not_found» (mai jos) și condiția de disclosure (nota de mai jos).
+    named_miss = bool(a.product_name) and not _named_product_found(a.product_name, products)
     ctx.emit(
         "product_search",
         mode=mode,
@@ -569,7 +573,34 @@ async def search_products_tool(
         is not None,  # NX-135: căutare de variantă (nuanță/mărime)
         diversified=diversified,  # NX-134: prima pagină a fost re-compusă divers
         brands_in_result=len({p.get("brand") for p in products if p.get("brand")}),
+        # NX-163 Demand Capture: ce s-a cerut, ca ref-uri/atribute NORMALIZATE (P8/P12) →
+        # raportul de cerere (NX-164). `category_key`/`brand` = filtrele cerute (structurate de
+        # triaj, nu text de user); `top_product_ids` = ce a întors search-ul. FĂRĂ query brut/PII.
+        top_product_ids=product_ids_from_dicts(products),
+        category_key=a.category,
+        brand=a.brand,
     )
+    # NX-163: cerere neîmplinită = gap de catalog, capturat determinist la sursă (nu inferență LLM).
+    # Exclusiv, ca o singură căutare să nu se dubleze: «named_not_found» (produs numit, absent) e
+    # mai specific decât «no_result» (nimic nu s-a potrivit — `had_any_match` False peste toate
+    # treptele de relaxare). Emis ÎNAINTE de early-return-ul de brand-absent, ca „brand X, 0
+    # rezultate" (cel mai valoros semnal) să NU fie pierdut. Doar atribute normalizate + locale.
+    if named_miss:
+        ctx.emit(
+            "unmet_query",
+            reason="named_not_found",
+            category_key=a.category,
+            brand=a.brand,
+            locale=ctx.language,
+        )
+    elif not had_any_match:
+        ctx.emit(
+            "unmet_query",
+            reason="no_result",
+            category_key=a.category,
+            brand=a.brand,
+            locale=ctx.language,
+        )
     # NX-119: semează sesiunea de căutare — DOAR id-uri (pool, cap MAX_SEARCH_POOL) + cursor + fp +
     # filtre mici (P8). Următorul „mai arată-mi" (fp identic) paginează din pool fără re-fetch. Doar
     # dacă avem rezultate (zero → nicio sesiune de paginat). Owner scriere: processor (state_patch).
@@ -607,7 +638,9 @@ async def search_products_tool(
     # A1: produs NUMIT inexistent (nu doar brand) → disclosure anti-bait-and-switch. Produsele
     # întoarse (dacă există) rămân ALTERNATIVE, dar agentul spune clar că nu e cel cerut.
     notes: list[str] = []
-    if a.product_name and not _named_product_found(a.product_name, products):
+    if (
+        named_miss
+    ):  # NX-163: precomputat mai sus (= același predicat, reuse — și driver de unmet_query)
         ctx.emit("named_product_not_found", alternatives=len(products))
         notes.append(
             f"(produsul «{a.product_name}» nu există ca atare în catalog — NU prezenta alt produs "

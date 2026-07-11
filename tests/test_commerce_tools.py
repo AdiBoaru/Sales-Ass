@@ -53,7 +53,13 @@ async def test_cart_add_happy(monkeypatch):
     ]
     assert res.prices == [240.0]  # total grounded (price × qty)
     ev = _event(ctx, "cart_updated")
-    assert ev and ev.properties == {"lines": 1, "value": 240.0, "turn_id": "t"}
+    # NX-163: + product_ids (ref-uri, P8) pt raportul de cerere; fără PII.
+    assert ev and ev.properties == {
+        "lines": 1,
+        "value": 240.0,
+        "product_ids": ["p2"],
+        "turn_id": "t",
+    }
 
 
 async def test_cart_add_merges_same_line(monkeypatch):
