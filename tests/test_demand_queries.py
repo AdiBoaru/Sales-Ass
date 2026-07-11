@@ -166,6 +166,24 @@ async def test_top_products_unnests_and_skips_events_without_ids(pool, biz):
 
 
 @pytest_integration
+async def test_top_products_survives_malformed_product_ids(pool, biz):
+    """Hardening (review Codex): un event cu `product_ids` MALFORMAT (scalar/obiect, nu array) NU
+    trebuie să crape query-ul — `CASE ... ELSE '[]'` îl tratează ca gol. Fluxul NX-163 produce doar
+    array-uri; ăsta apără contra unei inserări manuale/viitoare stricate."""
+    async with admin_tx(pool) as conn:
+        since, until = _window()
+        await _ins(conn, biz, "agent_recommended", {"product_ids": "p1"})  # scalar (malformat)
+        await _ins(
+            conn, biz, "agent_recommended", {"product_ids": {"k": "v"}}
+        )  # obiect (malformat)
+        await _ins(conn, biz, "agent_recommended", {"product_ids": ["p9"]})  # array valid
+        rows = await demand.top_products(conn, biz, since, until, event_type="agent_recommended")
+
+    counts = {r["product_id"]: r["mention_count"] for r in rows}
+    assert counts == {"p9": 1}  # doar array-ul valid contează; malformatele sărite, zero crash
+
+
+@pytest_integration
 async def test_top_requested_brands(pool, biz):
     since, until = _window()
     async with admin_tx(pool) as conn:

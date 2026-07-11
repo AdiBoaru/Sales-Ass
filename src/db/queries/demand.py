@@ -135,8 +135,9 @@ async def top_products(
 ) -> list[dict[str, Any]]:
     """Produse cel mai des menționate într-un event cu `product_ids[]` (`agent_recommended` /
     `cart_updated` / `checkout_link_created`) — ce împinge/adaugă/duce-la-checkout botul. Unnest
-    determinist pe array; evenimentele vechi fără `product_ids` sunt SĂRITE grațios (guard
-    `jsonb_typeof = 'array'`). `WHERE business_id = $1` (P7)."""
+    determinist; evenimentele fără `product_ids` SAU cu unul malformat (scalar/obiect) sunt SĂRITE
+    grațios prin `CASE ... ELSE '[]'::jsonb` în lateral — `jsonb_array_elements_text` primește MEREU
+    un array, altfel ar crăpa ÎNAINTE ca WHERE să filtreze. `WHERE business_id = $1` (P7)."""
     rows = await conn.fetch(
         f"""
         select
@@ -145,10 +146,14 @@ async def top_products(
             (array_agg(ae.conversation_id::text order by ae.created_at desc)
                 filter (where ae.conversation_id is not null))[1:{_EVIDENCE_POOL}] as evidence
         from analytics_events ae
-        cross join lateral jsonb_array_elements_text(ae.properties->'product_ids') as pid
+        cross join lateral jsonb_array_elements_text(
+            case when jsonb_typeof(ae.properties->'product_ids') = 'array'
+                 then ae.properties->'product_ids'
+                 else '[]'::jsonb
+            end
+        ) as pid
         where ae.business_id = $1
           and ae.event_type = $2
-          and jsonb_typeof(ae.properties->'product_ids') = 'array'
           and ae.created_at >= $3 and ae.created_at < $4
         group by pid
         order by mention_count desc
