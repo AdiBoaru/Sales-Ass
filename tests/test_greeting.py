@@ -74,6 +74,8 @@ async def test_welcome_on_pure_greeting():
     text = ctx.reply.text
     assert "Native" in text  # numele implicit al botului
     assert "Sole Demo" in text  # numele magazinului
+    assert "Cu ce te ajut azi?" in text
+    assert "Spune-mi ce cauți" not in text
     assert "inteligență artificială" not in text  # disclaimer OFF default (#2)
     assert "Caut o cremă pentru ten uscat" in text  # sugestie pe vertical beauty
     assert ctx.reply.cacheable is False
@@ -111,6 +113,7 @@ async def test_welcome_language_en():
     await greeting.greeting_stage(ctx, _DEPS)
     assert ctx.reply is not None
     assert "I'm Native" in ctx.reply.text
+    assert "How can I help today?" in ctx.reply.text  # ask EN natural (nu „Tell me what you need")
     assert "artificial intelligence" not in ctx.reply.text  # disclaimer OFF default (#2)
 
 
@@ -130,3 +133,21 @@ async def test_welcome_unknown_vertical_uses_generic():
     await greeting.greeting_stage(ctx, _DEPS)
     assert ctx.reply is not None
     assert "Caut un produs anume" in ctx.reply.text  # generic, nu beauty
+
+
+async def test_welcome_ask_override_string():
+    """settings["welcome"]["ask"] (string) înlocuiește textul de întâmpinare implicit."""
+    ctx = _ctx("salut", settings={"welcome": {"ask": "Zi-mi direct ce vrei și ți-l găsesc."}})
+    await greeting.greeting_stage(ctx, _DEPS)
+    assert ctx.reply is not None
+    assert "Zi-mi direct ce vrei și ți-l găsesc." in ctx.reply.text
+    assert "Cu ce te ajut azi?" not in ctx.reply.text  # override, nu default-ul RO
+
+
+async def test_welcome_ask_override_per_language():
+    """Override-ul poate fi un dict pe limbă; se alege intrarea limbii curente."""
+    ctx = _ctx("hi", language="en", settings={"welcome": {"ask": {"en": "What are you after?"}}})
+    await greeting.greeting_stage(ctx, _DEPS)
+    assert ctx.reply is not None
+    assert "What are you after?" in ctx.reply.text
+    assert "How can I help today?" not in ctx.reply.text  # override înlocuiește default-ul EN

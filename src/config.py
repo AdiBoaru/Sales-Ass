@@ -582,7 +582,7 @@ class Settings(BaseSettings):
         default=True, validation_alias="CHEAPEST_ALTERNATIVES_ENABLED"
     )
     # NX-159 felia 3: injectează profilul de STIL (DomainPack.response_style) ca ghid în compunerea
-    # NON-rich (proză/order). Rich are deja regulile ei → neatins. OFF / stil gol → byte-identic.
+    # răspunsurilor agentului (proză/order/rich). OFF / stil gol → byte-identic.
     response_style_enabled: bool = Field(default=True, validation_alias="RESPONSE_STYLE_ENABLED")
 
     # --- Pool metrics (NX-161 Felia 0A) — instrumentare bot_pool ---

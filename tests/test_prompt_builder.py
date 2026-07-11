@@ -149,6 +149,35 @@ def test_rich_detail_mode_forbids_list_skeleton():
     assert "NU refolosi scheletul de LISTĂ" in r  # MOD DETALIU aduce fapte noi, nu coaching repetat
 
 
+def test_rich_prompt_forbids_repetitive_ai_phrasing():
+    r = build_rich_system(_inp())
+    assert "ANTI-REPETIȚIE" in r
+    for forbidden in (
+        "Analizez catalogul",
+        "compar opțiunile",
+        "îți explic exact de ce",
+        "nu doar ce",
+    ):
+        assert forbidden in r
+    assert "Stil de răspuns" not in r  # apare doar când DomainPack trimite response_style
+
+
+def test_rich_prompt_carries_style_when_present():
+    styled = _inp(response_style={"ton": "natural, fara fraze-stampila"})
+    r = build_rich_system(styled)
+    assert "Stil de răspuns" in r
+    assert "fraze-stampila" in r
+
+
+def test_agent_prose_forbids_repetitive_ai_phrasing():
+    # Garanția anti-template există și pe calea PROZĂ (tool-calling), necondiționat de
+    # response_style (care e gated pe flag/pack) — nu doar în calea rich.
+    s = build_agent_system(_inp())
+    for forbidden in ("Analizez catalogul", "compar opțiunile", "îți explic exact de ce"):
+        assert forbidden in s
+    assert "ca un om din magazin" in s
+
+
 def test_tools_block_multi_intent_and_concept_compare():
     s = build_agent_system(_inp())
     assert "MAI MULTE intenții" in s  # onorează toate intențiile unui mesaj (P8)

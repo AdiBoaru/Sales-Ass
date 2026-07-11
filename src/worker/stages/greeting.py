@@ -12,7 +12,8 @@ coste un apel de triaj (free layer). Dacă mesajul NU e un pur salut (ex. „sal
 caut o cremă" sau „caut telefon"), stagiul nu face nimic și pipeline-ul continuă.
 
 Conținutul e CONFIGURABIL per business (`businesses.settings["welcome"]`,
-principiul 9) — numele botului, dacă e activ, sugestiile — cu fallback pe vertical.
+principiul 9) — numele botului, dacă e activ, sugestiile și textul de întâmpinare
+(`ask`) — cu fallback pe vertical/limbă.
 
 Câmpuri TurnContext scrise aici: `ctx.reply` (early-exit la Sender).
 """
@@ -75,19 +76,19 @@ _GREETINGS: frozenset[str] = frozenset(
 _WELCOME: dict[str, dict[str, str]] = {
     "ro": {
         "intro": "Bună! 👋 Eu sunt {bot}, asistentul tău de shopping {shop}.",
-        "ask": "Spune-mi ce cauți — un produs anume, o idee de cadou sau un sfat de alegere.",
+        "ask": "Cu ce te ajut azi? Poți să-mi scrii produsul, bugetul sau pentru cine cauți.",
         "try": "Poți încerca:",
         "disclaimer": "Funcționez cu inteligență artificială, așa că pot greși uneori.",
     },
     "en": {
         "intro": "Hi! 👋 I'm {bot}, your shopping assistant at {shop}.",
-        "ask": "Tell me what you need — a specific product, a gift idea, or advice on a choice.",
+        "ask": "How can I help today? Tell me the product, the budget, or who it's for.",
         "try": "You can try:",
         "disclaimer": "I run on artificial intelligence, so I can be wrong sometimes.",
     },
     "hu": {
         "intro": "Szia! 👋 {bot} vagyok, a(z) {shop} vásárlási asszisztense.",
-        "ask": "Mondd el, mit keresel — terméket, ajándékötletet vagy tanácsot a választáshoz.",
+        "ask": "Miben segíthetek ma? Írd le a terméket, a kereted, vagy hogy kinek keresel.",
         "try": "Kipróbálhatod:",
         "disclaimer": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
     },
@@ -143,13 +144,13 @@ def is_greeting(text: str | None) -> bool:
     return _norm(text) in _GREETINGS
 
 
-def _welcome_config(business: BusinessConfig) -> tuple[bool, str, object]:
-    """(enabled, bot_name, suggestions_override) — settings business au prioritate peste config."""
+def _welcome_config(business: BusinessConfig) -> tuple[bool, str, object, object]:
+    """(enabled, bot_name, suggestions_override, ask_override) — settings business au prioritate."""
     s = get_settings()
     bw = (business.settings or {}).get("welcome") or {}
     enabled = bool(bw.get("enabled", s.welcome_enabled))
     bot_name = (bw.get("bot_name") or s.welcome_bot_name).strip()
-    return enabled, bot_name, bw.get("suggestions")
+    return enabled, bot_name, bw.get("suggestions"), bw.get("ask")
 
 
 def _suggestions(business: BusinessConfig, language: str, override: object) -> list[str]:
@@ -164,15 +165,34 @@ def _suggestions(business: BusinessConfig, language: str, override: object) -> l
     return list(src.get(language) or src.get("ro") or [])
 
 
+def _ask(language: str, override: object) -> str:
+    """Textul de întâmpinare (`ask`) pentru limba dată: override din settings (string plat SAU
+    dict pe limbă), altfel șablonul implicit pe limbă. Fallback de limbă pe 'ro'."""
+    if isinstance(override, dict):
+        val = override.get(language) or override.get("ro")
+        if val:
+            return str(val)
+    elif isinstance(override, str) and override.strip():
+        return override.strip()
+    t = _WELCOME.get(language) or _WELCOME["ro"]
+    return t["ask"]
+
+
 def build_welcome(
-    business: BusinessConfig, language: str, *, bot_name: str, suggestions: list[str]
+    business: BusinessConfig,
+    language: str,
+    *,
+    bot_name: str,
+    suggestions: list[str],
+    ask: str | None = None,
 ) -> str:
-    """Compune textul de întâmpinare. Determinist, fără LLM. Limba necunoscută → 'ro'."""
+    """Compune textul de întâmpinare. Determinist, fără LLM. Limba necunoscută → 'ro'.
+    `ask` = textul rezolvat (override/limbă); None → șablonul pe limbă."""
     t = _WELCOME.get(language) or _WELCOME["ro"]
     parts = [
         t["intro"].format(bot=bot_name, shop=business.name),
         "",
-        t["ask"],
+        ask or t["ask"],
     ]
     if suggestions:
         parts += ["", t["try"], *(f"• {s}" for s in suggestions)]
@@ -183,13 +203,16 @@ def build_welcome(
 
 async def greeting_stage(ctx: TurnContext, deps: PipelineDeps) -> None:  # noqa: ARG001 — free layer, fără DB
     """La un pur salut → mesaj de întâmpinare branded (early-exit). Altfel: no-op."""
-    enabled, bot_name, override = _welcome_config(ctx.business)
+    enabled, bot_name, sugg_override, ask_override = _welcome_config(ctx.business)
     if not enabled:
         return
     if not is_greeting(ctx.message.body):
         return
-    suggestions = _suggestions(ctx.business, ctx.language, override)
-    text = build_welcome(ctx.business, ctx.language, bot_name=bot_name, suggestions=suggestions)
+    suggestions = _suggestions(ctx.business, ctx.language, sugg_override)
+    ask = _ask(ctx.language, ask_override)
+    text = build_welcome(
+        ctx.business, ctx.language, bot_name=bot_name, suggestions=suggestions, ask=ask
+    )
     ctx.emit("welcome_sent", language=ctx.language)
     # cacheable=False: salutul e tratat determinist aici, nu vrem să poluăm cache-ul semantic.
     ctx.set_reply(text, cacheable=False)

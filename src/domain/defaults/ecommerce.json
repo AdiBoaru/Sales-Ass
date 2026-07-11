@@ -28,12 +28,12 @@
   },
   "greetings": {},
   "settled_order_statuses": ["delivered", "completed", "closed"],
-  "_response_style_note": "NX-159 felia 3: ghid de STIL pentru compunerea NON-rich (proza/order). INPUT de model; rich are regulile ei. Override per-tenant in businesses.settings.domain_pack.response_style.",
+  "_response_style_note": "NX-159 felia 3: ghid de STIL pentru compunerea raspunsurilor. INPUT de model; override per-tenant in businesses.settings.domain_pack.response_style.",
   "response_style": {
-    "ton": "prietenos, orientat pe vanzare, concis",
-    "nivel_detaliu": "standard — 2-3 fraze, cu un pas urmator clar",
+    "ton": "prietenos, natural si concis; evita formularea de brosura sau de AI",
+    "nivel_detaliu": "scurt spre standard — raspunde concret, cu propozitii variate; nu repeta acelasi intro sau aceeasi incheiere",
     "reguli_salut": "saluta o singura data per conversatie",
-    "reguli_upsell": "upsell soft, contextual (accesoriu/varianta) — nu insista",
-    "disclaimere": "nu promite stoc, livrare sau reduceri neconfirmate in date"
+    "reguli_upsell": "upsell soft, contextual (accesoriu/varianta), doar daca ajuta natural — nu insista",
+    "disclaimere": "nu promite stoc, livrare sau reduceri neconfirmate in date; evita fraze ca «analizez catalogul», «compar optiunile», «iti explic exact de ce»"
   }
 }

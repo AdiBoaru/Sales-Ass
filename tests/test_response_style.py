@@ -2,7 +2,7 @@
 
 Testează: (1) helper-ul pur `response_style_block`; (2) loader-ul citește `response_style` din
 defaults + override per-tenant; (3) builderele — style ajunge în `build_agent_system`/
-`build_reco_system` (PRIMAR + retry), NU în `build_rich_system` (rich neatins); (4) gating în
+`build_reco_system`/`build_rich_system` (PRIMAR + retry + rich); (4) gating în
 `_load_prompt_inputs` (flag OFF / pack absent → fără style). Fără DB real → rulează în CI.
 """
 
@@ -94,7 +94,7 @@ def test_prompt_inputs_drops_empty_style_values():
     assert inp.response_style == (("ton", "x"),)
 
 
-# --- builderele: PRIMAR + retry stilate, rich NU -----------------------------
+# --- builderele: PRIMAR + retry + rich stilate -------------------------------
 
 
 def test_agent_system_carries_style():
@@ -107,9 +107,9 @@ def test_reco_system_carries_style():
     assert "Stil de răspuns" not in build_reco_system(INP)
 
 
-def test_rich_system_untouched_by_style():
-    # Calea rich are propriile reguli dure → NU primește ghidul de stil.
-    assert "Stil de răspuns" not in build_rich_system(INP_STYLED)
+def test_rich_system_carries_style():
+    assert "Stil de răspuns" in build_rich_system(INP_STYLED)
+    assert "Stil de răspuns" not in build_rich_system(INP)
 
 
 # --- gating în _load_prompt_inputs --------------------------------------------
