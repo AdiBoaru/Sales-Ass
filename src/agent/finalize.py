@@ -34,6 +34,7 @@ from src.agent.validator import (
     _valid,
     validate_prose,
 )
+from src.analytics.demand import clean_ids, product_ids_from_dicts
 from src.config import get_settings
 from src.models import Offer, TurnContext
 from src.worker import compose
@@ -377,7 +378,14 @@ async def render(
                 # NX-137: regulile rich INTERZIC linkuri în proza modelului → fără atașarea asta,
                 # linkul de checkout creat în acest tur nu ajungea NICIODATĂ la client pe web.
                 _attach_checkout_offer(ctx, plan.checkout_url)
-                ctx.emit("agent_recommended", n=len(rich.items), rich=True)
+                # NX-163: ce a recomandat botul, ca ref-uri (P8) — „ce se cere/convertește"
+                # (NX-164). rich.items poartă product_id structural; doar id-uri, fără PII.
+                ctx.emit(
+                    "agent_recommended",
+                    n=len(rich.items),
+                    rich=True,
+                    product_ids=clean_ids(it.product_id for it in rich.items),
+                )
                 return None
             # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
             # structurat a eșuat/excepție; `rich.items == []` = toate produsele au picat la
@@ -412,7 +420,8 @@ async def render(
         # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
         # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
         _attach_checkout_offer(ctx, plan.checkout_url)
-        ctx.emit("agent_recommended", n=len(products))
+        # NX-163: ce a recomandat botul, ca ref-uri (P8) — vezi enrich-ul rich de mai sus.
+        ctx.emit("agent_recommended", n=len(products), product_ids=product_ids_from_dicts(products))
         return result
     elif final:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
