@@ -75,6 +75,49 @@ def test_web_response_checker_catches_unknown_product_id():
     assert any("not in source" in f for f in result.failures)
 
 
+def test_web_response_checker_accepts_variant_payload_with_oos_stock():
+    payload = {
+        "content": "Iti recomand Fluid X.",
+        "products": [
+            {
+                "product_id": "p1",
+                "name": "Fluid X",
+                "price": 58.99,
+                "variants": [
+                    {"variant_id": "v07", "label": "Medium Warm 07", "price": 58.99, "stock": 3},
+                    {"variant_id": "v08", "label": "Tan Warm 08", "price": 58.99, "stock": 0},
+                ],
+            }
+        ],
+        "suggestions": [],
+    }
+
+    result = validate_web_payload(payload, source_products=SOURCE_PRODUCTS)
+
+    assert result.passed is True
+
+
+def test_web_response_checker_catches_broken_variant_payload():
+    payload = {
+        "content": "Iti recomand Fluid X.",
+        "products": [
+            {
+                "product_id": "p1",
+                "name": "Fluid X",
+                "price": 58.99,
+                "variants": [{"label": "Tan Warm 08", "stock": -1}],
+            }
+        ],
+        "suggestions": [],
+    }
+
+    result = validate_web_payload(payload, source_products=SOURCE_PRODUCTS)
+
+    assert result.passed is False
+    assert any("missing variant_id" in f for f in result.failures)
+    assert any("stock must be" in f for f in result.failures)
+
+
 def test_web_response_checker_catches_empty_or_invented_url():
     payload = {
         "content": "Vezi produsul aici: https://evil.example/p1",

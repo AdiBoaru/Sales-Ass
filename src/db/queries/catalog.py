@@ -35,21 +35,33 @@ _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 # (nuanțe beauty / mărimi fashion / fitment auto — `label` vine din DB). `vp` (scalarul min) rămâne
 # (îl folosesc _EFFECTIVE_PRICE + sortarea). Fragment partajat de `_SELECT`/`_DETAIL_SELECT` (DRY).
 # Perf: rulează pe tot pool-ul de fuziune (ca lateralele `vp`/`img` existente), dar e un index-scan
-# ieftin pe idx_variants_product(product_id), ≤12 rânduri — îl ținem și pe `_SELECT` ca validatorul
+# ieftin pe idx_variants_product(product_id), ≤16 rânduri — îl ținem și pe `_SELECT` ca validatorul
 # să aibă prețurile per-variantă pe ORICE cale (search/detail), robust la dedup.
 _VARIANTS_AGG = """
     left join lateral (
         select jsonb_agg(
             jsonb_build_object(
-                'id', v.id::text, 'label', v.label, 'sku', v.sku,
-                'price', coalesce(v.sale_price, v.price)::float8, 'stock', v.stock
+                'id', v.id::text,
+                'variant_id', v.id::text,
+                'label', v.label,
+                'sku', v.sku,
+                'price', coalesce(v.sale_price, v.price)::float8,
+                'list_price',
+                    (case when v.sale_price is not null and v.sale_price < v.price
+                          then v.price end)::float8,
+                'stock', v.stock,
+                'color_hex', v.color_hex,
+                'attributes', coalesce(v.attributes, '{}'::jsonb),
+                'shade', v.attributes->>'shade',
+                'undertone', v.attributes->>'undertone',
+                'depth', v.attributes->>'depth'
             ) order by coalesce(v.sale_price, v.price) asc
         ) as variants
         from (
             select * from product_variants
             where product_id = p.id
             order by coalesce(sale_price, price) asc
-            limit 12
+            limit 16
         ) v
     ) vr on true
 """

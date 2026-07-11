@@ -71,8 +71,25 @@ frontendul NU îl generează și NU îl interpretează, doar îl trece mai depar
                              //   `tone` ∈ info|danger (azi): deal→danger, top→info. `badge` (string)
                              //   rămâne emis în paralel pt FE-ul de bază. Randează `badges` dacă există.
   "currency": "RON",         // opțional — moneda cardului (din DomainPack); FE mapează RON→„Lei".
-  "details": "string"        // opțional — descriere EXTINSĂ („Spune-mi mai multe"), din ai_summary
+  "details": "string",       // opțional — descriere EXTINSĂ („Spune-mi mai multe"), din ai_summary
                              //   (catalog, medical-guarded). Randează colapsat/expandabil, NU în card.
+
+  // ——— Variante / nuanțe (NX-166, aditiv) ———
+  "variants": [              // opțional — selector de variantă/nuanță/mărime, max ~16/card
+    {
+      "variant_id": "uuid",  // obligatoriu în fiecare variantă
+      "label": "Medium Warm 07",
+      "price": 89.00,        // opțional — preț curent al variantei
+      "list_price": 109.00,  // opțional — preț original tăiat, doar dacă list_price > price
+      "stock": 8,            // opțional — stoc per variantă; 0 = out-of-stock, randează disabled
+      "color_hex": "#C89463",// opțional — swatch de culoare
+      "attributes": {        // opțional — chei compacte, neutre pe vertical
+        "shade": "07",
+        "undertone": "warm",
+        "depth": "medium"
+      }
+    }
+  ]
 }
 ```
 
@@ -87,6 +104,8 @@ frontendul NU îl generează și NU îl interpretează, doar îl trece mai depar
   fallback pe `badge` (string). Ex. „Super Preț" (danger/roșu), „Top Favorit" (info/albastru).
 - **`review_count`** + **`rating`**: `4.8 ★ (120)`.
 - **`reason`**: un rând discret sub nume. **`details`**: expandabil „Spune-mi mai multe".
+- **`variants`**: randează selector de swatch/nuanță când există. `stock: 0` înseamnă variantă
+  vizibilă dar dezactivată/OOS; nu o ascunde, fiindcă botul poate vorbi despre disponibilitate.
 
 ---
 
@@ -162,6 +181,7 @@ voce de client). Ex. la o comparație: `["Adaugă Crema A", "Adaugă Crema B", "
 | Badge | `badge` | tag/chip în colțul cardului |
 | Nr. recenzii | `review_count` (+`rating`) | `4.8 ★ (120)` |
 | Motiv per card | `reason` | rând discret sub nume |
+| Selector nuanțe/variante | `variants[]` | swatches/opțiuni; `stock:0` disabled/OOS |
 | **Tabel comparativ** | `comparison.{columns,rows}` | tabel; `null`→„—"; mobile→vertical |
 | Chips | `suggestions[]` | tap → trimite textul ca mesaj |
 

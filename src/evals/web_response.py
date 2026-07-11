@@ -104,6 +104,38 @@ def _validate_product_card(
         prices.add(list_price)
         if price is not None and list_price <= price:
             failures.append(f"{prefix} {pid}: list_price must be greater than price")
+    variants = card.get("variants")
+    if variants is not None:
+        if not isinstance(variants, list):
+            failures.append(f"{prefix} {pid}: variants must be a list")
+        else:
+            for i, variant in enumerate(variants):
+                if not isinstance(variant, dict):
+                    failures.append(f"{prefix} {pid}: variants[{i}] is not an object")
+                    continue
+                if not variant.get("variant_id"):
+                    failures.append(f"{prefix} {pid}: variants[{i}] missing variant_id")
+                if not variant.get("label"):
+                    failures.append(f"{prefix} {pid}: variants[{i}] missing label")
+                vprice = _price(variant.get("price"))
+                if variant.get("price") is not None and vprice is None:
+                    failures.append(f"{prefix} {pid}: variants[{i}] invalid price")
+                elif vprice is not None:
+                    prices.add(vprice)
+                vlist = _price(variant.get("list_price"))
+                if vlist is not None:
+                    prices.add(vlist)
+                    if vprice is not None and vlist <= vprice:
+                        failures.append(
+                            f"{prefix} {pid}: variants[{i}] list_price must be greater than price"
+                        )
+                stock = variant.get("stock")
+                if stock is not None:
+                    try:
+                        if int(stock) < 0:
+                            failures.append(f"{prefix} {pid}: variants[{i}] stock must be >= 0")
+                    except (TypeError, ValueError):
+                        failures.append(f"{prefix} {pid}: variants[{i}] invalid stock")
     return pid, prices, urls
 
 

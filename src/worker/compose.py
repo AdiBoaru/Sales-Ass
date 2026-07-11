@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.agent.fallbacks import _card_variants
 from src.config import get_settings
 from src.models import (
     Chip,
@@ -392,6 +393,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             list_price=float(lp) if lp is not None and float(lp) > eff else None,
             currency=currency,
             details=ai if (ai and not _unsafe_medical(ai)) else None,
+            variants=_card_variants(p),
         )
 
     items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
@@ -436,16 +438,19 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
 
 def card_products(items: list[RichItem]) -> list[dict[str, Any]]:
     """Carduri compacte (pt cache signature + state refs): product_id + price obligatorii."""
-    return [
-        {
+    cards: list[dict[str, Any]] = []
+    for it in items:
+        card = {
             "product_id": it.product_id,
             "name": it.name,
             "price": it.price,
             "url": it.url,
             "image": it.image,
         }
-        for it in items
-    ]
+        if it.variants:
+            card["variants"] = it.variants
+        cards.append(card)
+    return cards
 
 
 def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:

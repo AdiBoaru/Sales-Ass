@@ -186,6 +186,17 @@ def _message_usage_kwargs(turn_usage: TurnUsage | None) -> dict:
     }
 
 
+def _displayed_product_refs(products: list[dict] | None) -> list[dict]:
+    """Persist only compact refs in conversation state; rich card payload may contain variants."""
+    refs: list[dict] = []
+    for p in products or []:
+        pid = p.get("product_id") or p.get("id")
+        if pid is None or p.get("name") is None or p.get("price") is None:
+            continue
+        refs.append({"product_id": pid, "name": p["name"], "price": float(p["price"])})
+    return refs
+
+
 async def handle_turn(
     conn: asyncpg.Connection,
     business: BusinessConfig,
@@ -373,7 +384,10 @@ async def handle_turn(
         if (is_rich or has_products) and ctx.reply.products:
             # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
             # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
-            new_state = {**conv["state"], "displayed_products": ctx.reply.products}
+            new_state = {
+                **conv["state"],
+                "displayed_products": _displayed_product_refs(ctx.reply.products),
+            }
         # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
         # pending_question default None) → nu lăsăm întrebări zombi în state.
         new_state = {**new_state, "pending_question": ctx.reply.pending_question}
