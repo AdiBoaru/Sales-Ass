@@ -55,3 +55,37 @@ def test_classify_contextual_cheaper():
 def test_classify_bare_cheap_stays_dynamic():
     # „ieftin" simplu (fără comparativul „mai") = query de produs, NU refinare relativă.
     assert classify_volatility("caut o cremă ieftină") == "dynamic"
+
+
+def test_classify_contextual_deixis_compare():
+    # NX-165: „compară primele două" e REFERENȚIAL la setul afișat → bypass (poisoning altfel).
+    assert classify_volatility("compară primele două") == "contextual"
+    assert classify_volatility("compară astea două") == "contextual"
+    assert classify_volatility("poți compara primele opțiuni") == "contextual"
+    assert classify_volatility("compare the first two") == "contextual"
+    assert classify_volatility("Velora vs LumaDerm") == "contextual"
+    # NU „compartiment" (compar+t, nu compar+[aie]) → rămâne necontextual.
+    assert classify_volatility("vreau un compartiment separat") == "static"
+
+
+def test_classify_contextual_deixis_link():
+    # NX-165: cerere de LINK pe un produs afișat → referențial → bypass.
+    assert classify_volatility("dă-mi linkul") == "contextual"
+    assert classify_volatility("trimite-mi link direct") == "contextual"
+    assert classify_volatility("unde o cumpăr") == "contextual"
+    assert classify_volatility("where can i buy it") == "contextual"
+
+
+def test_classify_contextual_deixis_show_more():
+    # NX-165: paginare pe sesiunea afișată („mai arată-mi") → referențial → bypass.
+    assert classify_volatility("mai arată-mi") == "contextual"
+    assert classify_volatility("arată-mi mai multe produse") == "contextual"
+    assert classify_volatility("show more") == "contextual"
+    assert classify_volatility("altele") == "contextual"
+
+
+def test_classify_deixis_precedence_over_static_and_dynamic():
+    # „compară" nu conține cuvânt dynamic → fără gate deixis ar fi fost STATIC și s-ar fi cache-uit
+    # (bug-ul reprodus). Cu gate: contextual. Când conține și dynamic, deixis câștigă (ca cheaper).
+    assert classify_volatility("compară-le pe astea") == "contextual"
+    assert classify_volatility("dă-mi linkul la produsul cu reducere") == "contextual"

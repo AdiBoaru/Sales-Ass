@@ -40,7 +40,8 @@ mesaj (după Gates) →
   L1 CANONICALIZE + ROUTE VOLATILITY (determinist, fără LLM)
     • canonical_str + canonical_hash (lowercase, fără diacritice, colaps spații/filler)
     • clasă de volatilitate: static (FAQ) | dynamic (produs/preț) |
-      contextual (refinare relativă: "mai ieftin" decât setul AFIȘAT) | realtime (comandă, "a mea")
+      contextual (REFERENȚIAL la setul AFIȘAT: "mai ieftin" / "compară primele două" /
+      "dă-mi linkul" / "mai arată-mi" — NX-165) | realtime (comandă, "a mea")
     • realtime/contextual/personalizat → BYPASS cache (regenerează)
       — contextual e relativ la conversația curentă: un hit din cache-ul partajat ar servi
         răspunsul altui client (alt baseline); lasă turul la agent (cheaper_intent)

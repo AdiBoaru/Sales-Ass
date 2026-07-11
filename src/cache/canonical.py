@@ -5,9 +5,10 @@ Cod PUR, determinist (fără LLM). Două funcții:
     Colapsează paraphrase-urile pe un singur entry (ridică hit-rate) și alimentează
     stratul L1 exact prin hash.
   • `classify_volatility` — rutează query-ul: `realtime` (comandă/personal),
-    `contextual` (refinare relativă la setul afișat — „mai ieftin") și `dynamic`
-    (produs/preț) NU se servesc/scriu în G5b-1 (precision-first: când e dubiu,
-    bypass). Doar `static` (FAQ/generic) e cacheabil acum.
+    `contextual` (REFERENȚIAL la setul afișat — „mai ieftin", „compară primele
+    două", „dă-mi linkul", „mai arată-mi") și `dynamic` (produs/preț) NU se
+    servesc/scriu în G5b-1 (precision-first: când e dubiu, bypass). Doar `static`
+    (FAQ/generic) e cacheabil acum.
 
 Vezi docs/semantic-cache-design.md §2.
 """
@@ -62,6 +63,31 @@ _CONTEXTUAL_RE = re.compile(
     r"|\bprea\s+scump\w*|\bcam\s+scump\w*"
     r"|\bcheaper\b|\bcheapest\b|\bolcsobb\w*|\blegolcsobb\w*"
 )
+# Bypass contextual (NX-165) — INTENȚII REFERENȚIALE la setul deja afișat: „compară
+# primele două", „dă-mi linkul", „mai arată-mi". Răspunsul depinde de `displayed_products`
+# din ACEA conversație, nu de textul query-ului; cache-ul e cheiat pe text (+business+locale)
+# → un hit din cache-ul partajat servește comparația/linkul/pagina altui client = poisoning
+# (confirmat live: „compara primele doua" hit_count=3 sărea compare_intent la cache_stage).
+# Trebuie să ajungă mereu la agent, unde intențiile deterministe le tratează. Oglindă
+# normalizată (fără diacritice) a `_COMPARE_RE`/`_LINK_RE`/`_MORE_RE` din agent/deterministic.py
+# — duplicat intenționat (cache-ul e strat inferior, nu importă din agent). Blochează ȘI
+# lookup-ul (cache.py) ȘI writeback-ul (aftercare.py) — ambele cheamă classify_volatility.
+_DEIXIS_RE = re.compile(
+    # compară / versus / vs / HU összehasonlít, hasonlíts (NU „compartiment": compar+t)
+    r"\bcompar[aie]\w*|\bversus\b|\bvs\.?\b|\bosszehasonl\w*|\bhasonlits\w*"
+    # link / „unde (o/îl/le) (pot) cumpăr|comand|găsesc" / where…buy|get|find / HU hol…veszem
+    r"|\blink\w*"
+    r"|\bunde\s+(?:o\s+|il\s+|le\s+)?(?:pot\s+)?(?:cumpar|comand|gasesc)\w*"
+    r"|\bwhere\s+(?:can\s+i\s+|to\s+)?(?:buy|get|find)\b"
+    r"|\bhol\s+(?:tudom\s+)?(?:veszem|vehetem|megvenni|megveszem)\b"
+    # „mai arată-mi" / „mai multe" (paginare) / „alte opțiuni" / altele / show more / HU többet
+    r"|\bmai\s+arat\w*|\bmai\s+multe\b(?!\s+\w)"
+    r"|\bmai\s+multe\s+(?:produse|optiuni|variante|rezultate|exemple)\b"
+    r"|\balte\s+(?:optiuni|variante|produse)\b|\bsi\s+alte\s+(?:optiuni|variante|produse)\b"
+    r"|\baltele\b|\bmai\s+vreau\b"
+    r"|\bshow\s+more\b|\bmore\s+(?:options|products|results)\b|\bother\s+(?:options|ones)\b"
+    r"|\btobbet\b"
+)
 # Buget / număr + monedă („sub 80 lei", „100 ron") → query de produs.
 _BUDGET_RE = re.compile(r"\d+\s*(lei|ron)")
 # Pentru canonicalize: orice nu e literă/cifră/spațiu → spațiu.
@@ -89,14 +115,14 @@ def canonicalize(text: str) -> tuple[str, str]:
 def classify_volatility(text: str | None) -> str:
     """`'realtime' | 'contextual' | 'dynamic' | 'static'`. Precision-first:
     realtime/contextual/dynamic → bypass în G5b-1; restul (FAQ/generic) → static
-    (cacheabil). `contextual` ÎNAINTE de `dynamic`: „caut ceva mai ieftin" e o
-    refinare relativă (bypass), nu un query de produs cacheabil."""
+    (cacheabil). `contextual` ÎNAINTE de `dynamic`: „caut ceva mai ieftin" / „compară
+    primele două" sunt referențiale la setul afișat (bypass), nu query-uri cacheabile."""
     if not text:
         return "static"
     norm = _norm(text)
     if any(p in norm for p in _REALTIME):
         return "realtime"
-    if _CONTEXTUAL_RE.search(norm):
+    if _CONTEXTUAL_RE.search(norm) or _DEIXIS_RE.search(norm):
         return "contextual"
     if _BUDGET_RE.search(norm) or any(w in norm for w in _DYNAMIC_WORDS):
         return "dynamic"
