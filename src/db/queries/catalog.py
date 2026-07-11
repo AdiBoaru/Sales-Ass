@@ -35,7 +35,7 @@ _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 # (nuanțe beauty / mărimi fashion / fitment auto — `label` vine din DB). `vp` (scalarul min) rămâne
 # (îl folosesc _EFFECTIVE_PRICE + sortarea). Fragment partajat de `_SELECT`/`_DETAIL_SELECT` (DRY).
 # Perf: rulează pe tot pool-ul de fuziune (ca lateralele `vp`/`img` existente), dar e un index-scan
-# ieftin pe idx_variants_product(product_id), ≤12 rânduri — îl ținem și pe `_SELECT` ca validatorul
+# ieftin pe idx_variants_product(product_id), ≤16 rânduri — îl ținem și pe `_SELECT` ca validatorul
 # să aibă prețurile per-variantă pe ORICE cale (search/detail), robust la dedup.
 _VARIANTS_AGG = """
     left join lateral (
@@ -61,7 +61,7 @@ _VARIANTS_AGG = """
             select * from product_variants
             where product_id = p.id
             order by coalesce(sale_price, price) asc
-            limit 12
+            limit 16
         ) v
     ) vr on true
 """
