@@ -468,6 +468,23 @@ def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:
     ]
 
 
+# Intro-uri pt linia de chips pe floor-ul TEXT (WhatsApp/cache) — 2-3 variante naturale per limbă,
+# alese DETERMINIST din conținut (același reply → același text: cache-safe), ca linia să nu sune
+# „template" la fiecare recomandare. Web omite linia (chips = butoane); Telegram are calea lui.
+_CHIP_LEADS: dict[str, tuple[str, ...]] = {
+    "ro": ("Dacă vrei, putem continua cu:", "Îți mai pot arăta:", "Sau, dacă preferi:"),
+    "en": ("If you like, we can continue with:", "I can also show you:", "Or, if you prefer:"),
+    "hu": ("Ha szeretnéd, folytathatjuk:", "Ezt is meg tudom mutatni:", "Vagy, ha inkább:"),
+}
+
+
+def _chip_lead(language: str | None, seed: str) -> str:
+    """Un intro natural pt linia de chips, ales DETERMINIST din `seed` (conținutul chips-urilor) →
+    același reply produce mereu același text (cache-safe), dar recomandări diferite variază."""
+    variants = _CHIP_LEADS.get((language or "ro").lower()) or _CHIP_LEADS["ro"]
+    return variants[sum(ord(c) for c in seed) % len(variants)]
+
+
 def flatten(rich: RichReply, language: str | None = None) -> str:
     """Aplatizare deterministă în text — floor-ul pentru canale fără rich (WhatsApp),
     messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză. `language` →
@@ -495,7 +512,8 @@ def flatten(rich: RichReply, language: str | None = None) -> str:
     if rich.education:
         lines += ["", rich.education]
     if rich.chips:
-        lines += ["", "Poți cere și: " + " · ".join(c.label for c in rich.chips)]
+        labels = [c.label for c in rich.chips]
+        lines += ["", f"{_chip_lead(language, ''.join(labels))} " + " · ".join(labels)]
     if rich.disclaimer:
         lines += ["", rich.disclaimer]
     return "\n".join(lines).strip()

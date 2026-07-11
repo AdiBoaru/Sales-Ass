@@ -99,8 +99,8 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     excepții de DB se propagă în `try`-ul din `agent_stage` (→ echo fallback, P6)."""
     categories = await list_category_names(deps.conn, ctx.business.id)
     aliases = await list_routing_aliases(deps.conn, ctx.business.id)
-    # NX-159 felia 3: profilul de STIL per business (DomainPack) intră în system-ul buclei/retry
-    # (prompt_builder), NU pe rich. Gated; pack absent / OFF → None → prefix byte-identic.
+    # NX-159 felia 3 / NX-165: profilul de STIL (DomainPack) intră în TOATE system-urile de
+    # compunere (buclă/retry/rich). Gated; pack absent / OFF → None → prefix byte-identic.
     pack = getattr(ctx.business, "domain_pack", None)
     style = pack.response_style if (pack and get_settings().response_style_enabled) else None
     return PromptInputs.build(

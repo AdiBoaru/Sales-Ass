@@ -508,6 +508,32 @@ def test_flatten_hides_pick_by_default() -> None:
     assert "Recomandarea mea" not in compose.flatten(rich, "ro")  # settings reale → default OFF
 
 
+def test_chip_lead_deterministic_and_localized() -> None:
+    """`_chip_lead`: determinist per (limbă, conținut), fallback pe 'ro', și variază pe seed-uri."""
+    assert compose._chip_lead("ro", "abc") == compose._chip_lead("ro", "abc")  # stabil (cache-safe)
+    assert compose._chip_lead(None, "abc") in compose._CHIP_LEADS["ro"]  # None → ro
+    assert compose._chip_lead("xx", "abc") in compose._CHIP_LEADS["ro"]  # limbă necunoscută → ro
+    assert compose._chip_lead("en", "abc") in compose._CHIP_LEADS["en"]
+    leads = {compose._chip_lead("ro", s) for s in ("a", "bb", "ccc", "dddd", "eeeee", "ffffff")}
+    assert len(leads) >= 2  # nu o singură frază fixă (anti-template)
+
+
+def test_flatten_chips_uses_natural_lead_not_template() -> None:
+    """Floor-ul text: linia de chips folosește un lead natural + labels, NU „Poți cere și:"."""
+    rich = RichReply(
+        intro=None,
+        items=[RichItem(product_id="A", name="Cream A", price=10.0, reason="r")],
+        pick=None,
+        education=None,
+        chips=[SimpleNamespace(label="Una mai ieftină"), SimpleNamespace(label="Compară A cu B")],
+        disclaimer="",
+    )
+    text = compose.flatten(rich, "ro")
+    assert "Poți cere și" not in text  # fraza-șablon veche a dispărut
+    assert "Una mai ieftină" in text and "Compară A cu B" in text  # chips-urile rămân
+    assert any(lead in text for lead in compose._CHIP_LEADS["ro"])  # un lead RO natural
+
+
 def test_scrub_education_keeps_safe_sentences_drops_unsafe() -> None:
     """G4: scrub la nivel de PROPOZIȚIE — păstrăm sfatul sigur, aruncăm doar propoziția „murdară"
     (înainte, un singur număr/claim ucidea tot paragraful → coaching-ul dispărea des). stock_present

@@ -146,9 +146,10 @@ REGULI DURE:
 
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
   avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = UN rând de potrivire ca la iZi:
-  ÎNCEPE cu un conector („Bun pentru… / Potrivit dacă… / Ideal dacă… / Util dacă…"), apoi 1-2
-  CARACTERISTICI REALE ale produsului (din „fațete"/„descriere": ingredient / finish / proprietate /
-  tip de ten) legate de o NEVOIE sau un UZ concret.
+  spune pentru CINE/CÂND e potrivit + 1-2 CARACTERISTICI REALE ale produsului (din
+  „fațete"/„descriere": ingredient / finish / proprietate / tip de ten) legate de o NEVOIE sau un UZ
+  concret. Poți deschide cu un conector („Bun pentru… / Potrivit dacă… / Ideal dacă…"), dar sunt
+  EXEMPLE, nu obligatorii — VARIAZĂ începutul, nu folosi același conector pe două carduri.
     BINE: „Potrivit dacă ai ten sensibil — cu niacinamidă și acid hialuronic, pentru calmare."
     RĂU (tautologic/vag/repetitiv): „hidratează și lasă pielea confortabilă"; „bun pentru ce cauți".
   NU reformula nevoia tautologic, NU repeta aceeași expresie de două ori, preferă atributele din
@@ -326,8 +327,8 @@ def build_agent_system(inp: PromptInputs) -> str:
         "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
     )
     base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
-    # NX-159 felia 3: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR (non-rich),
-    # nu doar la retry. Gol → byte-identic. Rich re-compune cu `build_rich_system` (neatins).
+    # NX-159 felia 3 / NX-165: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR,
+    # nu doar la retry. Gol → byte-identic. Rich îl primește și el (vezi `build_rich_system`).
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
 
