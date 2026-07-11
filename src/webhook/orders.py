@@ -110,6 +110,16 @@ async def process_order(
     events = [Event("order_received", {"total": o.total, "has_ref": o.ref is not None})]
     if attribution != "none":
         events.append(Event("order_attributed", {"attribution": attribution, "total": o.total}))
+    # NX-162 (Funnel Truth): pasul de CONVERSIE al funnel-ului checkout (created→clicked→converted).
+    # Gated pe `inserted` → redelivery-ul aceleiași comenzi NU dublează evenimentul (mark_checkout
+    # e deja idempotent). Fără PII: ref_code (uuid), order_id (uuid), attribution (enum).
+    if checkout_link_id is not None and inserted:
+        events.append(
+            Event(
+                "checkout_link_converted",
+                {"ref_code": o.ref, "order_id": order_id, "attribution": attribution},
+            )
+        )
     try:
         await insert_events(
             conn, business_id, events, conversation_id=conversation_id, contact_id=contact_id

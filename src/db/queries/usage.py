@@ -58,21 +58,31 @@ msg as (
     where business_id = $1 and (created_at at time zone 'UTC')::date = $2
 ),
 ord as (
+    -- NX-162: split bot-led vs assisted, derivat din orders.attribution (FILTER). Perechea
+    -- agregată (attribution <> 'none') rămâne pentru back-compat; split-ul o descompune —
+    -- consumatorul NU trebuie să prezinte direct_bot + assisted ca un total unic (dublă numărare).
     select
-        count(*) filter (where attribution <> 'none')                  as orders_attributed,
-        coalesce(sum(total) filter (where attribution <> 'none'), 0)   as revenue_attributed
+        count(*) filter (where attribution <> 'none')                        as orders_attributed,
+        coalesce(sum(total) filter (where attribution <> 'none'), 0)         as revenue_attributed,
+        count(*) filter (where attribution = 'direct_bot')                   as orders_direct_bot,
+        coalesce(sum(total) filter (where attribution = 'direct_bot'), 0)    as revenue_direct_bot,
+        count(*) filter (where attribution = 'assisted')                     as orders_assisted,
+        coalesce(sum(total) filter (where attribution = 'assisted'), 0)      as revenue_assisted
     from orders
     where business_id = $1 and (placed_at at time zone 'UTC')::date = $2
 )
 insert into usage_daily (
     business_id, day, conversations, messages_in, messages_out, templates_sent,
     tokens_in, tokens_out, cached_tokens, cost_usd, cache_hits, handoffs,
-    orders_attributed, revenue_attributed, intents
+    orders_attributed, revenue_attributed,
+    orders_direct_bot, revenue_direct_bot, orders_assisted, revenue_assisted, intents
 )
 select
     $1, $2, ev.conversations, msg.messages_in, msg.messages_out, msg.templates_sent,
     ev.tokens_in, ev.tokens_out, ev.cached_tokens, ev.cost_usd, ev.cache_hits, ev.handoffs,
-    ord.orders_attributed, ord.revenue_attributed, intents.intents
+    ord.orders_attributed, ord.revenue_attributed,
+    ord.orders_direct_bot, ord.revenue_direct_bot, ord.orders_assisted, ord.revenue_assisted,
+    intents.intents
 from ev, intents, msg, ord
 on conflict (business_id, day) do update set
     conversations      = excluded.conversations,
@@ -87,6 +97,10 @@ on conflict (business_id, day) do update set
     handoffs           = excluded.handoffs,
     orders_attributed  = excluded.orders_attributed,
     revenue_attributed = excluded.revenue_attributed,
+    orders_direct_bot  = excluded.orders_direct_bot,
+    revenue_direct_bot = excluded.revenue_direct_bot,
+    orders_assisted    = excluded.orders_assisted,
+    revenue_assisted   = excluded.revenue_assisted,
     intents            = excluded.intents
 returning *
 """

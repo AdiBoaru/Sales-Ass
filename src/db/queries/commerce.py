@@ -70,6 +70,47 @@ async def get_checkout_link_by_ref(
     return dict(row) if row else None
 
 
+async def get_checkout_redirect(
+    conn: asyncpg.Connection, business_id: str, ref_code: str
+) -> dict[str, Any] | None:
+    """NX-162: linkul pt redirect de click — `url` (destinația 302) + ids pt drilldown, DOAR dacă
+    e NEexpirat. Expirat/inexistent → None (endpoint-ul îl tratează la fel: fallback safe, fără
+    leak de existență — ref_code = uuid). `business_id = $1` (izolare per tenant, P7)."""
+    row = await conn.fetchrow(
+        """
+        select id::text as id, url,
+               conversation_id::text as conversation_id, contact_id::text as contact_id
+        from checkout_links
+        where business_id = $1 and ref_code = $2
+          and (expires_at is null or expires_at > now())
+        """,
+        business_id,
+        ref_code,
+    )
+    return dict(row) if row else None
+
+
+async def stamp_checkout_clicked(
+    conn: asyncpg.Connection, business_id: str, ref_code: str
+) -> str | None:
+    """NX-162: ștampilează `clicked_at = now()` DOAR dacă e null (idempotent — primul click câștigă,
+    nu suprascrie). Întoarce `id`-ul linkului DACĂ acesta e primul click (→ endpoint-ul emite
+    `checkout_link_clicked`, un singur event), altfel None (deja click-uit / inexistent). `where
+    clicked_at is null` e atomic → un singur „primul" chiar la click-uri concurente.
+    `business_id = $1` (izolare, P7)."""
+    row = await conn.fetchrow(
+        """
+        update checkout_links
+        set clicked_at = now()
+        where business_id = $1 and ref_code = $2 and clicked_at is null
+        returning id::text as id
+        """,
+        business_id,
+        ref_code,
+    )
+    return row["id"] if row else None
+
+
 async def upsert_order(
     conn: asyncpg.Connection,
     business_id: str,
