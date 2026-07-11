@@ -28,6 +28,11 @@ if TYPE_CHECKING:
     pass
 
 
+# Web = UI premium: max 4 chips ca butoane (widget-ul nu trebuie să pară încărcat). Chat-urile
+# (WhatsApp/Telegram) rămân pe _MAX_CHIPS din compose — capul ăsta e DOAR pe render-ul web.
+_MAX_WEB_CHIPS = 4
+
+
 def _card(
     name: Any,
     price: Any,
@@ -150,7 +155,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
             )
             for it in reply.rich.items
         ]
-        suggestions = [c.label for c in reply.rich.chips]
+        suggestions = [c.label for c in reply.rich.chips][:_MAX_WEB_CHIPS]
         content = ensure_disclaimer(flatten_framing(reply.rich, lang), lang)
     elif reply.products:
         products = [
