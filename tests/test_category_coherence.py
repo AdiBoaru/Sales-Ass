@@ -111,3 +111,101 @@ async def test_semantic_wires_tree_clause_when_on(monkeypatch):
 
     assert "product_category_map m" in conn.sql
     assert "sub.path like reqc.path" in conn.sql
+
+
+# --- NX-167 (B): gardă „no off-category cards" (category_dropped) -----------------------------
+
+
+class _LLM:
+    async def embed(self, texts, *, model=None):
+        return [[0.0] * 8 for _ in texts]
+
+
+def _fresh_ctx(body):
+    from src.models import (
+        BusinessConfig,
+        Contact,
+        ConversationState,
+        InboundMessage,
+        TurnContext,
+    )
+
+    return TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="b", slug="d", name="D"),
+        contact=Contact(id="c", business_id="b"),
+        message=InboundMessage(provider_msg_id="m", body=body),
+        conversation_id="conv",
+        state=ConversationState(),
+    )
+
+
+def _stub_dropping_search(monkeypatch):
+    """Scriptează retrievalul ca să FORȚEZE category-drop: gol când categoria e cerută (strict),
+    un produs off-category după ce ladder-ul renunță la categorie (category=None) → relaxat."""
+    from src.tools import catalog_tools as ct
+
+    async def fake_lexical(
+        conn,
+        business_id,
+        *,
+        query_text,
+        price_max,
+        concerns,
+        category,
+        brand,
+        sort_mode,
+        in_stock_only,
+        pool,
+        **kwargs,
+    ):
+        if category:  # treapta strictă pe categorie → nimic
+            return []
+        return [{"id": "hair-1", "name": "Accesoriu par", "price": 9.99}]  # off-category
+
+    async def no_embeddings(conn, business_id):
+        return False
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
+    monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
+    monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
+    monkeypatch.setattr(ct, "map_concerns", lambda dp, c: ([str(x) for x in c] if c else None))
+
+
+async def test_offcategory_guard_suppresses_when_category_dropped(monkeypatch):
+    from src.tools.catalog_tools import search_products_tool
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", True)
+    _stub_dropping_search(monkeypatch)
+
+    ctx = _fresh_ctx("vreau makeup")
+    res = await search_products_tool(
+        ctx,
+        PipelineDeps(conn=object(), redis=None, llm=_LLM()),
+        {"query": "machiaj", "category": "machiaj"},
+    )
+
+    assert res.products == []  # cardurile off-category sunt SUPRIMATE
+    assert "«machiaj»" in res.llm_view  # semnal de clarificare cu categoria cerută
+    assert [e for e in ctx.events if e.type == "offcategory_suppressed"]
+    assert "active_search" not in ctx.state_patch  # sesiunea nu paginează gunoiul suprimat
+
+
+async def test_offcategory_guard_off_keeps_cards(monkeypatch):
+    from src.tools.catalog_tools import search_products_tool
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", False)
+    _stub_dropping_search(monkeypatch)
+
+    ctx = _fresh_ctx("vreau makeup")
+    res = await search_products_tool(
+        ctx,
+        PipelineDeps(conn=object(), redis=None, llm=_LLM()),
+        {"query": "machiaj", "category": "machiaj"},
+    )
+
+    assert res.products  # OFF → comportamentul vechi: cardurile off-category rămân (cu disclosure)
+    assert res.relevance is not None and res.relevance.category_dropped is True
+    assert not [e for e in ctx.events if e.type == "offcategory_suppressed"]

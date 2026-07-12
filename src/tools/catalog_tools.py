@@ -681,6 +681,28 @@ async def search_products_tool(
     category_dropped = bool(a.category) and (
         winning_step is not None and winning_step.get("category") is None
     )
+    # NX-167 (B): cerere CLARĂ de categorie, dar potrivirea a picat pe ALTĂ ramură (categoria cerută
+    # a fost renunțată în relaxare — nici pe arbore nu s-a găsit nimic pe ea) → NU prezenta produse
+    # off-category ca match. Suprimă cardurile + semnal de clarificare (P6: nu tăcere — agentul
+    # întreabă / oferă o subcategorie, nu minte că e ce a cerut). Curăță și sesiunea, ca
+    # „arată-mi altele" (fp identic) să NU pagineze gunoiul off-category suprimat.
+    if get_settings().search_offcategory_guard_enabled and category_dropped and products:
+        ctx.emit(
+            "offcategory_suppressed",
+            category_key=a.category,
+            relax_depth=relax_depth,
+            pool_size=len(products),
+        )
+        ctx.state_patch.pop("active_search", None)
+        return ToolResult(
+            ok=True,
+            products=[],
+            llm_view=(
+                f"Nu am găsit produse pe categoria «{a.category}» în catalog. NU prezenta produse "
+                f"din altă categorie ca fiind «{a.category}». Întreabă clientul ce anume caută sau "
+                f"propune-i o categorie înrudită — nu inventa o potrivire."
+            ),
+        )
     relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
     return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 
