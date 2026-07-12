@@ -191,16 +191,23 @@ def rule_required_attrs(products: list[dict[str, Any]], roots: dict[str, str]) -
     return out
 
 
+# Sufix de seed rezidual = număr (2-4 cifre) la final, precedat de un CUVÂNT lowercase (ex.
+# „definire 250", „volum 001"). NU prinde specs legitime cu majuscule (SPF 50, PA 30) — acolo
+# tokenul dinainte e uppercase. Lookbehind fix (3 litere) = suficient ca discriminator.
+_SEED_SUFFIX_RE = re.compile(r"(?<=[a-zăâîșț]{3})\s+\d{2,4}\s*$")
+
+
 def rule_clean_names(products: list[dict[str, Any]]) -> list[str]:
-    """R3: nume generate/duplicate — sufix numeric rezidual (`... 250`) sau nume identic
-    (normalizat) cu alt produs."""
+    """R3: nume generate/duplicate — sufix numeric rezidual de seed (`... definire 250`) sau nume
+    identic (normalizat) cu alt produs. NU semnalează specs legitime (`... SPF 50`)."""
     out = []
     norm_names: dict[str, str] = {}
     for p in products:
         name = p.get("name", "")
-        if re.search(r"\b\d{2,4}\s*$", name):
+        stripped = _SEED_SUFFIX_RE.sub("", name)
+        if stripped != name:
             out.append(f"{p.get('slug')}: nume cu sufix numeric rezidual — «{name}»")
-        key = re.sub(r"\s+", " ", _norm(re.sub(r"\b\d{2,4}\s*$", "", name)).strip())
+        key = re.sub(r"\s+", " ", _norm(stripped).strip())
         if key and key in norm_names and norm_names[key] != p.get("slug"):
             out.append(f"{p.get('slug')}: nume duplicat cu «{norm_names[key]}» — «{name}»")
         else:

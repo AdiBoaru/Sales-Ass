@@ -92,8 +92,7 @@
         "name": {
           "type": "string",
           "minLength": 3,
-          "pattern": "^(?!.*\\b\\d{2,4}\\s*$).+$",
-          "description": "Nume curat, FĂRĂ sufix numeric rezidual de seed (ex. '... 250')."
+          "description": "Nume curat. Sufixul numeric rezidual de seed (ex. '... 250') e prins de audit R3 (nu de schema — specs legitime ca 'SPF 50' sunt permise)."
         },
         "brandSlug": { "$ref": "#/$defs/slug" },
         "primaryCategorySlug": { "$ref": "#/$defs/slug" },

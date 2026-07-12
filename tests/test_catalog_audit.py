@@ -104,6 +104,13 @@ def test_r3_flags_duplicate_names():
     assert audit(data)["clean_names"]
 
 
+def test_r3_allows_legit_spec_number():
+    # „SPF 50" e o spec legitimă (număr precedat de majuscule), NU sufix rezidual de seed.
+    p = _fond("p")
+    p["name"] = "Solora Shield Cremă cu protecție solară SPF 50"
+    assert not audit({"categories": _cats(), "products": [p]})["clean_names"]
+
+
 # --- R4 coerență nume↔categorie ----------------------------------------------------------------
 
 
