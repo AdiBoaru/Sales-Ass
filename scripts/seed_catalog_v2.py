@@ -23,6 +23,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from urllib.parse import quote_plus
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -33,12 +34,29 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.audit_catalog_v2 import audit  # noqa: E402 — pre-flight gate
+from scripts.audit_catalog_v2 import audit, build_roots  # noqa: E402 — pre-flight gate + arbore
 from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 STORE_BASE = "https://shop.sole-demo.ro/p/"
 DATA = ROOT / "db" / "seed" / "catalog_v2.json"
+
+# Placeholder-e consistente pe categorie (runtime W1 citește prima poză). Culoare de fundal per
+# RAMURĂ top-level → cardurile arată coerent vizual pe categorie. placehold.co = serviciu care
+# randează efectiv (ca în catalogul demo vechi). Explicit `images` în JSON are prioritate.
+_ROOT_BG = {
+    "ingrijirea-tenului": "e8f0ea",
+    "machiaj": "f6e3ea",
+    "ingrijirea-parului": "f3e9d8",
+    "ingrijire-corp": "e6eef2",
+    "protectie-solara": "fdf3d8",
+    "buze": "f7e6ea",
+}
+
+
+def _placeholder_image(name: str, root: str) -> str:
+    bg = _ROOT_BG.get(root, "f5eee9")
+    return f"https://placehold.co/900x1200/{bg}/222222?text={quote_plus(name)}"
 
 
 async def _upsert_brand(conn, slug: str, name: str) -> str:
@@ -86,7 +104,7 @@ async def _upsert_category(conn, slug: str, name: str, parent_slug: str | None) 
     )
 
 
-async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str) -> str:
+async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) -> str:
     variants = p.get("variants") or []
     # produse fără variante: stoc default (100) ca să fie in_stock; altfel suma variantelor
     stock_total = sum(int(v.get("stock", 0)) for v in variants) or 100
@@ -169,19 +187,36 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str) -> str:
             json.dumps(v.get("attributes") or {}, ensure_ascii=False),
         )
 
-    # review summary (D3): sursă de adevăr = JSON → upsert pe product_id (PK)
+    # review summary (D3): sursă de adevăr = JSON → upsert pe product_id (PK).
+    # `review_count_at_build` NOT NULL (schema) = reviewCount-ul produsului la build.
     rs = p.get("reviewSummary")
     if rs:
         await conn.execute(
             "insert into product_review_summaries "
-            "(product_id, business_id, summary, top_pros, top_cons) values ($1,$2,$3,$4,$5) "
+            "(product_id, business_id, summary, top_pros, top_cons, review_count_at_build) "
+            "values ($1,$2,$3,$4,$5,$6) "
             "on conflict (product_id) do update set summary=excluded.summary, "
-            "top_pros=excluded.top_pros, top_cons=excluded.top_cons",
+            "top_pros=excluded.top_pros, top_cons=excluded.top_cons, "
+            "review_count_at_build=excluded.review_count_at_build",
             pid,
             DEMO_BIZ,
             rs.get("summary"),
             list(rs.get("topPros") or []),
             list(rs.get("topCons") or []),
+            int(p.get("reviewCount", 0)),
+        )
+
+    # imagini (runtime W1 citește prima): explicit din JSON, altfel un placeholder consistent pe
+    # categorie. Idempotent (șterge + reinserează, sursa de adevăr = JSON/placeholder).
+    await conn.execute("delete from product_images where product_id=$1", pid)
+    images = p.get("images") or [{"url": _placeholder_image(p["name"], root), "alt": p["name"]}]
+    for pos, im in enumerate(images):
+        await conn.execute(
+            "insert into product_images (product_id, url, alt, position) values ($1,$2,$3,$4)",
+            pid,
+            im["url"],
+            im.get("alt", p["name"]),
+            im.get("position", pos),
         )
     return pid
 
@@ -221,6 +256,7 @@ async def main() -> int:
             }
             for c in data["categories"]:
                 await _upsert_category(conn, c["slug"], c["name"], c.get("parentSlug"))
+            roots = build_roots(data["categories"])  # slug → root-branch (pt culoarea placeholder)
             n_var = 0
             for p in data["products"]:
                 cat_id = await conn.fetchval(
@@ -228,7 +264,8 @@ async def main() -> int:
                     DEMO_BIZ,
                     p["primaryCategorySlug"],
                 )
-                await _upsert_product(conn, p, brand_ids[p["brandSlug"]], cat_id)
+                root = roots.get(p["primaryCategorySlug"], "")
+                await _upsert_product(conn, p, brand_ids[p["brandSlug"]], cat_id, root)
                 n_var += len(p.get("variants") or [])
                 print(f"  seedat: {p['name']} ({len(p.get('variants') or [])} variante)")
             print(
