@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nativxtech.com/schema/catalog_v2.json",
+  "title": "Nativx Demo Catalog v2",
+  "description": "Contractul catalogului demo v2 (hand-curated, coerent). Atributele sunt CANONICE — exact cheile/valorile pe care le citește engine-ul (concern_map / searchable_facets / comparison_facets din src/domain/defaults/beauty_salon.json), altfel filtrele/comparația nu se leagă. Validarea structurală + enum e aici; regulile de coerență (nume↔categorie, filler, diferențiatori) le impune scripts/audit_catalog_v2.py.",
+  "type": "object",
+  "required": ["brands", "categories", "products"],
+  "properties": {
+    "brands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slug", "name"],
+        "properties": {
+          "slug": { "$ref": "#/$defs/slug" },
+          "name": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slug", "name"],
+        "properties": {
+          "slug": { "$ref": "#/$defs/slug" },
+          "name": { "type": "string", "minLength": 1 },
+          "parentSlug": { "$ref": "#/$defs/slug" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/product" }
+    }
+  },
+  "additionalProperties": true,
+
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "kebab-case RO (păstrăm slug-uri RO pt demo — vezi NX-168)."
+    },
+    "concern": {
+      "enum": ["oily", "dry", "sensitive", "combination", "acne", "anti_aging", "hyperpigmentation", "hydration", "normal"],
+      "description": "Chei CANONICE (concern_map). NU text RO ('ten uscat') — bug-ul catalogului vechi."
+    },
+    "finish": { "enum": ["natural", "matte", "dewy", "satin"] },
+    "coverage": { "enum": ["light", "medium", "full", "buildable"] },
+    "variant": {
+      "type": "object",
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "description": "Nuanță/mărime reală (ex. 'Warm Beige 03')." },
+        "sku": { "type": "string" },
+        "price": { "type": "number", "exclusiveMinimum": 0 },
+        "salePrice": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "stock": { "type": "integer", "minimum": 0 },
+        "colorHex": { "type": ["string", "null"], "pattern": "^#?[0-9a-fA-F]{6}$" },
+        "attributes": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Atribute canonice. `concerns`/`finish`/`coverage` sunt enum-uri validate; `key_ingredients`/`key_benefit`/`skin_type`/`hair_type`/`fragrance_free`/`spf`/`texture` sunt libere ca tip dar audit-ul le poate cere per-categorie.",
+      "properties": {
+        "concerns": { "type": "array", "items": { "$ref": "#/$defs/concern" }, "minItems": 1 },
+        "finish": { "$ref": "#/$defs/finish" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "key_ingredients": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "key_benefit": { "type": "string", "minLength": 1 },
+        "skin_type": { "type": "string" },
+        "hair_type": { "type": "string" },
+        "fragrance_free": { "type": "boolean" },
+        "spf": { "type": "integer", "minimum": 0 },
+        "texture": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "product": {
+      "type": "object",
+      "required": ["slug", "name", "brandSlug", "primaryCategorySlug", "price", "attributes"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/slug" },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Nume curat. Sufixul numeric rezidual de seed (ex. '... 250') e prins de audit R3 (nu de schema — specs legitime ca 'SPF 50' sunt permise)."
+        },
+        "brandSlug": { "$ref": "#/$defs/slug" },
+        "primaryCategorySlug": { "$ref": "#/$defs/slug" },
+        "categorySlugs": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+        "shortDescription": { "type": "string" },
+        "description": { "type": "string" },
+        "currency": { "type": "string", "enum": ["RON"] },
+        "price": { "type": "number", "exclusiveMinimum": 0 },
+        "salePrice": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "rating": { "type": "number", "minimum": 0, "maximum": 5 },
+        "reviewCount": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "enum": ["active", "archived", "draft"] },
+        "attributes": { "$ref": "#/$defs/attributes" },
+        "variants": { "type": "array", "items": { "$ref": "#/$defs/variant" } },
+        "reviewSummary": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "topPros": { "type": "array", "items": { "type": "string" } },
+            "topCons": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "images": { "type": "array" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
