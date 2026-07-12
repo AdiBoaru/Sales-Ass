@@ -1,0 +1,126 @@
+{
+  "generatedAt": "2026-07-12",
+  "sourceSite": "sample (NX-168a) — fixture minimal VALID pentru audit-gate; catalogul complet = NX-168b",
+  "brands": [
+    { "slug": "velora", "name": "Velora" },
+    { "slug": "lumaderm", "name": "LumaDerm" },
+    { "slug": "auralis", "name": "Auralis" },
+    { "slug": "nudelab", "name": "NudeLab" }
+  ],
+  "categories": [
+    { "slug": "machiaj", "name": "Machiaj" },
+    { "slug": "fond-de-ten", "name": "Fond de ten", "parentSlug": "machiaj" },
+    { "slug": "ingrijirea-tenului", "name": "Îngrijirea tenului" },
+    { "slug": "seruri-pentru-ten", "name": "Seruri pentru ten", "parentSlug": "ingrijirea-tenului" },
+    { "slug": "ingrijirea-parului", "name": "Îngrijirea părului" },
+    { "slug": "sampoane", "name": "Șampoane", "parentSlug": "ingrijirea-parului" }
+  ],
+  "products": [
+    {
+      "slug": "velora-skin-match-fond-de-ten",
+      "name": "Velora Skin Match Fond de ten",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "fond-de-ten",
+      "categorySlugs": ["fond-de-ten", "machiaj"],
+      "shortDescription": "Fond de ten cu acoperire medie și finish natural, pentru ten mixt.",
+      "currency": "RON",
+      "price": 89.99,
+      "salePrice": 79.99,
+      "rating": 4.5,
+      "reviewCount": 128,
+      "status": "active",
+      "attributes": {
+        "finish": "natural",
+        "coverage": "medium",
+        "concerns": ["combination", "normal"],
+        "key_benefit": "Acoperire medie, aspect natural, ține toată ziua.",
+        "fragrance_free": true
+      },
+      "variants": [
+        { "label": "Warm Beige 03", "sku": "VEL-SM-03", "price": 89.99, "stock": 12, "colorHex": "#d8a679" },
+        { "label": "Sand 05", "sku": "VEL-SM-05", "price": 89.99, "stock": 8, "colorHex": "#e0b98f" }
+      ],
+      "reviewSummary": {
+        "summary": "Acoperire fiabilă, finish natural apreciat pentru purtarea zilnică.",
+        "topPros": ["acoperire uniformă", "finish natural", "rezistă la transfer"],
+        "topCons": ["gama de nuanțe limitată"]
+      }
+    },
+    {
+      "slug": "lumaderm-luminous-fond-de-ten",
+      "name": "LumaDerm Luminous Fond de ten",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "fond-de-ten",
+      "categorySlugs": ["fond-de-ten", "machiaj"],
+      "shortDescription": "Fond de ten luminos cu acoperire lejeră, pentru ten uscat și sensibil.",
+      "currency": "RON",
+      "price": 109.99,
+      "rating": 4.7,
+      "reviewCount": 96,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "coverage": "light",
+        "concerns": ["dry", "sensitive"],
+        "key_benefit": "Efect luminos, hidratant, pentru ten uscat.",
+        "fragrance_free": false
+      },
+      "variants": [
+        { "label": "Ivory 01", "sku": "LUM-LM-01", "price": 109.99, "stock": 15, "colorHex": "#f2ddc8" }
+      ],
+      "reviewSummary": {
+        "summary": "Efect glow apreciat pe tenul uscat; acoperire mai lejeră.",
+        "topPros": ["aspect luminos", "confortabil pe ten uscat"],
+        "topCons": ["acoperire slabă pentru imperfecțiuni"]
+      }
+    },
+    {
+      "slug": "auralis-hydra-ser-hidratant",
+      "name": "Auralis Hydra Ser hidratant",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": ["seruri-pentru-ten", "ingrijirea-tenului"],
+      "shortDescription": "Ser hidratant cu acid hialuronic pentru ten uscat.",
+      "currency": "RON",
+      "price": 74.99,
+      "rating": 4.6,
+      "reviewCount": 210,
+      "status": "active",
+      "attributes": {
+        "concerns": ["hydration", "dry"],
+        "key_ingredients": ["acid hialuronic", "niacinamidă"],
+        "key_benefit": "Hidratare intensă, reduce senzația de tensiune.",
+        "fragrance_free": true,
+        "texture": "gel"
+      },
+      "reviewSummary": {
+        "summary": "Hidratare vizibilă în câteva zile; textură ușoară de gel.",
+        "topPros": ["hidratare de durată", "se absoarbe rapid"],
+        "topCons": ["flacon fără pompă"]
+      }
+    },
+    {
+      "slug": "nudelab-repair-sampon",
+      "name": "NudeLab Repair Șampon",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": ["sampoane", "ingrijirea-parului"],
+      "shortDescription": "Șampon reparator pentru păr deteriorat.",
+      "currency": "RON",
+      "price": 39.99,
+      "rating": 4.3,
+      "reviewCount": 74,
+      "status": "active",
+      "attributes": {
+        "hair_type": "deteriorat",
+        "key_benefit": "Repară și fortifică firul de păr.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Păr mai moale după câteva spălări; parfum plăcut.",
+        "topPros": ["repară vârfurile", "spumă bogată"],
+        "topCons": ["necesită balsam pentru descurcare"]
+      }
+    }
+  ]
+}
