@@ -55,6 +55,22 @@ def _carousel_keyboard(product: dict, index: int, total: int) -> dict:
     return {"inline_keyboard": [row]} if row else {"inline_keyboard": []}
 
 
+# Header pt reply-keyboard-ul de chips — 2-3 variante per limbă, ales DETERMINIST din conținut, ca
+# să nu sune „template" la fiecare recomandare (aliniat cu floor-ul text). `language` vine din
+# payload (vezi processor.py); chips-urile rămân butoane tappabile dedesubt.
+_CHIP_LEADS: dict[str, tuple[str, ...]] = {
+    "ro": ("Sau, dacă vrei:", "Îți mai pot arăta:", "Poți continua cu:"),
+    "en": ("Or, if you want:", "I can also show you:", "You can continue with:"),
+    "hu": ("Vagy, ha szeretnéd:", "Ezt is meg tudom mutatni:", "Folytathatod ezzel:"),
+}
+
+
+def _chip_lead(language: str | None, seed: str) -> str:
+    """Header natural pt keyboard-ul de chips, ales determinist din `seed` (labels concatenate)."""
+    variants = _CHIP_LEADS.get((language or "ro").lower()) or _CHIP_LEADS["ro"]
+    return variants[sum(ord(c) for c in seed) % len(variants)]
+
+
 class TelegramError(RuntimeError):
     """Răspuns Telegram cu ok=false sau payload neașteptat."""
 
@@ -178,11 +194,12 @@ class TelegramClient:
 
         chips = rich.get("chips") or []
         if chips:
+            lead = _chip_lead(payload.get("language"), "".join(c["label"] for c in chips))
             await self._call(
                 "sendMessage",
                 {
                     "chat_id": to,
-                    "text": "Pot continua cu:",
+                    "text": lead,
                     "reply_markup": {
                         "keyboard": [[{"text": c["label"]}] for c in chips],
                         "resize_keyboard": True,

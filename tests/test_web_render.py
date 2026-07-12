@@ -102,6 +102,42 @@ def test_render_web_rich_shape():
     assert out["products"][0]["product_id"] == "p1" and out["products"][0]["image_url"] == "i1"
 
 
+def test_render_web_caps_suggestions_at_4():
+    # Web = UI premium: max 4 chips (butoane), chiar dacă modelul/canalul produc mai multe.
+    rich = RichReply(
+        intro="x",
+        items=[RichItem(product_id="p1", name="A", price=10.0)],
+        pick=None,
+        education=None,
+        chips=[Chip(label=f"c{i}", payload=f"chip:{i}") for i in range(6)],
+        disclaimer="",
+    )
+    out = render_web(Reply(text="f", rich=rich), "ro")
+    assert out["suggestions"] == ["c0", "c1", "c2", "c3"]  # primele 4, restul tăiate
+
+
+def test_render_web_content_is_framing_not_list_or_prices():
+    # content = DOAR framing conversațional: fără listă numerotată, fără prețuri (le fac cardurile),
+    # fără linia „Poți cere și:" (chips = butoane în `suggestions`). education="" → content = intro.
+    rich = RichReply(
+        intro="Am mers pe variante lejere, cu texturi diferite.",
+        items=[
+            RichItem(product_id="p1", name="Crema A", price=82.99, reason="lejeră"),
+            RichItem(product_id="p2", name="Ser B", price=120.5, reason="hidratant"),
+        ],
+        pick=None,
+        education="",  # gol → premium: content rămâne doar intro-ul
+        chips=[Chip(label="Mai ieftin", payload="c")],
+        disclaimer="",
+    )
+    content = render_web(Reply(text="f", rich=rich), "ro")["content"]
+    assert content.startswith("Am mers pe variante lejere")
+    assert "82.99" not in content and "120.5" not in content  # prețurile stau pe carduri
+    assert "1. Crema A" not in content and "2. Ser B" not in content  # fără listă numerotată
+    assert "Poți cere și" not in content and "Mai ieftin" not in content  # chips = butoane separate
+    assert "Crema A" not in content  # numele produselor stau pe carduri, nu în framing
+
+
 def test_render_web_emag_card_fields():
     # Full-eMAG (contract extins): badges[{label,tone}] + badge legacy + currency + details.
     rich = RichReply(

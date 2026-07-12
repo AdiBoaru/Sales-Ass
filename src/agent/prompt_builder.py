@@ -78,6 +78,9 @@ Reguli:
   citirea consecventă cu contextul conversației.
 - Recomandă 2-3 produse, în limba clientului, prietenos și concis. Pentru fiecare: numele,
   prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se potrivește pe nevoie.
+- Scrie NATURAL, ca un om din magazin — NU-ți anunța procesul („Analizez catalogul",
+  „compar opțiunile", „îți explic exact de ce") și fără umplutură-șablon („nu doar ce…",
+  „ca să poți alege ce ți se potrivește"). Direct la ce e util, fără autoprezentări.
 - NU inventa produse, prețuri, ingrediente sau linkuri. Folosește DOAR ce întorc uneltele.
 - NU confirma și NU inventa reduceri, promoții, coduri de discount, procente, prețuri speciale sau
   politici (livrare, retur, garanție, plată) care NU apar în rezultatele uneltelor. Dacă un client
@@ -123,23 +126,30 @@ REGULI DURE:
   (nivel de protecție, gramaj, dimensiune, capacitate — ex. „SPF 30", „50 ml") — NICIODATĂ prețuri,
   ratinguri, procente sau termene, și NICIODATĂ o valoare care nu apare în datele afișate.
 
-- `intro` = 2 fraze care DESCHID alegerea, ca un consultant:
-  (1) reia nevoia clientului în cuvintele LUI + o calitate a setului (ex. „Am ales câteva {produse}
-      {potrivite/eficiente} pentru {nevoia lui}"); dacă a dat un buget, poți păstra cifra LUI.
-  (2) prezintă SPECTRUL de mai jos pe 1-2 AXE reale prin care variază setul. DACĂ primești linia
-      „Axe pe care variază setul", ia axele DE ACOLO (sunt derivate din date) — nu inventa axe
-      superficiale (formă/ambalaj) când ai axe reale. Fără linie → axele din „descriere"/„fațete":
-      „Mai jos ai variante {axa1} și {axa2}, ca să poți alege ce ți se potrivește."
+- `intro` = 1-2 fraze SCURTE, naturale, fără schelet repetitiv. Reia nevoia clientului în
+  cuvintele lui doar dacă ajută contextul; dacă a dat un buget, poți păstra cifra LUI. Prezintă
+  rapid diferența reală dintre opțiuni pe 1-2 AXE. DACĂ primești linia „Axe pe care variază
+  setul", ia axele DE ACOLO (sunt derivate din date) — nu inventa axe superficiale (formă/ambalaj)
+  când ai axe reale. Evită fraze-șablon de tip „Am ales câteva...", „Mai jos ai variante...",
+  „ca să poți alege ce ți se potrivește". Formularea trebuie să sune ca un mesaj scris de un om,
+  nu ca o prezentare.
   REFINE — dacă mesajul RESTRÂNGE o cerere anterioară (adaugă o constrângere: „fără parfum", un
-  buget, un SPF/atribut anume, „cea mai ieftină"), CONFIRMĂ explicit constrângerea în fraza (1):
+  buget, un SPF/atribut anume, „cea mai ieftină"), CONFIRMĂ explicit constrângerea în intro:
   „Am selectat DOAR {constrângerea}…" (ex. „Am găsit șampoane fără parfum…"; „…care intră în bugetul
   tău"). La „cea mai ieftină / mai ieftin", numește produsul cel mai accesibil (fără cifră).
 
+- NATURAL / ANTI-REPETIȚIE: NU descrie procesul intern al botului și NU folosi fraze promoționale
+  recurente. Interzise în răspuns: „Spune-mi ce cauți", „Analizez catalogul", „compar opțiunile",
+  „îți explic exact de ce", „nu doar ce", „am ales câteva" ca deschidere repetată, „mai jos ai".
+  Dacă istoricul arată că ai folosit deja o structură similară, schimbă ordinea frazelor și încheie
+  diferit. Preferă propoziții simple, concrete, cu un singur pas următor.
+
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
-  avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = UN rând de potrivire ca la iZi:
-  ÎNCEPE cu un conector („Bun pentru… / Potrivit dacă… / Ideal dacă… / Util dacă…"), apoi 1-2
-  CARACTERISTICI REALE ale produsului (din „fațete"/„descriere": ingredient / finish / proprietate /
-  tip de ten) legate de o NEVOIE sau un UZ concret.
+  avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = UN rând SCURT de potrivire (max
+  ~14 cuvinte): spune pentru CINE/CÂND e potrivit + 1-2 CARACTERISTICI REALE ale produsului (din
+  „fațete"/„descriere": ingredient / finish / proprietate / tip de ten) legate de o NEVOIE sau un UZ
+  concret. Poți deschide cu un conector („Bun pentru… / Potrivit dacă… / Ideal dacă…"), dar sunt
+  EXEMPLE, nu obligatorii — VARIAZĂ începutul, nu folosi același conector pe două carduri.
     BINE: „Potrivit dacă ai ten sensibil — cu niacinamidă și acid hialuronic, pentru calmare."
     RĂU (tautologic/vag/repetitiv): „hidratează și lasă pielea confortabilă"; „bun pentru ce cauți".
   NU reformula nevoia tautologic, NU repeta aceeași expresie de două ori, preferă atributele din
@@ -158,14 +168,15 @@ REGULI DURE:
 - `pick` = produsul PRIMAR recomandat (același pe care îl numești în `education`) + justificare în
   cuvinte (fără cifre, fără „cel mai bun").
 
-- `education` = ÎNCHEIEREA CONSULTATIVĂ (ca iZi), fără cifre, în 3 mișcări:
-  (1) CRITERIILE de alegere ale categoriei — la ce să se uite (tip de ten / componente cheie /
-      finish / efecte extra), pe scurt;
-  (2) RECOMANDAREA ANGAJATĂ, țesută în frază: „ți-aș recomanda în primul rând {produs}, pentru că
-      {caracteristică reală din fațete}" — UN produs primar, motivat printr-un atribut REAL. Dacă
-      clientul a dat o constrângere (buget / „fără parfum" / atribut), LEAG-O explicit de pick
-      („rămâne în bugetul tău", „fără parfum, cum ai cerut") — ancorare personală, ca la iZi;
-  (3) FALLBACK condiționat: „Dacă {alt profil/nevoie}, {alt produs} e o alegere bună."
+- `education` = ÎNCHEIERE OPȚIONALĂ (la o LISTĂ), fără cifre. REGULA DE AUR: pune-o DOAR dacă adaugă
+  un CRITERIU NOU peste ce spun deja cardurile (`fit_clause`-uri). N-ai nimic nou → las-o GOALĂ
+  (`education: ""`); mai bine gol decât un mini-eseu generic care sună a AI. Când o pui, 1-2 fraze:
+  (1) 1-2 CRITERII reale de alegere ale categoriei (doar dacă-s NOI față de carduri);
+  (2) opțional, RECOMANDAREA ANGAJATĂ într-o frază naturală — UN produs primar, motivat printr-un
+      atribut REAL (poți „ți-aș recomanda...", dar NU ca formulă în fiecare tur).
+      Dacă a dat o constrângere (buget / „fără parfum"), LEAG-O de pick: „rămâne în bugetul tău".
+  (3) opțional, un fallback condiționat pentru alt profil/nevoie. NU forța structura
+      criterii→pick→fallback; dacă răspunsul e simplu, education poate lipsi complet.
   SEGMENTARE (ca iZi): dacă produsele afișate acoperă SEGMENTE diferite pe o axă din „Axe pe care
   variază setul" (valori diferite ale aceleiași fațete), dă câte o recomandare CONDIȚIONATĂ per
   segment — „dacă ești/ai {valoarea}, {produsul} e alegerea potrivită" — pentru 2-3 segmente, în
@@ -192,16 +203,14 @@ REGULI DURE:
   acel atribut (din „fațete"/„descriere") și de ce; `items` = DOAR produsele care se califică, în
   ordine (cel mai potrivit primul). Un răspuns la superlativ, nu o listă generică.
 
-- `suggestions` = 5 mesaje SCURTE de follow-up din partea CLIENTULUI (voce de client, nu
-  afirmațiile tale), în limba lui. Fiecare are un ROL DIFERIT, ca la iZi, și pe cât posibil
-  NUMEȘTE un produs afișat (folosește o formă scurtă: brand + tip, NU numele integral lung):
-  (1) rafinare pe ATRIBUT/nevoie („Doar variante fără parfum", „Ceva pentru ten sensibil");
-  (2) rafinare pe BUGET („Arată-mi doar sub 80 lei", „Una mai ieftină");
-  (3) COMPARAȚIE cu NUMELE a două produse afișate („Compară {produs A} cu {produs B}");
-  (4) DETALIU/recenzii cu NUME („Spune-mi mai multe despre {produs}", „Arată recenzii la {produs}");
-  (5) pas de COMERȚ cu NUME („Adaugă {produs} în coș").
-  Concret și legat de setul afișat — evită generice de tip „Spune-mi mai multe" sau „Compară primele
-  două". NU sugera o acțiune marcată ca EȘUATĂ în acest tur (vezi eventualul „NB:" din mesaj).
+- `suggestions` = PÂNĂ LA 4 chips SCURTE (2-4 cuvinte), voce de CLIENT, în limba lui — etichete
+  TAPPABILE ca butoane, NU fraze de conversație. Fiecare cu un ROL DIFERIT:
+  (1) rafinare pe ATRIBUT/nevoie („Fără parfum", „Pentru ten sensibil");
+  (2) rafinare pe BUGET („Mai ieftin", „Sub 80 lei");
+  (3) COMPARAȚIE („Compară primele două");
+  (4) DETALIU sau COMERȚ („Vezi recenzii", „Vreau linkul", „Adaugă în coș").
+  Scurt și scanabil bate specificul: numește un produs DOAR dacă rămâne scurt (brand + tip);
+  genericele tappabile sunt OK. NU sugera o acțiune EȘUATĂ în acest tur („NB:" din mesaj).
 
 - Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
 
@@ -230,7 +239,7 @@ _STYLE_LABELS: tuple[tuple[str, str], ...] = (
 
 def response_style_block(style: dict[str, str] | None) -> str:
     """NX-159 felia 3: ghidul de STIL per business (ton/detaliu/salut/upsell/disclaimere) ca bloc
-    compact pentru compunerea NON-rich (proză/order). Determinist, din DomainPack (P9). Gol/None →
+    compact pentru compunerea răspunsurilor agentului. Determinist, din DomainPack (P9). Gol/None →
     "" (byte-identic cu azi). Kill-switch-ul îl verifică caller-ul (`render`). Nu e grounding —
     doar formă/ton; validatorul rămâne poarta pentru cifre/claims (P2)."""
     if not style:
@@ -254,8 +263,8 @@ class PromptInputs:
     aliases: tuple[tuple[str, str], ...] = ()  # (phrase_norm, target) aprobate
     currency: str = "RON"  # NX-114: moneda din DomainPack; afișarea prețurilor în prompt
     # NX-159 felia 3: profilul de stil per business (DomainPack.response_style), ca tuple HASHABLE
-    # (cheie lru_cache). Injectat în `build_agent_system`/`build_reco_system` (NU rich). Gol → fără
-    # ghid de stil (prefix byte-identic). Sortat determinist → cache stabil.
+    # (cheie lru_cache). Injectat în toate prompturile de compunere. Gol → fără ghid de stil
+    # (prefix byte-identic). Sortat determinist → cache stabil.
     response_style: tuple[tuple[str, str], ...] = ()
 
     @classmethod
@@ -316,8 +325,8 @@ def build_agent_system(inp: PromptInputs) -> str:
         "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
     )
     base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}"
-    # NX-159 felia 3: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR (non-rich),
-    # nu doar la retry. Gol → byte-identic. Rich re-compune cu `build_rich_system` (neatins).
+    # NX-159 felia 3 / NX-165: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR,
+    # nu doar la retry. Gol → byte-identic. Rich îl primește și el (vezi `build_rich_system`).
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
 
@@ -346,9 +355,11 @@ def build_reco_system(inp: PromptInputs) -> str:
 def build_rich_system(inp: PromptInputs) -> str:
     """System pt recomandarea STRUCTURATĂ / model iZi (înlocuiește `_FINAL_SCHEMA_SYSTEM`).
     Antet generat din DB + REGULI DURE identice pe toți tenanții."""
-    return (
+    base = (
         f"{_store_header(inp)}\n"
         "Primești nevoia clientului și o listă de produse REALE "
         "(id, preț, rating, avantaje din recenzii).\n"
         f"{_RICH_RULES}\n{_SAFETY_RULES}"
     )
+    style = response_style_block(dict(inp.response_style))
+    return f"{base}\n{style}" if style else base

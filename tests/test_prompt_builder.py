@@ -127,14 +127,13 @@ def test_order_reco_is_vertical_neutral():
 # --- NX-132: gramatica iZi în prompturi --------------------------------------
 
 
-def test_rich_suggestions_five_anchored_roles():
-    # chips-urile cer 5 roluri DISTINCTE ancorate pe nume; genericele sunt marcate ca DE EVITAT.
+def test_rich_suggestions_short_tappable_roles():
+    # chips = etichete SCURTE tappabile (până la 4), roluri diferite; genericele scurte sunt OK.
     r = build_rich_system(_inp())
-    assert "ROL DIFERIT" in r
-    for role in ("rafinare pe ATRIBUT", "COMPARAȚIE cu NUMELE", "pas de COMERȚ cu NUME"):
+    assert "PÂNĂ LA 4 chips" in r and "TAPPABILE" in r and "ROL DIFERIT" in r
+    for role in ("rafinare pe ATRIBUT", "rafinare pe BUGET", "COMPARAȚIE"):
         assert role in r
-    # „Compară primele două" apare DOAR ca exemplu de evitat (nu ca șablon de urmat)
-    assert "evită generice" in r
+    assert "Compară primele două" in r  # acum e exemplu BUN (scurt/tappabil), nu de evitat
 
 
 def test_rich_segmentation_and_constraint_echo():
@@ -147,6 +146,35 @@ def test_rich_segmentation_and_constraint_echo():
 def test_rich_detail_mode_forbids_list_skeleton():
     r = build_rich_system(_inp())
     assert "NU refolosi scheletul de LISTĂ" in r  # MOD DETALIU aduce fapte noi, nu coaching repetat
+
+
+def test_rich_prompt_forbids_repetitive_ai_phrasing():
+    r = build_rich_system(_inp())
+    assert "ANTI-REPETIȚIE" in r
+    for forbidden in (
+        "Analizez catalogul",
+        "compar opțiunile",
+        "îți explic exact de ce",
+        "nu doar ce",
+    ):
+        assert forbidden in r
+    assert "Stil de răspuns" not in r  # apare doar când DomainPack trimite response_style
+
+
+def test_rich_prompt_carries_style_when_present():
+    styled = _inp(response_style={"ton": "natural, fara fraze-stampila"})
+    r = build_rich_system(styled)
+    assert "Stil de răspuns" in r
+    assert "fraze-stampila" in r
+
+
+def test_agent_prose_forbids_repetitive_ai_phrasing():
+    # Garanția anti-template există și pe calea PROZĂ (tool-calling), necondiționat de
+    # response_style (care e gated pe flag/pack) — nu doar în calea rich.
+    s = build_agent_system(_inp())
+    for forbidden in ("Analizez catalogul", "compar opțiunile", "îți explic exact de ce"):
+        assert forbidden in s
+    assert "ca un om din magazin" in s
 
 
 def test_tools_block_multi_intent_and_concept_compare():

@@ -69,7 +69,7 @@ class DomainPack:
     # fără filtru de feature. Separat de concern_map (concerns are calea lor de mapare).
     searchable_facets: tuple[str, ...] = ()
     # NX-159 felia 3: profilul de STIL per business (ton / nivel_detaliu / reguli_salut /
-    # reguli_upsell / disclaimere) — directive scurte (RO), INPUT de model pe căile NON-rich de
-    # compunere (proză/order). Calea rich are deja regulile ei dure (`_RICH_RULES`) → nu-l consumă.
+    # reguli_upsell / disclaimere) — directive scurte (RO), INPUT de model pe căile de compunere
+    # ale agentului (proză/order/rich), peste regulile dure de grounding și siguranță.
     # Gol → fără ghid de stil (byte-identic). Per-vertical (defaults JSON) + override per-tenant.
     response_style: dict[str, str] = field(default_factory=dict)
