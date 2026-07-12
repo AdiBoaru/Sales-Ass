@@ -462,6 +462,25 @@ class Settings(BaseSettings):
     search_diversify_enabled: bool = Field(
         default=True, validation_alias="SEARCH_DIVERSIFY_ENABLED"
     )
+    # NX-167 (A): filtrul de categorie prinde produsul dacă ORICARE din categoriile lui (primary
+    # SAU product_category_map) e categoria cerută SAU un DESCENDENT al ei (materialized path
+    # `categories.path`). Repară „cerere pe părinte (machiaj) ratează copiii (fond-de-ten)". OFF
+    # (fail-safe) → match exact pe slug/nume al `primary_category_id`, byte-identic cu azi.
+    search_category_tree_enabled: bool = Field(
+        default=False, validation_alias="SEARCH_CATEGORY_TREE_ENABLED"
+    )
+    # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
+    # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
+    # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.
+    search_offcategory_guard_enabled: bool = Field(
+        default=False, validation_alias="SEARCH_OFFCATEGORY_GUARD_ENABLED"
+    )
+    # NX-167 (C): „compară primele 2" refuză produse din ramuri incoerente (root-branch diferit din
+    # `categories.path`, ex. machiaj vs. par) → cade pe bucla LLM (re-caută coerent). Fail-open la
+    # `path` lipsă. OFF → comportamentul vechi (compară orice 2 afișate).
+    compare_coherence_guard_enabled: bool = Field(
+        default=False, validation_alias="COMPARE_COHERENCE_GUARD_ENABLED"
+    )
     # ARCH-2026 P0: cardurile rich sunt ORDONATE de rankingul de retrieval (determinist), iar
     # „Recomandarea mea" = produsul cel mai bine clasat afișat — NU alegerea liberă a modelului
     # (popularity/position bias). Modelul doar NAREAZĂ (justificare/fit). OFF (fail-safe) →
