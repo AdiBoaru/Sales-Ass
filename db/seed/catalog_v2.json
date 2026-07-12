@@ -183,6 +183,61 @@
       "slug": "uleiuri-pentru-par",
       "name": "Uleiuri pentru păr",
       "parentSlug": "ingrijirea-parului"
+    },
+    {
+      "slug": "geluri-de-dus",
+      "name": "Geluri de duș",
+      "parentSlug": "ingrijire-corp"
+    },
+    {
+      "slug": "scrub-de-corp",
+      "name": "Scrub de corp",
+      "parentSlug": "ingrijire-corp"
+    },
+    {
+      "slug": "deodorante",
+      "name": "Deodorante",
+      "parentSlug": "ingrijire-corp"
+    },
+    {
+      "slug": "balsamuri-de-par",
+      "name": "Balsamuri de păr",
+      "parentSlug": "ingrijirea-parului"
+    },
+    {
+      "slug": "sampon-uscat",
+      "name": "Șampon uscat",
+      "parentSlug": "ingrijirea-parului"
+    },
+    {
+      "slug": "gloss-de-buze",
+      "name": "Gloss de buze",
+      "parentSlug": "machiaj"
+    },
+    {
+      "slug": "iluminatoare",
+      "name": "Iluminatoare",
+      "parentSlug": "machiaj"
+    },
+    {
+      "slug": "spray-de-fixare",
+      "name": "Spray de fixare",
+      "parentSlug": "machiaj"
+    },
+    {
+      "slug": "bronzer",
+      "name": "Bronzer",
+      "parentSlug": "machiaj"
+    },
+    {
+      "slug": "tratament-local",
+      "name": "Tratament local",
+      "parentSlug": "ingrijirea-tenului"
+    },
+    {
+      "slug": "mist-pentru-ten",
+      "name": "Mist pentru ten",
+      "parentSlug": "ingrijirea-tenului"
     }
   ],
   "products": [
@@ -2412,6 +2467,1034 @@
         ],
         "topCons": [
           "îngreunează dacă exagerezi"
+        ]
+      }
+    },
+    {
+      "slug": "solora-fresh-gel-de-dus",
+      "name": "Solora Fresh Gel de duș",
+      "brandSlug": "solora",
+      "primaryCategorySlug": "geluri-de-dus",
+      "categorySlugs": [
+        "geluri-de-dus",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Spumă plăcută, parfum proaspăt de durată.",
+      "currency": "RON",
+      "price": 18.99,
+      "rating": 4.4,
+      "reviewCount": 176,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Curăță blând și lasă pielea catifelată.",
+        "fragrance_free": false,
+        "texture": "gel"
+      },
+      "reviewSummary": {
+        "summary": "Spumă plăcută, parfum proaspăt de durată.",
+        "topPros": [
+          "parfum plăcut",
+          "nu usucă"
+        ],
+        "topCons": [
+          "flacon fără pompă"
+        ]
+      }
+    },
+    {
+      "slug": "petala-nourish-gel-de-dus",
+      "name": "Petala Nourish Gel de duș",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "geluri-de-dus",
+      "categorySlugs": [
+        "geluri-de-dus",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Lasă pielea hidratată, potrivit pentru piele uscată.",
+      "currency": "RON",
+      "price": 21.99,
+      "rating": 4.3,
+      "reviewCount": 112,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Gel de duș hrănitor cu unt de shea.",
+        "fragrance_free": true,
+        "texture": "gel-cremă"
+      },
+      "reviewSummary": {
+        "summary": "Lasă pielea hidratată, potrivit pentru piele uscată.",
+        "topPros": [
+          "hidratant",
+          "fără parfum"
+        ],
+        "topCons": [
+          "spumă redusă"
+        ]
+      }
+    },
+    {
+      "slug": "solora-smooth-scrub-de-corp",
+      "name": "Solora Smooth Scrub de corp",
+      "brandSlug": "solora",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Pielea e vizibil mai netedă; granule fine.",
+      "currency": "RON",
+      "price": 27.99,
+      "rating": 4.5,
+      "reviewCount": 143,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Exfoliază și netezește pielea corpului.",
+        "fragrance_free": false,
+        "texture": "scrub"
+      },
+      "reviewSummary": {
+        "summary": "Pielea e vizibil mai netedă; granule fine.",
+        "topPros": [
+          "netezește pielea",
+          "parfum plăcut"
+        ],
+        "topCons": [
+          "puțin uleios la clătire"
+        ]
+      }
+    },
+    {
+      "slug": "petala-coffee-scrub-de-corp",
+      "name": "Petala Coffee Scrub de corp",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Miros de cafea, exfoliere energică; poate fi abraziv.",
+      "currency": "RON",
+      "price": 24.99,
+      "rating": 4.4,
+      "reviewCount": 98,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Scrub cu cafea pentru aspect tonifiat.",
+        "fragrance_free": false,
+        "texture": "scrub"
+      },
+      "reviewSummary": {
+        "summary": "Miros de cafea, exfoliere energică; poate fi abraziv.",
+        "topPros": [
+          "tonifiază",
+          "exfoliere eficientă"
+        ],
+        "topCons": [
+          "granule mai aspre"
+        ]
+      }
+    },
+    {
+      "slug": "solora-fresh-deodorant",
+      "name": "Solora Fresh Deodorant",
+      "brandSlug": "solora",
+      "primaryCategorySlug": "deodorante",
+      "categorySlugs": [
+        "deodorante",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Ține prospețimea ore bune; se usucă rapid.",
+      "currency": "RON",
+      "price": 16.99,
+      "rating": 4.4,
+      "reviewCount": 201,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Protecție împotriva mirosului toată ziua.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Ține prospețimea ore bune; se usucă rapid.",
+        "topPros": [
+          "protecție de durată",
+          "uscare rapidă"
+        ],
+        "topCons": [
+          "nu antiperspirant"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-sensitive-deodorant",
+      "name": "Bloom Sensitive Deodorant",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "deodorante",
+      "categorySlugs": [
+        "deodorante",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Nu irită pielea sensibilă; fără parfum.",
+      "currency": "RON",
+      "price": 19.99,
+      "rating": 4.6,
+      "reviewCount": 134,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Deodorant blând, fără alcool, pentru piele sensibilă.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Nu irită pielea sensibilă; fără parfum.",
+        "topPros": [
+          "blând",
+          "fără alcool"
+        ],
+        "topCons": [
+          "protecție mai scurtă"
+        ]
+      }
+    },
+    {
+      "slug": "petala-silk-lotiune-de-corp",
+      "name": "Petala Silk Loțiune de corp",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "lotiuni-de-corp",
+      "categorySlugs": [
+        "lotiuni-de-corp",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Cremoasă și hrănitoare; parfum discret de cacao.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.4,
+      "reviewCount": 121,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "key_ingredients": [
+          "unt de cacao"
+        ],
+        "key_benefit": "Hidratare cremoasă cu absorbție rapidă.",
+        "fragrance_free": false,
+        "texture": "loțiune"
+      },
+      "reviewSummary": {
+        "summary": "Cremoasă și hrănitoare; parfum discret de cacao.",
+        "topPros": [
+          "hrănitoare",
+          "absorbție bună"
+        ],
+        "topCons": [
+          "parfum nu place tuturor"
+        ]
+      }
+    },
+    {
+      "slug": "petala-nourish-crema-de-maini",
+      "name": "Petala Nourish Cremă de mâini",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "creme-de-maini",
+      "categorySlugs": [
+        "creme-de-maini",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Se absoarbe repede, ideală pentru birou.",
+      "currency": "RON",
+      "price": 18.99,
+      "rating": 4.5,
+      "reviewCount": 156,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "key_ingredients": [
+          "glicerină",
+          "vitamina E"
+        ],
+        "key_benefit": "Hidratare zilnică non-grasă pentru mâini.",
+        "fragrance_free": false,
+        "texture": "cremă"
+      },
+      "reviewSummary": {
+        "summary": "Se absoarbe repede, ideală pentru birou.",
+        "topPros": [
+          "absorbție rapidă",
+          "preț bun"
+        ],
+        "topCons": [
+          "hidratare medie iarna"
+        ]
+      }
+    },
+    {
+      "slug": "verdea-repair-balsam-de-par",
+      "name": "Verdea Repair Balsam de păr",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "balsamuri-de-par",
+      "categorySlugs": [
+        "balsamuri-de-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Părul e mai moale și ușor de pieptănat.",
+      "currency": "RON",
+      "price": 34.99,
+      "rating": 4.6,
+      "reviewCount": 142,
+      "status": "active",
+      "attributes": {
+        "hair_type": "deteriorat",
+        "key_ingredients": [
+          "keratină"
+        ],
+        "key_benefit": "Descurcă și hrănește părul deteriorat.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Părul e mai moale și ușor de pieptănat.",
+        "topPros": [
+          "descurcă bine",
+          "hrănește"
+        ],
+        "topCons": [
+          "îngreunează părul fin"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-volume-balsam-de-par",
+      "name": "Bloom Volume Balsam de păr",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "balsamuri-de-par",
+      "categorySlugs": [
+        "balsamuri-de-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Ușor, nu lasă părul plat; hidratare modestă.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.3,
+      "reviewCount": 108,
+      "status": "active",
+      "attributes": {
+        "hair_type": "fin",
+        "key_ingredients": [
+          "proteine din grâu"
+        ],
+        "key_benefit": "Descurcă fără să îngreuneze părul fin.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Ușor, nu lasă părul plat; hidratare modestă.",
+        "topPros": [
+          "ușor",
+          "nu îngreunează"
+        ],
+        "topCons": [
+          "hidratare redusă"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-color-balsam-de-par",
+      "name": "Bloom Color Balsam de păr",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "balsamuri-de-par",
+      "categorySlugs": [
+        "balsamuri-de-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Culoarea pare mai vie; părul mai mătăsos.",
+      "currency": "RON",
+      "price": 32.99,
+      "rating": 4.5,
+      "reviewCount": 96,
+      "status": "active",
+      "attributes": {
+        "hair_type": "vopsit",
+        "key_ingredients": [
+          "filtru UV",
+          "ulei de floarea-soarelui"
+        ],
+        "key_benefit": "Protejează culoarea și hidratează.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Culoarea pare mai vie; părul mai mătăsos.",
+        "topPros": [
+          "protejează culoarea",
+          "mătăsos"
+        ],
+        "topCons": [
+          "preț peste medie"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-fresh-sampon-uscat",
+      "name": "Bloom Fresh Șampon uscat",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Absoarbe sebumul și dă volum rapid.",
+      "currency": "RON",
+      "price": 26.99,
+      "rating": 4.2,
+      "reviewCount": 133,
+      "status": "active",
+      "attributes": {
+        "hair_type": "gras",
+        "key_benefit": "Reîmprospătează părul între spălări.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Absoarbe sebumul și dă volum rapid.",
+        "topPros": [
+          "reîmprospătează rapid",
+          "volum"
+        ],
+        "topCons": [
+          "reziduu alb pe păr închis"
+        ]
+      }
+    },
+    {
+      "slug": "verdea-smooth-masca-de-par",
+      "name": "Verdea Smooth Mască de păr",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "masti-de-par",
+      "categorySlugs": [
+        "masti-de-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Reduce frizzul și disciplinează buclele.",
+      "currency": "RON",
+      "price": 44.99,
+      "rating": 4.6,
+      "reviewCount": 121,
+      "status": "active",
+      "attributes": {
+        "hair_type": "cret",
+        "key_ingredients": [
+          "ulei de argan"
+        ],
+        "key_benefit": "Netezește și disciplinează părul creț.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Reduce frizzul și disciplinează buclele.",
+        "topPros": [
+          "anti-frizz",
+          "netezește"
+        ],
+        "topCons": [
+          "borcan fără spatulă"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-hydra-masca-de-par",
+      "name": "Bloom Hydra Mască de păr",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "masti-de-par",
+      "categorySlugs": [
+        "masti-de-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Părul uscat pare revitalizat după câteva utilizări.",
+      "currency": "RON",
+      "price": 39.99,
+      "rating": 4.4,
+      "reviewCount": 87,
+      "status": "active",
+      "attributes": {
+        "hair_type": "uscat",
+        "key_ingredients": [
+          "acid hialuronic",
+          "aloe"
+        ],
+        "key_benefit": "Hidratează intens părul uscat.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Părul uscat pare revitalizat după câteva utilizări.",
+        "topPros": [
+          "hidratant",
+          "revitalizează"
+        ],
+        "topCons": [
+          "efect treptat"
+        ]
+      }
+    },
+    {
+      "slug": "aria-shine-gloss-de-buze",
+      "name": "Aria Shine Gloss de buze",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "gloss-de-buze",
+      "categorySlugs": [
+        "gloss-de-buze",
+        "machiaj"
+      ],
+      "shortDescription": "Luciu frumos, non-lipicios; nuanțe transparente.",
+      "currency": "RON",
+      "price": 27.99,
+      "rating": 4.4,
+      "reviewCount": 154,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Luciu intens și buze cu aspect plin.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Luciu frumos, non-lipicios; nuanțe transparente.",
+        "topPros": [
+          "non-lipicios",
+          "luciu intens"
+        ],
+        "topCons": [
+          "durată scurtă"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Transparent",
+          "sku": "ARIA-SG-TR",
+          "price": 27.99,
+          "stock": 20,
+          "colorHex": "#f4e4de"
+        },
+        {
+          "label": "Roz",
+          "sku": "ARIA-SG-RO",
+          "price": 27.99,
+          "stock": 14,
+          "colorHex": "#e39fae"
+        }
+      ]
+    },
+    {
+      "slug": "velora-plump-gloss-de-buze",
+      "name": "Velora Plump Gloss de buze",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "gloss-de-buze",
+      "categorySlugs": [
+        "gloss-de-buze",
+        "machiaj"
+      ],
+      "shortDescription": "Buzele par mai pline; ușoară senzație de furnicături.",
+      "currency": "RON",
+      "price": 31.99,
+      "rating": 4.3,
+      "reviewCount": 132,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Efect de volum și hidratare a buzelor.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Buzele par mai pline; ușoară senzație de furnicături.",
+        "topPros": [
+          "efect plumping",
+          "hidratant"
+        ],
+        "topCons": [
+          "furnicături neplăcute pentru unii"
+        ]
+      }
+    },
+    {
+      "slug": "velora-glow-iluminator",
+      "name": "Velora Glow Iluminator",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare",
+        "machiaj"
+      ],
+      "shortDescription": "Glow elegant, nu evidențiază porii; buildabil.",
+      "currency": "RON",
+      "price": 36.99,
+      "rating": 4.6,
+      "reviewCount": 143,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Strălucire naturală pe punctele înalte.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Glow elegant, nu evidențiază porii; buildabil.",
+        "topPros": [
+          "glow natural",
+          "buildabil"
+        ],
+        "topCons": [
+          "fallout ușor"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Șampanie",
+          "sku": "VEL-GI-CH",
+          "price": 36.99,
+          "stock": 16,
+          "colorHex": "#f0d9b5"
+        },
+        {
+          "label": "Auriu-roz",
+          "sku": "VEL-GI-RG",
+          "price": 36.99,
+          "stock": 12,
+          "colorHex": "#e7bfa6"
+        }
+      ]
+    },
+    {
+      "slug": "aria-radiant-iluminator",
+      "name": "Aria Radiant Iluminator",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare",
+        "machiaj"
+      ],
+      "shortDescription": "Efect subtil, potrivit pentru zi; textură cremoasă.",
+      "currency": "RON",
+      "price": 39.99,
+      "rating": 4.4,
+      "reviewCount": 99,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Iluminare satinată subtilă pentru zi.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Efect subtil, potrivit pentru zi; textură cremoasă.",
+        "topPros": [
+          "subtil",
+          "cremos"
+        ],
+        "topCons": [
+          "strălucire discretă"
+        ]
+      }
+    },
+    {
+      "slug": "velora-set-spray-de-fixare",
+      "name": "Velora Set Spray de fixare",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare",
+        "machiaj"
+      ],
+      "shortDescription": "Machiajul rezistă vizibil mai mult; finisaj natural.",
+      "currency": "RON",
+      "price": 42.99,
+      "rating": 4.5,
+      "reviewCount": 167,
+      "status": "active",
+      "attributes": {
+        "finish": "natural",
+        "key_benefit": "Fixează machiajul pentru o zi întreagă.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Machiajul rezistă vizibil mai mult; finisaj natural.",
+        "topPros": [
+          "fixare de durată",
+          "finisaj natural"
+        ],
+        "topCons": [
+          "pulverizare mai grosieră"
+        ]
+      }
+    },
+    {
+      "slug": "aria-matte-spray-de-fixare",
+      "name": "Aria Matte Spray de fixare",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare",
+        "machiaj"
+      ],
+      "shortDescription": "Controlează luciul și fixează; poate usca tenul uscat.",
+      "currency": "RON",
+      "price": 39.99,
+      "rating": 4.3,
+      "reviewCount": 121,
+      "status": "active",
+      "attributes": {
+        "finish": "matte",
+        "concerns": [
+          "oily"
+        ],
+        "key_benefit": "Fixare cu finish mat pentru ten gras.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Controlează luciul și fixează; poate usca tenul uscat.",
+        "topPros": [
+          "finish mat",
+          "control sebum"
+        ],
+        "topCons": [
+          "uscător pentru ten uscat"
+        ]
+      }
+    },
+    {
+      "slug": "velora-sun-bronzer",
+      "name": "Velora Sun Bronzer",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "bronzer",
+      "categorySlugs": [
+        "bronzer",
+        "machiaj"
+      ],
+      "shortDescription": "Nuanță naturală, non-portocalie; buildabil.",
+      "currency": "RON",
+      "price": 34.99,
+      "rating": 4.5,
+      "reviewCount": 143,
+      "status": "active",
+      "attributes": {
+        "finish": "matte",
+        "key_benefit": "Conturează și dă căldură naturală tenului.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Nuanță naturală, non-portocalie; buildabil.",
+        "topPros": [
+          "aspect natural",
+          "buildabil"
+        ],
+        "topCons": [
+          "pigment intens, aplicare cu grijă"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Light",
+          "sku": "VEL-SB-L",
+          "price": 34.99,
+          "stock": 15,
+          "colorHex": "#b98a63"
+        },
+        {
+          "label": "Medium",
+          "sku": "VEL-SB-M",
+          "price": 34.99,
+          "stock": 12,
+          "colorHex": "#9c6b45"
+        }
+      ]
+    },
+    {
+      "slug": "aria-glow-fard-de-obraz",
+      "name": "Aria Glow Fard de obraz",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "fard-de-obraz",
+      "categorySlugs": [
+        "fard-de-obraz",
+        "machiaj"
+      ],
+      "shortDescription": "Efect proaspăt, luminos; se estompează ușor.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.4,
+      "reviewCount": 118,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Obraji proaspeți cu finish luminos.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Efect proaspăt, luminos; se estompează ușor.",
+        "topPros": [
+          "finish luminos",
+          "estompare ușoară"
+        ],
+        "topCons": [
+          "ținută medie"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Corai",
+          "sku": "ARIA-GF-CO",
+          "price": 29.99,
+          "stock": 14,
+          "colorHex": "#e88f76"
+        },
+        {
+          "label": "Roz-piersică",
+          "sku": "ARIA-GF-PP",
+          "price": 29.99,
+          "stock": 12,
+          "colorHex": "#e6a58f"
+        }
+      ]
+    },
+    {
+      "slug": "aria-nude-ruj",
+      "name": "Aria Nude Ruj",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "rujuri",
+      "categorySlugs": [
+        "rujuri",
+        "machiaj"
+      ],
+      "shortDescription": "Culori purtabile, hidratante; finish satinat.",
+      "currency": "RON",
+      "price": 38.99,
+      "rating": 4.4,
+      "reviewCount": 132,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Nuanțe nude satinate, confortabile.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Culori purtabile, hidratante; finish satinat.",
+        "topPros": [
+          "confortabil",
+          "nuanțe purtabile"
+        ],
+        "topCons": [
+          "ținută medie"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Nude Roz",
+          "sku": "ARIA-NR-NP",
+          "price": 38.99,
+          "stock": 16,
+          "colorHex": "#c98a80"
+        },
+        {
+          "label": "Caramel",
+          "sku": "ARIA-NR-CA",
+          "price": 38.99,
+          "stock": 12,
+          "colorHex": "#b57b5e"
+        }
+      ]
+    },
+    {
+      "slug": "velora-classic-ruj-satinat",
+      "name": "Velora Classic Ruj satinat",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "rujuri",
+      "categorySlugs": [
+        "rujuri",
+        "machiaj"
+      ],
+      "shortDescription": "Pigment bogat și confort; nu usucă buzele.",
+      "currency": "RON",
+      "price": 41.99,
+      "rating": 4.6,
+      "reviewCount": 187,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Culoare intensă satinată, hidratantă.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Pigment bogat și confort; nu usucă buzele.",
+        "topPros": [
+          "pigment intens",
+          "hidratant"
+        ],
+        "topCons": [
+          "se transferă la mese"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Roșu clasic",
+          "sku": "VEL-CS-RC",
+          "price": 41.99,
+          "stock": 18,
+          "colorHex": "#b31f28"
+        },
+        {
+          "label": "Vișiniu",
+          "sku": "VEL-CS-VI",
+          "price": 41.99,
+          "stock": 10,
+          "colorHex": "#7d2233"
+        }
+      ]
+    },
+    {
+      "slug": "auralis-spot-tratament-local",
+      "name": "Auralis Spot Tratament local",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Coșurile se calmează mai repede aplicat punctual.",
+      "currency": "RON",
+      "price": 42.99,
+      "rating": 4.4,
+      "reviewCount": 121,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "acne",
+          "oily"
+        ],
+        "key_ingredients": [
+          "acid salicilic",
+          "niacinamidă"
+        ],
+        "key_benefit": "Reduce coșurile punctual, peste noapte.",
+        "fragrance_free": true,
+        "texture": "gel"
+      },
+      "reviewSummary": {
+        "summary": "Coșurile se calmează mai repede aplicat punctual.",
+        "topPros": [
+          "acțiune rapidă",
+          "usucă coșul"
+        ],
+        "topCons": [
+          "poate usca zona din jur"
+        ]
+      }
+    },
+    {
+      "slug": "lumaderm-calm-tratament-local",
+      "name": "LumaDerm Calm Tratament local",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Blând cu pielea sensibilă; reduce roșeața coșului.",
+      "currency": "RON",
+      "price": 39.99,
+      "rating": 4.5,
+      "reviewCount": 87,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "sensitive",
+          "acne"
+        ],
+        "key_ingredients": [
+          "centella asiatica",
+          "zinc"
+        ],
+        "key_benefit": "Calmează imperfecțiunile pe ten sensibil.",
+        "fragrance_free": true,
+        "texture": "gel"
+      },
+      "reviewSummary": {
+        "summary": "Blând cu pielea sensibilă; reduce roșeața coșului.",
+        "topPros": [
+          "blând",
+          "calmează roșeața"
+        ],
+        "topCons": [
+          "acțiune mai lentă"
+        ]
+      }
+    },
+    {
+      "slug": "auralis-hydra-mist-pentru-ten",
+      "name": "Auralis Hydra Mist pentru ten",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Reîmprospătează tenul peste zi și fixează machiajul.",
+      "currency": "RON",
+      "price": 36.99,
+      "rating": 4.5,
+      "reviewCount": 143,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "hydration",
+          "dry"
+        ],
+        "key_ingredients": [
+          "apă termală",
+          "acid hialuronic"
+        ],
+        "key_benefit": "Reîmprospătează și hidratează tenul oricând.",
+        "fragrance_free": true,
+        "texture": "mist"
+      },
+      "reviewSummary": {
+        "summary": "Reîmprospătează tenul peste zi și fixează machiajul.",
+        "topPros": [
+          "reîmprospătează",
+          "hidratant"
+        ],
+        "topCons": [
+          "pulverizare mai mare"
+        ]
+      }
+    },
+    {
+      "slug": "petala-fresh-mist-pentru-ten",
+      "name": "Petala Fresh Mist pentru ten",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Senzație răcoritoare plăcută; hidratare ușoară.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.3,
+      "reviewCount": 98,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "normal",
+          "hydration"
+        ],
+        "key_ingredients": [
+          "apă de trandafiri"
+        ],
+        "key_benefit": "Mist răcoritor cu apă de trandafiri.",
+        "fragrance_free": false,
+        "texture": "mist"
+      },
+      "reviewSummary": {
+        "summary": "Senzație răcoritoare plăcută; hidratare ușoară.",
+        "topPros": [
+          "răcoritor",
+          "parfum plăcut"
+        ],
+        "topCons": [
+          "hidratare superficială"
         ]
       }
     }
