@@ -27,7 +27,7 @@ from src.agent.fallbacks import (
     _view_label,
 )
 from src.config import get_settings
-from src.db.queries.catalog import get_products_by_ids
+from src.db.queries.catalog import get_products_by_ids, product_category_roots
 from src.models import Offer, RetrievalResult, Route, TurnContext
 from src.worker import compose
 
@@ -140,6 +140,19 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     n = 3 if _THREE_RE.search(query) else 2
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
     products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
+    # NX-167 (C): nu compara produse din ramuri INCOERENTE (root-branch diferit din
+    # `categories.path`, ex. machiaj vs. par) — tabelul „fond vs. accesoriu de păr" e absurd.
+    # Fail-open la `path` lipsă (produse fără root nu contează). ≥2 root-uri distincte → `return
+    # False` → cade pe bucla LLM (poate re-căuta coerent), nu un mesaj-perete. Kill-switch OFF →
+    # comportamentul vechi (compară orice 2 afișate).
+    if get_settings().compare_coherence_guard_enabled and len(products) >= 2:
+        roots = await product_category_roots(
+            deps.conn, ctx.business.id, [p["id"] for p in products]
+        )
+        distinct = {r for r in roots.values() if r}
+        if len(distinct) >= 2:
+            ctx.emit("compare_incoherent_blocked", n=len(products), root_branches=len(distinct))
+            return False
     comparison = compose.build_comparison(products, ctx.language, _comparison_facets(ctx))
     if comparison is None:
         return False

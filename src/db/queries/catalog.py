@@ -193,6 +193,34 @@ def _variant_label_clause(label: str, placeholder: Any) -> str:
     )
 
 
+def _category_clause(category: str, placeholder: Any) -> str:
+    """NX-167 (A): predicatul de categorie, ca UN SINGUR `exists(...)` INLINE (se adaugă la `conds`
+    ca orice altă condiție — fără CTE, fără restructurarea query-urilor).
+
+    Cu `SEARCH_CATEGORY_TREE_ENABLED`: produsul e „în categorie" dacă ORICARE din categoriile lui
+    — `primary_category_id` SAU orice `product_category_map` — e categoria CERUTĂ sau un DESCENDENT
+    al ei (materialized path `categories.path`). Repară „cerere pe părinte (machiaj) ratează copiii
+    (fond-de-ten)". `reqc`/`sub`/`m` NU se leagă de aliasurile din SELECT (`c`/`p`) → fără
+    coliziune; corelat pe `p.business_id`/`p.primary_category_id`/`p.id` (scope P7).
+
+    Fără flag (OFF): match exact pe slug/nume al `primary_category_id` — BYTE-IDENTIC cu vechiul cod
+    (două placeholder-e, ca înainte). `category` = slug SAU nume."""
+    if not get_settings().search_category_tree_enabled:
+        slug_ph = placeholder(category)
+        name_ph = placeholder(category)
+        return f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))"
+    cat_ph = placeholder(category)  # un singur placeholder, reutilizat de 2 ori (aceeași valoare)
+    return (
+        "exists (select 1 from categories reqc "
+        "join categories sub on sub.business_id = reqc.business_id "
+        "and (sub.id = reqc.id or sub.path like reqc.path || '/%') "
+        "where reqc.business_id = p.business_id "
+        f"and (lower(reqc.slug) = lower({cat_ph}) or lower(reqc.name) = lower({cat_ph})) "
+        "and (sub.id = p.primary_category_id or exists (select 1 from product_category_map m "
+        "where m.product_id = p.id and m.category_id = sub.id)))"
+    )
+
+
 async def search_products(
     conn: asyncpg.Connection,
     business_id: str,
@@ -228,10 +256,9 @@ async def search_products(
         return f"${len(params)}"
 
     if category:
-        # match pe slug exact SAU nume (case-insensitive)
-        slug_ph = placeholder(category)
-        name_ph = placeholder(category)
-        conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
+        # NX-167 (A): match pe arbore (primary + product_category_map + descendenți) sau, cu flag
+        # OFF, exact pe slug/nume al primary_category_id (byte-identic cu vechiul cod).
+        conds.append(_category_clause(category, placeholder))
     if brand:
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
@@ -292,9 +319,7 @@ async def search_products_lexical(
     # (nu prinde nimic) → cade pe trgm; niciun SQL invalid.
     conds.append(f"(p.search_tsv @@ websearch_to_tsquery('simple', {q_ph}) or p.name % {q_ph})")
     if category:
-        slug_ph = placeholder(category)
-        name_ph = placeholder(category)
-        conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
+        conds.append(_category_clause(category, placeholder))  # NX-167 (A): match pe arbore
     if brand:
         conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
     if concerns:
@@ -401,6 +426,26 @@ async def get_products_by_ids(
         limit,
     )
     return [_row_to_product(r) for r in rows]
+
+
+async def product_category_roots(
+    conn: asyncpg.Connection, business_id: str, product_ids: list[str]
+) -> dict[str, str]:
+    """NX-167 (C): root-branch-ul (primul segment din `categories.path`) al categoriei PRIMARE a
+    fiecărui produs — pentru garda de coerență la compare (`machiaj` vs. `par` = incoerent).
+    `business_id = $1` (izolare P7; RLS plasă). Produsele fără categorie/`path` sunt ABSENTE din
+    dict → caller-ul e fail-open (nu blochează pe date lipsă)."""
+    if not product_ids:
+        return {}
+    rows = await conn.fetch(
+        "select p.id::text as id, split_part(c.path, '/', 1) as root "
+        "from products p join categories c on c.id = p.primary_category_id "
+        "where p.business_id = $1 and p.id = any($2::uuid[]) "
+        "and c.path is not null and c.path <> ''",
+        business_id,
+        product_ids,
+    )
+    return {r["id"]: r["root"] for r in rows if r["root"]}
 
 
 async def search_cheaper_than(
@@ -589,9 +634,7 @@ async def search_products_semantic(
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if category:
-        slug_ph = placeholder(category)
-        name_ph = placeholder(category)
-        conds.append(f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))")
+        conds.append(_category_clause(category, placeholder))  # NX-167 (A): match pe arbore
     if brand:
         # Filtru DUR pe brand (la fel ca SQL-only): un brand cerut care nu există în catalog →
         # zero rezultate, NU produse semantic-apropiate de la alt brand (bug-ul „avem … Chanel").
