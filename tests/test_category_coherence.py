@@ -209,3 +209,132 @@ async def test_offcategory_guard_off_keeps_cards(monkeypatch):
     assert res.products  # OFF → comportamentul vechi: cardurile off-category rămân (cu disclosure)
     assert res.relevance is not None and res.relevance.category_dropped is True
     assert not [e for e in ctx.events if e.type == "offcategory_suppressed"]
+
+
+# --- NX-167 (C): gardă de coerență la compare (root-branch din path) --------------------------
+
+
+def _ctx_two_displayed():
+    from src.models import (
+        BusinessConfig,
+        Contact,
+        ConversationState,
+        InboundMessage,
+        ProductRef,
+        TurnContext,
+    )
+
+    return TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="b", slug="d", name="D"),
+        contact=Contact(id="c", business_id="b"),
+        message=InboundMessage(provider_msg_id="m", body="compară primele două"),
+        conversation_id="conv",
+        state=ConversationState(
+            displayed_products=[
+                ProductRef(product_id="p1", name="Fond A", price=58.99),
+                ProductRef(product_id="p2", name="Accesoriu par", price=9.99),
+            ]
+        ),
+    )
+
+
+def _stub_compare(monkeypatch, roots):
+    """Stub `get_products_by_ids` (2 produse valide pt build_comparison) + `product_category_roots`
+    cu root-urile date (dict id→root-branch)."""
+    from src.agent import deterministic as det
+
+    prods = [
+        {
+            "id": "p1",
+            "name": "Fond A",
+            "brand": "X",
+            "price": 58.99,
+            "rating": 4.8,
+            "availability": "in_stock",
+            "top_pros": ["acoperire bună"],
+        },
+        {
+            "id": "p2",
+            "name": "Accesoriu par",
+            "brand": "Y",
+            "price": 9.99,
+            "rating": 4.6,
+            "availability": "in_stock",
+            "top_pros": ["prinde bine"],
+        },
+    ]
+
+    async def _by_ids(conn, bid, ids, *, limit=6):
+        order = {pid: i for i, pid in enumerate(ids)}
+        return sorted([p for p in prods if p["id"] in ids], key=lambda p: order[p["id"]])[:limit]
+
+    async def _roots(conn, bid, ids):
+        return {i: roots[i] for i in ids if i in roots}
+
+    monkeypatch.setattr(det, "get_products_by_ids", _by_ids)
+    monkeypatch.setattr(det, "product_category_roots", _roots)
+
+
+async def test_compare_guard_blocks_incoherent_branches(monkeypatch):
+    from src.agent.deterministic import _handle_compare_intent
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "compare_coherence_guard_enabled", True)
+    _stub_compare(monkeypatch, {"p1": "machiaj", "p2": "par"})  # ramuri diferite
+
+    ctx = _ctx_two_displayed()
+    served = await _handle_compare_intent(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=None), "compară primele două"
+    )
+
+    assert served is False  # NU a servit tabelul → cade pe bucla LLM
+    assert ctx.reply is None  # nicio comparație incoerentă randată
+    ev = [e for e in ctx.events if e.type == "compare_incoherent_blocked"]
+    assert ev and ev[0].properties["root_branches"] == 2
+
+
+async def test_compare_guard_allows_same_branch(monkeypatch):
+    from src.agent.deterministic import _handle_compare_intent
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "compare_coherence_guard_enabled", True)
+    _stub_compare(monkeypatch, {"p1": "machiaj", "p2": "machiaj"})  # ACELAȘI root
+
+    ctx = _ctx_two_displayed()
+    served = await _handle_compare_intent(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=None), "compară primele două"
+    )
+
+    assert served is True  # coerent → serveste comparația
+    assert not [e for e in ctx.events if e.type == "compare_incoherent_blocked"]
+
+
+async def test_compare_guard_off_allows_incoherent(monkeypatch):
+    from src.agent.deterministic import _handle_compare_intent
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "compare_coherence_guard_enabled", False)
+    _stub_compare(monkeypatch, {"p1": "machiaj", "p2": "par"})
+
+    ctx = _ctx_two_displayed()
+    served = await _handle_compare_intent(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=None), "compară primele două"
+    )
+
+    assert served is True  # OFF → comportamentul vechi (compară orice 2 afișate)
+
+
+async def test_compare_guard_fail_open_on_missing_path(monkeypatch):
+    from src.agent.deterministic import _handle_compare_intent
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "compare_coherence_guard_enabled", True)
+    _stub_compare(monkeypatch, {})  # niciun root (path lipsă) → fail-open
+
+    ctx = _ctx_two_displayed()
+    served = await _handle_compare_intent(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=None), "compară primele două"
+    )
+
+    assert served is True  # fail-open: fără date de categorie NU blocăm

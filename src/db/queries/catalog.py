@@ -428,6 +428,26 @@ async def get_products_by_ids(
     return [_row_to_product(r) for r in rows]
 
 
+async def product_category_roots(
+    conn: asyncpg.Connection, business_id: str, product_ids: list[str]
+) -> dict[str, str]:
+    """NX-167 (C): root-branch-ul (primul segment din `categories.path`) al categoriei PRIMARE a
+    fiecărui produs — pentru garda de coerență la compare (`machiaj` vs. `par` = incoerent).
+    `business_id = $1` (izolare P7; RLS plasă). Produsele fără categorie/`path` sunt ABSENTE din
+    dict → caller-ul e fail-open (nu blochează pe date lipsă)."""
+    if not product_ids:
+        return {}
+    rows = await conn.fetch(
+        "select p.id::text as id, split_part(c.path, '/', 1) as root "
+        "from products p join categories c on c.id = p.primary_category_id "
+        "where p.business_id = $1 and p.id = any($2::uuid[]) "
+        "and c.path is not null and c.path <> ''",
+        business_id,
+        product_ids,
+    )
+    return {r["id"]: r["root"] for r in rows if r["root"]}
+
+
 async def search_cheaper_than(
     conn: asyncpg.Connection,
     business_id: str,
