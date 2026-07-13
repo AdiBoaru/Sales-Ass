@@ -64,7 +64,9 @@ async def _upsert_brand(conn, slug: str, name: str) -> str:
         "select id from brands where business_id=$1 and slug=$2", DEMO_BIZ, slug
     )
     if row:
-        await conn.execute("update brands set name=$1 where id=$2", name, row["id"])
+        await conn.execute(
+            "update brands set name=$1 where id=$2 and business_id=$3", name, row["id"], DEMO_BIZ
+        )
         return row["id"]
     return await conn.fetchval(
         "insert into brands (business_id, slug, name) values ($1,$2,$3) returning id",
@@ -86,11 +88,12 @@ async def _upsert_category(conn, slug: str, name: str, parent_slug: str | None) 
     )
     if row:
         await conn.execute(
-            "update categories set name=$1, parent_id=$2, path=$3 where id=$4",
+            "update categories set name=$1, parent_id=$2, path=$3 where id=$4 and business_id=$5",
             name,
             parent_id,
             path,
             row["id"],
+            DEMO_BIZ,
         )
         return row["id"]
     return await conn.fetchval(
@@ -139,7 +142,10 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
     if row:
         set_sql = ", ".join(f"{k}=${i + 2}" for i, k in enumerate(keys))
         await conn.execute(
-            f"update products set {set_sql} where id=$1", row["id"], *[cols[k] for k in keys]
+            f"update products set {set_sql} where id=$1 and business_id=${len(keys) + 2}",
+            row["id"],
+            *[cols[k] for k in keys],
+            DEMO_BIZ,
         )
         pid = row["id"]
     else:
@@ -152,7 +158,9 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
             *[cols[k] for k in keys],
         )
 
-    # category_map: primary + toate categorySlugs (idempotent — șterge + reinserează)
+    # category_map: primary + toate categorySlugs (idempotent — șterge + reinserează).
+    # NB: product_category_map / product_images NU au business_id (scoped prin FK products) —
+    # tenant guard-ul e pe `pid`, obținut mai sus cu filtru business_id.
     await conn.execute("delete from product_category_map where product_id=$1", pid)
     for pos, cslug in enumerate(p.get("categorySlugs") or [p["primaryCategorySlug"]]):
         cid = await conn.fetchval(
@@ -168,7 +176,9 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
             )
 
     # variante: sursă de adevăr = JSON → șterge + reinserează
-    await conn.execute("delete from product_variants where product_id=$1", pid)
+    await conn.execute(
+        "delete from product_variants where product_id=$1 and business_id=$2", pid, DEMO_BIZ
+    )
     for i, v in enumerate(variants):
         sku = v.get("sku") or f"V2-{p['slug']}-{i:02d}"
         await conn.execute(
@@ -197,7 +207,8 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
             "values ($1,$2,$3,$4,$5,$6) "
             "on conflict (product_id) do update set summary=excluded.summary, "
             "top_pros=excluded.top_pros, top_cons=excluded.top_cons, "
-            "review_count_at_build=excluded.review_count_at_build",
+            "review_count_at_build=excluded.review_count_at_build "
+            "where product_review_summaries.business_id=excluded.business_id",
             pid,
             DEMO_BIZ,
             rs.get("summary"),
