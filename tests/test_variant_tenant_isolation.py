@@ -85,3 +85,33 @@ async def test_variant_commercial_fields_scoped_to_tenant(two_shops):
         assert leak == []
         # și invers, ca dovadă simetrică
         assert await get_products_by_ids(conn, b, [pa], limit=1) == []
+
+
+async def test_rogue_variant_wrong_business_does_not_leak_into_payload(two_shops):
+    """Adversarial (review PR #226): `_VARIANTS_AGG` corela varianta DOAR pe `product_id = p.id`.
+    Cum `products.id` e UUID global-unic, un rând de variantă cu `business_id=B` dar
+    `product_id`=produsul lui A trece FK-ul și, fără filtrul pe business_id, ar intra în payload-ul
+    lui A. Injectăm exact acel rând rogue și cerem ca A să vadă DOAR varianta lui legitimă."""
+    a, b, pa, _pb = two_shops
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        # varianta rogue: tenantul B, dar atârnată de produsul lui A
+        rogue_sku = f"ROGUE-{uuid4().hex[:8]}"
+        await conn.execute(
+            "insert into product_variants "
+            "(business_id, product_id, label, sku, price, stock, gtin, net_content_value, "
+            " net_content_unit, image_url) "
+            "values ($1,$2,'ROGUE',$3,9,1,'4006381333931',10,'ml','http://b/rogue.jpg')",
+            b,  # business_id GREȘIT (B), pe product_id-ul lui A
+            pa,
+            rogue_sku,
+        )
+        try:
+            prods = await get_products_by_ids(conn, a, [pa], limit=1)
+            assert len(prods) == 1
+            skus = {v["sku"] for v in prods[0]["variants"]}
+            assert rogue_sku not in skus, "variantă cu business_id greșit scăpată în payload A"
+            # A vede exact varianta lui legitimă (una singură), nu cea rogue
+            assert all(v["label"] != "ROGUE" for v in prods[0]["variants"])
+        finally:
+            await conn.execute("delete from product_variants where sku=$1", rogue_sku)

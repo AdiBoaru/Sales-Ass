@@ -64,7 +64,7 @@ _VARIANTS_AGG = """
         ) as variants
         from (
             select * from product_variants
-            where product_id = p.id
+            where product_id = p.id and business_id = p.business_id
             order by coalesce(sale_price, price) asc
             limit 16
         ) v
