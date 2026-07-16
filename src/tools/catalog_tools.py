@@ -103,9 +103,68 @@ def _named_product_found(name: str, products: list[dict[str, Any]]) -> bool:
     return any(all(t in _normname(p.get("name") or "") for t in key) for p in products)
 
 
-def _brief(products: list[dict[str, Any]]) -> str:
+# --- NX-169: proiecția faptelor canonice v3 în view-urile text (generic din DomainPack) ------
+
+_USAGE_RO = {
+    "morning": "dimineața",
+    "evening": "seara",
+    "daily": "zilnic",
+    "occasional": "ocazional",
+}
+# fapte-cheie compacte pt search brief (buget tokens); restul apar în detail.
+_BRIEF_FACET_KEYS = {"concerns", "suitable_for", "finish", "coverage", "texture", "key_ingredients"}
+
+
+def _projection_on() -> bool:
+    return get_settings().catalog_projection_v2_enabled
+
+
+def _pattrs(p: dict[str, Any]) -> dict[str, Any]:
+    a = p.get("attributes")
+    return a if isinstance(a, dict) else {}
+
+
+def _facet_pairs(
+    attrs: dict[str, Any],
+    pack: Any,
+    locale: str,
+    *,
+    keys: set[str] | None = None,
+    exclude: set[str] | None = None,
+) -> list[tuple[str, str]]:
+    """(etichetă, valoare) pt fațetele de DOMENIU prezente în `attrs`, GENERIC din
+    `pack.comparison_facets` (nimic hardcodat de vertical). Valorile fără `value_labels` sunt deja
+    display-ready. `keys` → subset; `exclude` → chei sărite (buget tokens). Pack absent → []."""
+    out: list[tuple[str, str]] = []
+    seen_labels: set[str] = (
+        set()
+    )  # concerns + suitable_for împart „Potrivit pentru" → o singură dată
+    for spec in getattr(pack, "comparison_facets", ()) or ():
+        if keys is not None and spec.key not in keys:
+            continue
+        if exclude and spec.key in exclude:
+            continue
+        val = attrs.get(spec.key)
+        if not val or isinstance(val, dict):  # obiecte (usage/net_content) au randare dedicată
+            continue
+        label = spec.labels.get(locale) or spec.labels.get("ro") or spec.key
+        if label in seen_labels:
+            continue
+        seen_labels.add(label)
+
+        def _lbl(v: Any, _spec: Any = spec) -> str:
+            vl = _spec.value_labels.get(str(v), {})
+            return vl.get(locale) or vl.get("ro") or str(v)
+
+        vals = val if isinstance(val, list) else [val]
+        out.append((label, ", ".join(_lbl(v) for v in vals[:4])))
+    return out
+
+
+def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro") -> str:
     if not products:
         return "Niciun produs găsit."
+    proj = _projection_on()
     lines = []
     for p in products:
         rating = f" | {float(p['rating']):.1f}★" if p.get("rating") else ""
@@ -116,10 +175,21 @@ def _brief(products: list[dict[str, Any]]) -> str:
         variants = _variant_view(p.get("variants"), limit=4)
         vline = f" | variante: {variants}" if variants else ""
         summ = (p.get("ai_summary") or "")[:120]
-        lines.append(
+        base = (
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
-            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch}{vline} | {summ}"
+            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch}{vline}"
         )
+        if proj:
+            a = _pattrs(p)
+            # NX-169: fapte-cheie canonice (fit specific, nu tautologie) + best_for static, compact.
+            facts = _facet_pairs(a, pack, locale, keys=_BRIEF_FACET_KEYS)
+            bits = [f"{lbl}: {val}" for lbl, val in facts[:3]]
+            if a.get("best_for"):
+                bits.append(f"bun pt {a['best_for']}")
+            fline = (" | " + " · ".join(bits)) if bits else ""
+            lines.append(f"{base}{fline} | {summ}")
+        else:
+            lines.append(f"{base} | {summ}")
     return "\n".join(lines)
 
 
@@ -148,7 +218,7 @@ def _variant_view(raw_variants: Any, *, limit: int) -> str:
     return ", ".join(labels)
 
 
-def _detail_view(p: dict[str, Any]) -> str:
+def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str:
     parts = [
         f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {float(p['price']):.2f} lei",
         f"stoc: {p.get('availability') or '-'}",
@@ -157,6 +227,48 @@ def _detail_view(p: dict[str, Any]) -> str:
         parts.append(f"rating: {float(p['rating']):.1f}★")
     if p.get("ai_summary"):
         parts.append(f"descriere: {p['ai_summary'][:200]}")
+    if _projection_on():
+        a = _pattrs(p)
+        # NX-169: fațetele de domeniu (finish/coverage/suitable_for/...); key_ingredients îl randăm
+        # din tabelul NORMALIZAT (mai jos), nu din fațeta pe attributes.
+        for lbl, val in _facet_pairs(a, pack, locale, exclude={"key_ingredients"}):
+            parts.append(f"{lbl.lower()}: {val}")
+        # INCI din tabelul normalizat `product_ingredients` (168e-2); fallback attributes.
+        inci = p.get("ingredients_db") or a.get("key_ingredients") or []
+        if inci:
+            parts.append("ingrediente (INCI): " + ", ".join(str(x) for x in list(inci)[:6]))
+        if a.get("best_for"):
+            parts.append(f"recomandat pentru: {a['best_for']}")
+        times = (a.get("usage") or {}).get("time") or []
+        if times:
+            parts.append("cum se folosește: " + ", ".join(_USAGE_RO.get(t, t) for t in times))
+        warns = [
+            x.get("value")
+            for x in a.get("not_recommended_for") or []
+            if isinstance(x, dict) and x.get("value")
+        ]
+        if warns:
+            parts.append("de reținut — nepotrivit pentru: " + ", ".join(warns[:3]))
+        # NX-168e-2 graf PDP (consumat aici): secțiuni usage/warnings + badge-uri (dacă query le-a
+        # adus). Beneficii/ingrediente-secțiune sunt deja în fațete/ai_summary → nu le dublăm.
+        for sec in p.get("sections") or []:
+            if (
+                isinstance(sec, dict)
+                and sec.get("kind") in ("usage", "warnings")
+                and sec.get("body")
+            ):
+                parts.append(f"{(sec.get('title') or '').lower()}: {sec['body'][:150]}")
+        if p.get("badges"):
+            parts.append("etichete: " + ", ".join(str(b) for b in list(p["badges"])[:4]))
+        # NX-169: recenzii INDIVIDUALE (tabelul reviews, 168e-2) — 1-2 citate reale + autor/rating.
+        quotes = []
+        for rv in (p.get("reviews_list") or [])[:2]:
+            if isinstance(rv, dict) and rv.get("body"):
+                who = rv.get("author") or "client"
+                star = f", {int(rv['rating'])}★" if rv.get("rating") else ""
+                quotes.append(f'„{str(rv["body"])[:90]}" ({who}{star})')
+        if quotes:
+            parts.append("recenzii clienți: " + "; ".join(quotes))
     if p.get("review_summary"):
         parts.append(f"recenzii: {p['review_summary'][:200]}")
     if p.get("top_pros"):
@@ -171,8 +283,45 @@ def _detail_view(p: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
-def _compare_view(products: list[dict[str, Any]]) -> str:
-    return "\n".join(_detail_view(p) for p in products)
+def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro") -> str:
+    # Kill-switch OFF → comportamentul vechi (detail per produs).
+    if not _projection_on():
+        return "\n".join(_detail_view(p) for p in products)
+    # NX-169: comparație pe DIFERENȚE — o linie/produs cu identitatea + preț, apoi DOAR axele
+    # (preț + fațete de domeniu) care DIFERĂ între produse. Diferențiere reală, nu tabel identic.
+    heads = [
+        f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {float(p['price']):.2f} lei"
+        + (f", {float(p['rating']):.1f}★" if p.get("rating") else "")
+        for p in products
+    ]
+    lines = list(heads)
+    diffs: list[str] = []
+    # preț ca axă de diferență (dacă nu-s toate egale)
+    prices = [round(float(p.get("price") or 0), 2) for p in products]
+    if len(set(prices)) > 1:
+        diffs.append(
+            "preț: " + " vs ".join(f"{p['name']}={pr:.2f} lei" for p, pr in zip(products, prices))
+        )
+    # fațete de domeniu: afișează axa DOAR dacă valorile diferă între produse
+    seen_keys: list[str] = []
+    for p in products:
+        for lbl, _ in _facet_pairs(_pattrs(p), pack, locale):
+            if lbl not in seen_keys:
+                seen_keys.append(lbl)
+    for lbl in seen_keys:
+        vals = []
+        for p in products:
+            pair = dict(_facet_pairs(_pattrs(p), pack, locale))
+            vals.append(pair.get(lbl, "—"))
+        if len({v for v in vals}) > 1:  # diferă → axă utilă
+            diffs.append(
+                f"{lbl.lower()}: " + " vs ".join(f"{p['name']}={v}" for p, v in zip(products, vals))
+            )
+    if diffs:
+        lines.append("diferențe: " + " | ".join(diffs))
+    else:
+        lines.append("diferențe: preț/atribute similare — decide pe rating/recenzii/preferință")
+    return "\n".join(lines)
 
 
 # --- tool-uri ----------------------------------------------------------------
@@ -386,7 +535,11 @@ async def continue_search_session(
             served=len(products),
             unseen=len(page_ids),
         )
-        return ToolResult(ok=True, products=products, llm_view=_brief(products))
+        return ToolResult(
+            ok=True,
+            products=products,
+            llm_view=_brief(products, getattr(ctx.business, "domain_pack", None), ctx.language),
+        )
     ctx.emit(
         "search_session",
         action="exhausted",
@@ -671,7 +824,7 @@ async def search_products_tool(
             "(relaxat: n-am găsit potrivire exactă pe nevoia/categoria cerută; cele de mai jos "
             "sunt cele mai apropiate — spune sincer clientului că nu e match exact)"
         )
-    view = _brief(products)
+    view = _brief(products, getattr(ctx.business, "domain_pack", None), ctx.language)
     if notes:
         view = "\n".join(notes) + "\n" + view
     # izi-parity hardening: semnal de RELEVANȚĂ pentru compose (suprimă „Recomandarea mea"
@@ -716,7 +869,13 @@ async def get_product_details_tool(
     products = await get_products_by_ids(deps.conn, ctx.business.id, [a.product_id], limit=1)
     if not products:
         return ToolResult(ok=False, error="not_found", llm_view="Produsul nu există în catalog.")
-    return ToolResult(ok=True, products=products, llm_view=_detail_view(products[0]))
+    return ToolResult(
+        ok=True,
+        products=products,
+        llm_view=_detail_view(
+            products[0], getattr(ctx.business, "domain_pack", None), ctx.language
+        ),
+    )
 
 
 @register("compare_products")
@@ -733,4 +892,8 @@ async def compare_products_tool(
             error="need_2",
             llm_view="Am nevoie de cel puțin 2 produse existente pentru comparație.",
         )
-    return ToolResult(ok=True, products=products, llm_view=_compare_view(products))
+    return ToolResult(
+        ok=True,
+        products=products,
+        llm_view=_compare_view(products, getattr(ctx.business, "domain_pack", None), ctx.language),
+    )

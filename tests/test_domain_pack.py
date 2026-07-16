@@ -57,7 +57,16 @@ def test_beauty_salon_comparison_facets_parsed():
     pack = load_domain_pack(_biz("beauty_salon"))
     # ordinea = ordinea de afișare a rândurilor (populate azi: key_benefit + concerns 500/500;
     # key_ingredients derivat din INCI de scripts/enrich_key_ingredients.py).
-    assert [f.key for f in pack.comparison_facets] == ["key_benefit", "key_ingredients", "concerns"]
+    # NX-169: + fațetele v3 (suitable_for/finish/coverage/texture) pt proiecția în view-uri.
+    assert [f.key for f in pack.comparison_facets] == [
+        "key_benefit",
+        "key_ingredients",
+        "concerns",
+        "suitable_for",
+        "finish",
+        "coverage",
+        "texture",
+    ]
     kb = next(f for f in pack.comparison_facets if f.key == "key_benefit")
     assert kb.labels["ro"] == "Beneficiu principal"
     concerns = next(f for f in pack.comparison_facets if f.key == "concerns")

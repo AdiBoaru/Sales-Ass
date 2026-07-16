@@ -392,6 +392,12 @@ class Settings(BaseSettings):
     search_sort_mode_enabled: bool = Field(
         default=True, validation_alias="SEARCH_SORT_MODE_ENABLED"
     )
+    # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
+    # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
+    # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).
+    catalog_projection_v2_enabled: bool = Field(
+        default=True, validation_alias="CATALOG_PROJECTION_V2_ENABLED"
+    )
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
