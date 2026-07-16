@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from scripts.audit_catalog_v2 import _gtin_valid, audit
+from scripts.seed_catalog_v2 import gate_violations
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY = ROOT / "db" / "seed" / "catalog.json"
@@ -197,14 +198,66 @@ def test_r7_negation_is_warning_not_violation():
     assert res["warnings"]["desc_attr_contradiction"]  # dar e semnalată ca warning
 
 
-def test_seed_gate_counts_only_violations():
-    # Doar warning (R7 negație) + zero violations → poarta (violations) = 0 → seed ar trece.
+def test_seed_gate_helper_excludes_warnings():
+    # Exercită PORTA REALĂ a seed-ului (gate_violations), nu o formulă duplicată.
+    # Catalog cu DOAR warning (R7 negație) → poarta = [] (warnings excluse structural).
     p = _fond()
     p["attributes"]["finish"] = "dewy"
     p["ai_summary"] = "Fond care NU lasă finish mat."
+    assert gate_violations(_data(p), contract="v3") == []
+    # Catalog cu violation → poarta non-goală.
+    bad = _fond()
+    del bad["attributes"]["best_for"]
+    assert gate_violations(_data(bad), contract="v3")
+    # Poarta implicită (v2) pe catalog v2-curat → [] (seed ar porni).
+    assert gate_violations(_data(_fond())) == []
+
+
+# --- R12 extins: finish + concern + negație ----------------------------------------------------
+
+
+def test_r12_finish_claim_without_attribute():
+    # ai_summary afirmă „matifiant" dar produsul n-are `finish` → violation (nesusținut).
+    p = _fond()
+    del p["attributes"]["finish"]
+    p["ai_summary"] = "Fond matifiant cu ținută lungă."
+    assert _viol(_data(p)).get("ai_summary_unfounded")
+
+
+def test_r12_concern_claim_unfounded():
+    # „ten sensibil" în ai_summary dar `sensitive` absent din concerns/suitable_for → violation.
+    p = _fond()
+    p["ai_summary"] = "Fond ideal pentru ten sensibil."  # _fond are doar oily
+    assert _viol(_data(p)).get("ai_summary_unfounded")
+
+
+def test_r12_negation_is_warning():
+    # „fără retinol" (negație) → warning, NU violation.
+    p = _fond()
+    p["ai_summary"] = "Fond fără retinol, potrivit pentru ten gras."
     res = audit(_data(p), contract="v3")
-    assert sum(len(x) for x in res["violations"].values()) == 0
-    assert sum(len(x) for x in res["warnings"].values()) >= 1
+    assert not res["violations"]["ai_summary_unfounded"]
+    assert res["warnings"]["ai_summary_unfounded"]
+
+
+# --- Schema v3: validare structurală per-categorie (exercită jsonschema în CI) -----------------
+
+
+def test_v3_schema_validates_per_category():
+    import jsonschema  # dep în requirements — forțează CI să exercite catalog_v3.schema.json
+
+    schema = json.loads(
+        (ROOT / "db" / "seed" / "catalog_v3.schema.json").read_text(encoding="utf-8")
+    )
+    validator = jsonschema.Draft202012Validator(schema)
+    base = {
+        "brands": [{"slug": "velora", "name": "Velora"}],
+        "categories": [{"slug": "fond-de-ten", "name": "Fond"}],
+    }
+    assert not list(validator.iter_errors({**base, "products": [_fond()]}))  # complet → valid
+    bad = _fond()
+    del bad["attributes"]["finish"]
+    assert list(validator.iter_errors({**base, "products": [bad]}))  # fond fără finish → invalid
 
 
 # --- GS1 checksum ------------------------------------------------------------------------------
@@ -214,6 +267,10 @@ def test_gtin_checksum_helper():
     assert _gtin_valid("4006381333931")  # EAN-13 valid cunoscut
     assert not _gtin_valid("4006381333932")  # cifra de control greșită
     assert not _gtin_valid("123")  # lungime invalidă
+    # malformate: NU se curăță non-cifrele (altfel ar trece cu checksum corect)
+    assert not _gtin_valid("4006-3813-3393-1")  # cratime
+    assert not _gtin_valid("EAN4006381333931")  # prefix literă
+    assert not _gtin_valid("4006 3813 3393 1")  # spații
 
 
 # --- Legacy catalog pică v3 --------------------------------------------------------------------

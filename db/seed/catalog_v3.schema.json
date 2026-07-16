@@ -218,11 +218,20 @@
           "then": { "properties": { "attributes": { "required": ["key_benefit", "differentiators"] } } }
         },
         {
-          "description": "skincare (frunze uzuale): concerns+texture+usage+key_ingredients.",
-          "if": { "properties": { "primaryCategorySlug": { "enum": ["seruri-pentru-ten", "creme-hidratante", "creme-de-ochi", "tratament-local"] } } },
+          "description": "skincare (TOATE frunzele ingrijirea-tenului — aliniat cu audit R10 root-based): concerns+texture+usage+key_ingredients.",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["curatarea-tenului", "demachiante-pentru-ten", "seruri-pentru-ten", "creme-hidratante", "creme-de-ochi", "lotiuni-tonice", "exfoliante-pentru-ten", "masti-pentru-ten", "tratament-local", "mist-pentru-ten"] } } },
           "then": {
             "properties": {
               "attributes": { "required": ["concerns", "texture", "usage", "key_ingredients"] }
+            }
+          }
+        },
+        {
+          "description": "haircare (TOATE frunzele ingrijirea-parului — aliniat cu audit R10 root-based): hair_type+usage.",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["sampoane", "masti-de-par", "ingrijire-fara-clatire", "uleiuri-pentru-par", "balsamuri-de-par", "sampon-uscat"] } } },
+          "then": {
+            "properties": {
+              "attributes": { "required": ["hair_type", "usage"] }
             }
           }
         }

@@ -98,6 +98,20 @@ INGREDIENT_VOCAB = (
     "bisabolol",
     "squalan",
 )
+# Fraze RO de concern → cheie canonică (R12): un ai_summary care afirmă „ten gras" fără `oily`
+# în concerns/suitable_for = claim nefondat. Frazele sunt specifice (nu „gras" singur).
+CONCERN_PHRASES: dict[str, str] = {
+    "ten gras": "oily",
+    "ten uscat": "dry",
+    "ten sensibil": "sensitive",
+    "ten mixt": "combination",
+    "ten normal": "normal",
+    "acnee": "acne",
+    "riduri": "anti_aging",
+    "anti-imbatranire": "anti_aging",
+    "pete": "hyperpigmentation",
+    "hidratare": "hydration",
+}
 # Semnale de finish în descriere (R7). Regex pe text normalizat (fără diacritice); `\bmat[ae]?\b`
 # prinde „mat/mata/mate" ca CUVÂNT (nu „format"), iar „matifian" prinde matifiant/matifianta.
 _FINISH_SIGNALS: list[tuple[re.Pattern[str], str]] = [
@@ -228,9 +242,11 @@ def _is_active(p: dict[str, Any]) -> bool:
 
 
 def _gtin_valid(gtin: str) -> bool:
-    """Checksum GS1 mod-10 (GTIN-8/12/13/14). Cifra de control = ultima; ponderi 3/1 de la drept."""
-    s = re.sub(r"\D", "", gtin or "")
-    if len(s) not in (8, 12, 13, 14):
+    """Checksum GS1 mod-10. RESPINGE forme malformate (cratime/litere/spații): cere string
+    DOAR-cifre de lungime validă (8/12/13/14) — NU curăță non-cifrele (altfel „4006-...", „EAN..."
+    ar trece). Cifra de control = ultima; ponderi 3/1 de la dreapta."""
+    s = gtin or ""
+    if not re.fullmatch(r"\d{8}|\d{12}|\d{13}|\d{14}", s):
         return False
     ds = [int(c) for c in s]
     body = ds[:-1][::-1]
@@ -480,21 +496,22 @@ def rule_sku_gtin(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     skus: dict[str, list[str]] = defaultdict(list)
     gtins: dict[str, list[str]] = defaultdict(list)
+
+    def _collect_gtin(g: Any, slug: str, where: str) -> None:
+        if not _gtin_valid(str(g)):
+            out.append(_f(f"{slug}: GTIN {where}invalid/malformat «{g}»", slug))
+            return  # invalid → NU intră în dedup (ar polua cheia canonică)
+        gtins[str(g)].append(slug)  # valid = doar-cifre → cheia e deja canonică
+
     for p in products:
         slug = p.get("slug", "")
         for v in p.get("variants") or []:
             if v.get("sku"):
                 skus[str(v["sku"])].append(slug)
-            g = v.get("gtin")
-            if g:
-                gtins[str(g)].append(slug)
-                if not _gtin_valid(str(g)):
-                    out.append(_f(f"{slug}: GTIN invalid (checksum GS1) «{g}»", slug))
-        pg = _attrs(p).get("gtin")
-        if pg:
-            gtins[str(pg)].append(slug)
-            if not _gtin_valid(str(pg)):
-                out.append(_f(f"{slug}: GTIN produs invalid (checksum GS1) «{pg}»", slug))
+            if v.get("gtin"):
+                _collect_gtin(v["gtin"], slug, "")
+        if _attrs(p).get("gtin"):
+            _collect_gtin(_attrs(p)["gtin"], slug, "produs ")
     for sku, slugs in skus.items():
         if len(slugs) > 1:
             uniq = sorted(set(slugs))
@@ -539,38 +556,60 @@ def rule_missing_best_for(products: list[dict[str, Any]]) -> list[dict[str, Any]
     return out
 
 
+def _emit_claim(out: list, slug: str, summ: str, needle: str, backed: bool, what: str) -> None:
+    """Pt fiecare apariție a `needle` în ai_summary: dacă NU e susținut de atribute → violation
+    (pozitiv) / warning (negat în fereastra de ~24 caractere). Nimic dacă e susținut."""
+    if backed:
+        return
+    idx = summ.find(needle)
+    while idx != -1:
+        window = summ[max(0, idx - 24) : idx]
+        if ("fara " in window) or ("nu " in window):
+            out.append(
+                _f(
+                    f"{slug}: «{needle}» ({what}) negat în ai_summary (verifică)",
+                    slug,
+                    severity="warning",
+                )
+            )
+        else:
+            out.append(
+                _f(f"{slug}: ai_summary afirmă «{needle}» ({what}) nesusținut de atribute", slug)
+            )
+        idx = summ.find(needle, idx + len(needle))
+
+
 def rule_ai_summary_unfounded(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """R12: ai_summary afirmă POZITIV un ingredient (din vocabularul canonic) care NU e în
-    key_ingredients → violation. Negație („fără retinol") → warning."""
+    """R12: ai_summary afirmă POZITIV un fapt (ingredient / finish / concern) care NU e susținut de
+    `attributes` → violation; negație → warning. Finish: doar când atributul LIPSEȘTE (present +
+    contradictoriu = R7). Concern: cheie canonică absentă din concerns∪suitable_for."""
     out = []
     for p in products:
         summ = _norm(p.get("ai_summary") or "")
         if not summ:
             continue
         slug = p.get("slug", "")
-        ki = {_norm(str(x)) for x in _attrs(p).get("key_ingredients") or []}
+        a = _attrs(p)
+        ki = {_norm(str(x)) for x in a.get("key_ingredients") or []}
+        # ingrediente
         for ing in INGREDIENT_VOCAB:
-            idx = summ.find(ing)
-            while idx != -1:
-                if not any(ing in k or k in ing for k in ki):
-                    window = summ[max(0, idx - 24) : idx]
-                    negated = ("fara " in window) or ("nu " in window)
-                    if negated:
-                        out.append(
-                            _f(
-                                f"{slug}: «{ing}» negat în ai_summary (verifică)",
-                                slug,
-                                severity="warning",
-                            )
-                        )
-                    else:
-                        out.append(
-                            _f(
-                                f"{slug}: ai_summary afirmă «{ing}» absent din key_ingredients",
-                                slug,
-                            )
-                        )
-                idx = summ.find(ing, idx + len(ing))
+            _emit_claim(out, slug, summ, ing, any(ing in k or k in ing for k in ki), "ingredient")
+        # finish — DOAR dacă atributul lipsește (present+contradictoriu = R7)
+        if not a.get("finish"):
+            for rx, implied in _FINISH_SIGNALS:
+                for m in rx.finditer(summ):
+                    window = summ[max(0, m.start() - 24) : m.start()]
+                    sev = "warning" if (("nu " in window) or ("fara " in window)) else "violation"
+                    msg = (
+                        f"{slug}: ai_summary afirmă finish «{m.group()}»→{implied} dar n-are finish"
+                    )
+                    out.append(_f(msg, slug, severity=sev))
+        # concern — cheie canonică absentă din concerns ∪ suitable_for
+        backed_concerns = {_norm(str(c)) for c in a.get("concerns") or []} | {
+            _norm(str(s)) for s in a.get("suitable_for") or []
+        }
+        for phrase, canon in CONCERN_PHRASES.items():
+            _emit_claim(out, slug, summ, phrase, canon in backed_concerns, "concern")
     return out
 
 
