@@ -90,6 +90,18 @@ def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
                 d["attributes"] = {}
         elif a is None:
             d["attributes"] = {}
+    # NX-169: graf PDP (168e-2) — sections (json_agg → str) + badges (text[] → list). NULL → [].
+    if "sections" in d:
+        s = d["sections"]
+        if isinstance(s, str):
+            try:
+                d["sections"] = json.loads(s)
+            except (ValueError, TypeError):
+                d["sections"] = []
+        elif s is None:
+            d["sections"] = []
+    if "badges" in d and d["badges"] is None:
+        d["badges"] = []
     return d
 
 
@@ -383,6 +395,8 @@ _DETAIL_SELECT = f"""
         prs.top_pros                as top_pros,
         prs.top_cons                as top_cons,
         prs.sentiment::float8       as sentiment,
+        sec.sections                as sections,
+        bdg.badges                  as badges,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
@@ -398,6 +412,18 @@ _DETAIL_SELECT = f"""
         order by pi.position asc nulls last
         limit 1
     ) img on true
+    -- NX-168e-2 graf PDP, consumat de _detail_view (NX-169): secțiuni + badge-uri de trust.
+    left join lateral (
+        select json_agg(
+                   json_build_object('kind', s.kind, 'title', s.title, 'body', s.body)
+                   order by s.position
+               ) as sections
+        from product_sections s where s.product_id = p.id
+    ) sec on true
+    left join lateral (
+        select array_agg(pb.label order by pb.label) as badges
+        from product_badges pb where pb.product_id = p.id
+    ) bdg on true
 {_VARIANTS_AGG}
 """
 

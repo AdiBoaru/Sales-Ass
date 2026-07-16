@@ -88,7 +88,33 @@
         "hyperpigmentation": { "ro": "pete pigmentare", "en": "hyperpigmentation", "hu": "pigmentfoltok" },
         "hydration": { "ro": "hidratare", "en": "hydration", "hu": "hidratálás" }
       }
-    }
+    },
+    {
+      "key": "suitable_for",
+      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" },
+      "value_labels": {
+        "oily": { "ro": "ten gras" }, "dry": { "ro": "ten uscat" }, "sensitive": { "ro": "ten sensibil" },
+        "combination": { "ro": "ten mixt" }, "normal": { "ro": "ten normal" }, "mature": { "ro": "ten matur" },
+        "acne": { "ro": "ten acneic" }, "hydration": { "ro": "hidratare" },
+        "damaged": { "ro": "păr deteriorat" }, "colored": { "ro": "păr vopsit" }, "curly": { "ro": "păr creț" },
+        "fine": { "ro": "păr fin" }, "thick": { "ro": "păr gros" }, "frizzy": { "ro": "păr rebel" }
+      }
+    },
+    {
+      "key": "finish",
+      "labels": { "ro": "Finish", "en": "Finish", "hu": "Hatás" },
+      "value_labels": {
+        "matte": { "ro": "mat" }, "dewy": { "ro": "luminos" }, "satin": { "ro": "satinat" }, "natural": { "ro": "natural" }
+      }
+    },
+    {
+      "key": "coverage",
+      "labels": { "ro": "Acoperire", "en": "Coverage", "hu": "Fedés" },
+      "value_labels": {
+        "light": { "ro": "lejeră" }, "medium": { "ro": "medie" }, "full": { "ro": "completă" }, "buildable": { "ro": "ajustabilă" }
+      }
+    },
+    { "key": "texture", "labels": { "ro": "Textură", "en": "Texture", "hu": "Textúra" } }
   ],
   "_searchable_facets_note": "Tier 2b p2: atribute pe care search-ul le filtreaza la cerere (ex. ceva cu niacinamida). key_ingredients e derivat din INCI de enrich_key_ingredients.py; match normalizat.",
   "searchable_facets": ["key_ingredients"],
