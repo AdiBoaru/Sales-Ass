@@ -160,3 +160,7 @@ Cele 7 HIGH + 3 MEDIUM + LOW reconciliate în carduri:
 - **MEDIUM-2** NX-171 spart în 171a/b/c/d.
 - **MEDIUM-3** NX-172 strict validare pe 150; extinderea 150→250 → NX-173 condiționat.
 - **LOW** wording „tabele PDP goale" → „nepopulate pt v2 prin seed-ul v2".
+
+**Runda 2 (reconciliată):** schema v3 fișier SEPARAT (`catalog_v3.schema.json`) + `_validate_schema(data,contract)`; `audit()` întoarce `{violations,warnings}` (seed numără doar violations); `net_content`/`gtin` pe VARIANTE (produs=fallback); `claim_provenance[]` implementabil; content_status = JOB Python per-tenant + flag default off; NX-172 depinde și de 171a/b; `product_relations` UNIQUE+no-self+CHECK; `price_per_unit` bază+unități (kW≠net content). Docs versionate în **PR #219**.
+
+**Runda 3 (reconciliată):** `seed_catalog_v2.py` ADAPTAT la `{violations,warnings}` (numără doar violations; test warnings-only→exit0, violation→exit≠0) — parte din 168d; R8 simplificat determinist (TOATE key_ingredients+badges cer `claim_provenance`; contraindicația hard = provenance INLINE, fără duplicare); NX-171c job rulează audit O DATĂ pe catalog complet per tenant + mapează violations→produse (auditul cere snapshot complet); NX-172 depinde de TOATE 171a-d (închide epicul → validează published + embeddings versionate).
