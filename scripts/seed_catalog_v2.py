@@ -31,6 +31,7 @@ if str(ROOT) not in sys.path:
 
 from scripts import pdp_content  # noqa: E402 — NX-168e-2 graf PDP derivat
 from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
+    _gtin_valid,
     build_roots,
     evaluate,
 )
@@ -191,10 +192,17 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
     )
     for i, v in enumerate(variants):
         sku = v.get("sku") or f"V2-{p['slug']}-{i:02d}"
+        # NX-171a: coloane comerciale pe variantă (sursa de adevăr). GTIN invalid GS1 → NULL (nu
+        # scriem un cod fals; aliniat cu audit R9). net_content = fapt comercial (preț/unitate).
+        gtin = v.get("gtin")
+        if gtin and not _gtin_valid(str(gtin)):
+            gtin = None
+        nc = v.get("net_content") or {}
         await conn.execute(
             "insert into product_variants "
             "(business_id, product_id, label, sku, external_id, price, sale_price, stock, "
-            " color_hex, attributes) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+            " color_hex, attributes, gtin, net_content_value, net_content_unit, image_url) "
+            "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
             DEMO_BIZ,
             pid,
             v["label"],
@@ -205,6 +213,10 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
             int(v.get("stock", 0)),
             v.get("colorHex"),
             json.dumps(v.get("attributes") or {}, ensure_ascii=False),
+            gtin,
+            nc.get("value"),
+            nc.get("unit"),
+            v.get("image"),
         )
 
     # review summary (D3): sursă de adevăr = JSON → upsert pe product_id (PK).

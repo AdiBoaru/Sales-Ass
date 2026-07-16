@@ -54,7 +54,10 @@ _VARIANTS_AGG = """
                 'attributes', coalesce(v.attributes, '{}'::jsonb),
                 'shade', v.attributes->>'shade',
                 'undertone', v.attributes->>'undertone',
-                'depth', v.attributes->>'depth'
+                'depth', v.attributes->>'depth',
+                'net_content_value', v.net_content_value::float8,
+                'net_content_unit', v.net_content_unit,
+                'price_per_unit', v.price_per_unit::float8
             ) order by coalesce(v.sale_price, v.price) asc
         ) as variants
         from (

@@ -388,9 +388,23 @@ create table product_variants (
   stock       integer not null default 0,
   color_hex   text,
   attributes  jsonb not null default '{}'::jsonb,
+  -- NX-171a (migrare 026): coloane comerciale standard — sursa de adevăr comercială e VARIANTA.
+  gtin              text,                 -- GS1, validat mod-10 la seed (invalid → NULL)
+  net_content_value numeric,              -- cantitate netă (gramaj): 30, 250, ...
+  net_content_unit  text,                 -- ml | l | g | kg | buc (CHECK; NULL permis)
+  image_url         text,                 -- imagine proprie de variantă (nuanță)
+  price_per_unit    numeric generated always as (  -- preț/100ml (volum) sau /100g (masă); buc→NULL
+    case when net_content_value is null or net_content_value <= 0 then null
+         when net_content_unit in ('ml','l') then
+           round(coalesce(sale_price, price) / (net_content_value * (case net_content_unit when 'l' then 1000 else 1 end)) * 100, 2)
+         when net_content_unit in ('g','kg') then
+           round(coalesce(sale_price, price) / (net_content_value * (case net_content_unit when 'kg' then 1000 else 1 end)) * 100, 2)
+         else null end) stored,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  unique (business_id, sku)
+  unique (business_id, sku),
+  constraint product_variants_net_content_unit_chk
+    check (net_content_unit is null or net_content_unit in ('ml','l','g','kg','buc'))
 );
 create index idx_variants_product on product_variants(product_id);
 create trigger trg_variants_upd before update on product_variants

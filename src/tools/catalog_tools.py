@@ -235,7 +235,13 @@ def _variant_view(raw_variants: Any, *, limit: int) -> str:
             if attrs.get(k) or v.get(k)
         ]
         attrs_str = f", {'/'.join(bits)}" if bits else ""
-        labels.append(f"[{vid}] {lbl}{attrs_str}{price_str}{stock_str}")
+        # NX-171a: gramaj + preț/unitate (preț/100ml sau /100g) — comparație „cel mai bun raport".
+        ncv, ncu = v.get("net_content_value"), v.get("net_content_unit")
+        nc_str = f", {float(ncv):g}{ncu}" if ncv and ncu else ""
+        ppu = v.get("price_per_unit")
+        base = {"ml": "ml", "l": "ml", "g": "g", "kg": "g"}.get(ncu or "")
+        ppu_str = f", {float(ppu):.2f} lei/100{base}" if ppu and base else ""
+        labels.append(f"[{vid}] {lbl}{attrs_str}{nc_str}{price_str}{ppu_str}{stock_str}")
     return ", ".join(labels)
 
 
