@@ -71,6 +71,20 @@ def test_detail_projects_usage_badges_sections():
     assert "finish: mat" in v.lower()
 
 
+def test_detail_consumes_normalized_inci_and_reviews():
+    # NX-169 consumă tabelele din 168e-2: ingredients (INCI normalizat) + reviews individuale
+    p = _prod()
+    p["ingredients_db"] = ["niacinamidă", "acid hialuronic"]
+    p["reviews_list"] = [
+        {"author": "Ioana P.", "rating": 5, "body": "Se absoarbe rapid și nu lasă film gras."},
+        {"author": "Andrei M.", "rating": 4, "body": "Bun raport calitate-preț."},
+    ]
+    v = _detail_view(p, _pack(), "ro")
+    assert "ingrediente (inci): niacinamidă, acid hialuronic" in v.lower()  # din tabelul normalizat
+    assert "ingrediente cheie:" not in v.lower()  # NU dublăm fațeta pe attributes
+    assert "recenzii clienți:" in v and "Se absoarbe rapid" in v and "Ioana P." in v
+
+
 def test_compare_shows_only_differing_axes():
     a = _prod(id="1", name="Velora Fond", price=50)
     b = _prod(id="2", name="Aria Fond", price=80)

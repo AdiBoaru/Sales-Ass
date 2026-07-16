@@ -125,19 +125,32 @@ def _pattrs(p: dict[str, Any]) -> dict[str, Any]:
 
 
 def _facet_pairs(
-    attrs: dict[str, Any], pack: Any, locale: str, *, keys: set[str] | None = None
+    attrs: dict[str, Any],
+    pack: Any,
+    locale: str,
+    *,
+    keys: set[str] | None = None,
+    exclude: set[str] | None = None,
 ) -> list[tuple[str, str]]:
     """(etichetă, valoare) pt fațetele de DOMENIU prezente în `attrs`, GENERIC din
     `pack.comparison_facets` (nimic hardcodat de vertical). Valorile fără `value_labels` sunt deja
-    display-ready. `keys` → subset (buget tokens). Pack absent → []."""
+    display-ready. `keys` → subset; `exclude` → chei sărite (buget tokens). Pack absent → []."""
     out: list[tuple[str, str]] = []
+    seen_labels: set[str] = (
+        set()
+    )  # concerns + suitable_for împart „Potrivit pentru" → o singură dată
     for spec in getattr(pack, "comparison_facets", ()) or ():
         if keys is not None and spec.key not in keys:
+            continue
+        if exclude and spec.key in exclude:
             continue
         val = attrs.get(spec.key)
         if not val or isinstance(val, dict):  # obiecte (usage/net_content) au randare dedicată
             continue
         label = spec.labels.get(locale) or spec.labels.get("ro") or spec.key
+        if label in seen_labels:
+            continue
+        seen_labels.add(label)
 
         def _lbl(v: Any, _spec: Any = spec) -> str:
             vl = _spec.value_labels.get(str(v), {})
@@ -216,9 +229,14 @@ def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str
         parts.append(f"descriere: {p['ai_summary'][:200]}")
     if _projection_on():
         a = _pattrs(p)
-        # NX-169: TOATE fațetele de domeniu (finish/coverage/suitable_for/ingrediente) + best_for
-        for lbl, val in _facet_pairs(a, pack, locale):
+        # NX-169: fațetele de domeniu (finish/coverage/suitable_for/...); key_ingredients îl randăm
+        # din tabelul NORMALIZAT (mai jos), nu din fațeta pe attributes.
+        for lbl, val in _facet_pairs(a, pack, locale, exclude={"key_ingredients"}):
             parts.append(f"{lbl.lower()}: {val}")
+        # INCI din tabelul normalizat `product_ingredients` (168e-2); fallback attributes.
+        inci = p.get("ingredients_db") or a.get("key_ingredients") or []
+        if inci:
+            parts.append("ingrediente (INCI): " + ", ".join(str(x) for x in list(inci)[:6]))
         if a.get("best_for"):
             parts.append(f"recomandat pentru: {a['best_for']}")
         times = (a.get("usage") or {}).get("time") or []
@@ -242,6 +260,15 @@ def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str
                 parts.append(f"{(sec.get('title') or '').lower()}: {sec['body'][:150]}")
         if p.get("badges"):
             parts.append("etichete: " + ", ".join(str(b) for b in list(p["badges"])[:4]))
+        # NX-169: recenzii INDIVIDUALE (tabelul reviews, 168e-2) — 1-2 citate reale + autor/rating.
+        quotes = []
+        for rv in (p.get("reviews_list") or [])[:2]:
+            if isinstance(rv, dict) and rv.get("body"):
+                who = rv.get("author") or "client"
+                star = f", {int(rv['rating'])}★" if rv.get("rating") else ""
+                quotes.append(f'„{str(rv["body"])[:90]}" ({who}{star})')
+        if quotes:
+            parts.append("recenzii clienți: " + "; ".join(quotes))
     if p.get("review_summary"):
         parts.append(f"recenzii: {p['review_summary'][:200]}")
     if p.get("top_pros"):

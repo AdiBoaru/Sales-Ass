@@ -102,6 +102,17 @@ def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
             d["sections"] = []
     if "badges" in d and d["badges"] is None:
         d["badges"] = []
+    if "ingredients_db" in d and d["ingredients_db"] is None:
+        d["ingredients_db"] = []
+    if "reviews_list" in d:
+        rv = d["reviews_list"]
+        if isinstance(rv, str):
+            try:
+                d["reviews_list"] = json.loads(rv)
+            except (ValueError, TypeError):
+                d["reviews_list"] = []
+        elif rv is None:
+            d["reviews_list"] = []
     return d
 
 
@@ -397,6 +408,8 @@ _DETAIL_SELECT = f"""
         prs.sentiment::float8       as sentiment,
         sec.sections                as sections,
         bdg.badges                  as badges,
+        ing.names                   as ingredients_db,
+        rvw.items                   as reviews_list,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
@@ -424,6 +437,25 @@ _DETAIL_SELECT = f"""
         select array_agg(pb.label order by pb.label) as badges
         from product_badges pb where pb.product_id = p.id
     ) bdg on true
+    -- NX-169: consumă tabelul NORMALIZAT de ingrediente (168e-2) — INCI cheie din product_ingr.
+    left join lateral (
+        select array_agg(i.name order by pi.position) as names
+        from product_ingredients pi
+        join ingredients i on i.id = pi.ingredient_id
+        where pi.product_id = p.id and pi.is_key
+    ) ing on true
+    -- NX-169: consumă recenziile INDIVIDUALE (168e-2) — top 2 după rating, corelate pe tenant.
+    left join lateral (
+        select json_agg(
+                   json_build_object('author', r.author, 'rating', r.rating, 'body', r.body)
+                   order by r.rating desc
+               ) as items
+        from (
+            select author, rating, body from reviews
+            where product_id = p.id and business_id = p.business_id
+            order by rating desc limit 2
+        ) r
+    ) rvw on true
 {_VARIANTS_AGG}
 """
 
