@@ -33,7 +33,7 @@
 | `catalog.taxonomy` | — | **nu există**; folosește `categories` + `intent_aliases` (vezi Decizii) |
 | `catalog.products` | `products` | `price`/`sale_price` (nu `min_price`), `availability`, `ai_summary` |
 | `catalog.product_embeddings` | `product_embeddings` | HNSW cosine, `content_hash` |
-| `catalog.product_variants` | `product_variants` | `label`, `sku`, `price`, `stock` |
+| `catalog.product_variants` | `product_variants` | `label`, `sku`, `price`, `stock`, + NX-171a: `gtin`, `net_content_value`, `net_content_unit`, `image_url`, `price_per_unit` (generated: preț/100ml ori /100g; `buc`→NULL) |
 | `catalog.review_summaries` | `product_review_summaries` | `top_pros`/`top_cons`, `sentiment` |
 | `catalog.faq` | `faqs` | `locale`, `embedding` direct pe rând |
 | `catalog.faq_aliases` | `intent_aliases` | `phrase_norm`, `target_kind`, `status` |

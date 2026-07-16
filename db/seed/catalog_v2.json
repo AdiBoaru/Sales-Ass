@@ -1014,6 +1014,8 @@
           "price": 89.99,
           "stock": 14,
           "colorHex": "#f2ddc8",
+          "gtin": "5901234123457",
+          "image": "https://cdn.sole-demo.ro/variants/vel-sm-01.jpg",
           "net_content": {
             "value": 30,
             "unit": "ml"
@@ -1025,6 +1027,8 @@
           "price": 89.99,
           "stock": 12,
           "colorHex": "#d8a679",
+          "gtin": "4012345123456",
+          "image": "https://cdn.sole-demo.ro/variants/vel-sm-03.jpg",
           "net_content": {
             "value": 30,
             "unit": "ml"
