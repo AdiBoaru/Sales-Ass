@@ -57,7 +57,9 @@ _VARIANTS_AGG = """
                 'depth', v.attributes->>'depth',
                 'net_content_value', v.net_content_value::float8,
                 'net_content_unit', v.net_content_unit,
-                'price_per_unit', v.price_per_unit::float8
+                'price_per_unit', v.price_per_unit::float8,
+                'gtin', v.gtin,
+                'image_url', v.image_url
             ) order by coalesce(v.sale_price, v.price) asc
         ) as variants
         from (

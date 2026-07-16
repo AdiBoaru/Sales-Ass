@@ -70,6 +70,12 @@ def gate_violations(data: dict, contract: str = "v2") -> list[dict]:
     return [entry for viol in violations.values() for entry in viol]
 
 
+def clean_gtin(raw) -> str | None:
+    """NX-171a: GTIN valid GS1 (mod-10) → păstrat ca string; invalid/absent → None (nu scriem un
+    cod fals pe variantă, aliniat cu audit R9). Testabil separat de calea DB."""
+    return str(raw) if raw and _gtin_valid(str(raw)) else None
+
+
 async def _upsert_brand(conn, slug: str, name: str) -> str:
     row = await conn.fetchrow(
         "select id from brands where business_id=$1 and slug=$2", DEMO_BIZ, slug
@@ -194,9 +200,7 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         sku = v.get("sku") or f"V2-{p['slug']}-{i:02d}"
         # NX-171a: coloane comerciale pe variantă (sursa de adevăr). GTIN invalid GS1 → NULL (nu
         # scriem un cod fals; aliniat cu audit R9). net_content = fapt comercial (preț/unitate).
-        gtin = v.get("gtin")
-        if gtin and not _gtin_valid(str(gtin)):
-            gtin = None
+        gtin = clean_gtin(v.get("gtin"))
         nc = v.get("net_content") or {}
         await conn.execute(
             "insert into product_variants "

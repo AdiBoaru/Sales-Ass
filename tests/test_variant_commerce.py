@@ -1,6 +1,14 @@
-"""NX-171a — randarea preț/unitate în _variant_view (coloanele comerciale de variantă)."""
+"""NX-171a — randarea preț/unitate în _variant_view + validarea GTIN la seed."""
 
+from scripts.seed_catalog_v2 import clean_gtin
 from src.tools.catalog_tools import _variant_view
+
+
+def test_clean_gtin_invalid_becomes_none():
+    assert clean_gtin("4006381333931") == "4006381333931"  # GS1 valid → păstrat
+    assert clean_gtin("BAD-123") is None  # invalid → NULL (nu scriem cod fals)
+    assert clean_gtin("4006-3813-3393-1") is None  # cratime → invalid
+    assert clean_gtin(None) is None
 
 
 def _v(**over):
