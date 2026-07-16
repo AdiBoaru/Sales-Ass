@@ -396,15 +396,18 @@ async def search_products_lexical(
 
 
 async def has_embeddings(conn: asyncpg.Connection, business_id: str) -> bool:
-    """True dacă tenantul are măcar un `product_embedding`.
+    """True dacă tenantul are măcar un `product_embedding` PENTRU doc_type/model-ul ACTIV.
 
-    Decide calea din `search_products_tool`: semantic (JOIN pe product_embeddings)
-    doar dacă există embeddings; altfel SQL-only (NX-98). Un singur SELECT scoped
-    (principiul 7); ieftin — nu merită memoizat (embeddings apar după job, nu în tur).
-    """
+    Decide calea din `search_products_tool`: semantic (JOIN pe product_embeddings) doar dacă există
+    embeddings pe care read-path-ul le va găsi efectiv. NX-171d: read-path-ul filtrează
+    `doc_type='product'` + modelul activ, deci și acest check TREBUIE să le filtreze — altfel
+    embeddings de alt tip/model vechi ar declanșa calea semantică inutil (JOIN care nu întoarce
+    nimic). Un singur SELECT scoped (P7); ieftin (embeddings apar după job, nu în tur)."""
     row = await conn.fetchrow(
-        "select 1 from product_embeddings where business_id = $1 limit 1",
+        "select 1 from product_embeddings "
+        "where business_id = $1 and doc_type = 'product' and model = $2 limit 1",
         business_id,
+        get_settings().model_embed,
     )
     return row is not None
 
@@ -491,17 +494,25 @@ async def get_products_by_ids(
     product_ids: list[str],
     *,
     limit: int = 6,
+    respect_content_status: bool = False,
 ) -> list[dict[str, Any]]:
     """Produse active după id (tool-uri get_product_details / compare_products), cu detalii
     bogate (rating + rezumat recenzii D3). `business_id = $1` (izolare; RLS plasa). Max
     `limit` (hard cap 6). Ordinea ÎN care s-au cerut id-urile e PĂSTRATĂ (`array_position`) —
-    deixis-ul ordinal („a doua"/„compară primele două") rezolvă produsul corect."""
+    deixis-ul ordinal („a doua"/„compară primele două") rezolvă produsul corect.
+
+    `respect_content_status` (NX-171c): DEFAULT off — re-hidratarea produselor DEJA afișate
+    (validator de preț, deixis, compare) NU trebuie filtrată (un produs arătat, devenit draft, tot
+    are nevoie de preț validat). Calea care SERVEȘTE produse NOI nevăzute (`continue_search_session`
+    — „mai arată-mi") trece `True` → aplică filtrul published (per-tenant), ca discovery."""
     if not product_ids:
         return []
     limit = min(limit, 6)
+    cs = _content_status_pred() if respect_content_status else None
     rows = await conn.fetch(
         _DETAIL_SELECT
         + " where p.business_id = $1 and p.status = 'active' and p.id = any($2::uuid[])"
+        + (f" and {cs}" if cs else "")
         + " order by array_position($2::uuid[], p.id)"
         + " limit $3",
         business_id,

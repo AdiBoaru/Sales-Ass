@@ -17,6 +17,8 @@ from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_pool, register_vector_codec
 from src.db.queries.catalog import (
     get_complementary_products,
+    get_products_by_ids,
+    has_embeddings,
     search_products,
     search_products_semantic,
 )
@@ -292,6 +294,63 @@ async def test_no_filter_when_tenant_not_opted_in(shop):
         draft = await _make_product(conn, bid, name="Draft visible", content_status="draft")
         rows = await search_products(conn, bid, limit=10)
         assert draft in {r["id"] for r in rows}
+
+
+async def test_get_products_by_ids_respects_content_status_only_on_demand(shop):
+    """Follow-up review Codex: `continue_search_session` servește produse NOI din pool via
+    get_products_by_ids → trebuie filtrat published. Re-hidratarea (default) NU. Cu flagul on:
+    respect_content_status=False → draft vizibil (re-hidratare); =True → draft ascuns (pagină)."""
+    bid = shop
+    pool = await get_pool()
+    if not get_settings().content_status_filter_enabled:
+        pytest.skip("kill-switch global OFF")
+    async with admin_conn(pool) as conn:
+        pub = await _make_product(conn, bid, name="Pub", content_status="published")
+        draft = await _make_product(conn, bid, name="Draft", content_status="draft")
+        await conn.execute(
+            "update businesses set settings = coalesce(settings, '{}'::jsonb) "
+            "|| jsonb_build_object('content_status_filter', true) where id=$1",
+            bid,
+        )
+        # re-hidratare (validator/deixis): draft NU se filtrează
+        rehydrate = await get_products_by_ids(conn, bid, [pub, draft])
+        assert {r["id"] for r in rehydrate} == {pub, draft}
+        # pagină nouă (continue_search_session): draft ascuns
+        new_page = await get_products_by_ids(conn, bid, [pub, draft], respect_content_status=True)
+        assert {r["id"] for r in new_page} == {pub}
+
+
+async def test_has_embeddings_scoped_to_active_doc_type_and_model(shop):
+    """Follow-up review Codex: has_embeddings TREBUIE să filtreze doc_type='product' + model activ
+    (ca read-path-ul). Un embedding de alt doc_type / model vechi NU trebuie să declanșeze calea
+    semantică (JOIN care n-ar întoarce nimic)."""
+    bid = shop
+    pool = await get_pool()
+    model = get_settings().model_embed
+    vec = "[" + ",".join(["0.0"] * 1536) + "]"
+    async with admin_conn(pool) as conn:
+        prod = await _make_product(conn, bid, name="P")
+        # DOAR embedding de alt doc_type + model vechi → has_embeddings False
+        await conn.execute(
+            "insert into product_embeddings "
+            "(product_id, business_id, model, doc_type, embedding, content_hash) "
+            "values ($1, $2, 'old-model', 'review', $3::vector, 'h1')",
+            prod,
+            bid,
+            vec,
+        )
+        assert await has_embeddings(conn, bid) is False
+        # + embedding de doc_type='product' + model activ → True
+        await conn.execute(
+            "insert into product_embeddings "
+            "(product_id, business_id, model, doc_type, embedding, content_hash) "
+            "values ($1, $2, $3, 'product', $4::vector, 'h2')",
+            prod,
+            bid,
+            model,
+            vec,
+        )
+        assert await has_embeddings(conn, bid) is True
 
 
 # --- 171d: embeddings versionate --------------------------------------------------------------
