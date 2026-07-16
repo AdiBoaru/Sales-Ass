@@ -90,7 +90,7 @@ Fiecare produs **activ** trebuie să conțină, pe zone:
 
 | # Pachet | Card | Scop | DDL |
 |---|---|---|---|
-| 1. Contract + audit static | **NX-168d** | contract v3 per-categorie + audit **versionat** (`v2` neschimbat pt seed, `v3` = R1-R13) + tier `warnings` (negații non-fatale). NU blochează seed-ul existent | nu |
+| 1. Contract + audit static ✅ | **NX-168d** | contract v3 per-categorie + audit **versionat** (`v2` neschimbat pt seed, `v3` = R1-R13) + tier `warnings` (negații non-fatale). NU blochează seed-ul existent. **Implementat:** `catalog_v3.schema.json` + audit v2/v3 cu `{violations,warnings}` machine-readable + **`evaluate()`** (schemă+reguli, sursă unică seed+171c, schema-first, fail-closed); v2 pe cele 150 = 0 violations, v3 = raportează golurile | nu |
 | 2. Catalog complet la contract | **NX-168e** | **toate 150** duse la contract; seed populează DOAR tabele existente (variante, imagini, sections, ingredients, badges, reviews); `ai_summary` DERIVAT; **comută atomic** poarta seed pe `v3`; `net_content`/relații rămân în JSON | nu |
 | 3. Agent Product Surface | **NX-169** | proiecție fapte în `_brief`/`_detail_view`/`_compare_view`; compune motivul CONTEXTUAL din reason_codes; compare doar axele care DIFERĂ; teste token-budget | nu |
 | 4. Retrieval + reason codes | **NX-170** | doc embedding determinist din fapte; `not_recommended_for` cu **severitate** (hard=excludere, soft=penalizare+atenționare); `reason_codes` | nu |

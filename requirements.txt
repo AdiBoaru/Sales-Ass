@@ -8,6 +8,7 @@ asyncpg==0.31.0
 # Validare
 pydantic==2.13.4
 pydantic-settings==2.14.1
+jsonschema==4.25.1  # validare structurală catalog v2/v3 (audit_catalog_v2._validate_schema, NX-168d)
 
 # Cache / coadă
 redis[hiredis]==8.0.0

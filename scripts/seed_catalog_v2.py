@@ -25,17 +25,18 @@ import sys
 from pathlib import Path
 from urllib.parse import quote_plus
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.audit_catalog_v2 import audit, build_roots  # noqa: E402 — pre-flight gate + arbore
-from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
+from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
+    build_roots,
+    evaluate,
+)
+
+# NB: importul DB (`src.db.connection`) + politica asyncio Windows sunt LAZY (în `main()` /
+# `__main__`) ca importul acestui modul — ex. din teste, pt `gate_violations` — să NU atingă DB
+# și să NU schimbe event-loop policy global la colectarea pytest.
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 STORE_BASE = "https://shop.sole-demo.ro/p/"
@@ -57,6 +58,14 @@ _ROOT_BG = {
 def _placeholder_image(name: str, root: str) -> str:
     bg = _ROOT_BG.get(root, "f5eee9")
     return f"https://placehold.co/900x1200/{bg}/222222?text={quote_plus(name)}"
+
+
+def gate_violations(data: dict, contract: str = "v2") -> list[dict]:
+    """Poarta pre-flight a seed-ului: lista PLATĂ de blocaje (SCHEMĂ + reguli), din `evaluate()`
+    (sursă UNICĂ, partajată cu backfill-ul NX-171c). `warnings` excluse STRUCTURAL (citim DOAR
+    `['violations']`). Exercitat direct de teste — codul REAL, nu o formulă duplicată (NX-168d)."""
+    violations = evaluate(data, contract=contract)["violations"]
+    return [entry for viol in violations.values() for entry in viol]
 
 
 async def _upsert_brand(conn, slug: str, name: str) -> str:
@@ -235,16 +244,19 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
 async def main() -> int:
     dry = "--dry-run" in sys.argv
     archive_old = "--archive-old" in sys.argv
+    # import DB lazy (importul modulului rămâne fără efecte secundare — vezi nota de sus)
+    from src.db.connection import admin_conn, close_pool, get_pool  # noqa: PLC0415
+
     data = json.loads(DATA.read_text(encoding="utf-8"))
 
     # === PRE-FLIGHT GATE (NX-168a): audit static ÎNAINTE de orice scriere ===
-    results = audit(data)
-    total = sum(len(v) for v in results.values())
-    if total:
-        print(f"✗ AUDIT PICAT — {total} violări; NU seedez. Rulează scripts/audit_catalog_v2.py.")
-        for key, viol in results.items():
-            for line in viol[:3]:
-                print(f"    [{key}] {line}")
+    blocking = gate_violations(data)  # contract="v2"; warnings NU blochează (vezi gate_violations)
+    if blocking:
+        print(
+            f"✗ AUDIT PICAT — {len(blocking)} violations; NU seedez. Rulează audit_catalog_v2.py."
+        )
+        for entry in blocking[:6]:
+            print(f"    - {entry['message']}")
         return 1
     print(f"✓ audit static curat ({len(data['products'])} produse) — pornesc seed-ul\n")
 
@@ -290,6 +302,10 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
     try:
         raise SystemExit(asyncio.run(main()))
     except RuntimeError as e:
