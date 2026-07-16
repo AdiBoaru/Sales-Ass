@@ -670,7 +670,7 @@ RULES_V3 = RULES_V2 + [
     ("R12 ai_summary nefondat", "ai_summary_unfounded"),
     ("R13 variante incomplete", "variants_incomplete"),
 ]
-_ALL_KEYS = [key for _, key in RULES_V3]
+_ALL_KEYS = [key for _, key in RULES_V3] + ["structural"]
 
 
 def _rules_for(contract: str) -> list[tuple[str, str]]:
@@ -681,12 +681,21 @@ def audit(data: dict[str, Any], contract: str = "v2") -> dict[str, dict[str, lis
     """Rulează regulile contractului → `{"violations": {rule: [entry]}, "warnings": {...}}`.
     Fiecare entry = `{message, product_slugs}`. Pur (fără I/O), testabil pe dict. `contract="v2"`
     = R1-R6 (folosit de seed, logică neschimbată); `contract="v3"` = R1-R13."""
-    products = data.get("products") or []
-    categories = data.get("categories") or []
+    # GUARD structural: produse/categorii non-dict (ex. products=[42]) NU trebuie să crape regulile
+    # (care fac p.get(...)). Le izolăm ca violation „structural" și rulăm regulile doar pe dict-uri.
+    raw_products = data.get("products") or []
+    products = [p for p in raw_products if isinstance(p, dict)]
+    structural = [
+        _f(f"produs #{i} nu e obiect JSON (structural invalid): {p!r}")
+        for i, p in enumerate(raw_products)
+        if not isinstance(p, dict)
+    ]
+    categories = [c for c in (data.get("categories") or []) if isinstance(c, dict)]
     roots = build_roots(categories)
     cat_names = _cat_names(categories)
 
     per_rule: dict[str, list[dict[str, Any]]] = {
+        "structural": structural,
         "canonical_enums": rule_canonical_enums(products),
         "required_attrs": rule_required_attrs(products, roots),
         "clean_names": rule_clean_names(products),
@@ -716,14 +725,23 @@ def audit(data: dict[str, Any], contract: str = "v2") -> dict[str, dict[str, lis
 def _schema_findings(data: dict[str, Any], contract: str = "v2") -> list[dict[str, Any]]:
     """Erori de schemă ca findings machine-readable `{message, product_slugs}`. `product_slugs` e
     derivat din `error.path` (când indică în `products[i]`) → downstream (NX-171c) poate marca EXACT
-    produsul invalid `draft`. `jsonschema` absent / schema lipsă → [] (soft dep)."""
+    produsul invalid `draft`. **FAIL-CLOSED**: dacă `jsonschema` lipsește SAU fișierul schemei
+    lipsește, întoarce o EROARE blocantă (nu `[]`) — date nevalidate NU trec. Fără cap (toate
+    erorile, ca maparea la produse în 171c să fie completă)."""
     try:
         import jsonschema  # noqa: PLC0415 — soft dep, doar dacă e prezent
     except ImportError:
-        return []
+        return [
+            {
+                "message": "schema: jsonschema indisponibil — FAIL-CLOSED (validare imposibilă)",
+                "product_slugs": [],
+            }
+        ]
     path = SCHEMA_V3_PATH if contract == "v3" else SCHEMA_PATH
     if not path.exists():
-        return []
+        return [
+            {"message": f"schema: fișier lipsă «{path.name}» — FAIL-CLOSED", "product_slugs": []}
+        ]
     schema = json.loads(path.read_text(encoding="utf-8"))
     validator = jsonschema.Draft202012Validator(schema)
     products = data.get("products") or []
@@ -737,13 +755,14 @@ def _schema_findings(data: dict[str, Any], contract: str = "v2") -> list[dict[st
             and isinstance(p[1], int)
             and 0 <= p[1] < len(products)
         ):
-            s = products[p[1]].get("slug")
+            prod = products[p[1]]
+            s = prod.get("slug") if isinstance(prod, dict) else None
             if s:
                 slugs = [s]
         out.append(
             {"message": f"schema {'/'.join(map(str, p))}: {e.message}", "product_slugs": slugs}
         )
-    return out[:50]
+    return out
 
 
 def _validate_schema(data: dict[str, Any], contract: str = "v2") -> list[str]:
@@ -757,7 +776,12 @@ def evaluate(
     """Audit COMPLET = SCHEMĂ (structural) + REGULI, în shape-ul `{violations, warnings}`. SURSĂ
     UNICĂ pt poarta seed-ului ȘI backfill-ul NX-171c. Schema-first: dacă schema pică, NU rulăm
     regulile (pot crăpa pe tipuri greșite) — erorile de schemă poartă `product_slugs` (mapabile).
-    Altfel rulăm regulile normal. Cheia `schema` apare mereu în ambele buckete."""
+    Altfel rulăm regulile normal. Cheia `schema` apare mereu în ambele buckete.
+
+    **Politică pt erori GLOBALE** (schema fără `product_slugs` — ex. lipsă `brands`, fail-closed
+    jsonschema): NU pot fi mapate la un produs anume → consumatorii TREBUIE să trateze prezența lor
+    ca FAIL-CLOSED (vezi `has_global_blocker`): poarta seed blochează oricum; NX-171c NU publică
+    NICIUN produs pe tenant (toate rămân `draft`)."""
     schema_findings = _schema_findings(data, contract)
     if schema_findings:
         empty = {k: [] for k in [*_ALL_KEYS, "schema"]}
@@ -769,6 +793,15 @@ def evaluate(
     result["violations"]["schema"] = []
     result["warnings"]["schema"] = []
     return result
+
+
+def has_global_blocker(result: dict[str, dict[str, list[dict[str, Any]]]]) -> bool:
+    """True dacă există ≥1 violation GLOBALĂ (fără `product_slugs`) — ne-mapabilă la un produs.
+    Consumatorii (NX-171c) trebuie să FAIL-CLOSE: nu publica nimic pe tenant. Include erorile de
+    schemă globale + fail-closed-ul de jsonschema/schemă lipsă."""
+    return any(
+        not entry["product_slugs"] for viol in result["violations"].values() for entry in viol
+    )
 
 
 def main() -> int:
@@ -792,24 +825,37 @@ def main() -> int:
     n_cat = len(data.get("categories") or [])
     print(f"produse={n_prod}  categorii={n_cat}\n")
 
-    schema_errs = [] if args.no_schema else _validate_schema(data, args.contract)
-    if schema_errs:
-        print(f"SCHEMA ({args.contract}): {len(schema_errs)} erori structurale (primele):")
-        for e in schema_errs[: args.examples]:
-            print(f"    ✗ {e}")
-        print()
-
-    res = audit(data, contract=args.contract)
+    # evaluate() = SCHEMĂ + reguli (sursă unică). `--no-schema` → doar reguli (fallback audit).
+    if args.no_schema:
+        res = audit(data, contract=args.contract)
+        res["violations"].setdefault("schema", [])
+        res["warnings"].setdefault("schema", [])
+    else:
+        res = evaluate(data, contract=args.contract)
     violations, warnings = res["violations"], res["warnings"]
-    n_viol = sum(len(v) for v in violations.values()) + len(schema_errs)
+    n_viol = sum(len(v) for v in violations.values())
     n_warn = sum(len(v) for v in warnings.values())
 
+    schema_v = violations.get("schema") or []
+    if schema_v:
+        note = "" if args.no_schema else " — reguli ne-rulate (schema-first)"
+        print(f"SCHEMA ({args.contract}): {len(schema_v)} erori structurale{note}:")
+        for entry in schema_v[: args.examples]:
+            print(f"    ✗ {entry['message']}")
+        print()
+
     for label, key in _rules_for(args.contract):
-        v, w = violations.get(key, []), warnings.get(key, [])
+        v, w = violations.get(key) or [], warnings.get(key) or []
         mark = "✓" if not v else "✗"
         extra = f" (+{len(w)} warn)" if w else ""
         print(f"{mark} {label}: {len(v)} violations{extra}")
         for entry in v[: args.examples]:
+            print(f"      - {entry['message']}")
+
+    struct = violations.get("structural") or []
+    if struct:
+        print(f"✗ structural (produse non-obiect): {len(struct)}")
+        for entry in struct[: args.examples]:
             print(f"      - {entry['message']}")
 
     print()

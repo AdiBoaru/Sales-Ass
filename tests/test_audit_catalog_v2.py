@@ -4,9 +4,17 @@
 Regulile v2 (R1-R6) sunt testate în test_catalog_audit.py; aici testăm DOAR v3."""
 
 import json
+import sys
 from pathlib import Path
 
-from scripts.audit_catalog_v2 import _gtin_valid, audit, evaluate
+from scripts import audit_catalog_v2 as mod
+from scripts.audit_catalog_v2 import (
+    _gtin_valid,
+    _schema_findings,
+    audit,
+    evaluate,
+    has_global_blocker,
+)
 from scripts.seed_catalog_v2 import gate_violations
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -334,6 +342,79 @@ def test_gate_blocks_schema_invalid_data():
         ],
     }
     assert gate_violations(data)  # blocat de schema, chiar dacă regulile ar trece
+
+
+# --- runda 8: fail-closed, structural, global blocker, no-cap, CLI ----------------------------
+
+
+def test_audit_handles_non_dict_product():
+    # products=[42] NU crapă regulile; produsul non-obiect e flagat „structural"
+    res = audit({"products": [42, _fond("ok")], "categories": _cats()})
+    assert res["violations"]["structural"]
+
+
+def test_schema_findings_fail_closed_when_schema_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(mod, "SCHEMA_V3_PATH", tmp_path / "nu-exista.json")
+    findings = _schema_findings({"products": []}, "v3")
+    assert findings and "FAIL-CLOSED" in findings[0]["message"]
+
+
+def test_has_global_blocker_on_missing_brands():
+    # lipsă `brands` (required top-level) → eroare de schemă GLOBALĂ (fără product_slugs)
+    data = {"categories": _cats(), "products": [_fond()]}  # fără brands
+    res = evaluate(data, contract="v3")
+    assert has_global_blocker(res)
+
+
+def test_schema_findings_no_cap():
+    # >50 produse invalide → TOATE erorile raportate (fără cap la 50) pt maparea completă în 171c
+    prods = [
+        {
+            "slug": f"p{i}",
+            "brandSlug": "velora",
+            "primaryCategorySlug": "fond-de-ten",
+            "attributes": {},
+        }
+        for i in range(60)
+    ]
+    data = {
+        "brands": [{"slug": "velora", "name": "V"}],
+        "categories": [{"slug": "fond-de-ten", "name": "F"}],
+        "products": prods,
+    }
+    assert len(_schema_findings(data, "v3")) > 50
+
+
+def test_main_cli_uses_evaluate(monkeypatch, tmp_path):
+    # CLI trece prin evaluate(): price=text → eroare de schemă → exit 1
+    bad = tmp_path / "bad.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "brands": [{"slug": "v", "name": "V"}],
+                "categories": [{"slug": "fond-de-ten", "name": "F"}],
+                "products": [
+                    {
+                        "slug": "p",
+                        "name": "V Fond de ten",
+                        "brandSlug": "v",
+                        "primaryCategorySlug": "fond-de-ten",
+                        "price": "gratis",
+                        "attributes": {
+                            "finish": "matte",
+                            "coverage": "full",
+                            "suitable_for": ["oily"],
+                            "texture": "fluid",
+                            "best_for": "x",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys, "argv", ["audit", str(bad), "--contract", "v3"])
+    assert mod.main() == 1
 
 
 # --- GS1 checksum ------------------------------------------------------------------------------
