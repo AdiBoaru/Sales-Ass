@@ -5009,6 +5009,1340 @@
           "tub mic, se termină repede"
         ]
       }
+    },
+    {
+      "slug": "nudelab-natural-cover-anticearcan",
+      "name": "NudeLab Natural Cover Anticearcăn",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "anticearcan",
+      "categorySlugs": [
+        "anticearcan",
+        "machiaj"
+      ],
+      "shortDescription": "Anticearcăn cremos cu acoperire medie și finish natural, ușor de estompat.",
+      "currency": "RON",
+      "price": 49.99,
+      "rating": 4.5,
+      "reviewCount": 142,
+      "status": "active",
+      "attributes": {
+        "coverage": "medium",
+        "concerns": [
+          "normal",
+          "dry"
+        ],
+        "key_benefit": "Estompare ușoară, fără linii dure.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Acoperire medie confortabilă, se estompează fără dungi.",
+        "topPros": [
+          "ușor de estompat",
+          "nu usucă zona ochilor"
+        ],
+        "topCons": [
+          "acoperire medie, nu full"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Fair 01",
+          "sku": "NL-NC-01",
+          "price": 49.99,
+          "stock": 22,
+          "colorHex": "#f2dbc4"
+        },
+        {
+          "label": "Beige 03",
+          "sku": "NL-NC-03",
+          "price": 49.99,
+          "stock": 18,
+          "colorHex": "#e0bd94"
+        },
+        {
+          "label": "Tan 05",
+          "sku": "NL-NC-05",
+          "price": 49.99,
+          "stock": 14,
+          "colorHex": "#c99a6c"
+        }
+      ]
+    },
+    {
+      "slug": "lumaderm-bright-eye-anticearcan",
+      "name": "LumaDerm Bright Eye Anticearcăn",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "anticearcan",
+      "categorySlugs": [
+        "anticearcan",
+        "machiaj"
+      ],
+      "shortDescription": "Anticearcăn iluminator cu acoperire lejeră pentru zona sensibilă a ochilor.",
+      "currency": "RON",
+      "price": 46.99,
+      "rating": 4.6,
+      "reviewCount": 176,
+      "status": "active",
+      "attributes": {
+        "coverage": "light",
+        "concerns": [
+          "sensitive",
+          "dry"
+        ],
+        "key_benefit": "Luminează cearcănele fără efect de mască.",
+        "fragrance_free": true
+      },
+      "reviewSummary": {
+        "summary": "Iluminează discret cearcănele, foarte lejer pe piele sensibilă.",
+        "topPros": [
+          "luminează zona ochilor",
+          "textură lejeră"
+        ],
+        "topCons": [
+          "acoperire mică pe pete închise"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Light 01",
+          "sku": "LD-BE-01",
+          "price": 46.99,
+          "stock": 20,
+          "colorHex": "#f4dcc7"
+        },
+        {
+          "label": "Medium 03",
+          "sku": "LD-BE-03",
+          "price": 46.99,
+          "stock": 15,
+          "colorHex": "#dcb78e"
+        }
+      ]
+    },
+    {
+      "slug": "petala-soft-focus-anticearcan",
+      "name": "Petala Soft Focus Anticearcăn",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "anticearcan",
+      "categorySlugs": [
+        "anticearcan",
+        "machiaj"
+      ],
+      "shortDescription": "Anticearcăn cu acoperire buildable, ideal pentru un look natural de zi.",
+      "currency": "RON",
+      "price": 38.99,
+      "rating": 4.3,
+      "reviewCount": 98,
+      "status": "active",
+      "attributes": {
+        "coverage": "buildable",
+        "concerns": [
+          "normal"
+        ],
+        "key_benefit": "Construiești acoperirea strat cu strat.",
+        "fragrance_free": false
+      },
+      "reviewSummary": {
+        "summary": "Acoperire pe care o construiești; bun raport preț-calitate.",
+        "topPros": [
+          "preț accesibil",
+          "acoperire ajustabilă"
+        ],
+        "topCons": [
+          "parfumat",
+          "rezistă mai puțin la final de zi"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Neutral 02",
+          "sku": "PT-SF-02",
+          "price": 38.99,
+          "stock": 24,
+          "colorHex": "#e6c19a"
+        },
+        {
+          "label": "Warm 04",
+          "sku": "PT-SF-04",
+          "price": 38.99,
+          "stock": 16,
+          "colorHex": "#d0a575"
+        }
+      ]
+    },
+    {
+      "slug": "nudelab-soft-blush-fard-de-obraz",
+      "name": "NudeLab Soft Blush Fard de obraz",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "fard-de-obraz",
+      "categorySlugs": [
+        "fard-de-obraz",
+        "machiaj"
+      ],
+      "shortDescription": "Fard de obraz pudră cu finish mat și pigment fin, ușor de dozat.",
+      "currency": "RON",
+      "price": 34.99,
+      "rating": 4.6,
+      "reviewCount": 154,
+      "status": "active",
+      "attributes": {
+        "finish": "matte",
+        "key_benefit": "Culoare mată, buildable, fără efect prăfos."
+      },
+      "reviewSummary": {
+        "summary": "Pigment fin, mat, se dozează ușor fără să sară în culoare.",
+        "topPros": [
+          "finish mat elegant",
+          "ușor de dozat"
+        ],
+        "topCons": [
+          "gama de nuanțe mică"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Rose 01",
+          "sku": "NL-SB-01",
+          "price": 34.99,
+          "stock": 20,
+          "colorHex": "#e39aa0"
+        },
+        {
+          "label": "Peach 02",
+          "sku": "NL-SB-02",
+          "price": 34.99,
+          "stock": 17,
+          "colorHex": "#f0a985"
+        },
+        {
+          "label": "Berry 03",
+          "sku": "NL-SB-03",
+          "price": 34.99,
+          "stock": 12,
+          "colorHex": "#c56d7e"
+        }
+      ]
+    },
+    {
+      "slug": "petala-rose-fard-de-obraz-cremos",
+      "name": "Petala Rose Fard de obraz cremos",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "fard-de-obraz",
+      "categorySlugs": [
+        "fard-de-obraz",
+        "machiaj"
+      ],
+      "shortDescription": "Fard de obraz cremos cu efect luminos, se topește pe piele.",
+      "currency": "RON",
+      "price": 37.99,
+      "rating": 4.5,
+      "reviewCount": 121,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Efect luminos, natural, ca un blush din interior."
+      },
+      "reviewSummary": {
+        "summary": "Textură cremoasă care se estompează cu degetele; look luminos.",
+        "topPros": [
+          "efect luminos natural",
+          "bun pe ten uscat"
+        ],
+        "topCons": [
+          "se poate transfera pe ten gras"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Soft Rose 01",
+          "sku": "PT-RB-01",
+          "price": 37.99,
+          "stock": 18,
+          "colorHex": "#e58e97"
+        },
+        {
+          "label": "Coral 02",
+          "sku": "PT-RB-02",
+          "price": 37.99,
+          "stock": 14,
+          "colorHex": "#ef927a"
+        }
+      ]
+    },
+    {
+      "slug": "aria-peach-fard-de-obraz-satinat",
+      "name": "Aria Peach Fard de obraz satinat",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "fard-de-obraz",
+      "categorySlugs": [
+        "fard-de-obraz",
+        "machiaj"
+      ],
+      "shortDescription": "Fard de obraz satinat cu subtilă strălucire, tonuri piersică.",
+      "currency": "RON",
+      "price": 31.99,
+      "rating": 4.4,
+      "reviewCount": 109,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Strălucire discretă fără sclipici vizibil."
+      },
+      "reviewSummary": {
+        "summary": "Satinat, luminează pomeții discret; nuanțe piersică versatile.",
+        "topPros": [
+          "strălucire discretă",
+          "nuanțe versatile"
+        ],
+        "topCons": [
+          "pigment mediu, cere reaplicare"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Peach 01",
+          "sku": "AR-PB-01",
+          "price": 31.99,
+          "stock": 22,
+          "colorHex": "#f0a37f"
+        },
+        {
+          "label": "Apricot 02",
+          "sku": "AR-PB-02",
+          "price": 31.99,
+          "stock": 15,
+          "colorHex": "#eb9a6b"
+        }
+      ]
+    },
+    {
+      "slug": "nudelab-clear-gloss-de-buze",
+      "name": "NudeLab Clear Gloss de buze",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "gloss-de-buze",
+      "categorySlugs": [
+        "gloss-de-buze",
+        "machiaj"
+      ],
+      "shortDescription": "Gloss transparent non-lipicios cu efect de luciu curat pe buze.",
+      "currency": "RON",
+      "price": 24.99,
+      "rating": 4.5,
+      "reviewCount": 133,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Luciu curat, non-lipicios, peste orice ruj."
+      },
+      "reviewSummary": {
+        "summary": "Luciu curat, deloc lipicios; merge singur sau peste ruj.",
+        "topPros": [
+          "non-lipicios",
+          "poate merge peste ruj"
+        ],
+        "topCons": [
+          "durată scurtă"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Clear",
+          "sku": "NL-CG-00",
+          "price": 24.99,
+          "stock": 30,
+          "colorHex": "#f2e3d8"
+        },
+        {
+          "label": "Soft Pink",
+          "sku": "NL-CG-01",
+          "price": 24.99,
+          "stock": 20,
+          "colorHex": "#f0c9cf"
+        }
+      ]
+    },
+    {
+      "slug": "petala-berry-gloss-de-buze",
+      "name": "Petala Berry Gloss de buze",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "gloss-de-buze",
+      "categorySlugs": [
+        "gloss-de-buze",
+        "machiaj"
+      ],
+      "shortDescription": "Gloss pigmentat cu finish satinat și nuanțe fructate.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.4,
+      "reviewCount": 112,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Culoare fructată cu luciu satinat, nu translucid."
+      },
+      "reviewSummary": {
+        "summary": "Pigment mai intens decât un gloss clasic, finish satinat plăcut.",
+        "topPros": [
+          "pigment vizibil",
+          "miros fructat plăcut"
+        ],
+        "topCons": [
+          "ușor lipicios pe vânt"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Berry",
+          "sku": "PT-BG-01",
+          "price": 29.99,
+          "stock": 22,
+          "colorHex": "#a8455e"
+        },
+        {
+          "label": "Plum",
+          "sku": "PT-BG-02",
+          "price": 29.99,
+          "stock": 16,
+          "colorHex": "#7e3a54"
+        }
+      ]
+    },
+    {
+      "slug": "aria-plump-gloss-de-buze-cu-volum",
+      "name": "Aria Plump Gloss de buze cu volum",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "gloss-de-buze",
+      "categorySlugs": [
+        "gloss-de-buze",
+        "machiaj"
+      ],
+      "shortDescription": "Gloss cu efect de volum și senzație de răcorire, buze mai pline optic.",
+      "currency": "RON",
+      "price": 33.99,
+      "rating": 4.6,
+      "reviewCount": 147,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Efect de volum și hidratare, buze mai pline optic."
+      },
+      "reviewSummary": {
+        "summary": "Efect plumping real, buzele par mai pline; hidratează bine.",
+        "topPros": [
+          "efect de volum",
+          "hidratant"
+        ],
+        "topCons": [
+          "senzație de furnicături la unii"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Nude Plump",
+          "sku": "AR-PG-01",
+          "price": 33.99,
+          "stock": 20,
+          "colorHex": "#d99a8c"
+        },
+        {
+          "label": "Rose Plump",
+          "sku": "AR-PG-02",
+          "price": 33.99,
+          "stock": 15,
+          "colorHex": "#d67f88"
+        }
+      ]
+    },
+    {
+      "slug": "nudelab-long-wear-spray-de-fixare",
+      "name": "NudeLab Long Wear Spray de fixare",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare",
+        "machiaj"
+      ],
+      "shortDescription": "Spray de fixare cu ținută lungă și finish natural, fără senzație de crustă.",
+      "currency": "RON",
+      "price": 44.99,
+      "rating": 4.6,
+      "reviewCount": 168,
+      "status": "active",
+      "attributes": {
+        "finish": "natural",
+        "key_benefit": "Fixează machiajul până la 16h fără efect de mască."
+      },
+      "reviewSummary": {
+        "summary": "Ținută foarte lungă, finish natural; nu usucă și nu lasă crustă.",
+        "topPros": [
+          "ținută până la 16h",
+          "finish natural"
+        ],
+        "topCons": [
+          "preț mai mare"
+        ]
+      }
+    },
+    {
+      "slug": "petala-dewy-set-spray-de-fixare",
+      "name": "Petala Dewy Set Spray de fixare",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare",
+        "machiaj"
+      ],
+      "shortDescription": "Spray de fixare hidratant cu finish luminos pentru ten uscat.",
+      "currency": "RON",
+      "price": 37.99,
+      "rating": 4.4,
+      "reviewCount": 104,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "concerns": [
+          "dry"
+        ],
+        "key_benefit": "Fixează și hidratează, ideal pentru ten uscat."
+      },
+      "reviewSummary": {
+        "summary": "Fixează cu efect luminos, bun pe ten uscat; nu matifiază.",
+        "topPros": [
+          "efect luminos",
+          "hidratant"
+        ],
+        "topCons": [
+          "nu potrivit pentru ten gras"
+        ]
+      }
+    },
+    {
+      "slug": "velora-glow-primer-iluminator",
+      "name": "Velora Glow Primer iluminator",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "primer-pentru-machiaj",
+      "categorySlugs": [
+        "primer-pentru-machiaj",
+        "machiaj"
+      ],
+      "shortDescription": "Primer iluminator care dă luminozitate pielii înainte de fond.",
+      "currency": "RON",
+      "price": 47.99,
+      "rating": 4.6,
+      "reviewCount": 139,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "concerns": [
+          "dry",
+          "normal"
+        ],
+        "key_benefit": "Bază luminoasă care înviorează tenul obosit."
+      },
+      "reviewSummary": {
+        "summary": "Dă luminozitate imediată; fondul se așază mai frumos deasupra.",
+        "topPros": [
+          "efect de glow",
+          "bun pe ten uscat/obosit"
+        ],
+        "topCons": [
+          "prea luminos pentru ten gras"
+        ]
+      }
+    },
+    {
+      "slug": "petala-pore-blur-primer",
+      "name": "Petala Pore Blur Primer",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "primer-pentru-machiaj",
+      "categorySlugs": [
+        "primer-pentru-machiaj",
+        "machiaj"
+      ],
+      "shortDescription": "Primer matifiant care blurează porii și controlează sebumul.",
+      "currency": "RON",
+      "price": 42.99,
+      "rating": 4.4,
+      "reviewCount": 118,
+      "status": "active",
+      "attributes": {
+        "finish": "matte",
+        "concerns": [
+          "oily",
+          "combination"
+        ],
+        "key_benefit": "Netezește porii vizibili și ține sebumul sub control."
+      },
+      "reviewSummary": {
+        "summary": "Blurează porii vizibil și menține matitatea ore bune.",
+        "topPros": [
+          "blurează porii",
+          "control sebum"
+        ],
+        "topCons": [
+          "senzație ușor uscată la unii"
+        ]
+      }
+    },
+    {
+      "slug": "nudelab-liquid-iluminator-lichid",
+      "name": "NudeLab Liquid Iluminator lichid",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare",
+        "machiaj"
+      ],
+      "shortDescription": "Iluminator lichid cu strălucire intensă, se poate amesteca în fond.",
+      "currency": "RON",
+      "price": 42.99,
+      "rating": 4.6,
+      "reviewCount": 151,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "key_benefit": "Glow lichid intens, mixabil în fondul de ten."
+      },
+      "reviewSummary": {
+        "summary": "Strălucire lichidă intensă; se amestecă frumos în fond pentru glow all-over.",
+        "topPros": [
+          "glow intens",
+          "mixabil în fond"
+        ],
+        "topCons": [
+          "poate fi prea strălucitor pentru zi"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Champagne",
+          "sku": "NL-LI-01",
+          "price": 42.99,
+          "stock": 20,
+          "colorHex": "#f3d9a8"
+        },
+        {
+          "label": "Rose Gold",
+          "sku": "NL-LI-02",
+          "price": 42.99,
+          "stock": 15,
+          "colorHex": "#eec3a0"
+        }
+      ]
+    },
+    {
+      "slug": "petala-champagne-iluminator-pudra",
+      "name": "Petala Champagne Iluminator pudră",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare",
+        "machiaj"
+      ],
+      "shortDescription": "Iluminator pudră satinat, ușor de dozat pentru un glow discret.",
+      "currency": "RON",
+      "price": 34.99,
+      "rating": 4.4,
+      "reviewCount": 96,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Strălucire pudrată discretă, ușor de controlat."
+      },
+      "reviewSummary": {
+        "summary": "Glow discret și controlabil; bun pentru începători.",
+        "topPros": [
+          "glow discret",
+          "ușor de dozat"
+        ],
+        "topCons": [
+          "pigment mai puțin intens"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Champagne",
+          "sku": "PT-CI-01",
+          "price": 34.99,
+          "stock": 22,
+          "colorHex": "#f0d5a6"
+        },
+        {
+          "label": "Pearl",
+          "sku": "PT-CI-02",
+          "price": 34.99,
+          "stock": 16,
+          "colorHex": "#f2e5d4"
+        }
+      ]
+    },
+    {
+      "slug": "nudelab-warm-bronzer-pudra",
+      "name": "NudeLab Warm Bronzer pudră",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "bronzer",
+      "categorySlugs": [
+        "bronzer",
+        "machiaj"
+      ],
+      "shortDescription": "Bronzer pudră cu tonuri calde pentru conturare naturală și bronz discret.",
+      "currency": "RON",
+      "price": 38.99,
+      "rating": 4.6,
+      "reviewCount": 144,
+      "status": "active",
+      "attributes": {
+        "finish": "matte",
+        "key_benefit": "Tonuri calde, fără nuanțe portocalii."
+      },
+      "reviewSummary": {
+        "summary": "Tonuri calde reale, deloc portocalii; se estompează ușor.",
+        "topPros": [
+          "nuanțe calde naturale",
+          "buildable"
+        ],
+        "topCons": [
+          "gama de nuanțe limitată"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Light",
+          "sku": "NL-WB-01",
+          "price": 38.99,
+          "stock": 20,
+          "colorHex": "#c89466"
+        },
+        {
+          "label": "Deep",
+          "sku": "NL-WB-02",
+          "price": 38.99,
+          "stock": 14,
+          "colorHex": "#a06e45"
+        }
+      ]
+    },
+    {
+      "slug": "petala-sun-glow-bronzer-cremos",
+      "name": "Petala Sun Glow Bronzer cremos",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "bronzer",
+      "categorySlugs": [
+        "bronzer",
+        "machiaj"
+      ],
+      "shortDescription": "Bronzer cremos cu finish satinat pentru un bronz luminos pe ten uscat.",
+      "currency": "RON",
+      "price": 32.99,
+      "rating": 4.3,
+      "reviewCount": 101,
+      "status": "active",
+      "attributes": {
+        "finish": "satin",
+        "key_benefit": "Bronz luminos cremos, se topește pe piele."
+      },
+      "reviewSummary": {
+        "summary": "Textură cremoasă, bronz luminos; ideal pe ten uscat.",
+        "topPros": [
+          "efect luminos",
+          "bun pe ten uscat"
+        ],
+        "topCons": [
+          "se transferă pe ten gras"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Sun 01",
+          "sku": "PT-SG-01",
+          "price": 32.99,
+          "stock": 18,
+          "colorHex": "#bd8657"
+        },
+        {
+          "label": "Sun 02",
+          "sku": "PT-SG-02",
+          "price": 32.99,
+          "stock": 12,
+          "colorHex": "#9c6a40"
+        }
+      ]
+    },
+    {
+      "slug": "velora-perfect-bb-crema-spf-30",
+      "name": "Velora Perfect BB Cremă SPF 30",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "creme-bb-si-cc",
+      "categorySlugs": [
+        "creme-bb-si-cc",
+        "machiaj"
+      ],
+      "shortDescription": "Cremă BB cu acoperire medie, finish natural și protecție SPF 30.",
+      "currency": "RON",
+      "price": 59.99,
+      "rating": 4.5,
+      "reviewCount": 158,
+      "status": "active",
+      "attributes": {
+        "finish": "natural",
+        "coverage": "medium",
+        "spf": 30,
+        "concerns": [
+          "normal",
+          "combination"
+        ],
+        "key_benefit": "Uniformizează tenul și protejează cu SPF 30 într-un singur pas."
+      },
+      "reviewSummary": {
+        "summary": "Acoperire medie cu SPF real; uniformizează fără efect de mască.",
+        "topPros": [
+          "SPF 30 inclus",
+          "acoperire medie"
+        ],
+        "topCons": [
+          "gama de nuanțe medie"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Light 01",
+          "sku": "VE-BB-01",
+          "price": 59.99,
+          "stock": 20,
+          "colorHex": "#eccfb0"
+        },
+        {
+          "label": "Medium 03",
+          "sku": "VE-BB-03",
+          "price": 59.99,
+          "stock": 16,
+          "colorHex": "#d9b184"
+        },
+        {
+          "label": "Tan 05",
+          "sku": "VE-BB-05",
+          "price": 59.99,
+          "stock": 11,
+          "colorHex": "#c1935f"
+        }
+      ]
+    },
+    {
+      "slug": "auralis-hydra-cc-crema",
+      "name": "Auralis Hydra CC Cremă",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "creme-bb-si-cc",
+      "categorySlugs": [
+        "creme-bb-si-cc",
+        "machiaj"
+      ],
+      "shortDescription": "Cremă CC hidratantă cu acoperire lejeră și finish luminos, SPF 15.",
+      "currency": "RON",
+      "price": 64.99,
+      "rating": 4.6,
+      "reviewCount": 172,
+      "status": "active",
+      "attributes": {
+        "finish": "dewy",
+        "coverage": "light",
+        "spf": 15,
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "key_benefit": "Hidratează intens și dă un glow sănătos cu acoperire lejeră."
+      },
+      "reviewSummary": {
+        "summary": "Hidratare intensă și glow; acoperire lejeră, senzație de skincare.",
+        "topPros": [
+          "foarte hidratant",
+          "efect luminos"
+        ],
+        "topCons": [
+          "acoperire mică pe roșeață"
+        ]
+      },
+      "variants": [
+        {
+          "label": "Fair 01",
+          "sku": "AU-CC-01",
+          "price": 64.99,
+          "stock": 18,
+          "colorHex": "#f0d6bc"
+        },
+        {
+          "label": "Light 02",
+          "sku": "AU-CC-02",
+          "price": 64.99,
+          "stock": 14,
+          "colorHex": "#e3bd95"
+        }
+      ]
+    },
+    {
+      "slug": "aria-set-pensule-de-machiaj-5",
+      "name": "Aria Set Pensule de machiaj (5 buc)",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "pensule-si-bureti-de-machiaj",
+      "categorySlugs": [
+        "pensule-si-bureti-de-machiaj",
+        "machiaj"
+      ],
+      "shortDescription": "Set de 5 pensule esențiale cu peri sintetici moi pentru față și ochi.",
+      "currency": "RON",
+      "price": 89.99,
+      "rating": 4.7,
+      "reviewCount": 187,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Cinci pensule esențiale într-un singur set, peri sintetici moi."
+      },
+      "reviewSummary": {
+        "summary": "Set complet pentru început; perii sintetici moi nu lasă fire.",
+        "topPros": [
+          "set complet 5 piese",
+          "peri moi, nu lasă fire"
+        ],
+        "topCons": [
+          "husa de transport subțire"
+        ]
+      }
+    },
+    {
+      "slug": "petala-soft-burete-de-machiaj-2",
+      "name": "Petala Soft Burete de machiaj (2 buc)",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "pensule-si-bureti-de-machiaj",
+      "categorySlugs": [
+        "pensule-si-bureti-de-machiaj",
+        "machiaj"
+      ],
+      "shortDescription": "Doi bureți moi în formă de picătură pentru aplicarea uniformă a fondului.",
+      "currency": "RON",
+      "price": 19.99,
+      "rating": 4.3,
+      "reviewCount": 92,
+      "status": "active",
+      "attributes": {
+        "key_benefit": "Doi bureți la preț accesibil, aplicare fără urme."
+      },
+      "reviewSummary": {
+        "summary": "Aplicare uniformă la preț mic; se umezesc și cresc frumos.",
+        "topPros": [
+          "preț accesibil",
+          "2 bucăți"
+        ],
+        "topCons": [
+          "se uzează mai repede"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-curl-crema-leave-in-bucle",
+      "name": "Bloom Curl Cremă leave-in pentru bucle",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "ingrijire-fara-clatire",
+      "categorySlugs": [
+        "ingrijire-fara-clatire",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Cremă leave-in care definește buclele și controlează efectul de electrizare.",
+      "currency": "RON",
+      "price": 42.99,
+      "rating": 4.5,
+      "reviewCount": 127,
+      "status": "active",
+      "attributes": {
+        "hair_type": "curly",
+        "key_ingredients": [
+          "unt de shea",
+          "glicerină"
+        ],
+        "key_benefit": "Definește buclele fără să le încarce sau să le usuce."
+      },
+      "reviewSummary": {
+        "summary": "Definește buclele frumos și ține frizzul sub control toată ziua.",
+        "topPros": [
+          "definește buclele",
+          "anti-frizz"
+        ],
+        "topCons": [
+          "prea bogat pentru păr fin"
+        ]
+      }
+    },
+    {
+      "slug": "verdea-repair-crema-leave-in-reparatoare",
+      "name": "Verdea Repair Cremă leave-in reparatoare",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "ingrijire-fara-clatire",
+      "categorySlugs": [
+        "ingrijire-fara-clatire",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Cremă leave-in reparatoare pentru păr deteriorat și vârfuri despicate.",
+      "currency": "RON",
+      "price": 47.99,
+      "rating": 4.6,
+      "reviewCount": 143,
+      "status": "active",
+      "attributes": {
+        "hair_type": "deteriorat",
+        "key_ingredients": [
+          "keratină",
+          "ulei de argan"
+        ],
+        "key_benefit": "Repară vârfurile despicate și netezește lungimile deteriorate."
+      },
+      "reviewSummary": {
+        "summary": "Netezește vârfurile despicate vizibil; părul pare reparat după câteva zile.",
+        "topPros": [
+          "repară vârfurile",
+          "netezește lungimile"
+        ],
+        "topCons": [
+          "preț mai mare"
+        ]
+      }
+    },
+    {
+      "slug": "petala-silk-ulei-de-par-varfuri",
+      "name": "Petala Silk Ulei de păr pentru vârfuri",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "uleiuri-pentru-par",
+      "categorySlugs": [
+        "uleiuri-pentru-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Ulei ușor pentru vârfuri, absoarbe rapid fără senzație grasă.",
+      "currency": "RON",
+      "price": 34.99,
+      "rating": 4.4,
+      "reviewCount": 108,
+      "status": "active",
+      "attributes": {
+        "hair_type": "normal",
+        "key_ingredients": [
+          "ulei de jojoba"
+        ],
+        "key_benefit": "Ulei ușor care nu îngreunează părul fin."
+      },
+      "reviewSummary": {
+        "summary": "Ulei lejer, se absoarbe rapid; bun pentru păr fin care se îngreunează ușor.",
+        "topPros": [
+          "textură ușoară",
+          "nu lasă senzație grasă"
+        ],
+        "topCons": [
+          "hidratare mai mică pe păr foarte uscat"
+        ]
+      }
+    },
+    {
+      "slug": "verdea-gloss-ulei-de-par-stralucire",
+      "name": "Verdea Gloss Ulei de păr pentru strălucire",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "uleiuri-pentru-par",
+      "categorySlugs": [
+        "uleiuri-pentru-par",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Ulei bogat care dă strălucire intensă și netezește părul aspru.",
+      "currency": "RON",
+      "price": 44.99,
+      "rating": 4.6,
+      "reviewCount": 134,
+      "status": "active",
+      "attributes": {
+        "hair_type": "uscat",
+        "key_ingredients": [
+          "ulei de macadamia",
+          "vitamina E"
+        ],
+        "key_benefit": "Strălucire intensă și netezire pe păr aspru sau uscat."
+      },
+      "reviewSummary": {
+        "summary": "Strălucire imediată și netezire vizibilă pe păr aspru.",
+        "topPros": [
+          "strălucire intensă",
+          "netezește părul aspru"
+        ],
+        "topCons": [
+          "prea bogat pentru păr fin"
+        ]
+      }
+    },
+    {
+      "slug": "verdea-fresh-sampon-uscat-volumizant",
+      "name": "Verdea Fresh Șampon uscat volumizant",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Șampon uscat care absoarbe sebumul și dă volum la rădăcină între spălări.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.4,
+      "reviewCount": 116,
+      "status": "active",
+      "attributes": {
+        "hair_type": "gras",
+        "key_benefit": "Absoarbe sebumul și ridică rădăcina fără reziduu alb."
+      },
+      "reviewSummary": {
+        "summary": "Absoarbe bine sebumul și dă volum; nu lasă film alb dacă e distribuit bine.",
+        "topPros": [
+          "volum la rădăcină",
+          "reîmprospătează rapid"
+        ],
+        "topCons": [
+          "poate lăsa urme pe păr foarte închis"
+        ]
+      }
+    },
+    {
+      "slug": "petala-soft-sampon-uscat-par-inchis",
+      "name": "Petala Soft Șampon uscat pentru păr închis",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat",
+        "ingrijirea-parului"
+      ],
+      "shortDescription": "Șampon uscat ușor tentat pentru păr închis, fără reziduu vizibil.",
+      "currency": "RON",
+      "price": 27.99,
+      "rating": 4.3,
+      "reviewCount": 88,
+      "status": "active",
+      "attributes": {
+        "hair_type": "normal",
+        "key_benefit": "Formulă tentată care nu lasă film alb pe păr închis."
+      },
+      "reviewSummary": {
+        "summary": "Nu lasă urme albe pe părul închis; reîmprospătează discret.",
+        "topPros": [
+          "fără reziduu alb pe păr închis",
+          "miros discret"
+        ],
+        "topCons": [
+          "absorbție mai slabă pe păr foarte gras"
+        ]
+      }
+    },
+    {
+      "slug": "bloom-sugar-scrub-de-corp-zahar",
+      "name": "Bloom Sugar Scrub de corp cu zahăr",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Scrub cu cristale de zahăr și uleiuri hrănitoare pentru piele netedă.",
+      "currency": "RON",
+      "price": 29.99,
+      "rating": 4.5,
+      "reviewCount": 122,
+      "status": "active",
+      "attributes": {
+        "key_ingredients": [
+          "zahăr brun",
+          "ulei de cocos"
+        ],
+        "key_benefit": "Exfoliază blând și hrănește pielea cu uleiuri."
+      },
+      "reviewSummary": {
+        "summary": "Exfoliere blândă cu zahăr; pielea rămâne hrănită, nu uscată.",
+        "topPros": [
+          "exfoliere blândă",
+          "hrănește pielea"
+        ],
+        "topCons": [
+          "se consumă repede"
+        ]
+      }
+    },
+    {
+      "slug": "auralis-mineral-scrub-de-corp-exfoliant",
+      "name": "Auralis Mineral Scrub de corp exfoliant",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp",
+        "ingrijire-corp"
+      ],
+      "shortDescription": "Scrub mineral cu sare de mare pentru o exfoliere intensă și tonifiere.",
+      "currency": "RON",
+      "price": 32.99,
+      "rating": 4.6,
+      "reviewCount": 138,
+      "status": "active",
+      "attributes": {
+        "key_ingredients": [
+          "sare de mare",
+          "ulei de măsline"
+        ],
+        "key_benefit": "Exfoliere intensă cu săruri minerale, netezește zonele aspre."
+      },
+      "reviewSummary": {
+        "summary": "Exfoliere intensă pe coate/genunchi; pielea devine vizibil mai netedă.",
+        "topPros": [
+          "exfoliere intensă",
+          "bun pe zone aspre"
+        ],
+        "topCons": [
+          "prea abraziv pentru piele sensibilă"
+        ]
+      }
+    },
+    {
+      "slug": "petala-clear-tratament-local-imperfectiuni",
+      "name": "Petala Clear Tratament local anti-imperfecțiuni",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Tratament local cu acid salicilic care usucă coșurile peste noapte.",
+      "currency": "RON",
+      "price": 36.99,
+      "rating": 4.3,
+      "reviewCount": 97,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "acne",
+          "oily"
+        ],
+        "key_ingredients": [
+          "acid salicilic"
+        ],
+        "key_benefit": "Usucă rapid coșurile inflamate, punctual."
+      },
+      "reviewSummary": {
+        "summary": "Reduce vizibil coșul peste noapte; aplicare punctuală ușoară.",
+        "topPros": [
+          "acțiune rapidă peste noapte",
+          "preț accesibil"
+        ],
+        "topCons": [
+          "poate usca zona din jur"
+        ]
+      }
+    },
+    {
+      "slug": "auralis-night-tratament-local-retinol",
+      "name": "Auralis Night Tratament local cu retinol",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Tratament de noapte cu retinol pentru imperfecțiuni și textura neuniformă.",
+      "currency": "RON",
+      "price": 49.99,
+      "rating": 4.6,
+      "reviewCount": 129,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "acne",
+          "anti_aging"
+        ],
+        "key_ingredients": [
+          "retinol",
+          "niacinamidă"
+        ],
+        "key_benefit": "Tratează imperfecțiunile și netezește textura în timp."
+      },
+      "reviewSummary": {
+        "summary": "Netezește textura și reduce imperfecțiunile recurente în câteva săptămâni.",
+        "topPros": [
+          "dublu efect: acnee + textură",
+          "rezultate în timp"
+        ],
+        "topCons": [
+          "cere introducere treptată"
+        ]
+      }
+    },
+    {
+      "slug": "lumaderm-calm-mist-ten-sensibil",
+      "name": "LumaDerm Calm Mist pentru ten sensibil",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Mist calmant cu apă termală pentru ten sensibil și reactiv.",
+      "currency": "RON",
+      "price": 34.99,
+      "rating": 4.5,
+      "reviewCount": 119,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "sensitive",
+          "hydration"
+        ],
+        "key_ingredients": [
+          "apă termală",
+          "panthenol"
+        ],
+        "key_benefit": "Calmează roșeața și rehidratează pielea reactivă."
+      },
+      "reviewSummary": {
+        "summary": "Calmează imediat senzația de disconfort; bun pe ten reactiv.",
+        "topPros": [
+          "calmează roșeața",
+          "hidratant"
+        ],
+        "topCons": [
+          "efect de scurtă durată, cere reaplicare"
+        ]
+      }
+    },
+    {
+      "slug": "velora-glow-mist-fixator-vitamine",
+      "name": "Velora Glow Mist fixator cu vitamine",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten",
+        "ingrijirea-tenului"
+      ],
+      "shortDescription": "Mist cu vitamine care înviorează tenul și fixează machiajul cu efect luminos.",
+      "currency": "RON",
+      "price": 32.99,
+      "rating": 4.4,
+      "reviewCount": 103,
+      "status": "active",
+      "attributes": {
+        "concerns": [
+          "normal"
+        ],
+        "key_ingredients": [
+          "vitamina C",
+          "vitamina E"
+        ],
+        "key_benefit": "Înviorează tenul obosit și dă un glow luminos peste machiaj."
+      },
+      "reviewSummary": {
+        "summary": "Reîmprospătează tenul obosit și dă un glow discret peste machiaj.",
+        "topPros": [
+          "efect de prospețime",
+          "glow discret"
+        ],
+        "topCons": [
+          "nu înlocuiește un fixator dedicat"
+        ]
+      }
     }
   ]
 }
