@@ -15,6 +15,7 @@ Folosește adaptorul unic OpenAI (`src.agent.llm`).
 import argparse
 import asyncio
 import hashlib
+import json
 import logging
 
 from src.agent.llm import get_llm
@@ -24,16 +25,38 @@ log = logging.getLogger(__name__)
 BATCH = 128
 
 
+_EMBED_FACETS = (
+    ("concerns", "Potrivit pentru"),
+    ("suitable_for", "Pentru"),
+    ("texture", "Textură"),
+    ("finish", "Finish"),
+    ("coverage", "Acoperire"),
+    ("key_ingredients", "Ingrediente"),
+    ("key_benefit", "Beneficiu"),
+)
+
+
 def _embed_text(row: dict) -> str:
-    """Textul reprezentativ al produsului pentru embedding."""
+    """NX-170: doc de embedding DETERMINIST din faptele canonice (v3): name + brand + categorie +
+    ai_summary + concerns/suitable_for/texture/finish/coverage/key_ingredients/key_benefit.
+    `not_recommended_for` NU intră (excludere STRUCTURATĂ, nu embedding pozitiv)."""
+    a = row.get("attributes")
+    if isinstance(a, str):
+        try:
+            a = json.loads(a)
+        except (ValueError, TypeError):
+            a = {}
+    a = a if isinstance(a, dict) else {}
     parts = [row["name"]]
-    if row["brand"]:
-        parts.append(row["brand"])
-    if row["ai_summary"]:
-        parts.append(row["ai_summary"])
-    concerns = row["concerns"] or []
-    if concerns:
-        parts.append("Potrivit pentru: " + ", ".join(concerns))
+    for key in ("brand", "category", "ai_summary"):
+        if row.get(key):
+            parts.append(str(row[key]))
+    for key, label in _EMBED_FACETS:
+        v = a.get(key)
+        if isinstance(v, list) and v:
+            parts.append(f"{label}: " + ", ".join(str(x) for x in v))
+        elif isinstance(v, str) and v:
+            parts.append(f"{label}: {v}")
     return " | ".join(parts)
 
 
@@ -47,13 +70,12 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
     rows = await conn.fetch(
         """
         select p.id::text as id, p.business_id::text as business_id, p.name,
-               b.name as brand, p.ai_summary,
-               (select array_agg(v) from jsonb_array_elements_text(
-                    case when jsonb_typeof(p.attributes->'concerns')='array'
-                         then p.attributes->'concerns' else '[]'::jsonb end) v) as concerns,
+               b.name as brand, cat.name as category, p.ai_summary,
+               p.attributes as attributes,
                pe.content_hash as existing
         from products p
         left join brands b on b.id = p.brand_id
+        left join categories cat on cat.id = p.primary_category_id
         left join product_embeddings pe on pe.product_id = p.id
         where p.status = 'active'
         order by p.id

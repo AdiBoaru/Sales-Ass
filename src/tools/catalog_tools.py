@@ -28,6 +28,7 @@ from src.db.queries.fusion import fuse_candidates
 from src.domain.normalize import normalize
 from src.models import MAX_SEARCH_POOL, Relevance
 from src.tools.base import ToolResult, register
+from src.tools.reason_codes import annotate as annotate_reasons
 from src.tools.taxonomy import map_concerns
 
 # Candidați per retriever înainte de fuziune (P4: pool intern mare, dar tool result rămâne 6×8
@@ -161,6 +162,26 @@ def _facet_pairs(
     return out
 
 
+# NX-170: coduri de potrivire → frază scurtă RO (motivul CONTEXTUAL, grounded) + atenționare soft.
+_REASON_RO = {
+    "concern_match": "pe nevoia ta",
+    "budget_match": "în buget",
+    "ingredient_match": "cu ingredientul cerut",
+    "finish_match": "finish potrivit",
+}
+
+
+def _reason_str(p: dict[str, Any]) -> str:
+    codes = p.get("reason_codes") or []
+    parts = [_REASON_RO.get(c, c) for c in codes]
+    out = ""
+    if parts:
+        out += " | potrivire: " + ", ".join(parts)
+    if p.get("warning"):
+        out += f" | ⚠ {p['warning']}"
+    return out
+
+
 def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro") -> str:
     if not products:
         return "Niciun produs găsit."
@@ -187,9 +208,9 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
             if a.get("best_for"):
                 bits.append(f"bun pt {a['best_for']}")
             fline = (" | " + " · ".join(bits)) if bits else ""
-            lines.append(f"{base}{fline} | {summ}")
+            lines.append(f"{base}{fline} | {summ}{_reason_str(p)}")
         else:
-            lines.append(f"{base} | {summ}")
+            lines.append(f"{base} | {summ}{_reason_str(p)}")
     return "\n".join(lines)
 
 
@@ -823,6 +844,12 @@ async def search_products_tool(
         notes.append(
             "(relaxat: n-am găsit potrivire exactă pe nevoia/categoria cerută; cele de mai jos "
             "sunt cele mai apropiate — spune sincer clientului că nu e match exact)"
+        )
+    # NX-170: reason_codes (de ce se potrivește) + gate not_recommended_for (hard exclude / soft
+    # atenționare), determinist, sub kill-switch. Modifică `products` (excluderi + adnotări).
+    if get_settings().catalog_reason_codes_enabled:
+        products = annotate_reasons(
+            products, concerns=a.concerns, price_max=a.price_max, features=a.features
         )
     view = _brief(products, getattr(ctx.business, "domain_pack", None), ctx.language)
     if notes:

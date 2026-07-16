@@ -5,17 +5,23 @@ from src.jobs.embed_products import _content_hash, _embed_text
 
 
 def test_embed_text_composition():
+    # NX-170: doc determinist din faptele canonice (attributes), nu concerns top-level.
     row = {
         "name": "Crema X",
         "brand": "BrandY",
+        "category": "Creme hidratante",
         "ai_summary": "hidratare profundă",
-        "concerns": ["ten uscat"],
+        "attributes": {
+            "concerns": ["dry"],
+            "finish": "matte",
+            "key_ingredients": ["acid hialuronic"],
+        },
     }
     t = _embed_text(row)
-    assert "Crema X" in t
-    assert "BrandY" in t
+    assert "Crema X" in t and "BrandY" in t and "Creme hidratante" in t
     assert "hidratare profundă" in t
-    assert "ten uscat" in t
+    assert "Potrivit pentru: dry" in t  # concerns din attributes
+    assert "Finish: matte" in t and "acid hialuronic" in t
 
 
 def test_embed_text_handles_missing_fields():
