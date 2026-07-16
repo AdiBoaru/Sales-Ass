@@ -80,6 +80,10 @@ REQUIRED_V3_BY_SLUG: dict[str, set[str]] = {
     "cushion": {"finish", "coverage"},
     "anticearcan": {"coverage"},
     "pensule-si-bureti-de-machiaj": {"key_benefit", "differentiators"},
+    # produse de OCHI: nu au „finish" de complexion (paletele au finishuri MIXTE) — cer key_benefit
+    "mascara": {"key_benefit"},
+    "creioane-si-tusuri-de-ochi": {"key_benefit"},
+    "farduri-de-ochi": {"key_benefit"},
 }
 REQUIRED_V3_BY_ROOT: dict[str, set[str]] = {
     "ingrijirea-tenului": {"concerns", "texture", "usage", "key_ingredients"},
@@ -264,8 +268,11 @@ def _gtin_valid(gtin: str) -> bool:
 # --- R1-R6 (v2 + v3): logică NESCHIMBATĂ față de NX-168a, doar întorc findings ------------------
 
 
-def rule_canonical_enums(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """R1: concerns/finish/coverage TREBUIE valori canonice (bug-ul „ten uscat" în loc de `dry`)."""
+def rule_canonical_enums(
+    products: list[dict[str, Any]], contract: str = "v2"
+) -> list[dict[str, Any]]:
+    """R1: concerns/finish/coverage TREBUIE valori canonice (bug-ul „ten uscat" în loc de `dry`).
+    `suitable_for` = câmp v3 → validat DOAR pe contract="v3" (v2 rămâne neschimbat)."""
     out = []
     for p in products:
         a = _attrs(p)
@@ -273,9 +280,10 @@ def rule_canonical_enums(products: list[dict[str, Any]]) -> list[dict[str, Any]]
         bad_c = [v for v in (a.get("concerns") or []) if v not in CANONICAL_CONCERNS]
         if bad_c:
             out.append(_f(f"{slug}: concerns non-canonice {bad_c}", slug))
-        bad_sf = [v for v in (a.get("suitable_for") or []) if v not in CANONICAL_SUITABLE_FOR]
-        if bad_sf:
-            out.append(_f(f"{slug}: suitable_for non-canonic {bad_sf}", slug))
+        if contract == "v3":
+            bad_sf = [v for v in (a.get("suitable_for") or []) if v not in CANONICAL_SUITABLE_FOR]
+            if bad_sf:
+                out.append(_f(f"{slug}: suitable_for non-canonic {bad_sf}", slug))
         if "finish" in a and a["finish"] not in CANONICAL_FINISH:
             out.append(_f(f"{slug}: finish non-canonic '{a['finish']}'", slug))
         if "coverage" in a and a["coverage"] not in CANONICAL_COVERAGE:
@@ -696,7 +704,7 @@ def audit(data: dict[str, Any], contract: str = "v2") -> dict[str, dict[str, lis
 
     per_rule: dict[str, list[dict[str, Any]]] = {
         "structural": structural,
-        "canonical_enums": rule_canonical_enums(products),
+        "canonical_enums": rule_canonical_enums(products, contract),
         "required_attrs": rule_required_attrs(products, roots),
         "clean_names": rule_clean_names(products),
         "name_category_coherence": rule_name_category_coherence(products, cat_names),

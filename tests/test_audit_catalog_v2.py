@@ -85,6 +85,22 @@ def test_v3_complete_fond_passes():
     assert _n_viol(_data(_fond())) == 0
 
 
+def test_v3_eye_products_dont_require_finish():
+    # NX-168e: produse de OCHI (mascara/creioane/palete farduri) NU au finish de complexion →
+    # cer doar key_benefit, NU finish.
+    mascara = {
+        "slug": "m",
+        "name": "Velora Volume Mascara",
+        "brandSlug": "velora",
+        "primaryCategorySlug": "mascara",
+        "price": 39.9,
+        "attributes": {"best_for": "gene mai pline", "key_benefit": "volum și lungime"},
+    }
+    cats = _cats() + [{"slug": "mascara", "name": "Mascara", "parentSlug": "machiaj"}]
+    data = {"brands": [{"slug": "velora", "name": "V"}], "categories": cats, "products": [mascara]}
+    assert sum(len(v) for v in audit(data, contract="v3")["violations"].values()) == 0
+
+
 def test_v3_accessory_without_ingredients_passes():
     # Edge: accesoriu (pensule) NU cere ingrediente/concerns; cere key_benefit+differentiators.
     tool = {
@@ -289,6 +305,10 @@ def test_v3_schema_validates_per_category():
     sbad = _fond()
     sbad["attributes"]["suitable_for"] = ["ten gras"]
     assert list(validator.iter_errors({**base, "products": [sbad]}))
+    # net_content malformat pe variantă (lipsă unit) respins (cheia `net_content`, nu netContent)
+    ncbad = _fond()
+    ncbad["variants"][0]["net_content"] = {"value": 30}  # fără unit
+    assert list(validator.iter_errors({**base, "products": [ncbad]}))
 
 
 # --- suitable_for canonic + poarta include schema ---------------------------------------------
