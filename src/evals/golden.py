@@ -46,6 +46,15 @@ class GoldenExpect:
     expected_tools: list[str] = field(default_factory=list)
     expected_product_ids: list[str] = field(default_factory=list)
     expected_constraints: dict[str, Any] = field(default_factory=dict)
+    # NX-172 (validare catalog v3) — verificări STRUCTURALE peste `ctx`, dincolo de textul reply:
+    # `forbidden_categories`: niciun produs din retrieval/reply nu e într-o categorie interzisă
+    #   (audit regula 7 — „makeup" nu întoarce păr). `min_compare_diffs`: tabelul de comparație are
+    #   ≥N rânduri cu valori care DIFERĂ între coloane (diferențe reale, nu rânduri identice).
+    #   `require_reason`: fiecare produs recomandat are un MOTIV concret (rich.reason ori best_for/
+    #   reason_codes din retrieval) — nu recomandare fără justificare.
+    forbidden_categories: list[str] = field(default_factory=list)
+    min_compare_diffs: int = 0
+    require_reason: bool = False
 
 
 @dataclass(frozen=True)
@@ -117,6 +126,40 @@ def _ctx_product_ids(ctx: TurnContext) -> set[str]:
     return ids
 
 
+def _ctx_products(ctx: TurnContext) -> list[dict[str, Any]]:
+    """Dict-urile de produs observabile în tur (retrieval + reply.products) — pt verificările
+    structurale NX-172 (categorie / motiv). Dedup pe id, ordine stabilă (retrieval întâi)."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    sources: list[list[dict[str, Any]]] = []
+    if ctx.retrieval is not None:
+        sources.append(ctx.retrieval.products)
+    if ctx.reply is not None and ctx.reply.products:
+        sources.append(ctx.reply.products)
+    for src in sources:
+        for p in src:
+            pid = str(p.get("product_id") or p.get("id") or "")
+            if pid and pid not in seen:
+                seen.add(pid)
+                out.append(p)
+    return out
+
+
+def _product_category(p: dict[str, Any]) -> str | None:
+    """Categoria unui produs din câmpurile posibile (retrieval real / fixture golden)."""
+    for key in ("category", "category_slug", "primary_category_slug", "primary_category"):
+        v = p.get(key)
+        if v:
+            return str(v)
+    return None
+
+
+def _product_has_reason(p: dict[str, Any]) -> bool:
+    """Produsul poartă un motiv concret de recomandare: `best_for` (NX-169) ori `reason_codes`
+    (NX-170), nevide."""
+    return bool(p.get("best_for")) or bool(p.get("reason_codes"))
+
+
 def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> GoldenResult:
     """Checker PUR peste un `ctx` deja rulat prin pipeline. Verifică, în ordine:
     rută (când e cerută), `expect_reply` (P6), `must_include` (toate prezente),
@@ -167,6 +210,48 @@ def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> G
                 failures.append(
                     f"constraint {key!r}: așteptat {expected_value!r}, primit {actual_value!r}"
                 )
+
+    # NX-172: audit off-category (regula 7) — niciun produs surfacat într-o categorie interzisă.
+    if expect.forbidden_categories:
+        forbidden_cats = {c.lower() for c in expect.forbidden_categories}
+        for p in _ctx_products(ctx):
+            cat = _product_category(p)
+            if cat and cat.lower() in forbidden_cats:
+                pid = p.get("product_id") or p.get("id")
+                failures.append(f"produs off-category {pid!r}: categorie {cat!r} interzisă")
+
+    # NX-172: comparația trebuie să evidențieze ≥N diferențe REALE (rânduri cu valori care variază
+    # între coloane) — nu un tabel de rânduri identice.
+    if expect.min_compare_diffs:
+        comp = ctx.reply.comparison if ctx.reply is not None else None
+        if comp is None:
+            failures.append(f"comparație lipsă (așteptam ≥{expect.min_compare_diffs} diferențe)")
+        else:
+            diffs = sum(
+                1
+                for row in comp.rows
+                if len({v for v in row.values if v is not None}) >= 2  # ≥2 valori distincte
+            )
+            if diffs < expect.min_compare_diffs:
+                failures.append(
+                    f"comparație: {diffs} diferențe reale, așteptam ≥{expect.min_compare_diffs}"
+                )
+
+    # NX-172: fiecare produs recomandat are un motiv concret (rich.reason ori best_for/reason_code).
+    if expect.require_reason:
+        rich = ctx.reply.rich if ctx.reply is not None else None
+        if rich is not None and rich.items:
+            for it in rich.items:
+                if not (it.reason and it.reason.strip()):
+                    failures.append(f"card fără motiv (rich.reason gol): {it.product_id!r}")
+        else:
+            products = _ctx_products(ctx)
+            if not products:
+                failures.append("require_reason: niciun produs de justificat")
+            for p in products:
+                if not _product_has_reason(p):
+                    pid = p.get("product_id") or p.get("id")
+                    failures.append(f"produs fără motiv (best_for/reason_codes): {pid!r}")
 
     return GoldenResult(case_id=case_id, passed=not failures, failures=failures)
 
@@ -273,6 +358,9 @@ def _expect_from(raw: dict[str, Any]) -> GoldenExpect:
         expected_tools=list(raw.get("expected_tools", [])),
         expected_product_ids=list(raw.get("expected_product_ids", [])),
         expected_constraints=dict(raw.get("expected_constraints", {})),
+        forbidden_categories=list(raw.get("forbidden_categories", [])),
+        min_compare_diffs=int(raw.get("min_compare_diffs", 0)),
+        require_reason=bool(raw.get("require_reason", False)),
     )
 
 

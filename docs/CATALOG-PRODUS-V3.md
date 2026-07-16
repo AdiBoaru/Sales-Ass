@@ -166,3 +166,20 @@ Cele 7 HIGH + 3 MEDIUM + LOW reconciliate în carduri:
 **Runda 3 (reconciliată):** `seed_catalog_v2.py` ADAPTAT la `{violations,warnings}` (numără doar violations; test warnings-only→exit0, violation→exit≠0) — parte din 168d; R8 simplificat determinist (TOATE key_ingredients+badges cer `claim_provenance`; contraindicația hard = provenance INLINE, fără duplicare); NX-171c job rulează audit O DATĂ pe catalog complet per tenant + mapează violations→produse (auditul cere snapshot complet); NX-172 depinde de TOATE 171a-d (închide epicul → validează published + embeddings versionate).
 
 **Runda 4 (reconciliată):** `badges` = `string[]` la nivel de PRODUS, definit explicit în schema v3, fiecare badge cere `claim_provenance` (kind=badge) + teste R8 ingredient/badge cu&fără proveniență (168d); violations = **machine-readable** `{message, product_slugs:[...]}` (nu string) → NX-171c citește `product_slugs`, NU parsează text CLI, duplicatele marchează toate slug-urile; editorial 171c: backfill = job Python `src/jobs/` (NU în migrare, path consistent).
+
+---
+
+## Status livrare
+
+- **Pachet 1-4 (168d/e, 169, 170):** MERGED. **Pachet 5 (171a/b/c/d):** MERGED (#226, #227).
+- **Pachet 6 (NX-172) — felia 1 (gate CI golden) LIVRAT:** 3 checkere STRUCTURALE noi în
+  `src/evals/golden.py` — `forbidden_categories` (audit regula 7: makeup ≠ păr), `min_compare_diffs`
+  (comparație pe ≥N diferențe reale), `require_reason` (best_for/reason_codes ori rich.reason per
+  produs) — fiecare cu test load-bearing. **12 scenarii golden** (10 single-tur în `cases.json` +
+  2 conversații în `conversations.json`): ten gras/sensibil, ingredient (niacinamidă), fără parfum,
+  gramaj, utilizare, fond mat, nuanță, contraindicație, rutină, comparație, alternativă mai ieftină.
+  Gate CI verde (ScriptedLLM, zero OpenAI/DB).
+- **NX-172 — felia 2 (RĂMAS):** lanțul LIVE pe cele 150 (audit static → seed `--archive-old` →
+  audit DB → re-embed → retrieval real → sim harness) + auditul off-category pe pipeline REAL.
+  Blocat de DATE: DB demo are doar 24/150 produse v2 active → cere rularea `seed_catalog_v2.py`
+  (seedează 150 + `product_relations`) + `backfill_content_status` + `embed_products` întâi.
