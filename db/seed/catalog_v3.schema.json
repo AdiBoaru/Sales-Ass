@@ -129,7 +129,7 @@
         "salePrice": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "stock": { "type": "integer", "minimum": 0 },
         "colorHex": { "type": ["string", "null"], "pattern": "^#?[0-9a-fA-F]{6}$" },
-        "netContent": { "$ref": "#/$defs/netContent" },
+        "net_content": { "$ref": "#/$defs/netContent" },
         "image": { "type": "string" },
         "attributes": { "type": "object" }
       },
@@ -222,9 +222,14 @@
           "then": { "properties": { "attributes": { "required": ["finish", "coverage"] } } }
         },
         {
-          "description": "machiaj color (rujuri/mascara/pudre/farduri/... — aliniat cu audit R10 root machiaj): finish.",
-          "if": { "properties": { "primaryCategorySlug": { "enum": ["rujuri", "pudre", "mascara", "creioane-si-tusuri-de-ochi", "farduri-de-ochi", "fard-de-obraz", "primer-pentru-machiaj", "gloss-de-buze", "iluminatoare", "spray-de-fixare", "bronzer"] } } },
+          "description": "machiaj color de COMPLEXION/buze (au finish) — aliniat cu audit R10. Produsele de OCHI NU au un singur finish → excluse.",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["rujuri", "pudre", "fard-de-obraz", "primer-pentru-machiaj", "gloss-de-buze", "iluminatoare", "spray-de-fixare", "bronzer"] } } },
           "then": { "properties": { "attributes": { "required": ["finish"] } } }
+        },
+        {
+          "description": "produse de OCHI (mascara/creioane-tusuri/farduri-paletă): cer key_benefit, NU finish (finishuri mixte).",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["mascara", "creioane-si-tusuri-de-ochi", "farduri-de-ochi"] } } },
+          "then": { "properties": { "attributes": { "required": ["key_benefit"] } } }
         },
         {
           "description": "accesorii (pensule/bureți): key_benefit+differentiators; NU cer ingrediente.",

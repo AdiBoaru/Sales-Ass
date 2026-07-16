@@ -132,7 +132,7 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         name=p["name"],
         short_description=p.get("shortDescription"),
         description=p.get("description") or p.get("shortDescription"),
-        ai_summary=p.get("shortDescription"),
+        ai_summary=p.get("ai_summary") or p.get("shortDescription"),
         currency=p.get("currency", "RON"),
         price=p["price"],
         sale_price=p.get("salePrice"),
@@ -249,8 +249,9 @@ async def main() -> int:
 
     data = json.loads(DATA.read_text(encoding="utf-8"))
 
-    # === PRE-FLIGHT GATE (NX-168a): audit static ÎNAINTE de orice scriere ===
-    blocking = gate_violations(data)  # contract="v2"; warnings NU blochează (vezi gate_violations)
+    # === PRE-FLIGHT GATE: audit static ÎNAINTE de orice scriere ===
+    # NX-168e: COMUTARE ATOMICĂ pe v3 — catalogul e la contract complet (evaluate v3 = 0).
+    blocking = gate_violations(data, contract="v3")  # schema+reguli v3; warnings NU blochează
     if blocking:
         print(
             f"✗ AUDIT PICAT — {len(blocking)} violations; NU seedez. Rulează audit_catalog_v2.py."
