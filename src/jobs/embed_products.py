@@ -67,6 +67,12 @@ def _content_hash(text: str, model: str) -> str:
 async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> int:
     """Embed produsele cu hash schimbat/lipsă. Întoarce câte au fost embed-uite."""
     model = llm.model_embed
+    # NX-171d: embeddings versionate (PK compus product_id, doc_type, model). Doc-ul de produs =
+    # doc_type 'product'; join-ul filtrează doc_type + model activ ca `existing` să fie hash-ul
+    # rândului CORECT (nu al altui model/doc_type → altfel re-embed spurios sau skip greșit).
+    # `pe.business_id = p.business_id` (P7): un rând embedding cu business_id greșit NU trebuie să
+    # facă jobul să sară re-embed-ul (altfel read-path-ul, filtrat corect pe business, n-ar vedea
+    # produsul niciodată — embedding fantomă al altui tenant).
     rows = await conn.fetch(
         """
         select p.id::text as id, p.business_id::text as business_id, p.name,
@@ -76,10 +82,13 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
         from products p
         left join brands b on b.id = p.brand_id
         left join categories cat on cat.id = p.primary_category_id
-        left join product_embeddings pe on pe.product_id = p.id
+        left join product_embeddings pe
+               on pe.product_id = p.id and pe.business_id = p.business_id
+              and pe.doc_type = 'product' and pe.model = $1
         where p.status = 'active'
         order by p.id
-        """
+        """,
+        model,
     )
     todo = []
     for r in rows:
@@ -104,10 +113,11 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
                 await conn.execute(
                     """
                     insert into product_embeddings
-                        (product_id, business_id, model, embedding, content_hash, updated_at)
-                    values ($1, $2, $3, $4::vector, $5, now())
-                    on conflict (product_id) do update set
-                        business_id = excluded.business_id, model = excluded.model,
+                        (product_id, business_id, model, doc_type, embedding, content_hash,
+                         updated_at)
+                    values ($1, $2, $3, 'product', $4::vector, $5, now())
+                    on conflict (product_id, doc_type, model) do update set
+                        business_id = excluded.business_id,
                         embedding = excluded.embedding, content_hash = excluded.content_hash,
                         updated_at = now()
                     """,

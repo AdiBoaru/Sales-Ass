@@ -403,6 +403,18 @@ class Settings(BaseSettings):
     catalog_reason_codes_enabled: bool = Field(
         default=True, validation_alias="CATALOG_REASON_CODES_ENABLED"
     )
+    # NX-171b: cross-sell/rutină din `product_relations` (relații explicite curate) în loc de
+    # heuristica same-brand/concern. ON → relations-first cu fallback la heuristică DOAR când ancora
+    # n-are nicio relație. OFF (kill-switch) → mereu heuristica veche (byte-identic).
+    relations_first_enabled: bool = Field(default=True, validation_alias="RELATIONS_FIRST_ENABLED")
+    # NX-171c: quality-gate `content_status` — DOAR produsele 'published' sunt servite clientului.
+    # Kill-switch GLOBAL (feature disponibil); filtrarea EFECTIVĂ cere OPT-IN PER-TENANT
+    # (businesses.settings->>'content_status_filter' = true), activat DOAR după ce backfill-ul a
+    # rulat pt acel tenant (altfel catalog gol). Default: feature ON dar per-tenant OFF → nimeni
+    # filtrat până nu optează. Env OFF → filtrul nu se aplică nicăieri (kill de urgență).
+    content_status_filter_enabled: bool = Field(
+        default=True, validation_alias="CONTENT_STATUS_FILTER_ENABLED"
+    )
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")

@@ -549,7 +549,11 @@ async def continue_search_session(
     page = int(sess.get("page") or 0) + 1
     ctx.state_patch["active_search"] = {**sess, "cursor": new_cursor, "page": page}
     products = (
-        await get_products_by_ids(deps.conn, ctx.business.id, page_ids, limit=limit)
+        # NX-171c: pagina servește produse NOI nevăzute din pool → respectă filtrul published
+        # (spre deosebire de re-hidratarea produselor deja afișate, care NU se filtrează).
+        await get_products_by_ids(
+            deps.conn, ctx.business.id, page_ids, limit=limit, respect_content_status=True
+        )
         if page_ids
         else []
     )

@@ -76,6 +76,124 @@ def clean_gtin(raw) -> str | None:
     return str(raw) if raw and _gtin_valid(str(raw)) else None
 
 
+# NX-171b: ordinea canonică a pașilor de rutină (familie, rang). Sursa semnalului = `routine_step`
+# din attributes (168e). Două familii: skincare (0) + makeup (1). Un produs se leagă doar în familia
+# lui → nu amestecăm un fond de ten în rutina de îngrijire.
+_ROUTINE_STEPS = {
+    "cleanse": (0, 0),
+    "tone": (0, 1),
+    "treat": (0, 2),
+    "moisturize": (0, 3),
+    "protect": (0, 4),
+    "makeup_base": (1, 0),
+    "makeup_color": (1, 1),
+    "finish": (1, 2),
+}
+
+
+def _rel_rating(p: dict) -> float:
+    return float(p.get("rating") or 0)
+
+
+def _rel_price(p: dict) -> float:
+    return float(p.get("price") or 0)
+
+
+def _rel_concerns(p: dict) -> set[str]:
+    c = (p.get("attributes") or {}).get("concerns")
+    return set(c) if isinstance(c, list) else set()
+
+
+def _rel_step(p: dict) -> tuple[int, int] | None:
+    step = (p.get("attributes") or {}).get("routine_step")
+    return _ROUTINE_STEPS.get(step) if isinstance(step, str) else None
+
+
+def derive_relations(products: list[dict]) -> list[dict]:
+    """NX-171b: derivă DETERMINIST relații explicite din faptele catalogului (fără random/LLM).
+
+    - `routine_next`: produsul de la pasul N → produse de la următorul pas OCUPAT din ACEEAȘI
+      familie de rutină (skincare: cleanse→tone→treat→moisturize→protect; makeup: base→color→
+      finish), preferând același brand, apoi concern comun, apoi rating. Cap 3.
+    - `complement`: același brand, categorie primară DIFERITĂ (gama „se poartă cu"). Cap 3, rating.
+    - `substitute`: aceeași categorie primară, preț ≤ ancoră (alternativă mai ieftină/egală). Cap 3.
+
+    Întoarce `{product_slug, related_slug, kind, position}`. Fără self-relation; sortări STABILE pe
+    slug → aceeași ieșire la re-rulare (idempotent). Testabil fără DB."""
+    out: list[dict] = []
+
+    # index familie → rang → [produse] (pentru routine_next)
+    fam_rank: dict[int, dict[int, list[dict]]] = {}
+    for p in products:
+        rk = _rel_step(p)
+        if rk:
+            fam, rank = rk
+            fam_rank.setdefault(fam, {}).setdefault(rank, []).append(p)
+
+    for p in products:
+        rk = _rel_step(p)
+        if not rk:
+            continue
+        fam, rank = rk
+        later = sorted(r for r in fam_rank.get(fam, {}) if r > rank)
+        if not later:
+            continue
+        pc = _rel_concerns(p)
+        cands = [q for q in fam_rank[fam][later[0]] if q["slug"] != p["slug"]]
+        cands.sort(
+            key=lambda q: (
+                q.get("brandSlug") != p.get("brandSlug"),  # same-brand întâi (False < True)
+                not (_rel_concerns(q) & pc),  # concern comun apoi
+                -_rel_rating(q),
+                q["slug"],
+            )
+        )
+        for pos, q in enumerate(cands[:3]):
+            out.append(_rel(p, q, "routine_next", pos))
+
+    by_brand: dict[str, list[dict]] = {}
+    for p in products:
+        if p.get("brandSlug"):
+            by_brand.setdefault(p["brandSlug"], []).append(p)
+    for p in products:
+        b = p.get("brandSlug")
+        if not b:
+            continue
+        cands = [
+            q
+            for q in by_brand[b]
+            if q["slug"] != p["slug"]
+            and q.get("primaryCategorySlug") != p.get("primaryCategorySlug")
+        ]
+        cands.sort(key=lambda q: (-_rel_rating(q), q["slug"]))
+        for pos, q in enumerate(cands[:3]):
+            out.append(_rel(p, q, "complement", pos))
+
+    by_cat: dict[str, list[dict]] = {}
+    for p in products:
+        if p.get("primaryCategorySlug"):
+            by_cat.setdefault(p["primaryCategorySlug"], []).append(p)
+    for p in products:
+        c = p.get("primaryCategorySlug")
+        if not c:
+            continue
+        cands = [q for q in by_cat[c] if q["slug"] != p["slug"] and _rel_price(q) <= _rel_price(p)]
+        cands.sort(key=lambda q: (_rel_price(q), q["slug"]))
+        for pos, q in enumerate(cands[:3]):
+            out.append(_rel(p, q, "substitute", pos))
+
+    return out
+
+
+def _rel(p: dict, q: dict, kind: str, position: int) -> dict:
+    return {
+        "product_slug": p["slug"],
+        "related_slug": q["slug"],
+        "kind": kind,
+        "position": position,
+    }
+
+
 async def _upsert_brand(conn, slug: str, name: str) -> str:
     row = await conn.fetchrow(
         "select id from brands where business_id=$1 and slug=$2", DEMO_BIZ, slug
@@ -367,9 +485,38 @@ async def main() -> int:
                 await _upsert_product(conn, p, brand_ids[p["brandSlug"]], cat_id, root)
                 n_var += len(p.get("variants") or [])
                 print(f"  seedat: {p['name']} ({len(p.get('variants') or [])} variante)")
+
+            # NX-171b: relații explicite (rutină/complement/substitut) derivate DETERMINIST din
+            # faptele catalogului. Sursă de adevăr = JSON → șterge + reinserează (idempotent).
+            slug_to_id = {
+                r["slug"]: str(r["id"])
+                for r in await conn.fetch(
+                    "select id, slug from products where business_id=$1", DEMO_BIZ
+                )
+            }
+            await conn.execute("delete from product_relations where business_id=$1", DEMO_BIZ)
+            n_rel = 0
+            for rel in derive_relations(data["products"]):
+                pid_a = slug_to_id.get(rel["product_slug"])
+                pid_b = slug_to_id.get(rel["related_slug"])
+                if not pid_a or not pid_b or pid_a == pid_b:
+                    continue
+                await conn.execute(
+                    "insert into product_relations "
+                    "(business_id, product_id, related_id, kind, position) values ($1,$2,$3,$4,$5) "
+                    "on conflict (business_id, product_id, related_id, kind) do nothing",
+                    DEMO_BIZ,
+                    pid_a,
+                    pid_b,
+                    rel["kind"],
+                    rel["position"],
+                )
+                n_rel += 1
+
             print(
                 f"\n{len(data['products'])} produse, {n_var} variante, "
-                f"{len(data['brands'])} branduri, {len(data['categories'])} categorii."
+                f"{len(data['brands'])} branduri, {len(data['categories'])} categorii, "
+                f"{n_rel} relații."
             )
             if dry:
                 raise RuntimeError("--dry-run → rollback (nimic scris)")
