@@ -70,6 +70,9 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
     # NX-171d: embeddings versionate (PK compus product_id, doc_type, model). Doc-ul de produs =
     # doc_type 'product'; join-ul filtrează doc_type + model activ ca `existing` să fie hash-ul
     # rândului CORECT (nu al altui model/doc_type → altfel re-embed spurios sau skip greșit).
+    # `pe.business_id = p.business_id` (P7): un rând embedding cu business_id greșit NU trebuie să
+    # facă jobul să sară re-embed-ul (altfel read-path-ul, filtrat corect pe business, n-ar vedea
+    # produsul niciodată — embedding fantomă al altui tenant).
     rows = await conn.fetch(
         """
         select p.id::text as id, p.business_id::text as business_id, p.name,
@@ -80,7 +83,8 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
         left join brands b on b.id = p.brand_id
         left join categories cat on cat.id = p.primary_category_id
         left join product_embeddings pe
-               on pe.product_id = p.id and pe.doc_type = 'product' and pe.model = $1
+               on pe.product_id = p.id and pe.business_id = p.business_id
+              and pe.doc_type = 'product' and pe.model = $1
         where p.status = 'active'
         order by p.id
         """,

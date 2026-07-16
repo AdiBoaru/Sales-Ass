@@ -587,10 +587,29 @@ async def get_complementary_products(
     limit = min(limit, 6)
     exclude = list(dict.fromkeys([anchor_id, *(exclude_ids or [])]))
     if get_settings().relations_first_enabled:
-        rows = await _complementary_from_relations(conn, business_id, anchor_id, exclude, limit)
-        if rows:
-            return rows
+        # Contract: heuristica e fallback DOAR când ancora n-are NICIO relație curată (complement/
+        # rutină/accesoriu) — NU când relațiile există dar sunt neeligibile (draft/out-of-stock/în
+        # coș). Altfel un produs cu rutină definită ar aluneca înapoi în heuristica same-brand când
+        # pașii lui sunt temporar fără stoc. Verificăm EXISTENȚA relației separat de eligibilitate.
+        if await _has_complementary_relations(conn, business_id, anchor_id):
+            return await _complementary_from_relations(conn, business_id, anchor_id, exclude, limit)
     return await _complementary_heuristic(conn, business_id, anchor_id, exclude, limit)
+
+
+async def _has_complementary_relations(
+    conn: asyncpg.Connection, business_id: str, anchor_id: str
+) -> bool:
+    """Ancora are ≥1 relație de complementaritate (complement/routine_next/accessory), indiferent
+    de eligibilitatea produsului-țintă? Decide relations-first vs fallback heuristic (NU eligibi-
+    litatea). Același set de `kind` ca `_complementary_from_relations`. Tenant-scoped (P7)."""
+    return bool(
+        await conn.fetchval(
+            "select exists(select 1 from product_relations where business_id=$1 and product_id=$2 "
+            "and kind in ('complement', 'routine_next', 'accessory'))",
+            business_id,
+            anchor_id,
+        )
+    )
 
 
 async def _complementary_from_relations(

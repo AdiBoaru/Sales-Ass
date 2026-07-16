@@ -29,24 +29,31 @@ DEMO_CATALOG = ROOT / "db" / "seed" / "catalog_v2.json"
 
 
 def classify_content_status(data: dict[str, Any]) -> dict[str, str]:
-    """Pur (fără DB): audit v3 pe snapshot-ul COMPLET → `{slug: 'draft'|'published'}`. Un slug care
-    apare în ≥1 violation (orice regulă) = 'draft'; restul = 'published'. Sursa de „validat" =
-    `audit(contract='v3')` (168d), citind `entry['product_slugs']` machine-readable. Fără DB."""
-    from scripts.audit_catalog_v2 import audit  # lazy: modulul rămâne ușor la import
+    """Pur (fără DB): `evaluate(v3)` (SCHEMĂ + reguli, sursă UNICĂ cu poarta seed) pe snapshot-ul
+    COMPLET → `{slug: 'draft'|'published'}`. Un slug care apare în ≥1 violation = 'draft'; restul =
+    'published', citind `entry['product_slugs']` machine-readable.
 
-    result = audit(data, contract="v3")
+    FAIL-CLOSED (NX-171c): dacă există un blocker GLOBAL (`has_global_blocker` — violation fără
+    `product_slugs`, ex. schemă invalidă / `brands` lipsă / fail-closed jsonschema), NU putem mapa
+    eroarea la un produs → NU publicăm NIMIC pe tenant: TOATE produsele rămân 'draft'. (`audit()`
+    direct ar fi ratat acest caz și ar fi publicat produse peste o schemă coruptă.)"""
+    from scripts.audit_catalog_v2 import evaluate, has_global_blocker  # lazy: import ușor
+
+    result = evaluate(data, contract="v3")
+    products = [
+        p
+        for p in data.get("products") or []
+        if isinstance(p, dict) and isinstance(p.get("slug"), str) and p["slug"]
+    ]
+    if has_global_blocker(result):
+        return {p["slug"]: "draft" for p in products}  # fail-closed: nimic published
     flagged: set[str] = set()
     for entries in result["violations"].values():
         for entry in entries:
             for slug in entry.get("product_slugs") or []:
                 if slug:
                     flagged.add(slug)
-    out: dict[str, str] = {}
-    for p in data.get("products") or []:
-        slug = p.get("slug")
-        if isinstance(slug, str) and slug:
-            out[slug] = "draft" if slug in flagged else "published"
-    return out
+    return {p["slug"]: ("draft" if p["slug"] in flagged else "published") for p in products}
 
 
 async def backfill(conn, business_id: str, data: dict[str, Any]) -> dict[str, int]:

@@ -112,3 +112,17 @@ def test_violation_product_becomes_draft():
     assert mapping[victim] == "draft"
     others = [s for sl, s in mapping.items() if sl != victim]
     assert others and set(others) == {"published"}
+
+
+def test_global_blocker_fails_closed_all_draft():
+    """FAIL-CLOSED (NX-171c, review Codex): un blocker GLOBAL (schemă invalidă / produs non-dict —
+    violation FĂRĂ `product_slugs`, ne-mapabilă) → NICIUN produs 'published' (toate 'draft'). Prin
+    `evaluate` + `has_global_blocker`; `audit()` direct ar fi publicat peste o schemă coruptă."""
+    # schemă invalidă (produs fără câmpurile cerute) → schema finding global
+    assert set(
+        classify_content_status({"products": [{"slug": "x"}], "categories": []}).values()
+    ) == {"draft"}
+    # produs non-dict → violation structurală globală; produsul-dict valid rămâne draft (fail-close)
+    assert classify_content_status({"products": [42, {"slug": "ok"}], "categories": []}) == {
+        "ok": "draft"
+    }

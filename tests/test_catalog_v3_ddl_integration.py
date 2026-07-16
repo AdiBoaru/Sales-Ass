@@ -50,6 +50,24 @@ async def _make_product(conn, bid: str, *, name: str, price: float = 50.0, **col
     )
 
 
+async def _make_brand(conn, bid: str, name: str) -> str:
+    return await conn.fetchval(
+        "insert into brands (business_id, slug, name) values ($1, $2, $3) returning id::text",
+        bid,
+        f"b-{uuid4().hex[:8]}",
+        name,
+    )
+
+
+async def _make_category(conn, bid: str, name: str) -> str:
+    return await conn.fetchval(
+        "insert into categories (business_id, slug, name) values ($1, $2, $3) returning id::text",
+        bid,
+        f"c-{uuid4().hex[:8]}",
+        name,
+    )
+
+
 @pytest.fixture
 async def shop():
     """Un business throwaway (cu cleanup)."""
@@ -64,6 +82,8 @@ async def shop():
             await conn.execute("delete from product_relations where business_id=$1", bid)
             await conn.execute("delete from product_embeddings where business_id=$1", bid)
             await conn.execute("delete from products where business_id=$1", bid)
+            await conn.execute("delete from categories where business_id=$1", bid)
+            await conn.execute("delete from brands where business_id=$1", bid)
             await conn.execute("delete from businesses where id=$1", bid)
         await close_pool()
 
@@ -163,6 +183,78 @@ async def test_complementary_relations_first(shop):
         assert related in ids, "produsul legat explicit trebuie să apară (relations-first)"
         # ancora nu se auto-recomandă
         assert anchor not in ids
+
+
+async def test_no_heuristic_fallback_when_relations_exist_but_ineligible(shop):
+    """CONTRACT (review Codex): fallback la heuristică DOAR când ancora n-are NICIO relație curată —
+    NU când relația există dar produsul-țintă e neeligibil (out-of-stock). Altfel un produs cu
+    rutină definită ar aluneca în heuristica same-brand la primul pas fără stoc."""
+    bid = shop
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        brand = await _make_brand(conn, bid, "Aceeași gamă")
+        cat_a = await _make_category(conn, bid, "Categorie A")
+        cat_b = await _make_category(conn, bid, "Categorie B")
+        anchor = await _make_product(
+            conn, bid, name="Anchor", brand_id=brand, primary_category_id=cat_a
+        )
+        # produsul-țintă al relației: EXISTĂ relația, dar e out-of-stock → neeligibil
+        related = await _make_product(
+            conn, bid, name="Related OOS", availability="out_of_stock", primary_category_id=cat_b
+        )
+        # momeală: same-brand, categorie diferită, în stoc → heuristica AR întoarce-o (dacă cădeam)
+        decoy = await _make_product(
+            conn, bid, name="Same brand decoy", brand_id=brand, primary_category_id=cat_b
+        )
+        await conn.execute(
+            "insert into product_relations (business_id, product_id, related_id, kind, position) "
+            "values ($1, $2, $3, 'complement', 0)",
+            bid,
+            anchor,
+            related,
+        )
+        rows = await get_complementary_products(conn, bid, anchor, limit=4)
+        ids = {r["id"] for r in rows}
+        # ancora ARE relație → relations-first; related e OOS → gol; NU cădem pe heuristică (decoy)
+        assert decoy not in ids, "a căzut pe heuristică deși ancora avea relații (neeligibile)"
+        assert related not in ids  # OOS, filtrat
+        assert ids == set()
+
+
+async def test_embed_existing_hash_scoped_to_business(shop):
+    """Fix 171d (review Codex): verificarea `existing` din embed job filtrează pe business_id. Un
+    rând embedding cu business_id GREȘIT (product_id corect) NU e citit ca `existing` — altfel jobul
+    ar sări re-embed-ul, iar read-path-ul (filtrat pe business) n-ar vedea niciodată produsul.
+    Testează exact join-ul din `embed_pending`."""
+    bid = shop
+    pool = await get_pool()
+    other = str(uuid4())
+    model = get_settings().model_embed
+    vec = "[" + ",".join(["0.0"] * 1536) + "]"
+    async with admin_conn(pool) as conn:
+        prod = await _make_product(conn, bid, name="P")
+        # embedding rogue: product_id CORECT, business_id GREȘIT (al altui tenant)
+        await conn.execute(
+            "insert into product_embeddings "
+            "(product_id, business_id, model, doc_type, embedding, content_hash) "
+            "values ($1, $2, $3, 'product', $4::vector, 'ROGUE')",
+            prod,
+            other,
+            model,
+            vec,
+        )
+        try:
+            existing = await conn.fetchval(
+                "select pe.content_hash from products p "
+                "left join product_embeddings pe on pe.product_id = p.id "
+                "and pe.business_id = p.business_id and pe.doc_type = 'product' and pe.model = $2 "
+                "where p.id = $1",
+                prod,
+                model,
+            )
+            assert existing is None, "rogue embedding (business greșit) citit ca existing → skip"
+        finally:
+            await conn.execute("delete from product_embeddings where business_id=$1", other)
 
 
 # --- 171c: content_status filter --------------------------------------------------------------
