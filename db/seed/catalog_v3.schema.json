@@ -120,7 +120,7 @@
       "properties": {
         "label": { "type": "string", "minLength": 1, "description": "Nuanță/mărime reală (ex. 'Warm Beige 03')." },
         "sku": { "type": "string" },
-        "gtin": { "type": "string", "description": "GTIN-8/12/13/14; checksum GS1 validat de audit R9." },
+        "gtin": { "type": "string", "pattern": "^(\\d{8}|\\d{12}|\\d{13}|\\d{14})$", "description": "GTIN-8/12/13/14 (DOAR cifre); checksum GS1 validat de audit R9." },
         "price": { "type": "number", "exclusiveMinimum": 0 },
         "salePrice": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "stock": { "type": "integer", "minimum": 0 },
@@ -136,7 +136,7 @@
       "description": "Fapte canonice v3. Enum-urile sunt validate aici; obligatoriile per-categorie le impune schema product (if/then) + audit R10.",
       "properties": {
         "concerns": { "type": "array", "items": { "$ref": "#/$defs/concern" }, "minItems": 1 },
-        "suitable_for": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "suitable_for": { "type": "array", "items": { "$ref": "#/$defs/concern" }, "minItems": 1, "description": "Chei CANONICE (vocabular concerns) — filtrele botului se leagă pe ele." },
         "not_recommended_for": { "type": "array", "items": { "$ref": "#/$defs/notRecommendedFor" } },
         "finish": { "$ref": "#/$defs/finish" },
         "coverage": { "$ref": "#/$defs/coverage" },
@@ -150,7 +150,7 @@
         "badges": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "claim_provenance": { "type": "array", "items": { "$ref": "#/$defs/claimProvenance" } },
         "net_content": { "$ref": "#/$defs/netContent" },
-        "gtin": { "type": "string" },
+        "gtin": { "type": "string", "pattern": "^(\\d{8}|\\d{12}|\\d{13}|\\d{14})$" },
         "skin_type": { "type": "string" },
         "hair_type": { "type": "string" },
         "fragrance_free": { "type": "boolean" },
@@ -211,6 +211,16 @@
           "description": "anticearcan: coverage.",
           "if": { "properties": { "primaryCategorySlug": { "const": "anticearcan" } } },
           "then": { "properties": { "attributes": { "required": ["coverage"] } } }
+        },
+        {
+          "description": "cushion: finish+coverage.",
+          "if": { "properties": { "primaryCategorySlug": { "const": "cushion" } } },
+          "then": { "properties": { "attributes": { "required": ["finish", "coverage"] } } }
+        },
+        {
+          "description": "machiaj color (rujuri/mascara/pudre/farduri/... — aliniat cu audit R10 root machiaj): finish.",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["rujuri", "pudre", "mascara", "creioane-si-tusuri-de-ochi", "farduri-de-ochi", "fard-de-obraz", "primer-pentru-machiaj", "gloss-de-buze", "iluminatoare", "spray-de-fixare", "bronzer"] } } },
+          "then": { "properties": { "attributes": { "required": ["finish"] } } }
         },
         {
           "description": "accesorii (pensule/bureți): key_benefit+differentiators; NU cer ingrediente.",

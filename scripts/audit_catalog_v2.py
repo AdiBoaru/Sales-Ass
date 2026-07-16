@@ -52,6 +52,9 @@ CANONICAL_CONCERNS = frozenset(
 )
 CANONICAL_FINISH = frozenset({"natural", "matte", "dewy", "satin"})
 CANONICAL_COVERAGE = frozenset({"light", "medium", "full", "buildable"})
+# suitable_for = „pentru cine" → reutilizează vocabularul concerns (include tipurile de ten:
+# oily/dry/sensitive/combination/normal). Trebuie CANONIC ca filtrele botului să se lege.
+CANONICAL_SUITABLE_FOR = CANONICAL_CONCERNS
 
 # atribute obligatorii per categorie (frunză) / per root-branch. Contract, nu wordlist NLP.
 REQUIRED_ATTRS_BY_SLUG: dict[str, set[str]] = {
@@ -266,6 +269,9 @@ def rule_canonical_enums(products: list[dict[str, Any]]) -> list[dict[str, Any]]
         bad_c = [v for v in (a.get("concerns") or []) if v not in CANONICAL_CONCERNS]
         if bad_c:
             out.append(_f(f"{slug}: concerns non-canonice {bad_c}", slug))
+        bad_sf = [v for v in (a.get("suitable_for") or []) if v not in CANONICAL_SUITABLE_FOR]
+        if bad_sf:
+            out.append(_f(f"{slug}: suitable_for non-canonic {bad_sf}", slug))
         if "finish" in a and a["finish"] not in CANONICAL_FINISH:
             out.append(_f(f"{slug}: finish non-canonic '{a['finish']}'", slug))
         if "coverage" in a and a["coverage"] not in CANONICAL_COVERAGE:
@@ -371,11 +377,17 @@ def rule_comparison_differentiators(products: list[dict[str, Any]]) -> list[dict
     for p in products:
         by_cat[p.get("primaryCategorySlug", "")].append(p)
 
+    def _num(x: Any) -> float:
+        try:  # defensiv: date malformate (price=text) NU crapă auditul (schema le prinde separat)
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+
     def _sig(p: dict[str, Any]) -> tuple:
         rs = p.get("reviewSummary") or {}
         return (
-            round(float(p.get("salePrice") or p.get("price") or 0), 2),
-            round(float(p.get("rating") or 0), 2),
+            round(_num(p.get("salePrice") or p.get("price") or 0), 2),
+            round(_num(p.get("rating") or 0), 2),
             tuple(sorted(rs.get("topPros") or [])),
             tuple(sorted(rs.get("topCons") or [])),
         )

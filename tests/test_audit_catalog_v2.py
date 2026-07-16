@@ -53,7 +53,12 @@ def _fond(slug="fond-ok"):
 
 
 def _data(*products):
-    return {"categories": _cats(), "products": list(products)}
+    # brands prezent ca schema v3 (folosită de gate_violations) să valideze structural
+    return {
+        "brands": [{"slug": "velora", "name": "Velora"}, {"slug": "aria", "name": "Aria"}],
+        "categories": _cats(),
+        "products": list(products),
+    }
 
 
 def _viol(data):
@@ -258,6 +263,53 @@ def test_v3_schema_validates_per_category():
     bad = _fond()
     del bad["attributes"]["finish"]
     assert list(validator.iter_errors({**base, "products": [bad]}))  # fond fără finish → invalid
+    # machiaj color (mascara) cere finish — aliniat cu audit R10
+    mascara = {
+        "slug": "m",
+        "name": "Velora Mascara",
+        "brandSlug": "velora",
+        "primaryCategorySlug": "mascara",
+        "price": 30,
+        "attributes": {"best_for": "volum", "texture": "lichid"},  # fără finish
+    }
+    assert list(validator.iter_errors({**base, "products": [mascara]}))
+    # GTIN malformat (cratime) respins de pattern-ul numeric
+    gbad = _fond()
+    gbad["variants"][0]["gtin"] = "4006-3813-3393-1"
+    assert list(validator.iter_errors({**base, "products": [gbad]}))
+    # suitable_for necanonic respins de enum
+    sbad = _fond()
+    sbad["attributes"]["suitable_for"] = ["ten gras"]
+    assert list(validator.iter_errors({**base, "products": [sbad]}))
+
+
+# --- suitable_for canonic + poarta include schema ---------------------------------------------
+
+
+def test_r1_suitable_for_non_canonical():
+    p = _fond()
+    p["attributes"]["suitable_for"] = ["ten gras"]  # text RO, nu cheie canonică
+    assert _viol(_data(p)).get("canonical_enums")
+
+
+def test_gate_blocks_schema_invalid_data():
+    # Produs care trece REGULILE dar e invalid STRUCTURAL (price string) → poarta îl blochează
+    # prin validarea de schemă (nu doar prin reguli).
+    data = {
+        "brands": [{"slug": "velora", "name": "Velora"}],
+        "categories": _cats(),
+        "products": [
+            {
+                "slug": "p",
+                "name": "Velora Fond de ten",
+                "brandSlug": "velora",
+                "primaryCategorySlug": "fond-de-ten",
+                "price": "gratis",  # invalid: schema cere number
+                "attributes": {"finish": "matte", "coverage": "full", "concerns": ["oily"]},
+            }
+        ],
+    }
+    assert gate_violations(data)  # blocat de schema, chiar dacă regulile ar trece
 
 
 # --- GS1 checksum ------------------------------------------------------------------------------
