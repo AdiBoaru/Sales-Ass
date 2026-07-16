@@ -238,13 +238,18 @@ async def main() -> int:
     data = json.loads(DATA.read_text(encoding="utf-8"))
 
     # === PRE-FLIGHT GATE (NX-168a): audit static ÎNAINTE de orice scriere ===
-    results = audit(data)
-    total = sum(len(v) for v in results.values())
+    # NX-168d: auditul întoarce {violations, warnings} → seed-ul numără DOAR violations
+    # (warnings = negații/ambiguu, NU blochează). Poarta rămâne pe contract="v2".
+    results = audit(data, contract="v2")
+    violations = results["violations"]
+    total = sum(len(v) for v in violations.values())
     if total:
-        print(f"✗ AUDIT PICAT — {total} violări; NU seedez. Rulează scripts/audit_catalog_v2.py.")
-        for key, viol in results.items():
-            for line in viol[:3]:
-                print(f"    [{key}] {line}")
+        print(
+            f"✗ AUDIT PICAT — {total} violations; NU seedez. Rulează scripts/audit_catalog_v2.py."
+        )
+        for key, viol in violations.items():
+            for entry in viol[:3]:
+                print(f"    [{key}] {entry['message']}")
         return 1
     print(f"✓ audit static curat ({len(data['products'])} produse) — pornesc seed-ul\n")
 

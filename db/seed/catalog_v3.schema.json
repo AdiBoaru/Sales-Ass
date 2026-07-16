@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nativxtech.com/schema/catalog_v3.json",
+  "title": "Nativx Demo Catalog v3 — Product Recommendation Contract",
+  "description": "NX-168d: contract v3 orientat pe recomandare. SEPARAT de catalog_v2.schema.json (v2 rămâne intact, folosit de seed pe contract=v2). Atributele canonice sunt exact cheile citite de engine; câmpurile noi (suitable_for/not_recommended_for/texture/usage/routine_step/best_for/badges/claim_provenance) fac botul să recomande/contraindice/compare din SEMNALE, nu proză. Validarea structurală + enum e aici; regulile semantice (R7-R13: contradicții, proveniență, GTIN, obligatorii per-categorie) le impune scripts/audit_catalog_v2.py --contract v3.",
+  "type": "object",
+  "required": ["brands", "categories", "products"],
+  "properties": {
+    "brands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slug", "name"],
+        "properties": {
+          "slug": { "$ref": "#/$defs/slug" },
+          "name": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slug", "name"],
+        "properties": {
+          "slug": { "$ref": "#/$defs/slug" },
+          "name": { "type": "string", "minLength": 1 },
+          "parentSlug": { "$ref": "#/$defs/slug" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/product" }
+    }
+  },
+  "additionalProperties": true,
+
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "kebab-case RO (păstrăm slug-uri RO pt demo — vezi NX-168)."
+    },
+    "concern": {
+      "enum": ["oily", "dry", "sensitive", "combination", "acne", "anti_aging", "hyperpigmentation", "hydration", "normal"]
+    },
+    "finish": { "enum": ["natural", "matte", "dewy", "satin"] },
+    "coverage": { "enum": ["light", "medium", "full", "buildable"] },
+    "texture": {
+      "enum": ["gel", "cremă", "fluid", "ulei", "spumă", "balsam", "pudră", "lichid", "stick", "apă", "loțiune", "unt"]
+    },
+    "routineStep": {
+      "enum": ["cleanse", "tone", "treat", "moisturize", "protect", "makeup_base", "makeup_color", "finish"]
+    },
+    "usageTime": { "enum": ["morning", "evening", "daily", "occasional"] },
+    "netContent": {
+      "type": "object",
+      "required": ["value", "unit"],
+      "properties": {
+        "value": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "enum": ["ml", "l", "g", "kg", "buc"] }
+      },
+      "additionalProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "time": { "type": "array", "items": { "$ref": "#/$defs/usageTime" }, "minItems": 1 },
+        "steps": { "type": "array", "items": { "type": "string" } },
+        "frequency": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "notRecommendedFor": {
+      "type": "object",
+      "description": "Contraindicație cu SEVERITATE. hard+verificat → excludere dură (NX-170); soft → penalizare scor + atenționare. Proveniența e INLINE (nu în claim_provenance).",
+      "required": ["value", "level"],
+      "properties": {
+        "value": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string" },
+        "level": { "enum": ["hard", "soft"] },
+        "source": { "type": "string" },
+        "source_ref": { "type": "string" },
+        "verified_at": { "type": "string" }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "level": { "const": "hard" } } },
+          "then": { "required": ["source", "source_ref", "verified_at"] }
+        },
+        {
+          "if": { "properties": { "level": { "const": "soft" } } },
+          "then": { "required": ["reason"] }
+        }
+      ]
+    },
+    "claimProvenance": {
+      "type": "object",
+      "description": "Sursa unui claim verificabil. Acoperă FIECARE key_ingredient (kind=ingredient) și FIECARE badge (kind=badge). Contraindicațiile NU intră aici (proveniență inline).",
+      "required": ["kind", "value", "source", "source_ref", "verified_at"],
+      "properties": {
+        "kind": { "enum": ["ingredient", "badge", "certification"] },
+        "value": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "source_ref": { "type": "string", "minLength": 1 },
+        "verified_at": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "variant": {
+      "type": "object",
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "description": "Nuanță/mărime reală (ex. 'Warm Beige 03')." },
+        "sku": { "type": "string" },
+        "gtin": { "type": "string", "description": "GTIN-8/12/13/14; checksum GS1 validat de audit R9." },
+        "price": { "type": "number", "exclusiveMinimum": 0 },
+        "salePrice": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "stock": { "type": "integer", "minimum": 0 },
+        "colorHex": { "type": ["string", "null"], "pattern": "^#?[0-9a-fA-F]{6}$" },
+        "netContent": { "$ref": "#/$defs/netContent" },
+        "image": { "type": "string" },
+        "attributes": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Fapte canonice v3. Enum-urile sunt validate aici; obligatoriile per-categorie le impune schema product (if/then) + audit R10.",
+      "properties": {
+        "concerns": { "type": "array", "items": { "$ref": "#/$defs/concern" }, "minItems": 1 },
+        "suitable_for": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "not_recommended_for": { "type": "array", "items": { "$ref": "#/$defs/notRecommendedFor" } },
+        "finish": { "$ref": "#/$defs/finish" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "texture": { "$ref": "#/$defs/texture" },
+        "usage": { "$ref": "#/$defs/usage" },
+        "routine_step": { "$ref": "#/$defs/routineStep" },
+        "key_ingredients": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "key_benefit": { "type": "string", "minLength": 1 },
+        "best_for": { "type": "string", "minLength": 1 },
+        "differentiators": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "badges": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "claim_provenance": { "type": "array", "items": { "$ref": "#/$defs/claimProvenance" } },
+        "net_content": { "$ref": "#/$defs/netContent" },
+        "gtin": { "type": "string" },
+        "skin_type": { "type": "string" },
+        "hair_type": { "type": "string" },
+        "fragrance_free": { "type": "boolean" },
+        "spf": { "type": "integer", "minimum": 0 },
+        "schema_version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "product": {
+      "type": "object",
+      "required": ["slug", "name", "brandSlug", "primaryCategorySlug", "price", "attributes"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 3 },
+        "brandSlug": { "$ref": "#/$defs/slug" },
+        "primaryCategorySlug": { "$ref": "#/$defs/slug" },
+        "categorySlugs": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+        "shortDescription": { "type": "string" },
+        "description": { "type": "string" },
+        "ai_summary": { "type": "string" },
+        "currency": { "type": "string", "enum": ["RON"] },
+        "price": { "type": "number", "exclusiveMinimum": 0 },
+        "salePrice": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "rating": { "type": "number", "minimum": 0, "maximum": 5 },
+        "reviewCount": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "enum": ["active", "archived", "draft"] },
+        "attributes": { "$ref": "#/$defs/attributes" },
+        "variants": { "type": "array", "items": { "$ref": "#/$defs/variant" } },
+        "reviewSummary": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "topPros": { "type": "array", "items": { "type": "string" } },
+            "topCons": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "images": { "type": "array" }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "description": "best_for e universal pt produsele active (motiv de recomandare intrinsec).",
+          "if": {
+            "not": { "properties": { "status": { "enum": ["archived", "draft"] } }, "required": ["status"] }
+          },
+          "then": { "properties": { "attributes": { "required": ["best_for"] } } }
+        },
+        {
+          "description": "fond/BB-CC: finish+coverage+suitable_for+texture.",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["fond-de-ten", "creme-bb-si-cc"] } } },
+          "then": {
+            "properties": {
+              "attributes": { "required": ["finish", "coverage", "suitable_for", "texture"] }
+            }
+          }
+        },
+        {
+          "description": "anticearcan: coverage.",
+          "if": { "properties": { "primaryCategorySlug": { "const": "anticearcan" } } },
+          "then": { "properties": { "attributes": { "required": ["coverage"] } } }
+        },
+        {
+          "description": "accesorii (pensule/bureți): key_benefit+differentiators; NU cer ingrediente.",
+          "if": { "properties": { "primaryCategorySlug": { "const": "pensule-si-bureti-de-machiaj" } } },
+          "then": { "properties": { "attributes": { "required": ["key_benefit", "differentiators"] } } }
+        },
+        {
+          "description": "skincare (frunze uzuale): concerns+texture+usage+key_ingredients.",
+          "if": { "properties": { "primaryCategorySlug": { "enum": ["seruri-pentru-ten", "creme-hidratante", "creme-de-ochi", "tratament-local"] } } },
+          "then": {
+            "properties": {
+              "attributes": { "required": ["concerns", "texture", "usage", "key_ingredients"] }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
