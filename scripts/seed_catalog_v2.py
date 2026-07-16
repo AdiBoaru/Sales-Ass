@@ -30,9 +30,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
-    _validate_schema,
-    audit,
     build_roots,
+    evaluate,
 )
 
 # NB: importul DB (`src.db.connection`) + politica asyncio Windows sunt LAZY (în `main()` /
@@ -62,17 +61,10 @@ def _placeholder_image(name: str, root: str) -> str:
 
 
 def gate_violations(data: dict, contract: str = "v2") -> list[dict]:
-    """Poarta pre-flight a seed-ului: lista PLATĂ de blocaje = erori de SCHEMĂ (structural) +
-    `violations` de reguli. `warnings` excluse STRUCTURAL (citim DOAR `['violations']`). Include
-    schema ca date invalide structural să NU treacă seed-ul. Sursă UNICĂ folosită de `main()` ȘI
-    de teste — ca testul porții să exercite codul REAL, nu o formulă duplicată (NX-168d)."""
-    schema_errs = [
-        {"message": f"schema: {e}", "product_slugs": []} for e in _validate_schema(data, contract)
-    ]
-    if schema_errs:
-        return schema_errs  # SCHEMA-FIRST: date invalide structural → nu rulăm regulile (pot
-        # crăpa pe tipuri greșite, ex. price=text la conversia float)
-    violations = audit(data, contract=contract)["violations"]
+    """Poarta pre-flight a seed-ului: lista PLATĂ de blocaje (SCHEMĂ + reguli), din `evaluate()`
+    (sursă UNICĂ, partajată cu backfill-ul NX-171c). `warnings` excluse STRUCTURAL (citim DOAR
+    `['violations']`). Exercitat direct de teste — codul REAL, nu o formulă duplicată (NX-168d)."""
+    violations = evaluate(data, contract=contract)["violations"]
     return [entry for viol in violations.values() for entry in viol]
 
 

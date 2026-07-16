@@ -52,9 +52,13 @@ CANONICAL_CONCERNS = frozenset(
 )
 CANONICAL_FINISH = frozenset({"natural", "matte", "dewy", "satin"})
 CANONICAL_COVERAGE = frozenset({"light", "medium", "full", "buildable"})
-# suitable_for = „pentru cine" → reutilizează vocabularul concerns (include tipurile de ten:
-# oily/dry/sensitive/combination/normal). Trebuie CANONIC ca filtrele botului să se lege.
-CANONICAL_SUITABLE_FOR = CANONICAL_CONCERNS
+# suitable_for = „pentru cine" → chei CANONICE: concerns ∪ tipuri de ten ∪ tipuri de păr. Trebuie
+# canonic ca filtrele botului să se lege (nu text liber). Extensibil per-vertical (DomainPack).
+CANONICAL_SKIN_TYPES = frozenset({"oily", "dry", "sensitive", "combination", "normal", "mature"})
+CANONICAL_HAIR_TYPES = frozenset(
+    {"dry", "oily", "normal", "damaged", "colored", "curly", "fine", "thick", "frizzy"}
+)
+CANONICAL_SUITABLE_FOR = CANONICAL_CONCERNS | CANONICAL_SKIN_TYPES | CANONICAL_HAIR_TYPES
 
 # atribute obligatorii per categorie (frunză) / per root-branch. Contract, nu wordlist NLP.
 REQUIRED_ATTRS_BY_SLUG: dict[str, set[str]] = {
@@ -709,9 +713,10 @@ def audit(data: dict[str, Any], contract: str = "v2") -> dict[str, dict[str, lis
     return {"violations": violations, "warnings": warnings}
 
 
-def _validate_schema(data: dict[str, Any], contract: str = "v2") -> list[str]:
-    """Validare structurală opțională contra schemei versiunii (dacă `jsonschema` e instalat).
-    `v2`→catalog_v2.schema.json, `v3`→catalog_v3.schema.json. Absent → skip."""
+def _schema_findings(data: dict[str, Any], contract: str = "v2") -> list[dict[str, Any]]:
+    """Erori de schemă ca findings machine-readable `{message, product_slugs}`. `product_slugs` e
+    derivat din `error.path` (când indică în `products[i]`) → downstream (NX-171c) poate marca EXACT
+    produsul invalid `draft`. `jsonschema` absent / schema lipsă → [] (soft dep)."""
     try:
         import jsonschema  # noqa: PLC0415 — soft dep, doar dacă e prezent
     except ImportError:
@@ -721,7 +726,49 @@ def _validate_schema(data: dict[str, Any], contract: str = "v2") -> list[str]:
         return []
     schema = json.loads(path.read_text(encoding="utf-8"))
     validator = jsonschema.Draft202012Validator(schema)
-    return [f"{'/'.join(map(str, e.path))}: {e.message}" for e in validator.iter_errors(data)][:20]
+    products = data.get("products") or []
+    out: list[dict[str, Any]] = []
+    for e in validator.iter_errors(data):
+        p = list(e.path)
+        slugs: list[str] = []
+        if (
+            len(p) >= 2
+            and p[0] == "products"
+            and isinstance(p[1], int)
+            and 0 <= p[1] < len(products)
+        ):
+            s = products[p[1]].get("slug")
+            if s:
+                slugs = [s]
+        out.append(
+            {"message": f"schema {'/'.join(map(str, p))}: {e.message}", "product_slugs": slugs}
+        )
+    return out[:50]
+
+
+def _validate_schema(data: dict[str, Any], contract: str = "v2") -> list[str]:
+    """Mesajele de schemă (pt afișare CLI). Vezi `_schema_findings` pt varianta machine-readable."""
+    return [f["message"] for f in _schema_findings(data, contract)]
+
+
+def evaluate(
+    data: dict[str, Any], contract: str = "v2"
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Audit COMPLET = SCHEMĂ (structural) + REGULI, în shape-ul `{violations, warnings}`. SURSĂ
+    UNICĂ pt poarta seed-ului ȘI backfill-ul NX-171c. Schema-first: dacă schema pică, NU rulăm
+    regulile (pot crăpa pe tipuri greșite) — erorile de schemă poartă `product_slugs` (mapabile).
+    Altfel rulăm regulile normal. Cheia `schema` apare mereu în ambele buckete."""
+    schema_findings = _schema_findings(data, contract)
+    if schema_findings:
+        empty = {k: [] for k in [*_ALL_KEYS, "schema"]}
+        return {
+            "violations": {**empty, "schema": schema_findings},
+            "warnings": dict(empty),
+        }
+    result = audit(data, contract=contract)
+    result["violations"]["schema"] = []
+    result["warnings"]["schema"] = []
+    return result
 
 
 def main() -> int:

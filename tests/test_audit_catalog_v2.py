@@ -6,7 +6,7 @@ Regulile v2 (R1-R6) sunt testate în test_catalog_audit.py; aici testăm DOAR v3
 import json
 from pathlib import Path
 
-from scripts.audit_catalog_v2 import _gtin_valid, audit
+from scripts.audit_catalog_v2 import _gtin_valid, audit, evaluate
 from scripts.seed_catalog_v2 import gate_violations
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -290,6 +290,30 @@ def test_r1_suitable_for_non_canonical():
     p = _fond()
     p["attributes"]["suitable_for"] = ["ten gras"]  # text RO, nu cheie canonică
     assert _viol(_data(p)).get("canonical_enums")
+
+
+def test_suitable_for_accepts_skin_and_hair_types():
+    # tip de păr canonic („damaged") acceptat de R1 — nu doar vocabularul concerns
+    p = _fond()
+    p["attributes"]["suitable_for"] = ["damaged"]
+    assert not _viol(_data(p)).get("canonical_enums")
+
+
+def test_evaluate_maps_schema_error_to_product():
+    # evaluate() (schema+reguli, reutilizabil de NX-171c) → eroarea de schemă poartă product_slugs
+    p = _fond("fond-x")
+    del p["attributes"]["finish"]  # fond fără finish → invalid structural
+    res = evaluate(_data(p), contract="v3")
+    schema_v = res["violations"]["schema"]
+    assert schema_v
+    assert any("fond-x" in f["product_slugs"] for f in schema_v)
+
+
+def test_evaluate_clean_runs_rules():
+    # catalog schema-valid → evaluate rulează regulile; schema=[] ; fond complet → 0 violations
+    res = evaluate(_data(_fond()), contract="v3")
+    assert res["violations"]["schema"] == []
+    assert sum(len(v) for v in res["violations"].values()) == 0
 
 
 def test_gate_blocks_schema_invalid_data():
