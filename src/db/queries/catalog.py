@@ -145,6 +145,22 @@ def _order_clause(sort_mode: str, *, qvec_ph: str | None = None) -> str:
     return f" order by {_SHRUNK_RATING} desc, {_EFFECTIVE_PRICE} asc, p.id"
 
 
+def _content_status_pred(business_id_ph: str = "$1") -> str | None:
+    """NX-171c: predicat quality-gate pentru read-path (discovery). Întoarce `None` (fără filtru)
+    când kill-switch-ul GLOBAL e OFF. Altfel, filtru PER-TENANT: arată doar 'published' DACĂ
+    tenantul a optat (`businesses.settings->>'content_status_filter'`), altfel catalog integral
+    (fără outage). Sub-query-ul scalar e NECORELAT (constant $1) → evaluat O DATĂ ca initplan, zero
+    cost per-rând. NULL/absent setting → `false` → filtru inactiv. `business_id_ph` = placeholder-ul
+    lui business_id în query-ul apelant (mereu `$1` în funcțiile de catalog)."""
+    if not get_settings().content_status_filter_enabled:
+        return None
+    return (
+        "(p.content_status = 'published' or coalesce("
+        "(select (settings->>'content_status_filter')::boolean from businesses "
+        f"where id = {business_id_ph}), false) = false)"
+    )
+
+
 # Câmpuri per produs (CLAUDE.md): id, name, brand, price, url, ai_summary, stock,
 # availability + image (prima poză, pentru cardurile de produs — W1).
 _SELECT = f"""
@@ -299,6 +315,8 @@ async def search_products(
         conds.append("p.availability in ('in_stock', 'low_stock')")
     if query_text:
         conds.append(f"p.name ilike {placeholder(f'%{query_text}%')}")
+    if cs := _content_status_pred():  # NX-171c: doar 'published' (per-tenant, gated)
+        conds.append(cs)
 
     sql = (
         _SELECT
@@ -360,6 +378,8 @@ async def search_products_lexical(
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
+    if cs := _content_status_pred():  # NX-171c: doar 'published' (per-tenant, gated)
+        conds.append(cs)
 
     if sort_mode == "relevance":
         rank = (
@@ -530,6 +550,7 @@ async def search_cheaper_than(
     if not reference_ids:
         return []
     limit = min(limit, 6)
+    cs = _content_status_pred()  # NX-171c: doar 'published' (per-tenant, gated)
     sql = (
         _SELECT
         + " where p.business_id = $1 and p.status = 'active'"
@@ -539,6 +560,7 @@ async def search_cheaper_than(
         + "   where business_id = $1 and id = any($2::uuid[]) and primary_category_id is not null)"
         + " and p.id <> all($2::uuid[])"  # exclude produsele AFIȘATE: un produs în reducere nu e
         + f" and {_EFFECTIVE_PRICE} < $3"  # „mai ieftin decât el însuși" → altfel bucla pe același
+        + (f" and {cs}" if cs else "")
         + f" order by {_EFFECTIVE_PRICE} asc, {_SHRUNK_RATING} desc, p.id"
         + " limit $4"
     )
@@ -556,20 +578,71 @@ async def get_complementary_products(
 ) -> list[dict[str, Any]]:
     """Produse COMPLEMENTARE produsului `anchor_id` (cross-sell „merge bine cu" / rutină, #7b).
 
-    Generic pe vertical (NU doar beauty): produse din ACELAȘI brand (gama/rutina, ca iZi: contur
-    ochi + cremă din aceeași gamă) SAU care împart un `concern` cu ancora, dar dintr-o categorie
-    DIFERITĂ (complement, NU substitut — alt ser nu „merge bine cu" un ser). Doar CUMPĂRABILE (în
-    stoc), excluzând ancora + ce e deja în coș (`exclude_ids`). Same-brand întâi, apoi rating shrunk
-    (cold-start safe). Gol = niciun semnal complementar (→ fără cross-sell, flux normal).
+    NX-171b: **relations-first** — citește relații EXPLICITE curate din `product_relations`
+    (`complement`/`routine_next`/`accessory`), nu heuristica same-brand/concern. Doar CUMPĂRABILE
+    (în stoc), excluzând ancora + coșul (`exclude_ids`), ordonate pe tip (rutina întâi) + poziția
+    curată. Când ancora n-are NICIO relație (sau kill-switch `relations_first_enabled` OFF) → cade
+    pe heuristica veche (`_complementary_heuristic`, byte-identic). Gol = niciun semnal (flux ok).
     `business_id = $1` (izolare; RLS plasă). Hard cap 6."""
     limit = min(limit, 6)
     exclude = list(dict.fromkeys([anchor_id, *(exclude_ids or [])]))
+    if get_settings().relations_first_enabled:
+        rows = await _complementary_from_relations(conn, business_id, anchor_id, exclude, limit)
+        if rows:
+            return rows
+    return await _complementary_heuristic(conn, business_id, anchor_id, exclude, limit)
+
+
+async def _complementary_from_relations(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_id: str,
+    exclude: list[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """NX-171b: complementarele din `product_relations`. Agregă la UN rând per produs-înrudit
+    (`min(prioritate)` peste kind-uri: routine_next < complement < accessory) → fără duplicat când
+    un produs e legat prin >1 kind. Filtre de cumpărabilitate + published (per-tenant). `$1` =
+    business_id (folosit ȘI de predicatul content_status)."""
+    cs = _content_status_pred()
+    sql = (
+        _SELECT
+        + " join (select related_id,"
+        + "          min(case kind when 'routine_next' then 0 when 'complement' then 1 else 2 end)"
+        + "            as prio,"
+        + "          min(position) as pos"
+        + "        from product_relations"
+        + "        where business_id = $1 and product_id = $2"
+        + "          and kind in ('complement', 'routine_next', 'accessory')"
+        + "        group by related_id) pr on pr.related_id = p.id"
+        + " where p.business_id = $1 and p.status = 'active'"
+        + " and p.availability in ('in_stock', 'low_stock')"
+        + " and p.id <> all($3::uuid[])"
+        + (f" and {cs}" if cs else "")
+        + f" order by pr.prio, pr.pos, {_SHRUNK_RATING} desc, p.id"
+        + " limit $4"
+    )
+    rows = await conn.fetch(sql, business_id, anchor_id, exclude, limit)
+    return [_row_to_product(r) for r in rows]
+
+
+async def _complementary_heuristic(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_id: str,
+    exclude: list[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Fallback heuristic (pre-171b): produse din ACELAȘI brand SAU care împart un `concern` cu
+    ancora, dar dintr-o categorie DIFERITĂ (complement, NU substitut). Same-brand întâi, apoi rating
+    shrunk. Folosit când ancora n-are relații explicite sau kill-switch-ul e OFF."""
     same_brand = "(select brand_id from products where business_id = $1 and id = $2)"
     # concern-urile ancorei ca text[] (gol → '{}' → fără overlap, cade pe same-brand). `?|` oricare.
     anchor_concerns = (
         "coalesce((select array(select jsonb_array_elements_text(pa.attributes->'concerns'))"
         "          from products pa where pa.business_id = $1 and pa.id = $2), '{}')::text[]"
     )
+    cs = _content_status_pred()
     sql = (
         _SELECT
         + " where p.business_id = $1 and p.status = 'active'"
@@ -579,6 +652,7 @@ async def get_complementary_products(
         + " and p.primary_category_id is distinct from"
         + "     (select primary_category_id from products where business_id = $1 and id = $2)"
         + f" and (p.brand_id = {same_brand} or (p.attributes->'concerns') ?| {anchor_concerns})"
+        + (f" and {cs}" if cs else "")
         + f" order by (p.brand_id = {same_brand}) desc nulls last, {_SHRUNK_RATING} desc, p.id"
         + " limit $4"
     )
@@ -710,13 +784,22 @@ async def search_products_semantic(
         conds.append(_variant_label_clause(variant_label, placeholder))
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
+    if cs := _content_status_pred():  # NX-171c: doar 'published' (per-tenant, gated)
+        conds.append(cs)
 
+    # NX-171d: embeddings versionate (PK compus product_id, doc_type, model). Join-ul TREBUIE să
+    # filtreze doc_type + model activ, altfel >1 rând/produs → produs duplicat în rezultate. +
+    # `pe.business_id = p.business_id` (P7: un rând embedding cu business_id greșit nu scapă).
+    emb_doc = placeholder("product")
+    emb_model = placeholder(get_settings().model_embed)
     # Injectează coloana distanței vectoriale (cosine) în SELECT — semnal de calitate pt emit.
     cos_col = f"        (pe.embedding <=> {qvec_ph}::vector)::float8 as cosine_distance,\n"
     select_with_cos = _SELECT.replace("    select\n", "    select\n" + cos_col, 1)
     sql = (
         select_with_cos
         + " join product_embeddings pe on pe.product_id = p.id"
+        + f"   and pe.business_id = p.business_id and pe.doc_type = {emb_doc}"
+        + f"   and pe.model = {emb_model}"
         + " where "
         + " and ".join(conds)
         + _order_clause(sort_mode, qvec_ph=qvec_ph)

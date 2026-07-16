@@ -331,11 +331,19 @@ create table products (
   attributes    jsonb not null default '{}'::jsonb,
   seo           jsonb not null default '{}'::jsonb,
   product_url   text,                          -- linkul real din magazin (validatorul îl verifică)
+  -- NX-171c: quality-gate la nivel de DB. DOAR 'published' e servit clientului (filtru read-path,
+  -- flag per-tenant default off). Nullable → NOT NULL după backfill (job, nu SQL). Vezi migrarea 028.
+  content_status text default 'draft'
+                check (content_status is null or content_status in
+                       ('draft','reviewed','published','rejected')),
+  schema_version integer,                       -- versiunea contractului de conținut (v3 = 3)
+  verified_at    timestamptz,                   -- când a fost promovat la 'published'
   synced_at     timestamptz,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   unique (business_id, slug),
-  unique (business_id, external_id)
+  unique (business_id, external_id),
+  unique (business_id, id)                       -- NX-171b: target de FK compus (product_relations)
 );
 create index idx_products_business_status on products(business_id, status);
 create index idx_products_business_cat on products(business_id, primary_category_id);
@@ -346,13 +354,17 @@ create trigger trg_products_upd before update on products
 
 -- embeddings separate de products: re-embed fără lock pe tabelul fierbinte,
 -- și poți ține mai multe modele/versiuni în paralel
+-- NX-171d: PK COMPUS (product_id, doc_type, model) → versiuni paralele (produs × tip doc × model).
+-- Read-path-ul filtrează doc_type + model activ (altfel join naiv pe product_id dublează rezultatele).
 create table product_embeddings (
-  product_id  uuid primary key references products(id) on delete cascade,
+  product_id  uuid not null references products(id) on delete cascade,
   business_id uuid not null,
   model       text not null,
+  doc_type    text not null default 'product', -- 'product' | 'review' | 'usage' | ...
   embedding   vector(1536) not null,
   content_hash text not null,                  -- re-embed doar dacă s-a schimbat ai_summary
-  updated_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now(),
+  primary key (product_id, doc_type, model)
 );
 create index idx_product_emb_hnsw on product_embeddings
   using hnsw (embedding vector_cosine_ops);
@@ -409,6 +421,26 @@ create table product_variants (
 create index idx_variants_product on product_variants(product_id);
 create trigger trg_variants_upd before update on product_variants
   for each row execute function set_updated_at();
+
+-- NX-171b: relații explicite curate între produse (rutină/complement/substitut/accesoriu),
+-- înlocuind heuristica same-brand/concern. Integritate de tenant DECLARATIVĂ prin FK COMPUS:
+-- ambele capete pe același business_id → relația cross-tenant e structural imposibilă. Vezi migr. 027.
+create table product_relations (
+  id           uuid primary key default gen_random_uuid(),
+  business_id  uuid not null references businesses(id) on delete cascade,
+  product_id   uuid not null,
+  related_id   uuid not null,
+  kind         text not null
+               check (kind in ('substitute','complement','accessory','routine_next')),
+  position     integer not null default 0 check (position >= 0),
+  created_at   timestamptz not null default now(),
+  unique (business_id, product_id, related_id, kind),   -- fără relații duplicate
+  check (product_id <> related_id),                     -- fără self-relation
+  foreign key (business_id, product_id) references products (business_id, id) on delete cascade,
+  foreign key (business_id, related_id) references products (business_id, id) on delete cascade
+);
+create index product_relations_anchor_idx
+  on product_relations (business_id, product_id, kind, position);
 
 create table product_sections (
   id          uuid primary key default gen_random_uuid(),

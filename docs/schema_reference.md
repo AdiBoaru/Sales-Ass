@@ -31,9 +31,10 @@
 | (nou) | `message_status_events` | delivered/read/failed de la provider |
 | (nou) | `conversation_summaries` | summarizer conversații lungi |
 | `catalog.taxonomy` | — | **nu există**; folosește `categories` + `intent_aliases` (vezi Decizii) |
-| `catalog.products` | `products` | `price`/`sale_price` (nu `min_price`), `availability`, `ai_summary` |
-| `catalog.product_embeddings` | `product_embeddings` | HNSW cosine, `content_hash` |
+| `catalog.products` | `products` | `price`/`sale_price` (nu `min_price`), `availability`, `ai_summary`, + NX-171c: `content_status` (draft/reviewed/published/rejected — doar published servit, flag per-tenant), `schema_version`, `verified_at` |
+| `catalog.product_embeddings` | `product_embeddings` | HNSW cosine, `content_hash`, + NX-171d: PK COMPUS `(product_id, doc_type, model)` — versiuni paralele; read-path filtrează `doc_type`+`model` activ (anti-duplicate) |
 | `catalog.product_variants` | `product_variants` | `label`, `sku`, `price`, `stock`, + NX-171a: `gtin`, `net_content_value`, `net_content_unit`, `image_url`, `price_per_unit` (generated: preț/100ml ori /100g; `buc`→NULL) |
+| (nou) | `product_relations` | NX-171b: relații explicite (`substitute`/`complement`/`accessory`/`routine_next`); integritate tenant prin FK compus (cross-tenant imposibil); citit de `get_complementary_products` |
 | `catalog.review_summaries` | `product_review_summaries` | `top_pros`/`top_cons`, `sentiment` |
 | `catalog.faq` | `faqs` | `locale`, `embedding` direct pe rând |
 | `catalog.faq_aliases` | `intent_aliases` | `phrase_norm`, `target_kind`, `status` |
