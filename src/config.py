@@ -398,6 +398,11 @@ class Settings(BaseSettings):
     catalog_projection_v2_enabled: bool = Field(
         default=True, validation_alias="CATALOG_PROJECTION_V2_ENABLED"
     )
+    # NX-170: reason_codes (concern/budget/ingredient_match) + gate `not_recommended_for` (hard
+    # exclude / soft atenționare) la retrieval. OFF → fără reason_codes/excludere (byte-identic).
+    catalog_reason_codes_enabled: bool = Field(
+        default=True, validation_alias="CATALOG_REASON_CODES_ENABLED"
+    )
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
