@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts import pdp_content  # noqa: E402 — NX-168e-2 graf PDP derivat
 from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
     build_roots,
     evaluate,
@@ -237,6 +238,64 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
             im["url"],
             im.get("alt", p["name"]),
             im.get("position", pos),
+        )
+
+    # === NX-168e-2: graf PDP derivat determinist (sections/ingredients/badges/reviews) ===
+    # Toate idempotente (șterge + reinserează pe cheile stabile). Tabele scoped prin FK products
+    # (sections/product_ingredients/product_badges NU au business_id); reviews ARE business_id.
+    await conn.execute("delete from product_sections where product_id=$1", pid)
+    for pos, sec in enumerate(pdp_content.sections(p)):
+        await conn.execute(
+            "insert into product_sections (product_id, kind, title, body, position) "
+            "values ($1,$2,$3,$4,$5)",
+            pid,
+            sec["kind"],
+            sec["title"],
+            sec["body"],
+            pos,
+        )
+    # ingrediente normalizate (upsert pe (business_id, slug)) + legături is_key
+    await conn.execute("delete from product_ingredients where product_id=$1", pid)
+    for pos, ing in enumerate(pdp_content.ingredient_list(p)):
+        ing_id = await conn.fetchval(
+            "insert into ingredients (business_id, name, slug) values ($1,$2,$3) "
+            "on conflict (business_id, slug) do update set name=excluded.name returning id",
+            DEMO_BIZ,
+            ing,
+            pdp_content.slugify(ing),
+        )
+        await conn.execute(
+            "insert into product_ingredients (product_id, ingredient_id, position, is_key) "
+            "values ($1,$2,$3,true) on conflict (product_id, ingredient_id) do update "
+            "set position=excluded.position, is_key=true",
+            pid,
+            ing_id,
+            pos,
+        )
+    # badge-uri de trust (derivate din atribute reale)
+    await conn.execute("delete from product_badges where product_id=$1", pid)
+    for label in pdp_content.badges(p):
+        await conn.execute(
+            "insert into product_badges (product_id, label) values ($1,$2)", pid, label
+        )
+    # recenzii individuale (sursă seed_demo; idempotent pe (business_id, source, external_id))
+    await conn.execute(
+        "delete from reviews where product_id=$1 and business_id=$2 and source='seed_demo'",
+        pid,
+        DEMO_BIZ,
+    )
+    for rv in pdp_content.reviews(p):
+        await conn.execute(
+            "insert into reviews "
+            "(business_id, product_id, source, external_id, author, rating, body) "
+            "values ($1,$2,'seed_demo',$3,$4,$5,$6) "
+            "on conflict (business_id, source, external_id) do nothing",
+            DEMO_BIZ,
+            pid,
+            rv["external_id"],
+            rv["author"],
+            rv["rating"],
+            rv["body"],
         )
     return pid
 
