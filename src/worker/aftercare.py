@@ -36,6 +36,7 @@ from src.db.queries.semantic_cache import upsert_entry
 from src.db.queries.summaries import get_latest_summary, insert_conversation_summary
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Event, TurnContext
+from src.safety.policy import SafetyPolicy
 from src.worker.canonicalize import canonical_keys_for
 from src.worker.limits import cost_add
 from src.worker.memory import process_facts
@@ -114,6 +115,15 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
     if not settings.cache_enabled or ctx.from_cache or reply is None or llm is None:
         return
     if not reply.cacheable:
+        return
+    # NX-173 (P0): un răspuns compus sub context de siguranță e relativ la CLIENT, nu la query —
+    # nu intră NICIODATĂ în cache-ul partajat (l-ar servi altcuiva, ori i l-ar servi lui altă dată
+    # fără gate). `enforce` pune deja `cacheable=False`; verificăm ȘI aici, explicit, fiindcă
+    # write-back-ul e ultimul pas dinaintea otrăvirii și n-are voie să depindă de un flag setat de
+    # altcineva (P0 ≠ „presupunem că upstream a marcat corect"). Vezi `stages/cache.py` (bypass
+    # la CITIRE) — perechea completă read+write.
+    if SafetyPolicy.for_turn(ctx).contexts:
+        ctx.emit("cache_write_skipped", reason="safety_context")
         return
     text = (reply.text or "").strip()
     if not 5 <= len(text) <= 4000:

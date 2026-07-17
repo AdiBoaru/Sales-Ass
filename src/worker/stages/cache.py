@@ -33,6 +33,7 @@ from src.db.queries.semantic_cache import (
     touch_hit,
 )
 from src.models import TurnContext
+from src.safety.policy import SafetyPolicy
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -103,6 +104,17 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # răspunsul altui client (alt baseline). Ambele bypass: niciodată din cache, lasă
         # turul la agent (acolo `cheaper_intent` tratează „mai ieftin" determinist).
         ctx.emit("cache_bypass", volatility=volatility)
+        return
+
+    # NX-173 (P0): context de siguranță declarat → BYPASS, aceeași logică ca `contextual`, dar
+    # miza e siguranța, nu relevanța. Cache-ul e stagiul 4: rulează ÎNAINTE de triaj/agent, deci un
+    # hit face early-exit peste TOT gate-ul de contraindicații. Găsit live: „sunt însărcinată, ce
+    # cremă antirid pot folosi?" era servit din `semantic_cache` cu `route=None` — un răspuns
+    # compus într-un tur ANTERIOR (posibil dinaintea gate-ului), refolosit la nesfârșit pentru toți
+    # clienții cu aceeași frază. Un răspuns de siguranță e relativ la CLIENT, nu la query.
+    # (Scrierea e blocată separat: `safety/compose.enforce` pune `cacheable=False`.)
+    if SafetyPolicy.for_turn(ctx).contexts:
+        ctx.emit("cache_bypass", volatility="safety_context")
         return
 
     canonical, canonical_hash = canonicalize(body)

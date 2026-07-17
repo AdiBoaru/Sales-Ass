@@ -25,6 +25,7 @@ from src.channels.base import MediaFetcherRegistry
 from src.config import get_settings
 from src.db.provider import DbProvider, static_db
 from src.models import TurnContext, TurnUsage
+from src.safety import compose as safety_compose
 
 log = logging.getLogger(__name__)
 
@@ -85,10 +86,18 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             if ctx.reply is not None or ctx.halt:
                 ctx.emit("pipeline_early_exit", stage=name)
                 if ctx.reply is not None:  # halt (tăcere) n-are reply de măsurat
+                    safety_compose.enforce(ctx)  # NX-173: vezi mai jos
                     _emit_response_shape(ctx, name)
                 break
         else:
             ctx.emit("pipeline_complete")
+        # NX-173 (P0) — contractul de siguranță se aplică pe reply-ul FINAL, aici, fiindcă runner-ul
+        # e singurul loc prin care trec TOATE căile: early-exit din orice stagiu (inclusiv
+        # `try_pre_intents`, care iese înainte de agent) și pipeline-ul complet. Pus în agent_stage
+        # ar fi ratat exact căile care au scăpat gate-ului prima dată. Idempotent + no-op fără
+        # context de siguranță. (Stagiile nu știu că sunt măsurate — nici că sunt gate-uite, P10.)
+        if ctx.reply is not None:
+            safety_compose.enforce(ctx)
     finally:
         usage.pop(token)
         latency_ms = round((perf_counter() - turn_started) * 1000, 1)

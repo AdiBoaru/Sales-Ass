@@ -16,10 +16,10 @@ HUMAN = {  # intrare scrisă de om/furnizor — fără `rule_id` → nu ne apar�
 GEN = {
     "value": "pregnancy",
     "level": "hard",
-    "reason": "retinoizi",
     "source": "editorial_policy",
     "source_ref": "ref",
     "verified_at": "2026-07-17",
+    "reviewed_by": "adi-boaru",
     "rule_id": "pregnancy-retinoids",
     "matched_on": "retinol",
 }

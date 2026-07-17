@@ -2688,6 +2688,7 @@
     "c2",
     "c3"
    ],
+   "require_safety_referral": true,
    "require_reason": true
   },
   "fixtures": {

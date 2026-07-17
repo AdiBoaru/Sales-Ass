@@ -36,6 +36,7 @@ from src.db.queries.catalog import (
     search_cheaper_than,
 )
 from src.models import RetrievalResult, TurnContext
+from src.safety.policy import SafetyPolicy
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
 
@@ -132,6 +133,10 @@ async def build_plan(
     """Faza E: shaping determinist post-loop → `ResponsePlan`. Byte-identic cu vechiul bloc din
     `agent_stage`. Ramurile care răspund direct setează `ctx.reply` și întorc `handled=True`."""
     route = ctx.route
+    # NX-173 (P0): policy-ul turului, o dată. Faza asta aduce produse din DB pe PATRU căi care nu
+    # trec prin `ToolRun` (cross-sell, superlativ pe setul afișat, „mai ieftin", rehidratare de
+    # grounding) — fiecare e gate-uită mai jos cu ACEEAȘI decizie (P3: un singur proprietar).
+    policy = SafetyPolicy.for_turn(ctx)
 
     # FAQ-first: dacă modelul a cerut chiar un lookup de comandă pe web anonim (check_order →
     # login_required), servim mesajul de login DETERMINIST. Apare DOAR acum (nu pe toată ruta), după
@@ -197,6 +202,10 @@ async def build_plan(
         complementary = await get_complementary_products(
             deps.conn, ctx.business.id, str(added["id"]), exclude_ids=exclude_ids, limit=4
         )
+        # NX-173 (P0): cross-sell-ul e un set NOU, adus direct din DB, în afara `ToolRun` → nu-l
+        # vede niciun backstop de tool. Un `cart_add` perfect sigur putea trage un complement
+        # contraindicat (review Codex).
+        complementary = policy.gate(ctx, complementary, purpose="cross_sell")[0]
         if complementary:
             ctx.retrieval = RetrievalResult(products=complementary, source="cross_sell")
             rich = await _finalize_rich(
@@ -237,6 +246,9 @@ async def build_plan(
     if attr_query:
         ids = [p.product_id for p in ctx.state.displayed_products]
         hydrated = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+        # NX-173 (P0): superlativ pe setul AFIȘAT = state vechi (posibil de dinaintea declarației).
+        # „care e cea mai bună?" nu are voie să reintroducă un retinoid afișat la turul 1.
+        hydrated = policy.gate(ctx, hydrated, purpose="attr_query")[0]
         if hydrated:
             products = _dedupe(hydrated)
         ctx.emit("attr_query", n=len(products))
@@ -258,6 +270,8 @@ async def build_plan(
         baseline = min(p.price for p in ctx.state.displayed_products)
         ref_ids = [p.product_id for p in ctx.state.displayed_products]
         cheaper = await search_cheaper_than(deps.conn, ctx.business.id, ref_ids, baseline, limit=6)
+        # NX-173 (P0): „ceva mai ieftin" e o CĂUTARE NOUĂ în DB, în afara `ToolRun` → gate propriu.
+        cheaper = policy.gate(ctx, cheaper, purpose="cheaper")[0]
         ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
         if cheaper:
             products = _dedupe(cheaper)
@@ -286,11 +300,17 @@ async def build_plan(
     ):
         ids = [p.product_id for p in ctx.state.displayed_products]
         products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+        # NX-173 (P0): plasa de grounding rehidratează state vechi → gate ca pe orice altă cale.
+        products = policy.gate(ctx, products, purpose="rehydrate")[0]
         rehydrated = True
     # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
     # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
     # setează semnalul → compose tratează ca potrivire exactă (fail-open, fără suprimare falsă).
     relevance = None if (cheaper_intent or rehydrated) else run.search_relevance
+    # NX-173 (P0) — ENFORCEMENT FINAL: orice ar fi produs căile de mai sus (inclusiv una viitoare
+    # care uită gate-ul), aici e ultimul punct înainte ca `ctx.retrieval` să alimenteze validatorul,
+    # cardurile și `displayed_products`. Idempotent: pe un set deja gate-uit nu taie nimic.
+    products = policy.gate(ctx, products, purpose="retrieval_final")[0]
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
 
     return ResponsePlan(

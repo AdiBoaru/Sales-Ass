@@ -18,9 +18,8 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
-from src.config import get_settings
 from src.models import TurnContext
-from src.safety.contraindications import contexts_for_turn, filter_products
+from src.safety.policy import SafetyPolicy
 from src.tools.base import run_tool
 
 if TYPE_CHECKING:
@@ -96,28 +95,20 @@ class ToolRun:
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
 
     def _safe_products(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """NX-173: plasa de siguranță a contraindicațiilor peste rezultatul ORICĂRUI tool.
+        """NX-173: plasa de siguranță peste rezultatul ORICĂRUI tool.
 
-        În mod normal nu taie nimic (tool-urile de catalog au filtrat deja) — de-asta blocarea AICI
-        se loghează ca `unfiltered_path`: înseamnă că o cale a scăpat gate-ului de la sursă și, deși
-        clientul e în siguranță, `llm_view`-ul acelui tool descrie un produs pe care noi tocmai
-        l-am scos → bug de reparat la sursă, nu de tolerat."""
-        if not get_settings().safety_contraindications_enabled or not products:
+        NU e protecția principală — tool-urile gate-uiesc la sursă (catalog) și refuză mutațiile
+        ÎNAINTE de scriere (comerț). Aici prindem doar o cale nouă care ar uita gate-ul; e ultimul
+        loc dinaintea lui `retrieved` → `ctx.retrieval` → validator → carduri → displayed_products.
+
+        Limita ei (de-asta nu e suficientă singură, review Codex): filtrează `products`, dar
+        `llm_view`/`links`/`state_patch` ale tool-ului au plecat deja. Un blocaj AICI = bug la
+        sursă, nu o salvare — de-aia se emite cu `purpose="unfiltered_path"`."""
+        if not products:
             return products
-        contexts = contexts_for_turn(self.ctx)
-        if not contexts:
-            return products
-        kept, blocked = filter_products(products, contexts)
-        if blocked:
-            self.ctx.emit(
-                "safety_contraindication_block",
-                path="unfiltered_path",
-                contexts=sorted(contexts),
-                blocked=len(blocked),
-                rules=sorted({b.rule_id for b in blocked}),
-                product_ids=sorted({b.product_id for b in blocked if b.product_id}),
-            )
-        return kept
+        return SafetyPolicy.for_turn(self.ctx).gate(self.ctx, products, purpose="unfiltered_path")[
+            0
+        ]
 
     async def execute(self, name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,

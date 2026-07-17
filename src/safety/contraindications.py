@@ -47,12 +47,15 @@ def _norm(s: Any) -> str:
     return "".join(c for c in d if not unicodedata.combining(c))
 
 
+class RegistryError(RuntimeError):
+    """Registrul e invalid. NU se înghite: un registru stricat = protecție absentă (vezi
+    `load_registry` — fail-CLOSED)."""
+
+
 @dataclass(frozen=True)
 class SafetyContext:
     id: str
-    label_ro: str
     patterns: tuple[str, ...]
-    advice_ro: str
 
 
 @dataclass(frozen=True)
@@ -61,20 +64,20 @@ class SafetyRule:
     contexts: frozenset[str]
     level: str
     prefixes: tuple[str, ...]
-    reason_ro: str
     source: str
     source_ref: str
     verified_at: str
+    reviewed_by: str  # IMPUS: o regulă ne-revizuită de om nu se încarcă (vezi `_parse`)
 
 
 @dataclass(frozen=True)
 class Block:
-    """Un produs respins + DE CE (grounded: regula + provenance). Fără PII."""
+    """Un produs respins + DE CE, ca REF-URI (rule_id/context_id), nu ca text. Copy-ul de client se
+    randează din chei în `messages.py` — stratul de decizie nu poartă limbă. Fără PII."""
 
     product_id: str
     context_id: str
     rule_id: str
-    reason_ro: str
     matched: str
 
 
@@ -87,43 +90,103 @@ class Registry:
         return next((c for c in self.contexts if c.id == cid), None)
 
 
+# Aprobările umane acceptate: orice ALTCEVA decât un marcaj de „încă nerevizuit". O regulă cu
+# `PENDING_HUMAN_REVIEW` NU se încarcă → nu poate fi aplicată tăcut în producție (review Codex P1).
+_UNREVIEWED = {"", "pending_human_review", "todo", "tbd", "none", "null"}
+_VALID_LEVELS = {"hard", "soft"}
+
+
+def _require(cond: bool, msg: str) -> None:
+    if not cond:
+        raise RegistryError(msg)
+
+
 def _parse(raw: dict[str, Any]) -> Registry:
-    contexts = tuple(
-        SafetyContext(
-            id=str(c["id"]),
-            label_ro=str(c.get("label_ro") or c["id"]),
-            patterns=tuple(_norm(p) for p in c.get("context_patterns") or []),
-            advice_ro=str(c.get("advice_ro") or ""),
+    """Validare STRICTĂ. Orice abatere ridică `RegistryError` — nu „sare regula" tăcut: un registru
+    parțial încărcat e mai periculos decât unul respins (crezi că ai protecție și n-o ai)."""
+    _require(isinstance(raw, dict), "registrul nu e un obiect JSON")
+    contexts: list[SafetyContext] = []
+    seen_ctx: set[str] = set()
+    for c in raw.get("contexts") or []:
+        _require(isinstance(c, dict) and bool(c.get("id")), "context fără id")
+        cid = str(c["id"])
+        _require(cid not in seen_ctx, f"context duplicat: {cid}")
+        seen_ctx.add(cid)
+        pats = tuple(_norm(p) for p in c.get("context_patterns") or [] if str(p).strip())
+        _require(bool(pats), f"context fără `context_patterns`: {cid}")
+        contexts.append(SafetyContext(id=cid, patterns=pats))
+    _require(bool(contexts), "registru fără contexte")
+
+    rules: list[SafetyRule] = []
+    seen_rule: set[str] = set()
+    for r in raw.get("rules") or []:
+        _require(isinstance(r, dict) and bool(r.get("id")), "regulă fără id")
+        rid = str(r["id"])
+        _require(rid not in seen_rule, f"regulă duplicată: {rid}")
+        seen_rule.add(rid)
+        rctx = frozenset(str(x) for x in r.get("contexts") or [])
+        _require(bool(rctx), f"regula {rid}: fără contexte")
+        unknown = rctx - seen_ctx
+        _require(not unknown, f"regula {rid}: contexte inexistente {sorted(unknown)}")
+        level = str(r.get("level") or "")
+        _require(level in _VALID_LEVELS, f"regula {rid}: level invalid {level!r}")
+        prefixes = tuple(
+            _norm(p) for p in r.get("match_ingredient_prefixes") or [] if str(p).strip()
         )
-        for c in raw.get("contexts") or []
-    )
-    rules = tuple(
-        SafetyRule(
-            id=str(r["id"]),
-            contexts=frozenset(str(x) for x in r.get("contexts") or []),
-            level=str(r.get("level") or "hard"),
-            prefixes=tuple(_norm(p) for p in r.get("match_ingredient_prefixes") or []),
-            reason_ro=str(r.get("reason_ro") or ""),
-            source=str(r.get("source") or ""),
-            source_ref=str(r.get("source_ref") or ""),
-            verified_at=str(r.get("verified_at") or ""),
+        _require(bool(prefixes), f"regula {rid}: fără matcheri")
+        # Provenance COMPLET pe orice regulă `hard` (contract v3 / NX-168d R8): o excludere dură
+        # fără sursă verificabilă e exact „inferența devenită contraindicație" pe care o interzicem.
+        for f in ("source", "source_ref", "verified_at"):
+            _require(bool(str(r.get(f) or "").strip()), f"regula {rid}: `{f}` lipsă (provenance)")
+        reviewed = str(r.get("reviewed_by") or "").strip()
+        _require(
+            reviewed.lower() not in _UNREVIEWED,
+            f"regula {rid}: `reviewed_by`={reviewed!r} — regulă NEREVIZUITĂ de om, nu se încarcă",
         )
-        for r in raw.get("rules") or []
-    )
-    return Registry(contexts=contexts, rules=rules)
+        rules.append(
+            SafetyRule(
+                id=rid,
+                contexts=rctx,
+                level=level,
+                prefixes=prefixes,
+                source=str(r["source"]),
+                source_ref=str(r["source_ref"]),
+                verified_at=str(r["verified_at"]),
+                reviewed_by=reviewed,
+            )
+        )
+    _require(bool(rules), "registru fără reguli")
+    return Registry(contexts=tuple(contexts), rules=tuple(rules))
 
 
 @lru_cache(maxsize=1)
 def load_registry() -> Registry:
-    """Registrul curat, citit o dată. Fișier lipsă/corupt → registru GOL + log de eroare: gate-ul
-    devine inert, dar pipeline-ul nu cade (P6). Absența datelor nu are voie să rupă turul."""
+    """Registrul curat, citit + VALIDAT o dată.
+
+    FAIL-CLOSED (review Codex P0): fișier lipsă/corupt/invalid → ridică `RegistryError`. Varianta
+    veche întorcea registru gol „ca să nu cadă pipeline-ul" — dar asta înseamnă exact **catalog
+    nefiltrat servit ca și cum ar fi în siguranță**, adică modul de eșec pe care îl reparăm. Pentru
+    un gate P0, absența protecției trebuie să fie ZGOMOTOASĂ, nu tăcută.
+
+    Cine cheamă decide degradarea (`SafetyPolicy.for_turn` → `unavailable` → blochează tot
+    catalogul pe un tur cu context de siguranță; turul FĂRĂ context nu e afectat)."""
     try:
-        return _parse(json.loads(_RULES_PATH.read_text(encoding="utf-8")))
-    except (OSError, ValueError, KeyError):
-        log.exception(
-            "safety: registru de contraindicații necitibil (%s) — gate INERT", _RULES_PATH
-        )
-        return Registry(contexts=(), rules=())
+        raw = json.loads(_RULES_PATH.read_text(encoding="utf-8"))
+    except OSError as e:
+        raise RegistryError(f"registru necitibil ({_RULES_PATH}): {e}") from e
+    except ValueError as e:
+        raise RegistryError(f"registru JSON invalid ({_RULES_PATH}): {e}") from e
+    return _parse(raw)
+
+
+def registry_healthy() -> tuple[bool, str]:
+    """`(ok, motiv)` — poartă de BOOT (verificată la pornirea workerului/serverului) și sondă de
+    test. Nu ridică: cine cheamă alege ce face cu un registru stricat."""
+    try:
+        reg = load_registry()
+    except RegistryError as e:
+        return False, str(e)
+    return True, f"{len(reg.rules)} regul(i), {len(reg.contexts)} context(e)"
 
 
 @lru_cache(maxsize=512)
@@ -153,13 +216,13 @@ def detect_contexts(text: str | None) -> frozenset[str]:
     return frozenset(c.id for c in load_registry().contexts if _hit(hay, c.patterns))
 
 
-def contexts_for_turn(ctx: Any) -> frozenset[str]:
-    """Contextele active în tur: mesajul CURENT + istoricul bugetat (doar mesajele CLIENTULUI —
-    ce a scris botul nu declară nimic despre client). Acoperă multi-turul „sunt însărcinată" (t1)
-    → „arată-mi un ser antirid" (t2) fără state nou.
+def detect_contexts_in_turn(ctx: Any) -> frozenset[str]:
+    """Contextele DECLARATE în acest tur: mesajul curent + istoricul bugetat (doar mesajele
+    CLIENTULUI — ce a scris botul nu declară nimic despre client).
 
-    Limită cunoscută: `history` e plafonat la 8 (P4) → o declarație mai veche se pierde.
-    Persistarea în profil = follow-up (NX-173 Riscuri)."""
+    Sursa de adevăr pentru contextul ACTIV nu e asta, ci `state.safety` (persistat) — vezi
+    `SafetyPolicy.for_turn`. Istoricul (8 mesaje, P4) e prea scurt ca invariant de producție:
+    o declarație de la turul 9 dispare. Aici doar DETECTĂM ce s-a declarat acum."""
     found: set[str] = set(detect_contexts(getattr(getattr(ctx, "message", None), "body", None)))
     for m in getattr(ctx, "history", None) or []:
         if getattr(m, "direction", None) == "inbound":
@@ -190,9 +253,7 @@ def _ingredient_text(product: dict[str, Any]) -> str:
     return " | ".join(p for p in parts if p)
 
 
-def _declared_block(
-    product: dict[str, Any], contexts: frozenset[str], reg: Registry
-) -> tuple[str, str] | None:
+def _declared_block(product: dict[str, Any], contexts: frozenset[str]) -> str | None:
     """Calea NX-170 (date): `not_recommended_for` `hard` + provenance pe un context ACTIV.
     Spre deosebire de `reason_codes.not_recommended_gate`, NU cere ca valoarea să fie un
     *concern cerut* — contextul de siguranță nu e un filtru de căutare."""
@@ -204,10 +265,7 @@ def _declared_block(
             continue
         if nrf.get("level") == "hard" and nrf.get("source") and nrf.get("verified_at"):
             cid = next((c for c in contexts if _norm(c) == val), val)
-            reason = str(nrf.get("reason") or "").strip() or (
-                f"marcat de furnizor ca nerecomandat pentru {nrf.get('value')}"
-            )
-            return cid, reason
+            return cid
     return None
 
 
@@ -217,14 +275,12 @@ def check_product(product: dict[str, Any], contexts: frozenset[str]) -> Block | 
         return None
     reg = load_registry()
     pid = str(product.get("id") or product.get("product_id") or "")
-    declared = _declared_block(product, contexts, reg)
+    declared = _declared_block(product, contexts)
     if declared:
-        cid, reason = declared
         return Block(
             product_id=pid,
-            context_id=cid,
+            context_id=declared,
             rule_id="not_recommended_for",
-            reason_ro=reason,
             matched="declared",
         )
     hay = _ingredient_text(product)
@@ -234,13 +290,7 @@ def check_product(product: dict[str, Any], contexts: frozenset[str]) -> Block | 
         m = _hit(hay, rule.prefixes)
         if m:
             cid = next(iter(sorted(rule.contexts & contexts)))
-            return Block(
-                product_id=pid,
-                context_id=cid,
-                rule_id=rule.id,
-                reason_ro=rule.reason_ro,
-                matched=m,
-            )
+            return Block(product_id=pid, context_id=cid, rule_id=rule.id, matched=m)
     return None
 
 
@@ -266,42 +316,3 @@ def has_verifiable_ingredients(product: dict[str, Any]) -> bool:
     lăsăm botul să afirme că e potrivit)."""
     a = _attrs(product)
     return any((product.get(f) or a.get(f)) for f in _INGREDIENT_FIELDS)
-
-
-def safety_note(
-    contexts: frozenset[str], products: list[dict[str, Any]], blocked: list[Block]
-) -> str | None:
-    """Nota DETERMINISTĂ pusă în `llm_view` când un context de siguranță e activ.
-
-    Face trei lucruri, toate necesare ca P0 să nu depindă de bunăvoința modelului:
-      1. spune ce s-a exclus și de ce (grounded pe registru — agentul poate fi sincer, P6);
-      2. INTERZICE claim-ul de siguranță pe ce a rămas (nu declarăm sigur ce n-am verificat);
-      3. cere trimiterea la medic/farmacist — declinare, NU sfat medical inventat.
-    """
-    if not contexts:
-        return None
-    reg = load_registry()
-    known = [c for c in (reg.context(cid) for cid in sorted(contexts)) if c is not None]
-    if not known:
-        return None
-    labels = ", ".join(c.label_ro for c in known)
-    lines = [f"(CONTEXT DE SIGURANȚĂ declarat de client: {labels}.)"]
-    if blocked:
-        why = "; ".join(sorted({b.reason_ro for b in blocked if b.reason_ro}))
-        lines.append(
-            f"(am EXCLUS determinist {len(blocked)} produs(e) din listă: {why}. "
-            f"Poți spune sincer că le-am lăsat deoparte, dar NU le numi și NU le descrie.)"
-        )
-    unverifiable = [p for p in products if not has_verifiable_ingredients(p)]
-    if unverifiable:
-        lines.append(
-            "(pentru unele produse rămase nu avem lista de ingrediente în catalog → NU afirma că "
-            "sunt potrivite/sigure în acest context.)"
-        )
-    lines.append(
-        "(REGULI DURE: nu da sfat medical, nu afirma că un produs e sigur sau periculos, nu "
-        "diagnostica. Spune că decizia o ia medicul/farmacistul. "
-        + " ".join(c.advice_ro for c in known if c.advice_ro)
-        + ")"
-    )
-    return "\n".join(lines)

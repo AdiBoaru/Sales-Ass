@@ -27,13 +27,8 @@ from src.db.queries.catalog import (
 from src.db.queries.fusion import fuse_candidates
 from src.domain.normalize import normalize
 from src.models import MAX_SEARCH_POOL, Relevance
-from src.safety.contraindications import (
-    contexts_for_turn,
-    safety_note,
-)
-from src.safety.contraindications import (
-    filter_products as safety_filter,
-)
+from src.safety.compose import model_hint as safety_model_hint
+from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
 from src.tools.reason_codes import annotate as annotate_reasons
 from src.tools.taxonomy import map_concerns
@@ -46,6 +41,14 @@ _FUSION_POOL = 50
 _NO_MORE_VIEW = (
     "(sesiune de căutare epuizată — nu mai sunt alte produse pe filtrele curente. "
     "Spune-i clientului că asta e tot ce ai pe aceste criterii; nu inventa produse.)"
+)
+
+# NX-173: ce vede modelul când gate-ul a respins produsul cerut. Scurt și COMPORTAMENTAL („nu-l
+# prezenta, oferă-te să cauți altceva") — fraza de siguranță spre client o scrie CODUL la
+# compunere (messages.py), nu modelul. Fără jargon intern, fără majuscule (review Codex).
+_SAFETY_TOOL_VIEW = (
+    "(produsul nu poate fi prezentat în contextul declarat de client. Nu-l numi, nu-i da preț, "
+    "detalii sau link. Oferă-te să cauți o alternativă.)"
 )
 
 if TYPE_CHECKING:
@@ -508,32 +511,19 @@ def _displayed_ids(ctx: TurnContext) -> set[str]:
 
 
 def _safety_gate(
-    ctx: TurnContext, products: list[dict[str, Any]]
-) -> tuple[list[dict[str, Any]], str | None]:
-    """NX-173 (P0): scoate produsele contraindicate pentru contextul declarat de client (sarcină/
-    alăptare) + întoarce nota deterministă pentru `llm_view`. Chemat de TOATE căile care scot
-    produse din catalog, ÎNAINTE de pool/sesiune/vedere → nimic exclus nu poate reapărea.
+    ctx: TurnContext, products: list[dict[str, Any]], *, purpose: str
+) -> tuple[list[dict[str, Any]], str]:
+    """NX-173 (P0): scoate produsele contraindicate pentru contextul declarat, prin `SafetyPolicy`
+    (punctul UNIC de decizie). Chemat de căile de catalog ÎNAINTE de pool/sesiune/vedere.
 
-    Kill-switch OFF ori context nedeclarat → pass-through byte-identic (zero cost pe turul normal:
-    detecția e regex pe mesaj + istoric, fără DB, fără LLM)."""
-    if not get_settings().safety_contraindications_enabled:
-        return products, None
-    contexts = contexts_for_turn(ctx)
-    if not contexts:
-        return products, None
-    kept, blocked = safety_filter(products, contexts)
-    if blocked:
-        # P12: doar ref-uri/atribute normalizate — zero text de user, zero PII. `rule_id` +
-        # `context` fac excluderea auditabilă în analytics (de ce a dispărut produsul din listă).
-        ctx.emit(
-            "safety_contraindication_block",
-            contexts=sorted(contexts),
-            blocked=len(blocked),
-            kept=len(kept),
-            rules=sorted({b.rule_id for b in blocked}),
-            product_ids=sorted({b.product_id for b in blocked if b.product_id}),
-        )
-    return kept, safety_note(contexts, kept, blocked)
+    NU mai întoarce text: nota internă de tip „EXCLUS determinist / REGULI DURE" trimisă modelului
+    era jargon intern folosit ca pseudo-copy (review Codex). Fraza de siguranță e garantată de cod
+    la compunere, o singură dată, localizată — vezi `safety/messages.py`.
+
+    Întoarce `(păstrate, hint)` — `hint` = O linie de context pentru model (ca framing-ul lui
+    comercial să fie coerent), NU copy. Fără context / kill-switch OFF → `("", pass-through)`."""
+    kept, decision = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose=purpose)
+    return kept, safety_model_hint(decision)
 
 
 def _session_filters(
@@ -596,7 +586,7 @@ async def continue_search_session(
     # NX-173 (P0): pool-ul poate fi SEMĂNAT ÎNAINTE ca clientul să declare contextul („arată-mi
     # seruri" → „…dar sunt însărcinată" → „mai arată-mi") sau de un build fără gate. Re-filtrăm la
     # servire — pool-ul stocat nu e de încredere, doar ce iese pe pagină contează.
-    products, safety_view = _safety_gate(ctx, products)
+    products, _ = _safety_gate(ctx, products, purpose="page")
     if products:
         ctx.emit(
             "search_session",
@@ -606,11 +596,10 @@ async def continue_search_session(
             served=len(products),
             unseen=len(page_ids),
         )
-        view = _brief(products, getattr(ctx.business, "domain_pack", None), ctx.language)
         return ToolResult(
             ok=True,
             products=products,
-            llm_view=f"{safety_view}\n{view}" if safety_view else view,
+            llm_view=_brief(products, getattr(ctx.business, "domain_pack", None), ctx.language),
         )
     ctx.emit(
         "search_session",
@@ -764,7 +753,7 @@ async def search_products_tool(
     # supraviețuiește turului → un produs filtrat mai târziu (ex. la `annotate_reasons`, după pool)
     # ar rămâne în `active_search.pool` și ar reapărea la „arată-mi altele". Filtrat aici, dispare
     # din pool, pagină, `llm_view`, `ctx.retrieval`, carduri și `displayed_products` deodată.
-    ranked_final, safety_view = _safety_gate(ctx, ranked_final)
+    ranked_final, safety_hint = _safety_gate(ctx, ranked_final, purpose="search")
 
     # NX-134: diversificare sortiment — reordonează pool-ul ca prima pagină să acopere scara de preț
     # + branduri (nu top-N clone). DOAR pe `relevance` (sort explicit = ordinea cerută de client,
@@ -909,11 +898,10 @@ async def search_products_tool(
         products = annotate_reasons(
             products, concerns=a.concerns, price_max=a.price_max, features=a.features
         )
-    # NX-173: nota de siguranță PRIMA în listă — e o constrângere dură asupra compunerii (fără sfat
-    # medical, fără claim de siguranță), nu o observație. Ține și când setul a rămas GOL după gate:
-    # atunci e SINGURUL lucru care iese spre model → agentul explică onest, nu tace (P6).
-    if safety_view:
-        notes.insert(0, safety_view)
+    # NX-173: O linie de context (nu copy) — modelul alege coerent („în sarcină, aș merge pe ceva
+    # simplu"), dar NU scrie avertismentul: fraza garantată o adaugă codul la compunere.
+    if safety_hint:
+        notes.insert(0, safety_hint)
     view = _brief(products, getattr(ctx.business, "domain_pack", None), ctx.language)
     if notes:
         view = "\n".join(notes) + "\n" + view
@@ -961,17 +949,9 @@ async def get_product_details_tool(
         return ToolResult(ok=False, error="not_found", llm_view="Produsul nu există în catalog.")
     # NX-173 (P0): și calea de DETALIU e o cale de afișare — „spune-mi mai multe despre X" nu are
     # voie să reintroducă produsul exclus din listă (nici cu preț/link grounded pentru validator).
-    products, safety_view = _safety_gate(ctx, products)
+    products, _ = _safety_gate(ctx, products, purpose="details")
     if not products:
-        return ToolResult(
-            ok=False,
-            error="safety_excluded",
-            llm_view=(
-                f"{safety_view}\n(NU prezenta acest produs și nu-i da detalii/preț/link. Spune "
-                "sincer că nu ți se pare potrivit de recomandat în contextul declarat și că "
-                "medicul/farmacistul e cel care decide. Poți oferi să cauți altceva.)"
-            ),
-        )
+        return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_TOOL_VIEW)
     return ToolResult(
         ok=True,
         products=products,
@@ -992,17 +972,11 @@ async def compare_products_tool(
     # Gate ÎNAINTE de pragul `need_2`: dacă din 2 produse unul e contraindicat, rezultatul corect e
     # „nu compar asta", nu o comparație tăcută pe restul (și nici `need_2`, care ar minți despre
     # cauză — vezi NX-174 pentru „vorbește de 2, afișează 1").
-    products, safety_view = _safety_gate(ctx, products)
-    if safety_view and len(products) < 2:
+    n_before = len(products)
+    products, _ = _safety_gate(ctx, products, purpose="compare")
+    if len(products) < 2 and len(products) < n_before:
         return ToolResult(
-            ok=False,
-            products=[],
-            error="safety_excluded",
-            llm_view=(
-                f"{safety_view}\n(NU compara și NU prezenta produsele excluse. Spune sincer că "
-                "unul dintre ele nu ți se pare potrivit de recomandat în contextul declarat, fără "
-                "sfat medical, și oferă-te să cauți o alternativă.)"
-            ),
+            ok=False, products=[], error="safety_excluded", llm_view=_SAFETY_TOOL_VIEW
         )
     if len(products) < 2:
         return ToolResult(
@@ -1011,9 +985,8 @@ async def compare_products_tool(
             error="need_2",
             llm_view="Am nevoie de cel puțin 2 produse existente pentru comparație.",
         )
-    view = _compare_view(products, getattr(ctx.business, "domain_pack", None), ctx.language)
     return ToolResult(
         ok=True,
         products=products,
-        llm_view=f"{safety_view}\n{view}" if safety_view else view,
+        llm_view=_compare_view(products, getattr(ctx.business, "domain_pack", None), ctx.language),
     )

@@ -29,6 +29,7 @@ from src.agent.fallbacks import (
 from src.config import get_settings
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
 from src.models import Offer, RetrievalResult, Route, TurnContext
+from src.safety.policy import SafetyPolicy
 from src.worker import compose
 
 if TYPE_CHECKING:
@@ -98,6 +99,10 @@ async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
     demo) → mesaj ONEST, NU link inventat (PP-F4). Mereu setează un reply (P6, niciodată tăcere)."""
     ids = [p.product_id for p in ctx.state.displayed_products]
     products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+    # NX-173 (P0): `displayed_products` e STATE VECHI — poate conține produse afișate ÎNAINTE ca
+    # clientul să declare contextul („arată-mi seruri" → „sunt însărcinată, dă-mi linkul"). Calea
+    # asta iese înainte de tool loop, deci backstop-ul din executor n-o vede: gate aici, ori deloc.
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="link")[0]
     ctx.retrieval = RetrievalResult(products=products, source="link_intent")
     with_url = [p for p in products if p.get("url")]
     if not with_url:
@@ -140,6 +145,12 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     n = 3 if _THREE_RE.search(query) else 2
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
     products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
+    # NX-173 (P0): ca la link — set vechi din state, cale care ocolește tool loop-ul. Dacă
+    # gate-ul taie sub 2, întoarcem False → cade pe bucla LLM, care caută FRESH (deja filtrat de
+    # policy) — nu comparăm tăcut ce a mai rămas și nu prezentăm produsul exclus.
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="compare_intent")[0]
+    if len(products) < 2:
+        return False
     # NX-167 (C): nu compara produse din ramuri INCOERENTE (root-branch diferit din
     # `categories.path`, ex. machiaj vs. par) — tabelul „fond vs. accesoriu de păr" e absurd.
     # Fail-open la `path` lipsă (produse fără root nu contează). ≥2 root-uri distincte → `return

@@ -217,13 +217,15 @@ REGULI DURE:
 # P0-safety (CONV-COMMERCE) — sfat medical/beauty = RĂSPUNDERE JURIDICĂ. Bloc TENANT-INVARIANT
 # (parte din prefixul static → nu strică prompt-caching-ul). Stratul PREVENTIV; plasa structurală
 # e validatorul (proză) + scrub-ul (bogat) pe `has_medical_claim`.
+# NX-173: contract SCURT, nu un zid de interdicții cu majuscule (review Codex — promptul urla, iar
+# ce urla nu era nici măcar garantat). Poarta reală rămâne codul: `validator.has_medical_claim`
+# respinge claim-urile medicale, iar `safety/compose.enforce` GARANTEAZĂ declinarea + trimiterea la
+# medic când clientul a declarat sarcină/alăptare. Aici rămâne doar ce ține de VOCEA răspunsului.
 _SAFETY_RULES = """
-SIGURANȚĂ (sfat medical — OBLIGATORIU): NU da sfaturi medicale. NU afirma că un produs TRATEAZĂ
-sau VINDECĂ o afecțiune (acnee, eczemă, dermatită, alergii, micoză etc.), că e „sigur în
-sarcină/alăptare", că e „fără alergeni / fără efecte adverse" sau că e „recomandat de
-medic/dermatolog". Poți descrie beneficii COSMETICE (hidratează, calmează, pentru ten uscat,
-reduce aspectul ridurilor). Pentru orice problemă de SĂNĂTATE sau întrebare despre
-sarcină/alăptare/alergii, recomandă clientului să consulte un medic/specialist."""
+Siguranță: descrie beneficii cosmetice (hidratează, calmează, reduce aspectul ridurilor), nu
+efecte medicale. Nu spune că un produs tratează o afecțiune, că e sigur în sarcină sau alăptare,
+că n-are alergeni ori că e recomandat de medici. La orice întrebare de sănătate, sarcină,
+alăptare sau alergii, spune că decizia o ia medicul sau farmacistul."""
 
 
 # NX-159 felia 3: cheile profilului de stil în ordinea de afișare + eticheta RO (blocul e INPUT de

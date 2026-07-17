@@ -25,8 +25,18 @@ from src.db.queries.commerce import (
     has_back_in_stock_sub,
     subscribe_back_in_stock,
 )
+from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
+
+# NX-173 (P0): ce vede modelul când o MUTAȚIE e refuzată de policy. Refuzul se întâmplă ÎNAINTE de
+# scriere — o filtrare de rezultat nu poate anula un rând deja scris în `checkout_links` /
+# `back_in_stock_subscriptions` / `state.cart` (review Codex). Text scurt, comportamental; fraza
+# spre client o garantează codul la compunere (src/safety/messages.py).
+_SAFETY_REFUSED_VIEW = (
+    "(nu pot adăuga/comanda acest produs în contextul declarat de client. Nu-l numi și nu-i da "
+    "preț sau link. Oferă-te să cauți o alternativă.)"
+)
 
 if TYPE_CHECKING:
     from src.models import TurnContext
@@ -122,6 +132,15 @@ async def checkout_link_tool(
             llm_view="Produsele cerute nu mai sunt în catalog.",
         )
 
+    # NX-173 (P0): poarta de MUTAȚIE — ÎNAINTE de `create_checkout_link` (scrie în DB) și de
+    # generarea url-ului. Refuzăm TOT checkout-ul dacă vreo linie e contraindicată: un checkout
+    # „parțial", tăcut, ar schimba comanda clientului fără să-i spună (mai rău ca un refuz onest).
+    policy = SafetyPolicy.for_turn(ctx)
+    d = policy.evaluate([by_id[c["product_id"]] for c in cart], purpose="checkout")
+    if d.blocked or d.unavailable:
+        policy.emit(ctx, d, purpose="checkout")
+        return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_REFUSED_VIEW)
+
     sep = "&" if "?" in base else "?"
     url = f"{base}{sep}ref={ctx.turn_id}"
     expires_at = datetime.now(UTC) + timedelta(days=get_settings().checkout_link_ttl_days)
@@ -190,6 +209,12 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
             error="variant_not_found",
             llm_view="Varianta cerută nu există; spune-mi ce mărime/nuanță dorești.",
         )
+    # NX-173 (P0): poarta de MUTAȚIE — înainte de a scrie coșul. Backstop-ul din executor filtra
+    # `result.products`, dar `state_patch["cart"]` plecase deja cu produsul contraindicat în el.
+    policy = SafetyPolicy.for_turn(ctx)
+    if not policy.allows(p, purpose="cart_add"):
+        policy.emit(ctx, policy.evaluate([p], purpose="cart_add"), purpose="cart_add")
+        return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_REFUSED_VIEW)
 
     # Coșul curent din state (ref-uri compacte, NU obiectul complet — P8). Copie → nu mutăm state.
     cart: list[dict[str, Any]] = [dict(line) for line in (ctx.state.cart or [])]
@@ -286,6 +311,13 @@ async def subscribe_back_in_stock_tool(
     if not products:
         return ToolResult(ok=False, error="not_found", llm_view="Produsul nu există în catalog.")
     p = products[0]
+    # NX-173 (P0): poarta de MUTAȚIE — abonarea scrie un rând care declanșează un mesaj PROACTIV
+    # („a revenit pe stoc") peste zile. Ar fi cea mai proastă formă a bug-ului: promovare activă a
+    # unui produs contraindicat, în afara conversației.
+    policy = SafetyPolicy.for_turn(ctx)
+    if not policy.allows(p, purpose="back_in_stock"):
+        policy.emit(ctx, policy.evaluate([p], purpose="back_in_stock"), purpose="back_in_stock")
+        return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_REFUSED_VIEW)
     if p.get("availability") == "in_stock":
         return ToolResult(
             ok=True,

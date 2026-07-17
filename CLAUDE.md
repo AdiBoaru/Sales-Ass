@@ -101,13 +101,20 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • AGENT decide mutarea de vânzare (NU routerul)
     • MAX 3 tool calls per tur (limită dură în cod)
     • tool results: max 6 produse × 8 câmpuri (nu obiecte complete)
-    • P0-safety CONTRAINDICAȚII (NX-173, src/safety/): context declarat de client (sarcină/
-      alăptare, detectat DETERMINIST din mesaj+istoric) × registru curat cu provenance
-      (db/seed/safety_rules.json) → produsele incompatibile sunt scoase din setul fuzionat
-      ÎNAINTE de pool/pagină/llm_view → nu ajung în retrieval, reply, carduri,
-      displayed_products sau active_search.pool. Backstop în ToolRun.execute (toate tool-urile).
-      Nu se bazează pe prompt; nicio inferență LLM nu devine contraindicație. Botul NU dă sfat
-      medical — declină și trimite la medic (kill-switch safety_contraindications_enabled).
+    • P0-safety CONTRAINDICAȚII (NX-173, src/safety/) — UN SINGUR punct de decizie:
+      `SafetyPolicy.for_turn(ctx).evaluate(products, purpose)` → `Decision` tipizat. Context
+      (sarcină/alăptare) detectat DETERMINIST + PERSISTAT în state.safety (istoricul de 8 e
+      prea scurt); registru CURAT cu provenance + reviewed_by (db/seed/safety_rules.json),
+      validat STRICT și FAIL-CLOSED (poartă de boot; registru stricat + context activ ⇒ nu se
+      expune nimic). Chemat de TOATE căile: search/page/details/compare, link+compare intent,
+      cross-sell/superlativ/cheaper/rehidratare, enforcement final pe ctx.retrieval, backstop
+      în ToolRun. MUTAȚIILE (cart/checkout/back-in-stock) cer `policy.allows()` ÎNAINTE de
+      scriere — un filtru de rezultat nu poate anula un rând scris. Cache-ul (stagiul 4) face
+      BYPASS pe context de siguranță (citire + scriere): un hit ar sări peste tot gate-ul.
+      COMPUNERE: codul garantează O SINGURĂ frază localizată (recunoaștere + medic/farmacist),
+      în runner, idempotent (src/safety/compose.py + messages.py); modelul scrie doar partea
+      comercială. Nicio inferență LLM nu devine contraindicație; zero sfat medical.
+      Kill-switch: safety_contraindications_enabled.
 
 [8] VALIDATOR (cod pur)
     • fiecare preț din reply există în ctx.retrieval

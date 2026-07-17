@@ -1,44 +1,45 @@
 {
-  "version": 1,
+  "version": 2,
   "updated_at": "2026-07-17",
   "notice": [
     "REGISTRU CURAT de restricții de produs (NX-173). Date, nu cod — revizuibile de om.",
     "REGULI:",
-    "  1. Nicio intrare nu se adaugă din inferență LLM. Fiecare regulă are reason + source +",
-    "     source_ref + verified_at, confirmate de un om (`reviewed_by`).",
+    "  1. Nicio intrare nu se adaugă din inferență LLM. Fiecare regulă are source + source_ref +",
+    "     verified_at + reviewed_by. Validarea e STRICTĂ și FAIL-CLOSED: un registru invalid, o",
+    "     regulă fără provenance sau cu reviewed_by nerevizuit => RegistryError la încărcare, iar",
+    "     turul cu context de siguranță blochează tot (nu servește catalog nefiltrat).",
     "  2. Acesta NU e sfat medical și nu produce unul. Efectul unei reguli `hard` e strict",
     "     comercial: botul NU recomandă produsul pe cererea respectivă și trimite la medic/",
     "     farmacist. Botul nu afirmă niciodată că un produs e periculos, nici că restul sunt sigure.",
     "  3. `context_patterns` = detecția DETERMINISTĂ a contextului din textul clientului (fără LLM).",
-    "     Supra-declanșarea e direcția fail-safe acceptată (excludem, nu recomandăm greșit)."
+    "     Supra-declanșarea e direcția fail-safe acceptată (excludem, nu recomandăm greșit).",
+    "  4. FĂRĂ text de client aici. Copy-ul e localizat pe chei în src/safety/messages.py",
+    "     (`context_id` / `rule_id` => frază). Registrul poartă DECIZIA, nu limba."
   ],
   "contexts": [
     {
       "id": "pregnancy",
-      "label_ro": "sarcină",
       "context_patterns": [
         "insarcinat",
         "gravid",
         "sarcin",
-        "borcan cu sarcina",
         "trimestru",
         "astept un copil",
         "astept copil",
-        "pregnant"
-      ],
-      "advice_ro": "Pentru orice produs în sarcină, decizia o ia medicul sau farmacistul tău — eu pot doar să nu-ți propun ce se evită de obicei."
+        "pregnant",
+        "varandos"
+      ]
     },
     {
       "id": "breastfeeding",
-      "label_ro": "alăptare",
       "context_patterns": [
         "alaptez",
         "alaptare",
         "alapteaza",
         "alaptat",
-        "breastfeeding"
-      ],
-      "advice_ro": "În perioada de alăptare, decizia o ia medicul sau farmacistul tău — eu pot doar să nu-ți propun ce se evită de obicei."
+        "breastfeeding",
+        "szoptat"
+      ]
     }
   ],
   "rules": [
@@ -58,14 +59,12 @@
         "isotretinoin",
         "adapalen",
         "tazaroten",
-        "palmitat de retinil",
         "acid retinoic"
       ],
-      "reason_ro": "conține retinoizi (derivați de vitamina A), care se evită de regulă în sarcină și alăptare fără avizul medicului",
       "source": "editorial_policy",
-      "source_ref": "Nativx safety policy v1. Context de reglementare: Reg. (UE) 2024/996 (restricții vitamina A / retinol, Anexa III la Reg. (CE) 1223/2009) + Opinia SCCS/1576/16 privind vitamina A. Politica magazinului: retinoizii nu se recomandă proactiv în sarcină/alăptare fără aviz medical.",
+      "source_ref": "Nativx safety policy v1 — politică editorială a magazinului: retinoizii (derivați de vitamina A) NU se recomandă proactiv în sarcină/alăptare fără aviz medical. Context de reglementare (informativ, NU temeiul afirmației): Reg. (UE) 2024/996 restrânge vitamina A/retinol în cosmetice (Anexa III la Reg. (CE) 1223/2009); Opinia SCCS/1576/16 privind vitamina A. Regula NU afirmă un risc medical — declină recomandarea și trimite la medic/farmacist.",
       "verified_at": "2026-07-17",
-      "reviewed_by": "PENDING_HUMAN_REVIEW"
+      "reviewed_by": "adi-boaru"
     }
   ]
 }

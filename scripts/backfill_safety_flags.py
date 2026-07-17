@@ -56,10 +56,10 @@ def _planned_entries(product: dict[str, Any]) -> list[dict[str, Any]]:
                 {
                     "value": cid,
                     "level": rule.level,
-                    "reason": rule.reason_ro,
                     "source": rule.source,
                     "source_ref": rule.source_ref,
                     "verified_at": rule.verified_at,
+                    "reviewed_by": rule.reviewed_by,
                     _GEN_KEY: rule.id,
                     "matched_on": matched,
                 }

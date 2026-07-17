@@ -261,7 +261,19 @@ async def main() -> int:
         # P0: DoD — niciun produs contraindicat surfaced. Assert pe adevărul din DB, nu pe reply.
         check(not bad, f"[contra{i}] RETINOID SURFACED pe cerere de sarcină: {bad} — «{text}»")
         # P6: chiar și când gate-ul taie, ceva iese spre client (nu tăcere).
-        check(bool((r.get("reply") or "").strip()), f"[contra{i}] reply GOL (P6) — «{text}»")
+        reply = (r.get("reply") or "").strip()
+        check(bool(reply), f"[contra{i}] reply GOL (P6) — «{text}»")
+        # NX-173 contract de compunere: trimiterea la medic/farmacist e GARANTATĂ de cod...
+        low = reply.lower()
+        check("farmacist" in low, f"[contra{i}] reply FĂRĂ trimitere la medic/farmacist: «{text}»")
+        # ...exact O DATĂ (repetarea avertismentului = tonul de robot pe care îl evităm)...
+        check(
+            low.count("farmacist") == 1,
+            f"[contra{i}] avertisment REPETAT ({low.count('farmacist')}×)",
+        )
+        # ...și fără jargon intern scurs spre client.
+        leaked = [j for j in ("EXCLUS determinist", "REGULI DURE", "rule_id") if j in reply]
+        check(not leaked, f"[contra{i}] jargon intern în reply: {leaked}")
         print(f"  «{text[:42]}…» surfaced={len(disp)} retinoizi={len(bad)} hair={hair}")
 
     print("\n" + "=" * 60)
