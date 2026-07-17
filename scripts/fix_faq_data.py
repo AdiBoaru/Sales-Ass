@@ -41,7 +41,7 @@ if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-from src.db.connection import close_pool, get_pool, tenant_conn  # noqa: E402
+from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 
@@ -71,8 +71,11 @@ async def main() -> int:
     ap.add_argument("--apply", action="store_true", help="SCRIE (fără el: dry-run)")
     args = ap.parse_args()
 
-    await get_pool()
-    async with tenant_conn(args.business) as conn:
+    # `faqs` e knowledge: `bot_runtime` (tenant_conn) are DOAR SELECT → scrierea cere ADMIN, ca
+    # `seed_faqs.py`. admin_conn bypass-ează RLS → fiecare query PĂSTREAZĂ `WHERE business_id=$1`
+    # explicit (P7, defense-in-depth).
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
         targets = await _find(conn, args.business)
         print(f"Tenant: {args.business}")
         print(f"Mod:    {'APPLY (scrie)' if args.apply else 'DRY-RUN (nu scrie)'}\n")
