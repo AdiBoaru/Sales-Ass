@@ -179,7 +179,13 @@ Cele 7 HIGH + 3 MEDIUM + LOW reconciliate în carduri:
   2 conversații în `conversations.json`): ten gras/sensibil, ingredient (niacinamidă), fără parfum,
   gramaj, utilizare, fond mat, nuanță, contraindicație, rutină, comparație, alternativă mai ieftină.
   Gate CI verde (ScriptedLLM, zero OpenAI/DB).
-- **NX-172 — felia 2 (RĂMAS):** lanțul LIVE pe cele 150 (audit static → seed `--archive-old` →
-  audit DB → re-embed → retrieval real → sim harness) + auditul off-category pe pipeline REAL.
-  Blocat de DATE: DB demo are doar 24/150 produse v2 active → cere rularea `seed_catalog_v2.py`
-  (seedează 150 + `product_relations`) + `backfill_content_status` + `embed_products` întâi.
+- **Pachet 6 (NX-172) — felia 2 (lanț LIVE) LIVRAT:** DB demo populat complet pe pipeline real —
+  `seed_catalog_v2.py --archive-old` (**150 active**, 504 legacy arhivate, **957 `product_relations`**:
+  complement 450 / routine_next 285 / substitute 222) → `backfill_content_status --activate`
+  (**150 published**, `content_status_filter=true`) → `embed_products` (**150 re-embed**,
+  `has_embeddings=True`). Audit LIVE (`scripts/nx172_live_audit.py`) **PASS**: regula 7 verde pe
+  calea reală (query makeup CU filtru de categorie → **zero produse de păr**), filtru published
+  coerent (0 active ne-published). **Finding:** pe semantic BRUT (fără categorie) un query ambiguu
+  („mascara pentru volum") scurge un șampon volumizant → **filtrul de categorie din triaj e cel care
+  impune regula 7**, nu stratul semantic. Cost re-embed: ~$0.0002 (`text-embedding-3-small`).
+- **Epic catalog v3 ÎNCHIS** (Pachete 1-6 livrate).
