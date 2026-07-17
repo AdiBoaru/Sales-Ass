@@ -185,8 +185,19 @@ def check_contract(a: Audit, scenario: str, t: Turn) -> None:
                 f"card fără câmpuri {missing}",
                 json.dumps(p, ensure_ascii=False)[:160],
             )
+    # Chips-urile sunt ETICHETE tappabile, nu propoziții: un chip lung rupe UI-ul widgetului.
+    for s in t.suggestions:
+        if len(s) > 40:
+            a.flag(
+                scenario,
+                "P1",
+                "chip prea lung (propoziție/întrebare, nu etichetă tappabilă)",
+                repr(s),
+            )
     # Enumerarea trebuie să fie în CARDURI, nu în text (contractul iZi: content = framing).
-    if len(t.products) >= 2:
+    # Excepție: pe COMPARE, lead-ul numește intenționat „cea mai accesibilă / cea mai bine cotată"
+    # (pick de comparație) — e framing, nu enumerare brută. Nu-l tratăm ca dublare.
+    if len(t.products) >= 2 and not scenario.startswith("compare"):
         listed = sum(1 for n in t.names if n[:18] in t.content)
         if listed >= 2:
             a.flag(
@@ -282,10 +293,16 @@ async def sc_routine(a: Audit, mk) -> None:
     t = await c.say("fă-mi o rutină de machiaj")
     _show(t)
     check_contract(a, "routine", t)
-    acc = [n for n in t.names if any(w in n.lower() for w in ("pensul", "burete", "aplicator"))]
-    if acc and len(acc) == len(t.names) and t.names:
+    # „Rutină" = pași de machiaj reali (fond, corector, pudră…), NU unelte. Accesoriile = pensule,
+    # bureți, aplicatoare ȘI sprayuri de fixare. TOATE cardurile unelte → gap NX-176.
+    ACC = ("pensul", "burete", "aplicator", "spray de fix", "spray fix", "set pensule")
+    acc = [n for n in t.names if any(w in n.lower() for w in ACC)]
+    if t.names and len(acc) == len(t.names):
         a.flag(
-            "routine", "P2", "«rutină» → DOAR accesorii, nicio rutină reală (NX-176)", str(t.names)
+            "routine",
+            "P2",
+            "«rutină» → DOAR accesorii/unelte, nicio rutină reală (NX-176)",
+            str(t.names),
         )
 
 

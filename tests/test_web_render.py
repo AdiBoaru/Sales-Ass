@@ -464,3 +464,36 @@ async def test_render_path_silent_when_match(monkeypatch):
         object(), "biz", "telegram", {"products": [{"x": 1}]}, "carousel", "carousel"
     )
     assert captured == []
+
+
+# --- NX-179: gardă chips web (audit conversațional) --------------------------------------------
+
+
+def test_web_chips_drops_long_and_empty_non_rich():
+    """Calea clarify (non-rich): nano poate genera „chips" care sunt întrebări lungi cu paranteze
+    („Imi poti spune ce tip de produs cauti? (ex: …)") — nu-s butoane. Le dropăm; scurtele rămân."""
+    reply = Reply(
+        text="Ce anume cauți?",
+        suggestions=[
+            "Șampon",  # etichetă bună
+            "  ",  # goală → drop
+            "Imi poti spune ce tip de produs cauti? (ex: sampon, crema)",  # întrebare lungă → drop
+            "Cremă de față",  # bună
+        ],
+    )
+    out = render_web(reply, "ro")
+    assert out["suggestions"] == ["Șampon", "Cremă de față"]
+
+
+def test_web_chips_caps_count_rich():
+    """Calea rich: max 4 chips ca butoane, chiar dacă agentul propune mai multe."""
+    rich = RichReply(
+        intro="x",
+        items=[RichItem(product_id="p1", name="A", price=10.0)],
+        pick=("p1", "bună"),
+        education="edu",
+        chips=[Chip(label=f"chip{i}", payload=f"c{i}") for i in range(7)],
+        disclaimer="Funcționez cu inteligență artificială.",
+    )
+    out = render_web(Reply(text="x", rich=rich), "ro")
+    assert len(out["suggestions"]) == 4

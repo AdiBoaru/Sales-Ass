@@ -139,7 +139,7 @@ Format JSON de răspuns:
  "confidence": "<low|med|high>",
  "slots": {"budget_max": <număr sau null>, "concerns": [<termeni din lista de nevoi sau []>],
            "suitable_for": <text scurt sau null>, "brand": <nume brand sau null>},
- "suggestions": [<2-4 opțiuni scurte de apăsat pt clarify (ex. idei de cadou), altfel []>],
+ "suggestions": [<2-4 ETICHETE scurte de apăsat pt clarify (2-5 cuvinte), altfel []>],
  "purchase_intent": <true|false>, "closure": <true|false>}
 
 Reguli:
@@ -152,9 +152,11 @@ Reguli:
   primită; altfel null.
 - "reply": DOAR pentru "simple" (răspuns scurt, prietenos, în limba clientului)
   și "clarify" (o întrebare scurtă de clarificare). Pentru restul rutelor: null.
-- "suggestions": DOAR pentru "clarify" — 2-4 opțiuni SCURTE pe care clientul le poate apăsa ca să
-  avanseze, potrivite magazinului (vezi categoriile). La cadou vag: destinatar/ocazie/tip (ex.
-  „Cadou pentru ea", „Cadou pentru el", „Set cadou sub 100 lei"). Altă rută → [].
+- "suggestions": DOAR pentru "clarify" — 2-4 ETICHETE SCURTE (2-5 cuvinte, tappabile ca butoane)
+  pe care clientul le poate apăsa ca să avanseze, potrivite magazinului (vezi categoriile). NU
+  întrebări, NU propoziții lungi, NU paranteze explicative — sunt butoane, nu text. La cadou vag:
+  destinatar/ocazie/tip (ex. „Cadou pentru ea", „Cadou pentru el", „Set cadou sub 100 lei").
+  La input neclar/aiurea: tipuri de produs scurte (ex. „Șampon", „Cremă"). Altă rută → [].
 - Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și pentru păr?"),
   folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
   „sales"), NU „clarify".
