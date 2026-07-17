@@ -111,6 +111,10 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       în ToolRun. MUTAȚIILE (cart/checkout/back-in-stock) cer `policy.allows()` ÎNAINTE de
       scriere — un filtru de rezultat nu poate anula un rând scris. Cache-ul (stagiul 4) face
       BYPASS pe context de siguranță (citire + scriere): un hit ar sări peste tot gate-ul.
+      DRUMURILE DIN AFARA PIPELINE-ului au poarta lor (n-au TurnContext → `SafetyPolicy
+      .from_state`): caruselul (worker/callback.py, ◀/▶ e inbound NON-LLM) și PROACTIVUL
+      (back_in_stock/abandoned_cart — un job vechi ar promova produsul zile mai târziu;
+      awb_update/follow_up NU se gate-uiesc, sunt tranzacționale).
       COMPUNERE: codul garantează O SINGURĂ frază localizată (recunoaștere + medic/farmacist),
       în runner, idempotent (src/safety/compose.py + messages.py); modelul scrie doar partea
       comercială. Nicio inferență LLM nu devine contraindicație; zero sfat medical.

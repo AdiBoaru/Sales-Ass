@@ -16,10 +16,12 @@ import re
 import asyncpg
 
 from src.db.queries.analytics import insert_events
+from src.db.queries.catalog import get_products_by_ids
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import get_or_create_conversation
 from src.db.queries.outbox import enqueue_outbox
 from src.models import BusinessConfig, Event
+from src.safety.policy import SafetyPolicy
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +33,39 @@ def parse_nav(data: str | None) -> int | None:
     se face la afișare, butoanele din afara limitelor nici nu apar)."""
     m = _NAV_RE.match(data or "")
     return int(m.group(1)) if m else None
+
+
+async def _safe_products(
+    conn: asyncpg.Connection, business: BusinessConfig, conv: dict, products: list[dict]
+) -> list[dict]:
+    """NX-173: scoate din setul caruselului produsele contraindicate pentru contextul PERSISTAT.
+
+    Ref-urile din state n-au `attributes` (P8: doar id/nume/preț) → hidratăm din catalog ca să
+    judecăm pe fapte („LumaDerm Renew Ser" nu-și trădează retinalul în nume). Costul apare DOAR
+    când conversația chiar are un context de siguranță activ — pentru restul, zero query în plus.
+
+    Eșec de hidratare pe un context ACTIV → întoarcem [] (no-op la navigare): fail-CLOSED, ca
+    peste tot. Un carusel care nu se mișcă e un bug de UX; unul care arată retinol unei gravide e
+    bug-ul pe care îl reparăm."""
+    policy = SafetyPolicy.from_state(conv.get("state") or {})
+    if not policy.contexts or not products:
+        return products
+    ids = [str(p.get("product_id")) for p in products if p.get("product_id")]
+    try:
+        hydrated = await get_products_by_ids(conn, business.id, ids, limit=len(ids))
+    except Exception:  # noqa: BLE001
+        log.exception("carusel: hidratare eșuată pe context de siguranță — no-op (fail-closed)")
+        return []
+    blocked = set(policy.evaluate(hydrated, purpose="carousel").blocked_ids)
+    if not blocked:
+        return products
+    kept = [p for p in products if str(p.get("product_id")) not in blocked]
+    log.info(
+        "carusel: %d produs(e) blocate de policy (context=%s)",
+        len(blocked),
+        sorted(policy.contexts),
+    )
+    return kept
 
 
 async def handle_callback(
@@ -54,6 +89,13 @@ async def handle_callback(
     )
 
     products = (conv["state"] or {}).get("displayed_products") or []
+    # NX-173 (P0): caruselul e un drum de inbound care NU trece prin pipeline → nici prin runner,
+    # nici prin `safety_compose.enforce`, nici prin vreun gate de tool. Setul vine direct din state,
+    # care poate fi VECHI (afișat înainte de declararea sarcinii), importat, sau rămas murdar dacă
+    # prune-ul a picat o dată. Fără gate aici, un `car:nav:0` reexpune produsul blocat (review
+    # Codex #229). Contextul îl luăm din `state.safety` — un callback n-are mesaj de analizat, deci
+    # persistarea contextului e singura sursă.
+    products = await _safe_products(conn, business, conv, products)
     if not 0 <= idx < len(products):
         log.info("callback car:nav:%s în afara setului (%d produse) — no-op", idx, len(products))
         return None

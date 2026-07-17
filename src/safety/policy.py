@@ -101,6 +101,29 @@ class SafetyPolicy:
         contexts = frozenset(_persisted_contexts(ctx)) | detect_contexts_in_turn(ctx)
         return cls(contexts=contexts)
 
+    @classmethod
+    def from_state(cls, state: dict[str, Any] | None) -> SafetyPolicy:
+        """Policy pe baza DOAR a contextului PERSISTAT — pentru drumurile de inbound care NU trec
+        prin pipeline și n-au `TurnContext`: apăsarea ◀/▶ pe carusel (`worker/callback.py`), UI
+        deterministă fără triaj/agent/runner.
+
+        De-asta persistăm contextul în state și nu ne bazăm pe istoric: un callback n-are mesaj de
+        analizat. Fără `state.safety`, calea asta n-ar avea de unde să știe (review Codex #229)."""
+        if not get_settings().safety_contraindications_enabled:
+            return cls(contexts=frozenset())
+        safety = (state or {}).get("safety")
+        contexts = frozenset(
+            str(c) for c in ((safety or {}).get("contexts") or []) if isinstance(safety, dict)
+        )
+        if not contexts:
+            return cls(contexts=frozenset())
+        try:
+            load_registry()
+        except RegistryError as e:
+            log.error("safety: registru invalid → FAIL-CLOSED (callback). %s", e)
+            return cls(contexts=contexts, registry_ok=False, registry_error=str(e))
+        return cls(contexts=contexts)
+
     # --- decizie -------------------------------------------------------------------------------
 
     def evaluate(self, products: list[dict[str, Any]], *, purpose: str = "expose") -> Decision:

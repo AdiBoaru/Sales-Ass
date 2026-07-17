@@ -257,3 +257,62 @@ async def test_prune_survives_db_failure(monkeypatch):
     await _persist_safety_context(ctx, _deps())
     assert len(ctx.state.displayed_products) == 1  # neatins
     assert ctx.state_patch["safety"]["contexts"] == ["pregnancy"]  # contextul TOT se persistă
+
+
+async def test_prune_reruns_when_context_already_persisted():
+    """[review Codex] Prune-ul rula DOAR la prima declarare (`safety_state` None → return devreme),
+    deci un state deja marcat dar MURDAR (prune picat o dată, state importat, conversație de
+    dinaintea fix-ului) nu se mai curăța niciodată — iar caruselul, care citește state-ul direct,
+    l-ar reexpune. Acum se auto-vindecă la orice tur cu context activ."""
+    from src.worker.stages.agent import _persist_safety_context
+
+    ctx = _ctx("ce seruri ai?", ["unsafe-retinal", "safe-bakuchiol"])
+    ctx.history = []
+    ctx.state.safety = {
+        "contexts": ["pregnancy"],
+        "source": "declared_by_contact",
+    }  # DEJA persistat
+    await _persist_safety_context(ctx, _deps())
+    assert "safety" not in ctx.state_patch  # nimic nou de scris pe cheia safety...
+    # ...dar state-ul murdar S-A curățat
+    assert [p.product_id for p in ctx.state.displayed_products] == ["safe-bakuchiol"]
+    assert ctx.state_patch["displayed_products"] == [
+        {"product_id": "safe-bakuchiol", "name": "Ser Bakuchiol Gentle", "price": 84.0}
+    ]
+
+
+async def test_prune_is_noop_when_state_already_clean():
+    """Idempotent: nimic de tăiat → zero scrieri de state (P4, bugetul de 8KB)."""
+    from src.worker.stages.agent import _persist_safety_context
+
+    ctx = _ctx("ce seruri ai?", ["safe-bakuchiol"])
+    ctx.history = []
+    ctx.state.safety = {"contexts": ["pregnancy"]}
+    await _persist_safety_context(ctx, _deps())
+    assert "displayed_products" not in ctx.state_patch
+    assert "safety" not in ctx.state_patch
+
+
+async def test_prune_not_run_without_context():
+    """Turul normal nu plătește nicio interogare în plus."""
+    from src.worker.stages import agent as mod
+    from src.worker.stages.agent import _persist_safety_context
+
+    calls = []
+
+    async def spy(conn, business_id, ids, **k):
+        calls.append(ids)
+        return []
+
+    import pytest as _pytest
+
+    mp = _pytest.MonkeyPatch()
+    mp.setattr(mod, "get_products_by_ids", spy)
+    try:
+        ctx = _ctx("ce seruri ai?", ["unsafe-retinal"])
+        ctx.history = []
+        await _persist_safety_context(ctx, _deps())
+        assert calls == []
+        assert len(ctx.state.displayed_products) == 1
+    finally:
+        mp.undo()

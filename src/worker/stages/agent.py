@@ -219,11 +219,15 @@ async def _persist_safety_context(ctx: TurnContext, deps: PipelineDeps) -> None:
     MAI JOS în ACELAȘI tur să-l vadă deja persistat (altfel s-ar baza tot pe istoric)."""
     policy = SafetyPolicy.for_turn(ctx)
     patch = safety_state(ctx, policy)
-    if patch is None:
-        return  # niciun context nou → zero cost pe turul normal
-    ctx.state_patch["safety"] = patch
-    ctx.state.safety = patch
-    ctx.emit("safety_context_persisted", contexts=list(patch.get("contexts") or []))
+    if patch is not None:  # context NOU → persistă (turul normal nu scrie nimic)
+        ctx.state_patch["safety"] = patch
+        ctx.state.safety = patch
+        ctx.emit("safety_context_persisted", contexts=list(patch.get("contexts") or []))
+    # Prune-ul rulează ori de câte ori contextul e ACTIV, nu doar la prima declarare (review Codex
+    # #229): altfel un state deja marcat dar murdar (prune picat o dată pe DB, state importat,
+    # conversație de dinaintea fix-ului) NU se mai curăța NICIODATĂ — și caruselul, care citește
+    # state-ul direct, l-ar reexpune. Idempotent: fără nimic de tăiat = zero scrieri. Costul (un
+    # query pe id-uri) apare doar pe conversațiile cu context de siguranță activ.
     await _prune_displayed(ctx, deps, policy)
 
 
