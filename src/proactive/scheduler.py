@@ -24,6 +24,7 @@ from typing import Any
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
 from src.db.queries.analytics import insert_events
+from src.db.queries.catalog import get_products_by_ids
 from src.db.queries.contacts import get_contact_by_id
 from src.db.queries.outbox import (
     OUTBOX_PRIORITY_MARKETING,
@@ -33,6 +34,7 @@ from src.db.queries.outbox import (
 from src.db.queries.proactive import (
     business_ids_with_due_jobs,
     claim_due_jobs,
+    get_latest_checkout,
     get_proactive_route,
     get_recipient_external_id,
     mark_job,
@@ -40,6 +42,7 @@ from src.db.queries.proactive import (
 from src.models import Event
 from src.proactive.builders import build_message_spec
 from src.proactive.templates import decide_proactive
+from src.safety.policy import SafetyPolicy
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +62,49 @@ def _outbox_priority_for_job(kind: str) -> int:
 
 class ProactiveRouteError(RuntimeError):
     """Jobul nu poate fi rutat (fără conversație/canal/identitate de destinatar) → failed."""
+
+
+# NX-173: kind-urile care PROMOVEAZĂ un produs → trec prin poarta de siguranță. `awb_update` și
+# `follow_up` NU: sunt TRANZACȚIONALE (comanda e deja plasată, coletul e pe drum). A bloca „coletul
+# tău a fost expediat" fiindcă produsul conține retinol ar fi ostil și fără sens — nu recomandăm
+# nimic acolo, doar informăm despre ceva ce clientul a cumpărat deja.
+_SAFETY_GATED_KINDS = ("back_in_stock", "abandoned_cart")
+
+
+async def _job_product_ids(conn, business_id: str, job: dict[str, Any], route: dict) -> list[str]:
+    """Produsele pe care jobul le-ar promova. `back_in_stock` → din payload; `abandoned_cart` →
+    liniile checkout-ului reamintit. Altceva → [] (nu promovează produse)."""
+    kind = job["kind"]
+    if kind == "back_in_stock":
+        pid = (job.get("payload") or {}).get("product_id")
+        return [str(pid)] if pid else []
+    if kind == "abandoned_cart":
+        co = await get_latest_checkout(conn, business_id, route["id"])
+        cart = (co or {}).get("cart") or []
+        return [
+            str(li["product_id"]) for li in cart if isinstance(li, dict) and li.get("product_id")
+        ]
+    return []
+
+
+async def _safety_allows_job(conn, business_id: str, job: dict[str, Any], route: dict) -> bool:
+    """False ⇒ jobul se anulează (nu se trimite). Contextul vine din `state.safety` al conversației
+    (un job n-are `TurnContext`). Eroare de hidratare pe context ACTIV → False (fail-closed): un
+    mesaj proactiv nu are urgență — a nu trimite e gratis, a trimite greșit nu."""
+    if job["kind"] not in _SAFETY_GATED_KINDS:
+        return True
+    policy = SafetyPolicy.from_state(route.get("state") or {})
+    if not policy.contexts:
+        return True
+    ids = await _job_product_ids(conn, business_id, job, route)
+    if not ids:
+        return True
+    try:
+        products = await get_products_by_ids(conn, business_id, ids, limit=len(ids))
+    except Exception:  # noqa: BLE001
+        log.exception("proactiv: hidratare eșuată pe context de siguranță — anulez (fail-closed)")
+        return False
+    return not policy.evaluate(products, purpose=f"proactive:{job['kind']}").blocked
 
 
 async def _process_job(conn, business_id: str, job: dict[str, Any], events: list[Event]) -> None:
@@ -84,6 +130,15 @@ async def _process_job(conn, business_id: str, job: dict[str, Any], events: list
     )
     if not to:
         raise ProactiveRouteError("contact fără identitate de canal")
+
+    # NX-173 (P0): poarta de siguranță pe PROACTIV — forma cea mai gravă a bug-ului. Un job de
+    # back-in-stock creat ÎNAINTE ca clienta să declare sarcina ar trimite „serul cu retinal e din
+    # nou pe stoc!" zile mai târziu, nesolicitat, în afara oricărei conversații. Abonarea e
+    # gate-uită la creare (`commerce_tools`), dar joburile VECHI nu știu → verificăm la trimitere.
+    if not await _safety_allows_job(conn, business_id, job, route):
+        await mark_job(conn, business_id, job_id, "cancelled")
+        events.append(Event("proactive_skipped", {"kind": kind, "reason": "safety_excluded"}))
+        return
 
     spec = await build_message_spec(conn, business_id, job, route)
     if spec.cancel:

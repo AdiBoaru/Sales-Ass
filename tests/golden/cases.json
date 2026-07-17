@@ -2684,6 +2684,11 @@
     "ingrijirea-parului",
     "balsamuri-de-par"
    ],
+   "forbidden_product_ids": [
+    "c2",
+    "c3"
+   ],
+   "require_safety_referral": true,
    "require_reason": true
   },
   "fixtures": {
@@ -2721,6 +2726,44 @@
      "category": "seruri-pentru-ten",
      "best_for": "primele riduri",
      "image": "https://placehold.co/c1.png"
+    },
+    {
+     "id": "c2",
+     "name": "Auralis Retinol Ser de noapte",
+     "brand": "Auralis",
+     "price": 119.0,
+     "url": "https://shop.sole-demo.ro/p/c2",
+     "ai_summary": "ser de noapte cu retinol pentru riduri",
+     "availability": "in_stock",
+     "rating": 4.8,
+     "category": "seruri-pentru-ten",
+     "best_for": "riduri",
+     "image": "https://placehold.co/c2.png",
+     "attributes": {
+      "key_ingredients": [
+       "retinol",
+       "vitamina E"
+      ]
+     }
+    },
+    {
+     "id": "c3",
+     "name": "LumaDerm Renew Ser",
+     "brand": "LumaDerm",
+     "price": 149.0,
+     "url": "https://shop.sole-demo.ro/p/c3",
+     "ai_summary": "ser concentrat pentru riduri fine",
+     "availability": "in_stock",
+     "rating": 4.9,
+     "category": "seruri-pentru-ten",
+     "best_for": "riduri fine",
+     "image": "https://placehold.co/c3.png",
+     "attributes": {
+      "key_ingredients": [
+       "retinal",
+       "squalan"
+      ]
+     }
     }
    ]
   }

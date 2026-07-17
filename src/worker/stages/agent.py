@@ -61,10 +61,12 @@ from src.agent.validator import (
 )
 from src.config import get_settings
 from src.db.queries.catalog import (
+    get_products_by_ids,
     list_category_names,
     list_routing_aliases,
 )
 from src.models import Route, RouteDecision, TurnContext
+from src.safety.policy import SafetyPolicy, safety_state
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
@@ -211,6 +213,56 @@ def _lead_score_hint(ctx: TurnContext) -> str:
 # fraza userului) — păstrăm doar FILTRELE structurate (category/concerns/price_max...) care
 # răspund la „de ce a căutat în categoria greșită". `check_order` e special (vezi _safe_tool_args).
 # Tool-urile cu arg-uri PII (faq_lookup.query, reorder, request_human) NU-s în whitelist → `{}`.
+async def _persist_safety_context(ctx: TurnContext, deps: PipelineDeps) -> None:
+    """NX-173: scrie `state.safety` când clientul declară un context nou + curăță din state
+    produsele care nu mai pot fi arătate. `state` local se actualizează pe loc, ca policy-ul chemat
+    MAI JOS în ACELAȘI tur să-l vadă deja persistat (altfel s-ar baza tot pe istoric)."""
+    policy = SafetyPolicy.for_turn(ctx)
+    patch = safety_state(ctx, policy)
+    if patch is not None:  # context NOU → persistă (turul normal nu scrie nimic)
+        ctx.state_patch["safety"] = patch
+        ctx.state.safety = patch
+        ctx.emit("safety_context_persisted", contexts=list(patch.get("contexts") or []))
+    # Prune-ul rulează ori de câte ori contextul e ACTIV, nu doar la prima declarare (review Codex
+    # #229): altfel un state deja marcat dar murdar (prune picat o dată pe DB, state importat,
+    # conversație de dinaintea fix-ului) NU se mai curăța NICIODATĂ — și caruselul, care citește
+    # state-ul direct, l-ar reexpune. Idempotent: fără nimic de tăiat = zero scrieri. Costul (un
+    # query pe id-uri) apare doar pe conversațiile cu context de siguranță activ.
+    await _prune_displayed(ctx, deps, policy)
+
+
+async def _prune_displayed(ctx: TurnContext, deps: PipelineDeps, policy: SafetyPolicy) -> None:
+    """Contextul tocmai a devenit activ → produsele deja afișate care acum sunt contraindicate ies
+    din `displayed_products`.
+
+    Rehidratarea e oricum gate-uită, deci state-ul rămas ar fi inert. Curățăm totuși, pentru că
+    „inert" nu e „corect": deixis-ul ordinal („primele două", „prima") ar număra produse pe care nu
+    le mai putem arăta, iar o cale VIITOARE care citește state-ul fără gate ar reînvia bug-ul.
+
+    Ref-urile din state n-au `attributes` (P8, doar id/nume/preț) → HIDRATĂM din catalog ca să
+    judecăm pe fapte, nu pe nume: „LumaDerm Renew Ser" nu-și trădează retinalul în nume. Costul e o
+    interogare, o singură dată per conversație (doar când contextul DEVINE activ). Query eșuat →
+    păstrăm state-ul neatins (rehidratarea gate-uită rămâne garanția, P6: nu rupem turul)."""
+    displayed = ctx.state.displayed_products
+    if not displayed or not policy.contexts:
+        return
+    ids = [p.product_id for p in displayed]
+    try:
+        hydrated = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=len(ids))
+    except Exception as e:  # noqa: BLE001 — prune best-effort; garanția reală e la rehidratare
+        log.warning("safety: prune displayed eșuat (%s) — state neatins", type(e).__name__)
+        return
+    blocked = set(policy.evaluate(hydrated, purpose="state_prune").blocked_ids)
+    if not blocked:
+        return
+    kept = [p for p in displayed if p.product_id not in blocked]
+    ctx.emit("safety_state_pruned", removed=len(displayed) - len(kept), kept=len(kept))
+    ctx.state.displayed_products = kept
+    ctx.state_patch["displayed_products"] = [
+        {"product_id": p.product_id, "name": p.name, "price": p.price} for p in kept
+    ]
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -223,6 +275,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not query:
         return
     is_order = route.route == Route.ORDER
+
+    # NX-173 (P0): PERSISTĂ contextul de siguranță declarat, ÎNAINTE de orice cale care servește
+    # produse (inclusiv `try_pre_intents`, care iese imediat mai jos). Istoricul e plafonat la 8
+    # mesaje (P4) → fără persistare, o declarație de la turul 9 dispărea și retinoidul reintra
+    # (review Codex). Owner scriere: stagiul agent; persistat de processor din `state_patch`.
+    await _persist_safety_context(ctx, deps)
 
     # NX-128++ (FAQ-first, cererea Adi): zidul de login NU mai e scurtcircuit pe toată ruta ORDER.
     # Răspunde la FAQ chiar nelogat; cere login doar pentru ce ține de contul lui (status/retur).

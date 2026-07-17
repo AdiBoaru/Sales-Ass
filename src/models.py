@@ -188,6 +188,11 @@ class ConversationState:
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
     # owner la scriere: Sender (processor, din `ctx.state_patch`). Cap 10 linii (impus în cart_add).
     cart: list[dict[str, Any]] = field(default_factory=list)
+    # NX-173 (P0): contextul de SIGURANȚĂ declarat de client (sarcină/alăptare), PERSISTAT —
+    # {contexts: [...], source, updated_at}. Istoricul (8 mesaje, P4) e prea scurt ca invariant:
+    # o declarație de la turul 9 ar dispărea și retinoidul ar reintra. Owner la scriere: stagiul
+    # agent (via `safety_state`), persistat de processor. Revocare DOAR explicită (nu expiră).
+    safety: dict[str, Any] = field(default_factory=dict)
     state_version: int = 0
 
     @classmethod
@@ -231,6 +236,9 @@ class ConversationState:
                 else {}
             ),
             cart=cart,
+            # NX-173: state vechi fără cheie / corupt → {} (fără context persistat; detecția din
+            # mesaj tot prinde turul curent). Defensiv ca restul hidratării.
+            safety=(raw.get("safety") if isinstance(raw.get("safety"), dict) else {}),
             state_version=int(raw.get("state_version") or 0),
         )
 
@@ -499,6 +507,11 @@ class TurnContext:
     route: RouteDecision | None = None  # owner: Triaj
     retrieval: RetrievalResult | None = None  # owner: Retrieval
     reply: Reply | None = None  # owner: orice stagiu (early exit)
+    # NX-173 (P0): decizia de siguranță ACUMULATĂ a turului (`safety.Decision`). Owner UNIC la
+    # scriere: `SafetyPolicy.gate` (via `_merge_decision`) — call-site-urile nu o setează direct.
+    # Citită de compunere (garantează fraza de siguranță) și de enforcement-ul final. `Any` ca să
+    # nu importăm src.safety în models (ciclu: safety → config → …).
+    safety_decision: Any = None
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     from_cache: bool = False  # owner: Cache (G5b) — reply servit din cache
     # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al

@@ -138,7 +138,7 @@ async def get_proactive_route(
     row = await conn.fetchrow(
         """
         select c.id::text as id, c.channel_id::text as channel_id, c.locale,
-               ch.kind as channel_kind
+               c.state, ch.kind as channel_kind
         from conversations c
         join channels ch on ch.id = c.channel_id
         where c.business_id = $1 and c.id = $2
@@ -146,7 +146,24 @@ async def get_proactive_route(
         business_id,
         conversation_id,
     )
-    return dict(row) if row else None
+    # NX-173 (P0): `state` intră aici ca proactivul să vadă `state.safety` — un job de back-in-stock
+    # creat ÎNAINTE ca clienta să declare sarcina ar trimite altfel „serul cu retinal e din nou pe
+    # stoc!" zile mai târziu, în afara conversației. Jobul n-are TurnContext → contextul persistat
+    # e singura sursă.
+    return _row_with_state(row) if row else None
+
+
+def _row_with_state(row: asyncpg.Record) -> dict[str, Any]:
+    d = dict(row)
+    state = d.get("state")
+    if isinstance(state, str):  # asyncpg întoarce jsonb ca str
+        try:
+            d["state"] = json.loads(state)
+        except (ValueError, TypeError):
+            d["state"] = {}
+    elif not isinstance(state, dict):
+        d["state"] = {}
+    return d
 
 
 async def get_recipient_external_id(
@@ -205,7 +222,7 @@ async def get_latest_checkout(
     decide: convertit/expirat → cancelled; altfel → reamintire cu URL."""
     row = await conn.fetchrow(
         """
-        select id::text, url, converted_order_id::text as converted_order_id,
+        select id::text, url, cart, converted_order_id::text as converted_order_id,
                (expires_at is not null and expires_at < now()) as expired
         from checkout_links
         where business_id = $1 and conversation_id = $2
@@ -214,7 +231,20 @@ async def get_latest_checkout(
         business_id,
         conversation_id,
     )
-    return dict(row) if row else None
+    # NX-173: `cart` intră aici ca poarta de siguranță a proactivului să știe CE produse ar
+    # reaminti un `abandoned_cart` (coșul poate fi de dinaintea declarării contextului).
+    if row is None:
+        return None
+    d = dict(row)
+    cart = d.get("cart")
+    if isinstance(cart, str):
+        try:
+            d["cart"] = json.loads(cart)
+        except (ValueError, TypeError):
+            d["cart"] = []
+    elif not isinstance(cart, list):
+        d["cart"] = []
+    return d
 
 
 # --------------------------------------------------------------------------- #

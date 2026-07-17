@@ -40,6 +40,7 @@ from src.redis_bus import (
     get_redis,
     release_conv_lock,
 )
+from src.safety.contraindications import registry_healthy
 from src.webhook.orders import process_order
 from src.worker.admission import get_admission
 from src.worker.aftercare import run_aftercare
@@ -376,6 +377,14 @@ async def _main() -> None:
     # Migrare pending = boot refuzat cu eroare explicită (regresia 010/012 care crăpa primul
     # mesaj al fiecărui client nou), nu un crash la primul inbound.
     await assert_migrations_current(pool)
+    # NX-173 (P0): aceeași logică de poartă, pentru registrul de siguranță. Un registru
+    # lipsă/corupt/nerevizuit înseamnă protecție absentă — trebuie să fie ZGOMOTOS la pornire, nu
+    # descoperit când o clientă însărcinată primește un retinoid. (Runtime-ul e oricum fail-closed:
+    # policy → `unavailable` → nu expune nimic pe un tur cu context de siguranță.)
+    ok, info = registry_healthy()
+    if not ok:
+        raise RuntimeError(f"registru de contraindicații invalid — boot refuzat: {info}")
+    log.info("safety: registru de contraindicații OK (%s)", info)
     await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot, nu la primul mesaj
     redis = await get_redis()
     consumer_name = f"worker-{socket.gethostname()}"

@@ -101,6 +101,24 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • AGENT decide mutarea de vânzare (NU routerul)
     • MAX 3 tool calls per tur (limită dură în cod)
     • tool results: max 6 produse × 8 câmpuri (nu obiecte complete)
+    • P0-safety CONTRAINDICAȚII (NX-173, src/safety/) — UN SINGUR punct de decizie:
+      `SafetyPolicy.for_turn(ctx).evaluate(products, purpose)` → `Decision` tipizat. Context
+      (sarcină/alăptare) detectat DETERMINIST + PERSISTAT în state.safety (istoricul de 8 e
+      prea scurt); registru CURAT cu provenance + reviewed_by (db/seed/safety_rules.json),
+      validat STRICT și FAIL-CLOSED (poartă de boot; registru stricat + context activ ⇒ nu se
+      expune nimic). Chemat de TOATE căile: search/page/details/compare, link+compare intent,
+      cross-sell/superlativ/cheaper/rehidratare, enforcement final pe ctx.retrieval, backstop
+      în ToolRun. MUTAȚIILE (cart/checkout/back-in-stock) cer `policy.allows()` ÎNAINTE de
+      scriere — un filtru de rezultat nu poate anula un rând scris. Cache-ul (stagiul 4) face
+      BYPASS pe context de siguranță (citire + scriere): un hit ar sări peste tot gate-ul.
+      DRUMURILE DIN AFARA PIPELINE-ului au poarta lor (n-au TurnContext → `SafetyPolicy
+      .from_state`): caruselul (worker/callback.py, ◀/▶ e inbound NON-LLM) și PROACTIVUL
+      (back_in_stock/abandoned_cart — un job vechi ar promova produsul zile mai târziu;
+      awb_update/follow_up NU se gate-uiesc, sunt tranzacționale).
+      COMPUNERE: codul garantează O SINGURĂ frază localizată (recunoaștere + medic/farmacist),
+      în runner, idempotent (src/safety/compose.py + messages.py); modelul scrie doar partea
+      comercială. Nicio inferență LLM nu devine contraindicație; zero sfat medical.
+      Kill-switch: safety_contraindications_enabled.
 
 [8] VALIDATOR (cod pur)
     • fiecare preț din reply există în ctx.retrieval
@@ -477,6 +495,8 @@ nativx-assistant/
 │   │   │                          back-in-stock) + seam-uri awb/follow_up; rulate de jobs/scheduler
 │   │   ├── builders.py          ← text per kind (free_text + template_name + variables)
 │   │   └── templates.py         ← wa_templates + 24h window + consent check (poartă NX-71)
+│   ├── safety/                  ← NX-173 (P0): gate-uri DETERMINISTE, în afara deciziei de model
+│   │   └── contraindications.py ← context (sarcină/alăptare) × registru curat → excludere dură
 │   ├── gdpr/
 │   │   └── erase.py             ← gdpr_erase_contact + export
 │   ├── evals/                   ← G8-1: harness golden (regresii de pipeline)
