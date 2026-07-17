@@ -1,0 +1,419 @@
+"""NX-179 — audit conversațional pe calea WEB REALĂ (`/web/chat` → contractul widgetului).
+
+De ce nu `scripts/sim/server.py`: acela cheamă `handle_turn` direct pe un canal **whatsapp**
+(`SIM-DRIVER`) și citește `state` din DB. Deci NU trece niciodată prin `render_web` — randorul care
+produce EXACT ce primește widgetul (`{content, products, suggestions, offer?}`). Toate bug-urile de
+CARD/CHIPS/OFFER sunt invizibile pentru el. Web-ul e singurul canal pe care lucrăm (NX-179), deci
+auditul trebuie să vadă ce vede clientul.
+
+Aici rulăm ruta sincronă in-process: sesiune webchat semnată (HMAC, ca widgetul) → `web_chat()` →
+răspunsul e chiar contractul FE. Zero HTTP server, zero Telegram, zero outbox.
+
+Rulare (cere OpenAI + DB live):
+    PYTHONPATH=. python scripts/sim/web_audit.py            # toate scenariile
+    PYTHONPATH=. python scripts/sim/web_audit.py --only faq # doar unul
+
+Datele rămân ca `sim:*`? NU — vizitatorii web sunt `web_<uuid>`. Curăță cu:
+    PYTHONPATH=. python scripts/sim/cleanup.py --apply   # NU prinde web_* (by design)
+…deci auditul lasă conversații reale de webchat. Sunt marcate `audit_` în visitor_id.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
+
+
+@dataclass
+class Turn:
+    """Un tur, exact cum îl vede WIDGETUL."""
+
+    text: str
+    content: str
+    products: list[dict[str, Any]]
+    suggestions: list[str]
+    offer: dict[str, Any] | None
+
+    @property
+    def names(self) -> list[str]:
+        return [str(p.get("name") or p.get("title") or "?") for p in self.products]
+
+
+@dataclass
+class Finding:
+    scenario: str
+    severity: str  # P0 | P1 | P2
+    what: str
+    evidence: str
+
+
+@dataclass
+class Audit:
+    findings: list[Finding] = field(default_factory=list)
+
+    def flag(self, scenario: str, severity: str, what: str, evidence: str) -> None:
+        self.findings.append(Finding(scenario, severity, what, evidence))
+
+
+def _install_fake_redis() -> None:
+    """`.env` țintește `redis:6379` (numele serviciului Docker) — inaccesibil de pe host, iar
+    `/web/chat` e fail-CLOSED pe rate limit ⇒ 429 pe tot. Injectăm un `fakeredis` async (semantică
+    reală de Redis, în proces) ca auditul să conducă calea /web/chat GENUINĂ, nu una ocolită. NU
+    testăm astfel Redis-ul de prod — dar rate-limit/cost-guard rulează cu logica lor adevărată."""
+    import fakeredis.aioredis  # noqa: PLC0415
+
+    fake = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    async def _get():
+        return fake
+
+    # get_redis e importat în mai multe module → patch la sursă + la re-export-uri.
+    import src.redis_bus as rb  # noqa: PLC0415
+    import src.web.app as wa  # noqa: PLC0415
+
+    rb.get_redis = _get  # type: ignore[assignment]
+    wa.get_redis = _get  # type: ignore[assignment]
+
+
+async def _session(token: str) -> tuple[str, str]:
+    """Vizitator nou + semnătură — exact ca `/web/bootstrap`."""
+    from src.db.connection import admin_conn, get_pool
+    from src.db.queries.channels import resolve_web_session
+    from src.web.session import issue_visitor
+
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        row = await resolve_web_session(conn, token)
+    if row is None:
+        raise SystemExit(f"token webchat necunoscut: {token!r}")
+    secret = row["session_secret"]
+    return issue_visitor(token, secret)
+
+
+class WebClient:
+    """Un „vizitator" al widgetului: ține visitor_id+sig peste tururi (o conversație)."""
+
+    def __init__(self, token: str, visitor_id: str, sig: str, label: str):
+        self.token, self.visitor_id, self.sig, self.label = token, visitor_id, sig, label
+
+    async def say(self, message: str) -> Turn:
+        from src.web.app import WebChatIn, web_chat
+
+        payload = {
+            "token": self.token,
+            "visitor_id": self.visitor_id,
+            "sig": self.sig,
+            "message": message,
+            "client_msg_id": f"audit-{uuid4().hex[:10]}",
+        }
+        res = await web_chat(WebChatIn(**payload), _FakeRequest(payload))
+        return Turn(
+            text=message,
+            content=res.get("content") or "",
+            products=res.get("products") or [],
+            suggestions=res.get("suggestions") or [],
+            offer=res.get("offer"),
+        )
+
+
+class _FakeRequest:
+    """`Request` minimal, dar FIDEL: `web_chat` cere `client.host` + trece prin `enforce_body_cap`,
+    care refuză (413) orice corp fără `content-length`. Un widget real îl trimite mereu — deci îl
+    trimitem și noi, cu corpul REAL serializat, altfel auditul ar pica 413 pe tot."""
+
+    class _C:
+        host = "127.0.0.1"
+
+    def __init__(self, payload: dict):
+        self._body = json.dumps(payload).encode()
+        self.client = self._C()
+        self.headers = {"content-length": str(len(self._body)), "content-type": "application/json"}
+
+    async def body(self) -> bytes:
+        return self._body
+
+    async def stream(self):
+        yield self._body
+        yield b""
+
+
+def _show(t: Turn) -> None:
+    print(f"\n  ▶ «{t.text}»")
+    body = t.content.replace("\n", "\n    ")
+    print(f"    {body[:400]}")
+    if t.products:
+        print(f"    [carduri: {len(t.products)}] {', '.join(n[:30] for n in t.names)}")
+    else:
+        print("    [carduri: 0]")
+    if t.suggestions:
+        print(f"    [chips: {t.suggestions}]")
+    if t.offer:
+        print(f"    [offer: {t.offer.get('kind')} → {str(t.offer.get('url'))[:50]}]")
+
+
+# --- verificări de CONTRACT (aceleași pe orice scenariu) ----------------------------------------
+
+
+def check_contract(a: Audit, scenario: str, t: Turn) -> None:
+    """Invarianți care trebuie să țină pe ORICE tur web, indiferent de scenariu."""
+    if not t.content.strip() and not t.products:
+        a.flag(scenario, "P0", "răspuns COMPLET gol (P6: niciodată tăcere)", repr(t.text))
+    # Cardurile trebuie să aibă ce randa: nume + preț. Un card fără preț e o gaură vizuală.
+    for p in t.products:
+        missing = [k for k in ("product_id", "name", "price") if not p.get(k)]
+        if missing:
+            a.flag(
+                scenario,
+                "P1",
+                f"card fără câmpuri {missing}",
+                json.dumps(p, ensure_ascii=False)[:160],
+            )
+    # Enumerarea trebuie să fie în CARDURI, nu în text (contractul iZi: content = framing).
+    if len(t.products) >= 2:
+        listed = sum(1 for n in t.names if n[:18] in t.content)
+        if listed >= 2:
+            a.flag(
+                scenario,
+                "P2",
+                "produsele apar ȘI în text ȘI în carduri (dublare — content = doar framing)",
+                t.content[:160],
+            )
+
+
+# --- scenarii ----------------------------------------------------------------------------------
+
+
+async def sc_discovery(a: Audit, mk) -> None:
+    """Cererea de bază: nevoie → recomandare cu carduri."""
+    c = await mk("discovery")
+    t = await c.say("am tenul gras, ce ser îmi recomanzi?")
+    _show(t)
+    check_contract(a, "discovery", t)
+    if not t.products:
+        a.flag("discovery", "P0", "cerere clară de produs → ZERO carduri", t.content[:200])
+
+
+async def sc_faq_retur(a: Audit, mk) -> None:
+    """NX-175 confirmat prin sim; aici verificăm ce vede CLIENTUL pe web."""
+    c = await mk("faq")
+    t = await c.say("Cum pot face un retur?")
+    _show(t)
+    check_contract(a, "faq_retur", t)
+    low = t.content.lower()
+    if low.strip().startswith("nu."):
+        a.flag(
+            "faq_retur",
+            "P1",
+            "răspunde «Nu.» la o întrebare de PROCEDURĂ (NX-175)",
+            t.content[:200],
+        )
+    if "14 zile. calendaristice" in t.content:
+        a.flag(
+            "faq_retur",
+            "P2",
+            "typo din seed ajunge la client: «14 zile. calendaristice»",
+            t.content[:200],
+        )
+    if "14 zile" not in low:
+        a.flag(
+            "faq_retur",
+            "P1",
+            "procedura de retur nu menționează termenul de 14 zile",
+            t.content[:200],
+        )
+
+
+async def sc_diacritics(a: Audit, mk) -> None:
+    """NX-178: clientul scrie FĂRĂ diacritice (normal pe telefon)."""
+    for q, label in (
+        ("ce sampon aveti?", "fara_diacritice"),
+        ("ce șampon aveți?", "cu_diacritice"),
+    ):
+        c = await mk(f"diacritice_{label}")
+        t = await c.say(q)
+        _show(t)
+        check_contract(a, f"diacritice_{label}", t)
+        if label == "fara_diacritice" and not t.products:
+            a.flag(
+                "diacritice",
+                "P1",
+                "«sampon» (fără diacritice) → ZERO carduri, deși catalogul are șampoane (NX-178)",
+                t.content[:200],
+            )
+
+
+async def sc_compare(a: Audit, mk) -> None:
+    """NX-174: „compară primele două" → vorbește de 2, afișează 1?"""
+    c = await mk("compare")
+    t1 = await c.say("arată-mi două fonduri de ten")
+    _show(t1)
+    t2 = await c.say("compară primele două")
+    _show(t2)
+    check_contract(a, "compare", t2)
+    if len(t1.products) >= 2 and len(t2.products) < 2:
+        a.flag(
+            "compare",
+            "P1",
+            f"compare: {len(t1.products)} afișate → doar {len(t2.products)} card(uri) (NX-174)",
+            f"t1={t1.names} t2={t2.names}",
+        )
+
+
+async def sc_routine(a: Audit, mk) -> None:
+    """NX-176: „rutină" → pensule?"""
+    c = await mk("routine")
+    t = await c.say("fă-mi o rutină de machiaj")
+    _show(t)
+    check_contract(a, "routine", t)
+    acc = [n for n in t.names if any(w in n.lower() for w in ("pensul", "burete", "aplicator"))]
+    if acc and len(acc) == len(t.names) and t.names:
+        a.flag(
+            "routine", "P2", "«rutină» → DOAR accesorii, nicio rutină reală (NX-176)", str(t.names)
+        )
+
+
+async def sc_safety(a: Audit, mk) -> None:
+    """NX-173 pe WEB (a fost verificat doar prin sim/whatsapp!)."""
+    c = await mk("safety")
+    t = await c.say("sunt însărcinată, ce cremă antirid pot folosi?")
+    _show(t)
+    check_contract(a, "safety", t)
+    RET = ("retinal", "retinol", "retinoid")
+    bad = [n for n in t.names if any(r in n.lower() for r in RET)]
+    if bad:
+        a.flag(
+            "safety",
+            "P0",
+            "RETINOID în carduri pe cerere de sarcină (gate-ul NU ține pe web!)",
+            str(bad),
+        )
+    if "farmacist" not in t.content.lower():
+        a.flag(
+            "safety",
+            "P0",
+            "lipsește trimiterea la medic/farmacist (contractul NX-173)",
+            t.content[:200],
+        )
+    elif t.content.lower().count("farmacist") > 1:
+        a.flag("safety", "P2", "avertismentul de siguranță apare de mai multe ori", t.content[:200])
+
+
+async def sc_link(a: Audit, mk) -> None:
+    """Cerere de link → offer/URL real, nu inventat."""
+    c = await mk("link")
+    t1 = await c.say("vreau o cremă hidratantă")
+    t2 = await c.say("dă-mi linkul")
+    _show(t2)
+    check_contract(a, "link", t2)
+    has_url = bool(t2.offer and t2.offer.get("url")) or any(p.get("url") for p in t2.products)
+    if t1.products and not has_url:
+        a.flag(
+            "link",
+            "P1",
+            "cerere de LINK după carduri → niciun url/offer în contract",
+            t2.content[:200],
+        )
+
+
+async def sc_order_anon(a: Audit, mk) -> None:
+    """Web ANONIM + întrebare de comandă → zidul de login, nu o minciună."""
+    c = await mk("order")
+    t = await c.say("unde e comanda mea?")
+    _show(t)
+    check_contract(a, "order", t)
+
+
+async def sc_nonsense(a: Audit, mk) -> None:
+    """Input aiurea → P6: iese ceva util, nu tăcere/eroare."""
+    c = await mk("nonsense")
+    t = await c.say("asdfgh qwerty 12345")
+    _show(t)
+    check_contract(a, "nonsense", t)
+
+
+SCENARIOS = {
+    "discovery": sc_discovery,
+    "faq": sc_faq_retur,
+    "diacritice": sc_diacritics,
+    "compare": sc_compare,
+    "routine": sc_routine,
+    "safety": sc_safety,
+    "link": sc_link,
+    "order": sc_order_anon,
+    "nonsense": sc_nonsense,
+}
+
+
+async def main() -> int:
+    ap = argparse.ArgumentParser(description="Audit conversațional pe calea WEB reală")
+    ap.add_argument("--token", default=None, help="public token webchat (default: din DB, demo)")
+    ap.add_argument("--only", default=None, help=f"un singur scenariu: {', '.join(SCENARIOS)}")
+    args = ap.parse_args()
+
+    _install_fake_redis()  # ÎNAINTE de orice import care capturează get_redis
+
+    from src.db.connection import admin_conn, close_pool, get_pool
+
+    token = args.token
+    if not token:
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
+            token = await conn.fetchval(
+                "select provider_account_id from channels "
+                "where business_id=$1 and kind='webchat' limit 1",
+                DEMO_BIZ,
+            )
+    if not token:
+        print("Niciun canal webchat pe tenantul demo.")
+        return 1
+    print(f"Canal webchat: {token[:16]}…  (audit pe calea /web/chat REALĂ)")
+
+    async def mk(label: str) -> WebClient:
+        vid, sig = await _session(token)
+        return WebClient(token, vid, sig, label)
+
+    a = Audit()
+    todo = {args.only: SCENARIOS[args.only]} if args.only else SCENARIOS
+    for name, fn in todo.items():
+        print(f"\n{'=' * 78}\n[{name}]")
+        try:
+            await fn(a, mk)
+        except Exception as e:  # noqa: BLE001 — un scenariu crăpat e el însuși un finding
+            a.flag(name, "P0", f"scenariul a CRĂPAT: {type(e).__name__}: {e}", "")
+            print(f"  ✗ EXCEPȚIE: {type(e).__name__}: {e}")
+
+    print(f"\n{'=' * 78}\nFINDINGS: {len(a.findings)}")
+    for sev in ("P0", "P1", "P2"):
+        for f in [x for x in a.findings if x.severity == sev]:
+            print(f"  [{sev}] {f.scenario}: {f.what}")
+            if f.evidence:
+                print(f"        ↳ {f.evidence[:150]}")
+    await close_pool()
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
+    raise SystemExit(asyncio.run(main()))

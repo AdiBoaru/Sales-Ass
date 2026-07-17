@@ -91,11 +91,14 @@ services:
     command: python -m src.worker.dispatcher
     mem_limit: 192m
 
-  # Canal de TEST: long polling Telegram. Iese imediat dacă TELEGRAM_BOT_TOKEN e gol.
+  # Canal de TEST: long polling Telegram. ÎNGHEȚAT (NX-179) — focusul e 100% pe WEB WIDGET.
+  # OFF by default, ca `proactive`: pornește-l cu `--profile telegram` dacă se reia canalul.
+  # Codul rămâne intact (abstracția de canal NX-60 e arhitectura, nu o dependență de Telegram).
   telegram-poller:
     <<: *app
     command: python -m src.channels.telegram.poller
     mem_limit: 192m
+    profiles: ["telegram"]
 
   # Joburi de mentenanță (NX-83): rollup nocturn, purjă dedupe, embed incremental.
   # Folosește DOAR DB (admin_conn). Healthcheck pe heartbeat file.

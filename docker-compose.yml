@@ -91,14 +91,16 @@ services:
       - ./src:/app/src
     env_file: .env
 
-  # Canal de TEST (NX-61): long polling Telegram → stream inbound. Pornește doar
-  # dacă TELEGRAM_BOT_TOKEN e setat (altfel iese imediat, fără să blocheze restul).
+  # Canal de TEST (NX-61): long polling Telegram → stream inbound.
+  # ÎNGHEȚAT (NX-179) — focusul e 100% pe WEB WIDGET. OFF by default; pornește-l explicit cu
+  # `docker compose --profile telegram up` dacă se reia canalul. Codul rămâne intact.
   telegram-poller:
     build: .
     command: python -m src.channels.telegram.poller
     volumes:
       - ./src:/app/src
     env_file: .env
+    profiles: ["telegram"]
     depends_on:
       redis:
         condition: service_healthy

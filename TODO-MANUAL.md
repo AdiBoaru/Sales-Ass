@@ -4,9 +4,17 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-06-20_
+_Ultima actualizare: 2026-07-17_
 
 ---
+
+## ⛔ FOCUS ACTUAL: DOAR WEB WIDGET (NX-179, 2026-07-17)
+
+Se lucrează **exclusiv pe web widget**. Telegram și WhatsApp sunt **ÎNGHEȚATE** — codul rămâne, dar
+nu se investește în ele și nu rulează (poller Telegram OFF: `profiles: ["telegram"]`). Deci,
+**deocamdată NU sunt nevoie de tine** taskurile de mai jos (T013 WhatsApp, TG-TEST Telegram) — sunt
+păstrate pentru când se reia un canal de mesagerie. Ce contează acum e pe web, iar webul nu-ți cere
+setup extern (rulează deja pe `bot.nativextech.com`).
 
 ## 🎯 „Telegram e2e live" — ✅ ATINS (2026-06-13, LOCAL pe laptop)
 
