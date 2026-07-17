@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING
 
 from src.cache.canonical import canonicalize
 from src.config import get_settings
-from src.db.queries.faqs import semantic_lookup
+from src.db.queries.faqs import semantic_lookup, semantic_topk
+from src.knowledge.faq_rerank import FaqCandidate, rerank
 from src.models import TurnContext
 
 if TYPE_CHECKING:
@@ -42,6 +43,19 @@ _POLICY_RE = re.compile(
 )
 
 
+# NX-175: fraza scurtă care introduce chips-urile de clarificare. Chips-urile SUNT întrebările
+# candidate → clientul apasă una, iar textul ei re-interoghează la ~0.99 pe acel FAQ (auto-resolve).
+_CLARIFY_LEAD = {
+    "ro": "Ca să-ți dau răspunsul potrivit, la care te referi?",
+    "en": "So I give you the right answer, which do you mean?",
+    "hu": "Hogy a megfelelő választ adjam, melyikre gondolsz?",
+}
+
+
+def _clarify_lead(language: str) -> str:
+    return _CLARIFY_LEAD.get(language) or _CLARIFY_LEAD["ro"]
+
+
 async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     s = get_settings()
     if not s.faq_enabled:
@@ -57,9 +71,46 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         canon = canonicalize(body)[0]
         emb = (await deps.llm.embed([canon]))[0]
         model = s.model_embed  # NX-124a: filtrăm pe modelul curent (vectori de alt model = zgomot)
-        hit = await semantic_lookup(
-            deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model
-        )
+        # NX-175: top-k + rerank (calificatori + marjă) în loc de top-1 orb. Kill-switch OFF →
+        # cădem pe top-1 (comportamentul de dinainte), byte-identic pt back-compat.
+        if s.faq_rerank_enabled:
+            cands = await semantic_topk(
+                deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model, k=s.faq_topk
+            )
+            decision = rerank(
+                canon,
+                [
+                    FaqCandidate(c["id"], c["question"], c["answer"], float(c["similarity"]))
+                    for c in cands
+                ],
+            )
+            if decision.action == "miss":
+                hit = None
+            elif decision.action == "clarify":
+                # Ambiguitate reală → NU ghicim: cerem alegerea cu chips = întrebările candidate.
+                # Un chip apăsat re-interoghează la ~0.99 pe acel FAQ → auto-rezolvă (fără resume).
+                ctx.set_reply(
+                    _clarify_lead(ctx.language),
+                    cacheable=False,
+                )
+                ctx.reply.suggestions = [q for _, q in decision.clarify_options]
+                ctx.emit(
+                    "faq_clarify",
+                    options=[fid for fid, _ in decision.clarify_options],
+                    ranking=decision.ranking,
+                )
+                return
+            else:  # serve — rerank a ales FAQ-ul; confidence = cosine ORIGINAL pt pragul de mai jos
+                hit = {
+                    "id": decision.faq_id,
+                    "question": decision.question,
+                    "answer": decision.answer,
+                    "similarity": decision.confidence,
+                }
+        else:
+            hit = await semantic_lookup(
+                deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model
+            )
         sim = float(hit["similarity"]) if hit else 0.0
         # Prag RELAXAT pe întrebări de politică/livrare (regex = precizie): mesajele mixte
         # („rituals suna bine, aveti livrare?") diluează embedding-ul sub faq_tau_high → altfel
