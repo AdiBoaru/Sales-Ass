@@ -166,3 +166,41 @@ Cele 7 HIGH + 3 MEDIUM + LOW reconciliate în carduri:
 **Runda 3 (reconciliată):** `seed_catalog_v2.py` ADAPTAT la `{violations,warnings}` (numără doar violations; test warnings-only→exit0, violation→exit≠0) — parte din 168d; R8 simplificat determinist (TOATE key_ingredients+badges cer `claim_provenance`; contraindicația hard = provenance INLINE, fără duplicare); NX-171c job rulează audit O DATĂ pe catalog complet per tenant + mapează violations→produse (auditul cere snapshot complet); NX-172 depinde de TOATE 171a-d (închide epicul → validează published + embeddings versionate).
 
 **Runda 4 (reconciliată):** `badges` = `string[]` la nivel de PRODUS, definit explicit în schema v3, fiecare badge cere `claim_provenance` (kind=badge) + teste R8 ingredient/badge cu&fără proveniență (168d); violations = **machine-readable** `{message, product_slugs:[...]}` (nu string) → NX-171c citește `product_slugs`, NU parsează text CLI, duplicatele marchează toate slug-urile; editorial 171c: backfill = job Python `src/jobs/` (NU în migrare, path consistent).
+
+---
+
+## Status livrare
+
+- **Pachet 1-4 (168d/e, 169, 170):** MERGED. **Pachet 5 (171a/b/c/d):** MERGED (#226, #227).
+- **Pachet 6 (NX-172) — felia 1 (gate CI golden) LIVRAT:** 3 checkere STRUCTURALE noi în
+  `src/evals/golden.py` — `forbidden_categories` (audit regula 7: makeup ≠ păr), `min_compare_diffs`
+  (comparație pe ≥N diferențe reale), `require_reason` (best_for/reason_codes ori rich.reason per
+  produs) — fiecare cu test load-bearing. **12 scenarii golden** (10 single-tur în `cases.json` +
+  2 conversații în `conversations.json`): ten gras/sensibil, ingredient (niacinamidă), fără parfum,
+  gramaj, utilizare, fond mat, nuanță, contraindicație, rutină, comparație, alternativă mai ieftină.
+  Gate CI verde (ScriptedLLM, zero OpenAI/DB).
+- **Pachet 6 (NX-172) — felia 2 (lanț LIVE) LIVRAT:** DB demo populat complet pe pipeline real —
+  `seed_catalog_v2.py --archive-old` (**150 active**, 504 legacy arhivate, **957 `product_relations`**:
+  complement 450 / routine_next 285 / substitute 222) → `backfill_content_status --activate`
+  (**150 published**, `content_status_filter=true`) → `embed_products` (**150 re-embed**,
+  `has_embeddings=True`). Audit LIVE (`scripts/nx172_live_audit.py`) **PASS**: regula 7 verde pe
+  calea reală (query makeup CU filtru de categorie → **zero produse de păr**), filtru published
+  coerent (0 active ne-published). **Finding:** pe semantic BRUT (fără categorie) un query ambiguu
+  („mascara pentru volum") scurge un șampon volumizant → **filtrul de categorie din triaj e cel care
+  impune regula 7**, nu stratul semantic. Cost re-embed: ~$0.0002 (`text-embedding-3-small`).
+- **Sim harness E2E (`scripts/sim/nx172_smoke.py`, nou + re-rulabil) — PASS:** validează pipeline-ul
+  CONVERSAȚIONAL real (triaj + agent + tool loop + validator + reply) prin driver-ul warm
+  `scripts/sim/server.py` (`POST /turn`), cu mesaje în LIMBAJ NATURAL (categoria vine din triaj, NU
+  hardcodată — diferența față de `nx172_live_audit.py`). Assert-uri (nu transcript): route sales,
+  `search_products` chemat, zero categorii de păr în produsele surfaced (regula 7), reply grounded
+  (nume+preț din retrieval), fiecare produs are `best_for`, comparația ≥2 diferențe reale,
+  „mai ieftin" chiar mai ieftin. 6 scenarii (ten gras, ingredient, rutină makeup, comparație
+  multi-tur, cheaper multi-tur, contraindicație) verzi. Cost ~cenți OpenAI/rulare.
+- **2 findings reale scoase de sim E2E** (pe care retrieval-only nu le prindea):
+  1. **Comparația structurată (tabel IZI-parity) e inconsistentă** — gate-ul `not route.filters` +
+     varianta triajului nano fac ca `agent_compared` să se declanșeze intermitent; RO cade uneori pe
+     proza LLM (comparație corectă, dar fără tabelul structurat). → task de fix separat.
+  2. **`not_recommended_for` nepopulat în catalog** (0 produse) → gate-ul de excludere/contraindicație
+     NX-170 e **dormant** (nimic de exclus). Enrich necesar ca să fie testabilă exclus.
+- **Epic catalog v3 ÎNCHIS** (Pachete 1-6 livrate; DoD NX-172 complet: gate CI golden + lanț live +
+  sim E2E).

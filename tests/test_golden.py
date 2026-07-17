@@ -25,10 +25,15 @@ from src.evals.golden import (
 )
 from src.models import (
     BusinessConfig,
+    Comparison,
+    ComparisonColumn,
+    ComparisonRow,
     Contact,
     Event,
     InboundMessage,
     RetrievalResult,
+    RichItem,
+    RichReply,
     Route,
     RouteDecision,
     TurnContext,
@@ -239,6 +244,30 @@ def test_all_conversations_present():
     assert all(c.turns for c in CONVERSATIONS), "orice conversație are ≥1 tur"
 
 
+def test_nx172_catalog_v3_scenarios_present():
+    """NX-172: cele 12 scenarii golden de validare a catalogului v3 (10 single-tur + 2 conversații)
+    acoperă intențiile-cheie: ten gras/sensibil, ingredient, fără parfum, gramaj, utilizare, fond
+    mat, nuanță, contraindicație, rutină, comparație, alternativă mai ieftină."""
+    single = {c.id for c in CASES if c.id.startswith("nx172-")}
+    multi = {c.id for c in CONVERSATIONS if c.id.startswith("nx172-")}
+    required_single = {
+        "nx172-ten-gras",
+        "nx172-ten-sensibil",
+        "nx172-ingredient-niacinamida",
+        "nx172-fara-parfum",
+        "nx172-gramaj",
+        "nx172-utilizare",
+        "nx172-fond-mat",
+        "nx172-nuanta",
+        "nx172-contraindicatie",
+        "nx172-rutina-completa",
+    }
+    required_multi = {"nx172-conv-compare-diffs", "nx172-conv-cheaper-alternative"}
+    assert required_single <= single
+    assert required_multi <= multi
+    assert len(single) + len(multi) >= 12
+
+
 def test_all_seed_cases_present():
     """Plasa de regresie: cazurile seed (G8-1) + securitate (NX-16) sunt încărcate."""
     ids = {c.id for c in CASES}
@@ -432,3 +461,86 @@ def test_evaluate_reply_checks_expected_constraints():
     assert ok.passed is True
     assert bad.passed is False
     assert any("constraint" in f for f in bad.failures)
+
+
+# --- NX-172: checkere noi de validare catalog v3 (load-bearing) ----------------------------------
+
+
+def test_evaluate_reply_forbidden_categories():
+    """Audit off-category (regula 7): un produs de păr într-o căutare de makeup → pică."""
+    ok_ctx = _ran_ctx("fond de ten", route=Route.SALES)
+    ok_ctx.retrieval = RetrievalResult(
+        products=[{"id": "p1", "name": "Fond mat", "category": "fond-de-ten"}]
+    )
+    bad_ctx = _ran_ctx("fond de ten", route=Route.SALES)
+    bad_ctx.retrieval = RetrievalResult(
+        products=[
+            {"id": "p1", "name": "Fond mat", "category": "fond-de-ten"},
+            {"id": "px", "name": "Șampon", "category": "sampoane"},  # off-category
+        ]
+    )
+    ok = evaluate_reply(
+        ok_ctx,
+        GoldenExpect(forbidden_categories=["sampoane", "ingrijirea-parului"]),
+        case_id="offcat-ok",
+    )
+    bad = evaluate_reply(
+        bad_ctx,
+        GoldenExpect(forbidden_categories=["sampoane", "ingrijirea-parului"]),
+        case_id="offcat-bad",
+    )
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("off-category" in f for f in bad.failures)
+
+
+def test_evaluate_reply_min_compare_diffs():
+    """Comparația trebuie să aibă ≥N rânduri cu valori care DIFERĂ între coloane."""
+    cols = [
+        ComparisonColumn(product_id="p1", name="A", price=50.0),
+        ComparisonColumn(product_id="p2", name="B", price=80.0),
+    ]
+    rows_diff = [
+        ComparisonRow(label="Preț", values=["50", "80"]),  # diferă
+        ComparisonRow(label="Rating", values=["4.5", "4.5"]),  # identic
+    ]
+    ctx = _ran_ctx("compară", route=Route.SALES)
+    ctx.reply.comparison = Comparison(columns=cols, rows=rows_diff)
+    ok = evaluate_reply(ctx, GoldenExpect(min_compare_diffs=1), case_id="cmp-ok")
+    bad = evaluate_reply(ctx, GoldenExpect(min_compare_diffs=2), case_id="cmp-bad")
+    assert ok.passed is True
+    assert bad.passed is False
+    assert any("diferențe reale" in f for f in bad.failures)
+    # fără comparație → pică
+    no_cmp = evaluate_reply(
+        _ran_ctx("x", route=Route.SALES), GoldenExpect(min_compare_diffs=1), case_id="cmp-none"
+    )
+    assert no_cmp.passed is False
+
+
+def test_evaluate_reply_require_reason():
+    """Fiecare produs recomandat are un motiv: best_for/reason_codes retrieval SAU rich.reason."""
+    # via best_for în retrieval
+    ctx = _ran_ctx("recomandare", route=Route.SALES)
+    ctx.retrieval = RetrievalResult(products=[{"id": "p1", "name": "A", "best_for": "ten uscat"}])
+    assert evaluate_reply(ctx, GoldenExpect(require_reason=True), case_id="rsn-ok").passed is True
+    # fără motiv → pică
+    bad_ctx = _ran_ctx("recomandare", route=Route.SALES)
+    bad_ctx.retrieval = RetrievalResult(products=[{"id": "p1", "name": "A"}])
+    bad = evaluate_reply(bad_ctx, GoldenExpect(require_reason=True), case_id="rsn-bad")
+    assert bad.passed is False
+    assert any("fără motiv" in f for f in bad.failures)
+    # via rich.reason
+    rich_ctx = _ran_ctx("recomandare", route=Route.SALES)
+    rich_ctx.reply.rich = RichReply(
+        intro=None,
+        items=[RichItem(product_id="p1", name="A", price=50.0, reason="perfect pt ten uscat")],
+        pick=None,
+        education=None,
+        chips=[],
+        disclaimer="",
+    )
+    assert (
+        evaluate_reply(rich_ctx, GoldenExpect(require_reason=True), case_id="rsn-rich").passed
+        is True
+    )
