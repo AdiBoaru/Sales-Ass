@@ -18,7 +18,9 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
+from src.config import get_settings
 from src.models import TurnContext
+from src.safety.contraindications import contexts_for_turn, filter_products
 from src.tools.base import run_tool
 
 if TYPE_CHECKING:
@@ -93,6 +95,30 @@ class ToolRun:
     failed_commerce: set[str] = field(default_factory=set)  # NX-137: cart/checkout eșuate
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
 
+    def _safe_products(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """NX-173: plasa de siguranță a contraindicațiilor peste rezultatul ORICĂRUI tool.
+
+        În mod normal nu taie nimic (tool-urile de catalog au filtrat deja) — de-asta blocarea AICI
+        se loghează ca `unfiltered_path`: înseamnă că o cale a scăpat gate-ului de la sursă și, deși
+        clientul e în siguranță, `llm_view`-ul acelui tool descrie un produs pe care noi tocmai
+        l-am scos → bug de reparat la sursă, nu de tolerat."""
+        if not get_settings().safety_contraindications_enabled or not products:
+            return products
+        contexts = contexts_for_turn(self.ctx)
+        if not contexts:
+            return products
+        kept, blocked = filter_products(products, contexts)
+        if blocked:
+            self.ctx.emit(
+                "safety_contraindication_block",
+                path="unfiltered_path",
+                contexts=sorted(contexts),
+                blocked=len(blocked),
+                rules=sorted({b.rule_id for b in blocked}),
+                product_ids=sorted({b.product_id for b in blocked if b.product_id}),
+            )
+        return kept
+
     async def execute(self, name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
         întoarce vederea compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
@@ -100,11 +126,17 @@ class ToolRun:
         started = perf_counter()
         result = await run_tool(ctx, deps, name, args)
         latency_ms = round((perf_counter() - started) * 1000, 1)
-        self.retrieved.extend(result.products)
+        # NX-173 (P0) BACKSTOP: tool-urile de catalog filtrează deja contraindicațiile la sursă (cu
+        # `llm_view` construit din setul curat). Asta e plasa de siguranță pentru orice cale care
+        # UITĂ filtrul — un tool nou, o cale de comerț care întoarce produse. Aici trec TOATE
+        # rezultatele de tool, iar `retrieved` alimentează `ctx.retrieval` → validator → carduri →
+        # `displayed_products`: ce cade aici nu mai ajunge nicăieri.
+        products = self._safe_products(result.products)
+        self.retrieved.extend(products)
         # IZI-compare: dacă modelul a chemat compare_products (a înțeles „compară primele două"),
         # reține setul comparat ÎN ORDINEA cerută (get_products_by_ids o păstrează) → tabel.
-        if name == "compare_products" and result.ok and result.products:
-            self.compared = list(result.products)
+        if name == "compare_products" and result.ok and products:
+            self.compared = list(products)
         # izi-parity hardening: reține relevanța ULTIMULUI search_products (off-category signal) →
         # o punem pe ctx.retrieval mai jos, ca compose să suprime pick-ul pe categoria greșită.
         if name == "search_products" and result.relevance is not None:
@@ -113,8 +145,8 @@ class ToolRun:
         self.grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
             ctx.state_patch.update(result.state_patch)
-        if name == "cart_add" and result.ok and result.products:
-            self.added_product = result.products[0]  # #7b: ancora pentru cross-sell
+        if name == "cart_add" and result.ok and products:
+            self.added_product = products[0]  # #7b: ancora pentru cross-sell
         # NX-137: un eșec de comerț în ACEST tur → compunerea nu are voie să sugereze chips-ul
         # exact refuzat în mesaj („Adaugă-l în coș" sub un „nu pot adăuga în coș" — runda 2, iZi).
         if name in ("cart_add", "checkout_link") and not result.ok:
@@ -135,7 +167,7 @@ class ToolRun:
             name=name,
             ok=result.ok,
             args=_safe_tool_args(name, args),
-            n_results=len(result.products),
+            n_results=len(products),
             latency_ms=latency_ms,
             error=(result.error if not result.ok else None),
         )

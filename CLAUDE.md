@@ -101,6 +101,13 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • AGENT decide mutarea de vânzare (NU routerul)
     • MAX 3 tool calls per tur (limită dură în cod)
     • tool results: max 6 produse × 8 câmpuri (nu obiecte complete)
+    • P0-safety CONTRAINDICAȚII (NX-173, src/safety/): context declarat de client (sarcină/
+      alăptare, detectat DETERMINIST din mesaj+istoric) × registru curat cu provenance
+      (db/seed/safety_rules.json) → produsele incompatibile sunt scoase din setul fuzionat
+      ÎNAINTE de pool/pagină/llm_view → nu ajung în retrieval, reply, carduri,
+      displayed_products sau active_search.pool. Backstop în ToolRun.execute (toate tool-urile).
+      Nu se bazează pe prompt; nicio inferență LLM nu devine contraindicație. Botul NU dă sfat
+      medical — declină și trimite la medic (kill-switch safety_contraindications_enabled).
 
 [8] VALIDATOR (cod pur)
     • fiecare preț din reply există în ctx.retrieval
@@ -477,6 +484,8 @@ nativx-assistant/
 │   │   │                          back-in-stock) + seam-uri awb/follow_up; rulate de jobs/scheduler
 │   │   ├── builders.py          ← text per kind (free_text + template_name + variables)
 │   │   └── templates.py         ← wa_templates + 24h window + consent check (poartă NX-71)
+│   ├── safety/                  ← NX-173 (P0): gate-uri DETERMINISTE, în afara deciziei de model
+│   │   └── contraindications.py ← context (sarcină/alăptare) × registru curat → excludere dură
 │   ├── gdpr/
 │   │   └── erase.py             ← gdpr_erase_contact + export
 │   ├── evals/                   ← G8-1: harness golden (regresii de pipeline)

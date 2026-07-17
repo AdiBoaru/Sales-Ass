@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "updated_at": "2026-07-17",
+  "notice": [
+    "REGISTRU CURAT de restricții de produs (NX-173). Date, nu cod — revizuibile de om.",
+    "REGULI:",
+    "  1. Nicio intrare nu se adaugă din inferență LLM. Fiecare regulă are reason + source +",
+    "     source_ref + verified_at, confirmate de un om (`reviewed_by`).",
+    "  2. Acesta NU e sfat medical și nu produce unul. Efectul unei reguli `hard` e strict",
+    "     comercial: botul NU recomandă produsul pe cererea respectivă și trimite la medic/",
+    "     farmacist. Botul nu afirmă niciodată că un produs e periculos, nici că restul sunt sigure.",
+    "  3. `context_patterns` = detecția DETERMINISTĂ a contextului din textul clientului (fără LLM).",
+    "     Supra-declanșarea e direcția fail-safe acceptată (excludem, nu recomandăm greșit)."
+  ],
+  "contexts": [
+    {
+      "id": "pregnancy",
+      "label_ro": "sarcină",
+      "context_patterns": [
+        "insarcinat",
+        "gravid",
+        "sarcin",
+        "borcan cu sarcina",
+        "trimestru",
+        "astept un copil",
+        "astept copil",
+        "pregnant"
+      ],
+      "advice_ro": "Pentru orice produs în sarcină, decizia o ia medicul sau farmacistul tău — eu pot doar să nu-ți propun ce se evită de obicei."
+    },
+    {
+      "id": "breastfeeding",
+      "label_ro": "alăptare",
+      "context_patterns": [
+        "alaptez",
+        "alaptare",
+        "alapteaza",
+        "alaptat",
+        "breastfeeding"
+      ],
+      "advice_ro": "În perioada de alăptare, decizia o ia medicul sau farmacistul tău — eu pot doar să nu-ți propun ce se evită de obicei."
+    }
+  ],
+  "rules": [
+    {
+      "id": "pregnancy-retinoids",
+      "contexts": ["pregnancy", "breastfeeding"],
+      "level": "hard",
+      "match_ingredient_prefixes": [
+        "retinol",
+        "retinal",
+        "retinaldehid",
+        "retinoid",
+        "retinil",
+        "retinyl",
+        "tretinoin",
+        "izotretinoin",
+        "isotretinoin",
+        "adapalen",
+        "tazaroten",
+        "palmitat de retinil",
+        "acid retinoic"
+      ],
+      "reason_ro": "conține retinoizi (derivați de vitamina A), care se evită de regulă în sarcină și alăptare fără avizul medicului",
+      "source": "editorial_policy",
+      "source_ref": "Nativx safety policy v1. Context de reglementare: Reg. (UE) 2024/996 (restricții vitamina A / retinol, Anexa III la Reg. (CE) 1223/2009) + Opinia SCCS/1576/16 privind vitamina A. Politica magazinului: retinoizii nu se recomandă proactiv în sarcină/alăptare fără aviz medical.",
+      "verified_at": "2026-07-17",
+      "reviewed_by": "PENDING_HUMAN_REVIEW"
+    }
+  ]
+}

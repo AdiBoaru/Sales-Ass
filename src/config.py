@@ -403,6 +403,14 @@ class Settings(BaseSettings):
     catalog_reason_codes_enabled: bool = Field(
         default=True, validation_alias="CATALOG_REASON_CODES_ENABLED"
     )
+    # NX-173 (P0): gate DETERMINIST de contraindicații — context declarat de client (sarcină/
+    # alăptare) × registru curat (db/seed/safety_rules.json) → produsele incompatibile nu intră în
+    # retrieval/pool/carduri. NU e un feature-flag obișnuit: OFF readuce comportamentul care a
+    # afișat un ser cu retinol unei cliente însărcinate. Se stinge DOAR ca ultim resort operațional
+    # (ex. over-blocking dovedit pe fals pozitiv „sarcină" = *task*), niciodată „ca să curgă".
+    safety_contraindications_enabled: bool = Field(
+        default=True, validation_alias="SAFETY_CONTRAINDICATIONS_ENABLED"
+    )
     # NX-171b: cross-sell/rutină din `product_relations` (relații explicite curate) în loc de
     # heuristica same-brand/concern. ON → relations-first cu fallback la heuristică DOAR când ancora
     # n-are nicio relație. OFF (kill-switch) → mereu heuristica veche (byte-identic).

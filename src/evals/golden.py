@@ -55,6 +55,11 @@ class GoldenExpect:
     forbidden_categories: list[str] = field(default_factory=list)
     min_compare_diffs: int = 0
     require_reason: bool = False
+    # NX-173 (P0): niciun produs cu aceste ID-uri nu are voie să apară în retrieval SAU în reply.
+    # Assert pe IDENTITATE, nu pe text: `forbidden` (substringuri) verifică doar ce SCRIE modelul,
+    # deci trece și când produsul contraindicat e surfacat, atâta timp cât modelul nu-i numește
+    # ingredientul. Exact gaura prin care a trecut scenariul de sarcină.
+    forbidden_product_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -201,6 +206,16 @@ def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> G
         for pid in expect.expected_product_ids:
             if pid not in product_ids:
                 failures.append(f"product_id lipsă: {pid!r} (observate: {sorted(product_ids)!r})")
+
+    # NX-173 (P0): produsul contraindicat nu are voie NICĂIERI — nici în retrieval (de unde intră în
+    # carduri/`displayed_products`), nici în reply. Verificăm identitatea, nu vocabularul.
+    if expect.forbidden_product_ids:
+        product_ids = _ctx_product_ids(ctx)
+        for pid in expect.forbidden_product_ids:
+            if pid in product_ids:
+                failures.append(
+                    f"produs INTERZIS surfacat: {pid!r} (observate: {sorted(product_ids)!r})"
+                )
 
     if expect.expected_constraints:
         constraints = ctx.state.search_constraints or {}
@@ -359,6 +374,7 @@ def _expect_from(raw: dict[str, Any]) -> GoldenExpect:
         expected_product_ids=list(raw.get("expected_product_ids", [])),
         expected_constraints=dict(raw.get("expected_constraints", {})),
         forbidden_categories=list(raw.get("forbidden_categories", [])),
+        forbidden_product_ids=list(raw.get("forbidden_product_ids", [])),
         min_compare_diffs=int(raw.get("min_compare_diffs", 0)),
         require_reason=bool(raw.get("require_reason", False)),
     )
