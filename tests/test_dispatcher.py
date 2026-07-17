@@ -89,6 +89,24 @@ async def _enqueue_via_turn(conn, channel_id):
     return result
 
 
+async def _claim_mine(conn, turn) -> dict:
+    """NX-177: rândul revendicat care aparține ACESTUI test, din tot ce întoarce `claim_due`.
+
+    `claim_due` revendică TOT ce e pending pe tenant, iar tenantul demo e PARTAJAT: rulările de
+    sim, widgetul web sau un test manual lasă rânduri commit-uite în `outbox`. Testele asertau
+    `len(rows) == 1` / `[row] = ...` → picau cu «assert 2 == 1» de îndată ce mai exista un rând —
+    un eșec de IGIENĂ raportat ca regresie de dispatcher.
+
+    Filtrăm pe `outbox_id`-ul întors de `handle_turn` → testul e despre rândul LUI, indiferent ce
+    altceva mai e în coadă. (Datele reziduale rămân o problemă separată: scripts/sim/cleanup.py.)"""
+    rows = await claim_due(conn, DEMO_BIZ)
+    mine = [r for r in rows if str(r["id"]) == str(turn.outbox_id)]
+    assert len(mine) == 1, (
+        f"rândul turului ({turn.outbox_id}) nu e printre cele {len(rows)} revendicate"
+    )
+    return mine[0]
+
+
 # --------------------------------------------------------------------------- #
 # claim_due — întoarce channel_kind + channel_account_id (expeditor) din join
 # --------------------------------------------------------------------------- #
@@ -99,12 +117,11 @@ async def test_claim_returns_sender_channel(pool):
         pnid = await conn.fetchval(
             "select provider_account_id from channels where id = $1", channel_id
         )
-        await _enqueue_via_turn(conn, channel_id)
-        rows = await claim_due(conn, DEMO_BIZ)
-        assert len(rows) == 1
-        assert rows[0]["channel_kind"] == "whatsapp"
-        assert rows[0]["channel_account_id"] == pnid
-        assert rows[0]["payload"]["type"] == "text"
+        turn = await _enqueue_via_turn(conn, channel_id)
+        row = await _claim_mine(conn, turn)
+        assert row["channel_kind"] == "whatsapp"
+        assert row["channel_account_id"] == pnid  # ĂSTA e testul: join-ul aduce expeditorul
+        assert row["payload"]["type"] == "text"
 
 
 async def test_business_ids_with_due_outbox(pool):
@@ -123,7 +140,7 @@ async def test_business_ids_with_due_outbox(pool):
 async def test_dispatch_row_success_marks_sent_and_links_wamid(pool):
     async with tenant_tx(pool) as (conn, channel_id):
         turn = await _enqueue_via_turn(conn, channel_id)
-        [row] = await claim_due(conn, DEMO_BIZ)
+        row = await _claim_mine(conn, turn)
 
         meta = FakeMeta()
         status = await dispatch_row(conn, DEMO_BIZ, _registry(meta), row)
@@ -136,20 +153,27 @@ async def test_dispatch_row_success_marks_sent_and_links_wamid(pool):
             "select status, sent_message_id::text from outbox where id = $1", row["id"]
         )
         assert ob["status"] == "sent"
-        # mesajul outbound a primit wamid + status sent
-        msg = await conn.fetchrow(
-            "select provider_msg_id, status from messages "
-            "where conversation_id = $1 and direction = 'outbound'",
-            turn.conversation_id,
+        # NX-177: mesajul legat de RÂNDUL DISPATCH-uit, nu „vreun outbound al conversației".
+        # Un reply lung se sparge în 2 mesaje (P9) → un tur produce 2 rânduri de outbox + 2 mesaje
+        # outbound, iar `dispatch_row` leagă wamid-ul DOAR de al lui. Vechiul `fetchrow` fără
+        # `order by` lua unul la întâmplare și pica pe «assert None is not None» când nimerea
+        # mesajul celuilalt rând. Contract stale, nu regresie de dispatcher.
+        assert ob["sent_message_id"] is not None, (
+            "dispatch-ul n-a legat mesajul de rândul de outbox"
         )
-        assert msg["provider_msg_id"] is not None
+        msg = await conn.fetchrow(
+            "select provider_msg_id, status, direction from messages where id = $1",
+            ob["sent_message_id"],
+        )
+        assert msg["direction"] == "outbound"
+        assert msg["provider_msg_id"] is not None  # wamid-ul întors de canal
         assert msg["status"] == "sent"
 
 
 async def test_dispatch_row_failure_marks_failed_with_backoff(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        await _enqueue_via_turn(conn, channel_id)
-        [row] = await claim_due(conn, DEMO_BIZ)
+        turn = await _enqueue_via_turn(conn, channel_id)
+        row = await _claim_mine(conn, turn)
 
         meta = FakeMeta(fail=httpx.ConnectError("boom"))
         status = await dispatch_row(conn, DEMO_BIZ, _registry(meta), row)
@@ -168,8 +192,8 @@ async def test_dispatch_row_failure_marks_failed_with_backoff(pool):
 async def test_dispatch_row_unknown_channel_is_dead(pool):
     """channel_kind fără sender înregistrat → 'dead' cu log, fără crash."""
     async with tenant_tx(pool) as (conn, channel_id):
-        await _enqueue_via_turn(conn, channel_id)
-        [row] = await claim_due(conn, DEMO_BIZ)
+        turn = await _enqueue_via_turn(conn, channel_id)
+        row = await _claim_mine(conn, turn)
         empty_registry = ChannelSenderRegistry()  # niciun sender
         status = await dispatch_row(conn, DEMO_BIZ, empty_registry, row)
         assert status == "dead"
@@ -180,13 +204,15 @@ async def test_claim_visibility_timeout_hides_then_reclaims(pool):
     scadent după visibility timeout și e re-revendicat. now() e constant în
     tranzacție, deci simulăm expirarea împingând next_attempt_at în trecut."""
     async with tenant_tx(pool) as (conn, channel_id):
-        await _enqueue_via_turn(conn, channel_id)
+        turn = await _enqueue_via_turn(conn, channel_id)
+        # NX-177: primul claim ia TOT ce e scadent pe tenantul (partajat) demo — inclusiv rânduri
+        # reziduale. Ne interesează DOAR rândul nostru; restul e zgomot de mediu, nu subiectul.
         first = await claim_due(conn, DEMO_BIZ, visibility_timeout_s=120)
-        assert len(first) == 1
-        oid = first[0]["id"]
+        oid = str(turn.outbox_id)
+        assert oid in [str(r["id"]) for r in first]
 
         # imediat după claim: 'dispatching' cu next_attempt_at în viitor → ascuns
-        assert await claim_due(conn, DEMO_BIZ) == []
+        assert oid not in [str(r["id"]) for r in await claim_due(conn, DEMO_BIZ)]
 
         # dispatcher „mort": visibility timeout expirat (next_attempt_at în trecut)
         await conn.execute(
@@ -194,5 +220,4 @@ async def test_claim_visibility_timeout_hides_then_reclaims(pool):
             oid,
         )
         reclaimed = await claim_due(conn, DEMO_BIZ)
-        assert len(reclaimed) == 1
-        assert reclaimed[0]["id"] == oid  # același rând, re-revendicat
+        assert oid in [str(r["id"]) for r in reclaimed]  # același rând, re-revendicat

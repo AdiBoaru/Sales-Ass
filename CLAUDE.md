@@ -527,11 +527,18 @@ nativx-assistant/
 **business_id**: `6098812a-50fc-44bd-a1ba-bc77e6399158`
 **Slug**: `nativex-demo` (name „Sole Demo")
 **Vertical**: `beauty`
-**Date reale în Supabase** (re-verificat 2026-06-30): 500 produse seedate, catalog re-seedat.
-✅ `products.product_url` = 500 (toate populate, `shop.sole-demo.ro/p/<slug>`), `rating` variat
-4.3–4.9 (0 la 5.0), `review_count` populat, `attributes.concerns` populat. `ai_summary` = 500
-(templat). ⚠️ Singura coadă de DATE Val2: NUME cu ID rezidual de seed (ex. „…348") — curățat de
-`scripts/reseed_product_names.py --apply` (idempotent, derivat din slug; NU atinge slug/url). `faqs` = 0.
+**Date reale în Supabase** (re-verificat 2026-07-17, NX-177): **654 produse în total, din care doar
+150 `status='active'`** — restul de 504 sunt seed-ul vechi templatat, ARHIVAT. Catalogul SERVIT =
+cele 150 hand-curate v3 (NX-168e). Nu asertați numere fixe în teste: catalogul crește (testele
+cuplate la „500" au picat la 654 și au fost raportate ca regresie — vezi tasks/NX-177.md).
+- variante: 46/150 active au variante → prețul afișat = min-variantă DOAR pentru ele, altfel
+  `products.price` (contract condiționat);
+- ⚠️ **78/150 active (52%) au diacritice în nume**, `unaccent` NU e instalat, iar FTS rulează pe
+  config `english` → căutarea lexicală e diacritic-SENSITIVE („sampon" → 0 rezultate, „șampon" →
+  5). Impact real pe RO. Vezi **tasks/NX-178.md**.
+- `faqs` = 32 (RO seedate); ⚠️ 2 duplicate + typo — vezi tasks/NX-175.md.
+Datele de simulare (`sim:*`, din `scripts/sim/server.py`) se curăță cu
+`scripts/sim/cleanup.py` (dry-run default, `--apply` ca să șteargă).
 **Canale**: ✅ Telegram seedat — `@solechat_bot` (kind='telegram', provider_account_id
 = bot id, prin `scripts/seed_telegram_channel.py`). **Echo e2e LIVE confirmat** pe
 Telegram (long polling, fără HTTPS). WhatsApp încă 0 — cere T013 (Meta phone_number_id).
