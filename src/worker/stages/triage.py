@@ -131,7 +131,9 @@ Rute posibile (câmpul "route"):
 - "order"   : DOAR despre o comandă DEJA PLASATĂ de client — statusul ei, „unde e comanda mea",
   livrarea/AWB-ul ei, returul/refund-ul unei comenzi pe care a primit-o. NU „cum comand" (= sales).
 - "handoff" : cere explicit un operator uman, reclamație serioasă, caz sensibil.
-- "clarify" : ambiguu — nu e clar CE produs vrea (ex. „un cadou", „ceva", doar un buget).
+- "clarify" : cererea e SUB-SPECIFICATĂ pentru o recomandare bună — fie nu e clar CE produs vrea
+  („un cadou", „ceva"), fie e doar o categorie/tip LARG fără context util („un laptop", „o cremă",
+  „ceva de ten", „o rutină"). Vezi regula de SUFICIENȚĂ mai jos.
 
 Format JSON de răspuns:
 {"route": "<una din cele 5>", "category_key": <slug din lista dată sau null>,
@@ -150,13 +152,15 @@ Reguli:
   invenții. "suitable_for"/"brand" = doar dacă le menționează. Necunoscut → null/[].
 - "category_key": DOAR pentru route="sales", și DOAR un slug EXACT din lista
   primită; altfel null.
-- "reply": DOAR pentru "simple" (răspuns scurt, prietenos, în limba clientului)
-  și "clarify" (o întrebare scurtă de clarificare). Pentru restul rutelor: null.
+- "reply": DOAR pentru "simple" (răspuns scurt, prietenos, în limba clientului) și "clarify" (o
+  replică de CONSULTANT în limba clientului: caldă, care își spune scurt părerea și pune O întrebare
+  de clarificare — NU o întrebare seacă, NU doar chips). Pentru restul rutelor: null.
 - "suggestions": DOAR pentru "clarify" — 2-4 ETICHETE SCURTE (2-5 cuvinte, tappabile ca butoane)
-  pe care clientul le poate apăsa ca să avanseze, potrivite magazinului (vezi categoriile). NU
-  întrebări, NU propoziții lungi, NU paranteze explicative — sunt butoane, nu text. La cadou vag:
-  destinatar/ocazie/tip (ex. „Cadou pentru ea", „Cadou pentru el", „Set cadou sub 100 lei").
-  La input neclar/aiurea: tipuri de produs scurte (ex. „Șampon", „Cremă"). Altă rută → [].
+  pe care clientul le poate apăsa ca răspuns la ÎNTREBAREA ta, potrivite magazinului (vezi
+  categoriile/nevoile). NU întrebări, NU propoziții lungi, NU paranteze explicative — sunt butoane,
+  nu text. Reflectă exact opțiunile din întrebare, pe orice vertical: cadou → destinatar/ocazie
+  („Cadou pentru ea", „Set cadou sub 100 lei"); laptop → caz de folosire („Gaming", „Birou",
+  „Ușor de cărat"); ten → nevoie („Hidratare", „Anti-rid", „Ten gras"). Altă rută → [].
 - Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și pentru păr?"),
   folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
   „sales"), NU „clarify".
@@ -170,10 +174,23 @@ Reguli:
   „asta vreau, ADAUGĂ-O în coș" cere o ACȚIUNE → purchase_intent=true, route=„sales", closure=false.
   „mulțumesc! și pentru păr aveți ceva?" = întrebare NOUĂ → route=„sales", closure=false. Fără
   produse arătate anterior, un simplu „mulțumesc" e tot simple, dar closure=false (nimic de închis).
-- O cerere de cumpărare FĂRĂ tip de produs — doar „un cadou" / „ceva" / „ceva sub 100 lei" (numai
-  buget), fără să spună CE produs — e „clarify": întreabă scurt ce tip de produs și, dacă e cadou,
-  pentru cine și cu ce ocazie. DAR „cremă"/„ser"/„parfum"/„șampon" SUNT tipuri de produs → „sales"
-  (chiar dacă nu se potrivesc unei categorii din listă).
+- SUFICIENȚĂ (general, orice tip de produs): o cerere de cumpărare care numește doar o categorie /
+  tip LARG, FĂRĂ vreun calificator util (nevoie, buget, caz de folosire, ocazie, tip anume) e
+  „clarify" — pui O întrebare de consultant construită din categoriile/nevoile MAGAZINULUI (vezi
+  listele primite), ca să poți recomanda BINE. Exemple, pe orice vertical:
+  · „un cadou" / „ceva" → pentru cine + ce ocazie;
+  · „vreau un laptop" → cazul de folosire (gaming / birou / portabil) + buget;
+  · „o cremă" / „ceva de ten" (fără nevoie) → ce te preocupă (hidratare / riduri / gras) + buget;
+  · „fă-mi o rutină" → ce look / ocazie.
+  CALIBRARE (nu enerva clientul): dacă cererea are MĂCAR un calificator util → „sales", NU clarify.
+  O NEVOIE/atribut declarat E calificator suficient: „cremă antirid", „cremă pentru riduri", „ser
+  hidratant", „laptop de gaming", „șampon pentru păr vopsit" → „sales" (agentul recomandă și
+  rafinează). O SINGURĂ întrebare: dacă din conversație reiese că ai întrebat DEJA pe același slot,
+  nu re-întreba — mergi pe „sales" cu ce ai.
+  EXCEPȚIE DE SIGURANȚĂ (prioritate ABSOLUTĂ, peste tot ce e mai sus): dacă mesajul menționează
+  sarcină, alăptare, o afecțiune medicală sau alergii → NU clarifica NICIODATĂ; route=„sales" chiar
+  dacă e sub-specificat. Pe calea „sales" se filtrează produsele contraindicate și apare
+  avertismentul medical; o clarificare pe un context de sănătate ar rata gate-ul de siguranță.
 - Mesajele vin des FĂRĂ diacritice → unele cuvinte devin ambigue (ex. „fata" = „fată"/persoană sau
   „față"/zona feței). Dezambiguizează din CONTEXT. Dacă rămâne genuin ambiguu, route „clarify" și
   pune în „suggestions" AMBELE citiri (ex. „Cadou pentru o persoană" / „Produse pentru ten").
