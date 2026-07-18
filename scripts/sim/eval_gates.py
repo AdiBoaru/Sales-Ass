@@ -126,9 +126,14 @@ def check_turn(cur: dict[str, Any], prev: dict[str, Any] | None, spec: dict[str,
     # niciun URL/offer nu onorează cererea și trebuie prins (înainte trecea determinist).
     if spec.get("requires_offer"):
         offer = cur.get("offer") if isinstance(cur.get("offer"), dict) else {}
-        has_offer = bool(offer and offer.get("url"))
-        has_url_in_text = bool(_URL_RE.search(content))
-        if not has_offer and not has_url_in_text:
+        has_offer = bool(offer and offer.get("url"))  # un offer/CTA e linkul acționabil determinist
+        # un URL în text satisface DOAR dacă e al unui produs AFIȘAT (curent SAU anterior — produsul
+        # „așteptat" al cererii), nu orice URL (fix #234: înainte trecea pe orice URL/vag).
+        shown_urls = {str(p.get("url")) for p in products if p.get("url")}
+        if prev is not None:
+            shown_urls |= {str(p.get("url")) for p in (prev.get("products") or []) if p.get("url")}
+        url_to_shown = any(u.rstrip(").,;!?") in shown_urls for u in _URL_RE.findall(content))
+        if not has_offer and not url_to_shown:
             fails.append("missing_offer_link")
 
     # Chip = etichetă tappabilă, nu propoziție.

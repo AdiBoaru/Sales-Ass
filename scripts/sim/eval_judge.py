@@ -20,7 +20,8 @@ JUDGE_VERSION = "v1"
 # Promptul e FIX (byte-identic între rulări). Judecă UN tur al botului în contextul conversației.
 JUDGE_PROMPT = """Ești un evaluator RIGUROS al calității conversaționale a unui asistent de vânzări
 pe WhatsApp/web pentru un magazin din România. Primești conversația de până acum și ULTIMUL răspuns
-al botului. Evaluează DOAR ultimul răspuns al botului, în contextul conversației.
+al botului ca EXPERIENȚĂ COMPLETĂ servită clientului: TEXT + CARDURI (produse) + eventual un
+OFFER/CTA (buton/link). Evaluează DOAR ultimul răspuns al botului, în contextul conversației.
 
 Notează pe o scală 1-5 (1 = foarte slab, 3 = acceptabil, 5 = excelent), STRICT:
 - answered: a răspuns DIRECT la ce a întrebat clientul? (nu evită, nu răspunde altceva)
@@ -31,7 +32,10 @@ Notează pe o scală 1-5 (1 = foarte slab, 3 = acceptabil, 5 = excelent), STRICT
 
 Reguli:
 - Fii ZGÂRCIT cu 5. Un răspuns corect dar cu structură vizibil șablonată NU ia 5 la `natural`.
-- Nu penaliza absența cardurilor: cardurile se randează separat; tu judeci TEXTUL + potrivirea.
+- Un CARD sau un OFFER POATE fi el însuși răspunsul: la „dă-mi linkul", un offer/CTA e răspunsul
+  corect (`answered` mare) chiar cu text scurt; la o cerere de produs, cardurile sunt răspunsul —
+  NU marca „unanswered" un răspuns livrat prin card/offer. Evaluează experiența COMPLETĂ, nu doar
+  textul. `natural`/`concise` se referă totuși la TEXT (cardurile nu-l penalizează).
 - `overall` = impresia globală (1-5), nu media aritmetică.
 - `note` = o singură propoziție, în română, cu motivul principal al scorului.
 
@@ -84,22 +88,52 @@ def _clamp(v: Any) -> int:
         return 1
 
 
-def build_user_message(transcript: list[dict[str, str]], bot_reply: str) -> str:
-    """Transcriptul de până acum (roluri user/bot) + ultimul răspuns al botului de evaluat."""
+def _render_experience(
+    bot_reply: str, products: list[dict[str, Any]] | None, offer: dict[str, Any] | None
+) -> str:
+    """Experiența COMPLETĂ servită clientului (fix #234): TEXT + CARDURI + OFFER — nu doar textul.
+    Un card/offer poate FI răspunsul (ex. «dă-mi linkul»)."""
+    parts = [f"TEXT: {bot_reply or '(fără text)'}"]
+    prods = products or []
+    if prods:
+        names = ", ".join(str(p.get("name") or p.get("title") or "?") for p in prods)
+        parts.append(f"CARDURI ({len(prods)}): {names}")
+    else:
+        parts.append("CARDURI: niciunul")
+    if offer and offer.get("url"):
+        parts.append(f"OFFER/CTA: {offer.get('kind') or 'link'} → {offer.get('url')}")
+    return "\n".join(parts)
+
+
+def build_user_message(
+    transcript: list[dict[str, str]],
+    bot_reply: str,
+    products: list[dict[str, Any]] | None = None,
+    offer: dict[str, Any] | None = None,
+) -> str:
+    """Transcriptul de până acum (roluri user/bot) + EXPERIENȚA COMPLETĂ a ultimului răspuns."""
     lines = []
     for m in transcript:
         who = "CLIENT" if m["role"] == "user" else "BOT"
         lines.append(f"{who}: {m['text']}")
     convo = "\n".join(lines) if lines else "(conversație nouă)"
+    exp = _render_experience(bot_reply, products, offer)
     return (
-        f"Conversație până acum:\n{convo}\n\nULTIMUL răspuns al botului (de evaluat):\n{bot_reply}"
+        f"Conversație până acum:\n{convo}\n\n"
+        f"ULTIMUL răspuns al botului (experiența COMPLETĂ servită clientului):\n{exp}"
     )
 
 
-async def judge_turn(llm, transcript: list[dict[str, str]], bot_reply: str) -> dict[str, Any]:
-    """Cheamă judge-ul pe UN tur. Întoarce scorurile clampate 1-5 + `note`. Model = agent (mini).
-    Eroare de API → scoruri None (evaluatorul le tratează ca „judge indisponibil", nu ca 1)."""
-    user = build_user_message(transcript, bot_reply)
+async def judge_turn(
+    llm,
+    transcript: list[dict[str, str]],
+    bot_reply: str,
+    products: list[dict[str, Any]] | None = None,
+    offer: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Cheamă judge-ul pe UN tur (experiența completă: text + carduri + offer). Scoruri clampate
+    1-5 + `note`. Model = agent (mini). Eroare API → scoruri None (judge indisponibil, nu 1)."""
+    user = build_user_message(transcript, bot_reply, products, offer)
     try:
         raw = await llm.complete_schema(JUDGE_PROMPT, user, JUDGE_SCHEMA, model=llm.model_agent)
     except Exception as e:  # noqa: BLE001 — judge indisponibil ≠ scor 1 (nu falsifică baseline-ul)
