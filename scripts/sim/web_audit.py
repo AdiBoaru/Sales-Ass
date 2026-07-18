@@ -13,9 +13,13 @@ Rulare (cere OpenAI + DB live):
     PYTHONPATH=. python scripts/sim/web_audit.py            # toate scenariile
     PYTHONPATH=. python scripts/sim/web_audit.py --only faq # doar unul
 
-Datele rămân ca `sim:*`? NU — vizitatorii web sunt `web_<uuid>`. Curăță cu:
-    PYTHONPATH=. python scripts/sim/cleanup.py --apply   # NU prinde web_* (by design)
-…deci auditul lasă conversații reale de webchat. Sunt marcate `audit_` în visitor_id.
+Igienă de date: vizitatorii de audit sunt marcați `web_audit_<scenariu>_<uuid>` în `visitor_id`
+(NU `web_<uuid>` ca traficul real) → DISTINȘI de conversațiile reale și curățabili după prefix.
+Auditul se AUTO-CURĂȚĂ la final (`_purge_audit` șterge toți vizitatorii `web_audit_%` + urma lor),
+deci nu lasă reziduu în DB-ul live; purja acoperă și rulări anterioare crăpate (self-healing).
+NB: `scripts/sim/cleanup.py` curăță `sim:*` (harness-ul whatsapp), NU vizitatorii web.
+
+Exit code: 0 dacă nu sunt findings P0; non-zero dacă apare orice P0 (gate de regresie, ex. safety).
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -92,8 +97,16 @@ def _install_fake_redis() -> None:
     wa.get_redis = _get  # type: ignore[assignment]
 
 
-async def _session(token: str) -> tuple[str, str]:
-    """Vizitator nou + semnătură — exact ca `/web/bootstrap`."""
+def _audit_prefix(label: str) -> str:
+    """`web_audit_<scenariu>` — marcaj de vizitator de audit (distins de `web_*` real, curățabil).
+    Sanitizăm labelul la `[a-z0-9_]` ca `visitor_id` să rămână un external_id curat."""
+    safe = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "x"
+    return f"web_audit_{safe}"
+
+
+async def _session(token: str, label: str) -> tuple[str, str]:
+    """Vizitator nou + semnătură — exact ca `/web/bootstrap`, dar marcat `web_audit_<scenariu>`
+    (vs `web_*` real) → auditul nu se confundă cu traficul real și e curățabil (`_purge_audit`)."""
     from src.db.connection import admin_conn, get_pool
     from src.db.queries.channels import resolve_web_session
     from src.web.session import issue_visitor
@@ -104,7 +117,7 @@ async def _session(token: str) -> tuple[str, str]:
     if row is None:
         raise SystemExit(f"token webchat necunoscut: {token!r}")
     secret = row["session_secret"]
-    return issue_visitor(token, secret)
+    return issue_visitor(token, secret, prefix=_audit_prefix(label))
 
 
 class WebClient:
@@ -195,9 +208,12 @@ def check_contract(a: Audit, scenario: str, t: Turn) -> None:
                 repr(s),
             )
     # Enumerarea trebuie să fie în CARDURI, nu în text (contractul iZi: content = framing).
-    # Excepție: pe COMPARE, lead-ul numește intenționat „cea mai accesibilă / cea mai bine cotată"
-    # (pick de comparație) — e framing, nu enumerare brută. Nu-l tratăm ca dublare.
-    if len(t.products) >= 2 and not scenario.startswith("compare"):
+    # NB (fix review Codex): NU mai excludem `compare`. Verificarea numără NUMELE de produs care
+    # apar verbatim în content (`n[:18] in content`) — pick-urile de comparație gen „cea mai
+    # accesibilă" NU sunt nume de produs, deci nu declanșează. Dar dacă lead-ul enumeră ≥2 NUME
+    # (exact defectul NX-174 declarat în card: „dublează numele produselor în content"),
+    # trebuie prins. Excluderea `compare` masca fix defectul pe care cardul îl țintește.
+    if len(t.products) >= 2:
         listed = sum(1 for n in t.names if n[:18] in t.content)
         if listed >= 2:
             a.flag(
@@ -378,32 +394,109 @@ SCENARIOS = {
 }
 
 
+async def _purge_audit(conn, business_id: str) -> int:
+    """Șterge vizitatorii de audit (`web_audit_%`) + urma lor (mesaje/conversații/identități/
+    contact). Sunt creați EXCLUSIV de audit (id fresh per scenariu; bootstrap-ul real folosește
+    prefix `web`), deci — spre deosebire de sim/cleanup.py — NU există risc de contact mixt cu date
+    reale. Scanează PREFIXUL, deci prinde și rulări anterioare crăpate. Copii→părinți, într-o TX."""
+    cids = [
+        r["contact_id"]
+        for r in await conn.fetch(
+            "select distinct contact_id from channel_identities "
+            "where business_id = $1 and external_id like 'web_audit_%'",
+            business_id,
+        )
+    ]
+    if not cids:
+        return 0
+    convs = [
+        r["id"]
+        for r in await conn.fetch(
+            "select id from conversations where business_id = $1 and contact_id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+    ]
+    async with conn.transaction():
+        if convs:
+            for t in (
+                "messages",
+                "outbox",
+                "conversation_summaries",
+                "analytics_events",
+                "checkout_links",
+                "proactive_jobs",
+            ):
+                # `t` din tuplul literal (nu input user) → S608 fals-pozitiv. P7: business_id.
+                await conn.execute(
+                    f"delete from {t} "  # noqa: S608
+                    "where business_id = $1 and conversation_id = any($2::uuid[])",
+                    business_id,
+                    convs,
+                )
+        await conn.execute(
+            "delete from back_in_stock_subscriptions "
+            "where business_id = $1 and contact_id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+        await conn.execute(
+            "delete from conversations where business_id = $1 and contact_id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+        await conn.execute(
+            "delete from channel_identities "
+            "where business_id = $1 and contact_id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+        await conn.execute(
+            "delete from contacts where business_id = $1 and id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+    return len(cids)
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser(description="Audit conversațional pe calea WEB reală")
     ap.add_argument("--token", default=None, help="public token webchat (default: din DB, demo)")
     ap.add_argument("--only", default=None, help=f"un singur scenariu: {', '.join(SCENARIOS)}")
     args = ap.parse_args()
 
+    if args.only and args.only not in SCENARIOS:
+        print(f"Scenariu necunoscut: {args.only!r}. Valide: {', '.join(SCENARIOS)}")
+        return 2
+
     _install_fake_redis()  # ÎNAINTE de orice import care capturează get_redis
 
     from src.db.connection import admin_conn, close_pool, get_pool
+    from src.db.queries.channels import resolve_web_session
 
     token = args.token
-    if not token:
-        pool = await get_pool()
-        async with admin_conn(pool) as conn:
-            token = await conn.fetchval(
-                "select provider_account_id from channels "
-                "where business_id=$1 and kind='webchat' limit 1",
+    biz_id: str = DEMO_BIZ
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        if token:
+            resolved = await resolve_web_session(conn, token)
+            if resolved:
+                biz_id = resolved["business_id"]
+        else:
+            row = await conn.fetchrow(
+                "select provider_account_id, business_id::text as business_id "
+                "from channels where business_id=$1 and kind='webchat' limit 1",
                 DEMO_BIZ,
             )
+            if row:
+                token, biz_id = row["provider_account_id"], row["business_id"]
     if not token:
         print("Niciun canal webchat pe tenantul demo.")
         return 1
     print(f"Canal webchat: {token[:16]}…  (audit pe calea /web/chat REALĂ)")
 
     async def mk(label: str) -> WebClient:
-        vid, sig = await _session(token)
+        vid, sig = await _session(token, label)
         return WebClient(token, vid, sig, label)
 
     a = Audit()
@@ -422,8 +515,22 @@ async def main() -> int:
             print(f"  [{sev}] {f.scenario}: {f.what}")
             if f.evidence:
                 print(f"        ↳ {f.evidence[:150]}")
+
+    # Igienă: șterge vizitatorii de audit (`web_audit_%`) + urma lor din DB-ul live. Best-effort —
+    # o purjă eșuată NU trebuie să ascundă findings-urile (care sunt în memorie, nu în DB).
+    try:
+        async with admin_conn(pool) as conn:
+            purged = await _purge_audit(conn, biz_id)
+        if purged:
+            print(f"\nAuto-curățat {purged} vizitator(i) de audit (`web_audit_%`).")
+    except Exception as e:  # noqa: BLE001 — curățarea nu maschează rezultatul auditului
+        print(f"\n⚠ auto-curățarea a eșuat ({type(e).__name__}) — rulează manual dacă e nevoie.")
+
     await close_pool()
-    return 0
+    # Exit non-zero DOAR pe P0 (regresie hard, ex. safety). P1/P2 = defecte cunoscute, urmărite în
+    # cardurile lor → nu pică gate-ul. Review Codex: înainte întorcea 0 chiar și cu findings P0.
+    n_p0 = sum(1 for f in a.findings if f.severity == "P0")
+    return 2 if n_p0 else 0
 
 
 if __name__ == "__main__":
