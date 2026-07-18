@@ -1,7 +1,9 @@
 # Nativx Assistant — context complet pentru Claude Code
 
 ## Ce e acest proiect
-Platformă multi-tenant de AI Sales Assistant pe WhatsApp.
+Platformă multi-tenant de AI Sales Assistant pentru ecommerce.
+**Canalul de lucru ACUM: WEB WIDGET, exclusiv (NX-179).** WhatsApp/Telegram sunt ÎNGHEȚATE — cod
+păstrat, zero investiție, nimic nu rulează pe ele. Orice task nou se măsoară pe web sau nu se face.
 Nume comercial: **Nativx Assistant** (by Nativx Technology — nativxtech.com)
 Clienți țintă: magazine ecommerce și retaileri din România (beauty, HVAC, auto, salon).
 Model de business: agenție SaaS — setup fee + retainer lunar per client.
@@ -20,8 +22,9 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | LLM sales | OpenAI GPT-5.4-mini |
 | LLM triaj + simple | OpenAI GPT-5.4-nano |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
-| WhatsApp | Meta Cloud API direct (NU Twilio) — canal PRIMAR de producție |
-| Telegram | Bot API (long polling) — canal de TEST (chat direct pe VPS, fără HTTPS) |
+| **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
+| WhatsApp | Meta Cloud API direct (NU Twilio) — cod LIVE, dar **niciodată conectat** (0 conversații reale; lipsește phone_number_id, T013). **ÎNGHEȚAT** |
+| Telegram | Bot API (long polling) — a fost canal de TEST. **ÎNGHEȚAT** (ultimul mesaj real: 2026-06-18). Poller OFF by default: `docker compose --profile telegram up` ca să-l repornești |
 | Validare | Pydantic v2 |
 | Teste | pytest + pytest-asyncio |
 
@@ -167,13 +170,26 @@ exact DOUĂ margini, izolat prin contracte (NX-60):
   `ChannelSender`** mapează `channel_kind → client`. Dispatcher-ul alege clientul
   după `channel_kind` (zero logică de coadă duplicată).
 
-Canale:
-- **WhatsApp** — Meta Cloud API, webhook semnat (X-Hub-Signature-256), PRIMAR de
-  producție. Are fereastră 24h + template-uri (proactiv).
-- **Telegram** — Bot API prin **long polling** (`getUpdates`), canal de **TEST**:
-  rulează pe VPS fără HTTPS/tunel/verificare de semnătură. Fără fereastră 24h.
-  Pentru iterare rapidă pe comportamentul botului vorbind direct cu el. NU
-  înlocuiește WhatsApp; e aditiv. (Webhook mode = opțiune de prod ulterioară.)
+Canale — **NX-179: se lucrează DOAR pe web widget.**
+- **WEB WIDGET (`webchat`)** — **singurul canal activ și singurul pe care se lucrează.**
+  `POST /web/chat` (sincron, request/response — reply-ul se mapează direct în HTTP, fără
+  outbox/dispatcher, prin `render_web`) + `GET /web/stream` (SSE) + `POST /web/messages` +
+  `GET /web/bootstrap` (`src/web/app.py`). Widgetul propriu-zis trăiește într-un **repo FE
+  separat**; backendul emite DOAR JSON — [`docs/FRONTEND-CONTRACT-IZI.md`](docs/FRONTEND-CONTRACT-IZI.md).
+  Fără fereastră 24h, fără template-uri. Handoff dezactivat by default (fără operator). Identitate:
+  anonim by default; login passthrough JWT în spatele `WEB_IDENTITY_ENABLED` (NX-128/129/130).
+  Audit conversațional pe calea reală: `scripts/sim/web_audit.py`.
+- **WhatsApp** — Meta Cloud API, webhook semnat. Codul e LIVE și testat, dar canalul **n-a fost
+  niciodată conectat** (0 conversații reale; lipsește `phone_number_id` — T013). **ÎNGHEȚAT.**
+  Fereastră 24h + template-uri (proactiv) — relevant doar când se reia.
+- **Telegram** — Bot API prin long polling. A fost canal de TEST pe VPS fără HTTPS.
+  **ÎNGHEȚAT** (17 conversații, ultimul mesaj 2026-06-18). Poller OFF by default în ambele
+  compose-uri (`profiles: ["telegram"]`) → `docker compose --profile telegram up` ca să-l repornești.
+
+**De ce rămâne codul de canal:** abstracția (NX-60) NU e o dependență de Telegram/WhatsApp — e
+motivul pentru care pipeline-ul (stagiile 3-9) e agnostic. A o scoate ar cupla engine-ul la web și
+ar arunca seam-ul care face WhatsApp posibil pentru clienții români (modelul de business). Îngheț ≠
+ștergere: nu se investește, nu rulează, dar nici nu blochează.
 
 ---
 
@@ -539,10 +555,11 @@ cuplate la „500" au picat la 654 și au fost raportate ca regresie — vezi ta
 - `faqs` = 32 (RO seedate); ⚠️ 2 duplicate + typo — vezi tasks/NX-175.md.
 Datele de simulare (`sim:*`, din `scripts/sim/server.py`) se curăță cu
 `scripts/sim/cleanup.py` (dry-run default, `--apply` ca să șteargă).
-**Canale**: ✅ Telegram seedat — `@solechat_bot` (kind='telegram', provider_account_id
-= bot id, prin `scripts/seed_telegram_channel.py`). **Echo e2e LIVE confirmat** pe
-Telegram (long polling, fără HTTPS). WhatsApp încă 0 — cere T013 (Meta phone_number_id).
-Testele integration își creează channel throwaway (tranzacție rollback-uită).
+**Canale** (re-verificat pe DB live 2026-07-17 — NX-179): **webchat = ACTIV** (64 conversații,
+ultimul mesaj 2026-07-14) → SINGURUL pe care se lucrează. Telegram ÎNGHEȚAT (17 conv, ultimul
+2026-06-18; poller OFF: `profiles: ["telegram"]`). WhatsApp ÎNGHEȚAT (0 conversații reale; canalul
+din DB e `SIM-DRIVER`, harness-ul de test). Testele integration își creează channel throwaway
+(tranzacție rollback-uită).
 
 Folosește acest `business_id` pentru toate testele locale.
 

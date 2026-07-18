@@ -49,10 +49,16 @@ def _compute_sig(token: str, visitor_id: str, secret: str) -> str:
     return hmac.new(secret.encode(), f"{token}:{visitor_id}".encode(), sha256).hexdigest()
 
 
-def issue_visitor(token: str, session_secret: str) -> tuple[str, str]:
+def issue_visitor(token: str, session_secret: str, *, prefix: str = "web") -> tuple[str, str]:
     """Generează un `visitor_id` nou + semnătura lui (la bootstrap). Widget-ul le ține și le
-    retrimite la fiecare request."""
-    visitor_id = f"web_{uuid4().hex}"
+    retrimite la fiecare request.
+
+    `prefix` (default `web`) e partea de dinaintea uuid-ului în `visitor_id`. Traficul real
+    rămâne `web_*`; harness-ul de audit ([scripts/sim/web_audit.py](../../scripts/sim/web_audit.py))
+    trece `web_audit` ca vizitatorii lui să fie DISTINȘI de trafic real și curățabili (prefix scanat
+    la purjă). `visitor_id` e opac pe calea web (sig-ul e peste `{token}:{visitor_id}`), deci
+    prefixul nu schimbă nicio validare."""
+    visitor_id = f"{prefix}_{uuid4().hex}"
     return visitor_id, _compute_sig(token, visitor_id, session_secret)
 
 

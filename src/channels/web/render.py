@@ -31,6 +31,24 @@ if TYPE_CHECKING:
 # Web = UI premium: max 4 chips ca butoane (widget-ul nu trebuie să pară încărcat). Chat-urile
 # (WhatsApp/Telegram) rămân pe _MAX_CHIPS din compose — capul ăsta e DOAR pe render-ul web.
 _MAX_WEB_CHIPS = 4
+# Un chip e o ETICHETĂ tappabilă, nu o propoziție: pe calea clarify, nano poate genera „chips" care
+# sunt de fapt întrebări lungi cu paranteze (ex. „Imi poti spune ce tip de produs cauti? (ex: …)")
+# — rup UI-ul widgetului. Un chip mai lung decât atât nu e chip: îl DROPĂM (mai bine 0 chips decât
+# unul malformat). Pragul lasă loc de „Adaugă {nume produs}" (~35), dar taie întrebările (60+).
+_MAX_WEB_CHIP_LEN = 40
+
+
+def _web_chips(labels: list[str]) -> list[str]:
+    """Sanitizează chips-urile pentru contractul widgetului: strip, drop goale + prea lungi (nu-s
+    chip-uri), cap la _MAX_WEB_CHIPS. Structural, nu prin disciplina promptului (P4)."""
+    out: list[str] = []
+    for raw in labels:
+        s = (raw or "").strip()
+        if s and len(s) <= _MAX_WEB_CHIP_LEN:
+            out.append(s)
+        if len(out) >= _MAX_WEB_CHIPS:
+            break
+    return out
 
 
 def _card(
@@ -115,7 +133,9 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
         return {"content": "", "products": [], "suggestions": []}
     lang = language or "ro"
     products: list[dict[str, Any]] = []
-    suggestions: list[str] = list(reply.suggestions)  # non-rich (ex. clarify): chips de pe reply
+    suggestions: list[str] = _web_chips(
+        reply.suggestions
+    )  # non-rich (ex. clarify): chips de pe reply
     extra: dict[str, Any] = {}  # câmpuri suplimentare de contract (ex. `comparison`)
     if reply.comparison is not None:
         # IZI-compare: tabel structurat. `content` = DOAR lead-ul (tabelul îl randează frontendul
@@ -155,7 +175,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
             )
             for it in reply.rich.items
         ]
-        suggestions = [c.label for c in reply.rich.chips][:_MAX_WEB_CHIPS]
+        suggestions = _web_chips([c.label for c in reply.rich.chips])
         content = ensure_disclaimer(flatten_framing(reply.rich, lang), lang)
     elif reply.products:
         products = [
