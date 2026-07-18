@@ -263,6 +263,24 @@ async def _prune_displayed(ctx: TurnContext, deps: PipelineDeps, policy: SafetyP
     ]
 
 
+def _complete_faq_obligation(ctx: TurnContext) -> None:
+    """NX-184: pe un tur mixed-intent, FAQ-ul a atașat răspunsul de politică în `ctx.faq_grounded`
+    și a lăsat pipeline-ul să continue (produsul). GARANTĂM obligația: dacă reply-ul final nu are
+    deja politica, o adăugăm o singură dată (deterministic). Gated + best-effort."""
+    if not get_settings().response_shape_hints_enabled:
+        return
+    grounded = (getattr(ctx, "faq_grounded", None) or "").strip()
+    reply = ctx.reply
+    if not grounded or reply is None or not (reply.text or "").strip():
+        return
+    # euristică de acoperire: începutul politicii apare deja în reply → nu dublăm.
+    key = grounded[:24].lower()
+    if key and key in reply.text.lower():
+        return
+    reply.text = f"{reply.text.rstrip()}\n\n{grounded}"
+    ctx.emit("faq_obligation_completed")
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -407,3 +425,5 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 validator=validation,
             ),
         )
+    # NX-184: completare deterministă a obligației mixed-intent (FAQ a atașat politica).
+    _complete_faq_obligation(ctx)

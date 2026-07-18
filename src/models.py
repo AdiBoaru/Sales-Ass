@@ -528,6 +528,10 @@ class TurnContext:
     safety_decision: Any = None
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     from_cache: bool = False  # owner: Cache (G5b) — reply servit din cache
+    # NX-184: pe un mesaj MIXED-INTENT (produs + politică), FAQ-ul nu mai face early-exit — atașează
+    # aici răspunsul GROUNDED de politică (owner: faq_stage) → agentul ancorează produsul, iar
+    # completarea deterministă garantează că răspunsul de politică ajunge la client (obligation).
+    faq_grounded: str | None = None
     # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al
     # conversației lungi (acoperă mesajele de dinaintea ultimelor 8). Citit de context_blocks.
     summary: str | None = None

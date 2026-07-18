@@ -503,6 +503,12 @@ class Settings(BaseSettings):
     response_envelope_v2_enabled: bool = Field(
         default=False, validation_alias="RESPONSE_ENVELOPE_V2_ENABLED"
     )
+    # NX-184: mixed-intent — pe un mesaj produs+politică, FAQ-ul NU mai face early-exit (ar pierde
+    # produsul); atașează răspunsul de politică în context + continuă la agent, iar completarea
+    # deterministă garantează că politica ajunge la client. Default OFF → FAQ early-exit ca azi.
+    response_shape_hints_enabled: bool = Field(
+        default=False, validation_alias="RESPONSE_SHAPE_HINTS_ENABLED"
+    )
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).

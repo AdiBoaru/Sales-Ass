@@ -19,7 +19,13 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   · 325 regresie verzi. NOTĂ: calitatea end-to-end (output model) = de verificat LIVE cu evaluatorul
   (deferat); CODUL e verificat (OFF byte-identic + compunere pură). Gotcha rezolvat: ghilimea ASCII
   `"` de închidere în string non-triple-quoted (SyntaxError).
-- ⬜ **NX-184** planner obligations + FAQ mixed-intent pre-triaj · flag `response_shape_hints_enabled`
+- ✅ **NX-184** FAQ mixed-intent pre-triaj + completare obligație · flag `response_shape_hints_enabled`
+  · faq.py `mixed_intent_decision` (tri-state PURE_FAQ/POSSIBLE_MIXED/UNKNOWN; două clauze = semnalul
+  cheie; `aveti`+DomainPack vocab; `_MIXED_POLICY_EXTRA` pt verb forms) · faq_stage: mixed → atașează
+  `ctx.faq_grounded` + NU early-exit (OFF → early-exit ca azi) · TurnContext.faq_grounded · agent_stage
+  `_complete_faq_obligation` (append determinist dacă politica lipsește din reply) · test_mixed_intent (5)
+  + 270 regresie verzi. NOTĂ: `obligations` bogat + verificare renderer completă = live-review; aici =
+  mecanismul FAQ decis (Codex) + completare deterministă. response_shape a aterizat deja în NX-181.
 
 ## Track B — Selection Correctness (shadow-first)
 - ⬜ **NX-185** QuerySpec shadow (contract + merger owner-unic) · flag `query_spec_shadow_enabled`
