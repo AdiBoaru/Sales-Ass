@@ -29,7 +29,15 @@ class FakeConn:
         return [{"slug": s} for s in self._slugs]
 
 
-def _ctx(body: str) -> TurnContext:
+_BEAUTY = DomainPack(vertical="beauty_salon", concern_map={"ten gras": "oily"})
+# Vertical DIFERIT (Codex: „laptop" nu trebuie să ruleze pe vocabular beauty). Contract test cu
+# LLM scriptat → vocabularul intră doar în prompt; alegem verticalul corect pentru onestitate.
+_ELECTRONICS = DomainPack(
+    vertical="electronics", concern_map={"gaming": "gaming", "birou": "office"}
+)
+
+
+def _ctx(body: str, *, domain_pack: DomainPack | None = None) -> TurnContext:
     ctx = TurnContext(
         turn_id="t1",
         business=BusinessConfig(id="b1", slug="demo", name="Demo"),
@@ -37,7 +45,7 @@ def _ctx(body: str) -> TurnContext:
         message=InboundMessage(provider_msg_id="m1", body=body),
         conversation_id="conv1",
     )
-    ctx.business.domain_pack = DomainPack(vertical="beauty_salon", concern_map={"ten gras": "oily"})
+    ctx.business.domain_pack = domain_pack or _BEAUTY
     return ctx
 
 
@@ -73,7 +81,7 @@ async def test_underspecified_clarify_persists_slot_and_suggestions():
 
 async def test_clarify_suggestions_capped_at_4():
     """Nano dă 6 chips → codul păstrează max 4 (butoane, nu listă)."""
-    ctx = _ctx("vreau un laptop")
+    ctx = _ctx("vreau un laptop", domain_pack=_ELECTRONICS)
     llm = FakeLLM(
         {
             "route": "clarify",
@@ -123,3 +131,27 @@ async def test_specific_request_stays_sales():
     await triage_stage(ctx, _deps(llm))
     assert ctx.route.route == Route.SALES
     assert ctx.reply is None  # agentul răspunde, nu întrebăm
+
+
+async def test_low_confidence_sales_downgrades_to_clarify_when_not_safety():
+    """Guard NX-116 (contrast): sales low-confidence FĂRĂ context de siguranță → clarify. Dovedește
+    că guard-ul de siguranță e SPECIFIC, nu dezactivează downgrade-ul în general."""
+    ctx = _ctx("ceva")  # vag, non-safety
+    llm = FakeLLM({"route": "sales", "confidence": "low", "category_key": None})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.CLARIFY
+    assert any(e.type == "triage_low_confidence" for e in ctx.events)
+
+
+async def test_low_confidence_pregnancy_stays_sales_not_clarify():
+    """P0 (fix review Codex): o cerere cu context de SIGURANȚĂ (sarcină) pe care nano o dă
+    `sales` cu confidence LOW NU mai e downgradată la clarify de cod — ar rata gate-ul determinist
+    de contraindicații (calea sales filtrează retinoizii + pune avertismentul). Excepția de
+    siguranță nu mai trăiește DOAR în prompt: `detect_contexts_in_turn` o impune în cod."""
+    ctx = _ctx("sunt însărcinată, ce cremă antirid pot folosi?")
+    llm = FakeLLM({"route": "sales", "confidence": "low", "category_key": None})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.SALES  # NU downgradat la clarify
+    assert ctx.reply is None  # sales → agentul răspunde CU gate-ul de siguranță, nu clarifică
+    assert any(e.type == "triage_safety_kept_sales" for e in ctx.events)
+    assert not any(e.type == "triage_low_confidence" for e in ctx.events)

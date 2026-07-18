@@ -26,6 +26,7 @@ from src.config import get_settings
 from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
 from src.models import Route, RouteDecision, TurnContext
+from src.safety.contraindications import RegistryError, detect_contexts_in_turn
 from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
@@ -117,6 +118,18 @@ def _factual_bait(text: str) -> bool:
     decomposed = unicodedata.normalize("NFKD", (text or "").lower())
     norm = "".join(c for c in decomposed if not unicodedata.combining(c))
     return _FACTUAL_BAIT_RE.search(norm) is not None
+
+
+def _safety_sensitive(ctx: TurnContext) -> bool:
+    """True dacă turul declară un context de siguranță (sarcină/alăptare) — DETERMINIST, din
+    registrul NX-173 (`detect_contexts_in_turn`), NU din promptul nano. NX-176a (P0): guard-ul de
+    low-confidence de mai jos NU are voie să transforme o cerere cu context de sănătate în clarify —
+    ar rata gate-ul de contraindicații (calea sales filtrează retinoizii + pune avertismentul).
+    Fail-safe: un registru stricat ridică RegistryError → True (nu downgradăm pe un posibil P0)."""
+    try:
+        return bool(detect_contexts_in_turn(ctx))
+    except RegistryError:
+        return True
 
 
 _SYSTEM = """Ești modulul de TRIAJ al unui asistent de vânzări pentru un magazin online.
@@ -289,9 +302,15 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     # NX-116: confidence LOW → CODUL forțează CLARIFY (nu sales/order pe ghicit). „LLM înțelege,
     # codul decide" (P2). simple/handoff/clarify rămân neatinse (low-risk / deja terminale).
+    # NX-176a (P0, fix review Codex): EXCEPȚIA DE SIGURANȚĂ nu mai trăiește DOAR în promptul nano.
+    # Dacă turul declară un context de sănătate (sarcină/alăptare), NU downgradăm la clarify — o
+    # clarificare ar rata gate-ul determinist de contraindicații (sales filtrează + avertizează).
     if out.confidence == "low" and route in (Route.SALES, Route.ORDER):
-        route = Route.CLARIFY
-        ctx.emit("triage_low_confidence", original=out.route.value)
+        if _safety_sensitive(ctx):
+            ctx.emit("triage_safety_kept_sales", route=route.value)
+        else:
+            route = Route.CLARIFY
+            ctx.emit("triage_low_confidence", original=out.route.value)
 
     # NX-116: sloturile normalizate în cod populează RouteDecision.filters (azi câmp mort) →
     # agentul pornește search-ul de la constrângeri structurate, nu reparsate din proză.

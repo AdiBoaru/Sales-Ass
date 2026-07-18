@@ -310,9 +310,23 @@ async def sc_routine(a: Audit, mk) -> None:
     t = await c.say("fă-mi o rutină de machiaj")
     _show(t)
     check_contract(a, "routine", t)
-    # NX-176a: cererea vagă de rutină trebuie clarificată — răspuns conversațional (întrebare), fără
-    # carduri. Dacă botul întreabă (are „?" și 0 carduri) → PASS, nu mai verificăm accesoriile.
-    if "?" in t.content and not t.products:
+    # NX-176a: cererea vagă de rutină trebuie CLARIFICATĂ. Clarify CORECT (card DoD) = 0 carduri +
+    # replică de consultant (conține „?" ȘI e conversațională, > 40c) + 2-4 chips tappabile. Un „?"
+    # sec, o replică scurtă sau lipsa chips-urilor = clarify SLAB → tot flaghează (review Codex:
+    # PASS nu poate fi „orice cu ? și 0 carduri", fără lungimea replicii și numărul de chips).
+    if not t.products:
+        problems = []
+        if "?" not in t.content or len(t.content.strip()) <= 40:
+            problems.append("replică seacă/scurtă (nu întrebare de consultant > 40c)")
+        if not (2 <= len(t.suggestions) <= 4):
+            problems.append(f"{len(t.suggestions)} chips (așteptat 2-4)")
+        if problems:
+            a.flag(
+                "routine",
+                "P1",
+                "clarify slab pe rutină vagă: " + "; ".join(problems),
+                t.content[:200],
+            )
         return
     # Altfel a listat produse fără să întrebe. „Rutină" = pași reali (fond, corector, pudră…), NU
     # unelte. Accesoriile = pensule, bureți, aplicatoare ȘI sprayuri de fixare. Toate unelte → gap.
