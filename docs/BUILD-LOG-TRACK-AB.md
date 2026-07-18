@@ -40,7 +40,11 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   `facet_coverage` (present vs valid + enforceable: n≥10 ∧ pct≥prag) · test_facets (4) verzi. Modul
   nou, neimportat → zero regresie. NOTĂ: raportul DB per business+category = wrapper subțire (script,
   live — nefăcut aici, directivă no-live); coverage-ul PUR e gata.
-- ⬜ **NX-187** Match Gate shadow (MatchSet disjunct) + recall · flag `match_gate_shadow_enabled`
+- ✅ **NX-187** Match Gate (MatchSet disjunct) · `src/agent/match_gate.py` PUR: `evaluate_constraint`
+  (MATCH/MISMATCH/UNKNOWN; lipsă→UNKNOWN nu MISMATCH; lte/gte/eq/contains, bool-aware) + `classify_product`
+  + `match_set` DISJUNCT (precedență rejected→alternatives→exact; soft = doar ranking, nu apartenență)
+  · test_match_gate (4: exemplul Codex A/B/C/D + soft ignorat + no-hard) verzi. Modul nou → zero regresie.
+  NOTĂ: shadow emit în planner + recall vs scan exhaustiv = de cablat (planner) + live; logica pură e gata.
 - ⬜ **NX-189** typed facets SQL tri-state (shadow per fațetă) · flag `typed_facet_sql_enabled`
 - ⬜ **NX-188** Match Gate enforce + QuerySpec enforce + alternatives UX · flag `match_gate_enforce_enabled`
 
