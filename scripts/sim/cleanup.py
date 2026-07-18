@@ -80,6 +80,12 @@ async def _collect(conn, business_id: str) -> tuple[list, list]:
     return cids, convs
 
 
+async def _facts_table_present(conn) -> bool:
+    """`conversation_facts` (memoria per-contact NX-148, migrare delta 023) poate lipsi pe unele
+    DB → verificăm existența înainte de a o atinge (purja nu crapă unde migrarea nu e rulată)."""
+    return bool(await conn.fetchval("select to_regclass('public.conversation_facts')"))
+
+
 async def _counts(conn, business_id: str, cids: list, convs: list) -> dict[str, int]:
     """Ce s-ar șterge (dry-run) — aceleași predicate ca ștergerea, doar cu `count(*)`."""
     out: dict[str, int] = {}
@@ -109,6 +115,18 @@ async def _counts(conn, business_id: str, cids: list, convs: list) -> dict[str, 
         "where business_id = $1 and contact_id = any($2::uuid[])",
         business_id,
         cids,
+    )
+    # conversation_facts (NX-148): scoped pe contact_id (conversation_id e nullable/secundar), FĂRĂ
+    # FK/cascade → memoria de sim rămâne orfană dacă n-o ștergem explicit (review Codex #230).
+    out["conversation_facts"] = (
+        await conn.fetchval(
+            "select count(*) from conversation_facts "
+            "where business_id = $1 and contact_id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+        if await _facts_table_present(conn)
+        else 0
     )
     out["conversations"] = len(convs)
     out["channel_identities"] = await conn.fetchval(
@@ -157,6 +175,17 @@ async def _purge(conn, business_id: str, cids: list, convs: list) -> dict[str, i
         "where business_id = $1 and contact_id = any($2::uuid[])",
         business_id,
         cids,
+    )
+    # conversation_facts (NX-148): contact-scoped, fără FK/cascade → altfel orfană (Codex #230).
+    out["conversation_facts"] = (
+        await d(
+            "delete from conversation_facts "
+            "where business_id = $1 and contact_id = any($2::uuid[])",
+            business_id,
+            cids,
+        )
+        if await _facts_table_present(conn)
+        else 0
     )
     out["conversations"] = await d(
         "delete from conversations where business_id = $1 and contact_id = any($2::uuid[])",
