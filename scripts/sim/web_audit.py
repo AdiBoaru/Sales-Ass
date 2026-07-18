@@ -304,13 +304,32 @@ async def sc_compare(a: Audit, mk) -> None:
 
 
 async def sc_routine(a: Audit, mk) -> None:
-    """NX-176: „rutină" → pensule?"""
+    """NX-176a: „rutină de machiaj" (vag) → botul întreabă CONVERSAȚIONAL ce fel de rutină, NU
+    aruncă produse/accesorii. Clarify (0 carduri + întrebare) = comportamentul CORECT (PASS)."""
     c = await mk("routine")
     t = await c.say("fă-mi o rutină de machiaj")
     _show(t)
     check_contract(a, "routine", t)
-    # „Rutină" = pași de machiaj reali (fond, corector, pudră…), NU unelte. Accesoriile = pensule,
-    # bureți, aplicatoare ȘI sprayuri de fixare. TOATE cardurile unelte → gap NX-176.
+    # NX-176a: cererea vagă de rutină trebuie CLARIFICATĂ. Clarify CORECT (card DoD) = 0 carduri +
+    # replică de consultant (conține „?" ȘI e conversațională, > 40c) + 2-4 chips tappabile. Un „?"
+    # sec, o replică scurtă sau lipsa chips-urilor = clarify SLAB → tot flaghează (review Codex:
+    # PASS nu poate fi „orice cu ? și 0 carduri", fără lungimea replicii și numărul de chips).
+    if not t.products:
+        problems = []
+        if "?" not in t.content or len(t.content.strip()) <= 40:
+            problems.append("replică seacă/scurtă (nu întrebare de consultant > 40c)")
+        if not (2 <= len(t.suggestions) <= 4):
+            problems.append(f"{len(t.suggestions)} chips (așteptat 2-4)")
+        if problems:
+            a.flag(
+                "routine",
+                "P1",
+                "clarify slab pe rutină vagă: " + "; ".join(problems),
+                t.content[:200],
+            )
+        return
+    # Altfel a listat produse fără să întrebe. „Rutină" = pași reali (fond, corector, pudră…), NU
+    # unelte. Accesoriile = pensule, bureți, aplicatoare ȘI sprayuri de fixare. Toate unelte → gap.
     ACC = ("pensul", "burete", "aplicator", "spray de fix", "spray fix", "set pensule")
     acc = [n for n in t.names if any(w in n.lower() for w in ACC)]
     if t.names and len(acc) == len(t.names):
@@ -318,6 +337,14 @@ async def sc_routine(a: Audit, mk) -> None:
             "routine",
             "P2",
             "«rutină» → DOAR accesorii/unelte, nicio rutină reală (NX-176)",
+            str(t.names),
+        )
+    elif t.products:
+        # A listat produse direct pe o cerere vagă de rutină, fără să întrebe ce look/ocazie.
+        a.flag(
+            "routine",
+            "P2",
+            "«rutină» vagă → a listat produse fără să întrebe ce fel de rutină (NX-176a)",
             str(t.names),
         )
 
