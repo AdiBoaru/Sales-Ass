@@ -17,10 +17,12 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
+from src.agent import query_spec
 from src.agent.fallbacks import _is_short_ack
 from src.config import get_settings
 from src.db.queries.catalog import list_category_slugs, sibling_categories
@@ -295,6 +297,23 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         confidence=out.confidence,
         purchase_intent=purchase_intent,
     )
+
+    # NX-185: QuerySpec în SHADOW — construiește contractul canonic + merge cu state-ul, emite
+    # telemetrie (fingerprint + count-uri, fără PII). ZERO schimbare de comportament (nu se aplică).
+    if route == Route.SALES and get_settings().query_spec_shadow_enabled:
+        spec = query_spec.build_query_spec(ctx.route)
+        sc = getattr(ctx.state, "search_constraints", None) or {}
+        prev = query_spec.build_query_spec(
+            SimpleNamespace(filters=sc, category_key=sc.get("category_key"))
+        )
+        merged = query_spec.merge_query_spec(prev, spec)
+        ctx.emit(
+            "query_spec_shadow",
+            n_constraints=len(merged.constraints),
+            n_hard=len(merged.hard()),
+            has_category=merged.subject_category is not None,
+            fingerprint=merged.fingerprint(),
+        )
 
     # simple / clarify: nano a compus răspunsul → early exit la Sender.
     # simple = răspuns static reutilizabil (cacheabil); clarify = specific contextului.

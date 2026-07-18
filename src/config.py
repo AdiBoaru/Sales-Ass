@@ -509,6 +509,11 @@ class Settings(BaseSettings):
     response_shape_hints_enabled: bool = Field(
         default=False, validation_alias="RESPONSE_SHAPE_HINTS_ENABLED"
     )
+    # NX-185: QuerySpec în SHADOW — construiește contractul canonic de constrângeri + telemetrie,
+    # ZERO schimbare de comportament. Enforcement-ul (SearchArgs obligatoriu) e NX-188. Default OFF.
+    query_spec_shadow_enabled: bool = Field(
+        default=False, validation_alias="QUERY_SPEC_SHADOW_ENABLED"
+    )
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).

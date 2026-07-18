@@ -28,7 +28,12 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   mecanismul FAQ decis (Codex) + completare deterministă. response_shape a aterizat deja în NX-181.
 
 ## Track B — Selection Correctness (shadow-first)
-- ⬜ **NX-185** QuerySpec shadow (contract + merger owner-unic) · flag `query_spec_shadow_enabled`
+- ✅ **NX-185** QuerySpec shadow (contract + merger owner-unic) · flag `query_spec_shadow_enabled`
+  · `src/agent/query_spec.py` PUR: `Constraint`/`QuerySpec` + `build_query_spec` (din RouteDecision,
+  owner=triaj) + `merge_query_spec` (owner UNIC = modulul, nu agent.py; turul curent câștigă;
+  topic-switch resetează; inherited persistă) + `fingerprint` determinist · triage shadow emit
+  `query_spec_shadow` (gated, ZERO schimbare comportament) · test_query_spec (4) + 68 regresie triaj
+  verzi. Enforcement (SearchArgs obligatoriu) = NX-188.
 - ⬜ **NX-186** typed facet registry + coverage report
 - ⬜ **NX-187** Match Gate shadow (MatchSet disjunct) + recall · flag `match_gate_shadow_enabled`
 - ⬜ **NX-189** typed facets SQL tri-state (shadow per fațetă) · flag `typed_facet_sql_enabled`
