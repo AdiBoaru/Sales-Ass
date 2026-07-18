@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from src.cache.canonical import canonicalize
 from src.config import get_settings
 from src.db.queries.faqs import semantic_lookup, semantic_topk
-from src.knowledge.faq_rerank import FaqCandidate, rerank
+from src.knowledge.faq_rerank import FaqCandidate, FaqDecision, rerank
 from src.models import TurnContext
 
 if TYPE_CHECKING:
@@ -73,6 +73,7 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         model = s.model_embed  # NX-124a: filtrăm pe modelul curent (vectori de alt model = zgomot)
         # NX-175: top-k + rerank (calificatori + marjă) în loc de top-1 orb. Kill-switch OFF →
         # cădem pe top-1 (comportamentul de dinainte), byte-identic pt back-compat.
+        clarify: FaqDecision | None = None
         if s.faq_rerank_enabled:
             cands = await semantic_topk(
                 deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model, k=s.faq_topk
@@ -87,19 +88,20 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             if decision.action == "miss":
                 hit = None
             elif decision.action == "clarify":
-                # Ambiguitate reală → NU ghicim: cerem alegerea cu chips = întrebările candidate.
-                # Un chip apăsat re-interoghează la ~0.99 pe acel FAQ → auto-rezolvă (fără resume).
-                ctx.set_reply(
-                    _clarify_lead(ctx.language),
-                    cacheable=False,
-                )
-                ctx.reply.suggestions = [q for _, q in decision.clarify_options]
-                ctx.emit(
-                    "faq_clarify",
-                    options=[fid for fid, _ in decision.clarify_options],
-                    ranking=decision.ranking,
-                )
-                return
+                # NX-175 (fix review Codex): clarify NU ocolește pragul de servire. Marja mică
+                # semnalează AMBIGUITATE, dar dacă nici măcar candidatul TOP nu trece `tau`
+                # (mai jos), niciun FAQ nu e relevant → miss (lăsăm triajul/agentul). Altfel două
+                # FAQ-uri irelevante dar apropiate (ex. 0.70/0.685 < 0.78) ar intercepta ORICE
+                # mesaj cu o clarificare falsă, înainte de triaj. `hit` = candidatul TOP pt pragul
+                # de jos (`confidence` = cosine ORIGINAL top); servirea clarify-ului se decide DUPĂ.
+                top_id, top_q = decision.clarify_options[0]
+                hit = {
+                    "id": top_id,
+                    "question": top_q,
+                    "answer": "",
+                    "similarity": decision.confidence,
+                }
+                clarify = decision
             else:  # serve — rerank a ales FAQ-ul; confidence = cosine ORIGINAL pt pragul de mai jos
                 hit = {
                     "id": decision.faq_id,
@@ -126,6 +128,18 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         is_policy = msg_is_policy and (faq_is_policy or not s.faq_policy_gate_on_faq_kind)
         tau = s.faq_tau_policy if is_policy else s.faq_tau_high
         if hit is not None and sim >= tau:
+            if clarify is not None:
+                # Ambiguitate reală ȘI candidatul top e RELEVANT (>= tau) → NU ghicim: cerem
+                # alegerea cu chips = întrebările candidate. Un chip apăsat re-interoghează la
+                # ~0.99 pe acel FAQ → auto-rezolvă (fără resume). Necacheabil (specific turului).
+                ctx.set_reply(_clarify_lead(ctx.language), cacheable=False)
+                ctx.reply.suggestions = [q for _, q in clarify.clarify_options]
+                ctx.emit(
+                    "faq_clarify",
+                    options=[fid for fid, _ in clarify.clarify_options],
+                    ranking=clarify.ranking,
+                )
+                return
             # Cacheable DOAR la hit de încredere mare (tau_high). Hit relaxat pe mesaj MIXT →
             # cacheable=False: query-ul mixt ar otrăvi semantic_cache pt alte mesaje similare.
             ctx.set_reply(hit["answer"], cacheable=(sim >= s.faq_tau_high))

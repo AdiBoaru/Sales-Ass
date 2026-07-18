@@ -138,6 +138,63 @@ async def test_zero_rows_miss(monkeypatch):
     assert any(e.properties.get("similarity") == 0.0 for e in ctx.events)
 
 
+async def test_clarify_above_threshold_serves_chips(monkeypatch):
+    # Două FAQ-uri RELEVANTE (peste tau_high 0.78) și apropiate (marjă < eps 0.03) cu răspunsuri
+    # DIFERITE → clarify: chips = întrebările candidate, early-exit, necacheabil.
+    _patch_topk(
+        monkeypatch,
+        {
+            "id": "a",
+            "question": "Cum aleg crema pentru tenul meu?",
+            "answer": "Depinde de ten…",
+            "similarity": 0.82,
+        },
+        {
+            "id": "b",
+            "question": "Ce produse recomandați pentru început?",
+            "answer": "Un set de bază…",
+            "similarity": 0.80,
+        },
+    )
+    ctx = _ctx("ceva despre produse")  # non-politică → tau = tau_high (0.78)
+    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
+    assert ctx.reply is not None
+    assert ctx.reply.suggestions == [
+        "Cum aleg crema pentru tenul meu?",
+        "Ce produse recomandați pentru început?",
+    ]
+    assert ctx.reply.cacheable is False  # clarify specific turului → NU se cache-uiește
+    assert any(
+        e.type == "faq_clarify" and set(e.properties["options"]) == {"a", "b"} for e in ctx.events
+    )
+
+
+async def test_clarify_below_threshold_misses_not_intercepts(monkeypatch):
+    # Fix review Codex: rerank întoarce „clarify" pe marja mică (0.70 vs 0.685), DAR stage-ul NU
+    # mai interceptează — candidatul top (0.70) e SUB tau_high (0.78) → niciun FAQ relevant → miss.
+    # Fără fix, două FAQ-uri irelevante apropiate deflectau ORICE mesaj cu o clarificare falsă.
+    _patch_topk(
+        monkeypatch,
+        {
+            "id": "a",
+            "question": "Cum aleg crema pentru tenul meu?",
+            "answer": "Depinde de ten…",
+            "similarity": 0.70,
+        },
+        {
+            "id": "b",
+            "question": "Ce produse recomandați pentru început?",
+            "answer": "Un set de bază…",
+            "similarity": 0.685,
+        },
+    )
+    ctx = _ctx("ceva despre produse")
+    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
+    assert ctx.reply is None  # NU interceptează → pipeline continuă spre triaj
+    assert not any(e.type == "faq_clarify" for e in ctx.events)
+    assert any(e.type == "faq_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
+
+
 async def test_no_llm_skips_without_embed():
     ctx = _ctx(FAQ_Q)
     await faq_stage(ctx, PipelineDeps(conn=None, llm=None))  # fără LLM → skip grațios
