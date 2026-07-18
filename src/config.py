@@ -497,6 +497,12 @@ class Settings(BaseSettings):
     relaxed_disclosure_enabled: bool = Field(
         default=False, validation_alias="RELAXED_DISCLOSURE_ENABLED"
     )
+    # NX-183: ResponseEnvelope V2-light — `lead` liber + motive compuse DETERMINIST din evidence
+    # OPACE + răspuns text-only (fără carduri). Modelul emite doar cuvinte + referințe; codul pune
+    # faptele. Default OFF → calea rich veche. Flag EFECTIV per business (AND businesses.settings).
+    response_envelope_v2_enabled: bool = Field(
+        default=False, validation_alias="RESPONSE_ENVELOPE_V2_ENABLED"
+    )
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).

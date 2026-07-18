@@ -11,7 +11,14 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   · models: `RelaxedConstraint` + `Relevance.relaxed_constraints` · catalog_tools `_relaxed_constraints`
   (base vs winning_step) · compose `_relaxed_disclosure` + registru RO/EN/HU + suprimă pick când relaxat
   · test_relaxed_disclosure (3) + compose regression (40) verzi · getattr defensiv (fail-open)
-- ⬜ **NX-183** ResponseEnvelope V2-light + renderer text-only · flag `response_envelope_v2_enabled`
+- ✅ **NX-183** ResponseEnvelope V2-light + renderer text-only · flag `response_envelope_v2_enabled` (per business)
+  · `src/agent/envelope.py` (V2_SCHEMA, evidence OPACE `e{i}_{j}`, `compose_reason` determinist,
+  `response_envelope_v2_effective`) · prompt_builder `build_v2_system` + `_V2_RULES` · finalize
+  `_finalize_v2` (cards via assemble-reuse `fit_clause`=motiv compus + text-only `answer` cu lead
+  scrubuit) integrat în render ÎNAINTE de rich (OFF → nu se intră → byte-identic) · test_envelope_v2 (4)
+  · 325 regresie verzi. NOTĂ: calitatea end-to-end (output model) = de verificat LIVE cu evaluatorul
+  (deferat); CODUL e verificat (OFF byte-identic + compunere pură). Gotcha rezolvat: ghilimea ASCII
+  `"` de închidere în string non-triple-quoted (SyntaxError).
 - ⬜ **NX-184** planner obligations + FAQ mixed-intent pre-triaj · flag `response_shape_hints_enabled`
 
 ## Track B — Selection Correctness (shadow-first)
