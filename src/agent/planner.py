@@ -85,6 +85,10 @@ class ResponsePlan:
     grounded_prices: set[float] = field(default_factory=set)
     order_views: list[str] = field(default_factory=list)
     checkout_url: str | None = None
+    # NX-181: forma de răspuns (hint determinist pt Prompt vNext), owner unic = planner (P3).
+    # Vocabular UNIC `response_shape`: recommendation | direct_followup | detail. Consumat de
+    # `render` DOAR când `prompt_vnext_enabled` (altfel ignorat → comportament byte-identic).
+    response_shape: str = "recommendation"
 
 
 def _plan_mode(
@@ -313,6 +317,17 @@ async def build_plan(
     products = policy.gate(ctx, products, purpose="retrieval_final")[0]
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
 
+    # NX-181: forma de răspuns din semnalele DEJA calculate (fără LLM nou). detail = deep-dive pe 1
+    # produs afișat; direct_followup = follow-up pe setul afișat (superlativ/mai-ieftin/rehidratat);
+    # altfel recommendation (căutare proaspătă). Hint pt Prompt vNext, consumat doar când flag ON.
+    followup = attr_query or cheaper_intent or rehydrated
+    if followup and len(products) == 1:
+        response_shape = "detail"
+    elif followup:
+        response_shape = "direct_followup"
+    else:
+        response_shape = "recommendation"
+
     return ResponsePlan(
         handled=False,
         mode=_plan_mode(
@@ -336,4 +351,5 @@ async def build_plan(
         grounded_prices=run.grounded_prices,
         order_views=run.order_views,
         checkout_url=run.checkout_url,
+        response_shape=response_shape,
     )

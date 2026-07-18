@@ -13,6 +13,7 @@ Grounding-ul rămâne la `validator` (P2: modelul propune, codul dispune); texte
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
@@ -263,6 +264,16 @@ def _rich_bundle(
     return "\n".join(lines)
 
 
+def _last_bot_opening(ctx) -> str:
+    """NX-181: prima propoziție a ULTIMULUI răspuns al botului din istoric — semnal anti-repetiție
+    (în USER). Normalizat + trunchiat la 60 car. (text de bot, fără PII). Gol dacă nu există."""
+    for m in reversed(getattr(ctx, "history", None) or []):
+        if getattr(m, "direction", "") == "outbound" and getattr(m, "body", ""):
+            first = re.split(r"[.!?\n]", m.body.strip(), maxsplit=1)[0].strip()
+            return first[:60]
+    return ""
+
+
 async def _finalize_rich(
     llm,
     rich_system: str,
@@ -271,6 +282,8 @@ async def _finalize_rich(
     ctx,
     history: str,
     notes: str = "",
+    response_shape: str = "",
+    last_opening: str = "",
 ):
     """Compune recomandarea STRUCTURATĂ (model iZi). Modelul emite intro + referințe
     product_id/pro_index/fit_clause + pick + education + chip_intents (enum închis); codul
@@ -296,8 +309,16 @@ async def _finalize_rich(
                 + " | ".join(axes)
                 + "\n"
             )
+    # NX-181 (Prompt vNext): forma de răspuns + semnal anti-repetiție în mesajul USER (nu în system
+    # → prompt caching intact). Goale (flag OFF) → USER byte-identic cu azi.
+    shape_block = f"Mod de răspuns: {response_shape}\n" if response_shape else ""
+    norep_block = (
+        f"Anti-repetiție: NU relua deschiderea anterioară ({last_opening}…) — schimbă formularea.\n"
+        if last_opening
+        else ""
+    )
     user = (
-        f"Limba clientului: {ctx.language}\n{notes_block}{history_block}"
+        f"Limba clientului: {ctx.language}\n{notes_block}{shape_block}{norep_block}{history_block}"
         f"Nevoia clientului: {query}\n{axes_block}\nProduse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
@@ -360,14 +381,19 @@ async def render(
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
+            # NX-181 (Prompt vNext): gated. OFF → build_rich_system fără vnext + shape/anti-rep
+            # goale → comportament byte-identic. ON → reguli relaxate + hint-uri în USER.
+            vnext = get_settings().prompt_vnext_enabled
             rich = await _finalize_rich(
                 deps.llm,
-                prompt_builder.build_rich_system(plan.inp),
+                prompt_builder.build_rich_system(plan.inp, vnext=vnext),
                 plan.query,
                 products,
                 ctx,
                 plan.history,
                 notes=plan.commerce_note,
+                response_shape=plan.response_shape if vnext else "",
+                last_opening=_last_bot_opening(ctx) if vnext else "",
             )
             if rich is not None and rich.items:
                 ctx.set_rich_reply(

@@ -214,6 +214,32 @@ REGULI DURE:
 
 - Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
 
+# NX-181 (Prompt vNext) — variantă RELAXATĂ a `_RICH_RULES`, derivată prin `.replace()` (NU duplicat
+# de 90 de linii → o singură sursă de adevăr). Scoate număr-țintă de produse, cere să respecte
+# `Mod de răspuns` (response_shape din USER) și amplifică brevitatea/opționalitatea intro/education.
+# Gated de `prompt_vnext_enabled`; OFF → nu se folosește (comportament byte-identic).
+_VNEXT_HEADER = """MOD DE RĂSPUNS (respectă-l — ți se dă în mesaj la „Mod de răspuns"):
+- „direct_followup": clientul întreabă ceva DESPRE setul deja afișat („care e mai lejeră?", „mai
+  ieftin?"). NU relista tot setul și NU relua intro-ul — răspunde SCURT și DIRECT la întrebare, cu
+  MINIM de produse (idealul: doar cel relevant). `intro`='' de regulă, `education`=''.
+- „detail": deep-dive pe UN produs (vezi MOD DETALIU mai jos), `items` = doar acel produs.
+- „recommendation": cerere nouă → 1-3 produse potrivite.
+NATURALEȚE: scrie ca un om, scurt. Preferă mai puține produse, EXACTE, în locul umpluturii. Dacă
+primești „ai folosit deja: …", schimbă deschiderea și ordinea frazelor. `intro`/`education` sunt
+OPȚIONALE — gol e mai bun decât generic.
+
+"""
+
+_RICH_RULES_VNEXT = _VNEXT_HEADER + _RICH_RULES.replace(
+    # search = EXACT linia de cantitate din `_RICH_RULES` (nu se reflowează → noqa pe lungime)
+    "- Recomandă cele mai relevante PÂNĂ LA 4 produse din listă (ideal 4 dacă ai destule potrivite), în\n"  # noqa: E501
+    "  limba clientului. NU completa cu produse nepotrivite doar ca să ajungi la 4 — mai bine mai puține,\n"  # noqa: E501
+    "  toate potrivite.",
+    "- Recomandă 1-3 produse, câte se potrivesc REAL nevoii — FĂRĂ număr-țintă. Mai bine 1-2\n"
+    "  exacte decât 3-4 forțate. La un follow-up (direct_followup), de obicei 1 produs sau ZERO\n"
+    "  produse noi (răspunzi în cuvinte pe setul deja afișat).",
+)
+
 # P0-safety (CONV-COMMERCE) — sfat medical/beauty = RĂSPUNDERE JURIDICĂ. Bloc TENANT-INVARIANT
 # (parte din prefixul static → nu strică prompt-caching-ul). Stratul PREVENTIV; plasa structurală
 # e validatorul (proză) + scrub-ul (bogat) pe `has_medical_claim`.
@@ -354,14 +380,16 @@ def build_reco_system(inp: PromptInputs) -> str:
 
 
 @lru_cache(maxsize=256)
-def build_rich_system(inp: PromptInputs) -> str:
+def build_rich_system(inp: PromptInputs, vnext: bool = False) -> str:
     """System pt recomandarea STRUCTURATĂ / model iZi (înlocuiește `_FINAL_SCHEMA_SYSTEM`).
-    Antet generat din DB + REGULI DURE identice pe toți tenanții."""
+    Antet generat din DB + REGULI DURE identice pe toți tenanții. NX-181: `vnext=True` → reguli
+    RELAXATE (`_RICH_RULES_VNEXT`). `vnext` e în cheia `lru_cache` → OFF/ON nu se coliziază."""
+    rules = _RICH_RULES_VNEXT if vnext else _RICH_RULES
     base = (
         f"{_store_header(inp)}\n"
         "Primești nevoia clientului și o listă de produse REALE "
         "(id, preț, rating, avantaje din recenzii).\n"
-        f"{_RICH_RULES}\n{_SAFETY_RULES}"
+        f"{rules}\n{_SAFETY_RULES}"
     )
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
