@@ -12,6 +12,7 @@ vechi nu se compară orb cu cele noi.
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import Any
 
 JUDGE_VERSION = "v1"
@@ -67,11 +68,12 @@ _METRICS = ("answered", "natural", "non_repetitive", "concise", "honest", "overa
 
 
 def judge_prompt_sha256() -> str:
-    """Hash-ul promptului judge + versiune + schema → pin de reproductibilitate în raport."""
+    """Hash-ul promptului judge + versiune + schema INTEGRALĂ → pin de reproductibilitate în raport.
+    Schema completă (nu doar `required`, fix #234): o schimbare de tip/prop schimbă hash-ul."""
     h = hashlib.sha256()
     h.update(JUDGE_VERSION.encode())
     h.update(JUDGE_PROMPT.encode())
-    h.update(repr(sorted(JUDGE_SCHEMA["schema"]["required"])).encode())
+    h.update(json.dumps(JUDGE_SCHEMA, sort_keys=True, ensure_ascii=False).encode())
     return h.hexdigest()
 
 

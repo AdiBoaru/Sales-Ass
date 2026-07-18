@@ -9,8 +9,8 @@
          "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
          "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant"},
         {"user": "dintre ele care e mai lejera?",
-         "gates": {"no_new_cards": true, "grounded": true},
-         "judge_focus": "raspunde superlativ pe setul afisat, FARA sa reintroduca 4 carduri sau sa repete intro"},
+         "gates": {"max_cards": 0, "grounded": true},
+         "judge_focus": "raspunde superlativ pe setul afisat, TEXT-ONLY (fara re-listare de carduri), fara sa repete intro"},
         {"user": "una mai ieftina?",
          "gates": {"grounded": true},
          "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set"}
@@ -63,8 +63,8 @@
          "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
          "judge_focus": "set de creme anti-rid"},
         {"user": "care dintre ele e cea mai hidratanta?",
-         "gates": {"no_new_cards": true, "grounded": true},
-         "judge_focus": "raspunde la superlativ pe setul afisat, nu o lista generica noua"}
+         "gates": {"max_cards": 0, "grounded": true},
+         "judge_focus": "raspunde la superlativ pe setul afisat, TEXT-ONLY (fara re-listare), nu o lista generica noua"}
       ]
     },
     {

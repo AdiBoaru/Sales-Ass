@@ -54,6 +54,32 @@ def test_ungrounded_price_caught_but_client_budget_not():
     )
 
 
+def test_ungrounded_link_and_offer_url_allowed():
+    prods = [{"product_id": "p1", "name": "Cremă", "price": 20.0, "url": "https://shop.ro/p/crema"}]
+    # link INVENTAT în proză (nu e al vreunui card, nici offer) → prins (#234)
+    fails = eval_gates.check_turn(
+        _turn("cumpără de aici https://evil.example/x", prods), None, {"grounded": True}
+    )
+    assert "ungrounded_link" in fails
+    # URL-ul REAL al cardului → OK (chiar cu punctuație după)
+    assert (
+        eval_gates.check_turn(
+            _turn("uite: https://shop.ro/p/crema.", prods), None, {"grounded": True}
+        )
+        == []
+    )
+    # URL-ul offer-ului (checkout) → permis chiar dacă nu e URL de produs
+    offer = {"kind": "open_url", "url": "https://shop.ro/checkout?ref=abc"}
+    assert (
+        eval_gates.check_turn(
+            _turn("plătește aici https://shop.ro/checkout?ref=abc", prods, offer=offer),
+            None,
+            {"grounded": True},
+        )
+        == []
+    )
+
+
 def test_forbidden_and_required_substr_diacritic_insensitive():
     prods = [{"product_id": "p1", "name": "Ser cu Retinol 1%", "price": 50.0}]
     fails = eval_gates.check_turn(

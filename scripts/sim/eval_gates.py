@@ -25,6 +25,7 @@ def norm(s: str) -> str:
 # Preț de PRODUS: doar tokeni cu 2 zecimale (89.99 / 89,99) — bugetul CLIENTULUI e rotund („sub 80")
 # și NU se prinde aici (fără fals-pozitiv). Prinde prețurile inventate care imită formatul.
 _PRICE_RE = re.compile(r"(?<!\d)(\d{1,4})[.,](\d{2})(?!\d)")
+_URL_RE = re.compile(r"https?://\S+")
 
 
 def price_tokens(content: str) -> set[float]:
@@ -97,12 +98,22 @@ def check_turn(cur: dict[str, Any], prev: dict[str, Any] | None, spec: dict[str,
         if any(norm(bad) in norm(n) for n in _names(products)):
             fails.append(f"name_forbidden:{bad}")
 
-    # Preț inventat: token de preț (2 zecimale) în text care NU e prețul vreunui card afișat.
+    # Grounding (#234): preț inventat (2 zecimale) ȘI link inventat în text.
     if spec.get("grounded", True):
         allowed = _product_prices(products)
         for tok in price_tokens(content):
             if tok not in allowed:
                 fails.append(f"ungrounded_price:{tok}")
+        # orice URL din PROZĂ trebuie să fie al unui produs afișat SAU al offer-ului (checkout).
+        # Un link inventat / către alt produs = eșec. (Offer-ul de checkout are URL legit propriu.)
+        offer = cur.get("offer") if isinstance(cur.get("offer"), dict) else {}
+        offer_url = str(offer.get("url")) if offer and offer.get("url") else None
+        allowed_urls = {str(p.get("url")) for p in products if p.get("url")}
+        if offer_url:
+            allowed_urls.add(offer_url)
+        for raw in _URL_RE.findall(content):
+            if raw.rstrip(").,;!?") not in allowed_urls:
+                fails.append("ungrounded_link")
 
     # Follow-up direct: fără carduri NOI — nu re-lista la „care e mai lejeră?".
     if spec.get("no_new_cards") and prev is not None:

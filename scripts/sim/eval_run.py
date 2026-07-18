@@ -32,7 +32,9 @@ from statistics import median
 from typing import Any
 
 # Cache OPRIT ÎNAINTE de orice import care încarcă settings (DoD NX-180: rulări comparabile).
-os.environ.setdefault("CACHE_ENABLED", "false")
+# HARD, nu `setdefault`: garantat oprit chiar dacă env-ul/.env avea deja CACHE_ENABLED=true
+# (review Codex #234). `load_dotenv()` din __main__ NU suprascrie o cheie deja setată → stă false.
+os.environ["CACHE_ENABLED"] = "false"
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -94,14 +96,27 @@ async def _catalog_signature(conn, business_id: str) -> str:
     """Semnătură deterministă a catalogului (count + sha256 pe (id, price) sortat) → pin de
     reproductibilitate: dacă se re-seedează catalogul, baseline-urile nu se compară orb."""
     rows = await conn.fetch(
-        "select id::text as id, coalesce(price, 0) as price from products "
+        "select id::text as id, coalesce(price, 0) as price, coalesce(name, '') as name, "
+        "coalesce(availability, '') as availability from products "
         "where business_id = $1 order by id",
         business_id,
     )
     h = hashlib.sha256()
     for r in rows:
-        h.update(f"{r['id']}:{float(r['price']):.2f}".encode())
+        # nume + disponibilitate în semnătură, nu doar id+preț (review Codex #234): o re-seedare
+        # care schimbă nume/stoc dar nu prețul trebuie să invalideze comparația baseline.
+        h.update(f"{r['id']}:{float(r['price']):.2f}:{r['name']}:{r['availability']}".encode())
     return f"n={len(rows)};sha256={h.hexdigest()[:16]}"
+
+
+def _fixtures_signature() -> str:
+    """Hash-ul conținutului fixture-urilor (review Codex #234): baseline-uri pe seturi diferite de
+    conversații nu se compară orb. Sortat determinist pe cale."""
+    h = hashlib.sha256()
+    for path in sorted(CONV_DIR.glob("*.json")):
+        h.update(path.name.encode())
+        h.update(path.read_bytes())
+    return h.hexdigest()[:16]
 
 
 def _load_conversations(only: str | None) -> list[dict[str, Any]]:
@@ -153,7 +168,10 @@ async def _run_conversation(convo: dict[str, Any], mk, llm, runs: int) -> dict[s
 
             fails = eval_gates.check_turn(cur, prev_dict, tspec.get("gates", {}))
             op_rep = eval_gates.opening_repeated(cur, prev_dict)
-            # judge DUPĂ tokeni (nu-i contaminează); transcript = conversația de până AICI.
+            # transcript INCLUDE întrebarea curentă ÎNAINTE de judge (fix blocant #234): altfel
+            # judge-ul nu vede LA CE răspunde botul → `answered`/`natural`/`overall` invalide.
+            # Bot-reply se adaugă DUPĂ judge. Judge după tokeni (nu-i contaminează).
+            transcript.append({"role": "user", "text": user_msg})
             jscore = await eval_judge.judge_turn(llm, transcript, turn.content)
 
             acc[i]["judge"].append(jscore)
@@ -164,7 +182,6 @@ async def _run_conversation(convo: dict[str, Any], mk, llm, runs: int) -> dict[s
             acc[i]["sample"].append(
                 {"content": turn.content[:280], "n_cards": len(turn.products), "fails": fails}
             )
-            transcript.append({"role": "user", "text": user_msg})
             transcript.append({"role": "bot", "text": turn.content[:280]})
             prev_dict = cur
 
@@ -198,6 +215,9 @@ def _agg_turn(tspec: dict[str, Any], a: dict[str, list]) -> dict[str, Any]:
         "gate_fails_union": sorted({f for run in a["gate_fails"] for f in run}),
         "opening_repeat_runs": sum(1 for x in a["opening_rep"] if x),
         "judge": jmed,
+        "latency_ms_raw": [
+            float(x) for x in a["latency_ms"]
+        ],  # #234: p95 GLOBAL pe raw, nu p95-de-p95
         "latency_ms_p95": _p95([float(x) for x in a["latency_ms"]]),
         "latency_ms_median": round(median(a["latency_ms"]), 1) if a["latency_ms"] else 0,
         "tokens_out_median": median(tokens_out) if tokens_out else 0,
@@ -218,7 +238,9 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
     fu_answered = [
         _turn_median(t, "answered") for t in followups if _turn_median(t, "answered") is not None
     ]
-    lat = [t["latency_ms_p95"] for t in all_turns]
+    # p95 GLOBAL peste TOATE latențele brute (fiecare tur × fiecare rulare), NU p95-de-p95 (fix
+    # #234): doar așa pragul „+≤10% vs baseline" e măsurabil corect.
+    lat_raw = [x for t in all_turns for x in t.get("latency_ms_raw", [])]
     all_fails = [f for t in all_turns for f in t["gate_fails_union"]]
 
     def _pct_ge4(vals: list[float]) -> float:
@@ -245,8 +267,9 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "unstable_turns": [
             {"conv": c["id"], "user": t["user"]} for c in cases for t in c["turns"] if t["unstable"]
         ],
-        "latency_ms_p95": _p95(lat),
-        "latency_ms_p50": round(median(lat), 1) if lat else 0,
+        "latency_ms_p95": _p95(lat_raw),
+        "latency_ms_p50": round(median(lat_raw), 1) if lat_raw else 0,
+        "n_latency_samples": len(lat_raw),
     }
 
 
@@ -302,29 +325,38 @@ async def main() -> int:
         vid, sig = await web_audit._session(token, label)
         return web_audit.WebClient(token, vid, sig, label)
 
-    passes = [(None, False)]
     if args.flag:
-        passes = [(args.flag, False), (args.flag, True)]  # paired OFF apoi ON
+        pass_specs = [
+            (args.flag, False, f"{args.flag}=False"),
+            (args.flag, True, f"{args.flag}=True"),
+        ]
+    else:
+        pass_specs = [(None, False, "baseline")]
 
-    report_passes = []
-    for flag, value in passes:
-        if flag:
-            setattr(settings, flag, value)  # toggle paired (settings mutabil per pass)
-        label = f"{flag}={value}" if flag else "baseline"
-        print(f"\n{'=' * 70}\n[pass: {label}] runs={args.runs} cache={settings.cache_enabled}")
-        cases = []
-        for convo in convos:
-            print(f"  • {convo['id']} …", flush=True)
-            cases.append(await _run_conversation(convo, mk, llm, args.runs))
-        report_passes.append(
-            {
-                "pass": label,
-                "flag": flag,
-                "flag_value": value,
-                "summary": _summarize(cases),
-                "cases": cases,
-            }
-        )
+    # INTERCALAT per conversație (OFF apoi ON pe ACELAȘI caz, înainte de următorul) — nu tot OFF
+    # apoi tot ON (fix #234): altfel diferența măsoară drift temporal (rate limit / warmup / oră),
+    # nu efectul flagului. Baseline (fără flag) = un singur pass, neschimbat.
+    print(
+        f"\n{'=' * 70}\nruns/case={args.runs} cache={settings.cache_enabled} "
+        f"passes={[s[2] for s in pass_specs]}"
+    )
+    pass_cases: dict[str, list] = {label: [] for _, _, label in pass_specs}
+    for convo in convos:
+        print(f"  • {convo['id']} …", flush=True)
+        for flag, value, label in pass_specs:
+            if flag:
+                setattr(settings, flag, value)  # toggle paired per caz (settings mutabil)
+            pass_cases[label].append(await _run_conversation(convo, mk, llm, args.runs))
+    report_passes = [
+        {
+            "pass": label,
+            "flag": flag,
+            "flag_value": value,
+            "summary": _summarize(pass_cases[label]),
+            "cases": pass_cases[label],
+        }
+        for flag, value, label in pass_specs
+    ]
 
     now = datetime.now(timezone.utc)
     report = {
@@ -340,6 +372,8 @@ async def main() -> int:
             "judge_prompt_sha256": eval_judge.judge_prompt_sha256(),
             "judge_version": eval_judge.JUDGE_VERSION,
             "catalog_signature": catalog_sig,
+            "fixtures_sha256": _fixtures_signature(),
+            "paired_mode": "interleaved_per_conversation" if args.flag else "single",
             "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0",
         },
         "passes": report_passes,
