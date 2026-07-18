@@ -119,10 +119,15 @@ async def _pools():
 
 @pytest.mark.integration
 async def test_tenant_sees_own_products(_pools):
-    """Happy: checkout pe A → doar datele lui A."""
+    """Happy: checkout pe A → doar datele lui A.
+
+    NX-177: assert pe INVARIANT (tenantul își vede catalogul), nu pe numărul de produse. Numărul
+    exact e o proprietate a seed-ului, nu a izolării — cuplat la 500, testul a picat când catalogul
+    a crescut la 654, semnalând o „regresie" care nu exista. Perechea reală e cu `== 0` pe alt
+    tenant (testul de mai jos): asta demonstrează izolarea."""
     async with tenant_conn(DEMO_BIZ) as conn:
         count = await conn.fetchval("select count(*) from products")
-    assert count == 500
+    assert count > 0
 
 
 @pytest.mark.integration
@@ -170,5 +175,5 @@ async def test_two_consecutive_checkouts_isolated(_pools):
         demo = await conn.fetchval("select count(*) from products")
     async with tenant_conn(OTHER_BIZ) as conn:
         other = await conn.fetchval("select count(*) from products")
-    assert demo == 500
-    assert other == 0
+    assert demo > 0  # NX-177: invariant, nu numărul din seed (vezi test_tenant_sees_own_products)
+    assert other == 0  # ăsta e assertul care demonstrează izolarea

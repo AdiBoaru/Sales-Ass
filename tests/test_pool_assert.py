@@ -81,8 +81,8 @@ async def test_tenant_conn_runs_assert_happy(_pools, monkeypatch):
     monkeypatch.setattr(conn_mod, "_check_isolation", spy)
     async with tenant_conn(DEMO_BIZ) as c:
         n = await c.fetchval("select count(*) from products")
-    assert n == 500
-    assert calls == [("bot_runtime", DEMO_BIZ, DEMO_BIZ)]
+    assert n > 0  # NX-177: query-ul rulează — numărul din seed nu e obiectul testului
+    assert calls == [("bot_runtime", DEMO_BIZ, DEMO_BIZ)]  # ĂSTA e assertul: assertul s-a chemat
 
 
 @pytest.mark.integration
