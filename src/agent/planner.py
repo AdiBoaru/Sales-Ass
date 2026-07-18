@@ -120,6 +120,24 @@ def _plan_mode(
     return "fallback"
 
 
+def _response_shape(
+    tool_names: list[str],
+    *,
+    attr_query: bool,
+    cheaper_intent: bool,
+    rehydrated: bool,
+) -> str:
+    """NX-181: forma de răspuns (hint Prompt vNext) din INTENȚIE, NU din numărul de rezultate.
+    `detail` = clientul a cerut detalii despre UN produs (tool `get_product_details`);
+    `direct_followup` = follow-up pe setul afișat (superlativ / mai ieftin / rehidratat), INCLUSIV
+    când safety-gate-ul a lăsat 1 singur produs; altfel `recommendation` (căutare nouă). Pur."""
+    if "get_product_details" in tool_names:
+        return "detail"
+    if attr_query or cheaper_intent or rehydrated:
+        return "direct_followup"
+    return "recommendation"
+
+
 async def build_plan(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -317,16 +335,13 @@ async def build_plan(
     products = policy.gate(ctx, products, purpose="retrieval_final")[0]
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
 
-    # NX-181: forma de răspuns din semnalele DEJA calculate (fără LLM nou). detail = deep-dive pe 1
-    # produs afișat; direct_followup = follow-up pe setul afișat (superlativ/mai-ieftin/rehidratat);
-    # altfel recommendation (căutare proaspătă). Hint pt Prompt vNext, consumat doar când flag ON.
-    followup = attr_query or cheaper_intent or rehydrated
-    if followup and len(products) == 1:
-        response_shape = "detail"
-    elif followup:
-        response_shape = "direct_followup"
-    else:
-        response_shape = "recommendation"
+    # NX-181: forma de răspuns din INTENȚIE (funcție pură, testabilă) — vezi `_response_shape`.
+    response_shape = _response_shape(
+        tool_names,
+        attr_query=attr_query,
+        cheaper_intent=cheaper_intent,
+        rehydrated=rehydrated,
+    )
 
     return ResponsePlan(
         handled=False,

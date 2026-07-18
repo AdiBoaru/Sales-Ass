@@ -15,6 +15,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
+
+from src.config import get_settings
+
+
+def prompt_vnext_effective(business: Any) -> bool:
+    """NX-181: flag Prompt vNext EFECTIV = global master switch AND opt-in per business
+    (`business.settings["prompt_vnext_enabled"]`). global OFF → OFF; global ON + business
+    lipsă/false/valoare invalidă → OFF (fail-closed, strict `is True`); global ON + business True →
+    ON. `finalize` folosește DOAR ăsta (single source) — NU citește global-ul direct → rollout
+    multi-tenant controlat."""
+    if not get_settings().prompt_vnext_enabled:
+        return False
+    settings = getattr(business, "settings", None)
+    return isinstance(settings, dict) and settings.get("prompt_vnext_enabled") is True
+
 
 # Status comandă — NEUTRU pe vertical (nu vinde, doar raportează) → constantă, nu generat.
 ORDER_RECO_SYSTEM = (

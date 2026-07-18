@@ -381,9 +381,9 @@ async def render(
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
-            # NX-181 (Prompt vNext): gated. OFF → build_rich_system fără vnext + shape/anti-rep
-            # goale → comportament byte-identic. ON → reguli relaxate + hint-uri în USER.
-            vnext = get_settings().prompt_vnext_enabled
+            # NX-181 (Prompt vNext): flag EFECTIV per business (global AND business.settings).
+            # NU citim global-ul direct (single source: prompt_vnext_effective). OFF → byte-identic.
+            vnext = prompt_builder.prompt_vnext_effective(ctx.business)
             rich = await _finalize_rich(
                 deps.llm,
                 prompt_builder.build_rich_system(plan.inp, vnext=vnext),

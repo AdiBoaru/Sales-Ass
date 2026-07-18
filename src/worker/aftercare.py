@@ -20,6 +20,7 @@ from redis.asyncio import Redis
 from src.agent import usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
+from src.agent.prompt_builder import prompt_vnext_effective
 from src.cache.canonical import canonicalize, classify_volatility
 from src.config import get_settings
 from src.db.provider import DbProvider
@@ -156,6 +157,9 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
         canonical, canonical_hash = canonicalize(body or "")
         if not canonical:
             return
+        # NX-181: scrie în namespace-ul versiunii de prompt (simetric cu lookup-ul din cache_stage)
+        # → vNext nu suprascrie intrări v1. Flag EFECTIV per business (single source).
+        prompt_version = "vnext" if prompt_vnext_effective(ctx.business) else "v1"
         embedding = (await llm.embed([canonical]))[0]  # LLM — FĂRĂ conn ținut
         async with db() as conn:  # WRITE scurt (upsert)
             async with conn.transaction():
@@ -170,6 +174,7 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
                     volatility_class=volatility,
                     embedding_model=settings.model_embed,
                     quality_score=1.0,
+                    prompt_version=prompt_version,
                     **kwargs,
                 )
         if volatility == "dynamic":
