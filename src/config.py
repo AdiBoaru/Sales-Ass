@@ -514,6 +514,20 @@ class Settings(BaseSettings):
     query_spec_shadow_enabled: bool = Field(
         default=False, validation_alias="QUERY_SPEC_SHADOW_ENABLED"
     )
+    # NX-187/188: Match Gate în SHADOW — clasifică setul (exact/alternatives/rejected) + emite
+    # telemetrie, ZERO schimbare de comportament. Default OFF.
+    match_gate_shadow_enabled: bool = Field(
+        default=False, validation_alias="MATCH_GATE_SHADOW_ENABLED"
+    )
+    # NX-188: Match Gate ENFORCE (per business) — aplică efectiv (exclude rejected). Prerechizit:
+    # fațeta participă în retrieval (NX-189) + coverage ≥ prag. Default OFF. NB: enforce
+    # blind (fără NX-189) dă false-negative pe pool-ul de 24 → activare DOAR după verificare live.
+    match_gate_enforce_enabled: bool = Field(
+        default=False, validation_alias="MATCH_GATE_ENFORCE_ENABLED"
+    )
+    # NX-189: fațete tipizate în SQL tri-state (per fațetă). Default OFF; activare per fațetă matură
+    # după paritate shadow + recall (verificare live).
+    typed_facet_sql_enabled: bool = Field(default=False, validation_alias="TYPED_FACET_SQL_ENABLED")
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).

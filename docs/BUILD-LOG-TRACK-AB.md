@@ -45,8 +45,22 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   + `match_set` DISJUNCT (precedență rejected→alternatives→exact; soft = doar ranking, nu apartenență)
   · test_match_gate (4: exemplul Codex A/B/C/D + soft ignorat + no-hard) verzi. Modul nou → zero regresie.
   NOTĂ: shadow emit în planner + recall vs scan exhaustiv = de cablat (planner) + live; logica pură e gata.
-- ⬜ **NX-189** typed facets SQL tri-state (shadow per fațetă) · flag `typed_facet_sql_enabled`
-- ⬜ **NX-188** Match Gate enforce + QuerySpec enforce + alternatives UX · flag `match_gate_enforce_enabled`
+- 🟡 **NX-188** Match Gate shadow emit în planner (`match_gate_shadow`, gated, ZERO comportament) +
+  flag-uri `match_gate_shadow_enabled`/`match_gate_enforce_enabled`. ENFORCE propriu-zis (filtrare
+  rejected + QuerySpec projection + alternatives UX) = **LIVE-REVIEW** (behavior-changing, prerechizit
+  NX-189-per-fațetă; enforce blind pe pool-24 dă false-negative). Shadow OFF byte-identic (211 regresie).
+- 🟡 **NX-189** migrare `031_products_attributes_gin.sql` (index GIN additiv pe attributes, pregătire
+  filtrare tipizată) + flag `typed_facet_sql_enabled`. Wiring-ul SQL de retrieval (tri-state MATCH/
+  UNKNOWN, paritate shadow, recall) = **LIVE-REVIEW** (atinge SQL-ul core de retrieval, cere paritate live).
+
+## Rezumat sesiune
+- ✅ Track A COMPLET: NX-182, NX-183, NX-184 (toate kill-switch OFF byte-identic, testate).
+- ✅ Track B fundație+shadow: NX-185 (QuerySpec), NX-186 (facets), NX-187 (Match Gate) — module PURE,
+  testate, zero regresie.
+- 🟡 NX-188/189: partea SIGURĂ construită (shadow emit + migrare + flags); ENFORCE + SQL-retrieval =
+  perechea cuplată, behavior-changing, cu migrare DB → de finalizat + verificat LIVE împreună (directiva
+  „no-live" + „nu face greșeli" → nu cablez enforcement orb).
+- Regresie totală pe branch: rulare finală `pytest` la commit.
 
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_
