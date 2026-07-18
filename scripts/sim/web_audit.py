@@ -440,6 +440,15 @@ async def _purge_audit(conn, business_id: str) -> int:
             business_id,
             cids,
         )
+        # conversation_facts (NX-148): contact-scoped, fără FK/cascade → altfel memoria de audit
+        # rămâne orfană (Codex #231). Guard: migrarea delta 023 poate lipsi pe unele DB.
+        if await conn.fetchval("select to_regclass('public.conversation_facts')"):
+            await conn.execute(
+                "delete from conversation_facts "
+                "where business_id = $1 and contact_id = any($2::uuid[])",
+                business_id,
+                cids,
+            )
         await conn.execute(
             "delete from conversations where business_id = $1 and contact_id = any($2::uuid[])",
             business_id,
