@@ -200,6 +200,13 @@ class Settings(BaseSettings):
     faq_policy_gate_on_faq_kind: bool = Field(
         default=True, validation_alias="FAQ_POLICY_GATE_ON_FAQ_KIND"
     )
+    # NX-175: rerank determinist (calificatori + marjă → clarify) vs top-1 orb pe cosine.
+    # Măsurat: „Cum pot face un retur?" servea excepția „produs desfăcut" (0.619) în loc de
+    # procedura generală (0.592) — marjă 0.026. Rerank demotează EXCEPȚIILE când întrebarea nu are
+    # calificatorul → procedura câștigă. OFF (kill-switch) → top-1 orb (byte-identic cu #171).
+    faq_rerank_enabled: bool = Field(default=True, validation_alias="FAQ_RERANK_ENABLED")
+    # Câți candidați aduce top-k pentru rerank (5 = suficient pt clusterele reale; cost cosine mic).
+    faq_topk: int = Field(default=5, validation_alias="FAQ_TOPK")
     # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
     # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
     # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).

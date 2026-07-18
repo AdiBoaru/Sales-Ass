@@ -20,22 +20,25 @@ def _vec(embedding: list[float]) -> str:
     return "[" + ",".join(f"{x:.7f}" for x in embedding) + "]"
 
 
-async def semantic_lookup(
+async def semantic_topk(
     conn: asyncpg.Connection,
     business_id: str,
     locale: str,
     embedding: list[float],
     *,
     embedding_model: str,
-    limit: int = 1,  # noqa: ARG001 — v1 întoarce mereu cel mai apropiat rând
-) -> dict[str, Any] | None:
-    """Cel mai apropiat FAQ activ (cosine) pe `(business_id, locale)`. None la 0 rânduri.
-    Întoarce `{id, question, answer, similarity}`; caller-ul aplică pragul de similaritate.
+    k: int = 5,
+) -> list[dict[str, Any]]:
+    """Cei mai apropiați K candidați FAQ activi (cosine) pe `(business_id, locale)`, în ordine
+    descrescătoare de similaritate. `[]` la 0 rânduri.
 
-    `embedding is not null` în WHERE exclude rândurile ne-embed-uite (seed parțial) — ele nu
-    pot fi ordonate cosine oricum. NX-124a: filtru pe `embedding_model` — vectori dintr-un alt
-    model (dim/spațiu diferit) nu se compară cosine cu query-ul curent (P11)."""
-    row = await conn.fetchrow(
+    NX-175: top-1 orb rata cazul în care întrebarea generică e mai aproape de o EXCEPȚIE decât de
+    procedura generală (măsurat: marjă 0.026). Reranking-ul (calificatori + marjă) are nevoie de
+    candidați, nu de un singur rând. `semantic_lookup` (mai jos) rămâne wrapper thin pt back-compat.
+
+    `embedding is not null` exclude rândurile ne-embed-uite (seed parțial). Filtru pe
+    `embedding_model` — vectori din alt model nu se compară cosine (P11)."""
+    rows = await conn.fetch(
         """
         select id::text as id, question, answer,
                1 - (embedding <=> $3::vector) as similarity
@@ -46,11 +49,29 @@ async def semantic_lookup(
           and embedding is not null
           and embedding_model = $4
         order by embedding <=> $3::vector
-        limit 1
+        limit $5
         """,
         business_id,
         locale,
         _vec(embedding),
         embedding_model,
+        k,
     )
-    return dict(row) if row else None
+    return [dict(r) for r in rows]
+
+
+async def semantic_lookup(
+    conn: asyncpg.Connection,
+    business_id: str,
+    locale: str,
+    embedding: list[float],
+    *,
+    embedding_model: str,
+    limit: int = 1,  # noqa: ARG001 — wrapper thin peste `semantic_topk` (back-compat)
+) -> dict[str, Any] | None:
+    """Cel mai apropiat FAQ activ (cosine). Wrapper back-compat peste `semantic_topk` — codul nou
+    (rerank NX-175) folosește direct top-k; ăsta rămâne pt apelanții care vor doar top-1."""
+    rows = await semantic_topk(
+        conn, business_id, locale, embedding, embedding_model=embedding_model, k=1
+    )
+    return rows[0] if rows else None
