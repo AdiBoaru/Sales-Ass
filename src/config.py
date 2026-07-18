@@ -491,6 +491,12 @@ class Settings(BaseSettings):
     # opționale) + injectează `response_shape` + semnal anti-repetiție în mesajul USER (nu în system
     # → prompt caching intact). Default OFF → comportament byte-identic. Măsurat paired vs baseline.
     prompt_vnext_enabled: bool = Field(default=False, validation_alias="PROMPT_VNEXT_ENABLED")
+    # NX-182: disclosure DETERMINIST pe relaxarea filtrelor — search-ul a renunțat la o constrângere
+    # hard (nevoie/categorie/feature) ca să iasă ceva → compose spune EXPLICIT care filtru a fost
+    # relaxat + suprimă eticheta „exact". Default OFF → byte-identic (doar nota veche de proză).
+    relaxed_disclosure_enabled: bool = Field(
+        default=False, validation_alias="RELAXED_DISCLOSURE_ENABLED"
+    )
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).
