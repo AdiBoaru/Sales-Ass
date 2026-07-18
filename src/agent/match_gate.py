@@ -30,11 +30,16 @@ def _norm(s: Any) -> str:
 
 def _as_bool(x: Any) -> bool | None:
     """Coerciție booleană robustă. String → DOAR tokeni cunoscuți (Codex: `bool('false')` e True →
-    fals-pozitiv). Necunoscut → None → verdict UNKNOWN (nu ghicim)."""
+    fals-pozitiv). Numeric → DOAR 0/1 (Codex: `2` NU e boolean → None, nu True). Orice necunoscut →
+    None → verdict UNKNOWN (nu ghicim)."""
     if isinstance(x, bool):
         return x
-    if isinstance(x, (int, float)):
-        return bool(x)
+    if isinstance(x, (int, float)) and not isinstance(x, bool):
+        if x == 0:
+            return False
+        if x == 1:
+            return True
+        return None
     n = _norm(x)
     if n in _TRUE:
         return True

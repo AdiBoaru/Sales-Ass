@@ -84,3 +84,20 @@ def test_complete_faq_obligation_injects_into_rich(monkeypatch):
     _complete_faq_obligation(ctx)
     assert "Livrarea durează 2-3 zile" in (reply.rich.education or "")  # ajunge pe web
     assert "Livrarea durează 2-3 zile" in reply.text  # și pe floor (WhatsApp/Telegram)
+
+
+def test_complete_faq_obligation_injects_into_comparison(monkeypatch):
+    # Codex: la o COMPARAȚIE, render.py folosește comparison.intro (nu rich/text) → politica trebuie
+    # injectată și acolo, altfel se pierde pe web la turele de comparație.
+    from src.models import Comparison
+
+    monkeypatch.setattr(get_settings(), "response_shape_hints_enabled", True)
+    cmp = Comparison(rows=[], columns=[], intro="Uite comparația.")
+    reply = Reply(text="Uite comparația.", comparison=cmp)
+    ctx = SimpleNamespace(
+        faq_grounded="Livrarea durează 2-3 zile lucrătoare.",
+        reply=reply,
+        emit=lambda *a, **k: None,
+    )
+    _complete_faq_obligation(ctx)
+    assert "Livrarea durează 2-3 zile" in (reply.comparison.intro or "")

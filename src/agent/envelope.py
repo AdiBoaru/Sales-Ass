@@ -60,6 +60,8 @@ V2_SCHEMA: dict[str, Any] = {
             },
             # răspuns FACTUAL text-only (ex. „care e mai lejeră?") — codul compune afirmația din
             # evidence; `presentation: inline` = fără card. `product_id` gol/null → fără answer.
+            # Doar `inline` e consumat (Codex: `card` nu era randat → scos din contract; cardurile
+            # se cer prin `products`, nu prin `answer`).
             "answer": {
                 "type": ["object", "null"],
                 "additionalProperties": False,
@@ -67,7 +69,7 @@ V2_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "product_id": {"type": "string"},
                     "evidence_ids": {"type": "array", "items": {"type": "string"}},
-                    "presentation": {"type": "string", "enum": ["inline", "card"]},
+                    "presentation": {"type": "string", "enum": ["inline"]},
                 },
             },
             "follow_up": {"type": ["string", "null"]},

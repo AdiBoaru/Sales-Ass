@@ -44,3 +44,16 @@ def test_facet_coverage_present_vs_valid_and_enforceable():
     assert cov2["enforceable"] is False  # 10 prezente dar 0 valide → nu se enforce-uiește
     # prea puține produse → NU enforceable (evită „100%" pe 3 produse)
     assert facet_coverage([{"finish": "matte"}] * 3, spec)["enforceable"] is False
+
+
+def test_facet_coverage_typed_validity_bool_number():
+    # Codex: coverage-ul valida orice non-enum. bool → doar bool real; number → doar numeric.
+    b = FacetSpec("fragrance_free", "bool", ("eq",))
+    cov = facet_coverage([{"fragrance_free": True}] * 4 + [{"fragrance_free": "necunoscut"}] * 6, b)
+    assert cov["present"] == 10 and cov["valid"] == 4 and cov["pct_valid"] == 0.4
+    assert cov["enforceable"] is False  # doar bool real e valid → sub prag
+    # numeric: "n/a" prezent dar nu valid
+    num = FacetSpec("spf", "number", ("gte",))
+    assert facet_coverage([{"spf": 30}] * 10, num)["valid"] == 10
+    cov2 = facet_coverage([{"spf": "n/a"}] * 10, num)
+    assert cov2["present"] == 10 and cov2["valid"] == 0 and cov2["enforceable"] is False

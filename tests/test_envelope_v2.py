@@ -4,6 +4,8 @@ Proprietatea de siguranță: modelul referă DOAR id-uri opace din meniu → nu 
 un id invalid e ignorat. OFF → calea rich (verificat de regresia compose, nu aici).
 """
 
+from types import SimpleNamespace
+
 from src.agent import envelope
 from src.config import get_settings
 
@@ -114,3 +116,135 @@ async def test_finalize_v2_degrades_to_false_on_llm_error():
     plan.inp = PromptInputs.build("Demo", "beauty", "ro", [], [])
     ok = await _finalize_v2(deps, plan, _Ctx())
     assert ok is False  # eroare LLM → fall-through la rich (nu setează reply)
+
+
+def test_v2_schema_answer_presentation_only_inline():
+    # Codex: `card` nu era consumat → scos din contract (cardurile se cer prin `products`).
+    ans = envelope.V2_SCHEMA["schema"]["properties"]["answer"]
+    assert ans["properties"]["presentation"]["enum"] == ["inline"]
+
+
+def test_cache_prompt_version_namespaces_prompt_and_envelope(monkeypatch):
+    # Codex #3: namespace-ul de cache compune prompt (v1/vnext) cu envelope (v2); single-source
+    # lookup==upsert. OFF pe ambele → v1 (byte-identic).
+    from src.agent.prompt_builder import cache_prompt_version
+
+    s = get_settings()
+
+    class _Biz:
+        def __init__(self, settings):
+            self.settings = settings
+
+    monkeypatch.setattr(s, "prompt_vnext_enabled", False)
+    monkeypatch.setattr(s, "response_envelope_v2_enabled", False)
+    assert cache_prompt_version(_Biz({})) == "v1"
+    monkeypatch.setattr(s, "response_envelope_v2_enabled", True)
+    assert cache_prompt_version(_Biz({"response_envelope_v2_enabled": True})) == "v1+v2"
+    monkeypatch.setattr(s, "prompt_vnext_enabled", True)
+    assert (
+        cache_prompt_version(
+            _Biz({"prompt_vnext_enabled": True, "response_envelope_v2_enabled": True})
+        )
+        == "vnext+v2"
+    )
+    monkeypatch.setattr(s, "response_envelope_v2_enabled", False)
+    assert cache_prompt_version(_Biz({"prompt_vnext_enabled": True})) == "vnext"
+
+
+# --- integrare _finalize_v2 (Codex: testele declarate pentru answer/follow-up lipseau) ---------
+
+
+class _CaptureCtx:
+    def __init__(self, lang="ro"):
+        self.language = lang
+        self.business = SimpleNamespace(domain_pack=None, name="Demo", vertical="beauty")
+        self.message = SimpleNamespace(body="care e mai lejeră?")
+        self.history = []
+        self.state = SimpleNamespace(constraints={}, displayed_products=[])
+        self.retrieval = None
+        self.reply = None
+        self.offer = None
+        self.events = []
+
+    def emit(self, *a, **k):
+        self.events.append((a[0] if a else None, k))
+
+    def set_reply(self, text, kind="message", products=None, *, cacheable=True):
+        self.reply = SimpleNamespace(text=text, rich=None, products=products, cacheable=cacheable)
+
+    def set_rich_reply(self, rich, *, text, products=None, cacheable=False):
+        self.reply = SimpleNamespace(text=text, rich=rich, products=products, cacheable=cacheable)
+
+    def set_offer(self, offer):
+        self.offer = offer
+
+
+class _ScriptedLLM:
+    def __init__(self, env):
+        self._env = env
+
+    async def complete_schema(self, system, user, schema):
+        return self._env
+
+
+def _v2_plan(products):
+    from src.agent.prompt_builder import PromptInputs
+
+    return SimpleNamespace(
+        products=products,
+        inp=PromptInputs.build("Demo", "beauty", "ro", [], []),
+        query="care e mai lejeră?",
+        history="",
+        commerce_note="",
+        response_shape="",
+        checkout_url=None,
+    )
+
+
+async def test_finalize_v2_text_only_inline_served():
+    from src.agent.finalize import _finalize_v2
+
+    products = [_prod("p1", "Crema A", ["Fără parfum"])]
+    env = {
+        "lead": "Uite ce am găsit.",
+        "products": [],
+        "answer": {"product_id": "p1", "evidence_ids": ["e0_0"], "presentation": "inline"},
+        "follow_up": None,
+    }
+    ctx = _CaptureCtx()
+    ok = await _finalize_v2(SimpleNamespace(llm=_ScriptedLLM(env)), _v2_plan(products), ctx)
+    assert ok is True
+    assert ctx.reply is not None and ctx.reply.rich is None  # text-only, fără carduri
+    assert ctx.reply.cacheable is False  # dependent de context → nu se cache-uiește
+    assert "Fără parfum" in ctx.reply.text  # motiv factual din evidence
+
+
+async def test_finalize_v2_no_evidence_falls_through():
+    from src.agent.finalize import _finalize_v2
+
+    products = [_prod("p1", "Crema A", ["Fără parfum"])]
+    env = {
+        "lead": "x",
+        "products": [],
+        "answer": {"product_id": "p1", "evidence_ids": ["e9_9"], "presentation": "inline"},
+        "follow_up": None,
+    }
+    ctx = _CaptureCtx()
+    ok = await _finalize_v2(SimpleNamespace(llm=_ScriptedLLM(env)), _v2_plan(products), ctx)
+    assert ok is False and ctx.reply is None  # evidence invalid → fără motiv → nu servim text-only
+
+
+async def test_finalize_v2_follow_up_rendered_in_cards():
+    from src.agent.finalize import _finalize_v2
+
+    products = [_prod("p1", "Crema A", ["Fără parfum"])]
+    env = {
+        "lead": "Uite ce am găsit.",
+        "products": [{"product_id": "p1", "evidence_ids": ["e0_0"], "reason_style": "good_for"}],
+        "answer": None,
+        "follow_up": "Vrei să vezi și alte opțiuni?",
+    }
+    ctx = _CaptureCtx()
+    ok = await _finalize_v2(SimpleNamespace(llm=_ScriptedLLM(env)), _v2_plan(products), ctx)
+    assert ok is True and ctx.reply.rich is not None
+    assert "alte opțiuni" in (ctx.reply.rich.education or "")  # follow_up randat (scrubuit) pe web

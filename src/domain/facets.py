@@ -77,10 +77,31 @@ def facet_value(product: dict[str, Any], spec: FacetSpec) -> Any:
     return spec.canonicalize(raw)
 
 
+def _is_valid_value(spec: FacetSpec, v: Any) -> bool:
+    """Valoarea (deja extrasă/canonicalizată) e VALIDĂ pentru TIPUL fațetei? (Codex: nu doar
+    „prezentă"). enum→în `values`; bool→bool real (nu „necunoscut"/2); number→numeric;
+    list→are elemente; text→string nevid."""
+    if spec.value_type == "enum":
+        return v in spec.values
+    if spec.value_type == "bool":
+        return isinstance(v, bool)
+    if spec.value_type == "number":
+        if isinstance(v, bool):
+            return False
+        try:
+            float(v)
+            return True
+        except (TypeError, ValueError):
+            return False
+    if spec.value_type == "list":
+        return isinstance(v, (list, tuple)) and len(v) > 0
+    return isinstance(v, str) and bool(v.strip())
+
+
 def facet_coverage(products: list[dict[str, Any]], spec: FacetSpec) -> dict[str, Any]:
     """Coverage-ul unei fațete pe un set de produse (pur). Distinge (Codex): valoare PREZENTĂ vs
-    VALIDĂ în registru (enum). `pct_present`/`pct_valid` + `enforceable` (peste `min_coverage` +
-    numărul minim de produse). Denominator explicit."""
+    VALIDĂ pentru tipul fațetei (`_is_valid_value`, nu doar enum). `pct_present`/`pct_valid` +
+    `enforceable` (peste `min_coverage` + numărul minim de produse). Denominator explicit."""
     n = len(products)
     present = valid = 0
     for p in products:
@@ -88,10 +109,7 @@ def facet_coverage(products: list[dict[str, Any]], spec: FacetSpec) -> dict[str,
         if v is None or (isinstance(v, (list, tuple)) and not v):
             continue
         present += 1
-        if spec.value_type == "enum":
-            valid += 1 if v in spec.values else 0
-        else:
-            valid += 1
+        valid += 1 if _is_valid_value(spec, v) else 0
     pct_present = round(present / n, 3) if n else 0.0
     pct_valid = round(valid / n, 3) if n else 0.0
     return {

@@ -40,7 +40,6 @@ from src.config import get_settings
 from src.models import Offer, TurnContext
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
-from src.worker.text_scrub import has_medical_claim
 
 if TYPE_CHECKING:
     from src.agent.planner import ResponsePlan
@@ -372,9 +371,13 @@ async def _finalize_v2(deps, plan, ctx) -> bool:
             pid, ans.get("evidence_ids") or [], "good_for", menu, ctx.language
         )
         lead = compose.scrub_intro(env.get("lead") or "", set()) or ""
+        fu = compose.scrub_prose(env.get("follow_up")) or ""  # free-text → scrub preț/link/claim
         tail = f"{name} — {reason}".strip(" —") if name else reason
-        text = _append_follow_up(f"{lead} {tail}".strip(), env.get("follow_up"))
-        if text and not _v2_medical(text):
+        base = f"{lead} {tail}".strip()
+        text = f"{base}\n\n{fu}".strip() if fu else base
+        # VALIDARE COMPLETĂ de proză (Codex: nu doar medical) — preț/link/medical/claim ∈ produsele
+        # afișate. Fără motiv factual (evidence invalid) sau invalid → fall-through la rich.
+        if reason and text and validate_prose(text, products=products).ok:
             ctx.set_reply(text, cacheable=False)
             ctx.emit(
                 "agent_recommended", n=0, v2=True, text_only=True, product_ids=clean_ids([pid])
@@ -396,21 +399,18 @@ async def _finalize_v2(deps, plan, ctx) -> bool:
             )
             j_items.append({"product_id": pid, "pro_index": None, "fit_clause": reason})
     if j_items:
+        # follow_up (Codex: nescrubuit) → `education` ÎNAINTE de assemble → scrub_education curăță
+        # preț/link/claim (model free-text). Randat pe web de flatten_framing + floor.
+        raw_fu = env.get("follow_up")
         j = {
             "intro": env.get("lead") or "",
             "items": j_items,
             "pick": None,
-            "education": "",
+            "education": raw_fu if isinstance(raw_fu, str) else "",
             "suggestions": [],
         }
         rich = compose.assemble(ctx, j, products)
         if rich.items:
-            # follow_up (Codex: definit în schemă, nerandat) → paragraf de final pe web (`education`
-            # randat de `flatten_framing`) + floor text. E o întrebare, fără cifre/claim → sigur.
-            raw_fu = env.get("follow_up")
-            fu = raw_fu.strip() if isinstance(raw_fu, str) else ""
-            if fu:
-                rich.education = fu
             ctx.set_rich_reply(
                 rich,
                 text=compose.flatten(rich, ctx.language),
@@ -425,18 +425,6 @@ async def _finalize_v2(deps, plan, ctx) -> bool:
             )
             return True
     return False
-
-
-def _append_follow_up(text: str, follow_up: Any) -> str:
-    """NX-183: lipește `follow_up` (întrebare de continuare) la textul text-only, dacă există."""
-    fu = follow_up.strip() if isinstance(follow_up, str) else ""
-    return f"{text}\n\n{fu}".strip() if fu else text
-
-
-def _v2_medical(text: str) -> bool:
-    """Guard de siguranță pt textul V2 text-only (NU trece prin `validate_prose`). Gated de kill-
-    switch (ca restul guardrail-ului medical). True → textul face un claim medical → nu-l servim."""
-    return get_settings().safety_medical_guardrail_enabled and has_medical_claim(text)
 
 
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:

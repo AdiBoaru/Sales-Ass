@@ -83,10 +83,29 @@ Toate cele 7 findings CONFIRMATE în cod. Reparate STATIC (fără evaluator live
 - NX-185: `ctx.query_spec` + `query_spec_disagreement` + comparație cu args-urile tool-loop-ului.
 - NX-186: integrare DomainPack (labels, merchant provenance) + script/raport pilot per business.
 - NX-187: `ctx.match_set` + divergence + soft ranking + scan exhaustiv de recall.
-- NX-188 ENFORCE (filtrare rejected + QuerySpec projection + alternatives UX) — precede NX-189-per-fațetă.
-- NX-189 SQL tri-state (MATCH/UNKNOWN) + dual-run + paritate recall — atinge SQL-ul core de retrieval.
+- **Ordine corectă (Codex): NX-189 shadow/paritate/recall PRECEDE NX-188 enforce** (nu invers). Întâi
+  filtrarea tipizată SQL participă în retrieval + paritate shadow verde → abia apoi enforce-ul (altfel
+  enforce blind pe pool-24 dă false-negative).
+  - NX-189: SQL tri-state (MATCH/UNKNOWN) în retrieval + dual-run + paritate recall — atinge SQL-ul core.
+  - NX-188: ENFORCE (filtrare rejected + QuerySpec projection + alternatives UX) — DUPĂ NX-189-per-fațetă.
 
-**Next (Codex):** PR pe `feat/NX-track-ab` → CI complet → re-review. Evaluatorul paired rămâne OPRIT.
+**Next (Codex):** re-review pe `feat/NX-track-ab` (#236) → CI complet. Evaluatorul paired rămâne OPRIT.
+
+## Review Codex Round 5 — 5/7 fixuri erau PARȚIALE, completate (2026-07-18)
+Codex a re-verificat commitul 6cc92cb: #3 (cache) și #7 (fingerprint) erau corecte; #1,#2,#4,#5,#6 doar
+parțiale. Completate + teste REALE (Round 4 declarase teste care nu acopereau efectiv fixurile):
+
+| # | Ce lipsea (Codex R5) | Fix R5 | Test REAL |
+|---|---|---|---|
+| 1 | V2 cards/text-only încă lăsau preț/link/claim prin `follow_up` (nescrubuit) și text-only doar medical | `follow_up`→`education` ÎNAINTE de assemble (scrub_education); text-only prin `validate_prose` COMPLET (preț/link/medical/claim), nu doar `_v2_medical` | `test_finalize_v2_text_only_inline_served`, `test_finalize_v2_follow_up_rendered_in_cards` |
+| 2 | Mixed-intent pierdea FAQ când reply-ul era o COMPARAȚIE web (nu doar rich) | injectăm politica și în `comparison.intro` | `test_complete_faq_obligation_injects_into_comparison` |
+| 4 | `answer.presentation:"card"` acceptat dar neconsumat; evidence invalid → răspuns fără motiv | scos `card` din enum-ul schemei; text-only cere `reason` non-gol → altfel fall-through | `test_v2_schema_answer_presentation_only_inline`, `test_finalize_v2_no_evidence_falls_through` |
+| 5 | `bool(2)==True` clasifica greșit numerice non-0/1 | `_as_bool`: numeric DOAR 0/1, altfel None→UNKNOWN | `test_bool_string_coercion_not_truthy` (extins: 2→UNKNOWN) |
+| 6 | Coverage valida orice non-enum (bool/number invalid) | `_is_valid_value` per tip (bool→bool real; number→numeric; list→nevid) | `test_facet_coverage_typed_validity_bool_number` |
+
+Plus: cache namespace acum are test propriu (`test_cache_prompt_version_namespaces_prompt_and_envelope`);
+build-log-ul corectat pe ordinea NX-189→NX-188. **+13 teste noi total** (R4+R5). `pytest asyncio=AUTO` →
+testele de integrare `_finalize_v2` chiar rulează (nu skip tăcut).
 
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

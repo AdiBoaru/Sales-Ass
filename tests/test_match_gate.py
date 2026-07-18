@@ -92,6 +92,13 @@ def test_bool_string_coercion_not_truthy():
     # token necunoscut → UNKNOWN (nu ghicim)
     p3 = {"id": "z", "fragrance_free": "poate"}
     assert evaluate_constraint(p3, Constraint("fragrance_free", "eq", True), None) == UNKNOWN
+    # numeric non-0/1 → UNKNOWN (Codex: bool(2) e True → fals-pozitiv)
+    p4 = {"id": "w", "fragrance_free": 2}
+    assert evaluate_constraint(p4, Constraint("fragrance_free", "eq", True), None) == UNKNOWN
+    # 1/0 rămân valide
+    c = Constraint("fragrance_free", "eq", True)
+    assert evaluate_constraint({"fragrance_free": 1}, c, None) == MATCH
+    assert evaluate_constraint({"fragrance_free": 0}, c, None) == MISMATCH
 
 
 def test_no_hard_constraints_all_exact():

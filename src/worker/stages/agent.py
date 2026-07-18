@@ -291,6 +291,15 @@ def _complete_faq_obligation(ctx: TurnContext) -> None:
             rich.education = f"{edu.rstrip()}\n\n{grounded}".strip() if edu.strip() else grounded
             ctx.emit("faq_obligation_completed", surface="rich")
 
+    # WEB COMPARISON (Codex): la o COMPARAȚIE, `render.py` folosește `comparison.intro` (nu rich,
+    # nu text) → politica s-ar pierde pe web. O injectăm și acolo. Comparison e mutabil.
+    cmp = getattr(reply, "comparison", None)
+    if cmp is not None:
+        intro = cmp.intro or ""
+        if key not in intro.lower():
+            cmp.intro = f"{intro.rstrip()}\n\n{grounded}".strip() if intro.strip() else grounded
+            ctx.emit("faq_obligation_completed", surface="comparison")
+
 
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
