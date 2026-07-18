@@ -26,7 +26,7 @@ from src.config import get_settings
 from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
 from src.models import Route, RouteDecision, TurnContext
-from src.safety.contraindications import RegistryError, detect_contexts_in_turn
+from src.safety.policy import SafetyPolicy
 from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
@@ -121,14 +121,15 @@ def _factual_bait(text: str) -> bool:
 
 
 def _safety_sensitive(ctx: TurnContext) -> bool:
-    """True dacă turul declară un context de siguranță (sarcină/alăptare) — DETERMINIST, din
-    registrul NX-173 (`detect_contexts_in_turn`), NU din promptul nano. NX-176a (P0): guard-ul de
-    low-confidence de mai jos NU are voie să transforme o cerere cu context de sănătate în clarify —
-    ar rata gate-ul de contraindicații (calea sales filtrează retinoizii + pune avertismentul).
-    Fail-safe: un registru stricat ridică RegistryError → True (nu downgradăm pe un posibil P0)."""
+    """True dacă turul are un context de siguranță ACTIV (sarcină/alăptare). SINGURA sursă de adevăr
+    NX-173 = `SafetyPolicy.for_turn` = `state.safety` PERSISTAT ∪ detecția turului curent — NU doar
+    mesajul curent (P0, review Codex #233): o sarcină declarată într-un tur ANTERIOR și persistată
+    în state trebuie să blocheze downgrade-ul la clarify chiar dacă mesajul curent low-confidence
+    n-o repetă (altfel ocolim iar gate-ul). `for_turn` respectă kill-switch-ul (gate off → nimic de
+    protejat) și e fail-CLOSED pe registru stricat. Orice eroare neașteptată → fail-safe True."""
     try:
-        return bool(detect_contexts_in_turn(ctx))
-    except RegistryError:
+        return bool(SafetyPolicy.for_turn(ctx).contexts)
+    except Exception:  # noqa: BLE001 — orice eroare în policy → fail-safe: tratăm ca sensibil
         return True
 
 

@@ -8,7 +8,14 @@ live cu `scripts/sim/web_audit.py` (DB + OpenAI), NU aici (FakeLLM e scriptat).
 """
 
 from src.domain.pack import DomainPack
-from src.models import BusinessConfig, Contact, InboundMessage, Route, TurnContext
+from src.models import (
+    BusinessConfig,
+    Contact,
+    ConversationState,
+    InboundMessage,
+    Route,
+    TurnContext,
+)
 from src.worker.runner import PipelineDeps
 from src.worker.stages.triage import triage_stage
 
@@ -37,13 +44,16 @@ _ELECTRONICS = DomainPack(
 )
 
 
-def _ctx(body: str, *, domain_pack: DomainPack | None = None) -> TurnContext:
+def _ctx(
+    body: str, *, domain_pack: DomainPack | None = None, safety: dict | None = None
+) -> TurnContext:
     ctx = TurnContext(
         turn_id="t1",
         business=BusinessConfig(id="b1", slug="demo", name="Demo"),
         contact=Contact(id="c1", business_id="b1"),
         message=InboundMessage(provider_msg_id="m1", body=body),
         conversation_id="conv1",
+        state=ConversationState(safety=safety or {}),
     )
     ctx.business.domain_pack = domain_pack or _BEAUTY
     return ctx
@@ -153,5 +163,19 @@ async def test_low_confidence_pregnancy_stays_sales_not_clarify():
     await triage_stage(ctx, _deps(llm))
     assert ctx.route.route == Route.SALES  # NU downgradat la clarify
     assert ctx.reply is None  # sales → agentul răspunde CU gate-ul de siguranță, nu clarifică
+    assert any(e.type == "triage_safety_kept_sales" for e in ctx.events)
+    assert not any(e.type == "triage_low_confidence" for e in ctx.events)
+
+
+async def test_low_confidence_safety_persisted_in_state_stays_sales():
+    """P0 (fix review Codex #233): contextul de siguranță ACTIV = `state.safety` PERSISTAT ∪ turul
+    curent (`SafetyPolicy.for_turn`), NU doar mesajul curent. O sarcină declarată într-un tur
+    ANTERIOR (persistată în state.safety) blochează downgrade-ul la clarify chiar dacă mesajul
+    curent low-confidence n-o repetă — altfel ocolim iar gate-ul de contraindicații. Guard-ul vechi
+    (`detect_contexts_in_turn`) rata exact cazul ăsta."""
+    ctx = _ctx("ceva ieftin", safety={"contexts": ["pregnancy"], "source": "declared_by_contact"})
+    llm = FakeLLM({"route": "sales", "confidence": "low", "category_key": None})
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.SALES  # context persistat → NU downgradat la clarify
     assert any(e.type == "triage_safety_kept_sales" for e in ctx.events)
     assert not any(e.type == "triage_low_confidence" for e in ctx.events)
