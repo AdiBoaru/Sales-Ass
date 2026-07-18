@@ -75,10 +75,14 @@ async def test_cleanup_deletes_only_old(pool):
         recent = f"wamid.{uuid4().hex}"
         old = f"wamid.{uuid4().hex}"
         await claim_inbound(conn, DEMO_BIZ, recent)
-        # inserăm unul „vechi" cu first_seen în trecut
+        # NX-177: „vechi" = FINALIZAT demult. Testul seta `first_seen`, dar purja (NX-86) se uită
+        # la `completed_at`/`claimed_at` — coloana aia nu mai e criteriu. Rândul nu se potrivea pe
+        # nicio ramură → `deleted == 0`, raportat ca „cleanup stricat". Contract stale, nu bug.
         await conn.execute(
-            "insert into inbound_dedupe (business_id, provider_msg_id, first_seen) "
-            "values ($1, $2, now() - interval '72 hours')",
+            "insert into inbound_dedupe "
+            "(business_id, provider_msg_id, first_seen, claimed_at, completed_at) "
+            "values ($1, $2, now() - interval '72 hours', now() - interval '72 hours', "
+            "        now() - interval '72 hours')",
             DEMO_BIZ,
             old,
         )
@@ -103,17 +107,25 @@ async def test_handle_turn_dedupes_retry(pool):
         assert r1.deduped is False
         assert r1.outbox_id is not None
 
+        async def _counts() -> tuple[int, int]:
+            return (
+                await conn.fetchval(
+                    "select count(*) from outbox where conversation_id = $1", r1.conversation_id
+                ),
+                await conn.fetchval(
+                    "select count(*) from messages where conversation_id = $1", r1.conversation_id
+                ),
+            )
+
+        before = await _counts()
+
         # exact același payload (retry Meta care a scăpat de Redis layer 1)
         r2 = await handle_turn(conn, biz, channel_id, ev)
         assert r2.deduped is True
         assert r2.outbox_id is None
 
-        # un singur outbox, un singur mesaj inbound + un singur outbound
-        n_outbox = await conn.fetchval(
-            "select count(*) from outbox where conversation_id = $1", r1.conversation_id
-        )
-        n_msgs = await conn.fetchval(
-            "select count(*) from messages where conversation_id = $1", r1.conversation_id
-        )
-        assert n_outbox == 1
-        assert n_msgs == 2
+        # NX-177: invariantul dedup-ului e că retry-ul NU ADAUGĂ NIMIC — nu că un tur produce
+        # exact 1 outbox + 2 mesaje. Un reply lung se sparge în 2 (P9) → „salut" dă 2 rânduri de
+        # outbox și 3 mesaje, iar assert-urile fixe (1 / 2) picau pe o schimbare de compunere care
+        # n-are legătură cu dedup-ul. Comparăm ÎNAINTE vs DUPĂ: singurul lucru care contează.
+        assert await _counts() == before, "retry-ul a scris ceva — dedup-ul layer 2 nu ține"

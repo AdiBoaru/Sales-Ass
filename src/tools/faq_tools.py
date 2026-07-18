@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 
 from src.cache.canonical import canonicalize
 from src.config import get_settings
-from src.db.queries.faqs import semantic_lookup
+from src.db.queries.faqs import semantic_lookup, semantic_topk
+from src.knowledge.faq_rerank import FaqCandidate, rerank
 from src.tools.base import ToolResult, register
 
 if TYPE_CHECKING:
@@ -37,10 +38,36 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
     if deps.llm is None:
         return ToolResult(ok=False, error="no_llm", llm_view="FAQ indisponibil.")
     s = get_settings()
-    emb = (await deps.llm.embed([canonicalize(a.query)[0]]))[0]  # NX-124a: paritate cu seed FAQ
-    hit = await semantic_lookup(
-        deps.conn, ctx.business.id, ctx.language, emb, embedding_model=s.model_embed
-    )
+    canon = canonicalize(a.query)[0]  # NX-124a: paritate cu seed FAQ
+    emb = (await deps.llm.embed([canon]))[0]
+    # NX-175: același rerank ca stagiul gratuit (calificatori) → tool-ul nu mai poate întoarce
+    # excepția „produs desfăcut" pe o întrebare generică de retur. Tool-ul NU clarifică (agentul
+    # gestionează dialogul) — la ambiguitate/miss întoarce vederea neutră. Kill-switch → top-1.
+    if s.faq_rerank_enabled:
+        cands = await semantic_topk(
+            deps.conn,
+            ctx.business.id,
+            ctx.language,
+            emb,
+            embedding_model=s.model_embed,
+            k=s.faq_topk,
+        )
+        decision = rerank(
+            canon,
+            [
+                FaqCandidate(c["id"], c["question"], c["answer"], float(c["similarity"]))
+                for c in cands
+            ],
+        )
+        hit = (
+            {"answer": decision.answer, "similarity": decision.confidence}
+            if decision.action == "serve"
+            else None
+        )
+    else:
+        hit = await semantic_lookup(
+            deps.conn, ctx.business.id, ctx.language, emb, embedding_model=s.model_embed
+        )
     if hit is None or float(hit["similarity"]) < s.faq_tau_tool:
         return ToolResult(
             ok=True,
