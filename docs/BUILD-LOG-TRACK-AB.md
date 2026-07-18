@@ -34,7 +34,12 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   topic-switch resetează; inherited persistă) + `fingerprint` determinist · triage shadow emit
   `query_spec_shadow` (gated, ZERO schimbare comportament) · test_query_spec (4) + 68 regresie triaj
   verzi. Enforcement (SearchArgs obligatoriu) = NX-188.
-- ⬜ **NX-186** typed facet registry + coverage report
+- ✅ **NX-186** typed facet registry + coverage · `src/domain/facets.py` PUR: `FacetSpec` (key/
+  value_type/operators/values/aliases/missing_policy/min_coverage, validat fail-closed la __post_init__)
+  + `build_registry` (respinge duplicate) + `facet_value` (extractor din attributes + alias enum) +
+  `facet_coverage` (present vs valid + enforceable: n≥10 ∧ pct≥prag) · test_facets (4) verzi. Modul
+  nou, neimportat → zero regresie. NOTĂ: raportul DB per business+category = wrapper subțire (script,
+  live — nefăcut aici, directivă no-live); coverage-ul PUR e gata.
 - ⬜ **NX-187** Match Gate shadow (MatchSet disjunct) + recall · flag `match_gate_shadow_enabled`
 - ⬜ **NX-189** typed facets SQL tri-state (shadow per fațetă) · flag `typed_facet_sql_enabled`
 - ⬜ **NX-188** Match Gate enforce + QuerySpec enforce + alternatives UX · flag `match_gate_enforce_enabled`

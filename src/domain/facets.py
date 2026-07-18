@@ -1,0 +1,105 @@
+"""NX-186 — registru TIPIZAT de fațete + coverage (pur). Fundația pentru Match Gate (NX-187) și
+enforcement (NX-188/189).
+
+`searchable_facets` din DomainPack e azi doar `tuple[str]`. QuerySpec/Match Gate au nevoie de TIPURI
++ operatori + politica pentru valori lipsă. Registrul e din COD (allowlist de chei) — config NU
+poate introduce SQL arbitrar sau JSON paths. Coverage-ul (per business+category+facet) se MĂSOARĂ
+înainte de orice enforcement (o fațetă fără date → prea mult UNKNOWN → recall prăbușit).
+
+Pur: `facet_value` (extractor din `attributes`) + `facet_coverage` (statistici) pe dict-uri.
+"""
+
+from __future__ import annotations
+
+import unicodedata
+from dataclasses import dataclass, field
+from typing import Any
+
+_VALUE_TYPES = frozenset({"bool", "enum", "number", "text", "list"})
+_OPERATORS = frozenset({"eq", "in", "gte", "lte", "contains_any", "contains_all"})
+_MISSING = frozenset({"unknown", "fail"})
+
+
+def _norm(s: str) -> str:
+    d = unicodedata.normalize("NFKD", (s or "").lower())
+    return "".join(c for c in d if not unicodedata.combining(c))
+
+
+@dataclass(frozen=True)
+class FacetSpec:
+    """Contractul TIPIZAT al unei fațete. `missing_policy` ∈ {unknown, fail}: cum tratăm valoarea
+    lipsă (Match Gate). `min_coverage` = pragul sub care fațeta NU se enforce-uiește (NX-188)."""
+
+    key: str
+    value_type: str
+    operators: tuple[str, ...]
+    values: tuple[str, ...] = ()  # enum: valorile canonice permise
+    aliases: dict[str, str] = field(default_factory=dict)  # alias normalizat → canonic
+    missing_policy: str = "unknown"
+    min_coverage: float = 0.5
+
+    def __post_init__(self) -> None:
+        if self.value_type not in _VALUE_TYPES:
+            raise ValueError(f"value_type invalid: {self.value_type}")
+        bad_op = set(self.operators) - _OPERATORS
+        if bad_op:
+            raise ValueError(f"operatori invalizi: {bad_op}")
+        if self.missing_policy not in _MISSING:
+            raise ValueError(f"missing_policy invalid: {self.missing_policy}")
+
+    def canonicalize(self, value: Any) -> Any:
+        """Normalizează la forma canonică (alias → canonic pt enum; bool/number ca atare)."""
+        if self.value_type == "enum" and isinstance(value, str):
+            return self.aliases.get(_norm(value), _norm(value))
+        return value
+
+
+def build_registry(specs: list[FacetSpec]) -> dict[str, FacetSpec]:
+    """Registru {key: FacetSpec}, validat la construcție (fail-closed pe chei duplicate)."""
+    reg: dict[str, FacetSpec] = {}
+    for s in specs:
+        if s.key in reg:
+            raise ValueError(f"fațetă duplicată în registru: {s.key}")
+        reg[s.key] = s
+    return reg
+
+
+def facet_value(product: dict[str, Any], spec: FacetSpec) -> Any:
+    """Valoarea fațetei din `product` (top-level SAU `attributes`), canonicalizată. None = lipsă."""
+    attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+    raw = product.get(spec.key)
+    if raw is None:
+        raw = attrs.get(spec.key)
+    if raw is None:
+        return None
+    if spec.value_type == "list" and isinstance(raw, (list, tuple)):
+        return [spec.canonicalize(x) for x in raw]
+    return spec.canonicalize(raw)
+
+
+def facet_coverage(products: list[dict[str, Any]], spec: FacetSpec) -> dict[str, Any]:
+    """Coverage-ul unei fațete pe un set de produse (pur). Distinge (Codex): valoare PREZENTĂ vs
+    VALIDĂ în registru (enum). `pct_present`/`pct_valid` + `enforceable` (peste `min_coverage` +
+    numărul minim de produse). Denominator explicit."""
+    n = len(products)
+    present = valid = 0
+    for p in products:
+        v = facet_value(p, spec)
+        if v is None or (isinstance(v, (list, tuple)) and not v):
+            continue
+        present += 1
+        if spec.value_type == "enum":
+            valid += 1 if v in spec.values else 0
+        else:
+            valid += 1
+    pct_present = round(present / n, 3) if n else 0.0
+    return {
+        "facet": spec.key,
+        "n": n,
+        "present": present,
+        "valid": valid,
+        "pct_present": pct_present,
+        "pct_valid": round(valid / n, 3) if n else 0.0,
+        # enforceable DOAR peste prag ȘI cu suficiente produse (evită „100%" pe 2 produse).
+        "enforceable": n >= 10 and pct_present >= spec.min_coverage,
+    }

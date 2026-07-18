@@ -1,0 +1,45 @@
+"""NX-186 — registru tipizat de fațete + coverage (pur, fără DB)."""
+
+import pytest
+
+from src.domain.facets import FacetSpec, build_registry, facet_coverage, facet_value
+
+
+def test_facetspec_validation_fail_closed():
+    FacetSpec("fragrance_free", "bool", ("eq",))  # ok
+    with pytest.raises(ValueError):
+        FacetSpec("x", "badtype", ("eq",))
+    with pytest.raises(ValueError):
+        FacetSpec("x", "enum", ("badop",))
+    with pytest.raises(ValueError):
+        FacetSpec("x", "bool", ("eq",), missing_policy="nope")
+
+
+def test_build_registry_rejects_duplicates():
+    with pytest.raises(ValueError):
+        build_registry([FacetSpec("a", "bool", ("eq",)), FacetSpec("a", "bool", ("eq",))])
+    reg = build_registry([FacetSpec("a", "bool", ("eq",)), FacetSpec("b", "number", ("lte",))])
+    assert set(reg) == {"a", "b"}
+
+
+def test_facet_value_toplevel_attributes_and_alias():
+    spec = FacetSpec("finish", "enum", ("eq",), values=("matte", "dewy"), aliases={"mat": "matte"})
+    assert facet_value({"finish": "mat"}, spec) == "matte"  # alias + top-level
+    assert facet_value({"attributes": {"finish": "dewy"}}, spec) == "dewy"  # din attributes
+    assert facet_value({}, spec) is None  # lipsă
+    b = FacetSpec("fragrance_free", "bool", ("eq",))
+    assert facet_value({"fragrance_free": True}, b) is True
+
+
+def test_facet_coverage_present_vs_valid_and_enforceable():
+    spec = FacetSpec("finish", "enum", ("eq",), values=("matte", "dewy"), min_coverage=0.5)
+    prods = [{"finish": "matte"}] * 6 + [{}] * 4  # 6/10 prezente, toate valide
+    cov = facet_coverage(prods, spec)
+    assert cov["present"] == 6 and cov["pct_present"] == 0.6 and cov["valid"] == 6
+    assert cov["enforceable"] is True  # n>=10 și 0.6>=0.5
+    # valoare enum INVALIDĂ → prezentă dar nu validă
+    spec2 = FacetSpec("finish", "enum", ("eq",), values=("matte",))
+    cov2 = facet_coverage([{"finish": "necunoscut"}] * 10, spec2)
+    assert cov2["present"] == 10 and cov2["valid"] == 0
+    # prea puține produse → NU enforceable (evită „100%" pe 3 produse)
+    assert facet_coverage([{"finish": "matte"}] * 3, spec)["enforceable"] is False
