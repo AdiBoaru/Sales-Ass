@@ -47,12 +47,22 @@ _SIM_DEDUPE_PREFIX = "sim.%"
 
 
 async def _collect(conn, business_id: str) -> tuple[list, list]:
-    """`(contact_ids, conversation_ids)` ale simulării. Sursa de adevăr = identitatea de canal."""
+    """`(contact_ids, conversation_ids)` ale simulării. Sursa de adevăr = identitatea de canal.
+
+    SIGURANȚĂ (fix review Codex): purjăm DOAR contactele a căror identitate e EXCLUSIV `sim:%`.
+    Schema permite unui contact să aibă simultan o identitate simulată ȘI una reală (web/telefon);
+    dacă am selecta orice contact cu MĂCAR o identitate `sim:%`, ștergerea în cascadă (identități,
+    conversații, contact) ar distruge și datele reale. `not exists` peste orice identitate ne-`sim`
+    lasă contactele mixte COMPLET neatinse — mai bine gunoi de sim rămas decât date reale șterse."""
     cids = [
         r["contact_id"]
         for r in await conn.fetch(
-            "select contact_id from channel_identities "
-            "where business_id = $1 and external_id like $2",
+            "select distinct ci.contact_id from channel_identities ci "
+            "where ci.business_id = $1 and ci.external_id like $2 "
+            "and not exists ("
+            "  select 1 from channel_identities other "
+            "  where other.business_id = $1 and other.contact_id = ci.contact_id "
+            "    and other.external_id not like $2)",
             business_id,
             _SIM_PREFIX,
         )
@@ -82,20 +92,30 @@ async def _counts(conn, business_id: str, cids: list, convs: list) -> dict[str, 
         "proactive_jobs",
     )
     for t in by_conv:
+        # `t` vine din tuplul literal `by_conv` (nu input user) → S608 e fals-pozitiv. P7: filtru
+        # business_id explicit peste lista deja business-scoped (defense-in-depth).
         out[t] = (
             await conn.fetchval(
-                f"select count(*) from {t} where conversation_id = any($1::uuid[])",  # noqa: S608
+                f"select count(*) from {t} "  # noqa: S608
+                "where business_id = $1 and conversation_id = any($2::uuid[])",
+                business_id,
                 convs,
             )
             if convs
             else 0
         )
     out["back_in_stock_subscriptions"] = await conn.fetchval(
-        "select count(*) from back_in_stock_subscriptions where contact_id = any($1::uuid[])", cids
+        "select count(*) from back_in_stock_subscriptions "
+        "where business_id = $1 and contact_id = any($2::uuid[])",
+        business_id,
+        cids,
     )
     out["conversations"] = len(convs)
     out["channel_identities"] = await conn.fetchval(
-        "select count(*) from channel_identities where contact_id = any($1::uuid[])", cids
+        "select count(*) from channel_identities "
+        "where business_id = $1 and contact_id = any($2::uuid[])",
+        business_id,
+        cids,
     )
     out["contacts"] = len(cids)
     out["inbound_dedupe"] = await conn.fetchval(
@@ -125,12 +145,18 @@ async def _purge(conn, business_id: str, cids: list, convs: list) -> dict[str, i
             "checkout_links",
             "proactive_jobs",
         ):
+            # `t` din tuplul literal (nu input user) → S608 fals-pozitiv. P7: business_id explicit.
             out[t] = await d(
-                f"delete from {t} where conversation_id = any($1::uuid[])",  # noqa: S608
+                f"delete from {t} "  # noqa: S608
+                "where business_id = $1 and conversation_id = any($2::uuid[])",
+                business_id,
                 convs,
             )
     out["back_in_stock_subscriptions"] = await d(
-        "delete from back_in_stock_subscriptions where contact_id = any($1::uuid[])", cids
+        "delete from back_in_stock_subscriptions "
+        "where business_id = $1 and contact_id = any($2::uuid[])",
+        business_id,
+        cids,
     )
     out["conversations"] = await d(
         "delete from conversations where business_id = $1 and contact_id = any($2::uuid[])",
