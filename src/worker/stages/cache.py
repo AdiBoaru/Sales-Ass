@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.agent.prompt_builder import prompt_vnext_effective
+from src.agent.prompt_builder import cache_prompt_version
 from src.cache.canonical import canonicalize, classify_volatility
 from src.config import get_settings
 from src.db.queries.businesses import get_data_version
@@ -122,10 +122,10 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not canonical:
         return
 
-    # NX-181: namespace de cache pe versiunea de prompt (v1 vs vNext), determinat ÎNAINTE de lookup.
-    # Prompt vNext ON compune răspunsuri diferite → nu servi/scrie pe intrări v1 (și invers). OFF →
-    # 'v1' (neschimbat). Flag EFECTIV per business (single source: prompt_vnext_effective).
-    prompt_version = "vnext" if prompt_vnext_effective(ctx.business) else "v1"
+    # NX-181/183: namespace de cache pe versiunea de prompt (v1/vNext) + envelope (v2), determinat
+    # ÎNAINTE de lookup. Prompt/envelope diferit compune răspunsuri diferite → nu servi/scrie
+    # cross-versiune. OFF pe ambele → 'v1' (neschimbat). Single source: cache_prompt_version.
+    prompt_version = cache_prompt_version(ctx.business)
 
     # Cache-ul e o OPTIMIZARE — orice eroare (migrare neaplicată, DB, embed) →
     # degradează la „miss", NU rupe turul (principiul 6).

@@ -93,13 +93,16 @@ def facet_coverage(products: list[dict[str, Any]], spec: FacetSpec) -> dict[str,
         else:
             valid += 1
     pct_present = round(present / n, 3) if n else 0.0
+    pct_valid = round(valid / n, 3) if n else 0.0
     return {
         "facet": spec.key,
         "n": n,
         "present": present,
         "valid": valid,
         "pct_present": pct_present,
-        "pct_valid": round(valid / n, 3) if n else 0.0,
-        # enforceable DOAR peste prag ȘI cu suficiente produse (evită „100%" pe 2 produse).
-        "enforceable": n >= 10 and pct_present >= spec.min_coverage,
+        "pct_valid": pct_valid,
+        # enforceable pe date VALIDE, nu doar PREZENTE (Codex): 10 produse cu enum invalid
+        # (finish="necunoscut") au valid=0 → NU enforceable, deși sunt prezente. Peste prag ȘI
+        # cu suficiente produse (evită „100%" pe 2 produse).
+        "enforceable": n >= 10 and pct_valid >= spec.min_coverage,
     }

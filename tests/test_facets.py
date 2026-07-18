@@ -37,9 +37,10 @@ def test_facet_coverage_present_vs_valid_and_enforceable():
     cov = facet_coverage(prods, spec)
     assert cov["present"] == 6 and cov["pct_present"] == 0.6 and cov["valid"] == 6
     assert cov["enforceable"] is True  # n>=10 și 0.6>=0.5
-    # valoare enum INVALIDĂ → prezentă dar nu validă
+    # valoare enum INVALIDĂ → prezentă dar nu validă → NU enforceable (Codex: pct_valid, nu present)
     spec2 = FacetSpec("finish", "enum", ("eq",), values=("matte",))
     cov2 = facet_coverage([{"finish": "necunoscut"}] * 10, spec2)
-    assert cov2["present"] == 10 and cov2["valid"] == 0
+    assert cov2["present"] == 10 and cov2["valid"] == 0 and cov2["pct_valid"] == 0.0
+    assert cov2["enforceable"] is False  # 10 prezente dar 0 valide → nu se enforce-uiește
     # prea puține produse → NU enforceable (evită „100%" pe 3 produse)
     assert facet_coverage([{"finish": "matte"}] * 3, spec)["enforceable"] is False

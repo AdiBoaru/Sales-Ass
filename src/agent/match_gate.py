@@ -19,10 +19,28 @@ from src.domain.facets import FacetSpec, facet_value
 
 MATCH, MISMATCH, UNKNOWN = "MATCH", "MISMATCH", "UNKNOWN"
 
+_TRUE = {"true", "da", "yes", "1", "adevarat"}
+_FALSE = {"false", "nu", "no", "0", "fals"}
+
 
 def _norm(s: Any) -> str:
     d = unicodedata.normalize("NFKD", str(s or "").lower())
     return "".join(c for c in d if not unicodedata.combining(c))
+
+
+def _as_bool(x: Any) -> bool | None:
+    """Coerciție booleană robustă. String → DOAR tokeni cunoscuți (Codex: `bool('false')` e True →
+    fals-pozitiv). Necunoscut → None → verdict UNKNOWN (nu ghicim)."""
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, (int, float)):
+        return bool(x)
+    n = _norm(x)
+    if n in _TRUE:
+        return True
+    if n in _FALSE:
+        return False
+    return None
 
 
 def _product_value(product: dict[str, Any], facet: str, spec: FacetSpec | None) -> Any:
@@ -53,7 +71,10 @@ def evaluate_constraint(product: dict[str, Any], c: Constraint, spec: FacetSpec 
             return MATCH if float(v) >= float(c.value) else MISMATCH
         if c.op == "eq":
             if isinstance(v, bool) or isinstance(c.value, bool):
-                return MATCH if bool(v) == bool(c.value) else MISMATCH
+                bv, cv = _as_bool(v), _as_bool(c.value)
+                if bv is None or cv is None:
+                    return UNKNOWN
+                return MATCH if bv == cv else MISMATCH
             return MATCH if _norm(v) == _norm(c.value) else MISMATCH
         if c.op in ("contains", "contains_any", "contains_all"):
             vals = {_norm(x) for x in (v if isinstance(v, (list, tuple)) else [v])}
@@ -73,10 +94,16 @@ def evaluate_constraint(product: dict[str, Any], c: Constraint, spec: FacetSpec 
 def classify_product(
     product: dict[str, Any], spec: QuerySpec, registry: dict[str, FacetSpec]
 ) -> tuple[str, dict[str, str]]:
-    """(bucket, verdicts) pentru un produs vs constrângerile HARD. Soft = ignorat aici (ranking)."""
-    verdicts = {
-        c.facet: evaluate_constraint(product, c, registry.get(c.facet)) for c in spec.hard()
-    }
+    """(bucket, verdicts) pentru un produs vs constrângerile HARD. Soft = ignorat aici (ranking).
+    Verdictele sunt cheie-uite pe `facet:op:value` — NU doar pe `facet` (Codex: două constrângeri pe
+    aceeași fațetă, ex. concerns=oily ȘI concerns=sensitive, nu se suprascriu; MISMATCH-ul primei nu
+    poate fi șters de un MATCH pe a doua)."""
+    verdicts: dict[str, str] = {}
+    for i, c in enumerate(spec.hard()):
+        key = f"{c.facet}:{c.op}:{c.value}"
+        if key in verdicts:
+            key = f"{key}#{i}"
+        verdicts[key] = evaluate_constraint(product, c, registry.get(c.facet))
     vals = set(verdicts.values())
     if MISMATCH in vals:
         return "rejected", verdicts

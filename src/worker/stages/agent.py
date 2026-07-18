@@ -271,14 +271,25 @@ def _complete_faq_obligation(ctx: TurnContext) -> None:
         return
     grounded = (getattr(ctx, "faq_grounded", None) or "").strip()
     reply = ctx.reply
-    if not grounded or reply is None or not (reply.text or "").strip():
+    if not grounded or reply is None:
         return
-    # euristică de acoperire: începutul politicii apare deja în reply → nu dublăm.
+    # euristică de acoperire: începutul politicii deja în text/education → nu dublăm.
     key = grounded[:24].lower()
-    if key and key in reply.text.lower():
-        return
-    reply.text = f"{reply.text.rstrip()}\n\n{grounded}"
-    ctx.emit("faq_obligation_completed")
+
+    # Floor text (WhatsApp/Telegram + messages.body): apendă dacă lipsește.
+    if (reply.text or "").strip() and key not in reply.text.lower():
+        reply.text = f"{reply.text.rstrip()}\n\n{grounded}"
+        ctx.emit("faq_obligation_completed")
+
+    # WEB RICH (Codex): `render.py` RECONSTRUIEȘTE content-ul EXCLUSIV din `reply.rich`
+    # (flatten_framing), IGNORÂND `reply.text` → politica din text s-ar pierde pe web. O injectăm și
+    # în `rich.education` (paragraf de final randat de flatten_framing). RichReply e mutabil.
+    rich = getattr(reply, "rich", None)
+    if rich is not None:
+        edu = rich.education or ""
+        if key not in edu.lower():
+            rich.education = f"{edu.rstrip()}\n\n{grounded}".strip() if edu.strip() else grounded
+            ctx.emit("faq_obligation_completed", surface="rich")
 
 
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

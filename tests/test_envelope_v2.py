@@ -40,6 +40,16 @@ def test_compose_reason_only_valid_evidence():
     assert "Good for" in out_en
 
 
+def test_evidence_menu_drops_medical_claim(monkeypatch):
+    # P0-safety (Codex): un fapt cu claim medical (din recenzie) NU intră în meniu → modelul nu-l
+    # poate selecta, codul nu-l poate compune în text-only (care nu trece prin validate_prose).
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", True)
+    p = _prod("p1", "A", ["Textură lejeră", "Tratează acneea în 7 zile"])
+    facts = list(envelope.evidence_menu([p])["p1"].values())
+    assert "Textură lejeră" in facts
+    assert all("acnee" not in f.lower() for f in facts)  # claimul medical a fost eliminat
+
+
 def test_response_envelope_v2_effective_per_business():
     s = get_settings()
     orig = getattr(s, "response_envelope_v2_enabled", False)

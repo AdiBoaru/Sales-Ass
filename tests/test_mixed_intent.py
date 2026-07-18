@@ -7,7 +7,7 @@ Detectorul (Codex): PURE_FAQ → FAQ poate early-exit; POSSIBLE_MIXED/UNKNOWN �
 from types import SimpleNamespace
 
 from src.config import get_settings
-from src.models import Reply
+from src.models import Reply, RichReply
 from src.worker.stages.agent import _complete_faq_obligation
 from src.worker.stages.faq import mixed_intent_decision
 
@@ -66,3 +66,21 @@ def test_complete_faq_obligation_no_grounded_noop(monkeypatch):
     ctx = _ctx(None, "X")
     _complete_faq_obligation(ctx)
     assert ctx.reply.text == "X"  # fără faq_grounded → no-op
+
+
+def test_complete_faq_obligation_injects_into_rich(monkeypatch):
+    # Codex: pe web, render.py reconstruiește content-ul din reply.rich (IGNORÂND reply.text) →
+    # politica trebuie injectată și în rich.education (paragraf de final randat de flatten_framing).
+    monkeypatch.setattr(get_settings(), "response_shape_hints_enabled", True)
+    rich = RichReply(
+        intro="Uite ce am găsit.", items=[], pick=None, education=None, chips=[], disclaimer=""
+    )
+    reply = Reply(text="Uite ce am găsit.", rich=rich)
+    ctx = SimpleNamespace(
+        faq_grounded="Livrarea durează 2-3 zile lucrătoare.",
+        reply=reply,
+        emit=lambda *a, **k: None,
+    )
+    _complete_faq_obligation(ctx)
+    assert "Livrarea durează 2-3 zile" in (reply.rich.education or "")  # ajunge pe web
+    assert "Livrarea durează 2-3 zile" in reply.text  # și pe floor (WhatsApp/Telegram)

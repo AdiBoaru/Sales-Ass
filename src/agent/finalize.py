@@ -40,6 +40,7 @@ from src.config import get_settings
 from src.models import Offer, TurnContext
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
+from src.worker.text_scrub import has_medical_claim
 
 if TYPE_CHECKING:
     from src.agent.planner import ResponsePlan
@@ -354,8 +355,34 @@ async def _finalize_v2(deps, plan, ctx) -> bool:
         log.warning("agent: finalize v2 eșuat (%s)", type(e).__name__)
         return False
 
+    # TEXT-ONLY (Codex: are PRIORITATE dacă modelul a ales `presentation: inline`, altfel cardurile
+    # câștigau și `answer` era ignorat). `answer` inline pe UN produs → lead SCRUBUIT + afirmația
+    # compusă (nume grounded + motiv din evidence). Fără carduri. GUARD medical: textul NU trece
+    # prin `validate_prose` → claim medical în lead → fall-through la rich (validată).
+    # cacheable=False: răspuns dependent de produsele afișate anterior („care e mai lejeră?").
+    ans = env.get("answer")
+    if (
+        isinstance(ans, dict)
+        and ans.get("presentation") == "inline"
+        and str(ans.get("product_id") or "") in menu
+    ):
+        pid = str(ans["product_id"])
+        name = next((str(p.get("name")) for p in products if str(p.get("id")) == pid), None)
+        reason = envelope.compose_reason(
+            pid, ans.get("evidence_ids") or [], "good_for", menu, ctx.language
+        )
+        lead = compose.scrub_intro(env.get("lead") or "", set()) or ""
+        tail = f"{name} — {reason}".strip(" —") if name else reason
+        text = _append_follow_up(f"{lead} {tail}".strip(), env.get("follow_up"))
+        if text and not _v2_medical(text):
+            ctx.set_reply(text, cacheable=False)
+            ctx.emit(
+                "agent_recommended", n=0, v2=True, text_only=True, product_ids=clean_ids([pid])
+            )
+            return True
+
     # CARDS: transformă la rich `j` (fit_clause = motiv compus DETERMINIST din evidence validate) →
-    # reuse `assemble` (membership + hidratare preț/nume/link/badge, tot testat). pro_index=None.
+    # reuse `assemble` (membership + hidratare preț/nume/link/badge + scrub intro, tot testat).
     j_items: list[dict[str, Any]] = []
     for p in env.get("products") or []:
         pid = str(p.get("product_id") or "")
@@ -378,6 +405,12 @@ async def _finalize_v2(deps, plan, ctx) -> bool:
         }
         rich = compose.assemble(ctx, j, products)
         if rich.items:
+            # follow_up (Codex: definit în schemă, nerandat) → paragraf de final pe web (`education`
+            # randat de `flatten_framing`) + floor text. E o întrebare, fără cifre/claim → sigur.
+            raw_fu = env.get("follow_up")
+            fu = raw_fu.strip() if isinstance(raw_fu, str) else ""
+            if fu:
+                rich.education = fu
             ctx.set_rich_reply(
                 rich,
                 text=compose.flatten(rich, ctx.language),
@@ -391,26 +424,19 @@ async def _finalize_v2(deps, plan, ctx) -> bool:
                 product_ids=clean_ids(it.product_id for it in rich.items),
             )
             return True
-
-    # TEXT-ONLY: `answer` inline pe UN produs → lead SCRUBUIT + afirmația compusă (nume grounded +
-    # motiv din evidence). Fără carduri. Lead scrubuit cu allowed_numbers gol (V2 interzice cifre).
-    ans = env.get("answer")
-    if isinstance(ans, dict) and str(ans.get("product_id") or "") in menu:
-        pid = str(ans["product_id"])
-        name = next((str(p.get("name")) for p in products if str(p.get("id")) == pid), None)
-        reason = envelope.compose_reason(
-            pid, ans.get("evidence_ids") or [], "good_for", menu, ctx.language
-        )
-        lead = compose.scrub_intro(env.get("lead") or "", set()) or ""
-        tail = f"{name} — {reason}".strip(" —") if name else reason
-        text = f"{lead} {tail}".strip()
-        if text:
-            ctx.set_reply(text)
-            ctx.emit(
-                "agent_recommended", n=0, v2=True, text_only=True, product_ids=clean_ids([pid])
-            )
-            return True
     return False
+
+
+def _append_follow_up(text: str, follow_up: Any) -> str:
+    """NX-183: lipește `follow_up` (întrebare de continuare) la textul text-only, dacă există."""
+    fu = follow_up.strip() if isinstance(follow_up, str) else ""
+    return f"{text}\n\n{fu}".strip() if fu else text
+
+
+def _v2_medical(text: str) -> bool:
+    """Guard de siguranță pt textul V2 text-only (NU trece prin `validate_prose`). Gated de kill-
+    switch (ca restul guardrail-ului medical). True → textul face un claim medical → nu-l servim."""
+    return get_settings().safety_medical_guardrail_enabled and has_medical_claim(text)
 
 
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:

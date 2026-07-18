@@ -67,5 +67,32 @@ def test_soft_constraint_ignored_for_membership():
     assert match_set([p], spec)["exact"] == ["A"]
 
 
+def test_multiple_constraints_same_facet_not_collapsed():
+    # Codex: două constrângeri pe ACEEAȘI fațetă (concerns=oily ȘI concerns=sensitive). Produsul
+    # respectă doar `oily` → MISMATCH pe `sensitive` NU trebuie șters de MATCH pe `oily`.
+    spec = QuerySpec(
+        constraints=(
+            Constraint("concerns", "contains", "oily", "hard"),
+            Constraint("concerns", "contains", "sensitive", "hard"),
+        )
+    )
+    p = {"id": "P", "attributes": {"concerns": ["oily"]}}  # are oily, NU sensitive
+    ms = match_set([p], spec)
+    assert ms["rejected"] == ["P"]  # nu „exact" — a doua constrângere e MISMATCH
+    assert ms["exact"] == []
+
+
+def test_bool_string_coercion_not_truthy():
+    # Codex: `bool('false')` e True. Valoare string „false" vs constrângere bool True → MISMATCH,
+    # nu MATCH accidental.
+    p = {"id": "x", "fragrance_free": "false"}
+    assert evaluate_constraint(p, Constraint("fragrance_free", "eq", True), None) == MISMATCH
+    p2 = {"id": "y", "fragrance_free": "da"}
+    assert evaluate_constraint(p2, Constraint("fragrance_free", "eq", True), None) == MATCH
+    # token necunoscut → UNKNOWN (nu ghicim)
+    p3 = {"id": "z", "fragrance_free": "poate"}
+    assert evaluate_constraint(p3, Constraint("fragrance_free", "eq", True), None) == UNKNOWN
+
+
 def test_no_hard_constraints_all_exact():
     assert match_set([{"id": "x"}], QuerySpec())["exact"] == ["x"]

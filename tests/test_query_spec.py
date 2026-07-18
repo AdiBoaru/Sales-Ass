@@ -46,3 +46,11 @@ def test_fingerprint_deterministic_order_independent():
     a = build_query_spec(_rd({"budget_max": 80, "concerns": ["oily"]}, "creme"))
     b = build_query_spec(_rd({"concerns": ["oily"], "budget_max": 80}, "creme"))
     assert a.fingerprint() == b.fingerprint()  # sortat → stabil indiferent de ordine
+
+
+def test_fingerprint_no_raw_free_text_pii():
+    # brand/suitable_for = text liber din triaj → valoarea NU apare brută în telemetrie (hash).
+    rd = _rd({"brand": "SecretBrandXYZ", "suitable_for": "ion.popescu"}, "creme")
+    fp = build_query_spec(rd).fingerprint()
+    assert "SecretBrandXYZ" not in fp and "ion.popescu" not in fp
+    assert "brand:eq:" in fp  # fațeta+op rămân vizibile pentru grupare

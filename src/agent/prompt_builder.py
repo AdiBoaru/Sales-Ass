@@ -32,6 +32,17 @@ def prompt_vnext_effective(business: Any) -> bool:
     return isinstance(settings, dict) and settings.get("prompt_vnext_enabled") is True
 
 
+def cache_prompt_version(business: Any) -> str:
+    """NX-181/183: namespace-ul de cache. Compune versiunea de PROMPT (v1/vnext) cu cea de ENVELOPE
+    (v2). UN SINGUR owner → lookup (cache stage) și upsert (aftercare) folosesc EXACT aceeași cheie;
+    altfel s-ar servi un răspuns compus cu alt contract (Codex: „V2 poate servi răspunsuri V1"). OFF
+    pe ambele → 'v1' (byte-identic). Import local pt a evita ciclul agent↔prompt_builder la load."""
+    from src.agent.envelope import response_envelope_v2_effective
+
+    base = "vnext" if prompt_vnext_effective(business) else "v1"
+    return f"{base}+v2" if response_envelope_v2_effective(business) else base
+
+
 # Status comandă — NEUTRU pe vertical (nu vinde, doar raportează) → constantă, nu generat.
 ORDER_RECO_SYSTEM = (
     "Ești un asistent de suport pentru un magazin online din România.\n"

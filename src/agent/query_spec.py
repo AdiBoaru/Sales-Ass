@@ -12,6 +12,7 @@ Ownership: extracție = triaj (`build_query_spec` din `RouteDecision`); merge = 
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,10 +44,14 @@ class QuerySpec:
         return tuple(c for c in self.constraints if c.strength == "hard")
 
     def fingerprint(self) -> str:
-        """Semnătură deterministă (fără PII — facete + op + valori normalizate), pt telemetrie."""
+        """Semnătură deterministă pentru telemetrie. Valorile sunt HASH-uite (Codex: `brand`/
+        `suitable_for` sunt text liber din triaj → pot conține PII; nu ajung brute în analytics).
+        Fațeta+op+strength rămân vizibile pentru grupare; valoarea = digest scurt (determinist,
+        order-independent prin sort). `subject_category` = cheie de categorie, nu PII."""
         parts = [self.subject_category or "-"]
         for c in sorted(self.constraints, key=lambda x: (x.facet, x.op, str(x.value))):
-            parts.append(f"{c.facet}:{c.op}:{c.value}:{c.strength}")
+            vh = hashlib.sha256(str(c.value).encode("utf-8")).hexdigest()[:8]
+            parts.append(f"{c.facet}:{c.op}:{vh}:{c.strength}")
         return "|".join(parts)
 
 

@@ -7,11 +7,11 @@ zero evaluator live. Fiecare card gated de kill-switch (default OFF → byte-ide
 Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+pytest) · ⏸ blocat
 
 ## Track A — Response Quality
-- ✅ **NX-182** relaxed_constraints + disclosure determinist · flag `relaxed_disclosure_enabled`
+- 🟡 **NX-182** relaxed_constraints + disclosure determinist · flag `relaxed_disclosure_enabled`
   · models: `RelaxedConstraint` + `Relevance.relaxed_constraints` · catalog_tools `_relaxed_constraints`
   (base vs winning_step) · compose `_relaxed_disclosure` + registru RO/EN/HU + suprimă pick când relaxat
   · test_relaxed_disclosure (3) + compose regression (40) verzi · getattr defensiv (fail-open)
-- ✅ **NX-183** ResponseEnvelope V2-light + renderer text-only · flag `response_envelope_v2_enabled` (per business)
+- 🟡 **NX-183** ResponseEnvelope V2-light + renderer text-only · flag `response_envelope_v2_enabled` (per business)
   · `src/agent/envelope.py` (V2_SCHEMA, evidence OPACE `e{i}_{j}`, `compose_reason` determinist,
   `response_envelope_v2_effective`) · prompt_builder `build_v2_system` + `_V2_RULES` · finalize
   `_finalize_v2` (cards via assemble-reuse `fit_clause`=motiv compus + text-only `answer` cu lead
@@ -19,7 +19,7 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   · 325 regresie verzi. NOTĂ: calitatea end-to-end (output model) = de verificat LIVE cu evaluatorul
   (deferat); CODUL e verificat (OFF byte-identic + compunere pură). Gotcha rezolvat: ghilimea ASCII
   `"` de închidere în string non-triple-quoted (SyntaxError).
-- ✅ **NX-184** FAQ mixed-intent pre-triaj + completare obligație · flag `response_shape_hints_enabled`
+- 🟡 **NX-184** FAQ mixed-intent pre-triaj + completare obligație · flag `response_shape_hints_enabled`
   · faq.py `mixed_intent_decision` (tri-state PURE_FAQ/POSSIBLE_MIXED/UNKNOWN; două clauze = semnalul
   cheie; `aveti`+DomainPack vocab; `_MIXED_POLICY_EXTRA` pt verb forms) · faq_stage: mixed → atașează
   `ctx.faq_grounded` + NU early-exit (OFF → early-exit ca azi) · TurnContext.faq_grounded · agent_stage
@@ -28,19 +28,19 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   mecanismul FAQ decis (Codex) + completare deterministă. response_shape a aterizat deja în NX-181.
 
 ## Track B — Selection Correctness (shadow-first)
-- ✅ **NX-185** QuerySpec shadow (contract + merger owner-unic) · flag `query_spec_shadow_enabled`
+- 🟡 **NX-185** QuerySpec shadow (contract + merger owner-unic) · flag `query_spec_shadow_enabled`
   · `src/agent/query_spec.py` PUR: `Constraint`/`QuerySpec` + `build_query_spec` (din RouteDecision,
   owner=triaj) + `merge_query_spec` (owner UNIC = modulul, nu agent.py; turul curent câștigă;
   topic-switch resetează; inherited persistă) + `fingerprint` determinist · triage shadow emit
   `query_spec_shadow` (gated, ZERO schimbare comportament) · test_query_spec (4) + 68 regresie triaj
   verzi. Enforcement (SearchArgs obligatoriu) = NX-188.
-- ✅ **NX-186** typed facet registry + coverage · `src/domain/facets.py` PUR: `FacetSpec` (key/
+- 🟡 **NX-186** typed facet registry + coverage · `src/domain/facets.py` PUR: `FacetSpec` (key/
   value_type/operators/values/aliases/missing_policy/min_coverage, validat fail-closed la __post_init__)
   + `build_registry` (respinge duplicate) + `facet_value` (extractor din attributes + alias enum) +
   `facet_coverage` (present vs valid + enforceable: n≥10 ∧ pct≥prag) · test_facets (4) verzi. Modul
   nou, neimportat → zero regresie. NOTĂ: raportul DB per business+category = wrapper subțire (script,
   live — nefăcut aici, directivă no-live); coverage-ul PUR e gata.
-- ✅ **NX-187** Match Gate (MatchSet disjunct) · `src/agent/match_gate.py` PUR: `evaluate_constraint`
+- 🟡 **NX-187** Match Gate (MatchSet disjunct) · `src/agent/match_gate.py` PUR: `evaluate_constraint`
   (MATCH/MISMATCH/UNKNOWN; lipsă→UNKNOWN nu MISMATCH; lte/gte/eq/contains, bool-aware) + `classify_product`
   + `match_set` DISJUNCT (precedență rejected→alternatives→exact; soft = doar ranking, nu apartenență)
   · test_match_gate (4: exemplul Codex A/B/C/D + soft ignorat + no-hard) verzi. Modul nou → zero regresie.
@@ -53,14 +53,40 @@ Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+
   filtrare tipizată) + flag `typed_facet_sql_enabled`. Wiring-ul SQL de retrieval (tri-state MATCH/
   UNKNOWN, paritate shadow, recall) = **LIVE-REVIEW** (atinge SQL-ul core de retrieval, cere paritate live).
 
-## Rezumat sesiune
-- ✅ Track A COMPLET: NX-182, NX-183, NX-184 (toate kill-switch OFF byte-identic, testate).
-- ✅ Track B fundație+shadow: NX-185 (QuerySpec), NX-186 (facets), NX-187 (Match Gate) — module PURE,
-  testate, zero regresie.
-- 🟡 NX-188/189: partea SIGURĂ construită (shadow emit + migrare + flags); ENFORCE + SQL-retrieval =
-  perechea cuplată, behavior-changing, cu migrare DB → de finalizat + verificat LIVE împreună (directiva
-  „no-live" + „nu face greșeli" → nu cablez enforcement orb).
-- Regresie totală pe branch: rulare finală `pytest` la commit.
+## Rezumat sesiune — STATUS ONEST (corectat după review Codex Round 4)
+**Corecție:** afirmația inițială „6 carduri complet + 2 parțial" a fost GREȘITĂ față de DoD-urile
+scrise. Realist, NX-182..189 sunt TOATE parțiale: fundație utilă + fix-urile de mai jos, dar NU gata
+de merge / evaluare live. Codex a avut dreptate pe toate findings-urile P1 (verificate în cod).
+
+- 🟡 Track A: NX-182, NX-183, NX-184 — mecanismele decise + fix-uri P1; DoD incomplet (vezi mai jos).
+- 🟡 Track B: NX-185/186/187 module pure + fix-uri P1; enforcement/integrare = live-review.
+- 🟡 NX-188/189: shadow emit + migrare + flags; ENFORCE + SQL-retrieval = live-review.
+- Toate kill-switch OFF → byte-identic în producție (verificat prin regresie).
+
+## Review Codex Round 4 — findings P1 + remedieri (2026-07-18)
+Toate cele 7 findings CONFIRMATE în cod. Reparate STATIC (fără evaluator live), cu teste:
+
+| # | Finding | Fix | Fișier | Test |
+|---|---|---|---|---|
+| 1 | Safety: V2 text-only ocolea validatorul (evidence brut) | scrub medical la SURSĂ (menu) + guard `_v2_medical` pe textul final → fall-through la rich | `agent/envelope.py` `_evidence_facts`; `agent/finalize.py` `_v2_medical` | `test_evidence_menu_drops_medical_claim` |
+| 2 | Mixed-intent: FAQ dispărea pe web rich (`render.py` ignoră `reply.text`) | injectăm politica ȘI în `rich.education` (randat de `flatten_framing`) | `worker/stages/agent.py` `_complete_faq_obligation` | `test_complete_faq_obligation_injects_into_rich` |
+| 3 | Cache poisoning V2 text-only (cacheable + fără envelope_version) | `cacheable=False` pe text-only + namespace `cache_prompt_version` (v1/vnext + v2), single-source lookup==upsert | `agent/finalize.py`; `agent/prompt_builder.py`; `worker/stages/cache.py`; `worker/aftercare.py` | `test_cache_invalidation` (verzi) |
+| 4 | Contract V2 half-consumed (`answer` ignorat când sunt products; `follow_up` nerandat) | `answer:inline` are PRIORITATE (reorder înainte de cards); `follow_up` → `education` + floor | `agent/finalize.py` `_finalize_v2` | `test_finalize_v2_*` (verzi) |
+| 5 | Match Gate: constrângeri multiple pe aceeași fațetă se suprascriau; `bool("false")==True` | verdicts cheie-uite pe `facet:op:value`; `_as_bool` (tokeni RO/EN, necunoscut→UNKNOWN) | `agent/match_gate.py` | `test_multiple_constraints_same_facet_not_collapsed`, `test_bool_string_coercion_not_truthy` |
+| 6 | Coverage `enforceable` pe date invalide (`pct_present` nu `pct_valid`) | `enforceable = pct_valid ≥ min_coverage` | `domain/facets.py` `facet_coverage` | `test_facet_coverage_present_vs_valid_and_enforceable` (extins) |
+| 7 | QuerySpec: `brand`/`suitable_for` text liber în telemetrie (PII) | valorile HASH-uite în `fingerprint` (facet+op vizibile) | `agent/query_spec.py` `fingerprint` | `test_fingerprint_no_raw_free_text_pii` |
+
+**Rămâne pt review-ul de diseară (NU reparat orb — behavior-changing / DoD mare):**
+- V2 fallback = apel LLM dublu (V2 eșuat → rich). Structural; de decis împreună (early-attempt vs accept).
+- NX-184: contractul `obligations` bogat (`ResponsePlan.obligations`) + detector RO/EN/HU + e2e prin
+  faq_stage→agent→/web/chat. Azi: `ctx.faq_grounded` + completare deterministă (mecanismul FAQ decis).
+- NX-185: `ctx.query_spec` + `query_spec_disagreement` + comparație cu args-urile tool-loop-ului.
+- NX-186: integrare DomainPack (labels, merchant provenance) + script/raport pilot per business.
+- NX-187: `ctx.match_set` + divergence + soft ranking + scan exhaustiv de recall.
+- NX-188 ENFORCE (filtrare rejected + QuerySpec projection + alternatives UX) — precede NX-189-per-fațetă.
+- NX-189 SQL tri-state (MATCH/UNKNOWN) + dual-run + paritate recall — atinge SQL-ul core de retrieval.
+
+**Next (Codex):** PR pe `feat/NX-track-ab` → CI complet → re-review. Evaluatorul paired rămâne OPRIT.
 
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_
