@@ -5,8 +5,8 @@ Rulează un set de conversații reprezentative (`qa-suite/conversations/*.json`)
 Fiecare tur e evaluat de: gate-uri DETERMINISTE (`eval_gates`, pure) + un judge LLM (`eval_judge`).
 
 RIGLA, nu poarta: baseline-ul ÎNREGISTREAZĂ realitatea (inclusiv eșecuri) — nu întoarce „verde".
-Judge-ul NU poate anula un eșec determinist (P2). Cache OPRIT (CACHE_ENABLED=false, setat aici) +
-state RESETAT (vizitator PROASPĂT per rulare) → rulările sunt comparabile.
+Judge-ul NU poate anula un eșec determinist (P2). Cache OPRIT (pe `settings.cache_enabled`, doar pe
+durata rulării, restaurat după) + state RESETAT (vizitator PROASPĂT per rulare) → comparabile.
 
 Reproductibilitate (pinuri în `meta`): model triaj/agent, hash prompt judge, semnătură catalog,
 cache off, runs/case, flag (paired ON/OFF). Zero PII (fixture sintetice; transcript trunchiat).
@@ -23,7 +23,6 @@ import argparse
 import asyncio
 import hashlib
 import json
-import os
 import re
 import sys
 import time
@@ -32,11 +31,9 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
-# Cache OPRIT ÎNAINTE de orice import care încarcă settings (DoD NX-180: rulări comparabile).
-# HARD, nu `setdefault`: garantat oprit chiar dacă env-ul/.env avea deja CACHE_ENABLED=true
-# (review Codex #234). `load_dotenv()` din __main__ NU suprascrie o cheie deja setată → stă false.
-os.environ["CACHE_ENABLED"] = "false"
-
+# Cache OFF NU se mai setează la import (fix review #234: fără efect global de mediu care ar
+# contamina alte procese/teste). Se aplică pe `settings.cache_enabled` DOAR pe durata rulării
+# pipeline-ului, în `main()`, și se RESTAUREAZĂ după (try/finally).
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -185,7 +182,10 @@ async def _run_conversation(convo: dict[str, Any], mk, llm, runs: int) -> dict[s
             # judge-ul nu vede LA CE răspunde botul → `answered`/`natural`/`overall` invalide.
             # Bot-reply se adaugă DUPĂ judge. Judge după tokeni (nu-i contaminează).
             transcript.append({"role": "user", "text": user_msg})
-            jscore = await eval_judge.judge_turn(llm, transcript, turn.content)
+            # #234: judge-ul primește EXPERIENȚA completă (text + carduri + offer), nu doar textul.
+            jscore = await eval_judge.judge_turn(
+                llm, transcript, turn.content, turn.products, turn.offer
+            )
 
             acc[i]["judge"].append(jscore)
             acc[i]["gate_fails"].append(fails)
@@ -258,7 +258,11 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
     # p95 GLOBAL peste TOATE latențele brute (fiecare tur × fiecare rulare), NU p95-de-p95 (fix
     # #234): doar așa pragul „+≤10% vs baseline" e măsurabil corect.
     lat_raw = [x for t in all_turns for x in t.get("latency_ms_raw", [])]
-    all_fails = [f for t in all_turns for f in t["gate_fails_union"]]
+
+    def _turns_with(prefix: str) -> int:
+        # numără TURURILE DISTINCTE cu ≥1 eșec din categoria dată (fix #234: nu fail-strings,
+        # care supra-numărau — un tur cu 1>0 ȘI 2>0 e UN tur, nu două).
+        return sum(1 for t in all_turns if any(f.startswith(prefix) for f in t["gate_fails_union"]))
 
     def _pct_ge4(vals: list[float]) -> float:
         return round(100 * sum(1 for v in vals if v >= 4) / len(vals), 1) if vals else 0.0
@@ -290,10 +294,12 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
             / max(1, sum(t["runs"] for t in all_turns)),
             1,
         ),
-        "ungrounded_price_hits": sum(1 for f in all_fails if f.startswith("ungrounded_price")),
-        "new_cards_on_followup_hits": sum(
-            1 for f in all_fails if f.startswith("new_cards_on_followup")
-        ),
+        # contoare pe TURURI DISTINCTE (fix #234) + linkuri
+        "turns_ungrounded_price": _turns_with("ungrounded_price"),
+        "turns_ungrounded_link": _turns_with("ungrounded_link"),
+        "turns_missing_offer_link": _turns_with("missing_offer_link"),
+        "turns_too_many_cards": _turns_with("too_many_cards"),
+        "turns_new_cards_on_followup": _turns_with("new_cards_on_followup"),
         "opening_repeat_turns": sum(1 for t in all_turns if t["opening_repeat_runs"] > 0),
         "unstable_turns": [
             {"conv": c["id"], "user": t["user"]} for c in cases for t in c["turns"] if t["unstable"]
@@ -368,16 +374,22 @@ async def main() -> int:
     # apoi tot ON (fix #234): altfel diferența măsoară drift temporal (rate limit / warmup / oră),
     # nu efectul flagului. Baseline (fără flag) = un singur pass, neschimbat.
     print(
-        f"\n{'=' * 70}\nruns/case={args.runs} cache={settings.cache_enabled} "
-        f"passes={[s[2] for s in pass_specs]}"
+        f"\n{'=' * 70}\nruns/case={args.runs} cache=OFF(scoped) passes={[s[2] for s in pass_specs]}"
     )
+    # #234: CACHE OFF DOAR pe durata rulării pipeline-ului, restaurat garantat (try/finally). Fără
+    # efect global de mediu. `settings` e singleton mutabil (get_settings lru_cached).
+    _cache_prev = settings.cache_enabled
+    settings.cache_enabled = False
     pass_cases: dict[str, list] = {label: [] for _, _, label in pass_specs}
-    for convo in convos:
-        print(f"  • {convo['id']} …", flush=True)
-        for flag, value, label in pass_specs:
-            if flag:
-                setattr(settings, flag, value)  # toggle paired per caz (settings mutabil)
-            pass_cases[label].append(await _run_conversation(convo, mk, llm, args.runs))
+    try:
+        for convo in convos:
+            print(f"  • {convo['id']} …", flush=True)
+            for flag, value, label in pass_specs:
+                if flag:
+                    setattr(settings, flag, value)  # toggle paired per caz (settings mutabil)
+                pass_cases[label].append(await _run_conversation(convo, mk, llm, args.runs))
+    finally:
+        settings.cache_enabled = _cache_prev  # restaurare, orice s-ar întâmpla
     report_passes = [
         {
             "pass": label,
@@ -396,7 +408,7 @@ async def main() -> int:
             "kind": "baseline" if not args.flag else "paired",
             "business_id": biz_id,
             "runs_per_case": args.runs,
-            "cache_enabled": settings.cache_enabled,
+            "cache_enabled": False,  # #234: mereu OFF pe durata rulării (scoped, restaurat după)
             "model_triage": llm.model_triage,
             "model_agent": llm.model_agent,
             "judge_model": llm.model_agent,

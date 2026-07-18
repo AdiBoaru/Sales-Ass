@@ -95,10 +95,29 @@ def test_requires_offer_gate():
         )
         == []
     )
-    # URL de produs scris în text → OK
+    # URL de PRODUS AFIȘAT scris în text → OK (grounded off aici, izolăm requires_offer)
     assert (
         eval_gates.check_turn(
-            _turn("uite: https://shop.ro/p/crema", prods), None, {"requires_offer": True}
+            _turn("uite: https://shop.ro/p/crema", prods),
+            None,
+            {"requires_offer": True, "grounded": False},
+        )
+        == []
+    )
+    # #234: un URL care NU e al unui produs afișat NU satisface requires_offer (nu orice URL)
+    fails2 = eval_gates.check_turn(
+        _turn("vezi https://random.example/x", prods),
+        None,
+        {"requires_offer": True, "grounded": False},
+    )
+    assert "missing_offer_link" in fails2
+    # URL al unui produs afișat ANTERIOR (prev) → OK (produsul „așteptat" al cererii)
+    prev = _turn("aici", prods)
+    assert (
+        eval_gates.check_turn(
+            _turn("linkul: https://shop.ro/p/crema", []),
+            prev,
+            {"requires_offer": True, "grounded": False},
         )
         == []
     )
