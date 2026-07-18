@@ -179,3 +179,46 @@ async def test_low_confidence_safety_persisted_in_state_stays_sales():
     assert ctx.route.route == Route.SALES  # context persistat → NU downgradat la clarify
     assert any(e.type == "triage_safety_kept_sales" for e in ctx.events)
     assert not any(e.type == "triage_low_confidence" for e in ctx.events)
+
+
+async def test_direct_clarify_on_safety_turn_forced_to_sales():
+    """P0 #233 (felia 2): nano poate întoarce `clarify` DIRECT pe un tur cu context de siguranță
+    (sarcină) — LLM-ul poate ignora regula din prompt. Guard-ul low-confidence NU acoperea cazul
+    (route era deja CLARIFY, nu SALES/ORDER → nici nu intra în bloc), deci clarificarea se servea și
+    OCOLEA gate-ul de contraindicații. Codul impune acum sales (calea filtrează + avertizează), iar
+    clarificarea NU se servește."""
+    ctx = _ctx("ceva", safety={"contexts": ["pregnancy"], "source": "declared_by_contact"})
+    llm = FakeLLM(
+        {
+            "route": "clarify",
+            "missing_field": "intent",
+            "reply": "Sigur! Ca să te ajut mai bine, ce anume cauți?",
+            "suggestions": ["Cremă", "Ser"],
+        }
+    )
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.SALES  # clarify DIRECT flip-uit la sales
+    # clarificarea NU se servește → agentul răspunde pe sales, cu gate-ul de siguranță
+    assert ctx.reply is None
+    assert any(
+        e.type == "triage_safety_kept_sales" and e.properties.get("from_clarify")
+        for e in ctx.events
+    )
+
+
+async def test_direct_clarify_without_safety_stays_clarify():
+    """Contrast: aceeași formă (clarify direct de la nano) FĂRĂ context de siguranță → rămâne
+    clarify. Dovedește că flip-ul e SPECIFIC siguranței, nu dezactivează clarify-ul general."""
+    ctx = _ctx("ceva")  # vag, non-safety
+    llm = FakeLLM(
+        {
+            "route": "clarify",
+            "missing_field": "intent",
+            "reply": "Sigur! Ce anume cauți?",
+            "suggestions": ["Cremă", "Ser"],
+        }
+    )
+    await triage_stage(ctx, _deps(llm))
+    assert ctx.route.route == Route.CLARIFY  # non-safety → clarify conversațional normal
+    assert ctx.reply is not None
+    assert not any(e.type == "triage_safety_kept_sales" for e in ctx.events)

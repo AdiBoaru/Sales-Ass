@@ -302,16 +302,24 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.emit("triage_factual_guard", original="simple")
 
     # NX-116: confidence LOW → CODUL forțează CLARIFY (nu sales/order pe ghicit). „LLM înțelege,
-    # codul decide" (P2). simple/handoff/clarify rămân neatinse (low-risk / deja terminale).
-    # NX-176a (P0, fix review Codex): EXCEPȚIA DE SIGURANȚĂ nu mai trăiește DOAR în promptul nano.
-    # Dacă turul declară un context de sănătate (sarcină/alăptare), NU downgradăm la clarify — o
-    # clarificare ar rata gate-ul determinist de contraindicații (sales filtrează + avertizează).
+    # codul decide" (P2). simple/handoff rămân neatinse (low-risk / deja terminale).
+    # NX-176a (P0, fix review Codex #233): EXCEPȚIA DE SIGURANȚĂ e impusă în cod, nu doar în
+    # promptul nano. Pe un tur cu context de sănătate ACTIV (sarcină/alăptare) NU clarificăm
+    # NICIODATĂ — o clarificare ar rata gate-ul determinist de contraindicații (sales filtrează +
+    # avertizează). Acoperim AMBELE căi spre clarify: (a) downgrade-ul low-confidence de mai jos ȘI
+    # (b) clarify DIRECT de la nano — LLM-ul poate ignora regula din prompt (calea pe care guard-ul
+    # de mai jos o rata: route era deja CLARIFY, nu SALES/ORDER, deci nici nu intra în bloc).
+    safety = _safety_sensitive(ctx)
     if out.confidence == "low" and route in (Route.SALES, Route.ORDER):
-        if _safety_sensitive(ctx):
+        if safety:
             ctx.emit("triage_safety_kept_sales", route=route.value)
         else:
             route = Route.CLARIFY
             ctx.emit("triage_low_confidence", original=out.route.value)
+    # (b) nano a rutat CLARIFY DIRECT pe un tur safety-sensitive → forțăm sales (gate contraindic.).
+    if route == Route.CLARIFY and safety:
+        route = Route.SALES
+        ctx.emit("triage_safety_kept_sales", route=route.value, from_clarify=True)
 
     # NX-116: sloturile normalizate în cod populează RouteDecision.filters (azi câmp mort) →
     # agentul pornește search-ul de la constrângeri structurate, nu reparsate din proză.
