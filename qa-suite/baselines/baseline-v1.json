@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-07-18T14:13:22.006135+00:00",
+    "generated_at": "2026-07-18T15:11:01.952841+00:00",
     "kind": "baseline",
     "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
     "runs_per_case": 3,
@@ -11,7 +11,7 @@
     "judge_prompt_sha256": "77672c1576c66969c5e73ab47b0abd632d460493cf2c809fda3b870c6932aafa",
     "judge_version": "v1",
     "catalog_signature": "n=654;sha256=b73aa5df41b1debf",
-    "fixtures_sha256": "f8a99c6c8498e2e5",
+    "fixtures_sha256": "8bcb4d39636128bc",
     "paired_mode": "single",
     "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0"
   },
@@ -21,33 +21,58 @@
       "flag": null,
       "flag_value": false,
       "summary": {
-        "n_conversations": 13,
-        "n_turns": 22,
-        "n_followup_turns": 9,
+        "n_conversations": 18,
+        "n_turns": 38,
+        "n_followup_turns": 20,
         "judge_natural_median": 3.0,
-        "pct_turns_natural_ge4": 31.8,
-        "pct_followup_answered_ge4": 22.2,
-        "det_gate_pass_rate_pct": 90.9,
+        "pct_turns_natural_ge4": 23.7,
+        "pct_turns_natural_AND_answered_ge4": 21.1,
+        "pct_followup_answered_ge4": 35.0,
+        "det_gate_pass_rate_pct": 86.8,
         "ungrounded_price_hits": 0,
         "new_cards_on_followup_hits": 0,
-        "opening_repeat_turns": 0,
+        "opening_repeat_turns": 2,
         "unstable_turns": [
           {
             "conv": "discovery_oily_serum",
-            "user": "am tenul gras, ce ser imi recomanzi?"
+            "user": "dintre ele care e mai lejera?"
           },
           {
-            "conv": "discovery_oily_serum",
-            "user": "una mai ieftina?"
+            "conv": "detail_single_product",
+            "user": "arata-mi o crema pentru ten uscat"
           },
           {
             "conv": "superlative_on_set",
             "user": "care dintre ele e cea mai hidratanta?"
+          },
+          {
+            "conv": "link_after_cards",
+            "user": "da-mi linkul la prima"
+          },
+          {
+            "conv": "cart_checkout_flow",
+            "user": "recomanda-mi un ser hidratant"
+          },
+          {
+            "conv": "context_pronoun",
+            "user": "primul e bun pentru par vopsit?"
+          },
+          {
+            "conv": "context_pronoun",
+            "user": "atunci pe al doilea il iau"
+          },
+          {
+            "conv": "stock_and_alt",
+            "user": "e pe stoc?"
+          },
+          {
+            "conv": "budget_pivot",
+            "user": "caut un parfum"
           }
         ],
-        "latency_ms_p95": 19814.0,
-        "latency_ms_p50": 15249.6,
-        "n_latency_samples": 66
+        "latency_ms_p95": 20224.1,
+        "latency_ms_p50": 15514.8,
+        "n_latency_samples": 114
       },
       "cases": [
         {
@@ -63,11 +88,11 @@
               "judge": {
                 "answered": {
                   "median": 4,
-                  "spread": 4
+                  "spread": 3
                 },
                 "natural": {
-                  "median": 3,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 1
                 },
                 "non_repetitive": {
                   "median": 4,
@@ -75,40 +100,40 @@
                 },
                 "concise": {
                   "median": 4,
-                  "spread": 0
+                  "spread": 1
                 },
                 "honest": {
-                  "median": 3,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 1
                 },
                 "overall": {
                   "median": 3,
-                  "spread": 3
+                  "spread": 1
                 }
               },
               "latency_ms_raw": [
-                18884.3,
-                15103.1,
-                15184.1
+                22885.6,
+                17093.4,
+                15708.7
               ],
-              "latency_ms_p95": 18884.3,
-              "latency_ms_median": 15184.1,
-              "tokens_out_median": 849,
-              "tokens_in_median": 17576,
-              "unstable": true,
+              "latency_ms_p95": 22885.6,
+              "latency_ms_median": 17093.4,
+              "tokens_out_median": 876,
+              "tokens_in_median": 17581,
+              "unstable": false,
               "samples": [
                 {
-                  "content": "La un ten gras, caută în primul rând niacinamidă și zinc, mai ales dacă vrei și un aspect mai uniform. Dacă vrei ceva pentru hidratare fără să încarce, varianta Hydra rămâne utilă; pentru riduri fine, Renew e altă categorie, mai orientată spre anti-aging.",
+                  "content": "Dacă vrei controlul sebumului și un aspect mai uniform, mergi pe niacinamidă; dacă te interesează mai mult confortul pielii, varianta hidratantă e mai potrivită.",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Dacă problema principală e uscăciunea după curățare, atunci serul hidratant are mai mult sens; iar pentru pete sau primele linii, rămâne varianta cu retinal.",
+                  "content": "Dacă simți și pielea încărcată după curățare, varianta hidratantă rămâne o alegere bună, dar pentru ten gras aș merge prima dată pe serul cu niacinamidă.",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Dacă vrei controlul luciului și un aspect mai uniform, mergi pe niacinamidă; dacă pielea se simte mai degrabă deshidratată, serul hidratant are mai mult sens. Pentru ten gras, eu aș începe cu Auralis Clarity, fiindcă e construit exact pe reglarea sebumului.",
+                  "content": "Dacă vrei controlul sebumului și aspect mai uniform, mergi pe serul cu niacinamidă și zinc. Dacă simți mai multă strângere sau deshidratare, atunci varianta hidratantă e mai potrivită; pentru îngrijire anti-rid, rămâne opțiunea cu retinal.",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -126,57 +151,57 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 2,
-                  "spread": 2
+                  "median": 1,
+                  "spread": 4
                 },
                 "natural": {
-                  "median": 3,
-                  "spread": 2
+                  "median": 1,
+                  "spread": 3
                 },
                 "non_repetitive": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 3
                 },
                 "concise": {
-                  "median": 3,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 4
                 },
                 "honest": {
-                  "median": 2,
-                  "spread": 1
+                  "median": 1,
+                  "spread": 4
                 },
                 "overall": {
-                  "median": 3,
-                  "spread": 1
+                  "median": 1,
+                  "spread": 4
                 }
               },
               "latency_ms_raw": [
-                15616.3,
-                13815.1,
-                13767.6
+                16838.4,
+                11503.6,
+                13981.6
               ],
-              "latency_ms_p95": 15616.3,
-              "latency_ms_median": 13815.1,
-              "tokens_out_median": 667,
-              "tokens_in_median": 19062,
-              "unstable": false,
+              "latency_ms_p95": 16838.4,
+              "latency_ms_median": 13981.6,
+              "tokens_out_median": 676,
+              "tokens_in_median": 19110,
+              "unstable": true,
               "samples": [
                 {
-                  "content": "Dintre ele, varianta cu niacinamidă e mai lejeră pe ten, iar textura fluidă o face ușor de purtat zi de zi. Dacă vrei ceva care să nu încarce și să lase pielea mai mată, asta e direcția potrivită.\n\nPentru ten gras, contează mult textura și ingredientele care țin sebumul sub contr",
+                  "content": "Dintre ele, varianta hidratantă e mai lejeră la senzație. Serul cu niacinamidă merge mai mult pe controlul sebumului și matifiere, deci se simte mai activ pe tenul gras.",
                   "n_cards": 1,
                   "fails": [
                     "too_many_cards:1>0"
                   ]
                 },
                 {
-                  "content": "Iată diferențele principale — alege în funcție de ce contează pentru tine. Cea mai accesibilă: Auralis Clarity Ser cu niacinamidă. Cea mai bine cotată: LumaDerm Renew Ser cu retinal.",
+                  "content": "Iată diferențele principale — alege în funcție de ce contează pentru tine. Cea mai accesibilă: Auralis Hydra Ser hidratant. Cea mai bine cotată: Auralis Hydra Ser hidratant.",
                   "n_cards": 2,
                   "fails": [
                     "too_many_cards:2>0"
                   ]
                 },
                 {
-                  "content": "Dacă vrei un ser mai ușor pe ten gras, caută texturi fluide și formule cu niacinamidă; dacă ai pielea care se irită ușor, merită să-l introduci treptat, fiindcă poate da furnicături la început.",
+                  "content": "",
                   "n_cards": 1,
                   "fails": [
                     "too_many_cards:1>0"
@@ -193,19 +218,19 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 1,
-                  "spread": 3
+                  "median": 2,
+                  "spread": 1
                 },
                 "natural": {
                   "median": 3,
-                  "spread": 3
+                  "spread": 1
                 },
                 "non_repetitive": {
                   "median": 3,
-                  "spread": 3
+                  "spread": 1
                 },
                 "concise": {
-                  "median": 4,
+                  "median": 3,
                   "spread": 1
                 },
                 "honest": {
@@ -214,32 +239,32 @@
                 },
                 "overall": {
                   "median": 2,
-                  "spread": 3
+                  "spread": 1
                 }
               },
               "latency_ms_raw": [
-                15137.5,
-                14784.2,
-                15835.4
+                18007.2,
+                14061.9,
+                16432.3
               ],
-              "latency_ms_p95": 15835.4,
-              "latency_ms_median": 15137.5,
-              "tokens_out_median": 824,
-              "tokens_in_median": 19864,
-              "unstable": true,
+              "latency_ms_p95": 18007.2,
+              "latency_ms_median": 16432.3,
+              "tokens_out_median": 810,
+              "tokens_in_median": 19809,
+              "unstable": false,
               "samples": [
                 {
-                  "content": "Auralis Hydra merită dacă simți tenul mai uscat și vrei hidratare mai intensă, iar Bright e mai potrivit când urmărești și un plus de luminozitate.",
+                  "content": "Pentru alegere, contează mai ales dacă vrei hidratare simplă sau un plus de luminozitate.",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "",
-                  "n_cards": 3,
+                  "content": "Dacă prioritatea ta e doar să plătești mai puțin, Hydra rămâne alegerea firească. Dacă vrei și un plus de luminozitate, Bright intră în joc prin vitamina C și niacinamidă, dar rămâne peste varianta hidratantă la cost.",
+                  "n_cards": 2,
                   "fails": []
                 },
                 {
-                  "content": "Dacă vrei strict varianta mai accesibilă, Petala Hydra e alegerea firească. Dacă ai nevoie de hidratare mai intensă și de un ser care intră repede în piele, Auralis Hydra merită ales în locul ei.",
+                  "content": "Dacă vrei strict hidratare, uită-te la textura pe care o preferi: fluidă pentru senzație mai lejeră, gel pentru confort mai intens. Pentru uz zilnic, Petala Hydra rămâne alegerea mai ieftină; dacă ai nevoie de hidratare mai puternică, Auralis Hydra e mai potrivit.",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -259,53 +284,53 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 3,
-                  "spread": 1
+                  "median": 2,
+                  "spread": 0
                 },
                 "natural": {
-                  "median": 2,
-                  "spread": 1
+                  "median": 3,
+                  "spread": 2
                 },
                 "non_repetitive": {
                   "median": 3,
                   "spread": 1
                 },
                 "concise": {
-                  "median": 3,
-                  "spread": 1
+                  "median": 2,
+                  "spread": 2
                 },
                 "honest": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 2
                 },
                 "overall": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                14942.8,
-                14671.1,
-                15578.1
+                25414.4,
+                22533.5,
+                16245.6
               ],
-              "latency_ms_p95": 15578.1,
-              "latency_ms_median": 14942.8,
-              "tokens_out_median": 827,
-              "tokens_in_median": 17514,
+              "latency_ms_p95": 25414.4,
+              "latency_ms_median": 22533.5,
+              "tokens_out_median": 857,
+              "tokens_in_median": 17521,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Pentru o cremă hidratantă, setul se împarte clar între hidratare zilnică ușoară, bună și sub machiaj, și formule mai bogate pentru ten uscat. Se încadrează și în intervalul de preț dat, cu opțiuni pentru ten normal sau pentru ten mai uscat.\n\nDacă ai ten normal sau deshidratat, al",
+                  "content": "Am găsit o cremă hidratantă ușoară pentru zi și două opțiuni mai bogate pentru ten uscat, toate în intervalul tău de buget. Diferența reală e între hidratare lejeră, bună și sub machiaj, și nutriție mai consistentă pentru piele uscată.\n\nDacă vrei ceva pentru zi, caută o textură c",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Pentru o cremă hidratantă, diferența aici e între hidratare ușoară, bună sub machiaj, și varianta care lasă finish mat, fără să încarce. Mai există și opțiunea de noapte, pentru ten uscat și deshidratat.\n\nDacă vrei ceva pentru zi, alege gel-crema; dacă preferi o cremă mai clasică",
+                  "content": "Pentru o cremă hidratantă, setul se împarte clar între hidratare zilnică ușoară, bună și sub machiaj, și variante care hidratează fără să încarce, cu finish mat. Dacă vrei ceva pentru ten normal sau mixt, diferența e mai ales între textură lejeră și absorbție rapidă.\n\nDacă vrei o",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Pentru o cremă hidratantă, diferența aici e simplă: una dă hidratare zilnică ușoară și merge bine sub machiaj, alta hidratează fără să încarce și lasă finish mat. Mai este și varianta mai bogată, dacă vrei nutriție intensă peste noapte.\n\nDacă ai ten mixt sau gras, mergi pe gel-cr",
+                  "content": "Pentru o cremă hidratantă, diferența aici e simplă: una dă hidratare zilnică ușoară și merge bine sub machiaj, iar alta hidratează fără să încarce, cu finish mat. Am păstrat și varianta mai bogată pentru serile în care vrei mai mult confort.\n\nDacă vrei ceva de zi, caută o textură",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -320,53 +345,53 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 2,
-                  "spread": 1
+                  "median": 4,
+                  "spread": 0
                 },
                 "natural": {
-                  "median": 2,
+                  "median": 3,
                   "spread": 1
                 },
                 "non_repetitive": {
                   "median": 3,
-                  "spread": 2
+                  "spread": 1
                 },
                 "concise": {
                   "median": 3,
-                  "spread": 3
+                  "spread": 0
                 },
                 "honest": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 0
                 },
                 "overall": {
-                  "median": 2,
+                  "median": 3,
                   "spread": 1
                 }
               },
               "latency_ms_raw": [
-                18981.3,
-                16521.5,
-                13316.0
+                16741.4,
+                15275.4,
+                14696.4
               ],
-              "latency_ms_p95": 18981.3,
-              "latency_ms_median": 16521.5,
-              "tokens_out_median": 774,
-              "tokens_in_median": 19496,
+              "latency_ms_p95": 16741.4,
+              "latency_ms_median": 15275.4,
+              "tokens_out_median": 820,
+              "tokens_in_median": 19601,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Am selectat doar opțiuni fără parfum, iar diferența reală e între calmare pentru ten sensibil și hidratare lejeră cu finish mat pentru ten gras sau mixt.\n\nPetala Matte rămâne alegerea bună când vrei mai mult control al luciului și o textură gel.",
+                  "content": "Am selectat doar creme fără parfum, iar diferența aici e între calmare pentru ten sensibil și hidratare lejeră, cu finish mat, pentru ten gras sau mixt.\n\nDacă vrei liniștire și barieră mai bună, merg mai bine formulele cu panthenol și bisabolol. Pentru hidratare de zi, fără luciu",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "",
+                  "content": "Am selectat doar creme fără parfum, iar diferența principală aici e între calmare pentru ten sensibil, nutriție pentru ten uscat și hidratare cu finish mat pentru ten gras sau mixt.\n\nPentru ten uscat, Petala Rich e mai potrivită când urmărești nutriție mai bogată, iar Petala Matt",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Am selectat doar opțiuni fără parfum, iar diferența dintre ele e mai ales pe tipul de ten: una e pentru ten sensibil, una pentru ten uscat, iar una pentru ten gras sau mixt.",
+                  "content": "Am găsit variante fără parfum, iar diferența principală e între calmarea tenului sensibil, hidratarea bogată pentru ten uscat și un gel-cremă cu finish mat pentru ten gras.\n\nDacă prioritatea ta e toleranța, mergi pe formula fără parfum; dacă vrei doar hidratare mai bogată, varian",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -390,7 +415,7 @@
                 },
                 "non_repetitive": {
                   "median": 2,
-                  "spread": 0
+                  "spread": 1
                 },
                 "concise": {
                   "median": 3,
@@ -398,36 +423,36 @@
                 },
                 "honest": {
                   "median": 2,
-                  "spread": 0
+                  "spread": 1
                 },
                 "overall": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                15315.1,
-                16328.3,
-                14866.6
+                16992.6,
+                15550.1,
+                16299.1
               ],
-              "latency_ms_p95": 16328.3,
-              "latency_ms_median": 15315.1,
-              "tokens_out_median": 877,
-              "tokens_in_median": 20121,
+              "latency_ms_p95": 16992.6,
+              "latency_ms_median": 16299.1,
+              "tokens_out_median": 931,
+              "tokens_in_median": 20161,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Am găsit opțiuni care intră în bugetul tău și păstrează diferența clară între hidratare ușoară de zi și nutriție mai bogată pentru ten uscat.\n\nDacă vrei ceva de zi, mergi pe textura mai lejeră; dacă pielea e uscată și simți nevoie de confort, varianta mai bogată e mai potrivită.",
+                  "content": "Am selectat doar opțiuni care intră în bugetul tău, iar diferența principală e între nutriție bogată pentru ten uscat și hidratare zilnică mai ușoară. Dacă vrei ceva pentru zi, una rămâne mai lejeră; dacă ai ten uscat, cele cu unt de shea și ceramide sunt mai potrivite.\n\nDacă vre",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Am selectat variante care intră în bugetul tău și nu lasă film gras. Diferența principală e între hidratare lejeră de zi și o formulă mai nutritivă pentru noapte.\n\nPentru seară și piele mai uscată, Auralis Rich rămâne varianta mai nutritivă.",
+                  "content": "Am selectat doar variante care intră sub 100 lei. Diferența e clară: una hrănește mai mult peste noapte, una e lejeră pentru zi, iar una lasă finish mat când vrei hidratare fără luciu.",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Am selectat doar variante fără parfum care intră în bugetul tău. Diferența reală e între hidratare ușoară de zi, nutriție mai bogată pentru noapte și varianta care lasă finish mat.",
+                  "content": "Am păstrat și cerința de fără parfum, iar acum am pus accent și pe bugetul sub 100 lei. Se văd clar trei direcții: hidratare ușoară fără luciu, nutriție mai bogată pentru noapte și o cremă lejeră de zi, bună sub machiaj.\n\nDacă vrei ceva pentru zi și sub machiaj, gel-crema e mai p",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -452,15 +477,15 @@
                 },
                 "natural": {
                   "median": 3,
-                  "spread": 0
+                  "spread": 1
                 },
                 "non_repetitive": {
-                  "median": 2,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 1
                 },
                 "concise": {
                   "median": 3,
-                  "spread": 2
+                  "spread": 1
                 },
                 "honest": {
                   "median": 3,
@@ -468,33 +493,33 @@
                 },
                 "overall": {
                   "median": 3,
-                  "spread": 1
+                  "spread": 2
                 }
               },
               "latency_ms_raw": [
-                17272.5,
-                15803.4,
-                16271.2
+                18022.2,
+                15802.0,
+                15464.6
               ],
-              "latency_ms_p95": 17272.5,
-              "latency_ms_median": 16271.2,
-              "tokens_out_median": 892,
-              "tokens_in_median": 17558,
-              "unstable": false,
+              "latency_ms_p95": 18022.2,
+              "latency_ms_median": 15802.0,
+              "tokens_out_median": 830,
+              "tokens_in_median": 17524,
+              "unstable": true,
               "samples": [
                 {
-                  "content": "Pentru ten uscat, am pus alături o cremă de zi care calmează și una de noapte cu nutriție mai bogată. Dacă vrei ceva blând și dacă te interesează refacerea barierei, prima variantă iese în față; pentru hidratare intensă peste noapte, a treia e mai potrivită.\n\nDacă vrei o cremă de",
+                  "content": "Am găsit trei opțiuni pentru ten uscat, fiecare pe altă nevoie: una mai accesibilă și hrănitoare, una pentru ten sensibil, și una de noapte cu nutriție intensă.\n\nDacă tenul tău se înroșește ușor sau e reactiv, LumaDerm Calm e mai potrivită.",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru ten uscat, am pus alături o variantă calmantă pentru piele sensibilă, una hrănitoare la preț accesibil și o cremă de noapte mai intensă. Diferența reală e între confortul pentru ten reactiv, nutriția zilnică și refacerea peste noapte.\n\nDacă vrei ceva pentru zi, mergi pe va",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru ten uscat, am pus alături o cremă de zi care calmează și una de noapte cu nutriție intensă. Dacă vrei și barieră refăcută, și hidratare mai bogată seara, diferența stă chiar aici.\n\nDacă vrei ceva pentru zi, mergi pe crema calmantă; dacă simți tenul foarte uscat seara, vari",
                   "n_cards": 2,
-                  "fails": []
-                },
-                {
-                  "content": "Pentru ten uscat, am pus alături o cremă de zi care calmează și una de noapte mai nutritivă. Dacă vrei ceva care să nu încarce, există și gel-crema, dar ea e mai potrivită pentru ten mixt sau gras.\n\nPentru ten uscat, contează mult textura: o cremă mai bogată ajută seara, iar una ",
-                  "n_cards": 3,
-                  "fails": []
-                },
-                {
-                  "content": "Pentru ten uscat, diferența reală aici e între calmare și refacerea barierei ziua, sau nutriție mai bogată peste noapte. Ți-am pus alături și o variantă care hidratează mai lejer, dacă vrei ceva mai ușor pe piele.\n\nDacă vrei ceva pentru zi și pielea se irită ușor, mergi pe LumaDe",
-                  "n_cards": 3,
                   "fails": []
                 }
               ]
@@ -509,7 +534,7 @@
               "judge": {
                 "answered": {
                   "median": 5,
-                  "spread": 1
+                  "spread": 0
                 },
                 "natural": {
                   "median": 4,
@@ -521,40 +546,40 @@
                 },
                 "concise": {
                   "median": 4,
-                  "spread": 0
+                  "spread": 1
                 },
                 "honest": {
-                  "median": 4,
-                  "spread": 3
+                  "median": 3,
+                  "spread": 2
                 },
                 "overall": {
                   "median": 4,
-                  "spread": 1
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                13850.5,
-                14319.6,
-                14058.9
+                12655.9,
+                30722.2,
+                14049.2
               ],
-              "latency_ms_p95": 14319.6,
-              "latency_ms_median": 14058.9,
-              "tokens_out_median": 722,
-              "tokens_in_median": 19100,
+              "latency_ms_p95": 30722.2,
+              "latency_ms_median": 14049.2,
+              "tokens_out_median": 690,
+              "tokens_in_median": 18766,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Este o cremă pentru ten sensibil și uscat, cu panthenol și bisabolol, gândită să calmeze roșeața și să refacă bariera pielii. Are textură de cremă și este fără parfum, deci rămâne o opțiune blândă pentru pielea reactivă.\n\nPanthenolul ajută la confortul pielii, iar bisabololul com",
+                  "content": "Petala Rich este o cremă hidratantă pentru ten uscat și deshidratat, cu unt de shea și ceramide. Are o textură cremoasă și merge bine când vrei nutriție bogată, dar poate fi prea grea pentru ten gras.\n\nUntul de shea ajută la confortul pielii, iar ceramidele susțin bariera cutanat",
                   "n_cards": 1,
                   "fails": []
                 },
                 {
-                  "content": "Este o cremă pentru ten uscat și sensibil, cu textură de cremă și formulă fără parfum. Are panthenol și bisabolol, deci merge bine când pielea are nevoie de calmare și de refacerea barierei.\n\nPanthenolul ajută la confortul pielii, iar bisabololul susține calmarea; împreună sunt u",
+                  "content": "LumaDerm Calm este o cremă pentru ten sensibil și uscat, cu panthenol și bisabolol, gândită să liniștească pielea și să refacă bariera. Are textură de cremă și vine fără parfum.\n\nPanthenolul ajută la confortul pielii, iar bisabololul completează partea de calmare. O poți folosi d",
                   "n_cards": 1,
                   "fails": []
                 },
                 {
-                  "content": "LumaDerm Calm este o cremă pentru ten sensibil și uscat, cu panthenol și bisabolol. Merge bine când vrei calmare și refacerea barierei, fără parfum.\n\nPanthenolul ajută la confortul pielii, iar bisabololul completează formula cu efect de liniștire. E o alegere bună când vrei o cre",
+                  "content": "LumaDerm Calm este o cremă pentru ten sensibil și uscat, cu panthenol și bisabolol, gândită să calmeze roșeața și să refacă bariera pielii. Are textură de cremă și vine fără parfum.\n\nDacă urmărești o cremă de zi pentru ten uscat și sensibil, merită să te uiți la formula blândă și",
                   "n_cards": 1,
                   "fails": []
                 }
@@ -575,7 +600,7 @@
               "judge": {
                 "answered": {
                   "median": 4,
-                  "spread": 0
+                  "spread": 2
                 },
                 "natural": {
                   "median": 3,
@@ -586,41 +611,41 @@
                   "spread": 1
                 },
                 "concise": {
-                  "median": 3,
+                  "median": 4,
                   "spread": 1
                 },
                 "honest": {
                   "median": 2,
-                  "spread": 0
+                  "spread": 2
                 },
                 "overall": {
                   "median": 3,
-                  "spread": 1
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                15368.8,
-                19814.0,
-                14885.4
+                14591.0,
+                14254.5,
+                16543.8
               ],
-              "latency_ms_p95": 19814.0,
-              "latency_ms_median": 15368.8,
-              "tokens_out_median": 698,
-              "tokens_in_median": 17431,
+              "latency_ms_p95": 16543.8,
+              "latency_ms_median": 14591.0,
+              "tokens_out_median": 678,
+              "tokens_in_median": 17429,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Am pus alături două fonduri de ten care se despart clar prin finish și nivelul de acoperire: unul luminos și lejer, celălalt satinat cu acoperire medie.",
+                  "content": "Am pus alături două fonduri de ten care diferă clar prin finish și acoperire: unul luminos, cu acoperire lejeră, și unul satinat, cu acoperire medie.\n\nDacă vrei un rezultat mai natural și mai aerisit, mergi pe varianta luminoasă; dacă urmărești un aspect mai uniform, satinatul e ",
                   "n_cards": 2,
                   "fails": []
                 },
                 {
-                  "content": "Ți-am pus alături două fonduri de ten care se separă clar prin finish și acoperire: unul satinat, cu acoperire medie, și unul luminos, cu acoperire lejeră. Primul merge mai bine dacă vrei un aspect mai așezat, al doilea dacă preferi un efect fresh și hidratant.\n\nDacă vrei mai mul",
+                  "content": "Ți-am pus două fonduri de ten care se despart clar prin finish și acoperire: unul cu efect luminos și lejer, celălalt cu finish satinat și acoperire medie.\n\nDacă vrei un look mai luminos și mai emolient, LumaDerm e varianta potrivită; dacă preferi un aspect mai uniform și mai ord",
                   "n_cards": 2,
                   "fails": []
                 },
                 {
-                  "content": "Sigur — ai două direcții clare aici: un fond cu finish satinat și acoperire medie, sau unul cu finish luminos și acoperire lejeră. Primul merge mai bine pe ten normal și mixt, iar al doilea e mai potrivit dacă vrei un aspect mai fresh și hidratant.\n\nDacă ai ten normal sau mixt, A",
+                  "content": "Am găsit două fonduri de ten care se separă clar după finish și acoperire: unul satinat cu acoperire medie, celălalt luminos cu acoperire lejeră. Primul stă mai bine pe ten normal sau mixt, iar al doilea e mai potrivit dacă vrei un aspect fresh și hidratant.",
                   "n_cards": 2,
                   "fails": []
                 }
@@ -635,15 +660,15 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 2,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 3
                 },
                 "natural": {
                   "median": 2,
-                  "spread": 0
+                  "spread": 1
                 },
                 "non_repetitive": {
-                  "median": 2,
+                  "median": 3,
                   "spread": 1
                 },
                 "concise": {
@@ -651,23 +676,23 @@
                   "spread": 1
                 },
                 "honest": {
-                  "median": 1,
+                  "median": 2,
                   "spread": 2
                 },
                 "overall": {
-                  "median": 2,
-                  "spread": 0
+                  "median": 3,
+                  "spread": 1
                 }
               },
               "latency_ms_raw": [
-                11492.4,
-                12767.1,
-                14072.9
+                11511.7,
+                10494.2,
+                14905.1
               ],
-              "latency_ms_p95": 14072.9,
-              "latency_ms_median": 12767.1,
-              "tokens_out_median": 465,
-              "tokens_in_median": 15062,
+              "latency_ms_p95": 14905.1,
+              "latency_ms_median": 11511.7,
+              "tokens_out_median": 467,
+              "tokens_in_median": 15025,
               "unstable": false,
               "samples": [
                 {
@@ -681,7 +706,7 @@
                   "fails": []
                 },
                 {
-                  "content": "Le-am pus față în față: Aria Silk merge spre un finish satinat și o acoperire medie, iar LumaDerm spre un aspect mai luminos și mai lejer. Dacă vrei un look mai îngrijit și mai echilibrat, primul stă mai bine; dacă urmărești un efect fresh, al doilea e mai potrivit.",
+                  "content": "Le-am pus față în față după finish și potrivire pe ten: Aria Silk dă un aspect satinat cu acoperire medie, iar LumaDerm merge mai mult spre un look luminos și lejer. Dacă vrei un fond de ten mai așezat, primul e varianta mai echilibrată; dacă vrei efect fresh, al doilea se simte ",
                   "n_cards": 1,
                   "fails": []
                 }
@@ -702,7 +727,7 @@
               "judge": {
                 "answered": {
                   "median": 4,
-                  "spread": 1
+                  "spread": 0
                 },
                 "natural": {
                   "median": 4,
@@ -713,42 +738,42 @@
                   "spread": 1
                 },
                 "concise": {
-                  "median": 3,
-                  "spread": 1
+                  "median": 4,
+                  "spread": 0
                 },
                 "honest": {
-                  "median": 4,
+                  "median": 5,
                   "spread": 1
                 },
                 "overall": {
-                  "median": 3,
-                  "spread": 1
+                  "median": 4,
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                18356.3,
-                19645.3,
-                17262.6
+                17795.0,
+                17870.2,
+                15339.5
               ],
-              "latency_ms_p95": 19645.3,
-              "latency_ms_median": 18356.3,
-              "tokens_out_median": 900,
-              "tokens_in_median": 17566,
+              "latency_ms_p95": 17870.2,
+              "latency_ms_median": 17795.0,
+              "tokens_out_median": 922,
+              "tokens_in_median": 17570,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nLa cremele anti-rid, merită să alegi după ce vrei să prioritizezi",
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nEu aș începe cu serul LumaDerm dacă vrei un pas mai activ în ruti",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă urmărești efect anti-rid, contează să alegi între tratament ",
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei ceva pentru riduri și aspectul texturii, caută formule ",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei mai multă hidratare și pielea se simte uscată, varianta",
-                  "n_cards": 3,
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei anti-rid cu accent pe uniformizare, mergi pe formula cu",
+                  "n_cards": 2,
                   "fails": []
                 }
               ]
@@ -759,13 +784,14 @@
               "runs": 3,
               "gate_pass_runs": 0,
               "gate_fails_union": [
-                "too_many_cards:1>0"
+                "too_many_cards:1>0",
+                "too_many_cards:3>0"
               ],
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
                   "median": 4,
-                  "spread": 3
+                  "spread": 4
                 },
                 "natural": {
                   "median": 3,
@@ -773,48 +799,48 @@
                 },
                 "non_repetitive": {
                   "median": 4,
-                  "spread": 0
+                  "spread": 1
                 },
                 "concise": {
-                  "median": 4,
-                  "spread": 0
+                  "median": 3,
+                  "spread": 3
                 },
                 "honest": {
-                  "median": 3,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 1
                 },
                 "overall": {
-                  "median": 4,
+                  "median": 3,
                   "spread": 2
                 }
               },
               "latency_ms_raw": [
-                13146.8,
-                13999.2,
-                15513.5
+                15695.5,
+                15056.9,
+                16019.4
               ],
-              "latency_ms_p95": 15513.5,
-              "latency_ms_median": 13999.2,
-              "tokens_out_median": 651,
-              "tokens_in_median": 19138,
+              "latency_ms_p95": 16019.4,
+              "latency_ms_median": 15695.5,
+              "tokens_out_median": 857,
+              "tokens_in_median": 19342,
               "unstable": true,
               "samples": [
                 {
-                  "content": "Dacă vrei o cremă care să lase pielea mai confortabilă și mai catifelată peste noapte, aceasta e alegerea potrivită. Dacă ai ten gras, poate părea prea bogată, așa că merită o textură mai lejeră.",
+                  "content": "Dacă vrei confort și refacere pentru piele uscată, mergi pe Solora Repair; dacă te interesează mai ales zona ochilor, Petala Youth e mai potrivită.",
+                  "n_cards": 3,
+                  "fails": [
+                    "too_many_cards:3>0"
+                  ]
+                },
+                {
+                  "content": "Dacă prioritatea ta este hidratarea, caută formule cu ceramide și unt de shea; dacă vrei și netezirea texturii, retinolul și niacinamida sunt mai potrivite. Pentru retinol, e bine să începi treptat, iar seara să îl urmeze o cremă hrănitoare.",
                   "n_cards": 1,
                   "fails": [
                     "too_many_cards:1>0"
                   ]
                 },
                 {
-                  "content": "Dacă vrei hidratare, caută formule mai bogate, cu ceramide și unturi; dacă vrei și efect pe textură, retinolul rămâne mai potrivit, dar cere introducere treptată. Aici aș merge pe crema rich dacă prioritatea ta e hidratarea, iar tratamentul local dacă urmărești mai mult anti-agin",
-                  "n_cards": 1,
-                  "fails": [
-                    "too_many_cards:1>0"
-                  ]
-                },
-                {
-                  "content": "La o cremă de noapte, contează mai ales cât de bogată e formula și dacă are ingrediente care refac bariera pielii. Auralis Rich e alegerea potrivită când vrei hidratare serioasă; dacă ai ten gras, poate fi prea grea.",
+                  "content": "Dacă prioritatea ta este hidratarea, caută formule cu ceramide, unturi sau uleiuri emoliente; dacă vrei mai mult pe anti-rid, retinolul e mai potrivit, dar se introduce treptat. Pentru seară, aș merge pe crema bogată când simți pielea uscată, iar tratamentul cu retinol când vrei ",
                   "n_cards": 1,
                   "fails": [
                     "too_many_cards:1>0"
@@ -840,49 +866,49 @@
                   "spread": 0
                 },
                 "natural": {
-                  "median": 4,
-                  "spread": 3
+                  "median": 1,
+                  "spread": 1
                 },
                 "non_repetitive": {
-                  "median": 4,
-                  "spread": 3
+                  "median": 1,
+                  "spread": 2
                 },
                 "concise": {
-                  "median": 4,
-                  "spread": 3
+                  "median": 1,
+                  "spread": 1
                 },
                 "honest": {
-                  "median": 3,
+                  "median": 1,
                   "spread": 2
                 },
                 "overall": {
-                  "median": 2,
-                  "spread": 1
+                  "median": 1,
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                18270.0,
-                18037.0,
-                16344.5
+                16304.1,
+                17364.4,
+                15749.3
               ],
-              "latency_ms_p95": 18270.0,
-              "latency_ms_median": 18037.0,
-              "tokens_out_median": 944,
-              "tokens_in_median": 17554,
+              "latency_ms_p95": 17364.4,
+              "latency_ms_median": 16304.1,
+              "tokens_out_median": 876,
+              "tokens_in_median": 17524,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Dacă ai ten mixt sau gras, gel-crema e alegerea mai sigură; dacă ai ten normal și vrei o cremă mai clasică, Auralis Daily e mai potrivită.",
-                  "n_cards": 3,
-                  "fails": []
-                },
-                {
-                  "content": "Dacă ai ten mixt sau gras, gel-crema e alegerea mai comodă ziua; dacă ai ten normal și vrei o textură mai clasică, Auralis Daily e mai potrivită.",
+                  "content": "",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
                   "content": "",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru o cremă hidratantă, diferența aici e între o hidratare ușoară, bună ca bază sub machiaj, și o formulă care hidratează fără să încarce, cu finish mat. Ai și o variantă de noapte, dacă vrei ceva mai nutritiv pentru ten uscat.\n\nDacă vrei ceva pentru zi, alege în funcție de cu",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -910,12 +936,12 @@
                   "spread": 1
                 },
                 "non_repetitive": {
-                  "median": 5,
-                  "spread": 1
+                  "median": 4,
+                  "spread": 0
                 },
                 "concise": {
                   "median": 4,
-                  "spread": 1
+                  "spread": 0
                 },
                 "honest": {
                   "median": 5,
@@ -923,32 +949,32 @@
                 },
                 "overall": {
                   "median": 4,
-                  "spread": 1
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                12476.3,
-                12381.4,
-                22766.5
+                11321.5,
+                11785.7,
+                20233.7
               ],
-              "latency_ms_p95": 22766.5,
-              "latency_ms_median": 12476.3,
-              "tokens_out_median": 338,
-              "tokens_in_median": 13269,
+              "latency_ms_p95": 20233.7,
+              "latency_ms_median": 11785.7,
+              "tokens_out_median": 313,
+              "tokens_in_median": 13220,
               "unstable": false,
               "samples": [
                 {
-                  "content": "În sarcină, decizia pentru o cremă antirid o ia medicul sau farmacistul. Nu pot confirma eu ce e potrivit pentru tine.\n\nDacă vrei, îți pot arăta opțiuni antirid din catalog, iar tu le verifici cu medicul. Vrei ceva mai hidratant sau mai ferm?",
+                  "content": "În sarcină, decizia pentru o cremă antirid o ia medicul sau farmacistul, mai ales dacă ai ingrediente active în rutină. Eu nu pot confirma ce e potrivit în sarcină.\n\nDacă vrei, îți pot căuta creme antirid mai blânde din catalog, iar tu le verifici cu medicul. Preferi o variantă p",
                   "n_cards": 0,
                   "fails": []
                 },
                 {
-                  "content": "Țin cont că ești însărcinată. Nu pot confirma doar din datele catalogului că un produs e potrivit în această situație, așa că verifică alegerea cu medicul sau farmacistul.\n\nMomentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți (tip de produs, buget)?",
+                  "content": "În sarcină, alegerea unei creme antirid e bine s-o validezi cu medicul sau farmacistul. Eu nu pot confirma siguranța unui ingredient pentru sarcină.\n\nCa opțiune mai blândă, pot să-ți caut creme antirid din catalog cu formule simple, orientate pe hidratare și confortul tenului. Vr",
                   "n_cards": 0,
                   "fails": []
                 },
                 {
-                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nÎn sarcină, pentru produse antirid, alegerea finală ar trebui val",
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nÎn sarcină, pentru zona ochilor merită să mergi pe formule simple",
                   "n_cards": 2,
                   "fails": []
                 }
@@ -972,7 +998,7 @@
                   "spread": 0
                 },
                 "natural": {
-                  "median": 4,
+                  "median": 3,
                   "spread": 1
                 },
                 "non_repetitive": {
@@ -985,7 +1011,7 @@
                 },
                 "honest": {
                   "median": 5,
-                  "spread": 1
+                  "spread": 0
                 },
                 "overall": {
                   "median": 4,
@@ -993,12 +1019,12 @@
                 }
               },
               "latency_ms_raw": [
-                3557.4,
-                3938.8,
-                3501.4
+                3644.6,
+                3456.4,
+                3341.0
               ],
-              "latency_ms_p95": 3938.8,
-              "latency_ms_median": 3557.4,
+              "latency_ms_p95": 3644.6,
+              "latency_ms_median": 3456.4,
               "tokens_out_median": 0,
               "tokens_in_median": 0,
               "unstable": false,
@@ -1038,15 +1064,15 @@
                   "spread": 0
                 },
                 "natural": {
-                  "median": 4,
-                  "spread": 1
+                  "median": 5,
+                  "spread": 0
                 },
                 "non_repetitive": {
                   "median": 5,
-                  "spread": 1
+                  "spread": 0
                 },
                 "concise": {
-                  "median": 4,
+                  "median": 5,
                   "spread": 0
                 },
                 "honest": {
@@ -1054,33 +1080,33 @@
                   "spread": 0
                 },
                 "overall": {
-                  "median": 4,
-                  "spread": 1
+                  "median": 5,
+                  "spread": 0
                 }
               },
               "latency_ms_raw": [
-                11586.2,
-                11997.5,
-                11905.7
+                13945.5,
+                11572.0,
+                11707.9
               ],
-              "latency_ms_p95": 11997.5,
-              "latency_ms_median": 11905.7,
-              "tokens_out_median": 285,
-              "tokens_in_median": 13223,
+              "latency_ms_p95": 13945.5,
+              "latency_ms_median": 11707.9,
+              "tokens_out_median": 284,
+              "tokens_in_median": 13224,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Nu avem produse de la Chanel în catalog.\n\nDacă vrei, îți pot arăta alternative de fond de ten din alte branduri. Ce preferi: mai ieftin, mat sau cu acoperire mare?",
+                  "content": "Nu lucrăm cu brandul Chanel în catalog.\n\nDacă vrei, îți pot arăta alternative la fond de ten din alte branduri. Ce preferi: mai hidratant, mat sau cu acoperire mare?",
                   "n_cards": 0,
                   "fails": []
                 },
                 {
-                  "content": "Nu lucrăm cu brandul Chanel.\n\nDacă vrei, îți pot arăta alternative de fond de ten din alte branduri, pe bugetul tău sau cu finish-ul preferat. Ce variantă cauți?",
+                  "content": "Nu lucrăm cu brandul Chanel.\n\nDacă vrei, îți pot arăta alternative de fond de ten din alte branduri, potrivite ca acoperire sau finisaj. Ce preferi: mai lejer, mediu sau cu acoperire mare?",
                   "n_cards": 0,
                   "fails": []
                 },
                 {
-                  "content": "Nu avem fond de ten de la Chanel în catalog.\n\nDacă vrei, îți pot arăta 2-3 alternative din alte branduri, pe finisajul sau bugetul pe care îl preferi. Ce cauți mai exact?",
+                  "content": "Nu lucrăm cu brandul Chanel.\n\nDacă vrei, îți pot arăta alternative la fond de ten din alte branduri. Ce preferi: mai lejer, cu acoperire mare sau mai ieftin?",
                   "n_cards": 0,
                   "fails": []
                 }
@@ -1100,53 +1126,53 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 2,
+                  "median": 4,
                   "spread": 1
                 },
                 "natural": {
-                  "median": 2,
-                  "spread": 0
+                  "median": 3,
+                  "spread": 1
                 },
                 "non_repetitive": {
                   "median": 3,
                   "spread": 0
                 },
                 "concise": {
-                  "median": 2,
-                  "spread": 0
-                },
-                "honest": {
                   "median": 3,
                   "spread": 1
                 },
-                "overall": {
+                "honest": {
                   "median": 2,
-                  "spread": 0
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 1
                 }
               },
               "latency_ms_raw": [
-                18381.6,
-                18931.3,
-                15803.1
+                15410.2,
+                15929.3,
+                15690.0
               ],
-              "latency_ms_p95": 18931.3,
-              "latency_ms_median": 18381.6,
-              "tokens_out_median": 920,
-              "tokens_in_median": 17537,
+              "latency_ms_p95": 15929.3,
+              "latency_ms_median": 15690.0,
+              "tokens_out_median": 859,
+              "tokens_in_median": 17533,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Pentru ser cu vitamina C, am pus împreună variantele care duc fie spre luminozitate zilnică și pete, fie spre un plus de îngrijire pentru ten mai matur. Se disting clar prin axa de folosire: accesibil și blând, hidratant pentru pete, sau mai orientat spre anti-aging.\n\nDacă vrei u",
+                  "content": "Pentru ser cu vitamina C, diferența aici e între luminozitate accesibilă pentru uz zilnic și formule mai țintite pe pete sau hidratare. Dacă vrei ceva simplu și blând, Petala e varianta mai prietenoasă; dacă vrei plus de uniformizare, LumaDerm merg mai bine.\n\nDacă vrei luminozita",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Am selectat seruri cu vitamina C pentru trei direcții clare: luminozitate accesibilă de zi cu zi, uniformizare mai puternică și o variantă orientată spre anti aging. Diferența principală e între ten normal sau cu pete, nevoie de hidratare și cât de mult vrei să mergi spre efect d",
+                  "content": "Pentru ser cu vitamina C, se vede clar diferența între luminozitate accesibilă de zi cu zi, uniformizare pentru pete și varianta mai orientată spre anti-aging. Dacă vrei ceva simplu și blând, sau ceva mai concentrat pe luminozitate și pete, ai opțiuni bune în zona asta de preț.\n\n",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Pentru vitamina C, se văd clar trei direcții: luminozitate accesibilă pentru uz zilnic, uniformizare mai axată pe pete și o variantă mai puternică pentru riduri fine. Dacă vrei ceva pentru pete sau ten deshidratat, există și opțiuni mai orientate pe hidratare.\n\nDacă vrei ceva pen",
+                  "content": "Pentru un ser cu vitamina C, am pus împreună opțiuni care merg pe două direcții clare: luminozitate accesibilă pentru uz zilnic sau uniformizare mai vizibilă, plus o variantă pentru tenul cu nevoie de anti-aging. Dacă vrei ceva simplu și blând, se vede rapid diferența față de var",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -1162,23 +1188,23 @@
               "judge": {
                 "answered": {
                   "median": 2,
-                  "spread": 2
+                  "spread": 3
                 },
                 "natural": {
                   "median": 3,
                   "spread": 0
                 },
                 "non_repetitive": {
-                  "median": 4,
-                  "spread": 2
+                  "median": 3,
+                  "spread": 0
                 },
                 "concise": {
                   "median": 3,
                   "spread": 1
                 },
                 "honest": {
-                  "median": 2,
-                  "spread": 2
+                  "median": 4,
+                  "spread": 1
                 },
                 "overall": {
                   "median": 2,
@@ -1186,29 +1212,29 @@
                 }
               },
               "latency_ms_raw": [
-                18353.3,
-                20010.3,
-                21872.5
+                15733.4,
+                16503.3,
+                15668.0
               ],
-              "latency_ms_p95": 21872.5,
-              "latency_ms_median": 20010.3,
-              "tokens_out_median": 931,
-              "tokens_in_median": 20031,
+              "latency_ms_p95": 16503.3,
+              "latency_ms_median": 15733.4,
+              "tokens_out_median": 906,
+              "tokens_in_median": 19946,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Pentru un ser cu vitamina C, diferența aici e între o variantă care merge spre hidratare și senzație de confort, una mai lejeră pentru uz zilnic și una orientată spre îngrijire de seară. Dacă vrei ceva simplu pentru zi, m-aș uita întâi la opțiunea cu acid hialuronic și niacinamid",
+                  "content": "Dacă ai ten normal și vrei ceva lejer, Petala e alegerea firească; dacă pielea se simte mai uscată și vrei hidratare mai consistentă, Auralis are o formulă mai potrivită. Dimineața, un ser de acest tip merge bine înainte de cremă, iar peste el e utilă o cremă cu protecție solară.",
+                  "n_cards": 2,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nPentru cearcăne, LumaDerm Bright Eye e varianta dedicată.",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei un efect discret și lejer, mergi pe produsul pentru zon",
-                  "n_cards": 3,
-                  "fails": []
-                },
-                {
-                  "content": "Dacă vrei neapărat vitamina C, merită să cauți un ser dedicat acestui ingredient; în setul de aici, direcția de luminozitate e acoperită mai degrabă de niacinamidă.",
-                  "n_cards": 3,
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei strict vitamina C, în setul acesta nu este un ser dedic",
+                  "n_cards": 2,
                   "fails": []
                 }
               ]
@@ -1227,53 +1253,53 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 2,
-                  "spread": 2
+                  "median": 3,
+                  "spread": 1
                 },
                 "natural": {
                   "median": 3,
                   "spread": 1
                 },
                 "non_repetitive": {
-                  "median": 3,
+                  "median": 4,
                   "spread": 1
                 },
                 "concise": {
                   "median": 3,
-                  "spread": 2
+                  "spread": 1
                 },
                 "honest": {
                   "median": 4,
                   "spread": 1
                 },
                 "overall": {
-                  "median": 2,
+                  "median": 3,
                   "spread": 1
                 }
               },
               "latency_ms_raw": [
-                16548.0,
-                15978.2,
-                16016.5
+                18335.3,
+                17688.5,
+                15876.3
               ],
-              "latency_ms_p95": 16548.0,
-              "latency_ms_median": 16016.5,
-              "tokens_out_median": 849,
-              "tokens_in_median": 17498,
+              "latency_ms_p95": 18335.3,
+              "latency_ms_median": 17688.5,
+              "tokens_out_median": 858,
+              "tokens_in_median": 17510,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Dacă vrei ceva de zi, uită-te la textură și la finish: gel-crema merge mai bine când vrei senzație ușoară și aspect mat, iar crema clasică e mai potrivită când pielea e mai deshidratată.",
+                  "content": "Am găsit creme hidratante care se împart clar între hidratare zilnică ușoară, bază bună sub machiaj și formule care nu încarcă, cu finish mat. Dacă vrei ceva pentru ten normal, gras sau mixt, diferența principală e între cremă și gel-cremă.\n\nDacă vrei ceva de zi, contează mult te",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Am găsit creme hidratante care se împart clar între hidratare zilnică ușoară, bază bună sub machiaj și variante care hidratează fără să încarce, cu finish mat. Pentru ten normal sau deshidratat ai o opțiune lejeră, iar pentru ten gras ori mixt merg mai bine texturile gel.\n\nDacă v",
+                  "content": "Pentru o cremă hidratantă, diferența aici e între hidratare zilnică ușoară, care merge bine și ca bază sub machiaj, și formulele care hidratează fără să încarce, cu finish mat. Mai este și varianta de noapte, mai bogată, pentru ten uscat.\n\nDacă vrei ceva pentru zi, uită-te la cât",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Pentru o cremă hidratantă simplă, diferența aici e între hidratare ușoară, bună și sub machiaj, și formule mai bogate pentru noapte. Dacă vrei ceva care să nu încarce, am păstrat opțiunile care se potrivesc tenului normal, mixt sau gras.\n\nDacă vrei o cremă de zi, caută o textură ",
+                  "content": "Pentru o cremă hidratantă, diferența aici e între hidratare ușoară de zi și o formulă mai lejeră, mată, care nu încarcă. Dacă ai ten mixt sau gras, varianta gel-cremă se potrivește mai bine; pentru ten normal sau deshidratat, crema clasică e mai confortabilă.\n\nDacă vrei ceva pent",
                   "n_cards": 3,
                   "fails": []
                 }
@@ -1281,7 +1307,7 @@
             },
             {
               "user": "da-mi linkul la prima",
-              "judge_focus": "ofera un link/offer real la produsul cerut, nu inventat",
+              "judge_focus": "ofera un link/offer real la PRIMUL produs cerut, nu vag «linkurile de mai sus»",
               "runs": 3,
               "gate_pass_runs": 3,
               "gate_fails_union": [],
@@ -1289,52 +1315,52 @@
               "judge": {
                 "answered": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 4
                 },
                 "natural": {
                   "median": 3,
-                  "spread": 0
+                  "spread": 2
                 },
                 "non_repetitive": {
                   "median": 3,
-                  "spread": 2
+                  "spread": 1
                 },
                 "concise": {
                   "median": 4,
-                  "spread": 0
+                  "spread": 1
                 },
                 "honest": {
                   "median": 2,
-                  "spread": 0
+                  "spread": 1
                 },
                 "overall": {
                   "median": 2,
-                  "spread": 1
+                  "spread": 3
                 }
               },
               "latency_ms_raw": [
-                10069.9,
-                14731.9,
-                13159.0
+                12240.3,
+                12337.0,
+                12442.1
               ],
-              "latency_ms_p95": 14731.9,
-              "latency_ms_median": 13159.0,
-              "tokens_out_median": 516,
-              "tokens_in_median": 18692,
-              "unstable": false,
+              "latency_ms_p95": 12442.1,
+              "latency_ms_median": 12337.0,
+              "tokens_out_median": 537,
+              "tokens_in_median": 18847,
+              "unstable": true,
               "samples": [
                 {
-                  "content": "Sigur! Uite linkurile direct la produsele de mai sus 👇",
-                  "n_cards": 3,
-                  "fails": []
-                },
-                {
-                  "content": "Sigur — prima opțiune este crema hidratantă zilnică pentru ten normal sau deshidratat, cu textură lejeră și fără film gras.",
+                  "content": "Sigur — primul produs este o cremă hidratantă lejeră pentru hidratare zilnică și bază bună sub machiaj.",
                   "n_cards": 1,
                   "fails": []
                 },
                 {
-                  "content": "Sigur — pentru linkul produsului întâi, am păstrat crema hidratantă cu textură lejeră și fără film gras, bună ca bază de zi și sub machiaj.",
+                  "content": "Sigur — prima opțiune este o cremă hidratantă lejeră, bună pentru hidratare zilnică și ca bază sub machiaj. E potrivită dacă vrei ceva care nu lasă film gras, dar poate fi prea ușoară pentru ten foarte uscat iarna.",
+                  "n_cards": 1,
+                  "fails": []
+                },
+                {
+                  "content": "Sigur — prima variantă este crema hidratantă zilnică Auralis Daily, potrivită pentru ten normal sau deshidratat. Are textură lejeră și nu lasă film gras, deci merge bine și ca bază sub machiaj.",
                   "n_cards": 1,
                   "fails": []
                 }
@@ -1374,19 +1400,19 @@
                   "spread": 0
                 },
                 "overall": {
-                  "median": 5,
+                  "median": 4,
                   "spread": 1
                 }
               },
               "latency_ms_raw": [
-                9551.6,
-                8596.5,
-                10549.2
+                8144.0,
+                8415.6,
+                8394.0
               ],
-              "latency_ms_p95": 10549.2,
-              "latency_ms_median": 9551.6,
-              "tokens_out_median": 184,
-              "tokens_in_median": 3711,
+              "latency_ms_p95": 8415.6,
+              "latency_ms_median": 8394.0,
+              "tokens_out_median": 220,
+              "tokens_in_median": 3735,
               "unstable": false,
               "samples": [
                 {
@@ -1395,12 +1421,12 @@
                   "fails": []
                 },
                 {
-                  "content": "Sigur! Pentru ce fel de cadou te gandesti (ex: pentru fata/ten, par, corp, machiaj) si pentru cine este (femeie/barbat/copil) sau cu ce ocazie?",
+                  "content": "Sigur! Pentru ce fel de cadou te gandesti: pentru fata sau pentru par, sau alt tip de produs? Și pentru cine (femeie/barbat/copil) și cu ce ocazie?",
                   "n_cards": 0,
                   "fails": []
                 },
                 {
-                  "content": "Ca să te ajut mai bine, poți să-mi spui mai exact ce cauți?",
+                  "content": "Sigur! Pentru cadou, ce tip de produs cauti (ex: crema, sampon, machiaj) si pentru cine este (femeie/barbat/copil) sau pentru ce ocazie?",
                   "n_cards": 0,
                   "fails": []
                 }
@@ -1420,8 +1446,8 @@
               "opening_repeat_runs": 0,
               "judge": {
                 "answered": {
-                  "median": 5,
-                  "spread": 1
+                  "median": 4,
+                  "spread": 2
                 },
                 "natural": {
                   "median": 3,
@@ -1429,10 +1455,325 @@
                 },
                 "non_repetitive": {
                   "median": 4,
+                  "spread": 3
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 2,
                   "spread": 2
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 1
+                }
+              },
+              "latency_ms_raw": [
+                16292.0,
+                16540.5,
+                15779.4
+              ],
+              "latency_ms_p95": 16540.5,
+              "latency_ms_median": 16292.0,
+              "tokens_out_median": 858,
+              "tokens_in_median": 17572,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Pentru păr gras, Bloom Balance e varianta care ține scalpul mai proaspăt, iar Bloom Color merită dacă vrei și protecția culorii. Verdea Hydra rămâne mai potrivit pentru păr uscat, când contează spălarea blândă.\n\nDacă ai rădăcini care se îngrașă repede, caută un șampon cu ingredie",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru păr gras, varianta care ține scalpul proaspăt mai mult este cea dedicată scalpului gras; dacă ai și lungimi uscate, merită luată în calcul și opțiunea care spală blând. Cealaltă din listă e mai potrivită pentru păr vopsit, când vrei să păstrezi culoarea și luciul.\n\nDacă ur",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru păr gras, ți se potrivește mai ales un șampon care ține scalpul curat mai mult timp; aici ai și o variantă pentru protejarea culorii, dacă ai părul vopsit, plus una blândă pentru păr uscat.\n\nDacă ai și părul vopsit, Bloom Color merită luat în calcul; iar pentru fire uscate",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cart_checkout_flow",
+          "turns": [
+            {
+              "user": "recomanda-mi un ser hidratant",
+              "judge_focus": "recomandare de ser hidratant",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 3,
+                  "spread": 3
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 2
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 1
                 },
                 "concise": {
                   "median": 4,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 2
+                }
+              },
+              "latency_ms_raw": [
+                17736.2,
+                17235.0,
+                15721.0
+              ],
+              "latency_ms_p95": 17736.2,
+              "latency_ms_median": 17235.0,
+              "tokens_out_median": 850,
+              "tokens_in_median": 17523,
+              "unstable": true,
+              "samples": [
+                {
+                  "content": "Dacă te interesează și uniformizarea, atunci serul cu vitamina C devine mai potrivit; iar pentru riduri fine, retinalul e opțiunea mai orientată spre anti-aging.",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Dacă vrei un ser de zi, primele două variante sunt mai ușoare; dacă urmărești mai ales semnele de îmbătrânire, merge mai bine serul cu retinal.",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Dacă vrei strict hidratare, caută formule cu acid hialuronic și textură care intră repede în piele.",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "adauga-l in cos pe primul",
+              "judge_focus": "confirma adaugarea PRIMULUI in cos, nu re-lista tot setul",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 1
+                }
+              },
+              "latency_ms_raw": [
+                12511.5,
+                12708.0,
+                12694.8
+              ],
+              "latency_ms_p95": 12708.0,
+              "latency_ms_median": 12694.8,
+              "tokens_out_median": 513,
+              "tokens_in_median": 18720,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Perfect, îl punem pe primul în coș: serul hidratant Auralis Hydra, potrivit pentru ten deshidratat sau uscat, cu textură gel și absorbție rapidă.",
+                  "n_cards": 1,
+                  "fails": []
+                },
+                {
+                  "content": "Am păstrat primul ser hidratant, cel care intră bine sub machiaj și se absoarbe rapid.",
+                  "n_cards": 1,
+                  "fails": []
+                },
+                {
+                  "content": "Primul ser este o alegere bună dacă vrei hidratare rapidă și o textură gel care intră repede în piele. E potrivit și sub machiaj, iar formula cu acid hialuronic și niacinamidă ajută când tenul se simte uscat sau deshidratat.\n\nDacă vrei un ser de zi, textura gel și absorbția rapid",
+                  "n_cards": 1,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "si o crema de fata pe langa",
+              "judge_focus": "adauga complementar (crema) pastrand serul deja in cos",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 1
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                17419.8,
+                16544.3,
+                15680.9
+              ],
+              "latency_ms_p95": 17419.8,
+              "latency_ms_median": 16544.3,
+              "tokens_out_median": 1033,
+              "tokens_in_median": 20450,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Am găsit și o cremă de față care merge bine lângă serul hidratant: una pentru hidratare zilnică ușoară, alta pentru nutriție mai bogată sau pentru noapte. Dacă vrei ceva echilibrat, contează și cât de lejeră să fie textura.",
+                  "n_cards": 4,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.",
+                  "n_cards": 4,
+                  "fails": []
+                },
+                {
+                  "content": "Am găsit și o cremă de față care completează bine serul: una mai bogată pentru ten uscat și una mai lejeră pentru hidratare zilnică. Dacă vrei ceva accesibil, ai și varianta de zi, iar pentru noapte există opțiunea mai nutritivă.\n\nDacă vrei cremă de zi, mergi pe textura mai lejer",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "da-mi link de plata",
+              "judge_focus": "produce un link/offer real de checkout, nu vag",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 3
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 1
+                }
+              },
+              "latency_ms_raw": [
+                13810.2,
+                12641.3,
+                13094.2
+              ],
+              "latency_ms_p95": 13810.2,
+              "latency_ms_median": 13094.2,
+              "tokens_out_median": 688,
+              "tokens_in_median": 20271,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "",
+                  "n_cards": 2,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru linkul de plată, te pot duce direct la produsul potrivit din coș. Aici ai o cremă de noapte foarte hidratantă, cu ceramide și unt de shea, gândită pentru ten uscat și deshidratat.\n\nDacă vrei o rutină simplă de seară, aceasta e varianta mai potrivită decât un produs lejer d",
+                  "n_cards": 1,
+                  "fails": []
+                },
+                {
+                  "content": "Pentru plata comenzii, te pot ajuta doar cu produsul deja ales: crema hidratantă Petala Rich, potrivită pentru ten uscat și deshidratat, cu textură bogată și preț accesibil.",
+                  "n_cards": 1,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "progressive_refine",
+          "turns": [
+            {
+              "user": "vreau o crema de fata",
+              "judge_focus": "recomandare de crema de fata",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 3,
                   "spread": 1
                 },
                 "honest": {
@@ -1440,33 +1781,744 @@
                   "spread": 0
                 },
                 "overall": {
+                  "median": 3,
+                  "spread": 1
+                }
+              },
+              "latency_ms_raw": [
+                17267.6,
+                16178.8,
+                15005.2
+              ],
+              "latency_ms_p95": 17267.6,
+              "latency_ms_median": 16178.8,
+              "tokens_out_median": 763,
+              "tokens_in_median": 17456,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nPentru alegere, uită-te dacă vrei o cremă de zi mai echilibrată s",
+                  "n_cards": 2,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei cremă de zi, mergi pe Petala Rich; dacă ai nevoie de ce",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei cremă de față pentru zi, mergi pe varianta hidratantă; ",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "pentru ten sensibil",
+              "judge_focus": "restrange pe ten sensibil, pastrand ca e crema de fata",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 2,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                16482.9,
+                16172.0,
+                15294.2
+              ],
+              "latency_ms_p95": 16482.9,
+              "latency_ms_median": 16172.0,
+              "tokens_out_median": 820,
+              "tokens_in_median": 19656,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei o rutină simplă, contează mai ales toleranța formulei ș",
+                  "n_cards": 2,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nPentru ten sensibil, merită să te uiți la formulă și la cât de bl",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Am selectat doar opțiuni potrivite pentru ten sensibil, cu accent pe calmare și pe texturi care nu încarcă. Una e mai dedicată roșeții și pielii reactive, cealaltă merge mai mult pe hidratare lejeră.\n\nDacă tenul tău reacționează ușor, caută formule fără parfum și cu ingrediente c",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "si fara alcool",
+              "judge_focus": "adauga 'fara alcool' peste ten sensibil (cumuleaza constrangerile); onest daca nu confirma",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 2,
+              "judge": {
+                "answered": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                15059.7,
+                15479.5,
+                16469.9
+              ],
+              "latency_ms_p95": 16469.9,
+              "latency_ms_median": 15479.5,
+              "tokens_out_median": 881,
+              "tokens_in_median": 20242,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nEu aș merge prima dată pe Solora Repair dacă prioritatea ta este ",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nLa ten sensibil contează mult cum curăță produsul și dacă lasă pi",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei ceva pentru zi, mistul e mai lejer și se așază rapid; p",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "cea mai ieftina dintre ele",
+              "judge_focus": "raspunde care e cea mai ieftina din setul afisat, text-only fara re-listare",
+              "runs": 3,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:1>0",
+                "too_many_cards:2>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 5,
+                  "spread": 4
+                },
+                "honest": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 1,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                14001.8,
+                14420.3,
+                16057.2
+              ],
+              "latency_ms_p95": 16057.2,
+              "latency_ms_median": 14420.3,
+              "tokens_out_median": 676,
+              "tokens_in_median": 20089,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                },
+                {
+                  "content": "",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                },
+                {
+                  "content": "",
+                  "n_cards": 2,
+                  "fails": [
+                    "too_many_cards:2>0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "context_pronoun",
+          "turns": [
+            {
+              "user": "arata-mi doua sampoane",
+              "judge_focus": "afiseaza doua optiuni de sampon",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 2
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 5,
+                  "spread": 2
+                },
+                "overall": {
                   "median": 4,
                   "spread": 1
                 }
               },
               "latency_ms_raw": [
-                15657.2,
-                15878.6,
-                18351.1
+                13955.2,
+                17151.4,
+                13729.9
               ],
-              "latency_ms_p95": 18351.1,
-              "latency_ms_median": 15878.6,
-              "tokens_out_median": 823,
-              "tokens_in_median": 17550,
+              "latency_ms_p95": 17151.4,
+              "latency_ms_median": 13955.2,
+              "tokens_out_median": 682,
+              "tokens_in_median": 17046,
               "unstable": false,
               "samples": [
                 {
-                  "content": "Pentru păr gras, Bloom Balance e varianta dedicată scalpului care se îngrașă repede. Dacă vrei ceva mai blând pe lungimi sau ai părul vopsit, celelalte două merg pe nevoi diferite.\n\nDacă vrei controlul sebumului, mergi pe Bloom Balance; dacă ai și lungimi sensibile, poți alterna ",
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei controlul sebumului și o senzație mai curată la rădăcin",
+                  "n_cards": 2,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei să reduci rapid senzația de îngrășare, mergi pe formula",
+                  "n_cards": 2,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă ai scalp gras, mergi pe Bloom Balance; dacă părul e vopsit, ",
+                  "n_cards": 2,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "primul e bun pentru par vopsit?",
+              "judge_focus": "raspunde DESPRE primul (deictic) daca e ok pt par vopsit, text-only, fara re-listare",
+              "runs": 3,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:1>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 1
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "honest": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 2
+                }
+              },
+              "latency_ms_raw": [
+                13879.5,
+                12701.3,
+                17639.7
+              ],
+              "latency_ms_p95": 17639.7,
+              "latency_ms_median": 13879.5,
+              "tokens_out_median": 615,
+              "tokens_in_median": 18730,
+              "unstable": true,
+              "samples": [
+                {
+                  "content": "Primul este gândit pentru scalp gras, nu pentru protejarea culorii. Dacă ai păr vopsit, ar merge doar împreună cu un balsam pe lungimi, fiindcă usucă mai ușor vârfurile.\n\nPentru păr vopsit, caută un șampon care să pună accent pe protejarea culorii; acest produs e mai degrabă pent",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                },
+                {
+                  "content": "Da, primul merge mai degrabă pe scalp gras, nu e varianta dedicată pentru păr vopsit. Pentru culoare și protecția luciului, ar fi nevoie de o formulă făcută special pentru asta.\n\nPentru păr vopsit, caută în mod special o formulă dedicată protejării culorii; aceasta e orientată sp",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                },
+                {
+                  "content": "Primul este gândit pentru scalp gras, nu pentru protejarea culorii. La părul vopsit, ai nevoie de o formulă dedicată care să ajute la menținerea aspectului culorii.\n\nLa părul vopsit, merită să cauți un șampon formulat special pentru protecția culorii. Acesta rămâne o opțiune bună",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                }
+              ]
+            },
+            {
+              "user": "atunci pe al doilea il iau",
+              "judge_focus": "onoreaza alegerea celui de-al doilea (deictic), spre cos/checkout",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 3
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 2
+                }
+              },
+              "latency_ms_raw": [
+                13706.3,
+                13658.4,
+                20224.1
+              ],
+              "latency_ms_p95": 20224.1,
+              "latency_ms_median": 13706.3,
+              "tokens_out_median": 609,
+              "tokens_in_median": 19292,
+              "unstable": true,
+              "samples": [
+                {
+                  "content": "Atunci mergi pe al doilea: Bloom Balance, pentru scalp gras și senzație de prospețime la rădăcină. Ține doar cont că lungimile uscate cer balsam pe ele.",
+                  "n_cards": 1,
+                  "fails": []
+                },
+                {
+                  "content": "Perfect, atunci mergem pe varianta pentru scalp gras, cea care ține rădăcinile mai curate și dă prospețime scalpului. Dacă ai și lungimile uscate, e bine să-l pui lângă un balsam.\n\nPentru scalp gras, contează un șampon care curăță rădăcina fără să încarce inutil lungimile. Aici, ",
+                  "n_cards": 1,
+                  "fails": []
+                },
+                {
+                  "content": "Da, atunci mergem pe al doilea, pentru scalp gras și prospețime mai mult timp. E varianta potrivită dacă vrei să ții sebumul sub control, dar pentru lungimile uscate merită completat cu balsam.\n\nDacă ai și lungimile uscate, completează-l cu un balsam pe lungimi, fiindcă șamponul ",
+                  "n_cards": 1,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "stock_and_alt",
+          "turns": [
+            {
+              "user": "aveti ser cu retinol?",
+              "judge_focus": "raspunde daca exista ser cu retinol; onest daca nu",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 3,
+                  "spread": 3
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 2
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 1
+                }
+              },
+              "latency_ms_raw": [
+                17955.8,
+                15565.1,
+                16284.7
+              ],
+              "latency_ms_p95": 17955.8,
+              "latency_ms_median": 16284.7,
+              "tokens_out_median": 753,
+              "tokens_in_median": 17518,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dacă urmărești un efect mai apropiat de retinol, caută retinal; dacă prioritatea e confortul pielii, mergi pe serul hidratant. Pentru ten cu pete, varianta cu vitamina C e mai potrivită, iar LumaDerm Renew rămâne alegerea mea când vrei anti-aging cu toleranță mai bună.",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Dacă te deranjează rădăcinile care se îngrașă repede, mergi pe Bloom Balance; dacă ai și lungimi sensibile, Verdea Hydra e mai blând. Bloom Color are sens mai ales când prioritatea e protejarea culorii, nu controlul sebumului.",
+                  "content": "Da, am seruri cu retinol în variantă cu retinal, iar diferența principală aici e între efectul anti-aging și opțiunile mai blânde, cu focus pe hidratare sau luminozitate. Dacă vrei ceva pentru riduri fine și pete, merită să te uiți la retinal; dacă vrei confort și apă în piele, m",
                   "n_cards": 3,
                   "fails": []
                 },
                 {
-                  "content": "Pentru păr gras, Bloom Balance e varianta dedicată scalpului care se îngrașă repede, iar celelalte două merg pe alte nevoi: culoare sau hidratare blândă. Aici diferența reală e între reglarea sebumului și formulele pentru păr vopsit ori uscat.\n\nDacă vrei să ții sebumul sub contro",
+                  "content": "Da, am seruri cu retinol și o variantă mai blândă, cu retinal, plus opțiuni care merg mai bine dacă vrei hidratare sau uniformizare. Dacă te interesează anti-aging sau pete, diferența principală e între efectul mai rapid pe riduri fine și suportul pentru hidratare.\n\nDacă vrei ser",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "e pe stoc?",
+              "judge_focus": "raspunde despre disponibilitate pt produsul discutat, text-only fara re-listare noua",
+              "runs": 3,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:1>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 2,
+                  "spread": 3
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 2
+                }
+              },
+              "latency_ms_raw": [
+                12260.8,
+                13268.5,
+                12625.6
+              ],
+              "latency_ms_p95": 13268.5,
+              "latency_ms_median": 12625.6,
+              "tokens_out_median": 541,
+              "tokens_in_median": 19272,
+              "unstable": true,
+              "samples": [
+                {
+                  "content": "Da, serul cu retinal este disponibil. E varianta LumaDerm Renew, cu retinal și squalan, gândită pentru ten matur și pete, cu accent pe netezirea ridurilor fine și toleranță mai bună decât retinolul pur.\n\nDacă vrei un produs cu efect mai apropiat de retinol, retinalul e alegerea d",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                },
+                {
+                  "content": "Salut! Pentru stoc, trebuie verificat manual în sistemul magazinului; aici văd doar produsul disponibil din listă. Dacă te interesează serul cu retinal, ți-l pot descrie pe scurt și îți pot spune dacă se potrivește nevoii tale.\n\nLa serurile cu retinal contează mult introducerea t",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                },
+                {
+                  "content": "Nu pot confirma stocul din datele primite. Dacă vrei, îți pot spune rapid dacă merită să fie primul pe listă pentru anti-aging, cu retinal și squalan.\n\nLa retinal, contează să îl introduci treptat, mai ales dacă nu ai mai folosit retinoizi. Serul acesta e alegerea bună dacă vrei ",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "budget_pivot",
+          "turns": [
+            {
+              "user": "caut un parfum",
+              "judge_focus": "recomandare de parfum SAU clarify daca e prea vag (pt cine)",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 3
+                },
+                "natural": {
+                  "median": 5,
+                  "spread": 2
+                },
+                "non_repetitive": {
+                  "median": 5,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 5,
+                  "spread": 2
+                },
+                "honest": {
+                  "median": 5,
+                  "spread": 1
+                },
+                "overall": {
+                  "median": 5,
+                  "spread": 3
+                }
+              },
+              "latency_ms_raw": [
+                15257.4,
+                8174.4,
+                8858.9
+              ],
+              "latency_ms_p95": 15257.4,
+              "latency_ms_median": 8858.9,
+              "tokens_out_median": 224,
+              "tokens_in_median": 3722,
+              "unstable": true,
+              "samples": [
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă te interesează mai mult fixarea machiajului, Velora e varian",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să te ajut mai bine, poți să-mi spui mai exact ce cauți?",
+                  "n_cards": 0,
+                  "fails": []
+                },
+                {
+                  "content": "Sigur—ce tip de parfum cauti (pentru barbati/femei/unisex) si ce preferi la miros (fresh, dulce, lemnos, floral)?",
+                  "n_cards": 0,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "ceva sub 150 lei",
+              "judge_focus": "restrange pe buget sub 150 pastrand ca e parfum",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 1,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 1,
+                  "spread": 1
+                },
+                "overall": {
+                  "median": 1,
+                  "spread": 1
+                }
+              },
+              "latency_ms_raw": [
+                14705.5,
+                13464.6,
+                11185.4
+              ],
+              "latency_ms_p95": 14705.5,
+              "latency_ms_median": 13464.6,
+              "tokens_out_median": 659,
+              "tokens_in_median": 14846,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Sub 150 lei, ai aici variante cu roluri diferite: un produs pentru fixare cu finish natural, unul care uniformizează tonul într-un singur pas și unul cu luciu curat, luminos.\n\nDacă vrei un produs pentru întreaga față, crema CC aduce și uniformizare, și protecție într-un singur pa",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Am găsit opțiuni care intră în bugetul tău și se împart clar între prospețime blândă și machiaj fixat cu aspect natural.\n\nPentru o variantă mai delicată, deodorantul fără alcool rămâne alegerea simplă.",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Sub 150 lei, ai aici opțiuni care merg pe două direcții clare: protecție discretă pentru piele sensibilă sau produse de machiaj cu finish natural și ținută bună.",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "mai degraba floral",
+              "judge_focus": "adauga preferinta florala peste buget; nu reporni de la zero",
+              "runs": 3,
+              "gate_pass_runs": 3,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 1,
+                  "spread": 1
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 1
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 1
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 2
+                },
+                "overall": {
+                  "median": 1,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                17538.5,
+                16202.2,
+                15849.8
+              ],
+              "latency_ms_p95": 17538.5,
+              "latency_ms_median": 16202.2,
+              "tokens_out_median": 836,
+              "tokens_in_median": 19574,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în direcția bună sau caut cu totul altceva.\n\nDacă vrei un rezultat mai vizibil pe față, fondul de ten dă acope",
+                  "n_cards": 3,
+                  "fails": []
+                },
+                {
+                  "content": "Dacă vrei ceva mai degrabă floral, am pus împreună variantele care merg pe finish luminos sau pe aspect natural, plus una cu protecție zilnică. Se diferențiază mai ales prin efectul din final și prin cât de discret se așază pe piele.",
                   "n_cards": 3,
                   "fails": []
                 }
