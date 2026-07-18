@@ -24,6 +24,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -110,13 +111,25 @@ async def _catalog_signature(conn, business_id: str) -> str:
 
 
 def _fixtures_signature() -> str:
-    """Hash-ul conținutului fixture-urilor (review Codex #234): baseline-uri pe seturi diferite de
-    conversații nu se compară orb. Sortat determinist pe cale."""
+    """Hash-ul fixture-urilor pe JSON CANONIC (`json.dumps` sort_keys), NU pe bytes bruți (fix
+    review #234): independent de LF/CRLF (git convertește pe Windows) → reproductibil pe orice
+    checkout/OS. Sortat determinist pe cale."""
     h = hashlib.sha256()
     for path in sorted(CONV_DIR.glob("*.json")):
         h.update(path.name.encode())
-        h.update(path.read_bytes())
+        data = json.loads(path.read_text(encoding="utf-8"))
+        h.update(json.dumps(data, sort_keys=True, ensure_ascii=False).encode())
     return h.hexdigest()[:16]
+
+
+# Redactare PII (fix #234): chiar dacă fixture-urile sunt sintetice, contractul de raport NU trebuie
+# să persiste PII (rulări viitoare pe conversații reale). Scrub telefon (E.164/RO) + email. Aplicat
+# la ce se SCRIE în raport (întrebare + eșantion răspuns), NU la ce vede judge-ul (transient).
+_PII_RE = re.compile(r"(\+?\d[\d\s().-]{7,}\d)|([\w.+-]+@[\w-]+\.[\w.-]+)", re.IGNORECASE)
+
+
+def _redact(s: str) -> str:
+    return _PII_RE.sub("[REDACTED]", s or "")
 
 
 def _load_conversations(only: str | None) -> list[dict[str, Any]]:
@@ -180,7 +193,11 @@ async def _run_conversation(convo: dict[str, Any], mk, llm, runs: int) -> dict[s
             acc[i]["tokens"].append(tokens)
             acc[i]["opening_rep"].append(op_rep)
             acc[i]["sample"].append(
-                {"content": turn.content[:280], "n_cards": len(turn.products), "fails": fails}
+                {
+                    "content": _redact(turn.content[:280]),  # #234: fără PII în raport
+                    "n_cards": len(turn.products),
+                    "fails": fails,
+                }
             )
             transcript.append({"role": "bot", "text": turn.content[:280]})
             prev_dict = cur
@@ -208,7 +225,7 @@ def _agg_turn(tspec: dict[str, Any], a: dict[str, list]) -> dict[str, Any]:
     # instabilitate: gate trece în unele rulări dar nu în toate, SAU judge overall variază ≥2.
     unstable = (0 < gate_pass_runs < n) or (jmed["overall"]["spread"] or 0) >= 2
     return {
-        "user": tspec["user"],
+        "user": _redact(tspec["user"]),  # #234: fără PII în raport (contractul, nu doar fixturile)
         "judge_focus": tspec.get("judge_focus", ""),
         "runs": n,
         "gate_pass_runs": gate_pass_runs,
@@ -246,12 +263,26 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
     def _pct_ge4(vals: list[float]) -> float:
         return round(100 * sum(1 for v in vals if v >= 4) / len(vals), 1) if vals else 0.0
 
+    # Metrică JOINT (review #234): un răspuns e „bun" doar dacă e ȘI natural ȘI la obiect. Natural
+    # fără answered (proză care nu răspunde) SAU answered fără natural (corect dar șablon) nu se
+    # califică. Bara reală de calitate.
+    def _both_ge4(t: dict) -> bool:
+        nm, am = _turn_median(t, "natural"), _turn_median(t, "answered")
+        return nm is not None and am is not None and nm >= 4 and am >= 4
+
+    joint = (
+        round(100 * sum(1 for t in all_turns if _both_ge4(t)) / len(all_turns), 1)
+        if all_turns
+        else 0.0
+    )
+
     return {
         "n_conversations": len(cases),
         "n_turns": len(all_turns),
         "n_followup_turns": len(followups),
         "judge_natural_median": round(median(nat), 2) if nat else None,
         "pct_turns_natural_ge4": _pct_ge4(nat),
+        "pct_turns_natural_AND_answered_ge4": joint,  # #234: bara reală (joint)
         "pct_followup_answered_ge4": _pct_ge4(fu_answered),
         "det_gate_pass_rate_pct": round(
             100

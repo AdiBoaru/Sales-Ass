@@ -80,6 +80,30 @@ def test_ungrounded_link_and_offer_url_allowed():
     )
 
 
+def test_requires_offer_gate():
+    prods = [{"product_id": "p1", "name": "Cremă", "price": 20.0, "url": "https://shop.ro/p/crema"}]
+    # cerere de link fără offer ȘI fără URL în text → prins (#234: înainte trecea determinist)
+    fails = eval_gates.check_turn(
+        _turn("uite linkurile de mai sus", prods), None, {"requires_offer": True}
+    )
+    assert "missing_offer_link" in fails
+    # offer cu URL (checkout) → OK
+    offer = {"kind": "open_url", "url": "https://shop.ro/checkout?ref=x"}
+    assert (
+        eval_gates.check_turn(
+            _turn("plătește aici", prods, offer=offer), None, {"requires_offer": True}
+        )
+        == []
+    )
+    # URL de produs scris în text → OK
+    assert (
+        eval_gates.check_turn(
+            _turn("uite: https://shop.ro/p/crema", prods), None, {"requires_offer": True}
+        )
+        == []
+    )
+
+
 def test_forbidden_and_required_substr_diacritic_insensitive():
     prods = [{"product_id": "p1", "name": "Ser cu Retinol 1%", "price": 50.0}]
     fails = eval_gates.check_turn(

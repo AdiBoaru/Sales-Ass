@@ -121,6 +121,16 @@ def check_turn(cur: dict[str, Any], prev: dict[str, Any] | None, spec: dict[str,
         if new_ids:
             fails.append(f"new_cards_on_followup:{len(new_ids)}")
 
+    # Cerere de LINK (fix #234): „dă-mi linkul" trebuie să producă un link ACȚIONABIL — un `offer`
+    # cu URL SAU un URL de produs în text. Un răspuns vag („uite linkurile de mai sus 👇") fără
+    # niciun URL/offer nu onorează cererea și trebuie prins (înainte trecea determinist).
+    if spec.get("requires_offer"):
+        offer = cur.get("offer") if isinstance(cur.get("offer"), dict) else {}
+        has_offer = bool(offer and offer.get("url"))
+        has_url_in_text = bool(_URL_RE.search(content))
+        if not has_offer and not has_url_in_text:
+            fails.append("missing_offer_link")
+
     # Chip = etichetă tappabilă, nu propoziție.
     max_chip = int(spec.get("max_chip_len", 40))
     for s in suggestions:

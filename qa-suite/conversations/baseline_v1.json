@@ -123,8 +123,8 @@
          "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
          "judge_focus": "recomandare de crema"},
         {"user": "da-mi linkul la prima",
-         "gates": {"grounded": true},
-         "judge_focus": "ofera un link/offer real la produsul cerut, nu inventat"}
+         "gates": {"grounded": true, "requires_offer": true},
+         "judge_focus": "ofera un link/offer real la PRIMUL produs cerut, nu vag «linkurile de mai sus»"}
       ]
     },
     {
@@ -143,6 +143,84 @@
         {"user": "ce sampon aveti pentru par gras?",
          "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
          "judge_focus": "intelege 'sampon'/'par' fara diacritice si recomanda sampon pentru par gras"}
+      ]
+    },
+    {
+      "id": "cart_checkout_flow",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "recomanda-mi un ser hidratant",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "recomandare de ser hidratant"},
+        {"user": "adauga-l in cos pe primul",
+         "gates": {"grounded": true},
+         "judge_focus": "confirma adaugarea PRIMULUI in cos, nu re-lista tot setul"},
+        {"user": "si o crema de fata pe langa",
+         "gates": {"grounded": true},
+         "judge_focus": "adauga complementar (crema) pastrand serul deja in cos"},
+        {"user": "da-mi link de plata",
+         "gates": {"grounded": true, "requires_offer": true},
+         "judge_focus": "produce un link/offer real de checkout, nu vag"}
+      ]
+    },
+    {
+      "id": "progressive_refine",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "vreau o crema de fata",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "recomandare de crema de fata"},
+        {"user": "pentru ten sensibil",
+         "gates": {"grounded": true},
+         "judge_focus": "restrange pe ten sensibil, pastrand ca e crema de fata"},
+        {"user": "si fara alcool",
+         "gates": {"grounded": true},
+         "judge_focus": "adauga 'fara alcool' peste ten sensibil (cumuleaza constrangerile); onest daca nu confirma"},
+        {"user": "cea mai ieftina dintre ele",
+         "gates": {"max_cards": 0, "grounded": true},
+         "judge_focus": "raspunde care e cea mai ieftina din setul afisat, text-only fara re-listare"}
+      ]
+    },
+    {
+      "id": "context_pronoun",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "arata-mi doua sampoane",
+         "gates": {"grounded": true},
+         "judge_focus": "afiseaza doua optiuni de sampon"},
+        {"user": "primul e bun pentru par vopsit?",
+         "gates": {"max_cards": 0, "grounded": true},
+         "judge_focus": "raspunde DESPRE primul (deictic) daca e ok pt par vopsit, text-only, fara re-listare"},
+        {"user": "atunci pe al doilea il iau",
+         "gates": {"grounded": true},
+         "judge_focus": "onoreaza alegerea celui de-al doilea (deictic), spre cos/checkout"}
+      ]
+    },
+    {
+      "id": "stock_and_alt",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "aveti ser cu retinol?",
+         "gates": {"grounded": true},
+         "judge_focus": "raspunde daca exista ser cu retinol; onest daca nu"},
+        {"user": "e pe stoc?",
+         "gates": {"max_cards": 0, "grounded": true},
+         "judge_focus": "raspunde despre disponibilitate pt produsul discutat, text-only fara re-listare noua"}
+      ]
+    },
+    {
+      "id": "budget_pivot",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "caut un parfum",
+         "gates": {"grounded": true},
+         "judge_focus": "recomandare de parfum SAU clarify daca e prea vag (pt cine)"},
+        {"user": "ceva sub 150 lei",
+         "gates": {"grounded": true},
+         "judge_focus": "restrange pe buget sub 150 pastrand ca e parfum"},
+        {"user": "mai degraba floral",
+         "gates": {"grounded": true},
+         "judge_focus": "adauga preferinta florala peste buget; nu reporni de la zero"}
       ]
     }
   ]
