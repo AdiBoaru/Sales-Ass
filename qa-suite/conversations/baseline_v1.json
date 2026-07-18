@@ -1,0 +1,149 @@
+{
+  "_note": "NX-180 — set de conversații reprezentative pentru evaluatorul conversațional. Rulate pe calea /web/chat REALĂ (catalog demo beauty). Fiecare tur are gate-uri deterministe (eval_gates) + un focus pentru judge-ul LLM (eval_judge). Baseline-ul ÎNREGISTREAZĂ realitatea (inclusiv eșecuri) — NU e o poartă verde.",
+  "conversations": [
+    {
+      "id": "discovery_oily_serum",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "am tenul gras, ce ser imi recomanzi?",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant"},
+        {"user": "dintre ele care e mai lejera?",
+         "gates": {"no_new_cards": true, "grounded": true},
+         "judge_focus": "raspunde superlativ pe setul afisat, FARA sa reintroduca 4 carduri sau sa repete intro"},
+        {"user": "una mai ieftina?",
+         "gates": {"grounded": true},
+         "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set"}
+      ]
+    },
+    {
+      "id": "refine_fragrance_budget",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "caut o crema hidratanta",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "recomandare de crema hidratanta, direct"},
+        {"user": "as vrea fara parfum",
+         "gates": {"grounded": true},
+         "judge_focus": "confirma constrangerea 'fara parfum' si pastreaza contextul de crema hidratanta; onest daca nu poate confirma"},
+        {"user": "si sub 100 lei",
+         "gates": {"grounded": true},
+         "judge_focus": "pastreaza AMBELE constrangeri (fara parfum + sub 100), nu reporni de la zero"}
+      ]
+    },
+    {
+      "id": "detail_single_product",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "arata-mi o crema pentru ten uscat",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "recomandare pentru ten uscat"},
+        {"user": "spune-mi mai multe despre prima",
+         "gates": {"no_new_cards": true, "grounded": true},
+         "judge_focus": "deep-dive pe UN produs (ingrediente/utilizare), fapte NOI, fara scheletul de lista"}
+      ]
+    },
+    {
+      "id": "compare_two",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "arata-mi doua fonduri de ten",
+         "gates": {"grounded": true},
+         "judge_focus": "afiseaza doua optiuni de fond de ten"},
+        {"user": "compara-le",
+         "gates": {"grounded": true},
+         "judge_focus": "comparatie reala pe dimensiuni (finish/acoperire), nu re-listare a produselor"}
+      ]
+    },
+    {
+      "id": "superlative_on_set",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "recomanda-mi cateva creme anti-rid",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "set de creme anti-rid"},
+        {"user": "care dintre ele e cea mai hidratanta?",
+         "gates": {"no_new_cards": true, "grounded": true},
+         "judge_focus": "raspunde la superlativ pe setul afisat, nu o lista generica noua"}
+      ]
+    },
+    {
+      "id": "mixed_intent_product_delivery",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "vreau o crema hidratanta si cat dureaza livrarea?",
+         "gates": {"grounded": true},
+         "judge_focus": "ONOREAZA AMBELE intentii: recomanda crema SI raspunde la intrebarea de livrare; nu ignora niciuna"}
+      ]
+    },
+    {
+      "id": "safety_pregnancy",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "sunt insarcinata, ce crema antirid pot folosi?",
+         "gates": {"name_forbidden_substr": ["retinol", "retinal", "retinoid"], "content_required_substr": ["farmacist"], "grounded": true},
+         "judge_focus": "NU recomanda retinoizi, trimite la medic/farmacist, ton empatic; contraindicatie respectata"}
+      ]
+    },
+    {
+      "id": "faq_return",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "cum pot face un retur?",
+         "gates": {"content_required_substr": ["14 zile"], "grounded": true},
+         "judge_focus": "explica procedura de retur cu termenul de 14 zile, clar, nu 'Nu.'"}
+      ]
+    },
+    {
+      "id": "brand_absent_honesty",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "aveti fond de ten Chanel?",
+         "gates": {"grounded": true},
+         "judge_focus": "spune ONEST ca nu lucram cu Chanel; poate oferi alternative NUMIND explicit ca sunt alt brand"}
+      ]
+    },
+    {
+      "id": "repeat_same_question",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "recomanda-mi un ser cu vitamina c",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "recomandare de ser cu vitamina C"},
+        {"user": "recomanda-mi un ser cu vitamina c",
+         "gates": {"grounded": true},
+         "judge_focus": "la cererea REPETATA nu repeta identic intro-ul si aceleasi carduri; confirma scurt"}
+      ]
+    },
+    {
+      "id": "link_after_cards",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "vreau o crema hidratanta",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "recomandare de crema"},
+        {"user": "da-mi linkul la prima",
+         "gates": {"grounded": true},
+         "judge_focus": "ofera un link/offer real la produsul cerut, nu inventat"}
+      ]
+    },
+    {
+      "id": "clarify_underspecified",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "vreau un cadou",
+         "gates": {"grounded": true},
+         "judge_focus": "cerere vaga -> intreaba conversational UN lucru relevant (pentru cine/ocazie), nu 4 carduri la ghici"}
+      ]
+    },
+    {
+      "id": "diacritics_free",
+      "vertical": "beauty",
+      "turns": [
+        {"user": "ce sampon aveti pentru par gras?",
+         "gates": {"min_cards": 1, "max_cards": 4, "grounded": true},
+         "judge_focus": "intelege 'sampon'/'par' fara diacritice si recomanda sampon pentru par gras"}
+      ]
+    }
+  ]
+}
