@@ -38,6 +38,37 @@ def test_scrub_drops_numbers_claims_superlatives() -> None:
     assert compose.scrub_prose(None) is None
 
 
+def test_scrub_drops_urls() -> None:
+    # Codex R6: linkurile vin din offer/checkout, nu din proză (fit_clause/intro/education)
+    assert compose.scrub_prose("Vezi pe https://shop.example.com/p") is None
+    assert compose.scrub_prose("Detalii pe www.example.com") is None
+    assert compose.scrub_prose("Comandă la shop.sole-demo.ro/p/x") is None
+    assert (
+        compose.scrub_prose("Bun pentru ten uscat") == "Bun pentru ten uscat"
+    )  # fără URL → rămâne
+    assert compose.scrub_intro("Vezi www.example.com", set()) is None
+
+
+def test_scrub_education_drops_url_sentence() -> None:
+    # granular: propoziția cu URL cade, restul rămâne (nu tot paragraful)
+    out = compose.scrub_education(
+        "Ideal pentru început. Vezi www.example.com pentru detalii.", True
+    )
+    assert out == "Ideal pentru început."
+
+
+def test_pros_drops_medical_top_pro(monkeypatch) -> None:
+    # Codex R6: anchor-ul cardului vine din _pros (NEscrubuit în _join_reason) → top_pro medical
+    # eliminat la SURSĂ, ca să nu reintre pe card ocolind validate_prose + filtrul meniului V2.
+    from src.config import get_settings
+
+    p = {"top_pros": ["Textură lejeră", "Tratează acneea în 7 zile"]}
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", True)
+    assert compose._pros(p) == ["Textură lejeră"]  # claim medical eliminat
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", False)
+    assert compose._pros(p) == ["Textură lejeră", "Tratează acneea în 7 zile"]  # OFF → byte-identic
+
+
 # --- R4: bugetul clientului permis în intro (nu „Ai ceva sub lei") -----------
 
 

@@ -170,9 +170,14 @@ def _unsafe_medical(t: str) -> bool:
     return get_settings().safety_medical_guardrail_enabled and has_medical_claim(t)
 
 
+# Linkurile în proză NU sunt permise (vin din offer/checkout, nu din text — Codex): http(s)://, www.
+# sau domeniu cu path (`shop.ro/p/...`). Un URL într-un fit_clause/intro/education/follow_up = DROP.
+_URL_HINT = re.compile(r"https?://|www\.\w|\b[\w-]+\.[a-z]{2,}/\S", re.I)
+
+
 def scrub_prose(s: str | None) -> str | None:
     """Proza LLM poate referi NEVOIA clientului, nu fapte cuantificate. Strecoară cifre /
-    procente / claim-uri / superlative neverificabile → DROP (None). Faptele reale vin
+    procente / claim-uri / superlative neverificabile / linkuri → DROP (None). Faptele reale vin
     din card, randate de cod. Drop, nu retry (P0-safety: claim medical → DROP)."""
     if not s:
         return None
@@ -182,6 +187,8 @@ def scrub_prose(s: str | None) -> str | None:
     if has_unverifiable_claim(t):  # NX-117: digit + pct + claim + super (semantică neschimbată)
         return None
     if _unsafe_medical(t):  # P0-safety: sfat medical/terapeutic → DROP câmpul
+        return None
+    if _URL_HINT.search(t):  # P0: link inventat/nefondat în proză → DROP (Codex)
         return None
     return t
 
@@ -210,8 +217,9 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
     if not t:
         return None
     unknown = [n for n in re.findall(r"\d+", t) if n not in allowed_numbers]
-    if unknown or has_marketing_claim(t) or _unsafe_medical(t):
+    if unknown or has_marketing_claim(t) or _unsafe_medical(t) or _URL_HINT.search(t):
         # NX-117: pct + claim + super (cifrele clientului permise). P0-safety: claim medical → DROP.
+        # Codex: link în proză (inclusiv education/follow_up scrubuit aici) → DROP.
         return None
     return t
 
@@ -232,9 +240,15 @@ def _safe_badge(label: str | None) -> str | None:
 
 def _pros(p: dict[str, Any]) -> list[str]:
     """Avantajele reale ale produsului (din recenzii, D3): preferă lista `top_pros`,
-    fallback pe `review_pro` (un singur pro din search). Doar string-uri ne-goale."""
+    fallback pe `review_pro` (un singur pro din search). Doar string-uri ne-goale.
+
+    P0-safety (Codex): `anchor`-ul cardului vine DE AICI și se lipește NEscrubuit în `_join_reason`;
+    un top_pro cu claim medical ar reintra pe card, ocolind și `validate_prose` (rich nu-l rulează)
+    și filtrul meniului V2. Eliminăm faptele medicale la SURSĂ. `_unsafe_medical` e gated de
+    kill-switch → byte-identic când guardrail-ul e OFF."""
     raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
-    return [s.strip() for s in raw if isinstance(s, str) and s.strip()]
+    pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()]
+    return [s for s in pros if not _unsafe_medical(s)]
 
 
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:

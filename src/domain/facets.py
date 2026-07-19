@@ -11,6 +11,7 @@ Pur: `facet_value` (extractor din `attributes`) + `facet_coverage` (statistici) 
 
 from __future__ import annotations
 
+import math
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,10 +20,43 @@ _VALUE_TYPES = frozenset({"bool", "enum", "number", "text", "list"})
 _OPERATORS = frozenset({"eq", "in", "gte", "lte", "contains_any", "contains_all"})
 _MISSING = frozenset({"unknown", "fail"})
 
+_BOOL_TRUE = frozenset({"true", "da", "yes", "1", "adevarat"})
+_BOOL_FALSE = frozenset({"false", "nu", "no", "0", "fals"})
+
 
 def _norm(s: str) -> str:
     d = unicodedata.normalize("NFKD", (s or "").lower())
     return "".join(c for c in d if not unicodedata.combining(c))
+
+
+def parse_bool(x: Any) -> bool | None:
+    """Parse canonic la bool: bool real, 0/1, sau token cunoscut (da/nu/true/false/yes/no). Altfel
+    None (necunoscut). SURSĂ UNICĂ pentru coverage (validitate) ȘI Match Gate (verdict) — semantica
+    TREBUIE să coincidă (Codex: coverage cerea bool real, dar Match Gate accepta stringuri bool)."""
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, (int, float)):
+        if x == 0:
+            return False
+        if x == 1:
+            return True
+        return None
+    n = _norm(str(x))
+    if n in _BOOL_TRUE:
+        return True
+    if n in _BOOL_FALSE:
+        return False
+    return None
+
+
+def is_valid_number(x: Any) -> bool:
+    """Numeric FINIT (Codex: NaN/inf NU e un număr valid). bool exclus (True nu e „număr")."""
+    if isinstance(x, bool):
+        return False
+    try:
+        return math.isfinite(float(x))
+    except (TypeError, ValueError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -84,15 +118,9 @@ def _is_valid_value(spec: FacetSpec, v: Any) -> bool:
     if spec.value_type == "enum":
         return v in spec.values
     if spec.value_type == "bool":
-        return isinstance(v, bool)
+        return parse_bool(v) is not None  # aliniat cu Match Gate (string bool cunoscut = valid)
     if spec.value_type == "number":
-        if isinstance(v, bool):
-            return False
-        try:
-            float(v)
-            return True
-        except (TypeError, ValueError):
-            return False
+        return is_valid_number(v)  # numeric finit; NaN/inf/bool/text → invalid
     if spec.value_type == "list":
         return isinstance(v, (list, tuple)) and len(v) > 0
     return isinstance(v, str) and bool(v.strip())

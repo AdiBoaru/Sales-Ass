@@ -101,5 +101,13 @@ def test_bool_string_coercion_not_truthy():
     assert evaluate_constraint({"fragrance_free": 0}, c, None) == MISMATCH
 
 
+def test_number_nan_and_text_are_unknown():
+    # Codex R6: NaN/text nu se compară numeric → UNKNOWN (aliniat cu coverage, nu MISMATCH tăcut)
+    c = Constraint("spf", "gte", 30)
+    assert evaluate_constraint({"spf": float("nan")}, c, None) == UNKNOWN
+    assert evaluate_constraint({"spf": "n/a"}, c, None) == UNKNOWN
+    assert evaluate_constraint({"spf": 50}, c, None) == MATCH  # număr valid rămâne
+
+
 def test_no_hard_constraints_all_exact():
     assert match_set([{"id": "x"}], QuerySpec())["exact"] == ["x"]

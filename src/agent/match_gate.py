@@ -15,37 +15,14 @@ import unicodedata
 from typing import Any
 
 from src.agent.query_spec import Constraint, QuerySpec
-from src.domain.facets import FacetSpec, facet_value
+from src.domain.facets import FacetSpec, facet_value, is_valid_number, parse_bool
 
 MATCH, MISMATCH, UNKNOWN = "MATCH", "MISMATCH", "UNKNOWN"
-
-_TRUE = {"true", "da", "yes", "1", "adevarat"}
-_FALSE = {"false", "nu", "no", "0", "fals"}
 
 
 def _norm(s: Any) -> str:
     d = unicodedata.normalize("NFKD", str(s or "").lower())
     return "".join(c for c in d if not unicodedata.combining(c))
-
-
-def _as_bool(x: Any) -> bool | None:
-    """Coerciție booleană robustă. String → DOAR tokeni cunoscuți (Codex: `bool('false')` e True →
-    fals-pozitiv). Numeric → DOAR 0/1 (Codex: `2` NU e boolean → None, nu True). Orice necunoscut →
-    None → verdict UNKNOWN (nu ghicim)."""
-    if isinstance(x, bool):
-        return x
-    if isinstance(x, (int, float)) and not isinstance(x, bool):
-        if x == 0:
-            return False
-        if x == 1:
-            return True
-        return None
-    n = _norm(x)
-    if n in _TRUE:
-        return True
-    if n in _FALSE:
-        return False
-    return None
 
 
 def _product_value(product: dict[str, Any], facet: str, spec: FacetSpec | None) -> Any:
@@ -70,13 +47,14 @@ def evaluate_constraint(product: dict[str, Any], c: Constraint, spec: FacetSpec 
     if v is None or (isinstance(v, (list, tuple)) and not v):
         return UNKNOWN
     try:
-        if c.op == "lte":
-            return MATCH if float(v) <= float(c.value) else MISMATCH
-        if c.op == "gte":
-            return MATCH if float(v) >= float(c.value) else MISMATCH
+        if c.op in ("lte", "gte"):
+            if not is_valid_number(v) or not is_valid_number(c.value):
+                return UNKNOWN  # NaN/inf/text → nu comparăm numeric (Codex: aliniat cu coverage)
+            fv, fc = float(v), float(c.value)
+            return MATCH if (fv <= fc if c.op == "lte" else fv >= fc) else MISMATCH
         if c.op == "eq":
             if isinstance(v, bool) or isinstance(c.value, bool):
-                bv, cv = _as_bool(v), _as_bool(c.value)
+                bv, cv = parse_bool(v), parse_bool(c.value)
                 if bv is None or cv is None:
                     return UNKNOWN
                 return MATCH if bv == cv else MISMATCH

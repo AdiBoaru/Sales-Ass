@@ -107,5 +107,18 @@ Plus: cache namespace acum are test propriu (`test_cache_prompt_version_namespac
 build-log-ul corectat pe ordinea NX-189→NX-188. **+13 teste noi total** (R4+R5). `pytest asyncio=AUTO` →
 testele de integrare `_finalize_v2` chiar rulează (nu skip tăcut).
 
+## Review Codex Round 6 — 2 probleme de CLASĂ + doc stale (2026-07-18)
+Codex a re-verificat 81f1540: inline-only, reason obligatoriu, comparația, numeric 0/1 = închise
+bine. Rămâneau 2 probleme de CLASĂ (nu cosmetice) + descrierea PR stale. Reparate static:
+
+| Problemă (clasă) | Rădăcină | Fix | Test |
+|---|---|---|---|
+| Safety cards încă permitea preț/link/claim | (a) `scrub_education`/`scrub_intro` NU verificau URL-uri; (b) `compose.assemble` re-adăuga `top_pro` BRUT ca `anchor` (via `_pros`→`_join_reason`, nescrubuit) DUPĂ ce meniul V2 îl eliminase ca medical | (a) `_URL_HINT` în `scrub_prose`+`scrub_intro` (deci și education/follow_up/fit_clause) → link în proză = DROP; (b) `_pros` filtrează medical la SURSĂ (gated) → anchor curat pe rich ȘI V2 | `test_scrub_drops_urls`, `test_scrub_education_drops_url_sentence`, `test_pros_drops_medical_top_pro` |
+| Divergență typed coverage↔Match Gate | coverage cerea bool REAL dar Match Gate accepta stringuri bool; `NaN` considerat număr valid de coverage | `facets.parse_bool` + `facets.is_valid_number` = SURSĂ UNICĂ, folosite de AMBELE (`_is_valid_value` + `evaluate_constraint`); NaN/inf → invalid/UNKNOWN | `test_facet_coverage_typed_validity_bool_number` (extins), `test_number_nan_and_text_are_unknown` |
+
+Plus: descrierea PR #236 actualizată (nu mai spune „1914 passed" / fixuri parțiale R4). **Notă siguranță:**
+filtrul medical din `_pros` + URL-scrub-ul se aplică și pe calea RICH normală (nu doar V2) — închid o
+gaură latentă pre-existentă (anchor medical / link în proză), gated de kill-switch → OFF byte-identic.
+
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

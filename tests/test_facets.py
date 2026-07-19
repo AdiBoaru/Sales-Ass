@@ -1,5 +1,7 @@
 """NX-186 — registru tipizat de fațete + coverage (pur, fără DB)."""
 
+import math
+
 import pytest
 
 from src.domain.facets import FacetSpec, build_registry, facet_coverage, facet_value
@@ -57,3 +59,7 @@ def test_facet_coverage_typed_validity_bool_number():
     assert facet_coverage([{"spf": 30}] * 10, num)["valid"] == 10
     cov2 = facet_coverage([{"spf": "n/a"}] * 10, num)
     assert cov2["present"] == 10 and cov2["valid"] == 0 and cov2["enforceable"] is False
+    # Codex R6: string bool cunoscut („da") e VALID (aliniat cu Match Gate — divergență închisă)
+    assert facet_coverage([{"fragrance_free": "da"}] * 10, b)["valid"] == 10
+    # Codex R6: NaN NU e număr valid (era considerat valid)
+    assert facet_coverage([{"spf": math.nan}] * 10, num)["valid"] == 0
