@@ -168,6 +168,42 @@ def test_eq_spec_priority_over_runtime_type():
     assert evaluate_constraint({"finish": "Matte"}, Constraint("finish", "eq", "matte"), t) == MATCH
 
 
+def test_eq_enum_canonicalizes_both_sides_and_validates():
+    from src.domain.facets import FacetSpec
+
+    spec = FacetSpec("finish", "enum", ("eq",), values=("matte", "dewy"), aliases={"mat": "matte"})
+    # Codex R10: aliasul se canonicalizează pe CONSTRAINT, nu doar pe produs → mat == matte = MATCH
+    assert (
+        evaluate_constraint({"finish": "matte"}, Constraint("finish", "eq", "mat"), spec) == MATCH
+    )
+    assert (
+        evaluate_constraint({"finish": "mat"}, Constraint("finish", "eq", "matte"), spec) == MATCH
+    )
+    assert (
+        evaluate_constraint({"finish": "matte"}, Constraint("finish", "eq", "dewy"), spec)
+        == MISMATCH
+    )
+    # valoare INVALIDĂ pentru enum (nici alias, nici canonic) → UNKNOWN, NU verdict cunoscut
+    assert (
+        evaluate_constraint({"finish": "necunoscut"}, Constraint("finish", "eq", "matte"), spec)
+        == UNKNOWN
+    )
+    assert (
+        evaluate_constraint({"finish": "matte"}, Constraint("finish", "eq", "xyz"), spec) == UNKNOWN
+    )
+
+
+def test_eq_text_invalid_and_list_rejected():
+    from src.domain.facets import FacetSpec
+
+    txt = FacetSpec("note", "text", ("eq",))
+    assert evaluate_constraint({"note": "Bun"}, Constraint("note", "eq", "bun"), txt) == MATCH
+    assert evaluate_constraint({"note": ""}, Constraint("note", "eq", "bun"), txt) == UNKNOWN  # gol
+    # eq pe listă = fără semantică → UNKNOWN (Codex R10)
+    lst = FacetSpec("tags", "list", ("contains_any",))
+    assert evaluate_constraint({"tags": ["a", "b"]}, Constraint("tags", "eq", "a"), lst) == UNKNOWN
+
+
 def test_typed_bool_coverage_matches_match_gate():
     # Codex R8 §4: coverage și Match Gate DAU ACEEAȘI semantică pe bool. Valid în coverage ⟺ verdict
     # cunoscut (MATCH/MISMATCH) în Match Gate; invalid ⟺ UNKNOWN.
@@ -191,6 +227,19 @@ def test_typed_bool_coverage_matches_match_gate():
         cov = facet_coverage([{"ff": val}], spec)
         assert (cov["valid"] == 1) is valid, (val, cov)
         verdict = evaluate_constraint({"ff": val}, Constraint("ff", "eq", True), spec)
+        assert (verdict in (MATCH, MISMATCH)) is valid, (val, verdict)
+
+
+def test_typed_enum_coverage_matches_match_gate():
+    # Codex R10 §4: aceeași semantică pe enum. alias valid ⟺ verdict cunoscut; invalid ⟺ UNKNOWN.
+    from src.domain.facets import FacetSpec, facet_coverage
+
+    spec = FacetSpec("finish", "enum", ("eq",), values=("matte", "dewy"), aliases={"mat": "matte"})
+    cases = [("matte", True), ("mat", True), ("dewy", True), ("necunoscut", False), ("", False)]
+    for val, valid in cases:
+        cov = facet_coverage([{"finish": val}], spec)
+        assert (cov["valid"] == 1) is valid, (val, cov)
+        verdict = evaluate_constraint({"finish": val}, Constraint("finish", "eq", "matte"), spec)
         assert (verdict in (MATCH, MISMATCH)) is valid, (val, verdict)
 
 

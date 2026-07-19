@@ -195,5 +195,16 @@ Note: `1 == True` — pe facet **bool** declarat → MATCH (1 = true); pe facet 
 spec** → UNKNOWN (tip incompatibil, nu coerce). Testul vechi R7 care aștepta MATCH fără spec = corectat
 (era exact coerciția pe care R9 o interzice).
 
+## Review Codex Round 10 — 2 findings P1 (2026-07-18)
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| P1 | typed `eq` corect doar pt bool/number: enum canonicaliza aliasul DOAR pe produs (nu pe constraint → `mat`≠`matte` MISMATCH greșit); text/enum invalid primea verdict cunoscut, nu UNKNOWN; testul enum promis lipsea | `eq` dispatch per tip DECLARAT: `_eq_enum` canonicalizează + validează AMBELE părți în `spec.values`; text = string nevid pe ambele (altfel UNKNOWN); list = eq respins → UNKNOWN | `test_eq_enum_canonicalizes_both_sides_and_validates`, `test_eq_text_invalid_and_list_rejected`, `test_typed_enum_coverage_matches_match_gate` |
+| P1 | URL = allowlist finit: `.beauty/.pro/.cloud/.space/.world/.za` treceau | `has_url` = detectare GENERICĂ de TLD (orice TLD alfabetic 2-24, incl. gTLD noi + ccTLD neenumerate); allowlist-ul `_TLD` eliminat | `test_url_scrub` (.beauty/.pro/.cloud/.space/.world/.za/.tz) + OUTPUT `_clean_facts`/`evidence_menu` cu gTLD generic |
+
+Note §4 (consistență): `test_typed_{bool,number,enum}_coverage_matches_match_gate` demonstrează că
+coverage-valid ⟺ Match-Gate-verdict-cunoscut pe toate cele trei tipuri.
+Note §7 (URL generic): FAIL-CLOSED — poate tăia rar un `cuvânt.cuvânt` adiacent sau o extensie de
+fișier; sigur (se pierde o propoziție, nu un link). Rămâne always-on (nu byte-identic).
+
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

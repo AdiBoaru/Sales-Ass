@@ -48,10 +48,23 @@ def _eq_number(a: Any, b: Any) -> str:
     return MATCH if float(a) == float(b) else MISMATCH
 
 
+def _nonempty_str(x: Any) -> bool:
+    return isinstance(x, str) and bool(x.strip())
+
+
+def _eq_enum(v: Any, cv: Any, spec: FacetSpec) -> str:
+    """Egalitate ENUM. Codex R10: canonicalizează aliasul pe AMBELE părți („mat"→„matte", nu doar
+    produsul) + validează AMBELE în `spec.values` (invalidă → UNKNOWN, nu verdict)."""
+    pv, cvv = spec.canonicalize(v), spec.canonicalize(cv)
+    if pv not in spec.values or cvv not in spec.values:
+        return UNKNOWN
+    return MATCH if pv == cvv else MISMATCH
+
+
 def _eq(v: Any, cv: Any, spec: FacetSpec | None) -> str:
-    """Egalitate TIPIZATĂ. Codex R9: cu `spec`, tipul DECLARAT are prioritate ABSOLUTĂ — NU se
-    consultă isinstance-ul runtime (`1 == True` pe un facet number = UNKNOWN, nu MATCH). Fără spec →
-    euristici conservatoare: număr-vs-bool = tip incompatibil → UNKNOWN (nu coerce)."""
+    """Egalitate TIPIZATĂ. Cu `spec`, tipul DECLARAT are prioritate ABSOLUTĂ (Codex R9/R10) —
+    dispatch per tip, valoare invalidă pentru tip → UNKNOWN (nu verdict cunoscut). Fără spec →
+    euristici conservatoare (număr-vs-bool = incompatibil → UNKNOWN)."""
     if _nonfinite(v) or _nonfinite(cv):  # NaN/inf float pe ORICE cale → UNKNOWN
         return UNKNOWN
     vt = spec.value_type if spec else None
@@ -59,7 +72,13 @@ def _eq(v: Any, cv: Any, spec: FacetSpec | None) -> str:
         return _eq_bool(v, cv)
     if vt == "number":
         return _eq_number(v, cv)
-    if vt is not None:  # enum/text/list DECLARAT → egalitate normalizată de string
+    if vt == "enum":
+        return _eq_enum(v, cv, spec)
+    if vt == "list":
+        return UNKNOWN  # Codex R10: eq pe listă n-are semantică (folosește contains) → respins
+    if vt == "text":
+        if not (_nonempty_str(v) and _nonempty_str(cv)):
+            return UNKNOWN  # Codex R10: text invalid (gol/non-string) → UNKNOWN
         return MATCH if _norm(v) == _norm(cv) else MISMATCH
     # FĂRĂ spec → euristici runtime, conservatoare la tip incompatibil
     v_num, c_num = is_valid_number(v), is_valid_number(cv)
