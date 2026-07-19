@@ -491,6 +491,43 @@ class Settings(BaseSettings):
     # opționale) + injectează `response_shape` + semnal anti-repetiție în mesajul USER (nu în system
     # → prompt caching intact). Default OFF → comportament byte-identic. Măsurat paired vs baseline.
     prompt_vnext_enabled: bool = Field(default=False, validation_alias="PROMPT_VNEXT_ENABLED")
+    # NX-182: disclosure DETERMINIST pe relaxarea filtrelor — search-ul a renunțat la o constrângere
+    # hard (nevoie/categorie/feature) ca să iasă ceva → compose spune EXPLICIT care filtru a fost
+    # relaxat + suprimă eticheta „exact". Default OFF → byte-identic (doar nota veche de proză).
+    relaxed_disclosure_enabled: bool = Field(
+        default=False, validation_alias="RELAXED_DISCLOSURE_ENABLED"
+    )
+    # NX-183: ResponseEnvelope V2-light — `lead` liber + motive compuse DETERMINIST din evidence
+    # OPACE + răspuns text-only (fără carduri). Modelul emite doar cuvinte + referințe; codul pune
+    # faptele. Default OFF → calea rich veche. Flag EFECTIV per business (AND businesses.settings).
+    response_envelope_v2_enabled: bool = Field(
+        default=False, validation_alias="RESPONSE_ENVELOPE_V2_ENABLED"
+    )
+    # NX-184: mixed-intent — pe un mesaj produs+politică, FAQ-ul NU mai face early-exit (ar pierde
+    # produsul); atașează răspunsul de politică în context + continuă la agent, iar completarea
+    # deterministă garantează că politica ajunge la client. Default OFF → FAQ early-exit ca azi.
+    response_shape_hints_enabled: bool = Field(
+        default=False, validation_alias="RESPONSE_SHAPE_HINTS_ENABLED"
+    )
+    # NX-185: QuerySpec în SHADOW — construiește contractul canonic de constrângeri + telemetrie,
+    # ZERO schimbare de comportament. Enforcement-ul (SearchArgs obligatoriu) e NX-188. Default OFF.
+    query_spec_shadow_enabled: bool = Field(
+        default=False, validation_alias="QUERY_SPEC_SHADOW_ENABLED"
+    )
+    # NX-187/188: Match Gate în SHADOW — clasifică setul (exact/alternatives/rejected) + emite
+    # telemetrie, ZERO schimbare de comportament. Default OFF.
+    match_gate_shadow_enabled: bool = Field(
+        default=False, validation_alias="MATCH_GATE_SHADOW_ENABLED"
+    )
+    # NX-188: Match Gate ENFORCE (per business) — aplică efectiv (exclude rejected). Prerechizit:
+    # fațeta participă în retrieval (NX-189) + coverage ≥ prag. Default OFF. NB: enforce
+    # blind (fără NX-189) dă false-negative pe pool-ul de 24 → activare DOAR după verificare live.
+    match_gate_enforce_enabled: bool = Field(
+        default=False, validation_alias="MATCH_GATE_ENFORCE_ENABLED"
+    )
+    # NX-189: fațete tipizate în SQL tri-state (per fațetă). Default OFF; activare per fațetă matură
+    # după paritate shadow + recall (verificare live).
+    typed_facet_sql_enabled: bool = Field(default=False, validation_alias="TYPED_FACET_SQL_ENABLED")
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).

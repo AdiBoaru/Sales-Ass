@@ -32,6 +32,17 @@ def prompt_vnext_effective(business: Any) -> bool:
     return isinstance(settings, dict) and settings.get("prompt_vnext_enabled") is True
 
 
+def cache_prompt_version(business: Any) -> str:
+    """NX-181/183: namespace-ul de cache. Compune versiunea de PROMPT (v1/vnext) cu cea de ENVELOPE
+    (v2). UN SINGUR owner → lookup (cache stage) și upsert (aftercare) folosesc EXACT aceeași cheie;
+    altfel s-ar servi un răspuns compus cu alt contract (Codex: „V2 poate servi răspunsuri V1"). OFF
+    pe ambele → 'v1' (byte-identic). Import local pt a evita ciclul agent↔prompt_builder la load."""
+    from src.agent.envelope import response_envelope_v2_effective
+
+    base = "vnext" if prompt_vnext_effective(business) else "v1"
+    return f"{base}+v2" if response_envelope_v2_effective(business) else base
+
+
 # Status comandă — NEUTRU pe vertical (nu vinde, doar raportează) → constantă, nu generat.
 ORDER_RECO_SYSTEM = (
     "Ești un asistent de suport pentru un magazin online din România.\n"
@@ -409,3 +420,34 @@ def build_rich_system(inp: PromptInputs, vnext: bool = False) -> str:
     )
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
+
+
+# NX-183 (ResponseEnvelope V2-light) — REGULI: modelul scrie DOAR `lead` (conversațional) +
+# selectează evidence OPACE per produs. Codul compune faptele. Identice pe toți tenanții.
+_V2_RULES = """Compui un răspuns NATURAL, scurt, ca un consultant. Răspunzi DOAR cu JSON (schema).
+
+REGULI DURE:
+- `lead` = 1-2 fraze conversaționale, în limba clientului, LEGATE de întrebarea curentă. NU scrie
+  prețuri, linkuri, ratinguri, procente, termene sau ORICE cifră (codul le pune). NU afirma atribute
+  tehnice noi despre produse (textură/ingredient/potrivire) în `lead` — acelea se aleg ca evidence.
+- `products` = PÂNĂ LA 3 produse din listă. Pentru fiecare: `product_id` EXACT din listă;
+  `evidence_ids` = id-uri DOAR din „Dovezi disponibile" ale ACELUI produs (nu inventa, nu împrumuta
+  de la alt produs); `reason_style` ∈ {best_if, good_for, note}. Codul scrie motivul din dovezile
+  alese — tu doar le SELECTEZI.
+- `answer` (opțional) = pt o întrebare DIRECTĂ pe setul afișat („care e mai lejeră?"): alege UN
+  `product_id` + `evidence_ids` care răspund, `presentation: inline` (răspuns text, fără card nou).
+  Cerere de recomandare normală → `answer: null`.
+- La un follow-up direct, preferă `answer` inline + `products` GOL (nu re-lista setul).
+- `follow_up` = cel mult o întrebare scurtă, DOAR dacă schimbă recomandarea; altfel null.
+- Folosește DOAR id-uri de produs și evidence din liste. Orice id inventat e ignorat de sistem."""
+
+
+@lru_cache(maxsize=256)
+def build_v2_system(inp: PromptInputs) -> str:
+    """NX-183: system pt ResponseEnvelope V2-light. Antet din DB + reguli V2 + safety. Static per
+    (business, locale)."""
+    return (
+        f"{_store_header(inp)}\n"
+        "Primești nevoia clientului, produsele REALE și dovezile disponibile (id opac → fapt).\n"
+        f"{_V2_RULES}\n{_SAFETY_RULES}"
+    )

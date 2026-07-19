@@ -38,6 +38,52 @@ def test_scrub_drops_numbers_claims_superlatives() -> None:
     assert compose.scrub_prose(None) is None
 
 
+def test_scrub_drops_urls() -> None:
+    # Codex R6: linkurile vin din offer/checkout, nu din proză (fit_clause/intro/education)
+    assert compose.scrub_prose("Vezi pe https://shop.example.com/p") is None
+    assert compose.scrub_prose("Detalii pe www.example.com") is None
+    assert compose.scrub_prose("Comandă la shop.sole-demo.ro/p/x") is None
+    assert (
+        compose.scrub_prose("Bun pentru ten uscat") == "Bun pentru ten uscat"
+    )  # fără URL → rămâne
+    assert compose.scrub_intro("Vezi www.example.com", set()) is None
+
+
+def test_scrub_education_drops_url_sentence() -> None:
+    # granular: propoziția cu URL cade, restul rămâne (nu tot paragraful)
+    out = compose.scrub_education(
+        "Ideal pentru început. Vezi www.example.com pentru detalii.", True
+    )
+    assert out == "Ideal pentru început."
+
+
+def test_pros_drops_medical_top_pro(monkeypatch) -> None:
+    # Codex R6: anchor-ul cardului vine din _pros (NEscrubuit în _join_reason) → top_pro medical
+    # eliminat la SURSĂ, ca să nu reintre pe card ocolind validate_prose + filtrul meniului V2.
+    from src.config import get_settings
+
+    p = {"top_pros": ["Textură lejeră", "Tratează acneea în 7 zile"]}
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", True)
+    assert compose._pros(p) == ["Textură lejeră"]  # claim medical eliminat
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", False)
+    assert compose._pros(p) == ["Textură lejeră", "Tratează acneea în 7 zile"]  # OFF → byte-identic
+
+
+def test_pros_drops_url_top_pro() -> None:
+    # Codex R7: URL în top_pro nu reintră ca anchor pe card (numărul real ar rămâne, URL-ul nu)
+    p = {"top_pros": ["Comandă pe shop.x.ro/p/1", "Bun pentru ten uscat"]}
+    assert compose._pros(p) == ["Bun pentru ten uscat"]
+
+
+def test_join_list_drops_medical_and_url(monkeypatch) -> None:
+    # Codex R7: celulele comparației (top_pros/top_cons) folosesc faptele DIRECT → filtrate
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", True)
+    cell = compose._join_list(["Textură lejeră", "Tratează acneea în 7 zile", "Vezi www.x.com"], 3)
+    assert cell == "Textură lejeră"
+
+
 # --- R4: bugetul clientului permis în intro (nu „Ai ceva sub lei") -----------
 
 

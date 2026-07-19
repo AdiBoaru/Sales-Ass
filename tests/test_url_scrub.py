@@ -1,0 +1,74 @@
+"""Codex R8 — `has_url` single-source (text_scrub) + matrice adversarială.
+
+Protocol: testează CLASA, nu exemplul. URL în oricare formă (http/www/path/bare) NU are voie în
+proză sau într-un fapt (anti-injecție/phishing); linkurile legitime vin din offer/checkout.
+"""
+
+import pytest
+
+from src.worker.text_scrub import has_url
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("https://shop.example.com/p", True),  # http(s)://
+        ("http://x.ro", True),
+        ("Detalii pe www.example.com", True),  # www.
+        ("Comandă la shop.sole-demo.ro/p/x", True),  # domeniu cu path
+        ("Vezi example.com", True),  # domeniu GOL, TLD cunoscut
+        ("magazin.ro acum", True),
+        ("site.online", True),
+        ("evil.ai", True),  # Codex R9: ccTLD/gTLD care lipseau
+        ("shop.hu", True),
+        ("brand.eu", True),
+        ("example.co", True),
+        ("shop.co.uk pagina", True),  # TLD compus
+        ("glow.beauty", True),  # Codex R10: gTLD nou — detectare GENERICĂ, nu allowlist
+        ("shop.pro", True),
+        ("app.cloud", True),
+        ("brand.space", True),
+        ("site.world", True),
+        ("magazin.za", True),  # ccTLD .za
+        ("dukan.tz here", True),  # ccTLD NEenumerat (.tz) — generic
+        ("magazin.рф", True),  # Codex R11: IDN ccTLD chirilic (.рф)
+        ("shop.中国 aici", True),  # IDN TLD CJK (.中国)
+        ("brand.xn--p1ai", True),  # punycode modelat corect (nu doar prefix .xn)
+        ("Bun pentru ten uscat", False),  # proză curată
+        ("Rezistă 8 ore", False),  # cifră reală, NU URL
+        ("4.9 stele", False),
+        ("n/a", False),
+        ("e.g. produsul", False),  # nu e TLD
+        ("S.R.L. Cosmetics", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_has_url_adversarial(text, expected):
+    assert has_url(text) is expected
+
+
+def test_clean_facts_output_drops_urls():
+    # Codex R9: test pe OUTPUT-ul _clean_facts (nu doar has_url izolat)
+    from src.worker.compose import _clean_facts
+
+    # incl. gTLD nou (.beauty) + ccTLD neenumerat (.tz) → detectare generică pe OUTPUT
+    out = _clean_facts(["Bun pentru ten uscat", "Vezi glow.beauty", "Comandă shop.tz/p"])
+    assert out == ["Bun pentru ten uscat"]
+
+
+def test_evidence_menu_output_drops_urls():
+    # Codex R9/R10: test pe OUTPUT-ul _evidence_facts / evidence_menu, incl. gTLD generic
+    from src.agent.envelope import evidence_menu
+
+    p = {"id": "p1", "name": "A", "price": 50.0, "top_pros": ["Textură lejeră", "vezi brand.cloud"]}
+    facts = list(evidence_menu([p])["p1"].values())
+    assert facts == ["Textură lejeră"]
+
+
+def test_clean_facts_output_drops_idn():
+    # Codex R11: IDN/punycode pe OUTPUT-ul _clean_facts (nu doar has_url)
+    from src.worker.compose import _clean_facts
+
+    out = _clean_facts(["Bun pentru ten uscat", "vezi magazin.рф", "shop.xn--p1ai/p"])
+    assert out == ["Bun pentru ten uscat"]

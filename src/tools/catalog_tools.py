@@ -26,7 +26,7 @@ from src.db.queries.catalog import (
 )
 from src.db.queries.fusion import fuse_candidates
 from src.domain.normalize import normalize
-from src.models import MAX_SEARCH_POOL, Relevance
+from src.models import MAX_SEARCH_POOL, RelaxedConstraint, Relevance
 from src.safety.compose import model_hint as safety_model_hint
 from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
@@ -403,6 +403,39 @@ def _relax_ladder(
     if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
         steps.append({**steps[-1], "features": None})
     return steps
+
+
+# NX-182: cheie de ladder → facet_key canonic (pt disclosure determinist + registrul de labels).
+_RELAX_FACET = {
+    "price_max": "price",
+    "concerns": "concerns",
+    "category": "category",
+    "features": "features",
+}
+
+
+def _relaxed_constraints(
+    ladder: list[dict[str, Any]], winning_step: dict[str, Any] | None, relax_depth: int
+) -> tuple[RelaxedConstraint, ...]:
+    """NX-182: care constrângeri HARD au fost relaxate = prezente în `base` (ladder[0]) dar None în
+    treapta CÂȘTIGĂTOARE. `original_value` NORMALIZAT (listă→join; slug/număr ca atare; niciodată
+    PII — filtre de căutare, nu text liber). Gol dacă nimic relaxat / fără treaptă câștigătoare."""
+    if not winning_step or not ladder:
+        return ()
+    base = ladder[0]
+    out: list[RelaxedConstraint] = []
+    for key, facet in _RELAX_FACET.items():
+        if base.get(key) and not winning_step.get(key):
+            val = base.get(key)
+            norm = (
+                (", ".join(str(x) for x in val) or None)
+                if isinstance(val, (list, tuple))
+                else str(val)
+            )
+            out.append(
+                RelaxedConstraint(facet_key=facet, relaxed_step=relax_depth, original_value=norm)
+            )
+    return tuple(out)
 
 
 def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
@@ -934,7 +967,19 @@ async def search_products_tool(
                 f"propune-i o categorie înrudită — nu inventa o potrivire."
             ),
         )
-    relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
+    # NX-182: constrângerile hard relaxate (structurat) → disclosure determinist în compose. Gated;
+    # OFF → () → byte-identic (rămâne doar nota de proză de mai sus).
+    relaxed_constraints = (
+        _relaxed_constraints(ladder, winning_step, relax_depth)
+        if getattr(get_settings(), "relaxed_disclosure_enabled", False)
+        else ()
+    )
+    relevance = Relevance(
+        relaxed=relaxed,
+        category_dropped=category_dropped,
+        top_cosine=top_cosine,
+        relaxed_constraints=relaxed_constraints,
+    )
     return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 
 

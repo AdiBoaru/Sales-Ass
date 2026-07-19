@@ -16,7 +16,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from src.agent import prompt_builder
+from src.agent import envelope, prompt_builder
 from src.agent.deterministic import _comparison_facets
 from src.agent.fallbacks import (
     _card_products,
@@ -330,6 +330,103 @@ async def _finalize_rich(
     return compose.assemble(ctx, j, products)
 
 
+async def _finalize_v2(deps, plan, ctx) -> bool:
+    """NX-183: ResponseEnvelope V2-light. Modelul emite `lead` + evidence OPACE; CODUL compune
+    motivele + hidratează cardurile (reuse `compose.assemble`, motiv = `fit_clause`) SAU un răspuns
+    TEXT-ONLY (`answer` inline). Întoarce True dacă a setat reply (handled); False → fall-through la
+    calea rich. Orice eșec de apel → False (degradare, P6). Gated de caller (flag per business)."""
+    products = plan.products
+    menu = envelope.evidence_menu(products)
+    hist = f"Conversație până acum:\n{plan.history}\n\n" if plan.history else ""
+    notes = f"NB: {plan.commerce_note}\n" if plan.commerce_note else ""
+    shape = f"Mod de răspuns: {plan.response_shape}\n" if plan.response_shape else ""
+    user = (
+        f"Limba clientului: {ctx.language}\n{notes}{shape}{hist}"
+        f"Nevoia clientului: {plan.query}\nProduse disponibile:\n"
+        f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}\n\n"
+        f"Dovezi disponibile (id opac → fapt):\n{envelope.render_evidence_menu(menu)}"
+    )
+    try:
+        env = await deps.llm.complete_schema(
+            prompt_builder.build_v2_system(plan.inp), user, envelope.V2_SCHEMA
+        )
+    except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fall-through la rich
+        log.warning("agent: finalize v2 eșuat (%s)", type(e).__name__)
+        return False
+
+    # TEXT-ONLY (Codex: are PRIORITATE dacă modelul a ales `presentation: inline`, altfel cardurile
+    # câștigau și `answer` era ignorat). `answer` inline pe UN produs → lead SCRUBUIT + afirmația
+    # compusă (nume grounded + motiv din evidence). Fără carduri. GUARD medical: textul NU trece
+    # prin `validate_prose` → claim medical în lead → fall-through la rich (validată).
+    # cacheable=False: răspuns dependent de produsele afișate anterior („care e mai lejeră?").
+    ans = env.get("answer")
+    if (
+        isinstance(ans, dict)
+        and ans.get("presentation") == "inline"
+        and str(ans.get("product_id") or "") in menu
+    ):
+        pid = str(ans["product_id"])
+        name = next((str(p.get("name")) for p in products if str(p.get("id")) == pid), None)
+        reason = envelope.compose_reason(
+            pid, ans.get("evidence_ids") or [], "good_for", menu, ctx.language
+        )
+        lead = compose.scrub_intro(env.get("lead") or "", set()) or ""
+        fu = compose.scrub_prose(env.get("follow_up")) or ""  # free-text → scrub preț/link/claim
+        tail = f"{name} — {reason}".strip(" —") if name else reason
+        base = f"{lead} {tail}".strip()
+        text = f"{base}\n\n{fu}".strip() if fu else base
+        # VALIDARE COMPLETĂ de proză (Codex: nu doar medical) — preț/link/medical/claim ∈ produsele
+        # afișate. Fără motiv factual (evidence invalid) sau invalid → fall-through la rich.
+        if reason and text and validate_prose(text, products=products).ok:
+            ctx.set_reply(text, cacheable=False)
+            ctx.emit(
+                "agent_recommended", n=0, v2=True, text_only=True, product_ids=clean_ids([pid])
+            )
+            return True
+
+    # CARDS: transformă la rich `j` (fit_clause = motiv compus DETERMINIST din evidence validate) →
+    # reuse `assemble` (membership + hidratare preț/nume/link/badge + scrub intro, tot testat).
+    j_items: list[dict[str, Any]] = []
+    for p in env.get("products") or []:
+        pid = str(p.get("product_id") or "")
+        if pid in menu:
+            reason = envelope.compose_reason(
+                pid,
+                p.get("evidence_ids") or [],
+                p.get("reason_style") or "good_for",
+                menu,
+                ctx.language,
+            )
+            j_items.append({"product_id": pid, "pro_index": None, "fit_clause": reason})
+    if j_items:
+        # follow_up (Codex: nescrubuit) → `education` ÎNAINTE de assemble → scrub_education curăță
+        # preț/link/claim (model free-text). Randat pe web de flatten_framing + floor.
+        raw_fu = env.get("follow_up")
+        j = {
+            "intro": env.get("lead") or "",
+            "items": j_items,
+            "pick": None,
+            "education": raw_fu if isinstance(raw_fu, str) else "",
+            "suggestions": [],
+        }
+        rich = compose.assemble(ctx, j, products)
+        if rich.items:
+            ctx.set_rich_reply(
+                rich,
+                text=compose.flatten(rich, ctx.language),
+                products=compose.card_products(rich.items),
+            )
+            _attach_checkout_offer(ctx, plan.checkout_url)
+            ctx.emit(
+                "agent_recommended",
+                n=len(rich.items),
+                v2=True,
+                product_ids=clean_ids(it.product_id for it in rich.items),
+            )
+            return True
+    return False
+
+
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
     """NX-137: linkul de checkout creat în ACEST tur ajunge GARANTAT la client, pe orice cale de
     compunere. Root cause (găsit live pe sim): pe calea RICH (web) modelul are INTERZIS structural
@@ -381,6 +478,13 @@ async def render(
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
+            # NX-183 (ResponseEnvelope V2-light): gated per business. ON → încearcă V2 (lead +
+            # opace, motive compuse de cod, eventual text-only). Eșec/nesetat → cade pe calea rich
+            # (OFF → nici nu se intră aici → byte-identic).
+            if envelope.response_envelope_v2_effective(ctx.business) and await _finalize_v2(
+                deps, plan, ctx
+            ):
+                return None
             # NX-181 (Prompt vNext): flag EFECTIV per business (global AND business.settings).
             # NU citim global-ul direct (single source: prompt_vnext_effective). OFF → byte-identic.
             vnext = prompt_builder.prompt_vnext_effective(ctx.business)

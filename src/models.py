@@ -264,6 +264,17 @@ class RouteDecision:
     purchase_intent: bool = False
 
 
+@dataclass(frozen=True)
+class RelaxedConstraint:
+    """NX-182: o constrângere HARD pe care `_relax_ladder` a renunțat-o ca să iasă ceva (P6). Struct
+    (nu proza generică) → compose pune disclosure determinist + suprimă „exact". `original_value` e
+    NORMALIZAT (vocabular/slug/număr, niciodată text liber/PII); None dacă nenormalizabil."""
+
+    facet_key: str  # concerns | category | features | price | stock (cheie canonică, nu label)
+    relaxed_step: int  # treapta din ladder la care s-a produs rezultatul (adâncimea relaxării)
+    original_value: str | None = None
+
+
 @dataclass
 class Relevance:
     """Semnal STRUCTURAT de relevanță al retrievalului (izi-parity, hardening). Scris de
@@ -283,6 +294,9 @@ class Relevance:
     relaxed: bool = False
     category_dropped: bool = False
     top_cosine: float | None = None
+    # NX-182: care constrângeri HARD au fost relaxate (structurat) → disclosure determinist
+    # + suprimarea etichetei „exact". Gol = nimic relaxat (fail-open, comportament vechi).
+    relaxed_constraints: tuple[RelaxedConstraint, ...] = ()
 
 
 @dataclass
@@ -514,6 +528,10 @@ class TurnContext:
     safety_decision: Any = None
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     from_cache: bool = False  # owner: Cache (G5b) — reply servit din cache
+    # NX-184: pe un mesaj MIXED-INTENT (produs + politică), FAQ-ul nu mai face early-exit — atașează
+    # aici răspunsul GROUNDED de politică (owner: faq_stage) → agentul ancorează produsul, iar
+    # completarea deterministă garantează că răspunsul de politică ajunge la client (obligation).
+    faq_grounded: str | None = None
     # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al
     # conversației lungi (acoperă mesajele de dinaintea ultimelor 8). Citit de context_blocks.
     summary: str | None = None

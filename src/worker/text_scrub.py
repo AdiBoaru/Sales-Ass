@@ -143,3 +143,29 @@ def has_medical_claim(text: str | None) -> bool:
     if _TREAT_VERB.search(t) and _MED_CONDITION.search(t):
         return True
     return bool(_PREG_SAFE.search(t) or _ALLERGEN_FREE.search(t) or _MED_AUTHORITY.search(t))
+
+
+# Un URL/domeniu în proză sau într-un fapt de produs. Detectare GENERICĂ de TLD (Codex R10: NU un
+# allowlist finit — orice TLD alfabetic 2-24 e prins, incl. gTLD noi `.beauty/.cloud` și ccTLD
+# neenumerate `.za/.tz`). Forme: http(s)://, www., domeniu cu path, domeniu gol cu subdomenii + TLD
+# compus (`shop.co.uk`). `{2,24}` alfabetic exclude versiuni/zecimale (TLD numeric) și inițiale de o
+# literă (`S.R.L`, `e.g`). Linkurile LEGITIME vin din offer/checkout → un URL în proză/fapt = DROP.
+# SINGLE SOURCE: compose (scrub_prose/scrub_intro/_clean_facts) + envelope (_evidence_facts).
+# TRADEOFF (ONEST, §7): generic e FAIL-CLOSED — poate tăia rar un `cuvânt.cuvânt` adiacent sau o
+# extensie de fișier (`readme.txt`); SIGUR (se pierde o propoziție, nu se scurge un link).
+# IDN-aware (Codex R11): etichetă = alfanumeric UNICODE (fără `_`), cratime în interior. TLD =
+# punycode `xn--…` SAU 2-24 LITERE Unicode → prinde ASCII (`.com`), IDN bare (`.рф`, `.中国`) și
+# punycode modelat corect (`.xn--p1ai`), nu doar accidental ca prefix `.xn`.
+_LABEL = r"[^\W_](?:[\w-]*[^\W_])?"
+_TLD = r"(?:xn--[a-z0-9-]{2,}|[^\W\d_]{2,24})"
+_URL_HINT = re.compile(
+    r"https?://|www\.\w" rf"|\b{_LABEL}(?:\.{_LABEL})*\.{_TLD}\b",
+    re.I | re.UNICODE,
+)
+
+
+def has_url(text: str | None) -> bool:
+    """Textul conține un URL/domeniu? Detectare GENERICĂ + IDN-aware (orice TLD Unicode 2-24 SAU
+    punycode `xn--`, nu allowlist): http(s)://, www., domeniu-cu-path, domeniu gol + subdomenii +
+    TLD compus. Prinde `.рф`/`.中国`/`.xn--p1ai`. Codex R10/R11."""
+    return bool(text) and _URL_HINT.search(text) is not None

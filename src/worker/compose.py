@@ -37,6 +37,7 @@ from src.worker.text_scrub import (
     has_medical_claim,
     has_stock_claim,
     has_unverifiable_claim,
+    has_url,
 )
 
 if TYPE_CHECKING:
@@ -111,6 +112,47 @@ def _off_category(relevance: Relevance | None) -> bool:
     return floor is not None and relevance.top_cosine is not None and relevance.top_cosine > floor
 
 
+# NX-182: registru MINIMAL de labels per fațetă relaxată (RO/EN/HU). NX-186 îl extinde la registrul
+# tipizat complet. Doar labels de afișare — fără valori brute în text.
+_RELAX_LABELS: dict[str, dict[str, str]] = {
+    "concerns": {"ro": "nevoia cerută", "en": "the requested need", "hu": "a kért igény"},
+    "category": {
+        "ro": "categoria cerută",
+        "en": "the requested category",
+        "hu": "a kért kategória",
+    },
+    "features": {
+        "ro": "ingredientul/atributul cerut",
+        "en": "the requested ingredient/attribute",
+        "hu": "a kért összetevő/tulajdonság",
+    },
+    "price": {"ro": "bugetul", "en": "the budget", "hu": "a költségkeret"},
+}
+_RELAX_LEAD: dict[str, str] = {
+    "ro": "N-am găsit potrivire exactă — am relaxat {}.",
+    "en": "No exact match — I relaxed {}.",
+    "hu": "Nincs pontos találat — lazítottam ezen: {}.",
+}
+
+
+def _relaxed_disclosure(relevance: Relevance | None, language: str | None) -> str:
+    """NX-182: linia de disclosure DETERMINIST pentru filtrele relaxate (numește fațeta relaxată,
+    per-locale, fără valori brute). Gol dacă flag OFF / None / nimic relaxat → byte-identic."""
+    if not getattr(get_settings(), "relaxed_disclosure_enabled", False) or relevance is None:
+        return ""
+    rc = getattr(relevance, "relaxed_constraints", ()) or ()
+    if not rc:
+        return ""
+    lang = (language or "ro").lower()
+    seen: list[str] = []
+    for c in rc:
+        m = _RELAX_LABELS.get(c.facet_key, {})
+        lbl = m.get(lang) or m.get("ro") or c.facet_key
+        if lbl not in seen:
+            seen.append(lbl)
+    return (_RELAX_LEAD.get(lang) or _RELAX_LEAD["ro"]).format(", ".join(seen))
+
+
 # IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
 # Constante de PRODUS (decizii de UX, nu ops-tuning) — pick-ul pe web e separat un kill-switch în
 # config (`rich_pick_web_enabled`). `_MAX_RICH_ITEMS` = câte carduri (modelul curează, codul taie la
@@ -131,7 +173,7 @@ def _unsafe_medical(t: str) -> bool:
 
 def scrub_prose(s: str | None) -> str | None:
     """Proza LLM poate referi NEVOIA clientului, nu fapte cuantificate. Strecoară cifre /
-    procente / claim-uri / superlative neverificabile → DROP (None). Faptele reale vin
+    procente / claim-uri / superlative neverificabile / linkuri → DROP (None). Faptele reale vin
     din card, randate de cod. Drop, nu retry (P0-safety: claim medical → DROP)."""
     if not s:
         return None
@@ -141,6 +183,8 @@ def scrub_prose(s: str | None) -> str | None:
     if has_unverifiable_claim(t):  # NX-117: digit + pct + claim + super (semantică neschimbată)
         return None
     if _unsafe_medical(t):  # P0-safety: sfat medical/terapeutic → DROP câmpul
+        return None
+    if has_url(t):  # P0: link inventat/nefondat în proză → DROP (Codex)
         return None
     return t
 
@@ -169,8 +213,9 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
     if not t:
         return None
     unknown = [n for n in re.findall(r"\d+", t) if n not in allowed_numbers]
-    if unknown or has_marketing_claim(t) or _unsafe_medical(t):
+    if unknown or has_marketing_claim(t) or _unsafe_medical(t) or has_url(t):
         # NX-117: pct + claim + super (cifrele clientului permise). P0-safety: claim medical → DROP.
+        # Codex: link în proză (inclusiv education/follow_up scrubuit aici) → DROP.
         return None
     return t
 
@@ -189,11 +234,36 @@ def _safe_badge(label: str | None) -> str | None:
     return t
 
 
+def _clean_facts(raw: Any) -> list[str]:
+    """Fapte de produs (top_pros/top_cons din recenzii) SIGURE pentru afișare DIRECTĂ — anchor-ul
+    cardului (`_pros`→`_join_reason`, NEscrubuit) ȘI celulele comparației (`_join_list`). Elimină
+    claim medical (gated) + linkuri. Codex R7: comparison folosea top_pros/top_cons brut, iar _pros
+    nu filtra URL → medical / URL reapărea în tabel sau pe card.
+
+    PROVENANCE (Codex R8, §5): `raw` e o listă de string-uri FĂRĂ context → NU putem verifica dacă o
+    cifră dintr-un top_pro („rezistă 8 ore", „87% mulțumiți") e un spec real sau o afirmație
+    neverificabilă. Aici PĂSTRĂM cifrele (comportament pre-existent: pros de recenzie tratate ca
+    fapte). Validarea/eliminarea cifrelor din faptele de recenzie = DEFERRED (decizie de UX pe
+    normal-rich; ori pasăm produsul + valorile permise, ori scrub cu `has_unverifiable_claim`)."""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out: list[str] = []
+    for s in raw:
+        if not isinstance(s, str) or not s.strip():
+            continue
+        t = s.strip()
+        if _unsafe_medical(t) or has_url(t):
+            continue
+        out.append(t)
+    return out
+
+
 def _pros(p: dict[str, Any]) -> list[str]:
-    """Avantajele reale ale produsului (din recenzii, D3): preferă lista `top_pros`,
-    fallback pe `review_pro` (un singur pro din search). Doar string-uri ne-goale."""
+    """Avantajele reale ale produsului (din recenzii, D3): preferă lista `top_pros`, fallback pe
+    `review_pro` (un singur pro din search). Faptele trec prin `_clean_facts` (medical + URL) — vezi
+    docstring-ul lui pentru DE CE anchor-ul cardului trebuie curățat la SURSĂ."""
     raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
-    return [s.strip() for s in raw if isinstance(s, str) and s.strip()]
+    return _clean_facts(raw)
 
 
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:
@@ -413,7 +483,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         shown = [facts[it.product_id] for it in items if it.product_id in facts]
         allowed_numbers |= spec_numbers(shown, pack.comparison_facets if pack else (), ctx.language)
 
-    if _off_category(relevance):
+    off_cat = _off_category(relevance)
+    if off_cat:
         ctx.emit(
             "pick_suppressed",
             reason="off_category",
@@ -425,6 +496,18 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     else:
         pick = _select_pick(j, facts, items, stock_present, deterministic)
         intro = _drop_unfounded_stock(scrub_intro(j.get("intro"), allowed_numbers), stock_present)
+
+    # NX-182: relaxare cu disclosure DETERMINIST (când NU e deja off-category, care are propriul
+    # mesaj). Suprimă pick-ul (nu e potrivire „exactă") + prefixează intro cu nota onestă. Gated;
+    # OFF / nimic relaxat → "" → nimic se schimbă (byte-identic).
+    relaxed_note = "" if off_cat else _relaxed_disclosure(relevance, ctx.language)
+    if relaxed_note:
+        pick = None
+        intro = f"{relaxed_note} {intro}".strip() if intro else relaxed_note
+        ctx.emit(
+            "relaxed_disclosure",
+            facets=[c.facet_key for c in (relevance.relaxed_constraints or ())],
+        )
 
     return RichReply(
         intro=intro,
@@ -603,10 +686,10 @@ def _labels(language: str | None) -> dict[str, str]:
 
 
 def _join_list(raw: Any, n: int) -> str | None:
-    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—")."""
-    if not isinstance(raw, (list, tuple)):
-        return None
-    items = [s.strip() for s in raw if isinstance(s, str) and s.strip()]
+    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—").
+    Codex R7: SIGURE prin `_clean_facts` (medical + URL) — celulele tabelului de comparație folosesc
+    top_pros/top_cons DIRECT, ocolind scrub-ul cardului; un medical / link n-are ce căuta acolo."""
+    items = _clean_facts(raw)
     return "; ".join(items[:n]) or None
 
 

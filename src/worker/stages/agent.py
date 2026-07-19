@@ -263,6 +263,44 @@ async def _prune_displayed(ctx: TurnContext, deps: PipelineDeps, policy: SafetyP
     ]
 
 
+def _complete_faq_obligation(ctx: TurnContext) -> None:
+    """NX-184: pe un tur mixed-intent, FAQ-ul a atașat răspunsul de politică în `ctx.faq_grounded`
+    și a lăsat pipeline-ul să continue (produsul). GARANTĂM obligația: dacă reply-ul final nu are
+    deja politica, o adăugăm o singură dată (deterministic). Gated + best-effort."""
+    if not get_settings().response_shape_hints_enabled:
+        return
+    grounded = (getattr(ctx, "faq_grounded", None) or "").strip()
+    reply = ctx.reply
+    if not grounded or reply is None:
+        return
+    # euristică de acoperire: începutul politicii deja în text/education → nu dublăm.
+    key = grounded[:24].lower()
+
+    # Floor text (WhatsApp/Telegram + messages.body): apendă dacă lipsește.
+    if (reply.text or "").strip() and key not in reply.text.lower():
+        reply.text = f"{reply.text.rstrip()}\n\n{grounded}"
+        ctx.emit("faq_obligation_completed")
+
+    # WEB RICH (Codex): `render.py` RECONSTRUIEȘTE content-ul EXCLUSIV din `reply.rich`
+    # (flatten_framing), IGNORÂND `reply.text` → politica din text s-ar pierde pe web. O injectăm și
+    # în `rich.education` (paragraf de final randat de flatten_framing). RichReply e mutabil.
+    rich = getattr(reply, "rich", None)
+    if rich is not None:
+        edu = rich.education or ""
+        if key not in edu.lower():
+            rich.education = f"{edu.rstrip()}\n\n{grounded}".strip() if edu.strip() else grounded
+            ctx.emit("faq_obligation_completed", surface="rich")
+
+    # WEB COMPARISON (Codex): la o COMPARAȚIE, `render.py` folosește `comparison.intro` (nu rich,
+    # nu text) → politica s-ar pierde pe web. O injectăm și acolo. Comparison e mutabil.
+    cmp = getattr(reply, "comparison", None)
+    if cmp is not None:
+        intro = cmp.intro or ""
+        if key not in intro.lower():
+            cmp.intro = f"{intro.rstrip()}\n\n{grounded}".strip() if intro.strip() else grounded
+            ctx.emit("faq_obligation_completed", surface="comparison")
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -407,3 +445,5 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 validator=validation,
             ),
         )
+    # NX-184: completare deterministă a obligației mixed-intent (FAQ a atașat politica).
+    _complete_faq_obligation(ctx)

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from typing import TYPE_CHECKING
 
 from src.cache.canonical import canonicalize
@@ -41,6 +42,53 @@ _POLICY_RE = re.compile(
     r"|\bcat\s+cost\w*\s+livr|\bmetode\s+de\s+plat\w*",
     re.IGNORECASE,
 )
+
+# NX-184: cuvinte de PRODUS generice (fallback cross-vertical; per-vertical din DomainPack —
+# concern_map + searchable_facets). Semnal că mesajul poartă ȘI o cerere de produs, nu doar FAQ.
+_PRODUCT_WORDS = re.compile(
+    r"\bcrem\w*|\bser\w*|\bsampon\w*|\bparfum\w*|\bfond\w*|\bmasc\w*|\bgel\w*|\bulei\w*"
+    r"|\brecomand\w*|\bprodus\w*|\bvreau\b|\bcaut\w*|\barat\w*|\baveti\b",
+    re.IGNORECASE,
+)
+# conjuncție / două clauze → semnal de intenție DUBLĂ (produs + politică în același mesaj).
+_CONJ_RE = re.compile(r"\bsi\b|\biar\b|\bdar\b|\bplus\b|,|\?.+\?", re.IGNORECASE)
+# politică EXTINSĂ pt detector (verb forms pe care `_POLICY_RE` partajat nu le prinde: „livrați",
+# „plătești") — nu atingem `_POLICY_RE` (folosit de pragul FAQ). Aplicat pe text normalizat.
+_MIXED_POLICY_EXTRA = re.compile(r"\blivra\w*|\bplat\w*", re.IGNORECASE)
+
+
+def _strip_diac(s: str) -> str:
+    """lower + fără diacritice, PĂSTRÂND punctuația (pt clauze: `și`→`si`, dar `?` rămâne)."""
+    d = unicodedata.normalize("NFKD", (s or "").lower())
+    return "".join(c for c in d if not unicodedata.combining(c))
+
+
+def _has_product_term(norm: str, domain_pack) -> bool:
+    """True dacă mesajul (normalizat) conține un cuvânt de produs generic SAU un termen de vocabular
+    din DomainPack (concern_map / searchable_facets). Generic pe vertical."""
+    if _PRODUCT_WORDS.search(norm):
+        return True
+    vocab = list(getattr(domain_pack, "concern_map", {}) or {}) + list(
+        getattr(domain_pack, "searchable_facets", ()) or []
+    )
+    return any(canonicalize(v)[0] in norm for v in vocab if isinstance(v, str) and v)
+
+
+def mixed_intent_decision(body: str, domain_pack) -> str:
+    """NX-184: tri-state (Codex — un bool nu poate reprezenta „incert"). `PURE_FAQ` = doar politică
+    → FAQ poate early-exit. `POSSIBLE_MIXED` = ȘI produs ȘI politică, două clauze → NU early-exit.
+    `UNKNOWN` = două clauze + politică dar produs nerecunoscut → conservator, NU early-exit. Pur,
+    fără LLM, generic pe vertical."""
+    norm = canonicalize(body or "")[0]
+    if not (_POLICY_RE.search(norm) or _MIXED_POLICY_EXTRA.search(norm)):
+        return "PURE_FAQ"  # fără semnal de politică → nimic de „mixat"
+    if not _CONJ_RE.search(_strip_diac(body or "")):
+        # o SINGURĂ clauză = intenție unică (politică), chiar dacă menționează un obiect de produs
+        # („cum returnez o cremă?") → FAQ poate face early-exit.
+        return "PURE_FAQ"
+    # două clauze + politică: produs recunoscut → POSSIBLE_MIXED; produs nerecunoscut (posibil brand
+    # necunoscut) → UNKNOWN (conservator, tot continuă pipeline-ul).
+    return "POSSIBLE_MIXED" if _has_product_term(norm, domain_pack) else "UNKNOWN"
 
 
 # NX-175: fraza scurtă care introduce chips-urile de clarificare. Chips-urile SUNT întrebările
@@ -142,9 +190,20 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 return
             # Cacheable DOAR la hit de încredere mare (tau_high). Hit relaxat pe mesaj MIXT →
             # cacheable=False: query-ul mixt ar otrăvi semantic_cache pt alte mesaje similare.
-            ctx.set_reply(hit["answer"], cacheable=(sim >= s.faq_tau_high))
-            ctx.emit("faq_hit", faq_id=hit["id"], similarity=round(sim, 4), policy=is_policy)
-            return
+            # NX-184: mixed-intent — dacă mesajul poartă ȘI o cerere de produs, NU face early-exit
+            # (ar pierde produsul); atașează răspunsul de politică GROUNDED în context + continuă la
+            # triaj/agent. Completarea deterministă (agent_stage) garantează că politica ajunge la
+            # client. OFF / PURE_FAQ → early-exit ca azi (byte-identic).
+            if (
+                s.response_shape_hints_enabled
+                and mixed_intent_decision(body, ctx.business.domain_pack) != "PURE_FAQ"
+            ):
+                ctx.faq_grounded = hit["answer"]
+                ctx.emit("faq_mixed_intent", faq_id=hit["id"], similarity=round(sim, 4))
+            else:
+                ctx.set_reply(hit["answer"], cacheable=(sim >= s.faq_tau_high))
+                ctx.emit("faq_hit", faq_id=hit["id"], similarity=round(sim, 4), policy=is_policy)
+                return
         # NX-124a: fallback de locale (gated) — user pe o limbă fără cunoștințe seedate, dar
         # `default_locale` le are. Prag STRICT (precision-first; NU traducem, servim cunoștința
         # existentă unui user care a scris în limba aia dar conv.locale diferă). P6: mai bine

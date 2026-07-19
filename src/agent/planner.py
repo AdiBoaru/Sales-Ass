@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from src.agent import prompt_builder
+from src.agent import match_gate, prompt_builder, query_spec
 from src.agent.deterministic import _CHEAPER_RE
 from src.agent.fallbacks import (
     _cart_confirm_msg,
@@ -334,6 +334,20 @@ async def build_plan(
     # cardurile și `displayed_products`. Idempotent: pe un set deja gate-uit nu taie nimic.
     products = policy.gate(ctx, products, purpose="retrieval_final")[0]
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
+
+    # NX-187/188: Match Gate în SHADOW — clasifică setul retrievat (exact/alternatives/rejected) vs
+    # QuerySpec-ul turului + emite telemetrie. ZERO schimbare de comportament (nu filtrează nimic;
+    # enforce-ul e NX-188, gated separat + prerechizit NX-189). Registry gol → fallback pe câmpuri.
+    if products and get_settings().match_gate_shadow_enabled:
+        spec = query_spec.build_query_spec(ctx.route) if ctx.route else query_spec.QuerySpec()
+        ms = match_gate.match_set(products, spec)
+        ctx.emit(
+            "match_gate_shadow",
+            n_exact=len(ms["exact"]),
+            n_alternatives=len(ms["alternatives"]),
+            n_rejected=len(ms["rejected"]),
+            n_hard=len(spec.hard()),
+        )
 
     # NX-181: forma de răspuns din INTENȚIE (funcție pură, testabilă) — vezi `_response_shape`.
     response_shape = _response_shape(
