@@ -487,6 +487,10 @@ class Settings(BaseSettings):
     # (tip de ten / fitment / material — per vertical), nu superficiale. OFF → fără linia de axe
     # (prompturile devin inerte pe partea asta), byte-identic cu azi.
     decision_axes_enabled: bool = Field(default=True, validation_alias="DECISION_AXES_ENABLED")
+    # NX-181 (Prompt vNext): relaxează `_RICH_RULES` (1-3 produse fără număr-țintă, intro/education
+    # opționale) + injectează `response_shape` + semnal anti-repetiție în mesajul USER (nu în system
+    # → prompt caching intact). Default OFF → comportament byte-identic. Măsurat paired vs baseline.
+    prompt_vnext_enabled: bool = Field(default=False, validation_alias="PROMPT_VNEXT_ENABLED")
     # NX-139: cifrele de SPECIFICAȚIE prezente în datele produselor AFIȘATE (nume/fațete: „SPF 30",
     # „50 ml", „9000 BTU") devin permise în intro/education — grounded, nu inventate. Prețurile NU
     # intră niciodată în setul permis. OFF → doar cifrele clientului (comportamentul de azi).

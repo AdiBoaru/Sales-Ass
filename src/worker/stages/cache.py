@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from src.agent.prompt_builder import prompt_vnext_effective
 from src.cache.canonical import canonicalize, classify_volatility
 from src.config import get_settings
 from src.db.queries.businesses import get_data_version
@@ -121,12 +122,22 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not canonical:
         return
 
+    # NX-181: namespace de cache pe versiunea de prompt (v1 vs vNext), determinat ÎNAINTE de lookup.
+    # Prompt vNext ON compune răspunsuri diferite → nu servi/scrie pe intrări v1 (și invers). OFF →
+    # 'v1' (neschimbat). Flag EFECTIV per business (single source: prompt_vnext_effective).
+    prompt_version = "vnext" if prompt_vnext_effective(ctx.business) else "v1"
+
     # Cache-ul e o OPTIMIZARE — orice eroare (migrare neaplicată, DB, embed) →
     # degradează la „miss", NU rupe turul (principiul 6).
     try:
         # L1 exact (O(1), zero false-positive).
         hit = await exact_lookup(
-            deps.conn, ctx.business.id, ctx.language, canonical_hash, volatility_class=volatility
+            deps.conn,
+            ctx.business.id,
+            ctx.language,
+            canonical_hash,
+            volatility_class=volatility,
+            prompt_version=prompt_version,
         )
         if hit is not None and await _serve(ctx, deps, hit, volatility, layer="exact"):
             return
@@ -143,6 +154,7 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             embedding,
             volatility_class=volatility,
             embedding_model=settings.model_embed,
+            prompt_version=prompt_version,
         )
         similarity = float(cand["similarity"]) if cand else 0.0
         if (

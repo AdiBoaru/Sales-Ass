@@ -85,6 +85,10 @@ class ResponsePlan:
     grounded_prices: set[float] = field(default_factory=set)
     order_views: list[str] = field(default_factory=list)
     checkout_url: str | None = None
+    # NX-181: forma de răspuns (hint determinist pt Prompt vNext), owner unic = planner (P3).
+    # Vocabular UNIC `response_shape`: recommendation | direct_followup | detail. Consumat de
+    # `render` DOAR când `prompt_vnext_enabled` (altfel ignorat → comportament byte-identic).
+    response_shape: str = "recommendation"
 
 
 def _plan_mode(
@@ -114,6 +118,24 @@ def _plan_mode(
     if is_order and web_unidentified(ctx):
         return "order"
     return "fallback"
+
+
+def _response_shape(
+    tool_names: list[str],
+    *,
+    attr_query: bool,
+    cheaper_intent: bool,
+    rehydrated: bool,
+) -> str:
+    """NX-181: forma de răspuns (hint Prompt vNext) din INTENȚIE, NU din numărul de rezultate.
+    `detail` = clientul a cerut detalii despre UN produs (tool `get_product_details`);
+    `direct_followup` = follow-up pe setul afișat (superlativ / mai ieftin / rehidratat), INCLUSIV
+    când safety-gate-ul a lăsat 1 singur produs; altfel `recommendation` (căutare nouă). Pur."""
+    if "get_product_details" in tool_names:
+        return "detail"
+    if attr_query or cheaper_intent or rehydrated:
+        return "direct_followup"
+    return "recommendation"
 
 
 async def build_plan(
@@ -313,6 +335,14 @@ async def build_plan(
     products = policy.gate(ctx, products, purpose="retrieval_final")[0]
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
 
+    # NX-181: forma de răspuns din INTENȚIE (funcție pură, testabilă) — vezi `_response_shape`.
+    response_shape = _response_shape(
+        tool_names,
+        attr_query=attr_query,
+        cheaper_intent=cheaper_intent,
+        rehydrated=rehydrated,
+    )
+
     return ResponsePlan(
         handled=False,
         mode=_plan_mode(
@@ -336,4 +366,5 @@ async def build_plan(
         grounded_prices=run.grounded_prices,
         order_views=run.order_views,
         checkout_url=run.checkout_url,
+        response_shape=response_shape,
     )
