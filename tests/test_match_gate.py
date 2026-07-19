@@ -95,10 +95,16 @@ def test_bool_string_coercion_not_truthy():
     # numeric non-0/1 → UNKNOWN (Codex: bool(2) e True → fals-pozitiv)
     p4 = {"id": "w", "fragrance_free": 2}
     assert evaluate_constraint(p4, Constraint("fragrance_free", "eq", True), None) == UNKNOWN
-    # 1/0 rămân valide
-    c = Constraint("fragrance_free", "eq", True)
-    assert evaluate_constraint({"fragrance_free": 1}, c, None) == MATCH
-    assert evaluate_constraint({"fragrance_free": 0}, c, None) == MISMATCH
+    # 1/0 sunt valide DOAR pe un facet bool DECLARAT (Codex R9: fără spec, int vs bool = UNKNOWN,
+    # nu coerce). În realitate facet-ul bool ARE spec în registru.
+    from src.domain.facets import FacetSpec
+
+    b = FacetSpec("ff", "bool", ("eq",))
+    assert evaluate_constraint({"ff": 1}, Constraint("ff", "eq", True), b) == MATCH
+    assert evaluate_constraint({"ff": 0}, Constraint("ff", "eq", True), b) == MISMATCH
+    assert (
+        evaluate_constraint({"ff": 1}, Constraint("ff", "eq", True), None) == UNKNOWN
+    )  # fără spec
 
 
 def test_number_nan_and_text_are_unknown():
@@ -130,6 +136,36 @@ def test_eq_uses_typed_helpers_bool_number_nan():
     )
     # numeric eq: 5 == 5.0 → MATCH (nu _norm „5" vs „5.0")
     assert evaluate_constraint({"spf": 5}, Constraint("spf", "eq", 5.0), None) == MATCH
+
+
+def test_eq_number_spec_rejects_infinity_and_bool():
+    from src.domain.facets import FacetSpec
+
+    num = FacetSpec("spf", "number", ("eq",))
+    # Codex R9: number + eq validează cu is_valid_number ÎNAINTE de conversie
+    assert (
+        evaluate_constraint({"spf": "Infinity"}, Constraint("spf", "eq", "Infinity"), num)
+        == UNKNOWN
+    )
+    assert evaluate_constraint({"spf": float("inf")}, Constraint("spf", "eq", 5), num) == UNKNOWN
+    # 1 == True pe un facet NUMBER → UNKNOWN (tip declarat are prioritate, nu coerce bool)
+    assert evaluate_constraint({"spf": 1}, Constraint("spf", "eq", True), num) == UNKNOWN
+    assert evaluate_constraint({"spf": 30}, Constraint("spf", "eq", 30.0), num) == MATCH
+    assert evaluate_constraint({"spf": 30}, Constraint("spf", "eq", 31), num) == MISMATCH
+
+
+def test_eq_spec_priority_over_runtime_type():
+    from src.domain.facets import FacetSpec
+
+    # bool facet: 1 == True → MATCH (1 e „true" pentru bool)
+    b = FacetSpec("ff", "bool", ("eq",))
+    assert evaluate_constraint({"ff": 1}, Constraint("ff", "eq", True), b) == MATCH
+    assert evaluate_constraint({"ff": 2}, Constraint("ff", "eq", True), b) == UNKNOWN
+    # fără spec: 1(int) vs True(bool) = tip incompatibil → UNKNOWN (nu coerce)
+    assert evaluate_constraint({"x": 1}, Constraint("x", "eq", True), None) == UNKNOWN
+    # text spec: egalitate de string
+    t = FacetSpec("finish", "text", ("eq",))
+    assert evaluate_constraint({"finish": "Matte"}, Constraint("finish", "eq", "matte"), t) == MATCH
 
 
 def test_typed_bool_coverage_matches_match_gate():

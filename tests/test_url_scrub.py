@@ -19,6 +19,11 @@ from src.worker.text_scrub import has_url
         ("Vezi example.com", True),  # domeniu GOL, TLD cunoscut
         ("magazin.ro acum", True),
         ("site.online", True),
+        ("evil.ai", True),  # Codex R9: ccTLD/gTLD care lipseau
+        ("shop.hu", True),
+        ("brand.eu", True),
+        ("example.co", True),
+        ("shop.co.uk pagina", True),  # TLD compus
         ("Bun pentru ten uscat", False),  # proză curată
         ("Rezistă 8 ore", False),  # cifră reală, NU URL
         ("4.9 stele", False),
@@ -31,3 +36,20 @@ from src.worker.text_scrub import has_url
 )
 def test_has_url_adversarial(text, expected):
     assert has_url(text) is expected
+
+
+def test_clean_facts_output_drops_urls():
+    # Codex R9: test pe OUTPUT-ul _clean_facts (nu doar has_url izolat)
+    from src.worker.compose import _clean_facts
+
+    out = _clean_facts(["Bun pentru ten uscat", "Vezi evil.ai", "Comandă shop.co.uk/p"])
+    assert out == ["Bun pentru ten uscat"]
+
+
+def test_evidence_menu_output_drops_urls():
+    # Codex R9: test pe OUTPUT-ul _evidence_facts / evidence_menu
+    from src.agent.envelope import evidence_menu
+
+    p = {"id": "p1", "name": "A", "price": 50.0, "top_pros": ["Textură lejeră", "vezi brand.eu"]}
+    facts = list(evidence_menu([p])["p1"].values())
+    assert facts == ["Textură lejeră"]

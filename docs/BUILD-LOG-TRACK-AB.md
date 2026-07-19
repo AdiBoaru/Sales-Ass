@@ -2,7 +2,19 @@
 
 Ramură integrare: `feat/NX-track-ab` (stacked pe `feat/NX-181-prompt-vnext` @ 9c2c4c1).
 Bază verificată verde: **1885 passed** pe NX-181. Directivă: construiește tot, self-verify riguros,
-zero evaluator live. Fiecare card gated de kill-switch (default OFF → byte-identic).
+zero evaluator live.
+
+## ⭐ STARE CURENTĂ (SUPERSEDES orice afirmație inline mai jos) — HEAD după Codex R9
+Stare (protocol): **SELF-TESTED** — teste locale verzi. NU „closed" (VERIFIED = re-review Codex fără
+findings). Ultima regresie completă la commit. Ce e ADEVĂRAT ACUM:
+- **OFF byte-identic** pentru: prompt vNext, V2 envelope, mixed-intent, QuerySpec/facets/Match Gate
+  (shadow), **medical filter (gated)**.
+- **ALWAYS-ON (schimbare intenționată de siguranță, NU byte-identic)**: **URL scrub** în scrub_prose/
+  scrub_intro/scrub_education/_clean_facts/_evidence_facts. Un link în proză/fapt = DROP.
+- **`_clean_facts` NU garantează cifre „grounded"** — primește `raw: list[str]`, fără provenance;
+  cifrele din recenzii se PĂSTREAZĂ (pre-existent), validarea lor = DEFERRED (§5).
+> Orice frază de mai jos care spune „toate OFF byte-identic" sau „numere grounded" = **SUPERSEDED**
+> de blocul ăsta + secțiunile R8/R9. Le-am lăsat ca istoric al deciziei, nu ca adevăr curent.
 
 Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+pytest) · ⏸ blocat
 
@@ -61,7 +73,8 @@ de merge / evaluare live. Codex a avut dreptate pe toate findings-urile P1 (veri
 - 🟡 Track A: NX-182, NX-183, NX-184 — mecanismele decise + fix-uri P1; DoD incomplet (vezi mai jos).
 - 🟡 Track B: NX-185/186/187 module pure + fix-uri P1; enforcement/integrare = live-review.
 - 🟡 NX-188/189: shadow emit + migrare + flags; ENFORCE + SQL-retrieval = live-review.
-- Toate kill-switch OFF → byte-identic în producție (verificat prin regresie).
+- ~~Toate kill-switch OFF → byte-identic în producție~~ **[SUPERSEDED de R8/R9: URL scrub e
+  ALWAYS-ON; medical gated. Vezi blocul STARE CURENTĂ.]**
 
 ## Review Codex Round 4 — findings P1 + remedieri (2026-07-18)
 Toate cele 7 findings CONFIRMATE în cod. Reparate STATIC (fără evaluator live), cu teste:
@@ -129,8 +142,10 @@ OK. Rămâneau 2 leak-uri de CLASĂ (aceeași clasă, altă suprafață). Repara
 | Safety: medical/URL reapărea în TABELUL de comparație + URL pe card | `_pros` curăța doar medical (nu URL) → anchor cu URL; `build_comparison` folosea `top_pros/top_cons` DIRECT (via `_join_list`), ocolind orice scrub | `_clean_facts` (medical gated + URL, păstrează numerele reale) = sursă unică → folosit în `_pros` ȘI `_join_list` (celule comparație) | `test_pros_drops_url_top_pro`, `test_join_list_drops_medical_and_url` |
 | Typed: Match Gate ocolea helper-ele pe `eq` | eq folosea `parse_bool` doar la `isinstance bool`; string/string → `_norm` brut (verdict greșit pt tokeni bool diferiți); `NaN==NaN` prin `_norm` ('nan'=='nan') → MATCH | eq folosește tipul (`spec.value_type`): bool→`parse_bool` (ambele părți), număr→numeric (5==5.0), non-finit→UNKNOWN | `test_eq_uses_typed_helpers_bool_number_nan` |
 
-Notă: `_clean_facts` păstrează NUMERELE reale (spec produs = fapt grounded), elimină doar medical+link.
-Filtrul se aplică și pe calea RICH normală (comparison + anchor), gated → OFF byte-identic.
+Notă: ~~`_clean_facts` păstrează NUMERELE reale (spec produs = fapt grounded)~~ **[SUPERSEDED de R8 §5:
+`raw: list[str]` n-are provenance → cifrele se păstrează dar NU sunt „grounded"; validare = DEFERRED.]**
+Filtrul (medical+URL) se aplică și pe calea RICH normală (comparison + anchor); medical gated, **URL
+always-on** (vezi §7).
 
 ## Review Codex Round 8 — protocol fix-de-clasă (2026-07-18)
 Stare (protocol): **SELF-TESTED** (testele mele verzi) — NU „closed". VERIFIED = după re-review Codex.
@@ -168,6 +183,17 @@ Stare (protocol): **SELF-TESTED** (testele mele verzi) — NU „closed". VERIFI
 - Provenance cifre în fapte de recenzie (§5): de decis dacă `_clean_facts`/`_join_list` scrub cifrele
   neverificabile din top_pros (schimbă UX normal-rich) sau primesc produsul + valorile permise.
 - Gate pentru URL scrub (dacă vrem rollback).
+
+## Review Codex Round 9 — 3 findings (2026-07-18)
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| P1 | typed `eq` încă greșit: `number` producea MATCH pentru „Infinity" și `1 == True`; testele acopereau gte, nu eq | `eq` rescris: cu `spec`, tipul DECLARAT are prioritate ABSOLUTĂ (nu isinstance runtime); `_eq_number` validează AMBELE cu `is_valid_number` ÎNAINTE de conversie; fără spec, număr-vs-bool = UNKNOWN | `test_eq_number_spec_rejects_infinity_and_bool`, `test_eq_spec_priority_over_runtime_type` (+ matrice) |
+| P1 | URL scrub incomplet: `evil.ai`/`shop.hu`/`brand.eu`/`example.co`/`shop.co.uk` treceau | `has_url` extins: TLD set larg (gTLD+ccTLD incl. ai/hu/eu/co/io/uk) + subdomenii + TLD compus (`co.uk`) | `test_url_scrub` (extins) + teste pe OUTPUT `_clean_facts` + `evidence_menu` |
+| P2 | doc contradictorie (OFF byte-identic / numere grounded vs R8) | bloc **STARE CURENTĂ** sus (supersedes) + linii istorice marcate **SUPERSEDED** | — |
+
+Note: `1 == True` — pe facet **bool** declarat → MATCH (1 = true); pe facet **number** → UNKNOWN; **fără
+spec** → UNKNOWN (tip incompatibil, nu coerce). Testul vechi R7 care aștepta MATCH fără spec = corectat
+(era exact coerciția pe care R9 o interzice).
 
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

@@ -31,6 +31,48 @@ def _nonfinite(x: Any) -> bool:
     return isinstance(x, float) and not is_valid_number(x)
 
 
+def _eq_bool(a: Any, b: Any) -> str:
+    """Egalitate BOOL prin `parse_bool` (single source cu coverage). Necunoscut pe orice parte →
+    UNKNOWN."""
+    ba, bb = parse_bool(a), parse_bool(b)
+    if ba is None or bb is None:
+        return UNKNOWN
+    return MATCH if ba == bb else MISMATCH
+
+
+def _eq_number(a: Any, b: Any) -> str:
+    """Egalitate NUMĂR. Codex R9: validează AMBELE cu `is_valid_number` ÎNAINTE de conversie →
+    „Infinity"/NaN/bool/text → UNKNOWN, NU MATCH (era `float('inf')==float('inf')`)."""
+    if not (is_valid_number(a) and is_valid_number(b)):
+        return UNKNOWN
+    return MATCH if float(a) == float(b) else MISMATCH
+
+
+def _eq(v: Any, cv: Any, spec: FacetSpec | None) -> str:
+    """Egalitate TIPIZATĂ. Codex R9: cu `spec`, tipul DECLARAT are prioritate ABSOLUTĂ — NU se
+    consultă isinstance-ul runtime (`1 == True` pe un facet number = UNKNOWN, nu MATCH). Fără spec →
+    euristici conservatoare: număr-vs-bool = tip incompatibil → UNKNOWN (nu coerce)."""
+    if _nonfinite(v) or _nonfinite(cv):  # NaN/inf float pe ORICE cale → UNKNOWN
+        return UNKNOWN
+    vt = spec.value_type if spec else None
+    if vt == "bool":
+        return _eq_bool(v, cv)
+    if vt == "number":
+        return _eq_number(v, cv)
+    if vt is not None:  # enum/text/list DECLARAT → egalitate normalizată de string
+        return MATCH if _norm(v) == _norm(cv) else MISMATCH
+    # FĂRĂ spec → euristici runtime, conservatoare la tip incompatibil
+    v_num, c_num = is_valid_number(v), is_valid_number(cv)
+    v_bool, c_bool = isinstance(v, bool), isinstance(cv, bool)
+    if (v_num and c_bool) or (v_bool and c_num):
+        return UNKNOWN  # număr vs bool fără spec → nu coerce (Codex R9)
+    if v_bool or c_bool or (parse_bool(v) is not None and parse_bool(cv) is not None):
+        return _eq_bool(v, cv)
+    if v_num and c_num:
+        return _eq_number(v, cv)
+    return MATCH if _norm(v) == _norm(cv) else MISMATCH
+
+
 def _product_value(product: dict[str, Any], facet: str, spec: FacetSpec | None) -> Any:
     """Valoarea fațetei din produs. Cu FacetSpec → `facet_value` (typed). Fără → fallback pe câmpuri
     cunoscute (price/brand top-level; concerns/suitable_for din attributes)."""
@@ -59,26 +101,7 @@ def evaluate_constraint(product: dict[str, Any], c: Constraint, spec: FacetSpec 
             fv, fc = float(v), float(c.value)
             return MATCH if (fv <= fc if c.op == "lte" else fv >= fc) else MISMATCH
         if c.op == "eq":
-            # Codex R7: eq NU mai ocolește helper-ele tipizate. NaN/inf → UNKNOWN (nu MATCH prin
-            # _norm). BOOL (spec bool / bool real / fără spec, ambele tokeni bool) → parse_bool
-            # (aliniat cu coverage: „true"/„da" = același verdict). NUMĂR → numeric (5==5.0).
-            if _nonfinite(v) or _nonfinite(c.value):
-                return UNKNOWN
-            vt = spec.value_type if spec else None
-            is_bool = (
-                vt == "bool"
-                or isinstance(v, bool)
-                or isinstance(c.value, bool)
-                or (vt is None and parse_bool(v) is not None and parse_bool(c.value) is not None)
-            )
-            if is_bool:
-                bv, cv = parse_bool(v), parse_bool(c.value)
-                if bv is None or cv is None:
-                    return UNKNOWN
-                return MATCH if bv == cv else MISMATCH
-            if vt == "number" or (is_valid_number(v) and is_valid_number(c.value)):
-                return MATCH if float(v) == float(c.value) else MISMATCH
-            return MATCH if _norm(v) == _norm(c.value) else MISMATCH
+            return _eq(v, c.value, spec)
         if c.op in ("contains", "contains_any", "contains_all"):
             vals = {_norm(x) for x in (v if isinstance(v, (list, tuple)) else [v])}
             wanted = (

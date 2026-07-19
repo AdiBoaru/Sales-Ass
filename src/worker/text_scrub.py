@@ -145,17 +145,24 @@ def has_medical_claim(text: str | None) -> bool:
     return bool(_PREG_SAFE.search(t) or _ALLERGEN_FREE.search(t) or _MED_AUTHORITY.search(t))
 
 
-# Un URL/domeniu în proză sau într-un fapt de produs. Patru forme (Codex R8 — listă adversarială):
-#   1. http(s)://…          2. www.…          3. domeniu cu path (`shop.ro/p/x`)
-#   4. domeniu GOL cu TLD cunoscut (`example.com`, `magazin.ro`) — fără schemă/path.
+# Un URL/domeniu în proză sau într-un fapt de produs. Patru forme (Codex R8/R9, listă adversarială):
+#   1. http(s)://…   2. www.…   3. domeniu cu path (`shop.ro/p/x`)
+#   4. domeniu GOL cu TLD cunoscut, subdomenii + TLD compus (`example.com`, `evil.ai`, `shop.co.uk`)
 # Linkurile LEGITIME vin din offer/checkout (cod), NU din text de model sau din recenzii → un URL în
 # proză/fapt = DROP (anti-injecție/phishing). SINGLE SOURCE: compose (scrub_prose/scrub_intro/
-# _clean_facts) + envelope (_evidence_facts). Codex R7/R8: două detectoare divergente = bypass.
-# NB: TLD-uri scurte ambigue (eu/co/io) EXCLUSE din forma BARE (`eu` = cuvânt RO) — prinse totuși
-# în forma cu path (`shop.eu/p`). Reduce fals-pozitivele pe proza RO.
+# _clean_facts) + envelope (_evidence_facts). Codex R7/R8/R9: un singur detector, zero bypass.
+# TLD set larg (gTLD + ccTLD populare, incl. cerute de Codex R9: ai/hu/eu/co/io/uk). Over-drop pe
+# fals-pozitiv (ex. „cuvânt.eu") e SIGUR (fail-closed) — se pierde o propoziție, nu un link.
+# `[\w-]+(?:\.[\w-]+)*\.(?:TLD)` prinde subdomenii + TLD compus (`shop.co.uk` via „.uk").
+_TLD = (
+    r"com|org|net|info|biz|shop|store|online|site|app|dev|tech|club|live|xyz|blog|link"
+    r"|io|co|ai|eu|me|tv|cc|gg"
+    r"|ro|hu|uk|de|fr|it|es|nl|pl|at|be|ch|cz|dk|fi|gr|ie|pt|se|no|ru|ua|md|bg|rs|sk|si"
+    r"|us|ca|au|nz|jp|cn|in|br|tr|il|ae"
+)
 _URL_HINT = re.compile(
     r"https?://|www\.\w"
-    r"|\b[\w-]+\.(?:com|ro|net|org|shop|store|online|info|biz|dev|app)\b"
+    r"|\b[\w-]+(?:\.[\w-]+)*\.(?:" + _TLD + r")\b"
     r"|\b[\w-]+\.[a-z]{2,}/\S",
     re.I,
 )
@@ -163,5 +170,6 @@ _URL_HINT = re.compile(
 
 def has_url(text: str | None) -> bool:
     """Textul conține un URL/domeniu? (link nefondat în proză sau fapt de produs). Prinde http(s)://,
-    www., domeniu-cu-path ȘI domeniu gol cu TLD cunoscut (`example.com`). Codex R8."""
+    www., domeniu-cu-path ȘI domeniu gol cu TLD cunoscut, subdomenii + TLD compus (`shop.co.uk`).
+    Codex R8/R9."""
     return bool(text) and _URL_HINT.search(text) is not None
