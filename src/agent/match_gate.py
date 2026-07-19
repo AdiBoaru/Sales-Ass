@@ -25,6 +25,12 @@ def _norm(s: Any) -> str:
     return "".join(c for c in d if not unicodedata.combining(c))
 
 
+def _nonfinite(x: Any) -> bool:
+    """Float NaN/inf? (un int nu poate fi non-finit). Codex R7: `NaN == NaN` prin `_norm` ('nan' ==
+    'nan') devenea MATCH numeric — trebuie UNKNOWN."""
+    return isinstance(x, float) and not is_valid_number(x)
+
+
 def _product_value(product: dict[str, Any], facet: str, spec: FacetSpec | None) -> Any:
     """Valoarea fațetei din produs. Cu FacetSpec → `facet_value` (typed). Fără → fallback pe câmpuri
     cunoscute (price/brand top-level; concerns/suitable_for din attributes)."""
@@ -53,11 +59,25 @@ def evaluate_constraint(product: dict[str, Any], c: Constraint, spec: FacetSpec 
             fv, fc = float(v), float(c.value)
             return MATCH if (fv <= fc if c.op == "lte" else fv >= fc) else MISMATCH
         if c.op == "eq":
-            if isinstance(v, bool) or isinstance(c.value, bool):
+            # Codex R7: eq NU mai ocolește helper-ele tipizate. NaN/inf → UNKNOWN (nu MATCH prin
+            # _norm). BOOL (spec bool / bool real / fără spec, ambele tokeni bool) → parse_bool
+            # (aliniat cu coverage: „true"/„da" = același verdict). NUMĂR → numeric (5==5.0).
+            if _nonfinite(v) or _nonfinite(c.value):
+                return UNKNOWN
+            vt = spec.value_type if spec else None
+            is_bool = (
+                vt == "bool"
+                or isinstance(v, bool)
+                or isinstance(c.value, bool)
+                or (vt is None and parse_bool(v) is not None and parse_bool(c.value) is not None)
+            )
+            if is_bool:
                 bv, cv = parse_bool(v), parse_bool(c.value)
                 if bv is None or cv is None:
                     return UNKNOWN
                 return MATCH if bv == cv else MISMATCH
+            if vt == "number" or (is_valid_number(v) and is_valid_number(c.value)):
+                return MATCH if float(v) == float(c.value) else MISMATCH
             return MATCH if _norm(v) == _norm(c.value) else MISMATCH
         if c.op in ("contains", "contains_any", "contains_all"):
             vals = {_norm(x) for x in (v if isinstance(v, (list, tuple)) else [v])}

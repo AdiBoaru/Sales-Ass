@@ -120,5 +120,17 @@ Plus: descrierea PR #236 actualizată (nu mai spune „1914 passed" / fixuri par
 filtrul medical din `_pros` + URL-scrub-ul se aplică și pe calea RICH normală (nu doar V2) — închid o
 gaură latentă pre-existentă (anchor medical / link în proză), gated de kill-switch → OFF byte-identic.
 
+## Review Codex Round 7 — 2 leak-uri reziduale de clasă (2026-07-18)
+Codex a re-verificat eb942e0: URL în proză + gte/lte NaN/inf = corecte; PR body + ordinea NX-189→188 =
+OK. Rămâneau 2 leak-uri de CLASĂ (aceeași clasă, altă suprafață). Reparate static:
+
+| Problemă | Rădăcină | Fix | Test |
+|---|---|---|---|
+| Safety: medical/URL reapărea în TABELUL de comparație + URL pe card | `_pros` curăța doar medical (nu URL) → anchor cu URL; `build_comparison` folosea `top_pros/top_cons` DIRECT (via `_join_list`), ocolind orice scrub | `_clean_facts` (medical gated + URL, păstrează numerele reale) = sursă unică → folosit în `_pros` ȘI `_join_list` (celule comparație) | `test_pros_drops_url_top_pro`, `test_join_list_drops_medical_and_url` |
+| Typed: Match Gate ocolea helper-ele pe `eq` | eq folosea `parse_bool` doar la `isinstance bool`; string/string → `_norm` brut (verdict greșit pt tokeni bool diferiți); `NaN==NaN` prin `_norm` ('nan'=='nan') → MATCH | eq folosește tipul (`spec.value_type`): bool→`parse_bool` (ambele părți), număr→numeric (5==5.0), non-finit→UNKNOWN | `test_eq_uses_typed_helpers_bool_number_nan` |
+
+Notă: `_clean_facts` păstrează NUMERELE reale (spec produs = fapt grounded), elimină doar medical+link.
+Filtrul se aplică și pe calea RICH normală (comparison + anchor), gated → OFF byte-identic.
+
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

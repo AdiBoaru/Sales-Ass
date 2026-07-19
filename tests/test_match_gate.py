@@ -109,5 +109,28 @@ def test_number_nan_and_text_are_unknown():
     assert evaluate_constraint({"spf": 50}, c, None) == MATCH  # număr valid rămâne
 
 
+def test_eq_uses_typed_helpers_bool_number_nan():
+    from src.domain.facets import FacetSpec
+
+    spec = FacetSpec("fragrance_free", "bool", ("eq",))
+    # Codex R7: bool facet cu valori STRING → parse_bool pe AMBELE părți (nu _norm brut)
+    assert (
+        evaluate_constraint({"fragrance_free": "true"}, Constraint("ff", "eq", "da"), spec) == MATCH
+    )
+    assert (
+        evaluate_constraint({"fragrance_free": "false"}, Constraint("ff", "eq", "da"), spec)
+        == MISMATCH
+    )
+    # fără spec, ambii tokeni bool → tot parse_bool („da" == „true")
+    assert evaluate_constraint({"x": "da"}, Constraint("x", "eq", "true"), None) == MATCH
+    # NaN == NaN NU e MATCH (era prin _norm 'nan'=='nan')
+    assert (
+        evaluate_constraint({"spf": float("nan")}, Constraint("spf", "eq", float("nan")), None)
+        == UNKNOWN
+    )
+    # numeric eq: 5 == 5.0 → MATCH (nu _norm „5" vs „5.0")
+    assert evaluate_constraint({"spf": 5}, Constraint("spf", "eq", 5.0), None) == MATCH
+
+
 def test_no_hard_constraints_all_exact():
     assert match_set([{"id": "x"}], QuerySpec())["exact"] == ["x"]

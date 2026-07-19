@@ -69,6 +69,21 @@ def test_pros_drops_medical_top_pro(monkeypatch) -> None:
     assert compose._pros(p) == ["Textură lejeră", "Tratează acneea în 7 zile"]  # OFF → byte-identic
 
 
+def test_pros_drops_url_top_pro() -> None:
+    # Codex R7: URL în top_pro nu reintră ca anchor pe card (numărul real ar rămâne, URL-ul nu)
+    p = {"top_pros": ["Comandă pe shop.x.ro/p/1", "Bun pentru ten uscat"]}
+    assert compose._pros(p) == ["Bun pentru ten uscat"]
+
+
+def test_join_list_drops_medical_and_url(monkeypatch) -> None:
+    # Codex R7: celulele comparației (top_pros/top_cons) folosesc faptele DIRECT → filtrate
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "safety_medical_guardrail_enabled", True)
+    cell = compose._join_list(["Textură lejeră", "Tratează acneea în 7 zile", "Vezi www.x.com"], 3)
+    assert cell == "Textură lejeră"
+
+
 # --- R4: bugetul clientului permis în intro (nu „Ai ceva sub lei") -----------
 
 

@@ -238,17 +238,31 @@ def _safe_badge(label: str | None) -> str | None:
     return t
 
 
-def _pros(p: dict[str, Any]) -> list[str]:
-    """Avantajele reale ale produsului (din recenzii, D3): preferă lista `top_pros`,
-    fallback pe `review_pro` (un singur pro din search). Doar string-uri ne-goale.
+def _clean_facts(raw: Any) -> list[str]:
+    """Fapte de produs (top_pros/top_cons din recenzii) SIGURE pentru afișare DIRECTĂ — anchor-ul
+    cardului (`_pros`→`_join_reason`, NEscrubuit) ȘI celulele comparației (`_join_list`).
+    Elimină claim medical (gated) + linkuri; numerele reale (spec produs) RĂMÂN (fapt grounded, nu
+    proză de model). Codex R7: comparison folosea top_pros/top_cons brut, iar `_pros` nu filtra
+    URL → claim medical / URL reapărea în tabel sau pe card."""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out: list[str] = []
+    for s in raw:
+        if not isinstance(s, str) or not s.strip():
+            continue
+        t = s.strip()
+        if _unsafe_medical(t) or _URL_HINT.search(t):
+            continue
+        out.append(t)
+    return out
 
-    P0-safety (Codex): `anchor`-ul cardului vine DE AICI și se lipește NEscrubuit în `_join_reason`;
-    un top_pro cu claim medical ar reintra pe card, ocolind și `validate_prose` (rich nu-l rulează)
-    și filtrul meniului V2. Eliminăm faptele medicale la SURSĂ. `_unsafe_medical` e gated de
-    kill-switch → byte-identic când guardrail-ul e OFF."""
+
+def _pros(p: dict[str, Any]) -> list[str]:
+    """Avantajele reale ale produsului (din recenzii, D3): preferă lista `top_pros`, fallback pe
+    `review_pro` (un singur pro din search). Faptele trec prin `_clean_facts` (medical + URL) — vezi
+    docstring-ul lui pentru DE CE anchor-ul cardului trebuie curățat la SURSĂ."""
     raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
-    pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()]
-    return [s for s in pros if not _unsafe_medical(s)]
+    return _clean_facts(raw)
 
 
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:
@@ -671,10 +685,10 @@ def _labels(language: str | None) -> dict[str, str]:
 
 
 def _join_list(raw: Any, n: int) -> str | None:
-    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—")."""
-    if not isinstance(raw, (list, tuple)):
-        return None
-    items = [s.strip() for s in raw if isinstance(s, str) and s.strip()]
+    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—").
+    Codex R7: SIGURE prin `_clean_facts` (medical + URL) — celulele tabelului de comparație folosesc
+    top_pros/top_cons DIRECT, ocolind scrub-ul cardului; un medical / link n-are ce căuta acolo."""
+    items = _clean_facts(raw)
     return "; ".join(items[:n]) or None
 
 
