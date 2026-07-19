@@ -4,10 +4,9 @@ Ramură integrare: `feat/NX-track-ab` (stacked pe `feat/NX-181-prompt-vnext` @ 9
 Bază verificată verde: **1885 passed** pe NX-181. Directivă: construiește tot, self-verify riguros,
 zero evaluator live.
 
-## ⭐ STARE CURENTĂ (SUPERSEDES orice afirmație inline mai jos) — HEAD `dupa R11` (post-00d80bc)
+## ⭐ STARE CURENTĂ (SUPERSEDES orice afirmație inline mai jos) — HEAD `a3c4351` (Codex R11)
 Stare (protocol): **SELF-TESTED** — teste locale verzi. NU „closed" (VERIFIED = re-review Codex fără
-findings). Ultima regresie completă confirmatorie: **1965 passed, exit 0** (la 00d80bc; R11 adaugă
-IDN/type-op → re-rulată la commit). Ce e ADEVĂRAT ACUM:
+findings). Ultima regresie completă: **1970 passed, exit 0** (la a3c4351). Ce e ADEVĂRAT ACUM:
 - **OFF byte-identic** pentru: prompt vNext, V2 envelope, mixed-intent, QuerySpec/facets/Match Gate
   (shadow), **medical filter (gated)**.
 - **ALWAYS-ON (schimbare intenționată de siguranță, NU byte-identic)**: **URL scrub** (detectare
