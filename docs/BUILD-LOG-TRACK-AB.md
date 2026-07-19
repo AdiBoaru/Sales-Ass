@@ -5,8 +5,10 @@ Bază verificată verde: **1885 passed** pe NX-181. Directivă: construiește to
 zero evaluator live.
 
 ## ⭐ STARE CURENTĂ (SUPERSEDES orice afirmație inline mai jos) — HEAD `a3c4351` (Codex R11)
-Stare (protocol): **SELF-TESTED** — teste locale verzi. NU „closed" (VERIFIED = re-review Codex fără
-findings). Ultima regresie completă: **1970 passed, exit 0** (la a3c4351). Ce e ADEVĂRAT ACUM:
+Stare (protocol): **VERIFIED pentru scope-ul static** — Codex a re-verificat R11 (PR #236) și NU a
+găsit findings noi. **NU e CLOSED / merge-ready**: lipsește CI (PR stacked, vezi mai jos) și rămân
+deferred: allowlist `FacetSpec.operators`, provenance numeric în fapte, NX-188/189. Ultima regresie
+completă: **1970 passed, exit 0** (la a3c4351). Ce e ADEVĂRAT ACUM:
 - **OFF byte-identic** pentru: prompt vNext, V2 envelope, mixed-intent, QuerySpec/facets/Match Gate
   (shadow), **medical filter (gated)**.
 - **ALWAYS-ON (schimbare intenționată de siguranță, NU byte-identic)**: **URL scrub** (detectare
