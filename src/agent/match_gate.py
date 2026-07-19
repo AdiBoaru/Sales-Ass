@@ -113,6 +113,16 @@ def evaluate_constraint(product: dict[str, Any], c: Constraint, spec: FacetSpec 
     v = _product_value(product, c.facet, spec)
     if v is None or (isinstance(v, (list, tuple)) and not v):
         return UNKNOWN
+    # Codex R11: compatibilitate TIP-OPERATOR (cu spec) — ordonarea (gte/lte) doar pe `number`,
+    # apartenența (contains*) doar pe `list`. Operator incompatibil cu tipul DECLARAT → UNKNOWN.
+    # NOTĂ (DEFERRED, blocant înainte de NX-188): allowlist-ul propriu-zis `FacetSpec.operators`
+    # (respingerea unui op pe care fațeta NU-l declară) cere întâi ALINIEREA vocabularului de
+    # operatori — `Constraint.op` folosește „contains", `FacetSpec.operators` „contains_any"/„in".
+    if spec is not None:
+        if c.op in ("lte", "gte") and spec.value_type != "number":
+            return UNKNOWN
+        if c.op in ("contains", "contains_any", "contains_all") and spec.value_type != "list":
+            return UNKNOWN
     try:
         if c.op in ("lte", "gte"):
             if not is_valid_number(v) or not is_valid_number(c.value):

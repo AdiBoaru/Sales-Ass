@@ -4,17 +4,22 @@ Ramură integrare: `feat/NX-track-ab` (stacked pe `feat/NX-181-prompt-vnext` @ 9
 Bază verificată verde: **1885 passed** pe NX-181. Directivă: construiește tot, self-verify riguros,
 zero evaluator live.
 
-## ⭐ STARE CURENTĂ (SUPERSEDES orice afirmație inline mai jos) — HEAD după Codex R9
+## ⭐ STARE CURENTĂ (SUPERSEDES orice afirmație inline mai jos) — HEAD `dupa R11` (post-00d80bc)
 Stare (protocol): **SELF-TESTED** — teste locale verzi. NU „closed" (VERIFIED = re-review Codex fără
-findings). Ultima regresie completă la commit. Ce e ADEVĂRAT ACUM:
+findings). Ultima regresie completă confirmatorie: **1965 passed, exit 0** (la 00d80bc; R11 adaugă
+IDN/type-op → re-rulată la commit). Ce e ADEVĂRAT ACUM:
 - **OFF byte-identic** pentru: prompt vNext, V2 envelope, mixed-intent, QuerySpec/facets/Match Gate
   (shadow), **medical filter (gated)**.
-- **ALWAYS-ON (schimbare intenționată de siguranță, NU byte-identic)**: **URL scrub** în scrub_prose/
-  scrub_intro/scrub_education/_clean_facts/_evidence_facts. Un link în proză/fapt = DROP.
+- **ALWAYS-ON (schimbare intenționată de siguranță, NU byte-identic)**: **URL scrub** (detectare
+  GENERICĂ + IDN-aware, fail-closed) în scrub_prose/scrub_intro/scrub_education/_clean_facts/
+  _evidence_facts. Un link/domeniu (incl. `.рф`/`.中国`/punycode) în proză/fapt = DROP.
 - **`_clean_facts` NU garantează cifre „grounded"** — primește `raw: list[str]`, fără provenance;
   cifrele din recenzii se PĂSTREAZĂ (pre-existent), validarea lor = DEFERRED (§5).
+- **Match Gate: type-op compat DA (gte/lte→number, contains→list); FacetSpec.operators allowlist =
+  DEFERRED blocant înainte de NX-188** (vocabular op nerezolvat: Constraint „contains" vs FacetSpec
+  „contains_any"/„in"). Vezi R11.
 > Orice frază de mai jos care spune „toate OFF byte-identic" sau „numere grounded" = **SUPERSEDED**
-> de blocul ăsta + secțiunile R8/R9. Le-am lăsat ca istoric al deciziei, nu ca adevăr curent.
+> de blocul ăsta + secțiunile R8-R11. Le-am lăsat ca istoric al deciziei, nu ca adevăr curent.
 
 Legendă: ⬜ neînceput · 🔨 în lucru · ✅ construit+self-verified (ruff+pytest) · ⏸ blocat
 
@@ -205,6 +210,17 @@ Note §4 (consistență): `test_typed_{bool,number,enum}_coverage_matches_match_
 coverage-valid ⟺ Match-Gate-verdict-cunoscut pe toate cele trei tipuri.
 Note §7 (URL generic): FAIL-CLOSED — poate tăia rar un `cuvânt.cuvânt` adiacent sau o extensie de
 fișier; sigur (se pierde o propoziție, nu un link). Rămâne always-on (nu byte-identic).
+
+## Review Codex Round 11 — 1 P1 + 2 P2 (2026-07-18)
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| P1 | URL rata IDN bare (`magazin.рф`, `shop.中国`); punycode doar accidental ca prefix `.xn` | `has_url` IDN-aware: etichetă Unicode + TLD = punycode `xn--…` SAU 2-24 LITERE Unicode (`re.UNICODE`) | `test_url_scrub` (.рф/.中国/.xn--p1ai) + OUTPUT `_clean_facts` |
+| P2 | doc stale: STARE CURENTĂ zicea „HEAD după R9" | sincronizat la 00d80bc / **1965 passed** + R11 | — |
+| P2 | Match Gate ignora `FacetSpec.operators` (o fațetă „eq-only" putea rula gte/contains) | **type-op compat DA** (gte/lte→number, contains*→list; incompatibil→UNKNOWN); **allowlist `operators` = DEFERRED blocant înainte de NX-188** (vocabular op nealiniat: Constraint „contains" vs FacetSpec „contains_any"/„in") | `test_operator_type_incompatibility_is_unknown` |
+
+DECIZIE §2 (deferred explicit): allowlist-ul `FacetSpec.operators` NU se cablează acum — cere întâi
+alinierea vocabularului de operatori (o decizie de design care aparține lui NX-188). Rămâne BLOCANT
+înainte de enforcement. Type-op compat (subsetul sigur) e livrat acum.
 
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

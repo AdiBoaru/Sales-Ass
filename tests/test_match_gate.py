@@ -264,5 +264,23 @@ def test_typed_number_coverage_matches_match_gate():
         assert (verdict in (MATCH, MISMATCH)) is valid, (val, verdict)
 
 
+def test_operator_type_incompatibility_is_unknown():
+    from src.domain.facets import FacetSpec
+
+    # Codex R11: gte pe un facet non-number → UNKNOWN; contains pe non-list → UNKNOWN
+    b = FacetSpec("ff", "bool", ("eq",))
+    assert evaluate_constraint({"ff": True}, Constraint("ff", "gte", 1), b) == UNKNOWN
+    txt = FacetSpec("finish", "text", ("eq",))
+    assert (
+        evaluate_constraint({"finish": "matte"}, Constraint("finish", "contains", "mat"), txt)
+        == UNKNOWN
+    )
+    # tip corect rămâne funcțional
+    num = FacetSpec("spf", "number", ("gte",))
+    assert evaluate_constraint({"spf": 30}, Constraint("spf", "gte", 10), num) == MATCH
+    lst = FacetSpec("tags", "list", ("contains_any",))
+    assert evaluate_constraint({"tags": ["a"]}, Constraint("tags", "contains", "a"), lst) == MATCH
+
+
 def test_no_hard_constraints_all_exact():
     assert match_set([{"id": "x"}], QuerySpec())["exact"] == ["x"]

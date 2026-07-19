@@ -31,6 +31,9 @@ from src.worker.text_scrub import has_url
         ("site.world", True),
         ("magazin.za", True),  # ccTLD .za
         ("dukan.tz here", True),  # ccTLD NEenumerat (.tz) — generic
+        ("magazin.рф", True),  # Codex R11: IDN ccTLD chirilic (.рф)
+        ("shop.中国 aici", True),  # IDN TLD CJK (.中国)
+        ("brand.xn--p1ai", True),  # punycode modelat corect (nu doar prefix .xn)
         ("Bun pentru ten uscat", False),  # proză curată
         ("Rezistă 8 ore", False),  # cifră reală, NU URL
         ("4.9 stele", False),
@@ -61,3 +64,11 @@ def test_evidence_menu_output_drops_urls():
     p = {"id": "p1", "name": "A", "price": 50.0, "top_pros": ["Textură lejeră", "vezi brand.cloud"]}
     facts = list(evidence_menu([p])["p1"].values())
     assert facts == ["Textură lejeră"]
+
+
+def test_clean_facts_output_drops_idn():
+    # Codex R11: IDN/punycode pe OUTPUT-ul _clean_facts (nu doar has_url)
+    from src.worker.compose import _clean_facts
+
+    out = _clean_facts(["Bun pentru ten uscat", "vezi magazin.рф", "shop.xn--p1ai/p"])
+    assert out == ["Bun pentru ten uscat"]

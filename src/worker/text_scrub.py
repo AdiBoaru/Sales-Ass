@@ -153,15 +153,19 @@ def has_medical_claim(text: str | None) -> bool:
 # SINGLE SOURCE: compose (scrub_prose/scrub_intro/_clean_facts) + envelope (_evidence_facts).
 # TRADEOFF (ONEST, §7): generic e FAIL-CLOSED — poate tăia rar un `cuvânt.cuvânt` adiacent sau o
 # extensie de fișier (`readme.txt`); SIGUR (se pierde o propoziție, nu se scurge un link).
+# IDN-aware (Codex R11): etichetă = alfanumeric UNICODE (fără `_`), cratime în interior. TLD =
+# punycode `xn--…` SAU 2-24 LITERE Unicode → prinde ASCII (`.com`), IDN bare (`.рф`, `.中国`) și
+# punycode modelat corect (`.xn--p1ai`), nu doar accidental ca prefix `.xn`.
+_LABEL = r"[^\W_](?:[\w-]*[^\W_])?"
+_TLD = r"(?:xn--[a-z0-9-]{2,}|[^\W\d_]{2,24})"
 _URL_HINT = re.compile(
-    r"https?://"
-    r"|www\.\w"
-    r"|\b[a-z0-9][\w-]*(?:\.[a-z0-9][\w-]*)*\.[a-z]{2,24}\b",
-    re.I,
+    r"https?://|www\.\w" rf"|\b{_LABEL}(?:\.{_LABEL})*\.{_TLD}\b",
+    re.I | re.UNICODE,
 )
 
 
 def has_url(text: str | None) -> bool:
-    """Textul conține un URL/domeniu? Detectare GENERICĂ de TLD (orice TLD alfabetic 2-24, nu
-    allowlist): http(s)://, www., domeniu-cu-path, domeniu gol + subdomenii + TLD compus."""
+    """Textul conține un URL/domeniu? Detectare GENERICĂ + IDN-aware (orice TLD Unicode 2-24 SAU
+    punycode `xn--`, nu allowlist): http(s)://, www., domeniu-cu-path, domeniu gol + subdomenii +
+    TLD compus. Prinde `.рф`/`.中国`/`.xn--p1ai`. Codex R10/R11."""
     return bool(text) and _URL_HINT.search(text) is not None
