@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.config import get_settings
-from src.worker.text_scrub import has_medical_claim
+from src.worker.text_scrub import has_medical_claim, has_url
 
 # Stiluri de motiv (enum închis) → conector per-locale. Microcopy compact, nu propoziție rigidă.
 _STYLE_LEAD: dict[str, dict[str, str]] = {
@@ -90,15 +90,15 @@ def _evidence_facts(product: dict[str, Any]) -> list[str]:
     facts += [s.strip() for s in raw if isinstance(s, str) and s.strip()]
     # P0-safety (Codex): faptele intră DIRECT în microcopy-ul servit (fit_clause pe card SAU text-
     # only via set_reply), care NU trece prin `validate_prose`. Scrub la SURSĂ: un fapt cu claim
-    # medical/terapeutic („tratează acneea în 7 zile", dintr-o recenzie) e ELIMINAT din meniu →
-    # modelul nu-l poate selecta, codul nu-l poate compune. Gated de kill-switch (ca restul
-    # guardrail-ului medical). Dedup păstrând ordinea.
+    # medical/terapeutic („tratează acneea în 7 zile") SAU URL (Codex R8, aliniat cu `_clean_facts`)
+    # e ELIMINAT din meniu → modelul nu-l poate selecta, codul nu-l poate compune. Medical gated de
+    # kill-switch; URL mereu. has_url/has_medical_claim = single source (text_scrub). Dedup ordine.
     med_guard = get_settings().safety_medical_guardrail_enabled
     seen: list[str] = []
     for f in facts:
         if f in seen:
             continue
-        if med_guard and has_medical_claim(f):
+        if (med_guard and has_medical_claim(f)) or has_url(f):
             continue
         seen.append(f)
     return seen[:4]

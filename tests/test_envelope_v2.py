@@ -52,6 +52,14 @@ def test_evidence_menu_drops_medical_claim(monkeypatch):
     assert all("acnee" not in f.lower() for f in facts)  # claimul medical a fost eliminat
 
 
+def test_evidence_menu_drops_url(monkeypatch):
+    # Codex R8: aliniat cu _clean_facts — un URL într-un evidence/top_pro e eliminat din meniu
+    # (single source has_url din text_scrub), nu doar medical.
+    p = _prod("p1", "A", ["Bun pentru ten uscat", "Vezi www.example.com"])
+    facts = list(envelope.evidence_menu([p])["p1"].values())
+    assert facts == ["Bun pentru ten uscat"]
+
+
 def test_response_envelope_v2_effective_per_business():
     s = get_settings()
     orig = getattr(s, "response_envelope_v2_enabled", False)

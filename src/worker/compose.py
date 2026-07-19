@@ -37,6 +37,7 @@ from src.worker.text_scrub import (
     has_medical_claim,
     has_stock_claim,
     has_unverifiable_claim,
+    has_url,
 )
 
 if TYPE_CHECKING:
@@ -170,11 +171,6 @@ def _unsafe_medical(t: str) -> bool:
     return get_settings().safety_medical_guardrail_enabled and has_medical_claim(t)
 
 
-# Linkurile în proză NU sunt permise (vin din offer/checkout, nu din text — Codex): http(s)://, www.
-# sau domeniu cu path (`shop.ro/p/...`). Un URL într-un fit_clause/intro/education/follow_up = DROP.
-_URL_HINT = re.compile(r"https?://|www\.\w|\b[\w-]+\.[a-z]{2,}/\S", re.I)
-
-
 def scrub_prose(s: str | None) -> str | None:
     """Proza LLM poate referi NEVOIA clientului, nu fapte cuantificate. Strecoară cifre /
     procente / claim-uri / superlative neverificabile / linkuri → DROP (None). Faptele reale vin
@@ -188,7 +184,7 @@ def scrub_prose(s: str | None) -> str | None:
         return None
     if _unsafe_medical(t):  # P0-safety: sfat medical/terapeutic → DROP câmpul
         return None
-    if _URL_HINT.search(t):  # P0: link inventat/nefondat în proză → DROP (Codex)
+    if has_url(t):  # P0: link inventat/nefondat în proză → DROP (Codex)
         return None
     return t
 
@@ -217,7 +213,7 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
     if not t:
         return None
     unknown = [n for n in re.findall(r"\d+", t) if n not in allowed_numbers]
-    if unknown or has_marketing_claim(t) or _unsafe_medical(t) or _URL_HINT.search(t):
+    if unknown or has_marketing_claim(t) or _unsafe_medical(t) or has_url(t):
         # NX-117: pct + claim + super (cifrele clientului permise). P0-safety: claim medical → DROP.
         # Codex: link în proză (inclusiv education/follow_up scrubuit aici) → DROP.
         return None
@@ -240,10 +236,15 @@ def _safe_badge(label: str | None) -> str | None:
 
 def _clean_facts(raw: Any) -> list[str]:
     """Fapte de produs (top_pros/top_cons din recenzii) SIGURE pentru afișare DIRECTĂ — anchor-ul
-    cardului (`_pros`→`_join_reason`, NEscrubuit) ȘI celulele comparației (`_join_list`).
-    Elimină claim medical (gated) + linkuri; numerele reale (spec produs) RĂMÂN (fapt grounded, nu
-    proză de model). Codex R7: comparison folosea top_pros/top_cons brut, iar `_pros` nu filtra
-    URL → claim medical / URL reapărea în tabel sau pe card."""
+    cardului (`_pros`→`_join_reason`, NEscrubuit) ȘI celulele comparației (`_join_list`). Elimină
+    claim medical (gated) + linkuri. Codex R7: comparison folosea top_pros/top_cons brut, iar _pros
+    nu filtra URL → medical / URL reapărea în tabel sau pe card.
+
+    PROVENANCE (Codex R8, §5): `raw` e o listă de string-uri FĂRĂ context → NU putem verifica dacă o
+    cifră dintr-un top_pro („rezistă 8 ore", „87% mulțumiți") e un spec real sau o afirmație
+    neverificabilă. Aici PĂSTRĂM cifrele (comportament pre-existent: pros de recenzie tratate ca
+    fapte). Validarea/eliminarea cifrelor din faptele de recenzie = DEFERRED (decizie de UX pe
+    normal-rich; ori pasăm produsul + valorile permise, ori scrub cu `has_unverifiable_claim`)."""
     if not isinstance(raw, (list, tuple)):
         return []
     out: list[str] = []
@@ -251,7 +252,7 @@ def _clean_facts(raw: Any) -> list[str]:
         if not isinstance(s, str) or not s.strip():
             continue
         t = s.strip()
-        if _unsafe_medical(t) or _URL_HINT.search(t):
+        if _unsafe_medical(t) or has_url(t):
             continue
         out.append(t)
     return out

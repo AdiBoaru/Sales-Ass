@@ -132,5 +132,42 @@ OK. Rămâneau 2 leak-uri de CLASĂ (aceeași clasă, altă suprafață). Repara
 Notă: `_clean_facts` păstrează NUMERELE reale (spec produs = fapt grounded), elimină doar medical+link.
 Filtrul se aplică și pe calea RICH normală (comparison + anchor), gated → OFF byte-identic.
 
+## Review Codex Round 8 — protocol fix-de-clasă (2026-07-18)
+Stare (protocol): **SELF-TESTED** (testele mele verzi) — NU „closed". VERIFIED = după re-review Codex.
+
+### Harta clasei (rg pe câmpul brut, nu pe helper)
+`top_pros`/`top_cons`/`review_pro` — TOATE suprafețele:
+- **Client-facing** (fapt afișat DIRECT): `_pros` (anchor card) + `_join_list` (celule comparație) →
+  ambele via `_clean_facts` (medical gated + URL). ✅ acoperit.
+- **Model-input** (validat pe OUTPUT, nu client-facing): `_rich_bundle` (finalize.py:252), `_products_
+  brief` (fallbacks, prompt retry), `catalog_tools` (rezultat tool), `_evidence_facts` (meniu V2).
+  Output-ul e prins de `scrub_prose`/`scrub_education`/`validate_prose`/`assemble`. `_evidence_facts`
+  filtrează totuși medical+URL la sursă (defense-in-depth). ✅ justificat.
+- `_deterministic_reply` (fallback client) = doar nume+preț. ✅ fără fapt de recenzie.
+- FAQ grounded → `rich.education`/`comparison.intro` (mixed-intent) ocolește scrub — **justificat**:
+  politica FAQ e curată din DB și conține cifre LEGITIME (ex. „2-3 zile") pe care scrub le-ar tăia.
+
+### Fixuri
+| Problemă | Fix | Test |
+|---|---|---|
+| URL avea DOUĂ detectoare divergente (`_URL_HINT` doar în compose; `_evidence_facts` fără URL) | `has_url` mutat în `text_scrub` = SINGLE SOURCE; compose (scrub_prose/scrub_intro/_clean_facts) + envelope (_evidence_facts) îl folosesc | `test_url_scrub` (matrice adversarială: http/www/path/bare) |
+| `has_url` rata BARE domain (`example.com`) | regex extins la domeniu gol cu TLD cunoscut (eu/co/io excluse — colizie „eu" RO) | idem |
+| Match Gate `eq` ocolea tipul (§4) — deja reparat R7; adăugată dovada de CONSISTENȚĂ | test parametric: coverage-valid ⟺ Match-Gate-verdict-cunoscut pe bool ȘI number (2/NaN/inf/text) | `test_typed_*_coverage_matches_match_gate` |
+| `_clean_facts` DECLARA fals „numere grounded" (§5) | docstring corectat: `raw: list[str]` n-are provenance → cifrele din recenzii se PĂSTREAZĂ (pre-existent), validarea lor = **DEFERRED** | — |
+
+### §7 — schimbare intenționată vs byte-identic (ONEST)
+- **URL scrub = ALWAYS-ON** (nu gated) în scrub_prose/scrub_intro/scrub_education/_clean_facts/
+  _evidence_facts → **schimbare intenționată de comportament de siguranță**, NU „byte-identic". Regresia
+  trece (niciun fixture n-avea URL legitim în proză scrubuită), dar semantic e always-on. Se poate gate
+  dacă vrem control de rollback (decizie de review).
+- **Medical filter = GATED** (`safety_medical_guardrail_enabled`) → OFF byte-identic pentru medical.
+- **Typed (match_gate/facets/coverage)** = shadow-only (flag-uri shadow OFF → necablat în prod) →
+  byte-identic în prod.
+
+### DEFERRED (documentat, NU reparat orb)
+- Provenance cifre în fapte de recenzie (§5): de decis dacă `_clean_facts`/`_join_list` scrub cifrele
+  neverificabile din top_pros (schimbă UX normal-rich) sau primesc produsul + valorile permise.
+- Gate pentru URL scrub (dacă vrem rollback).
+
 ## Jurnal (per card: fișiere, teste, note)
 _(se completează pe măsură ce construiesc)_

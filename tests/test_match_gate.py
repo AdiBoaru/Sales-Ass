@@ -132,5 +132,52 @@ def test_eq_uses_typed_helpers_bool_number_nan():
     assert evaluate_constraint({"spf": 5}, Constraint("spf", "eq", 5.0), None) == MATCH
 
 
+def test_typed_bool_coverage_matches_match_gate():
+    # Codex R8 §4: coverage și Match Gate DAU ACEEAȘI semantică pe bool. Valid în coverage ⟺ verdict
+    # cunoscut (MATCH/MISMATCH) în Match Gate; invalid ⟺ UNKNOWN.
+    from src.domain.facets import FacetSpec, facet_coverage
+
+    spec = FacetSpec("ff", "bool", ("eq",))
+    cases = [
+        (True, True),
+        (False, True),
+        ("true", True),
+        ("false", True),
+        ("da", True),
+        ("nu", True),
+        (1, True),
+        (0, True),
+        (2, False),
+        ("poate", False),
+        ("", False),
+    ]
+    for val, valid in cases:
+        cov = facet_coverage([{"ff": val}], spec)
+        assert (cov["valid"] == 1) is valid, (val, cov)
+        verdict = evaluate_constraint({"ff": val}, Constraint("ff", "eq", True), spec)
+        assert (verdict in (MATCH, MISMATCH)) is valid, (val, verdict)
+
+
+def test_typed_number_coverage_matches_match_gate():
+    # Codex R8 §4: aceeași semantică pe number. bool/NaN/inf/text → invalid ⟺ UNKNOWN.
+    from src.domain.facets import FacetSpec, facet_coverage
+
+    spec = FacetSpec("spf", "number", ("gte",))
+    cases = [
+        (30, True),
+        (30.5, True),
+        ("30", True),
+        (True, False),
+        (float("nan"), False),
+        (float("inf"), False),
+        ("n/a", False),
+    ]
+    for val, valid in cases:
+        cov = facet_coverage([{"spf": val}], spec)
+        assert (cov["valid"] == 1) is valid, (val, cov)
+        verdict = evaluate_constraint({"spf": val}, Constraint("spf", "gte", 10), spec)
+        assert (verdict in (MATCH, MISMATCH)) is valid, (val, verdict)
+
+
 def test_no_hard_constraints_all_exact():
     assert match_set([{"id": "x"}], QuerySpec())["exact"] == ["x"]

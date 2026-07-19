@@ -143,3 +143,25 @@ def has_medical_claim(text: str | None) -> bool:
     if _TREAT_VERB.search(t) and _MED_CONDITION.search(t):
         return True
     return bool(_PREG_SAFE.search(t) or _ALLERGEN_FREE.search(t) or _MED_AUTHORITY.search(t))
+
+
+# Un URL/domeniu în proză sau într-un fapt de produs. Patru forme (Codex R8 — listă adversarială):
+#   1. http(s)://…          2. www.…          3. domeniu cu path (`shop.ro/p/x`)
+#   4. domeniu GOL cu TLD cunoscut (`example.com`, `magazin.ro`) — fără schemă/path.
+# Linkurile LEGITIME vin din offer/checkout (cod), NU din text de model sau din recenzii → un URL în
+# proză/fapt = DROP (anti-injecție/phishing). SINGLE SOURCE: compose (scrub_prose/scrub_intro/
+# _clean_facts) + envelope (_evidence_facts). Codex R7/R8: două detectoare divergente = bypass.
+# NB: TLD-uri scurte ambigue (eu/co/io) EXCLUSE din forma BARE (`eu` = cuvânt RO) — prinse totuși
+# în forma cu path (`shop.eu/p`). Reduce fals-pozitivele pe proza RO.
+_URL_HINT = re.compile(
+    r"https?://|www\.\w"
+    r"|\b[\w-]+\.(?:com|ro|net|org|shop|store|online|info|biz|dev|app)\b"
+    r"|\b[\w-]+\.[a-z]{2,}/\S",
+    re.I,
+)
+
+
+def has_url(text: str | None) -> bool:
+    """Textul conține un URL/domeniu? (link nefondat în proză sau fapt de produs). Prinde http(s)://,
+    www., domeniu-cu-path ȘI domeniu gol cu TLD cunoscut (`example.com`). Codex R8."""
+    return bool(text) and _URL_HINT.search(text) is not None
