@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
+from src.commerce.project import delivery_for
 from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
+    get_substitutes,
     has_embeddings,
     search_products_lexical,
     search_products_semantic,
@@ -255,7 +257,9 @@ def _variant_view(raw_variants: Any, *, limit: int) -> str:
     return ", ".join(labels)
 
 
-def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str:
+def _detail_view(
+    p: dict[str, Any], pack: Any = None, locale: str = "ro", delivery: str | None = None
+) -> str:
     parts = [
         f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {float(p['price']):.2f} lei",
         f"stoc: {p.get('availability') or '-'}",
@@ -317,6 +321,17 @@ def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str
     # `variant_id` REAL la cart_add (membership-ul rămâne plasa). Format `[id] etichetă (preț)`.
     if variants := _variant_view(p.get("variants"), limit=8):
         parts.append("variante: " + variants)
+    # NX-191: livrarea e un FAPT de vânzare, nu un detaliu — „în cât timp ajunge?" e printre cele
+    # mai frecvente întrebări, iar până acum botul n-avea ce citi. Textul e CALCULAT (cod), nu
+    # compus de model.
+    if delivery:
+        parts.append(f"livrare: {delivery}")
+    # NX-194: FAQ per produs — citit DOAR la detaliu (nu intră în căutare). Cap 3 în vederea
+    # modelului: restul rămân pe pagina de produs, ca să nu umflăm contextul.
+    faqs = [f for f in (p.get("faqs") or []) if isinstance(f, dict) and f.get("question")]
+    if faqs:
+        qa = "; ".join(f"{f['question']} — {str(f.get('answer') or '')[:110]}" for f in faqs[:3])
+        parts.append(f"întrebări frecvente: {qa}")
     return " | ".join(parts)
 
 
@@ -952,13 +967,24 @@ async def get_product_details_tool(
     products, _ = _safety_gate(ctx, products, purpose="details")
     if not products:
         return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_TOOL_VIEW)
-    return ToolResult(
-        ok=True,
-        products=products,
-        llm_view=_detail_view(
-            products[0], getattr(ctx.business, "domain_pack", None), ctx.language
-        ),
+    p = products[0]
+    view = _detail_view(
+        p,
+        getattr(ctx.business, "domain_pack", None),
+        ctx.language,
+        delivery=delivery_for(p, ctx.business).text,
     )
+    # NX-195: produs epuizat → propunem ALTERNATIVA, nu doar „nu mai avem". Relațiile de substitut
+    # (222, din NX-171b) existau și nu le citea nimeni. Alternativele intră și în `products`, ca
+    # validatorul (stagiul 8) să accepte prețul lor dacă modelul îl rostește.
+    if (p.get("availability") or "") == "out_of_stock":
+        subs = await get_substitutes(deps.conn, ctx.business.id, p["id"], limit=2)
+        subs, _ = _safety_gate(ctx, subs, purpose="details")
+        if subs:
+            alt = "; ".join(f"[{s['id']}] {s['name']} — {float(s['price']):.2f} lei" for s in subs)
+            view += f" | alternative pe stoc: {alt}"
+            products = products + subs
+    return ToolResult(ok=True, products=products, llm_view=view)
 
 
 @register("compare_products")

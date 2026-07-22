@@ -183,3 +183,15 @@ def free_shipping_gap(cart_total: float, shipping: ShippingConfig) -> float | No
     if threshold is None or cart_total >= threshold:
         return None
     return round(threshold - cart_total, 2)
+
+
+def has_time_sensitive_text(text: str | None) -> bool:
+    """Textul conține o promisiune raportată la CEASUL de acum („în următoarele 2 ore")?
+
+    Plasă la scrierea în cache, independentă de cine a compus fraza — inclusiv modelul, dacă a
+    preluat formularea din contextul primit. Un hit de mâine ar servi „mai ai 2 ore" seara.
+    """
+    if not text:
+        return False
+    t = text.lower()
+    return "urmatoarele" in t.replace("ă", "a") and ("ore" in t or "minute" in t)

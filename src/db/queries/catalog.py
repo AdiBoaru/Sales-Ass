@@ -130,6 +130,15 @@ def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
         d["badges"] = []
     if "ingredients_db" in d and d["ingredients_db"] is None:
         d["ingredients_db"] = []
+    if "faqs" in d:
+        fq = d["faqs"]
+        if isinstance(fq, str):
+            try:
+                d["faqs"] = json.loads(fq)
+            except (ValueError, TypeError):
+                d["faqs"] = []
+        elif fq is None:
+            d["faqs"] = []
     if "reviews_list" in d:
         rv = d["reviews_list"]
         if isinstance(rv, str):
@@ -460,6 +469,11 @@ _DETAIL_SELECT = f"""
         bdg.badges                  as badges,
         ing.names                   as ingredients_db,
         rvw.items                   as reviews_list,
+        faq.items                   as faqs,
+        -- NX-191: faptele de livrare (clasa + data de revenire). Promisiunea CONCRETĂ se
+        -- calculează în cod (src/commerce/delivery), nu în SQL: depinde de ceas și de config.
+        p.delivery_class            as delivery_class,
+        p.restock_date              as restock_date,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
@@ -495,6 +509,19 @@ _DETAIL_SELECT = f"""
         join ingredients i on i.id = pi.ingredient_id
         where pi.product_id = p.id and pi.is_key
     ) ing on true
+    -- NX-194: FAQ per produs (6), citit la DETALIU (nu intră în căutare — vezi migrarea 032).
+    -- Tenant pe business_id (FK compus), limbă explicită (P11).
+    left join lateral (
+        select json_agg(
+                   json_build_object('question', f.question, 'answer', f.answer)
+                   order by f.position
+               ) as items
+        from (
+            select question, answer, position from product_faqs
+            where business_id = p.business_id and product_id = p.id and locale = 'ro'
+            order by position limit 6
+        ) f
+    ) faq on true
     -- NX-169: consumă recenziile INDIVIDUALE (168e-2) — top 2 după rating, corelate pe tenant.
     left join lateral (
         select json_agg(
@@ -541,6 +568,39 @@ async def get_products_by_ids(
         business_id,
         product_ids[:limit],
         limit,
+    )
+    return [_row_to_product(r) for r in rows]
+
+
+async def get_substitutes(
+    conn: asyncpg.Connection,
+    business_id: str,
+    product_id: str,
+    *,
+    limit: int = 2,
+) -> list[dict[str, Any]]:
+    """NX-195: alternativele PE STOC pentru un produs epuizat, din `product_relations`
+    (kind='substitute', NX-171b).
+
+    Cele 222 de relații de substitut existau de la 171b și NU erau citite de nimeni — „nu mai
+    avem" era răspunsul final, deși alternativa era în DB. Filtrăm explicit ce nu ajută:
+    produsul-ancoră, produsele inactive/nepublicate și cele care sunt și ele epuizate (un
+    substitut epuizat nu e un substitut).
+
+    `business_id = $1` pe AMBELE capete (P7; FK-ul compus din 027 face cross-tenant imposibil
+    structural, dar predicatul rămâne mecanismul primar)."""
+    cs = _content_status_pred()
+    rows = await conn.fetch(
+        _DETAIL_SELECT
+        + " join product_relations r on r.related_id = p.id and r.business_id = p.business_id"
+        + " where p.business_id = $1 and r.product_id = $2::uuid and r.kind = 'substitute'"
+        + " and p.status = 'active' and p.availability <> 'out_of_stock'"
+        + (f" and {cs}" if cs else "")
+        + " order by r.position asc, p.id"
+        + " limit $3",
+        business_id,
+        product_id,
+        min(limit, 3),
     )
     return [_row_to_product(r) for r in rows]
 

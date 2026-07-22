@@ -256,7 +256,7 @@ def derived_faqs(p: dict, root: str, routine_next: list[str] | None = None) -> l
         add(
             "Ce nuanțe are?",
             f"Sunt disponibile {len(labels)} variante: {', '.join(str(x) for x in labels)}. "
-            f"Dacă nu știi ce nuanță ți se potrivește, descrie-mi tenul și te ajut să alegi.",
+            f"Dacă nu știi care ți se potrivește, spune-mi ce cauți și te ajut să alegi.",
         )
 
     # 6. fațete de machiaj
