@@ -292,13 +292,18 @@ def _detail_view(
             parts.append("de reținut — nepotrivit pentru: " + ", ".join(warns[:3]))
         # NX-168e-2 graf PDP (consumat aici): secțiuni usage/warnings + badge-uri (dacă query le-a
         # adus). Beneficii/ingrediente-secțiune sunt deja în fațete/ai_summary → nu le dublăm.
+        # NX-196: fișa autorată aduce blocuri noi (features/benefits/scenarios). Le randăm pe
+        # toate, dar cu buget: modelul primește esențialul, nu fișa întreagă — descrierea lungă
+        # rămâne pe pagina de produs, unde are loc.
         for sec in p.get("sections") or []:
-            if (
-                isinstance(sec, dict)
-                and sec.get("kind") in ("usage", "warnings")
-                and sec.get("body")
-            ):
-                parts.append(f"{(sec.get('title') or '').lower()}: {sec['body'][:150]}")
+            if not isinstance(sec, dict) or not sec.get("body"):
+                continue
+            kind = sec.get("kind")
+            if kind not in ("usage", "warnings", "features", "benefits", "scenarios"):
+                continue
+            cap = 220 if kind in ("features", "benefits", "scenarios") else 150
+            body = " ".join(str(sec["body"]).split())
+            parts.append(f"{(sec.get('title') or kind).lower()}: {body[:cap]}")
         if p.get("badges"):
             parts.append("etichete: " + ", ".join(str(b) for b in list(p["badges"])[:4]))
         # NX-169: recenzii INDIVIDUALE (tabelul reviews, 168e-2) — 1-2 citate reale + autor/rating.

@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import faq_content, pdp_content  # noqa: E402 — graf PDP + FAQ derivate
+from scripts import authored_content, faq_content, pdp_content  # noqa: E402 — PDP + FAQ + conținut
 from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
     _gtin_valid,
     build_roots,
@@ -252,6 +252,8 @@ async def _upsert_category(conn, slug: str, name: str, parent_slug: str | None) 
 _DOWNGRADED_SECTIONS: list[tuple[str, str]] = []
 #: FAQ-uri respinse la ingestion (claim medical) — NU se scriu în DB, se raportează
 _REJECTED_FAQS: list[tuple[str, str]] = []
+#: fișa autorată per slug (compusă o dată în `_upsert_product`, refolosită la secțiuni)
+_AUTHORED: dict[str, dict] = {}
 #: slug produs → numele pașilor următori din rutină (pentru FAQ „Cu ce se combină?")
 _ROUTINE_NEXT: dict[str, list[str]] = {}
 
@@ -308,15 +310,28 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         availability = "in_stock"
     url = STORE_BASE + p["slug"]
     fp = "V2-" + hashlib.sha256(p["slug"].encode()).hexdigest()[:24]
-    attrs = json.dumps(p.get("attributes") or {}, ensure_ascii=False)
+    # NX-196: fișa autorată (short + description lungă + secțiuni + specs). Compunerea e
+    # deterministă și trece poarta de claim la INGESTION; `_AUTHORED` o memorează per produs ca
+    # secțiunile de mai jos s-o refolosească fără recalculare.
+    authored = authored_content.compose(p, has_medical_claim)
+    if authored:
+        _AUTHORED[p["slug"]] = authored
+
+    raw_attrs = dict(p.get("attributes") or {})
+    if authored and authored["specs"]:
+        # `specs` = bloc de AFIȘARE (key-value), separat de faptele canonice de deasupra
+        raw_attrs["specs"] = {**(raw_attrs.get("specs") or {}), **authored["specs"]}
+    attrs = json.dumps(raw_attrs, ensure_ascii=False)
     cols = dict(
         brand_id=brand_id,
         primary_category_id=cat_id,
         external_id="V2-" + p["slug"],
         source_fingerprint=fp,
         name=p["name"],
-        short_description=p.get("shortDescription"),
-        description=p.get("description") or p.get("shortDescription"),
+        short_description=(authored or {}).get("shortDescription") or p.get("shortDescription"),
+        description=(authored or {}).get("description")
+        or p.get("description")
+        or p.get("shortDescription"),
         ai_summary=p.get("ai_summary") or p.get("shortDescription"),
         currency=p.get("currency", "RON"),
         price=p["price"],
@@ -440,7 +455,8 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
     # Toate idempotente (șterge + reinserează pe cheile stabile). product_ingredients/product_badges
     # rămân scoped prin FK products; `product_sections` ARE business_id de la migrarea 032 (P7).
     await conn.execute("delete from product_sections where product_id=$1", pid)
-    for pos, sec in enumerate(pdp_content.sections(p)):
+    sections = (_AUTHORED.get(p["slug"]) or {}).get("sections") or pdp_content.sections(p)
+    for pos, sec in enumerate(sections):
         await conn.execute(
             "insert into product_sections "
             "(business_id, product_id, kind, title, body, position, locale, voice) "
