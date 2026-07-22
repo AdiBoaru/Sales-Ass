@@ -228,6 +228,29 @@ USAGE_RO = {
 MAKEUP_COLOR_ROOT = "machiaj"
 TOOLS_SLUG = "pensule-si-bureti-de-machiaj"
 
+# --- NX-190: ai_summary = DOCUMENT DE CĂUTARE ------------------------------------------------- #
+# ai_summary e SINGURUL text liber din AMBELE motoare de regăsire: FTS (`search_tsv` = name +
+# ai_summary, migrarea 015) și embedding (`_embed_text`, NX-170). `description`/`shortDescription`
+# nu sunt citite de NIMIC în read-path → un fapt care nu e proiectat aici e INVIZIBIL la căutare.
+# De aceea proiectăm TOATE faptele canonice, în formularea RO în care întreabă clientul.
+# R12-safe prin CONSTRUCȚIE: fiecare frază vine dintr-un atribut existent, deci niciun claim nu e
+# nefondat. R7-safe: finish-ul e randat din `finish`, deci nu poate contrazice atributul.
+COVERAGE_RO = {"light": "lejeră", "medium": "medie", "full": "mare", "buildable": "modulabilă"}
+# suitable_for canonic → etichetă RO, pe DOUĂ axe (ten vs păr). Cheile de păr sunt cele din
+# HAIR_RO_TO_CANON; restul sunt concerns de ten (CONCERN_RO). „normal" apare pe ambele axe →
+# discriminăm după rădăcina de categorie, nu după valoare.
+HAIR_CANON_RO = {
+    "dry": "uscat",
+    "oily": "gras",
+    "normal": "normal",
+    "damaged": "deteriorat",
+    "colored": "vopsit",
+    "curly": "creț",
+    "fine": "fin",
+    "thick": "gros",
+    "frizzy": "electrizat",
+}
+
 
 def _a(p: dict) -> dict:
     return p.setdefault("attributes", {})
@@ -256,9 +279,9 @@ def _best_for(p: dict, root: str) -> str:
     if root == MAKEUP_COLOR_ROOT and a.get("finish"):
         fin = FINISH_RO.get(a["finish"], a["finish"])
         base = f"cine vrea un finish {fin}"
-        return f"{base}, pe ten {' și '.join(ro)}" if ro else base
+        return f"{base}, pe ten {_join_ro(ro)}" if ro else base
     if ro:
-        return f"ten {' și '.join(ro)}"
+        return f"ten {_join_ro(ro)}"
     return CATEGORY_BEST_FOR.get(slug) or ROOT_BEST_FOR.get(root, "îngrijire generală")
 
 
@@ -313,18 +336,92 @@ def _provenance(a: dict) -> list[dict]:
     ]
 
 
-def _ai_summary(p: dict) -> str:
-    """ai_summary DOAR din fapte canonice (best_for + texture + key_ingredients) — fără nume/text
-    liber (ar reintroduce claim-uri R12). Fact-backed."""
+def _join_ro(items: list[str]) -> str:
+    """Enumerare RO firească: „a, b și c" (nu „a și b și c")."""
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " și " + items[-1]
+
+
+def _suitable_ro(a: dict, root: str) -> str | None:
+    """`suitable_for` canonic → sintagma RO în care caută clientul („ten gras și sensibil",
+    „păr uscat"). Axa (ten/păr) vine din rădăcina de categorie, nu din valoare — „normal" e
+    valid pe ambele. Doar valori CUNOSCUTE (o cheie nemapată se ignoră, nu se inventează)."""
+    vals = a.get("suitable_for") or a.get("concerns") or []
+    if not vals:
+        return None
+    if root == "ingrijirea-parului":
+        ro = [HAIR_CANON_RO[v] for v in vals if v in HAIR_CANON_RO]
+        noun = "păr"
+    else:
+        ro = [CONCERN_RO[v] for v in vals if v in CONCERN_RO]
+        noun = "ten"
+    if not ro:
+        return None
+    return f"{noun} {_join_ro(ro)}"
+
+
+def _ai_summary(p: dict, root: str = "", cat_name: str = "") -> str:
+    """ai_summary = DOCUMENT DE CĂUTARE (NX-190), nu rezumat de citit.
+
+    Proiectează TOATE faptele canonice în RO natural, pentru că e singurul text liber văzut de
+    FTS (`search_tsv`) și de embedding. Fiecare frază e susținută de un atribut → R12-safe prin
+    construcție; `finish` e randat din atribut → nu poate contrazice (R7). Fără text liber
+    (key_benefit/nume) — acolo stau claim-urile nefondate."""
     a = _a(p)
-    parts = []
+    parts: list[str] = []
+
+    def add(sentence: str, core: str | None = None) -> None:
+        """Adaugă o frază DOAR dacă informația („core") nu e deja în document — `best_for` e
+        derivat din aceleași fapte, deci fără dedup ar ieși „păr deteriorat" de trei ori.
+        Repetiția n-ar fi doar urâtă: umflă ts_rank pe termeni deja prezenți."""
+        if core and _norm(core) in _norm(" ".join(parts)):
+            return
+        parts.append(sentence)
+
+    if cat_name:
+        parts.append(f"{cat_name}.")
     if a.get("best_for"):
         parts.append(f"Recomandat pentru {a['best_for']}.")
+    suit = _suitable_ro(a, root)
+    if suit:
+        add(f"Potrivit pentru {suit}.", suit)
     if a.get("texture"):
-        parts.append(f"Textură {a['texture']}.")
+        add(f"Textură {a['texture']}.", f"textură {a['texture']}")
+    if a.get("finish"):
+        fin = FINISH_RO.get(a["finish"], a["finish"])
+        add(f"Finish {fin}.", f"finish {fin}")
+    if a.get("coverage"):
+        cov = COVERAGE_RO.get(a["coverage"], a["coverage"])
+        add(f"Acoperire {cov}.", f"acoperire {cov}")
+    if a.get("spf"):
+        add(f"Protecție solară SPF {a['spf']}.", f"spf {a['spf']}")
+    if a.get("hair_type") and root == "ingrijirea-parului":
+        add(f"Pentru păr {a['hair_type']}.", f"păr {a['hair_type']}")
     ki = a.get("key_ingredients") or []
     if ki:
-        parts.append(f"Ingrediente-cheie: {', '.join(ki[:3])}.")
+        parts.append(f"Ingrediente-cheie: {', '.join(ki)}.")
+    # gramaj: pe produs dacă există, altfel de pe VARIANTE (sursa de adevăr comercială, NX-171a)
+    # — „șampon 250 ml" e o interogare reală, iar fără proiecție aici nu e căutabilă.
+    ncs = (
+        [a["net_content"]]
+        if a.get("net_content")
+        else [v["net_content"] for v in (p.get("variants") or []) if v.get("net_content")]
+    )
+    seen: list[str] = []
+    for nc in ncs:
+        if not (nc.get("value") and nc.get("unit")):
+            continue
+        val = nc["value"]
+        val = int(val) if isinstance(val, float) and val.is_integer() else val
+        label = f"{val} {nc['unit']}"
+        if label not in seen:
+            seen.append(label)
+    if seen:
+        parts.append("Gramaj " + ", ".join(seen[:3]) + ".")
+    times = (a.get("usage") or {}).get("time") or []
+    if times:
+        parts.append("Se folosește " + ", ".join(USAGE_RO.get(t, t) for t in times) + ".")
     return " ".join(parts) or "Produs de îngrijire/machiaj."
 
 
@@ -348,6 +445,9 @@ def _description(p: dict) -> str:
 
 def enrich(data: dict) -> dict[str, int]:
     roots = build_roots(data["categories"])
+    # numele RO al categoriei-frunză → ancoră lexicală în ai_summary (NX-190): produsele al căror
+    # nume nu conține cuvântul de categorie („Bloom Fresh" ≠ „șampon uscat") devin găsibile.
+    cat_names = {c["slug"]: c.get("name", "") for c in data["categories"]}
     counts: dict[str, int] = {}
 
     def bump(k):
@@ -416,7 +516,7 @@ def enrich(data: dict) -> dict[str, int]:
         # DERIVATE pure text → regenerate mereu (după ce faptele de mai sus sunt setate)
         if "best_for" not in locked:
             a["best_for"] = _best_for(p, root)
-        p["ai_summary"] = _ai_summary(p)
+        p["ai_summary"] = _ai_summary(p, root, cat_names.get(slug, ""))
         p["description"] = _description(p)
 
     return counts

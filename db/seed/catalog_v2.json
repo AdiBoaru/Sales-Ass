@@ -317,7 +317,7 @@
           "flacon fără pompă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și normal. Textură gel. Ingrediente-cheie: glicerină, panthenol.",
+      "ai_summary": "Curățarea tenului. Recomandat pentru ten sensibil și normal. Textură gel. Ingrediente-cheie: glicerină, panthenol. Gramaj 150 ml. Se folosește dimineața, seara.",
       "description": "Auralis Gentle Gel de curățare. Curăță fără să usuce, potrivit pentru ten sensibil. Recomandat pentru ten sensibil și normal. Se folosește dimineața, seara. Ingrediente-cheie: glicerină, panthenol."
     },
     {
@@ -389,7 +389,7 @@
           "ușor uscător la utilizare zilnică"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură gel. Ingrediente-cheie: acid salicilic, zinc.",
+      "ai_summary": "Curățarea tenului. Recomandat pentru ten gras și cu tendință acneică. Textură gel. Ingrediente-cheie: acid salicilic, zinc. Gramaj 150 ml. Se folosește seara.",
       "description": "LumaDerm Purifying Gel de curățare. Controlează sebumul și reduce imperfecțiunile. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, zinc."
     },
     {
@@ -461,7 +461,7 @@
           "mai puțin eficientă pe machiaj waterproof"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și normal. Textură apă. Ingrediente-cheie: apă termală, glicerină.",
+      "ai_summary": "Demachiante pentru ten. Recomandat pentru ten sensibil și normal. Textură apă. Ingrediente-cheie: apă termală, glicerină. Gramaj 200 ml. Se folosește seara.",
       "description": "Auralis Apa micelară demachiantă. Demachiază complet fără frecare, fără clătire. Recomandat pentru ten sensibil și normal. Se folosește seara. Ingrediente-cheie: apă termală, glicerină."
     },
     {
@@ -536,7 +536,7 @@
           "flacon fără pompă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten deshidratat și uscat. Textură gel. Ingrediente-cheie: acid hialuronic, niacinamidă.",
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten deshidratat și uscat. Textură gel. Ingrediente-cheie: acid hialuronic, niacinamidă. Gramaj 30 ml. Se folosește dimineața, seara.",
       "description": "Auralis Hydra Ser hidratant. Hidratare intensă, reduce senzația de tensiune. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă."
     },
     {
@@ -599,7 +599,7 @@
           "value": 30,
           "unit": "ml"
         },
-        "best_for": "ten gras și cu tendință acneică și cu pete"
+        "best_for": "ten gras, cu tendință acneică și cu pete"
       },
       "reviewSummary": {
         "summary": "Reduce luciul și uniformizează în timp; rezultate treptate.",
@@ -612,8 +612,8 @@
           "poate da furnicături la început"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică și cu pete. Textură fluid. Ingrediente-cheie: niacinamidă, zinc.",
-      "description": "Auralis Clarity Ser cu niacinamidă. Reglează sebumul și uniformizează tenul. Recomandat pentru ten gras și cu tendință acneică și cu pete. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, zinc."
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten gras, cu tendință acneică și cu pete. Textură fluid. Ingrediente-cheie: niacinamidă, zinc. Gramaj 30 ml. Se folosește dimineața, seara.",
+      "description": "Auralis Clarity Ser cu niacinamidă. Reglează sebumul și uniformizează tenul. Recomandat pentru ten gras, cu tendință acneică și cu pete. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, zinc."
     },
     {
       "slug": "auralis-daily-crema-hidratanta",
@@ -685,7 +685,7 @@
           "insuficientă pentru ten foarte uscat iarna"
         ]
       },
-      "ai_summary": "Recomandat pentru ten deshidratat și normal. Textură cremă. Ingrediente-cheie: acid hialuronic, unt de shea.",
+      "ai_summary": "Creme hidratante. Recomandat pentru ten deshidratat și normal. Textură cremă. Ingrediente-cheie: acid hialuronic, unt de shea. Gramaj 50 ml. Se folosește dimineața, seara.",
       "description": "Auralis Daily Cremă hidratantă. Hidratare zilnică ușoară, bază bună sub machiaj. Recomandat pentru ten deshidratat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, unt de shea."
     },
     {
@@ -759,7 +759,7 @@
           "preț peste medie"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și uscat. Textură cremă. Ingrediente-cheie: panthenol, bisabolol.",
+      "ai_summary": "Creme hidratante. Recomandat pentru ten sensibil și uscat. Textură cremă. Ingrediente-cheie: panthenol, bisabolol. Gramaj 50 ml. Se folosește dimineața, seara.",
       "description": "LumaDerm Calm Cremă pentru ten sensibil. Calmează roșeața și reface bariera tenului sensibil. Recomandat pentru ten sensibil și uscat. Se folosește dimineața, seara. Ingrediente-cheie: panthenol, bisabolol."
     },
     {
@@ -831,7 +831,7 @@
           "prea bogată pentru ten gras"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: ceramide, unt de shea.",
+      "ai_summary": "Creme hidratante. Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: ceramide, unt de shea. Gramaj 50 ml. Se folosește seara.",
       "description": "Auralis Rich Cremă de noapte. Nutriție intensă peste noapte pentru ten uscat. Recomandat pentru ten uscat și deshidratat. Se folosește seara. Ingrediente-cheie: ceramide, unt de shea."
     },
     {
@@ -904,7 +904,7 @@
           "efect modest pe pungi"
         ]
       },
-      "ai_summary": "Recomandat pentru ten deshidratat și sensibil. Textură cremă. Ingrediente-cheie: cofeină, acid hialuronic.",
+      "ai_summary": "Creme pentru ochi. Recomandat pentru ten deshidratat și sensibil. Textură cremă. Ingrediente-cheie: cofeină, acid hialuronic. Gramaj 15 ml. Se folosește dimineața, seara.",
       "description": "Auralis Contur ochi Cremă. Hidratează și reduce aspectul de oboseală. Recomandat pentru ten deshidratat și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: cofeină, acid hialuronic."
     },
     {
@@ -971,7 +971,7 @@
           "necesită reaplicare la expunere lungă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și normal. Textură fluid. Ingrediente-cheie: filtre UVA/UVB, vitamina E.",
+      "ai_summary": "Protecție solară. Recomandat pentru ten sensibil și normal. Textură fluid. Protecție solară SPF 50. Ingrediente-cheie: filtre UVA/UVB, vitamina E. Gramaj 50 ml.",
       "description": "Solora Shield Cremă cu protecție solară SPF 50. Protecție solară zilnică, se poartă bine sub machiaj. Recomandat pentru ten sensibil și normal. Ingrediente-cheie: filtre UVA/UVB, vitamina E."
     },
     {
@@ -1068,7 +1068,7 @@
           "gama de nuanțe încă limitată"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Textură fluid.",
+      "ai_summary": "Fond de ten. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Textură fluid. Acoperire medie. Gramaj 30 ml.",
       "description": "Velora Skin Match Fond de ten. Acoperire medie, aspect natural, rezistă toată ziua. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal."
     },
     {
@@ -1150,7 +1150,7 @@
           "poate luci pe ten gras"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și sensibil. Textură fluid.",
+      "ai_summary": "Fond de ten. Recomandat pentru cine vrea un finish luminos, pe ten uscat și sensibil. Textură fluid. Acoperire lejeră. Gramaj 30 ml.",
       "description": "LumaDerm Luminous Fond de ten. Efect luminos și hidratant, pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat și sensibil."
     },
     {
@@ -1231,7 +1231,7 @@
           "poate accentua pielea uscată"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Textură fluid.",
+      "ai_summary": "Fond de ten. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Textură fluid. Acoperire mare. Gramaj 30 ml.",
       "description": "NudeLab Matte 24H Fond de ten. Controlează luciul și acoperă imperfecțiunile toată ziua. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
     },
     {
@@ -1298,7 +1298,7 @@
           "puține nuanțe deschise"
         ]
       },
-      "ai_summary": "Recomandat pentru ten mixt și normal.",
+      "ai_summary": "Anticearcăn. Recomandat pentru ten mixt și normal. Acoperire mare. Gramaj 7 ml.",
       "description": "Velora Perfect Cover Anticearcăn. Acoperă cearcănele fără să se așeze în riduri. Recomandat pentru ten mixt și normal."
     },
     {
@@ -1368,7 +1368,7 @@
           "se transferă la mese lungi"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Rujuri. Recomandat pentru cine vrea un finish mat. Gramaj 4 g.",
       "description": "Velora Soft Matte Ruj. Culoare intensă cu finish mat confortabil. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -1406,7 +1406,7 @@
           "necesită spălare frecventă"
         ]
       },
-      "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
+      "ai_summary": "Pensule și bureți de machiaj. Recomandat pentru aplicarea uniformă a machiajului.",
       "description": "NudeLab Pro Pensulă pentru fond de ten. Aplicare uniformă, fără urme, a produselor de ten. Recomandat pentru aplicarea uniformă a machiajului."
     },
     {
@@ -1442,7 +1442,7 @@
           "se uzează în câteva luni"
         ]
       },
-      "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
+      "ai_summary": "Pensule și bureți de machiaj. Recomandat pentru aplicarea uniformă a machiajului.",
       "description": "Velora Blend Burete de machiaj. Estompează fondul pentru un finish natural. Recomandat pentru aplicarea uniformă a machiajului."
     },
     {
@@ -1508,7 +1508,7 @@
           "necesită balsam pentru descurcare"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan.",
+      "ai_summary": "Șampoane. Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Verdea Repair Șampon. Curăță blând și fortifică firul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan."
     },
     {
@@ -1574,7 +1574,7 @@
           "borcan fără spatulă"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, unt de shea.",
+      "ai_summary": "Măști de păr. Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, unt de shea. Gramaj 200 ml. Se folosește ocazional.",
       "description": "Verdea Repair Mască de păr. Reparare intensă pentru păr deteriorat și uscat. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: keratină, unt de shea."
     },
     {
@@ -1640,7 +1640,7 @@
           "cantitate mare îngreunează părul fin"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, provitamina B5.",
+      "ai_summary": "Îngrijire fără clătire. Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, provitamina B5. Gramaj 150 ml. Se folosește zilnic.",
       "description": "Verdea Leave-in Îngrijire fără clătire. Descurcă, protejează termic și reduce electrizarea. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: ulei de argan, provitamina B5."
     },
     {
@@ -1707,7 +1707,7 @@
           "parfum discret care nu place tuturor"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, glicerină.",
+      "ai_summary": "Creme de mâini. Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, glicerină. Gramaj 75 ml.",
       "description": "Solora Nourish Cremă de mâini. Hidratare zilnică, se absoarbe rapid, non-lipicioasă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, glicerină."
     },
     {
@@ -1780,7 +1780,7 @@
           "textură mai densă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat. Textură cremă. Ingrediente-cheie: ceramide, pantenol, unt de cacao.",
+      "ai_summary": "Creme de mâini. Recomandat pentru ten uscat. Textură cremă. Ingrediente-cheie: ceramide, pantenol, unt de cacao. Gramaj 75 ml.",
       "description": "Solora Repair Cremă de mâini intensivă. Reparare intensă pentru pielea foarte uscată și crăpată. Recomandat pentru ten uscat. Ingrediente-cheie: ceramide, pantenol, unt de cacao."
     },
     {
@@ -1846,7 +1846,7 @@
           "flacon fără pompă la varianta mică"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură loțiune. Ingrediente-cheie: unt de shea, vitamina E.",
+      "ai_summary": "Loțiuni de corp. Recomandat pentru ten uscat și deshidratat. Textură loțiune. Ingrediente-cheie: unt de shea, vitamina E. Gramaj 250 ml.",
       "description": "Solora Silk Loțiune de corp. Hidratare de durată pentru corp, se absoarbe rapid. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, vitamina E."
     },
     {
@@ -1911,7 +1911,7 @@
           "fără SPF"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură balsam. Ingrediente-cheie: unt de shea, ceară de albine.",
+      "ai_summary": "Îngrijirea buzelor. Recomandat pentru ten uscat și deshidratat. Textură balsam. Ingrediente-cheie: unt de shea, ceară de albine. Gramaj 15 ml.",
       "description": "Solora Balsam de buze hidratant. Hidratează și repară buzele uscate și crăpate. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ceară de albine."
     },
     {
@@ -1985,7 +1985,7 @@
         ]
       },
       "salePrice": 74.99,
-      "ai_summary": "Recomandat pentru ten cu pete și deshidratat. Textură fluid. Ingrediente-cheie: vitamina C, acid ferulic.",
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten cu pete și deshidratat. Textură fluid. Ingrediente-cheie: vitamina C, acid ferulic. Gramaj 30 ml. Se folosește dimineața, seara.",
       "description": "LumaDerm Vitamin C Ser luminozitate. Uniformizează și dă luminozitate tenului. Recomandat pentru ten cu pete și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, acid ferulic."
     },
     {
@@ -2058,7 +2058,7 @@
           "concentrație mai mică de vitamina C"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu pete și normal. Textură fluid. Ingrediente-cheie: vitamina C, niacinamidă.",
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten cu pete și normal. Textură fluid. Ingrediente-cheie: vitamina C, niacinamidă. Gramaj 30 ml. Se folosește dimineața, seara.",
       "description": "Petala Bright Ser cu vitamina C. Luminozitate accesibilă pentru uz zilnic. Recomandat pentru ten cu pete și normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, niacinamidă."
     },
     {
@@ -2131,7 +2131,7 @@
           "doar seara"
         ]
       },
-      "ai_summary": "Recomandat pentru ten matur și cu pete. Textură fluid. Ingrediente-cheie: retinol, vitamina E.",
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten matur și cu pete. Textură fluid. Ingrediente-cheie: retinol, vitamina E. Gramaj 30 ml. Se folosește seara.",
       "description": "Auralis Retinol Ser de noapte. Reduce ridurile fine și reînnoiește pielea peste noapte. Recomandat pentru ten matur și cu pete. Se folosește seara. Ingrediente-cheie: retinol, vitamina E."
     },
     {
@@ -2203,7 +2203,7 @@
           "sensibilizează la soare"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și cu pete. Textură lichid. Ingrediente-cheie: acid glicolic, acid lactic.",
+      "ai_summary": "Exfoliante pentru ten. Recomandat pentru ten gras și cu pete. Textură lichid. Ingrediente-cheie: acid glicolic, acid lactic. Gramaj 100 ml. Se folosește seara.",
       "description": "Auralis AHA Exfoliant. Exfoliere chimică pentru ten uniform și neted. Recomandat pentru ten gras și cu pete. Se folosește seara. Ingrediente-cheie: acid glicolic, acid lactic."
     },
     {
@@ -2267,7 +2267,7 @@
           "exfoliere ușoară"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și uscat. Textură gel. Ingrediente-cheie: enzime de papaya.",
+      "ai_summary": "Exfoliante pentru ten. Recomandat pentru ten sensibil și uscat. Textură gel. Ingrediente-cheie: enzime de papaya. Gramaj 100 ml. Se folosește seara.",
       "description": "LumaDerm Gentle Exfoliant enzimatic. Exfoliere blândă pentru ten sensibil, fără frecare. Recomandat pentru ten sensibil și uscat. Se folosește seara. Ingrediente-cheie: enzime de papaya."
     },
     {
@@ -2340,7 +2340,7 @@
           "flacon fără spray"
         ]
       },
-      "ai_summary": "Recomandat pentru ten mixt și gras. Textură lichid. Ingrediente-cheie: hamamelis, niacinamidă.",
+      "ai_summary": "Loțiuni tonice. Recomandat pentru ten mixt și gras. Textură lichid. Ingrediente-cheie: hamamelis, niacinamidă. Gramaj 200 ml. Se folosește dimineața, seara.",
       "description": "Auralis Balancing Loțiune tonică. Echilibrează sebumul și reîmprospătează tenul. Recomandat pentru ten mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: hamamelis, niacinamidă."
     },
     {
@@ -2413,7 +2413,7 @@
           "efect subtil singur"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură lichid. Ingrediente-cheie: acid hialuronic, aloe vera.",
+      "ai_summary": "Loțiuni tonice. Recomandat pentru ten uscat și deshidratat. Textură lichid. Ingrediente-cheie: acid hialuronic, aloe vera. Gramaj 200 ml. Se folosește dimineața, seara.",
       "description": "LumaDerm Hydra Loțiune tonică. Hidratează și pregătește tenul pentru serumuri. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, aloe vera."
     },
     {
@@ -2485,7 +2485,7 @@
           "poate usca dacă e ținută prea mult"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură cremă. Ingrediente-cheie: argilă, zinc.",
+      "ai_summary": "Măști pentru ten. Recomandat pentru ten gras și cu tendință acneică. Textură cremă. Ingrediente-cheie: argilă, zinc. Gramaj 75 ml. Se folosește ocazional.",
       "description": "Auralis Clay Mască pentru ten. Purifică porii și controlează luciul. Recomandat pentru ten gras și cu tendință acneică. Se folosește ocazional. Ingrediente-cheie: argilă, zinc."
     },
     {
@@ -2557,7 +2557,7 @@
           "parfum discret"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: acid hialuronic, unt de shea.",
+      "ai_summary": "Măști pentru ten. Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: acid hialuronic, unt de shea. Gramaj 75 ml. Se folosește ocazional.",
       "description": "LumaDerm Hydra Mască pentru ten. Hidratare intensă pentru ten uscat și tern. Recomandat pentru ten uscat și deshidratat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, unt de shea."
     },
     {
@@ -2621,7 +2621,7 @@
           "necesită curățare a doua oară"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și normal. Textură ulei. Ingrediente-cheie: ulei de jojoba.",
+      "ai_summary": "Demachiante pentru ten. Recomandat pentru ten uscat și normal. Textură ulei. Ingrediente-cheie: ulei de jojoba. Gramaj 200 ml. Se folosește seara.",
       "description": "Auralis Ulei demachiant. Demachiază inclusiv machiajul rezistent, fără să usuce. Recomandat pentru ten uscat și normal. Se folosește seara. Ingrediente-cheie: ulei de jojoba."
     },
     {
@@ -2694,7 +2694,7 @@
           "prea bogată pentru ten gras"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, ceramide.",
+      "ai_summary": "Creme hidratante. Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, ceramide. Gramaj 50 ml. Se folosește dimineața, seara.",
       "description": "Petala Rich Cremă hidratantă. Nutriție bogată pentru ten uscat, la preț accesibil. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: unt de shea, ceramide."
     },
     {
@@ -2767,7 +2767,7 @@
           "insuficientă iarna"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și mixt. Textură gel. Ingrediente-cheie: niacinamidă, acid hialuronic.",
+      "ai_summary": "Creme hidratante. Recomandat pentru ten gras și mixt. Textură gel. Ingrediente-cheie: niacinamidă, acid hialuronic. Gramaj 50 ml. Se folosește dimineața, seara.",
       "description": "Petala Matte Cremă hidratantă. Hidratare cu finish mat pentru ten gras. Recomandat pentru ten gras și mixt. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, acid hialuronic."
     },
     {
@@ -2840,7 +2840,7 @@
           "flacon fără pompă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten mixt și gras. Textură gel. Ingrediente-cheie: niacinamidă, extract de ceai verde.",
+      "ai_summary": "Curățarea tenului. Recomandat pentru ten mixt și gras. Textură gel. Ingrediente-cheie: niacinamidă, extract de ceai verde. Gramaj 150 ml. Se folosește dimineața, seara.",
       "description": "Auralis Balance Gel de curățare. Curăță și echilibrează tenul mixt spre gras. Recomandat pentru ten mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, extract de ceai verde."
     },
     {
@@ -2907,7 +2907,7 @@
           "protecție mai mică decât SPF 50"
         ]
       },
-      "ai_summary": "Recomandat pentru ten normal și mixt. Textură cremă. Ingrediente-cheie: filtre UVA/UVB, niacinamidă.",
+      "ai_summary": "Protecție solară. Recomandat pentru ten normal și mixt. Textură cremă. Protecție solară SPF 30. Ingrediente-cheie: filtre UVA/UVB, niacinamidă. Gramaj 50 ml.",
       "description": "Auralis Daily Cremă cu SPF 30. Cremă de zi cu protecție solară SPF 30, finish natural. Recomandat pentru ten normal și mixt. Ingrediente-cheie: filtre UVA/UVB, niacinamidă."
     },
     {
@@ -2987,7 +2987,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat, pe ten normal și mixt. Textură fluid.",
+      "ai_summary": "Fond de ten. Recomandat pentru cine vrea un finish satinat, pe ten normal și mixt. Textură fluid. Acoperire medie. Gramaj 30 ml.",
       "description": "Aria Silk Fond de ten. Finish satinat cu acoperire medie, aspect îngrijit. Recomandat pentru cine vrea un finish satinat, pe ten normal și mixt."
     },
     {
@@ -3056,7 +3056,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten normal și uscat. Textură fluid.",
+      "ai_summary": "Fond de ten. Recomandat pentru cine vrea un finish natural, pe ten normal și uscat. Textură fluid. Acoperire lejeră. Gramaj 30 ml.",
       "description": "Petala Nude Fond de ten. Acoperire lejeră cu aspect nud, la preț accesibil. Recomandat pentru cine vrea un finish natural, pe ten normal și uscat."
     },
     {
@@ -3123,7 +3123,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru ten normal și uscat.",
+      "ai_summary": "Anticearcăn. Recomandat pentru ten normal și uscat. Acoperire medie. Gramaj 7 ml.",
       "description": "Aria Radiant Anticearcăn. Iluminează zona ochilor cu acoperire medie. Recomandat pentru ten normal și uscat."
     },
     {
@@ -3170,7 +3170,7 @@
           "poate accentua pielea uscată"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "ai_summary": "Pudre. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Gramaj 10 g.",
       "description": "Velora HD Pudră matifiantă. Fixează machiajul și controlează luciul. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
     },
     {
@@ -3217,7 +3217,7 @@
           "nu matifiază"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten normal și uscat.",
+      "ai_summary": "Pudre. Recomandat pentru cine vrea un finish luminos, pe ten normal și uscat. Gramaj 10 g.",
       "description": "Aria Glow Pudră iluminatoare. Dă un finish luminos și proaspăt. Recomandat pentru cine vrea un finish luminos, pe ten normal și uscat."
     },
     {
@@ -3275,7 +3275,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "ai_summary": "Mascara. Recomandat pentru definirea și volumul genelor. Gramaj 10 ml.",
       "description": "Velora Volume Mascara. Volum intens și gene definite, fără cocoloașe. Recomandat pentru definirea și volumul genelor."
     },
     {
@@ -3313,7 +3313,7 @@
           "volum modest"
         ]
       },
-      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "ai_summary": "Mascara. Recomandat pentru definirea și volumul genelor. Gramaj 10 ml.",
       "description": "Aria Lengthening Mascara. Alungește și separă genele pentru un look natural. Recomandat pentru definirea și volumul genelor."
     },
     {
@@ -3371,7 +3371,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "ai_summary": "Creioane și tușuri de ochi. Recomandat pentru conturarea privirii. Gramaj 1.2 g.",
       "description": "Velora Precise Creion de ochi. Trasare precisă și rezistentă a conturului ochilor. Recomandat pentru conturarea privirii."
     },
     {
@@ -3429,7 +3429,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "ai_summary": "Creioane și tușuri de ochi. Recomandat pentru conturarea privirii. Gramaj 1.2 g.",
       "description": "Aria Brow Creion de sprâncene. Definește și umple sprâncenele natural. Recomandat pentru conturarea privirii."
     },
     {
@@ -3467,7 +3467,7 @@
           "ușor fallout la nuanțele mate"
         ]
       },
-      "ai_summary": "Recomandat pentru machiajul ochilor.",
+      "ai_summary": "Farduri de ochi. Recomandat pentru machiajul ochilor. Gramaj 10 g.",
       "description": "Aria Nude Paletă farduri de ochi. Nuanțe nude versatile pentru zi și seară. Recomandat pentru machiajul ochilor."
     },
     {
@@ -3526,7 +3526,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Fard de obraz. Recomandat pentru cine vrea un finish satinat. Gramaj 5 g.",
       "description": "Velora Glow Fard de obraz. Culoare naturală și proaspătă a obrajilor. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -3573,7 +3573,7 @@
           "senzație siliconată pentru unii"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "ai_summary": "Primer pentru machiaj. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Gramaj 30 ml.",
       "description": "Aria Smooth Primer. Netezește porii și prelungește durata machiajului. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
     },
     {
@@ -3643,7 +3643,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Rujuri. Recomandat pentru cine vrea un finish mat. Gramaj 4 g.",
       "description": "Velora Matte Ruj lichid. Culoare intensă mată, cu ținută lungă. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -3701,7 +3701,7 @@
           "hidratare modestă"
         ]
       },
-      "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: proteine din grâu.",
+      "ai_summary": "Șampoane. Recomandat pentru păr fin. Ingrediente-cheie: proteine din grâu. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Bloom Volume Șampon. Volum și corp pentru părul fin, fără să îngreuneze. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din grâu."
     },
     {
@@ -3767,7 +3767,7 @@
           "preț peste medie"
         ]
       },
-      "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV.",
+      "ai_summary": "Șampoane. Recomandat pentru păr vopsit. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Bloom Color Șampon pentru păr vopsit. Protejează culoarea și prelungește strălucirea. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV."
     },
     {
@@ -3833,7 +3833,7 @@
           "îngreunează dacă exagerezi"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, ulei de macadamia.",
+      "ai_summary": "Uleiuri pentru păr. Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, ulei de macadamia. Gramaj 50 ml. Se folosește ocazional.",
       "description": "Verdea Nourish Ulei de păr. Hrănește vârfurile și reduce aspectul uscat. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, ulei de macadamia."
     },
     {
@@ -3871,7 +3871,7 @@
           "flacon fără pompă"
         ]
       },
-      "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel.",
+      "ai_summary": "Geluri de duș. Recomandat pentru curățarea corpului la duș. Textură gel. Gramaj 250 ml.",
       "description": "Solora Fresh Gel de duș. Curăță blând și lasă pielea catifelată. Recomandat pentru curățarea corpului la duș."
     },
     {
@@ -3909,7 +3909,7 @@
           "spumă redusă"
         ]
       },
-      "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel.",
+      "ai_summary": "Geluri de duș. Recomandat pentru curățarea corpului la duș. Textură gel. Gramaj 250 ml.",
       "description": "Petala Nourish Gel de duș. Gel de duș hrănitor cu unt de shea. Recomandat pentru curățarea corpului la duș."
     },
     {
@@ -3947,7 +3947,7 @@
           "puțin uleios la clătire"
         ]
       },
-      "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Textură cremă.",
+      "ai_summary": "Scrub de corp. Recomandat pentru exfolierea blândă a corpului. Textură cremă. Gramaj 200 ml.",
       "description": "Solora Smooth Scrub de corp. Exfoliază și netezește pielea corpului. Recomandat pentru exfolierea blândă a corpului."
     },
     {
@@ -3985,7 +3985,7 @@
           "granule mai aspre"
         ]
       },
-      "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Textură cremă.",
+      "ai_summary": "Scrub de corp. Recomandat pentru exfolierea blândă a corpului. Textură cremă. Gramaj 200 ml.",
       "description": "Petala Coffee Scrub de corp. Scrub cu cafea pentru aspect tonifiat. Recomandat pentru exfolierea blândă a corpului."
     },
     {
@@ -4022,7 +4022,7 @@
           "nu antiperspirant"
         ]
       },
-      "ai_summary": "Recomandat pentru prospețime de lungă durată.",
+      "ai_summary": "Deodorante. Recomandat pentru prospețime de lungă durată. Gramaj 50 ml.",
       "description": "Solora Fresh Deodorant. Protecție împotriva mirosului toată ziua. Recomandat pentru prospețime de lungă durată."
     },
     {
@@ -4059,7 +4059,7 @@
           "protecție mai scurtă"
         ]
       },
-      "ai_summary": "Recomandat pentru prospețime de lungă durată.",
+      "ai_summary": "Deodorante. Recomandat pentru prospețime de lungă durată. Gramaj 50 ml.",
       "description": "Bloom Sensitive Deodorant. Deodorant blând, fără alcool, pentru piele sensibilă. Recomandat pentru prospețime de lungă durată."
     },
     {
@@ -4117,7 +4117,7 @@
           "parfum nu place tuturor"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură loțiune. Ingrediente-cheie: unt de cacao.",
+      "ai_summary": "Loțiuni de corp. Recomandat pentru ten uscat și deshidratat. Textură loțiune. Ingrediente-cheie: unt de cacao. Gramaj 250 ml.",
       "description": "Petala Silk Loțiune de corp. Hidratare cremoasă cu absorbție rapidă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de cacao."
     },
     {
@@ -4183,7 +4183,7 @@
           "hidratare medie iarna"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: glicerină, vitamina E.",
+      "ai_summary": "Creme de mâini. Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: glicerină, vitamina E. Gramaj 75 ml.",
       "description": "Petala Nourish Cremă de mâini. Hidratare zilnică non-grasă pentru mâini. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: glicerină, vitamina E."
     },
     {
@@ -4241,7 +4241,7 @@
           "îngreunează părul fin"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină.",
+      "ai_summary": "Balsamuri de păr. Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Verdea Repair Balsam de păr. Descurcă și hrănește părul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină."
     },
     {
@@ -4299,7 +4299,7 @@
           "hidratare redusă"
         ]
       },
-      "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: proteine din grâu.",
+      "ai_summary": "Balsamuri de păr. Recomandat pentru păr fin. Ingrediente-cheie: proteine din grâu. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Bloom Volume Balsam de păr. Descurcă fără să îngreuneze părul fin. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din grâu."
     },
     {
@@ -4365,7 +4365,7 @@
           "preț peste medie"
         ]
       },
-      "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: filtru UV, ulei de floarea-soarelui.",
+      "ai_summary": "Balsamuri de păr. Recomandat pentru păr vopsit. Ingrediente-cheie: filtru UV, ulei de floarea-soarelui. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Bloom Color Balsam de păr. Protejează culoarea și hidratează. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: filtru UV, ulei de floarea-soarelui."
     },
     {
@@ -4411,7 +4411,7 @@
           "reziduu alb pe păr închis"
         ]
       },
-      "ai_summary": "Recomandat pentru păr gras.",
+      "ai_summary": "Șampon uscat. Recomandat pentru păr gras. Gramaj 150 ml. Se folosește ocazional.",
       "description": "Bloom Fresh Șampon uscat. Reîmprospătează părul între spălări. Recomandat pentru păr gras. Se folosește ocazional."
     },
     {
@@ -4469,7 +4469,7 @@
           "borcan fără spatulă"
         ]
       },
-      "ai_summary": "Recomandat pentru păr cret. Ingrediente-cheie: ulei de argan.",
+      "ai_summary": "Măști de păr. Recomandat pentru păr cret. Ingrediente-cheie: ulei de argan. Gramaj 200 ml. Se folosește ocazional.",
       "description": "Verdea Smooth Mască de păr. Netezește și disciplinează părul creț. Recomandat pentru păr cret. Se folosește ocazional. Ingrediente-cheie: ulei de argan."
     },
     {
@@ -4535,7 +4535,7 @@
           "efect treptat"
         ]
       },
-      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: acid hialuronic, aloe.",
+      "ai_summary": "Măști de păr. Recomandat pentru păr uscat. Ingrediente-cheie: acid hialuronic, aloe. Gramaj 200 ml. Se folosește ocazional.",
       "description": "Bloom Hydra Mască de păr. Hidratează intens părul uscat. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, aloe."
     },
     {
@@ -4594,7 +4594,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Gloss de buze. Recomandat pentru cine vrea un finish luminos. Gramaj 6 ml.",
       "description": "Aria Shine Gloss de buze. Luciu intens și buze cu aspect plin. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -4633,7 +4633,7 @@
           "furnicături neplăcute pentru unii"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Gloss de buze. Recomandat pentru cine vrea un finish luminos. Gramaj 6 ml.",
       "description": "Velora Plump Gloss de buze. Efect de volum și hidratare a buzelor. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -4692,7 +4692,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Iluminatoare. Recomandat pentru cine vrea un finish luminos. Gramaj 6 g.",
       "description": "Velora Glow Iluminator. Strălucire naturală pe punctele înalte. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -4731,7 +4731,7 @@
           "strălucire discretă"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Iluminatoare. Recomandat pentru cine vrea un finish satinat. Gramaj 6 g.",
       "description": "Aria Radiant Iluminator. Iluminare satinată subtilă pentru zi. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -4770,7 +4770,7 @@
           "pulverizare mai grosieră"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "ai_summary": "Spray de fixare. Recomandat pentru cine vrea un finish natural. Gramaj 100 ml.",
       "description": "Velora Set Spray de fixare. Fixează machiajul pentru o zi întreagă. Recomandat pentru cine vrea un finish natural."
     },
     {
@@ -4815,7 +4815,7 @@
           "uscător pentru ten uscat"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras.",
+      "ai_summary": "Spray de fixare. Recomandat pentru cine vrea un finish mat, pe ten gras. Gramaj 100 ml.",
       "description": "Aria Matte Spray de fixare. Fixare cu finish mat pentru ten gras. Recomandat pentru cine vrea un finish mat, pe ten gras."
     },
     {
@@ -4874,7 +4874,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Bronzer. Recomandat pentru cine vrea un finish mat. Gramaj 8 g.",
       "description": "Velora Sun Bronzer. Conturează și dă căldură naturală tenului. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -4933,7 +4933,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Fard de obraz. Recomandat pentru cine vrea un finish luminos. Gramaj 5 g.",
       "description": "Aria Glow Fard de obraz. Obraji proaspeți cu finish luminos. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -4992,7 +4992,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Rujuri. Recomandat pentru cine vrea un finish satinat. Gramaj 4 g.",
       "description": "Aria Nude Ruj. Nuanțe nude satinate, confortabile. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -5051,7 +5051,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Rujuri. Recomandat pentru cine vrea un finish satinat. Gramaj 4 g.",
       "description": "Velora Classic Ruj satinat. Culoare intensă satinată, hidratantă. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -5123,7 +5123,7 @@
           "poate usca zona din jur"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu tendință acneică și gras. Textură gel. Ingrediente-cheie: acid salicilic, niacinamidă.",
+      "ai_summary": "Tratament local. Recomandat pentru ten cu tendință acneică și gras. Textură gel. Ingrediente-cheie: acid salicilic, niacinamidă. Gramaj 15 ml. Se folosește seara.",
       "description": "Auralis Spot Tratament local. Reduce coșurile punctual, peste noapte. Recomandat pentru ten cu tendință acneică și gras. Se folosește seara. Ingrediente-cheie: acid salicilic, niacinamidă."
     },
     {
@@ -5195,7 +5195,7 @@
           "acțiune mai lentă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și cu tendință acneică. Textură gel. Ingrediente-cheie: centella asiatica, zinc.",
+      "ai_summary": "Tratament local. Recomandat pentru ten sensibil și cu tendință acneică. Textură gel. Ingrediente-cheie: centella asiatica, zinc. Gramaj 15 ml. Se folosește seara.",
       "description": "LumaDerm Calm Tratament local. Calmează imperfecțiunile pe ten sensibil. Recomandat pentru ten sensibil și cu tendință acneică. Se folosește seara. Ingrediente-cheie: centella asiatica, zinc."
     },
     {
@@ -5268,7 +5268,7 @@
           "pulverizare mai mare"
         ]
       },
-      "ai_summary": "Recomandat pentru ten deshidratat și uscat. Textură apă. Ingrediente-cheie: apă termală, acid hialuronic.",
+      "ai_summary": "Mist pentru ten. Recomandat pentru ten deshidratat și uscat. Textură apă. Ingrediente-cheie: apă termală, acid hialuronic. Gramaj 100 ml. Se folosește dimineața, seara.",
       "description": "Auralis Hydra Mist pentru ten. Reîmprospătează și hidratează tenul oricând. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: apă termală, acid hialuronic."
     },
     {
@@ -5333,7 +5333,7 @@
           "hidratare superficială"
         ]
       },
-      "ai_summary": "Recomandat pentru ten normal și deshidratat. Textură apă. Ingrediente-cheie: apă de trandafiri.",
+      "ai_summary": "Mist pentru ten. Recomandat pentru ten normal și deshidratat. Textură apă. Ingrediente-cheie: apă de trandafiri. Gramaj 100 ml. Se folosește dimineața, seara.",
       "description": "Petala Fresh Mist pentru ten. Mist răcoritor cu apă de trandafiri. Recomandat pentru ten normal și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: apă de trandafiri."
     },
     {
@@ -5396,7 +5396,7 @@
           "value": 30,
           "unit": "ml"
         },
-        "best_for": "ten deshidratat și uscat și normal"
+        "best_for": "ten deshidratat, uscat și normal"
       },
       "reviewSummary": {
         "summary": "Hidratează vizibil și se stratifică ușor sub cremă.",
@@ -5409,8 +5409,8 @@
           "efectul cere cremă deasupra ca să dureze"
         ]
       },
-      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal. Textură fluid. Ingrediente-cheie: acid hialuronic, glicerină.",
-      "description": "Petala Hydra Ser cu acid hialuronic. Hidratare imediată și repulpare fină a liniilor de deshidratare. Recomandat pentru ten deshidratat și uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, glicerină."
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten deshidratat, uscat și normal. Textură fluid. Ingrediente-cheie: acid hialuronic, glicerină. Gramaj 30 ml. Se folosește dimineața, seara.",
+      "description": "Petala Hydra Ser cu acid hialuronic. Hidratare imediată și repulpare fină a liniilor de deshidratare. Recomandat pentru ten deshidratat, uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, glicerină."
     },
     {
       "slug": "lumaderm-renew-ser-cu-retinal",
@@ -5483,7 +5483,7 @@
           "preț ridicat"
         ]
       },
-      "ai_summary": "Recomandat pentru ten matur și cu pete. Textură fluid. Ingrediente-cheie: retinal, squalan.",
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten matur și cu pete. Textură fluid. Ingrediente-cheie: retinal, squalan. Gramaj 30 ml. Se folosește seara.",
       "description": "LumaDerm Renew Ser cu retinal. Netezește ridurile fine mai rapid decât retinolul clasic, cu iritare redusă. Recomandat pentru ten matur și cu pete. Se folosește seara. Ingrediente-cheie: retinal, squalan."
     },
     {
@@ -5546,7 +5546,7 @@
           "value": 30,
           "unit": "ml"
         },
-        "best_for": "ten cu tendință acneică și cu pete și sensibil"
+        "best_for": "ten cu tendință acneică, cu pete și sensibil"
       },
       "reviewSummary": {
         "summary": "Estompează petele post-acneice și e blând cu pielea reactivă.",
@@ -5558,8 +5558,8 @@
           "textura ușor siliconică"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu tendință acneică și cu pete și sensibil. Textură fluid. Ingrediente-cheie: acid azelaic, niacinamidă.",
-      "description": "LumaDerm Even Ser cu acid azelaic. Uniformizează tonul și calmează roșeața fără să irite. Recomandat pentru ten cu tendință acneică și cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid azelaic, niacinamidă."
+      "ai_summary": "Seruri pentru ten. Recomandat pentru ten cu tendință acneică, cu pete și sensibil. Textură fluid. Ingrediente-cheie: acid azelaic, niacinamidă. Gramaj 30 ml. Se folosește dimineața, seara.",
+      "description": "LumaDerm Even Ser cu acid azelaic. Uniformizează tonul și calmează roșeața fără să irite. Recomandat pentru ten cu tendință acneică, cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid azelaic, niacinamidă."
     },
     {
       "slug": "auralis-clear-lotiune-tonica-cu-bha",
@@ -5630,7 +5630,7 @@
           "poate înțepa la început"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură lichid. Ingrediente-cheie: acid salicilic, extract de hamamelis.",
+      "ai_summary": "Loțiuni tonice. Recomandat pentru ten gras și cu tendință acneică. Textură lichid. Ingrediente-cheie: acid salicilic, extract de hamamelis. Gramaj 200 ml. Se folosește seara.",
       "description": "Auralis Clear Loțiune tonică cu BHA. Desfundă porii și reduce punctele negre la folosire constantă. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, extract de hamamelis."
     },
     {
@@ -5693,7 +5693,7 @@
           "value": 50,
           "unit": "ml"
         },
-        "best_for": "ten gras și mixt și deshidratat"
+        "best_for": "ten gras, mixt și deshidratat"
       },
       "reviewSummary": {
         "summary": "Perfectă sub machiaj pe ten gras; se absoarbe instant.",
@@ -5706,8 +5706,8 @@
           "insuficientă iarna pentru zonele uscate"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și mixt și deshidratat. Textură gel. Ingrediente-cheie: acid hialuronic, niacinamidă.",
-      "description": "LumaDerm Aqua Gel-cremă hidratantă. Hidratează fără să încarce; finish mat, nu înfundă porii. Recomandat pentru ten gras și mixt și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă."
+      "ai_summary": "Creme hidratante. Recomandat pentru ten gras, mixt și deshidratat. Textură gel. Ingrediente-cheie: acid hialuronic, niacinamidă. Gramaj 50 ml. Se folosește dimineața, seara.",
+      "description": "LumaDerm Aqua Gel-cremă hidratantă. Hidratează fără să încarce; finish mat, nu înfundă porii. Recomandat pentru ten gras, mixt și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă."
     },
     {
       "slug": "lumaderm-bright-crema-de-ochi-cu-cofeina",
@@ -5779,7 +5779,7 @@
           "efect modest pe cearcănele pigmentare"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu pete și sensibil. Textură gel. Ingrediente-cheie: cofeină, peptide.",
+      "ai_summary": "Creme pentru ochi. Recomandat pentru ten cu pete și sensibil. Textură gel. Ingrediente-cheie: cofeină, peptide. Gramaj 15 ml. Se folosește dimineața, seara.",
       "description": "LumaDerm Bright Cremă de ochi cu cofeină. Reduce aspectul cearcănelor și decongestionează zona ochilor dimineața. Recomandat pentru ten cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: cofeină, peptide."
     },
     {
@@ -5852,7 +5852,7 @@
           "prea bogată pentru pielea tânără"
         ]
       },
-      "ai_summary": "Recomandat pentru ten matur și uscat. Textură cremă. Ingrediente-cheie: peptide, unt de shea.",
+      "ai_summary": "Creme pentru ochi. Recomandat pentru ten matur și uscat. Textură cremă. Ingrediente-cheie: peptide, unt de shea. Gramaj 15 ml. Se folosește dimineața, seara.",
       "description": "Petala Youth Cremă de ochi antirid. Hrănește zona ochilor și atenuează ridurile fine în timp. Recomandat pentru ten matur și uscat. Se folosește dimineața, seara. Ingrediente-cheie: peptide, unt de shea."
     },
     {
@@ -5924,7 +5924,7 @@
           "furnică pe pielea sensibilă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu pete și normal. Textură gel. Ingrediente-cheie: AHA din fructe, extract de papaya.",
+      "ai_summary": "Măști pentru ten. Recomandat pentru ten cu pete și normal. Textură gel. Ingrediente-cheie: AHA din fructe, extract de papaya. Gramaj 75 ml. Se folosește seara.",
       "description": "Petala Glow Mască exfoliantă cu AHA. Luminozitate vizibilă după o singură folosire. Recomandat pentru ten cu pete și normal. Se folosește seara. Ingrediente-cheie: AHA din fructe, extract de papaya."
     },
     {
@@ -5996,7 +5996,7 @@
           "usucă dacă e folosit zilnic de la început"
         ]
       },
-      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură lichid. Ingrediente-cheie: acid salicilic, ceai verde.",
+      "ai_summary": "Exfoliante pentru ten. Recomandat pentru ten gras și cu tendință acneică. Textură lichid. Ingrediente-cheie: acid salicilic, ceai verde. Gramaj 100 ml. Se folosește seara.",
       "description": "LumaDerm Smooth Exfoliant cu BHA. Curăță porii în profunzime și previne erupțiile recurente. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, ceai verde."
     },
     {
@@ -6058,7 +6058,7 @@
           "value": 200,
           "unit": "ml"
         },
-        "best_for": "ten uscat și normal și sensibil"
+        "best_for": "ten uscat, normal și sensibil"
       },
       "reviewSummary": {
         "summary": "Demachiere completă dintr-un singur pas; senzație de confort.",
@@ -6070,8 +6070,8 @@
           "necesită clătire atentă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și normal și sensibil. Textură balsam. Ingrediente-cheie: unt de shea, ulei de măceșe.",
-      "description": "Petala Soft Balsam demachiant. Demachiază complet, inclusiv mascara waterproof, lăsând pielea suplă. Recomandat pentru ten uscat și normal și sensibil. Se folosește seara. Ingrediente-cheie: unt de shea, ulei de măceșe."
+      "ai_summary": "Demachiante pentru ten. Recomandat pentru ten uscat, normal și sensibil. Textură balsam. Ingrediente-cheie: unt de shea, ulei de măceșe. Gramaj 200 ml. Se folosește seara.",
+      "description": "Petala Soft Balsam demachiant. Demachiază complet, inclusiv mascara waterproof, lăsând pielea suplă. Recomandat pentru ten uscat, normal și sensibil. Se folosește seara. Ingrediente-cheie: unt de shea, ulei de măceșe."
     },
     {
       "slug": "petala-gentle-spuma-de-curatare",
@@ -6143,7 +6143,7 @@
           "nu demachiază machiaj rezistent"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și normal. Textură spumă. Ingrediente-cheie: glicerină, aloe vera.",
+      "ai_summary": "Curățarea tenului. Recomandat pentru ten uscat și normal. Textură spumă. Ingrediente-cheie: glicerină, aloe vera. Gramaj 150 ml. Se folosește dimineața, seara.",
       "description": "Petala Gentle Spumă de curățare. Curăță delicat dimineața fără senzația de piele care trage. Recomandat pentru ten uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: glicerină, aloe vera."
     },
     {
@@ -6211,7 +6211,7 @@
           "flacon mic pentru preț"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și gras. Textură fluid. Ingrediente-cheie: filtre minerale-organice, niacinamidă.",
+      "ai_summary": "Protecție solară. Recomandat pentru ten sensibil și gras. Textură fluid. Protecție solară SPF 50. Ingrediente-cheie: filtre minerale-organice, niacinamidă. Gramaj 50 ml.",
       "description": "LumaDerm Shield Fluid SPF 50+. Protecție înaltă cu textură de fluid, invizibil sub machiaj. Recomandat pentru ten sensibil și gras. Ingrediente-cheie: filtre minerale-organice, niacinamidă."
     },
     {
@@ -6323,7 +6323,7 @@
           "ține mai puțin pe zona T grasă"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Textură fluid. Ingrediente-cheie: acid hialuronic, squalan.",
+      "ai_summary": "Fond de ten. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Textură fluid. Acoperire modulabilă. Ingrediente-cheie: acid hialuronic, squalan. Gramaj 30 ml.",
       "description": "Velora Second Skin Fond de ten serum. Aspect de piele sănătoasă, se poate construi de la ușor la mediu. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Ingrediente-cheie: acid hialuronic, squalan."
     },
     {
@@ -6417,7 +6417,7 @@
           "doar 3 nuanțe disponibile"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Textură fluid. Ingrediente-cheie: niacinamidă.",
+      "ai_summary": "Creme BB și CC. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Textură fluid. Acoperire lejeră. Protecție solară SPF 25. Ingrediente-cheie: niacinamidă. Gramaj 40 ml.",
       "description": "NudeLab Fresh Cremă CC. Uniformizează tonul într-un singur pas, cu protecție SPF 25. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Ingrediente-cheie: niacinamidă."
     },
     {
@@ -6517,7 +6517,7 @@
           "nu acoperă imperfecțiuni pronunțate"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Textură fluid. Ingrediente-cheie: glicerină, vitamina E.",
+      "ai_summary": "Creme BB și CC. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Textură fluid. Acoperire lejeră. Ingrediente-cheie: glicerină, vitamina E. Gramaj 40 ml.",
       "description": "Aria Light Cremă BB hidratantă. Hidratare plus uniformizare ușoară, pentru un look fresh de zi. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Ingrediente-cheie: glicerină, vitamina E."
     },
     {
@@ -6557,7 +6557,7 @@
           "ambalajul scutură pudră în exces"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Pudre. Recomandat pentru cine vrea un finish mat. Gramaj 10 g.",
       "description": "NudeLab Soft Focus Pudră translucidă. Fixează machiajul și estompează vizual porii, universală pe orice nuanță. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -6604,7 +6604,7 @@
           "necesită demachiant bifazic"
         ]
       },
-      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "ai_summary": "Mascara. Recomandat pentru definirea și volumul genelor. Gramaj 10 ml.",
       "description": "Aria Waterproof Mascara. Rezistă la apă, transpirație și umiditate fără să se scurgă. Recomandat pentru definirea și volumul genelor."
     },
     {
@@ -6663,7 +6663,7 @@
           "se usucă repede dacă rămâne deschis"
         ]
       },
-      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "ai_summary": "Creioane și tușuri de ochi. Recomandat pentru conturarea privirii. Gramaj 1.2 g.",
       "description": "NudeLab Ink Tuș de ochi lichid. Linie precisă și intens pigmentată, nu se decojește pe parcursul zilei. Recomandat pentru conturarea privirii."
     },
     {
@@ -6702,7 +6702,7 @@
           "fără oglindă mare în ambalaj"
         ]
       },
-      "ai_summary": "Recomandat pentru machiajul ochilor.",
+      "ai_summary": "Farduri de ochi. Recomandat pentru machiajul ochilor. Gramaj 10 g.",
       "description": "Velora Warm Paletă farduri de ochi. Gamă caldă completă pentru look-uri de zi și de seară dintr-o singură paletă. Recomandat pentru machiajul ochilor."
     },
     {
@@ -6772,7 +6772,7 @@
           "gamă mică de nuanțe"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Farduri de ochi. Recomandat pentru cine vrea un finish satinat. Gramaj 10 g.",
       "description": "NudeLab Mono Fard de ochi cremos. Machiaj de ochi în 30 de secunde, aplicat cu degetul, fără pensule. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -6820,7 +6820,7 @@
           "senzație siliconică nu pentru oricine"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Textură gel.",
+      "ai_summary": "Primer pentru machiaj. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Textură gel. Gramaj 30 ml.",
       "description": "NudeLab Matte Primer matifiant. Prelungește rezistența fondului de ten pe tenul gras cu câteva ore. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
     },
     {
@@ -6902,7 +6902,7 @@
           "transferă ușor la mese"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat. Ingrediente-cheie: unt de shea.",
+      "ai_summary": "Rujuri. Recomandat pentru cine vrea un finish mat. Ingrediente-cheie: unt de shea. Gramaj 4 g.",
       "description": "NudeLab Velvet Ruj mat. Mat catifelat care rămâne confortabil ore întregi. Recomandat pentru cine vrea un finish mat. Ingrediente-cheie: unt de shea."
     },
     {
@@ -6959,7 +6959,7 @@
           "borcanul cere aplicare cu degetul"
         ]
       },
-      "ai_summary": "Recomandat pentru îngrijirea buzelor. Textură cremă. Ingrediente-cheie: zahăr, ulei de cocos.",
+      "ai_summary": "Îngrijirea buzelor. Recomandat pentru îngrijirea buzelor. Textură cremă. Ingrediente-cheie: zahăr, ulei de cocos. Gramaj 15 ml.",
       "description": "Aria Sugar Scrub de buze. Netezește buzele uscate înainte de rujul mat. Recomandat pentru îngrijirea buzelor. Ingrediente-cheie: zahăr, ulei de cocos."
     },
     {
@@ -7047,7 +7047,7 @@
           "pigmentul dispare în 2-3 ore"
         ]
       },
-      "ai_summary": "Recomandat pentru îngrijirea buzelor. Textură balsam. Ingrediente-cheie: unt de shea, ceară de albine.",
+      "ai_summary": "Îngrijirea buzelor. Recomandat pentru îngrijirea buzelor. Textură balsam. Ingrediente-cheie: unt de shea, ceară de albine. Gramaj 15 ml.",
       "description": "Petala Tint Balsam de buze nuanțator. Hidratare plus culoare discretă, look natural fără oglindă. Recomandat pentru îngrijirea buzelor. Ingrediente-cheie: unt de shea, ceară de albine."
     },
     {
@@ -7106,7 +7106,7 @@
           "pigment construit din straturi, nu intens dintr-o trecere"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Bronzer. Recomandat pentru cine vrea un finish mat. Gramaj 8 g.",
       "description": "Aria Sun Kiss Bronzer pudră. Bronz natural fără subton portocaliu, ușor de estompat. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -7172,7 +7172,7 @@
           "lungimile uscate cer balsam obligatoriu"
         ]
       },
-      "ai_summary": "Recomandat pentru păr gras. Ingrediente-cheie: zinc PCA, extract de mentă.",
+      "ai_summary": "Șampoane. Recomandat pentru păr gras. Ingrediente-cheie: zinc PCA, extract de mentă. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Bloom Balance Șampon pentru scalp gras. Prelungește senzația de curat a scalpului cu o zi în plus. Recomandat pentru păr gras. Se folosește zilnic. Ingrediente-cheie: zinc PCA, extract de mentă."
     },
     {
@@ -7256,7 +7256,7 @@
           "spumează puțin (fără sulfați)"
         ]
       },
-      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: aloe vera, pantenol.",
+      "ai_summary": "Șampoane. Recomandat pentru păr uscat. Ingrediente-cheie: aloe vera, pantenol. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Verdea Hydra Șampon hidratant. Spală blând și lasă părul uscat moale, nu aspru. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: aloe vera, pantenol."
     },
     {
@@ -7322,7 +7322,7 @@
           "hidratare insuficientă pentru păr foarte creț"
         ]
       },
-      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: unt de shea, aloe vera.",
+      "ai_summary": "Balsamuri de păr. Recomandat pentru păr uscat. Ingrediente-cheie: unt de shea, aloe vera. Gramaj 250 ml. Se folosește zilnic.",
       "description": "Verdea Hydra Balsam de păr. Descurcare instant și hidratare fără îngreunare. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: unt de shea, aloe vera."
     },
     {
@@ -7385,7 +7385,7 @@
           "pulverizatorul stropește neuniform spre final"
         ]
       },
-      "ai_summary": "Recomandat pentru păr toate tipurile. Ingrediente-cheie: proteine de grâu, pantenol.",
+      "ai_summary": "Îngrijire fără clătire. Recomandat pentru păr toate tipurile. Ingrediente-cheie: proteine de grâu, pantenol. Gramaj 150 ml. Se folosește zilnic.",
       "description": "Verdea Protect Spray termoprotector. Protejează firul la styling termic și reduce despicarea în timp. Recomandat pentru păr toate tipurile. Se folosește zilnic. Ingrediente-cheie: proteine de grâu, pantenol."
     },
     {
@@ -7451,7 +7451,7 @@
           "îngreunează părul fin dacă se exagerează"
         ]
       },
-      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: ulei de argan, vitamina E.",
+      "ai_summary": "Uleiuri pentru păr. Recomandat pentru păr uscat. Ingrediente-cheie: ulei de argan, vitamina E. Gramaj 50 ml. Se folosește ocazional.",
       "description": "Bloom Shine Ulei de păr cu argan. Luciu instant și vârfuri sigilate, fără aspect gras. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, vitamina E."
     },
     {
@@ -7535,7 +7535,7 @@
           "exces de proteine dacă e folosită prea des"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: proteine hidrolizate, keratină.",
+      "ai_summary": "Măști de păr. Recomandat pentru păr deteriorat. Ingrediente-cheie: proteine hidrolizate, keratină. Gramaj 200 ml. Se folosește ocazional.",
       "description": "Bloom Repair Mască de păr cu proteine. Refacere a firului fragilizat de decolorare în 5-10 minute. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: proteine hidrolizate, keratină."
     },
     {
@@ -7611,7 +7611,7 @@
           "parfumul dispare relativ repede"
         ]
       },
-      "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel. Ingrediente-cheie: ulei esențial de lavandă, glicerină.",
+      "ai_summary": "Geluri de duș. Recomandat pentru curățarea corpului la duș. Textură gel. Ingrediente-cheie: ulei esențial de lavandă, glicerină. Gramaj 250 ml.",
       "description": "Solora Relax Gel de duș cu lavandă. Duș relaxant de seară care nu usucă pielea. Recomandat pentru curățarea corpului la duș. Ingrediente-cheie: ulei esențial de lavandă, glicerină."
     },
     {
@@ -7677,7 +7677,7 @@
           "absorbție lentă"
         ]
       },
-      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură unt. Ingrediente-cheie: unt de shea, unt de cacao.",
+      "ai_summary": "Loțiuni de corp. Recomandat pentru ten uscat și deshidratat. Textură unt. Ingrediente-cheie: unt de shea, unt de cacao. Gramaj 250 ml.",
       "description": "Solora Rich Unt de corp. Hidratare intensă de durată pentru zone foarte uscate (coate, gambe). Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, unt de cacao."
     },
     {
@@ -7735,7 +7735,7 @@
           "protecție mai scurtă la efort intens"
         ]
       },
-      "ai_summary": "Recomandat pentru prospețime de lungă durată. Textură cremă. Ingrediente-cheie: arrowroot, unt de shea.",
+      "ai_summary": "Deodorante. Recomandat pentru prospețime de lungă durată. Textură cremă. Ingrediente-cheie: arrowroot, unt de shea. Gramaj 50 ml.",
       "description": "Petala Pure Deodorant natural. Protecție naturală fără aluminiu, blândă cu pielea sensibilă. Recomandat pentru prospețime de lungă durată. Ingrediente-cheie: arrowroot, unt de shea."
     },
     {
@@ -7794,7 +7794,7 @@
           "tub mic, se termină repede"
         ]
       },
-      "ai_summary": "Recomandat pentru îngrijirea mâinilor. Textură cremă. Ingrediente-cheie: filtre UV, vitamina E.",
+      "ai_summary": "Creme de mâini. Recomandat pentru îngrijirea mâinilor. Textură cremă. Protecție solară SPF 30. Ingrediente-cheie: filtre UV, vitamina E. Gramaj 75 ml.",
       "description": "Solora Sun Cremă de mâini SPF 30. Protejează mâinile de petele pigmentare cauzate de soare. Recomandat pentru îngrijirea mâinilor. Ingrediente-cheie: filtre UV, vitamina E."
     },
     {
@@ -7872,7 +7872,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru ten normal și uscat.",
+      "ai_summary": "Anticearcăn. Recomandat pentru ten normal și uscat. Acoperire medie. Gramaj 7 ml.",
       "description": "NudeLab Natural Cover Anticearcăn. Estompare ușoară, fără linii dure. Recomandat pentru ten normal și uscat."
     },
     {
@@ -7939,7 +7939,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru ten sensibil și uscat.",
+      "ai_summary": "Anticearcăn. Recomandat pentru ten sensibil și uscat. Acoperire lejeră. Gramaj 7 ml.",
       "description": "LumaDerm Bright Eye Anticearcăn. Luminează cearcănele fără efect de mască. Recomandat pentru ten sensibil și uscat."
     },
     {
@@ -8005,7 +8005,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru ten normal.",
+      "ai_summary": "Anticearcăn. Recomandat pentru ten normal. Acoperire modulabilă. Gramaj 7 ml.",
       "description": "Petala Soft Focus Anticearcăn. Construiești acoperirea strat cu strat. Recomandat pentru ten normal."
     },
     {
@@ -8074,7 +8074,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Fard de obraz. Recomandat pentru cine vrea un finish mat. Gramaj 5 g.",
       "description": "NudeLab Soft Blush Fard de obraz. Culoare mată, buildable, fără efect prăfos. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -8132,7 +8132,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Fard de obraz. Recomandat pentru cine vrea un finish luminos. Gramaj 5 g.",
       "description": "Petala Rose Fard de obraz cremos. Efect luminos, natural, ca un blush din interior. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -8190,7 +8190,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Fard de obraz. Recomandat pentru cine vrea un finish satinat. Gramaj 5 g.",
       "description": "Aria Peach Fard de obraz satinat. Strălucire discretă fără sclipici vizibil. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -8248,7 +8248,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Gloss de buze. Recomandat pentru cine vrea un finish luminos. Gramaj 6 ml.",
       "description": "NudeLab Clear Gloss de buze. Luciu curat, non-lipicios, peste orice ruj. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -8306,7 +8306,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Gloss de buze. Recomandat pentru cine vrea un finish satinat. Gramaj 6 ml.",
       "description": "Petala Berry Gloss de buze. Culoare fructată cu luciu satinat, nu translucid. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -8364,7 +8364,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Gloss de buze. Recomandat pentru cine vrea un finish luminos. Gramaj 6 ml.",
       "description": "Aria Plump Gloss de buze cu volum. Efect de volum și hidratare, buze mai pline optic. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -8402,7 +8402,7 @@
           "preț mai mare"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "ai_summary": "Spray de fixare. Recomandat pentru cine vrea un finish natural. Gramaj 100 ml.",
       "description": "NudeLab Long Wear Spray de fixare. Fixează machiajul până la 16h fără efect de mască. Recomandat pentru cine vrea un finish natural."
     },
     {
@@ -8446,7 +8446,7 @@
           "nu potrivit pentru ten gras"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat.",
+      "ai_summary": "Spray de fixare. Recomandat pentru cine vrea un finish luminos, pe ten uscat. Gramaj 100 ml.",
       "description": "Petala Dewy Set Spray de fixare. Fixează și hidratează, ideal pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat."
     },
     {
@@ -8492,7 +8492,7 @@
           "prea luminos pentru ten gras"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal.",
+      "ai_summary": "Primer pentru machiaj. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Gramaj 30 ml.",
       "description": "Velora Glow Primer iluminator. Bază luminoasă care înviorează tenul obosit. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal."
     },
     {
@@ -8538,7 +8538,7 @@
           "senzație ușor uscată la unii"
         ]
       },
-      "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "ai_summary": "Primer pentru machiaj. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Gramaj 30 ml.",
       "description": "Petala Pore Blur Primer. Netezește porii vizibili și ține sebumul sub control. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
     },
     {
@@ -8596,7 +8596,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "ai_summary": "Iluminatoare. Recomandat pentru cine vrea un finish luminos. Gramaj 6 g.",
       "description": "NudeLab Liquid Iluminator lichid. Glow lichid intens, mixabil în fondul de ten. Recomandat pentru cine vrea un finish luminos."
     },
     {
@@ -8654,7 +8654,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Iluminatoare. Recomandat pentru cine vrea un finish satinat. Gramaj 6 g.",
       "description": "Petala Champagne Iluminator pudră. Strălucire pudrată discretă, ușor de controlat. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -8712,7 +8712,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "ai_summary": "Bronzer. Recomandat pentru cine vrea un finish mat. Gramaj 8 g.",
       "description": "NudeLab Warm Bronzer pudră. Tonuri calde, fără nuanțe portocalii. Recomandat pentru cine vrea un finish mat."
     },
     {
@@ -8770,7 +8770,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "ai_summary": "Bronzer. Recomandat pentru cine vrea un finish satinat. Gramaj 8 g.",
       "description": "Petala Sun Glow Bronzer cremos. Bronz luminos cremos, se topește pe piele. Recomandat pentru cine vrea un finish satinat."
     },
     {
@@ -8850,7 +8850,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten normal și mixt. Textură fluid.",
+      "ai_summary": "Creme BB și CC. Recomandat pentru cine vrea un finish natural, pe ten normal și mixt. Textură fluid. Acoperire medie. Protecție solară SPF 30. Gramaj 40 ml.",
       "description": "Velora Perfect BB Cremă SPF 30. Uniformizează tenul și protejează cu SPF 30 într-un singur pas. Recomandat pentru cine vrea un finish natural, pe ten normal și mixt."
     },
     {
@@ -8919,7 +8919,7 @@
           }
         }
       ],
-      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat. Textură fluid.",
+      "ai_summary": "Creme BB și CC. Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat. Textură fluid. Acoperire lejeră. Protecție solară SPF 15. Gramaj 40 ml.",
       "description": "Auralis Hydra CC Cremă. Hidratează intens și dă un glow sănătos cu acoperire lejeră. Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat."
     },
     {
@@ -8955,7 +8955,7 @@
           "husa de transport subțire"
         ]
       },
-      "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
+      "ai_summary": "Pensule și bureți de machiaj. Recomandat pentru aplicarea uniformă a machiajului.",
       "description": "Aria Set Pensule de machiaj (5 buc). Cinci pensule esențiale într-un singur set, peri sintetici moi. Recomandat pentru aplicarea uniformă a machiajului."
     },
     {
@@ -8991,7 +8991,7 @@
           "se uzează mai repede"
         ]
       },
-      "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
+      "ai_summary": "Pensule și bureți de machiaj. Recomandat pentru aplicarea uniformă a machiajului.",
       "description": "Petala Soft Burete de machiaj (2 buc). Doi bureți la preț accesibil, aplicare fără urme. Recomandat pentru aplicarea uniformă a machiajului."
     },
     {
@@ -9056,7 +9056,7 @@
           "prea bogat pentru păr fin"
         ]
       },
-      "ai_summary": "Recomandat pentru păr curly. Ingrediente-cheie: unt de shea, glicerină.",
+      "ai_summary": "Îngrijire fără clătire. Recomandat pentru păr curly. Potrivit pentru păr creț. Ingrediente-cheie: unt de shea, glicerină. Gramaj 150 ml. Se folosește zilnic.",
       "description": "Bloom Curl Cremă leave-in pentru bucle. Definește buclele fără să le încarce sau să le usuce. Recomandat pentru păr curly. Se folosește zilnic. Ingrediente-cheie: unt de shea, glicerină."
     },
     {
@@ -9121,7 +9121,7 @@
           "preț mai mare"
         ]
       },
-      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan.",
+      "ai_summary": "Îngrijire fără clătire. Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan. Gramaj 150 ml. Se folosește zilnic.",
       "description": "Verdea Repair Cremă leave-in reparatoare. Repară vârfurile despicate și netezește lungimile deteriorate. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan."
     },
     {
@@ -9178,7 +9178,7 @@
           "hidratare mai mică pe păr foarte uscat"
         ]
       },
-      "ai_summary": "Recomandat pentru păr normal. Ingrediente-cheie: ulei de jojoba.",
+      "ai_summary": "Uleiuri pentru păr. Recomandat pentru păr normal. Ingrediente-cheie: ulei de jojoba. Gramaj 50 ml. Se folosește ocazional.",
       "description": "Petala Silk Ulei de păr pentru vârfuri. Ulei ușor care nu îngreunează părul fin. Recomandat pentru păr normal. Se folosește ocazional. Ingrediente-cheie: ulei de jojoba."
     },
     {
@@ -9243,7 +9243,7 @@
           "prea bogat pentru păr fin"
         ]
       },
-      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: ulei de macadamia, vitamina E.",
+      "ai_summary": "Uleiuri pentru păr. Recomandat pentru păr uscat. Ingrediente-cheie: ulei de macadamia, vitamina E. Gramaj 50 ml. Se folosește ocazional.",
       "description": "Verdea Gloss Ulei de păr pentru strălucire. Strălucire intensă și netezire pe păr aspru sau uscat. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: ulei de macadamia, vitamina E."
     },
     {
@@ -9288,7 +9288,7 @@
           "poate lăsa urme pe păr foarte închis"
         ]
       },
-      "ai_summary": "Recomandat pentru păr gras.",
+      "ai_summary": "Șampon uscat. Recomandat pentru păr gras. Gramaj 150 ml. Se folosește ocazional.",
       "description": "Verdea Fresh Șampon uscat volumizant. Absoarbe sebumul și ridică rădăcina fără reziduu alb. Recomandat pentru păr gras. Se folosește ocazional."
     },
     {
@@ -9333,7 +9333,7 @@
           "absorbție mai slabă pe păr foarte gras"
         ]
       },
-      "ai_summary": "Recomandat pentru păr normal.",
+      "ai_summary": "Șampon uscat. Recomandat pentru păr normal. Gramaj 150 ml. Se folosește ocazional.",
       "description": "Petala Soft Șampon uscat pentru păr închis. Formulă tentată care nu lasă film alb pe păr închis. Recomandat pentru păr normal. Se folosește ocazional."
     },
     {
@@ -9389,7 +9389,7 @@
           "se consumă repede"
         ]
       },
-      "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: zahăr brun, ulei de cocos.",
+      "ai_summary": "Scrub de corp. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: zahăr brun, ulei de cocos. Gramaj 200 ml.",
       "description": "Bloom Sugar Scrub de corp cu zahăr. Exfoliază blând și hrănește pielea cu uleiuri. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: zahăr brun, ulei de cocos."
     },
     {
@@ -9445,7 +9445,7 @@
           "prea abraziv pentru piele sensibilă"
         ]
       },
-      "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline.",
+      "ai_summary": "Scrub de corp. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline. Gramaj 200 ml.",
       "description": "Auralis Mineral Scrub de corp exfoliant. Exfoliere intensă cu săruri minerale, netezește zonele aspre. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline."
     },
     {
@@ -9508,7 +9508,7 @@
           "poate usca zona din jur"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu tendință acneică și gras. Textură gel. Ingrediente-cheie: acid salicilic.",
+      "ai_summary": "Tratament local. Recomandat pentru ten cu tendință acneică și gras. Textură gel. Ingrediente-cheie: acid salicilic. Gramaj 15 ml. Se folosește seara.",
       "description": "Petala Clear Tratament local anti-imperfecțiuni. Usucă rapid coșurile inflamate, punctual. Recomandat pentru ten cu tendință acneică și gras. Se folosește seara. Ingrediente-cheie: acid salicilic."
     },
     {
@@ -9579,7 +9579,7 @@
           "cere introducere treptată"
         ]
       },
-      "ai_summary": "Recomandat pentru ten cu tendință acneică și matur. Textură gel. Ingrediente-cheie: retinol, niacinamidă.",
+      "ai_summary": "Tratament local. Recomandat pentru ten cu tendință acneică și matur. Textură gel. Ingrediente-cheie: retinol, niacinamidă. Gramaj 15 ml. Se folosește seara.",
       "description": "Auralis Night Tratament local cu retinol. Tratează imperfecțiunile și netezește textura în timp. Recomandat pentru ten cu tendință acneică și matur. Se folosește seara. Ingrediente-cheie: retinol, niacinamidă."
     },
     {
@@ -9651,7 +9651,7 @@
           "efect de scurtă durată, cere reaplicare"
         ]
       },
-      "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură apă. Ingrediente-cheie: apă termală, panthenol.",
+      "ai_summary": "Mist pentru ten. Recomandat pentru ten sensibil și deshidratat. Textură apă. Ingrediente-cheie: apă termală, panthenol. Gramaj 100 ml. Se folosește dimineața, seara.",
       "description": "LumaDerm Calm Mist pentru ten sensibil. Calmează roșeața și rehidratează pielea reactivă. Recomandat pentru ten sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: apă termală, panthenol."
     },
     {
@@ -9721,7 +9721,7 @@
           "nu înlocuiește un fixator dedicat"
         ]
       },
-      "ai_summary": "Recomandat pentru ten normal. Textură apă. Ingrediente-cheie: vitamina C, vitamina E.",
+      "ai_summary": "Mist pentru ten. Recomandat pentru ten normal. Textură apă. Ingrediente-cheie: vitamina C, vitamina E. Gramaj 100 ml. Se folosește dimineața, seara.",
       "description": "Velora Glow Mist fixator cu vitamine. Înviorează tenul obosit și dă un glow luminos peste machiaj. Recomandat pentru ten normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, vitamina E."
     }
   ]
