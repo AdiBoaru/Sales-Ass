@@ -37,6 +37,62 @@
     {
       "slug": "bloom",
       "name": "Bloom"
+    },
+    {
+      "slug": "aurelia-lab",
+      "name": "Aurelia Lab"
+    },
+    {
+      "slug": "coral-theory",
+      "name": "Coral Theory"
+    },
+    {
+      "slug": "elara-beauty",
+      "name": "Elara Beauty"
+    },
+    {
+      "slug": "mira-atelier",
+      "name": "Mira Atelier"
+    },
+    {
+      "slug": "nova-botanics",
+      "name": "Nova Botanics"
+    },
+    {
+      "slug": "orchid-field",
+      "name": "Orchid Field"
+    },
+    {
+      "slug": "rhea-organics",
+      "name": "Rhea Organics"
+    },
+    {
+      "slug": "velvet-root",
+      "name": "Velvet Root"
+    },
+    {
+      "slug": "calm-theory",
+      "name": "Calm Theory"
+    },
+    {
+      "slug": "nera-rituals",
+      "name": "Nera Rituals"
+    },
+    {
+      "slug": "pure-arc",
+      "name": "Pure Arc"
+    },
+    {
+      "slug": "maison-verde",
+      "name": "Maison Verde"
+    },
+    {
+      "slug": "iris-and-co",
+      "name": "Iris & Co"
+    },
+    {
+      "slug": "lumiere-skin",
+      "name": "Lumiere Skin"
     }
   ],
   "categories": [
@@ -468,7 +524,12 @@
       "ai_summary": "Recomandat pentru ten sensibil și normal. Textură apă. Ingrediente-cheie: apă termală, glicerină.",
       "description": "Auralis Apa micelară demachiantă. Demachiază complet fără frecare, fără clătire. Recomandat pentru ten sensibil și normal. Se folosește seara. Ingrediente-cheie: apă termală, glicerină.",
       "stock": 42,
-      "deliveryClass": "next_day"
+      "deliveryClass": "next_day",
+      "salePrice": 27.99,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 21
+      }
     },
     {
       "slug": "auralis-hydra-ser-hidratant",
@@ -2536,7 +2597,12 @@
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură lichid. Ingrediente-cheie: acid hialuronic, aloe vera.",
       "description": "LumaDerm Hydra Loțiune tonică. Hidratează și pregătește tenul pentru serumuri. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, aloe vera.",
       "stock": 24,
-      "deliveryClass": "next_day"
+      "deliveryClass": "next_day",
+      "salePrice": 42.49,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      }
     },
     {
       "slug": "auralis-clay-masca-pentru-ten",
@@ -3967,7 +4033,12 @@
       "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV.",
       "description": "Bloom Color Șampon pentru păr vopsit. Protejează culoarea și prelungește strălucirea. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV.",
       "stock": 55,
-      "deliveryClass": "next_day"
+      "deliveryClass": "next_day",
+      "salePrice": 29.59,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 2
+      }
     },
     {
       "slug": "verdea-nourish-ulei-de-par",
@@ -4114,8 +4185,8 @@
       },
       "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel.",
       "description": "Petala Nourish Gel de duș. Gel de duș hrănitor cu unt de shea. Recomandat pentru curățarea corpului la duș.",
-      "stock": 3,
-      "deliveryClass": "standard"
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-smooth-scrub-de-corp",
@@ -5237,8 +5308,7 @@
           "net_content": {
             "value": 4,
             "unit": "g"
-          },
-          "salePrice": 33.14
+          }
         },
         {
           "label": "Caramel",
@@ -5249,18 +5319,12 @@
           "net_content": {
             "value": 4,
             "unit": "g"
-          },
-          "salePrice": 33.14
+          }
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
       "description": "Aria Nude Ruj. Nuanțe nude satinate, confortabile. Recomandat pentru cine vrea un finish satinat.",
       "stock": 12,
-      "salePrice": 33.14,
-      "saleWindow": {
-        "startsInDays": -1,
-        "endsInDays": 5
-      },
       "deliveryClass": "standard"
     },
     {
@@ -8005,8 +8069,7 @@
           "net_content": {
             "value": 250,
             "unit": "ml"
-          },
-          "salePrice": 15.59
+          }
         },
         {
           "label": "500 ml",
@@ -8016,8 +8079,7 @@
           "net_content": {
             "value": 250,
             "unit": "ml"
-          },
-          "salePrice": 24.04
+          }
         }
       ],
       "reviewSummary": {
@@ -8033,11 +8095,6 @@
       "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel. Ingrediente-cheie: ulei esențial de lavandă, glicerină.",
       "description": "Solora Relax Gel de duș cu lavandă. Duș relaxant de seară care nu usucă pielea. Recomandat pentru curățarea corpului la duș. Ingrediente-cheie: ulei esențial de lavandă, glicerină.",
       "stock": 42,
-      "salePrice": 15.59,
-      "saleWindow": {
-        "startsInDays": -8,
-        "endsInDays": 2
-      },
       "deliveryClass": "next_day"
     },
     {
@@ -10295,6 +10352,5911 @@
       "description": "Velora Glow Mist fixator cu vitamine. Înviorează tenul obosit și dă un glow luminos peste machiaj. Recomandat pentru ten normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, vitamina E.",
       "stock": 18,
       "deliveryClass": "standard"
+    },
+    {
+      "slug": "aurelia-lab-balance-pensula-de-machiaj",
+      "name": "Aurelia Lab Balance Pensulă de machiaj",
+      "brandSlug": "aurelia-lab",
+      "primaryCategorySlug": "pensule-si-bureti-de-machiaj",
+      "categorySlugs": [
+        "pensule-si-bureti-de-machiaj"
+      ],
+      "price": 17.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 170,
+      "status": "active",
+      "shortDescription": "Pensulă de machiaj pentru aplicarea machiajului. Aplicare uniformă și estompare naturală.",
+      "attributes": {
+        "key_benefit": "Aplicare uniformă și estompare naturală.",
+        "specs": {
+          "Cod EAN": "8441819951098",
+          "Cod producator": "DEMO-03E990AF51"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-08FC9560C0",
+          "_concerns_ro": [
+            "ten normal",
+            "ten mixt",
+            "ten uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "differentiators": [
+          "Aplicare uniformă și estompare naturală"
+        ],
+        "best_for": "aplicarea uniformă a machiajului"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A046A83D430C",
+          "price": 17.99,
+          "stock": 8
+        }
+      ],
+      "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
+      "description": "Aurelia Lab Balance Pensulă de machiaj. Aplicare uniformă și estompare naturală. Recomandat pentru aplicarea uniformă a machiajului.",
+      "stock": 8,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "aurelia-lab-glow-pensula-de-machiaj",
+      "name": "Aurelia Lab Glow Pensulă de machiaj",
+      "brandSlug": "aurelia-lab",
+      "primaryCategorySlug": "pensule-si-bureti-de-machiaj",
+      "categorySlugs": [
+        "pensule-si-bureti-de-machiaj"
+      ],
+      "price": 61.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 109,
+      "status": "active",
+      "shortDescription": "Pensulă de machiaj pentru aplicarea machiajului. Aplicare uniformă și confortabilă.",
+      "attributes": {
+        "key_benefit": "Aplicare uniformă și confortabilă.",
+        "specs": {
+          "Cod EAN": "9353763008694",
+          "Cod producator": "DEMO-7098FB1FB5"
+        },
+        "_meta": {
+          "enrich_v": 1,
+          "Cod memoX": "DEMO-706A9C94CB",
+          "_concerns_ro": [
+            "calmare",
+            "uz zilnic",
+            "ten sensibil",
+            "acoperire machiaj"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "differentiators": [
+          "Aplicare uniformă și confortabilă"
+        ],
+        "best_for": "aplicarea uniformă a machiajului"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-3030287B9198",
+          "price": 61.99,
+          "stock": 8,
+          "salePrice": 40.29
+        }
+      ],
+      "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
+      "description": "Aurelia Lab Glow Pensulă de machiaj. Aplicare uniformă și confortabilă. Recomandat pentru aplicarea uniformă a machiajului.",
+      "stock": 8,
+      "salePrice": 40.29,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 7
+      },
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "coral-theory-soft-masca-de-fata",
+      "name": "Coral Theory Soft Mască de față",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 46.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 39,
+      "status": "active",
+      "shortDescription": "Mască de față pentru ten sensibil și hidratare. Cu centella, ceai verde, panthenol.",
+      "attributes": {
+        "key_benefit": "Calmează și oferă confort pielii.",
+        "key_ingredients": [
+          "centella",
+          "ceai verde",
+          "panthenol",
+          "alantoină"
+        ],
+        "concerns": [
+          "sensitive",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "8949656210527"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-930EC36E29",
+          "_concerns_ro": [
+            "ten sensibil",
+            "calmare",
+            "hidratare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-BAC475F20A20",
+          "price": 46.99,
+          "stock": 42,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură cremă. Ingrediente-cheie: centella, ceai verde, panthenol.",
+      "description": "Coral Theory Soft Mască de față. Calmează și oferă confort pielii. Recomandat pentru ten sensibil și deshidratat. Se folosește ocazional. Ingrediente-cheie: centella, ceai verde, panthenol, alantoină.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "elara-beauty-balance-masca-de-fata",
+      "name": "Elara Beauty Balance Mască de față",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 9.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 146,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu acid hialuronic, alantoină.",
+      "attributes": {
+        "key_benefit": "Hidratează și lasă pielea mai catifelată.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "alantoină"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "normal",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "4429033408045"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-7AC9EB81A0",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten normal",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "normal",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și normal și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-092E62FA0C2F",
+          "price": 9.99,
+          "stock": 24,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal și mixt. Textură cremă. Ingrediente-cheie: acid hialuronic, alantoină.",
+      "description": "Elara Beauty Balance Mască de față. Hidratează și lasă pielea mai catifelată. Recomandat pentru ten deshidratat și uscat și normal și mixt. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, alantoină.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-balance-ser-pentru-ten",
+      "name": "Mira Atelier Balance Ser pentru ten",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 104.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 130,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru hidratare și ten mixt. Cu acid hialuronic, vitamina C, centella.",
+      "attributes": {
+        "key_benefit": "Hidratează și echilibrează pielea.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "vitamina C",
+          "centella",
+          "aloe vera"
+        ],
+        "concerns": [
+          "hydration",
+          "combination",
+          "dry"
+        ],
+        "specs": {
+          "Cod EAN": "0146696211494"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-B809FA9CBB",
+          "_concerns_ro": [
+            "hidratare",
+            "ten mixt",
+            "ten uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "combination",
+          "dry"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și mixt și uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-F4EA3F1F50AA",
+          "price": 104.99,
+          "stock": 67,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și mixt și uscat. Textură fluid. Ingrediente-cheie: acid hialuronic, vitamina C, centella.",
+      "description": "Mira Atelier Balance Ser pentru ten. Hidratează și echilibrează pielea. Recomandat pentru ten deshidratat și mixt și uscat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, vitamina C, centella, aloe vera.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-balance-gel-de-curatare",
+      "name": "Mira Atelier Balance Gel de curățare",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 96.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 121,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru hidratare și ten uscat. Cu acid hialuronic, vitamina C, ceramide.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 80.99,
+          "vs": {
+            "547fbf54-1a26-456d-841e-94607cab118d": 80.99
+          },
+          "pct": 22
+        },
+        "key_benefit": "Curăță delicat și menține hidratarea.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "vitamina C",
+          "ceramide",
+          "centella"
+        ],
+        "concerns": [
+          "hydration",
+          "dry"
+        ],
+        "specs": {
+          "Cod EAN": "4104676489044"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-C92040CD9C",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-E15356775DAB",
+          "price": 96.99,
+          "stock": 18,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          },
+          "salePrice": 87.29
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat. Textură gel. Ingrediente-cheie: acid hialuronic, vitamina C, ceramide.",
+      "description": "Mira Atelier Balance Gel de curățare. Curăță delicat și menține hidratarea. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, vitamina C, ceramide, centella.",
+      "stock": 18,
+      "salePrice": 87.29,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 5
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "mira-atelier-balance-lotiune-tonica",
+      "name": "Mira Atelier Balance Loțiune tonică",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 106.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 98,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten mixt. Cu acid hialuronic, vitamina C, centella.",
+      "attributes": {
+        "key_benefit": "Hidratează și echilibrează pielea după curățare.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "vitamina C",
+          "centella",
+          "aloe vera"
+        ],
+        "concerns": [
+          "hydration",
+          "combination",
+          "dry"
+        ],
+        "specs": {
+          "Cod EAN": "6727036495432"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-92C1DD874F",
+          "_concerns_ro": [
+            "hidratare",
+            "ten mixt",
+            "ten uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "combination",
+          "dry"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și mixt și uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-9A6E537664B1",
+          "price": 106.99,
+          "stock": 24,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și mixt și uscat. Textură apă. Ingrediente-cheie: acid hialuronic, vitamina C, centella.",
+      "description": "Mira Atelier Balance Loțiune tonică. Hidratează și echilibrează pielea după curățare. Recomandat pentru ten deshidratat și mixt și uscat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, vitamina C, centella, aloe vera.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-balance-gel-de-curatare-cu-ulei-de-jojoba",
+      "name": "Mira Atelier Balance Gel de curățare cu ulei de jojoba",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 130.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 167,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru hidratare și ten uscat. Cu ulei de jojoba.",
+      "attributes": {
+        "key_benefit": "Curățare blândă, cu senzație de confort.",
+        "key_ingredients": [
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "0801229991463"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-83CA9B71C5",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "ten sensibil"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination",
+          "sensitive"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A78B8E788C5F",
+          "price": 130.99,
+          "stock": 18,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt și sensibil. Textură gel. Ingrediente-cheie: ulei de jojoba.",
+      "description": "Mira Atelier Balance Gel de curățare cu ulei de jojoba. Curățare blândă, cu senzație de confort. Recomandat pentru ten deshidratat și uscat și mixt și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: ulei de jojoba.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "mira-atelier-clear-ser-pentru-ten",
+      "name": "Mira Atelier Clear Ser pentru ten",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 156.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 137,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, ceramide.",
+      "attributes": {
+        "key_benefit": "Hidratează și lasă tenul mai suplu.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "ceramide",
+          "centella"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "1846500909383"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-3BD2FA4A27",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-D8686AEE27FF",
+          "price": 156.99,
+          "stock": 31,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură fluid. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide.",
+      "description": "Mira Atelier Clear Ser pentru ten. Hidratează și lasă tenul mai suplu. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide, centella.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-hydra-lotiune-tonica",
+      "name": "Mira Atelier Hydra Loțiune tonică",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 101.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 107,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, centella.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 84.99,
+          "vs": {
+            "e31b934b-d4da-44bc-9c27-4b741fb94cfd": 84.99
+          },
+          "pct": 35
+        },
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "centella"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "9246886530172"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-2605E68F45",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C63CFA3060E3",
+          "price": 101.99,
+          "stock": 3,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          },
+          "salePrice": 76.49
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură apă. Ingrediente-cheie: acid hialuronic, niacinamidă, centella.",
+      "description": "Mira Atelier Hydra Loțiune tonică. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă, centella.",
+      "stock": 3,
+      "salePrice": 76.49,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "mira-atelier-pure-lotiune-tonica",
+      "name": "Mira Atelier Pure Loțiune tonică",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 120.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 157,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru ten sensibil și ten mixt. Cu acid hialuronic, centella, panthenol.",
+      "attributes": {
+        "key_benefit": "Calmează și pregătește tenul pentru pașii următori.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "centella",
+          "panthenol"
+        ],
+        "concerns": [
+          "sensitive",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "7997599359000"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-71C4B490B4",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten mixt",
+            "calmare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "combination"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-91499B01A879",
+          "price": 120.99,
+          "stock": 31,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          },
+          "salePrice": 102.84
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și mixt. Textură apă. Ingrediente-cheie: acid hialuronic, centella, panthenol.",
+      "description": "Mira Atelier Pure Loțiune tonică. Calmează și pregătește tenul pentru pașii următori. Recomandat pentru ten sensibil și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, centella, panthenol.",
+      "stock": 31,
+      "salePrice": 102.84,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-silk-lotiune-tonica",
+      "name": "Mira Atelier Silk Loțiune tonică",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 36.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 125,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, ceramide.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "ceramide",
+          "centella"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "3356442507907"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-3E3BDC4321",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-52CB19CDEEE2",
+          "price": 36.99,
+          "stock": 42,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură apă. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide.",
+      "description": "Mira Atelier Silk Loțiune tonică. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide, centella.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nova-botanics-glow-gel-de-curatare",
+      "name": "Nova Botanics Glow Gel de curățare",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 84.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 155,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru hidratare și ten uscat. Cu ceai verde.",
+      "attributes": {
+        "key_benefit": "Curățare delicată cu efect de hidratare.",
+        "key_ingredients": [
+          "ceai verde"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "1122999365854"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-DB279AAC92",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten sensibil",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-05A7D9CB9260",
+          "price": 84.99,
+          "stock": 31,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și sensibil. Textură gel. Ingrediente-cheie: ceai verde.",
+      "description": "Nova Botanics Glow Gel de curățare. Curățare delicată cu efect de hidratare. Recomandat pentru ten deshidratat și uscat și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: ceai verde.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-soft-masca-de-fata",
+      "name": "Orchid Field Soft Mască de față",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 12.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 184,
+      "status": "active",
+      "shortDescription": "Mască de față pentru ten sensibil și ten mixt. Cu aloe vera.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 11.99,
+          "vs": {
+            "7559c49f-e9b2-48e8-8850-66a0d8deb5d5": 11.99
+          },
+          "pct": 20
+        },
+        "key_benefit": "Calmează și oferă confort pielii.",
+        "key_ingredients": [
+          "aloe vera"
+        ],
+        "concerns": [
+          "sensitive",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "2598117303794"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-FF644D4A37",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten mixt",
+            "calmare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-842B71ADA3A4",
+          "price": 12.99,
+          "stock": 67,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          },
+          "salePrice": 9.09
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și mixt. Textură cremă. Ingrediente-cheie: aloe vera.",
+      "description": "Orchid Field Soft Mască de față. Calmează și oferă confort pielii. Recomandat pentru ten sensibil și mixt. Se folosește ocazional. Ingrediente-cheie: aloe vera.",
+      "stock": 67,
+      "salePrice": 9.09,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 7
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-soft-masca-de-fata-cu-acid-hialuronic",
+      "name": "Orchid Field Soft Mască de față cu acid hialuronic",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 14.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 95,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu acid hialuronic.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și lasă pielea mai moale.",
+        "key_ingredients": [
+          "acid hialuronic"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination",
+          "normal"
+        ],
+        "specs": {
+          "Cod EAN": "7852401323902"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-60700A8E8C",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "ten normal"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination",
+          "normal"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt și normal"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-8A21680563EB",
+          "price": 14.99,
+          "stock": 31,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt și normal. Textură cremă. Ingrediente-cheie: acid hialuronic.",
+      "description": "Orchid Field Soft Mască de față cu acid hialuronic. Oferă hidratare și lasă pielea mai moale. Recomandat pentru ten deshidratat și uscat și mixt și normal. Se folosește ocazional. Ingrediente-cheie: acid hialuronic.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "rhea-organics-pure-masca-de-fata",
+      "name": "Rhea Organics Pure Mască de față",
+      "brandSlug": "rhea-organics",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 11.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 159,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, centella.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": null,
+          "vs": {
+            "92c4aba7-8f7f-4d87-b768-a0be0fa678f3": null
+          },
+          "pct": 25
+        },
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "centella",
+          "ceai verde"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "normal",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "0419154241933"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-252F3952CE",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten normal",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "normal",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și normal și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-9B5053101897",
+          "price": 11.99,
+          "stock": 67,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          },
+          "salePrice": 10.79
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal și mixt. Textură cremă. Ingrediente-cheie: acid hialuronic, niacinamidă, centella.",
+      "description": "Rhea Organics Pure Mască de față. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și normal și mixt. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, niacinamidă, centella, ceai verde.",
+      "stock": 67,
+      "salePrice": 10.79,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "velvet-root-balance-lotiune-tonica",
+      "name": "Velvet Root Balance Loțiune tonică",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 71.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 103,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, panthenol.",
+      "attributes": {
+        "key_benefit": "Hidratează și echilibrează pielea după curățare.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "panthenol"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "7163590264500"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-990CB12F7D",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "ten sensibil"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination",
+          "sensitive"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-3A541F86F201",
+          "price": 71.99,
+          "stock": 8,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt și sensibil. Textură apă. Ingrediente-cheie: acid hialuronic, panthenol.",
+      "description": "Velvet Root Balance Loțiune tonică. Hidratează și echilibrează pielea după curățare. Recomandat pentru ten deshidratat și uscat și mixt și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, panthenol.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velvet-root-fresh-lotiune-tonica",
+      "name": "Velvet Root Fresh Loțiune tonică",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 122.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 152,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru ten sensibil și ten mixt. Cu acid hialuronic, centella, acid salicilic.",
+      "attributes": {
+        "key_benefit": "Tonifică și calmează pielea după curățare.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "centella",
+          "acid salicilic",
+          "acid glicolic/lactic (AHA)"
+        ],
+        "concerns": [
+          "sensitive",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "7226037014032"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-A2DF388505",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten mixt",
+            "calmare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "combination"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid salicilic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid glicolic/lactic (AHA)",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-9B087B60F45F",
+          "price": 122.99,
+          "stock": 8,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și mixt. Textură apă. Ingrediente-cheie: acid hialuronic, centella, acid salicilic.",
+      "description": "Velvet Root Fresh Loțiune tonică. Tonifică și calmează pielea după curățare. Recomandat pentru ten sensibil și mixt. Se folosește seara. Ingrediente-cheie: acid hialuronic, centella, acid salicilic, acid glicolic/lactic (AHA).",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "calm-theory-pure-ser-pentru-ten",
+      "name": "Calm Theory Pure Ser pentru ten",
+      "brandSlug": "calm-theory",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 88.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 114,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru ten sensibil și ten mixt. Cu acid glicolic/lactic (AHA), cofeină, unt de shea.",
+      "attributes": {
+        "key_benefit": "Susține repararea și confortul pielii.",
+        "key_ingredients": [
+          "acid glicolic/lactic (AHA)",
+          "cofeină",
+          "unt de shea",
+          "ceai verde"
+        ],
+        "concerns": [
+          "sensitive",
+          "combination",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "1836770824800"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-A636D03F6E",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten mixt",
+            "hidratare",
+            "calmare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "combination",
+          "hydration"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid glicolic/lactic (AHA)",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "cofeină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și mixt și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-2C66285416FC",
+          "price": 88.99,
+          "stock": 8,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și mixt și deshidratat. Textură fluid. Ingrediente-cheie: acid glicolic/lactic (AHA), cofeină, unt de shea.",
+      "description": "Calm Theory Pure Ser pentru ten. Susține repararea și confortul pielii. Recomandat pentru ten sensibil și mixt și deshidratat. Se folosește seara. Ingrediente-cheie: acid glicolic/lactic (AHA), cofeină, unt de shea, ceai verde.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "coral-theory-fresh-masca-de-fata",
+      "name": "Coral Theory Fresh Mască de față",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 148.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 166,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu panthenol, vitamina E.",
+      "attributes": {
+        "key_benefit": "Oferă pielii un plus de hidratare și confort.",
+        "key_ingredients": [
+          "panthenol",
+          "vitamina E"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "normal",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "7271203580570"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-3772980ECB",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten normal",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "normal",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și normal și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-1F51A968B5DA",
+          "price": 148.99,
+          "stock": 24,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal și mixt. Textură cremă. Ingrediente-cheie: panthenol, vitamina E.",
+      "description": "Coral Theory Fresh Mască de față. Oferă pielii un plus de hidratare și confort. Recomandat pentru ten deshidratat și uscat și normal și mixt. Se folosește ocazional. Ingrediente-cheie: panthenol, vitamina E.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "coral-theory-fresh-lotiune-tonica",
+      "name": "Coral Theory Fresh Loțiune tonică",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 126.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 60,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu niacinamidă.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și pregătește pielea pentru pașii următori.",
+        "key_ingredients": [
+          "niacinamidă"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "5296496021800"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-34A045DB76",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-044CB44A9C1B",
+          "price": 126.99,
+          "stock": 31,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură apă. Ingrediente-cheie: niacinamidă.",
+      "description": "Coral Theory Fresh Loțiune tonică. Oferă hidratare și pregătește pielea pentru pașii următori. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "coral-theory-pure-ser-pentru-ten",
+      "name": "Coral Theory Pure Ser pentru ten",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 166.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 144,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru hidratare și ten uscat. Cu acid hialuronic, ceai verde.",
+      "attributes": {
+        "key_benefit": "Hidratează și lasă tenul mai confortabil.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "ceai verde"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "4110333750593"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-D9436035DA",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-1EBF1AB96311",
+          "price": 166.99,
+          "stock": 55,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          },
+          "salePrice": 100.19
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură fluid. Ingrediente-cheie: acid hialuronic, ceai verde.",
+      "description": "Coral Theory Pure Ser pentru ten. Hidratează și lasă tenul mai confortabil. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, ceai verde.",
+      "stock": 55,
+      "salePrice": 100.19,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "elara-beauty-balance-masca-de-fata-cu-colagen",
+      "name": "Elara Beauty Balance Mască de față cu colagen",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 14.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 115,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu colagen.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și un aspect mai plin pielii.",
+        "key_ingredients": [
+          "colagen"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "1243102291951"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-FB86105C69",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "colagen",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-BF93C1FF1077",
+          "price": 14.99,
+          "stock": 18,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură cremă. Ingrediente-cheie: colagen.",
+      "description": "Elara Beauty Balance Mască de față cu colagen. Oferă hidratare și un aspect mai plin pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește ocazional. Ingrediente-cheie: colagen.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "elara-beauty-calm-masca-de-fata",
+      "name": "Elara Beauty Calm Mască de față",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 9.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 44,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu acid hialuronic, ceai verde, panthenol.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "ceai verde",
+          "panthenol"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "6903786224912"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-3B2862AF64",
+          "_concerns_ro": [
+            "hidratare",
+            "calmare",
+            "ten uscat",
+            "ten sensibil"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-9A2B0A49B608",
+          "price": 9.99,
+          "stock": 67,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și sensibil. Textură cremă. Ingrediente-cheie: acid hialuronic, ceai verde, panthenol.",
+      "description": "Elara Beauty Calm Mască de față. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și sensibil. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, ceai verde, panthenol.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-calm-gel-de-curatare",
+      "name": "Mira Atelier Calm Gel de curățare",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 23.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 164,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten sensibil și ten normal. Cu acid hialuronic, centella.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și ajută la confortul pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "centella"
+        ],
+        "concerns": [
+          "sensitive",
+          "normal"
+        ],
+        "specs": {
+          "Cod EAN": "0127056451864"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-D22E3A5839",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten normal",
+            "calmare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "normal"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și normal"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-6313FFA4604B",
+          "price": 23.99,
+          "stock": 42,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și normal. Textură gel. Ingrediente-cheie: acid hialuronic, centella.",
+      "description": "Mira Atelier Calm Gel de curățare. Curăță delicat și ajută la confortul pielii. Recomandat pentru ten sensibil și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, centella.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-clear-lotiune-tonica",
+      "name": "Mira Atelier Clear Loțiune tonică",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 140.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 106,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, centella.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "centella"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "5826550826094"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-B324206654",
+          "_concerns_ro": [
+            "hidratare",
+            "uz zilnic",
+            "ten uscat",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-44E1433EE36B",
+          "price": 140.99,
+          "stock": 8,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          },
+          "salePrice": 112.79
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură apă. Ingrediente-cheie: acid hialuronic, niacinamidă, centella.",
+      "description": "Mira Atelier Clear Loțiune tonică. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă, centella.",
+      "stock": 8,
+      "salePrice": 112.79,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "mira-atelier-clear-lotiune-tonica-cu-acid-hialuronic",
+      "name": "Mira Atelier Clear Loțiune tonică cu acid hialuronic",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 96.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 168,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare. Cu acid hialuronic, ceramide, centella.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și pregătește pielea pentru pașii următori.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "ceramide",
+          "centella",
+          "panthenol"
+        ],
+        "concerns": [
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "7533311368232"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-8C981C6EF7",
+          "_concerns_ro": [
+            "hidratare",
+            "calmare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A1140FB8141B",
+          "price": 96.99,
+          "stock": 67,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat. Textură apă. Ingrediente-cheie: acid hialuronic, ceramide, centella.",
+      "description": "Mira Atelier Clear Loțiune tonică cu acid hialuronic. Oferă hidratare și pregătește pielea pentru pașii următori. Recomandat pentru ten deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, ceramide, centella, panthenol.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-daily-masca-de-fata",
+      "name": "Mira Atelier Daily Mască de față",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 33.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 134,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, centella.",
+      "attributes": {
+        "key_benefit": "Hidratează și oferă confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "centella",
+          "panthenol"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "8014796444836"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-6AC38A4223",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C904979AAB86",
+          "price": 33.99,
+          "stock": 31,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          },
+          "salePrice": 28.89
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură cremă. Ingrediente-cheie: acid hialuronic, niacinamidă, centella.",
+      "description": "Mira Atelier Daily Mască de față. Hidratează și oferă confort pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, niacinamidă, centella, panthenol.",
+      "stock": 31,
+      "salePrice": 28.89,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-fresh-ser-pentru-ten",
+      "name": "Mira Atelier Fresh Ser pentru ten",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 95.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 168,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru hidratare și ten mixt. Cu niacinamidă, vitamina C, centella.",
+      "attributes": {
+        "key_benefit": "Uniformizează și revitalizează aspectul tenului.",
+        "key_ingredients": [
+          "niacinamidă",
+          "vitamina C",
+          "centella",
+          "ferment de orez/galactomyces"
+        ],
+        "concerns": [
+          "hydration",
+          "combination",
+          "oily"
+        ],
+        "specs": {
+          "Cod EAN": "7429819699279"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-1890F2C8BB",
+          "_concerns_ro": [
+            "luminozitate",
+            "hidratare",
+            "ten mixt",
+            "ten gras"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "combination",
+          "oily"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ferment de orez/galactomyces",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și mixt și gras"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-7FCC0C58E7E8",
+          "price": 95.99,
+          "stock": 67,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și mixt și gras. Textură fluid. Ingrediente-cheie: niacinamidă, vitamina C, centella.",
+      "description": "Mira Atelier Fresh Ser pentru ten. Uniformizează și revitalizează aspectul tenului. Recomandat pentru ten deshidratat și mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, vitamina C, centella, ferment de orez/galactomyces.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-glow-masca-de-fata",
+      "name": "Mira Atelier Glow Mască de față",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 46.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 115,
+      "status": "active",
+      "shortDescription": "Mască de față pentru ten normal și ten mixt. Cu acid hialuronic, niacinamidă, ceramide.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 39.99,
+          "vs": {
+            "9548dfbe-7809-46d0-8db6-ff18694fb1f0": 39.99
+          },
+          "pct": 33
+        },
+        "key_benefit": "Oferă tenului un aspect mai luminos și mai odihnit.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "ceramide",
+          "centella"
+        ],
+        "concerns": [
+          "normal",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "0888558477609"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-6AFA16ABEC",
+          "_concerns_ro": [
+            "luminozitate",
+            "ten normal",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "normal",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten normal și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-3A090C7077CE",
+          "price": 46.99,
+          "stock": 18,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          },
+          "salePrice": 35.24
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten normal și mixt. Textură cremă. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide.",
+      "description": "Mira Atelier Glow Mască de față. Oferă tenului un aspect mai luminos și mai odihnit. Recomandat pentru ten normal și mixt. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide, centella.",
+      "stock": 18,
+      "salePrice": 35.24,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 3
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "mira-atelier-glow-ser-pentru-ten",
+      "name": "Mira Atelier Glow Ser pentru ten",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 44.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 105,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru hidratare și ten uscat. Cu niacinamidă, vitamina C, centella.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "niacinamidă",
+          "vitamina C",
+          "centella",
+          "ferment de orez/galactomyces"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "7883996658762"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-335EAD9B9B",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ferment de orez/galactomyces",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-B87AC9F4CB3D",
+          "price": 44.99,
+          "stock": 24,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură fluid. Ingrediente-cheie: niacinamidă, vitamina C, centella.",
+      "description": "Mira Atelier Glow Ser pentru ten. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, vitamina C, centella, ferment de orez/galactomyces.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-pure-lotiune-tonica-cu-niacinamida",
+      "name": "Mira Atelier Pure Loțiune tonică cu niacinamidă",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 81.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 97,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu niacinamidă, vitamina C, centella.",
+      "attributes": {
+        "key_benefit": "Hidratează și pregătește pielea pentru rutină.",
+        "key_ingredients": [
+          "niacinamidă",
+          "vitamina C",
+          "centella",
+          "panthenol"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "normal"
+        ],
+        "specs": {
+          "Cod EAN": "1239838213486"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-1C78512D50",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten normal",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "normal"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și normal"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-2CF3771D387F",
+          "price": 81.99,
+          "stock": 24,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal. Textură apă. Ingrediente-cheie: niacinamidă, vitamina C, centella.",
+      "description": "Mira Atelier Pure Loțiune tonică cu niacinamidă. Hidratează și pregătește pielea pentru rutină. Recomandat pentru ten deshidratat și uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, vitamina C, centella, panthenol.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nera-rituals-clear-gel-de-dus",
+      "name": "Nera Rituals Clear Gel de duș",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "geluri-de-dus",
+      "categorySlugs": [
+        "geluri-de-dus"
+      ],
+      "price": 20.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 58,
+      "status": "active",
+      "shortDescription": "Gel de duș pentru hidratare și ten uscat.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": null,
+          "vs": {
+            "de89edf8-100b-41d5-ab8b-3b4e32b8ea85": null
+          },
+          "pct": 30
+        },
+        "key_benefit": "Curățare delicată cu efect de hidratare.",
+        "concerns": [
+          "hydration",
+          "dry",
+          "normal"
+        ],
+        "specs": {
+          "Cod EAN": "4931196013341",
+          "Cod producator": "DEMO-4B488B8C53"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-89A484A052",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten normal",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "normal"
+        ],
+        "best_for": "ten deshidratat și uscat și normal"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A0A7CC668C81",
+          "price": 20.99,
+          "stock": 8,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          },
+          "salePrice": 17.84
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal.",
+      "description": "Nera Rituals Clear Gel de duș. Curățare delicată cu efect de hidratare. Recomandat pentru ten deshidratat și uscat și normal.",
+      "stock": 8,
+      "salePrice": 17.84,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 7
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nera-rituals-glow-sampon",
+      "name": "Nera Rituals Glow Șampon",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 32.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 22,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu vitamina E.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și oferă confort scalpului.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "3939233969286",
+          "Cod producator": "DEMO-E87A3AC29F"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-1DE494DF87",
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-3C302EA7B6E5",
+          "price": 32.99,
+          "stock": 18,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: vitamina E.",
+      "description": "Nera Rituals Glow Șampon. Curăță delicat și oferă confort scalpului. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: vitamina E.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nera-rituals-hydra-sampon",
+      "name": "Nera Rituals Hydra Șampon",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 33.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 25,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu vitamina E.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": null,
+          "vs": {
+            "5210cd60-67cd-48bd-8e45-0faab37de1c8": null
+          },
+          "pct": 28
+        },
+        "key_benefit": "Curăță delicat și ajută părul să arate mai hidratat.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "8528100677666",
+          "Cod producator": "DEMO-4D0F434803"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-66BDA7BE9A",
+          "_concerns_ro": [
+            "păr uscat",
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-D108CF140943",
+          "price": 33.99,
+          "stock": 24,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: vitamina E.",
+      "description": "Nera Rituals Hydra Șampon. Curăță delicat și ajută părul să arate mai hidratat. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: vitamina E.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nova-botanics-soft-lotiune-tonica",
+      "name": "Nova Botanics Soft Loțiune tonică",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 153.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 172,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă, ferment de orez/galactomyces.",
+      "attributes": {
+        "key_benefit": "Tonifică și oferă hidratare pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă",
+          "ferment de orez/galactomyces",
+          "ceai verde"
+        ],
+        "Lactobacillus/ Ferment de orez": "Bogat in proteine, vitamine, minerale si aminoacizi, care ajuta la hranirea pielii terne, imbunatateste textura pielii si ofera un tonus neted si uniform.",
+        "Extract de radacina de Morus Alba": "Imbunatateste continutul de hidratare, revitalizeaza straturile exterioare ale suprafetei pielii.",
+        "concerns": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "2280054853953"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-6BA9451B4B",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten sensibil",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ferment de orez/galactomyces",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C9C3009A522F",
+          "price": 153.99,
+          "stock": 12,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și sensibil. Textură apă. Ingrediente-cheie: acid hialuronic, niacinamidă, ferment de orez/galactomyces.",
+      "description": "Nova Botanics Soft Loțiune tonică. Tonifică și oferă hidratare pielii. Recomandat pentru ten deshidratat și uscat și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă, ferment de orez/galactomyces, ceai verde.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "orchid-field-clear-masca-de-fata",
+      "name": "Orchid Field Clear Mască de față",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 57.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 84,
+      "status": "active",
+      "shortDescription": "Mască de față pentru ten sensibil și ten mixt. Cu niacinamidă, centella, aloe vera.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 48.99,
+          "vs": {
+            "878a8379-7006-45c5-9ffc-ff2e02d3ec51": 48.99
+          },
+          "pct": 25
+        },
+        "key_benefit": "Oferă confort și calmează pielea.",
+        "key_ingredients": [
+          "niacinamidă",
+          "centella",
+          "aloe vera",
+          "panthenol"
+        ],
+        "concerns": [
+          "sensitive",
+          "combination",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "1960192533091"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-8234B0EFC5",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten mixt",
+            "calmare",
+            "hidratare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "combination",
+          "hydration"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și mixt și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-840D97AFAAD2",
+          "price": 57.99,
+          "stock": 55,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și mixt și deshidratat. Textură cremă. Ingrediente-cheie: niacinamidă, centella, aloe vera.",
+      "description": "Orchid Field Clear Mască de față. Oferă confort și calmează pielea. Recomandat pentru ten sensibil și mixt și deshidratat. Se folosește ocazional. Ingrediente-cheie: niacinamidă, centella, aloe vera, panthenol.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "pure-arc-glow-ser-pentru-ten",
+      "name": "Pure Arc Glow Ser pentru ten",
+      "brandSlug": "pure-arc",
+      "primaryCategorySlug": "seruri-pentru-ten",
+      "categorySlugs": [
+        "seruri-pentru-ten"
+      ],
+      "price": 78.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 107,
+      "status": "active",
+      "shortDescription": "Ser pentru ten pentru hidratare și ten uscat. Cu acid hialuronic, acid glicolic/lactic (AHA), panthenol.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și confort pielii.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "acid glicolic/lactic (AHA)",
+          "panthenol"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "5030101788384"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-2AAE0DBFB7",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "fluid",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid glicolic/lactic (AHA)",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-D272555AA49D",
+          "price": 78.99,
+          "stock": 8,
+          "net_content": {
+            "value": 30,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură fluid. Ingrediente-cheie: acid hialuronic, acid glicolic/lactic (AHA), panthenol.",
+      "description": "Pure Arc Glow Ser pentru ten. Oferă hidratare și confort pielii. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește seara. Ingrediente-cheie: acid hialuronic, acid glicolic/lactic (AHA), panthenol.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velvet-root-clear-gel-de-curatare",
+      "name": "Velvet Root Clear Gel de curățare",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 51.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 94,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru hidratare și ten uscat. Cu acid hialuronic, ceramide, panthenol.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": null,
+          "vs": {
+            "17eb1ff3-d60f-429b-add3-e2068b26a3b0": null
+          },
+          "pct": 33
+        },
+        "key_benefit": "Curățare blândă, cu confort și hidratare.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "ceramide",
+          "panthenol",
+          "alantoină"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "normal"
+        ],
+        "specs": {
+          "Cod EAN": "7905800119210"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-6291894812",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten normal",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "normal"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și normal"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C96CB28822CB",
+          "price": 51.99,
+          "stock": 31,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal. Textură gel. Ingrediente-cheie: acid hialuronic, ceramide, panthenol.",
+      "description": "Velvet Root Clear Gel de curățare. Curățare blândă, cu confort și hidratare. Recomandat pentru ten deshidratat și uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, ceramide, panthenol, alantoină.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "velvet-root-clear-lotiune-tonica",
+      "name": "Velvet Root Clear Loțiune tonică",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 93.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 111,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, niacinamidă.",
+      "attributes": {
+        "key_benefit": "Reîmprospătează și hidratează pielea.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "niacinamidă"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "9375923935450"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-22A70EAB6B",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten mixt",
+            "ten sensibil"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination",
+          "sensitive"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-44B16EF8FB1E",
+          "price": 93.99,
+          "stock": 42,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt și sensibil. Textură apă. Ingrediente-cheie: acid hialuronic, niacinamidă.",
+      "description": "Velvet Root Clear Loțiune tonică. Reîmprospătează și hidratează pielea. Recomandat pentru ten deshidratat și uscat și mixt și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "velvet-root-hydra-masca-de-fata",
+      "name": "Velvet Root Hydra Mască de față",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 120.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 104,
+      "status": "active",
+      "shortDescription": "Mască de față pentru ten sensibil și hidratare. Cu acid hialuronic, ceai verde, alantoină.",
+      "attributes": {
+        "key_benefit": "Calmează și hidratează pielea.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "ceai verde",
+          "alantoină"
+        ],
+        "concerns": [
+          "sensitive",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "8666394508875"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-51D0301643",
+          "_concerns_ro": [
+            "ten sensibil",
+            "hidratare",
+            "calmare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-6AF54AF20124",
+          "price": 120.99,
+          "stock": 18,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură cremă. Ingrediente-cheie: acid hialuronic, ceai verde, alantoină.",
+      "description": "Velvet Root Hydra Mască de față. Calmează și hidratează pielea. Recomandat pentru ten sensibil și deshidratat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, ceai verde, alantoină.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velvet-root-soft-gel-de-curatare",
+      "name": "Velvet Root Soft Gel de curățare",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 54.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 76,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten mixt și ten sensibil. Cu centella, acid salicilic, panthenol.",
+      "attributes": {
+        "key_benefit": "Curățare delicată cu efect de netezire.",
+        "key_ingredients": [
+          "centella",
+          "acid salicilic",
+          "panthenol",
+          "alantoină"
+        ],
+        "concerns": [
+          "combination",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "1534971272692"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-FD7660F5C3",
+          "_concerns_ro": [
+            "ten mixt",
+            "ten sensibil",
+            "uz zilnic",
+            "calmare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "combination",
+          "sensitive"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid salicilic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten mixt și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A4131D771295",
+          "price": 54.99,
+          "stock": 55,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          },
+          "salePrice": 46.74
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten mixt și sensibil. Textură gel. Ingrediente-cheie: centella, acid salicilic, panthenol.",
+      "description": "Velvet Root Soft Gel de curățare. Curățare delicată cu efect de netezire. Recomandat pentru ten mixt și sensibil. Se folosește seara. Ingrediente-cheie: centella, acid salicilic, panthenol, alantoină.",
+      "stock": 55,
+      "salePrice": 46.74,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 10
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "calm-theory-fresh-masca-de-fata",
+      "name": "Calm Theory Fresh Mască de față",
+      "brandSlug": "calm-theory",
+      "primaryCategorySlug": "masti-pentru-ten",
+      "categorySlugs": [
+        "masti-pentru-ten"
+      ],
+      "price": 116.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 96,
+      "status": "active",
+      "shortDescription": "Mască de față pentru hidratare și ten uscat. Cu vitamina E.",
+      "attributes": {
+        "key_benefit": "Hidratează și oferă confort pielii.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "Fermenti probiotici si extract de orez": "Ingrediente care sustin o bariera protectoare sanatoasa si microbiomul pielii, reduc roseata si diminueaza inflamatia.",
+        "concerns": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "3425193006103"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-FDE1F8D97D",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten sensibil",
+            "calmare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-0488508B3853",
+          "price": 116.99,
+          "stock": 8,
+          "net_content": {
+            "value": 75,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și sensibil. Textură cremă. Ingrediente-cheie: vitamina E.",
+      "description": "Calm Theory Fresh Mască de față. Hidratează și oferă confort pielii. Recomandat pentru ten deshidratat și uscat și sensibil. Se folosește ocazional. Ingrediente-cheie: vitamina E.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "calm-theory-pure-lotiune-tonica",
+      "name": "Calm Theory Pure Loțiune tonică",
+      "brandSlug": "calm-theory",
+      "primaryCategorySlug": "lotiuni-tonice",
+      "categorySlugs": [
+        "lotiuni-tonice"
+      ],
+      "price": 73.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 143,
+      "status": "active",
+      "shortDescription": "Loțiune tonică pentru hidratare și ten uscat. Cu acid hialuronic, acid glicolic/lactic (AHA), aloe vera.",
+      "attributes": {
+        "key_benefit": "Oferă hidratare și confort după curățare.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "acid glicolic/lactic (AHA)",
+          "aloe vera"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "7593231509623"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-75D58F9633",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten sensibil",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "tone",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid glicolic/lactic (AHA)",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-18A1DF9D6057",
+          "price": 73.99,
+          "stock": 12,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și sensibil. Textură apă. Ingrediente-cheie: acid hialuronic, acid glicolic/lactic (AHA), aloe vera.",
+      "description": "Calm Theory Pure Loțiune tonică. Oferă hidratare și confort după curățare. Recomandat pentru ten deshidratat și uscat și sensibil. Se folosește seara. Ingrediente-cheie: acid hialuronic, acid glicolic/lactic (AHA), aloe vera.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "maison-verde-fresh-apa-micelara",
+      "name": "Maison Verde Fresh Apă micelară",
+      "brandSlug": "maison-verde",
+      "primaryCategorySlug": "demachiante-pentru-ten",
+      "categorySlugs": [
+        "demachiante-pentru-ten"
+      ],
+      "price": 45.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 86,
+      "status": "active",
+      "shortDescription": "Apă micelară pentru hidratare și ten uscat. Cu vitamina E.",
+      "attributes": {
+        "key_benefit": "Curățare blândă cu efect de confort.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "6807632916000",
+          "Cod producator": "DEMO-A49FC00769"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-5473B05C83",
+          "_concerns_ro": [
+            "hidratare",
+            "ten uscat",
+            "ten sensibil",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-E3C14A21224B",
+          "price": 45.99,
+          "stock": 67,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și sensibil. Textură apă. Ingrediente-cheie: vitamina E.",
+      "description": "Maison Verde Fresh Apă micelară. Curățare blândă cu efect de confort. Recomandat pentru ten deshidratat și uscat și sensibil. Se folosește seara. Ingrediente-cheie: vitamina E.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-calm-gel-de-curatare-cu-centella",
+      "name": "Mira Atelier Calm Gel de curățare cu centella",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 71.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 154,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten sensibil și ten uscat. Cu centella, aloe vera.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 59.99,
+          "vs": {
+            "8f773af5-1d33-4746-a0bf-200be9b7df67": 59.99
+          },
+          "pct": 30
+        },
+        "key_benefit": "Curățare blândă, cu efect de calmare.",
+        "key_ingredients": [
+          "centella",
+          "aloe vera"
+        ],
+        "concerns": [
+          "sensitive",
+          "dry"
+        ],
+        "specs": {
+          "Cod EAN": "7423476692286"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-715853E8F6",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten uscat",
+            "calmare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "dry"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-663F55D76DCF",
+          "price": 71.99,
+          "stock": 42,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și uscat. Textură gel. Ingrediente-cheie: centella, aloe vera.",
+      "description": "Mira Atelier Calm Gel de curățare cu centella. Curățare blândă, cu efect de calmare. Recomandat pentru ten sensibil și uscat. Se folosește dimineața, seara. Ingrediente-cheie: centella, aloe vera.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-daily-gel-de-curatare",
+      "name": "Mira Atelier Daily Gel de curățare",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 61.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 133,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru hidratare și ten uscat. Cu centella, acid salicilic.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și ajută la menținerea hidratării.",
+        "key_ingredients": [
+          "centella",
+          "acid salicilic"
+        ],
+        "concerns": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "4590194988624"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-4ACC5306BD",
+          "_concerns_ro": [
+            "hidratare",
+            "uz zilnic",
+            "ten uscat",
+            "ten mixt"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid salicilic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-654823BF1FDE",
+          "price": 61.99,
+          "stock": 8,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură gel. Ingrediente-cheie: centella, acid salicilic.",
+      "description": "Mira Atelier Daily Gel de curățare. Curăță delicat și ajută la menținerea hidratării. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește seara. Ingrediente-cheie: centella, acid salicilic.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nera-rituals-clear-sampon",
+      "name": "Nera Rituals Clear Șampon",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 33.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 127,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu vitamina E.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și lasă părul mai hidratat.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "2040434740000",
+          "Cod producator": "DEMO-2B3A9BF1C7"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-FF3B605E36",
+          "_concerns_ro": [
+            "păr uscat",
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-D7500DF7955F",
+          "price": 33.99,
+          "stock": 8,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: vitamina E.",
+      "description": "Nera Rituals Clear Șampon. Curăță delicat și lasă părul mai hidratat. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: vitamina E.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "orchid-field-hydra-gel-de-curatare",
+      "name": "Orchid Field Hydra Gel de curățare",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 89.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 168,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten sensibil și hidratare. Cu niacinamidă, ceramide, centella.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și lasă pielea confortabilă.",
+        "key_ingredients": [
+          "niacinamidă",
+          "ceramide",
+          "centella",
+          "acid salicilic"
+        ],
+        "concerns": [
+          "sensitive",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "5131332588376"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-A8E32680C0",
+          "_concerns_ro": [
+            "ten sensibil",
+            "calmare",
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "niacinamidă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid salicilic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-187789E7283A",
+          "price": 89.99,
+          "stock": 67,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          },
+          "salePrice": 58.49
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură gel. Ingrediente-cheie: niacinamidă, ceramide, centella.",
+      "description": "Orchid Field Hydra Gel de curățare. Curăță delicat și lasă pielea confortabilă. Recomandat pentru ten sensibil și deshidratat. Se folosește seara. Ingrediente-cheie: niacinamidă, ceramide, centella, acid salicilic.",
+      "stock": 67,
+      "salePrice": 58.49,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "rhea-organics-glow-stick-cu-spf",
+      "name": "Rhea Organics Glow Stick cu SPF",
+      "brandSlug": "rhea-organics",
+      "primaryCategorySlug": "protectie-solara",
+      "categorySlugs": [
+        "protectie-solara"
+      ],
+      "price": 69.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 169,
+      "status": "active",
+      "shortDescription": "Stick cu SPF pentru ten mixt și ten uscat. Cu acid hialuronic, centella, ulei de jojoba.",
+      "attributes": {
+        "key_benefit": "Protecție solară practică, în format stick.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "centella",
+          "ulei de jojoba",
+          "aloe vera"
+        ],
+        "concerns": [
+          "combination",
+          "dry"
+        ],
+        "specs": {
+          "Cod EAN": "5642953540800"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-69C201E1EA",
+          "_concerns_ro": [
+            "protecție solară",
+            "uz zilnic",
+            "ten mixt",
+            "ten uscat"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "suitable_for": [
+          "combination",
+          "dry"
+        ],
+        "routine_step": "protect",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten mixt și uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C5F47DB9EE76",
+          "price": 69.99,
+          "stock": 8,
+          "net_content": {
+            "value": 50,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten mixt și uscat. Ingrediente-cheie: acid hialuronic, centella, ulei de jojoba.",
+      "description": "Rhea Organics Glow Stick cu SPF. Protecție solară practică, în format stick. Recomandat pentru ten mixt și uscat. Ingrediente-cheie: acid hialuronic, centella, ulei de jojoba, aloe vera.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "rhea-organics-hydra-gel-de-curatare",
+      "name": "Rhea Organics Hydra Gel de curățare",
+      "brandSlug": "rhea-organics",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 84.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 170,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten uscat și ten sensibil. Cu vitamina E.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 70.99,
+          "vs": {
+            "afb5d466-9f77-4b36-8759-5e1183ee8d83": 70.99
+          },
+          "pct": 22
+        },
+        "key_benefit": "Curăță blând și ajută la menținerea hidratării.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "Curatare profunda": "Uleiul de soia dizolva delicat murdaria si machiajul acumulat pe piele.",
+        "Ulei de soia (50%)": "Bogat in acizi grasi esentiali, curata porii fara a-i bloca si netezeste pielea.",
+        "Tehnologie micelara": "Micelii compuse din apa si ulei atrag si elimina impuritatile, oferind totodata hidratare in profunzime.",
+        "Ulei de seminte de ginseng (0,1%)": "Protejeaza pielea de factorii externi si ofera un parfum calmant, transformand curatarea intr-un moment de relaxare.",
+        "concerns": [
+          "dry",
+          "sensitive",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "1272527662816"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-3489658CE1",
+          "_concerns_ro": [
+            "ten uscat",
+            "ten sensibil",
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "dry",
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten uscat și sensibil și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-F4FA0AFECC73",
+          "price": 84.99,
+          "stock": 18,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          },
+          "salePrice": 63.74
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten uscat și sensibil și deshidratat. Textură gel. Ingrediente-cheie: vitamina E.",
+      "description": "Rhea Organics Hydra Gel de curățare. Curăță blând și ajută la menținerea hidratării. Recomandat pentru ten uscat și sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: vitamina E.",
+      "stock": 18,
+      "salePrice": 63.74,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velvet-root-pure-gel-de-curatare",
+      "name": "Velvet Root Pure Gel de curățare",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 115.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 132,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten sensibil și ten uscat. Cu ulei de jojoba, vitamina E.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 95.99,
+          "vs": {
+            "48d1c63c-a1ea-4b77-9d91-52603c2708a1": 95.99
+          },
+          "pct": 35
+        },
+        "key_benefit": "Curățare blândă, cu confort pentru piele.",
+        "key_ingredients": [
+          "ulei de jojoba",
+          "vitamina E"
+        ],
+        "concerns": [
+          "sensitive",
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "4985784005278"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-42C2948992",
+          "_concerns_ro": [
+            "ten sensibil",
+            "ten uscat",
+            "ten mixt",
+            "calmare"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "dry",
+          "combination"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten sensibil și uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A1086D8B9EC0",
+          "price": 115.99,
+          "stock": 31,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten sensibil și uscat și mixt. Textură gel. Ingrediente-cheie: ulei de jojoba, vitamina E.",
+      "description": "Velvet Root Pure Gel de curățare. Curățare blândă, cu confort pentru piele. Recomandat pentru ten sensibil și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: ulei de jojoba, vitamina E.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "iris-co-pure-sampon",
+      "name": "Iris & Co Pure Șampon",
+      "brandSlug": "iris-and-co",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 89.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 105,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu colagen.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și ajută la hidratarea părului.",
+        "key_ingredients": [
+          "colagen"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "7427589493994"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-7015568F7A",
+          "_concerns_ro": [
+            "hidratare",
+            "păr uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "colagen",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-A2055364AA7E",
+          "price": 89.99,
+          "stock": 12,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: colagen.",
+      "description": "Iris & Co Pure Șampon. Curăță delicat și ajută la hidratarea părului. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: colagen.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "mira-atelier-silk-stick-cu-spf",
+      "name": "Mira Atelier Silk Stick cu SPF",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "protectie-solara",
+      "categorySlugs": [
+        "protectie-solara"
+      ],
+      "price": 95.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 180,
+      "status": "active",
+      "shortDescription": "Stick cu SPF pentru hidratare. Cu acid hialuronic, centella, ulei de jojoba.",
+      "attributes": {
+        "key_benefit": "Protecție solară cu plus de hidratare, ușor de reaplicat.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "centella",
+          "ulei de jojoba",
+          "aloe vera"
+        ],
+        "concerns": [
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "8466145420000"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-A9A27544B6",
+          "_concerns_ro": [
+            "protecție solară",
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "suitable_for": [
+          "hydration"
+        ],
+        "routine_step": "protect",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-578D678B3DD2",
+          "price": 95.99,
+          "stock": 8,
+          "net_content": {
+            "value": 50,
+            "unit": "ml"
+          },
+          "salePrice": 67.19
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat. Ingrediente-cheie: acid hialuronic, centella, ulei de jojoba.",
+      "description": "Mira Atelier Silk Stick cu SPF. Protecție solară cu plus de hidratare, ușor de reaplicat. Recomandat pentru ten deshidratat. Ingrediente-cheie: acid hialuronic, centella, ulei de jojoba, aloe vera.",
+      "stock": 8,
+      "salePrice": 67.19,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 3
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nova-botanics-pure-gel-de-curatare",
+      "name": "Nova Botanics Pure Gel de curățare",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "curatarea-tenului",
+      "categorySlugs": [
+        "curatarea-tenului"
+      ],
+      "price": 118.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 119,
+      "status": "active",
+      "shortDescription": "Gel de curățare pentru ten uscat și ten sensibil. Cu ulei de jojoba.",
+      "attributes": {
+        "key_benefit": "Curăță eficient și menține confortul pielii.",
+        "key_ingredients": [
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "dry",
+          "sensitive",
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "8990577950360"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-B9F548FD77",
+          "_concerns_ro": [
+            "ten uscat",
+            "ten sensibil",
+            "hidratare",
+            "ochi"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "dry",
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten uscat și sensibil și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-E33688674FE0",
+          "price": 118.99,
+          "stock": 8,
+          "net_content": {
+            "value": 150,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten uscat și sensibil și deshidratat. Textură gel. Ingrediente-cheie: ulei de jojoba.",
+      "description": "Nova Botanics Pure Gel de curățare. Curăță eficient și menține confortul pielii. Recomandat pentru ten uscat și sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: ulei de jojoba.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nera-rituals-silk-gel-de-dus",
+      "name": "Nera Rituals Silk Gel de duș",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "geluri-de-dus",
+      "categorySlugs": [
+        "geluri-de-dus"
+      ],
+      "price": 19.99,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 167,
+      "status": "active",
+      "shortDescription": "Gel de duș pentru hidratare. Cu acid glicolic/lactic (AHA), vitamina E.",
+      "attributes": {
+        "key_benefit": "Curățare blândă cu senzație de prospețime.",
+        "key_ingredients": [
+          "acid glicolic/lactic (AHA)",
+          "vitamina E"
+        ],
+        "concerns": [
+          "hydration"
+        ],
+        "specs": {
+          "Cod EAN": "7018608090219",
+          "Cod producator": "DEMO-42E79BEF06"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-148FF05CE0",
+          "_concerns_ro": [
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "suitable_for": [
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid glicolic/lactic (AHA)",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten deshidratat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C8F1987FD67E",
+          "price": 19.99,
+          "stock": 42,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          },
+          "salePrice": 13.99
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten deshidratat. Ingrediente-cheie: acid glicolic/lactic (AHA), vitamina E.",
+      "description": "Nera Rituals Silk Gel de duș. Curățare blândă cu senzație de prospețime. Recomandat pentru ten deshidratat. Ingrediente-cheie: acid glicolic/lactic (AHA), vitamina E.",
+      "stock": 42,
+      "salePrice": 13.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 7
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "coral-theory-hydra-sampon",
+      "name": "Coral Theory Hydra Șampon",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 111.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 177,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu vitamina E.",
+      "attributes": {
+        "key_benefit": "Curăță delicat și ajută la protejarea hidratării părului.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "5350743243133"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-5C59FF1015",
+          "_concerns_ro": [
+            "hidratare",
+            "păr uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-3A9B4627E1EC",
+          "price": 111.99,
+          "stock": 42,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: vitamina E.",
+      "description": "Coral Theory Hydra Șampon. Curăță delicat și ajută la protejarea hidratării părului. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: vitamina E.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumiere-skin-silk-stick-cu-spf",
+      "name": "Lumiere Skin Silk Stick cu SPF",
+      "brandSlug": "lumiere-skin",
+      "primaryCategorySlug": "protectie-solara",
+      "categorySlugs": [
+        "protectie-solara"
+      ],
+      "price": 71.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 130,
+      "status": "active",
+      "shortDescription": "Stick cu SPF pentru ten mixt și ten gras. Cu aloe vera, vitamina E.",
+      "attributes": {
+        "key_benefit": "Protecție UV practică, în format stick.",
+        "key_ingredients": [
+          "aloe vera",
+          "vitamina E"
+        ],
+        "concerns": [
+          "combination",
+          "oily"
+        ],
+        "specs": {
+          "Cod EAN": "0662623061641"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-C1D5CBF5C0",
+          "_concerns_ro": [
+            "protecție solară",
+            "uz zilnic",
+            "ten mixt",
+            "ten gras"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "suitable_for": [
+          "combination",
+          "oily"
+        ],
+        "routine_step": "protect",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "aloe vera",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten mixt și gras"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-504CE1DF1863",
+          "price": 71.99,
+          "stock": 55,
+          "net_content": {
+            "value": 50,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten mixt și gras. Ingrediente-cheie: aloe vera, vitamina E.",
+      "description": "Lumiere Skin Silk Stick cu SPF. Protecție UV practică, în format stick. Recomandat pentru ten mixt și gras. Ingrediente-cheie: aloe vera, vitamina E.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "pure-arc-silk-sampon",
+      "name": "Pure Arc Silk Șampon",
+      "brandSlug": "pure-arc",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 44.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 131,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu ceramide, panthenol.",
+      "attributes": {
+        "key_benefit": "Păr mai neted și mai ușor de coafat.",
+        "key_ingredients": [
+          "ceramide",
+          "panthenol"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "7650159674982"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-DA827B9A6F",
+          "_concerns_ro": [
+            "păr uscat",
+            "hidratare",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-B9308ADF1E85",
+          "price": 44.99,
+          "stock": 12,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          },
+          "salePrice": 38.24
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: ceramide, panthenol.",
+      "description": "Pure Arc Silk Șampon. Păr mai neted și mai ușor de coafat. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: ceramide, panthenol.",
+      "stock": 12,
+      "salePrice": 38.24,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 3
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "coral-theory-fresh-apa-micelara",
+      "name": "Coral Theory Fresh Apă micelară",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "demachiante-pentru-ten",
+      "categorySlugs": [
+        "demachiante-pentru-ten"
+      ],
+      "price": 183.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 137,
+      "status": "active",
+      "shortDescription": "Apă micelară pentru ten uscat și ten mixt. Cu acid hialuronic, peptide.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": null,
+          "vs": {
+            "beb4759f-2bde-499d-8580-72aef393d4b2": null
+          },
+          "pct": 22
+        },
+        "key_benefit": "Curăță delicat și lasă pielea confortabilă.",
+        "key_ingredients": [
+          "acid hialuronic",
+          "peptide"
+        ],
+        "concerns": [
+          "dry",
+          "combination"
+        ],
+        "specs": {
+          "Cod EAN": "6690875167056"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-9D608492E5",
+          "_concerns_ro": [
+            "ten uscat",
+            "ten mixt",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "dry",
+          "combination"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "peptide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten uscat și mixt"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-2F983EEB106E",
+          "price": 183.99,
+          "stock": 67,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten uscat și mixt. Textură apă. Ingrediente-cheie: acid hialuronic, peptide.",
+      "description": "Coral Theory Fresh Apă micelară. Curăță delicat și lasă pielea confortabilă. Recomandat pentru ten uscat și mixt. Se folosește seara. Ingrediente-cheie: acid hialuronic, peptide.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "iris-co-glow-sampon",
+      "name": "Iris & Co Glow Șampon",
+      "brandSlug": "iris-and-co",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 28.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 131,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu colagen.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": 24.99,
+          "vs": {
+            "8be5256e-5742-4fe3-82c4-0a74a4860cf4": 24.99
+          },
+          "pct": 20
+        },
+        "key_benefit": "Curăță delicat și ajută la hidratarea părului.",
+        "key_ingredients": [
+          "colagen"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "5406889373700"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-AF3C9EF55E",
+          "_concerns_ro": [
+            "hidratare",
+            "păr uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "colagen",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-2DFADF3837DD",
+          "price": 28.99,
+          "stock": 18,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: colagen.",
+      "description": "Iris & Co Glow Șampon. Curăță delicat și ajută la hidratarea părului. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: colagen.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nera-rituals-silk-sampon",
+      "name": "Nera Rituals Silk Șampon",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "sampoane",
+      "categorySlugs": [
+        "sampoane"
+      ],
+      "price": 59.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 162,
+      "status": "active",
+      "shortDescription": "Șampon pentru păr uscat. Cu vitamina E.",
+      "attributes": {
+        "key_benefit": "Hidratare și suplețe pentru părul uscat.",
+        "key_ingredients": [
+          "vitamina E"
+        ],
+        "hair_type": "uscat",
+        "specs": {
+          "Cod EAN": "4524212557373",
+          "Cod producator": "DEMO-A561286393"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-5959C93891",
+          "_concerns_ro": [
+            "hidratare",
+            "păr uscat",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "păr uscat"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-C0649DFBEB58",
+          "price": 59.99,
+          "stock": 31,
+          "net_content": {
+            "value": 250,
+            "unit": "ml"
+          },
+          "salePrice": 53.99
+        }
+      ],
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: vitamina E.",
+      "description": "Nera Rituals Silk Șampon. Hidratare și suplețe pentru părul uscat. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: vitamina E.",
+      "stock": 31,
+      "salePrice": 53.99,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-glow-apa-micelara",
+      "name": "Orchid Field Glow Apă micelară",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "demachiante-pentru-ten",
+      "categorySlugs": [
+        "demachiante-pentru-ten"
+      ],
+      "price": 82.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 117,
+      "status": "active",
+      "shortDescription": "Apă micelară pentru ten uscat și ten sensibil. Cu ulei de jojoba, ceai verde.",
+      "attributes": {
+        "_seed_deal": {
+          "v": 1,
+          "ps": null,
+          "vs": {
+            "a70e688f-7aa3-4de1-95e2-cecd16a0089a": null
+          },
+          "pct": 33
+        },
+        "key_benefit": "Curăță delicat și lasă pielea suplă.",
+        "key_ingredients": [
+          "ulei de jojoba",
+          "ceai verde"
+        ],
+        "concerns": [
+          "dry",
+          "sensitive"
+        ],
+        "specs": {
+          "Cod EAN": "7112621506681",
+          "Cod producator": "DEMO-78A1486B0C"
+        },
+        "_meta": {
+          "enrich_v": 2,
+          "Cod memoX": "DEMO-920E668883",
+          "_concerns_ro": [
+            "ten uscat",
+            "ten sensibil",
+            "acoperire machiaj",
+            "uz zilnic"
+          ],
+          "original_brand_replaced": true,
+          "source_visible_image_count": 5,
+          "source_visible_variant_count": 0,
+          "revived_from": "archive"
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "dry",
+          "sensitive"
+        ],
+        "routine_step": "cleanse",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceai verde",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "best_for": "ten uscat și sensibil"
+      },
+      "variants": [
+        {
+          "label": "Standard",
+          "sku": "REV-D488D2C0B14B",
+          "price": 82.99,
+          "stock": 42,
+          "net_content": {
+            "value": 200,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru ten uscat și sensibil. Textură apă. Ingrediente-cheie: ulei de jojoba, ceai verde.",
+      "description": "Orchid Field Glow Apă micelară. Curăță delicat și lasă pielea suplă. Recomandat pentru ten uscat și sensibil. Se folosește seara. Ingrediente-cheie: ulei de jojoba, ceai verde.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     }
   ]
 }
