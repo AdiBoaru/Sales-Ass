@@ -50,6 +50,10 @@ DATA = ROOT / "db" / "seed" / "catalog_v2.json"
 # urgență ONESTĂ (spune un fapt), dar are nevoie de o stare distinctă, nu doar de un număr.
 LOW_STOCK_THRESHOLD = 5
 
+#: NX-197: câte produse pe tranzacție. Vezi comentariul din bucla de seed — o singură tranzacție
+#: pentru tot catalogul depășește limita poolerului odată ce fișele au conținut real.
+COMMIT_EVERY = 25
+
 # Placeholder-e consistente pe categorie (runtime W1 citește prima poză). Culoare de fundal per
 # RAMURĂ top-level → cardurile arată coerent vizual pe categorie. placehold.co = serviciu care
 # randează efectiv (ca în catalogul demo vechi). Explicit `images` în JSON are prioritate.
@@ -514,7 +518,9 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         )
     # badge-uri de trust (derivate din atribute reale)
     await conn.execute("delete from product_badges where product_id=$1", pid)
-    for label in pdp_content.badges(p):
+    # NX-197: badge-urile AUTORATE (derivate din fapte în enrich_catalog_extras) au prioritate;
+    # fallback pe derivarea din pdp_content pentru produsele fără listă proprie.
+    for label in p.get("badges") or pdp_content.badges(p):
         await conn.execute(
             "insert into product_badges (product_id, label) values ($1,$2)", pid, label
         )
@@ -562,7 +568,9 @@ async def main() -> int:
 
     pool = await get_pool()
     async with admin_conn(pool) as conn:
-        async with conn.transaction():
+        tx = conn.transaction()
+        await tx.start()
+        try:
             v2_slugs = [p["slug"] for p in data["products"]]
             if archive_old:
                 n = await conn.fetchval(
@@ -590,7 +598,7 @@ async def main() -> int:
                     if tgt:
                         _ROUTINE_NEXT.setdefault(rel["product_slug"], []).append(tgt["name"])
 
-            for p in data["products"]:
+            for i, p in enumerate(data["products"], start=1):
                 cat_id = await conn.fetchval(
                     "select id from categories where business_id=$1 and slug=$2",
                     DEMO_BIZ,
@@ -600,6 +608,17 @@ async def main() -> int:
                 await _upsert_product(conn, p, brand_ids[p["brandSlug"]], cat_id, root)
                 n_var += len(p.get("variants") or [])
                 print(f"  seedat: {p['name']} ({len(p.get('variants') or [])} variante)")
+                # NX-197: punct de commit intermediar. Cu fișe de ~2.000 de caractere × 300 de
+                # produse, o singură tranzacție depășește limita poolerului Supabase și conexiunea
+                # e închisă la mijloc (l-am prins în practică la ~250 de produse). Compromisul e
+                # asumat: poarta de audit rulează ÎNAINTE de orice scriere, iar seed-ul e idempotent
+                # pe slug — deci o întrerupere lasă un catalog parțial ACTUALIZAT, nu unul corupt,
+                # iar re-rularea îl duce la capăt.
+                if not dry and i % COMMIT_EVERY == 0 and i < len(data["products"]):
+                    await tx.commit()
+                    tx = conn.transaction()
+                    await tx.start()
+                    print(f"  — commit intermediar ({i}/{len(data['products'])})", flush=True)
 
             # NX-171b: relații explicite (rutină/complement/substitut) derivate DETERMINIST din
             # faptele catalogului. Sursă de adevăr = JSON → șterge + reinserează (idempotent).
@@ -648,6 +667,10 @@ async def main() -> int:
                     print(f"      {slug} [{kind}]")
             if dry:
                 raise RuntimeError("--dry-run → rollback (nimic scris)")
+            await tx.commit()
+        except BaseException:
+            await tx.rollback()
+            raise
     await close_pool()
     return 0
 

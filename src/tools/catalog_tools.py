@@ -227,7 +227,12 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
 
 
 def _variant_view(raw_variants: Any, *, limit: int) -> str:
-    """Compact variant labels for the model, including per-variant stock when present."""
+    """Compact variant labels for the model, including per-variant stock when present.
+
+    NX-197: NU suprimăm varianta unică aici, deși pe cardul web selectorul cu o singură opțiune e
+    ascuns. Motivul: varianta poartă gramajul și prețul pe unitate („50ml, 84.00 lei/100ml"), adică
+    exact faptele cu care botul răspunde la «care e mai avantajos». Zgomot pe UI ≠ zgomot pentru
+    model — testele de la NX-171a au prins diferența."""
     labels: list[str] = []
     for v in (raw_variants or [])[:limit]:
         if not isinstance(v, dict):

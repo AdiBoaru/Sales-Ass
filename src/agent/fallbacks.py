@@ -196,9 +196,16 @@ def _deterministic_reply(products: list[dict[str, Any]]) -> str:
 
 
 def _card_variants(product: dict[str, Any], n: int = 16) -> list[dict[str, Any]]:
-    """Compact variant payload for product cards (shade/size stock, color and attributes)."""
+    """Compact variant payload for product cards (shade/size stock, color and attributes).
+
+    NX-197: un selector cu O SINGURĂ opțiune nu e o alegere, e zgomot pe card. Modelul de date
+    rămâne uniform („tot ce se vinde e o variantă", ca să existe SKU/gramaj/preț-per-unitate pe
+    toate produsele), dar UI-ul primește selectorul doar când chiar are ce alege."""
+    raws = product.get("variants") or []
+    if len(raws) < 2:
+        return []
     out: list[dict[str, Any]] = []
-    for raw in (product.get("variants") or [])[:n]:
+    for raw in raws[:n]:
         if not isinstance(raw, dict):
             continue
         variant_id = raw.get("variant_id") or raw.get("id")
