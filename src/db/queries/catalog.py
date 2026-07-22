@@ -15,10 +15,24 @@ import asyncpg
 
 from src.config import get_settings
 
+# NX-191 — FEREASTRA promoției. `sale_price` fără verificarea ferestrei = minciună comercială:
+# o promoție încheiată ar continua să se afișeze ca preț curent, iar validatorul (stagiul 8) ar
+# confirma-o, pentru că vede același preț greșit. Fereastra deschisă (ambele NULL) = promoție
+# permanentă — comportamentul de dinainte de card, deci rândurile vechi rămân valide.
+# `current_date` e evaluat de Postgres în fusul sesiunii; suficient pentru o graniță pe ZI.
+_SALE_WINDOW_OK = (
+    "(p.sale_start is null or p.sale_start <= current_date)"
+    " and (p.sale_end is null or p.sale_end >= current_date)"
+)
+# Promoția e ACTIVĂ: există, e mai mică decât prețul de listă ȘI e în fereastră.
+_SALE_ACTIVE = f"(p.sale_price is not null and p.sale_price < p.price and {_SALE_WINDOW_OK})"
+# Prețul de produs ținând cont de fereastră (fallback-ul când nu există variante).
+_PRODUCT_PRICE = f"(case when {_SALE_ACTIVE} then p.sale_price else p.price end)"
+
 # Prețul REAL e pe variantă (vezi T037): fiecare produs are variante cu sale_price
 # propriu, de obicei mai mic decât products.price. Sursăm min(variant) cu fallback
 # la products. Validatorul de preț trebuie să vadă același preț ca clientul.
-_EFFECTIVE_PRICE = "coalesce(vp.price, p.sale_price, p.price)"
+_EFFECTIVE_PRICE = f"coalesce(vp.price, {_PRODUCT_PRICE})"
 
 # Rating „shrunk" (Bayesian) — un 5.0 cu 1 recenzie NU mai îngroapă un 4.6 cu 200 (cold-start).
 # Prior C≈30 spre media 4.0: (n*rating + C*4.0)/(n + C). Pur SQL, `review_count` deja selectat.
@@ -30,6 +44,11 @@ _SHRUNK_RATING = (
 # Moduri de sortare (allowlist → zero injection; sort_mode e structural, nu param bindabil).
 _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 
+# Varianta NU are fereastră proprie: MOȘTENEȘTE fereastra produsului (promoția e a produsului,
+# nuanțele doar o poartă). Fără asta, o promoție expirată ar rămâne activă pe variante — adică fix
+# pe prețul EFECTIV, cel pe care îl vede clientul.
+_VARIANT_SALE_ON = f"v.sale_price is not null and v.sale_price < v.price and {_SALE_WINDOW_OK}"
+
 # NX-118: array compact de variante (cap 12, cele mai ieftine) hidratat pe read path → validatorul
 # vede prețurile per-variantă reale (50ml vs 100ml) și modelul etichetele/SKU. Neutru de vertical
 # (nuanțe beauty / mărimi fashion / fitment auto — `label` vine din DB). `vp` (scalarul min) rămâne
@@ -37,7 +56,7 @@ _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 # Perf: rulează pe tot pool-ul de fuziune (ca lateralele `vp`/`img` existente), dar e un index-scan
 # ieftin pe idx_variants_product(product_id), ≤16 rânduri — îl ținem și pe `_SELECT` ca validatorul
 # să aibă prețurile per-variantă pe ORICE cale (search/detail), robust la dedup.
-_VARIANTS_AGG = """
+_VARIANTS_AGG = f"""
     left join lateral (
         select jsonb_agg(
             jsonb_build_object(
@@ -45,13 +64,13 @@ _VARIANTS_AGG = """
                 'variant_id', v.id::text,
                 'label', v.label,
                 'sku', v.sku,
-                'price', coalesce(v.sale_price, v.price)::float8,
+                'price', (case when {_VARIANT_SALE_ON}
+                               then v.sale_price else v.price end)::float8,
                 'list_price',
-                    (case when v.sale_price is not null and v.sale_price < v.price
-                          then v.price end)::float8,
+                    (case when {_VARIANT_SALE_ON} then v.price end)::float8,
                 'stock', v.stock,
                 'color_hex', v.color_hex,
-                'attributes', coalesce(v.attributes, '{}'::jsonb),
+                'attributes', coalesce(v.attributes, '{{}}'::jsonb),
                 'shade', v.attributes->>'shade',
                 'undertone', v.attributes->>'undertone',
                 'depth', v.attributes->>'depth',
@@ -60,12 +79,14 @@ _VARIANTS_AGG = """
                 'price_per_unit', v.price_per_unit::float8,
                 'gtin', v.gtin,
                 'image_url', v.image_url
-            ) order by coalesce(v.sale_price, v.price) asc
+            ) order by (case when {_VARIANT_SALE_ON}
+                             then v.sale_price else v.price end) asc
         ) as variants
         from (
             select * from product_variants
             where product_id = p.id and business_id = p.business_id
-            order by coalesce(sale_price, price) asc
+            order by (case when {_SALE_WINDOW_OK} and sale_price is not null
+                           and sale_price < price then sale_price else price end) asc
             limit 16
         ) v
     ) vr on true
@@ -178,10 +199,10 @@ _SELECT = f"""
         p.review_count              as review_count,
         prs.top_pros[1]             as review_pro,
         prs.top_pros                as top_pros,
-        (p.sale_price is not null and p.sale_price < p.price) as on_sale,
+        {_SALE_ACTIVE} as on_sale,
         -- IZI-anchor: preț ORIGINAL (tăiat), DOAR la reducere reală; altfel NULL → cardul nu
         -- afișează „de la X" fals pe o variantă mai mică. `price` rămâne efectivul curent.
-        (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
+        (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
         p.attributes->'concerns'    as concerns,
         p.attributes                as attributes,
@@ -191,9 +212,10 @@ _SELECT = f"""
     left join categories c on c.id = p.primary_category_id
     left join product_review_summaries prs on prs.product_id = p.id
     left join lateral (
-        select min(coalesce(v.sale_price, v.price)) as price
+        select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
+                         and v.sale_price < v.price then v.sale_price else v.price end) as price
         from product_variants v
-        where v.product_id = p.id
+        where v.product_id = p.id and v.business_id = p.business_id
     ) vp on true
     left join lateral (
         select pi.url from product_images pi
@@ -428,7 +450,7 @@ _DETAIL_SELECT = f"""
         p.review_count              as review_count,
         p.attributes                as attributes,
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
-        (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
+        (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
         prs.summary                 as review_summary,
         prs.top_pros                as top_pros,
@@ -443,9 +465,10 @@ _DETAIL_SELECT = f"""
     left join brands b on b.id = p.brand_id
     left join product_review_summaries prs on prs.product_id = p.id
     left join lateral (
-        select min(coalesce(v.sale_price, v.price)) as price
+        select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
+                         and v.sale_price < v.price then v.sale_price else v.price end) as price
         from product_variants v
-        where v.product_id = p.id
+        where v.product_id = p.id and v.business_id = p.business_id
     ) vp on true
     left join lateral (
         select pi.url from product_images pi
