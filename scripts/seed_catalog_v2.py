@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import pdp_content  # noqa: E402 — NX-168e-2 graf PDP derivat
+from scripts import faq_content, pdp_content  # noqa: E402 — graf PDP + FAQ derivate
 from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
     _gtin_valid,
     build_roots,
@@ -250,6 +250,10 @@ async def _upsert_category(conn, slug: str, name: str, parent_slug: str | None) 
 
 #: secțiuni retrogradate la voice='brand' pentru că fac un claim medical (raportate la final)
 _DOWNGRADED_SECTIONS: list[tuple[str, str]] = []
+#: FAQ-uri respinse la ingestion (claim medical) — NU se scriu în DB, se raportează
+_REJECTED_FAQS: list[tuple[str, str]] = []
+#: slug produs → numele pașilor următori din rutină (pentru FAQ „Cu ce se combină?")
+_ROUTINE_NEXT: dict[str, list[str]] = {}
 
 
 def _section_voice(sec: dict, slug: str = "") -> str:
@@ -449,6 +453,31 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
             pos,
             _section_voice(sec, p["slug"]),
         )
+    # NX-194: FAQ per produs (6), derivat din fapte. Idempotent: șterge + reinserează.
+    # Poarta de claim rulează AICI (ingestion), nu la runtime: un răspuns pe care validatorul
+    # l-ar tăia în conversație n-are ce căuta în DB ca afirmație a botului.
+    await conn.execute(
+        "delete from product_faqs where business_id=$1 and product_id=$2", DEMO_BIZ, pid
+    )
+    for faq in faq_content.build_faqs(p, root, _ROUTINE_NEXT.get(p["slug"])):
+        if has_medical_claim(faq["answer"]):
+            _REJECTED_FAQS.append((p["slug"], faq["question"]))
+            continue
+        await conn.execute(
+            "insert into product_faqs "
+            "(business_id, product_id, locale, question, answer, position, source, derived) "
+            "values ($1,$2,'ro',$3,$4,$5,$6,$7) "
+            "on conflict (business_id, product_id, locale, question) do update set "
+            "answer=excluded.answer, position=excluded.position, source=excluded.source",
+            DEMO_BIZ,
+            pid,
+            faq["question"],
+            faq["answer"],
+            faq["position"],
+            faq["source"],
+            faq["derived"],
+        )
+
     # ingrediente normalizate (upsert pe (business_id, slug)) + legături is_key
     await conn.execute("delete from product_ingredients where product_id=$1", pid)
     for pos, ing in enumerate(pdp_content.ingredient_list(p)):
@@ -536,6 +565,15 @@ async def main() -> int:
                 await _upsert_category(conn, c["slug"], c["name"], c.get("parentSlug"))
             roots = build_roots(data["categories"])  # slug → root-branch (pt culoarea placeholder)
             n_var = 0
+            # harta „pasul următor din rutină" (din aceleași relații derivate deterministic) —
+            # alimentează FAQ-ul „Cu ce se combină?" fără un query în plus per produs
+            by_slug = {q["slug"]: q for q in data["products"]}
+            for rel in derive_relations(data["products"]):
+                if rel["kind"] == "routine_next":
+                    tgt = by_slug.get(rel["related_slug"])
+                    if tgt:
+                        _ROUTINE_NEXT.setdefault(rel["product_slug"], []).append(tgt["name"])
+
             for p in data["products"]:
                 cat_id = await conn.fetchval(
                     "select id from categories where business_id=$1 and slug=$2",
@@ -581,6 +619,10 @@ async def main() -> int:
             )
             # NX-191: retrogradările NU sunt tăcute — un text derivat care face claim medical e un
             # semnal despre DATE (formulare de reparat), nu doar o etichetă de pus.
+            if _REJECTED_FAQS:
+                print(f"  ⚠ {len(_REJECTED_FAQS)} FAQ respinse la ingestion (claim medical):")
+                for slug, q in _REJECTED_FAQS[:5]:
+                    print(f"      {slug}: {q}")
             if _DOWNGRADED_SECTIONS:
                 print(
                     f"  ⚠ {len(_DOWNGRADED_SECTIONS)} secțiuni → voice='brand' (claim medical, "

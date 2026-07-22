@@ -1390,8 +1390,7 @@
           "net_content": {
             "value": 7,
             "unit": "ml"
-          },
-          "salePrice": 48.44
+          }
         },
         {
           "label": "Medium 03",
@@ -1402,8 +1401,7 @@
           "net_content": {
             "value": 7,
             "unit": "ml"
-          },
-          "salePrice": 48.44
+          }
         }
       ],
       "reviewSummary": {
@@ -1419,11 +1417,6 @@
       "ai_summary": "Recomandat pentru ten mixt și normal.",
       "description": "Velora Perfect Cover Anticearcăn. Acoperă cearcănele fără să se așeze în riduri. Recomandat pentru ten mixt și normal.",
       "stock": 18,
-      "salePrice": 48.44,
-      "saleWindow": {
-        "startsInDays": -1,
-        "endsInDays": 2
-      },
       "deliveryClass": "standard"
     },
     {
@@ -1646,8 +1639,8 @@
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan.",
       "description": "Verdea Repair Șampon. Curăță blând și fortifică firul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan.",
-      "stock": 31,
-      "deliveryClass": "next_day"
+      "stock": 2,
+      "deliveryClass": "standard"
     },
     {
       "slug": "verdea-repair-masca-de-par",
@@ -1857,7 +1850,12 @@
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, glicerină.",
       "description": "Solora Nourish Cremă de mâini. Hidratare zilnică, se absoarbe rapid, non-lipicioasă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, glicerină.",
       "stock": 42,
-      "deliveryClass": "next_day"
+      "deliveryClass": "next_day",
+      "salePrice": 16.79,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 2
+      }
     },
     {
       "slug": "solora-repair-crema-de-maini-intensiva",
@@ -2442,11 +2440,6 @@
       "ai_summary": "Recomandat pentru ten sensibil și uscat. Textură gel. Ingrediente-cheie: enzime de papaya.",
       "description": "LumaDerm Gentle Exfoliant enzimatic. Exfoliere blândă pentru ten sensibil, fără frecare. Recomandat pentru ten sensibil și uscat. Se folosește seara. Ingrediente-cheie: enzime de papaya.",
       "stock": 67,
-      "salePrice": 48.74,
-      "saleWindow": {
-        "startsInDays": -1,
-        "endsInDays": 21
-      },
       "deliveryClass": "next_day"
     },
     {
@@ -3325,7 +3318,7 @@
           "label": "Light",
           "sku": "ARIA-RA-L",
           "price": 44.99,
-          "stock": 2,
+          "stock": 28,
           "colorHex": "#f1d8bf",
           "net_content": {
             "value": 7,
@@ -3336,7 +3329,7 @@
           "label": "Medium",
           "sku": "ARIA-RA-M",
           "price": 44.99,
-          "stock": 1,
+          "stock": 27,
           "colorHex": "#ddb68b",
           "net_content": {
             "value": 7,
@@ -3346,8 +3339,8 @@
       ],
       "ai_summary": "Recomandat pentru ten normal și uscat.",
       "description": "Aria Radiant Anticearcăn. Iluminează zona ochilor cu acoperire medie. Recomandat pentru ten normal și uscat.",
-      "stock": 3,
-      "deliveryClass": "standard"
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-hd-pudra-matifianta",
@@ -3493,7 +3486,8 @@
           "net_content": {
             "value": 10,
             "unit": "ml"
-          }
+          },
+          "salePrice": 27.99
         },
         {
           "label": "Maro",
@@ -3504,13 +3498,19 @@
           "net_content": {
             "value": 10,
             "unit": "ml"
-          }
+          },
+          "salePrice": 27.99
         }
       ],
       "ai_summary": "Recomandat pentru definirea și volumul genelor.",
       "description": "Velora Volume Mascara. Volum intens și gene definite, fără cocoloașe. Recomandat pentru definirea și volumul genelor.",
       "stock": 8,
-      "deliveryClass": "standard"
+      "deliveryClass": "standard",
+      "salePrice": 27.99,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 7
+      }
     },
     {
       "slug": "aria-lengthening-mascara",
@@ -4266,7 +4266,12 @@
       "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Textură cremă.",
       "description": "Petala Coffee Scrub de corp. Scrub cu cafea pentru aspect tonifiat. Recomandat pentru exfolierea blândă a corpului.",
       "stock": 31,
-      "deliveryClass": "next_day"
+      "deliveryClass": "next_day",
+      "salePrice": 21.24,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 7
+      }
     },
     {
       "slug": "solora-fresh-deodorant",
@@ -6447,9 +6452,8 @@
       },
       "ai_summary": "Recomandat pentru ten uscat și normal și sensibil. Textură balsam. Ingrediente-cheie: unt de shea, ulei de măceșe.",
       "description": "Petala Soft Balsam demachiant. Demachiază complet, inclusiv mascara waterproof, lăsând pielea suplă. Recomandat pentru ten uscat și normal și sensibil. Se folosește seara. Ingrediente-cheie: unt de shea, ulei de măceșe.",
-      "stock": 0,
-      "restockInDays": 10,
-      "deliveryClass": "supplier"
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-gentle-spuma-de-curatare",
@@ -6952,9 +6956,8 @@
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
       "description": "NudeLab Soft Focus Pudră translucidă. Fixează machiajul și estompează vizual porii, universală pe orice nuanță. Recomandat pentru cine vrea un finish mat.",
-      "stock": 0,
-      "restockInDays": 7,
-      "deliveryClass": "supplier"
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-waterproof-mascara",
@@ -7152,7 +7155,7 @@
           "label": "Bronze",
           "sku": "NDL-MN-BZ",
           "price": 29.99,
-          "stock": 0,
+          "stock": 18,
           "colorHex": "#9c6b43",
           "net_content": {
             "value": 10,
@@ -7164,7 +7167,7 @@
           "label": "Taupe",
           "sku": "NDL-MN-TP",
           "price": 29.99,
-          "stock": 2,
+          "stock": 18,
           "colorHex": "#8b7d72",
           "net_content": {
             "value": 10,
@@ -7185,7 +7188,7 @@
       },
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
       "description": "NudeLab Mono Fard de ochi cremos. Machiaj de ochi în 30 de secunde, aplicat cu degetul, fără pensule. Recomandat pentru cine vrea un finish satinat.",
-      "stock": 21,
+      "stock": 55,
       "salePrice": 20.99,
       "saleWindow": {
         "startsInDays": -3,
@@ -7524,7 +7527,8 @@
           "net_content": {
             "value": 8,
             "unit": "g"
-          }
+          },
+          "salePrice": 31.44
         },
         {
           "label": "Deep Bronze",
@@ -7535,7 +7539,8 @@
           "net_content": {
             "value": 8,
             "unit": "g"
-          }
+          },
+          "salePrice": 31.44
         }
       ],
       "reviewSummary": {
@@ -7551,7 +7556,12 @@
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
       "description": "Aria Sun Kiss Bronzer pudră. Bronz natural fără subton portocaliu, ușor de estompat. Recomandat pentru cine vrea un finish mat.",
       "stock": 8,
-      "deliveryClass": "standard"
+      "deliveryClass": "standard",
+      "salePrice": 31.44,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      }
     },
     {
       "slug": "bloom-balance-sampon-pentru-scalp-gras",
@@ -7618,9 +7628,8 @@
       },
       "ai_summary": "Recomandat pentru păr gras. Ingrediente-cheie: zinc PCA, extract de mentă.",
       "description": "Bloom Balance Șampon pentru scalp gras. Prelungește senzația de curat a scalpului cu o zi în plus. Recomandat pentru păr gras. Se folosește zilnic. Ingrediente-cheie: zinc PCA, extract de mentă.",
-      "stock": 0,
-      "deliveryClass": "supplier",
-      "restockInDays": 7
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "verdea-hydra-sampon-hidratant",
@@ -8341,7 +8350,7 @@
           "label": "Fair 01",
           "sku": "NL-NC-01",
           "price": 49.99,
-          "stock": 3,
+          "stock": 14,
           "colorHex": "#f2dbc4",
           "net_content": {
             "value": 7,
@@ -8352,7 +8361,7 @@
           "label": "Beige 03",
           "sku": "NL-NC-03",
           "price": 49.99,
-          "stock": 0,
+          "stock": 14,
           "colorHex": "#e0bd94",
           "net_content": {
             "value": 7,
@@ -8373,8 +8382,8 @@
       ],
       "ai_summary": "Recomandat pentru ten normal și uscat.",
       "description": "NudeLab Natural Cover Anticearcăn. Estompare ușoară, fără linii dure. Recomandat pentru ten normal și uscat.",
-      "stock": 17,
-      "deliveryClass": "standard"
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-bright-eye-anticearcan",
@@ -8494,8 +8503,7 @@
           "net_content": {
             "value": 7,
             "unit": "ml"
-          },
-          "salePrice": 31.19
+          }
         },
         {
           "label": "Warm 04",
@@ -8506,18 +8514,12 @@
           "net_content": {
             "value": 7,
             "unit": "ml"
-          },
-          "salePrice": 31.19
+          }
         }
       ],
       "ai_summary": "Recomandat pentru ten normal.",
       "description": "Petala Soft Focus Anticearcăn. Construiești acoperirea strat cu strat. Recomandat pentru ten normal.",
       "stock": 24,
-      "salePrice": 31.19,
-      "saleWindow": {
-        "startsInDays": -8,
-        "endsInDays": 21
-      },
       "deliveryClass": "next_day"
     },
     {
@@ -8640,8 +8642,7 @@
           "net_content": {
             "value": 5,
             "unit": "g"
-          },
-          "salePrice": 22.79
+          }
         },
         {
           "label": "Coral 02",
@@ -8652,18 +8653,12 @@
           "net_content": {
             "value": 5,
             "unit": "g"
-          },
-          "salePrice": 22.79
+          }
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
       "description": "Petala Rose Fard de obraz cremos. Efect luminos, natural, ca un blush din interior. Recomandat pentru cine vrea un finish luminos.",
       "stock": 55,
-      "salePrice": 22.79,
-      "saleWindow": {
-        "startsInDays": -3,
-        "endsInDays": 21
-      },
       "deliveryClass": "next_day"
     },
     {
@@ -8990,11 +8985,6 @@
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat.",
       "description": "Petala Dewy Set Spray de fixare. Fixează și hidratează, ideal pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat.",
       "stock": 31,
-      "salePrice": 26.59,
-      "saleWindow": {
-        "startsInDays": -8,
-        "endsInDays": 21
-      },
       "deliveryClass": "next_day"
     },
     {
@@ -9134,8 +9124,7 @@
           "net_content": {
             "value": 6,
             "unit": "g"
-          },
-          "salePrice": 30.09
+          }
         },
         {
           "label": "Rose Gold",
@@ -9146,18 +9135,12 @@
           "net_content": {
             "value": 6,
             "unit": "g"
-          },
-          "salePrice": 30.09
+          }
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
       "description": "NudeLab Liquid Iluminator lichid. Glow lichid intens, mixabil în fondul de ten. Recomandat pentru cine vrea un finish luminos.",
       "stock": 12,
-      "salePrice": 30.09,
-      "saleWindow": {
-        "startsInDays": -3,
-        "endsInDays": 10
-      },
       "deliveryClass": "standard"
     },
     {
@@ -9889,11 +9872,6 @@
       "ai_summary": "Recomandat pentru păr gras.",
       "description": "Verdea Fresh Șampon uscat volumizant. Absoarbe sebumul și ridică rădăcina fără reziduu alb. Recomandat pentru păr gras. Se folosește ocazional.",
       "stock": 8,
-      "salePrice": 26.99,
-      "saleWindow": {
-        "startsInDays": -2,
-        "endsInDays": 2
-      },
       "deliveryClass": "standard"
     },
     {
@@ -10056,13 +10034,13 @@
       },
       "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline.",
       "description": "Auralis Mineral Scrub de corp exfoliant. Exfoliere intensă cu săruri minerale, netezește zonele aspre. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline.",
-      "stock": 4,
+      "stock": 42,
       "salePrice": 28.04,
       "saleWindow": {
         "startsInDays": -1,
         "endsInDays": 2
       },
-      "deliveryClass": "standard"
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-clear-tratament-local-imperfectiuni",
@@ -11167,13 +11145,19 @@
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 102.04
         }
       ],
       "ai_summary": "Recomandat pentru ten deshidratat și uscat și mixt. Textură fluid. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide.",
       "description": "Mira Atelier Clear Ser pentru ten. Hidratează și lasă tenul mai suplu. Recomandat pentru ten deshidratat și uscat și mixt. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă, ceramide, centella.",
       "stock": 31,
-      "deliveryClass": "next_day"
+      "deliveryClass": "next_day",
+      "salePrice": 102.04,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 14
+      }
     },
     {
       "slug": "mira-atelier-hydra-lotiune-tonica",
@@ -16256,6 +16240,4697 @@
       "ai_summary": "Recomandat pentru ten uscat și sensibil. Textură apă. Ingrediente-cheie: ulei de jojoba, ceai verde.",
       "description": "Orchid Field Glow Apă micelară. Curăță delicat și lasă pielea suplă. Recomandat pentru ten uscat și sensibil. Se folosește seara. Ingrediente-cheie: ulei de jojoba, ceai verde.",
       "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "calm-theory-sun-balsam-de-buze",
+      "name": "Calm Theory Sun Balsam de buze",
+      "brandSlug": "calm-theory",
+      "primaryCategorySlug": "buze",
+      "categorySlugs": [
+        "buze"
+      ],
+      "price": 26.49,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 233,
+      "status": "active",
+      "shortDescription": "Balsam de buze pentru buze uscate și hidratare. Cu unt de shea, ulei de jojoba.",
+      "attributes": {
+        "key_ingredients": [
+          "unt de shea",
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "description": "Calm Theory Sun Balsam de buze. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "stock": 0,
+      "restockInDays": 21,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "nudelab-nude-creion-de-ochi",
+      "name": "NudeLab Nude Creion de ochi",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "creioane-si-tusuri-de-ochi",
+      "categorySlugs": [
+        "creioane-si-tusuri-de-ochi"
+      ],
+      "price": 56.49,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 311,
+      "status": "active",
+      "shortDescription": "Creion de ochi.",
+      "attributes": {
+        "key_benefit": "Vârf fin pentru contur exact.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 1.2,
+          "unit": "g"
+        },
+        "best_for": "conturarea privirii"
+      },
+      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "description": "NudeLab Nude Creion de ochi. Vârf fin pentru contur exact. Recomandat pentru conturarea privirii.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-pure-crema-de-ochi",
+      "name": "Orchid Field Pure Cremă de ochi",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "creme-de-ochi",
+      "categorySlugs": [
+        "creme-de-ochi"
+      ],
+      "price": 74.49,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 133,
+      "status": "active",
+      "shortDescription": "Cremă de ochi pentru ten matur. Cu retinol, vitamina C.",
+      "attributes": {
+        "key_ingredients": [
+          "retinol",
+          "vitamina C"
+        ],
+        "concerns": [
+          "anti_aging"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "anti_aging"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "retinol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten matur"
+      },
+      "ai_summary": "Recomandat pentru ten matur. Textură cremă. Ingrediente-cheie: retinol, vitamina C.",
+      "description": "Orchid Field Pure Cremă de ochi. Recomandat pentru ten matur. Se folosește seara. Ingrediente-cheie: retinol, vitamina C.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "verdea-bloom-deodorant",
+      "name": "Verdea Bloom Deodorant",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "deodorante",
+      "categorySlugs": [
+        "deodorante"
+      ],
+      "price": 49.49,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 362,
+      "status": "active",
+      "shortDescription": "Deodorant pentru piele normală. Cu centella, alantoină.",
+      "attributes": {
+        "key_ingredients": [
+          "centella",
+          "alantoină"
+        ],
+        "concerns": [
+          "normal"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "ten normal"
+      },
+      "ai_summary": "Recomandat pentru ten normal. Ingrediente-cheie: centella, alantoină.",
+      "description": "Verdea Bloom Deodorant. Recomandat pentru ten normal. Ingrediente-cheie: centella, alantoină.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nudelab-nutri-exfoliant-pentru-ten",
+      "name": "NudeLab Nutri Exfoliant pentru ten",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "exfoliante-pentru-ten",
+      "categorySlugs": [
+        "exfoliante-pentru-ten"
+      ],
+      "price": 79.49,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 147,
+      "status": "active",
+      "shortDescription": "Exfoliant pentru ten mixt. Cu vitamina C, colagen.",
+      "attributes": {
+        "key_ingredients": [
+          "vitamina C",
+          "colagen"
+        ],
+        "concerns": [
+          "combination"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "colagen",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten mixt"
+      },
+      "ai_summary": "Recomandat pentru ten mixt. Textură gel. Ingrediente-cheie: vitamina C, colagen.",
+      "description": "NudeLab Nutri Exfoliant pentru ten. Recomandat pentru ten mixt. Se folosește seara. Ingrediente-cheie: vitamina C, colagen.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "calm-theory-silk-fard-de-ochi",
+      "name": "Calm Theory Silk Fard de ochi",
+      "brandSlug": "calm-theory",
+      "primaryCategorySlug": "farduri-de-ochi",
+      "categorySlugs": [
+        "farduri-de-ochi"
+      ],
+      "price": 52.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 397,
+      "status": "active",
+      "shortDescription": "Fard de ochi.",
+      "attributes": {
+        "key_benefit": "Textură fină, fără praf la aplicare.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "machiajul ochilor"
+      },
+      "ai_summary": "Recomandat pentru machiajul ochilor.",
+      "description": "Calm Theory Silk Fard de ochi. Textură fină, fără praf la aplicare. Recomandat pentru machiajul ochilor.",
+      "stock": 42,
+      "salePrice": 42.39,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "aurelia-lab-silk-lotiune-de-corp",
+      "name": "Aurelia Lab Silk Loțiune de corp",
+      "brandSlug": "aurelia-lab",
+      "primaryCategorySlug": "lotiuni-de-corp",
+      "categorySlugs": [
+        "lotiuni-de-corp"
+      ],
+      "price": 82.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 159,
+      "status": "active",
+      "shortDescription": "Loțiune de corp pentru piele sensibilă. Cu unt de shea, ulei de jojoba.",
+      "attributes": {
+        "key_ingredients": [
+          "unt de shea",
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "sensitive"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "sensitive"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "ten sensibil"
+      },
+      "ai_summary": "Recomandat pentru ten sensibil. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "description": "Aurelia Lab Silk Loțiune de corp. Recomandat pentru ten sensibil. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nera-rituals-aura-mascara",
+      "name": "Nera Rituals Aura Mascara",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "mascara",
+      "categorySlugs": [
+        "mascara"
+      ],
+      "price": 56.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 47,
+      "status": "active",
+      "shortDescription": "Mascara.",
+      "attributes": {
+        "key_benefit": "Volum și separare bună a genelor.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "ml"
+        },
+        "best_for": "definirea și volumul genelor"
+      },
+      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "description": "Nera Rituals Aura Mascara. Volum și separare bună a genelor. Recomandat pentru definirea și volumul genelor.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "mira-atelier-matte-pudra",
+      "name": "Mira Atelier Matte Pudră",
+      "brandSlug": "mira-atelier",
+      "primaryCategorySlug": "pudre",
+      "categorySlugs": [
+        "pudre"
+      ],
+      "price": 88.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 388,
+      "status": "active",
+      "shortDescription": "Pudră cu finish natural.",
+      "attributes": {
+        "finish": "natural",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish natural"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "description": "Mira Atelier Matte Pudră. Recomandat pentru cine vrea un finish natural.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "coral-theory-hydra-sampon-uscat",
+      "name": "Coral Theory Hydra Șampon uscat",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat"
+      ],
+      "price": 53.49,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 369,
+      "status": "active",
+      "shortDescription": "Șampon uscat pentru păr fin. Cu ulei de argan, panthenol.",
+      "attributes": {
+        "key_ingredients": [
+          "ulei de argan",
+          "panthenol"
+        ],
+        "hair_type": "fin",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "fine"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de argan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr fin"
+      },
+      "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: ulei de argan, panthenol.",
+      "description": "Coral Theory Hydra Șampon uscat. Recomandat pentru păr fin. Se folosește ocazional. Ingrediente-cheie: ulei de argan, panthenol.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "iris-co-soft-balsam-de-par",
+      "name": "Iris & Co Soft Balsam de păr",
+      "brandSlug": "iris-and-co",
+      "primaryCategorySlug": "balsamuri-de-par",
+      "categorySlugs": [
+        "balsamuri-de-par"
+      ],
+      "price": 41.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 248,
+      "status": "active",
+      "shortDescription": "Balsam de păr pentru păr vopsit. Cu proteine din mătase, keratină.",
+      "attributes": {
+        "key_ingredients": [
+          "proteine din mătase",
+          "keratină"
+        ],
+        "hair_type": "vopsit",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "colored"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "păr vopsit"
+      },
+      "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: proteine din mătase, keratină.",
+      "description": "Iris & Co Soft Balsam de păr. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: proteine din mătase, keratină.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "aurelia-lab-matte-bronzer",
+      "name": "Aurelia Lab Matte Bronzer",
+      "brandSlug": "aurelia-lab",
+      "primaryCategorySlug": "bronzer",
+      "categorySlugs": [
+        "bronzer"
+      ],
+      "price": 69.49,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 177,
+      "status": "active",
+      "shortDescription": "Bronzer cu finish matte.",
+      "attributes": {
+        "finish": "matte",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 8,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish mat"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "description": "Aurelia Lab Matte Bronzer. Recomandat pentru cine vrea un finish mat.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "petala-velvet-crema-bb",
+      "name": "Petala Velvet Cremă BB",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "creme-bb-si-cc",
+      "categorySlugs": [
+        "creme-bb-si-cc"
+      ],
+      "price": 104.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 99,
+      "status": "active",
+      "shortDescription": "Cremă BB pentru ten uscat și hidratare.",
+      "attributes": {
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "finish": "dewy",
+        "coverage": "medium",
+        "texture": "fluid",
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "routine_step": "makeup_base",
+        "best_for": "cine vrea un finish luminos, pe ten uscat și deshidratat"
+      },
+      "variants": [
+        {
+          "label": "07 Amber",
+          "sku": "GEN-D4ECA8CD66F9",
+          "price": 104.99,
+          "stock": 11,
+          "colorHex": "#B98455",
+          "attributes": {
+            "shade": "amber"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          }
+        },
+        {
+          "label": "01 Porcelain",
+          "sku": "GEN-8EA2DAE1B0E3",
+          "price": 104.99,
+          "stock": 0,
+          "colorHex": "#F6E3D5",
+          "attributes": {
+            "shade": "porcelain"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          }
+        },
+        {
+          "label": "02 Ivory",
+          "sku": "GEN-3AF0ED07826C",
+          "price": 104.99,
+          "stock": 10,
+          "colorHex": "#F0D9C4",
+          "attributes": {
+            "shade": "ivory"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat. Textură fluid.",
+      "description": "Petala Velvet Cremă BB. Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat.",
+      "stock": 21,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "velvet-root-pure-crema-de-maini",
+      "name": "Velvet Root Pure Cremă de mâini",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "creme-de-maini",
+      "categorySlugs": [
+        "creme-de-maini"
+      ],
+      "price": 45.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 220,
+      "status": "active",
+      "shortDescription": "Cremă de mâini pentru piele uscată și hidratare. Cu unt de shea, ulei de jojoba.",
+      "attributes": {
+        "key_ingredients": [
+          "unt de shea",
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 75,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "description": "Velvet Root Pure Cremă de mâini. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumiere-skin-glow-iluminator",
+      "name": "Lumiere Skin Glow Iluminator",
+      "brandSlug": "lumiere-skin",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare"
+      ],
+      "price": 86.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 350,
+      "status": "active",
+      "shortDescription": "Iluminator cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 6,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish luminos"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "Lumiere Skin Glow Iluminator. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nera-rituals-pure-crema-leave-in",
+      "name": "Nera Rituals Pure Cremă leave-in",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "ingrijire-fara-clatire",
+      "categorySlugs": [
+        "ingrijire-fara-clatire"
+      ],
+      "price": 82.49,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 339,
+      "status": "active",
+      "shortDescription": "Cremă leave-in pentru păr fin. Cu keratină, ulei de argan.",
+      "attributes": {
+        "key_ingredients": [
+          "keratină",
+          "ulei de argan"
+        ],
+        "hair_type": "fin",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "fine"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de argan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr fin"
+      },
+      "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: keratină, ulei de argan.",
+      "description": "Nera Rituals Pure Cremă leave-in. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nova-botanics-pure-masca-de-par",
+      "name": "Nova Botanics Pure Mască de păr",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "masti-de-par",
+      "categorySlugs": [
+        "masti-de-par"
+      ],
+      "price": 91.49,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 284,
+      "status": "active",
+      "shortDescription": "Mască de păr pentru păr deteriorat. Cu keratină, ulei de argan.",
+      "attributes": {
+        "key_ingredients": [
+          "keratină",
+          "ulei de argan"
+        ],
+        "hair_type": "deteriorat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "damaged"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de argan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 200,
+          "unit": "ml"
+        },
+        "best_for": "păr deteriorat"
+      },
+      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan.",
+      "description": "Nova Botanics Pure Mască de păr. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: keratină, ulei de argan.",
+      "stock": 8,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "aria-revive-mist-pentru-ten",
+      "name": "Aria Revive Mist pentru ten",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten"
+      ],
+      "price": 72.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 376,
+      "status": "active",
+      "shortDescription": "Mist pentru hidratare. Cu bisabolol, centella.",
+      "attributes": {
+        "key_ingredients": [
+          "bisabolol",
+          "centella"
+        ],
+        "concerns": [
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "bisabolol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten deshidratat. Textură apă. Ingrediente-cheie: bisabolol, centella.",
+      "description": "Aria Revive Mist pentru ten. Recomandat pentru ten deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: bisabolol, centella.",
+      "stock": 0,
+      "restockInDays": 21,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "nova-botanics-luxe-primer-pentru-machiaj",
+      "name": "Nova Botanics Luxe Primer pentru machiaj",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "primer-pentru-machiaj",
+      "categorySlugs": [
+        "primer-pentru-machiaj"
+      ],
+      "price": 97.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 237,
+      "status": "active",
+      "shortDescription": "Primer pentru machiaj cu finish matte.",
+      "attributes": {
+        "finish": "matte",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_base",
+        "net_content": {
+          "value": 30,
+          "unit": "ml"
+        },
+        "best_for": "cine vrea un finish mat"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "description": "Nova Botanics Luxe Primer pentru machiaj. Recomandat pentru cine vrea un finish mat.",
+      "stock": 67,
+      "salePrice": 83.29,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "iris-co-ritual-scrub-de-corp",
+      "name": "Iris & Co Ritual Scrub de corp",
+      "brandSlug": "iris-and-co",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp"
+      ],
+      "price": 39.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 83,
+      "status": "active",
+      "shortDescription": "Scrub de corp pentru piele uscată. Cu panthenol, squalan.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "squalan"
+        ],
+        "concerns": [
+          "dry"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "squalan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 200,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat. Ingrediente-cheie: panthenol, squalan.",
+      "description": "Iris & Co Ritual Scrub de corp. Recomandat pentru ten uscat. Ingrediente-cheie: panthenol, squalan.",
+      "stock": 0,
+      "restockInDays": 14,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "calm-theory-nude-spray-de-fixare",
+      "name": "Calm Theory Nude Spray de fixare",
+      "brandSlug": "calm-theory",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare"
+      ],
+      "price": 70.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 363,
+      "status": "active",
+      "shortDescription": "Spray de fixare cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "finish",
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "cine vrea un finish luminos"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "Calm Theory Nude Spray de fixare. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 24,
+      "salePrice": 53.24,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-repair-tratament-local",
+      "name": "Orchid Field Repair Tratament local",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local"
+      ],
+      "price": 65.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 89,
+      "status": "active",
+      "shortDescription": "Tratament local pentru ten cu tendință acneică. Cu acid salicilic, argilă.",
+      "attributes": {
+        "key_ingredients": [
+          "acid salicilic",
+          "argilă"
+        ],
+        "concerns": [
+          "acne"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "acne"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid salicilic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "argilă",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten cu tendință acneică"
+      },
+      "ai_summary": "Recomandat pentru ten cu tendință acneică. Textură gel. Ingrediente-cheie: acid salicilic, argilă.",
+      "description": "Orchid Field Repair Tratament local. Recomandat pentru ten cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, argilă.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "petala-hydra-ulei-de-par",
+      "name": "Petala Hydra Ulei de păr",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "uleiuri-pentru-par",
+      "categorySlugs": [
+        "uleiuri-pentru-par"
+      ],
+      "price": 74.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 119,
+      "status": "active",
+      "shortDescription": "Ulei de păr pentru păr uscat. Cu keratină, ulei de argan.",
+      "attributes": {
+        "key_ingredients": [
+          "keratină",
+          "ulei de argan"
+        ],
+        "hair_type": "uscat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de argan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "păr uscat"
+      },
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: keratină, ulei de argan.",
+      "description": "Petala Hydra Ulei de păr. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: keratină, ulei de argan.",
+      "stock": 67,
+      "salePrice": 48.74,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 7
+      },
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "nera-rituals-velvet-anticearcan",
+      "name": "Nera Rituals Velvet Anticearcăn",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "anticearcan",
+      "categorySlugs": [
+        "anticearcan"
+      ],
+      "price": 50.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 386,
+      "status": "active",
+      "shortDescription": "Anticearcăn pentru ten uscat.",
+      "attributes": {
+        "concerns": [
+          "dry"
+        ],
+        "finish": "satin",
+        "coverage": "full",
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "routine_step": "makeup_base",
+        "best_for": "cine vrea un finish satinat, pe ten uscat"
+      },
+      "variants": [
+        {
+          "label": "03 Beige",
+          "sku": "GEN-33253B037AE4",
+          "price": 50.99,
+          "stock": 11,
+          "colorHex": "#E3C3A5",
+          "attributes": {
+            "shade": "beige"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 35.69
+        },
+        {
+          "label": "05 Sand",
+          "sku": "GEN-1D2F378D21B6",
+          "price": 50.99,
+          "stock": 11,
+          "colorHex": "#D2A97F",
+          "attributes": {
+            "shade": "sand"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 35.69
+        },
+        {
+          "label": "07 Amber",
+          "sku": "GEN-E60D0D9D710D",
+          "price": 50.99,
+          "stock": 10,
+          "colorHex": "#B98455",
+          "attributes": {
+            "shade": "amber"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 35.69
+        },
+        {
+          "label": "01 Porcelain",
+          "sku": "GEN-29AFF821D854",
+          "price": 50.99,
+          "stock": 10,
+          "colorHex": "#F6E3D5",
+          "attributes": {
+            "shade": "porcelain"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 35.69
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish satinat, pe ten uscat.",
+      "description": "Nera Rituals Velvet Anticearcăn. Recomandat pentru cine vrea un finish satinat, pe ten uscat.",
+      "stock": 42,
+      "salePrice": 35.69,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nova-botanics-aura-fard-de-obraz",
+      "name": "Nova Botanics Aura Fard de obraz",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "fard-de-obraz",
+      "categorySlugs": [
+        "fard-de-obraz"
+      ],
+      "price": 45.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 62,
+      "status": "active",
+      "shortDescription": "Fard de obraz cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "best_for": "cine vrea un finish luminos"
+      },
+      "variants": [
+        {
+          "label": "Rosewood",
+          "sku": "GEN-172F121D3307",
+          "price": 45.99,
+          "stock": 11,
+          "colorHex": "#B25A62",
+          "attributes": {
+            "shade": "rosewood"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          },
+          "salePrice": 34.49
+        },
+        {
+          "label": "Nude Peach",
+          "sku": "GEN-10629954A09A",
+          "price": 45.99,
+          "stock": 10,
+          "colorHex": "#D89A82",
+          "attributes": {
+            "shade": "peach"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          },
+          "salePrice": 34.49
+        },
+        {
+          "label": "Cherry",
+          "sku": "GEN-FD51F8F5697D",
+          "price": 45.99,
+          "stock": 10,
+          "colorHex": "#9E2231",
+          "attributes": {
+            "shade": "cherry"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          },
+          "salePrice": 34.49
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "Nova Botanics Aura Fard de obraz. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 31,
+      "salePrice": 34.49,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumiere-skin-sun-gel-de-dus",
+      "name": "Lumiere Skin Sun Gel de duș",
+      "brandSlug": "lumiere-skin",
+      "primaryCategorySlug": "geluri-de-dus",
+      "categorySlugs": [
+        "geluri-de-dus"
+      ],
+      "price": 32.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 90,
+      "status": "active",
+      "shortDescription": "Gel de duș pentru piele normală și hidratare. Cu squalan, acid hialuronic.",
+      "attributes": {
+        "key_ingredients": [
+          "squalan",
+          "acid hialuronic"
+        ],
+        "concerns": [
+          "normal",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "squalan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "ten normal și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten normal și deshidratat. Ingrediente-cheie: squalan, acid hialuronic.",
+      "description": "Lumiere Skin Sun Gel de duș. Recomandat pentru ten normal și deshidratat. Ingrediente-cheie: squalan, acid hialuronic.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nera-rituals-glow-gloss-de-buze",
+      "name": "Nera Rituals Glow Gloss de buze",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "gloss-de-buze",
+      "categorySlugs": [
+        "gloss-de-buze"
+      ],
+      "price": 40.49,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 358,
+      "status": "active",
+      "shortDescription": "Gloss de buze cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "best_for": "cine vrea un finish luminos"
+      },
+      "variants": [
+        {
+          "label": "Cherry",
+          "sku": "GEN-FFCAB523F15F",
+          "price": 40.49,
+          "stock": 14,
+          "colorHex": "#9E2231",
+          "attributes": {
+            "shade": "cherry"
+          },
+          "net_content": {
+            "value": 6,
+            "unit": "ml"
+          },
+          "salePrice": 28.34
+        },
+        {
+          "label": "Mauve",
+          "sku": "GEN-BEDA2D943BD1",
+          "price": 40.49,
+          "stock": 14,
+          "colorHex": "#A9707F",
+          "attributes": {
+            "shade": "mauve"
+          },
+          "net_content": {
+            "value": 6,
+            "unit": "ml"
+          },
+          "salePrice": 28.34
+        },
+        {
+          "label": "Rosewood",
+          "sku": "GEN-E5DFB81F01B3",
+          "price": 40.49,
+          "stock": 14,
+          "colorHex": "#B25A62",
+          "attributes": {
+            "shade": "rosewood"
+          },
+          "net_content": {
+            "value": 6,
+            "unit": "ml"
+          },
+          "salePrice": 28.34
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "Nera Rituals Glow Gloss de buze. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 42,
+      "salePrice": 28.34,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "rhea-organics-glow-ruj",
+      "name": "Rhea Organics Glow Ruj",
+      "brandSlug": "rhea-organics",
+      "primaryCategorySlug": "rujuri",
+      "categorySlugs": [
+        "rujuri"
+      ],
+      "price": 37.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 71,
+      "status": "active",
+      "shortDescription": "Ruj cu finish matte.",
+      "attributes": {
+        "finish": "matte",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "best_for": "cine vrea un finish mat"
+      },
+      "variants": [
+        {
+          "label": "Cherry",
+          "sku": "GEN-B69D2CA99FF8",
+          "price": 37.99,
+          "stock": 4,
+          "colorHex": "#9E2231",
+          "attributes": {
+            "shade": "cherry"
+          },
+          "net_content": {
+            "value": 4,
+            "unit": "g"
+          },
+          "salePrice": 30.39
+        },
+        {
+          "label": "Mauve",
+          "sku": "GEN-14DA4AF92374",
+          "price": 37.99,
+          "stock": 4,
+          "colorHex": "#A9707F",
+          "attributes": {
+            "shade": "mauve"
+          },
+          "net_content": {
+            "value": 4,
+            "unit": "g"
+          },
+          "salePrice": 30.39
+        },
+        {
+          "label": "Rosewood",
+          "sku": "GEN-4B1E8DB2913C",
+          "price": 37.99,
+          "stock": 4,
+          "colorHex": "#B25A62",
+          "attributes": {
+            "shade": "rosewood"
+          },
+          "net_content": {
+            "value": 4,
+            "unit": "g"
+          },
+          "salePrice": 30.39
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish mat.",
+      "description": "Rhea Organics Glow Ruj. Recomandat pentru cine vrea un finish mat.",
+      "stock": 12,
+      "salePrice": 30.39,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "coral-theory-balance-crema-hidratanta",
+      "name": "Coral Theory Balance Cremă hidratantă",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "creme-hidratante",
+      "categorySlugs": [
+        "creme-hidratante"
+      ],
+      "price": 114.49,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 315,
+      "status": "active",
+      "shortDescription": "Cremă hidratantă pentru ten uscat și hidratare. Cu ovăz coloidal, bisabolol.",
+      "attributes": {
+        "key_ingredients": [
+          "ovăz coloidal",
+          "bisabolol"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ovăz coloidal",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "bisabolol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: ovăz coloidal, bisabolol.",
+      "description": "Coral Theory Balance Cremă hidratantă. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: ovăz coloidal, bisabolol.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nudelab-silk-balsam-de-buze",
+      "name": "NudeLab Silk Balsam de buze",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "buze",
+      "categorySlugs": [
+        "buze"
+      ],
+      "price": 35.49,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 227,
+      "status": "active",
+      "shortDescription": "Balsam de buze pentru buze uscate și hidratare. Cu vitamina E, ceramide.",
+      "attributes": {
+        "key_ingredients": [
+          "vitamina E",
+          "ceramide"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: vitamina E, ceramide.",
+      "description": "NudeLab Silk Balsam de buze. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: vitamina E, ceramide.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "auralis-velvet-creion-de-ochi",
+      "name": "Auralis Velvet Creion de ochi",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "creioane-si-tusuri-de-ochi",
+      "categorySlugs": [
+        "creioane-si-tusuri-de-ochi"
+      ],
+      "price": 31.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 141,
+      "status": "active",
+      "shortDescription": "Creion de ochi.",
+      "attributes": {
+        "key_benefit": "Pigment intens dintr-o singură trecere.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 1.2,
+          "unit": "g"
+        },
+        "best_for": "conturarea privirii"
+      },
+      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "description": "Auralis Velvet Creion de ochi. Pigment intens dintr-o singură trecere. Recomandat pentru conturarea privirii.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "petala-hydra-crema-de-ochi",
+      "name": "Petala Hydra Cremă de ochi",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "creme-de-ochi",
+      "categorySlugs": [
+        "creme-de-ochi"
+      ],
+      "price": 71.49,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 329,
+      "status": "active",
+      "shortDescription": "Cremă de ochi pentru ten matur. Cu peptide, retinol.",
+      "attributes": {
+        "key_ingredients": [
+          "peptide",
+          "retinol"
+        ],
+        "concerns": [
+          "anti_aging"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "anti_aging"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "peptide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "retinol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten matur"
+      },
+      "ai_summary": "Recomandat pentru ten matur. Textură cremă. Ingrediente-cheie: peptide, retinol.",
+      "description": "Petala Hydra Cremă de ochi. Recomandat pentru ten matur. Se folosește seara. Ingrediente-cheie: peptide, retinol.",
+      "stock": 42,
+      "salePrice": 53.62,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumaderm-pure-deodorant",
+      "name": "LumaDerm Pure Deodorant",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "deodorante",
+      "categorySlugs": [
+        "deodorante"
+      ],
+      "price": 50.49,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 24,
+      "status": "active",
+      "shortDescription": "Deodorant pentru piele sensibilă. Cu ovăz coloidal, bisabolol.",
+      "attributes": {
+        "key_ingredients": [
+          "ovăz coloidal",
+          "bisabolol"
+        ],
+        "concerns": [
+          "sensitive"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "sensitive"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ovăz coloidal",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "bisabolol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "ten sensibil"
+      },
+      "ai_summary": "Recomandat pentru ten sensibil. Ingrediente-cheie: ovăz coloidal, bisabolol.",
+      "description": "LumaDerm Pure Deodorant. Recomandat pentru ten sensibil. Ingrediente-cheie: ovăz coloidal, bisabolol.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nova-botanics-calm-exfoliant-pentru-ten",
+      "name": "Nova Botanics Calm Exfoliant pentru ten",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "exfoliante-pentru-ten",
+      "categorySlugs": [
+        "exfoliante-pentru-ten"
+      ],
+      "price": 85.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 72,
+      "status": "active",
+      "shortDescription": "Exfoliant pentru ten mixt. Cu colagen, peptide.",
+      "attributes": {
+        "key_ingredients": [
+          "colagen",
+          "peptide"
+        ],
+        "concerns": [
+          "combination"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "combination"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "colagen",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "peptide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten mixt"
+      },
+      "ai_summary": "Recomandat pentru ten mixt. Textură gel. Ingrediente-cheie: colagen, peptide.",
+      "description": "Nova Botanics Calm Exfoliant pentru ten. Recomandat pentru ten mixt. Se folosește seara. Ingrediente-cheie: colagen, peptide.",
+      "stock": 8,
+      "salePrice": 77.39,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 21
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "lumiere-skin-luxe-fard-de-ochi",
+      "name": "Lumiere Skin Luxe Fard de ochi",
+      "brandSlug": "lumiere-skin",
+      "primaryCategorySlug": "farduri-de-ochi",
+      "categorySlugs": [
+        "farduri-de-ochi"
+      ],
+      "price": 69.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 25,
+      "status": "active",
+      "shortDescription": "Fard de ochi.",
+      "attributes": {
+        "key_benefit": "Pigmentare bogată și estompare ușoară.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "machiajul ochilor"
+      },
+      "ai_summary": "Recomandat pentru machiajul ochilor.",
+      "description": "Lumiere Skin Luxe Fard de ochi. Pigmentare bogată și estompare ușoară. Recomandat pentru machiajul ochilor.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "aurelia-lab-clean-lotiune-de-corp",
+      "name": "Aurelia Lab Clean Loțiune de corp",
+      "brandSlug": "aurelia-lab",
+      "primaryCategorySlug": "lotiuni-de-corp",
+      "categorySlugs": [
+        "lotiuni-de-corp"
+      ],
+      "price": 55.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 228,
+      "status": "active",
+      "shortDescription": "Loțiune de corp pentru piele sensibilă. Cu unt de shea, ulei de jojoba.",
+      "attributes": {
+        "key_ingredients": [
+          "unt de shea",
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "sensitive"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "sensitive"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "ten sensibil"
+      },
+      "ai_summary": "Recomandat pentru ten sensibil. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "description": "Aurelia Lab Clean Loțiune de corp. Recomandat pentru ten sensibil. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-nude-mascara",
+      "name": "Orchid Field Nude Mascara",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "mascara",
+      "categorySlugs": [
+        "mascara"
+      ],
+      "price": 63.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 179,
+      "status": "active",
+      "shortDescription": "Mascara.",
+      "attributes": {
+        "key_benefit": "Volum și separare bună a genelor.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "ml"
+        },
+        "best_for": "definirea și volumul genelor"
+      },
+      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "description": "Orchid Field Nude Mascara. Volum și separare bună a genelor. Recomandat pentru definirea și volumul genelor.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "aurelia-lab-aura-pudra",
+      "name": "Aurelia Lab Aura Pudră",
+      "brandSlug": "aurelia-lab",
+      "primaryCategorySlug": "pudre",
+      "categorySlugs": [
+        "pudre"
+      ],
+      "price": 77.49,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 251,
+      "status": "active",
+      "shortDescription": "Pudră cu finish natural.",
+      "attributes": {
+        "finish": "natural",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish natural"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "description": "Aurelia Lab Aura Pudră. Recomandat pentru cine vrea un finish natural.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "elara-beauty-hydra-sampon-uscat",
+      "name": "Elara Beauty Hydra Șampon uscat",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat"
+      ],
+      "price": 38.49,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 296,
+      "status": "active",
+      "shortDescription": "Șampon uscat pentru păr gras. Cu panthenol, proteine din mătase.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "proteine din mătase"
+        ],
+        "hair_type": "gras",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "oily"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr gras"
+      },
+      "ai_summary": "Recomandat pentru păr gras. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "description": "Elara Beauty Hydra Șampon uscat. Recomandat pentru păr gras. Se folosește ocazional. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "stock": 31,
+      "salePrice": 23.09,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "maison-verde-revive-balsam-de-par",
+      "name": "Maison Verde Revive Balsam de păr",
+      "brandSlug": "maison-verde",
+      "primaryCategorySlug": "balsamuri-de-par",
+      "categorySlugs": [
+        "balsamuri-de-par"
+      ],
+      "price": 77.49,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 354,
+      "status": "active",
+      "shortDescription": "Balsam de păr pentru păr vopsit. Cu panthenol, proteine din mătase.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "proteine din mătase"
+        ],
+        "hair_type": "vopsit",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "colored"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "păr vopsit"
+      },
+      "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "description": "Maison Verde Revive Balsam de păr. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "orchid-field-nude-bronzer",
+      "name": "Orchid Field Nude Bronzer",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "bronzer",
+      "categorySlugs": [
+        "bronzer"
+      ],
+      "price": 86.99,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 218,
+      "status": "active",
+      "shortDescription": "Bronzer cu finish satin.",
+      "attributes": {
+        "finish": "satin",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 8,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish satinat"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "description": "Orchid Field Nude Bronzer. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "pure-arc-luxe-crema-bb",
+      "name": "Pure Arc Luxe Cremă BB",
+      "brandSlug": "pure-arc",
+      "primaryCategorySlug": "creme-bb-si-cc",
+      "categorySlugs": [
+        "creme-bb-si-cc"
+      ],
+      "price": 79.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 173,
+      "status": "active",
+      "shortDescription": "Cremă BB pentru ten normal.",
+      "attributes": {
+        "concerns": [
+          "normal"
+        ],
+        "finish": "dewy",
+        "coverage": "light",
+        "texture": "fluid",
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "routine_step": "makeup_base",
+        "best_for": "cine vrea un finish luminos, pe ten normal"
+      },
+      "variants": [
+        {
+          "label": "02 Ivory",
+          "sku": "GEN-62FCF3866E56",
+          "price": 79.99,
+          "stock": 14,
+          "colorHex": "#F0D9C4",
+          "attributes": {
+            "shade": "ivory"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          },
+          "salePrice": 59.99
+        },
+        {
+          "label": "03 Beige",
+          "sku": "GEN-7E90F122BF6D",
+          "price": 79.99,
+          "stock": 14,
+          "colorHex": "#E3C3A5",
+          "attributes": {
+            "shade": "beige"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          },
+          "salePrice": 59.99
+        },
+        {
+          "label": "05 Sand",
+          "sku": "GEN-EF36CB4D7147",
+          "price": 79.99,
+          "stock": 14,
+          "colorHex": "#D2A97F",
+          "attributes": {
+            "shade": "sand"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          },
+          "salePrice": 59.99
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten normal. Textură fluid.",
+      "description": "Pure Arc Luxe Cremă BB. Recomandat pentru cine vrea un finish luminos, pe ten normal.",
+      "stock": 42,
+      "salePrice": 59.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "bloom-clean-crema-de-maini",
+      "name": "Bloom Clean Cremă de mâini",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "creme-de-maini",
+      "categorySlugs": [
+        "creme-de-maini"
+      ],
+      "price": 38.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 321,
+      "status": "active",
+      "shortDescription": "Cremă de mâini pentru piele uscată și hidratare. Cu glicerină, panthenol.",
+      "attributes": {
+        "key_ingredients": [
+          "glicerină",
+          "panthenol"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "glicerină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 75,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: glicerină, panthenol.",
+      "description": "Bloom Clean Cremă de mâini. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: glicerină, panthenol.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "velvet-root-luxe-iluminator",
+      "name": "Velvet Root Luxe Iluminator",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare"
+      ],
+      "price": 62.49,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 340,
+      "status": "active",
+      "shortDescription": "Iluminator cu finish satin.",
+      "attributes": {
+        "finish": "satin",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 6,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish satinat"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "description": "Velvet Root Luxe Iluminator. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 2,
+      "salePrice": 56.24,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 2
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "elara-beauty-soft-crema-leave-in",
+      "name": "Elara Beauty Soft Cremă leave-in",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "ingrijire-fara-clatire",
+      "categorySlugs": [
+        "ingrijire-fara-clatire"
+      ],
+      "price": 66.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 286,
+      "status": "active",
+      "shortDescription": "Cremă leave-in pentru păr uscat. Cu panthenol, proteine din mătase.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "proteine din mătase"
+        ],
+        "hair_type": "uscat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr uscat"
+      },
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "description": "Elara Beauty Soft Cremă leave-in. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "iris-co-pure-masca-de-par",
+      "name": "Iris & Co Pure Mască de păr",
+      "brandSlug": "iris-and-co",
+      "primaryCategorySlug": "masti-de-par",
+      "categorySlugs": [
+        "masti-de-par"
+      ],
+      "price": 61.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 159,
+      "status": "active",
+      "shortDescription": "Mască de păr pentru păr vopsit. Cu panthenol, proteine din mătase.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "proteine din mătase"
+        ],
+        "hair_type": "vopsit",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "colored"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 200,
+          "unit": "ml"
+        },
+        "best_for": "păr vopsit"
+      },
+      "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "description": "Iris & Co Pure Mască de păr. Recomandat pentru păr vopsit. Se folosește ocazional. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "stock": 18,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "aria-pure-mist-pentru-ten",
+      "name": "Aria Pure Mist pentru ten",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten"
+      ],
+      "price": 65.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 304,
+      "status": "active",
+      "shortDescription": "Mist pentru ten sensibil și hidratare. Cu centella, alantoină.",
+      "attributes": {
+        "key_ingredients": [
+          "centella",
+          "alantoină"
+        ],
+        "concerns": [
+          "sensitive",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten sensibil și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură apă. Ingrediente-cheie: centella, alantoină.",
+      "description": "Aria Pure Mist pentru ten. Recomandat pentru ten sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: centella, alantoină.",
+      "stock": 18,
+      "salePrice": 39.59,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nudelab-prime-primer-pentru-machiaj",
+      "name": "NudeLab Prime Primer pentru machiaj",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "primer-pentru-machiaj",
+      "categorySlugs": [
+        "primer-pentru-machiaj"
+      ],
+      "price": 75.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 46,
+      "status": "active",
+      "shortDescription": "Primer pentru machiaj cu finish natural.",
+      "attributes": {
+        "finish": "natural",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_base",
+        "net_content": {
+          "value": 30,
+          "unit": "ml"
+        },
+        "best_for": "cine vrea un finish natural"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "description": "NudeLab Prime Primer pentru machiaj. Recomandat pentru cine vrea un finish natural.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nudelab-ritual-scrub-de-corp",
+      "name": "NudeLab Ritual Scrub de corp",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp"
+      ],
+      "price": 57.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 294,
+      "status": "active",
+      "shortDescription": "Scrub de corp pentru piele normală. Cu panthenol, squalan.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "squalan"
+        ],
+        "concerns": [
+          "normal"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "squalan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 200,
+          "unit": "ml"
+        },
+        "best_for": "ten normal"
+      },
+      "ai_summary": "Recomandat pentru ten normal. Ingrediente-cheie: panthenol, squalan.",
+      "description": "NudeLab Ritual Scrub de corp. Recomandat pentru ten normal. Ingrediente-cheie: panthenol, squalan.",
+      "stock": 8,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "lumaderm-aura-spray-de-fixare",
+      "name": "LumaDerm Aura Spray de fixare",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare"
+      ],
+      "price": 68.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 152,
+      "status": "active",
+      "shortDescription": "Spray de fixare cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "finish",
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "cine vrea un finish luminos"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "LumaDerm Aura Spray de fixare. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 67,
+      "salePrice": 48.29,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nera-rituals-revive-tratament-local",
+      "name": "Nera Rituals Revive Tratament local",
+      "brandSlug": "nera-rituals",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local"
+      ],
+      "price": 61.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 316,
+      "status": "active",
+      "shortDescription": "Tratament local pentru ten cu tendință acneică. Cu bisabolol, centella.",
+      "attributes": {
+        "key_ingredients": [
+          "bisabolol",
+          "centella"
+        ],
+        "concerns": [
+          "acne"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "acne"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "bisabolol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten cu tendință acneică"
+      },
+      "ai_summary": "Recomandat pentru ten cu tendință acneică. Textură gel. Ingrediente-cheie: bisabolol, centella.",
+      "description": "Nera Rituals Revive Tratament local. Recomandat pentru ten cu tendință acneică. Se folosește seara. Ingrediente-cheie: bisabolol, centella.",
+      "stock": 18,
+      "salePrice": 37.19,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "solora-repair-ulei-de-par",
+      "name": "Solora Repair Ulei de păr",
+      "brandSlug": "solora",
+      "primaryCategorySlug": "uleiuri-pentru-par",
+      "categorySlugs": [
+        "uleiuri-pentru-par"
+      ],
+      "price": 87.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 358,
+      "status": "active",
+      "shortDescription": "Ulei de păr pentru păr uscat. Cu proteine din mătase, keratină.",
+      "attributes": {
+        "key_ingredients": [
+          "proteine din mătase",
+          "keratină"
+        ],
+        "hair_type": "uscat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "păr uscat"
+      },
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: proteine din mătase, keratină.",
+      "description": "Solora Repair Ulei de păr. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: proteine din mătase, keratină.",
+      "stock": 31,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "orchid-field-prime-anticearcan",
+      "name": "Orchid Field Prime Anticearcăn",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "anticearcan",
+      "categorySlugs": [
+        "anticearcan"
+      ],
+      "price": 54.49,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 132,
+      "status": "active",
+      "shortDescription": "Anticearcăn pentru ten uscat.",
+      "attributes": {
+        "concerns": [
+          "dry"
+        ],
+        "finish": "natural",
+        "coverage": "full",
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "routine_step": "makeup_base",
+        "best_for": "cine vrea un finish natural, pe ten uscat"
+      },
+      "variants": [
+        {
+          "label": "07 Amber",
+          "sku": "GEN-BED6BB500DB7",
+          "price": 54.49,
+          "stock": 6,
+          "colorHex": "#B98455",
+          "attributes": {
+            "shade": "amber"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 46.32
+        },
+        {
+          "label": "01 Porcelain",
+          "sku": "GEN-CB95B6D54CA0",
+          "price": 54.49,
+          "stock": 6,
+          "colorHex": "#F6E3D5",
+          "attributes": {
+            "shade": "porcelain"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 46.32
+        },
+        {
+          "label": "02 Ivory",
+          "sku": "GEN-B22A0D7652FB",
+          "price": 54.49,
+          "stock": 6,
+          "colorHex": "#F0D9C4",
+          "attributes": {
+            "shade": "ivory"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 46.32
+        },
+        {
+          "label": "03 Beige",
+          "sku": "GEN-DB9B585BC0D3",
+          "price": 54.49,
+          "stock": 6,
+          "colorHex": "#E3C3A5",
+          "attributes": {
+            "shade": "beige"
+          },
+          "net_content": {
+            "value": 7,
+            "unit": "ml"
+          },
+          "salePrice": 46.32
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten uscat.",
+      "description": "Orchid Field Prime Anticearcăn. Recomandat pentru cine vrea un finish natural, pe ten uscat.",
+      "stock": 24,
+      "salePrice": 46.32,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "coral-theory-silk-balsam-de-buze",
+      "name": "Coral Theory Silk Balsam de buze",
+      "brandSlug": "coral-theory",
+      "primaryCategorySlug": "buze",
+      "categorySlugs": [
+        "buze"
+      ],
+      "price": 36.49,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 24,
+      "status": "active",
+      "shortDescription": "Balsam de buze pentru buze uscate și hidratare. Cu vitamina E, ceramide.",
+      "attributes": {
+        "key_ingredients": [
+          "vitamina E",
+          "ceramide"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ceramide",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: vitamina E, ceramide.",
+      "description": "Coral Theory Silk Balsam de buze. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: vitamina E, ceramide.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "aria-aura-creion-de-ochi",
+      "name": "Aria Aura Creion de ochi",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "creioane-si-tusuri-de-ochi",
+      "categorySlugs": [
+        "creioane-si-tusuri-de-ochi"
+      ],
+      "price": 38.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 353,
+      "status": "active",
+      "shortDescription": "Creion de ochi.",
+      "attributes": {
+        "key_benefit": "Vârf fin pentru contur exact.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 1.2,
+          "unit": "g"
+        },
+        "best_for": "conturarea privirii"
+      },
+      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "description": "Aria Aura Creion de ochi. Vârf fin pentru contur exact. Recomandat pentru conturarea privirii.",
+      "stock": 8,
+      "salePrice": 23.39,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 5
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "nova-botanics-nutri-crema-de-ochi",
+      "name": "Nova Botanics Nutri Cremă de ochi",
+      "brandSlug": "nova-botanics",
+      "primaryCategorySlug": "creme-de-ochi",
+      "categorySlugs": [
+        "creme-de-ochi"
+      ],
+      "price": 75.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 176,
+      "status": "active",
+      "shortDescription": "Cremă de ochi pentru ten matur. Cu acid hialuronic, glicerină.",
+      "attributes": {
+        "key_ingredients": [
+          "acid hialuronic",
+          "glicerină"
+        ],
+        "concerns": [
+          "anti_aging"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "anti_aging"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "glicerină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten matur"
+      },
+      "ai_summary": "Recomandat pentru ten matur. Textură cremă. Ingrediente-cheie: acid hialuronic, glicerină.",
+      "description": "Nova Botanics Nutri Cremă de ochi. Recomandat pentru ten matur. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, glicerină.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velora-pure-deodorant",
+      "name": "Velora Pure Deodorant",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "deodorante",
+      "categorySlugs": [
+        "deodorante"
+      ],
+      "price": 50.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 220,
+      "status": "active",
+      "shortDescription": "Deodorant pentru piele normală. Cu centella, alantoină.",
+      "attributes": {
+        "key_ingredients": [
+          "centella",
+          "alantoină"
+        ],
+        "concerns": [
+          "normal"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "ten normal"
+      },
+      "ai_summary": "Recomandat pentru ten normal. Ingrediente-cheie: centella, alantoină.",
+      "description": "Velora Pure Deodorant. Recomandat pentru ten normal. Ingrediente-cheie: centella, alantoină.",
+      "stock": 24,
+      "salePrice": 43.34,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 7
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "iris-co-revive-exfoliant-pentru-ten",
+      "name": "Iris & Co Revive Exfoliant pentru ten",
+      "brandSlug": "iris-and-co",
+      "primaryCategorySlug": "exfoliante-pentru-ten",
+      "categorySlugs": [
+        "exfoliante-pentru-ten"
+      ],
+      "price": 62.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 195,
+      "status": "active",
+      "shortDescription": "Exfoliant pentru ten gras și ten cu tendință acneică. Cu vitamina C, colagen.",
+      "attributes": {
+        "key_ingredients": [
+          "vitamina C",
+          "colagen"
+        ],
+        "concerns": [
+          "oily",
+          "acne"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "oily",
+          "acne"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "colagen",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten gras și cu tendință acneică"
+      },
+      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură gel. Ingrediente-cheie: vitamina C, colagen.",
+      "description": "Iris & Co Revive Exfoliant pentru ten. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: vitamina C, colagen.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumiere-skin-velvet-fard-de-ochi",
+      "name": "Lumiere Skin Velvet Fard de ochi",
+      "brandSlug": "lumiere-skin",
+      "primaryCategorySlug": "farduri-de-ochi",
+      "categorySlugs": [
+        "farduri-de-ochi"
+      ],
+      "price": 76.49,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 63,
+      "status": "active",
+      "shortDescription": "Fard de ochi.",
+      "attributes": {
+        "key_benefit": "Nuanțe care se pot suprapune fără să se tulbure.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "machiajul ochilor"
+      },
+      "ai_summary": "Recomandat pentru machiajul ochilor.",
+      "description": "Lumiere Skin Velvet Fard de ochi. Nuanțe care se pot suprapune fără să se tulbure. Recomandat pentru machiajul ochilor.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumaderm-ritual-lotiune-de-corp",
+      "name": "LumaDerm Ritual Loțiune de corp",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "lotiuni-de-corp",
+      "categorySlugs": [
+        "lotiuni-de-corp"
+      ],
+      "price": 70.49,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 235,
+      "status": "active",
+      "shortDescription": "Loțiune de corp pentru piele uscată și hidratare. Cu ulei de jojoba, vitamina E.",
+      "attributes": {
+        "key_ingredients": [
+          "ulei de jojoba",
+          "vitamina E"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: ulei de jojoba, vitamina E.",
+      "description": "LumaDerm Ritual Loțiune de corp. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: ulei de jojoba, vitamina E.",
+      "stock": 42,
+      "salePrice": 56.39,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "bloom-aura-mascara",
+      "name": "Bloom Aura Mascara",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "mascara",
+      "categorySlugs": [
+        "mascara"
+      ],
+      "price": 78.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 79,
+      "status": "active",
+      "shortDescription": "Mascara.",
+      "attributes": {
+        "key_benefit": "Volum și separare bună a genelor.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "ml"
+        },
+        "best_for": "definirea și volumul genelor"
+      },
+      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "description": "Bloom Aura Mascara. Volum și separare bună a genelor. Recomandat pentru definirea și volumul genelor.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "elara-beauty-nude-pudra",
+      "name": "Elara Beauty Nude Pudră",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "pudre",
+      "categorySlugs": [
+        "pudre"
+      ],
+      "price": 49.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 359,
+      "status": "active",
+      "shortDescription": "Pudră cu finish natural.",
+      "attributes": {
+        "finish": "natural",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish natural"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "description": "Elara Beauty Nude Pudră. Recomandat pentru cine vrea un finish natural.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumiere-skin-revive-sampon-uscat",
+      "name": "Lumiere Skin Revive Șampon uscat",
+      "brandSlug": "lumiere-skin",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat"
+      ],
+      "price": 43.49,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 268,
+      "status": "active",
+      "shortDescription": "Șampon uscat pentru păr normal. Cu proteine din mătase, keratină.",
+      "attributes": {
+        "key_ingredients": [
+          "proteine din mătase",
+          "keratină"
+        ],
+        "hair_type": "normal",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr normal"
+      },
+      "ai_summary": "Recomandat pentru păr normal. Ingrediente-cheie: proteine din mătase, keratină.",
+      "description": "Lumiere Skin Revive Șampon uscat. Recomandat pentru păr normal. Se folosește ocazional. Ingrediente-cheie: proteine din mătase, keratină.",
+      "stock": 42,
+      "salePrice": 39.14,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "auralis-repair-balsam-de-par",
+      "name": "Auralis Repair Balsam de păr",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "balsamuri-de-par",
+      "categorySlugs": [
+        "balsamuri-de-par"
+      ],
+      "price": 53.99,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 80,
+      "status": "active",
+      "shortDescription": "Balsam de păr pentru păr fin. Cu proteine din mătase, keratină.",
+      "attributes": {
+        "key_ingredients": [
+          "proteine din mătase",
+          "keratină"
+        ],
+        "hair_type": "fin",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "fine"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "păr fin"
+      },
+      "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: proteine din mătase, keratină.",
+      "description": "Auralis Repair Balsam de păr. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din mătase, keratină.",
+      "stock": 55,
+      "salePrice": 43.19,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "elara-beauty-sun-balsam-de-buze",
+      "name": "Elara Beauty Sun Balsam de buze",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "buze",
+      "categorySlugs": [
+        "buze"
+      ],
+      "price": 34.49,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 318,
+      "status": "active",
+      "shortDescription": "Balsam de buze pentru buze uscate și hidratare. Cu acid hialuronic, glicerină.",
+      "attributes": {
+        "key_ingredients": [
+          "acid hialuronic",
+          "glicerină"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "acid hialuronic",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "glicerină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: acid hialuronic, glicerină.",
+      "description": "Elara Beauty Sun Balsam de buze. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: acid hialuronic, glicerină.",
+      "stock": 8,
+      "salePrice": 20.69,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "bloom-nude-creion-de-ochi",
+      "name": "Bloom Nude Creion de ochi",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "creioane-si-tusuri-de-ochi",
+      "categorySlugs": [
+        "creioane-si-tusuri-de-ochi"
+      ],
+      "price": 31.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 130,
+      "status": "active",
+      "shortDescription": "Creion de ochi.",
+      "attributes": {
+        "key_benefit": "Linie precisă, ușor de estompat.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 1.2,
+          "unit": "g"
+        },
+        "best_for": "conturarea privirii"
+      },
+      "ai_summary": "Recomandat pentru conturarea privirii.",
+      "description": "Bloom Nude Creion de ochi. Linie precisă, ușor de estompat. Recomandat pentru conturarea privirii.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "pure-arc-revive-crema-de-ochi",
+      "name": "Pure Arc Revive Cremă de ochi",
+      "brandSlug": "pure-arc",
+      "primaryCategorySlug": "creme-de-ochi",
+      "categorySlugs": [
+        "creme-de-ochi"
+      ],
+      "price": 94.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 185,
+      "status": "active",
+      "shortDescription": "Cremă de ochi pentru hidratare și ten uscat. Cu panthenol, squalan.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "squalan"
+        ],
+        "concerns": [
+          "hydration",
+          "dry"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "cremă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "hydration",
+          "dry"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "squalan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten deshidratat și uscat"
+      },
+      "ai_summary": "Recomandat pentru ten deshidratat și uscat. Textură cremă. Ingrediente-cheie: panthenol, squalan.",
+      "description": "Pure Arc Revive Cremă de ochi. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: panthenol, squalan.",
+      "stock": 55,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "auralis-ritual-deodorant",
+      "name": "Auralis Ritual Deodorant",
+      "brandSlug": "auralis",
+      "primaryCategorySlug": "deodorante",
+      "categorySlugs": [
+        "deodorante"
+      ],
+      "price": 49.49,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 90,
+      "status": "active",
+      "shortDescription": "Deodorant pentru piele normală. Cu centella, alantoină.",
+      "attributes": {
+        "key_ingredients": [
+          "centella",
+          "alantoină"
+        ],
+        "concerns": [
+          "normal"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "centella",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "alantoină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "ten normal"
+      },
+      "ai_summary": "Recomandat pentru ten normal. Ingrediente-cheie: centella, alantoină.",
+      "description": "Auralis Ritual Deodorant. Recomandat pentru ten normal. Ingrediente-cheie: centella, alantoină.",
+      "stock": 67,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "bloom-calm-exfoliant-pentru-ten",
+      "name": "Bloom Calm Exfoliant pentru ten",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "exfoliante-pentru-ten",
+      "categorySlugs": [
+        "exfoliante-pentru-ten"
+      ],
+      "price": 62.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 269,
+      "status": "active",
+      "shortDescription": "Exfoliant pentru ten gras și ten cu tendință acneică. Cu retinol, vitamina C.",
+      "attributes": {
+        "key_ingredients": [
+          "retinol",
+          "vitamina C"
+        ],
+        "concerns": [
+          "oily",
+          "acne"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "oily",
+          "acne"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "retinol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina C",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten gras și cu tendință acneică"
+      },
+      "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură gel. Ingrediente-cheie: retinol, vitamina C.",
+      "description": "Bloom Calm Exfoliant pentru ten. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: retinol, vitamina C.",
+      "stock": 24,
+      "salePrice": 44.09,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "velora-silk-fard-de-ochi",
+      "name": "Velora Silk Fard de ochi",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "farduri-de-ochi",
+      "categorySlugs": [
+        "farduri-de-ochi"
+      ],
+      "price": 45.49,
+      "currency": "RON",
+      "rating": 4.5,
+      "reviewCount": 357,
+      "status": "active",
+      "shortDescription": "Fard de ochi.",
+      "attributes": {
+        "key_benefit": "Nuanțe care se pot suprapune fără să se tulbure.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "machiajul ochilor"
+      },
+      "ai_summary": "Recomandat pentru machiajul ochilor.",
+      "description": "Velora Silk Fard de ochi. Nuanțe care se pot suprapune fără să se tulbure. Recomandat pentru machiajul ochilor.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "maison-verde-sun-lotiune-de-corp",
+      "name": "Maison Verde Sun Loțiune de corp",
+      "brandSlug": "maison-verde",
+      "primaryCategorySlug": "lotiuni-de-corp",
+      "categorySlugs": [
+        "lotiuni-de-corp"
+      ],
+      "price": 63.49,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 73,
+      "status": "active",
+      "shortDescription": "Loțiune de corp pentru piele sensibilă. Cu unt de shea, ulei de jojoba.",
+      "attributes": {
+        "key_ingredients": [
+          "unt de shea",
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "sensitive"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "sensitive"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 250,
+          "unit": "ml"
+        },
+        "best_for": "ten sensibil"
+      },
+      "ai_summary": "Recomandat pentru ten sensibil. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "description": "Maison Verde Sun Loțiune de corp. Recomandat pentru ten sensibil. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumaderm-velvet-mascara",
+      "name": "LumaDerm Velvet Mascara",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "mascara",
+      "categorySlugs": [
+        "mascara"
+      ],
+      "price": 44.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 200,
+      "status": "active",
+      "shortDescription": "Mascara.",
+      "attributes": {
+        "key_benefit": "Curbare de durată, rezistentă la umezeală.",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "ml"
+        },
+        "best_for": "definirea și volumul genelor"
+      },
+      "ai_summary": "Recomandat pentru definirea și volumul genelor.",
+      "description": "LumaDerm Velvet Mascara. Curbare de durată, rezistentă la umezeală. Recomandat pentru definirea și volumul genelor.",
+      "stock": 31,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nudelab-luxe-pudra",
+      "name": "NudeLab Luxe Pudră",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "pudre",
+      "categorySlugs": [
+        "pudre"
+      ],
+      "price": 52.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 302,
+      "status": "active",
+      "shortDescription": "Pudră cu finish natural.",
+      "attributes": {
+        "finish": "natural",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 10,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish natural"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "description": "NudeLab Luxe Pudră. Recomandat pentru cine vrea un finish natural.",
+      "stock": 8,
+      "salePrice": 34.44,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "elara-beauty-repair-sampon-uscat",
+      "name": "Elara Beauty Repair Șampon uscat",
+      "brandSlug": "elara-beauty",
+      "primaryCategorySlug": "sampon-uscat",
+      "categorySlugs": [
+        "sampon-uscat"
+      ],
+      "price": 62.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 221,
+      "status": "active",
+      "shortDescription": "Șampon uscat pentru păr fin. Cu proteine din mătase, keratină.",
+      "attributes": {
+        "key_ingredients": [
+          "proteine din mătase",
+          "keratină"
+        ],
+        "hair_type": "fin",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "fine"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr fin"
+      },
+      "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: proteine din mătase, keratină.",
+      "description": "Elara Beauty Repair Șampon uscat. Recomandat pentru păr fin. Se folosește ocazional. Ingrediente-cheie: proteine din mătase, keratină.",
+      "stock": 42,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "lumaderm-matte-bronzer",
+      "name": "LumaDerm Matte Bronzer",
+      "brandSlug": "lumaderm",
+      "primaryCategorySlug": "bronzer",
+      "categorySlugs": [
+        "bronzer"
+      ],
+      "price": 82.99,
+      "currency": "RON",
+      "rating": 4.2,
+      "reviewCount": 52,
+      "status": "active",
+      "shortDescription": "Bronzer cu finish satin.",
+      "attributes": {
+        "finish": "satin",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 8,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish satinat"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "description": "LumaDerm Matte Bronzer. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "verdea-prime-crema-bb",
+      "name": "Verdea Prime Cremă BB",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "creme-bb-si-cc",
+      "categorySlugs": [
+        "creme-bb-si-cc"
+      ],
+      "price": 98.49,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 295,
+      "status": "active",
+      "shortDescription": "Cremă BB pentru ten normal.",
+      "attributes": {
+        "concerns": [
+          "normal"
+        ],
+        "finish": "dewy",
+        "coverage": "medium",
+        "texture": "fluid",
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "normal"
+        ],
+        "routine_step": "makeup_base",
+        "best_for": "cine vrea un finish luminos, pe ten normal"
+      },
+      "variants": [
+        {
+          "label": "03 Beige",
+          "sku": "GEN-972DC5D1C737",
+          "price": 98.49,
+          "stock": 0,
+          "colorHex": "#E3C3A5",
+          "attributes": {
+            "shade": "beige"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          }
+        },
+        {
+          "label": "05 Sand",
+          "sku": "GEN-0DAD09C027D9",
+          "price": 98.49,
+          "stock": 4,
+          "colorHex": "#D2A97F",
+          "attributes": {
+            "shade": "sand"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          }
+        },
+        {
+          "label": "07 Amber",
+          "sku": "GEN-372895609656",
+          "price": 98.49,
+          "stock": 3,
+          "colorHex": "#B98455",
+          "attributes": {
+            "shade": "amber"
+          },
+          "net_content": {
+            "value": 40,
+            "unit": "ml"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten normal. Textură fluid.",
+      "description": "Verdea Prime Cremă BB. Recomandat pentru cine vrea un finish luminos, pe ten normal.",
+      "stock": 7,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "rhea-organics-ritual-crema-de-maini",
+      "name": "Rhea Organics Ritual Cremă de mâini",
+      "brandSlug": "rhea-organics",
+      "primaryCategorySlug": "creme-de-maini",
+      "categorySlugs": [
+        "creme-de-maini"
+      ],
+      "price": 26.99,
+      "currency": "RON",
+      "rating": 4.1,
+      "reviewCount": 94,
+      "status": "active",
+      "shortDescription": "Cremă de mâini pentru piele uscată și hidratare. Cu unt de shea, ulei de jojoba.",
+      "attributes": {
+        "key_ingredients": [
+          "unt de shea",
+          "ulei de jojoba"
+        ],
+        "concerns": [
+          "dry",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry",
+          "hydration"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "unt de shea",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 75,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "description": "Rhea Organics Ritual Cremă de mâini. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ulei de jojoba.",
+      "stock": 18,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velora-luxe-iluminator",
+      "name": "Velora Luxe Iluminator",
+      "brandSlug": "velora",
+      "primaryCategorySlug": "iluminatoare",
+      "categorySlugs": [
+        "iluminatoare"
+      ],
+      "price": 88.49,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 219,
+      "status": "active",
+      "shortDescription": "Iluminator cu finish satin.",
+      "attributes": {
+        "finish": "satin",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "net_content": {
+          "value": 6,
+          "unit": "g"
+        },
+        "best_for": "cine vrea un finish satinat"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
+      "description": "Velora Luxe Iluminator. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 42,
+      "salePrice": 61.94,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "nudelab-soft-crema-leave-in",
+      "name": "NudeLab Soft Cremă leave-in",
+      "brandSlug": "nudelab",
+      "primaryCategorySlug": "ingrijire-fara-clatire",
+      "categorySlugs": [
+        "ingrijire-fara-clatire"
+      ],
+      "price": 84.99,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 112,
+      "status": "active",
+      "shortDescription": "Cremă leave-in pentru păr uscat. Cu proteine din mătase, keratină.",
+      "attributes": {
+        "key_ingredients": [
+          "proteine din mătase",
+          "keratină"
+        ],
+        "hair_type": "uscat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "daily"
+          ]
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "keratină",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 150,
+          "unit": "ml"
+        },
+        "best_for": "păr uscat"
+      },
+      "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: proteine din mătase, keratină.",
+      "description": "NudeLab Soft Cremă leave-in. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: proteine din mătase, keratină.",
+      "stock": 42,
+      "salePrice": 76.49,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "orchid-field-revive-masca-de-par",
+      "name": "Orchid Field Revive Mască de păr",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "masti-de-par",
+      "categorySlugs": [
+        "masti-de-par"
+      ],
+      "price": 95.49,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 230,
+      "status": "active",
+      "shortDescription": "Mască de păr pentru păr deteriorat. Cu panthenol, proteine din mătase.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "proteine din mătase"
+        ],
+        "hair_type": "deteriorat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "damaged"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "proteine din mătase",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 200,
+          "unit": "ml"
+        },
+        "best_for": "păr deteriorat"
+      },
+      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "description": "Orchid Field Revive Mască de păr. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: panthenol, proteine din mătase.",
+      "stock": 12,
+      "salePrice": 66.84,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 10
+      },
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "aria-hydra-mist-pentru-ten",
+      "name": "Aria Hydra Mist pentru ten",
+      "brandSlug": "aria",
+      "primaryCategorySlug": "mist-pentru-ten",
+      "categorySlugs": [
+        "mist-pentru-ten"
+      ],
+      "price": 41.49,
+      "currency": "RON",
+      "rating": 4.4,
+      "reviewCount": 130,
+      "status": "active",
+      "shortDescription": "Mist pentru ten sensibil și hidratare. Cu panthenol, squalan.",
+      "attributes": {
+        "key_ingredients": [
+          "panthenol",
+          "squalan"
+        ],
+        "concerns": [
+          "sensitive",
+          "hydration"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "apă",
+        "usage": {
+          "time": [
+            "morning",
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "sensitive",
+          "hydration"
+        ],
+        "routine_step": "moisturize",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "squalan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "ten sensibil și deshidratat"
+      },
+      "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură apă. Ingrediente-cheie: panthenol, squalan.",
+      "description": "Aria Hydra Mist pentru ten. Recomandat pentru ten sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: panthenol, squalan.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "rhea-organics-prime-primer-pentru-machiaj",
+      "name": "Rhea Organics Prime Primer pentru machiaj",
+      "brandSlug": "rhea-organics",
+      "primaryCategorySlug": "primer-pentru-machiaj",
+      "categorySlugs": [
+        "primer-pentru-machiaj"
+      ],
+      "price": 81.99,
+      "currency": "RON",
+      "rating": 4.3,
+      "reviewCount": 304,
+      "status": "active",
+      "shortDescription": "Primer pentru machiaj cu finish natural.",
+      "attributes": {
+        "finish": "natural",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_base",
+        "net_content": {
+          "value": 30,
+          "unit": "ml"
+        },
+        "best_for": "cine vrea un finish natural"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish natural.",
+      "description": "Rhea Organics Prime Primer pentru machiaj. Recomandat pentru cine vrea un finish natural.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "bloom-nutri-scrub-de-corp",
+      "name": "Bloom Nutri Scrub de corp",
+      "brandSlug": "bloom",
+      "primaryCategorySlug": "scrub-de-corp",
+      "categorySlugs": [
+        "scrub-de-corp"
+      ],
+      "price": 52.49,
+      "currency": "RON",
+      "rating": 4.7,
+      "reviewCount": 301,
+      "status": "active",
+      "shortDescription": "Scrub de corp pentru piele uscată. Cu ulei de jojoba, vitamina E.",
+      "attributes": {
+        "key_ingredients": [
+          "ulei de jojoba",
+          "vitamina E"
+        ],
+        "concerns": [
+          "dry"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "suitable_for": [
+          "dry"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de jojoba",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "vitamina E",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 200,
+          "unit": "ml"
+        },
+        "best_for": "ten uscat"
+      },
+      "ai_summary": "Recomandat pentru ten uscat. Ingrediente-cheie: ulei de jojoba, vitamina E.",
+      "description": "Bloom Nutri Scrub de corp. Recomandat pentru ten uscat. Ingrediente-cheie: ulei de jojoba, vitamina E.",
+      "stock": 12,
+      "deliveryClass": "standard"
+    },
+    {
+      "slug": "velvet-root-silk-spray-de-fixare",
+      "name": "Velvet Root Silk Spray de fixare",
+      "brandSlug": "velvet-root",
+      "primaryCategorySlug": "spray-de-fixare",
+      "categorySlugs": [
+        "spray-de-fixare"
+      ],
+      "price": 55.99,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 253,
+      "status": "active",
+      "shortDescription": "Spray de fixare cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "finish",
+        "net_content": {
+          "value": 100,
+          "unit": "ml"
+        },
+        "best_for": "cine vrea un finish luminos"
+      },
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "Velvet Root Silk Spray de fixare. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "verdea-nutri-tratament-local",
+      "name": "Verdea Nutri Tratament local",
+      "brandSlug": "verdea",
+      "primaryCategorySlug": "tratament-local",
+      "categorySlugs": [
+        "tratament-local"
+      ],
+      "price": 67.99,
+      "currency": "RON",
+      "rating": 4.6,
+      "reviewCount": 117,
+      "status": "active",
+      "shortDescription": "Tratament local pentru ten cu tendință acneică. Cu ovăz coloidal, bisabolol.",
+      "attributes": {
+        "key_ingredients": [
+          "ovăz coloidal",
+          "bisabolol"
+        ],
+        "concerns": [
+          "acne"
+        ],
+        "_meta": {
+          "generated": true
+        },
+        "texture": "gel",
+        "usage": {
+          "time": [
+            "evening"
+          ]
+        },
+        "suitable_for": [
+          "acne"
+        ],
+        "routine_step": "treat",
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ovăz coloidal",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "bisabolol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 15,
+          "unit": "ml"
+        },
+        "best_for": "ten cu tendință acneică"
+      },
+      "ai_summary": "Recomandat pentru ten cu tendință acneică. Textură gel. Ingrediente-cheie: ovăz coloidal, bisabolol.",
+      "description": "Verdea Nutri Tratament local. Recomandat pentru ten cu tendință acneică. Se folosește seara. Ingrediente-cheie: ovăz coloidal, bisabolol.",
+      "stock": 24,
+      "deliveryClass": "next_day"
+    },
+    {
+      "slug": "petala-nutri-ulei-de-par",
+      "name": "Petala Nutri Ulei de păr",
+      "brandSlug": "petala",
+      "primaryCategorySlug": "uleiuri-pentru-par",
+      "categorySlugs": [
+        "uleiuri-pentru-par"
+      ],
+      "price": 60.49,
+      "currency": "RON",
+      "rating": 4.9,
+      "reviewCount": 163,
+      "status": "active",
+      "shortDescription": "Ulei de păr pentru păr deteriorat. Cu ulei de argan, panthenol.",
+      "attributes": {
+        "key_ingredients": [
+          "ulei de argan",
+          "panthenol"
+        ],
+        "hair_type": "deteriorat",
+        "_meta": {
+          "generated": true
+        },
+        "usage": {
+          "time": [
+            "occasional"
+          ]
+        },
+        "suitable_for": [
+          "damaged"
+        ],
+        "claim_provenance": [
+          {
+            "kind": "ingredient",
+            "value": "ulei de argan",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          },
+          {
+            "kind": "ingredient",
+            "value": "panthenol",
+            "source": "demo_catalog_authored",
+            "source_ref": "NX-168e enrichment (fapt de catalog demo — nu etichetă de produs reală)",
+            "verified_at": "2026-07-16"
+          }
+        ],
+        "net_content": {
+          "value": 50,
+          "unit": "ml"
+        },
+        "best_for": "păr deteriorat"
+      },
+      "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, panthenol.",
+      "description": "Petala Nutri Ulei de păr. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, panthenol.",
+      "stock": 12,
+      "deliveryClass": "supplier"
+    },
+    {
+      "slug": "orchid-field-glow-fard-de-obraz",
+      "name": "Orchid Field Glow Fard de obraz",
+      "brandSlug": "orchid-field",
+      "primaryCategorySlug": "fard-de-obraz",
+      "categorySlugs": [
+        "fard-de-obraz"
+      ],
+      "price": 44.99,
+      "currency": "RON",
+      "rating": 4.8,
+      "reviewCount": 340,
+      "status": "active",
+      "shortDescription": "Fard de obraz cu finish dewy.",
+      "attributes": {
+        "finish": "dewy",
+        "_meta": {
+          "generated": true
+        },
+        "routine_step": "makeup_color",
+        "best_for": "cine vrea un finish luminos"
+      },
+      "variants": [
+        {
+          "label": "Cherry",
+          "sku": "GEN-4B1E8FAD6341",
+          "price": 44.99,
+          "stock": 8,
+          "colorHex": "#9E2231",
+          "attributes": {
+            "shade": "cherry"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          }
+        },
+        {
+          "label": "Mauve",
+          "sku": "GEN-D302C91615A4",
+          "price": 44.99,
+          "stock": 8,
+          "colorHex": "#A9707F",
+          "attributes": {
+            "shade": "mauve"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          }
+        },
+        {
+          "label": "Rosewood",
+          "sku": "GEN-0B00272A7BCC",
+          "price": 44.99,
+          "stock": 8,
+          "colorHex": "#B25A62",
+          "attributes": {
+            "shade": "rosewood"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          }
+        },
+        {
+          "label": "Nude Peach",
+          "sku": "GEN-6A476C3F5552",
+          "price": 44.99,
+          "stock": 7,
+          "colorHex": "#D89A82",
+          "attributes": {
+            "shade": "peach"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "g"
+          }
+        }
+      ],
+      "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
+      "description": "Orchid Field Glow Fard de obraz. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 31,
       "deliveryClass": "next_day"
     }
   ]
