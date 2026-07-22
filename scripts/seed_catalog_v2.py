@@ -22,6 +22,7 @@ import asyncio
 import hashlib
 import json
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -35,6 +36,7 @@ from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbor
     build_roots,
     evaluate,
 )
+from src.worker.text_scrub import has_medical_claim  # noqa: E402 — poarta de claim la ingestion
 
 # NB: importul DB (`src.db.connection`) + politica asyncio Windows sunt LAZY (în `main()` /
 # `__main__`) ca importul acestui modul — ex. din teste, pt `gate_violations` — să NU atingă DB
@@ -43,6 +45,10 @@ from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbor
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 STORE_BASE = "https://shop.sole-demo.ro/p/"
 DATA = ROOT / "db" / "seed" / "catalog_v2.json"
+
+# NX-191: sub acest prag, availability devine `low_stock` — „au mai rămas 3 bucăți" e o pârghie de
+# urgență ONESTĂ (spune un fapt), dar are nevoie de o stare distinctă, nu doar de un număr.
+LOW_STOCK_THRESHOLD = 5
 
 # Placeholder-e consistente pe categorie (runtime W1 citește prima poză). Culoare de fundal per
 # RAMURĂ top-level → cardurile arată coerent vizual pe categorie. placehold.co = serviciu care
@@ -242,11 +248,60 @@ async def _upsert_category(conn, slug: str, name: str, parent_slug: str | None) 
     )
 
 
+#: secțiuni retrogradate la voice='brand' pentru că fac un claim medical (raportate la final)
+_DOWNGRADED_SECTIONS: list[tuple[str, str]] = []
+
+
+def _section_voice(sec: dict, slug: str = "") -> str:
+    """NX-191 — PROVENIENȚA textului, decisă la INGESTION, nu la runtime.
+
+    `voice='assistant'` = botul poate afirma direct blocul. Deci verificarea de claim medical
+    (P0-safety, stagiul 8) se mută AICI: un text care ar fi tăiat de validator în conversație
+    n-are ce căuta ca afirmație proprie. Retrogradat la `brand` (rămâne afișabil, dar atribuit
+    producătorului) în loc să fie aruncat — informația nu se pierde, responsabilitatea se mută.
+
+    Ex. real din catalogul demo: „Tratează imperfecțiunile…" lângă „ten cu tendință acneică" =
+    verb terapeutic + afecțiune. Corect ca text de producător, interzis ca afirmație a botului.
+    """
+    if sec.get("voice"):
+        return str(sec["voice"])
+    if has_medical_claim(sec.get("body")):
+        _DOWNGRADED_SECTIONS.append((slug, sec.get("kind", "?")))
+        return "brand"
+    return "assistant"
+
+
+def _commerce_dates(p: dict, today: date) -> dict:
+    """NX-191: offset-urile RELATIVE din catalog (`saleWindow`, `restockInDays`) → date reale, la
+    momentul seed-ului. Datele absolute în fișier ar expira: peste o lună demo-ul ar arăta un
+    catalog fără nicio promoție activă și cu reaprovizionări în trecut."""
+    out: dict = {"sale_start": None, "sale_end": None, "restock_date": None}
+    win = p.get("saleWindow") or {}
+    if p.get("salePrice") and isinstance(win.get("endsInDays"), int):
+        out["sale_start"] = today + timedelta(days=int(win.get("startsInDays", 0)))
+        out["sale_end"] = today + timedelta(days=int(win["endsInDays"]))
+    if isinstance(p.get("restockInDays"), int):
+        out["restock_date"] = today + timedelta(days=int(p["restockInDays"]))
+    return out
+
+
 async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) -> str:
     variants = p.get("variants") or []
-    # produse fără variante: stoc default (100) ca să fie in_stock; altfel suma variantelor
-    stock_total = sum(int(v.get("stock", 0)) for v in variants) or 100
-    availability = "in_stock" if stock_total > 0 else "out_of_stock"
+    # Stocul e AUTORAT (NX-191): `stock` pe produs e sursa de adevăr; fallback pe suma variantelor,
+    # apoi pe 100 (produsele vechi, fără strat comercial). `low_stock` e o valoare distinctă de
+    # `in_stock` — „au mai rămas 3 bucăți" e o pârghie de urgență ONESTĂ, deci trebuie să existe
+    # în availability, nu doar în stock_total.
+    authored = p.get("stock")
+    if isinstance(authored, int):
+        stock_total = authored
+    else:
+        stock_total = sum(int(v.get("stock", 0)) for v in variants) or 100
+    if stock_total <= 0:
+        availability = "out_of_stock"
+    elif stock_total <= LOW_STOCK_THRESHOLD:
+        availability = "low_stock"
+    else:
+        availability = "in_stock"
     url = STORE_BASE + p["slug"]
     fp = "V2-" + hashlib.sha256(p["slug"].encode()).hexdigest()[:24]
     attrs = json.dumps(p.get("attributes") or {}, ensure_ascii=False)
@@ -269,6 +324,9 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         status=p.get("status", "active"),
         attributes=attrs,
         product_url=url,
+        # NX-191 — strat comercial. delivery_class NULL = „ca magazinul" (fără promisiune proprie).
+        delivery_class=p.get("deliveryClass"),
+        **_commerce_dates(p, date.today()),
     )
     row = await conn.fetchrow(
         "select id from products where business_id=$1 and slug=$2", DEMO_BIZ, p["slug"]
@@ -375,18 +433,21 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         )
 
     # === NX-168e-2: graf PDP derivat determinist (sections/ingredients/badges/reviews) ===
-    # Toate idempotente (șterge + reinserează pe cheile stabile). Tabele scoped prin FK products
-    # (sections/product_ingredients/product_badges NU au business_id); reviews ARE business_id.
+    # Toate idempotente (șterge + reinserează pe cheile stabile). product_ingredients/product_badges
+    # rămân scoped prin FK products; `product_sections` ARE business_id de la migrarea 032 (P7).
     await conn.execute("delete from product_sections where product_id=$1", pid)
     for pos, sec in enumerate(pdp_content.sections(p)):
         await conn.execute(
-            "insert into product_sections (product_id, kind, title, body, position) "
-            "values ($1,$2,$3,$4,$5)",
+            "insert into product_sections "
+            "(business_id, product_id, kind, title, body, position, locale, voice) "
+            "values ($1,$2,$3,$4,$5,$6,'ro',$7)",
+            DEMO_BIZ,
             pid,
             sec["kind"],
             sec["title"],
             sec["body"],
             pos,
+            _section_voice(sec, p["slug"]),
         )
     # ingrediente normalizate (upsert pe (business_id, slug)) + legături is_key
     await conn.execute("delete from product_ingredients where product_id=$1", pid)
@@ -518,6 +579,15 @@ async def main() -> int:
                 f"{len(data['brands'])} branduri, {len(data['categories'])} categorii, "
                 f"{n_rel} relații."
             )
+            # NX-191: retrogradările NU sunt tăcute — un text derivat care face claim medical e un
+            # semnal despre DATE (formulare de reparat), nu doar o etichetă de pus.
+            if _DOWNGRADED_SECTIONS:
+                print(
+                    f"  ⚠ {len(_DOWNGRADED_SECTIONS)} secțiuni → voice='brand' (claim medical, "
+                    f"nu pot fi afirmate de bot):"
+                )
+                for slug, kind in _DOWNGRADED_SECTIONS[:10]:
+                    print(f"      {slug} [{kind}]")
             if dry:
                 raise RuntimeError("--dry-run → rollback (nimic scris)")
     await close_pool()

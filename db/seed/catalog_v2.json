@@ -318,7 +318,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și normal. Textură gel. Ingrediente-cheie: glicerină, panthenol.",
-      "description": "Auralis Gentle Gel de curățare. Curăță fără să usuce, potrivit pentru ten sensibil. Recomandat pentru ten sensibil și normal. Se folosește dimineața, seara. Ingrediente-cheie: glicerină, panthenol."
+      "description": "Auralis Gentle Gel de curățare. Curăță fără să usuce, potrivit pentru ten sensibil. Recomandat pentru ten sensibil și normal. Se folosește dimineața, seara. Ingrediente-cheie: glicerină, panthenol.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-purifying-gel-de-curatare",
@@ -390,7 +392,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură gel. Ingrediente-cheie: acid salicilic, zinc.",
-      "description": "LumaDerm Purifying Gel de curățare. Controlează sebumul și reduce imperfecțiunile. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, zinc."
+      "description": "LumaDerm Purifying Gel de curățare. Controlează sebumul și reduce imperfecțiunile. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, zinc.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-apa-micelara-demachianta",
@@ -462,7 +466,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și normal. Textură apă. Ingrediente-cheie: apă termală, glicerină.",
-      "description": "Auralis Apa micelară demachiantă. Demachiază complet fără frecare, fără clătire. Recomandat pentru ten sensibil și normal. Se folosește seara. Ingrediente-cheie: apă termală, glicerină."
+      "description": "Auralis Apa micelară demachiantă. Demachiază complet fără frecare, fără clătire. Recomandat pentru ten sensibil și normal. Se folosește seara. Ingrediente-cheie: apă termală, glicerină.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-hydra-ser-hidratant",
@@ -476,7 +482,6 @@
       "shortDescription": "Ser hidratant cu acid hialuronic pentru ten uscat și deshidratat.",
       "currency": "RON",
       "price": 74.99,
-      "salePrice": 64.99,
       "rating": 4.7,
       "reviewCount": 312,
       "status": "active",
@@ -537,7 +542,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten deshidratat și uscat. Textură gel. Ingrediente-cheie: acid hialuronic, niacinamidă.",
-      "description": "Auralis Hydra Ser hidratant. Hidratare intensă, reduce senzația de tensiune. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă."
+      "description": "Auralis Hydra Ser hidratant. Hidratare intensă, reduce senzația de tensiune. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă.",
+      "stock": 3,
+      "deliveryClass": "standard"
     },
     {
       "slug": "auralis-clarity-ser-cu-niacinamida",
@@ -613,7 +620,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și cu tendință acneică și cu pete. Textură fluid. Ingrediente-cheie: niacinamidă, zinc.",
-      "description": "Auralis Clarity Ser cu niacinamidă. Reglează sebumul și uniformizează tenul. Recomandat pentru ten gras și cu tendință acneică și cu pete. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, zinc."
+      "description": "Auralis Clarity Ser cu niacinamidă. Reglează sebumul și uniformizează tenul. Recomandat pentru ten gras și cu tendință acneică și cu pete. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, zinc.",
+      "stock": 31,
+      "salePrice": 41.99,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-daily-crema-hidratanta",
@@ -686,7 +700,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten deshidratat și normal. Textură cremă. Ingrediente-cheie: acid hialuronic, unt de shea.",
-      "description": "Auralis Daily Cremă hidratantă. Hidratare zilnică ușoară, bază bună sub machiaj. Recomandat pentru ten deshidratat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, unt de shea."
+      "description": "Auralis Daily Cremă hidratantă. Hidratare zilnică ușoară, bază bună sub machiaj. Recomandat pentru ten deshidratat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, unt de shea.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-calm-crema-ten-sensibil",
@@ -760,7 +776,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și uscat. Textură cremă. Ingrediente-cheie: panthenol, bisabolol.",
-      "description": "LumaDerm Calm Cremă pentru ten sensibil. Calmează roșeața și reface bariera tenului sensibil. Recomandat pentru ten sensibil și uscat. Se folosește dimineața, seara. Ingrediente-cheie: panthenol, bisabolol."
+      "description": "LumaDerm Calm Cremă pentru ten sensibil. Calmează roșeața și reface bariera tenului sensibil. Recomandat pentru ten sensibil și uscat. Se folosește dimineața, seara. Ingrediente-cheie: panthenol, bisabolol.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "auralis-rich-crema-de-noapte",
@@ -832,7 +850,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: ceramide, unt de shea.",
-      "description": "Auralis Rich Cremă de noapte. Nutriție intensă peste noapte pentru ten uscat. Recomandat pentru ten uscat și deshidratat. Se folosește seara. Ingrediente-cheie: ceramide, unt de shea."
+      "description": "Auralis Rich Cremă de noapte. Nutriție intensă peste noapte pentru ten uscat. Recomandat pentru ten uscat și deshidratat. Se folosește seara. Ingrediente-cheie: ceramide, unt de shea.",
+      "stock": 24,
+      "salePrice": 51.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-contur-ochi-crema",
@@ -905,7 +930,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten deshidratat și sensibil. Textură cremă. Ingrediente-cheie: cofeină, acid hialuronic.",
-      "description": "Auralis Contur ochi Cremă. Hidratează și reduce aspectul de oboseală. Recomandat pentru ten deshidratat și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: cofeină, acid hialuronic."
+      "description": "Auralis Contur ochi Cremă. Hidratează și reduce aspectul de oboseală. Recomandat pentru ten deshidratat și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: cofeină, acid hialuronic.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "solora-shield-crema-cu-spf-50",
@@ -972,7 +999,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și normal. Textură fluid. Ingrediente-cheie: filtre UVA/UVB, vitamina E.",
-      "description": "Solora Shield Cremă cu protecție solară SPF 50. Protecție solară zilnică, se poartă bine sub machiaj. Recomandat pentru ten sensibil și normal. Ingrediente-cheie: filtre UVA/UVB, vitamina E."
+      "description": "Solora Shield Cremă cu protecție solară SPF 50. Protecție solară zilnică, se poartă bine sub machiaj. Recomandat pentru ten sensibil și normal. Ingrediente-cheie: filtre UVA/UVB, vitamina E.",
+      "stock": 24,
+      "salePrice": 35.74,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 10
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-skin-match-fond-de-ten",
@@ -986,7 +1020,6 @@
       "shortDescription": "Fond de ten cu acoperire medie și finish natural, pentru ten mixt.",
       "currency": "RON",
       "price": 89.99,
-      "salePrice": 79.99,
       "rating": 4.5,
       "reviewCount": 289,
       "status": "active",
@@ -1012,7 +1045,7 @@
           "label": "Ivory 01",
           "sku": "VEL-SM-01",
           "price": 89.99,
-          "stock": 14,
+          "stock": 2,
           "colorHex": "#f2ddc8",
           "gtin": "5901234123457",
           "image": "https://cdn.sole-demo.ro/variants/vel-sm-01.jpg",
@@ -1025,7 +1058,7 @@
           "label": "Warm Beige 03",
           "sku": "VEL-SM-03",
           "price": 89.99,
-          "stock": 12,
+          "stock": 0,
           "colorHex": "#d8a679",
           "gtin": "4012345123456",
           "image": "https://cdn.sole-demo.ro/variants/vel-sm-03.jpg",
@@ -1038,7 +1071,7 @@
           "label": "Sand 05",
           "sku": "VEL-SM-05",
           "price": 89.99,
-          "stock": 8,
+          "stock": 14,
           "colorHex": "#e0b98f",
           "net_content": {
             "value": 30,
@@ -1049,7 +1082,7 @@
           "label": "Amber 07",
           "sku": "VEL-SM-07",
           "price": 89.99,
-          "stock": 6,
+          "stock": 13,
           "colorHex": "#c68a5c",
           "net_content": {
             "value": 30,
@@ -1069,7 +1102,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Textură fluid.",
-      "description": "Velora Skin Match Fond de ten. Acoperire medie, aspect natural, rezistă toată ziua. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal."
+      "description": "Velora Skin Match Fond de ten. Acoperire medie, aspect natural, rezistă toată ziua. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal.",
+      "stock": 29,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-luminous-fond-de-ten",
@@ -1108,34 +1143,37 @@
           "label": "Porcelain 00",
           "sku": "LUM-LM-00",
           "price": 109.99,
-          "stock": 10,
+          "stock": 23,
           "colorHex": "#f6e3d3",
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 71.49
         },
         {
           "label": "Natural 02",
           "sku": "LUM-LM-02",
           "price": 109.99,
-          "stock": 15,
+          "stock": 22,
           "colorHex": "#e8caa9",
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 71.49
         },
         {
           "label": "Honey 04",
           "sku": "LUM-LM-04",
           "price": 109.99,
-          "stock": 7,
+          "stock": 22,
           "colorHex": "#d3a373",
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 71.49
         }
       ],
       "reviewSummary": {
@@ -1151,7 +1189,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și sensibil. Textură fluid.",
-      "description": "LumaDerm Luminous Fond de ten. Efect luminos și hidratant, pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat și sensibil."
+      "description": "LumaDerm Luminous Fond de ten. Efect luminos și hidratant, pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat și sensibil.",
+      "stock": 67,
+      "salePrice": 71.49,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "nudelab-matte-24h-fond-de-ten",
@@ -1190,34 +1235,37 @@
           "label": "Light 10",
           "sku": "NUD-M24-10",
           "price": 94.99,
-          "stock": 11,
+          "stock": 14,
           "colorHex": "#eccdae",
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 66.49
         },
         {
           "label": "Medium 20",
           "sku": "NUD-M24-20",
           "price": 94.99,
-          "stock": 13,
+          "stock": 14,
           "colorHex": "#d3a476",
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 66.49
         },
         {
           "label": "Tan 30",
           "sku": "NUD-M24-30",
           "price": 94.99,
-          "stock": 5,
+          "stock": 14,
           "colorHex": "#b9835a",
           "net_content": {
             "value": 30,
             "unit": "ml"
-          }
+          },
+          "salePrice": 66.49
         }
       ],
       "reviewSummary": {
@@ -1232,7 +1280,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Textură fluid.",
-      "description": "NudeLab Matte 24H Fond de ten. Controlează luciul și acoperă imperfecțiunile toată ziua. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
+      "description": "NudeLab Matte 24H Fond de ten. Controlează luciul și acoperă imperfecțiunile toată ziua. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "stock": 42,
+      "salePrice": 66.49,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-perfect-cover-anticearcan",
@@ -1269,23 +1324,25 @@
           "label": "Light 01",
           "sku": "VEL-PC-01",
           "price": 56.99,
-          "stock": 20,
+          "stock": 9,
           "colorHex": "#f0d6bd",
           "net_content": {
             "value": 7,
             "unit": "ml"
-          }
+          },
+          "salePrice": 48.44
         },
         {
           "label": "Medium 03",
           "sku": "VEL-PC-03",
           "price": 56.99,
-          "stock": 16,
+          "stock": 9,
           "colorHex": "#dcb488",
           "net_content": {
             "value": 7,
             "unit": "ml"
-          }
+          },
+          "salePrice": 48.44
         }
       ],
       "reviewSummary": {
@@ -1299,7 +1356,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten mixt și normal.",
-      "description": "Velora Perfect Cover Anticearcăn. Acoperă cearcănele fără să se așeze în riduri. Recomandat pentru ten mixt și normal."
+      "description": "Velora Perfect Cover Anticearcăn. Acoperă cearcănele fără să se așeze în riduri. Recomandat pentru ten mixt și normal.",
+      "stock": 18,
+      "salePrice": 48.44,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 2
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-soft-matte-ruj",
@@ -1328,7 +1392,7 @@
           "label": "Rose Nude",
           "sku": "VEL-SR-RN",
           "price": 42.99,
-          "stock": 25,
+          "stock": 4,
           "colorHex": "#c47d76",
           "net_content": {
             "value": 4,
@@ -1339,7 +1403,7 @@
           "label": "Classic Red",
           "sku": "VEL-SR-CR",
           "price": 42.99,
-          "stock": 18,
+          "stock": 4,
           "colorHex": "#b01f2b",
           "net_content": {
             "value": 4,
@@ -1350,7 +1414,7 @@
           "label": "Berry",
           "sku": "VEL-SR-BE",
           "price": 42.99,
-          "stock": 12,
+          "stock": 4,
           "colorHex": "#8e2f4d",
           "net_content": {
             "value": 4,
@@ -1369,7 +1433,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "Velora Soft Matte Ruj. Culoare intensă cu finish mat confortabil. Recomandat pentru cine vrea un finish mat."
+      "description": "Velora Soft Matte Ruj. Culoare intensă cu finish mat confortabil. Recomandat pentru cine vrea un finish mat.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-pro-pensula-pentru-fond",
@@ -1407,7 +1473,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
-      "description": "NudeLab Pro Pensulă pentru fond de ten. Aplicare uniformă, fără urme, a produselor de ten. Recomandat pentru aplicarea uniformă a machiajului."
+      "description": "NudeLab Pro Pensulă pentru fond de ten. Aplicare uniformă, fără urme, a produselor de ten. Recomandat pentru aplicarea uniformă a machiajului.",
+      "stock": 24,
+      "salePrice": 44.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 14
+      },
+      "deliveryClass": "supplier"
     },
     {
       "slug": "velora-blend-burete-de-machiaj",
@@ -1443,7 +1516,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
-      "description": "Velora Blend Burete de machiaj. Estompează fondul pentru un finish natural. Recomandat pentru aplicarea uniformă a machiajului."
+      "description": "Velora Blend Burete de machiaj. Estompează fondul pentru un finish natural. Recomandat pentru aplicarea uniformă a machiajului.",
+      "stock": 42,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "verdea-repair-sampon",
@@ -1509,7 +1584,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan.",
-      "description": "Verdea Repair Șampon. Curăță blând și fortifică firul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan."
+      "description": "Verdea Repair Șampon. Curăță blând și fortifică firul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "verdea-repair-masca-de-par",
@@ -1575,7 +1652,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, unt de shea.",
-      "description": "Verdea Repair Mască de păr. Reparare intensă pentru păr deteriorat și uscat. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: keratină, unt de shea."
+      "description": "Verdea Repair Mască de păr. Reparare intensă pentru păr deteriorat și uscat. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: keratină, unt de shea.",
+      "stock": 67,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "verdea-leave-in-ingrijire-fara-clatire",
@@ -1641,7 +1720,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, provitamina B5.",
-      "description": "Verdea Leave-in Îngrijire fără clătire. Descurcă, protejează termic și reduce electrizarea. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: ulei de argan, provitamina B5."
+      "description": "Verdea Leave-in Îngrijire fără clătire. Descurcă, protejează termic și reduce electrizarea. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: ulei de argan, provitamina B5.",
+      "stock": 31,
+      "salePrice": 35.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-nourish-crema-de-maini",
@@ -1708,7 +1794,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, glicerină.",
-      "description": "Solora Nourish Cremă de mâini. Hidratare zilnică, se absoarbe rapid, non-lipicioasă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, glicerină."
+      "description": "Solora Nourish Cremă de mâini. Hidratare zilnică, se absoarbe rapid, non-lipicioasă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, glicerină.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-repair-crema-de-maini-intensiva",
@@ -1781,7 +1869,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat. Textură cremă. Ingrediente-cheie: ceramide, pantenol, unt de cacao.",
-      "description": "Solora Repair Cremă de mâini intensivă. Reparare intensă pentru pielea foarte uscată și crăpată. Recomandat pentru ten uscat. Ingrediente-cheie: ceramide, pantenol, unt de cacao."
+      "description": "Solora Repair Cremă de mâini intensivă. Reparare intensă pentru pielea foarte uscată și crăpată. Recomandat pentru ten uscat. Ingrediente-cheie: ceramide, pantenol, unt de cacao.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-silk-lotiune-de-corp",
@@ -1847,7 +1937,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură loțiune. Ingrediente-cheie: unt de shea, vitamina E.",
-      "description": "Solora Silk Loțiune de corp. Hidratare de durată pentru corp, se absoarbe rapid. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, vitamina E."
+      "description": "Solora Silk Loțiune de corp. Hidratare de durată pentru corp, se absoarbe rapid. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, vitamina E.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "solora-balsam-de-buze-hidratant",
@@ -1912,7 +2004,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură balsam. Ingrediente-cheie: unt de shea, ceară de albine.",
-      "description": "Solora Balsam de buze hidratant. Hidratează și repară buzele uscate și crăpate. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ceară de albine."
+      "description": "Solora Balsam de buze hidratant. Hidratează și repară buzele uscate și crăpate. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, ceară de albine.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-vitamin-c-ser-luminozitate",
@@ -1984,9 +2078,15 @@
           "se oxidează dacă nu e păstrat corect"
         ]
       },
-      "salePrice": 74.99,
       "ai_summary": "Recomandat pentru ten cu pete și deshidratat. Textură fluid. Ingrediente-cheie: vitamina C, acid ferulic.",
-      "description": "LumaDerm Vitamin C Ser luminozitate. Uniformizează și dă luminozitate tenului. Recomandat pentru ten cu pete și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, acid ferulic."
+      "description": "LumaDerm Vitamin C Ser luminozitate. Uniformizează și dă luminozitate tenului. Recomandat pentru ten cu pete și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, acid ferulic.",
+      "stock": 12,
+      "deliveryClass": "standard",
+      "salePrice": 50.99,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      }
     },
     {
       "slug": "petala-bright-ser-cu-vitamina-c",
@@ -2059,7 +2159,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu pete și normal. Textură fluid. Ingrediente-cheie: vitamina C, niacinamidă.",
-      "description": "Petala Bright Ser cu vitamina C. Luminozitate accesibilă pentru uz zilnic. Recomandat pentru ten cu pete și normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, niacinamidă."
+      "description": "Petala Bright Ser cu vitamina C. Luminozitate accesibilă pentru uz zilnic. Recomandat pentru ten cu pete și normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, niacinamidă.",
+      "stock": 55,
+      "salePrice": 47.24,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 10
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-retinol-ser-de-noapte",
@@ -2132,7 +2239,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten matur și cu pete. Textură fluid. Ingrediente-cheie: retinol, vitamina E.",
-      "description": "Auralis Retinol Ser de noapte. Reduce ridurile fine și reînnoiește pielea peste noapte. Recomandat pentru ten matur și cu pete. Se folosește seara. Ingrediente-cheie: retinol, vitamina E."
+      "description": "Auralis Retinol Ser de noapte. Reduce ridurile fine și reînnoiește pielea peste noapte. Recomandat pentru ten matur și cu pete. Se folosește seara. Ingrediente-cheie: retinol, vitamina E.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-aha-exfoliant",
@@ -2204,7 +2313,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și cu pete. Textură lichid. Ingrediente-cheie: acid glicolic, acid lactic.",
-      "description": "Auralis AHA Exfoliant. Exfoliere chimică pentru ten uniform și neted. Recomandat pentru ten gras și cu pete. Se folosește seara. Ingrediente-cheie: acid glicolic, acid lactic."
+      "description": "Auralis AHA Exfoliant. Exfoliere chimică pentru ten uniform și neted. Recomandat pentru ten gras și cu pete. Se folosește seara. Ingrediente-cheie: acid glicolic, acid lactic.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-gentle-exfoliant-enzimatic",
@@ -2268,7 +2379,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și uscat. Textură gel. Ingrediente-cheie: enzime de papaya.",
-      "description": "LumaDerm Gentle Exfoliant enzimatic. Exfoliere blândă pentru ten sensibil, fără frecare. Recomandat pentru ten sensibil și uscat. Se folosește seara. Ingrediente-cheie: enzime de papaya."
+      "description": "LumaDerm Gentle Exfoliant enzimatic. Exfoliere blândă pentru ten sensibil, fără frecare. Recomandat pentru ten sensibil și uscat. Se folosește seara. Ingrediente-cheie: enzime de papaya.",
+      "stock": 67,
+      "salePrice": 48.74,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-balancing-lotiune-tonica",
@@ -2341,7 +2459,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten mixt și gras. Textură lichid. Ingrediente-cheie: hamamelis, niacinamidă.",
-      "description": "Auralis Balancing Loțiune tonică. Echilibrează sebumul și reîmprospătează tenul. Recomandat pentru ten mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: hamamelis, niacinamidă."
+      "description": "Auralis Balancing Loțiune tonică. Echilibrează sebumul și reîmprospătează tenul. Recomandat pentru ten mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: hamamelis, niacinamidă.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-hydra-lotiune-tonica",
@@ -2414,7 +2534,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură lichid. Ingrediente-cheie: acid hialuronic, aloe vera.",
-      "description": "LumaDerm Hydra Loțiune tonică. Hidratează și pregătește tenul pentru serumuri. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, aloe vera."
+      "description": "LumaDerm Hydra Loțiune tonică. Hidratează și pregătește tenul pentru serumuri. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, aloe vera.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-clay-masca-pentru-ten",
@@ -2486,7 +2608,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură cremă. Ingrediente-cheie: argilă, zinc.",
-      "description": "Auralis Clay Mască pentru ten. Purifică porii și controlează luciul. Recomandat pentru ten gras și cu tendință acneică. Se folosește ocazional. Ingrediente-cheie: argilă, zinc."
+      "description": "Auralis Clay Mască pentru ten. Purifică porii și controlează luciul. Recomandat pentru ten gras și cu tendință acneică. Se folosește ocazional. Ingrediente-cheie: argilă, zinc.",
+      "stock": 18,
+      "salePrice": 43.19,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-hydra-masca-pentru-ten",
@@ -2558,7 +2687,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: acid hialuronic, unt de shea.",
-      "description": "LumaDerm Hydra Mască pentru ten. Hidratare intensă pentru ten uscat și tern. Recomandat pentru ten uscat și deshidratat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, unt de shea."
+      "description": "LumaDerm Hydra Mască pentru ten. Hidratare intensă pentru ten uscat și tern. Recomandat pentru ten uscat și deshidratat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, unt de shea.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-ulei-demachiant",
@@ -2622,7 +2753,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și normal. Textură ulei. Ingrediente-cheie: ulei de jojoba.",
-      "description": "Auralis Ulei demachiant. Demachiază inclusiv machiajul rezistent, fără să usuce. Recomandat pentru ten uscat și normal. Se folosește seara. Ingrediente-cheie: ulei de jojoba."
+      "description": "Auralis Ulei demachiant. Demachiază inclusiv machiajul rezistent, fără să usuce. Recomandat pentru ten uscat și normal. Se folosește seara. Ingrediente-cheie: ulei de jojoba.",
+      "stock": 8,
+      "salePrice": 43.19,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-rich-crema-hidratanta",
@@ -2695,7 +2833,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: unt de shea, ceramide.",
-      "description": "Petala Rich Cremă hidratantă. Nutriție bogată pentru ten uscat, la preț accesibil. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: unt de shea, ceramide."
+      "description": "Petala Rich Cremă hidratantă. Nutriție bogată pentru ten uscat, la preț accesibil. Recomandat pentru ten uscat și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: unt de shea, ceramide.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-matte-crema-hidratanta",
@@ -2768,7 +2908,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și mixt. Textură gel. Ingrediente-cheie: niacinamidă, acid hialuronic.",
-      "description": "Petala Matte Cremă hidratantă. Hidratare cu finish mat pentru ten gras. Recomandat pentru ten gras și mixt. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, acid hialuronic."
+      "description": "Petala Matte Cremă hidratantă. Hidratare cu finish mat pentru ten gras. Recomandat pentru ten gras și mixt. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, acid hialuronic.",
+      "stock": 67,
+      "salePrice": 28.79,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-gel-de-curatare-ten-mixt",
@@ -2841,7 +2988,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten mixt și gras. Textură gel. Ingrediente-cheie: niacinamidă, extract de ceai verde.",
-      "description": "Auralis Balance Gel de curățare. Curăță și echilibrează tenul mixt spre gras. Recomandat pentru ten mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, extract de ceai verde."
+      "description": "Auralis Balance Gel de curățare. Curăță și echilibrează tenul mixt spre gras. Recomandat pentru ten mixt și gras. Se folosește dimineața, seara. Ingrediente-cheie: niacinamidă, extract de ceai verde.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-daily-crema-spf-30",
@@ -2908,7 +3057,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten normal și mixt. Textură cremă. Ingrediente-cheie: filtre UVA/UVB, niacinamidă.",
-      "description": "Auralis Daily Cremă cu SPF 30. Cremă de zi cu protecție solară SPF 30, finish natural. Recomandat pentru ten normal și mixt. Ingrediente-cheie: filtre UVA/UVB, niacinamidă."
+      "description": "Auralis Daily Cremă cu SPF 30. Cremă de zi cu protecție solară SPF 30, finish natural. Recomandat pentru ten normal și mixt. Ingrediente-cheie: filtre UVA/UVB, niacinamidă.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-silk-fond-de-ten",
@@ -2957,7 +3108,7 @@
           "label": "Light 1",
           "sku": "ARIA-SF-1",
           "price": 79.99,
-          "stock": 14,
+          "stock": 4,
           "colorHex": "#eecdb0",
           "net_content": {
             "value": 30,
@@ -2968,7 +3119,7 @@
           "label": "Medium 3",
           "sku": "ARIA-SF-3",
           "price": 79.99,
-          "stock": 12,
+          "stock": 4,
           "colorHex": "#d3a578",
           "net_content": {
             "value": 30,
@@ -2979,7 +3130,7 @@
           "label": "Deep 5",
           "sku": "ARIA-SF-5",
           "price": 79.99,
-          "stock": 6,
+          "stock": 4,
           "colorHex": "#a9714a",
           "net_content": {
             "value": 30,
@@ -2988,7 +3139,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat, pe ten normal și mixt. Textură fluid.",
-      "description": "Aria Silk Fond de ten. Finish satinat cu acoperire medie, aspect îngrijit. Recomandat pentru cine vrea un finish satinat, pe ten normal și mixt."
+      "description": "Aria Silk Fond de ten. Finish satinat cu acoperire medie, aspect îngrijit. Recomandat pentru cine vrea un finish satinat, pe ten normal și mixt.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-nude-fond-de-ten",
@@ -3037,7 +3190,7 @@
           "label": "Fair 01",
           "sku": "PET-NF-01",
           "price": 59.99,
-          "stock": 16,
+          "stock": 2,
           "colorHex": "#f0dbc4",
           "net_content": {
             "value": 30,
@@ -3048,7 +3201,7 @@
           "label": "Beige 03",
           "sku": "PET-NF-03",
           "price": 59.99,
-          "stock": 10,
+          "stock": 1,
           "colorHex": "#dcb489",
           "net_content": {
             "value": 30,
@@ -3057,7 +3210,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten normal și uscat. Textură fluid.",
-      "description": "Petala Nude Fond de ten. Acoperire lejeră cu aspect nud, la preț accesibil. Recomandat pentru cine vrea un finish natural, pe ten normal și uscat."
+      "description": "Petala Nude Fond de ten. Acoperire lejeră cu aspect nud, la preț accesibil. Recomandat pentru cine vrea un finish natural, pe ten normal și uscat.",
+      "stock": 3,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-radiant-anticearcan",
@@ -3104,7 +3259,7 @@
           "label": "Light",
           "sku": "ARIA-RA-L",
           "price": 44.99,
-          "stock": 18,
+          "stock": 2,
           "colorHex": "#f1d8bf",
           "net_content": {
             "value": 7,
@@ -3115,7 +3270,7 @@
           "label": "Medium",
           "sku": "ARIA-RA-M",
           "price": 44.99,
-          "stock": 14,
+          "stock": 1,
           "colorHex": "#ddb68b",
           "net_content": {
             "value": 7,
@@ -3124,7 +3279,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru ten normal și uscat.",
-      "description": "Aria Radiant Anticearcăn. Iluminează zona ochilor cu acoperire medie. Recomandat pentru ten normal și uscat."
+      "description": "Aria Radiant Anticearcăn. Iluminează zona ochilor cu acoperire medie. Recomandat pentru ten normal și uscat.",
+      "stock": 3,
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-hd-pudra-matifianta",
@@ -3171,7 +3328,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
-      "description": "Velora HD Pudră matifiantă. Fixează machiajul și controlează luciul. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
+      "description": "Velora HD Pudră matifiantă. Fixează machiajul și controlează luciul. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-glow-pudra-iluminatoare",
@@ -3218,7 +3377,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten normal și uscat.",
-      "description": "Aria Glow Pudră iluminatoare. Dă un finish luminos și proaspăt. Recomandat pentru cine vrea un finish luminos, pe ten normal și uscat."
+      "description": "Aria Glow Pudră iluminatoare. Dă un finish luminos și proaspăt. Recomandat pentru cine vrea un finish luminos, pe ten normal și uscat.",
+      "stock": 42,
+      "salePrice": 34.39,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-volume-mascara",
@@ -3256,7 +3422,7 @@
           "label": "Negru",
           "sku": "VEL-VM-BK",
           "price": 34.99,
-          "stock": 30,
+          "stock": 4,
           "colorHex": "#111111",
           "net_content": {
             "value": 10,
@@ -3267,7 +3433,7 @@
           "label": "Maro",
           "sku": "VEL-VM-BR",
           "price": 34.99,
-          "stock": 12,
+          "stock": 4,
           "colorHex": "#4b3527",
           "net_content": {
             "value": 10,
@@ -3276,7 +3442,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru definirea și volumul genelor.",
-      "description": "Velora Volume Mascara. Volum intens și gene definite, fără cocoloașe. Recomandat pentru definirea și volumul genelor."
+      "description": "Velora Volume Mascara. Volum intens și gene definite, fără cocoloașe. Recomandat pentru definirea și volumul genelor.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-lengthening-mascara",
@@ -3314,7 +3482,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru definirea și volumul genelor.",
-      "description": "Aria Lengthening Mascara. Alungește și separă genele pentru un look natural. Recomandat pentru definirea și volumul genelor."
+      "description": "Aria Lengthening Mascara. Alungește și separă genele pentru un look natural. Recomandat pentru definirea și volumul genelor.",
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-precise-creion-de-ochi",
@@ -3352,7 +3522,7 @@
           "label": "Negru",
           "sku": "VEL-PE-BK",
           "price": 24.99,
-          "stock": 28,
+          "stock": 6,
           "colorHex": "#111111",
           "net_content": {
             "value": 1.2,
@@ -3363,7 +3533,7 @@
           "label": "Maro",
           "sku": "VEL-PE-BR",
           "price": 24.99,
-          "stock": 15,
+          "stock": 6,
           "colorHex": "#4b3527",
           "net_content": {
             "value": 1.2,
@@ -3372,7 +3542,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru conturarea privirii.",
-      "description": "Velora Precise Creion de ochi. Trasare precisă și rezistentă a conturului ochilor. Recomandat pentru conturarea privirii."
+      "description": "Velora Precise Creion de ochi. Trasare precisă și rezistentă a conturului ochilor. Recomandat pentru conturarea privirii.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-brow-creion-de-sprancene",
@@ -3410,27 +3582,36 @@
           "label": "Blond",
           "sku": "ARIA-BR-BL",
           "price": 27.99,
-          "stock": 12,
+          "stock": 16,
           "colorHex": "#8a6b4a",
           "net_content": {
             "value": 1.2,
             "unit": "g"
-          }
+          },
+          "salePrice": 16.79
         },
         {
           "label": "Șaten",
           "sku": "ARIA-BR-BR",
           "price": 27.99,
-          "stock": 14,
+          "stock": 15,
           "colorHex": "#5c4326",
           "net_content": {
             "value": 1.2,
             "unit": "g"
-          }
+          },
+          "salePrice": 16.79
         }
       ],
       "ai_summary": "Recomandat pentru conturarea privirii.",
-      "description": "Aria Brow Creion de sprâncene. Definește și umple sprâncenele natural. Recomandat pentru conturarea privirii."
+      "description": "Aria Brow Creion de sprâncene. Definește și umple sprâncenele natural. Recomandat pentru conturarea privirii.",
+      "stock": 31,
+      "salePrice": 16.79,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "aria-nude-paleta-farduri-de-ochi",
@@ -3468,7 +3649,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru machiajul ochilor.",
-      "description": "Aria Nude Paletă farduri de ochi. Nuanțe nude versatile pentru zi și seară. Recomandat pentru machiajul ochilor."
+      "description": "Aria Nude Paletă farduri de ochi. Nuanțe nude versatile pentru zi și seară. Recomandat pentru machiajul ochilor.",
+      "stock": 0,
+      "restockInDays": 10,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "velora-glow-fard-de-obraz",
@@ -3507,7 +3691,7 @@
           "label": "Piersică",
           "sku": "VEL-GB-PE",
           "price": 32.99,
-          "stock": 16,
+          "stock": 6,
           "colorHex": "#e8a586",
           "net_content": {
             "value": 5,
@@ -3518,7 +3702,7 @@
           "label": "Roz",
           "sku": "VEL-GB-RO",
           "price": 32.99,
-          "stock": 14,
+          "stock": 6,
           "colorHex": "#dd8fa0",
           "net_content": {
             "value": 5,
@@ -3527,7 +3711,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Velora Glow Fard de obraz. Culoare naturală și proaspătă a obrajilor. Recomandat pentru cine vrea un finish satinat."
+      "description": "Velora Glow Fard de obraz. Culoare naturală și proaspătă a obrajilor. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-smooth-primer",
@@ -3574,7 +3760,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
-      "description": "Aria Smooth Primer. Netezește porii și prelungește durata machiajului. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
+      "description": "Aria Smooth Primer. Netezește porii și prelungește durata machiajului. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "stock": 55,
+      "salePrice": 35.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-matte-ruj-lichid",
@@ -3613,7 +3806,7 @@
           "label": "Cărămiziu",
           "sku": "VEL-ML-CA",
           "price": 39.99,
-          "stock": 18,
+          "stock": 14,
           "colorHex": "#a34a37",
           "net_content": {
             "value": 4,
@@ -3624,7 +3817,7 @@
           "label": "Roșu intens",
           "sku": "VEL-ML-RO",
           "price": 39.99,
-          "stock": 15,
+          "stock": 14,
           "colorHex": "#96131f",
           "net_content": {
             "value": 4,
@@ -3635,7 +3828,7 @@
           "label": "Mov",
           "sku": "VEL-ML-MO",
           "price": 39.99,
-          "stock": 9,
+          "stock": 14,
           "colorHex": "#6e2246",
           "net_content": {
             "value": 4,
@@ -3644,7 +3837,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "Velora Matte Ruj lichid. Culoare intensă mată, cu ținută lungă. Recomandat pentru cine vrea un finish mat."
+      "description": "Velora Matte Ruj lichid. Culoare intensă mată, cu ținută lungă. Recomandat pentru cine vrea un finish mat.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "bloom-volume-sampon",
@@ -3702,7 +3897,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: proteine din grâu.",
-      "description": "Bloom Volume Șampon. Volum și corp pentru părul fin, fără să îngreuneze. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din grâu."
+      "description": "Bloom Volume Șampon. Volum și corp pentru părul fin, fără să îngreuneze. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din grâu.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "bloom-color-sampon-par-vopsit",
@@ -3768,7 +3965,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV.",
-      "description": "Bloom Color Șampon pentru păr vopsit. Protejează culoarea și prelungește strălucirea. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV."
+      "description": "Bloom Color Șampon pentru păr vopsit. Protejează culoarea și prelungește strălucirea. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: ulei de floarea-soarelui, filtru UV.",
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "verdea-nourish-ulei-de-par",
@@ -3834,7 +4033,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: ulei de argan, ulei de macadamia.",
-      "description": "Verdea Nourish Ulei de păr. Hrănește vârfurile și reduce aspectul uscat. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, ulei de macadamia."
+      "description": "Verdea Nourish Ulei de păr. Hrănește vârfurile și reduce aspectul uscat. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, ulei de macadamia.",
+      "stock": 31,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "solora-fresh-gel-de-dus",
@@ -3872,7 +4073,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel.",
-      "description": "Solora Fresh Gel de duș. Curăță blând și lasă pielea catifelată. Recomandat pentru curățarea corpului la duș."
+      "description": "Solora Fresh Gel de duș. Curăță blând și lasă pielea catifelată. Recomandat pentru curățarea corpului la duș.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-nourish-gel-de-dus",
@@ -3910,7 +4113,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel.",
-      "description": "Petala Nourish Gel de duș. Gel de duș hrănitor cu unt de shea. Recomandat pentru curățarea corpului la duș."
+      "description": "Petala Nourish Gel de duș. Gel de duș hrănitor cu unt de shea. Recomandat pentru curățarea corpului la duș.",
+      "stock": 3,
+      "deliveryClass": "standard"
     },
     {
       "slug": "solora-smooth-scrub-de-corp",
@@ -3948,7 +4153,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Textură cremă.",
-      "description": "Solora Smooth Scrub de corp. Exfoliază și netezește pielea corpului. Recomandat pentru exfolierea blândă a corpului."
+      "description": "Solora Smooth Scrub de corp. Exfoliază și netezește pielea corpului. Recomandat pentru exfolierea blândă a corpului.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-coffee-scrub-de-corp",
@@ -3986,7 +4193,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Textură cremă.",
-      "description": "Petala Coffee Scrub de corp. Scrub cu cafea pentru aspect tonifiat. Recomandat pentru exfolierea blândă a corpului."
+      "description": "Petala Coffee Scrub de corp. Scrub cu cafea pentru aspect tonifiat. Recomandat pentru exfolierea blândă a corpului.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-fresh-deodorant",
@@ -4023,7 +4232,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru prospețime de lungă durată.",
-      "description": "Solora Fresh Deodorant. Protecție împotriva mirosului toată ziua. Recomandat pentru prospețime de lungă durată."
+      "description": "Solora Fresh Deodorant. Protecție împotriva mirosului toată ziua. Recomandat pentru prospețime de lungă durată.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "bloom-sensitive-deodorant",
@@ -4060,7 +4271,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru prospețime de lungă durată.",
-      "description": "Bloom Sensitive Deodorant. Deodorant blând, fără alcool, pentru piele sensibilă. Recomandat pentru prospețime de lungă durată."
+      "description": "Bloom Sensitive Deodorant. Deodorant blând, fără alcool, pentru piele sensibilă. Recomandat pentru prospețime de lungă durată.",
+      "stock": 67,
+      "salePrice": 13.99,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-silk-lotiune-de-corp",
@@ -4118,7 +4336,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură loțiune. Ingrediente-cheie: unt de cacao.",
-      "description": "Petala Silk Loțiune de corp. Hidratare cremoasă cu absorbție rapidă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de cacao."
+      "description": "Petala Silk Loțiune de corp. Hidratare cremoasă cu absorbție rapidă. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de cacao.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-nourish-crema-de-maini",
@@ -4184,7 +4404,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură cremă. Ingrediente-cheie: glicerină, vitamina E.",
-      "description": "Petala Nourish Cremă de mâini. Hidratare zilnică non-grasă pentru mâini. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: glicerină, vitamina E."
+      "description": "Petala Nourish Cremă de mâini. Hidratare zilnică non-grasă pentru mâini. Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: glicerină, vitamina E.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "verdea-repair-balsam-de-par",
@@ -4242,7 +4464,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină.",
-      "description": "Verdea Repair Balsam de păr. Descurcă și hrănește părul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină."
+      "description": "Verdea Repair Balsam de păr. Descurcă și hrănește părul deteriorat. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "bloom-volume-balsam-de-par",
@@ -4300,7 +4524,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr fin. Ingrediente-cheie: proteine din grâu.",
-      "description": "Bloom Volume Balsam de păr. Descurcă fără să îngreuneze părul fin. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din grâu."
+      "description": "Bloom Volume Balsam de păr. Descurcă fără să îngreuneze părul fin. Recomandat pentru păr fin. Se folosește zilnic. Ingrediente-cheie: proteine din grâu.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "bloom-color-balsam-de-par",
@@ -4366,7 +4592,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr vopsit. Ingrediente-cheie: filtru UV, ulei de floarea-soarelui.",
-      "description": "Bloom Color Balsam de păr. Protejează culoarea și hidratează. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: filtru UV, ulei de floarea-soarelui."
+      "description": "Bloom Color Balsam de păr. Protejează culoarea și hidratează. Recomandat pentru păr vopsit. Se folosește zilnic. Ingrediente-cheie: filtru UV, ulei de floarea-soarelui.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "bloom-fresh-sampon-uscat",
@@ -4412,7 +4640,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr gras.",
-      "description": "Bloom Fresh Șampon uscat. Reîmprospătează părul între spălări. Recomandat pentru păr gras. Se folosește ocazional."
+      "description": "Bloom Fresh Șampon uscat. Reîmprospătează părul între spălări. Recomandat pentru păr gras. Se folosește ocazional.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "verdea-smooth-masca-de-par",
@@ -4470,7 +4700,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr cret. Ingrediente-cheie: ulei de argan.",
-      "description": "Verdea Smooth Mască de păr. Netezește și disciplinează părul creț. Recomandat pentru păr cret. Se folosește ocazional. Ingrediente-cheie: ulei de argan."
+      "description": "Verdea Smooth Mască de păr. Netezește și disciplinează părul creț. Recomandat pentru păr cret. Se folosește ocazional. Ingrediente-cheie: ulei de argan.",
+      "stock": 55,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "bloom-hydra-masca-de-par",
@@ -4536,7 +4768,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: acid hialuronic, aloe.",
-      "description": "Bloom Hydra Mască de păr. Hidratează intens părul uscat. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, aloe."
+      "description": "Bloom Hydra Mască de păr. Hidratează intens părul uscat. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: acid hialuronic, aloe.",
+      "stock": 31,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "aria-shine-gloss-de-buze",
@@ -4575,27 +4809,36 @@
           "label": "Transparent",
           "sku": "ARIA-SG-TR",
           "price": 27.99,
-          "stock": 20,
+          "stock": 4,
           "colorHex": "#f4e4de",
           "net_content": {
             "value": 6,
             "unit": "ml"
-          }
+          },
+          "salePrice": 20.99
         },
         {
           "label": "Roz",
           "sku": "ARIA-SG-RO",
           "price": 27.99,
-          "stock": 14,
+          "stock": 4,
           "colorHex": "#e39fae",
           "net_content": {
             "value": 6,
             "unit": "ml"
-          }
+          },
+          "salePrice": 20.99
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "Aria Shine Gloss de buze. Luciu intens și buze cu aspect plin. Recomandat pentru cine vrea un finish luminos."
+      "description": "Aria Shine Gloss de buze. Luciu intens și buze cu aspect plin. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 8,
+      "salePrice": 20.99,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-plump-gloss-de-buze",
@@ -4634,7 +4877,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "Velora Plump Gloss de buze. Efect de volum și hidratare a buzelor. Recomandat pentru cine vrea un finish luminos."
+      "description": "Velora Plump Gloss de buze. Efect de volum și hidratare a buzelor. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 0,
+      "restockInDays": 7,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "velora-glow-iluminator",
@@ -4673,7 +4919,7 @@
           "label": "Șampanie",
           "sku": "VEL-GI-CH",
           "price": 36.99,
-          "stock": 16,
+          "stock": 21,
           "colorHex": "#f0d9b5",
           "net_content": {
             "value": 6,
@@ -4684,7 +4930,7 @@
           "label": "Auriu-roz",
           "sku": "VEL-GI-RG",
           "price": 36.99,
-          "stock": 12,
+          "stock": 21,
           "colorHex": "#e7bfa6",
           "net_content": {
             "value": 6,
@@ -4693,7 +4939,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "Velora Glow Iluminator. Strălucire naturală pe punctele înalte. Recomandat pentru cine vrea un finish luminos."
+      "description": "Velora Glow Iluminator. Strălucire naturală pe punctele înalte. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "aria-radiant-iluminator",
@@ -4732,7 +4980,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Aria Radiant Iluminator. Iluminare satinată subtilă pentru zi. Recomandat pentru cine vrea un finish satinat."
+      "description": "Aria Radiant Iluminator. Iluminare satinată subtilă pentru zi. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-set-spray-de-fixare",
@@ -4771,7 +5021,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish natural.",
-      "description": "Velora Set Spray de fixare. Fixează machiajul pentru o zi întreagă. Recomandat pentru cine vrea un finish natural."
+      "description": "Velora Set Spray de fixare. Fixează machiajul pentru o zi întreagă. Recomandat pentru cine vrea un finish natural.",
+      "stock": 0,
+      "restockInDays": 7,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "aria-matte-spray-de-fixare",
@@ -4816,7 +5069,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras.",
-      "description": "Aria Matte Spray de fixare. Fixare cu finish mat pentru ten gras. Recomandat pentru cine vrea un finish mat, pe ten gras."
+      "description": "Aria Matte Spray de fixare. Fixare cu finish mat pentru ten gras. Recomandat pentru cine vrea un finish mat, pe ten gras.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-sun-bronzer",
@@ -4855,7 +5110,7 @@
           "label": "Light",
           "sku": "VEL-SB-L",
           "price": 34.99,
-          "stock": 15,
+          "stock": 4,
           "colorHex": "#b98a63",
           "net_content": {
             "value": 8,
@@ -4866,7 +5121,7 @@
           "label": "Medium",
           "sku": "VEL-SB-M",
           "price": 34.99,
-          "stock": 12,
+          "stock": 4,
           "colorHex": "#9c6b45",
           "net_content": {
             "value": 8,
@@ -4875,7 +5130,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "Velora Sun Bronzer. Conturează și dă căldură naturală tenului. Recomandat pentru cine vrea un finish mat."
+      "description": "Velora Sun Bronzer. Conturează și dă căldură naturală tenului. Recomandat pentru cine vrea un finish mat.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-glow-fard-de-obraz",
@@ -4914,7 +5171,7 @@
           "label": "Corai",
           "sku": "ARIA-GF-CO",
           "price": 29.99,
-          "stock": 14,
+          "stock": 6,
           "colorHex": "#e88f76",
           "net_content": {
             "value": 5,
@@ -4925,7 +5182,7 @@
           "label": "Roz-piersică",
           "sku": "ARIA-GF-PP",
           "price": 29.99,
-          "stock": 12,
+          "stock": 6,
           "colorHex": "#e6a58f",
           "net_content": {
             "value": 5,
@@ -4934,7 +5191,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "Aria Glow Fard de obraz. Obraji proaspeți cu finish luminos. Recomandat pentru cine vrea un finish luminos."
+      "description": "Aria Glow Fard de obraz. Obraji proaspeți cu finish luminos. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-nude-ruj",
@@ -4973,27 +5232,36 @@
           "label": "Nude Roz",
           "sku": "ARIA-NR-NP",
           "price": 38.99,
-          "stock": 16,
+          "stock": 6,
           "colorHex": "#c98a80",
           "net_content": {
             "value": 4,
             "unit": "g"
-          }
+          },
+          "salePrice": 33.14
         },
         {
           "label": "Caramel",
           "sku": "ARIA-NR-CA",
           "price": 38.99,
-          "stock": 12,
+          "stock": 6,
           "colorHex": "#b57b5e",
           "net_content": {
             "value": 4,
             "unit": "g"
-          }
+          },
+          "salePrice": 33.14
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Aria Nude Ruj. Nuanțe nude satinate, confortabile. Recomandat pentru cine vrea un finish satinat."
+      "description": "Aria Nude Ruj. Nuanțe nude satinate, confortabile. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 12,
+      "salePrice": 33.14,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 5
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-classic-ruj-satinat",
@@ -5032,7 +5300,7 @@
           "label": "Roșu clasic",
           "sku": "VEL-CS-RC",
           "price": 41.99,
-          "stock": 18,
+          "stock": 6,
           "colorHex": "#b31f28",
           "net_content": {
             "value": 4,
@@ -5043,7 +5311,7 @@
           "label": "Vișiniu",
           "sku": "VEL-CS-VI",
           "price": 41.99,
-          "stock": 10,
+          "stock": 6,
           "colorHex": "#7d2233",
           "net_content": {
             "value": 4,
@@ -5052,7 +5320,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Velora Classic Ruj satinat. Culoare intensă satinată, hidratantă. Recomandat pentru cine vrea un finish satinat."
+      "description": "Velora Classic Ruj satinat. Culoare intensă satinată, hidratantă. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "auralis-spot-tratament-local",
@@ -5124,7 +5394,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu tendință acneică și gras. Textură gel. Ingrediente-cheie: acid salicilic, niacinamidă.",
-      "description": "Auralis Spot Tratament local. Reduce coșurile punctual, peste noapte. Recomandat pentru ten cu tendință acneică și gras. Se folosește seara. Ingrediente-cheie: acid salicilic, niacinamidă."
+      "description": "Auralis Spot Tratament local. Reduce coșurile punctual, peste noapte. Recomandat pentru ten cu tendință acneică și gras. Se folosește seara. Ingrediente-cheie: acid salicilic, niacinamidă.",
+      "stock": 18,
+      "salePrice": 27.94,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 7
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-calm-tratament-local",
@@ -5196,7 +5473,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și cu tendință acneică. Textură gel. Ingrediente-cheie: centella asiatica, zinc.",
-      "description": "LumaDerm Calm Tratament local. Calmează imperfecțiunile pe ten sensibil. Recomandat pentru ten sensibil și cu tendință acneică. Se folosește seara. Ingrediente-cheie: centella asiatica, zinc."
+      "description": "LumaDerm Calm Tratament local. Calmează imperfecțiunile pe ten sensibil. Recomandat pentru ten sensibil și cu tendință acneică. Se folosește seara. Ingrediente-cheie: centella asiatica, zinc.",
+      "stock": 0,
+      "restockInDays": 14,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "auralis-hydra-mist-pentru-ten",
@@ -5269,7 +5549,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten deshidratat și uscat. Textură apă. Ingrediente-cheie: apă termală, acid hialuronic.",
-      "description": "Auralis Hydra Mist pentru ten. Reîmprospătează și hidratează tenul oricând. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: apă termală, acid hialuronic."
+      "description": "Auralis Hydra Mist pentru ten. Reîmprospătează și hidratează tenul oricând. Recomandat pentru ten deshidratat și uscat. Se folosește dimineața, seara. Ingrediente-cheie: apă termală, acid hialuronic.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-fresh-mist-pentru-ten",
@@ -5334,7 +5616,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten normal și deshidratat. Textură apă. Ingrediente-cheie: apă de trandafiri.",
-      "description": "Petala Fresh Mist pentru ten. Mist răcoritor cu apă de trandafiri. Recomandat pentru ten normal și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: apă de trandafiri."
+      "description": "Petala Fresh Mist pentru ten. Mist răcoritor cu apă de trandafiri. Recomandat pentru ten normal și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: apă de trandafiri.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-hydra-ser-cu-acid-hialuronic",
@@ -5410,7 +5694,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten deshidratat și uscat și normal. Textură fluid. Ingrediente-cheie: acid hialuronic, glicerină.",
-      "description": "Petala Hydra Ser cu acid hialuronic. Hidratare imediată și repulpare fină a liniilor de deshidratare. Recomandat pentru ten deshidratat și uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, glicerină."
+      "description": "Petala Hydra Ser cu acid hialuronic. Hidratare imediată și repulpare fină a liniilor de deshidratare. Recomandat pentru ten deshidratat și uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, glicerină.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-renew-ser-cu-retinal",
@@ -5424,7 +5710,6 @@
       "shortDescription": "Ser de noapte cu retinal encapsulat, pentru riduri și textură neuniformă.",
       "currency": "RON",
       "price": 119.99,
-      "salePrice": 99.99,
       "rating": 4.7,
       "reviewCount": 96,
       "status": "active",
@@ -5484,7 +5769,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten matur și cu pete. Textură fluid. Ingrediente-cheie: retinal, squalan.",
-      "description": "LumaDerm Renew Ser cu retinal. Netezește ridurile fine mai rapid decât retinolul clasic, cu iritare redusă. Recomandat pentru ten matur și cu pete. Se folosește seara. Ingrediente-cheie: retinal, squalan."
+      "description": "LumaDerm Renew Ser cu retinal. Netezește ridurile fine mai rapid decât retinolul clasic, cu iritare redusă. Recomandat pentru ten matur și cu pete. Se folosește seara. Ingrediente-cheie: retinal, squalan.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-even-ser-cu-acid-azelaic",
@@ -5559,7 +5846,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu tendință acneică și cu pete și sensibil. Textură fluid. Ingrediente-cheie: acid azelaic, niacinamidă.",
-      "description": "LumaDerm Even Ser cu acid azelaic. Uniformizează tonul și calmează roșeața fără să irite. Recomandat pentru ten cu tendință acneică și cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid azelaic, niacinamidă."
+      "description": "LumaDerm Even Ser cu acid azelaic. Uniformizează tonul și calmează roșeața fără să irite. Recomandat pentru ten cu tendință acneică și cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: acid azelaic, niacinamidă.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-clear-lotiune-tonica-cu-bha",
@@ -5631,7 +5920,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură lichid. Ingrediente-cheie: acid salicilic, extract de hamamelis.",
-      "description": "Auralis Clear Loțiune tonică cu BHA. Desfundă porii și reduce punctele negre la folosire constantă. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, extract de hamamelis."
+      "description": "Auralis Clear Loțiune tonică cu BHA. Desfundă porii și reduce punctele negre la folosire constantă. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, extract de hamamelis.",
+      "stock": 42,
+      "salePrice": 31.79,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 7
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-aqua-gel-crema-hidratanta",
@@ -5707,7 +6003,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și mixt și deshidratat. Textură gel. Ingrediente-cheie: acid hialuronic, niacinamidă.",
-      "description": "LumaDerm Aqua Gel-cremă hidratantă. Hidratează fără să încarce; finish mat, nu înfundă porii. Recomandat pentru ten gras și mixt și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă."
+      "description": "LumaDerm Aqua Gel-cremă hidratantă. Hidratează fără să încarce; finish mat, nu înfundă porii. Recomandat pentru ten gras și mixt și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: acid hialuronic, niacinamidă.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-bright-crema-de-ochi-cu-cofeina",
@@ -5780,7 +6078,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu pete și sensibil. Textură gel. Ingrediente-cheie: cofeină, peptide.",
-      "description": "LumaDerm Bright Cremă de ochi cu cofeină. Reduce aspectul cearcănelor și decongestionează zona ochilor dimineața. Recomandat pentru ten cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: cofeină, peptide."
+      "description": "LumaDerm Bright Cremă de ochi cu cofeină. Reduce aspectul cearcănelor și decongestionează zona ochilor dimineața. Recomandat pentru ten cu pete și sensibil. Se folosește dimineața, seara. Ingrediente-cheie: cofeină, peptide.",
+      "stock": 18,
+      "salePrice": 49.49,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 3
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-youth-crema-de-ochi-antirid",
@@ -5853,7 +6158,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten matur și uscat. Textură cremă. Ingrediente-cheie: peptide, unt de shea.",
-      "description": "Petala Youth Cremă de ochi antirid. Hrănește zona ochilor și atenuează ridurile fine în timp. Recomandat pentru ten matur și uscat. Se folosește dimineața, seara. Ingrediente-cheie: peptide, unt de shea."
+      "description": "Petala Youth Cremă de ochi antirid. Hrănește zona ochilor și atenuează ridurile fine în timp. Recomandat pentru ten matur și uscat. Se folosește dimineața, seara. Ingrediente-cheie: peptide, unt de shea.",
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-glow-masca-exfolianta-cu-aha",
@@ -5925,7 +6232,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu pete și normal. Textură gel. Ingrediente-cheie: AHA din fructe, extract de papaya.",
-      "description": "Petala Glow Mască exfoliantă cu AHA. Luminozitate vizibilă după o singură folosire. Recomandat pentru ten cu pete și normal. Se folosește seara. Ingrediente-cheie: AHA din fructe, extract de papaya."
+      "description": "Petala Glow Mască exfoliantă cu AHA. Luminozitate vizibilă după o singură folosire. Recomandat pentru ten cu pete și normal. Se folosește seara. Ingrediente-cheie: AHA din fructe, extract de papaya.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-smooth-exfoliant-cu-bha",
@@ -5997,7 +6306,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten gras și cu tendință acneică. Textură lichid. Ingrediente-cheie: acid salicilic, ceai verde.",
-      "description": "LumaDerm Smooth Exfoliant cu BHA. Curăță porii în profunzime și previne erupțiile recurente. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, ceai verde."
+      "description": "LumaDerm Smooth Exfoliant cu BHA. Curăță porii în profunzime și previne erupțiile recurente. Recomandat pentru ten gras și cu tendință acneică. Se folosește seara. Ingrediente-cheie: acid salicilic, ceai verde.",
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-soft-balsam-demachiant",
@@ -6071,7 +6382,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și normal și sensibil. Textură balsam. Ingrediente-cheie: unt de shea, ulei de măceșe.",
-      "description": "Petala Soft Balsam demachiant. Demachiază complet, inclusiv mascara waterproof, lăsând pielea suplă. Recomandat pentru ten uscat și normal și sensibil. Se folosește seara. Ingrediente-cheie: unt de shea, ulei de măceșe."
+      "description": "Petala Soft Balsam demachiant. Demachiază complet, inclusiv mascara waterproof, lăsând pielea suplă. Recomandat pentru ten uscat și normal și sensibil. Se folosește seara. Ingrediente-cheie: unt de shea, ulei de măceșe.",
+      "stock": 0,
+      "restockInDays": 10,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "petala-gentle-spuma-de-curatare",
@@ -6144,7 +6458,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și normal. Textură spumă. Ingrediente-cheie: glicerină, aloe vera.",
-      "description": "Petala Gentle Spumă de curățare. Curăță delicat dimineața fără senzația de piele care trage. Recomandat pentru ten uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: glicerină, aloe vera."
+      "description": "Petala Gentle Spumă de curățare. Curăță delicat dimineața fără senzația de piele care trage. Recomandat pentru ten uscat și normal. Se folosește dimineața, seara. Ingrediente-cheie: glicerină, aloe vera.",
+      "stock": 55,
+      "salePrice": 30.09,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-shield-fluid-spf-50",
@@ -6212,7 +6533,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și gras. Textură fluid. Ingrediente-cheie: filtre minerale-organice, niacinamidă.",
-      "description": "LumaDerm Shield Fluid SPF 50+. Protecție înaltă cu textură de fluid, invizibil sub machiaj. Recomandat pentru ten sensibil și gras. Ingrediente-cheie: filtre minerale-organice, niacinamidă."
+      "description": "LumaDerm Shield Fluid SPF 50+. Protecție înaltă cu textură de fluid, invizibil sub machiaj. Recomandat pentru ten sensibil și gras. Ingrediente-cheie: filtre minerale-organice, niacinamidă.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-second-skin-fond-de-ten-serum",
@@ -6271,7 +6594,7 @@
           "label": "Porcelain 00",
           "sku": "VEL-SS-00",
           "price": 99.99,
-          "stock": 9,
+          "stock": 17,
           "colorHex": "#f6e6d6",
           "net_content": {
             "value": 30,
@@ -6282,7 +6605,7 @@
           "label": "Ivory 01",
           "sku": "VEL-SS-01",
           "price": 99.99,
-          "stock": 14,
+          "stock": 17,
           "colorHex": "#f1dcc6",
           "net_content": {
             "value": 30,
@@ -6293,7 +6616,7 @@
           "label": "Beige 04",
           "sku": "VEL-SS-04",
           "price": 99.99,
-          "stock": 11,
+          "stock": 17,
           "colorHex": "#dcae82",
           "net_content": {
             "value": 30,
@@ -6304,7 +6627,7 @@
           "label": "Caramel 08",
           "sku": "VEL-SS-08",
           "price": 99.99,
-          "stock": 5,
+          "stock": 16,
           "colorHex": "#bf8355",
           "net_content": {
             "value": 30,
@@ -6324,7 +6647,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Textură fluid. Ingrediente-cheie: acid hialuronic, squalan.",
-      "description": "Velora Second Skin Fond de ten serum. Aspect de piele sănătoasă, se poate construi de la ușor la mediu. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Ingrediente-cheie: acid hialuronic, squalan."
+      "description": "Velora Second Skin Fond de ten serum. Aspect de piele sănătoasă, se poate construi de la ușor la mediu. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Ingrediente-cheie: acid hialuronic, squalan.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "nudelab-fresh-crema-cc",
@@ -6376,7 +6701,7 @@
           "label": "Light",
           "sku": "NDL-CC-LT",
           "price": 69.99,
-          "stock": 16,
+          "stock": 2,
           "colorHex": "#f0dcc4",
           "net_content": {
             "value": 40,
@@ -6387,7 +6712,7 @@
           "label": "Medium",
           "sku": "NDL-CC-MD",
           "price": 69.99,
-          "stock": 12,
+          "stock": 1,
           "colorHex": "#ddb289",
           "net_content": {
             "value": 40,
@@ -6398,7 +6723,7 @@
           "label": "Tan",
           "sku": "NDL-CC-TN",
           "price": 69.99,
-          "stock": 7,
+          "stock": 1,
           "colorHex": "#c89465",
           "net_content": {
             "value": 40,
@@ -6418,7 +6743,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Textură fluid. Ingrediente-cheie: niacinamidă.",
-      "description": "NudeLab Fresh Cremă CC. Uniformizează tonul într-un singur pas, cu protecție SPF 25. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Ingrediente-cheie: niacinamidă."
+      "description": "NudeLab Fresh Cremă CC. Uniformizează tonul într-un singur pas, cu protecție SPF 25. Recomandat pentru cine vrea un finish natural, pe ten mixt și normal. Ingrediente-cheie: niacinamidă.",
+      "stock": 4,
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-light-crema-bb-hidratanta",
@@ -6477,7 +6804,7 @@
           "label": "Light",
           "sku": "ARI-BB-LT",
           "price": 54.99,
-          "stock": 18,
+          "stock": 4,
           "colorHex": "#f2dfc9",
           "net_content": {
             "value": 40,
@@ -6488,7 +6815,7 @@
           "label": "Medium",
           "sku": "ARI-BB-MD",
           "price": 54.99,
-          "stock": 13,
+          "stock": 4,
           "colorHex": "#dfb58c",
           "net_content": {
             "value": 40,
@@ -6499,7 +6826,7 @@
           "label": "Deep",
           "sku": "ARI-BB-DP",
           "price": 54.99,
-          "stock": 6,
+          "stock": 4,
           "colorHex": "#c08a5e",
           "net_content": {
             "value": 40,
@@ -6518,7 +6845,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Textură fluid. Ingrediente-cheie: glicerină, vitamina E.",
-      "description": "Aria Light Cremă BB hidratantă. Hidratare plus uniformizare ușoară, pentru un look fresh de zi. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Ingrediente-cheie: glicerină, vitamina E."
+      "description": "Aria Light Cremă BB hidratantă. Hidratare plus uniformizare ușoară, pentru un look fresh de zi. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal. Ingrediente-cheie: glicerină, vitamina E.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-soft-focus-pudra-translucida",
@@ -6558,7 +6887,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "NudeLab Soft Focus Pudră translucidă. Fixează machiajul și estompează vizual porii, universală pe orice nuanță. Recomandat pentru cine vrea un finish mat."
+      "description": "NudeLab Soft Focus Pudră translucidă. Fixează machiajul și estompează vizual porii, universală pe orice nuanță. Recomandat pentru cine vrea un finish mat.",
+      "stock": 0,
+      "restockInDays": 7,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "aria-waterproof-mascara",
@@ -6586,12 +6918,13 @@
           "label": "Negru",
           "sku": "ARI-WP-BK",
           "price": 39.99,
-          "stock": 24,
+          "stock": 18,
           "colorHex": "#0e0e0e",
           "net_content": {
             "value": 10,
             "unit": "ml"
-          }
+          },
+          "salePrice": 33.99
         }
       ],
       "reviewSummary": {
@@ -6605,7 +6938,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru definirea și volumul genelor.",
-      "description": "Aria Waterproof Mascara. Rezistă la apă, transpirație și umiditate fără să se scurgă. Recomandat pentru definirea și volumul genelor."
+      "description": "Aria Waterproof Mascara. Rezistă la apă, transpirație și umiditate fără să se scurgă. Recomandat pentru definirea și volumul genelor.",
+      "stock": 18,
+      "salePrice": 33.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 3
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-ink-tus-de-ochi-lichid",
@@ -6633,7 +6973,7 @@
           "label": "Negru",
           "sku": "NDL-INK-BK",
           "price": 32.99,
-          "stock": 21,
+          "stock": 34,
           "colorHex": "#101010",
           "net_content": {
             "value": 1.2,
@@ -6644,7 +6984,7 @@
           "label": "Maro",
           "sku": "NDL-INK-BR",
           "price": 32.99,
-          "stock": 9,
+          "stock": 33,
           "colorHex": "#4a3628",
           "net_content": {
             "value": 1.2,
@@ -6664,7 +7004,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru conturarea privirii.",
-      "description": "NudeLab Ink Tuș de ochi lichid. Linie precisă și intens pigmentată, nu se decojește pe parcursul zilei. Recomandat pentru conturarea privirii."
+      "description": "NudeLab Ink Tuș de ochi lichid. Linie precisă și intens pigmentată, nu se decojește pe parcursul zilei. Recomandat pentru conturarea privirii.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-warm-paleta-farduri-de-ochi",
@@ -6703,7 +7045,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru machiajul ochilor.",
-      "description": "Velora Warm Paletă farduri de ochi. Gamă caldă completă pentru look-uri de zi și de seară dintr-o singură paletă. Recomandat pentru machiajul ochilor."
+      "description": "Velora Warm Paletă farduri de ochi. Gamă caldă completă pentru look-uri de zi și de seară dintr-o singură paletă. Recomandat pentru machiajul ochilor.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-mono-fard-de-ochi-cremos",
@@ -6732,34 +7076,37 @@
           "label": "Champagne",
           "sku": "NDL-MN-CH",
           "price": 29.99,
-          "stock": 14,
+          "stock": 19,
           "colorHex": "#e8cfae",
           "net_content": {
             "value": 10,
             "unit": "g"
-          }
+          },
+          "salePrice": 20.99
         },
         {
           "label": "Bronze",
           "sku": "NDL-MN-BZ",
           "price": 29.99,
-          "stock": 11,
+          "stock": 0,
           "colorHex": "#9c6b43",
           "net_content": {
             "value": 10,
             "unit": "g"
-          }
+          },
+          "salePrice": 20.99
         },
         {
           "label": "Taupe",
           "sku": "NDL-MN-TP",
           "price": 29.99,
-          "stock": 8,
+          "stock": 2,
           "colorHex": "#8b7d72",
           "net_content": {
             "value": 10,
             "unit": "g"
-          }
+          },
+          "salePrice": 20.99
         }
       ],
       "reviewSummary": {
@@ -6773,7 +7120,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "NudeLab Mono Fard de ochi cremos. Machiaj de ochi în 30 de secunde, aplicat cu degetul, fără pensule. Recomandat pentru cine vrea un finish satinat."
+      "description": "NudeLab Mono Fard de ochi cremos. Machiaj de ochi în 30 de secunde, aplicat cu degetul, fără pensule. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 21,
+      "salePrice": 20.99,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "nudelab-matte-primer-matifiant",
@@ -6821,7 +7175,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt. Textură gel.",
-      "description": "NudeLab Matte Primer matifiant. Prelungește rezistența fondului de ten pe tenul gras cu câteva ore. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
+      "description": "NudeLab Matte Primer matifiant. Prelungește rezistența fondului de ten pe tenul gras cu câteva ore. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "nudelab-velvet-ruj-mat",
@@ -6862,34 +7218,37 @@
           "label": "Ruby",
           "sku": "NDL-VL-RB",
           "price": 44.99,
-          "stock": 13,
+          "stock": 4,
           "colorHex": "#9b1c31",
           "net_content": {
             "value": 4,
             "unit": "g"
-          }
+          },
+          "salePrice": 33.74
         },
         {
           "label": "Terracotta",
           "sku": "NDL-VL-TC",
           "price": 44.99,
-          "stock": 10,
+          "stock": 4,
           "colorHex": "#b35a43",
           "net_content": {
             "value": 4,
             "unit": "g"
-          }
+          },
+          "salePrice": 33.74
         },
         {
           "label": "Mauve",
           "sku": "NDL-VL-MV",
           "price": 44.99,
-          "stock": 12,
+          "stock": 4,
           "colorHex": "#a5697a",
           "net_content": {
             "value": 4,
             "unit": "g"
-          }
+          },
+          "salePrice": 33.74
         }
       ],
       "reviewSummary": {
@@ -6903,7 +7262,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat. Ingrediente-cheie: unt de shea.",
-      "description": "NudeLab Velvet Ruj mat. Mat catifelat care rămâne confortabil ore întregi. Recomandat pentru cine vrea un finish mat. Ingrediente-cheie: unt de shea."
+      "description": "NudeLab Velvet Ruj mat. Mat catifelat care rămâne confortabil ore întregi. Recomandat pentru cine vrea un finish mat. Ingrediente-cheie: unt de shea.",
+      "stock": 12,
+      "salePrice": 33.74,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 5
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "aria-sugar-scrub-de-buze",
@@ -6960,7 +7326,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru îngrijirea buzelor. Textură cremă. Ingrediente-cheie: zahăr, ulei de cocos.",
-      "description": "Aria Sugar Scrub de buze. Netezește buzele uscate înainte de rujul mat. Recomandat pentru îngrijirea buzelor. Ingrediente-cheie: zahăr, ulei de cocos."
+      "description": "Aria Sugar Scrub de buze. Netezește buzele uscate înainte de rujul mat. Recomandat pentru îngrijirea buzelor. Ingrediente-cheie: zahăr, ulei de cocos.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-tint-balsam-de-buze-nuantator",
@@ -7007,34 +7375,37 @@
           "label": "Rose",
           "sku": "PET-TB-RS",
           "price": 26.99,
-          "stock": 17,
+          "stock": 23,
           "colorHex": "#d98a9a",
           "net_content": {
             "value": 15,
             "unit": "ml"
-          }
+          },
+          "salePrice": 17.54
         },
         {
           "label": "Berry",
           "sku": "PET-TB-BY",
           "price": 26.99,
-          "stock": 9,
+          "stock": 22,
           "colorHex": "#a34d68",
           "net_content": {
             "value": 15,
             "unit": "ml"
-          }
+          },
+          "salePrice": 17.54
         },
         {
           "label": "Coral",
           "sku": "PET-TB-CL",
           "price": 26.99,
-          "stock": 12,
+          "stock": 22,
           "colorHex": "#e2795f",
           "net_content": {
             "value": 15,
             "unit": "ml"
-          }
+          },
+          "salePrice": 17.54
         }
       ],
       "reviewSummary": {
@@ -7048,7 +7419,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru îngrijirea buzelor. Textură balsam. Ingrediente-cheie: unt de shea, ceară de albine.",
-      "description": "Petala Tint Balsam de buze nuanțator. Hidratare plus culoare discretă, look natural fără oglindă. Recomandat pentru îngrijirea buzelor. Ingrediente-cheie: unt de shea, ceară de albine."
+      "description": "Petala Tint Balsam de buze nuanțator. Hidratare plus culoare discretă, look natural fără oglindă. Recomandat pentru îngrijirea buzelor. Ingrediente-cheie: unt de shea, ceară de albine.",
+      "stock": 67,
+      "salePrice": 17.54,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 7
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "aria-sun-kiss-bronzer-pudra",
@@ -7077,7 +7455,7 @@
           "label": "Light Bronze",
           "sku": "ARI-SK-LB",
           "price": 36.99,
-          "stock": 15,
+          "stock": 4,
           "colorHex": "#c99a6d",
           "net_content": {
             "value": 8,
@@ -7088,7 +7466,7 @@
           "label": "Deep Bronze",
           "sku": "ARI-SK-DB",
           "price": 36.99,
-          "stock": 8,
+          "stock": 4,
           "colorHex": "#a9743f",
           "net_content": {
             "value": 8,
@@ -7107,7 +7485,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "Aria Sun Kiss Bronzer pudră. Bronz natural fără subton portocaliu, ușor de estompat. Recomandat pentru cine vrea un finish mat."
+      "description": "Aria Sun Kiss Bronzer pudră. Bronz natural fără subton portocaliu, ușor de estompat. Recomandat pentru cine vrea un finish mat.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "bloom-balance-sampon-pentru-scalp-gras",
@@ -7173,7 +7553,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr gras. Ingrediente-cheie: zinc PCA, extract de mentă.",
-      "description": "Bloom Balance Șampon pentru scalp gras. Prelungește senzația de curat a scalpului cu o zi în plus. Recomandat pentru păr gras. Se folosește zilnic. Ingrediente-cheie: zinc PCA, extract de mentă."
+      "description": "Bloom Balance Șampon pentru scalp gras. Prelungește senzația de curat a scalpului cu o zi în plus. Recomandat pentru păr gras. Se folosește zilnic. Ingrediente-cheie: zinc PCA, extract de mentă.",
+      "stock": 0,
+      "deliveryClass": "supplier",
+      "restockInDays": 7
     },
     {
       "slug": "verdea-hydra-sampon-hidratant",
@@ -7229,21 +7612,23 @@
           "label": "250 ml",
           "sku": "VER-HS-250",
           "price": 37.99,
-          "stock": 22,
+          "stock": 4,
           "net_content": {
             "value": 250,
             "unit": "ml"
-          }
+          },
+          "salePrice": 34.19
         },
         {
           "label": "400 ml",
           "sku": "VER-HS-400",
           "price": 52.99,
-          "stock": 11,
+          "stock": 4,
           "net_content": {
             "value": 250,
             "unit": "ml"
-          }
+          },
+          "salePrice": 47.69
         }
       ],
       "reviewSummary": {
@@ -7257,7 +7642,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: aloe vera, pantenol.",
-      "description": "Verdea Hydra Șampon hidratant. Spală blând și lasă părul uscat moale, nu aspru. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: aloe vera, pantenol."
+      "description": "Verdea Hydra Șampon hidratant. Spală blând și lasă părul uscat moale, nu aspru. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: aloe vera, pantenol.",
+      "stock": 8,
+      "salePrice": 34.19,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "verdea-hydra-balsam-de-par",
@@ -7323,7 +7715,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: unt de shea, aloe vera.",
-      "description": "Verdea Hydra Balsam de păr. Descurcare instant și hidratare fără îngreunare. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: unt de shea, aloe vera."
+      "description": "Verdea Hydra Balsam de păr. Descurcare instant și hidratare fără îngreunare. Recomandat pentru păr uscat. Se folosește zilnic. Ingrediente-cheie: unt de shea, aloe vera.",
+      "stock": 8,
+      "salePrice": 22.19,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 2
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "verdea-protect-spray-termoprotector",
@@ -7386,7 +7785,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr toate tipurile. Ingrediente-cheie: proteine de grâu, pantenol.",
-      "description": "Verdea Protect Spray termoprotector. Protejează firul la styling termic și reduce despicarea în timp. Recomandat pentru păr toate tipurile. Se folosește zilnic. Ingrediente-cheie: proteine de grâu, pantenol."
+      "description": "Verdea Protect Spray termoprotector. Protejează firul la styling termic și reduce despicarea în timp. Recomandat pentru păr toate tipurile. Se folosește zilnic. Ingrediente-cheie: proteine de grâu, pantenol.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "bloom-shine-ulei-de-par-cu-argan",
@@ -7452,7 +7853,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: ulei de argan, vitamina E.",
-      "description": "Bloom Shine Ulei de păr cu argan. Luciu instant și vârfuri sigilate, fără aspect gras. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, vitamina E."
+      "description": "Bloom Shine Ulei de păr cu argan. Luciu instant și vârfuri sigilate, fără aspect gras. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: ulei de argan, vitamina E.",
+      "stock": 55,
+      "salePrice": 30.54,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      },
+      "deliveryClass": "supplier"
     },
     {
       "slug": "bloom-repair-masca-de-par-cu-proteine",
@@ -7508,21 +7916,23 @@
           "label": "200 ml",
           "sku": "BLM-RM-200",
           "price": 42.99,
-          "stock": 19,
+          "stock": 9,
           "net_content": {
             "value": 200,
             "unit": "ml"
-          }
+          },
+          "salePrice": 38.69
         },
         {
           "label": "500 ml",
           "sku": "BLM-RM-500",
           "price": 69.99,
-          "stock": 7,
+          "stock": 9,
           "net_content": {
             "value": 200,
             "unit": "ml"
-          }
+          },
+          "salePrice": 62.99
         }
       ],
       "reviewSummary": {
@@ -7536,7 +7946,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: proteine hidrolizate, keratină.",
-      "description": "Bloom Repair Mască de păr cu proteine. Refacere a firului fragilizat de decolorare în 5-10 minute. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: proteine hidrolizate, keratină."
+      "description": "Bloom Repair Mască de păr cu proteine. Refacere a firului fragilizat de decolorare în 5-10 minute. Recomandat pentru păr deteriorat. Se folosește ocazional. Ingrediente-cheie: proteine hidrolizate, keratină.",
+      "stock": 18,
+      "salePrice": 38.69,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 3
+      },
+      "deliveryClass": "supplier"
     },
     {
       "slug": "solora-relax-gel-de-dus-cu-lavanda",
@@ -7584,21 +8001,23 @@
           "label": "250 ml",
           "sku": "SOL-RX-250",
           "price": 23.99,
-          "stock": 26,
+          "stock": 21,
           "net_content": {
             "value": 250,
             "unit": "ml"
-          }
+          },
+          "salePrice": 15.59
         },
         {
           "label": "500 ml",
           "sku": "SOL-RX-500",
           "price": 36.99,
-          "stock": 14,
+          "stock": 21,
           "net_content": {
             "value": 250,
             "unit": "ml"
-          }
+          },
+          "salePrice": 24.04
         }
       ],
       "reviewSummary": {
@@ -7612,7 +8031,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru curățarea corpului la duș. Textură gel. Ingrediente-cheie: ulei esențial de lavandă, glicerină.",
-      "description": "Solora Relax Gel de duș cu lavandă. Duș relaxant de seară care nu usucă pielea. Recomandat pentru curățarea corpului la duș. Ingrediente-cheie: ulei esențial de lavandă, glicerină."
+      "description": "Solora Relax Gel de duș cu lavandă. Duș relaxant de seară care nu usucă pielea. Recomandat pentru curățarea corpului la duș. Ingrediente-cheie: ulei esențial de lavandă, glicerină.",
+      "stock": 42,
+      "salePrice": 15.59,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 2
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-rich-unt-de-corp",
@@ -7678,7 +8104,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten uscat și deshidratat. Textură unt. Ingrediente-cheie: unt de shea, unt de cacao.",
-      "description": "Solora Rich Unt de corp. Hidratare intensă de durată pentru zone foarte uscate (coate, gambe). Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, unt de cacao."
+      "description": "Solora Rich Unt de corp. Hidratare intensă de durată pentru zone foarte uscate (coate, gambe). Recomandat pentru ten uscat și deshidratat. Ingrediente-cheie: unt de shea, unt de cacao.",
+      "stock": 67,
+      "salePrice": 31.99,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 14
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-pure-deodorant-natural",
@@ -7736,7 +8169,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru prospețime de lungă durată. Textură cremă. Ingrediente-cheie: arrowroot, unt de shea.",
-      "description": "Petala Pure Deodorant natural. Protecție naturală fără aluminiu, blândă cu pielea sensibilă. Recomandat pentru prospețime de lungă durată. Ingrediente-cheie: arrowroot, unt de shea."
+      "description": "Petala Pure Deodorant natural. Protecție naturală fără aluminiu, blândă cu pielea sensibilă. Recomandat pentru prospețime de lungă durată. Ingrediente-cheie: arrowroot, unt de shea.",
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "solora-sun-crema-de-maini-spf-30",
@@ -7795,7 +8230,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru îngrijirea mâinilor. Textură cremă. Ingrediente-cheie: filtre UV, vitamina E.",
-      "description": "Solora Sun Cremă de mâini SPF 30. Protejează mâinile de petele pigmentare cauzate de soare. Recomandat pentru îngrijirea mâinilor. Ingrediente-cheie: filtre UV, vitamina E."
+      "description": "Solora Sun Cremă de mâini SPF 30. Protejează mâinile de petele pigmentare cauzate de soare. Recomandat pentru îngrijirea mâinilor. Ingrediente-cheie: filtre UV, vitamina E.",
+      "stock": 8,
+      "salePrice": 17.49,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 14
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-natural-cover-anticearcan",
@@ -7842,7 +8284,7 @@
           "label": "Fair 01",
           "sku": "NL-NC-01",
           "price": 49.99,
-          "stock": 22,
+          "stock": 3,
           "colorHex": "#f2dbc4",
           "net_content": {
             "value": 7,
@@ -7853,7 +8295,7 @@
           "label": "Beige 03",
           "sku": "NL-NC-03",
           "price": 49.99,
-          "stock": 18,
+          "stock": 0,
           "colorHex": "#e0bd94",
           "net_content": {
             "value": 7,
@@ -7873,7 +8315,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru ten normal și uscat.",
-      "description": "NudeLab Natural Cover Anticearcăn. Estompare ușoară, fără linii dure. Recomandat pentru ten normal și uscat."
+      "description": "NudeLab Natural Cover Anticearcăn. Estompare ușoară, fără linii dure. Recomandat pentru ten normal și uscat.",
+      "stock": 17,
+      "deliveryClass": "standard"
     },
     {
       "slug": "lumaderm-bright-eye-anticearcan",
@@ -7920,7 +8364,7 @@
           "label": "Light 01",
           "sku": "LD-BE-01",
           "price": 46.99,
-          "stock": 20,
+          "stock": 6,
           "colorHex": "#f4dcc7",
           "net_content": {
             "value": 7,
@@ -7931,7 +8375,7 @@
           "label": "Medium 03",
           "sku": "LD-BE-03",
           "price": 46.99,
-          "stock": 15,
+          "stock": 6,
           "colorHex": "#dcb78e",
           "net_content": {
             "value": 7,
@@ -7940,7 +8384,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru ten sensibil și uscat.",
-      "description": "LumaDerm Bright Eye Anticearcăn. Luminează cearcănele fără efect de mască. Recomandat pentru ten sensibil și uscat."
+      "description": "LumaDerm Bright Eye Anticearcăn. Luminează cearcănele fără efect de mască. Recomandat pentru ten sensibil și uscat.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-soft-focus-anticearcan",
@@ -7986,27 +8432,36 @@
           "label": "Neutral 02",
           "sku": "PT-SF-02",
           "price": 38.99,
-          "stock": 24,
+          "stock": 12,
           "colorHex": "#e6c19a",
           "net_content": {
             "value": 7,
             "unit": "ml"
-          }
+          },
+          "salePrice": 31.19
         },
         {
           "label": "Warm 04",
           "sku": "PT-SF-04",
           "price": 38.99,
-          "stock": 16,
+          "stock": 12,
           "colorHex": "#d0a575",
           "net_content": {
             "value": 7,
             "unit": "ml"
-          }
+          },
+          "salePrice": 31.19
         }
       ],
       "ai_summary": "Recomandat pentru ten normal.",
-      "description": "Petala Soft Focus Anticearcăn. Construiești acoperirea strat cu strat. Recomandat pentru ten normal."
+      "description": "Petala Soft Focus Anticearcăn. Construiești acoperirea strat cu strat. Recomandat pentru ten normal.",
+      "stock": 24,
+      "salePrice": 31.19,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "nudelab-soft-blush-fard-de-obraz",
@@ -8044,38 +8499,48 @@
           "label": "Rose 01",
           "sku": "NL-SB-01",
           "price": 34.99,
-          "stock": 20,
+          "stock": 23,
           "colorHex": "#e39aa0",
           "net_content": {
             "value": 5,
             "unit": "g"
-          }
+          },
+          "salePrice": 22.74
         },
         {
           "label": "Peach 02",
           "sku": "NL-SB-02",
           "price": 34.99,
-          "stock": 17,
+          "stock": 22,
           "colorHex": "#f0a985",
           "net_content": {
             "value": 5,
             "unit": "g"
-          }
+          },
+          "salePrice": 22.74
         },
         {
           "label": "Berry 03",
           "sku": "NL-SB-03",
           "price": 34.99,
-          "stock": 12,
+          "stock": 0,
           "colorHex": "#c56d7e",
           "net_content": {
             "value": 5,
             "unit": "g"
-          }
+          },
+          "salePrice": 22.74
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "NudeLab Soft Blush Fard de obraz. Culoare mată, buildable, fără efect prăfos. Recomandat pentru cine vrea un finish mat."
+      "description": "NudeLab Soft Blush Fard de obraz. Culoare mată, buildable, fără efect prăfos. Recomandat pentru cine vrea un finish mat.",
+      "stock": 45,
+      "salePrice": 22.74,
+      "saleWindow": {
+        "startsInDays": -5,
+        "endsInDays": 5
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-rose-fard-de-obraz-cremos",
@@ -8113,27 +8578,36 @@
           "label": "Soft Rose 01",
           "sku": "PT-RB-01",
           "price": 37.99,
-          "stock": 18,
+          "stock": 28,
           "colorHex": "#e58e97",
           "net_content": {
             "value": 5,
             "unit": "g"
-          }
+          },
+          "salePrice": 22.79
         },
         {
           "label": "Coral 02",
           "sku": "PT-RB-02",
           "price": 37.99,
-          "stock": 14,
+          "stock": 27,
           "colorHex": "#ef927a",
           "net_content": {
             "value": 5,
             "unit": "g"
-          }
+          },
+          "salePrice": 22.79
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "Petala Rose Fard de obraz cremos. Efect luminos, natural, ca un blush din interior. Recomandat pentru cine vrea un finish luminos."
+      "description": "Petala Rose Fard de obraz cremos. Efect luminos, natural, ca un blush din interior. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 55,
+      "salePrice": 22.79,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "aria-peach-fard-de-obraz-satinat",
@@ -8171,7 +8645,7 @@
           "label": "Peach 01",
           "sku": "AR-PB-01",
           "price": 31.99,
-          "stock": 22,
+          "stock": 6,
           "colorHex": "#f0a37f",
           "net_content": {
             "value": 5,
@@ -8182,7 +8656,7 @@
           "label": "Apricot 02",
           "sku": "AR-PB-02",
           "price": 31.99,
-          "stock": 15,
+          "stock": 6,
           "colorHex": "#eb9a6b",
           "net_content": {
             "value": 5,
@@ -8191,7 +8665,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Aria Peach Fard de obraz satinat. Strălucire discretă fără sclipici vizibil. Recomandat pentru cine vrea un finish satinat."
+      "description": "Aria Peach Fard de obraz satinat. Strălucire discretă fără sclipici vizibil. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-clear-gloss-de-buze",
@@ -8229,7 +8705,7 @@
           "label": "Clear",
           "sku": "NL-CG-00",
           "price": 24.99,
-          "stock": 30,
+          "stock": 4,
           "colorHex": "#f2e3d8",
           "net_content": {
             "value": 6,
@@ -8240,7 +8716,7 @@
           "label": "Soft Pink",
           "sku": "NL-CG-01",
           "price": 24.99,
-          "stock": 20,
+          "stock": 4,
           "colorHex": "#f0c9cf",
           "net_content": {
             "value": 6,
@@ -8249,7 +8725,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "NudeLab Clear Gloss de buze. Luciu curat, non-lipicios, peste orice ruj. Recomandat pentru cine vrea un finish luminos."
+      "description": "NudeLab Clear Gloss de buze. Luciu curat, non-lipicios, peste orice ruj. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 8,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-berry-gloss-de-buze",
@@ -8287,7 +8765,7 @@
           "label": "Berry",
           "sku": "PT-BG-01",
           "price": 29.99,
-          "stock": 22,
+          "stock": 21,
           "colorHex": "#a8455e",
           "net_content": {
             "value": 6,
@@ -8298,7 +8776,7 @@
           "label": "Plum",
           "sku": "PT-BG-02",
           "price": 29.99,
-          "stock": 16,
+          "stock": 21,
           "colorHex": "#7e3a54",
           "net_content": {
             "value": 6,
@@ -8307,7 +8785,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Petala Berry Gloss de buze. Culoare fructată cu luciu satinat, nu translucid. Recomandat pentru cine vrea un finish satinat."
+      "description": "Petala Berry Gloss de buze. Culoare fructată cu luciu satinat, nu translucid. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "aria-plump-gloss-de-buze-cu-volum",
@@ -8345,7 +8825,7 @@
           "label": "Nude Plump",
           "sku": "AR-PG-01",
           "price": 33.99,
-          "stock": 20,
+          "stock": 6,
           "colorHex": "#d99a8c",
           "net_content": {
             "value": 6,
@@ -8356,7 +8836,7 @@
           "label": "Rose Plump",
           "sku": "AR-PG-02",
           "price": 33.99,
-          "stock": 15,
+          "stock": 6,
           "colorHex": "#d67f88",
           "net_content": {
             "value": 6,
@@ -8365,7 +8845,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "Aria Plump Gloss de buze cu volum. Efect de volum și hidratare, buze mai pline optic. Recomandat pentru cine vrea un finish luminos."
+      "description": "Aria Plump Gloss de buze cu volum. Efect de volum și hidratare, buze mai pline optic. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-long-wear-spray-de-fixare",
@@ -8403,7 +8885,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish natural.",
-      "description": "NudeLab Long Wear Spray de fixare. Fixează machiajul până la 16h fără efect de mască. Recomandat pentru cine vrea un finish natural."
+      "description": "NudeLab Long Wear Spray de fixare. Fixează machiajul până la 16h fără efect de mască. Recomandat pentru cine vrea un finish natural.",
+      "stock": 42,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-dewy-set-spray-de-fixare",
@@ -8447,7 +8931,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat.",
-      "description": "Petala Dewy Set Spray de fixare. Fixează și hidratează, ideal pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat."
+      "description": "Petala Dewy Set Spray de fixare. Fixează și hidratează, ideal pentru ten uscat. Recomandat pentru cine vrea un finish luminos, pe ten uscat.",
+      "stock": 31,
+      "salePrice": 26.59,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-glow-primer-iluminator",
@@ -8493,7 +8984,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal.",
-      "description": "Velora Glow Primer iluminator. Bază luminoasă care înviorează tenul obosit. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal."
+      "description": "Velora Glow Primer iluminator. Bază luminoasă care înviorează tenul obosit. Recomandat pentru cine vrea un finish luminos, pe ten uscat și normal.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "petala-pore-blur-primer",
@@ -8539,7 +9032,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
-      "description": "Petala Pore Blur Primer. Netezește porii vizibili și ține sebumul sub control. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt."
+      "description": "Petala Pore Blur Primer. Netezește porii vizibili și ține sebumul sub control. Recomandat pentru cine vrea un finish mat, pe ten gras și mixt.",
+      "stock": 12,
+      "deliveryClass": "standard"
     },
     {
       "slug": "nudelab-liquid-iluminator-lichid",
@@ -8577,27 +9072,36 @@
           "label": "Champagne",
           "sku": "NL-LI-01",
           "price": 42.99,
-          "stock": 20,
+          "stock": 6,
           "colorHex": "#f3d9a8",
           "net_content": {
             "value": 6,
             "unit": "g"
-          }
+          },
+          "salePrice": 30.09
         },
         {
           "label": "Rose Gold",
           "sku": "NL-LI-02",
           "price": 42.99,
-          "stock": 15,
+          "stock": 6,
           "colorHex": "#eec3a0",
           "net_content": {
             "value": 6,
             "unit": "g"
-          }
+          },
+          "salePrice": 30.09
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos.",
-      "description": "NudeLab Liquid Iluminator lichid. Glow lichid intens, mixabil în fondul de ten. Recomandat pentru cine vrea un finish luminos."
+      "description": "NudeLab Liquid Iluminator lichid. Glow lichid intens, mixabil în fondul de ten. Recomandat pentru cine vrea un finish luminos.",
+      "stock": 12,
+      "salePrice": 30.09,
+      "saleWindow": {
+        "startsInDays": -3,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-champagne-iluminator-pudra",
@@ -8635,7 +9139,7 @@
           "label": "Champagne",
           "sku": "PT-CI-01",
           "price": 34.99,
-          "stock": 22,
+          "stock": 16,
           "colorHex": "#f0d5a6",
           "net_content": {
             "value": 6,
@@ -8646,7 +9150,7 @@
           "label": "Pearl",
           "sku": "PT-CI-02",
           "price": 34.99,
-          "stock": 16,
+          "stock": 15,
           "colorHex": "#f2e5d4",
           "net_content": {
             "value": 6,
@@ -8655,7 +9159,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Petala Champagne Iluminator pudră. Strălucire pudrată discretă, ușor de controlat. Recomandat pentru cine vrea un finish satinat."
+      "description": "Petala Champagne Iluminator pudră. Strălucire pudrată discretă, ușor de controlat. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "nudelab-warm-bronzer-pudra",
@@ -8693,7 +9199,7 @@
           "label": "Light",
           "sku": "NL-WB-01",
           "price": 38.99,
-          "stock": 20,
+          "stock": 9,
           "colorHex": "#c89466",
           "net_content": {
             "value": 8,
@@ -8704,7 +9210,7 @@
           "label": "Deep",
           "sku": "NL-WB-02",
           "price": 38.99,
-          "stock": 14,
+          "stock": 9,
           "colorHex": "#a06e45",
           "net_content": {
             "value": 8,
@@ -8713,7 +9219,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish mat.",
-      "description": "NudeLab Warm Bronzer pudră. Tonuri calde, fără nuanțe portocalii. Recomandat pentru cine vrea un finish mat."
+      "description": "NudeLab Warm Bronzer pudră. Tonuri calde, fără nuanțe portocalii. Recomandat pentru cine vrea un finish mat.",
+      "stock": 18,
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-sun-glow-bronzer-cremos",
@@ -8751,27 +9259,36 @@
           "label": "Sun 01",
           "sku": "PT-SG-01",
           "price": 32.99,
-          "stock": 18,
+          "stock": 9,
           "colorHex": "#bd8657",
           "net_content": {
             "value": 8,
             "unit": "g"
-          }
+          },
+          "salePrice": 24.74
         },
         {
           "label": "Sun 02",
           "sku": "PT-SG-02",
           "price": 32.99,
-          "stock": 12,
+          "stock": 9,
           "colorHex": "#9c6a40",
           "net_content": {
             "value": 8,
             "unit": "g"
-          }
+          },
+          "salePrice": 24.74
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish satinat.",
-      "description": "Petala Sun Glow Bronzer cremos. Bronz luminos cremos, se topește pe piele. Recomandat pentru cine vrea un finish satinat."
+      "description": "Petala Sun Glow Bronzer cremos. Bronz luminos cremos, se topește pe piele. Recomandat pentru cine vrea un finish satinat.",
+      "stock": 18,
+      "salePrice": 24.74,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 10
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "velora-perfect-bb-crema-spf-30",
@@ -8820,7 +9337,7 @@
           "label": "Light 01",
           "sku": "VE-BB-01",
           "price": 59.99,
-          "stock": 20,
+          "stock": 0,
           "colorHex": "#eccfb0",
           "net_content": {
             "value": 40,
@@ -8831,7 +9348,7 @@
           "label": "Medium 03",
           "sku": "VE-BB-03",
           "price": 59.99,
-          "stock": 16,
+          "stock": 8,
           "colorHex": "#d9b184",
           "net_content": {
             "value": 40,
@@ -8842,7 +9359,7 @@
           "label": "Tan 05",
           "sku": "VE-BB-05",
           "price": 59.99,
-          "stock": 11,
+          "stock": 3,
           "colorHex": "#c1935f",
           "net_content": {
             "value": 40,
@@ -8851,7 +9368,9 @@
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish natural, pe ten normal și mixt. Textură fluid.",
-      "description": "Velora Perfect BB Cremă SPF 30. Uniformizează tenul și protejează cu SPF 30 într-un singur pas. Recomandat pentru cine vrea un finish natural, pe ten normal și mixt."
+      "description": "Velora Perfect BB Cremă SPF 30. Uniformizează tenul și protejează cu SPF 30 într-un singur pas. Recomandat pentru cine vrea un finish natural, pe ten normal și mixt.",
+      "stock": 11,
+      "deliveryClass": "standard"
     },
     {
       "slug": "auralis-hydra-cc-crema",
@@ -8900,27 +9419,36 @@
           "label": "Fair 01",
           "sku": "AU-CC-01",
           "price": 64.99,
-          "stock": 18,
+          "stock": 21,
           "colorHex": "#f0d6bc",
           "net_content": {
             "value": 40,
             "unit": "ml"
-          }
+          },
+          "salePrice": 58.49
         },
         {
           "label": "Light 02",
           "sku": "AU-CC-02",
           "price": 64.99,
-          "stock": 14,
+          "stock": 21,
           "colorHex": "#e3bd95",
           "net_content": {
             "value": 40,
             "unit": "ml"
-          }
+          },
+          "salePrice": 58.49
         }
       ],
       "ai_summary": "Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat. Textură fluid.",
-      "description": "Auralis Hydra CC Cremă. Hidratează intens și dă un glow sănătos cu acoperire lejeră. Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat."
+      "description": "Auralis Hydra CC Cremă. Hidratează intens și dă un glow sănătos cu acoperire lejeră. Recomandat pentru cine vrea un finish luminos, pe ten uscat și deshidratat.",
+      "stock": 42,
+      "salePrice": 58.49,
+      "saleWindow": {
+        "startsInDays": -8,
+        "endsInDays": 3
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "aria-set-pensule-de-machiaj-5",
@@ -8956,7 +9484,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
-      "description": "Aria Set Pensule de machiaj (5 buc). Cinci pensule esențiale într-un singur set, peri sintetici moi. Recomandat pentru aplicarea uniformă a machiajului."
+      "description": "Aria Set Pensule de machiaj (5 buc). Cinci pensule esențiale într-un singur set, peri sintetici moi. Recomandat pentru aplicarea uniformă a machiajului.",
+      "stock": 42,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "petala-soft-burete-de-machiaj-2",
@@ -8992,7 +9522,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru aplicarea uniformă a machiajului.",
-      "description": "Petala Soft Burete de machiaj (2 buc). Doi bureți la preț accesibil, aplicare fără urme. Recomandat pentru aplicarea uniformă a machiajului."
+      "description": "Petala Soft Burete de machiaj (2 buc). Doi bureți la preț accesibil, aplicare fără urme. Recomandat pentru aplicarea uniformă a machiajului.",
+      "stock": 42,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "bloom-curl-crema-leave-in-bucle",
@@ -9057,7 +9589,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr curly. Ingrediente-cheie: unt de shea, glicerină.",
-      "description": "Bloom Curl Cremă leave-in pentru bucle. Definește buclele fără să le încarce sau să le usuce. Recomandat pentru păr curly. Se folosește zilnic. Ingrediente-cheie: unt de shea, glicerină."
+      "description": "Bloom Curl Cremă leave-in pentru bucle. Definește buclele fără să le încarce sau să le usuce. Recomandat pentru păr curly. Se folosește zilnic. Ingrediente-cheie: unt de shea, glicerină.",
+      "stock": 31,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "verdea-repair-crema-leave-in-reparatoare",
@@ -9122,7 +9656,10 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr deteriorat. Ingrediente-cheie: keratină, ulei de argan.",
-      "description": "Verdea Repair Cremă leave-in reparatoare. Repară vârfurile despicate și netezește lungimile deteriorate. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan."
+      "description": "Verdea Repair Cremă leave-in reparatoare. Repară vârfurile despicate și netezește lungimile deteriorate. Recomandat pentru păr deteriorat. Se folosește zilnic. Ingrediente-cheie: keratină, ulei de argan.",
+      "stock": 0,
+      "restockInDays": 14,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "petala-silk-ulei-de-par-varfuri",
@@ -9179,7 +9716,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr normal. Ingrediente-cheie: ulei de jojoba.",
-      "description": "Petala Silk Ulei de păr pentru vârfuri. Ulei ușor care nu îngreunează părul fin. Recomandat pentru păr normal. Se folosește ocazional. Ingrediente-cheie: ulei de jojoba."
+      "description": "Petala Silk Ulei de păr pentru vârfuri. Ulei ușor care nu îngreunează părul fin. Recomandat pentru păr normal. Se folosește ocazional. Ingrediente-cheie: ulei de jojoba.",
+      "stock": 8,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "verdea-gloss-ulei-de-par-stralucire",
@@ -9244,7 +9783,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr uscat. Ingrediente-cheie: ulei de macadamia, vitamina E.",
-      "description": "Verdea Gloss Ulei de păr pentru strălucire. Strălucire intensă și netezire pe păr aspru sau uscat. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: ulei de macadamia, vitamina E."
+      "description": "Verdea Gloss Ulei de păr pentru strălucire. Strălucire intensă și netezire pe păr aspru sau uscat. Recomandat pentru păr uscat. Se folosește ocazional. Ingrediente-cheie: ulei de macadamia, vitamina E.",
+      "stock": 31,
+      "deliveryClass": "supplier"
     },
     {
       "slug": "verdea-fresh-sampon-uscat-volumizant",
@@ -9289,7 +9830,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr gras.",
-      "description": "Verdea Fresh Șampon uscat volumizant. Absoarbe sebumul și ridică rădăcina fără reziduu alb. Recomandat pentru păr gras. Se folosește ocazional."
+      "description": "Verdea Fresh Șampon uscat volumizant. Absoarbe sebumul și ridică rădăcina fără reziduu alb. Recomandat pentru păr gras. Se folosește ocazional.",
+      "stock": 8,
+      "salePrice": 26.99,
+      "saleWindow": {
+        "startsInDays": -2,
+        "endsInDays": 2
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-soft-sampon-uscat-par-inchis",
@@ -9334,7 +9882,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru păr normal.",
-      "description": "Petala Soft Șampon uscat pentru păr închis. Formulă tentată care nu lasă film alb pe păr închis. Recomandat pentru păr normal. Se folosește ocazional."
+      "description": "Petala Soft Șampon uscat pentru păr închis. Formulă tentată care nu lasă film alb pe păr închis. Recomandat pentru păr normal. Se folosește ocazional.",
+      "stock": 55,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "bloom-sugar-scrub-de-corp-zahar",
@@ -9390,7 +9940,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: zahăr brun, ulei de cocos.",
-      "description": "Bloom Sugar Scrub de corp cu zahăr. Exfoliază blând și hrănește pielea cu uleiuri. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: zahăr brun, ulei de cocos."
+      "description": "Bloom Sugar Scrub de corp cu zahăr. Exfoliază blând și hrănește pielea cu uleiuri. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: zahăr brun, ulei de cocos.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-mineral-scrub-de-corp-exfoliant",
@@ -9446,7 +9998,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline.",
-      "description": "Auralis Mineral Scrub de corp exfoliant. Exfoliere intensă cu săruri minerale, netezește zonele aspre. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline."
+      "description": "Auralis Mineral Scrub de corp exfoliant. Exfoliere intensă cu săruri minerale, netezește zonele aspre. Recomandat pentru exfolierea blândă a corpului. Ingrediente-cheie: sare de mare, ulei de măsline.",
+      "stock": 4,
+      "salePrice": 28.04,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 2
+      },
+      "deliveryClass": "standard"
     },
     {
       "slug": "petala-clear-tratament-local-imperfectiuni",
@@ -9509,7 +10068,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu tendință acneică și gras. Textură gel. Ingrediente-cheie: acid salicilic.",
-      "description": "Petala Clear Tratament local anti-imperfecțiuni. Usucă rapid coșurile inflamate, punctual. Recomandat pentru ten cu tendință acneică și gras. Se folosește seara. Ingrediente-cheie: acid salicilic."
+      "description": "Petala Clear Tratament local anti-imperfecțiuni. Usucă rapid coșurile inflamate, punctual. Recomandat pentru ten cu tendință acneică și gras. Se folosește seara. Ingrediente-cheie: acid salicilic.",
+      "stock": 67,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "auralis-night-tratament-local-retinol",
@@ -9580,7 +10141,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten cu tendință acneică și matur. Textură gel. Ingrediente-cheie: retinol, niacinamidă.",
-      "description": "Auralis Night Tratament local cu retinol. Tratează imperfecțiunile și netezește textura în timp. Recomandat pentru ten cu tendință acneică și matur. Se folosește seara. Ingrediente-cheie: retinol, niacinamidă."
+      "description": "Auralis Night Tratament local cu retinol. Tratează imperfecțiunile și netezește textura în timp. Recomandat pentru ten cu tendință acneică și matur. Se folosește seara. Ingrediente-cheie: retinol, niacinamidă.",
+      "stock": 24,
+      "deliveryClass": "next_day"
     },
     {
       "slug": "lumaderm-calm-mist-ten-sensibil",
@@ -9652,7 +10215,14 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten sensibil și deshidratat. Textură apă. Ingrediente-cheie: apă termală, panthenol.",
-      "description": "LumaDerm Calm Mist pentru ten sensibil. Calmează roșeața și rehidratează pielea reactivă. Recomandat pentru ten sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: apă termală, panthenol."
+      "description": "LumaDerm Calm Mist pentru ten sensibil. Calmează roșeața și rehidratează pielea reactivă. Recomandat pentru ten sensibil și deshidratat. Se folosește dimineața, seara. Ingrediente-cheie: apă termală, panthenol.",
+      "stock": 31,
+      "salePrice": 26.24,
+      "saleWindow": {
+        "startsInDays": -1,
+        "endsInDays": 21
+      },
+      "deliveryClass": "next_day"
     },
     {
       "slug": "velora-glow-mist-fixator-vitamine",
@@ -9722,7 +10292,9 @@
         ]
       },
       "ai_summary": "Recomandat pentru ten normal. Textură apă. Ingrediente-cheie: vitamina C, vitamina E.",
-      "description": "Velora Glow Mist fixator cu vitamine. Înviorează tenul obosit și dă un glow luminos peste machiaj. Recomandat pentru ten normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, vitamina E."
+      "description": "Velora Glow Mist fixator cu vitamine. Înviorează tenul obosit și dă un glow luminos peste machiaj. Recomandat pentru ten normal. Se folosește dimineața, seara. Ingrediente-cheie: vitamina C, vitamina E.",
+      "stock": 18,
+      "deliveryClass": "standard"
     }
   ]
 }
