@@ -335,7 +335,8 @@ async def search_products(
         # OFF, exact pe slug/nume al primary_category_id (byte-identic cu vechiul cod).
         conds.append(_category_clause(category, placeholder))
     if brand:
-        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+        # NX-178: și brandul se caută fără diacritice („petala" → „Petala", „loreal" → „L'Oréal")
+        conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
@@ -394,11 +395,19 @@ async def search_products_lexical(
     q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
     # Match lexical: FTS (frază naturală) SAU trgm (typo/SKU). Query gol/stopwords → tsquery gol
     # (nu prinde nimic) → cade pe trgm; niciun SQL invalid.
-    conds.append(f"(p.search_tsv @@ websearch_to_tsquery('simple', {q_ph}) or p.name % {q_ph})")
+    # NX-178: AMBELE capete trec prin `ro_unaccent` (033). `search_tsv` e deja construit peste text
+    # normalizat, deci aici normalizăm doar interogarea; trgm-ul compară expresii normalizate, pe
+    # indexul dedicat. Fără asta, „sampon" nu găsea niciun „șampon" — zero rezultate, nu relevanță
+    # slabă.
+    conds.append(
+        f"(p.search_tsv @@ websearch_to_tsquery('simple', ro_unaccent({q_ph}))"
+        f" or ro_unaccent(p.name) % ro_unaccent({q_ph}))"
+    )
     if category:
         conds.append(_category_clause(category, placeholder))  # NX-167 (A): match pe arbore
     if brand:
-        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+        # NX-178: și brandul se caută fără diacritice („petala" → „Petala", „loreal" → „L'Oréal")
+        conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
@@ -414,8 +423,8 @@ async def search_products_lexical(
 
     if sort_mode == "relevance":
         rank = (
-            f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', {q_ph}))"
-            f" + similarity(p.name, {q_ph})"
+            f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({q_ph})))"
+            f" + similarity(ro_unaccent(p.name), ro_unaccent({q_ph}))"
         )
         order = f" order by ({rank}) desc, p.id"
     else:
@@ -888,7 +897,8 @@ async def search_products_semantic(
     if brand:
         # Filtru DUR pe brand (la fel ca SQL-only): un brand cerut care nu există în catalog →
         # zero rezultate, NU produse semantic-apropiate de la alt brand (bug-ul „avem … Chanel").
-        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+        # NX-178: și brandul se caută fără diacritice („petala" → „Petala", „loreal" → „L'Oréal")
+        conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
