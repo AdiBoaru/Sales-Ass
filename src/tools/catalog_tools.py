@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
+from src.commerce.project import delivery_for
 from src.config import get_settings
 from src.db.queries.catalog import (
     get_products_by_ids,
+    get_substitutes,
     has_embeddings,
     search_products_lexical,
     search_products_semantic,
@@ -225,7 +227,12 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
 
 
 def _variant_view(raw_variants: Any, *, limit: int) -> str:
-    """Compact variant labels for the model, including per-variant stock when present."""
+    """Compact variant labels for the model, including per-variant stock when present.
+
+    NX-197: NU suprimăm varianta unică aici, deși pe cardul web selectorul cu o singură opțiune e
+    ascuns. Motivul: varianta poartă gramajul și prețul pe unitate („50ml, 84.00 lei/100ml"), adică
+    exact faptele cu care botul răspunde la «care e mai avantajos». Zgomot pe UI ≠ zgomot pentru
+    model — testele de la NX-171a au prins diferența."""
     labels: list[str] = []
     for v in (raw_variants or [])[:limit]:
         if not isinstance(v, dict):
@@ -255,7 +262,9 @@ def _variant_view(raw_variants: Any, *, limit: int) -> str:
     return ", ".join(labels)
 
 
-def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str:
+def _detail_view(
+    p: dict[str, Any], pack: Any = None, locale: str = "ro", delivery: str | None = None
+) -> str:
     parts = [
         f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {float(p['price']):.2f} lei",
         f"stoc: {p.get('availability') or '-'}",
@@ -288,13 +297,18 @@ def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str
             parts.append("de reținut — nepotrivit pentru: " + ", ".join(warns[:3]))
         # NX-168e-2 graf PDP (consumat aici): secțiuni usage/warnings + badge-uri (dacă query le-a
         # adus). Beneficii/ingrediente-secțiune sunt deja în fațete/ai_summary → nu le dublăm.
+        # NX-196: fișa autorată aduce blocuri noi (features/benefits/scenarios). Le randăm pe
+        # toate, dar cu buget: modelul primește esențialul, nu fișa întreagă — descrierea lungă
+        # rămâne pe pagina de produs, unde are loc.
         for sec in p.get("sections") or []:
-            if (
-                isinstance(sec, dict)
-                and sec.get("kind") in ("usage", "warnings")
-                and sec.get("body")
-            ):
-                parts.append(f"{(sec.get('title') or '').lower()}: {sec['body'][:150]}")
+            if not isinstance(sec, dict) or not sec.get("body"):
+                continue
+            kind = sec.get("kind")
+            if kind not in ("usage", "warnings", "features", "benefits", "scenarios"):
+                continue
+            cap = 220 if kind in ("features", "benefits", "scenarios") else 150
+            body = " ".join(str(sec["body"]).split())
+            parts.append(f"{(sec.get('title') or kind).lower()}: {body[:cap]}")
         if p.get("badges"):
             parts.append("etichete: " + ", ".join(str(b) for b in list(p["badges"])[:4]))
         # NX-169: recenzii INDIVIDUALE (tabelul reviews, 168e-2) — 1-2 citate reale + autor/rating.
@@ -317,6 +331,17 @@ def _detail_view(p: dict[str, Any], pack: Any = None, locale: str = "ro") -> str
     # `variant_id` REAL la cart_add (membership-ul rămâne plasa). Format `[id] etichetă (preț)`.
     if variants := _variant_view(p.get("variants"), limit=8):
         parts.append("variante: " + variants)
+    # NX-191: livrarea e un FAPT de vânzare, nu un detaliu — „în cât timp ajunge?" e printre cele
+    # mai frecvente întrebări, iar până acum botul n-avea ce citi. Textul e CALCULAT (cod), nu
+    # compus de model.
+    if delivery:
+        parts.append(f"livrare: {delivery}")
+    # NX-194: FAQ per produs — citit DOAR la detaliu (nu intră în căutare). Cap 3 în vederea
+    # modelului: restul rămân pe pagina de produs, ca să nu umflăm contextul.
+    faqs = [f for f in (p.get("faqs") or []) if isinstance(f, dict) and f.get("question")]
+    if faqs:
+        qa = "; ".join(f"{f['question']} — {str(f.get('answer') or '')[:110]}" for f in faqs[:3])
+        parts.append(f"întrebări frecvente: {qa}")
     return " | ".join(parts)
 
 
@@ -952,13 +977,24 @@ async def get_product_details_tool(
     products, _ = _safety_gate(ctx, products, purpose="details")
     if not products:
         return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_TOOL_VIEW)
-    return ToolResult(
-        ok=True,
-        products=products,
-        llm_view=_detail_view(
-            products[0], getattr(ctx.business, "domain_pack", None), ctx.language
-        ),
+    p = products[0]
+    view = _detail_view(
+        p,
+        getattr(ctx.business, "domain_pack", None),
+        ctx.language,
+        delivery=delivery_for(p, ctx.business).text,
     )
+    # NX-195: produs epuizat → propunem ALTERNATIVA, nu doar „nu mai avem". Relațiile de substitut
+    # (222, din NX-171b) existau și nu le citea nimeni. Alternativele intră și în `products`, ca
+    # validatorul (stagiul 8) să accepte prețul lor dacă modelul îl rostește.
+    if (p.get("availability") or "") == "out_of_stock":
+        subs = await get_substitutes(deps.conn, ctx.business.id, p["id"], limit=2)
+        subs, _ = _safety_gate(ctx, subs, purpose="details")
+        if subs:
+            alt = "; ".join(f"[{s['id']}] {s['name']} — {float(s['price']):.2f} lei" for s in subs)
+            view += f" | alternative pe stoc: {alt}"
+            products = products + subs
+    return ToolResult(ok=True, products=products, llm_view=view)
 
 
 @register("compare_products")

@@ -556,7 +556,18 @@ class TurnContext:
     ) -> None:
         """Setează reply → semnalează early exit la Sender. `products` (opțional) →
         Sender-ul le trimite ca carduri (poză+preț+buton) după text (W1). `cacheable`
-        (G5b) → False pe clarify/refuz/fallback (nu se scriu în cache)."""
+        (G5b) → False pe clarify/refuz/fallback (nu se scriu în cache).
+
+        NX-191: un răspuns care conține o promisiune raportată la CEAS („dacă comanzi în
+        următoarele 2 ore, ajunge mâine") devine NEcacheabil AUTOMAT, oricine l-ar fi compus —
+        inclusiv modelul, dacă a preluat formularea din contextul primit. Un hit de mâine ar
+        servi „mai ai 2 ore" la ora 20:00. Plasa stă AICI, în singurul punct prin care trec
+        toate răspunsurile, nu la fiecare call-site.
+        """
+        from src.commerce.delivery import has_time_sensitive_text  # noqa: PLC0415 — evită ciclul
+
+        if cacheable and has_time_sensitive_text(text):
+            cacheable = False
         self.reply = Reply(text=text, kind=kind, products=products, cacheable=cacheable)
 
     def set_rich_reply(

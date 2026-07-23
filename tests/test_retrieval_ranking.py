@@ -162,7 +162,10 @@ async def test_lexical_uses_fts_and_trgm():
     await catalog.search_products_lexical(conn, "biz-1", "cremă pentru ten gras", pool=50)
     assert "websearch_to_tsquery('simple'" in conn.sql  # FTS real, nu ILIKE
     assert "ts_rank_cd" in conn.sql  # rank lexical
-    assert "p.name %" in conn.sql and "similarity(p.name" in conn.sql  # pg_trgm (typo/SKU)
+    # NX-178: trgm-ul compară acum expresii NORMALIZATE (fără diacritice), pe indexul dedicat —
+    # altfel „sampon" nu găsea niciun „șampon". Contractul rămâne același: FTS + fuzzy pe nume.
+    assert "ro_unaccent(p.name) %" in conn.sql
+    assert "similarity(ro_unaccent(p.name)" in conn.sql
     assert "p.business_id = $1" in conn.sql  # P7
     assert conn.params[0] == "biz-1" and "cremă pentru ten gras" in conn.params
     assert "ilike '%" not in conn.sql.lower()  # NU mai e substring ILIKE pe frază
@@ -207,7 +210,7 @@ async def test_lexical_applies_hard_filters():
     await catalog.search_products_lexical(
         conn, "b", "q", brand="Nivea", price_max=80.0, in_stock_only=True, pool=10
     )
-    assert "b.name ilike" in conn.sql  # brand = filtru dur
+    assert "ro_unaccent(b.name) like" in conn.sql  # brand = filtru dur, fără diacritice
     assert "in ('in_stock', 'low_stock')" in conn.sql  # stoc
     assert "Nivea" in str(conn.params) and 80.0 in conn.params
 

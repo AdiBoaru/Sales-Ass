@@ -15,10 +15,24 @@ import asyncpg
 
 from src.config import get_settings
 
+# NX-191 — FEREASTRA promoției. `sale_price` fără verificarea ferestrei = minciună comercială:
+# o promoție încheiată ar continua să se afișeze ca preț curent, iar validatorul (stagiul 8) ar
+# confirma-o, pentru că vede același preț greșit. Fereastra deschisă (ambele NULL) = promoție
+# permanentă — comportamentul de dinainte de card, deci rândurile vechi rămân valide.
+# `current_date` e evaluat de Postgres în fusul sesiunii; suficient pentru o graniță pe ZI.
+_SALE_WINDOW_OK = (
+    "(p.sale_start is null or p.sale_start <= current_date)"
+    " and (p.sale_end is null or p.sale_end >= current_date)"
+)
+# Promoția e ACTIVĂ: există, e mai mică decât prețul de listă ȘI e în fereastră.
+_SALE_ACTIVE = f"(p.sale_price is not null and p.sale_price < p.price and {_SALE_WINDOW_OK})"
+# Prețul de produs ținând cont de fereastră (fallback-ul când nu există variante).
+_PRODUCT_PRICE = f"(case when {_SALE_ACTIVE} then p.sale_price else p.price end)"
+
 # Prețul REAL e pe variantă (vezi T037): fiecare produs are variante cu sale_price
 # propriu, de obicei mai mic decât products.price. Sursăm min(variant) cu fallback
 # la products. Validatorul de preț trebuie să vadă același preț ca clientul.
-_EFFECTIVE_PRICE = "coalesce(vp.price, p.sale_price, p.price)"
+_EFFECTIVE_PRICE = f"coalesce(vp.price, {_PRODUCT_PRICE})"
 
 # Rating „shrunk" (Bayesian) — un 5.0 cu 1 recenzie NU mai îngroapă un 4.6 cu 200 (cold-start).
 # Prior C≈30 spre media 4.0: (n*rating + C*4.0)/(n + C). Pur SQL, `review_count` deja selectat.
@@ -30,6 +44,11 @@ _SHRUNK_RATING = (
 # Moduri de sortare (allowlist → zero injection; sort_mode e structural, nu param bindabil).
 _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 
+# Varianta NU are fereastră proprie: MOȘTENEȘTE fereastra produsului (promoția e a produsului,
+# nuanțele doar o poartă). Fără asta, o promoție expirată ar rămâne activă pe variante — adică fix
+# pe prețul EFECTIV, cel pe care îl vede clientul.
+_VARIANT_SALE_ON = f"v.sale_price is not null and v.sale_price < v.price and {_SALE_WINDOW_OK}"
+
 # NX-118: array compact de variante (cap 12, cele mai ieftine) hidratat pe read path → validatorul
 # vede prețurile per-variantă reale (50ml vs 100ml) și modelul etichetele/SKU. Neutru de vertical
 # (nuanțe beauty / mărimi fashion / fitment auto — `label` vine din DB). `vp` (scalarul min) rămâne
@@ -37,7 +56,7 @@ _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 # Perf: rulează pe tot pool-ul de fuziune (ca lateralele `vp`/`img` existente), dar e un index-scan
 # ieftin pe idx_variants_product(product_id), ≤16 rânduri — îl ținem și pe `_SELECT` ca validatorul
 # să aibă prețurile per-variantă pe ORICE cale (search/detail), robust la dedup.
-_VARIANTS_AGG = """
+_VARIANTS_AGG = f"""
     left join lateral (
         select jsonb_agg(
             jsonb_build_object(
@@ -45,13 +64,13 @@ _VARIANTS_AGG = """
                 'variant_id', v.id::text,
                 'label', v.label,
                 'sku', v.sku,
-                'price', coalesce(v.sale_price, v.price)::float8,
+                'price', (case when {_VARIANT_SALE_ON}
+                               then v.sale_price else v.price end)::float8,
                 'list_price',
-                    (case when v.sale_price is not null and v.sale_price < v.price
-                          then v.price end)::float8,
+                    (case when {_VARIANT_SALE_ON} then v.price end)::float8,
                 'stock', v.stock,
                 'color_hex', v.color_hex,
-                'attributes', coalesce(v.attributes, '{}'::jsonb),
+                'attributes', coalesce(v.attributes, '{{}}'::jsonb),
                 'shade', v.attributes->>'shade',
                 'undertone', v.attributes->>'undertone',
                 'depth', v.attributes->>'depth',
@@ -60,12 +79,14 @@ _VARIANTS_AGG = """
                 'price_per_unit', v.price_per_unit::float8,
                 'gtin', v.gtin,
                 'image_url', v.image_url
-            ) order by coalesce(v.sale_price, v.price) asc
+            ) order by (case when {_VARIANT_SALE_ON}
+                             then v.sale_price else v.price end) asc
         ) as variants
         from (
             select * from product_variants
             where product_id = p.id and business_id = p.business_id
-            order by coalesce(sale_price, price) asc
+            order by (case when {_SALE_WINDOW_OK} and sale_price is not null
+                           and sale_price < price then sale_price else price end) asc
             limit 16
         ) v
     ) vr on true
@@ -109,6 +130,15 @@ def _row_to_product(r: asyncpg.Record) -> dict[str, Any]:
         d["badges"] = []
     if "ingredients_db" in d and d["ingredients_db"] is None:
         d["ingredients_db"] = []
+    if "faqs" in d:
+        fq = d["faqs"]
+        if isinstance(fq, str):
+            try:
+                d["faqs"] = json.loads(fq)
+            except (ValueError, TypeError):
+                d["faqs"] = []
+        elif fq is None:
+            d["faqs"] = []
     if "reviews_list" in d:
         rv = d["reviews_list"]
         if isinstance(rv, str):
@@ -178,10 +208,10 @@ _SELECT = f"""
         p.review_count              as review_count,
         prs.top_pros[1]             as review_pro,
         prs.top_pros                as top_pros,
-        (p.sale_price is not null and p.sale_price < p.price) as on_sale,
+        {_SALE_ACTIVE} as on_sale,
         -- IZI-anchor: preț ORIGINAL (tăiat), DOAR la reducere reală; altfel NULL → cardul nu
         -- afișează „de la X" fals pe o variantă mai mică. `price` rămâne efectivul curent.
-        (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
+        (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
         p.attributes->'concerns'    as concerns,
         p.attributes                as attributes,
@@ -191,9 +221,10 @@ _SELECT = f"""
     left join categories c on c.id = p.primary_category_id
     left join product_review_summaries prs on prs.product_id = p.id
     left join lateral (
-        select min(coalesce(v.sale_price, v.price)) as price
+        select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
+                         and v.sale_price < v.price then v.sale_price else v.price end) as price
         from product_variants v
-        where v.product_id = p.id
+        where v.product_id = p.id and v.business_id = p.business_id
     ) vp on true
     left join lateral (
         select pi.url from product_images pi
@@ -304,7 +335,8 @@ async def search_products(
         # OFF, exact pe slug/nume al primary_category_id (byte-identic cu vechiul cod).
         conds.append(_category_clause(category, placeholder))
     if brand:
-        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+        # NX-178: și brandul se caută fără diacritice („petala" → „Petala", „loreal" → „L'Oréal")
+        conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
@@ -363,11 +395,19 @@ async def search_products_lexical(
     q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
     # Match lexical: FTS (frază naturală) SAU trgm (typo/SKU). Query gol/stopwords → tsquery gol
     # (nu prinde nimic) → cade pe trgm; niciun SQL invalid.
-    conds.append(f"(p.search_tsv @@ websearch_to_tsquery('simple', {q_ph}) or p.name % {q_ph})")
+    # NX-178: AMBELE capete trec prin `ro_unaccent` (033). `search_tsv` e deja construit peste text
+    # normalizat, deci aici normalizăm doar interogarea; trgm-ul compară expresii normalizate, pe
+    # indexul dedicat. Fără asta, „sampon" nu găsea niciun „șampon" — zero rezultate, nu relevanță
+    # slabă.
+    conds.append(
+        f"(p.search_tsv @@ websearch_to_tsquery('simple', ro_unaccent({q_ph}))"
+        f" or ro_unaccent(p.name) % ro_unaccent({q_ph}))"
+    )
     if category:
         conds.append(_category_clause(category, placeholder))  # NX-167 (A): match pe arbore
     if brand:
-        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+        # NX-178: și brandul se caută fără diacritice („petala" → „Petala", „loreal" → „L'Oréal")
+        conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
@@ -383,8 +423,8 @@ async def search_products_lexical(
 
     if sort_mode == "relevance":
         rank = (
-            f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', {q_ph}))"
-            f" + similarity(p.name, {q_ph})"
+            f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({q_ph})))"
+            f" + similarity(ro_unaccent(p.name), ro_unaccent({q_ph}))"
         )
         order = f" order by ({rank}) desc, p.id"
     else:
@@ -428,7 +468,7 @@ _DETAIL_SELECT = f"""
         p.review_count              as review_count,
         p.attributes                as attributes,
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
-        (case when p.sale_price is not null and p.sale_price < p.price then p.price end)::float8
+        (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
         prs.summary                 as review_summary,
         prs.top_pros                as top_pros,
@@ -438,14 +478,20 @@ _DETAIL_SELECT = f"""
         bdg.badges                  as badges,
         ing.names                   as ingredients_db,
         rvw.items                   as reviews_list,
+        faq.items                   as faqs,
+        -- NX-191: faptele de livrare (clasa + data de revenire). Promisiunea CONCRETĂ se
+        -- calculează în cod (src/commerce/delivery), nu în SQL: depinde de ceas și de config.
+        p.delivery_class            as delivery_class,
+        p.restock_date              as restock_date,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
     left join product_review_summaries prs on prs.product_id = p.id
     left join lateral (
-        select min(coalesce(v.sale_price, v.price)) as price
+        select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
+                         and v.sale_price < v.price then v.sale_price else v.price end) as price
         from product_variants v
-        where v.product_id = p.id
+        where v.product_id = p.id and v.business_id = p.business_id
     ) vp on true
     left join lateral (
         select pi.url from product_images pi
@@ -472,6 +518,19 @@ _DETAIL_SELECT = f"""
         join ingredients i on i.id = pi.ingredient_id
         where pi.product_id = p.id and pi.is_key
     ) ing on true
+    -- NX-194: FAQ per produs (6), citit la DETALIU (nu intră în căutare — vezi migrarea 032).
+    -- Tenant pe business_id (FK compus), limbă explicită (P11).
+    left join lateral (
+        select json_agg(
+                   json_build_object('question', f.question, 'answer', f.answer)
+                   order by f.position
+               ) as items
+        from (
+            select question, answer, position from product_faqs
+            where business_id = p.business_id and product_id = p.id and locale = 'ro'
+            order by position limit 6
+        ) f
+    ) faq on true
     -- NX-169: consumă recenziile INDIVIDUALE (168e-2) — top 2 după rating, corelate pe tenant.
     left join lateral (
         select json_agg(
@@ -518,6 +577,39 @@ async def get_products_by_ids(
         business_id,
         product_ids[:limit],
         limit,
+    )
+    return [_row_to_product(r) for r in rows]
+
+
+async def get_substitutes(
+    conn: asyncpg.Connection,
+    business_id: str,
+    product_id: str,
+    *,
+    limit: int = 2,
+) -> list[dict[str, Any]]:
+    """NX-195: alternativele PE STOC pentru un produs epuizat, din `product_relations`
+    (kind='substitute', NX-171b).
+
+    Cele 222 de relații de substitut existau de la 171b și NU erau citite de nimeni — „nu mai
+    avem" era răspunsul final, deși alternativa era în DB. Filtrăm explicit ce nu ajută:
+    produsul-ancoră, produsele inactive/nepublicate și cele care sunt și ele epuizate (un
+    substitut epuizat nu e un substitut).
+
+    `business_id = $1` pe AMBELE capete (P7; FK-ul compus din 027 face cross-tenant imposibil
+    structural, dar predicatul rămâne mecanismul primar)."""
+    cs = _content_status_pred()
+    rows = await conn.fetch(
+        _DETAIL_SELECT
+        + " join product_relations r on r.related_id = p.id and r.business_id = p.business_id"
+        + " where p.business_id = $1 and r.product_id = $2::uuid and r.kind = 'substitute'"
+        + " and p.status = 'active' and p.availability <> 'out_of_stock'"
+        + (f" and {cs}" if cs else "")
+        + " order by r.position asc, p.id"
+        + " limit $3",
+        business_id,
+        product_id,
+        min(limit, 3),
     )
     return [_row_to_product(r) for r in rows]
 
@@ -805,7 +897,8 @@ async def search_products_semantic(
     if brand:
         # Filtru DUR pe brand (la fel ca SQL-only): un brand cerut care nu există în catalog →
         # zero rezultate, NU produse semantic-apropiate de la alt brand (bug-ul „avem … Chanel").
-        conds.append(f"b.name ilike {placeholder(f'%{brand}%')}")
+        # NX-178: și brandul se caută fără diacritice („petala" → „Petala", „loreal" → „L'Oréal")
+        conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:

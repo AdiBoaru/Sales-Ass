@@ -22,6 +22,7 @@ import asyncio
 import hashlib
 import json
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -29,12 +30,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import pdp_content  # noqa: E402 — NX-168e-2 graf PDP derivat
+from scripts import authored_content, faq_content, pdp_content  # noqa: E402 — PDP + FAQ + conținut
 from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbore
     _gtin_valid,
     build_roots,
     evaluate,
 )
+from src.worker.text_scrub import has_medical_claim  # noqa: E402 — poarta de claim la ingestion
 
 # NB: importul DB (`src.db.connection`) + politica asyncio Windows sunt LAZY (în `main()` /
 # `__main__`) ca importul acestui modul — ex. din teste, pt `gate_violations` — să NU atingă DB
@@ -43,6 +45,14 @@ from scripts.audit_catalog_v2 import (  # noqa: E402 — pre-flight gate + arbor
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 STORE_BASE = "https://shop.sole-demo.ro/p/"
 DATA = ROOT / "db" / "seed" / "catalog_v2.json"
+
+# NX-191: sub acest prag, availability devine `low_stock` — „au mai rămas 3 bucăți" e o pârghie de
+# urgență ONESTĂ (spune un fapt), dar are nevoie de o stare distinctă, nu doar de un număr.
+LOW_STOCK_THRESHOLD = 5
+
+#: NX-197: câte produse pe tranzacție. Vezi comentariul din bucla de seed — o singură tranzacție
+#: pentru tot catalogul depășește limita poolerului odată ce fișele au conținut real.
+COMMIT_EVERY = 25
 
 # Placeholder-e consistente pe categorie (runtime W1 citește prima poză). Culoare de fundal per
 # RAMURĂ top-level → cardurile arată coerent vizual pe categorie. placehold.co = serviciu care
@@ -242,22 +252,90 @@ async def _upsert_category(conn, slug: str, name: str, parent_slug: str | None) 
     )
 
 
+#: secțiuni retrogradate la voice='brand' pentru că fac un claim medical (raportate la final)
+_DOWNGRADED_SECTIONS: list[tuple[str, str]] = []
+#: FAQ-uri respinse la ingestion (claim medical) — NU se scriu în DB, se raportează
+_REJECTED_FAQS: list[tuple[str, str]] = []
+#: fișa autorată per slug (compusă o dată în `_upsert_product`, refolosită la secțiuni)
+_AUTHORED: dict[str, dict] = {}
+#: slug produs → numele pașilor următori din rutină (pentru FAQ „Cu ce se combină?")
+_ROUTINE_NEXT: dict[str, list[str]] = {}
+
+
+def _section_voice(sec: dict, slug: str = "") -> str:
+    """NX-191 — PROVENIENȚA textului, decisă la INGESTION, nu la runtime.
+
+    `voice='assistant'` = botul poate afirma direct blocul. Deci verificarea de claim medical
+    (P0-safety, stagiul 8) se mută AICI: un text care ar fi tăiat de validator în conversație
+    n-are ce căuta ca afirmație proprie. Retrogradat la `brand` (rămâne afișabil, dar atribuit
+    producătorului) în loc să fie aruncat — informația nu se pierde, responsabilitatea se mută.
+
+    Ex. real din catalogul demo: „Tratează imperfecțiunile…" lângă „ten cu tendință acneică" =
+    verb terapeutic + afecțiune. Corect ca text de producător, interzis ca afirmație a botului.
+    """
+    if sec.get("voice"):
+        return str(sec["voice"])
+    if has_medical_claim(sec.get("body")):
+        _DOWNGRADED_SECTIONS.append((slug, sec.get("kind", "?")))
+        return "brand"
+    return "assistant"
+
+
+def _commerce_dates(p: dict, today: date) -> dict:
+    """NX-191: offset-urile RELATIVE din catalog (`saleWindow`, `restockInDays`) → date reale, la
+    momentul seed-ului. Datele absolute în fișier ar expira: peste o lună demo-ul ar arăta un
+    catalog fără nicio promoție activă și cu reaprovizionări în trecut."""
+    out: dict = {"sale_start": None, "sale_end": None, "restock_date": None}
+    win = p.get("saleWindow") or {}
+    if p.get("salePrice") and isinstance(win.get("endsInDays"), int):
+        out["sale_start"] = today + timedelta(days=int(win.get("startsInDays", 0)))
+        out["sale_end"] = today + timedelta(days=int(win["endsInDays"]))
+    if isinstance(p.get("restockInDays"), int):
+        out["restock_date"] = today + timedelta(days=int(p["restockInDays"]))
+    return out
+
+
 async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) -> str:
     variants = p.get("variants") or []
-    # produse fără variante: stoc default (100) ca să fie in_stock; altfel suma variantelor
-    stock_total = sum(int(v.get("stock", 0)) for v in variants) or 100
-    availability = "in_stock" if stock_total > 0 else "out_of_stock"
+    # Stocul e AUTORAT (NX-191): `stock` pe produs e sursa de adevăr; fallback pe suma variantelor,
+    # apoi pe 100 (produsele vechi, fără strat comercial). `low_stock` e o valoare distinctă de
+    # `in_stock` — „au mai rămas 3 bucăți" e o pârghie de urgență ONESTĂ, deci trebuie să existe
+    # în availability, nu doar în stock_total.
+    authored = p.get("stock")
+    if isinstance(authored, int):
+        stock_total = authored
+    else:
+        stock_total = sum(int(v.get("stock", 0)) for v in variants) or 100
+    if stock_total <= 0:
+        availability = "out_of_stock"
+    elif stock_total <= LOW_STOCK_THRESHOLD:
+        availability = "low_stock"
+    else:
+        availability = "in_stock"
     url = STORE_BASE + p["slug"]
     fp = "V2-" + hashlib.sha256(p["slug"].encode()).hexdigest()[:24]
-    attrs = json.dumps(p.get("attributes") or {}, ensure_ascii=False)
+    # NX-196: fișa autorată (short + description lungă + secțiuni + specs). Compunerea e
+    # deterministă și trece poarta de claim la INGESTION; `_AUTHORED` o memorează per produs ca
+    # secțiunile de mai jos s-o refolosească fără recalculare.
+    authored = authored_content.compose(p, has_medical_claim)
+    if authored:
+        _AUTHORED[p["slug"]] = authored
+
+    raw_attrs = dict(p.get("attributes") or {})
+    if authored and authored["specs"]:
+        # `specs` = bloc de AFIȘARE (key-value), separat de faptele canonice de deasupra
+        raw_attrs["specs"] = {**(raw_attrs.get("specs") or {}), **authored["specs"]}
+    attrs = json.dumps(raw_attrs, ensure_ascii=False)
     cols = dict(
         brand_id=brand_id,
         primary_category_id=cat_id,
         external_id="V2-" + p["slug"],
         source_fingerprint=fp,
         name=p["name"],
-        short_description=p.get("shortDescription"),
-        description=p.get("description") or p.get("shortDescription"),
+        short_description=(authored or {}).get("shortDescription") or p.get("shortDescription"),
+        description=(authored or {}).get("description")
+        or p.get("description")
+        or p.get("shortDescription"),
         ai_summary=p.get("ai_summary") or p.get("shortDescription"),
         currency=p.get("currency", "RON"),
         price=p["price"],
@@ -269,6 +347,9 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         status=p.get("status", "active"),
         attributes=attrs,
         product_url=url,
+        # NX-191 — strat comercial. delivery_class NULL = „ca magazinul" (fără promisiune proprie).
+        delivery_class=p.get("deliveryClass"),
+        **_commerce_dates(p, date.today()),
     )
     row = await conn.fetchrow(
         "select id from products where business_id=$1 and slug=$2", DEMO_BIZ, p["slug"]
@@ -375,19 +456,48 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         )
 
     # === NX-168e-2: graf PDP derivat determinist (sections/ingredients/badges/reviews) ===
-    # Toate idempotente (șterge + reinserează pe cheile stabile). Tabele scoped prin FK products
-    # (sections/product_ingredients/product_badges NU au business_id); reviews ARE business_id.
+    # Toate idempotente (șterge + reinserează pe cheile stabile). product_ingredients/product_badges
+    # rămân scoped prin FK products; `product_sections` ARE business_id de la migrarea 032 (P7).
     await conn.execute("delete from product_sections where product_id=$1", pid)
-    for pos, sec in enumerate(pdp_content.sections(p)):
+    sections = (_AUTHORED.get(p["slug"]) or {}).get("sections") or pdp_content.sections(p)
+    for pos, sec in enumerate(sections):
         await conn.execute(
-            "insert into product_sections (product_id, kind, title, body, position) "
-            "values ($1,$2,$3,$4,$5)",
+            "insert into product_sections "
+            "(business_id, product_id, kind, title, body, position, locale, voice) "
+            "values ($1,$2,$3,$4,$5,$6,'ro',$7)",
+            DEMO_BIZ,
             pid,
             sec["kind"],
             sec["title"],
             sec["body"],
             pos,
+            _section_voice(sec, p["slug"]),
         )
+    # NX-194: FAQ per produs (6), derivat din fapte. Idempotent: șterge + reinserează.
+    # Poarta de claim rulează AICI (ingestion), nu la runtime: un răspuns pe care validatorul
+    # l-ar tăia în conversație n-are ce căuta în DB ca afirmație a botului.
+    await conn.execute(
+        "delete from product_faqs where business_id=$1 and product_id=$2", DEMO_BIZ, pid
+    )
+    for faq in faq_content.build_faqs(p, root, _ROUTINE_NEXT.get(p["slug"])):
+        if has_medical_claim(faq["answer"]):
+            _REJECTED_FAQS.append((p["slug"], faq["question"]))
+            continue
+        await conn.execute(
+            "insert into product_faqs "
+            "(business_id, product_id, locale, question, answer, position, source, derived) "
+            "values ($1,$2,'ro',$3,$4,$5,$6,$7) "
+            "on conflict (business_id, product_id, locale, question) do update set "
+            "answer=excluded.answer, position=excluded.position, source=excluded.source",
+            DEMO_BIZ,
+            pid,
+            faq["question"],
+            faq["answer"],
+            faq["position"],
+            faq["source"],
+            faq["derived"],
+        )
+
     # ingrediente normalizate (upsert pe (business_id, slug)) + legături is_key
     await conn.execute("delete from product_ingredients where product_id=$1", pid)
     for pos, ing in enumerate(pdp_content.ingredient_list(p)):
@@ -408,7 +518,9 @@ async def _upsert_product(conn, p: dict, brand_id: str, cat_id: str, root: str) 
         )
     # badge-uri de trust (derivate din atribute reale)
     await conn.execute("delete from product_badges where product_id=$1", pid)
-    for label in pdp_content.badges(p):
+    # NX-197: badge-urile AUTORATE (derivate din fapte în enrich_catalog_extras) au prioritate;
+    # fallback pe derivarea din pdp_content pentru produsele fără listă proprie.
+    for label in p.get("badges") or pdp_content.badges(p):
         await conn.execute(
             "insert into product_badges (product_id, label) values ($1,$2)", pid, label
         )
@@ -456,7 +568,9 @@ async def main() -> int:
 
     pool = await get_pool()
     async with admin_conn(pool) as conn:
-        async with conn.transaction():
+        tx = conn.transaction()
+        await tx.start()
+        try:
             v2_slugs = [p["slug"] for p in data["products"]]
             if archive_old:
                 n = await conn.fetchval(
@@ -475,7 +589,16 @@ async def main() -> int:
                 await _upsert_category(conn, c["slug"], c["name"], c.get("parentSlug"))
             roots = build_roots(data["categories"])  # slug → root-branch (pt culoarea placeholder)
             n_var = 0
-            for p in data["products"]:
+            # harta „pasul următor din rutină" (din aceleași relații derivate deterministic) —
+            # alimentează FAQ-ul „Cu ce se combină?" fără un query în plus per produs
+            by_slug = {q["slug"]: q for q in data["products"]}
+            for rel in derive_relations(data["products"]):
+                if rel["kind"] == "routine_next":
+                    tgt = by_slug.get(rel["related_slug"])
+                    if tgt:
+                        _ROUTINE_NEXT.setdefault(rel["product_slug"], []).append(tgt["name"])
+
+            for i, p in enumerate(data["products"], start=1):
                 cat_id = await conn.fetchval(
                     "select id from categories where business_id=$1 and slug=$2",
                     DEMO_BIZ,
@@ -485,6 +608,17 @@ async def main() -> int:
                 await _upsert_product(conn, p, brand_ids[p["brandSlug"]], cat_id, root)
                 n_var += len(p.get("variants") or [])
                 print(f"  seedat: {p['name']} ({len(p.get('variants') or [])} variante)")
+                # NX-197: punct de commit intermediar. Cu fișe de ~2.000 de caractere × 300 de
+                # produse, o singură tranzacție depășește limita poolerului Supabase și conexiunea
+                # e închisă la mijloc (l-am prins în practică la ~250 de produse). Compromisul e
+                # asumat: poarta de audit rulează ÎNAINTE de orice scriere, iar seed-ul e idempotent
+                # pe slug — deci o întrerupere lasă un catalog parțial ACTUALIZAT, nu unul corupt,
+                # iar re-rularea îl duce la capăt.
+                if not dry and i % COMMIT_EVERY == 0 and i < len(data["products"]):
+                    await tx.commit()
+                    tx = conn.transaction()
+                    await tx.start()
+                    print(f"  — commit intermediar ({i}/{len(data['products'])})", flush=True)
 
             # NX-171b: relații explicite (rutină/complement/substitut) derivate DETERMINIST din
             # faptele catalogului. Sursă de adevăr = JSON → șterge + reinserează (idempotent).
@@ -518,8 +652,25 @@ async def main() -> int:
                 f"{len(data['brands'])} branduri, {len(data['categories'])} categorii, "
                 f"{n_rel} relații."
             )
+            # NX-191: retrogradările NU sunt tăcute — un text derivat care face claim medical e un
+            # semnal despre DATE (formulare de reparat), nu doar o etichetă de pus.
+            if _REJECTED_FAQS:
+                print(f"  ⚠ {len(_REJECTED_FAQS)} FAQ respinse la ingestion (claim medical):")
+                for slug, q in _REJECTED_FAQS[:5]:
+                    print(f"      {slug}: {q}")
+            if _DOWNGRADED_SECTIONS:
+                print(
+                    f"  ⚠ {len(_DOWNGRADED_SECTIONS)} secțiuni → voice='brand' (claim medical, "
+                    f"nu pot fi afirmate de bot):"
+                )
+                for slug, kind in _DOWNGRADED_SECTIONS[:10]:
+                    print(f"      {slug} [{kind}]")
             if dry:
                 raise RuntimeError("--dry-run → rollback (nimic scris)")
+            await tx.commit()
+        except BaseException:
+            await tx.rollback()
+            raise
     await close_pool()
     return 0
 
