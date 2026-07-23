@@ -70,9 +70,10 @@ critic; `ruff check` + `ruff format --check` + `pytest`; validare pe flux end-to
   scrie nicăieri) și **`SafeQuerySpec`** (canonical constraints + metadate normalizate, FĂRĂ
   raw_query, fără PII) — singurul care ajunge în telemetrie sau persistență. Raw query-ul poate
   conține nume, telefon, adresă, date medicale.
-- **D7. Hard constraints inviolabile; UNKNOWN ≠ NO_MATCH.** Agentul poate reformula query-ul
+- **D7. Hard constraints inviolabile; UNKNOWN ≠ MISMATCH.** Agentul poate reformula query-ul
   semantic dar nu poate relaxa hard constraints (buget, negații, brand exclus, safety).
-  Constraint coverage are 3 stări: MATCH / NO_MATCH / UNKNOWN — UNKNOWN înseamnă „nu știm",
+  Constraint coverage are 3 stări: MATCH / MISMATCH / UNKNOWN (enum canonic din NX-187:
+  MISMATCH = datele CONTRAZIC; un singur vocabular în tot sistemul) — UNKNOWN înseamnă „nu știm",
   nu „nu corespunde", și declanșează clarificare sau disclosure, nu excludere.
 - **D8. Evidence ID e necesar, nu suficient.** Fapte structurale (preț/stoc/link/variantă/
   ingredient/free_of) → validate determinist. Afirmații semantice („mai potrivit pentru...")
@@ -135,7 +136,7 @@ Două carduri nu pot rămâne simultan implementabile pe aceleași fișiere și 
 | Card existent | Dispoziție | Motiv / relație |
 |---|---|---|
 | NX-185 (QuerySpec shadow + merger owner-unic) | **REUSED în shadow**; ownership-ul ȚINTĂ se mută la agentul principal (D11) prin NX-210 | Contractul + mergerul pur + telemetria `query_spec_disagreement` rămân. NX-208 îl EXTINDE cu D6 (Runtime/Safe + 3 reprezentări). Extracția din triaj rămâne shadow, nu devine sursă finală. |
-| NX-186 (typed facet registry + coverage report) | **REUSED** — **dependență HARD a NX-209** | Tri-state MATCH/NO_MATCH/UNKNOWN (D7) e imposibil fără contractul de tipuri/operatori/`missing_value` + pragurile de coverage. NX-209 **nu reimplementează** registrul: îl consumă. |
+| NX-186 (typed facet registry + coverage report) | **REUSED** — **dependență HARD a NX-209** | Tri-state MATCH/MISMATCH/UNKNOWN (D7) e imposibil fără contractul de tipuri/operatori/`missing_value` + pragurile de coverage. NX-209 **nu reimplementează** registrul: îl consumă. |
 | NX-187 (Match Gate shadow + recall vs scan exhaustiv) | **REUSED** — dependență HARD consumată de NX-209 | NX-187 se implementează (evaluatorul MATCH/MISMATCH/UNKNOWN per produs×constrângere, `MatchSet` disjunct, recall vs scan exhaustiv); NX-209 îl CONSUMĂ ca treaptă internă a `search_entities` — nu îl reimplementează. Verdictul per produs×constrângere se PĂSTREAZĂ în contractul de output NX-209 (`candidates[].constraint_results`). |
 | NX-188 (Match Gate + QuerySpec ENFORCEMENT + alternatives UX) | **FROZEN** până la GO-ul de la NX-210 | Enforcement pe arhitectura veche ar fi muncă aruncată dacă gate-ul mare schimbă ownership-ul QuerySpec. Se redeschide după F7, aliniat la agentul unic. |
 | NX-189 (typed facets în SQL tri-state) | **FROZEN** până la GO-ul de la NX-210, apoi **REUSED** ca dependență per-fațetă a enforcement-ului | Ordinea per fațetă rămâne cea din 189: shadow/recall → tri-state shadow → paritate → enforce. |
@@ -157,7 +158,7 @@ cere, cardul nou NU pornește (dependență hard) — nu se implementează o a d
 | 3 | Completarea + auditarea catalogului (gates de completitudine, nu lungime) | NX-206 | 0 produse publicate cu câmpuri obligatorii lipsă / contradicții / claims fără sursă |
 | 4 | `search_document_v1` + `fts_document` ponderat + `evidence_chunks` + `card_blurb`, în SHADOW, embeddings versionate; plan migrare `ai_summary` | NX-207 | Benchmark vechi-vs-nou pe retrieval set; switch doar dacă cifrele cresc |
 | 5 | QuerySpec (raw+normalized+facets) în shadow, reconciliere NX-185; pipeline vocabular viu privacy-safe | NX-208 | Dezacorduri shadow analizate; extracția țintă stabilită pe agent |
-| 6 | Search tool „gras" (`search_entities`): exact+FTS+dual embedding+filtre+RRF+penalizări+rerank adaptiv+evidence hydration+constraint coverage; selecție embeddings×reranker pe benchmark | NX-209 | Recall@20 ≥90%, nDCG@6 ≥0,85, top-6 relevant ≥90%, 0 încălcări hard — măsurate pe **holdout-ul de retrieval** (nu pe setul de tuning) + **lanțul de validare LIVE din NX-172** (audit → seed → re-embed → retrieval real → sim) verde pe pipeline-ul nou |
+| 6 | Search tool „gras" (`search_entities`): exact+FTS+dual embedding+filtre+RRF+penalizări+rerank adaptiv+evidence hydration+constraint coverage; selecție embeddings×reranker pe benchmark | NX-209 | Recall@20 ≥90%, nDCG@6 ≥0,85, top-6 relevant ≥90%, 0 încălcări hard — măsurate pe **felia de holdout H2, single-use** (NX-207 folosește H1, NX-210 folosește H3 — o felie deschisă = arsă, anti-contaminare) + **lanțul de validare LIVE din NX-172** (audit → seed → re-embed → retrieval real → sim) verde pe pipeline-ul nou |
 | 7 | Prototip agent unic (+ **AnswerPlanV0** experimental, offline) + evaluare OARBĂ vs. sistemul actual | NX-210 | **GATE-UL MARE:** câștig clar pe query-uri grele, 0 regresii facts, cost + latență în **SLO-ul provizoriu din NX-201** (NU în țintele NX-213 — acela e card ulterior) — altfel STOP |
 | 8 | AnswerPlan + validator determinist extins + critic semantic selectiv | NX-211 | Preț/link/stoc inventate = 0; claims grounded ≥99%; hard violations = 0 |
 | 9 | Needs profile + clarificare deterministă + ancorare + persona | NX-212 | Rubrica need-alignment crește; response-rate la clarificări crește |
@@ -178,7 +179,7 @@ retrieval-ul + evidence să fie măsurabil mai bune (gate F6).
 - Nu punem toate informațiile într-un singur embedding; negativele nu intră în documentul pozitiv.
 - Nu eliminăm raw query-ul după canonicalizare.
 - Nu introducem expresii live direct în concern_map / routing.
-- Nu tratăm UNKNOWN ca NO_MATCH.
+- Nu tratăm UNKNOWN ca MISMATCH.
 - Nu permitem agentului să relaxeze hard constraints.
 - Nu facem fine-tuning fără date + problemă demonstrată prin evals.
 - Nu declarăm scoruri de calitate fără benchmark (nicio cifră „9/10" fără măsurătoare).
