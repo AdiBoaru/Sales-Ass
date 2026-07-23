@@ -63,12 +63,14 @@ def test_bucket_and_role_values_are_valid():
 
 def test_locale_regression_is_frozen_not_in_ro_quality():
     """Decizia ro-only (2026-07-23): en/hu sunt DOAR locale-regression, niciodată ro-quality.
-    Guard împotriva adăugării accidentale de conținut en/hu în setul de calitate."""
+    Guard împotriva adăugării accidentale de conținut en/hu în setul de calitate — pe AMBELE
+    colecții (cases + conversations au câmp `language`). Un dialog en/hu care primea ro-quality
+    trecea tăcut înainte (gap prins de Codex pe PR #242)."""
     cls = _classification()
-    cases = json.loads((GOLDEN / "cases.json").read_text(encoding="utf-8"))
-    lang = {c["id"]: c.get("language", "ro") for c in cases}
-    for cid, meta in cls["cases"].items():
-        if lang.get(cid) in ("en", "hu"):
-            assert meta["role"] == "locale-regression", (
-                f"{cid} ({lang[cid]}) are role={meta['role']!r} — en/hu = doar locale-regression"
-            )
+    for fixture_file, scope in (("cases.json", "cases"), ("conversations.json", "conversations")):
+        items = json.loads((GOLDEN / fixture_file).read_text(encoding="utf-8"))
+        lang = {c["id"]: c.get("language", "ro") for c in items}
+        for cid, meta in cls[scope].items():
+            if lang.get(cid) in ("en", "hu"):
+                msg = f"{cid} ({lang[cid]}, {scope}) role={meta['role']!r}; en/hu=locale-regression"
+                assert meta["role"] == "locale-regression", msg

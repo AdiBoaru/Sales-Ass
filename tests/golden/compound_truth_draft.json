@@ -1,0 +1,430 @@
+{
+  "_meta": {
+    "schema": "docs/NX-202-COMPOUND-TRUTH-SCHEMA.md",
+    "status": "DRAFT — Claude a propus constrângerile; câmpurile marcate TODO-ADI cer etichetarea adevărului de business",
+    "todo_adi": ["expected_products", "forbidden_products", "required_disclosures (text)", "correct_answer_sketch", "validare hard-vs-soft"],
+    "fixture_note": "search_products temporar; se rescrie pe search_entities la NX-209",
+    "acoperire_dimensiuni": "multi-constraint(3-4) · imposibilitate · alternativă-tradeoff · free_of · buget · use-case · compare(≥2 diferențe)"
+  },
+  "compound": [
+    {
+      "id": "compound-fond-mat-gras-buget-fara-parfum",
+      "language": "ro",
+      "input": "vreau un fond de ten mat, pentru ten gras, sub 100 de lei și fără parfum",
+      "dimensions": ["multi-constraint", "budget", "free_of"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "category", "op": "eq", "value": "fond-de-ten"},
+          {"facet": "price", "op": "lte", "value": 100, "unit": "RON"},
+          {"facet": "fragrance_free", "op": "eq", "value": true}
+        ],
+        "soft_preferences": [
+          {"facet": "finish", "value": "matte", "weight": "high"},
+          {"facet": "skin_types", "value": "oily", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "dacă `fragrance_free` e UNKNOWN pentru un candidat, îl marchează ca alternativă, nu exact ('nu pot confirma că e fără parfum')",
+        "on_no_exact_match": "arată cele mai apropiate cu trade-off explicit (ex. mat+gras dar peste buget SAU în buget dar finish satinat), nu tăcere",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-antilucire-rezistent-caldura",
+      "language": "ro",
+      "input": "ceva să nu mă lucesc peste zi, să reziste și pe căldură, sub 120",
+      "dimensions": ["multi-constraint", "use-case", "budget", "colocvial"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "price", "op": "lte", "value": 120, "unit": "RON"}
+        ],
+        "soft_preferences": [
+          {"facet": "finish", "value": "matte", "weight": "high"},
+          {"facet": "concern", "value": "oily_shine_control", "weight": "high"},
+          {"facet": "wear_time", "op": "gte", "value": 8, "unit": "h", "weight": "medium"},
+          {"facet": "use_case", "value": "hot_weather", "weight": "medium"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "wear_time/heat-resistance des UNKNOWN în catalog → nu afirma rezistența dacă nu e în date",
+        "on_no_exact_match": "propune matifiant în buget + explică ce nu putem garanta (rezistența la căldură)",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-crema-sensibil-fara-alcool-parfum-50ml",
+      "language": "ro",
+      "input": "o cremă hidratantă pentru ten sensibil, fără alcool și fără parfum, la 50 ml",
+      "dimensions": ["multi-constraint", "free_of"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "category", "op": "eq", "value": "crema-hidratanta"},
+          {"facet": "fragrance_free", "op": "eq", "value": true},
+          {"facet": "alcohol_free", "op": "eq", "value": true},
+          {"facet": "net_content", "op": "eq", "value": 50, "unit": "ml"}
+        ],
+        "soft_preferences": [
+          {"facet": "skin_types", "value": "sensitive", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "dacă gramajul exact 50ml nu e confirmat, oferă variantele reale de gramaj, nu inventa",
+        "on_no_exact_match": "relaxează întâi gramajul (soft de facto) cu disclosure, păstrează free_of dur",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-vitc-ten-reactiv-buget",
+      "language": "ro",
+      "input": "ser cu vitamina C dar să nu-mi irite tenul reactiv, sub 150",
+      "dimensions": ["multi-constraint", "budget", "free_of"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "key_ingredient", "op": "contains", "value": "vitamina_c"},
+          {"facet": "price", "op": "lte", "value": 150, "unit": "RON"}
+        ],
+        "soft_preferences": [
+          {"facet": "skin_types", "value": "sensitive", "weight": "high"},
+          {"facet": "concern", "value": "reactive_low_irritation", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "'potrivit ten reactiv' e des inferat, nu confirmat → prezintă ca soft, nu ca garanție",
+        "on_no_exact_match": "propune concentrație mai blândă / derivat de vit C, cu explicație",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-spf-fata-gras-noncomedogenic",
+      "language": "ro",
+      "input": "protecție solară de față pentru ten gras, să nu lase film gras și non-comedogenică",
+      "dimensions": ["multi-constraint", "use-case", "free_of"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "category", "op": "eq", "value": "protectie-solara"},
+          {"facet": "use_case", "op": "eq", "value": "face"},
+          {"facet": "non_comedogenic", "op": "eq", "value": true}
+        ],
+        "soft_preferences": [
+          {"facet": "skin_types", "value": "oily", "weight": "high"},
+          {"facet": "finish", "value": "non_greasy", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "non_comedogenic UNKNOWN → alternativă, nu excludere; nu afirma dacă nu e în date",
+        "on_no_exact_match": "SPF de față pentru ten gras + notă că 'non-comedogenic' nu e confirmat la unele",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-machiaj-nunta-ten-mixt-buget",
+      "language": "ro",
+      "input": "machiaj de bază pentru nuntă, să țină toată ziua, am ten mixt, buget 200",
+      "dimensions": ["multi-constraint", "use-case", "budget"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "price", "op": "lte", "value": 200, "unit": "RON"}
+        ],
+        "soft_preferences": [
+          {"facet": "use_case", "value": "event_longwear", "weight": "high"},
+          {"facet": "wear_time", "op": "gte", "value": 10, "unit": "h", "weight": "high"},
+          {"facet": "skin_types", "value": "combination", "weight": "medium"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "bugetul 200 e pt UN produs sau set? dacă ambiguu → o singură clarificare",
+        "on_no_exact_match": "propune combinație (fond + pudră fixare) în buget, cu trade-off",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-imposibil-premium-ieftin",
+      "language": "ro",
+      "input": "vreau un fond de ten de brand premium, mat, dar sub 40 de lei",
+      "dimensions": ["multi-constraint", "impossibility", "alternative-tradeoff", "budget"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "category", "op": "eq", "value": "fond-de-ten"},
+          {"facet": "price", "op": "lte", "value": 40, "unit": "RON"}
+        ],
+        "soft_preferences": [
+          {"facet": "tier", "value": "premium", "weight": "high"},
+          {"facet": "finish", "value": "matte", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": ["probabil imposibil: premium + sub 40 lei rar coexistă → spune-o onest"],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "",
+        "on_no_exact_match": "OBLIGATORIU alternativă cu trade-off: 'premium peste buget' SAU 'în buget, dar nu premium' — client alege",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-imposibil-retinol-sarcina",
+      "language": "ro",
+      "input": "vreau un ser cu retinol pentru riduri, sunt însărcinată",
+      "dimensions": ["impossibility", "safety", "disclosure"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "safety", "op": "contraindicated", "value": "retinoids_in_pregnancy"}
+        ],
+        "soft_preferences": [],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": ["retinoizii NU sunt recomandați în sarcină → referral safety, nu recomandare de retinol"],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock", "recomandare_retinol_in_sarcina"],
+        "on_unknown": "",
+        "on_no_exact_match": "NU recomanda retinol; oferă alternativă sigură în sarcină (ex. vit C blândă/hidratare) + sfat să consulte medicul",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; gate-ul de safety (NX-173) e sursa; rescrie la NX-209"
+    },
+    {
+      "id": "compound-over-constrained-fara-tot-ieftin",
+      "language": "ro",
+      "input": "o cremă complet fără conservanți, fără parfum, fără alcool, pentru ten foarte sensibil, sub 30 de lei",
+      "dimensions": ["multi-constraint", "impossibility", "free_of", "budget", "alternative-tradeoff"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "preservative_free", "op": "eq", "value": true},
+          {"facet": "fragrance_free", "op": "eq", "value": true},
+          {"facet": "alcohol_free", "op": "eq", "value": true},
+          {"facet": "price", "op": "lte", "value": 30, "unit": "RON"}
+        ],
+        "soft_preferences": [
+          {"facet": "skin_types", "value": "very_sensitive", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": ["4 constrângeri dure + buget mic = probabil zero exact → onestitate"],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "preservative_free e des UNKNOWN → nu afirma; cere dacă e negociabil",
+        "on_no_exact_match": "spune ce constrângere e cel mai greu de satisfăcut + oferă cel mai apropiat, cu trade-off",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-cel-mai-ieftin-niacinamida-calitate",
+      "language": "ro",
+      "input": "cel mai ieftin ser cu niacinamidă, dar să fie de calitate bună",
+      "dimensions": ["alternative-tradeoff", "budget"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "key_ingredient", "op": "contains", "value": "niacinamida"}
+        ],
+        "soft_preferences": [
+          {"facet": "price", "value": "ascending", "weight": "high"},
+          {"facet": "rating", "op": "gte", "value": 4.0, "weight": "medium"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "'calitate bună' = proxy pe rating/review, nu claim absolut",
+        "on_no_exact_match": "cel mai ieftin cu rating decent + explică trade-off preț↔rating dacă cel mai ieftin are rating slab",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-alternativa-la-scump",
+      "language": "ro",
+      "input": "vreau ceva ca [produs scump din catalog] dar mai accesibil ca preț",
+      "dimensions": ["alternative-tradeoff", "budget"],
+      "truth": {
+        "hard_constraints": [],
+        "soft_preferences": [
+          {"facet": "similar_to_reference", "weight": "high"},
+          {"facet": "price", "value": "lower_than_reference", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock", "echivalent_identic"],
+        "on_unknown": "referința trebuie identificată exact (rezolvare produs) înainte de alternativă",
+        "on_no_exact_match": "alternativă apropiată + spune EXPLICIT ce diferă (nu pretinde echivalent identic)",
+        "correct_answer_sketch": "",
+        "adi_note": "înlocuiește [produs scump din catalog] cu un produs real la etichetare"
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-fara-parfum-rutina-fata",
+      "language": "ro",
+      "input": "vreau produse fără parfum pentru toată rutina de față",
+      "dimensions": ["free_of", "multi-product", "use-case"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "fragrance_free", "op": "eq", "value": true}
+        ],
+        "soft_preferences": [
+          {"facet": "routine_completeness", "value": "cleanse_treat_moisturize_protect", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "pt fiecare pas fără opțiune fără-parfum confirmată → spune-o, nu completa forțat",
+        "on_no_exact_match": "acoperă pașii cu opțiuni fără parfum; semnalează pașii unde nu ai",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-demachiant-fara-alcool-ochi-sensibili",
+      "language": "ro",
+      "input": "demachiant fără alcool pentru ochi sensibili",
+      "dimensions": ["free_of", "use-case"],
+      "truth": {
+        "hard_constraints": [
+          {"facet": "category", "op": "eq", "value": "demachiant"},
+          {"facet": "alcohol_free", "op": "eq", "value": true},
+          {"facet": "use_case", "op": "eq", "value": "eye_area"}
+        ],
+        "soft_preferences": [
+          {"facet": "skin_types", "value": "sensitive", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "'pentru ochi' UNKNOWN → alternativă demachiant blând, cu notă",
+        "on_no_exact_match": "demachiant blând fără alcool + notă că nu e etichetat specific pentru ochi",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-dupa-sport-nu-se-ia",
+      "language": "ro",
+      "input": "ceva pentru ten după sport, să nu se ia când transpir",
+      "dimensions": ["use-case", "multi-constraint", "colocvial"],
+      "truth": {
+        "hard_constraints": [],
+        "soft_preferences": [
+          {"facet": "use_case", "value": "post_sport_sweat", "weight": "high"},
+          {"facet": "concern", "value": "transfer_resistant", "weight": "high"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "clarifică întâi: îngrijire (post-sport) sau machiaj rezistent la transpirație? schimbă categoria",
+        "on_no_exact_match": "după clarificare, cel mai apropiat + trade-off",
+        "correct_answer_sketch": "",
+        "adi_note": "caz bun de clarificare: intenția e ambiguă (skincare vs makeup)"
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-birou-natural-ten-normal",
+      "language": "ro",
+      "input": "machiaj discret pentru birou, aspect natural, am ten normal",
+      "dimensions": ["use-case", "multi-constraint"],
+      "truth": {
+        "hard_constraints": [],
+        "soft_preferences": [
+          {"facet": "use_case", "value": "office_daily", "weight": "high"},
+          {"facet": "coverage", "value": "light_natural", "weight": "high"},
+          {"facet": "skin_types", "value": "normal", "weight": "low"}
+        ],
+        "expected_products": [], "forbidden_products": [],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock"],
+        "on_unknown": "",
+        "on_no_exact_match": "propune acoperire ușoară/naturală; dacă nimic 'natural' etichetat, cel mai apropiat cu notă",
+        "correct_answer_sketch": ""
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    }
+  ],
+  "compare": [
+    {
+      "id": "compare-doua-fonduri",
+      "language": "ro",
+      "input": "care e diferența între [fond A] și [fond B]?",
+      "dimensions": ["compare"],
+      "truth": {
+        "hard_constraints": [{"facet": "compare_set_size", "op": "eq", "value": 2}],
+        "soft_preferences": [],
+        "expected_products": [], "forbidden_products": [],
+        "required_differences_min": 2,
+        "difference_axes_expected": ["coverage", "finish", "price"],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock", "diferente_inventate"],
+        "on_unknown": "dacă o axă lipsește pt un produs, nu inventa diferența — compară doar axele cu date la ambele",
+        "on_no_exact_match": "dacă un produs numit nu există → disclosure, nu compara cu altceva pe tăcute",
+        "correct_answer_sketch": "",
+        "adi_note": "alege 2 fonduri reale care DIFERĂ pe ≥2 axe"
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compare-doua-seruri-vitc",
+      "language": "ro",
+      "input": "ce ser cu vitamina C să aleg dintre [X] și [Y]?",
+      "dimensions": ["compare"],
+      "truth": {
+        "hard_constraints": [{"facet": "compare_set_size", "op": "eq", "value": 2}],
+        "soft_preferences": [],
+        "expected_products": [], "forbidden_products": [],
+        "required_differences_min": 2,
+        "difference_axes_expected": ["concentration", "texture", "price", "skin_suitability"],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock", "diferente_inventate"],
+        "on_unknown": "concentrația des UNKNOWN → nu o inventa; compară pe ce e în date",
+        "on_no_exact_match": "produs numit inexistent → disclosure",
+        "correct_answer_sketch": "",
+        "adi_note": "alege 2 seruri vit C reale care diferă"
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compare-doua-creme-uscat",
+      "language": "ro",
+      "input": "crema hidratantă [X] sau [Y] pentru ten uscat?",
+      "dimensions": ["compare"],
+      "truth": {
+        "hard_constraints": [{"facet": "compare_set_size", "op": "eq", "value": 2}],
+        "soft_preferences": [{"facet": "skin_types", "value": "dry", "weight": "high"}],
+        "expected_products": [], "forbidden_products": [],
+        "required_differences_min": 2,
+        "difference_axes_expected": ["richness", "key_ingredients", "price"],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock", "diferente_inventate"],
+        "on_unknown": "compară doar axele cu date la ambele produse",
+        "on_no_exact_match": "produs numit inexistent → disclosure",
+        "correct_answer_sketch": "",
+        "adi_note": "alege 2 creme reale potrivite ten uscat, care diferă"
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compare-doua-spf",
+      "language": "ro",
+      "input": "care e diferența dintre SPF-ul [X] și [Y]?",
+      "dimensions": ["compare"],
+      "truth": {
+        "hard_constraints": [{"facet": "compare_set_size", "op": "eq", "value": 2}],
+        "soft_preferences": [],
+        "expected_products": [], "forbidden_products": [],
+        "required_differences_min": 2,
+        "difference_axes_expected": ["spf_value", "finish", "price", "use_case"],
+        "required_disclosures": [],
+        "forbidden_claims": ["medical", "invented_price", "invented_stock", "diferente_inventate"],
+        "on_unknown": "nu inventa valoarea SPF dacă nu e în date",
+        "on_no_exact_match": "produs numit inexistent → disclosure",
+        "correct_answer_sketch": "",
+        "adi_note": "alege 2 SPF-uri reale care diferă"
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    }
+  ]
+}
