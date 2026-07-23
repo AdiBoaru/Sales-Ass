@@ -21,6 +21,7 @@ from src.agent import usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.cache.canonical import canonicalize, classify_volatility
+from src.cache.version import cache_prompt_version
 from src.config import get_settings
 from src.db.provider import DbProvider
 from src.db.queries.analytics import insert_events
@@ -156,6 +157,9 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
         canonical, canonical_hash = canonicalize(body or "")
         if not canonical:
             return
+        # NX-216: scrie în namespace-ul versiunii de prompt, din ACEEAȘI sursă ca lookup-ul
+        # (cache_stage) → v1/vNext nu se suprascriu și nu se servesc încrucișat.
+        prompt_version = cache_prompt_version(ctx.business)
         embedding = (await llm.embed([canonical]))[0]  # LLM — FĂRĂ conn ținut
         async with db() as conn:  # WRITE scurt (upsert)
             async with conn.transaction():
@@ -170,14 +174,20 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
                     volatility_class=volatility,
                     embedding_model=settings.model_embed,
                     quality_score=1.0,
+                    prompt_version=prompt_version,
                     **kwargs,
                 )
         if volatility == "dynamic":
             ctx.emit("cache_write", volatility="dynamic", n_products=len(reply.products))
         else:
             ctx.emit("cache_write", volatility="static", ttl_days=settings.cache_ttl_static_days)
-    except Exception:  # noqa: BLE001 — write-back best-effort, turul a răspuns deja
+    except Exception as e:  # noqa: BLE001 — write-back best-effort, turul a răspuns deja
+        # NX-216: best-effort NU înseamnă invizibil. Fără event, acest `except` a ascuns luni de
+        # zile un cache complet blocat la scriere (ON CONFLICT vs index unic desincronizate) —
+        # turul răspundea normal, deci nimeni n-a observat. Un strat gratuit mort trebuie să fie
+        # ALERTABIL, nu doar logat: `cache_write_failed` e semnalul pe care se pune pragul.
         log.exception("cache write-back a eșuat (turul continuă)")
+        ctx.emit("cache_write_failed", error_type=type(e).__name__, volatility=volatility)
 
 
 async def _summarize_if_needed(

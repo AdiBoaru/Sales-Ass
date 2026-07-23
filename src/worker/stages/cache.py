@@ -23,6 +23,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.cache.canonical import canonicalize, classify_volatility
+from src.cache.version import cache_prompt_version
 from src.config import get_settings
 from src.db.queries.businesses import get_data_version
 from src.db.queries.semantic_cache import (
@@ -123,10 +124,19 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     # Cache-ul e o OPTIMIZARE — orice eroare (migrare neaplicată, DB, embed) →
     # degradează la „miss", NU rupe turul (principiul 6).
+    # NX-216: namespace-ul de prompt e dimensiune de cheie. Se determină ÎNAINTE de lookup și e
+    # ACEEAȘI sursă ca la write-back (aftercare) → nu servim un răspuns compus cu alt prompt.
+    prompt_version = cache_prompt_version(ctx.business)
+
     try:
         # L1 exact (O(1), zero false-positive).
         hit = await exact_lookup(
-            deps.conn, ctx.business.id, ctx.language, canonical_hash, volatility_class=volatility
+            deps.conn,
+            ctx.business.id,
+            ctx.language,
+            canonical_hash,
+            volatility_class=volatility,
+            prompt_version=prompt_version,
         )
         if hit is not None and await _serve(ctx, deps, hit, volatility, layer="exact"):
             return
@@ -143,6 +153,7 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             embedding,
             volatility_class=volatility,
             embedding_model=settings.model_embed,
+            prompt_version=prompt_version,
         )
         similarity = float(cand["similarity"]) if cand else 0.0
         if (
