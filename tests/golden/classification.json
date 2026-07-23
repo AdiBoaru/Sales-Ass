@@ -1,0 +1,394 @@
+{
+  "_meta": {
+    "source": "docs/GOLDEN-SET-AUDIT-NX202.md",
+    "decizie": "pilot DOAR ro (2026-07-23); en/hu = locale-regression INGHETAT, nu se extinde (D3: nucleu locale-aware, efortul e ro-only)",
+    "roluri": {
+      "ro-quality": "în setul de calitate ro-RO",
+      "safety-grounding": "gardă grounding/safety independentă de arhitectură (plasă de regresie, NU conținut de calitate)",
+      "locale-regression": "en/hu — gardă nucleu locale-aware; INGHETAT, nu în setul de calitate ro"
+    },
+    "buckets": {
+      "keep": "valid pe arhitectura țintă",
+      "rewrite": "intenție validă, forma se rescrie la NX-209/NX-207"
+    }
+  },
+  "cases": {
+    "sales-grounded": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-face-cream-budget": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-serum-vitamin-c": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-shampoo-oily-hair": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-spf": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-perfume": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-lip-balm": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-eye-cream": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-cleanser": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-toner": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-body-lotion": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-ten-gras": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-ten-sensibil": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-ingredient-niacinamida": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-fara-parfum": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-gramaj": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-utilizare": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-fond-mat": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-nuanta": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "nx172-rutina-completa": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
+    },
+    "sales-en-face-cream": {
+      "bucket": "rewrite",
+      "role": "locale-regression",
+      "note": "recomandare en/hu — INGHETAT (doar ro acum); nu se extinde"
+    },
+    "sales-hu-face-cream": {
+      "bucket": "rewrite",
+      "role": "locale-regression",
+      "note": "recomandare en/hu — INGHETAT (doar ro acum); nu se extinde"
+    },
+    "moderation-neutral": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "risk-handoff": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "invented-price-blocked": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "prose-claim-scrubbed": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "injection-fake-discount-blocked": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "injection-fake-link-blocked": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "injection-toxic-stays-neutral": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "injection-legal-threat-handoff": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "injection-ignore-instructions-stays-grounded": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-price-one-leu": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-fake-checkout-link": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-fake-product": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-fake-stock-count": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-fake-policy-price": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-competitor-link": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-admin-override": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-system-role-price": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "sales-no-result-specific": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "sales-no-result-brand": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "order-never-silent": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "order-status-generic": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "order-awb": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "nx172-contraindicatie": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "gardă grounding/safety independentă de arhitectură"
+    },
+    "adversarial-en-fake-sale": {
+      "bucket": "keep",
+      "role": "locale-regression",
+      "note": "gardă grounding en/hu — INGHETAT (doar ro acum)"
+    },
+    "adversarial-hu-fake-link": {
+      "bucket": "keep",
+      "role": "locale-regression",
+      "note": "gardă grounding en/hu — INGHETAT (doar ro acum)"
+    },
+    "greeting-simple": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-thanks": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-ok-perfect": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-are-you-there": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-bot-identity": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-short-ack": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-politeness": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "clarify-vague-gift": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "clarify-vague-something": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "clarify-budget-only": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "clarify-low-confidence-sales": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
+    },
+    "simple-en-thanks": {
+      "bucket": "keep",
+      "role": "locale-regression",
+      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
+    },
+    "simple-hu-thanks": {
+      "bucket": "keep",
+      "role": "locale-regression",
+      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
+    },
+    "clarify-en-vague": {
+      "bucket": "keep",
+      "role": "locale-regression",
+      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
+    },
+    "clarify-hu-vague": {
+      "bucket": "keep",
+      "role": "locale-regression",
+      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
+    }
+  },
+  "conversations": {
+    "conv-greeting-then-sales": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "multi-tur sales; contract vechi"
+    },
+    "conv-sales-refine-carries-category": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "carry state categorie; contract vechi"
+    },
+    "conv-sales-topic-switch-resets-constraints": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "topic-switch resetează constrângeri; contract vechi"
+    },
+    "conv-greeting-sales-refine-3turn": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "refine 3-tur; contract vechi"
+    },
+    "conv-sales-cheaper-link-3turn": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "cheaper + checkout 3-tur; contract vechi"
+    },
+    "nx172-conv-compare-diffs": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "COMPARE (≥2 diferențe); contract vechi — acoperă parțial golul de comparații"
+    },
+    "nx172-conv-cheaper-alternative": {
+      "bucket": "rewrite",
+      "role": "ro-quality",
+      "note": "alternativă mai ieftină; contract vechi"
+    },
+    "conv-sales-then-injection-price-blocked": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "grounding pe ture (injection preț blocat)"
+    },
+    "conv-sales-no-result-no-invention": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "no-result fără invenție, multi-tur"
+    },
+    "conv-sales-then-invented-product-blocked": {
+      "bucket": "keep",
+      "role": "safety-grounding",
+      "note": "produs inventat blocat, multi-tur"
+    },
+    "conv-order-then-thanks": {
+      "bucket": "keep",
+      "role": "ro-quality",
+      "note": "order status apoi mulțumire"
+    },
+    "conv-hu-sales-refine": {
+      "bucket": "rewrite",
+      "role": "locale-regression",
+      "note": "refine hu — INGHETAT (doar ro acum)"
+    },
+    "conv-en-sales-refine": {
+      "bucket": "rewrite",
+      "role": "locale-regression",
+      "note": "refine en — INGHETAT (doar ro acum)"
+    }
+  }
+}
