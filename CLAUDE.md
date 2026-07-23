@@ -35,6 +35,38 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 
 ---
 
+## ⚠️ Direcția arhitecturală 2026 — Quality Overhaul (ratificat 2026-07-23)
+
+**Sursa de adevăr a inițiativei: [`docs/QUALITY-OVERHAUL-2026.md`](docs/QUALITY-OVERHAUL-2026.md)**
+(ADR APPROVED, deciziile D1-D15 + matricea de dispoziție a cardurilor + 13 faze cu gate-uri).
+
+Arhitectura descrisă mai jos (pipeline liniar în 9 stagii) e **starea CURENTĂ, validă până la
+gate-ul NX-210**. Direcția aprobată către care migrăm:
+
+- **Creier unic (D1):** un singur agent principal (frontier) vede mesajul **BRUT** + istoric +
+  profil. **Niciun model mic nu clasifică/rezumă mesajul înaintea lui** — triajul nano dispare
+  de pe drumul sincron al conversației (rămâne shadow până la gate).
+- **Fast path determinist (D2):** înaintea agentului doar COD; poate încheia turul singur DOAR
+  pentru clasa „factual exact și sigur" (preț/stoc pe produs identificat exact, status comandă,
+  FAQ high-confidence), cu **contract propriu + validator** (identitate/autorizare, evidence +
+  version anti-stale, cache niciodată cross-tenant/cross-locale, P6). Orice dubiu → agent.
+- **Control plane determinist în jur:** hard constraints inviolabile de model (D7),
+  `UNKNOWN ≠ MISMATCH`, AnswerPlan cu evidence ÎNAINTEA textului (D8), validator determinist
+  pentru fapte + critic semantic selectiv pentru afirmații.
+- **Structura e adevărul (D4/D5):** faptele structurate = sursa; orice text AI
+  (`search_document`, blurb) = artefact **derivat, versionat, regenerabil** — nescris de mână.
+- **Pilot `ro-RO`, nucleu locale-aware (D3):** limba activă a pilotului e româna, dar
+  `business_id` / `locale` / `domain_pack` / `schema_version` / `document_version` rămân în TOATE
+  contractele și artefactele. **Nu hardcoda română nicăieri** — vezi și principiul 11.
+- **`business_id` e SERVER-OWNED:** injectat server-side, **niciodată** din output-ul modelului
+  și niciodată parametru controlabil de LLM.
+- **Nicio schimbare mare pe speranță (D15):** model, embeddings, reranker, framework — toate se
+  decid pe măsurători (golden set + retrieval benchmark), nu pe intuiție.
+
+**Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
+
+---
+
 ## Arhitectura — pipeline liniar (9 stagii)
 
 Fiecare mesaj inbound parcurge stagiile în ordine fixă.
@@ -442,11 +474,11 @@ alt query pe admin_conn = bug de izolare.
 4. **Buget de context impus în cod** — nu în prompturi, nu prin disciplină, în cod (state 8KB tăiat de context builder; CHECK în DB ca plasă)
 5. **Un singur punct de ieșire** — Sender → outbox → dispatcher. Orice alt loc care trimite mesaje e o greșeală
 6. **Niciodată tăcere** — degradare: mini → retry → nano → template → om notificat
-7. **business_id pe tot** — niciun query fără `WHERE business_id = $1`; RLS (`bot_runtime` + `app.business_id`) ca plasă, nu ca mecanism primar
+7. **business_id pe tot, SERVER-OWNED** — niciun query fără `WHERE business_id = $1`; RLS (`bot_runtime` + `app.business_id`) ca plasă, nu ca mecanism primar. `business_id` se injectează server-side: **niciodată** din output-ul modelului, niciodată parametru de tool controlabil de LLM
 8. **State = ref-uri, nu obiecte** — în displayed_products: {product_id, name, price}, NU obiectul complet
 9. **Promptul se generează din DB** — system prompt din `categories` (+ `intent_aliases`), nu hardcodat. (Un tabel `taxonomy` bogat se adaugă aditiv DOAR când verticalul cere filtre pe concerns — vezi schema_reference.)
 10. **Observabilitate din runner** — stagiile nu știu că sunt măsurate; runner-ul scrie event-ul
-11. **Limba e parte din cheie** — orice lookup în faqs / semantic_cache / wa_templates include locale. Un cache hit în limba greșită e un bug, nu un hit
+11. **Limba e parte din cheie** — orice lookup în faqs / semantic_cache / wa_templates include locale. Un cache hit în limba greșită e un bug, nu un hit. **Pilotul e `ro-RO`, dar nucleul rămâne locale-aware (D3): nu hardcoda română** — limba activă e configurație, nu constantă
 12. **PII trăiește într-un loc** — `channel_identities` (telefon E.164 / id canal, + hash). Nicăieri altundeva. Logurile nu conțin telefoane (redaction în logger)
 
 ---

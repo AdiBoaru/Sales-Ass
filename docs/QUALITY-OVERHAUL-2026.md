@@ -1,8 +1,11 @@
 # Quality Overhaul 2026 — ADR + plan de execuție (calitate maximă Sales Assistant)
 
-**Status:** DRAFT rev.2 (post-review Codex 2026-07-23) · **Autori:** Adi (decizie) + Claude (build) + Codex (verify)
-**Regulă de proces:** cardurile NX-200..NX-215 sunt tăiate dar **NU se implementează** până la review-ul
-dependențelor + Definition of Done per card. Revizia trăiește pe branch/PR **docs-only**, separat de NX-164.
+**Status:** ✅ **APPROVED** (rev.4) — aprobat de Adi, merge PR #239, 2026-07-23 · **Autori:** Adi (decizie) + Claude (build) + Codex (verify)
+**Istoric revizii:** rev.1 (draft inițial) → rev.2 (11 corecții review Codex #1) → rev.3 (6 CONFIRMED
+review #2) → rev.4 (5 findings re-review #3) → **APPROVED**.
+**Regulă de proces:** direcția + contractele sunt RATIFICATE. Fiecare card se implementează pe rând,
+în ordinea fazelor, cu Definition of Done-ul lui; un card care ar contrazice o decizie D1-D15
+modifică ÎNTÂI acest document (cu aprobare Adi), nu reinterpretează tacit.
 
 Acest document e sursa de adevăr a INIȚIATIVEI. **Nu înlocuiește invariantele CLAUDE.md** (pipeline,
 tenant isolation, PII, outbox) — le presupune; unde o decizie D schimbă un principiu CLAUDE.md,
