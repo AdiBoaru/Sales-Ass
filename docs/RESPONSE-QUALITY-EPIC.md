@@ -1,5 +1,19 @@
 # Response Quality — index epic (NX-180..189)
 
+> ## ⚠️ Dispoziție sub ADR Quality Overhaul 2026 (ratificat 2026-07-23)
+> [`docs/QUALITY-OVERHAUL-2026.md`](QUALITY-OVERHAUL-2026.md) (secțiunea 2bis) stabilește
+> pentru cardurile acestui epic:
+> - **NX-180..184** (naturalețe/Track A+B) — **INDEPENDENT**, continuă normal.
+> - **NX-185** (QuerySpec shadow) — **REUSED în shadow**; ownership-ul ȚINTĂ al extracției se
+>   mută la agentul principal (D11), decis la NX-210. Extinderea cu `RuntimeQuerySpec` /
+>   `SafeQuerySpec` + 3 reprezentări = NX-208.
+> - **NX-186** (typed facet registry + coverage) — **REUSED, dependență HARD a NX-209**.
+> - **NX-187** (Match Gate shadow + recall) — **REUSED, dependență HARD a NX-209**, care îl
+>   consumă ca treaptă internă (nu îl reimplementează).
+> - **NX-188, NX-189** — 🧊 **FROZEN** până la GO-ul de la NX-210.
+>
+> **Enum canonic în tot sistemul: `MATCH | MISMATCH | UNKNOWN`** (D7). `NO_MATCH` nu se folosește.
+
 **Status:** carduri curățate după runda 2 Codex (corecții INTEGRATE în corp, fără secțiuni „Review fixes" duplicate) — **pending re-verificare Codex** · **Data:** 2026-07-18
 **Brief istoric:** [AGENT-RESPONSE-QUALITY-CLAUDE-REVIEW.md](AGENT-RESPONSE-QUALITY-CLAUDE-REVIEW.md) — SUPERSEDED de acest index + carduri (banner adăugat); acolo unde diferă, cardurile câștigă.
 **Istoric review:** runda 1 = APPROVE WITH REQUIRED CHANGES (contracte); runda 2 = APPROVE WITH REQUIRED CLEANUP (contradicții interne carduri) — ambele aplicate.
