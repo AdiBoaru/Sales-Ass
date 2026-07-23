@@ -19,6 +19,8 @@ from typing import Any
 
 import asyncpg
 
+from src.cache.version import DEFAULT_PROMPT_VERSION
+
 # Prețul efectiv (min variantă, fallback la products) — ACELAȘI ca în search_products
 # (catalog._EFFECTIVE_PRICE). Price-check-ul trebuie să vadă exact prețul oferit clientului.
 _EFFECTIVE_PRICE = "coalesce(vp.price, p.sale_price, p.price)"
@@ -47,6 +49,7 @@ async def exact_lookup(
     canonical_hash: str,
     *,
     volatility_class: str = "static",
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
 ) -> dict[str, Any] | None:
     """L1 exact: entry neexpirat din clasa cerută pentru hash-ul canonic. None la miss.
     Întoarce și `retrieval_signature`+`data_version` (provenance pt price-check dynamic).
@@ -62,6 +65,7 @@ async def exact_lookup(
           and locale = $2
           and canonical_hash = $3
           and volatility_class = $4
+          and prompt_version = $5
           and expires_at > now()
         limit 1
         """,
@@ -69,6 +73,7 @@ async def exact_lookup(
         locale,
         canonical_hash,
         volatility_class,
+        prompt_version,
     )
     return _row(row)
 
@@ -81,6 +86,7 @@ async def semantic_lookup(
     *,
     volatility_class: str = "static",
     embedding_model: str,
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
 ) -> dict[str, Any] | None:
     """L2 semantic: cel mai apropiat entry din clasa cerută (cosine). Întoarce
     `{id, answer, similarity, retrieval_signature, data_version}` sau None. Caller-ul
@@ -97,6 +103,7 @@ async def semantic_lookup(
           and locale = $2
           and volatility_class = $4
           and embedding_model = $5
+          and prompt_version = $6
           and expires_at > now()
         order by embedding <=> $3::vector
         limit 1
@@ -106,6 +113,7 @@ async def semantic_lookup(
         _vec(embedding),
         volatility_class,
         embedding_model,
+        prompt_version,
     )
     return _row(row)
 
@@ -139,6 +147,7 @@ async def upsert_entry(
     ttl_minutes: int = 0,
     retrieval_signature: list[dict[str, Any]] | None = None,
     data_version: int | None = None,
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
 ) -> None:
     """Write-back idempotent pe `(business_id, locale, canonical_hash)`. Reîmprospătează
     answer+embedding+clasă+provenance+expires_at dacă entry-ul exista (paraphrase nou pe
@@ -149,11 +158,11 @@ async def upsert_entry(
         insert into semantic_cache
             (business_id, locale, query_norm, canonical_hash, embedding, answer,
              volatility_class, embedding_model, quality_score,
-             retrieval_signature, data_version, expires_at)
+             retrieval_signature, data_version, prompt_version, expires_at)
         values
-            ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10::jsonb, $11,
-             now() + make_interval(days => $12, mins => $13))
-        on conflict (business_id, locale, canonical_hash) do update
+            ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10::jsonb, $11, $12,
+             now() + make_interval(days => $13, mins => $14))
+        on conflict (business_id, locale, canonical_hash, prompt_version) do update
             set answer = excluded.answer,
                 embedding = excluded.embedding,
                 embedding_model = excluded.embedding_model,
@@ -174,6 +183,7 @@ async def upsert_entry(
         quality_score,
         json.dumps(retrieval_signature) if retrieval_signature is not None else None,
         data_version,
+        prompt_version,
         ttl_days,
         ttl_minutes,
     )

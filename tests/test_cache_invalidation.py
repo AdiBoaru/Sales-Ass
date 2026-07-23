@@ -70,7 +70,11 @@ async def test_dynamic_hit_price_match_serves(monkeypatch):
         "data_version": 3,
     }
 
-    async def fake_exact(conn, bid, locale, h, *, volatility_class, embedding_model=None):
+    async def fake_exact(
+        conn, bid, locale, h, *, volatility_class, embedding_model=None, prompt_version="v1"
+    ):
+        # NX-216: stagiul trebuie sa ceara EXPLICIT namespace-ul de prompt (nu default implicit).
+        assert prompt_version == "v1"
         assert volatility_class == "dynamic"
         return entry
 
@@ -114,10 +118,17 @@ async def _evict_setup(monkeypatch, entry, *, data_version=3, prices=None):
     id-urile evacuate. Întoarce lista `deleted`."""
     deleted = []
 
-    async def fake_exact(conn, bid, locale, h, *, volatility_class, embedding_model=None):
+    async def fake_exact(
+        conn, bid, locale, h, *, volatility_class, embedding_model=None, prompt_version="v1"
+    ):
+        # NX-216: stagiul trebuie sa ceara EXPLICIT namespace-ul de prompt (nu default implicit).
+        assert prompt_version == "v1"
         return entry
 
-    async def fake_sem(conn, bid, locale, emb, *, volatility_class, embedding_model=None):
+    async def fake_sem(
+        conn, bid, locale, emb, *, volatility_class, embedding_model=None, prompt_version="v1"
+    ):
+        assert prompt_version == "v1"
         return None
 
     async def fake_delete(conn, bid, eid):
@@ -205,7 +216,11 @@ async def test_dynamic_pricecheck_raises_is_miss(monkeypatch):
         "data_version": 3,
     }
 
-    async def fake_exact(conn, bid, locale, h, *, volatility_class, embedding_model=None):
+    async def fake_exact(
+        conn, bid, locale, h, *, volatility_class, embedding_model=None, prompt_version="v1"
+    ):
+        # NX-216: stagiul trebuie sa ceara EXPLICIT namespace-ul de prompt (nu default implicit).
+        assert prompt_version == "v1"
         return entry
 
     async def boom(*a, **k):
@@ -236,7 +251,11 @@ async def test_static_ignores_data_version(monkeypatch):
         "data_version": None,
     }
 
-    async def fake_exact(conn, bid, locale, h, *, volatility_class, embedding_model=None):
+    async def fake_exact(
+        conn, bid, locale, h, *, volatility_class, embedding_model=None, prompt_version="v1"
+    ):
+        # NX-216: stagiul trebuie sa ceara EXPLICIT namespace-ul de prompt (nu default implicit).
+        assert prompt_version == "v1"
         assert volatility_class == "static"
         return entry
 
