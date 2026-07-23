@@ -45,12 +45,16 @@ critic; `ruff check` + `ruff format --check` + `pytest`; validare pe flux end-to
 - **D1. Creier unic.** Mesajele nerezolvate complet de un fast path determinist (D2) ajung
   DIRECT la agentul principal — mesaj BRUT + istoric + profil — fără niciun alt LLM intermediar.
   Niciun model mic nu clasifică/rezumă mesajul înaintea agentului.
-- **D2. Fast path determinist, cu dozaj explicit.** Înaintea agentului: doar cod. Fast path-ul
-  poate TERMINA turul singur DOAR pentru clasa „factual exact și sigur": preț/stoc pe produs
-  identificat exact, status comandă, FAQ aprobat cu potrivire de mare încredere — răspunsuri
-  unde formularea nu adaugă valoare conversațională (aici se păstrează economia straturilor
-  gratuite: <500ms, cost 0). Pentru ORICE altceva, fast path-ul cel mult PREGĂTEȘTE facts și
-  lasă agentul să formuleze. Regula de ambiguitate: la orice dubiu de potrivire → agent.
+- **D2. Fast path determinist, cu dozaj explicit ȘI contract propriu.** Înaintea agentului:
+  doar cod. Fast path-ul poate TERMINA turul singur DOAR pentru clasa „factual exact și sigur":
+  preț/stoc pe produs identificat exact, status comandă, FAQ aprobat cu potrivire de mare
+  încredere — răspunsuri unde formularea nu adaugă valoare conversațională (aici se păstrează
+  economia straturilor gratuite: <500ms, cost 0). Pentru ORICE altceva, fast path-ul cel mult
+  PREGĂTEȘTE facts și lasă agentul să formuleze. Regula de ambiguitate: la orice dubiu → agent.
+  **Clasa care ocolește agentul ocolește și AnswerPlan-ul — deci fast path-ul are propriul
+  contract tipizat + validator determinist:** identitate/autorizare verificată pentru status
+  comandă; evidence + version pentru preț/stoc/FAQ (facts live, nu snapshot stale); cache
+  NICIODATĂ cross-tenant sau cross-locale; P6 (fallback formulat, nu tăcere).
 - **D3. Pilot ro-RO, nucleu generic.** Limba activă a pilotului: `ro-RO`. Nucleul rămâne
   locale-aware + multi-vertical: `business_id`, `locale`, `domain_pack`, `schema_version`,
   `document_version` prezente în toate contractele și artefactele de retrieval.
@@ -74,12 +78,16 @@ critic; `ruff check` + `ruff format --check` + `pytest`; validare pe flux end-to
   ingredient/free_of) → validate determinist. Afirmații semantice („mai potrivit pentru...")
   → evidence ID + verificare semantică (critic selectiv). AnswerPlan face halucinațiile mult
   mai greu de produs și mai ușor de detectat — nu „imposibile".
-- **D9. Negativele nu intră în vectorul POZITIV de candidate retrieval.** `not_recommended_for` /
-  warnings NU intră în documentul pozitiv de căutare (capcana negației în embeddings: „NU e pentru
-  ten uscat" ar face match pe „ten uscat"). Intră în: (a) facets cu excludere/penalizare
-  deterministă la ranking (`level=hard` verificat exclude; `soft` penalizează — conform NX-170),
-  (b) `evidence_chunks` de tip warning/limitation — care POT fi vectorizate în indexul de evidence,
-  ca agentul să răspundă la „de ce nu?" / „ce să evit?".
+- **D9. Warnings/contraindicațiile nu intră în vectorul POZITIV de candidate retrieval.**
+  `not_recommended_for` / warnings NU intră în documentul pozitiv de căutare (capcana negației
+  în embeddings: „NU e pentru ten uscat" ar face match pe „ten uscat"). Intră în: (a) facets cu
+  excludere/penalizare deterministă la ranking (`level=hard` verificat exclude; `soft`
+  penalizează — conform NX-170), (b) `evidence_chunks` de tip warning/limitation — care POT fi
+  vectorizate în indexul de evidence, ca agentul să răspundă la „de ce nu?" / „ce să evit?".
+  **Distincție obligatorie: fațetele canonice de ABSENȚĂ CONFIRMATĂ (`free_of: fragrance` →
+  „fără parfum adăugat") sunt proprietăți POZITIVE de selecție — intră în documentul pozitiv,
+  formulate neambiguu ca beneficiu, NU se elimină ca „negații".** Se exclude contraindicația,
+  nu semnalul de selecție.
 - **D10. Vocabular viu doar curat.** Expresii reale → redactare PII → normalizare → agregare →
   prag de frecvență → review uman → intrare în concern_map/intent_aliases. NIMIC live direct
   în routing/filtre. (unmet_query actual nu conține textul — pipeline nou necesar.)
@@ -116,11 +124,11 @@ Două carduri nu pot rămâne simultan implementabile pe aceleași fișiere și 
 | NX-168d (Product Contract v3: fapte canonice per-categorie, audit v2/v3 versionat, `not_recommended_for{level,source,verified_at}`, `claim_provenance`) | **REUSED** — dependență hard a NX-205 | Contractul + proveniența EXISTĂ deja aici. NX-205 nu-l rescrie: îl **extinde** cu `evidence_chunks` (roles) + `DerivedSignals{rule_id}` + `schema_version/locale` pe artefacte. Vocabularul canonic rămâne al 168d. |
 | NX-168e (150 produse la contract v3 + seed graf complet; `ai_summary` derivat determinist) | **REUSED + ABSORBED parțial** de NX-206 | Autoringul + seed-ul rămân ale 168e (e cardul care comută ATOMIC poarta v2→v3). NX-206 absoarbe DOAR: gate-ul de completitudine extins (contradicții + proveniență obligatorie pe contraindicații hard) și raportul per categorie. **`ai_summary` derivat din 168e rămâne valabil ca pas intermediar** — este deprecat abia de NX-207 (search documents), nu de NX-206. |
 | NX-169 (Agent Product Surface: proiecția faptelor în `_brief`/`_detail`/`_compare`) | **REUSED** — dependență a NX-209/NX-210 | Proiecția către model rămâne a 169. NX-209 o consumă ca bază pentru `evidence hydration`; NX-210 o folosește ca intrare a agentului. Fără suprapunere de fișiere dacă 169 intră ÎNAINTE. |
-| NX-170 (doc embedding determinist + excluderi structurate + `reason_codes`) | **ABSORBED parțial** de NX-207 (documentul) și NX-209 (excluderi/ranking) | Documentul determinist de embedding din 170 devine `positive_search_document` (NX-207) — **NX-207 continuă 170, nu-l rescrie**; excluderea hard/soft + `reason_codes` devin treapta de penalizare din `search_entities` (NX-209). Dacă 170 e livrat înainte, NX-207/209 pornesc de la el. |
+| NX-170 (doc embedding determinist + excluderi structurate + `reason_codes`) | **ABSORBED integral** — NU se mai implementează separat | Scope-ul se împarte cu graniță clară: documentul determinist de embedding → NX-207 (`positive_search_document`); excluderea hard/soft + `reason_codes` → NX-209 (treapta de penalizare din `search_entities`). UN singur traseu implementabil, fără „dacă". |
 | NX-171a/b (net_content pe variante, product_relations) | **INDEPENDENT** | DDL de catalog, fără conflict cu inițiativa. |
 | NX-171c (`content_status`/`schema_version`/`verified_at` + backfill sigur) | **REUSED** — dependență a NX-206 | Quality-gate la nivel DB (published) = plasa de care are nevoie gate-ul NX-206. Nu se dublează. |
 | NX-171d (embeddings versionabile: PK compus `(product_id, doc_type, model)`) | **REUSED** — **dependență HARD a NX-207** | Fără PK compus, shadow-ul „index vechi + `search_document_v1` în paralel" e IMPOSIBIL. NX-207 nu poate începe înainte de 171d. |
-| NX-172 (golden e2e, 12 scenarii pe cele 150) | **ABSORBED** de NX-202 | Cele 12 scenarii + checker-ele (off-category, invented-facts, compare-diff, reason prezent) devin **nucleul de scenarii al golden set-ului auditat** din NX-202. NX-172 nu se mai implementează separat; checker-ele lui migrează. |
+| NX-172 (golden e2e, 12 scenarii pe cele 150) | **REUSED** ca validare LIVE finală; NX-202 absoarbe DOAR scenariile + checker-ele | Cele 12 scenarii + checker-ele (off-category, invented-facts, compare-diff, reason prezent) migrează în golden set-ul NX-202. **Lanțul de validare live** (audit static → seed dry-run → audit DB → re-embed → retrieval real → sim) RĂMÂNE al NX-172, repoziționat: rulează pe pipeline-ul NOU, ca parte din gate-ul de ieșire F6 (după NX-207 + NX-209), ÎNAINTE de evaluarea oarbă NX-210. NX-202 nu are dependențele necesare ca să închidă obligația asta. |
 
 ### Epic Selection Correctness (docs/RESPONSE-QUALITY-EPIC.md)
 
@@ -128,7 +136,7 @@ Două carduri nu pot rămâne simultan implementabile pe aceleași fișiere și 
 |---|---|---|
 | NX-185 (QuerySpec shadow + merger owner-unic) | **REUSED în shadow**; ownership-ul ȚINTĂ se mută la agentul principal (D11) prin NX-210 | Contractul + mergerul pur + telemetria `query_spec_disagreement` rămân. NX-208 îl EXTINDE cu D6 (Runtime/Safe + 3 reprezentări). Extracția din triaj rămâne shadow, nu devine sursă finală. |
 | NX-186 (typed facet registry + coverage report) | **REUSED** — **dependență HARD a NX-209** | Tri-state MATCH/NO_MATCH/UNKNOWN (D7) e imposibil fără contractul de tipuri/operatori/`missing_value` + pragurile de coverage. NX-209 **nu reimplementează** registrul: îl consumă. |
-| NX-187 (Match Gate shadow + recall vs scan exhaustiv) | **REUSED / ABSORBED de NX-209** ca treaptă internă | `MatchSet` disjunct (exact/alternatives/rejected) + regula „soft nu mută apartenența" devin semantica lui `constraint_coverage` din `search_entities`. Recall-ul vs scan exhaustiv rămâne măsurătoarea lui 187 și hrănește gate-ul NX-209. |
+| NX-187 (Match Gate shadow + recall vs scan exhaustiv) | **REUSED** — dependență HARD consumată de NX-209 | NX-187 se implementează (evaluatorul MATCH/MISMATCH/UNKNOWN per produs×constrângere, `MatchSet` disjunct, recall vs scan exhaustiv); NX-209 îl CONSUMĂ ca treaptă internă a `search_entities` — nu îl reimplementează. Verdictul per produs×constrângere se PĂSTREAZĂ în contractul de output NX-209 (`candidates[].constraint_results`). |
 | NX-188 (Match Gate + QuerySpec ENFORCEMENT + alternatives UX) | **FROZEN** până la GO-ul de la NX-210 | Enforcement pe arhitectura veche ar fi muncă aruncată dacă gate-ul mare schimbă ownership-ul QuerySpec. Se redeschide după F7, aliniat la agentul unic. |
 | NX-189 (typed facets în SQL tri-state) | **FROZEN** până la GO-ul de la NX-210, apoi **REUSED** ca dependență per-fațetă a enforcement-ului | Ordinea per fațetă rămâne cea din 189: shadow/recall → tri-state shadow → paritate → enforce. |
 | NX-180..184 (Track A+B, naturalețe) | **INDEPENDENT** | Nu ating retrieval/selection; vezi memoria `agent-response-quality-plan`. |
@@ -149,7 +157,7 @@ cere, cardul nou NU pornește (dependență hard) — nu se implementează o a d
 | 3 | Completarea + auditarea catalogului (gates de completitudine, nu lungime) | NX-206 | 0 produse publicate cu câmpuri obligatorii lipsă / contradicții / claims fără sursă |
 | 4 | `search_document_v1` + `fts_document` ponderat + `evidence_chunks` + `card_blurb`, în SHADOW, embeddings versionate; plan migrare `ai_summary` | NX-207 | Benchmark vechi-vs-nou pe retrieval set; switch doar dacă cifrele cresc |
 | 5 | QuerySpec (raw+normalized+facets) în shadow, reconciliere NX-185; pipeline vocabular viu privacy-safe | NX-208 | Dezacorduri shadow analizate; extracția țintă stabilită pe agent |
-| 6 | Search tool „gras" (`search_entities`): exact+FTS+dual embedding+filtre+RRF+penalizări+rerank adaptiv+evidence hydration+constraint coverage; selecție embeddings×reranker pe benchmark | NX-209 | Recall@20 ≥90%, nDCG@6 ≥0,85, top-6 relevant ≥90%, 0 încălcări hard |
+| 6 | Search tool „gras" (`search_entities`): exact+FTS+dual embedding+filtre+RRF+penalizări+rerank adaptiv+evidence hydration+constraint coverage; selecție embeddings×reranker pe benchmark | NX-209 | Recall@20 ≥90%, nDCG@6 ≥0,85, top-6 relevant ≥90%, 0 încălcări hard — măsurate pe **holdout-ul de retrieval** (nu pe setul de tuning) + **lanțul de validare LIVE din NX-172** (audit → seed → re-embed → retrieval real → sim) verde pe pipeline-ul nou |
 | 7 | Prototip agent unic (+ **AnswerPlanV0** experimental, offline) + evaluare OARBĂ vs. sistemul actual | NX-210 | **GATE-UL MARE:** câștig clar pe query-uri grele, 0 regresii facts, cost + latență în **SLO-ul provizoriu din NX-201** (NU în țintele NX-213 — acela e card ulterior) — altfel STOP |
 | 8 | AnswerPlan + validator determinist extins + critic semantic selectiv | NX-211 | Preț/link/stoc inventate = 0; claims grounded ≥99%; hard violations = 0 |
 | 9 | Needs profile + clarificare deterministă + ancorare + persona | NX-212 | Rubrica need-alignment crește; response-rate la clarificări crește |
