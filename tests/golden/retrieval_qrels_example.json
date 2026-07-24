@@ -1,0 +1,60 @@
+{
+  "_meta": {
+    "ATENTIE": "EXEMPLU DE SCHELET — 3 query-uri fictive ca să ruleze harness-ul. NU e datasetul de benchmark.",
+    "dataset_real": "200-500 query-uri ro se populează la NX-203 popularea, din etichetele NX-202 validate de Adi",
+    "schema": "src/evals/retrieval/schema.py (QrelsSet)"
+  },
+  "schema_version": 1,
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "ex-crema-gras-buget",
+      "query": "crema de fata pentru ten gras sub 90",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "creme-fata",
+      "catalog_version": "example-v0",
+      "judgments": [
+        {"product_id": "px-1", "relevance": 3},
+        {"product_id": "px-2", "relevance": 2},
+        {"product_id": "px-3", "relevance": 1}
+      ],
+      "forbidden_products": ["px-off-category"],
+      "hard_constraints": [
+        {"facet": "category", "op": "eq", "value": "creme-fata"},
+        {"facet": "price", "op": "lte", "value": 90, "unit": "RON"}
+      ]
+    },
+    {
+      "id": "ex-ser-vitc",
+      "query": "ser cu vitamina c",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri",
+      "catalog_version": "example-v0",
+      "judgments": [
+        {"product_id": "px-4", "relevance": 3},
+        {"product_id": "px-5", "relevance": 2}
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {"facet": "key_ingredient", "op": "contains", "value": "vitamina_c"}
+      ]
+    },
+    {
+      "id": "ex-fara-parfum",
+      "query": "crema fara parfum",
+      "locale": "ro",
+      "provenance": "paraphrase",
+      "category": "creme-fata",
+      "catalog_version": "example-v0",
+      "judgments": [
+        {"product_id": "px-6", "relevance": 3}
+      ],
+      "forbidden_products": ["px-cu-parfum"],
+      "hard_constraints": [
+        {"facet": "fragrance_free", "op": "eq", "value": true}
+      ]
+    }
+  ]
+}
