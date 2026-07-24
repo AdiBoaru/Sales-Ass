@@ -55,6 +55,17 @@ class CandidateVerdict:
 
 
 @dataclass(frozen=True)
+class FacetCoverage:
+    """Acoperirea AGREGATĂ per fațetă hard — DISTRIBUȚIA completă (Review #248: nu comprimăm
+    MATCH+UNKNOWN într-un singur status; distribuția UNKNOWN e exact ce cere DoD-ul + NX-188)."""
+
+    facet: str
+    match: int
+    mismatch: int
+    unknown: int
+
+
+@dataclass(frozen=True)
 class MatchSet:
     """Mulțimi DISJUNCTE de product_id + verdicte per candidat (păstrate) + acoperirea agregată."""
 
@@ -62,7 +73,7 @@ class MatchSet:
     alternatives: tuple[str, ...]
     rejected: tuple[str, ...]
     verdicts: tuple[CandidateVerdict, ...]
-    coverage: tuple[ConstraintResult, ...]  # agregat per fațetă hard (același enum tri-state)
+    coverage: tuple[FacetCoverage, ...]  # distribuție MATCH/MISMATCH/UNKNOWN per fațetă hard
 
 
 def _facet_for(facets_by_key: dict[str, TypedFacet], key: str) -> TypedFacet | None:
@@ -70,8 +81,13 @@ def _facet_for(facets_by_key: dict[str, TypedFacet], key: str) -> TypedFacet | N
 
 
 def evaluate(facet: TypedFacet, op: str, value: Any, product_value: Any) -> Verdict:
-    """Tri-state pentru O constrângere pe un produs (D7). Valoare lipsă/nevalidă = UNKNOWN, nu
-    MISMATCH — „nu știm" ≠ „contrazice". Tipul/operatorul vin din `facet` (registrul NX-186)."""
+    """Tri-state pentru O constrângere pe un produs (D7). Valoare/operator lipsă sau nevalid =
+    UNKNOWN, NICIODATĂ MATCH/MISMATCH — „nu putem evalua" ≠ „contrazice". Tipul/operatorii permiși
+    vin din `facet` (registrul NX-186)."""
+    # Review #248: un operator neacceptat de fațetă sau o valoare de query lipsă NU trebuie să
+    # producă un MATCH accidental — nu putem evalua constrângerea → UNKNOWN.
+    if op not in facet.operators or value is None:
+        return "UNKNOWN"
     if product_value is None or not is_valid_value(facet, product_value):
         return "UNKNOWN"
     if facet.value_type is FacetType.NUMBER:
@@ -79,10 +95,17 @@ def evaluate(facet: TypedFacet, op: str, value: Any, product_value: Any) -> Verd
             pv, val = float(product_value), float(value)
         except (TypeError, ValueError):
             return "UNKNOWN"
-        ok = {"lte": pv <= val, "gte": pv >= val, "eq": pv == val}.get(op, pv == val)
-        return "MATCH" if ok else "MISMATCH"
+        if op == "lte":
+            return "MATCH" if pv <= val else "MISMATCH"
+        if op == "gte":
+            return "MATCH" if pv >= val else "MISMATCH"
+        if op == "eq":
+            return "MATCH" if pv == val else "MISMATCH"
+        return "UNKNOWN"  # niciun default tăcut la eq
     if facet.value_type is FacetType.BOOL:
-        return "MATCH" if bool(product_value) == bool(value) else "MISMATCH"
+        if not isinstance(value, bool):  # valoare de query invalidă pt bool → UNKNOWN
+            return "UNKNOWN"
+        return "MATCH" if bool(product_value) == value else "MISMATCH"
     if facet.value_type is FacetType.LIST and isinstance(product_value, list):
         vals = {normalize(str(x)) for x in product_value}
         return "MATCH" if normalize(str(value)) in vals else "MISMATCH"
@@ -132,25 +155,26 @@ def classify_product(
 
 def _aggregate_coverage(
     verdicts: list[CandidateVerdict], constraints: list[Constraint] | tuple[Constraint, ...]
-) -> tuple[ConstraintResult, ...]:
-    """Acoperirea AGREGATĂ per fațetă hard: MISMATCH dacă vreun produs contrazice, altfel MATCH
-    dacă vreunul confirmă, altfel UNKNOWN. Semnalul „cât UNKNOWN produce catalogul"."""
-    out: list[ConstraintResult] = []
+) -> tuple[FacetCoverage, ...]:
+    """DISTRIBUȚIA MATCH/MISMATCH/UNKNOWN per fațetă hard peste candidați (Review #248: numere, nu
+    un status comprimat — unknown>0 e semnalul „cât UNKNOWN produce catalogul", cerut NX-188)."""
+    out: list[FacetCoverage] = []
     for c in constraints:
         if c.strength != "hard":
             continue
-        statuses = {
-            r.status
-            for v in verdicts
-            for r in v.constraint_results
-            if r.facet == c.facet and r.strength == "hard"
-        }
-        agg = (
-            "MISMATCH"
-            if "MISMATCH" in statuses
-            else ("MATCH" if "MATCH" in statuses else "UNKNOWN")
+        counts = {"MATCH": 0, "MISMATCH": 0, "UNKNOWN": 0}
+        for v in verdicts:
+            for r in v.constraint_results:
+                if r.facet == c.facet and r.strength == "hard":
+                    counts[r.status] += 1
+        out.append(
+            FacetCoverage(
+                facet=c.facet,
+                match=counts["MATCH"],
+                mismatch=counts["MISMATCH"],
+                unknown=counts["UNKNOWN"],
+            )
         )
-        out.append(ConstraintResult(facet=c.facet, status=agg, strength="hard"))
     return tuple(out)
 
 

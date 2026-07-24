@@ -36,7 +36,7 @@ potrivirile reale — un Match Gate doar-pe-pool ar rata masiv; recall-ul cere p
 `match_gate_shadow_enabled` (default **OFF**). ON → planner-ul (post-retrieval, `planner.py:_match_gate_shadow`)
 construiește constrângerile din query (contractul NX-208) + registrul tipizat, clasează candidații, scrie
 `ctx.match_set` (owner unic: planner) și emite telemetrie FĂRĂ PII: `match_gate_shadow` (numere: candidați/
-exact/alternative/rejected/hard) + `match_gate_outcome` (per fațetă hard: cheie canonică + status). **ZERO
+exact/alternative/rejected/hard) + `match_gate_outcome` (per fațetă hard: cheie + distribuția MATCH/MISMATCH/UNKNOWN). **ZERO
 schimbare de răspuns** — nu atinge `ctx.reply`. Best-effort (orice eroare înghițită, P6). OFF → byte-identic.
 
 ## Note
