@@ -79,7 +79,13 @@ def test_provenance_three_states_distinct():
                 "fragrance_free": True,
                 "key_ingredients": ["niacinamida"],
                 "claim_provenance": [
-                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"}
+                    {
+                        "kind": "ingredient",
+                        "value": "niacinamida",
+                        "source": "lab",
+                        "source_ref": "INCI-1",
+                        "verified_at": "2026-07-16",
+                    }
                 ],
             },
         ),
@@ -118,7 +124,13 @@ def test_partial_list_provenance_not_verified():
             {
                 "key_ingredients": ["niacinamida", "retinol"],
                 "claim_provenance": [
-                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"}
+                    {
+                        "kind": "ingredient",
+                        "value": "niacinamida",
+                        "source": "lab",
+                        "source_ref": "INCI-1",
+                        "verified_at": "2026-07-16",
+                    }
                 ],  # doar „niacinamida" e susținut; „retinol" nu
             },
         )
@@ -126,6 +138,25 @@ def test_partial_list_provenance_not_verified():
     rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
     ing = _row(rows, "key_ingredients")
     assert ing["valid"] == 1 and ing["verified"] == 0  # listă parțial susținută ≠ verified
+
+
+def test_provenance_without_source_ref_not_verified():
+    # Review re-review #247: proveniență cu value + verified_at dar FĂRĂ source/source_ref → NU e
+    # merchant-verified (contractul catalogului cere kind+value+source+source_ref+verified_at).
+    prods = [
+        _prod(
+            50,
+            {
+                "key_ingredients": ["niacinamida"],
+                "claim_provenance": [
+                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"}
+                ],  # lipsesc source + source_ref
+            },
+        )
+    ]
+    rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
+    ing = _row(rows, "key_ingredients")
+    assert ing["valid"] == 1 and ing["verified"] == 0
 
 
 def test_full_list_provenance_verified():
@@ -136,8 +167,20 @@ def test_full_list_provenance_verified():
             {
                 "key_ingredients": ["niacinamida", "retinol"],
                 "claim_provenance": [
-                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"},
-                    {"kind": "ingredient", "value": "retinol", "verified_at": "2026-07-16"},
+                    {
+                        "kind": "ingredient",
+                        "value": "niacinamida",
+                        "source": "lab",
+                        "source_ref": "INCI-1",
+                        "verified_at": "2026-07-16",
+                    },
+                    {
+                        "kind": "ingredient",
+                        "value": "retinol",
+                        "source": "lab",
+                        "source_ref": "INCI-2",
+                        "verified_at": "2026-07-16",
+                    },
                 ],
             },
         )

@@ -65,13 +65,17 @@ def _claim_verified(attributes: dict, facet, value) -> bool:
     cp = attributes.get("claim_provenance")
     if not isinstance(cp, list):
         return False
+    # Contractul catalogului (NX-168d): o proveniență CONFIRMATĂ are kind + value + source +
+    # source_ref + verified_at. O intrare parțială (fără source/source_ref) NU e merchant-verified.
     backed = {
         normalize(str(e["value"]))
         for e in cp
         if isinstance(e, dict)
-        and e.get("verified_at")
         and e.get("kind") in kinds
         and e.get("value")
+        and e.get("verified_at")
+        and e.get("source")
+        and e.get("source_ref")
     }
     if not backed:
         return False
