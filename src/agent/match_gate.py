@@ -84,17 +84,17 @@ def evaluate(facet: TypedFacet, op: str, value: Any, product_value: Any) -> Verd
     """Tri-state pentru O constrângere pe un produs (D7). Valoare/operator lipsă sau nevalid =
     UNKNOWN, NICIODATĂ MATCH/MISMATCH — „nu putem evalua" ≠ „contrazice". Tipul/operatorii permiși
     vin din `facet` (registrul NX-186)."""
-    # Review #248: un operator neacceptat de fațetă sau o valoare de query lipsă NU trebuie să
-    # producă un MATCH accidental — nu putem evalua constrângerea → UNKNOWN.
+    # Review #248: operator neacceptat de fațetă, valoare de query lipsă SAU de TIP incompatibil cu
+    # fațeta (True pt NUMBER, 123 pt TEXT) NU trebuie să producă un MATCH accidental → UNKNOWN.
     if op not in facet.operators or value is None:
         return "UNKNOWN"
     if product_value is None or not is_valid_value(facet, product_value):
         return "UNKNOWN"
     if facet.value_type is FacetType.NUMBER:
-        try:
-            pv, val = float(product_value), float(value)
-        except (TypeError, ValueError):
+        # bool e subtip de int (float(True)=1.0) → l-am respinge; cerem un număr propriu-zis.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             return "UNKNOWN"
+        pv, val = float(product_value), float(value)
         if op == "lte":
             return "MATCH" if pv <= val else "MISMATCH"
         if op == "gte":
@@ -106,10 +106,13 @@ def evaluate(facet: TypedFacet, op: str, value: Any, product_value: Any) -> Verd
         if not isinstance(value, bool):  # valoare de query invalidă pt bool → UNKNOWN
             return "UNKNOWN"
         return "MATCH" if bool(product_value) == value else "MISMATCH"
+    # ENUM / TEXT / LIST — valoarea de query trebuie să fie string (123 pt TEXT → UNKNOWN).
+    if not isinstance(value, str):
+        return "UNKNOWN"
     if facet.value_type is FacetType.LIST and isinstance(product_value, list):
         vals = {normalize(str(x)) for x in product_value}
-        return "MATCH" if normalize(str(value)) in vals else "MISMATCH"
-    return "MATCH" if normalize(str(product_value)) == normalize(str(value)) else "MISMATCH"
+        return "MATCH" if normalize(value) in vals else "MISMATCH"
+    return "MATCH" if normalize(str(product_value)) == normalize(value) else "MISMATCH"
 
 
 def classify_product(
@@ -156,20 +159,33 @@ def classify_product(
 def _aggregate_coverage(
     verdicts: list[CandidateVerdict], constraints: list[Constraint] | tuple[Constraint, ...]
 ) -> tuple[FacetCoverage, ...]:
-    """DISTRIBUȚIA MATCH/MISMATCH/UNKNOWN per fațetă hard peste candidați (Review #248: numere, nu
-    un status comprimat — unknown>0 e semnalul „cât UNKNOWN produce catalogul", cerut NX-188)."""
-    out: list[FacetCoverage] = []
+    """DISTRIBUȚIA MATCH/MISMATCH/UNKNOWN per fațetă hard (numere, nu status comprimat — un
+    unknown>0 = „cât UNKNOWN produce catalogul", NX-188). Review #248: UN SINGUR rând per fațetă
+    (deduplicat) și UN SINGUR vot per produs — două constrângeri hard pe aceeași fațetă NU dublează
+    nici rândurile, nici contoarele. Per produs, statusul pe fațetă agregă cu precedența
+    MISMATCH > UNKNOWN > MATCH (aceeași ca la clasa produsului)."""
+    hard_facets: list[str] = []
     for c in constraints:
-        if c.strength != "hard":
-            continue
+        if c.strength == "hard" and c.facet not in hard_facets:
+            hard_facets.append(c.facet)  # unic, ordine stabilă
+    out: list[FacetCoverage] = []
+    for facet in hard_facets:
         counts = {"MATCH": 0, "MISMATCH": 0, "UNKNOWN": 0}
         for v in verdicts:
-            for r in v.constraint_results:
-                if r.facet == c.facet and r.strength == "hard":
-                    counts[r.status] += 1
+            statuses = [
+                r.status for r in v.constraint_results if r.facet == facet and r.strength == "hard"
+            ]
+            if not statuses:
+                continue
+            agg = (
+                "MISMATCH"
+                if "MISMATCH" in statuses
+                else ("UNKNOWN" if "UNKNOWN" in statuses else "MATCH")
+            )
+            counts[agg] += 1  # un singur vot per produs, nu per constrângere
         out.append(
             FacetCoverage(
-                facet=c.facet,
+                facet=facet,
                 match=counts["MATCH"],
                 mismatch=counts["MISMATCH"],
                 unknown=counts["UNKNOWN"],

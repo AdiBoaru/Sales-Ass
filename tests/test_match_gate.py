@@ -200,6 +200,26 @@ def test_non_bool_value_for_bool_facet_is_unknown():
     assert evaluate(_FF, "eq", "true", True) == "UNKNOWN"  # valoare invalidă pt bool → UNKNOWN
 
 
+def test_incompatible_value_type_is_unknown():
+    # Review re-review #248: valoare de query de TIP incompatibil cu fațeta → UNKNOWN, nu MATCH
+    assert (
+        evaluate(_PRICE, "eq", True, 1) == "UNKNOWN"
+    )  # bool pt NUMBER (fără el: 1.0==1.0 → MATCH)
+    assert evaluate(_FINISH, "eq", 123, "matte") == "UNKNOWN"  # int pt ENUM → UNKNOWN
+    assert evaluate(_CONCERNS, "contains", 5, ["5"]) == "UNKNOWN"  # non-str pt LIST → UNKNOWN
+
+
+def test_two_constraints_same_facet_no_double_coverage():
+    # Review re-review #248: 2 constrângeri hard pe aceeași fațetă → UN rând + UN vot/produs
+    products = [_p("a", price=50), _p("b", price=200)]
+    ms = build_match_set(products, [_hard("price", "gte", 20), _hard("price", "lte", 100)], _REG)
+    price_rows = [r for r in ms.coverage if r.facet == "price"]
+    assert len(price_rows) == 1  # un singur rând, nu dublat
+    r = price_rows[0]
+    assert r.match + r.mismatch + r.unknown == 2  # 2 produse, nu 4 (contoare nedublate)
+    assert r.match == 1 and r.mismatch == 1  # a: 50∈[20,100] MATCH; b: 200>100 MISMATCH
+
+
 # --- shadow hook (kill-switch OFF by default, zero behavior change) ----------
 
 
