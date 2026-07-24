@@ -110,6 +110,33 @@ def test_ecommerce_no_searchable_facets():
     assert pack.searchable_facets == ()  # fără filtru de feature (default)
 
 
+# --- NX-208: query_expansions (vocabular de rescriere) ----------------------
+
+
+def test_beauty_salon_query_expansions_parsed():
+    pack = load_domain_pack(_biz("beauty_salon"))
+    # cheile se normalizează (lower + fără diacritice); valorile rămân ca text de căutare.
+    assert pack.query_expansions["ma lucesc"] == ["matifiant", "mat", "ten gras"]
+    assert "curățare" in pack.query_expansions["rutina de fata"]
+
+
+def test_query_expansions_override_and_garbage_ignored():
+    pack = load_domain_pack(
+        _biz(
+            "beauty_salon",
+            {"domain_pack": {"query_expansions": {"Ten Lucios": ["mat"], "bad": "nu-i listă"}}},
+        )
+    )
+    assert pack.query_expansions["ten lucios"] == ["mat"]  # cheie nouă, normalizată
+    assert "bad" not in pack.query_expansions  # valoare non-listă → ignorată (fail-safe)
+    assert "ma lucesc" in pack.query_expansions  # default păstrat (merge)
+
+
+def test_ecommerce_no_query_expansions():
+    pack = load_domain_pack(_biz("ecommerce"))
+    assert pack.query_expansions == {}  # default gol (fără expandare)
+
+
 # --- locale-keyed (P11) -----------------------------------------------------
 
 

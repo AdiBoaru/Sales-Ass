@@ -36,6 +36,12 @@ class DomainPack:
     vertical: str  # verticalul tenantului (ecommerce | beauty_salon | auto_service | other | ...)
     # termen liber NORMALIZAT → cheia canonică din products.attributes->'concerns' (ex. "oily").
     concern_map: dict[str, str] = field(default_factory=dict)
+    # NX-208: vocabular de EXPANDARE a interogării (query understanding). Frază colocvială
+    # NORMALIZATĂ → termeni canonici de căutare adăugați la `search_text` (ex. „sa nu ma lucesc" →
+    # ["matifiant", "mat"]). Separat de `concern_map` (acela mapează la o cheie de FILTRU pe
+    # attributes->'concerns'; aici sunt termeni de TEXT care hrănesc lexical+semantic). Gol → fără
+    # expandare (retrieval byte-identic). Per-vertical (defaults JSON) + override per-tenant (P9).
+    query_expansions: dict[str, list[str]] = field(default_factory=dict)
     # locale → {reason: [phrase_norm,...]} — termeni de risc/legal keyed pe locale (P11).
     risk_terms: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     # locale → saluturi adiționale NORMALIZATE (peste baza din greeting.py) (P11).

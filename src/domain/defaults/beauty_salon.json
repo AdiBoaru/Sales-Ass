@@ -27,7 +27,29 @@
     "hyperpigmentation": "hyperpigmentation",
     "hidratare": "hydration",
     "deshidratat": "hydration",
-    "hydration": "hydration"
+    "hydration": "hydration",
+    "ten reactiv": "sensitive",
+    "piele reactivă": "sensitive",
+    "reactiv": "sensitive",
+    "reactivă": "sensitive",
+    "mă lucesc": "oily",
+    "luciu": "oily"
+  },
+  "_query_expansions_note": "NX-208 (query understanding): frază colocvială → termeni canonici de căutare adăugați la search_text. Vocabular RO real, high-confidence, GENERIC (nu reverse-engineering pe ID-uri). Cheile se normalizează la încărcare (fără diacritice/lower). Separat de concern_map (acela e mapare la filtru pe attributes->'concerns').",
+  "query_expansions": {
+    "mă lucesc": ["matifiant", "mat", "ten gras"],
+    "să nu lucesc": ["matifiant", "mat"],
+    "luciu": ["matifiant", "mat"],
+    "lucios": ["matifiant", "mat"],
+    "să reziste": ["rezistent", "long lasting"],
+    "rezistent la căldură": ["rezistent", "long lasting"],
+    "pe căldură": ["rezistent"],
+    "aspect natural": ["natural", "acoperire lejeră"],
+    "machiaj discret": ["natural", "lejer", "acoperire lejeră"],
+    "toată rutina": ["curățare", "ser", "cremă hidratantă", "hidratare"],
+    "rutina de față": ["curățare", "ser", "cremă hidratantă", "hidratare"],
+    "apă micelară": ["demachiant", "apă micelară"],
+    "reactiv": ["ten sensibil"]
   },
   "fact_type_whitelist": [
     "skin_type",

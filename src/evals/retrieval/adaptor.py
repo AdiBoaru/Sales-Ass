@@ -14,17 +14,22 @@ Async (DB + embed). Runner-ul pre-încarcă rezultatele, apoi hrănește harness
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 
 from src.agent.llm import LLMClient
+from src.agent.query_rewrite import build_query_spec
 from src.db.queries.catalog import (
     has_embeddings,
     search_products_lexical,
     search_products_semantic,
 )
 from src.db.queries.fusion import fuse_candidates
+from src.domain.normalize import normalize
+
+if TYPE_CHECKING:
+    from src.domain.pack import DomainPack
 
 _POOL = 50  # același ca _FUSION_POOL din catalog_tools
 
@@ -85,3 +90,41 @@ async def retrieve_products(
 
     fused = fuse_candidates(lexical, vector, sort_mode="relevance")
     return [_pid(p) for p in fused]
+
+
+def _excluded_by_reference(product: dict[str, Any], reference_terms: tuple[str, ...]) -> bool:
+    """True dacă produsul E chiar referința dintr-un „ca X dar mai ieftin" (i-o excludem: căutăm
+    ALTERNATIVE, iar referința e de obicei chiar produsul interzis)."""
+    name = normalize(str(product.get("name") or ""))
+    return any(ref and (ref in name or name in ref) for ref in reference_terms)
+
+
+async def retrieve_products_rewritten(
+    conn: asyncpg.Connection,
+    llm: LLMClient | None,
+    business_id: str,
+    raw_query: str,
+    domain_pack: DomainPack | None,
+) -> list[str]:
+    """Regimul NX-208 — retrieval pe query-ul RESCRIS determinist (query understanding), fără
+    oracol de constrângeri. Izolează exact câștigul de ÎNȚELEGERE peste `raw_hybrid`:
+
+    `build_query_spec` expandează textul (vocabular canonic din DomainPack) și prinde pattern-uri
+    de limbă (preț, referință). Căutăm pe `search_text`, apoi excludem referința.
+    ZERO filtre hard din adevăr — doar ce se poate deriva din mesajul clientului."""
+    spec = build_query_spec(raw_query, domain_pack)
+
+    lexical = await search_products_lexical(
+        conn, business_id, query_text=spec.search_text, pool=_POOL
+    )
+    vector: list[dict[str, Any]] = []
+    if llm is not None and await has_embeddings(conn, business_id):
+        try:
+            qvec = (await llm.embed([spec.search_text]))[0]
+            vector = await search_products_semantic(conn, business_id, qvec, pool=_POOL)
+        except Exception:  # noqa: BLE001 — embed/semantic pică → lexical-only (P6)
+            vector = []
+
+    fused = fuse_candidates(lexical, vector, sort_mode="relevance")
+    kept = [p for p in fused if not _excluded_by_reference(p, spec.reference_terms)]
+    return [_pid(p) for p in kept]

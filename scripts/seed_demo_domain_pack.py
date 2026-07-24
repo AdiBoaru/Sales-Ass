@@ -102,6 +102,32 @@ CONCERN_MAP: dict[str, str] = {
     "acoperire": "acoperire machiaj",
     "fond de ten": "acoperire machiaj",
     "acoperire machiaj": "acoperire machiaj",
+    # --- NX-208: extindere high-confidence din cazurile compuse (concern → valoare RO reală) ---
+    "ten reactiv": "ten sensibil",
+    "reactiv": "ten sensibil",
+    "reactiva": "ten sensibil",
+    "ma lucesc": "ten gras",
+    "luciu": "ten gras",
+}
+
+# NX-208: vocabular de EXPANDARE a interogării (query understanding). Frază colocvială (loader-ul
+# normalizează CHEILE) → termeni canonici de căutare adăugați la `search_text`, ca lexical +
+# semantic să prindă query-urile pe care textul brut le rata. Vocabular RO real, high-confidence,
+# GENERIC (nu reverse-engineering pe ID-uri). Separat de concern_map (acela e mapare la filtru).
+QUERY_EXPANSIONS: dict[str, list[str]] = {
+    "mă lucesc": ["matifiant", "mat", "ten gras"],
+    "să nu lucesc": ["matifiant", "mat"],
+    "luciu": ["matifiant", "mat"],
+    "lucios": ["matifiant", "mat"],
+    "să reziste": ["rezistent", "long lasting"],
+    "rezistent la căldură": ["rezistent", "long lasting"],
+    "pe căldură": ["rezistent"],
+    "aspect natural": ["natural", "acoperire lejeră"],
+    "machiaj discret": ["natural", "lejer", "acoperire lejeră"],
+    "toată rutina": ["curățare", "ser", "cremă hidratantă", "hidratare"],
+    "rutina de față": ["curățare", "ser", "cremă hidratantă", "hidratare"],
+    "apă micelară": ["demachiant", "apă micelară"],
+    "reactiv": ["ten sensibil"],
 }
 
 
@@ -113,13 +139,17 @@ async def main() -> None:
             settings = raw if isinstance(raw, dict) else (json.loads(raw) if raw else {})
             dp = settings.get("domain_pack") or {}
             dp["concern_map"] = CONCERN_MAP
+            dp["query_expansions"] = QUERY_EXPANSIONS  # NX-208
             settings["domain_pack"] = dp
             await conn.execute(
                 "update businesses set settings = $2::jsonb where id = $1",
                 DEMO_BIZ,
                 json.dumps(settings, ensure_ascii=False),
             )
-            print(f"OK: concern_map override ({len(CONCERN_MAP)} intrări) scris pe {DEMO_BIZ}")
+            print(
+                f"OK: domain_pack override scris pe {DEMO_BIZ} — concern_map ({len(CONCERN_MAP)} "
+                f"intrări) + query_expansions ({len(QUERY_EXPANSIONS)} intrări)"
+            )
     finally:
         await close_pool()
 

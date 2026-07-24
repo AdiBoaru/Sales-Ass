@@ -215,6 +215,14 @@ class Settings(BaseSettings):
     )
     faq_fallback_tau: float = Field(default=0.85, validation_alias="FAQ_FALLBACK_TAU")
 
+    # NX-208: QuerySpec în SHADOW (ADR D6/D11). ON → triajul emite `query_spec_shadow` (fără PII:
+    # intent/sort/fațete/nr. constrângeri) pe turul sales — ZERO schimbare de comportament, DOAR
+    # observabilitate. Extracția din triaj e provizorie (comparație); owner-ul ȚINTĂ = agentul
+    # principal (F7). Default OFF → întoarcere completă la comportamentul vechi (byte-identic).
+    query_spec_shadow_enabled: bool = Field(
+        default=False, validation_alias="QUERY_SPEC_SHADOW_ENABLED"
+    )
+
     # --- Cost guard + rate limit (G2c, stagiul 2) ---
     # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)
     # dezactivează LLM-ul pt restul zilei. Estimare-plasă; facturarea reală = usage_daily.
