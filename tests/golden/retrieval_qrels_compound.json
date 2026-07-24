@@ -1,0 +1,411 @@
+{
+  "_meta": {
+    "source": "tests/golden/compound_truth_proposed.json (adevăr NX-202 validat)",
+    "note": "qrels REALE din catalogul demo; doar cazuri cu expected_products. clarify/safety/imposibilitate-pură excluse (nu au produse de găsit).",
+    "excluse": [
+      [
+        "compound-crema-sensibil-fara-alcool-parfum-50ml",
+        "alternative_disclosure"
+      ],
+      [
+        "compound-spf-fata-gras-noncomedogenic",
+        "alternative_disclosure"
+      ],
+      [
+        "compound-imposibil-premium-ieftin",
+        "impossibility_tradeoff"
+      ],
+      [
+        "compound-imposibil-retinol-sarcina",
+        "safety_refusal"
+      ],
+      [
+        "compound-over-constrained-fara-tot-ieftin",
+        "impossibility_tradeoff"
+      ],
+      [
+        "compound-demachiant-fara-alcool-ochi-sensibili",
+        "alternative_disclosure"
+      ],
+      [
+        "compound-dupa-sport-nu-se-ia",
+        "clarify"
+      ]
+    ]
+  },
+  "schema_version": 1,
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "compound-fond-mat-gras-buget-fara-parfum",
+      "query": "vreau un fond de ten mat, pentru ten gras, sub 100 de lei și fără parfum",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "fond-de-ten",
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
+        "8cb6faed-d058-4303-845b-7a53a894b9e2"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 100,
+          "unit": "RON"
+        },
+        {
+          "facet": "fragrance_free",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "compound-antilucire-rezistent-caldura",
+      "query": "ceva să nu mă lucesc peste zi, să reziste și pe căldură, sub 120",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "relevance": 2
+        },
+        {
+          "product_id": "42be923a-28db-4d10-9e4a-e22f487e281e",
+          "relevance": 2
+        },
+        {
+          "product_id": "c508461f-ae1f-4c62-937a-6ff27b6919a7",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
+        "39ac3ec4-9206-483f-88f9-e812b06caabc"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 120,
+          "unit": "RON"
+        }
+      ]
+    },
+    {
+      "id": "compound-vitc-ten-reactiv-buget",
+      "query": "ser cu vitamina C dar să nu-mi irite tenul reactiv, sub 150",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "ser-pentru-ten",
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 2
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+        "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "ser-pentru-ten"
+        },
+        {
+          "facet": "key_ingredient",
+          "op": "contains",
+          "value": "vitamina_c"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 150,
+          "unit": "RON"
+        }
+      ]
+    },
+    {
+      "id": "compound-machiaj-nunta-ten-mixt-buget",
+      "query": "machiaj de bază pentru nuntă, să țină toată ziua, am ten mixt, buget 200",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "relevance": 3
+        },
+        {
+          "product_id": "3d6887f7-b9f1-40bb-8daf-7f9a04c718fb",
+          "relevance": 3
+        },
+        {
+          "product_id": "c508461f-ae1f-4c62-937a-6ff27b6919a7",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "39ac3ec4-9206-483f-88f9-e812b06caabc",
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 200,
+          "unit": "RON"
+        }
+      ]
+    },
+    {
+      "id": "compound-cel-mai-ieftin-niacinamida-calitate",
+      "query": "cel mai ieftin ser cu niacinamidă, dar să fie de calitate bună",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "ser-pentru-ten",
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "ser-pentru-ten"
+        },
+        {
+          "facet": "key_ingredient",
+          "op": "contains",
+          "value": "niacinamida"
+        }
+      ]
+    },
+    {
+      "id": "compound-alternativa-la-scump",
+      "query": "vreau ceva ca Coral Theory Fresh Apă micelară, dar mai accesibil ca preț",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+          "relevance": 2
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [
+        "b7ebe55c-da08-4b28-a8eb-62ac1bc72b7b"
+      ],
+      "hard_constraints": []
+    },
+    {
+      "id": "compound-fara-parfum-rutina-fata",
+      "query": "vreau produse fără parfum pentru toată rutina de față",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+        "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "fragrance_free",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "compound-birou-natural-ten-normal",
+      "query": "machiaj discret pentru birou, aspect natural, am ten normal",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+          "relevance": 2
+        },
+        {
+          "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+          "relevance": 2
+        },
+        {
+          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [
+        "835d38ab-7a5a-448a-aeb8-03d1e2ce1857"
+      ],
+      "hard_constraints": []
+    },
+    {
+      "id": "compare-doua-fonduri",
+      "query": "care e diferența între Petala Nude Fond de ten și NudeLab Matte 24H Fond de ten?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+          "relevance": 3
+        },
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "8cb6faed-d058-4303-845b-7a53a894b9e2"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "compare_set_size",
+          "op": "eq",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "id": "compare-doua-seruri-vitc",
+      "query": "ce ser cu vitamina C să aleg dintre Petala Bright Ser cu vitamina C și LumaDerm Vitamin C Ser luminozitate?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "compare_set_size",
+          "op": "eq",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "id": "compare-doua-creme-uscat",
+      "query": "Petala Rich Cremă hidratantă sau Coral Theory Balance Cremă hidratantă pentru ten uscat?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "2500935f-44d7-4d5b-8445-67ca1b020408"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "compare_set_size",
+          "op": "eq",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "id": "compare-doua-spf",
+      "query": "care e diferența dintre Auralis Daily Cremă cu SPF 30 și LumaDerm Shield Fluid SPF 50+?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "catalog_version": "demo-2026-07-24",
+      "judgments": [
+        {
+          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "020baf31-3e6a-4e16-86fd-4820e78b6090"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "compare_set_size",
+          "op": "eq",
+          "value": 2
+        }
+      ]
+    }
+  ]
+}
