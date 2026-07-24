@@ -51,6 +51,13 @@ _BEAUTY_RAW: dict[str, str] = {
     "hidratare": "hydration",
     "deshidratat": "hydration",
     "hydration": "hydration",
+    # NX-208: extindere high-confidence din cazurile compuse ratate (parity cu beauty_salon.json).
+    "ten reactiv": "sensitive",
+    "piele reactivă": "sensitive",
+    "reactiv": "sensitive",
+    "reactivă": "sensitive",
+    "mă lucesc": "oily",
+    "luciu": "oily",
 }
 
 _BEAUTY: dict[str, str] = {_norm(k): v for k, v in _BEAUTY_RAW.items()}

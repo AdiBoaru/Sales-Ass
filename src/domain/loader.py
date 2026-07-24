@@ -78,6 +78,20 @@ def _norm_concern_map(raw: Any) -> dict[str, str]:
     return {normalize(k): v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
 
 
+def _norm_query_expansions(raw: Any) -> dict[str, list[str]]:
+    """NX-208: frază colocvială NORMALIZATĂ → termeni de căutare (listă de str curați). Gunoi →
+    ignorat (fail-safe, P6). Termenii rămân ne-normalizați (intră ca text în search_text)."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for k, v in raw.items():
+        if isinstance(k, str) and isinstance(v, list):
+            terms = [t.strip() for t in v if isinstance(t, str) and t.strip()]
+            if terms:
+                out[normalize(k)] = terms
+    return out
+
+
 def _norm_risk_terms(raw: Any) -> dict[str, dict[str, list[str]]]:
     out: dict[str, dict[str, list[str]]] = {}
     if not isinstance(raw, dict):
@@ -169,6 +183,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
     return DomainPack(
         vertical=vertical,
         concern_map=_norm_concern_map(merged.get("concern_map")),
+        query_expansions=_norm_query_expansions(merged.get("query_expansions")),  # NX-208
         risk_terms=_norm_risk_terms(merged.get("risk_terms")),
         greetings=_norm_greetings(merged.get("greetings")),
         injection_patterns=_norm_injection_patterns(merged.get("injection_patterns")),

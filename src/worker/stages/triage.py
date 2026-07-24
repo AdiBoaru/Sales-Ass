@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ValidationError
 
 from src.agent.fallbacks import _is_short_ack
+from src.agent.query_rewrite import build_query_spec
 from src.config import get_settings
 from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
@@ -50,6 +51,31 @@ _CLOSURE_CHIP = {
     "en": "Also recommend {}",
     "hu": "Ajánlj még {}",
 }
+
+
+def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:
+    """NX-208 (D6/D11): emite `query_spec_shadow` pe turul sales/order — telemetrie FĂRĂ PII,
+    ZERO schimbare de comportament. Kill-switch `query_spec_shadow_enabled` (default OFF).
+
+    Emite DOAR proiecția Safe (fără raw/text liber): intent, sort, fațete, nr. constrângeri,
+    prezența unei referințe. Best-effort — orice eroare e înghițită (nu atinge turul, P6)."""
+    if not get_settings().query_spec_shadow_enabled or route not in (Route.SALES, Route.ORDER):
+        return
+    try:
+        spec = build_query_spec(
+            ctx.message.body or "", ctx.business.domain_pack, locale=ctx.language
+        )
+        safe = spec.to_safe()
+        ctx.emit(
+            "query_spec_shadow",
+            intent=safe.intent,
+            sort=safe.sort,
+            n_constraints=len(safe.constraints),
+            facets=sorted({c.facet for c in safe.constraints}),
+            has_reference=bool(spec.reference_terms),
+        )
+    except Exception:  # noqa: BLE001 — shadow pur observabil; nu blochează niciodată turul
+        log.warning("query_spec_shadow emit failed", exc_info=True)
 
 
 async def _closure_chips(deps: PipelineDeps, ctx: TurnContext) -> tuple[list[str], str | None]:
@@ -340,6 +366,7 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         confidence=out.confidence,
         purchase_intent=purchase_intent,
     )
+    _emit_query_spec_shadow(ctx, route)
 
     # simple / clarify: nano a compus răspunsul → early exit la Sender.
     # simple = răspuns static reutilizabil (cacheabil); clarify = specific contextului.
