@@ -65,6 +65,38 @@
       "cases_with_empty_expected_products": 7,
       "hard_soft_corrections": 3,
       "safety_note": "Niciun produs rămas după filtrarea retinoizilor nu este declarat sigur în sarcină; se cere medic/farmacist conform NX-173."
+    },
+    "_response_voice": {
+      "status": "REPER APROBAT PENTRU VALIDARE — exemplele nu sunt text exact obligatoriu",
+      "locale": "ro-RO nativ",
+      "addressing": "tu, informal și respectuos",
+      "channel": "WhatsApp/mobile",
+      "length": "2-3 fraze scurte",
+      "emoji": "fără emoji în reper",
+      "price_in_reply": "rotunjit natural (ex. 66 de lei); prețul exact rămâne în date/card",
+      "response_shape": [
+        "recomandarea directă",
+        "motivul pe limba clientului",
+        "o singură rezervă importantă, dacă există",
+        "o întrebare utilă doar când mută conversația înainte"
+      ],
+      "forbidden_customer_language": [
+        "match/potrivire exactă",
+        "UNKNOWN",
+        "fațetă",
+        "suitability",
+        "catalogul/DB-ul spune",
+        "constrângere hard/soft",
+        "standardizat",
+        "RON și zecimale comerciale în proză"
+      ],
+      "grounding_rule": "must_convey și evidence au prioritate față de stil; naturalețea nu autorizează beneficii sau garanții neinregistrate",
+      "field_roles": {
+        "exemplar_reply": "reper de voce user-facing, nu aserțiune byte-exactă",
+        "must_convey": "checklist semantic pentru evaluator",
+        "correct_answer_sketch": "schiță internă de adevăr, nu model de copy user-facing",
+        "_evidence": "trasabilitate internă; nu se expune clientului"
+      }
     }
   },
   "compound": [
@@ -160,7 +192,14 @@
             "835d38ab...: 66.49 RON, fragrance_free=true, matte, oily/combination",
             "6ece5c7f...: 71.49 RON, fragrance_free=false, dewy"
           ]
-        }
+        },
+        "exemplar_reply": "Am exact ce cauți: NudeLab Matte 24H. E mat, merge bine pe ten gras și e fără parfum, la aproximativ 66 de lei. Vrei să-ți verific ce nuanțe sunt disponibile?",
+        "must_convey": [
+          "recomandă NudeLab Matte 24H",
+          "menționează mat + ten gras/mixt + fără parfum",
+          "preț conversațional ~66 lei; exact 66,49 pe card",
+          "întreabă de nuanță/disponibilitate"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -284,7 +323,14 @@
             "c508461f... text până la 16h",
             "wear_time=0/300; heat_resistant=0/300"
           ]
-        }
+        },
+        "exemplar_reply": "Pentru luciu, aș merge pe NudeLab Matte 24H, la aproximativ 66 de lei, iar Aria Matte Spray, cam 40 de lei, poate ajuta la fixare. Nu vreau să-ți promit cât ține pe căldură, pentru că informația asta nu apare pe produs.",
+        "must_convey": [
+          "NudeLab Matte 24H ~66 lei pentru bază mată/oily",
+          "Aria Matte Spray ~40 lei pentru fixare",
+          "nu garanta rezistența la căldură sau durata exactă",
+          "nu prezenta 24H/16H ca măsurători comparabile"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -382,6 +428,13 @@
         },
         "_codex_hard_soft_review": [
           "Păstrează alcohol_free hard: este cerut explicit; UNKNOWN cere disclosure, nu relaxare tăcută."
+        ],
+        "exemplar_reply": "Pentru ten sensibil, cea mai apropiată variantă este LumaDerm Calm: are 50 ml, e fără parfum și costă în jur de 68 de lei. Nu am însă confirmarea că e și fără alcool; dacă asta e esențial pentru tine, verificăm ingredientele înainte.",
+        "must_convey": [
+          "nu pretinde match exact",
+          "LumaDerm Calm: 50 ml, fragrance_free=true, sensitive/dry, 67,99 lei",
+          "alcohol_free rămâne necunoscut",
+          "oferă verificarea etichetei/INCI"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -495,6 +548,13 @@
         },
         "_codex_hard_soft_review": [
           "Categoria «ser» lipsea din hard și ar fi permis produse off-category."
+        ],
+        "exemplar_reply": "Ai două variante bune sub buget: Petala Bright, cam 47 de lei, și LumaDerm Vitamin C, cam 51 de lei, ambele fără parfum. Niciuna nu este prezentată special pentru ten reactiv, așa că nu vreau să-ți promit că nu va irita. Dacă vrei, le alegem după restul formulei și ce folosești deja.",
+        "must_convey": [
+          "Petala Bright 47,24 și LumaDerm Vitamin C 50,99",
+          "ambele sunt seruri cu vitamina C, sub 150 și fără parfum",
+          "nu garanta potrivirea/toleranța pentru ten reactiv",
+          "concentrația vitaminei C nu este cunoscută"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -587,7 +647,14 @@
             }
           ],
           "coverage": "non_comedogenic=0/300; use_case=0/300; spf la 3/6 produse din categorie"
-        }
+        },
+        "exemplar_reply": "Cea mai apropiată variantă este LumaDerm Shield SPF 50+, la aproximativ 63 de lei: are textură fluidă, e fără parfum și merge pe ten gras sau sensibil. Nu am confirmarea că este non-comedogenic, așa că, dacă pentru tine e obligatoriu, verificăm eticheta înainte.",
+        "must_convey": [
+          "nu pretinde match exact",
+          "LumaDerm Shield: SPF 50, fluid, fragrance_free=true, oily/sensitive, 62,99 lei",
+          "non-comedogenic nu este confirmat",
+          "nu garanta finish non-gras"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -705,6 +772,14 @@
         },
         "_codex_hard_soft_review": [
           "Bugetul este hard numai după clarificarea unității: per produs sau total set."
+        ],
+        "exemplar_reply": "Pentru nuntă ți-aș face un set simplu: NudeLab Matte 24H, pudra Velora HD și spray-ul NudeLab Long Wear. Împreună sunt cam 151 de lei, deci intră în buget. Cei 200 de lei sunt pentru tot setul sau pentru un singur produs?",
+        "must_convey": [
+          "cele trei produse reale din set",
+          "total exact intern 151,47; în conversație ~151 lei",
+          "potrivire cu ten mixt/matifiere/fixare",
+          "clarifică dacă bugetul este pe set sau pe produs",
+          "nu promite durată exactă"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -820,7 +895,15 @@
               ]
             }
           ]
-        }
+        },
+        "exemplar_reply": "Sincer, sub 40 de lei nu am acum niciun fond de ten. Cel mai accesibil este Petala Nude, la aproximativ 60 de lei, iar dacă efectul mat contează mai mult, NudeLab Matte 24H este cam 66. Ce păstrăm ca prioritate: bugetul sau finishul mat?",
+        "must_convey": [
+          "spune clar zero fonduri <=40",
+          "Petala Nude este cel mai ieftin: 59,99",
+          "NudeLab Matte este alternativa mată: 66,49",
+          "nu pretinde că premium este o clasificare disponibilă",
+          "cere alegerea trade-off-ului"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -921,6 +1004,13 @@
         },
         "_codex_hard_soft_review": [
           "Corectat brief-ul: alternativa nu poate fi numită «sigură»; NX-173 cere filtrare retinoizi + referral, fără verdict pe rest."
+        ],
+        "exemplar_reply": "În sarcină n-aș merge pe retinol sau retinal. Îți pot arăta variante fără retinoizi, dar nu vreau să le numesc „sigure” fără confirmarea medicului sau farmacistului. Vrei să ne uităm la hidratare sau la luminozitate?",
+        "must_convey": [
+          "nu recomanda și nu afișa retinol/retinal",
+          "nu declara niciun produs rămas sigur în sarcină",
+          "trimite decizia la medic/farmacist",
+          "poate oferi doar direcții cosmetice fără retinoizi"
         ]
       },
       "fixture_note": "search_products temporar; gate-ul de safety (NX-173) e sursa; rescrie la NX-209"
@@ -1051,6 +1141,13 @@
         },
         "_codex_hard_soft_review": [
           "Categoria «cremă hidratantă» lipsea din hard și a fost adăugată."
+        ],
+        "exemplar_reply": "Îți spun cinstit: nu am o cremă care să le bifeze pe toate și să rămână sub 30 de lei. Petala Matte este cam 29 de lei și e fără parfum, dar e pentru ten gras și nu am informații clare despre alcool sau conservanți. La care condiție ai putea renunța prima?",
+        "must_convey": [
+          "spune că nu există opțiune confirmată cu toate cerințele",
+          "Petala Matte 28,79: fragrance_free, oily/combination",
+          "alcohol_free și preservative_free necunoscute",
+          "cere ce condiție poate fi relaxată"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1137,6 +1234,13 @@
         },
         "_codex_hard_soft_review": [
           "Categoria «ser» lipsea din hard și a fost adăugată."
+        ],
+        "exemplar_reply": "Cel mai ieftin ser cu niacinamidă este Auralis Clarity: aproximativ 42 de lei, în stoc și cu rating 4,5. Este fără parfum și merge mai ales pe ten gras sau cu tendință de imperfecțiuni și pete.",
+        "must_convey": [
+          "Auralis Clarity este cel mai ieftin ser cu niacinamidă",
+          "41,99 lei, rating 4,5, in_stock",
+          "fragrance_free=true, oily/acne/hyperpigmentation",
+          "ratingul este proxy, nu garanție absolută de calitate"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1223,7 +1327,15 @@
             "4f7ff352... 27.99, sensitive/normal, thermal water+glycerin",
             "7ddf1d5f... 45.99, dry/sensitive, vitamin E"
           ]
-        }
+        },
+        "exemplar_reply": "Coral Theory este la aproximativ 184 de lei, dar am două opțiuni mult mai accesibile pentru aceeași nevoie: apa micelară de la Auralis, cam 28 de lei, și cea de la Maison Verde, cam 46. Toate au 200 ml; ingredientele și tipurile de ten diferă, așa că îți pot spune rapid care ți se potrivește mai bine.",
+        "must_convey": [
+          "referință Coral Theory 183,99",
+          "Auralis 27,99 și Maison Verde 45,99",
+          "toate sunt ape micelare de 200 ml",
+          "nu le prezenta ca formule identice",
+          "oferă comparația diferențelor"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -1343,7 +1455,14 @@
             "aa5bde75... moisturize",
             "8c5171d3... protect"
           ]
-        }
+        },
+        "exemplar_reply": "Îți pot face rutina completă doar cu produse fără parfum: Auralis Gentle pentru curățare, Auralis Clarity ca ser, LumaDerm Calm ca cremă și LumaDerm Shield SPF pentru zi. În total sunt aproximativ 218 lei, iar ordinea este curățare, ser, cremă și protecție solară.",
+        "must_convey": [
+          "cele patru produse și pașii cleanse/treat/moisturize/protect",
+          "toate au fragrance_free=true",
+          "total exact intern 217,96; conversațional ~218",
+          "nu face promisiuni despre toleranță/compatibilitate individuală"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -1434,7 +1553,14 @@
             }
           ],
           "coverage": "alcohol_free=0/300; eye_area=0/300"
-        }
+        },
+        "exemplar_reply": "Cea mai apropiată variantă este Auralis Apa micelară, la aproximativ 28 de lei: e fără parfum și este potrivită pentru ten sensibil. Nu am însă confirmarea că e fără alcool sau făcută special pentru zona ochilor; dacă vrei, verificăm eticheta înainte.",
+        "must_convey": [
+          "nu pretinde match exact sau produs special pentru ochi",
+          "Auralis micellar: 27,99, sensitive/normal, fragrance_free=true",
+          "alcohol_free și eye_area necunoscute",
+          "oferă verificarea etichetei"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     },
@@ -1505,6 +1631,12 @@
         },
         "_codex_hard_soft_review": [
           "Empty expected_products este intenționat: recomandarea înainte de clarificare ar fi un fals pozitiv."
+        ],
+        "exemplar_reply": "Ca să-ți recomand ce trebuie: cauți ceva pentru curățare și îngrijire după antrenament sau un machiaj care să reziste cât faci sport? Sunt două nevoi diferite și vreau să aleg categoria potrivită înainte să-ți arăt produse.",
+        "must_convey": [
+          "pune o singură întrebare de clarificare skincare vs makeup",
+          "nu recomanda produs înainte de răspuns",
+          "nu pretinde sweat/transfer resistance"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1605,7 +1737,14 @@
             "c1eec351... dewy/light/normal",
             "896945ed... natural/medium/normal"
           ]
-        }
+        },
+        "exemplar_reply": "Pentru un look discret la birou, Petala Nude are acoperire lejeră și finish natural, la aproximativ 60 de lei. Dacă vrei ceva mai hidratant, Aria Light BB este cam 55 de lei, iar pentru puțin mai multă uniformizare ai Velora Skin Match la aproximativ 90 de lei.",
+        "must_convey": [
+          "Petala Nude: light/natural/normal-dry, 59,99, low_stock",
+          "Aria Light BB: light/dewy/hydrating, 54,99",
+          "Velora Skin Match: medium/natural/normal-combination, 89,99",
+          "nu afirma use_case office ca atribut"
+        ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
     }
@@ -1701,7 +1840,13 @@
               "oily/combination"
             ]
           }
-        }
+        },
+        "exemplar_reply": "Diferența mare este cât acoperă și pentru ce ten sunt făcute. Petala Nude, cam 60 de lei, este lejer și natural, pentru ten normal sau uscat; NudeLab Matte 24H, cam 66 de lei, acoperă mai mult și este mat, pentru ten gras sau mixt. Aici aș alege după efectul dorit, nu după preț.",
+        "must_convey": [
+          "Petala: light/natural/normal-dry/59,99/low_stock",
+          "NudeLab: full/matte/oily-combination/66,49",
+          "minimum două axe reale: coverage, finish, skin type, price"
+        ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
     },
@@ -1800,7 +1945,14 @@
               "UNKNOWN"
             ]
           }
-        }
+        },
+        "exemplar_reply": "Ambele sunt seruri fluide cu vitamina C, fără parfum și foarte apropiate ca preț: Petala Bright este cam 47 de lei, iar LumaDerm cam 51. Petala mai are niacinamidă și e pentru ten normal cu pete; LumaDerm are acid ferulic și e pentru ten deshidratat cu pete. Concentrația vitaminei C nu este trecută la niciunul.",
+        "must_convey": [
+          "Petala: Vit C+niacinamidă, hyperpigmentation/normal, 47,24",
+          "LumaDerm: Vit C+acid ferulic, hyperpigmentation/hydration, 50,99",
+          "ambele fluid și fragrance_free",
+          "concentrația necunoscută; nu o inventa"
+        ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
     },
@@ -1900,7 +2052,14 @@
               "50 ml"
             ]
           }
-        }
+        },
+        "exemplar_reply": "Ambele sunt pentru ten uscat, dar diferă mult la ingrediente și preț. Petala Rich este cam 50 de lei, cu unt de shea și ceramide, iar Coral Theory este aproximativ 114 lei, cu ovăz coloidal și bisabolol. Dacă vrei varianta mai accesibilă și cu accent clar pe hrănire, aș merge pe Petala.",
+        "must_convey": [
+          "ambele dry/hydration, 50 ml, texture cream",
+          "Petala: 49,99, shea+ceramides, explicit rich/nourishing claim",
+          "Coral: 114,49, colloidal oats+bisabolol",
+          "nu afirma că Coral este mai calmant; beneficiul nu este confirmat"
+        ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
     },
@@ -2003,7 +2162,15 @@
               "UNKNOWN"
             ]
           }
-        }
+        },
+        "exemplar_reply": "Auralis Daily este o cremă cu SPF 30 pentru ten normal sau mixt și costă cam 50 de lei. LumaDerm Shield este un fluid cu SPF 50 pentru ten gras sau sensibil, la aproximativ 63 de lei. Dacă vrei protecție mai ridicată și o textură fluidă, aș merge pe LumaDerm; Auralis rămâne varianta mai accesibilă.",
+        "must_convey": [
+          "Auralis: SPF30, cream, normal/combination, 49,99",
+          "LumaDerm: SPF50, fluid, oily/sensitive, 62,99",
+          "ambele 50 ml și fragrance_free",
+          "nu afirma că SPF30 este suficient pentru un context neprecizat",
+          "finishul nu este comparabil"
+        ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
     }
