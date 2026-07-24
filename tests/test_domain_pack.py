@@ -137,6 +137,54 @@ def test_ecommerce_no_query_expansions():
     assert pack.query_expansions == {}  # default gol (fără expandare)
 
 
+# --- NX-186: registru de fațete tipizate ------------------------------------
+
+
+def test_beauty_salon_facets_parsed():
+    from src.domain.facets import FacetType
+
+    pack = load_domain_pack(_biz("beauty_salon"))
+    byk = {f.key: f for f in pack.facets}
+    assert "price" in byk and "fragrance_free" in byk and "concerns" in byk
+    assert byk["price"].value_type is FacetType.NUMBER
+    assert byk["fragrance_free"].provenance == "claim"
+    assert byk["category"].source_key == "primary_category_id"
+
+
+def test_ecommerce_no_facets():
+    pack = load_domain_pack(_biz("ecommerce"))
+    assert pack.facets == ()  # default gol (fără fațete tipizate)
+
+
+def test_facets_override_merges_and_fails_closed():
+    # override adaugă o fațetă validă + una NESIGURĂ (JSON path) → doar cea validă intră.
+    pack = load_domain_pack(
+        _biz(
+            "beauty_salon",
+            {
+                "domain_pack": {
+                    "facets": [
+                        {
+                            "key": "price",
+                            "value_type": "number",
+                            "source": "column",
+                            "source_key": "price",
+                        },
+                        {
+                            "key": "evil",
+                            "value_type": "text",
+                            "source": "attribute",
+                            "source_key": "a->b",
+                        },
+                    ]
+                }
+            },
+        )
+    )
+    keys = {f.key for f in pack.facets}
+    assert "price" in keys and "evil" not in keys  # fail-closed pe config nesigur
+
+
 # --- locale-keyed (P11) -----------------------------------------------------
 
 
