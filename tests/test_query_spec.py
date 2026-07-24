@@ -51,6 +51,37 @@ def test_to_safe_drops_raw_and_reference_names():
     assert any(c.facet == "price" for c in safe.constraints)
 
 
+def test_to_safe_drops_pii_in_constraint_value():
+    """Review #246: o constrângere cu VALOARE de text liber / PII e DROPATĂ din SafeQuerySpec —
+    `to_safe()` nu copiază valori necanonice. Număr/boolean + token canonic supraviețuiesc."""
+    rt = RuntimeQuerySpec(
+        raw_query=_CANARY,
+        normalized_query=_CANARY.lower(),
+        search_text=_CANARY,
+        constraints=(
+            Constraint(facet="price", op="lte", value=120, strength="hard"),  # număr → OK
+            Constraint(facet="concern", op="contains", value="oily", strength="soft"),  # token → OK
+            Constraint(facet="note", op="eq", value=_CANARY, strength="soft"),  # text liber → DROP
+            Constraint(facet="phone", op="eq", value="0722123456", strength="hard"),  # cifre → DROP
+        ),
+    )
+    safe = rt.to_safe()
+    dumped = safe.model_dump_json()
+    assert _CANARY not in dumped and "0722123456" not in dumped  # PII nu ajunge în Safe
+    facets = {c.facet for c in safe.constraints}
+    assert facets == {"price", "concern"}  # doar canonicele supraviețuiesc (fail-closed)
+
+
+def test_to_safe_drops_non_canonical_category():
+    rt = RuntimeQuerySpec(
+        raw_query="x",
+        normalized_query="x",
+        search_text="x",
+        category="Ion Popescu 0722123456",  # text liber în loc de slug → dropat la None
+    )
+    assert rt.to_safe().category is None
+
+
 def test_runtime_spec_not_serializable():
     """RuntimeQuerySpec nu expune nicio cale de serializare (fără model_dump/json) — trăiește
     doar în memoria turului. Unica ieșire e `to_safe()`."""

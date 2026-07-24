@@ -23,9 +23,29 @@ DROPează tot textul liber (inclusiv numele de produs-referință din `reference
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
+
+from src.domain.normalize import normalize
+
+# Valoare de constrângere care POATE ieși în SafeQuerySpec (telemetrie/persistență): număr/boolean,
+# SAU un TOKEN canonic — începe cu literă, doar [a-z0-9_-], ≤48 caractere (după normalizare). Asta
+# blochează STRUCTURAL textul liber / PII: spații (nume/adrese), majuscule, punctuație și valorile
+# cifră-only (telefon/adresă încep cu cifră → respinse). Un slug/cod canonic („oily", „vitamina_c",
+# „seruri-pentru-ten") trece; „Ion Popescu 0722…" nu.
+_CANONICAL_TOKEN = re.compile(r"[a-z][a-z0-9_-]*")
+
+
+def _is_safe_value(value: object) -> bool:
+    """True dacă valoarea e sigură de persistat (fără text liber/PII). Vezi `_CANONICAL_TOKEN`."""
+    if isinstance(value, (bool, int, float)):
+        return True
+    if isinstance(value, str):
+        return len(value) <= 48 and _CANONICAL_TOKEN.fullmatch(normalize(value)) is not None
+    return False
+
 
 # Vocabular ÎNGUST de operatori/tării, comun cu qrels-ul (retrieval_qrels_compound.json) și NX-185.
 Op = str  # "eq" | "lte" | "gte" | "contains" (validat de consumatori; ținut lax pt forward-compat)
@@ -88,12 +108,21 @@ class RuntimeQuerySpec:
     locale: str = "ro"
 
     def to_safe(self) -> SafeQuerySpec:
-        """Proiecție canonică fără text liber — SINGURA cale spre telemetrie/persistență."""
+        """Proiecție canonică fără text liber — SINGURA cale spre telemetrie/persistență.
+
+        SANITIZEAZĂ valorile (fail-closed): o constrângere ajunge în Safe DOAR dacă atât `facet` cât
+        și `value` sunt canonice (`_is_safe_value`); orice text liber / PII e DROPAT, nu copiat. La
+        fel pentru `category` și `reference_categories` — garanție structurală, nu «în practică»."""
+        safe_constraints = tuple(
+            c for c in self.constraints if _is_safe_value(c.facet) and _is_safe_value(c.value)
+        )
         return SafeQuerySpec(
             locale=self.locale,
             intent=self.intent,
-            category=self.category,
-            constraints=self.constraints,
-            reference_categories=self.reference_categories,
+            category=self.category if _is_safe_value(self.category) else None,
+            constraints=safe_constraints,
+            reference_categories=tuple(
+                rc for rc in self.reference_categories if _is_safe_value(rc)
+            ),
             sort=self.sort,
         )
