@@ -97,6 +97,20 @@
         "correct_answer_sketch": "schiță internă de adevăr, nu model de copy user-facing",
         "_evidence": "trasabilitate internă; nu se expune clientului"
       }
+    },
+    "form_layers": {
+      "added_at": "2026-07-24",
+      "spec": "docs/NX-202-FORM-DECISION-SPEC.md",
+      "regula": "exemplar_reply = LOCKED (vocea Adi, nu se rescrie); form/expected_cards/follow_up_suggestions/negative_checks = straturi SEPARATE lângă text, nu în el. Cardurile+chips sunt payload de randare (FRONTEND-CONTRACT-IZI, text-first); clarify și safety_refusal au expected_cards gol PRIN DESIGN.",
+      "forms_distribution": {
+        "recommendation": 6,
+        "alternative_disclosure": 3,
+        "multi_product_set": 2,
+        "impossibility_tradeoff": 2,
+        "safety_refusal": 1,
+        "clarify": 1,
+        "comparison": 4
+      }
     }
   },
   "compound": [
@@ -199,6 +213,22 @@
           "menționează mat + ten gras/mixt + fără parfum",
           "preț conversațional ~66 lei; exact 66,49 pe card",
           "întreabă de nuanță/disponibilitate"
+        ],
+        "form": "recommendation",
+        "expected_cards": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Ce nuanțe are?",
+          "Arată-mi și alte fonduri de ten",
+          "Adaugă-l în coș"
+        ],
+        "negative_checks": [
+          "nu prezenta fonduri cu parfum sau finish dewy ca potrivire",
+          "nu inventa alte «potriviri» când una singură e match curat"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -330,6 +360,29 @@
           "Aria Matte Spray ~40 lei pentru fixare",
           "nu garanta rezistența la căldură sau durata exactă",
           "nu prezenta 24H/16H ca măsurători comparabile"
+        ],
+        "form": "recommendation",
+        "expected_cards": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "42be923a-28db-4d10-9e4a-e22f487e281e",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "c508461f-ae1f-4c62-937a-6ff27b6919a7",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Compară cele două spray-uri",
+          "Vreau doar îngrijire, nu machiaj",
+          "Adaugă fondul în coș"
+        ],
+        "negative_checks": [
+          "nu garanta rezistența la căldură sau numărul de ore (wear_time neconfirmat)"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -435,6 +488,21 @@
           "LumaDerm Calm: 50 ml, fragrance_free=true, sensitive/dry, 67,99 lei",
           "alcohol_free rămâne necunoscut",
           "oferă verificarea etichetei/INCI"
+        ],
+        "form": "alternative_disclosure",
+        "expected_cards": [
+          {
+            "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+            "presented_as": "alternative"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Verifică dacă e fără alcool",
+          "Arată-mi alte creme pentru ten sensibil"
+        ],
+        "negative_checks": [
+          "nu prezenta LumaDerm Calm ca potrivire exactă (alcohol_free neconfirmat)",
+          "nu afirma «fără alcool» pentru niciun produs"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -555,6 +623,25 @@
           "ambele sunt seruri cu vitamina C, sub 150 și fără parfum",
           "nu garanta potrivirea/toleranța pentru ten reactiv",
           "concentrația vitaminei C nu este cunoscută"
+        ],
+        "form": "recommendation",
+        "expected_cards": [
+          {
+            "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Compară-le",
+          "Care e mai blând pentru început?"
+        ],
+        "negative_checks": [
+          "nu promite că nu irită (potrivirea pentru ten reactiv neconfirmată)",
+          "nu inventa concentrații"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -654,6 +741,21 @@
           "LumaDerm Shield: SPF 50, fluid, fragrance_free=true, oily/sensitive, 62,99 lei",
           "non-comedogenic nu este confirmat",
           "nu garanta finish non-gras"
+        ],
+        "form": "alternative_disclosure",
+        "expected_cards": [
+          {
+            "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+            "presented_as": "alternative"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Verifică eticheta pentru non-comedogenic",
+          "Alte produse cu SPF pentru față"
+        ],
+        "negative_checks": [
+          "nu afirma «non-comedogenic» (fațetă neconfirmată)",
+          "nu prezenta ca potrivire exactă"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -780,6 +882,29 @@
           "potrivire cu ten mixt/matifiere/fixare",
           "clarifică dacă bugetul este pe set sau pe produs",
           "nu promite durată exactă"
+        ],
+        "form": "multi_product_set",
+        "expected_cards": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "3d6887f7-b9f1-40bb-8daf-7f9a04c718fb",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "c508461f-ae1f-4c62-937a-6ff27b6919a7",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Bugetul e pentru tot setul",
+          "Bugetul e doar pentru fondul de ten"
+        ],
+        "negative_checks": [
+          "nu garanta «ține toată ziua» ca promisiune de ore",
+          "clarifică scopul bugetului, nu-l presupune"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -822,20 +947,6 @@
         ],
         "expected_products": [],
         "forbidden_products": [
-          {
-            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
-            "name": "Petala Nude Fond de ten",
-            "price": 59.99,
-            "currency": "RON",
-            "reason": "cel mai ieftin fond, dar peste 40 RON"
-          },
-          {
-            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
-            "name": "NudeLab Matte 24H Fond de ten",
-            "price": 66.49,
-            "currency": "RON",
-            "reason": "mat, dar peste 40 RON"
-          },
           {
             "product_id": "8cb6faed-d058-4303-845b-7a53a894b9e2",
             "name": "Petala Pore Blur Primer",
@@ -903,6 +1014,29 @@
           "NudeLab Matte este alternativa mată: 66,49",
           "nu pretinde că premium este o clasificare disponibilă",
           "cere alegerea trade-off-ului"
+        ],
+        "form": "impossibility_tradeoff",
+        "expected_cards": [
+          {
+            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+            "presented_as": "alternative"
+          },
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "presented_as": "alternative"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Rămân la buget",
+          "Contează mai mult finishul mat"
+        ],
+        "negative_checks": [
+          "nu prezenta nimic ca fiind sub 40 de lei (nu există, confirmat)",
+          "nu pretinde tier «premium» (nu există în taxonomie)",
+          "alternativele se afișează cu compromisul explicat, nu ca potrivire"
+        ],
+        "_notes": [
+          "fix semantic 2026-07-24: Petala Nude + NudeLab Matte scoase din forbidden_products — exemplarul validat de Adi le prezintă ca ALTERNATIVE cu compromis explicat (expected_cards presented_as=alternative). forbidden = niciodată afișat; alternativa cu tradeoff = afișabilă."
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1011,6 +1145,17 @@
           "nu declara niciun produs rămas sigur în sarcină",
           "trimite decizia la medic/farmacist",
           "poate oferi doar direcții cosmetice fără retinoizi"
+        ],
+        "form": "safety_refusal",
+        "expected_cards": [],
+        "follow_up_suggestions": [
+          "Variante de hidratare",
+          "Ceva pentru luminozitate"
+        ],
+        "negative_checks": [
+          "ZERO retinoizi afișați sau numiți ca opțiune",
+          "nu declara niciun produs «sigur în sarcină»",
+          "nu împinge carduri de produs în răspunsul de siguranță"
         ]
       },
       "fixture_note": "search_products temporar; gate-ul de safety (NX-173) e sursa; rescrie la NX-209"
@@ -1148,6 +1293,21 @@
           "Petala Matte 28,79: fragrance_free, oily/combination",
           "alcohol_free și preservative_free necunoscute",
           "cere ce condiție poate fi relaxată"
+        ],
+        "form": "impossibility_tradeoff",
+        "expected_cards": [
+          {
+            "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+            "presented_as": "alternative"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Renunț la limita de preț",
+          "Renunț la «fără conservanți»"
+        ],
+        "negative_checks": [
+          "nu afirma «fără alcool»/«fără conservanți» (fațete neconfirmate)",
+          "nu prezenta alternativa ca îndeplinind toate condițiile"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1241,6 +1401,20 @@
           "41,99 lei, rating 4,5, in_stock",
           "fragrance_free=true, oily/acne/hyperpigmentation",
           "ratingul este proxy, nu garanție absolută de calitate"
+        ],
+        "form": "recommendation",
+        "expected_cards": [
+          {
+            "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Adaugă-l în coș",
+          "Mai ai și alte seruri cu niacinamidă?"
+        ],
+        "negative_checks": [
+          "«calitatea» se susține doar prin rating/recenzii, nu ca verdict absolut"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1335,6 +1509,25 @@
           "toate sunt ape micelare de 200 ml",
           "nu le prezenta ca formule identice",
           "oferă comparația diferențelor"
+        ],
+        "form": "recommendation",
+        "expected_cards": [
+          {
+            "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Ce diferă față de Coral Theory?",
+          "Adaug-o pe cea de 28 de lei"
+        ],
+        "negative_checks": [
+          "nu pretinde echivalență identică cu referința",
+          "spune explicit ce diferă"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1462,6 +1655,33 @@
           "toate au fragrance_free=true",
           "total exact intern 217,96; conversațional ~218",
           "nu face promisiuni despre toleranță/compatibilitate individuală"
+        ],
+        "form": "multi_product_set",
+        "expected_cards": [
+          {
+            "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Detalii despre fiecare pas",
+          "O alternativă mai ieftină la cremă"
+        ],
+        "negative_checks": [
+          "niciun produs cu parfum în rutină",
+          "nu evalua compatibilitatea ingredientelor ca garanție"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1560,6 +1780,20 @@
           "Auralis micellar: 27,99, sensitive/normal, fragrance_free=true",
           "alcohol_free și eye_area necunoscute",
           "oferă verificarea etichetei"
+        ],
+        "form": "alternative_disclosure",
+        "expected_cards": [
+          {
+            "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+            "presented_as": "alternative"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Verifică eticheta pentru alcool",
+          "Alte demachiante blânde"
+        ],
+        "negative_checks": [
+          "nu afirma «fără alcool» sau «pentru zona ochilor» (neconfirmate)"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1637,6 +1871,16 @@
           "pune o singură întrebare de clarificare skincare vs makeup",
           "nu recomanda produs înainte de răspuns",
           "nu pretinde sweat/transfer resistance"
+        ],
+        "form": "clarify",
+        "expected_cards": [],
+        "follow_up_suggestions": [
+          "Îngrijire după antrenament",
+          "Machiaj rezistent la sport"
+        ],
+        "negative_checks": [
+          "ZERO carduri înainte de clarificare",
+          "nu ghici categoria (schimbă complet recomandarea)"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1744,6 +1988,28 @@
           "Aria Light BB: light/dewy/hydrating, 54,99",
           "Velora Skin Match: medium/natural/normal-combination, 89,99",
           "nu afirma use_case office ca atribut"
+        ],
+        "form": "recommendation",
+        "expected_cards": [
+          {
+            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Vreau doar BB cream",
+          "Ceva sub 60 de lei"
+        ],
+        "negative_checks": [
+          "nu împinge full-coverage mat pe o cerere de «natural, discret»"
         ]
       },
       "fixture_note": "search_products temporar; rescrie la NX-209"
@@ -1846,6 +2112,27 @@
           "Petala: light/natural/normal-dry/59,99/low_stock",
           "NudeLab: full/matte/oily-combination/66,49",
           "minimum două axe reale: coverage, finish, skin type, price"
+        ],
+        "form": "comparison",
+        "expected_cards": [
+          {
+            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Adaugă Petala Nude",
+          "Adaugă NudeLab Matte",
+          "Arată-mi și alte fonduri"
+        ],
+        "negative_checks": [
+          "compară DOAR pe axe cu date la ambele",
+          "minim 2 diferențe demonstrate",
+          "nu inventa diferențe"
         ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
@@ -1952,6 +2239,26 @@
           "LumaDerm: Vit C+acid ferulic, hyperpigmentation/hydration, 50,99",
           "ambele fluid și fragrance_free",
           "concentrația necunoscută; nu o inventa"
+        ],
+        "form": "comparison",
+        "expected_cards": [
+          {
+            "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Adaugă Petala Bright",
+          "Adaugă LumaDerm",
+          "Care pentru ten sensibil?"
+        ],
+        "negative_checks": [
+          "nu inventa concentrația (neconfirmată la ambele)",
+          "minim 2 diferențe demonstrate"
         ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
@@ -2059,6 +2366,26 @@
           "Petala: 49,99, shea+ceramides, explicit rich/nourishing claim",
           "Coral: 114,49, colloidal oats+bisabolol",
           "nu afirma că Coral este mai calmant; beneficiul nu este confirmat"
+        ],
+        "form": "comparison",
+        "expected_cards": [
+          {
+            "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Adaugă Petala Rich",
+          "Adaugă Coral Theory",
+          "Alte creme pentru ten uscat"
+        ],
+        "negative_checks": [
+          "nu inventa diferență de «richness» la Coral (nedeclarată)",
+          "minim 2 diferențe demonstrate"
         ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
@@ -2170,6 +2497,26 @@
           "ambele 50 ml și fragrance_free",
           "nu afirma că SPF30 este suficient pentru un context neprecizat",
           "finishul nu este comparabil"
+        ],
+        "form": "comparison",
+        "expected_cards": [
+          {
+            "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+            "presented_as": "exact"
+          },
+          {
+            "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+            "presented_as": "exact"
+          }
+        ],
+        "follow_up_suggestions": [
+          "Adaugă Auralis SPF 30",
+          "Adaugă LumaDerm SPF 50+",
+          "Care e mai bun sub machiaj?"
+        ],
+        "negative_checks": [
+          "nu inventa finish (nestructurat la ambele)",
+          "minim 2 diferențe demonstrate"
         ]
       },
       "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
