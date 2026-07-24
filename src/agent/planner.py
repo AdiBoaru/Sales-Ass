@@ -74,8 +74,14 @@ def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: 
             n_rejected=len(ms.rejected),
             n_hard=sum(1 for c in spec.constraints if c.strength == "hard"),
         )
-        for r in ms.coverage:  # agregat per fațetă hard — cheie canonică + status (fără PII)
-            ctx.emit("match_gate_outcome", facet=r.facet, status=r.status)
+        for r in ms.coverage:  # distribuție per fațetă hard — cheie canonică + numere (fără PII)
+            ctx.emit(
+                "match_gate_outcome",
+                facet=r.facet,
+                match=r.match,
+                mismatch=r.mismatch,
+                unknown=r.unknown,
+            )
     except Exception:  # noqa: BLE001 — shadow pur observabil; nu blochează niciodată turul
         log.warning("match_gate_shadow failed", exc_info=True)
 

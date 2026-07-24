@@ -168,14 +168,36 @@ def test_dod_happy_full_matchset():
 
 
 def test_coverage_aggregate_reports_unknown():
-    # fragrance_free UNKNOWN peste tot (niciun produs nu-l are) → coverage agregat UNKNOWN
+    # fragrance_free UNKNOWN peste tot (niciun produs nu-l are) → distribuție 100% UNKNOWN
     products = [_p("x", price=50, concerns=["dry"]), _p("y", price=60, concerns=["oily"])]
     ms = build_match_set(
         products, [_hard("fragrance_free", "eq", True), _hard("price", "lte", 100)], _REG
     )
-    cov = {r.facet: r.status for r in ms.coverage}
-    assert cov["fragrance_free"] == "UNKNOWN"
-    assert cov["price"] == "MATCH"
+    cov = {r.facet: r for r in ms.coverage}
+    assert (cov["fragrance_free"].match, cov["fragrance_free"].unknown) == (0, 2)
+    assert (cov["price"].match, cov["price"].unknown) == (2, 0)
+
+
+def test_coverage_preserves_distribution_not_collapsed():
+    # Review #248: fațetă cu MATCH + UNKNOWN → distribuția PĂSTREAZĂ ambele (nu comprimă în MATCH)
+    products = [_p("a", fragrance_free=True), _p("b")]  # unul are, unul nu
+    ms = build_match_set(products, [_hard("fragrance_free", "eq", True)], _REG)
+    ff = ms.coverage[0]
+    assert ff.match == 1 and ff.unknown == 1 and ff.mismatch == 0  # UNKNOWN NU se pierde
+
+
+def test_invalid_operator_is_unknown_not_match():
+    # Review #248: operator neacceptat de fațetă (contains pe bool) → UNKNOWN, nu MATCH accidental
+    assert evaluate(_FF, "contains", True, True) == "UNKNOWN"
+    assert evaluate(_PRICE, "typo", 100, 50) == "UNKNOWN"  # op inexistent → UNKNOWN, nu eq tăcut
+
+
+def test_missing_query_value_is_unknown():
+    assert evaluate(_PRICE, "lte", None, 50) == "UNKNOWN"  # valoare de query lipsă → UNKNOWN
+
+
+def test_non_bool_value_for_bool_facet_is_unknown():
+    assert evaluate(_FF, "eq", "true", True) == "UNKNOWN"  # valoare invalidă pt bool → UNKNOWN
 
 
 # --- shadow hook (kill-switch OFF by default, zero behavior change) ----------
