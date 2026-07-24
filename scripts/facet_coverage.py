@@ -27,37 +27,59 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(
+        encoding="utf-8"
+    )  # F4: diacritice pe consola Windows fără PYTHONIOENCODING
+
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.domain.facets import FacetType, extract_value, is_valid_value  # noqa: E402
 from src.domain.loader import load_domain_pack  # noqa: E402
+from src.domain.normalize import normalize  # noqa: E402
 from src.models import BusinessConfig  # noqa: E402
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 MIN_PRODUCTS = 5  # sub acest prag pe categorie → „date insuficiente", nu coverage fals
-
+QRELS = ROOT / "tests" / "golden" / "retrieval_qrels_compound.json"
 
 # Vocabularul `claim_provenance.kind` care SUSȚINE o fațetă (catalogul demo folosește `ingredient`).
-# Fațetele-claim neapărute aici rămân verified=0 CORECT (afirmate, nu merchant-verified) — exact
-# semnalul de care are nevoie NX-188 (nu enforce-ui un claim fără proveniență ca „confirmat").
+# O fațetă-claim NEMAPATĂ aici NU poate fi merchant-verified (fail-safe) — semnalul de care are
+# nevoie NX-188 (nu enforce-ui un claim fără proveniență ca „confirmat").
 _PROVENANCE_KINDS_BY_FACET: dict[str, set[str]] = {
     "key_ingredients": {"ingredient"},
 }
 
+# Cheie qrels (NX-208) → cheie registru (unele fațete apar la singular în qrels).
+_FACET_KEY_ALIASES: dict[str, str] = {"key_ingredient": "key_ingredients", "concern": "concerns"}
 
-def _has_claim_provenance(attributes: dict, facet_key: str, source_key: str) -> bool:
-    """True dacă există o intrare `claim_provenance` cu `verified_at` al cărei `kind` susține fațeta
-    (D5). Conservator: fără verified_at → nu e verified; fără vocabular de proveniență → 0."""
+
+def _claim_verified(attributes: dict, facet, value) -> bool:
+    """F1 (sound): valoarea PREZENTĂ pe produs e merchant-verified DOAR dacă o intrare
+    `claim_provenance` cu `verified_at`, cu `kind` MAPAT pentru fațetă, are o `value` care chiar
+    CORESPUNDE valorii produsului (D5). Proveniența pt alt ingredient NU confirmă acest produs;
+    o fațetă nemapată → niciodată verified. Evită fals-pozitivul de „verified"."""
+    kinds = _PROVENANCE_KINDS_BY_FACET.get(facet.key)
+    if kinds is None:
+        return False
     cp = attributes.get("claim_provenance")
     if not isinstance(cp, list):
         return False
-    kinds = _PROVENANCE_KINDS_BY_FACET.get(facet_key, {facet_key, source_key})
-    for entry in cp:
-        if not isinstance(entry, dict) or not entry.get("verified_at"):
-            continue
-        if entry.get("kind") in kinds or entry.get("facet") in kinds:
-            return True
-    return False
+    backed = {
+        normalize(str(e["value"]))
+        for e in cp
+        if isinstance(e, dict)
+        and e.get("verified_at")
+        and e.get("kind") in kinds
+        and e.get("value")
+    }
+    if not backed:
+        return False
+    if facet.value_type is FacetType.LIST and isinstance(value, list):
+        return any(normalize(str(x)) in backed for x in value)
+    if isinstance(value, str):
+        return normalize(value) in backed
+    return False  # bool/number claim fără proveniență la nivel de valoare → nu confirmăm
 
 
 def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -> list[dict]:
@@ -76,8 +98,8 @@ def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -
                     present += 1
                 if is_valid_value(facet, v):
                     valid += 1
-                    if facet.provenance == "structural" or _has_claim_provenance(
-                        p.get("attributes") or {}, facet.key, facet.source_key
+                    if facet.provenance == "structural" or _claim_verified(
+                        p.get("attributes") or {}, facet, v
                     ):
                         verified += 1
                     if facet.value_type in (FacetType.ENUM, FacetType.TEXT):
@@ -103,6 +125,55 @@ def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -
                 }
             )
     return out
+
+
+def evaluate_constraint(facet, op: str, value, product_value) -> str:
+    """F3 — tri-state de MĂSURARE (previziune pe query-uri reale): MATCH | MISMATCH | UNKNOWN (D7).
+    Valoare lipsă/nevalidă = UNKNOWN, NU MISMATCH. NU e Match Gate-ul de runtime (acela e NX-187, cu
+    MatchSet disjunct + precedență); aici e doar evaluatorul pt distribuția pe qrels."""
+    if product_value is None or not is_valid_value(facet, product_value):
+        return "UNKNOWN"
+    if facet.value_type is FacetType.NUMBER:
+        try:
+            pv, val = float(product_value), float(value)
+        except (TypeError, ValueError):
+            return "UNKNOWN"
+        ok = {"lte": pv <= val, "gte": pv >= val, "eq": pv == val}.get(op, pv == val)
+        return "MATCH" if ok else "MISMATCH"
+    if facet.value_type is FacetType.BOOL:
+        return "MATCH" if bool(product_value) == bool(value) else "MISMATCH"
+    if facet.value_type is FacetType.LIST and isinstance(product_value, list):
+        vals = {normalize(str(x)) for x in product_value}
+        return "MATCH" if normalize(str(value)) in vals else "MISMATCH"
+    return "MATCH" if normalize(str(product_value)) == normalize(str(value)) else "MISMATCH"
+
+
+def query_match_distribution(facets, queries: list[dict], all_products: list[dict]) -> dict:
+    """F3 — distribuția MATCH/MISMATCH/UNKNOWN a constrângerilor REALE (qrels) peste produsele din
+    scope-ul query-ului (categoria lui, altfel tot catalogul). PUR. Input NX-188: un UNKNOWN mare =
+    fațeta nu e gata de enforcement hard pe query-urile reale."""
+    by_key = {f.key: f for f in facets}
+    by_cat: dict[str, list[dict]] = collections.defaultdict(list)
+    for p in all_products:
+        by_cat[p.get("category_slug")].append(p)
+    per_facet: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    n = 0
+    for q in queries:
+        cat = q.get("category")
+        scope = by_cat.get(cat, []) if cat else all_products
+        for hc in q.get("hard_constraints", []):
+            fkey = _FACET_KEY_ALIASES.get(hc.get("facet"), hc.get("facet"))
+            facet = by_key.get(fkey)
+            if facet is None:  # fațete non-registru (ex. compare_set_size) → skip
+                continue
+            n += 1
+            for p in scope:
+                pv = extract_value(facet, p, p.get("attributes") or {})
+                per_facet[fkey][evaluate_constraint(facet, hc.get("op"), hc.get("value"), pv)] += 1
+    return {
+        "constraints_evaluated": n,
+        "per_facet": {k: dict(v) for k, v in sorted(per_facet.items())},
+    }
 
 
 async def _facets_for(conn, business_id: str, vertical: str):
@@ -143,12 +214,18 @@ async def main() -> None:
             args.business,
         )
 
+    products: list[dict] = []
     by_cat: dict[str, list[dict]] = collections.defaultdict(list)
     for r in rows:
         prod = dict(r)
         attrs = prod["attributes"]
         prod["attributes"] = json.loads(attrs) if isinstance(attrs, str) else (attrs or {})
+        products.append(prod)
         by_cat[prod["category_slug"] or "(necategorizat)"].append(prod)
+
+    queries = []
+    if QRELS.exists():  # F3: distribuția MATCH/MISMATCH/UNKNOWN pe query-uri REALE (best-effort)
+        queries = json.loads(QRELS.read_text(encoding="utf-8")).get("queries", [])
 
     report: dict = {
         "_meta": {
@@ -171,6 +248,7 @@ async def main() -> None:
             for f in facets
         },
         "coverage": compute_coverage(facets, by_cat, MIN_PRODUCTS),
+        "query_distribution": query_match_distribution(facets, queries, products),
     }
 
     out = ROOT / "reports" / f"facet-coverage-{args.business[:8]}-{args.date}.json"
@@ -178,8 +256,10 @@ async def main() -> None:
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     ready = sum(1 for c in report["coverage"] if c["enforce_ready"])
+    qd = report["query_distribution"]
     print(f"registru: {registry_source} · {len(facets)} fațete · {len(by_cat)} categorii")
     print(f"rânduri coverage: {len(report['coverage'])} · enforce_ready: {ready}")
+    print(f"query_distribution: {qd['constraints_evaluated']} constrângeri reale evaluate")
     print(f"raport: {out.relative_to(ROOT)}")
     await close_pool()
 

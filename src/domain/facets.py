@@ -94,9 +94,15 @@ class TypedFacet:
         default_factory=dict
     )  # locale → etichetă display (absoarbe NX-182)
 
-    def label(self, locale: str) -> str:
-        """Etichetă de afișare per-locale; fallback pe cheia fațetei (P11 — locale în cheie)."""
-        return self.labels.get(locale) or self.labels.get("ro") or self.key
+    def label(self, locale: str, *, fallback_locale: str | None = None) -> str:
+        """Etichetă de afișare per-locale. Fallback: `locale` → `fallback_locale` (dacă e dat) →
+        cheia fațetei. NU hardcodează o limbă (P11/D3) — `fallback_locale` îl dă apelantul din
+        `business.default_locale`, nu presupunem română în cod."""
+        if locale in self.labels:
+            return self.labels[locale]
+        if fallback_locale and fallback_locale in self.labels:
+            return self.labels[fallback_locale]
+        return self.key
 
     def allows(self, op: str) -> bool:
         return op in self.operators
@@ -152,18 +158,27 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
     if not 0.0 <= min_cov <= 1.0:
         raise FacetConfigError(f"min_coverage în afara [0,1] pt {key!r}: {min_cov}")
 
-    values = tuple(v for v in (raw.get("values") or []) if isinstance(v, str))
+    # Colecțiile trebuie să fie de tipul corect — altfel FacetConfigError (fațeta e DROPATĂ,
+    # nu crapă tot load-ul). `.items()` pe un ne-dict ar arunca AttributeError = load întreg picat.
+    values_raw = raw.get("values") or []
+    if not isinstance(values_raw, list):
+        raise FacetConfigError(f"values nu e listă pt {key!r}")
+    values = tuple(v for v in values_raw if isinstance(v, str))
+    aliases_raw = raw.get("aliases") or {}
+    if not isinstance(aliases_raw, dict):
+        raise FacetConfigError(f"aliases nu e dict pt {key!r}")
     aliases = {
-        str(a): str(c)
-        for a, c in (raw.get("aliases") or {}).items()
-        if isinstance(a, str) and isinstance(c, str)
+        str(a): str(c) for a, c in aliases_raw.items() if isinstance(a, str) and isinstance(c, str)
     }
     list_sem = raw.get("list_semantics", "any")
     if list_sem not in ("any", "all"):
         raise FacetConfigError(f"list_semantics invalid pt {key!r}: {list_sem!r}")
+    labels_raw = raw.get("labels") or {}
+    if not isinstance(labels_raw, dict):
+        raise FacetConfigError(f"labels nu e dict pt {key!r}")
     labels = {
         str(loc): str(txt)
-        for loc, txt in (raw.get("labels") or {}).items()
+        for loc, txt in labels_raw.items()
         if isinstance(loc, str) and isinstance(txt, str)
     }
 
@@ -196,7 +211,7 @@ def build_facets(raw: Any) -> tuple[TypedFacet, ...]:
             continue
         try:
             spec = _build_one(entry)
-        except FacetConfigError as e:
+        except Exception as e:  # noqa: BLE001 — fail-closed: nicio fațetă nu dărâmă load-ul pack-ului
             log.warning("facet respinsă la load (fail-closed): %s", e)
             continue
         if spec.key in seen:
