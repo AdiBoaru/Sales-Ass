@@ -41,45 +41,60 @@ def test_safe_spec_rejects_extra_raw_query():
 
 
 def test_to_safe_drops_raw_and_reference_names():
-    """`to_safe()` e singura punte — DROPează tot textul liber (raw + numele referinței)."""
+    """`to_safe()` e singura punte — textul liber (raw + numele referinței) nu ajunge în Safe.
+    Fără `allowed_values`, niciun string nu iese (fail-closed); numerele rămân."""
     safe = _runtime().to_safe()
     dumped = safe.model_dump_json()
     assert _CANARY not in dumped
     assert "coral theory fresh" not in dumped.lower()  # numele referinței nu se persistă
-    # dar constrângerile canonice + categoriile de referință (slug) SUPRAVIEȚUIESC
-    assert "apa-micelara" in dumped
-    assert any(c.facet == "price" for c in safe.constraints)
+    assert "apa-micelara" not in dumped  # fără vocabular permis → dropat (fail-closed)
+    # facet-ul + valoarea numerică a constrângerii de preț supraviețuiesc (telemetrie)
+    price = next(c for c in safe.constraints if c.facet == "price")
+    assert price.value == 120
 
 
-def test_to_safe_drops_pii_in_constraint_value():
-    """Review #246: o constrângere cu VALOARE de text liber / PII e DROPATĂ din SafeQuerySpec —
-    `to_safe()` nu copiază valori necanonice. Număr/boolean + token canonic supraviețuiesc."""
+def test_to_safe_redacts_unvalidated_strings_keeps_numbers():
+    """Review #246: valorile string neverificate contra vocabularului sunt REDACTATE la None (nu
+    dropăm constrângerea — facet/op rămân); numărul/boolean-ul rămân."""
     rt = RuntimeQuerySpec(
         raw_query=_CANARY,
-        normalized_query=_CANARY.lower(),
+        normalized_query=_CANARY,
         search_text=_CANARY,
         constraints=(
-            Constraint(facet="price", op="lte", value=120, strength="hard"),  # număr → OK
-            Constraint(facet="concern", op="contains", value="oily", strength="soft"),  # token → OK
-            Constraint(facet="note", op="eq", value=_CANARY, strength="soft"),  # text liber → DROP
-            Constraint(facet="phone", op="eq", value="0722123456", strength="hard"),  # cifre → DROP
+            Constraint(facet="price", op="lte", value=120, strength="hard"),  # număr → rămâne
+            Constraint(facet="concern", op="contains", value="oily", strength="soft"),  # str
+            Constraint(facet="note", op="eq", value=_CANARY, strength="soft"),  # PII
         ),
     )
+    # fără allowed_values → toate string-urile → None (dar facet keys rămân)
     safe = rt.to_safe()
-    dumped = safe.model_dump_json()
-    assert _CANARY not in dumped and "0722123456" not in dumped  # PII nu ajunge în Safe
-    facets = {c.facet for c in safe.constraints}
-    assert facets == {"price", "concern"}  # doar canonicele supraviețuiesc (fail-closed)
+    assert _CANARY not in safe.model_dump_json()
+    byf = {c.facet: c.value for c in safe.constraints}
+    assert byf == {"price": 120, "concern": None, "note": None}
+    # cu vocabular controlat → doar valoarea permisă trece; PII rămâne redactat
+    safe2 = rt.to_safe(allowed_values={"concern": {"oily"}})
+    byf2 = {c.facet: c.value for c in safe2.constraints}
+    assert byf2 == {"price": 120, "concern": "oily", "note": None}
 
 
-def test_to_safe_drops_non_canonical_category():
+def test_to_safe_slug_form_pii_does_not_pass():
+    """Review re-review #246: un slug-PII (`ion_popescu_0722123456`) NU trece — nu e într-un
+    vocabular controlat, deci e redactat (heuristicul de token ar fi lăsat un astfel de slug)."""
     rt = RuntimeQuerySpec(
         raw_query="x",
         normalized_query="x",
         search_text="x",
-        category="Ion Popescu 0722123456",  # text liber în loc de slug → dropat la None
+        category="ion_popescu_0722123456",
+        constraints=(
+            Constraint(facet="concern", op="eq", value="ion_popescu_0722123456", strength="hard"),
+        ),
+        reference_categories=("ion_popescu_0722123456",),
     )
-    assert rt.to_safe().category is None
+    safe = rt.to_safe(allowed_values={"concern": {"oily"}, "category": {"seruri-pentru-ten"}})
+    assert "ion_popescu_0722123456" not in safe.model_dump_json()
+    assert safe.category is None
+    assert safe.reference_categories == ()
+    assert safe.constraints[0].value is None
 
 
 def test_runtime_spec_not_serializable():
@@ -92,7 +107,8 @@ def test_runtime_spec_not_serializable():
 
 
 def test_to_safe_preserves_canonical_metadata():
-    safe = _runtime().to_safe()
+    # cu vocabular controlat, slug-urile canonice trec; metadatele non-string rămân mereu
+    safe = _runtime().to_safe(allowed_values={"category": {"seruri-pentru-ten", "apa-micelara"}})
     assert safe.locale == "ro"
     assert safe.category == "seruri-pentru-ten"
     assert safe.reference_categories == ("apa-micelara",)

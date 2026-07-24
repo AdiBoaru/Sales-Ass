@@ -23,28 +23,18 @@ DROPează tot textul liber (inclusiv numele de produs-referință din `reference
 
 from __future__ import annotations
 
-import re
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-from src.domain.normalize import normalize
 
-# Valoare de constrângere care POATE ieși în SafeQuerySpec (telemetrie/persistență): număr/boolean,
-# SAU un TOKEN canonic — începe cu literă, doar [a-z0-9_-], ≤48 caractere (după normalizare). Asta
-# blochează STRUCTURAL textul liber / PII: spații (nume/adrese), majuscule, punctuație și valorile
-# cifră-only (telefon/adresă încep cu cifră → respinse). Un slug/cod canonic („oily", „vitamina_c",
-# „seruri-pentru-ten") trece; „Ion Popescu 0722…" nu.
-_CANONICAL_TOKEN = re.compile(r"[a-z][a-z0-9_-]*")
-
-
-def _is_safe_value(value: object) -> bool:
-    """True dacă valoarea e sigură de persistat (fără text liber/PII). Vezi `_CANONICAL_TOKEN`."""
-    if isinstance(value, (bool, int, float)):
-        return True
-    if isinstance(value, str):
-        return len(value) <= 48 and _CANONICAL_TOKEN.fullmatch(normalize(value)) is not None
-    return False
+def _safe_str(value: object, allowed: Collection[str] | None) -> bool:
+    """True dacă un `value` de tip str poate ieși în SafeQuerySpec: DOAR dacă e într-un vocabular
+    CONTROLAT (`allowed`) pasat de apelant din registru/catalog. Fără listă de valori permise → nu
+    iese niciun string. Un heuristic de „token" NU e suficient: un slug-PII (`ion_popescu_0722…`)
+    ar trece; apartenența la un vocabular canonic o închide structural."""
+    return isinstance(value, str) and allowed is not None and value in allowed
 
 
 # Vocabular ÎNGUST de operatori/tării, comun cu qrels-ul (retrieval_qrels_compound.json) și NX-185.
@@ -61,7 +51,7 @@ class Constraint(BaseModel):
 
     facet: str
     op: Op
-    value: str | float | int | bool
+    value: str | float | int | bool | None  # None = valoare REDACTATĂ în proiecția Safe
     strength: Strength = "hard"
     source: str = "current_turn"
 
@@ -107,22 +97,33 @@ class RuntimeQuerySpec:
     sort: str = "relevance"
     locale: str = "ro"
 
-    def to_safe(self) -> SafeQuerySpec:
+    def to_safe(self, allowed_values: Mapping[str, Collection[str]] | None = None) -> SafeQuerySpec:
         """Proiecție canonică fără text liber — SINGURA cale spre telemetrie/persistență.
 
-        SANITIZEAZĂ valorile (fail-closed): o constrângere ajunge în Safe DOAR dacă atât `facet` cât
-        și `value` sunt canonice (`_is_safe_value`); orice text liber / PII e DROPAT, nu copiat. La
-        fel pentru `category` și `reference_categories` — garanție structurală, nu «în practică»."""
+        SANITIZEAZĂ valorile pe VOCABULAR CONTROLAT (fail-closed): un `value` string iese DOAR dacă
+        e în `allowed_values[facet]` (valori canonice ale fațetei, date de apelant din registru).
+        Numerele/boolean-urile trec (nu pot fi PII). Orice string neverificat e **REDACTAT la None**
+        (facet/op/strength rămân pt telemetrie). `category`/`reference_categories` validate contra
+        `allowed_values["category"]`. Fără `allowed_values` → NICIUN string nu iese: nu ne bazăm pe
+        un heuristic de token (un slug-PII `ion_popescu_…` ar trece; vocabularul nu)."""
+        av = allowed_values or {}
+
+        def _redact(facet: str, value: object) -> str | float | int | bool | None:
+            if isinstance(value, bool) or isinstance(value, (int, float)):
+                return value  # numeric/bool: nu pot purta PII
+            return value if _safe_str(value, av.get(facet)) else None  # string neverificat → None
+
         safe_constraints = tuple(
-            c for c in self.constraints if _is_safe_value(c.facet) and _is_safe_value(c.value)
+            c.model_copy(update={"value": _redact(c.facet, c.value)}) for c in self.constraints
         )
+        cat_ok = av.get("category")
         return SafeQuerySpec(
             locale=self.locale,
             intent=self.intent,
-            category=self.category if _is_safe_value(self.category) else None,
+            category=self.category if _safe_str(self.category, cat_ok) else None,
             constraints=safe_constraints,
             reference_categories=tuple(
-                rc for rc in self.reference_categories if _is_safe_value(rc)
+                rc for rc in self.reference_categories if _safe_str(rc, cat_ok)
             ),
             sort=self.sort,
         )
