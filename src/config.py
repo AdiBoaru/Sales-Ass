@@ -222,6 +222,13 @@ class Settings(BaseSettings):
     query_spec_shadow_enabled: bool = Field(
         default=False, validation_alias="QUERY_SPEC_SHADOW_ENABLED"
     )
+    # NX-187: Match Gate în SHADOW (post-retrieval). ON → planner-ul calculează MatchSet-ul (clase
+    # exact/alternative/rejected din verdicte MATCH/MISMATCH/UNKNOWN) pe candidați + telemetrie
+    # (`match_gate_shadow`, `match_gate_outcome`) — ZERO schimbare de răspuns. Enforce = NX-188
+    # (înghețat). Default OFF → byte-identic cu azi.
+    match_gate_shadow_enabled: bool = Field(
+        default=False, validation_alias="MATCH_GATE_SHADOW_ENABLED"
+    )
 
     # --- Cost guard + rate limit (G2c, stagiul 2) ---
     # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)
