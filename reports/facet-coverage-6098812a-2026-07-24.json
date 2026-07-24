@@ -5697,5 +5697,26 @@
       "enforce_ready": false,
       "value_distribution": null
     }
-  ]
+  ],
+  "query_distribution": {
+    "constraints_evaluated": 11,
+    "per_facet": {
+      "category": {
+        "MATCH": 36
+      },
+      "fragrance_free": {
+        "MATCH": 75,
+        "MISMATCH": 51,
+        "UNKNOWN": 180
+      },
+      "key_ingredients": {
+        "MISMATCH": 23,
+        "MATCH": 7
+      },
+      "price": {
+        "MATCH": 607,
+        "MISMATCH": 14
+      }
+    }
+  }
 }

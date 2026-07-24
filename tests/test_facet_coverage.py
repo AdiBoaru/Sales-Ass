@@ -1,6 +1,10 @@
 """NX-186 — logica de coverage (pură, fără DB): denominator, insuficiență, 3 stări provenance."""
 
-from scripts.facet_coverage import compute_coverage
+from scripts.facet_coverage import (
+    compute_coverage,
+    evaluate_constraint,
+    query_match_distribution,
+)
 from src.domain.facets import FacetSource, FacetType, TypedFacet
 
 _PRICE = TypedFacet(
@@ -66,26 +70,59 @@ def test_insufficient_data_below_min():
 
 
 def test_provenance_three_states_distinct():
-    # structural (price) → verified == valid; claim fără provenance → verified 0;
-    # claim CU provenance (kind=ingredient) → verified > 0.
+    # structural (price) → verified == valid; claim fără provenance → 0; claim CU provenance a cărei
+    # VALOARE corespunde ingredientului produsului → verified.
     prods = [
         _prod(
             50,
             {
                 "fragrance_free": True,
                 "key_ingredients": ["niacinamida"],
-                "claim_provenance": [{"kind": "ingredient", "verified_at": "2026-07-16"}],
+                "claim_provenance": [
+                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"}
+                ],
             },
         ),
         _prod(80, {"fragrance_free": True, "key_ingredients": ["retinol"]}),  # fără provenance
     ]
     rows = compute_coverage([_PRICE, _FF, _ING], {"seruri": prods}, min_products=1)
     assert _row(rows, "price")["verified"] == 2  # structural: verified = valid
-    assert _row(rows, "fragrance_free")["verified"] == 0  # claim fără provenance → 0
+    assert _row(rows, "fragrance_free")["verified"] == 0  # claim nemapat → niciodată verified
     ing = _row(rows, "key_ingredients")
-    assert (
-        ing["present"] == 2 and ing["valid"] == 2 and ing["verified"] == 1
-    )  # doar 1 are provenance
+    assert ing["present"] == 2 and ing["valid"] == 2 and ing["verified"] == 1  # doar 1 e susținut
+
+
+def test_f1_provenance_requires_value_match():
+    # F1 (soundness): proveniența pt ALT ingredient NU confirmă acest produs → verified 0.
+    prods = [
+        _prod(
+            50,
+            {
+                "key_ingredients": ["retinol"],
+                "claim_provenance": [
+                    {"kind": "ingredient", "value": "ceai verde", "verified_at": "2026-07-16"}
+                ],  # susține „ceai verde", NU „retinol"
+            },
+        )
+    ]
+    rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
+    ing = _row(rows, "key_ingredients")
+    assert ing["valid"] == 1 and ing["verified"] == 0  # prezent+valid, dar NU merchant-verified
+
+
+def test_f1_provenance_without_value_is_not_verified():
+    # F1: intrare de proveniență FĂRĂ `value` (incompletă) nu poate marca fals verified.
+    prods = [
+        _prod(
+            50,
+            {
+                "key_ingredients": ["retinol"],
+                "claim_provenance": [{"kind": "ingredient", "verified_at": "2026-07-16"}],
+            },
+        )
+    ]
+    rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
+    assert _row(rows, "key_ingredients")["verified"] == 0
 
 
 def test_enforce_ready_uses_per_facet_threshold():
@@ -106,3 +143,45 @@ def test_value_distribution_for_list():
     rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
     dist = _row(rows, "key_ingredients")["value_distribution"]
     assert dist["niacinamida"] == 2 and dist["acid hialuronic"] == 1
+
+
+# --- F3: evaluator MATCH/MISMATCH/UNKNOWN + distribuție pe query-uri reale ---
+
+
+def test_evaluate_constraint_tristate():
+    # number lte / bool eq / list contains + UNKNOWN pe valoare lipsă (D7: UNKNOWN ≠ MISMATCH)
+    assert evaluate_constraint(_PRICE, "lte", 100, 80) == "MATCH"
+    assert evaluate_constraint(_PRICE, "lte", 100, 150) == "MISMATCH"
+    assert (
+        evaluate_constraint(_PRICE, "lte", 100, None) == "UNKNOWN"
+    )  # lipsă → UNKNOWN, nu MISMATCH
+    assert evaluate_constraint(_FF, "eq", True, True) == "MATCH"
+    assert evaluate_constraint(_FF, "eq", True, False) == "MISMATCH"
+    assert evaluate_constraint(_FF, "eq", True, None) == "UNKNOWN"
+    assert (
+        evaluate_constraint(_ING, "contains", "niacinamida", ["niacinamida", "retinol"]) == "MATCH"
+    )
+    assert evaluate_constraint(_ING, "contains", "niacinamida", ["retinol"]) == "MISMATCH"
+    assert evaluate_constraint(_ING, "contains", "niacinamida", None) == "UNKNOWN"
+
+
+def test_query_match_distribution_from_qrels():
+    facets = [_PRICE, _FF]
+    products = [
+        {"price": 50, "category_slug": "seruri", "attributes": {"fragrance_free": True}},
+        {"price": 200, "category_slug": "seruri", "attributes": {}},  # fără fragrance_free
+    ]
+    queries = [
+        {
+            "category": "seruri",
+            "hard_constraints": [
+                {"facet": "price", "op": "lte", "value": 100},
+                {"facet": "fragrance_free", "op": "eq", "value": True},
+                {"facet": "compare_set_size", "op": "eq", "value": 2},  # non-registru → ignorat
+            ],
+        }
+    ]
+    dist = query_match_distribution(facets, queries, products)
+    assert dist["constraints_evaluated"] == 2  # compare_set_size sărit
+    assert dist["per_facet"]["price"] == {"MATCH": 1, "MISMATCH": 1}
+    assert dist["per_facet"]["fragrance_free"] == {"MATCH": 1, "UNKNOWN": 1}  # al 2-lea lipsește

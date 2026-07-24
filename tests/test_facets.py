@@ -62,13 +62,14 @@ def test_default_operators_when_omitted():
     assert ff.operators == ("eq",)
 
 
-def test_label_fallback_to_key():
+def test_label_locale_agnostic_fallback():
+    # F5 / P11 / D3: fallback NU hardcodează româna. locale absent → cheia; cu fallback_locale
+    # explicit → eticheta acelui locale.
     price = {f.key: f for f in build_facets(_OK)}["price"]
     assert price.label("ro") == "Preț"
-    assert price.label("hu") == "Preț"  # fallback ro
-    assert {f.key: f for f in build_facets(_OK)}["concerns"].label(
-        "en"
-    ) == "concerns"  # fallback key
+    assert price.label("hu") == "price"  # niciun fallback → cheia, NU „Preț" (fără hardcodare ro)
+    assert price.label("hu", fallback_locale="ro") == "Preț"  # fallback explicit dat de apelant
+    assert price.label("hu", fallback_locale="en") == "price"  # fallback fără etichetă → cheia
 
 
 # --- fail-closed (config nesigur RESPINS la load) ---------------------------
@@ -131,6 +132,56 @@ def test_operator_not_allowed_for_type_rejected():
         ]
     )
     assert out == ()
+
+
+def test_malformed_aliases_dropped_not_crash():
+    # F2: aliases ne-dict → fațeta e DROPATĂ (nu crapă tot load-ul cu AttributeError pe .items()).
+    out = build_facets(
+        _OK
+        + [
+            {
+                "key": "bad",
+                "value_type": "text",
+                "source": "attribute",
+                "source_key": "texture",
+                "aliases": "nu-i dict",
+            }
+        ]
+    )
+    keys = {f.key for f in out}
+    assert "bad" not in keys and "price" in keys
+
+
+def test_malformed_labels_dropped_not_crash():
+    out = build_facets(
+        _OK
+        + [
+            {
+                "key": "bad",
+                "value_type": "text",
+                "source": "attribute",
+                "source_key": "texture",
+                "labels": ["nu", "e", "dict"],
+            }
+        ]
+    )
+    assert "bad" not in {f.key for f in out} and "price" in {f.key for f in out}
+
+
+def test_malformed_values_dropped_not_crash():
+    out = build_facets(
+        _OK
+        + [
+            {
+                "key": "bad",
+                "value_type": "enum",
+                "source": "attribute",
+                "source_key": "finish",
+                "values": "matte",
+            }
+        ]  # str, nu listă
+    )
+    assert "bad" not in {f.key for f in out} and "price" in {f.key for f in out}
 
 
 def test_bad_min_coverage_rejected():

@@ -48,6 +48,20 @@ MISMATCH per valoare de query), `enforce_ready` (coverage ≥ prag PER fațetă 
 | `coverage` | enum | structural | 0,10 | 0,07 | 100% | 3/38 |
 | `spf` | number | structural | 0,05 | 0,02 | 100% | 3/38 |
 
+## Distribuția MATCH/MISMATCH/UNKNOWN pe query-uri REALE (qrels NX-208)
+`query_match_distribution` evaluează cele 11 constrângeri hard din qrels-ul NX-208 peste produsele din
+scope-ul fiecărui query (evaluator tri-state de MĂSURARE — NU Match Gate-ul de runtime, care e NX-187):
+
+| Fațetă | MATCH | MISMATCH | UNKNOWN |
+|---|---|---|---|
+| `price` | 607 | 14 | 0 |
+| `category` | 36 | 0 | 0 |
+| `fragrance_free` | 75 | 51 | **180** |
+| `key_ingredients` | 7 | 23 | 0 |
+
+`fragrance_free` are **UNKNOWN masiv (180)** pe query-uri reale — dovada directă (D7) că enforce-ul hard
+îl transformă în excludere de recall, nu în filtru corect. `price`/`category` = zero UNKNOWN → sigure.
+
 ## Ce spun cifrele pentru NX-188 (enforce)
 - **`price`, `category`:** universale + verified → **hard-enforce oriunde**, fără risc de UNKNOWN.
 - **`fragrance_free`:** 40% coverage și **0% merchant-verified** (claim AUTORAT, fără proveniență) —
