@@ -76,7 +76,9 @@ def _claim_verified(attributes: dict, facet, value) -> bool:
     if not backed:
         return False
     if facet.value_type is FacetType.LIST and isinstance(value, list):
-        return any(normalize(str(x)) in backed for x in value)
+        # Review #247: verified DOAR dacă TOATE valorile listei sunt susținute de proveniență — o
+        # proveniență parțială (un singur ingredient confirmat) NU validează toată lista.
+        return bool(value) and all(normalize(str(x)) in backed for x in value)
     if isinstance(value, str):
         return normalize(value) in backed
     return False  # bool/number claim fără proveniență la nivel de valoare → nu confirmăm

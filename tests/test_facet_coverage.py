@@ -110,6 +110,42 @@ def test_f1_provenance_requires_value_match():
     assert ing["valid"] == 1 and ing["verified"] == 0  # prezent+valid, dar NU merchant-verified
 
 
+def test_partial_list_provenance_not_verified():
+    # Review #247: 2 ingrediente, DOAR unul are proveniență → produsul NU e verified (all, nu any).
+    prods = [
+        _prod(
+            50,
+            {
+                "key_ingredients": ["niacinamida", "retinol"],
+                "claim_provenance": [
+                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"}
+                ],  # doar „niacinamida" e susținut; „retinol" nu
+            },
+        )
+    ]
+    rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
+    ing = _row(rows, "key_ingredients")
+    assert ing["valid"] == 1 and ing["verified"] == 0  # listă parțial susținută ≠ verified
+
+
+def test_full_list_provenance_verified():
+    # toate valorile listei susținute → verified
+    prods = [
+        _prod(
+            50,
+            {
+                "key_ingredients": ["niacinamida", "retinol"],
+                "claim_provenance": [
+                    {"kind": "ingredient", "value": "niacinamida", "verified_at": "2026-07-16"},
+                    {"kind": "ingredient", "value": "retinol", "verified_at": "2026-07-16"},
+                ],
+            },
+        )
+    ]
+    rows = compute_coverage([_ING], {"seruri": prods}, min_products=1)
+    assert _row(rows, "key_ingredients")["verified"] == 1
+
+
 def test_f1_provenance_without_value_is_not_verified():
     # F1: intrare de proveniență FĂRĂ `value` (incompletă) nu poate marca fals verified.
     prods = [
