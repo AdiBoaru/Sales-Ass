@@ -1,0 +1,2011 @@
+{
+  "_meta": {
+    "schema": "docs/NX-202-COMPOUND-TRUTH-SCHEMA.md",
+    "status": "PROPUNERE CODEX — grounded read-only pe catalogul demo la 2026-07-24; necesită validare Adi",
+    "todo_adi": [
+      "validare/ajustare propuneri Codex",
+      "acceptare explicită înainte de folosirea ca adevăr golden"
+    ],
+    "fixture_note": "search_products temporar; se rescrie pe search_entities la NX-209",
+    "acoperire_dimensiuni": "multi-constraint(3-4) · imposibilitate · alternativă-tradeoff · free_of · buget · use-case · compare(≥2 diferențe)",
+    "_catalog_snapshot": {
+      "queried_at": "2026-07-24",
+      "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+      "scope": "products.status=active AND products.content_status=published",
+      "products": 300,
+      "variants": 925,
+      "query_mode": "Supabase REST GET read-only; products + product_variants + categories + brands",
+      "commercial_price_rule": "sale_price dacă există, altfel price; confirmat pe varianta disponibilă"
+    },
+    "_catalog_coverage_gaps": {
+      "structured_and_queryable": {
+        "category": "300/300 produse",
+        "price": "300/300; verificat și în product_variants",
+        "availability_stock": "300/300",
+        "rating": "300/300",
+        "fragrance_free": "120/300 (70 true, 50 false); UNKNOWN pentru restul",
+        "key_ingredients": "193/300",
+        "finish": "70/300; 6/6 fonduri de ten",
+        "coverage": "20/300; 6/6 fonduri de ten",
+        "suitable_for": "213/300",
+        "routine_step": "205/300",
+        "spf": "7/300; doar 3/6 din categoria Protecție solară",
+        "net_content": "178/300 în attributes; 377/925 variante standardizate"
+      },
+      "absent_structured_treat_as_unknown": {
+        "alcohol_free": "0/300",
+        "preservative_free": "0/300",
+        "non_comedogenic": "0/300; o singură afirmație liberă «nu înfundă porii»",
+        "wear_time": "0/300; doar afirmații libere 16H/24H/toată ziua",
+        "heat_resistant": "0/300",
+        "use_case": "0/300",
+        "eye_area": "0/300",
+        "transfer_resistant": "0/300",
+        "tier": "0/300",
+        "concentration": "0/300",
+        "not_recommended_for": "0/300; sarcină-retinoizi vine din registrul determinist NX-173"
+      },
+      "nx206_priority": [
+        "alcohol_free",
+        "preservative_free",
+        "non_comedogenic",
+        "wear_time",
+        "heat_resistant",
+        "use_case",
+        "eye_area",
+        "transfer_resistant",
+        "tier",
+        "active_ingredient_concentration",
+        "spf pentru toate produsele din categoria Protecție solară"
+      ],
+      "semantic_rule": "UNKNOWN ≠ NO_MATCH: lipsa câmpului nu este false"
+    },
+    "_proposal_summary": {
+      "cases_with_expected_products": 12,
+      "cases_with_empty_expected_products": 7,
+      "hard_soft_corrections": 3,
+      "safety_note": "Niciun produs rămas după filtrarea retinoizilor nu este declarat sigur în sarcină; se cere medic/farmacist conform NX-173."
+    }
+  },
+  "compound": [
+    {
+      "id": "compound-fond-mat-gras-buget-fara-parfum",
+      "language": "ro",
+      "input": "vreau un fond de ten mat, pentru ten gras, sub 100 de lei și fără parfum",
+      "dimensions": [
+        "multi-constraint",
+        "budget",
+        "free_of"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "fond-de-ten"
+          },
+          {
+            "facet": "price",
+            "op": "lte",
+            "value": 100,
+            "unit": "RON"
+          },
+          {
+            "facet": "fragrance_free",
+            "op": "eq",
+            "value": true
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "finish",
+            "value": "matte",
+            "weight": "high"
+          },
+          {
+            "facet": "skin_types",
+            "value": "oily",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "match_class": "exact",
+            "matched_on": [
+              "category=fond-de-ten",
+              "price<=100",
+              "fragrance_free=true",
+              "finish=matte",
+              "suitable_for includes oily"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
+            "name": "LumaDerm Luminous Fond de ten",
+            "price": 71.49,
+            "currency": "RON",
+            "reason": "fragrance_free=false; finish=dewy"
+          },
+          {
+            "product_id": "8cb6faed-d058-4303-845b-7a53a894b9e2",
+            "name": "Petala Pore Blur Primer",
+            "price": 42.99,
+            "currency": "RON",
+            "reason": "off-category: primer, nu fond de ten"
+          }
+        ],
+        "required_disclosures": [
+          "66,49 RON este prețul promoțional curent al variantelor disponibile."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "dacă `fragrance_free` e UNKNOWN pentru un candidat, îl marchează ca alternativă, nu exact ('nu pot confirma că e fără parfum')",
+        "on_no_exact_match": "arată cele mai apropiate cu trade-off explicit (ex. mat+gras dar peste buget SAU în buget dar finish satinat), nu tăcere",
+        "correct_answer_sketch": "NudeLab Matte 24H este potrivirea exactă: 66,49 RON, fără parfum confirmat, finish mat și potrivit pentru ten gras/mixt. Are acoperire mare; verificăm nuanța disponibilă înainte de comandă.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "category Fond de ten + price/fragrance_free/finish/suitable_for; preț și stoc din variants",
+          "rows": [
+            "835d38ab...: 66.49 RON, fragrance_free=true, matte, oily/combination",
+            "6ece5c7f...: 71.49 RON, fragrance_free=false, dewy"
+          ]
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-antilucire-rezistent-caldura",
+      "language": "ro",
+      "input": "ceva să nu mă lucesc peste zi, să reziste și pe căldură, sub 120",
+      "dimensions": [
+        "multi-constraint",
+        "use-case",
+        "budget",
+        "colocvial"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "price",
+            "op": "lte",
+            "value": 120,
+            "unit": "RON"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "finish",
+            "value": "matte",
+            "weight": "high"
+          },
+          {
+            "facet": "concern",
+            "value": "oily_shine_control",
+            "weight": "high"
+          },
+          {
+            "facet": "wear_time",
+            "op": "gte",
+            "value": 8,
+            "unit": "h",
+            "weight": "medium"
+          },
+          {
+            "facet": "use_case",
+            "value": "hot_weather",
+            "weight": "medium"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "match_class": "hard_match_soft_partial",
+            "matched_on": [
+              "price<=120",
+              "matte",
+              "oily/combination",
+              "text liber 24H"
+            ]
+          },
+          {
+            "product_id": "42be923a-28db-4d10-9e4a-e22f487e281e",
+            "name": "Aria Matte Spray de fixare",
+            "price": 39.99,
+            "currency": "RON",
+            "match_class": "hard_match_soft_partial",
+            "matched_on": [
+              "price<=120",
+              "matte",
+              "oily"
+            ]
+          },
+          {
+            "product_id": "c508461f-ae1f-4c62-937a-6ff27b6919a7",
+            "name": "NudeLab Long Wear Spray de fixare",
+            "price": 44.99,
+            "currency": "RON",
+            "match_class": "hard_match_soft_partial",
+            "matched_on": [
+              "price<=120",
+              "text liber până la 16h"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
+            "name": "LumaDerm Luminous Fond de ten",
+            "price": 71.49,
+            "currency": "RON",
+            "reason": "dewy și dry/sensitive; contrar anti-luciu"
+          },
+          {
+            "product_id": "39ac3ec4-9206-483f-88f9-e812b06caabc",
+            "name": "Velora Set Spray de fixare",
+            "price": 42.99,
+            "currency": "RON",
+            "reason": "out_of_stock"
+          }
+        ],
+        "required_disclosures": [
+          "wear_time și heat_resistant lipsesc ca fațete; 24H/16H sunt afirmații libere, nu garanții comparabile.",
+          "Categoria este ambiguă: fondul și spray-ul rezolvă părți diferite ale nevoii."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "wear_time/heat-resistance des UNKNOWN în catalog → nu afirma rezistența dacă nu e în date",
+        "on_no_exact_match": "propune matifiant în buget + explică ce nu putem garanta (rezistența la căldură)",
+        "correct_answer_sketch": "Pentru controlul luciului, NudeLab Matte 24H (66,49 RON) este baza cea mai apropiată; Aria Matte Spray (39,99 RON) poate completa fixarea. Catalogul nu confirmă standardizat rezistența la căldură, deci nu aș garanta-o.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "active products <=120 RON; finish/suitable_for/key_benefit",
+          "rows": [
+            "835d38ab... matte+oily",
+            "42be923a... matte+oily",
+            "c508461f... text până la 16h",
+            "wear_time=0/300; heat_resistant=0/300"
+          ]
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-crema-sensibil-fara-alcool-parfum-50ml",
+      "language": "ro",
+      "input": "o cremă hidratantă pentru ten sensibil, fără alcool și fără parfum, la 50 ml",
+      "dimensions": [
+        "multi-constraint",
+        "free_of"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "crema-hidratanta"
+          },
+          {
+            "facet": "fragrance_free",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "facet": "alcohol_free",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "facet": "net_content",
+            "op": "eq",
+            "value": 50,
+            "unit": "ml"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "skin_types",
+            "value": "sensitive",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+            "name": "Petala Rich Cremă hidratantă",
+            "price": 49.99,
+            "currency": "RON",
+            "reason": "fragrance_free=false"
+          },
+          {
+            "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+            "name": "Auralis Daily Cremă hidratantă",
+            "price": 59.99,
+            "currency": "RON",
+            "reason": "fragrance_free=false și nu sensitive"
+          }
+        ],
+        "required_disclosures": [
+          "Nu există match exact demonstrabil: alcohol_free este absent la 0/300 produse.",
+          "LumaDerm Calm are 50 ml și fragrance_free=true, dar lipsa alcoolului rămâne UNKNOWN."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "dacă gramajul exact 50ml nu e confirmat, oferă variantele reale de gramaj, nu inventa",
+        "on_no_exact_match": "relaxează întâi gramajul (soft de facto) cu disclosure, păstrează free_of dur",
+        "correct_answer_sketch": "Cea mai apropiată este LumaDerm Calm Cremă pentru ten sensibil, 50 ml, 67,99 RON și fără parfum confirmat. Nu o pot numi potrivire exactă fiindcă alcohol_free lipsește; verificăm INCI sau completăm catalogul.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "creme + fragrance_free/sensitive + variant net_content; cheie alcohol_free pe 300 produse",
+          "exact_match_count": 0,
+          "alternative_products": [
+            {
+              "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+              "name": "LumaDerm Calm Cremă pentru ten sensibil",
+              "price": 67.99,
+              "currency": "RON",
+              "known": [
+                "category cream",
+                "fragrance_free=true",
+                "sensitive/dry",
+                "50 ml"
+              ],
+              "unknown": [
+                "alcohol_free"
+              ]
+            }
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Păstrează alcohol_free hard: este cerut explicit; UNKNOWN cere disclosure, nu relaxare tăcută."
+        ]
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-vitc-ten-reactiv-buget",
+      "language": "ro",
+      "input": "ser cu vitamina C dar să nu-mi irite tenul reactiv, sub 150",
+      "dimensions": [
+        "multi-constraint",
+        "budget",
+        "free_of"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "ser-pentru-ten"
+          },
+          {
+            "facet": "key_ingredient",
+            "op": "contains",
+            "value": "vitamina_c"
+          },
+          {
+            "facet": "price",
+            "op": "lte",
+            "value": 150,
+            "unit": "RON"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "skin_types",
+            "value": "sensitive",
+            "weight": "high"
+          },
+          {
+            "facet": "concern",
+            "value": "reactive_low_irritation",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+            "name": "Petala Bright Ser cu vitamina C",
+            "price": 47.24,
+            "currency": "RON",
+            "match_class": "hard_match_soft_unknown",
+            "matched_on": [
+              "ser",
+              "vitamina C",
+              "price<=150",
+              "fragrance_free=true"
+            ]
+          },
+          {
+            "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+            "name": "LumaDerm Vitamin C Ser luminozitate",
+            "price": 50.99,
+            "currency": "RON",
+            "match_class": "hard_match_soft_unknown",
+            "matched_on": [
+              "ser",
+              "vitamina C",
+              "price<=150",
+              "fragrance_free=true"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+            "name": "Auralis Retinol Ser de noapte",
+            "price": 92.99,
+            "currency": "RON",
+            "reason": "ingredient retinol, nu vitamina C"
+          },
+          {
+            "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+            "name": "Petala Hydra Ser cu acid hialuronic",
+            "price": 49.99,
+            "currency": "RON",
+            "reason": "nu conține vitamina C"
+          }
+        ],
+        "required_disclosures": [
+          "Niciun rezultat Vit C nu are suitability=sensitive/reactive, iar concentrația lipsește; toleranța nu poate fi garantată.",
+          "category=ser-pentru-ten a fost adăugată hard deoarece textul cere explicit ser."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "'potrivit ten reactiv' e des inferat, nu confirmat → prezintă ca soft, nu ca garanție",
+        "on_no_exact_match": "propune concentrație mai blândă / derivat de vit C, cu explicație",
+        "correct_answer_sketch": "Petala Bright (47,24 RON) și LumaDerm Vitamin C (50,99 RON) respectă ingredientul și bugetul, iar ambele sunt fără parfum confirmat. Catalogul nu dovedește potrivirea pentru ten reactiv și nu oferă concentrația, deci formulăm prudent.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "category Seruri + key_ingredients vitamina C + effective_price<=150",
+          "rows": [
+            "fe2d6b98... vitamina C+niacinamidă, normal/hyperpigmentation",
+            "b3c825cb... vitamina C+acid ferulic, hydration/hyperpigmentation",
+            "concentration=0/300"
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Categoria «ser» lipsea din hard și ar fi permis produse off-category."
+        ]
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-spf-fata-gras-noncomedogenic",
+      "language": "ro",
+      "input": "protecție solară de față pentru ten gras, să nu lase film gras și non-comedogenică",
+      "dimensions": [
+        "multi-constraint",
+        "use-case",
+        "free_of"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "protectie-solara"
+          },
+          {
+            "facet": "use_case",
+            "op": "eq",
+            "value": "face"
+          },
+          {
+            "facet": "non_comedogenic",
+            "op": "eq",
+            "value": true
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "skin_types",
+            "value": "oily",
+            "weight": "high"
+          },
+          {
+            "facet": "finish",
+            "value": "non_greasy",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+            "name": "Petala Matte Cremă hidratantă",
+            "price": 28.79,
+            "currency": "RON",
+            "reason": "off-category: nu are SPF"
+          }
+        ],
+        "required_disclosures": [
+          "Nu există match exact: non_comedogenic=0/300 ca fațetă.",
+          "Categoria și suitable_for sugerează față, dar use_case=face nu este atribut explicit.",
+          "LumaDerm Shield este alternativa apropiată, fără a pretinde non-comedogenic."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "non_comedogenic UNKNOWN → alternativă, nu excludere; nu afirma dacă nu e în date",
+        "on_no_exact_match": "SPF de față pentru ten gras + notă că 'non-comedogenic' nu e confirmat la unele",
+        "correct_answer_sketch": "Cea mai apropiată este LumaDerm Shield Fluid SPF 50+, 62,99 RON: SPF 50, fluid, fără parfum și potrivit pentru ten gras/sensibil. Nu pot confirma «non-comedogenic» sau finish non-gras, deci nu este match exact.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "Protecție solară + oily; spf/non_comedogenic/use_case",
+          "exact_match_count": 0,
+          "alternative_products": [
+            {
+              "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+              "name": "LumaDerm Shield Fluid SPF 50+",
+              "price": 62.99,
+              "currency": "RON",
+              "known": [
+                "spf=50",
+                "fluid",
+                "fragrance_free=true",
+                "oily/sensitive"
+              ],
+              "unknown": [
+                "non_comedogenic",
+                "use_case=face",
+                "finish=non_greasy"
+              ]
+            }
+          ],
+          "coverage": "non_comedogenic=0/300; use_case=0/300; spf la 3/6 produse din categorie"
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-machiaj-nunta-ten-mixt-buget",
+      "language": "ro",
+      "input": "machiaj de bază pentru nuntă, să țină toată ziua, am ten mixt, buget 200",
+      "dimensions": [
+        "multi-constraint",
+        "use-case",
+        "budget"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "price",
+            "op": "lte",
+            "value": 200,
+            "unit": "RON"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "use_case",
+            "value": "event_longwear",
+            "weight": "high"
+          },
+          {
+            "facet": "wear_time",
+            "op": "gte",
+            "value": 10,
+            "unit": "h",
+            "weight": "high"
+          },
+          {
+            "facet": "skin_types",
+            "value": "combination",
+            "weight": "medium"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "match_class": "bundle_member",
+            "matched_on": [
+              "combination",
+              "matte",
+              "24H text"
+            ]
+          },
+          {
+            "product_id": "3d6887f7-b9f1-40bb-8daf-7f9a04c718fb",
+            "name": "Velora HD Pudră matifiantă",
+            "price": 39.99,
+            "currency": "RON",
+            "match_class": "bundle_member",
+            "matched_on": [
+              "combination",
+              "matte",
+              "fixează"
+            ]
+          },
+          {
+            "product_id": "c508461f-ae1f-4c62-937a-6ff27b6919a7",
+            "name": "NudeLab Long Wear Spray de fixare",
+            "price": 44.99,
+            "currency": "RON",
+            "match_class": "bundle_member",
+            "matched_on": [
+              "până la 16h text"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "39ac3ec4-9206-483f-88f9-e812b06caabc",
+            "name": "Velora Set Spray de fixare",
+            "price": 42.99,
+            "currency": "RON",
+            "reason": "out_of_stock"
+          },
+          {
+            "product_id": "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
+            "name": "LumaDerm Luminous Fond de ten",
+            "price": 71.49,
+            "currency": "RON",
+            "reason": "dry/sensitive și dewy, potrivire slabă pentru ten mixt/rezistență"
+          }
+        ],
+        "required_disclosures": [
+          "Setul propus costă 151,47 RON; trebuie clarificat dacă bugetul de 200 RON este pentru set sau pentru un singur produs.",
+          "wear_time este text liber, nu fațetă structurată."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "bugetul 200 e pt UN produs sau set? dacă ambiguu → o singură clarificare",
+        "on_no_exact_match": "propune combinație (fond + pudră fixare) în buget, cu trade-off",
+        "correct_answer_sketch": "Dacă cei 200 RON sunt pentru set, NudeLab Matte 24H + Velora HD Pudră + NudeLab Long Wear Spray însumează 151,47 RON și acoperă bază, matifiere și fixare. Durata exactă nu este standardizată în catalog, deci nu promit 10+ ore.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "makeup base/finish, combination/matte, sum effective variant prices",
+          "rows": [
+            "66.49+39.99+44.99=151.47 RON",
+            "toate trei in_stock",
+            "wear_time structured=0/300"
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Bugetul este hard numai după clarificarea unității: per produs sau total set."
+        ]
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-imposibil-premium-ieftin",
+      "language": "ro",
+      "input": "vreau un fond de ten de brand premium, mat, dar sub 40 de lei",
+      "dimensions": [
+        "multi-constraint",
+        "impossibility",
+        "alternative-tradeoff",
+        "budget"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "fond-de-ten"
+          },
+          {
+            "facet": "price",
+            "op": "lte",
+            "value": 40,
+            "unit": "RON"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "tier",
+            "value": "premium",
+            "weight": "high"
+          },
+          {
+            "facet": "finish",
+            "value": "matte",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+            "name": "Petala Nude Fond de ten",
+            "price": 59.99,
+            "currency": "RON",
+            "reason": "cel mai ieftin fond, dar peste 40 RON"
+          },
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "reason": "mat, dar peste 40 RON"
+          },
+          {
+            "product_id": "8cb6faed-d058-4303-845b-7a53a894b9e2",
+            "name": "Petala Pore Blur Primer",
+            "price": 42.99,
+            "currency": "RON",
+            "reason": "off-category și peste buget"
+          }
+        ],
+        "required_disclosures": [
+          "Confirmat în DB: 6 fonduri active/publicate, iar minimul curent este 59,99 RON; zero fonduri <=40 RON.",
+          "«premium» nu are taxonomie (tier=0/300), deci nu poate fi confirmat."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "",
+        "on_no_exact_match": "OBLIGATORIU alternativă cu trade-off: 'premium peste buget' SAU 'în buget, dar nu premium' — client alege",
+        "correct_answer_sketch": "Nu există fond de ten sub 40 RON în catalog. Cea mai mică abatere de buget este Petala Nude la 59,99 RON; dacă prioritatea este finishul mat, NudeLab Matte 24H costă 66,49 RON. «Premium» trebuie definit separat.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "category Fond de ten, active/published, order by effective price",
+          "exact_match_count": 0,
+          "rows": [
+            "count=6",
+            "min=Petala Nude 59.99 RON",
+            "tier=0/300"
+          ],
+          "alternative_products": [
+            {
+              "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+              "name": "Petala Nude Fond de ten",
+              "price": 59.99,
+              "currency": "RON",
+              "known": [
+                "cheapest foundation",
+                "natural/light"
+              ],
+              "unknown": [
+                "premium tier"
+              ]
+            },
+            {
+              "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+              "name": "NudeLab Matte 24H Fond de ten",
+              "price": 66.49,
+              "currency": "RON",
+              "known": [
+                "matte",
+                "oily/combination"
+              ],
+              "unknown": [
+                "premium tier"
+              ]
+            }
+          ]
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-imposibil-retinol-sarcina",
+      "language": "ro",
+      "input": "vreau un ser cu retinol pentru riduri, sunt însărcinată",
+      "dimensions": [
+        "impossibility",
+        "safety",
+        "disclosure"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "safety",
+            "op": "contraindicated",
+            "value": "retinoids_in_pregnancy"
+          }
+        ],
+        "soft_preferences": [],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+            "name": "Auralis Retinol Ser de noapte",
+            "price": 92.99,
+            "currency": "RON",
+            "reason": "retinol; exclus de gate-ul NX-173 în context pregnancy"
+          },
+          {
+            "product_id": "bb65ad5c-18f4-4add-8cc7-6103b359a0dc",
+            "name": "LumaDerm Renew Ser cu retinal",
+            "price": 119.99,
+            "currency": "RON",
+            "reason": "retinal; exclus de NX-173"
+          },
+          {
+            "product_id": "8fc02c3b-0df7-4a46-8c43-65ec956af643",
+            "name": "Auralis Night Tratament local cu retinol",
+            "price": 49.99,
+            "currency": "RON",
+            "reason": "retinol; exclus de NX-173"
+          }
+        ],
+        "required_disclosures": [
+          "Nu recomandăm și nu afișăm retinoizi în context de sarcină; decizia o ia medicul sau farmacistul.",
+          "Produsele rămase nu sunt declarate «sigure în sarcină»; catalogul are not_recommended_for=0/300, iar NX-173 interzice un asemenea claim."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock",
+          "recomandare_retinol_in_sarcina"
+        ],
+        "on_unknown": "",
+        "on_no_exact_match": "NU recomanda retinol; oferă alternativă sigură în sarcină (ex. vit C blândă/hidratare) + sfat să consulte medicul",
+        "correct_answer_sketch": "Las deoparte Auralis Retinol, LumaDerm Retinal și orice alt retinoid. Pot arăta opțiuni cosmetice fără retinoizi, precum Petala Hydra sau Petala Bright, dar nu le declar sigure în sarcină; alegerea trebuie validată de medic sau farmacist.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "key_ingredients/name retinol|retinal + registrul determinist NX-173",
+          "exact_match_count": 0,
+          "rows": [
+            "66add6ca... retinol",
+            "bb65ad5c... retinal",
+            "8fc02c3b... retinol"
+          ],
+          "alternative_products": [
+            {
+              "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+              "name": "Petala Hydra Ser cu acid hialuronic",
+              "price": 49.99,
+              "currency": "RON",
+              "known": [
+                "fără retinoid în key_ingredients",
+                "hydration"
+              ],
+              "unknown": [
+                "verdict de siguranță în sarcină"
+              ]
+            },
+            {
+              "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+              "name": "Petala Bright Ser cu vitamina C",
+              "price": 47.24,
+              "currency": "RON",
+              "known": [
+                "fără retinoid în key_ingredients",
+                "vitamina C"
+              ],
+              "unknown": [
+                "verdict de siguranță în sarcină"
+              ]
+            }
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Corectat brief-ul: alternativa nu poate fi numită «sigură»; NX-173 cere filtrare retinoizi + referral, fără verdict pe rest."
+        ]
+      },
+      "fixture_note": "search_products temporar; gate-ul de safety (NX-173) e sursa; rescrie la NX-209"
+    },
+    {
+      "id": "compound-over-constrained-fara-tot-ieftin",
+      "language": "ro",
+      "input": "o cremă complet fără conservanți, fără parfum, fără alcool, pentru ten foarte sensibil, sub 30 de lei",
+      "dimensions": [
+        "multi-constraint",
+        "impossibility",
+        "free_of",
+        "budget",
+        "alternative-tradeoff"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "crema-hidratanta"
+          },
+          {
+            "facet": "preservative_free",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "facet": "fragrance_free",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "facet": "alcohol_free",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "facet": "price",
+            "op": "lte",
+            "value": 30,
+            "unit": "RON"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "skin_types",
+            "value": "very_sensitive",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+            "name": "Petala Rich Cremă hidratantă",
+            "price": 49.99,
+            "currency": "RON",
+            "reason": "fragrance_free=false și price>30"
+          },
+          {
+            "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+            "name": "LumaDerm Calm Cremă pentru ten sensibil",
+            "price": 67.99,
+            "currency": "RON",
+            "reason": "price>30; alcohol_free/preservative_free UNKNOWN"
+          }
+        ],
+        "required_disclosures": [
+          "Zero match exact: alcohol_free și preservative_free lipsesc la 0/300.",
+          "Petala Matte respectă categoria, prețul, 50 ml și fără parfum, dar este pentru oily/combination și celelalte două free_of sunt UNKNOWN."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "preservative_free e des UNKNOWN → nu afirma; cere dacă e negociabil",
+        "on_no_exact_match": "spune ce constrângere e cel mai greu de satisfăcut + oferă cel mai apropiat, cu trade-off",
+        "correct_answer_sketch": "Nu pot confirma o cremă care să îndeplinească toate cerințele. Petala Matte costă 28,79 RON și este fără parfum, dar este pentru ten gras/mixt și nu avem date despre alcool sau conservanți; LumaDerm Calm este pentru sensibil, dar costă 67,99 RON și are aceleași goluri de date.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "Creme hidratante + price<=30 + fragrance_free; coverage alcohol/preservative",
+          "exact_match_count": 0,
+          "rows": [
+            "2500935f... 28.79, fragrance_free=true, oily/combination",
+            "alcohol_free=0/300",
+            "preservative_free=0/300"
+          ],
+          "alternative_products": [
+            {
+              "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+              "name": "Petala Matte Cremă hidratantă",
+              "price": 28.79,
+              "currency": "RON",
+              "known": [
+                "category",
+                "price<=30",
+                "fragrance_free=true",
+                "50 ml"
+              ],
+              "unknown": [
+                "alcohol_free",
+                "preservative_free",
+                "very_sensitive"
+              ]
+            },
+            {
+              "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+              "name": "LumaDerm Calm Cremă pentru ten sensibil",
+              "price": 67.99,
+              "currency": "RON",
+              "known": [
+                "category",
+                "fragrance_free=true",
+                "sensitive",
+                "50 ml"
+              ],
+              "unknown": [
+                "alcohol_free",
+                "preservative_free",
+                "budget"
+              ]
+            }
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Categoria «cremă hidratantă» lipsea din hard și a fost adăugată."
+        ]
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-cel-mai-ieftin-niacinamida-calitate",
+      "language": "ro",
+      "input": "cel mai ieftin ser cu niacinamidă, dar să fie de calitate bună",
+      "dimensions": [
+        "alternative-tradeoff",
+        "budget"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "ser-pentru-ten"
+          },
+          {
+            "facet": "key_ingredient",
+            "op": "contains",
+            "value": "niacinamida"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "price",
+            "value": "ascending",
+            "weight": "high"
+          },
+          {
+            "facet": "rating",
+            "op": "gte",
+            "value": 4,
+            "weight": "medium"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+            "name": "Auralis Clarity Ser cu niacinamidă",
+            "price": 41.99,
+            "currency": "RON",
+            "match_class": "exact",
+            "matched_on": [
+              "ser",
+              "niacinamidă",
+              "lowest effective price",
+              "rating=4.5"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+            "name": "Petala Hydra Ser cu acid hialuronic",
+            "price": 49.99,
+            "currency": "RON",
+            "reason": "nu conține niacinamidă"
+          }
+        ],
+        "required_disclosures": [
+          "«Calitate bună» este aproximată prin ratingul 4,5; nu este verdict absolut.",
+          "category=ser-pentru-ten a fost adăugată hard pentru a exclude tonere/creme cu niacinamidă."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "'calitate bună' = proxy pe rating/review, nu claim absolut",
+        "on_no_exact_match": "cel mai ieftin cu rating decent + explică trade-off preț↔rating dacă cel mai ieftin are rating slab",
+        "correct_answer_sketch": "Auralis Clarity este cel mai ieftin ser cu niacinamidă din catalog: 41,99 RON, rating 4,5, în stoc. Este fără parfum și orientat spre ten gras/acneic/pete; ratingul este doar un proxy pentru calitate.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "Seruri pentru ten where key_ingredients contains niacinamidă, order by effective variant price",
+          "rows": [
+            "Auralis Clarity 41.99, rating 4.5",
+            "următorul: Mira Atelier Glow 44.99, rating 4.8"
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Categoria «ser» lipsea din hard și a fost adăugată."
+        ]
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-alternativa-la-scump",
+      "language": "ro",
+      "input": "vreau ceva ca Coral Theory Fresh Apă micelară, dar mai accesibil ca preț",
+      "dimensions": [
+        "alternative-tradeoff",
+        "budget"
+      ],
+      "truth": {
+        "hard_constraints": [],
+        "soft_preferences": [
+          {
+            "facet": "similar_to_reference",
+            "weight": "high"
+          },
+          {
+            "facet": "price",
+            "value": "lower_than_reference",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+            "name": "Auralis Apa micelară demachiantă",
+            "price": 27.99,
+            "currency": "RON",
+            "match_class": "alternative",
+            "matched_on": [
+              "same category",
+              "micellar water",
+              "200 ml",
+              "lower price"
+            ]
+          },
+          {
+            "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+            "name": "Maison Verde Fresh Apă micelară",
+            "price": 45.99,
+            "currency": "RON",
+            "match_class": "alternative",
+            "matched_on": [
+              "same category",
+              "micellar water",
+              "200 ml",
+              "lower price"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "b7ebe55c-da08-4b28-a8eb-62ac1bc72b7b",
+            "name": "Coral Theory Fresh Apă micelară",
+            "price": 183.99,
+            "currency": "RON",
+            "reason": "este referința; nu este mai ieftină"
+          }
+        ],
+        "required_disclosures": [
+          "Alternativele nu sunt echivalente identic: diferă ingredientele și suitability.",
+          "Auralis are fragrance_free=true și sensitive/normal; Coral este dry/combination și nu are fragrance_free populat."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock",
+          "echivalent_identic"
+        ],
+        "on_unknown": "referința trebuie identificată exact (rezolvare produs) înainte de alternativă",
+        "on_no_exact_match": "alternativă apropiată + spune EXPLICIT ce diferă (nu pretinde echivalent identic)",
+        "correct_answer_sketch": "Față de Coral Theory Fresh la 183,99 RON, Auralis Apa micelară costă 27,99 RON și Maison Verde 45,99 RON; toate au 200 ml. Auralis este cea mai apropiată ca funcție și cea mai ieftină, dar ingredientele și tipurile de ten diferă.",
+        "adi_note": "înlocuiește [produs scump din catalog] cu un produs real la etichetare",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "same category Demachiante, texture water, net_content 200 ml, price below reference",
+          "rows": [
+            "reference b7ebe55c... 183.99, dry/combination, HA+peptides",
+            "4f7ff352... 27.99, sensitive/normal, thermal water+glycerin",
+            "7ddf1d5f... 45.99, dry/sensitive, vitamin E"
+          ]
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-fara-parfum-rutina-fata",
+      "language": "ro",
+      "input": "vreau produse fără parfum pentru toată rutina de față",
+      "dimensions": [
+        "free_of",
+        "multi-product",
+        "use-case"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "fragrance_free",
+            "op": "eq",
+            "value": true
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "routine_completeness",
+            "value": "cleanse_treat_moisturize_protect",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+            "name": "Auralis Gentle Gel de curățare",
+            "price": 44.99,
+            "currency": "RON",
+            "match_class": "routine_member",
+            "matched_on": [
+              "routine_step=cleanse",
+              "fragrance_free=true"
+            ]
+          },
+          {
+            "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+            "name": "Auralis Clarity Ser cu niacinamidă",
+            "price": 41.99,
+            "currency": "RON",
+            "match_class": "routine_member",
+            "matched_on": [
+              "routine_step=treat",
+              "fragrance_free=true"
+            ]
+          },
+          {
+            "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+            "name": "LumaDerm Calm Cremă pentru ten sensibil",
+            "price": 67.99,
+            "currency": "RON",
+            "match_class": "routine_member",
+            "matched_on": [
+              "routine_step=moisturize",
+              "fragrance_free=true"
+            ]
+          },
+          {
+            "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+            "name": "LumaDerm Shield Fluid SPF 50+",
+            "price": 62.99,
+            "currency": "RON",
+            "match_class": "routine_member",
+            "matched_on": [
+              "routine_step=protect",
+              "fragrance_free=true"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+            "name": "Petala Gentle Spumă de curățare",
+            "price": 30.09,
+            "currency": "RON",
+            "reason": "fragrance_free=false"
+          },
+          {
+            "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+            "name": "Petala Rich Cremă hidratantă",
+            "price": 49.99,
+            "currency": "RON",
+            "reason": "fragrance_free=false"
+          },
+          {
+            "product_id": "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
+            "name": "LumaDerm Luminous Fond de ten",
+            "price": 71.49,
+            "currency": "RON",
+            "reason": "off-routine și fragrance_free=false"
+          }
+        ],
+        "required_disclosures": [
+          "Rutina costă 217,96 RON la prețurile curente; ordinea este cleanse → treat → moisturize → protect.",
+          "Compatibilitatea ingredientelor și toleranța individuală nu sunt evaluate de acest caz."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "pt fiecare pas fără opțiune fără-parfum confirmată → spune-o, nu completa forțat",
+        "on_no_exact_match": "acoperă pașii cu opțiuni fără parfum; semnalează pașii unde nu ai",
+        "correct_answer_sketch": "O rutină completă fără parfum confirmat este: Auralis Gentle (44,99), Auralis Clarity (41,99), LumaDerm Calm (67,99) și LumaDerm Shield SPF 50+ (62,99). Totalul este 217,96 RON, iar fiecare produs are fragrance_free=true.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "fragrance_free=true grouped by routine_step cleanse/treat/moisturize/protect",
+          "rows": [
+            "04bb4c58... cleanse",
+            "a341f639... treat",
+            "aa5bde75... moisturize",
+            "8c5171d3... protect"
+          ]
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-demachiant-fara-alcool-ochi-sensibili",
+      "language": "ro",
+      "input": "demachiant fără alcool pentru ochi sensibili",
+      "dimensions": [
+        "free_of",
+        "use-case"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "category",
+            "op": "eq",
+            "value": "demachiant"
+          },
+          {
+            "facet": "alcohol_free",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "facet": "use_case",
+            "op": "eq",
+            "value": "eye_area"
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "skin_types",
+            "value": "sensitive",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+            "name": "Auralis Gentle Gel de curățare",
+            "price": 44.99,
+            "currency": "RON",
+            "reason": "off-category: cleanser, nu demachiant"
+          },
+          {
+            "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+            "name": "Auralis Contur ochi Cremă",
+            "price": 62.99,
+            "currency": "RON",
+            "reason": "off-category: cremă de ochi, nu demachiant"
+          }
+        ],
+        "required_disclosures": [
+          "Nu există match exact: alcohol_free=0/300 și eye_area=0/300.",
+          "Auralis Apa micelară este sensitive/normal și fragrance_free=true, dar nu confirmă alcool-free sau utilizare specifică pe ochi."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "'pentru ochi' UNKNOWN → alternativă demachiant blând, cu notă",
+        "on_no_exact_match": "demachiant blând fără alcool + notă că nu e etichetat specific pentru ochi",
+        "correct_answer_sketch": "Cea mai apropiată este Auralis Apa micelară demachiantă, 27,99 RON, pentru ten sensibil și fără parfum. Catalogul nu confirmă însă «fără alcool» sau utilizarea specifică în zona ochilor, deci verificăm eticheta înainte de recomandare exactă.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "category Demachiante + sensitive; coverage alcohol_free/eye_area",
+          "exact_match_count": 0,
+          "alternative_products": [
+            {
+              "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+              "name": "Auralis Apa micelară demachiantă",
+              "price": 27.99,
+              "currency": "RON",
+              "known": [
+                "category demachiant",
+                "sensitive/normal",
+                "fragrance_free=true",
+                "200 ml"
+              ],
+              "unknown": [
+                "alcohol_free",
+                "eye_area"
+              ]
+            }
+          ],
+          "coverage": "alcohol_free=0/300; eye_area=0/300"
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-dupa-sport-nu-se-ia",
+      "language": "ro",
+      "input": "ceva pentru ten după sport, să nu se ia când transpir",
+      "dimensions": [
+        "use-case",
+        "multi-constraint",
+        "colocvial"
+      ],
+      "truth": {
+        "hard_constraints": [],
+        "soft_preferences": [
+          {
+            "facet": "use_case",
+            "value": "post_sport_sweat",
+            "weight": "high"
+          },
+          {
+            "facet": "concern",
+            "value": "transfer_resistant",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [],
+        "forbidden_products": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "reason": "nu recomanda machiaj înainte de clarificarea intenției"
+          },
+          {
+            "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+            "name": "Auralis Gentle Gel de curățare",
+            "price": 44.99,
+            "currency": "RON",
+            "reason": "nu recomanda skincare înainte de clarificarea intenției"
+          }
+        ],
+        "required_disclosures": [
+          "Trebuie clarificat dacă se cere îngrijire după sport sau machiaj rezistent la transpirație.",
+          "transfer_resistant, sweat_resistant și use_case=post_sport lipsesc ca fațete."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "clarifică întâi: îngrijire (post-sport) sau machiaj rezistent la transpirație? schimbă categoria",
+        "on_no_exact_match": "după clarificare, cel mai apropiat + trade-off",
+        "correct_answer_sketch": "Te interesează un produs de curățare/îngrijire după antrenament sau un produs de machiaj care să reziste în timpul sportului? Categoria se schimbă complet, iar catalogul nu are fațete standard pentru transpirație/transfer, deci întâi clarificăm.",
+        "adi_note": "caz bun de clarificare: intenția e ambiguă (skincare vs makeup)",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "coverage use_case/transfer_resistant/sport_sweat on active catalog",
+          "exact_match_count": 0,
+          "rows": [
+            "use_case=0/300",
+            "transfer_resistant=0/300",
+            "un singur text despre sweat: mascara waterproof, insuficient pentru această intenție"
+          ]
+        },
+        "_codex_hard_soft_review": [
+          "Empty expected_products este intenționat: recomandarea înainte de clarificare ar fi un fals pozitiv."
+        ]
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compound-birou-natural-ten-normal",
+      "language": "ro",
+      "input": "machiaj discret pentru birou, aspect natural, am ten normal",
+      "dimensions": [
+        "use-case",
+        "multi-constraint"
+      ],
+      "truth": {
+        "hard_constraints": [],
+        "soft_preferences": [
+          {
+            "facet": "use_case",
+            "value": "office_daily",
+            "weight": "high"
+          },
+          {
+            "facet": "coverage",
+            "value": "light_natural",
+            "weight": "high"
+          },
+          {
+            "facet": "skin_types",
+            "value": "normal",
+            "weight": "low"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+            "name": "Petala Nude Fond de ten",
+            "price": 59.99,
+            "currency": "RON",
+            "match_class": "soft_match",
+            "matched_on": [
+              "natural",
+              "light coverage",
+              "normal/dry"
+            ]
+          },
+          {
+            "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+            "name": "Aria Light Cremă BB hidratantă",
+            "price": 54.99,
+            "currency": "RON",
+            "match_class": "soft_match",
+            "matched_on": [
+              "light coverage",
+              "normal/dry",
+              "dewy"
+            ]
+          },
+          {
+            "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+            "name": "Velora Skin Match Fond de ten",
+            "price": 89.99,
+            "currency": "RON",
+            "match_class": "soft_match",
+            "matched_on": [
+              "natural",
+              "medium coverage",
+              "normal/combination"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "reason": "full coverage+matte; slab pentru cererea discret/natural"
+          }
+        ],
+        "required_disclosures": [
+          "office_daily nu este fațetă; rankingul se bazează pe coverage, finish și suitable_for.",
+          "Petala Nude este low_stock (3 total)."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock"
+        ],
+        "on_unknown": "",
+        "on_no_exact_match": "propune acoperire ușoară/naturală; dacă nimic 'natural' etichetat, cel mai apropiat cu notă",
+        "correct_answer_sketch": "Pentru cel mai discret rezultat, Petala Nude oferă acoperire lejeră și finish natural la 59,99 RON; Aria Light BB este mai hidratant și luminos la 54,99 RON. Velora Skin Match este o opțiune cu acoperire medie dacă vrei puțin mai multă uniformizare.",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "makeup base products; coverage light/medium + finish natural/dewy + normal",
+          "rows": [
+            "0dea9466... natural/light/normal, low_stock",
+            "c1eec351... dewy/light/normal",
+            "896945ed... natural/medium/normal"
+          ]
+        }
+      },
+      "fixture_note": "search_products temporar; rescrie la NX-209"
+    }
+  ],
+  "compare": [
+    {
+      "id": "compare-doua-fonduri",
+      "language": "ro",
+      "input": "care e diferența între Petala Nude Fond de ten și NudeLab Matte 24H Fond de ten?",
+      "dimensions": [
+        "compare"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "compare_set_size",
+            "op": "eq",
+            "value": 2
+          }
+        ],
+        "soft_preferences": [],
+        "expected_products": [
+          {
+            "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+            "name": "Petala Nude Fond de ten",
+            "price": 59.99,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          },
+          {
+            "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+            "name": "NudeLab Matte 24H Fond de ten",
+            "price": 66.49,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "8cb6faed-d058-4303-845b-7a53a894b9e2",
+            "name": "Petala Pore Blur Primer",
+            "price": 42.99,
+            "currency": "RON",
+            "reason": "off-category; nu substitui unul dintre fondurile numite"
+          }
+        ],
+        "required_differences_min": 2,
+        "difference_axes_expected": [
+          "coverage",
+          "finish",
+          "price"
+        ],
+        "required_disclosures": [
+          "Petala Nude este low_stock; NudeLab are stoc bun.",
+          "Diferențe demonstrate: coverage light vs full, finish natural vs matte, normal/dry vs oily/combination, 59,99 vs 66,49 RON."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock",
+          "diferente_inventate"
+        ],
+        "on_unknown": "dacă o axă lipsește pt un produs, nu inventa diferența — compară doar axele cu date la ambele",
+        "on_no_exact_match": "dacă un produs numit nu există → disclosure, nu compara cu altceva pe tăcute",
+        "correct_answer_sketch": "Petala Nude este mai lejer și natural, pentru normal/uscat, la 59,99 RON; NudeLab Matte 24H are acoperire mare și finish mat pentru gras/mixt, la 66,49 RON. Alegerea ține în primul rând de acoperire și tipul de ten, nu de diferența mică de preț.",
+        "adi_note": "alege 2 fonduri reale care DIFERĂ pe ≥2 axe",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "exact product ids + attributes coverage/finish/suitable_for + variant price",
+          "difference_axes": {
+            "coverage": [
+              "light",
+              "full"
+            ],
+            "finish": [
+              "natural",
+              "matte"
+            ],
+            "price": [
+              59.99,
+              66.49
+            ],
+            "skin_suitability": [
+              "normal/dry",
+              "oily/combination"
+            ]
+          }
+        }
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compare-doua-seruri-vitc",
+      "language": "ro",
+      "input": "ce ser cu vitamina C să aleg dintre Petala Bright Ser cu vitamina C și LumaDerm Vitamin C Ser luminozitate?",
+      "dimensions": [
+        "compare"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "compare_set_size",
+            "op": "eq",
+            "value": 2
+          }
+        ],
+        "soft_preferences": [],
+        "expected_products": [
+          {
+            "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+            "name": "Petala Bright Ser cu vitamina C",
+            "price": 47.24,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          },
+          {
+            "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+            "name": "LumaDerm Vitamin C Ser luminozitate",
+            "price": 50.99,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+            "name": "Auralis Retinol Ser de noapte",
+            "price": 92.99,
+            "currency": "RON",
+            "reason": "nu conține vitamina C; nu substitui produsele numite"
+          }
+        ],
+        "required_differences_min": 2,
+        "difference_axes_expected": [
+          "concentration",
+          "texture",
+          "price",
+          "skin_suitability"
+        ],
+        "required_disclosures": [
+          "Concentrația vitaminei C este UNKNOWN la ambele; nu o inventăm.",
+          "Ambele sunt fluide și fără parfum; diferențele reale sunt prețul, suitability și ingredientul secundar."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock",
+          "diferente_inventate"
+        ],
+        "on_unknown": "concentrația des UNKNOWN → nu o inventa; compară pe ce e în date",
+        "on_no_exact_match": "produs numit inexistent → disclosure",
+        "correct_answer_sketch": "Petala Bright costă 47,24 RON și combină vitamina C cu niacinamidă, fiind etichetat pentru pete/ten normal; LumaDerm costă 50,99 RON și combină vitamina C cu acid ferulic, pentru pete/hidratare. Concentrația nu este în catalog, deci nu o folosesc în comparație.",
+        "adi_note": "alege 2 seruri vit C reale care diferă",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "exact ids + key_ingredients/suitable_for/texture/price",
+          "difference_axes": {
+            "price": [
+              47.24,
+              50.99
+            ],
+            "skin_suitability": [
+              "hyperpigmentation/normal",
+              "hyperpigmentation/hydration"
+            ],
+            "secondary_ingredient": [
+              "niacinamidă",
+              "acid ferulic"
+            ],
+            "texture": [
+              "fluid",
+              "fluid"
+            ],
+            "concentration": [
+              "UNKNOWN",
+              "UNKNOWN"
+            ]
+          }
+        }
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compare-doua-creme-uscat",
+      "language": "ro",
+      "input": "Petala Rich Cremă hidratantă sau Coral Theory Balance Cremă hidratantă pentru ten uscat?",
+      "dimensions": [
+        "compare"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "compare_set_size",
+            "op": "eq",
+            "value": 2
+          }
+        ],
+        "soft_preferences": [
+          {
+            "facet": "skin_types",
+            "value": "dry",
+            "weight": "high"
+          }
+        ],
+        "expected_products": [
+          {
+            "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+            "name": "Petala Rich Cremă hidratantă",
+            "price": 49.99,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          },
+          {
+            "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+            "name": "Coral Theory Balance Cremă hidratantă",
+            "price": 114.49,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+            "name": "Petala Matte Cremă hidratantă",
+            "price": 28.79,
+            "currency": "RON",
+            "reason": "pentru oily/combination, nu perechea dry cerută"
+          }
+        ],
+        "required_differences_min": 2,
+        "difference_axes_expected": [
+          "richness",
+          "key_ingredients",
+          "price"
+        ],
+        "required_disclosures": [
+          "Ambele sunt 50 ml, textură cremă și pentru dry/hydration.",
+          "Bogăția este explicită doar la Petala («nutriție bogată»); nu inventăm o diferență de richness pentru Coral."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock",
+          "diferente_inventate"
+        ],
+        "on_unknown": "compară doar axele cu date la ambele produse",
+        "on_no_exact_match": "produs numit inexistent → disclosure",
+        "correct_answer_sketch": "Petala Rich costă 49,99 RON și folosește unt de shea+ceramide, cu beneficiu explicit de nutriție bogată; Coral Theory Balance costă 114,49 RON și folosește ovăz coloidal+bisabolol. Ambele sunt pentru ten uscat, iar diferențele certe sunt ingredientele și 64,50 RON la preț.",
+        "adi_note": "alege 2 creme reale potrivite ten uscat, care diferă",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "exact ids + key_ingredients/best_for/texture/net_content/price",
+          "difference_axes": {
+            "price": [
+              49.99,
+              114.49
+            ],
+            "key_ingredients": [
+              "shea+ceramides",
+              "colloidal oats+bisabolol"
+            ],
+            "richness": [
+              "explicit rich claim",
+              "UNKNOWN"
+            ],
+            "net_content": [
+              "50 ml",
+              "50 ml"
+            ]
+          }
+        }
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    },
+    {
+      "id": "compare-doua-spf",
+      "language": "ro",
+      "input": "care e diferența dintre Auralis Daily Cremă cu SPF 30 și LumaDerm Shield Fluid SPF 50+?",
+      "dimensions": [
+        "compare"
+      ],
+      "truth": {
+        "hard_constraints": [
+          {
+            "facet": "compare_set_size",
+            "op": "eq",
+            "value": 2
+          }
+        ],
+        "soft_preferences": [],
+        "expected_products": [
+          {
+            "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+            "name": "Auralis Daily Cremă cu SPF 30",
+            "price": 49.99,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          },
+          {
+            "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+            "name": "LumaDerm Shield Fluid SPF 50+",
+            "price": 62.99,
+            "currency": "RON",
+            "match_class": "comparison_member",
+            "matched_on": [
+              "comparison member"
+            ]
+          }
+        ],
+        "forbidden_products": [
+          {
+            "product_id": "020baf31-3e6a-4e16-86fd-4820e78b6090",
+            "name": "Lumiere Skin Silk Stick cu SPF",
+            "price": 71.99,
+            "currency": "RON",
+            "reason": "valoarea SPF este UNKNOWN; nu substitui unul dintre produsele numite"
+          }
+        ],
+        "required_differences_min": 2,
+        "difference_axes_expected": [
+          "spf_value",
+          "finish",
+          "price",
+          "use_case"
+        ],
+        "required_disclosures": [
+          "Finishul nu este structurat pentru niciunul; Auralis are doar o afirmație liberă «finish natural».",
+          "Ambele au 50 ml și fragrance_free=true."
+        ],
+        "forbidden_claims": [
+          "medical",
+          "invented_price",
+          "invented_stock",
+          "diferente_inventate"
+        ],
+        "on_unknown": "nu inventa valoarea SPF dacă nu e în date",
+        "on_no_exact_match": "produs numit inexistent → disclosure",
+        "correct_answer_sketch": "Auralis Daily are SPF 30, textură cremă, este pentru normal/mixt și costă 49,99 RON; LumaDerm Shield are SPF 50, textură fluidă, este pentru sensibil/gras și costă 62,99 RON. Diferențele certe sunt protecția, textura, tipul de ten și prețul.",
+        "adi_note": "alege 2 SPF-uri reale care diferă",
+        "_evidence": {
+          "source": "Supabase REST GET read-only",
+          "snapshot": "2026-07-24",
+          "scope": "business_id=6098812a-50fc-44bd-a1ba-bc77e6399158; status=active; content_status=published",
+          "query": "exact ids + spf/texture/suitable_for/net_content/price",
+          "difference_axes": {
+            "spf_value": [
+              30,
+              50
+            ],
+            "texture": [
+              "cream",
+              "fluid"
+            ],
+            "price": [
+              49.99,
+              62.99
+            ],
+            "skin_suitability": [
+              "normal/combination",
+              "sensitive/oily"
+            ],
+            "net_content": [
+              "50 ml",
+              "50 ml"
+            ],
+            "finish": [
+              "free-text natural",
+              "UNKNOWN"
+            ]
+          }
+        }
+      },
+      "fixture_note": "search_products/compare_products temporar; rescrie la NX-209"
+    }
+  ]
+}
