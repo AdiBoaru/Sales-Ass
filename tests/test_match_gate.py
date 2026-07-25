@@ -220,6 +220,54 @@ def test_two_constraints_same_facet_no_double_coverage():
     assert r.match == 1 and r.mismatch == 1  # a: 50∈[20,100] MATCH; b: 200>100 MISMATCH
 
 
+def test_unknown_enum_value_is_unknown_not_mismatch():
+    """Re-review #248: valoare de query în AFARA vocabularului fațetei (typo/sinonim nemapat) =
+    constrângere pe care nu o putem interpreta → UNKNOWN. MISMATCH ar declara produsul incompatibil
+    pe baza unei cereri neînțelese (D7: UNKNOWN ≠ MISMATCH)."""
+    assert evaluate(_FINISH, "eq", "glowy", "matte") == "UNKNOWN"  # „glowy" nu e în vocabular
+    assert (
+        evaluate(_FINISH, "eq", "matte", "dewy") == "MISMATCH"
+    )  # cunoscută + diferită = contrazice
+    assert evaluate(_FINISH, "eq", "matte", "matte") == "MATCH"
+
+
+def test_unknown_enum_value_puts_product_in_alternatives_not_rejected():
+    """Consecința pe MatchSet: produsul NU e respins pe o constrângere neinterpretabilă."""
+    ms = build_match_set([_p("a", finish="matte")], [_hard("finish", "eq", "glowy")], _REG)
+    assert ms.rejected == () and ms.alternatives == ("a",)
+
+
+def test_enum_alias_resolved_before_vocabulary_check():
+    """Aliasul declarat în registru se rezolvă ÎNAINTE de verificarea vocabularului (nu devine
+    UNKNOWN doar pentru că e scris colocvial)."""
+    finish = TypedFacet(
+        key="finish",
+        value_type=FacetType.ENUM,
+        source=FacetSource.ATTRIBUTE,
+        source_key="finish",
+        operators=("eq",),
+        values=("matte", "dewy"),
+        aliases={"mat": "matte"},
+    )
+    assert evaluate(finish, "eq", "mat", "matte") == "MATCH"
+    assert evaluate(finish, "eq", "mat", "dewy") == "MISMATCH"
+
+
+def test_facet_alias_and_canonical_key_share_one_coverage_row():
+    """Re-review #248: `concern` (aliasul din QuerySpec/qrels) și `concerns` (cheia catalogului)
+    sunt ACEEAȘI fațetă → UN rând de coverage și UN vot per produs, nu două."""
+    products = [_p("a", concerns=["oily"]), _p("b", concerns=["dry"])]
+    ms = build_match_set(
+        products,
+        [_hard("concern", "contains", "oily"), _hard("concerns", "contains", "oily")],
+        _REG,
+    )
+    assert [r.facet for r in ms.coverage] == ["concerns"]  # un singur rând, pe cheia canonică
+    r = ms.coverage[0]
+    assert r.match + r.mismatch + r.unknown == 2  # 2 produse, nu 4
+    assert r.match == 1 and r.mismatch == 1
+
+
 # --- shadow hook (kill-switch OFF by default, zero behavior change) ----------
 
 
