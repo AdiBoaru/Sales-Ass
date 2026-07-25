@@ -18,6 +18,7 @@ tri-state = NX-189). Verdictul per candidat se PĂSTREAZĂ (NX-209 îl consumă)
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -89,6 +90,24 @@ def canonical_facet_key(facets_by_key: dict[str, TypedFacet], key: str) -> str:
     return facet.key if facet else _FACET_KEY_ALIASES.get(key, key)
 
 
+def _words(s: Any) -> str:
+    """Text normalizat → cuvinte separate de spații, cu santinele (` gel crema `). Match pe cuvânt
+    întreg, nu pe substring: „gel" prinde „gel-crema", dar NU „angel"."""
+    return " " + re.sub(r"[^a-z0-9]+", " ", normalize(str(s))).strip() + " "
+
+
+def text_matches(op: str, product_value: Any, value: str) -> bool:
+    """Comparația pentru fațete TEXT. `eq` = egalitate normalizată; `contains` = valoarea de query
+    apare ca secvență de CUVINTE ÎNTREGI în textul produsului.
+
+    Review re-review #248: `contains` era evaluat ca `eq` (căderea pe ramura finală de egalitate),
+    deci `texture contains "gel"` pe „gel-crema" întorcea MISMATCH. Registrul declară explicit
+    `contains` printre operatorii TEXT — semantica lui trebuie să existe, nu doar permisiunea."""
+    if op == "contains":
+        return _words(value) in _words(product_value)
+    return normalize(str(product_value)) == normalize(value)
+
+
 def resolve_query_value(facet: TypedFacet, value: Any) -> Any:
     """Valoarea DIN QUERY proiectată pe vocabularul fațetei: rezolvă aliasul (`gras` → `oily`) și
     cere apartenența la valorile canonice, unde fațeta le declară (ENUM/LIST).
@@ -99,6 +118,8 @@ def resolve_query_value(facet: TypedFacet, value: Any) -> Any:
     D7 cere UNKNOWN. `None` = „nu putem interpreta valoarea"."""
     if not isinstance(value, str):
         return value
+    if not normalize(value):
+        return None  # string gol → nimic de evaluat (nu „contains ''" = MATCH pe orice)
     resolved = facet.aliases.get(normalize(value), value)
     if facet.values and resolved not in facet.values:
         return None
@@ -141,7 +162,7 @@ def evaluate(facet: TypedFacet, op: str, value: Any, product_value: Any) -> Verd
     if facet.value_type is FacetType.LIST and isinstance(product_value, list):
         vals = {normalize(str(x)) for x in product_value}
         return "MATCH" if normalize(value) in vals else "MISMATCH"
-    return "MATCH" if normalize(str(product_value)) == normalize(value) else "MISMATCH"
+    return "MATCH" if text_matches(op, product_value, value) else "MISMATCH"
 
 
 def classify_product(

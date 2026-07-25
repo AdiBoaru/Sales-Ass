@@ -253,6 +253,47 @@ def test_enum_alias_resolved_before_vocabulary_check():
     assert evaluate(finish, "eq", "mat", "dewy") == "MISMATCH"
 
 
+_TEXTURE = TypedFacet(
+    key="texture",
+    value_type=FacetType.TEXT,
+    source=FacetSource.ATTRIBUTE,
+    source_key="texture",
+    operators=("eq", "contains"),
+)
+_REG_TEXT = {**_REG, "texture": _TEXTURE}
+
+
+def test_text_contains_is_not_equality():
+    """Re-review 2 #248: `contains` pe fațete TEXT era evaluat ca `eq` — `texture contains "gel"`
+    pe „gel-crema" întorcea MISMATCH. Registrul declară `contains` printre operatorii TEXT, deci
+    semantica trebuie să existe, nu doar permisiunea."""
+    assert evaluate(_TEXTURE, "contains", "gel", "gel-crema") == "MATCH"
+    assert evaluate(_TEXTURE, "contains", "gel", "gel") == "MATCH"
+    assert evaluate(_TEXTURE, "contains", "gel", "cremă bogată") == "MISMATCH"
+    # `eq` rămâne egalitate strictă (normalizată) — nu s-a lărgit accidental
+    assert evaluate(_TEXTURE, "eq", "gel", "gel-crema") == "MISMATCH"
+    assert evaluate(_TEXTURE, "eq", "gel-cremă", "gel-crema") == "MATCH"  # diacritice normalizate
+
+
+def test_text_contains_matches_whole_words_only():
+    """`contains` = cuvinte ÎNTREGI, nu substring: „gel" nu are voie să prindă „angel"."""
+    assert evaluate(_TEXTURE, "contains", "gel", "angel balm") == "MISMATCH"
+    assert evaluate(_TEXTURE, "contains", "gel crema", "gel-cremă ușoară") == "MATCH"  # frază
+
+
+def test_empty_query_value_is_unknown_not_match_all():
+    """Valoare de query goală → UNKNOWN; altfel `contains ""` ar da MATCH pe orice produs."""
+    assert evaluate(_TEXTURE, "contains", "", "gel-crema") == "UNKNOWN"
+    assert evaluate(_TEXTURE, "contains", "   ", "gel-crema") == "UNKNOWN"
+
+
+def test_text_contains_product_side_missing_is_unknown():
+    """Lipsa valorii pe produs rămâne UNKNOWN (nu MISMATCH) și pentru `contains`."""
+    assert evaluate(_TEXTURE, "contains", "gel", None) == "UNKNOWN"
+    v = classify_product(_p("t"), [_hard("texture", "contains", "gel")], _REG_TEXT)
+    assert v.match_class == "alternative"
+
+
 def test_facet_alias_and_canonical_key_share_one_coverage_row():
     """Re-review #248: `concern` (aliasul din QuerySpec/qrels) și `concerns` (cheia catalogului)
     sunt ACEEAȘI fațetă → UN rând de coverage și UN vot per produs, nu două."""
