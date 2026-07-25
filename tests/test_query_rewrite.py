@@ -3,7 +3,7 @@
 Pur (fără DB/LLM): folosește pack-ul default beauty_salon (are `query_expansions` + concern_map
 extins). Verifică pattern-urile de limbă (preț, referință, fără-parfum) + expandarea."""
 
-from src.agent.query_rewrite import build_query_spec
+from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.config import get_settings
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Contact, InboundMessage, Route, TurnContext
@@ -124,3 +124,24 @@ def test_shadow_skips_non_sales_routes(monkeypatch):
     ctx = _ctx(_PII_RAW)
     _emit_query_spec_shadow(ctx, Route.SIMPLE)
     assert not [e for e in ctx.events if e.type == "query_spec_shadow"]
+
+
+def test_safe_vocabulary_derives_from_pack_only():
+    """Re-review #246: vocabularul controlat vine DOAR din surse controlate (fațetele emise de
+    rescriere + `concern_map` din pack + locale-urile businessului), niciodată din textul brut."""
+    vocab = safe_vocabulary(_pack(), locales=("ro",))
+    assert vocab.knows_facet("price") and vocab.knows_facet("concern")
+    assert not vocab.knows_facet("telefon_client")
+    concerns = set(vocab.facet_values["concern"])
+    assert concerns == set(_pack().concern_map.values())
+
+
+def test_safe_vocabulary_without_pack_is_fail_closed_on_values():
+    """Fără pack: fațetele structurale rămân (telemetrie), dar nicio valoare de concern nu poate fi
+    verificată → nu iese (P6: degradare grațioasă, nu scurgere)."""
+    vocab = safe_vocabulary(None)
+    assert vocab.knows_facet("price")
+    assert not vocab.facet_values["concern"]
+    spec = build_query_spec("ceva pentru ten gras sub 120", None)
+    safe = spec.to_safe(vocab)
+    assert [(c.facet, c.value) for c in safe.constraints] == [("price", 120.0)]

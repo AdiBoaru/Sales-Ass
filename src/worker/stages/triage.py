@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ValidationError
 
 from src.agent.fallbacks import _is_short_ack
-from src.agent.query_rewrite import build_query_spec
+from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.config import get_settings
 from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
@@ -65,7 +65,14 @@ def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:
         spec = build_query_spec(
             ctx.message.body or "", ctx.business.domain_pack, locale=ctx.language
         )
-        safe = spec.to_safe()
+        # Vocabular CONTROLAT (fațete din cod + concern-uri din pack + locale-urile
+        # businessului): fără el proiecția Safe e goală (fail-closed); cu el telemetria rămâne,
+        # iar PII-ul tot nu poate ieși.
+        safe = spec.to_safe(
+            safe_vocabulary(
+                ctx.business.domain_pack, locales=tuple(ctx.business.supported_locales or ())
+            )
+        )
         ctx.emit(
             "query_spec_shadow",
             intent=safe.intent,

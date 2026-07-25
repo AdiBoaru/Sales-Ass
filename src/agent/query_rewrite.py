@@ -18,13 +18,20 @@ sunt RO generic, nu specifice unui vertical. Determinist → testabil, prompt-ca
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from typing import TYPE_CHECKING
 
-from src.agent.query_spec import Constraint, RuntimeQuerySpec
+from src.agent.query_spec import Constraint, RuntimeQuerySpec, SafeVocabulary
 from src.domain.normalize import normalize
 
 if TYPE_CHECKING:
     from src.domain.pack import DomainPack
+
+# Fațetele pe care le poate emite rescrierea — mulțime ÎNCHISĂ, definită AICI (owner unic). Numele
+# de fațetă nu vine niciodată din textul clientului; `safe_vocabulary()` le declară proiecției Safe.
+FACET_PRICE = "price"
+FACET_FRAGRANCE_FREE = "fragrance_free"
+FACET_CONCERN = "concern"
 
 # Preț plafon: „sub 120", „buget 200", „maxim 150", „cel mult 100", „până în 80".
 _PRICE_RE = re.compile(
@@ -89,6 +96,32 @@ def _compose(base: str, extra_terms: list[str]) -> str:
     return out
 
 
+def safe_vocabulary(
+    domain_pack: DomainPack | None,
+    *,
+    locales: Collection[str] = (),
+    categories: Collection[str] = (),
+) -> SafeVocabulary:
+    """Vocabularul CONTROLAT pentru proiecția Safe a spec-ului produs de `build_query_spec`.
+
+    Derivat DOAR din surse controlate: fațetele emise de rescriere (constante din cod) + valorile
+    canonice de concern din `DomainPack.concern_map` (config per-vertical, P9) + `supported_locales`
+    ale businessului + slug-urile de categorie date de apelant. NIMIC din textul clientului.
+
+    Fără pack → doar fațetele structurale (preț/fără-parfum): telemetria rămâne, valorile de concern
+    nu au cum să fie verificate, deci nu ies (fail-closed, P6)."""
+    concern_values = (
+        tuple(dict.fromkeys((domain_pack.concern_map or {}).values())) if domain_pack else ()
+    )
+    return SafeVocabulary(
+        facet_values={FACET_CONCERN: frozenset(concern_values)},
+        numeric_facets=frozenset({FACET_PRICE}),
+        bool_facets=frozenset({FACET_FRAGRANCE_FREE}),
+        categories=frozenset(categories),
+        locales=frozenset(locales),
+    )
+
+
 def build_query_spec(
     raw_query: str,
     domain_pack: DomainPack | None,
@@ -113,7 +146,9 @@ def build_query_spec(
     price_max = _extract_price_max(norm)
     if price_max is not None:
         constraints.append(
-            Constraint(facet="price", op="lte", value=price_max, strength="hard", source="derived")
+            Constraint(
+                facet=FACET_PRICE, op="lte", value=price_max, strength="hard", source="derived"
+            )
         )
 
     # 2. Referință + „mai ieftin" → sort preț crescător (soft) + referință de exclus downstream.
@@ -129,7 +164,7 @@ def build_query_spec(
     if _FRAGFREE_RE.search(norm):
         constraints.append(
             Constraint(
-                facet="fragrance_free", op="eq", value=True, strength="hard", source="derived"
+                facet=FACET_FRAGRANCE_FREE, op="eq", value=True, strength="hard", source="derived"
             )
         )
 
@@ -138,7 +173,7 @@ def build_query_spec(
         if _word_hit(scan, phrase_norm):
             constraints.append(
                 Constraint(
-                    facet="concern",
+                    facet=FACET_CONCERN,
                     op="contains",
                     value=canonical,
                     strength="soft",
@@ -156,7 +191,7 @@ def build_query_spec(
     deduped: list[Constraint] = []
     for c in constraints:
         key = f"{c.facet}:{c.value}"
-        if c.facet == "concern":
+        if c.facet == FACET_CONCERN:
             if key in seen_concern:
                 continue
             seen_concern.add(key)
