@@ -80,13 +80,42 @@ def _facet_for(facets_by_key: dict[str, TypedFacet], key: str) -> TypedFacet | N
     return facets_by_key.get(key) or facets_by_key.get(_FACET_KEY_ALIASES.get(key, key))
 
 
+def canonical_facet_key(facets_by_key: dict[str, TypedFacet], key: str) -> str:
+    """Cheia CANONICĂ a unei fațete (cea din registru). `concern` (singular, din QuerySpec/qrels) și
+    `concerns` (plural, din catalog) sunt ACEEAȘI fațetă — agregarea trebuie să le vadă la fel, nu
+    să producă două rânduri. Fațetă necunoscută registrului → cheia dată (după alias), ca să rămână
+    vizibilă în coverage."""
+    facet = _facet_for(facets_by_key, key)
+    return facet.key if facet else _FACET_KEY_ALIASES.get(key, key)
+
+
+def resolve_query_value(facet: TypedFacet, value: Any) -> Any:
+    """Valoarea DIN QUERY proiectată pe vocabularul fațetei: rezolvă aliasul (`gras` → `oily`) și
+    cere apartenența la valorile canonice, unde fațeta le declară (ENUM/LIST).
+
+    Review re-review #248: o valoare de query pe care fațeta NU o cunoaște (typo, sinonim
+    nemapat, vocabular vechi) NU e o contrazicere — e o necunoscută. A întoarce MISMATCH ar
+    declara produsele incompatibile pe baza unei constrângeri pe care nu o putem interpreta;
+    D7 cere UNKNOWN. `None` = „nu putem interpreta valoarea"."""
+    if not isinstance(value, str):
+        return value
+    resolved = facet.aliases.get(normalize(value), value)
+    if facet.values and resolved not in facet.values:
+        return None
+    return resolved
+
+
 def evaluate(facet: TypedFacet, op: str, value: Any, product_value: Any) -> Verdict:
     """Tri-state pentru O constrângere pe un produs (D7). Valoare/operator lipsă sau nevalid =
     UNKNOWN, NICIODATĂ MATCH/MISMATCH — „nu putem evalua" ≠ „contrazice". Tipul/operatorii permiși
-    vin din `facet` (registrul NX-186)."""
+    și VOCABULARUL valorilor vin din `facet` (registrul NX-186)."""
     # Review #248: operator neacceptat de fațetă, valoare de query lipsă SAU de TIP incompatibil cu
     # fațeta (True pt NUMBER, 123 pt TEXT) NU trebuie să producă un MATCH accidental → UNKNOWN.
     if op not in facet.operators or value is None:
+        return "UNKNOWN"
+    # …iar o valoare de query în afara vocabularului fațetei nu poate produce nici MISMATCH.
+    value = resolve_query_value(facet, value)
+    if value is None:
         return "UNKNOWN"
     if product_value is None or not is_valid_value(facet, product_value):
         return "UNKNOWN"
@@ -157,23 +186,31 @@ def classify_product(
 
 
 def _aggregate_coverage(
-    verdicts: list[CandidateVerdict], constraints: list[Constraint] | tuple[Constraint, ...]
+    verdicts: list[CandidateVerdict],
+    constraints: list[Constraint] | tuple[Constraint, ...],
+    facets_by_key: dict[str, TypedFacet],
 ) -> tuple[FacetCoverage, ...]:
     """DISTRIBUȚIA MATCH/MISMATCH/UNKNOWN per fațetă hard (numere, nu status comprimat — un
     unknown>0 = „cât UNKNOWN produce catalogul", NX-188). Review #248: UN SINGUR rând per fațetă
     (deduplicat) și UN SINGUR vot per produs — două constrângeri hard pe aceeași fațetă NU dublează
     nici rândurile, nici contoarele. Per produs, statusul pe fațetă agregă cu precedența
-    MISMATCH > UNKNOWN > MATCH (aceeași ca la clasa produsului)."""
+    MISMATCH > UNKNOWN > MATCH (aceeași ca la clasa produsului).
+
+    Re-review #248: dedupe-ul se face pe cheia CANONICĂ din registru — `concern` (alias) și
+    `concerns` (cheia catalogului) sunt aceeași fațetă, deci un singur rând, nu două."""
     hard_facets: list[str] = []
     for c in constraints:
-        if c.strength == "hard" and c.facet not in hard_facets:
-            hard_facets.append(c.facet)  # unic, ordine stabilă
+        key = canonical_facet_key(facets_by_key, c.facet)
+        if c.strength == "hard" and key not in hard_facets:
+            hard_facets.append(key)  # unic pe cheia canonică, ordine stabilă
     out: list[FacetCoverage] = []
     for facet in hard_facets:
         counts = {"MATCH": 0, "MISMATCH": 0, "UNKNOWN": 0}
         for v in verdicts:
             statuses = [
-                r.status for r in v.constraint_results if r.facet == facet and r.strength == "hard"
+                r.status
+                for r in v.constraint_results
+                if canonical_facet_key(facets_by_key, r.facet) == facet and r.strength == "hard"
             ]
             if not statuses:
                 continue
@@ -209,5 +246,5 @@ def build_match_set(
         alternatives=alternatives,
         rejected=rejected,
         verdicts=tuple(verdicts),
-        coverage=_aggregate_coverage(verdicts, constraints),
+        coverage=_aggregate_coverage(verdicts, constraints, facets_by_key),
     )
