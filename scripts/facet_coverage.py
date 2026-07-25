@@ -32,7 +32,7 @@ if hasattr(sys.stdout, "reconfigure"):
         encoding="utf-8"
     )  # F4: diacritice pe consola Windows fără PYTHONIOENCODING
 
-from src.agent.match_gate import resolve_query_value  # noqa: E402
+from src.agent.match_gate import resolve_query_value, text_matches  # noqa: E402
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.domain.facets import FacetType, extract_value, is_valid_value  # noqa: E402
@@ -159,7 +159,7 @@ def evaluate_constraint(facet, op: str, value, product_value) -> str:
     if facet.value_type is FacetType.LIST and isinstance(product_value, list):
         vals = {normalize(str(x)) for x in product_value}
         return "MATCH" if normalize(str(value)) in vals else "MISMATCH"
-    return "MATCH" if normalize(str(product_value)) == normalize(str(value)) else "MISMATCH"
+    return "MATCH" if text_matches(op, product_value, str(value)) else "MISMATCH"
 
 
 def query_match_distribution(facets, queries: list[dict], all_products: list[dict]) -> dict:
