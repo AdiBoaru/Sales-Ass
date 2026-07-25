@@ -33,6 +33,12 @@ FACET_PRICE = "price"
 FACET_FRAGRANCE_FREE = "fragrance_free"
 FACET_CONCERN = "concern"
 
+# Benzile cu care un PREȚ are voie să iasă în proiecția Safe (RON). Nu e un prag de plauzibilitate,
+# e granularitatea telemetriei: proiecția emite „100-150", niciodată numărul brut, iar orice valoare
+# în afara domeniului declarat e redactată (un telefon nu e un preț). Când fațetele tipizate ajung
+# în registrul per-tenant (NX-186/209), lattice-ul se mută acolo — apelantul poate deja să-l dea.
+_PRICE_BANDS: tuple[float, ...] = (0, 50, 100, 150, 200, 300, 500, 1000)
+
 # Preț plafon: „sub 120", „buget 200", „maxim 150", „cel mult 100", „până în 80".
 _PRICE_RE = re.compile(
     r"\b(?:sub|pana in|maxim|max|cel mult|buget(?:ul)?(?: de)?|in jur de|aprox|circa|pana la)"
@@ -115,7 +121,7 @@ def safe_vocabulary(
     )
     return SafeVocabulary(
         facet_values={FACET_CONCERN: frozenset(concern_values)},
-        numeric_facets=frozenset({FACET_PRICE}),
+        numeric_bands={FACET_PRICE: _PRICE_BANDS},
         bool_facets=frozenset({FACET_FRAGRANCE_FREE}),
         categories=frozenset(categories),
         locales=frozenset(locales),

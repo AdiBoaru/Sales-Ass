@@ -75,16 +75,19 @@ class SafeVocabulary:
     Toate câmpurile vin din surse CONTROLATE (registrul de fațete / catalog / config), niciodată
     din mesajul clientului. Ce nu e aici nu iese: fail-closed pe toată suprafața, nu doar `value`.
 
-    - `facet_values`   — fațetă → valorile ei canonice de tip string (ENUM/LIST/TEXT controlat).
-    - `numeric_facets` — fațetele unde o valoare NUMERICĂ e legitimă (preț, rating). Un număr NU e
-      automat sigur: un telefon e tot număr. Numericul iese DOAR sub o fațetă declarată numerică.
-    - `bool_facets`    — fațetele unde un boolean e legitim (fragrance_free etc.).
-    - `categories`     — slug-uri canonice de categorie (`category` + `reference_categories`).
-    - `locales`        — locale-urile suportate de business (`supported_locales`), nu din cod.
+    - `facet_values`  — fațetă → valorile ei canonice de tip string (ENUM/LIST/TEXT controlat).
+    - `numeric_bands` — fațetă numerică → pragurile ordonate ale benzilor. **Nu e o listă de fațete
+      „de încredere": e domeniul + granularitatea cu care numărul are voie să iasă.** Declararea
+      tipului valida doar TIPUL, nu valoarea — un telefon e un număr perfect valid (re-review #246).
+      Numărul brut NU iese niciodată: se proiectează pe bandă („100-150"), iar în afara domeniului
+      declarat e redactat. O bandă nu poate identifica pe nimeni; un număr de 9 cifre, da.
+    - `bool_facets`   — fațetele unde un boolean e legitim (fragrance_free etc.).
+    - `categories`    — slug-uri canonice de categorie (`category` + `reference_categories`).
+    - `locales`       — locale-urile suportate de business (`supported_locales`), nu din cod.
     """
 
     facet_values: Mapping[str, Collection[str]] = field(default_factory=dict)
-    numeric_facets: Collection[str] = ()
+    numeric_bands: Mapping[str, tuple[float, ...]] = field(default_factory=dict)
     bool_facets: Collection[str] = ()
     categories: Collection[str] = ()
     locales: Collection[str] = ()
@@ -93,11 +96,30 @@ class SafeVocabulary:
         """True dacă numele fațetei însuși e dintr-un vocabular controlat. Numele de fațetă e un
         câmp string ca oricare altul: nevalidat, ar putea purta text de utilizator."""
         return isinstance(facet, str) and (
-            facet in self.facet_values or facet in self.numeric_facets or facet in self.bool_facets
+            facet in self.facet_values or facet in self.numeric_bands or facet in self.bool_facets
         )
 
 
 _EMPTY_VOCAB = SafeVocabulary()
+
+
+def _fmt_edge(x: float) -> str:
+    return str(int(x)) if float(x).is_integer() else str(x)
+
+
+def band_label(edges: tuple[float, ...], value: float) -> str | None:
+    """Valoare numerică → eticheta BENZII din lattice-ul declarat; `None` în afara domeniului.
+
+    Benzi semi-deschise `[lo, hi)`, ultima închisă `[lo, hi]` — convenție fixă, deci eticheta e
+    deterministă și mulțimea etichetelor e finită (derivată din `edges`, nu din valoare). Sub prima
+    margine sau peste ultima → `None`: o valoare din afara domeniului declarat nu e o măsurătoare,
+    e altceva (un telefon, un id) — și nu are ce căuta în proiecția Safe."""
+    if len(edges) < 2 or value < edges[0] or value > edges[-1]:
+        return None
+    for lo, hi in zip(edges, edges[1:]):
+        if lo <= value < hi or (hi == edges[-1] and value == hi):
+            return f"{_fmt_edge(lo)}-{_fmt_edge(hi)}"
+    return None
 
 
 class SafeQuerySpec(BaseModel):
@@ -148,14 +170,17 @@ class RuntimeQuerySpec:
         **Regula (re-review #246): FIECARE câmp al proiecției e verificat contra unui vocabular,
         nu doar `value`.** Un `Constraint` e construit de apelant: `facet`, `op`, `source` sunt
         string-uri la fel de capabile să poarte PII ca `value` — a valida doar valoarea lasă ușa
-        deschisă (`facet="ion_popescu_0722123456"`). Iar numericul NU e sigur prin natura lui:
-        un telefon e tot un număr.
+        deschisă (`facet="ion_popescu_0722123456"`).
+
+        **Iar tipul nu e o garanție de siguranță (re-review 2 #246): un telefon e un `int` perfect
+        valid.** De aceea numărul nu iese brut NICIODATĂ — se proiectează pe o bandă declarată.
 
         - `facet` necunoscut vocabularului → constrângerea e **DROPATĂ integral** (nu redactată:
           numele fațetei e el însuși payload-ul).
         - `op` / `strength` / `source` în afara vocabularelor ÎNCHISE din cod → **DROP**.
-        - `value`: string → doar din `facet_values[facet]`; număr → doar sub o fațetă din
-          `numeric_facets`; boolean → doar sub o fațetă din `bool_facets`; altfel **None**.
+        - `value`: string → doar din `facet_values[facet]`; **număr → eticheta benzii din
+          `numeric_bands[facet]`** („100-150"), iar în afara domeniului declarat → **None**;
+          boolean → doar sub o fațetă din `bool_facets`.
         - `intent` / `sort` → doar din vocabularele închise din cod; `locale` → doar din
           `vocab.locales` (`supported_locales`, nu o listă hardcodată); `category` /
           `reference_categories` → doar slug-uri din `vocab.categories`.
@@ -167,9 +192,9 @@ class RuntimeQuerySpec:
             if isinstance(c.value, bool):
                 return c.value if c.facet in v.bool_facets else None
             if isinstance(c.value, (int, float)):
-                # Numărul nu e sigur prin natura lui (un telefon e număr) — iese DOAR sub o fațetă
-                # declarată numerică de vocabular.
-                return c.value if c.facet in v.numeric_facets else None
+                # Numărul BRUT nu iese niciodată: îl proiectăm pe banda declarată pentru fațetă.
+                # Un telefon (9 cifre) cade în afara oricărui domeniu plauzibil de preț → None.
+                return band_label(tuple(v.numeric_bands.get(c.facet) or ()), float(c.value))
             return c.value if _safe_str(c.value, v.facet_values.get(c.facet)) else None
 
         safe_constraints = tuple(

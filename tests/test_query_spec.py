@@ -6,7 +6,13 @@ telemetrizabilă (`SafeQuerySpec`) — garanție de TIP, nu de convenție. Pur (
 import pytest
 from pydantic import ValidationError
 
-from src.agent.query_spec import Constraint, RuntimeQuerySpec, SafeQuerySpec, SafeVocabulary
+from src.agent.query_spec import (
+    Constraint,
+    RuntimeQuerySpec,
+    SafeQuerySpec,
+    SafeVocabulary,
+    band_label,
+)
 
 # String „PII-like" (nume + telefon) folosit ca test canary: dacă apare în serializarea Safe,
 # invariantul e rupt.
@@ -18,7 +24,7 @@ def _vocab() -> SafeVocabulary:
     """Vocabularul controlat tipic (fațete din cod + valori canonice + slug-uri + locale)."""
     return SafeVocabulary(
         facet_values={"concern": frozenset({"oily"})},
-        numeric_facets=frozenset({"price"}),
+        numeric_bands={"price": (0, 50, 100, 150, 200, 300, 500, 1000)},
         bool_facets=frozenset({"fragrance_free"}),
         categories=frozenset({"seruri-pentru-ten", "apa-micelara"}),
         locales=frozenset({"ro"}),
@@ -58,10 +64,10 @@ def test_to_safe_drops_raw_and_reference_names():
     dumped = safe.model_dump_json()
     assert _CANARY not in dumped
     assert "coral theory fresh" not in dumped.lower()  # numele referinței nu se persistă
-    # slug-ul canonic (vocabular controlat) trece; facet-ul + valoarea numerică supraviețuiesc
+    # slug-ul canonic (vocabular controlat) trece; prețul iese ca BANDĂ, nu ca număr brut
     assert safe.reference_categories == ("apa-micelara",)
     price = next(c for c in safe.constraints if c.facet == "price")
-    assert price.value == 120
+    assert price.value == "100-150"
 
 
 def test_to_safe_without_vocabulary_is_fully_fail_closed():
@@ -91,7 +97,7 @@ def test_to_safe_redacts_unvalidated_values_keeps_canonical():
     safe = rt.to_safe(_vocab())
     assert _CANARY not in safe.model_dump_json()
     assert [(c.facet, c.value) for c in safe.constraints] == [
-        ("price", 120),
+        ("price", "100-150"),
         ("concern", "oily"),
         ("concern", None),
     ]
@@ -134,7 +140,7 @@ def test_to_safe_drops_constraint_with_unknown_facet_name():
     dumped = safe.model_dump_json()
     assert _CANARY not in dumped
     assert "ion_popescu" not in dumped
-    assert [(c.facet, c.value) for c in safe.constraints] == [("price", 120)]
+    assert [(c.facet, c.value) for c in safe.constraints] == [("price", "100-150")]
 
 
 def test_to_safe_drops_constraint_with_uncontrolled_op_strength_source():
@@ -158,8 +164,7 @@ def test_to_safe_drops_constraint_with_uncontrolled_op_strength_source():
 
 
 def test_to_safe_numeric_pii_needs_declared_numeric_facet():
-    """Re-review #246: un NUMĂR nu e sigur prin natura lui — un telefon e număr. Valoarea numerică
-    iese DOAR sub o fațetă declarată numerică; sub o fațetă enum/bool e redactată."""
+    """Un NUMĂR nu e sigur prin natura lui: sub o fațetă enum/bool valoarea numerică e redactată."""
     rt = RuntimeQuerySpec(
         raw_query="x",
         normalized_query="x",
@@ -177,6 +182,42 @@ def test_to_safe_numeric_pii_needs_declared_numeric_facet():
         ("fragrance_free", None),
         ("fragrance_free", True),
     ]
+
+
+def test_to_safe_never_emits_a_raw_number():
+    """Re-review 2 #246: declararea fațetei ca numerică validează TIPUL, nu valoarea — un telefon e
+    un număr valid. Deci numărul brut NU iese niciodată: iese banda, iar în afara domeniului
+    declarat (un telefon nu e un preț) valoarea e redactată."""
+    rt = RuntimeQuerySpec(
+        raw_query="x",
+        normalized_query="x",
+        search_text="x",
+        constraints=(
+            # ACELAȘI telefon, de data asta sub fațeta declarată NUMERICĂ (findingul Codex)
+            Constraint(facet="price", op="lte", value=_PHONE_NUM, strength="hard"),
+            Constraint(facet="price", op="lte", value=120, strength="hard"),
+        ),
+    )
+    safe = rt.to_safe(_vocab())
+    dumped = safe.model_dump_json()
+    assert str(_PHONE_NUM) not in dumped  # telefonul nu iese nici sub o fațetă numerică
+    assert "722" not in dumped  # nici măcar parțial (prefix/sufix)
+    assert [(c.facet, c.value) for c in safe.constraints] == [("price", None), ("price", "100-150")]
+    # niciun câmp din proiecție nu e un număr brut provenit din tur
+    assert all(
+        not isinstance(c.value, (int, float)) or isinstance(c.value, bool) for c in safe.constraints
+    )
+
+
+def test_band_label_is_deterministic_and_bounded():
+    edges = (0, 50, 100, 150, 200, 300, 500, 1000)
+    assert band_label(edges, 0) == "0-50"
+    assert band_label(edges, 50) == "50-100"  # benzi semi-deschise [lo, hi)
+    assert band_label(edges, 149.99) == "100-150"
+    assert band_label(edges, 1000) == "500-1000"  # ultima bandă e închisă
+    assert band_label(edges, 1000.01) is None  # peste domeniu → redactat
+    assert band_label(edges, -1) is None  # sub domeniu → redactat
+    assert band_label((), 100) is None  # fără lattice declarat → nimic nu iese
 
 
 def test_to_safe_validates_intent_sort_locale():

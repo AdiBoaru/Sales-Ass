@@ -144,4 +144,4 @@ def test_safe_vocabulary_without_pack_is_fail_closed_on_values():
     assert not vocab.facet_values["concern"]
     spec = build_query_spec("ceva pentru ten gras sub 120", None)
     safe = spec.to_safe(vocab)
-    assert [(c.facet, c.value) for c in safe.constraints] == [("price", 120.0)]
+    assert [(c.facet, c.value) for c in safe.constraints] == [("price", "100-150")]
