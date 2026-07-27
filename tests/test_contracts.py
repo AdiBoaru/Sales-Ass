@@ -400,13 +400,20 @@ def test_malformed_input_is_reported_not_silently_unknown():
     facts, problems = parse_product(
         {
             "slug": "p1",
-            "attributes": {"concerns": "oily", "spf": "50", "fragrance_free": "da", "usage": []},
+            "attributes": {
+                "concerns": "oily",
+                "finish": 123,
+                "spf": "50",
+                "fragrance_free": "da",
+                "usage": [],
+            },
         },
         business_id="b",
         locale="ro",
     )
-    assert facts.concerns is None and facts.spf is None
+    assert facts.concerns is None and facts.finish is None and facts.spf is None
     assert any("concerns: malformat" in p for p in problems)
+    assert any("finish: malformat" in p for p in problems)
     assert any("spf: malformat" in p for p in problems)
     assert any("fragrance_free: malformat" in p for p in problems)
     assert any("usage: malformat" in p for p in problems)
@@ -485,6 +492,27 @@ def test_list_with_wrong_element_types_is_reported():
     )
     assert facts.concerns == ("oily",)
     assert any("element(e) de tip nepermis" in p for p in problems)
+
+
+def test_whitespace_fact_values_are_rejected_in_every_entry_path():
+    """Nu există un fapt text gol: nici prin model direct, nici prin parserul de raport."""
+    with pytest.raises(ValidationError):
+        _facts(concerns=("  ",))
+    with pytest.raises(ValidationError):
+        _facts(finish="\t")
+
+    facts, problems = parse_product(
+        {"slug": "p1", "attributes": {"concerns": ["oily", "  "], "finish": "  "}},
+        business_id="b",
+        locale="ro",
+    )
+    assert facts.concerns == ("oily",) and facts.finish is None
+    assert any("concerns: 1 element(e) gol/goale" in p for p in problems)
+    assert any("finish: malformat (text gol" in p for p in problems)
+    with pytest.raises(ContractError, match="finish: malformat"):
+        ProductFacts.from_product(
+            {"slug": "p1", "attributes": {"finish": "  "}}, business_id="b", locale="ro"
+        )
 
 
 def test_unknown_attribute_keys_are_visible_not_silent():

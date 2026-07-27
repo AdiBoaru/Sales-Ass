@@ -247,24 +247,24 @@ class ProductFacts(_DerivedArtifact):
         portiță: „Alcohol " și „alcohol" sunt același ingredient).
     """
 
-    category_slug: str | None = None
-    concerns: tuple[str, ...] | None = None
-    suitable_for: tuple[str, ...] | None = None
-    key_ingredients: tuple[str, ...] | None = None
-    free_of: tuple[str, ...] | None = None
-    differentiators: tuple[str, ...] | None = None
-    finish: str | None = None
-    coverage: str | None = None
-    texture: str | None = None
-    routine_step: str | None = None
-    skin_type: str | None = None
-    hair_type: str | None = None
-    best_for: str | None = None
-    key_benefit: str | None = None
-    wear_time: str | None = None
+    category_slug: NonBlank | None = None
+    concerns: tuple[NonBlank, ...] | None = None
+    suitable_for: tuple[NonBlank, ...] | None = None
+    key_ingredients: tuple[NonBlank, ...] | None = None
+    free_of: tuple[NonBlank, ...] | None = None
+    differentiators: tuple[NonBlank, ...] | None = None
+    finish: NonBlank | None = None
+    coverage: NonBlank | None = None
+    texture: NonBlank | None = None
+    routine_step: NonBlank | None = None
+    skin_type: NonBlank | None = None
+    hair_type: NonBlank | None = None
+    best_for: NonBlank | None = None
+    key_benefit: NonBlank | None = None
+    wear_time: NonBlank | None = None
     spf: float | None = None
     fragrance_free: bool | None = None
-    gtin: str | None = None
+    gtin: NonBlank | None = None
     usage: Usage | None = None
     net_content: NetContent | None = None
     variants: tuple[Variant, ...] | None = None
@@ -367,24 +367,33 @@ def _collect_facts(
         if not isinstance(raw, list):
             problems.append(f"{key}: malformat (așteptat listă, primit {type(raw).__name__})")
             return None
-        out, bad = [], 0
+        out: list[str] = []
+        wrong_type = blank = 0
         for v in raw:
-            if isinstance(v, str) or (isinstance(v, (int, float)) and not isinstance(v, bool)):
-                out.append(str(v).strip())
+            if not isinstance(v, str):
+                wrong_type += 1
+            elif value := v.strip():
+                out.append(value)
             else:
-                bad += 1
-        if bad:
-            problems.append(f"{key}: {bad} element(e) de tip nepermis, ignorate")
+                blank += 1
+        if wrong_type:
+            problems.append(f"{key}: {wrong_type} element(e) de tip nepermis, ignorate")
+        if blank:
+            problems.append(f"{key}: {blank} element(e) gol/goale sau doar spații, ignorate")
         return tuple(out)
 
     def _str(key: str, source: Mapping[str, Any] = attrs) -> str | None:
         if key not in source or source.get(key) is None:
             return None
         raw = source[key]
-        if isinstance(raw, bool) or not isinstance(raw, (str, int, float)):
+        if not isinstance(raw, str):
             problems.append(f"{key}: malformat (așteptat text, primit {type(raw).__name__})")
             return None
-        return str(raw).strip() or None
+        value = raw.strip()
+        if not value:
+            problems.append(f"{key}: malformat (text gol sau doar spații)")
+            return None
+        return value
 
     def _num(key: str) -> float | None:
         if key not in attrs or attrs.get(key) is None:
