@@ -59,6 +59,7 @@ class QrelsQuery(BaseModel):
     locale: str = "ro"
     provenance: Provenance
     category: str | None = None  # pentru stratificare pe categorii
+    human_verified: bool = False  # obligatoriu la gate; explicit ca să nu presupunem verificarea
     catalog_version: str  # versiunea catalogului la care s-au făcut etichetele
     judgments: list[QrelJudgment] = Field(default_factory=list)  # produse relevante, graduale
     forbidden_products: list[str] = Field(

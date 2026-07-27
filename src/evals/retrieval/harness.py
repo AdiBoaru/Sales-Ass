@@ -53,6 +53,33 @@ class BenchmarkReport(BaseModel):
     per_query: list[QueryResult]
 
 
+class BenchmarkComparison(BaseModel):
+    """Comparație machine-readable între baseline și candidat pe exact același qrels split."""
+
+    baseline: BenchmarkReport
+    candidate: BenchmarkReport
+    delta_recall_at_20: float
+    delta_ndcg_at_6: float
+    delta_top_6_hit_rate: float
+    delta_forbidden_violation_rate: float
+
+
+def compare_reports(baseline: BenchmarkReport, candidate: BenchmarkReport) -> BenchmarkComparison:
+    """Diferențe candidat-minus-baseline; condiția de switch se decide în afara harness-ului."""
+    if baseline.n_queries != candidate.n_queries:
+        raise ValueError("nu pot compara rapoarte cu număr diferit de query-uri")
+    return BenchmarkComparison(
+        baseline=baseline,
+        candidate=candidate,
+        delta_recall_at_20=candidate.recall_at_20 - baseline.recall_at_20,
+        delta_ndcg_at_6=candidate.ndcg_at_6 - baseline.ndcg_at_6,
+        delta_top_6_hit_rate=candidate.top_6_hit_rate - baseline.top_6_hit_rate,
+        delta_forbidden_violation_rate=(
+            candidate.forbidden_violation_rate - baseline.forbidden_violation_rate
+        ),
+    )
+
+
 def evaluate_query(q: QrelsQuery, ranked: Sequence[str]) -> QueryResult:
     return QueryResult(
         id=q.id,

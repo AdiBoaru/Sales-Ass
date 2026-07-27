@@ -15,7 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.evals.retrieval import metrics
-from src.evals.retrieval.harness import RunConfig, run_benchmark
+from src.evals.retrieval.harness import RunConfig, compare_reports, run_benchmark
 from src.evals.retrieval.schema import (
     HardConstraint,
     Provenance,
@@ -180,3 +180,30 @@ def test_example_hard_constraints_parse():
     hc = qset.queries[0].hard_constraints
     assert hc and isinstance(hc[0], HardConstraint)
     assert hc[0].facet == "category"
+
+
+def test_comparison_uses_same_query_count_and_exposes_deltas():
+    qset = QrelsSet(business_id="b", queries=[_q(id="one")])
+    baseline = run_benchmark(qset, lambda _query: ["miss"], RunConfig(label="legacy"))
+    candidate = run_benchmark(qset, lambda _query: [], RunConfig(label="shadow"))
+
+    comparison = compare_reports(baseline, candidate)
+
+    assert comparison.delta_recall_at_20 == 0.0
+    assert comparison.delta_ndcg_at_6 == 0.0
+    assert comparison.baseline.config.label == "legacy"
+    assert comparison.candidate.config.label == "shadow"
+
+
+def test_comparison_rejects_different_qrels_sizes():
+    one = run_benchmark(
+        QrelsSet(business_id="b", queries=[_q(id="one")]), lambda _q: [], RunConfig(label="one")
+    )
+    two = run_benchmark(
+        QrelsSet(business_id="b", queries=[_q(id="one"), _q(id="two")]),
+        lambda _q: [],
+        RunConfig(label="two"),
+    )
+
+    with pytest.raises(ValueError, match="număr diferit"):
+        compare_reports(one, two)
