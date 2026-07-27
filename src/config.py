@@ -414,6 +414,9 @@ class Settings(BaseSettings):
     search_sort_mode_enabled: bool = Field(
         default=True, validation_alias="SEARCH_SORT_MODE_ENABLED"
     )
+    # NX-207: citirea embeddings-urilor shadow se activează numai după benchmark. OFF păstrează
+    # exact doc_type='product', deci este kill switch-ul de revenire imediată la retrieval-ul live.
+    search_shadow_enabled: bool = Field(default=False, validation_alias="SEARCH_SHADOW_ENABLED")
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).
