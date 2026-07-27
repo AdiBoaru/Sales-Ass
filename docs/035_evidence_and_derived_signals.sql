@@ -75,7 +75,15 @@ create table if not exists product_derived_signals (
   product_id     uuid not null,
   signal         text not null check (length(btrim(signal)) > 0),
   -- Nevid: un semnal fără intrări nu e derivat, e inventat.
-  derived_from   text[] not null check (array_length(derived_from, 1) >= 1),
+  -- ATENȚIE (review #250): `array_length(x, 1)` întoarce NULL pe array GOL, iar un CHECK care se
+  -- evaluează la NULL TRECE. `cardinality()` întoarce 0 → constrângerea chiar respinge `{}`.
+  -- Elementele goale/NULL sunt și ele respinse: „derivat din nimic" scris cu spații e tot nimic.
+  derived_from   text[] not null
+                 check (cardinality(derived_from) >= 1)
+                 check (array_position(derived_from, null) is null)
+                 -- niciun element gol/din spații. Separatorul E'\x01' nu poate apărea într-un
+                 -- path de fapt, deci un segment gol în join = un element gol în array.
+                 check (array_to_string(derived_from, E'\x01') !~ E'(^|\x01)[[:space:]]*(\x01|$)'),
   -- Regula versionată — cheia prin care se re-derivează global (vezi `..._rule_idx`).
   rule_id        text not null check (length(btrim(rule_id)) > 0),
   locale         text not null,

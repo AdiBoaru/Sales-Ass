@@ -4,40 +4,46 @@ DerivedSignals). Pur: fără DB, fără LLM, fără I/O.
 **Extinde NX-168d, NU îl rescrie.** Vocabularul canonic (concerns, finish, coverage, texture,
 routine_step) și shape-urile `claim_provenance` / `not_recommended_for` rămân ale contractului v3
 (`db/seed/catalog_v3.schema.json`) — aici sunt doar TIPIZATE în Python, ca să existe un singur
-validator pe care îl pot folosi și seed-ul, și auditul, și codul de runtime. Delta cardului:
+validator pe care îl pot folosi și seed-ul, și auditul, și codul de runtime.
 
-  1. `EvidenceChunk`  — fragmentul citabil, cu ROL explicit (D9: negativele intră aici ca
-     `warning`).
-  2. `DerivedSignal`  — semnal DERIVAT, separat fizic de faptul confirmat: `derived_from[]` +
-     `rule_id` (regula e versionată → reparabilă global, nu produs cu produs).
-  3. `CategoryRequirements` — câmpurile obligatorii PER CATEGORIE, din DomainPack (P9), nu din cod.
-  4. `locale` + `schema_version` pe artefactele derivate (D3).
-
-**Cele trei stări ale adevărului (D5) — nu se amestecă niciodată:**
+**Cele trei stări ale adevărului (D5) — separate STRUCTURAL, nu prin disciplină:**
   - *confirmat*  → `ProductFacts` + `ClaimProvenance` (are sursă verificabilă);
-  - *derivat*    → `DerivedSignal` (are `rule_id`, deci se poate re-calcula/repara);
-  - *necunoscut* → absența câmpului. NU se completează cu o presupunere.
+  - *derivat*    → `DerivedSignal` (are `rule_id`, deci se poate re-calcula/repara global);
+  - *necunoscut* → **`None`**, distinct de „cunoscut și gol" (`()`).
 
-**Zero PII:** contractele descriu PRODUSE. Niciun câmp nu ține text de utilizator, nume, telefon
-sau id de canal — `EvidenceChunk.text` e conținut de catalog și cere `source` (fără sursă nu e
-„evidence", e afirmație). Vezi `test_contracts.py::test_no_pii_shaped_fields`.
+**`None` ≠ `()` — invariantul necunoscutului (review #250).** Dacă absența unui fapt se
+serializează ca listă goală, „nu știm dacă are parfum" devine „nu are parfum" la prima citire, iar
+un UNKNOWN pierdut nu se mai recuperează. De aceea colecțiile sunt `... | None`, default `None`, iar
+serializarea canonică (`to_artifact()`) OMITE necunoscutele în loc să le aplatizeze.
+
+**Prețul/stocul NU intră în `ProductFacts`.** Sunt fapte LIVE (`LiveFacts`), citite din rând la
+momentul răspunsului. Un preț copiat într-un artefact derivat e un preț care va fi greșit — iar
+garanția „nu inventăm prețuri" nu are voie să depindă de prospețimea unui cache.
+
+**Zero PII:** contractele descriu PRODUSE. `EvidenceChunk.text` e conținut de catalog și cere
+`source` (fără sursă nu e „evidence", e afirmație).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from src.domain.normalize import normalize
 
 # Versiunea contractului de artefact derivat (D3). Distinctă de `products.schema_version` (028):
 # aceea versionează RÂNDUL de produs, asta versionează ARTEFACTUL derivat din el.
 CONTRACT_SCHEMA_VERSION = 1
 
+# String care nu poate fi „gol deghizat": strip ÎNAINTE de validare, deci `" "` e respins la fel ca
+# `""` (review #250 — proveniența din whitespace trecea și de contract, și de auditul R8).
+NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
 # Vocabulare ÎNCHISE, identice cu `db/seed/catalog_v3.schema.json` (sursa 168d). Testul
-# `test_contract_vocabularies_match_json_schema` le ține sincronizate — dacă schema se schimbă și
-# aici nu, CI pică. Fără a treia copie „aproape la fel".
+# `test_contract_vocabularies_match_json_schema` le ține sincronizate.
 PROVENANCE_KINDS: frozenset[str] = frozenset({"ingredient", "badge", "certification"})
 CONTRAINDICATION_LEVELS: frozenset[str] = frozenset({"hard", "soft"})
 
@@ -47,6 +53,36 @@ EVIDENCE_ROLES: frozenset[str] = frozenset(
     {"benefit", "usage", "warning", "ingredient", "faq", "review_summary", "policy"}
 )
 
+# Cheile de `attributes` pe care contractul le TIPIZEAZĂ.
+KNOWN_ATTRIBUTE_KEYS: frozenset[str] = frozenset(
+    {
+        "concerns",
+        "suitable_for",
+        "not_recommended_for",
+        "key_ingredients",
+        "free_of",
+        "claim_provenance",
+        "finish",
+        "coverage",
+        "texture",
+        "routine_step",
+        "usage",
+        "wear_time",
+        "net_content",
+        "best_for",
+        "key_benefit",
+        "differentiators",
+        "hair_type",
+        "skin_type",
+        "fragrance_free",
+        "spf",
+        "gtin",
+        "schema_version",
+    }
+)
+# Chei de serviciu ale seed-ului/pipeline-ului: nu sunt fapte, dar nici „necunoscute" de raportat.
+_INTERNAL_ATTRIBUTE_KEYS: frozenset[str] = frozenset({"_meta", "_seed_deal", "specs", "badges"})
+
 
 class ContractError(ValueError):
     """Contract încălcat — fail-closed (artefactul NU se produce)."""
@@ -54,16 +90,18 @@ class ContractError(ValueError):
 
 class ClaimProvenance(BaseModel):
     """Sursa unui claim verificabil (NX-168d, shape neschimbat). Acoperă FIECARE `key_ingredient`
-    (`kind=ingredient`) și FIECARE `badge` (`kind=badge`). Contraindicațiile NU intră aici — ele au
-    proveniență inline (vezi `NotRecommendedFor`)."""
+    (`kind=ingredient`) și FIECARE `badge` (`kind=badge`). Contraindicațiile NU intră aici — au
+    proveniență inline (vezi `NotRecommendedFor`).
+
+    Toate câmpurile sunt `NonBlank`: o „sursă" din spații e o sursă inexistentă cu pași în plus."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: Literal["ingredient", "badge", "certification"]
-    value: str = Field(min_length=1)
-    source: str = Field(min_length=1)
-    source_ref: str = Field(min_length=1)
-    verified_at: str = Field(min_length=1)
+    value: NonBlank
+    source: NonBlank
+    source_ref: NonBlank
+    verified_at: NonBlank
 
 
 class NotRecommendedFor(BaseModel):
@@ -71,38 +109,33 @@ class NotRecommendedFor(BaseModel):
     (NX-170/`reason_codes`); `soft` → penalizare + atenționare.
 
     `hard` cere proveniență INLINE (source + source_ref + verified_at): o excludere dură fără sursă
-    e o afirmație medicală nesusținută, exact ce interzice P0-safety. `soft` cere `reason` — altfel
-    penalizăm fără să putem spune de ce.
+    e o afirmație medicală nesusținută, exact ce interzice P0-safety. `soft` cere `reason`.
 
-    `rule_id` / `reviewed_by` / `matched_on` sunt scrise de backfill-ul NX-173
-    (`scripts/backfill_safety_flags.py`) și fac parte din contract: o intrare derivată dintr-o
-    regulă
-    trebuie să spună DIN CE regulă — altfel nu se poate repara global când se schimbă regula."""
+    `rule_id` / `reviewed_by` / `matched_on` sunt scrise de backfill-ul NX-173 și fac parte din
+    contract: o intrare derivată dintr-o regulă trebuie să spună DIN CE regulă."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    value: str = Field(min_length=1)
+    value: NonBlank
     level: Literal["hard", "soft"]
-    reason: str | None = None
-    source: str | None = None
-    source_ref: str | None = None
-    verified_at: str | None = None
-    rule_id: str | None = None
-    reviewed_by: str | None = None
-    matched_on: str | None = None
+    reason: NonBlank | None = None
+    source: NonBlank | None = None
+    source_ref: NonBlank | None = None
+    verified_at: NonBlank | None = None
+    rule_id: NonBlank | None = None
+    reviewed_by: NonBlank | None = None
+    matched_on: NonBlank | None = None
 
     @model_validator(mode="after")
     def _severity_requires_backing(self) -> NotRecommendedFor:
         if self.level == "hard":
-            missing = [
-                f for f in ("source", "source_ref", "verified_at") if not (getattr(self, f) or "")
-            ]
+            missing = [f for f in ("source", "source_ref", "verified_at") if not getattr(self, f)]
             if missing:
                 raise ValueError(
                     f"contraindicație hard fără proveniență inline (lipsesc: {', '.join(missing)}) "
                     f"— o excludere dură fără sursă nu are voie să existe"
                 )
-        elif not (self.reason or ""):
+        elif not self.reason:
             raise ValueError("contraindicație soft fără `reason` — penalizăm fără să putem explica")
         return self
 
@@ -119,15 +152,54 @@ class NetContent(BaseModel):
     unit: Literal["ml", "l", "g", "kg", "buc"]
 
 
+class Usage(BaseModel):
+    """Cum se folosește produsul. Schema v3 permite chei suplimentare aici
+    (`additionalProperties: true`), deci modelul le IGNORĂ în loc să respingă — nucleul tipizat e
+    cel de mai jos, restul rămâne în `attributes` brut."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    time: tuple[NonBlank, ...] | None = None
+    steps: tuple[NonBlank, ...] | None = None
+    frequency: NonBlank | None = None
+
+
+class Variant(BaseModel):
+    """Identitatea unei variante. **Fără preț/stoc** — acelea sunt `LiveFacts`: o variantă
+    „ieftină" memorată într-un artefact devine minciună la prima schimbare de preț."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    label: NonBlank
+    sku: NonBlank | None = None
+    gtin: NonBlank | None = None
+    net_content: NetContent | None = None
+
+
+class LiveFacts(BaseModel):
+    """Faptele care se citesc LA MOMENTUL răspunsului, niciodată dintr-un artefact derivat.
+
+    Există ca tip ca să fie explicit unde NU au voie să ajungă: nu în `ProductFacts`, nu în
+    `EvidenceChunk`, nu în embedding. Validatorul de răspuns (stagiul 8) compară prețul din reply
+    cu ASTA, nu cu un snapshot."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    price: float | None = None
+    sale_price: float | None = None
+    availability: str | None = None
+    stock_total: int | None = None
+
+
 class _DerivedArtifact(BaseModel):
     """Bază pentru artefactele DERIVATE dintr-un produs. D3: fiecare poartă `business_id`, `locale`
     și `schema_version` — un artefact fără ele nu se poate nici izola pe tenant, nici migra."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    business_id: str = Field(min_length=1)
-    product_id: str = Field(min_length=1)
-    locale: str = Field(min_length=2, max_length=8)
+    business_id: NonBlank
+    product_id: NonBlank
+    locale: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=8)]
     schema_version: int = Field(default=CONTRACT_SCHEMA_VERSION, ge=1)
 
 
@@ -139,15 +211,8 @@ class EvidenceChunk(_DerivedArtifact):
     ca să nu fie nevoie ca modelul să le „știe" din altă parte."""
 
     role: Literal["benefit", "usage", "warning", "ingredient", "faq", "review_summary", "policy"]
-    text: str = Field(min_length=1)
-    source: str = Field(min_length=1)
-
-    @field_validator("text", "source")
-    @classmethod
-    def _not_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("câmp gol (doar spații)")
-        return v
+    text: NonBlank
+    source: NonBlank
 
 
 class DerivedSignal(_DerivedArtifact):
@@ -155,60 +220,148 @@ class DerivedSignal(_DerivedArtifact):
 
     `derived_from` = faptele care l-au produs (nevid: un semnal fără intrări nu e derivat, e
     inventat). `rule_id` = regula care l-a produs, versionată — când regula se dovedește greșită,
-    se re-derivează TOATE semnalele ei, nu se repară produs cu produs. Precedentul de shape e
-    `src/safety/contraindications.py` (`Block.rule_id`), reutilizat intenționat."""
+    se re-derivează TOATE semnalele ei, nu se repară produs cu produs."""
 
-    signal: str = Field(min_length=1)
-    derived_from: tuple[str, ...] = Field(min_length=1)
-    rule_id: str = Field(min_length=1)
-
-    @field_validator("derived_from")
-    @classmethod
-    def _inputs_not_blank(cls, v: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not (x or "").strip() for x in v):
-            raise ValueError("`derived_from` conține intrări goale")
-        return v
+    signal: NonBlank
+    derived_from: tuple[NonBlank, ...] = Field(min_length=1)
+    rule_id: NonBlank
 
 
 class ProductFacts(_DerivedArtifact):
-    """Faptele CANONICE ale unui produs, tipizate (proiecția `attributes` din contractul v3).
+    """Faptele CANONICE ale unui produs (proiecția tipizată a `attributes` din contractul v3).
 
-    Nu duplică vocabularul: valorile se validează contra DomainPack-ului prin
-    `validate_vocabulary()`, nu contra unei liste din cod (P9). Aici se impun INVARIANTELE
-    structurale, cele care nu depind de vertical:
+    **`None` = necunoscut, `()` = cunoscut și gol.** Constructorul `from_product()` respectă
+    distincția: cheie lipsă → `None`; cheie prezentă cu listă goală → `()`.
 
+    Nu duplică vocabularul: valorile se verifică contra DomainPack-ului prin `validate_vocabulary()`
+    (P9). Aici se impun invariantele structurale, cele care nu depind de vertical:
       - un claim important fără sursă nu trece (`key_ingredients`/`badges` cer `claim_provenance`);
-      - contradicțiile interne nu trec (aceeași valoare și recomandată, și contraindicată).
+      - contradicțiile interne nu trec — comparate NORMALIZAT (casing/diacritice/spații nu sunt
+        portiță: „Alcohol " și „alcohol" sunt același ingredient).
     """
 
     category_slug: str | None = None
-    concerns: tuple[str, ...] = ()
-    suitable_for: tuple[str, ...] = ()
-    key_ingredients: tuple[str, ...] = ()
-    free_of: tuple[str, ...] = ()
-    badges: tuple[str, ...] = ()
+    concerns: tuple[str, ...] | None = None
+    suitable_for: tuple[str, ...] | None = None
+    key_ingredients: tuple[str, ...] | None = None
+    free_of: tuple[str, ...] | None = None
+    badges: tuple[str, ...] | None = None
+    differentiators: tuple[str, ...] | None = None
     finish: str | None = None
     coverage: str | None = None
     texture: str | None = None
     routine_step: str | None = None
+    skin_type: str | None = None
+    hair_type: str | None = None
+    best_for: str | None = None
+    key_benefit: str | None = None
+    wear_time: str | None = None
+    spf: float | None = None
+    fragrance_free: bool | None = None
+    gtin: str | None = None
+    usage: Usage | None = None
     net_content: NetContent | None = None
-    not_recommended_for: tuple[NotRecommendedFor, ...] = ()
-    claim_provenance: tuple[ClaimProvenance, ...] = ()
+    variants: tuple[Variant, ...] | None = None
+    not_recommended_for: tuple[NotRecommendedFor, ...] | None = None
+    claim_provenance: tuple[ClaimProvenance, ...] | None = None
+
+    # --- construcție din shape-ul BRUT (seed v3 sau rând de DB) ---------------
+
+    @classmethod
+    def from_product(
+        cls,
+        product: Mapping[str, Any],
+        *,
+        business_id: str,
+        locale: str,
+        product_id: str | None = None,
+        strict: bool = True,
+    ) -> ProductFacts:
+        """Produs brut → fapte tipizate, PĂSTRÂND necunoscutul.
+
+        `strict=True` (implicit) = fail-closed: un produs cu claims nesusținute sau contradicții NU
+        produce artefact. `strict=False` construiește oricum, pentru regimul de RAPORT — folosește
+        `parse_product()`, care întoarce explicit și problemele, nu doar faptele.
+
+        Cheile netipizate rămân în `attributes` (nu se pierd, dar nu devin fapte de contract) —
+        `unknown_attribute_keys()` le face vizibile pentru gate-ul de conținut (NX-206)."""
+        attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+        pid = product_id or str(product.get("id") or product.get("slug") or "")
+
+        def _strs(key: str, source: Mapping[str, Any] = attrs) -> tuple[str, ...] | None:
+            raw = source.get(key)
+            if not isinstance(raw, list):
+                return None  # absent sau malformat → necunoscut, NU „gol"
+            return tuple(str(v).strip() for v in raw if isinstance(v, (str, int, float)))
+
+        def _str(key: str, source: Mapping[str, Any] = attrs) -> str | None:
+            raw = source.get(key)
+            if not isinstance(raw, (str, int, float)) or isinstance(raw, bool):
+                return None
+            return str(raw).strip() or None
+
+        def _sub(key: str, model: type[BaseModel]) -> Any:
+            raw = attrs.get(key)
+            return model.model_validate(raw) if isinstance(raw, dict) else None
+
+        def _items(key: str, model: type[BaseModel], src: Mapping[str, Any] = attrs) -> Any:
+            raw = src.get(key)
+            if not isinstance(raw, list):
+                return None
+            return tuple(model.model_validate(e) for e in raw if isinstance(e, dict))
+
+        build = cls if strict else cls.model_construct
+        return build(
+            business_id=business_id,
+            product_id=pid,
+            locale=locale,
+            category_slug=_str("primaryCategorySlug", product) or _str("category_slug", product),
+            concerns=_strs("concerns"),
+            suitable_for=_strs("suitable_for"),
+            key_ingredients=_strs("key_ingredients"),
+            free_of=_strs("free_of"),
+            # `badges` stă la nivel de produs în seed-ul v3, nu în `attributes`.
+            badges=_strs("badges", product) if "badges" in product else _strs("badges"),
+            differentiators=_strs("differentiators"),
+            finish=_str("finish"),
+            coverage=_str("coverage"),
+            texture=_str("texture"),
+            routine_step=_str("routine_step"),
+            skin_type=_str("skin_type"),
+            hair_type=_str("hair_type"),
+            best_for=_str("best_for"),
+            key_benefit=_str("key_benefit"),
+            wear_time=_str("wear_time"),
+            spf=(
+                float(attrs["spf"])
+                if isinstance(attrs.get("spf"), (int, float))
+                and not isinstance(attrs.get("spf"), bool)
+                else None
+            ),
+            fragrance_free=(
+                attrs["fragrance_free"] if isinstance(attrs.get("fragrance_free"), bool) else None
+            ),
+            gtin=_str("gtin"),
+            usage=_sub("usage", Usage),
+            net_content=_sub("net_content", NetContent),
+            variants=_items("variants", Variant, product),
+            not_recommended_for=_items("not_recommended_for", NotRecommendedFor),
+            claim_provenance=_items("claim_provenance", ClaimProvenance),
+        )
+
+    def to_artifact(self) -> dict[str, Any]:
+        """Serializare canonică: necunoscutele sunt OMISE, nu aplatizate la gol (review #250)."""
+        return self.model_dump(exclude_none=True)
 
     def provenance_values(self, kind: str) -> frozenset[str]:
-        """Valorile acoperite de proveniență COMPLETĂ pentru un `kind` (aceeași condiție ca
-        `facet_coverage._claim_verified`: toate cele 5 câmpuri prezente — impus deja de model)."""
-        return frozenset(p.value for p in self.claim_provenance if p.kind == kind)
+        """Valorile (NORMALIZATE) acoperite de proveniență completă pentru un `kind`."""
+        return frozenset(
+            normalize(p.value) for p in (self.claim_provenance or ()) if p.kind == kind
+        )
 
     @model_validator(mode="after")
     def _claims_have_sources(self) -> ProductFacts:
-        missing_ing = sorted(set(self.key_ingredients) - self.provenance_values("ingredient"))
-        missing_badge = sorted(set(self.badges) - self.provenance_values("badge"))
-        problems = []
-        if missing_ing:
-            problems.append(f"key_ingredients fără proveniență: {missing_ing}")
-        if missing_badge:
-            problems.append(f"badges fără proveniență: {missing_badge}")
+        problems = claim_problems(self)
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -220,61 +373,135 @@ class ProductFacts(_DerivedArtifact):
         return self
 
 
+def claim_problems(facts: ProductFacts) -> list[str]:
+    """Claims care nu-și au sursa (regula R8 din 168d, exprimată pe fapte tipizate).
+
+    Extras din validator ca funcție de sine stătătoare pentru că e nevoie de el în DOUĂ regimuri:
+    strict (producerea artefactului — fail-closed) și de RAPORT (`parse_product`, unde vrem să
+    NUMĂRĂM golurile catalogului, nu să ne oprim la primul)."""
+    problems: list[str] = []
+    for field, kind in (("key_ingredients", "ingredient"), ("badges", "badge")):
+        values = getattr(facts, field)
+        if not values:
+            continue
+        covered = facts.provenance_values(kind)
+        missing = sorted({v for v in values if normalize(v) not in covered})
+        if missing:
+            problems.append(f"{field} fără proveniență: {missing}")
+    return problems
+
+
+def parse_product(
+    product: Mapping[str, Any], *, business_id: str, locale: str, product_id: str | None = None
+) -> tuple[ProductFacts, tuple[str, ...]]:
+    """Produs brut → (fapte, probleme) — regim de RAPORT, care NU aruncă pe date incomplete.
+
+    `from_product()` e fail-closed: refuză să producă artefactul unui produs cu claims nesusținute.
+    Corect pentru runtime, inutil pentru inventarul unui catalog întreg, unde vrei să vezi TOATE
+    golurile deodată. Aici faptele se construiesc fără validare, iar problemele se întorc ca listă.
+
+    Cine consumă asta NU are voie să publice un produs cu `problems` nevide — raportul e pentru
+    gate-ul de completitudine (NX-206), nu o portiță de ocolire a contractului."""
+    facts = ProductFacts.from_product(
+        product, business_id=business_id, locale=locale, product_id=product_id, strict=False
+    )
+    return facts, tuple(claim_problems(facts) + contradictions(facts))
+
+
+def unknown_attribute_keys(product: Mapping[str, Any]) -> tuple[str, ...]:
+    """Cheile de `attributes` pe care contractul NU le tipizează (fără cele de serviciu).
+
+    Nu e o eroare — e vizibilitate: un vertical poate avea atribute proprii, dar un „ingredient
+    folosit din greșeală drept cheie" trebuie să se vadă, nu să se piardă tăcut în JSON."""
+    attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+    return tuple(
+        sorted(
+            k for k in attrs if k not in KNOWN_ATTRIBUTE_KEYS and k not in _INTERNAL_ATTRIBUTE_KEYS
+        )
+    )
+
+
 def contradictions(facts: ProductFacts) -> list[str]:
     """Contradicțiile INTERNE ale unui set de fapte (deterministe, fără vocabular de vertical).
 
-    Nu sunt „stil", sunt fapte care se exclud reciproc: dacă produsul e recomandat pentru ceva ce
-    e și contraindicat, una din cele două afirmații e falsă și nu putem ști care — deci artefactul
-    nu are voie să existe (fail-closed), nu îl publicăm „cu un warning"."""
+    Comparațiile sunt NORMALIZATE (lower + fără diacritice + trim): altfel „Alcohol " și „alcohol"
+    ar fi valori diferite, iar contradicția s-ar ocoli cu o majusculă (review #250).
+
+    Nu sunt „stil", sunt fapte care se exclud reciproc: dacă produsul e recomandat pentru ceva ce e
+    și contraindicat, una din afirmații e falsă și nu putem ști care — deci artefactul nu are voie
+    să existe (fail-closed), nu îl publicăm „cu un warning"."""
     out: list[str] = []
-    contra = {n.value for n in facts.not_recommended_for}
-    both_suitable = sorted(set(facts.suitable_for) & contra)
+    nrf = facts.not_recommended_for or ()
+    contra = {normalize(n.value) for n in nrf}
+    hard_contra = {normalize(n.value) for n in nrf if n.level == "hard"}
+
+    both_suitable = sorted({v for v in (facts.suitable_for or ()) if normalize(v) in contra})
     if both_suitable:
         out.append(f"valoare și în `suitable_for`, și în `not_recommended_for`: {both_suitable}")
-    hard_contra = {n.value for n in facts.not_recommended_for if n.level == "hard"}
-    both_concern = sorted(set(facts.concerns) & hard_contra)
+    both_concern = sorted({v for v in (facts.concerns or ()) if normalize(v) in hard_contra})
     if both_concern:
         out.append(f"concern tratat și contraindicat HARD simultan: {both_concern}")
-    both_free = sorted(
-        {_norm(x) for x in facts.free_of} & {_norm(x) for x in facts.key_ingredients}
-    )
+    free_of = {normalize(v) for v in (facts.free_of or ())}
+    both_free = sorted({v for v in (facts.key_ingredients or ()) if normalize(v) in free_of})
     if both_free:
         out.append(f"ingredient declarat și `free_of`, și `key_ingredient`: {both_free}")
-    dupes = sorted({v for v in contra if [n.value for n in facts.not_recommended_for].count(v) > 1})
+    seen: set[str] = set()
+    dupes: set[str] = set()
+    for n in nrf:
+        key = normalize(n.value)
+        if key in seen:
+            dupes.add(n.value)
+        seen.add(key)
     if dupes:
-        out.append(f"contraindicație duplicată (severități posibil divergente): {dupes}")
+        out.append(f"contraindicație duplicată (severități posibil divergente): {sorted(dupes)}")
     return out
 
 
-def _norm(s: str) -> str:
-    return (s or "").strip().lower()
+@dataclass(frozen=True, slots=True)
+class VocabularyReport:
+    """Rezultatul verificării de vocabular — cu `unchecked` EXPLICIT.
+
+    Review #250: a întoarce „fără probleme" pentru un câmp care n-a fost verificat înseamnă a
+    confunda „nevalidat" cu „valid". Cine consumă raportul trebuie să vadă ce NU s-a verificat, ca
+    să poată decide (gate-ul NX-206 blochează, telemetria doar numără)."""
+
+    problems: tuple[str, ...] = ()
+    unchecked: tuple[str, ...] = ()
+
+    @property
+    def is_clean(self) -> bool:
+        """Curat = zero probleme ȘI zero câmpuri neverificate. Un câmp fără vocabular declarat NU e
+        o promisiune de corectitudine."""
+        return not self.problems and not self.unchecked
 
 
-def validate_vocabulary(facts: ProductFacts, allowed: Mapping[str, Iterable[str]]) -> list[str]:
+_VOCAB_LIST_FIELDS = ("concerns", "suitable_for", "key_ingredients")
+_VOCAB_SCALAR_FIELDS = ("finish", "coverage", "texture", "routine_step")
+
+
+def validate_vocabulary(
+    facts: ProductFacts, allowed: Mapping[str, Iterable[str]]
+) -> VocabularyReport:
     """Valorile de fapte contra vocabularului CONTROLAT al verticalului (DomainPack, P9).
 
     Separat de validarea structurală din model: vocabularul e config per-vertical, deci nu are ce
-    căuta într-un model Pydantic din cod. Câmp fără vocabular declarat = nevalidat (nu respins):
-    fail-open aici e corect: gate-ul de publicare (NX-206) e cel care decide, nu contractul.
-    """
+    căuta într-un model Pydantic din cod. Câmpurile PREZENTE fără vocabular declarat se întorc în
+    `unchecked` — nu ca „ok"."""
     problems: list[str] = []
-    for field, values in (
-        ("concerns", facts.concerns),
-        ("suitable_for", facts.suitable_for),
-        ("key_ingredients", facts.key_ingredients),
-    ):
-        vocab = {str(v) for v in (allowed.get(field) or ())}
+    unchecked: list[str] = []
+    for field in _VOCAB_LIST_FIELDS + _VOCAB_SCALAR_FIELDS:
+        value = getattr(facts, field)
+        if value is None:
+            continue  # necunoscut: nu e nici valid, nici invalid — nu se verifică
+        vocab = {normalize(str(v)) for v in (allowed.get(field) or ())}
         if not vocab:
+            unchecked.append(field)
             continue
-        unknown = sorted({v for v in values if v not in vocab})
+        values = value if isinstance(value, tuple) else (value,)
+        unknown = sorted({v for v in values if normalize(v) not in vocab})
         if unknown:
             problems.append(f"{field}: valori în afara vocabularului {unknown}")
-    for field in ("finish", "coverage", "texture", "routine_step"):
-        value = getattr(facts, field)
-        vocab = {str(v) for v in (allowed.get(field) or ())}
-        if value is not None and vocab and value not in vocab:
-            problems.append(f"{field}: valoare în afara vocabularului {value!r}")
-    return problems
+    return VocabularyReport(problems=tuple(problems), unchecked=tuple(unchecked))
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,8 +513,7 @@ class CategoryRequirements:
 
     **Slug-ul BATE rădăcina (override), nu se cumulează** — semantica lui NX-168d (R10), păstrată
     intenționat: `mascara` cere `key_benefit`, dar NU `finish`-ul rădăcinii `machiaj`, pentru că
-    produsele de ochi n-au finish de complexion (paletele au finishuri mixte). Un cumul ar fi
-    inventat cerințe pe care contractul v3 le exclude explicit."""
+    produsele de ochi n-au finish de complexion."""
 
     by_slug: Mapping[str, frozenset[str]]
     by_root: Mapping[str, frozenset[str]]
@@ -302,17 +528,36 @@ class CategoryRequirements:
     def missing(
         self, attributes: Mapping[str, Any], slug: str | None, root: str | None = None
     ) -> tuple[str, ...]:
-        """Câmpurile obligatorii ABSENTE sau goale. Ordine sortată → mesaje deterministe."""
-        required = self.required_for(slug, root)
-        return tuple(sorted(k for k in required if attributes.get(k) in (None, "", [], {}, ())))
+        """Câmpurile obligatorii ABSENTE sau GOALE — ambele încalcă cerința (un `coverage: ""` nu
+        spune mai mult decât lipsa lui). Distincția o dă `missing_detail()`."""
+        return tuple(k for k, _ in self.missing_detail(attributes, slug, root))
+
+    def missing_detail(
+        self, attributes: Mapping[str, Any], slug: str | None, root: str | None = None
+    ) -> tuple[tuple[str, str], ...]:
+        """Ca `missing()`, dar cu motivul: `absent` (cheia nu există) vs `empty` (există, e goală).
+        Ordine sortată → mesaje deterministe."""
+        out: list[tuple[str, str]] = []
+        for key in sorted(self.required_for(slug, root)):
+            if key not in attributes:
+                out.append((key, "absent"))
+                continue
+            value = attributes[key]
+            if value is None:
+                out.append((key, "empty"))
+            elif isinstance(value, str) and not value.strip():
+                out.append((key, "empty"))
+            elif not isinstance(value, str) and hasattr(value, "__len__") and len(value) == 0:
+                out.append((key, "empty"))
+        return tuple(out)
 
 
 EMPTY_REQUIREMENTS = CategoryRequirements(by_slug={}, by_root={})
 
 
 def build_category_requirements(raw: Any) -> CategoryRequirements:
-    """Config → `CategoryRequirements`, **fail-closed per intrare** (tipar `build_facets`):
-    o intrare invalidă e ignorată, nu dărâmă pack-ul și nu devine cerință pe jumătate. Config
+    """Config → `CategoryRequirements`, **fail-closed per intrare** (tipar `build_facets`): o
+    intrare invalidă e ignorată, nu dărâmă pack-ul și nu devine cerință pe jumătate. Config
     lipsă/gunoi → cerințe goale (comportamentul de azi pentru verticalele fără contract)."""
     if not isinstance(raw, dict):
         return EMPTY_REQUIREMENTS
@@ -322,11 +567,9 @@ def build_category_requirements(raw: Any) -> CategoryRequirements:
         if not isinstance(node, dict):
             return out
         for key, fields in node.items():
-            if not isinstance(key, str) or not key.strip():
+            if not isinstance(key, str) or not key.strip() or not isinstance(fields, list):
                 continue
-            if not isinstance(fields, list):
-                continue
-            clean = frozenset(f for f in fields if isinstance(f, str) and f.strip())
+            clean = frozenset(f.strip() for f in fields if isinstance(f, str) and f.strip())
             if clean:
                 out[key] = clean
         return out

@@ -35,9 +35,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.domain.contracts import CategoryRequirements  # noqa: E402
-from src.domain.loader import load_domain_pack  # noqa: E402
-from src.models import BusinessConfig  # noqa: E402
+from src.domain.contracts import CategoryRequirements, build_category_requirements  # noqa: E402
+from src.domain.loader import _default_name, _load_default_json  # noqa: E402
 
 # Verticalul al cărui contract de conținut îl auditează scriptul (catalogul demo e beauty).
 AUDIT_VERTICAL = "beauty_salon"
@@ -81,15 +80,36 @@ REQUIRED_ATTRS_BY_ROOT: dict[str, set[str]] = {
     "ingrijirea-tenului": {"concerns"},
 }
 
+
 # --- contract v3 (NX-168d) --------------------------------------------------------------------
 # Obligatorii per-categorie v3 — semantică de OVERRIDE (slug bate root; unealta nu cere concerns).
 # `best_for` e universal (R11 separat), deci NU apare aici.
 # NX-205: obligatoriile v3 NU mai sunt hardcodate aici — vin din DomainPack (P9: contractul de
 # conținut e config per-vertical, nu cod de audit). Semantica rămâne a lui R10: slug BATE root.
 # Pack lipsă/gunoi → cerințe goale (fail-closed pe încărcare, nu pe rulare).
-CATEGORY_REQUIREMENTS: CategoryRequirements = load_domain_pack(
-    BusinessConfig(id="audit", slug="audit", name="audit", vertical=AUDIT_VERTICAL, settings={})
-).required_attributes
+def _load_requirements() -> CategoryRequirements:
+    """Obligatoriile per categorie din DEFAULTS-ul verticalului.
+
+    Review #250: `load_domain_pack` întoarce None când `DOMAIN_PACK_ENABLED=false` (kill-switch de
+    RUNTIME) — auditul crăpa. Dar nici „pack lipsă → zero cerințe" nu e acceptabil: R10 ar trece
+    tăcut pe orice catalog. Auditul e o unealtă OFFLINE, deci citește defaults-ul DIRECT, fără să
+    depindă de un flag de runtime, și eșuează EXPLICIT dacă fișierul de contract lipsește."""
+    try:
+        raw = _load_default_json(_default_name(AUDIT_VERTICAL))
+    except Exception as e:  # noqa: BLE001 — contract de conținut lipsă = audit imposibil, nu „gol"
+        raise SystemExit(
+            f"NX-205: nu pot citi contractul de conținut pentru verticalul {AUDIT_VERTICAL!r}: {e}"
+        ) from e
+    reqs = build_category_requirements(raw.get("required_attributes"))
+    if not reqs.by_slug and not reqs.by_root:
+        raise SystemExit(
+            f"NX-205: verticalul {AUDIT_VERTICAL!r} nu declară `required_attributes` — R10 ar "
+            f"trece tăcut. Completează src/domain/defaults/{AUDIT_VERTICAL}.json."
+        )
+    return reqs
+
+
+CATEGORY_REQUIREMENTS: CategoryRequirements = _load_requirements()
 # Aliasuri păstrate pentru compatibilitate (consumatori/teste existente): derivate, nu sursă.
 REQUIRED_V3_BY_SLUG: dict[str, set[str]] = {
     k: set(v) for k, v in CATEGORY_REQUIREMENTS.by_slug.items()
@@ -468,6 +488,15 @@ def rule_desc_attr_contradiction(products: list[dict[str, Any]]) -> list[dict[st
     return out
 
 
+_PROV_REQUIRED = ("source", "source_ref", "verified_at")
+
+
+def _present(value: Any) -> bool:
+    """True dacă valoarea are CONȚINUT (nu doar spații). `" "` e truthy în Python — fără gardă,
+    o „sursă" din whitespace ar susține un claim (review #250)."""
+    return bool(str(value).strip()) if isinstance(value, str) else value is not None and value != ""
+
+
 def _provenance_index(a: dict[str, Any]) -> dict[str, set[str]]:
     """value-urile (normalizate) acoperite de claim_provenance, per kind, DOAR cu sursă completă."""
     cov: dict[str, set[str]] = {k: set() for k in PROVENANCE_KINDS}
@@ -475,7 +504,9 @@ def _provenance_index(a: dict[str, Any]) -> dict[str, set[str]]:
         if not isinstance(e, dict):
             continue
         kind, val = e.get("kind"), e.get("value")
-        if kind in cov and val and e.get("source") and e.get("source_ref") and e.get("verified_at"):
+        # Review #250: `" "` e truthy în Python — o proveniență din spații trecea de R8. Cerem
+        # conținut real, la fel ca `NonBlank` din contractul tipizat (src/domain/contracts.py).
+        if kind in cov and _present(val) and all(_present(e.get(f)) for f in _PROV_REQUIRED):
             cov[kind].add(_norm(str(val)))
     return cov
 
@@ -497,24 +528,40 @@ def rule_claim_provenance(products: list[dict[str, Any]]) -> list[dict[str, Any]
                         slug,
                     )
                 )
+        # Review #250: badge-urile stau la nivel de PRODUS în seed-ul v3, nu în `attributes` —
+        # regula se uita doar în `attributes`, deci n-a validat NICIODATĂ vreun badge (0/195 pe
+        # catalogul demo). Acum se uită în ambele locuri. Locul nou intră ca WARNING, nu violation:
+        # popularea datelor e explicit NX-206, iar o violation ar bloca seed-ul pentru o gaură de
+        # DATE descoperită acum. NX-206 o ridică la violation (sau reclasifică badge-urile ca
+        # semnale DERIVATE cu rule_id — vezi src/domain/contracts.py::DerivedSignal).
         for badge in a.get("badges") or []:
             if _norm(str(badge)) not in cov["badge"]:
                 out.append(
                     _f(f"{slug}: badge «{badge}» fără claim_provenance (kind=badge+sursă)", slug)
+                )
+        for badge in p.get("badges") or []:
+            if _norm(str(badge)) not in cov["badge"]:
+                out.append(
+                    _f(
+                        f"{slug}: badge «{badge}» (nivel produs) fără claim_provenance — NX-206 "
+                        f"decide: proveniență sau reclasificare ca semnal derivat",
+                        slug,
+                        severity="warning",
+                    )
                 )
         for nrf in a.get("not_recommended_for") or []:
             if not isinstance(nrf, dict):
                 out.append(_f(f"{slug}: not_recommended_for malformat (nu e obiect)", slug))
                 continue
             if nrf.get("level") == "hard":
-                if not (nrf.get("source") and nrf.get("source_ref") and nrf.get("verified_at")):
+                if not all(_present(nrf.get(f)) for f in _PROV_REQUIRED):
                     out.append(
                         _f(
                             f"{slug}: contraindicație hard «{nrf.get('value')}» fără sursă inline",
                             slug,
                         )
                     )
-            elif not nrf.get("reason"):
+            elif not _present(nrf.get("reason")):
                 out.append(
                     _f(f"{slug}: contraindicație soft «{nrf.get('value')}» fără reason", slug)
                 )
