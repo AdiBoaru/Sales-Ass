@@ -435,12 +435,16 @@ async def search_products_lexical(
     return [_row_to_product(r) for r in rows]
 
 
-def semantic_embedding_doc_type() -> str:
-    """Selectează documentul semantic activ; OFF păstrează fallback-ul live."""
+def semantic_embedding_doc_type(explicit: str | None = None) -> str:
+    """Selectează documentul semantic activ; override-ul e pentru benchmark/shadow intern."""
+    if explicit is not None:
+        return explicit
     return "search_document_v1" if get_settings().search_shadow_enabled else "product"
 
 
-async def has_embeddings(conn: asyncpg.Connection, business_id: str) -> bool:
+async def has_embeddings(
+    conn: asyncpg.Connection, business_id: str, *, embedding_doc_type: str | None = None
+) -> bool:
     """True dacă tenantul are măcar un `product_embedding` PENTRU doc_type/model-ul ACTIV.
 
     Decide calea din `search_products_tool`: semantic (JOIN pe product_embeddings) doar dacă există
@@ -452,7 +456,7 @@ async def has_embeddings(conn: asyncpg.Connection, business_id: str) -> bool:
         "select 1 from product_embeddings "
         "where business_id = $1 and doc_type = $2 and model = $3 limit 1",
         business_id,
-        semantic_embedding_doc_type(),
+        semantic_embedding_doc_type(embedding_doc_type),
         get_settings().model_embed,
     )
     return row is not None
@@ -871,6 +875,7 @@ async def search_products_semantic(
     in_stock_only: bool = False,
     limit: int = 6,
     pool: int | None = None,
+    embedding_doc_type: str | None = None,
 ) -> list[dict[str, Any]]:
     """Căutare HIBRIDĂ: filtre SQL dure (preț/categorie/brand/concerns/stoc) + ranking.
     `query_embedding` = vectorul mesajului (calculat de tool/agent prin adaptor — stratul de date
@@ -919,7 +924,7 @@ async def search_products_semantic(
     # NX-171d: embeddings versionate (PK compus product_id, doc_type, model). Join-ul TREBUIE să
     # filtreze doc_type + model activ, altfel >1 rând/produs → produs duplicat în rezultate. +
     # `pe.business_id = p.business_id` (P7: un rând embedding cu business_id greșit nu scapă).
-    emb_doc = placeholder(semantic_embedding_doc_type())
+    emb_doc = placeholder(semantic_embedding_doc_type(embedding_doc_type))
     emb_model = placeholder(get_settings().model_embed)
     # Injectează coloana distanței vectoriale (cosine) în SELECT — semnal de calitate pt emit.
     cos_col = f"        (pe.embedding <=> {qvec_ph}::vector)::float8 as cosine_distance,\n"
