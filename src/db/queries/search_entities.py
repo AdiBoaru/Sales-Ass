@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from src.domain.identifier_resolution import IdentifierCandidate
 from src.domain.search_entities import EvidenceReference
 
 
@@ -75,3 +76,40 @@ async def load_evidence_references(
             )
         )
     return {product_id: tuple(refs) for product_id, refs in grouped.items()}
+
+
+async def load_identifier_candidates(conn: Any, business_id: str) -> list[IdentifierCandidate]:
+    """Nume + SKU + numai aliasuri product aprobate, toate strict din tenantul cerut."""
+    rows = await conn.fetch(
+        """
+        select p.id::text as product_id,
+               p.name,
+               coalesce(
+                 array_agg(distinct v.sku) filter (where v.sku is not null and v.sku <> ''),
+                 '{}'::text[]
+               ) as skus,
+               coalesce(
+                 array_agg(distinct ia.phrase_norm) filter (where ia.phrase_norm is not null),
+                 '{}'::text[]
+               ) as aliases
+        from products p
+        left join product_variants v on v.product_id = p.id and v.business_id = p.business_id
+        left join intent_aliases ia on ia.target_id = p.id
+          and ia.business_id = p.business_id
+          and ia.target_kind = 'product'
+          and ia.status = 'approved'
+        where p.business_id = $1 and p.status = 'active'
+        group by p.id, p.name
+        order by p.id
+        """,
+        business_id,
+    )
+    return [
+        IdentifierCandidate(
+            product_id=str(row["product_id"]),
+            name=str(row["name"]),
+            skus=tuple(row["skus"] or ()),
+            aliases=tuple(row["aliases"] or ()),
+        )
+        for row in rows
+    ]

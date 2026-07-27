@@ -1,6 +1,10 @@
 import pytest
 
-from src.db.queries.search_entities import load_evidence_references, search_shadow_fts
+from src.db.queries.search_entities import (
+    load_evidence_references,
+    load_identifier_candidates,
+    search_shadow_fts,
+)
 
 
 class _Conn:
@@ -14,6 +18,8 @@ class _Conn:
                 {"evidence_id": "ev-2", "product_id": "p-2", "role": "warning"},
                 {"evidence_id": "ev-1", "product_id": "p-1", "role": "benefit"},
             ]
+        if "intent_aliases" in query:
+            return [{"product_id": "p-1", "name": "Ser X", "skus": ["SER-X"], "aliases": ["ser x"]}]
         return [{"product_id": "p-2"}, {"product_id": "p-1"}]
 
 
@@ -57,3 +63,18 @@ async def test_empty_query_or_products_avoid_database_call():
     assert await search_shadow_fts(conn, "business-1", "   ") == []
     assert await load_evidence_references(conn, "business-1", []) == {}
     assert conn.calls == []
+
+
+@pytest.mark.asyncio
+async def test_identifier_candidates_are_active_approved_and_tenant_scoped():
+    conn = _Conn()
+
+    candidates = await load_identifier_candidates(conn, "business-1")
+
+    query, args = conn.calls[0]
+    assert "where p.business_id = $1 and p.status = 'active'" in query
+    assert "ia.business_id = p.business_id" in query
+    assert "ia.target_kind = 'product'" in query and "ia.status = 'approved'" in query
+    assert args == ("business-1",)
+    assert candidates[0].skus == ("SER-X",)
+    assert candidates[0].aliases == ("ser x",)
