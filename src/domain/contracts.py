@@ -30,7 +30,14 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 from src.domain.normalize import normalize
 
@@ -235,7 +242,7 @@ class ProductFacts(_DerivedArtifact):
 
     Nu duplică vocabularul: valorile se verifică contra DomainPack-ului prin `validate_vocabulary()`
     (P9). Aici se impun invariantele structurale, cele care nu depind de vertical:
-      - un claim important fără sursă nu trece (`key_ingredients`/`badges` cer `claim_provenance`);
+      - un claim important fără sursă nu trece (`key_ingredients` cer `claim_provenance`);
       - contradicțiile interne nu trec — comparate NORMALIZAT (casing/diacritice/spații nu sunt
         portiță: „Alcohol " și „alcohol" sunt același ingredient).
     """
@@ -245,7 +252,6 @@ class ProductFacts(_DerivedArtifact):
     suitable_for: tuple[str, ...] | None = None
     key_ingredients: tuple[str, ...] | None = None
     free_of: tuple[str, ...] | None = None
-    badges: tuple[str, ...] | None = None
     differentiators: tuple[str, ...] | None = None
     finish: str | None = None
     coverage: str | None = None
@@ -275,83 +281,39 @@ class ProductFacts(_DerivedArtifact):
         business_id: str,
         locale: str,
         product_id: str | None = None,
-        strict: bool = True,
     ) -> ProductFacts:
-        """Produs brut → fapte tipizate, PĂSTRÂND necunoscutul.
+        """Produs brut → fapte tipizate, FAIL-CLOSED. Ridică `ContractError` dacă intrarea e
+        malformată și `ValidationError` dacă faptele încalcă contractul.
 
-        `strict=True` (implicit) = fail-closed: un produs cu claims nesusținute sau contradicții NU
-        produce artefact. `strict=False` construiește oricum, pentru regimul de RAPORT — folosește
-        `parse_product()`, care întoarce explicit și problemele, nu doar faptele.
-
-        Cheile netipizate rămân în `attributes` (nu se pierd, dar nu devin fapte de contract) —
-        `unknown_attribute_keys()` le face vizibile pentru gate-ul de conținut (NX-206)."""
-        attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
-        pid = product_id or str(product.get("id") or product.get("slug") or "")
-
-        def _strs(key: str, source: Mapping[str, Any] = attrs) -> tuple[str, ...] | None:
-            raw = source.get(key)
-            if not isinstance(raw, list):
-                return None  # absent sau malformat → necunoscut, NU „gol"
-            return tuple(str(v).strip() for v in raw if isinstance(v, (str, int, float)))
-
-        def _str(key: str, source: Mapping[str, Any] = attrs) -> str | None:
-            raw = source.get(key)
-            if not isinstance(raw, (str, int, float)) or isinstance(raw, bool):
-                return None
-            return str(raw).strip() or None
-
-        def _sub(key: str, model: type[BaseModel]) -> Any:
-            raw = attrs.get(key)
-            return model.model_validate(raw) if isinstance(raw, dict) else None
-
-        def _items(key: str, model: type[BaseModel], src: Mapping[str, Any] = attrs) -> Any:
-            raw = src.get(key)
-            if not isinstance(raw, list):
-                return None
-            return tuple(model.model_validate(e) for e in raw if isinstance(e, dict))
-
-        build = cls if strict else cls.model_construct
-        return build(
-            business_id=business_id,
-            product_id=pid,
-            locale=locale,
-            category_slug=_str("primaryCategorySlug", product) or _str("category_slug", product),
-            concerns=_strs("concerns"),
-            suitable_for=_strs("suitable_for"),
-            key_ingredients=_strs("key_ingredients"),
-            free_of=_strs("free_of"),
-            # `badges` stă la nivel de produs în seed-ul v3, nu în `attributes`.
-            badges=_strs("badges", product) if "badges" in product else _strs("badges"),
-            differentiators=_strs("differentiators"),
-            finish=_str("finish"),
-            coverage=_str("coverage"),
-            texture=_str("texture"),
-            routine_step=_str("routine_step"),
-            skin_type=_str("skin_type"),
-            hair_type=_str("hair_type"),
-            best_for=_str("best_for"),
-            key_benefit=_str("key_benefit"),
-            wear_time=_str("wear_time"),
-            spf=(
-                float(attrs["spf"])
-                if isinstance(attrs.get("spf"), (int, float))
-                and not isinstance(attrs.get("spf"), bool)
-                else None
-            ),
-            fragrance_free=(
-                attrs["fragrance_free"] if isinstance(attrs.get("fragrance_free"), bool) else None
-            ),
-            gtin=_str("gtin"),
-            usage=_sub("usage", Usage),
-            net_content=_sub("net_content", NetContent),
-            variants=_items("variants", Variant, product),
-            not_recommended_for=_items("not_recommended_for", NotRecommendedFor),
-            claim_provenance=_items("claim_provenance", ClaimProvenance),
+        Pentru inventarul unui catalog întreg (unde vrei toate golurile, nu prima excepție) există
+        `parse_product()` — aceeași parsare, dar cu problemele întoarse ca listă."""
+        values, problems = _collect_facts(
+            product, business_id=business_id, locale=locale, product_id=product_id
         )
+        if problems:
+            raise ContractError("; ".join(problems))
+        return cls(**values)
 
     def to_artifact(self) -> dict[str, Any]:
         """Serializare canonică: necunoscutele sunt OMISE, nu aplatizate la gol (review #250)."""
         return self.model_dump(exclude_none=True)
+
+    @property
+    def confirmed_badges(self) -> tuple[str, ...]:
+        """Badge-urile CONFIRMATE — derivate din `claim_provenance`, nu dintr-un câmp propriu.
+
+        D5 aplicat structural: un badge e un fapt doar dacă are sursă, deci existența lui E
+        proveniența. Nu poate exista „badge fără sursă" ca stare a modelului. Badge-urile produse
+        de reguli sunt `DerivedSignal` (vezi `derived_badge_candidates`)."""
+        return tuple(
+            sorted(
+                {
+                    p.value
+                    for p in (self.claim_provenance or ())
+                    if p.kind in ("badge", "certification")
+                }
+            )
+        )
 
     def provenance_values(self, kind: str) -> frozenset[str]:
         """Valorile (NORMALIZATE) acoperite de proveniență completă pentru un `kind`."""
@@ -373,6 +335,158 @@ class ProductFacts(_DerivedArtifact):
         return self
 
 
+def _collect_facts(
+    product: Mapping[str, Any], *, business_id: str, locale: str, product_id: str | None = None
+) -> tuple[dict[str, Any], list[str]]:
+    """Produs brut → (valori pentru `ProductFacts`, probleme de FORMĂ).
+
+    Review 2 #250: parserul confunda „malformat" cu „necunoscut" (un `concerns: "oily"` devenea
+    tăcut `None`) și arunca `ValidationError` din sub-modele chiar și în regimul de raport — adică
+    exact acolo unde promisiunea era că nu aruncă.
+
+    Regula: **absent → `None`, fără problemă; malformat → `None` + problemă RAPORTATĂ.** O intrare
+    invalidă dintr-o listă e dropată individual și raportată, ca un singur rând stricat să nu
+    ascundă restul faptelor bune."""
+    raw_attrs = product.get("attributes")
+    problems: list[str] = []
+    if raw_attrs is not None and not isinstance(raw_attrs, dict):
+        problems.append(
+            f"attributes: malformat (așteptat obiect, primit {type(raw_attrs).__name__})"
+        )
+    attrs: Mapping[str, Any] = raw_attrs if isinstance(raw_attrs, dict) else {}
+    pid = product_id or str(product.get("id") or product.get("slug") or "")
+    if not pid:
+        # Un artefact fără identitate de produs nu poate fi nici scris, nici corelat înapoi la
+        # sursă. În regimul strict pica oricum (la validare), dar în raport trecea tăcut.
+        problems.append("product_id: absent (nici `id`, nici `slug` pe produs)")
+
+    def _strs(key: str, source: Mapping[str, Any] = attrs) -> tuple[str, ...] | None:
+        if key not in source or source.get(key) is None:
+            return None  # absent = necunoscut, fără problemă
+        raw = source[key]
+        if not isinstance(raw, list):
+            problems.append(f"{key}: malformat (așteptat listă, primit {type(raw).__name__})")
+            return None
+        out, bad = [], 0
+        for v in raw:
+            if isinstance(v, str) or (isinstance(v, (int, float)) and not isinstance(v, bool)):
+                out.append(str(v).strip())
+            else:
+                bad += 1
+        if bad:
+            problems.append(f"{key}: {bad} element(e) de tip nepermis, ignorate")
+        return tuple(out)
+
+    def _str(key: str, source: Mapping[str, Any] = attrs) -> str | None:
+        if key not in source or source.get(key) is None:
+            return None
+        raw = source[key]
+        if isinstance(raw, bool) or not isinstance(raw, (str, int, float)):
+            problems.append(f"{key}: malformat (așteptat text, primit {type(raw).__name__})")
+            return None
+        return str(raw).strip() or None
+
+    def _num(key: str) -> float | None:
+        if key not in attrs or attrs.get(key) is None:
+            return None
+        raw = attrs[key]
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            problems.append(f"{key}: malformat (așteptat număr, primit {type(raw).__name__})")
+            return None
+        return float(raw)
+
+    def _flag(key: str) -> bool | None:
+        if key not in attrs or attrs.get(key) is None:
+            return None
+        raw = attrs[key]
+        if not isinstance(raw, bool):
+            problems.append(f"{key}: malformat (așteptat boolean, primit {type(raw).__name__})")
+            return None
+        return raw
+
+    def _sub(key: str, model: type[BaseModel]) -> Any:
+        if key not in attrs or attrs.get(key) is None:
+            return None
+        raw = attrs[key]
+        if not isinstance(raw, dict):
+            problems.append(f"{key}: malformat (așteptat obiect, primit {type(raw).__name__})")
+            return None
+        try:
+            return model.model_validate(raw)
+        except ValidationError as e:
+            problems.append(f"{key}: invalid ({e.error_count()} eroare/erori de contract)")
+            return None
+
+    def _items(key: str, model: type[BaseModel], source: Mapping[str, Any] = attrs) -> Any:
+        if key not in source or source.get(key) is None:
+            return None
+        raw = source[key]
+        if not isinstance(raw, list):
+            problems.append(f"{key}: malformat (așteptat listă, primit {type(raw).__name__})")
+            return None
+        out, bad = [], []
+        for idx, entry in enumerate(raw):
+            if not isinstance(entry, dict):
+                bad.append(f"#{idx} nu e obiect")
+                continue
+            try:
+                out.append(model.model_validate(entry))
+            except ValidationError as e:
+                bad.append(f"#{idx} {e.errors()[0].get('msg', 'invalid')}")
+        if bad:
+            problems.append(f"{key}: intrări invalide, dropate — {'; '.join(bad)}")
+        return tuple(out)
+
+    values = {
+        "business_id": business_id,
+        "product_id": pid,
+        "locale": locale,
+        "category_slug": _str("primaryCategorySlug", product) or _str("category_slug", product),
+        "concerns": _strs("concerns"),
+        "suitable_for": _strs("suitable_for"),
+        "key_ingredients": _strs("key_ingredients"),
+        "free_of": _strs("free_of"),
+        "differentiators": _strs("differentiators"),
+        "finish": _str("finish"),
+        "coverage": _str("coverage"),
+        "texture": _str("texture"),
+        "routine_step": _str("routine_step"),
+        "skin_type": _str("skin_type"),
+        "hair_type": _str("hair_type"),
+        "best_for": _str("best_for"),
+        "key_benefit": _str("key_benefit"),
+        "wear_time": _str("wear_time"),
+        "spf": _num("spf"),
+        "fragrance_free": _flag("fragrance_free"),
+        "gtin": _str("gtin"),
+        "usage": _sub("usage", Usage),
+        "net_content": _sub("net_content", NetContent),
+        "variants": _items("variants", Variant, product),
+        "not_recommended_for": _items("not_recommended_for", NotRecommendedFor),
+        "claim_provenance": _items("claim_provenance", ClaimProvenance),
+    }
+    return values, problems
+
+
+def derived_badge_candidates(product: Mapping[str, Any]) -> tuple[str, ...]:
+    """Badge-urile brute ale unui produs — **candidați de `DerivedSignal`, NU fapte**.
+
+    Review 2 #250 (D5): badge-urile din catalogul demo sunt produse de reguli (`badge_rules` din
+    DomainPack) din alte atribute („Fără parfum" ← `fragrance_free`). A le pune în `ProductFacts` ar
+    fi amestecat DERIVATUL cu CONFIRMATUL — exact separarea pe care o apără cardul. Un badge devine:
+      - `DerivedSignal{signal, derived_from[], rule_id}` dacă vine dintr-o regulă, sau
+      - un fapt confirmat DOAR prin `claim_provenance` (vezi `ProductFacts.confirmed_badges`),
+        pentru badge-urile care nu se pot deriva (certificări externe).
+    Funcția expune materia primă; clasificarea o face NX-206 (are `badge_rules` și datele)."""
+    raw = product.get("badges")
+    if not isinstance(raw, list):
+        attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+        raw = attrs.get("badges")
+    if not isinstance(raw, list):
+        return ()
+    return tuple(str(b).strip() for b in raw if isinstance(b, str) and b.strip())
+
+
 def claim_problems(facts: ProductFacts) -> list[str]:
     """Claims care nu-și au sursa (regula R8 din 168d, exprimată pe fapte tipizate).
 
@@ -380,14 +494,15 @@ def claim_problems(facts: ProductFacts) -> list[str]:
     strict (producerea artefactului — fail-closed) și de RAPORT (`parse_product`, unde vrem să
     NUMĂRĂM golurile catalogului, nu să ne oprim la primul)."""
     problems: list[str] = []
-    for field, kind in (("key_ingredients", "ingredient"), ("badges", "badge")):
-        values = getattr(facts, field)
-        if not values:
-            continue
-        covered = facts.provenance_values(kind)
+    values = facts.key_ingredients
+    if values:
+        covered = facts.provenance_values("ingredient")
         missing = sorted({v for v in values if normalize(v) not in covered})
         if missing:
-            problems.append(f"{field} fără proveniență: {missing}")
+            problems.append(f"key_ingredients fără proveniență: {missing}")
+    # `badges` NU se verifică aici: nu mai e un câmp de fapte (D5). Un badge e ori DERIVAT
+    # (`DerivedSignal{rule_id}`), ori confirmat prin proveniență — și atunci există prin
+    # construcție (`confirmed_badges`), deci nu poate fi „fără sursă".
     return problems
 
 
@@ -396,16 +511,19 @@ def parse_product(
 ) -> tuple[ProductFacts, tuple[str, ...]]:
     """Produs brut → (fapte, probleme) — regim de RAPORT, care NU aruncă pe date incomplete.
 
-    `from_product()` e fail-closed: refuză să producă artefactul unui produs cu claims nesusținute.
-    Corect pentru runtime, inutil pentru inventarul unui catalog întreg, unde vrei să vezi TOATE
-    golurile deodată. Aici faptele se construiesc fără validare, iar problemele se întorc ca listă.
+    `from_product()` e fail-closed: refuză să producă artefactul unui produs cu intrare malformată
+    sau claims nesusținute. Corect pentru runtime, inutil pentru inventarul unui catalog întreg,
+    unde vrei să vezi TOATE golurile deodată. Aici faptele se construiesc fără validare, iar
+    problemele — de FORMĂ (malformat) și de CONTRACT (claims, contradicții) — se întorc ca listă.
+    Nu aruncă niciodată pe date: dacă aruncă, e un bug al parserului (review 2 #250).
 
     Cine consumă asta NU are voie să publice un produs cu `problems` nevide — raportul e pentru
     gate-ul de completitudine (NX-206), nu o portiță de ocolire a contractului."""
-    facts = ProductFacts.from_product(
-        product, business_id=business_id, locale=locale, product_id=product_id, strict=False
+    values, problems = _collect_facts(
+        product, business_id=business_id, locale=locale, product_id=product_id
     )
-    return facts, tuple(claim_problems(facts) + contradictions(facts))
+    facts = ProductFacts.model_construct(**values)
+    return facts, tuple(problems + claim_problems(facts) + contradictions(facts))
 
 
 def unknown_attribute_keys(product: Mapping[str, Any]) -> tuple[str, ...]:

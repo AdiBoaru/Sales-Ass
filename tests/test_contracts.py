@@ -23,6 +23,7 @@ from src.domain.contracts import (
     PROVENANCE_KINDS,
     CategoryRequirements,
     ClaimProvenance,
+    ContractError,
     DerivedSignal,
     EvidenceChunk,
     LiveFacts,
@@ -30,6 +31,7 @@ from src.domain.contracts import (
     ProductFacts,
     build_category_requirements,
     contradictions,
+    derived_badge_candidates,
     parse_product,
     unknown_attribute_keys,
     validate_vocabulary,
@@ -129,10 +131,37 @@ def test_provenance_match_is_normalized():
     assert _facts(key_ingredients=("Retinol ",), claim_provenance=(_prov("retinol"),))
 
 
-def test_badge_without_provenance_is_rejected():
-    with pytest.raises(ValidationError, match="badges fără proveniență"):
-        _facts(badges=("vegan",), claim_provenance=(_prov("vegan", kind="ingredient"),))
-    assert _facts(badges=("vegan",), claim_provenance=(_prov("vegan", kind="badge"),)).badges
+def test_badges_are_not_facts_they_are_derived_or_confirmed():
+    """Review 2 #250 (D5): badge-urile din catalog sunt produse de reguli (`badge_rules`), deci a
+    le ține în `ProductFacts` amesteca DERIVATUL cu CONFIRMATUL. Acum:
+      - nu există câmp `badges` (nu poate exista „badge fără sursă" ca stare a modelului);
+      - badge-ul CONFIRMAT există prin proveniență (`confirmed_badges`);
+      - badge-ul brut e materie primă pentru `DerivedSignal` (`derived_badge_candidates`)."""
+    assert "badges" not in ProductFacts.model_fields
+    with pytest.raises(ValidationError):
+        _facts(badges=("vegan",))  # extra=forbid: nu se poate strecura înapoi
+
+    confirmed = _facts(claim_provenance=(_prov("Vegan", kind="badge"),))
+    assert confirmed.confirmed_badges == ("Vegan",)
+    assert _facts(claim_provenance=(_prov("retinol"),)).confirmed_badges == ()
+
+    raw = {"badges": ["Fără parfum", "Vegan"], "attributes": {}}
+    assert derived_badge_candidates(raw) == ("Fără parfum", "Vegan")
+    facts, _ = parse_product(raw, business_id="b", locale="ro")
+    assert not hasattr(facts, "badges")  # badge-urile brute NU intră în fapte
+
+
+def test_derived_badge_becomes_a_signal_not_a_fact():
+    """Forma țintă a unui badge derivat: semnal cu regula din care provine (reparabil global)."""
+    signal = DerivedSignal(
+        business_id="b",
+        product_id="p",
+        locale="ro",
+        signal="badge:Fără parfum",
+        derived_from=("attributes.fragrance_free",),
+        rule_id="badge_fragrance_free_v1",
+    )
+    assert signal.rule_id and signal.derived_from
 
 
 # --- contraindicații --------------------------------------------------------
@@ -325,19 +354,29 @@ def test_parses_every_demo_product():
     assert any(f.net_content for f, _ in parsed) and any(f.claim_provenance for f, _ in parsed)
 
 
-def test_demo_catalog_gap_is_exactly_unsourced_badges():
-    """Golul REAL descoperit de contract: 195/300 produse au badge-uri, ZERO au
-    `claim_provenance` kind=badge — iar R8 nu-l vedea (căuta badge-urile în `attributes`, dar în
-    seed stau la nivel de produs). Testul FIXEAZĂ constatarea, ca NX-206 să nu o poată pierde:
-    dacă golul se închide, testul pică și se șterge deliberat."""
+def test_demo_catalog_is_contract_clean_and_badges_await_classification():
+    """După separarea D5, catalogul demo e CURAT la contract (300/300, zero probleme) — golul real
+    nu dispare, își schimbă natura: 195 produse au badge-uri care așteaptă clasificarea în
+    `DerivedSignal{rule_id}` (derivate din `badge_rules`) sau în `claim_provenance` (certificări).
+
+    Testul fixează constatarea pentru NX-206: dacă badge-urile se clasifică, numărul scade și
+    testul pică — atunci se actualizează deliberat, nu din inerție."""
+    products = _CATALOG["products"]
     problems = [
         (p["slug"], probs)
-        for p in _CATALOG["products"]
+        for p in products
         for _, probs in [parse_product(p, business_id="b", locale="ro")]
         if probs
     ]
-    assert all(len(probs) == 1 and probs[0].startswith("badges") for _, probs in problems)
-    assert len(problems) == 195
+    assert problems == [], f"catalogul demo nu mai e curat la contract: {problems[:3]}"
+
+    pending = [p for p in products if derived_badge_candidates(p)]
+    assert len(pending) == 195
+    assert not any(
+        f.confirmed_badges
+        for p in products
+        for f, _ in [parse_product(p, business_id="b", locale="ro")]
+    ), "zero badge-uri confirmate prin proveniență — exact golul pe care îl preia NX-206"
 
 
 def test_audit_now_sees_product_level_badges():
@@ -350,6 +389,102 @@ def test_audit_now_sees_product_level_badges():
     )
     assert findings and findings[0]["severity"] == "warning"
     assert "nivel produs" in findings[0]["message"]
+
+
+# --- parser: malformat ≠ necunoscut, iar raportul NU aruncă --------------------
+
+
+def test_malformed_input_is_reported_not_silently_unknown():
+    """Review 2 #250: `concerns: "oily"` (string în loc de listă) devenea tăcut `None`, adică
+    „necunoscut" — o eroare de date se ascundea ca lipsă de date."""
+    facts, problems = parse_product(
+        {
+            "slug": "p1",
+            "attributes": {"concerns": "oily", "spf": "50", "fragrance_free": "da", "usage": []},
+        },
+        business_id="b",
+        locale="ro",
+    )
+    assert facts.concerns is None and facts.spf is None
+    assert any("concerns: malformat" in p for p in problems)
+    assert any("spf: malformat" in p for p in problems)
+    assert any("fragrance_free: malformat" in p for p in problems)
+    assert any("usage: malformat" in p for p in problems)
+
+
+def test_absent_is_not_a_problem():
+    """Absența unui câmp e o stare legitimă (necunoscut), nu o eroare de formă."""
+    facts, problems = parse_product({"slug": "p1", "attributes": {}}, business_id="b", locale="ro")
+    assert problems == ()
+    assert facts.concerns is None
+
+
+def test_report_path_never_raises_on_bad_entries():
+    """`parse_product` promitea că nu aruncă, dar sub-modelele ridicau `ValidationError` — deci
+    exact calea de inventar se rupea pe primul rând stricat."""
+    facts, problems = parse_product(
+        {
+            "slug": "p1",
+            "attributes": {
+                "claim_provenance": [
+                    "nu e obiect",
+                    {"kind": "ingredient", "value": "retinol"},  # sursă lipsă
+                    {
+                        "kind": "ingredient",
+                        "value": "niacinamida",
+                        "source": "INCI",
+                        "source_ref": "r",
+                        "verified_at": "2026",
+                    },
+                ],
+                "not_recommended_for": [{"value": "pregnancy", "level": "hard"}],  # fără sursă
+                "net_content": {"value": -1, "unit": "ml"},
+            },
+        },
+        business_id="b",
+        locale="ro",
+    )
+    # intrările stricate sunt DROPATE și raportate; cea bună supraviețuiește
+    assert [p.value for p in facts.claim_provenance] == ["niacinamida"]
+    assert facts.not_recommended_for == ()
+    assert facts.net_content is None
+    assert any("claim_provenance: intrări invalide" in p for p in problems)
+    assert any("not_recommended_for: intrări invalide" in p for p in problems)
+    assert any("net_content: invalid" in p for p in problems)
+
+
+def test_strict_parser_fails_closed_on_malformed_input():
+    """Runtime-ul NU are voie să producă un artefact dintr-o intrare malformată."""
+    with pytest.raises(ContractError, match="concerns: malformat"):
+        ProductFacts.from_product(
+            {"slug": "p1", "attributes": {"concerns": "oily"}}, business_id="b", locale="ro"
+        )
+    with pytest.raises(ContractError, match="attributes: malformat"):
+        ProductFacts.from_product(
+            {"slug": "p1", "attributes": "nu e obiect"}, business_id="b", locale="ro"
+        )
+    with pytest.raises(ContractError, match="product_id: absent"):
+        ProductFacts.from_product({"attributes": {}}, business_id="b", locale="ro")
+
+
+def test_strict_parser_still_enforces_contract_after_parsing():
+    """Formă bună + contract încălcat → tot fail-closed (acum prin ValidationError, nu tăcere)."""
+    with pytest.raises(ValidationError, match="key_ingredients fără proveniență"):
+        ProductFacts.from_product(
+            {"slug": "p1", "attributes": {"key_ingredients": ["retinol"]}},
+            business_id="b",
+            locale="ro",
+        )
+
+
+def test_list_with_wrong_element_types_is_reported():
+    facts, problems = parse_product(
+        {"slug": "p1", "attributes": {"concerns": ["oily", {"x": 1}, None, True]}},
+        business_id="b",
+        locale="ro",
+    )
+    assert facts.concerns == ("oily",)
+    assert any("element(e) de tip nepermis" in p for p in problems)
 
 
 def test_unknown_attribute_keys_are_visible_not_silent():
