@@ -506,6 +506,10 @@ class TurnContext:
     verified_customer_ref: str | None = None
     route: RouteDecision | None = None  # owner: Triaj
     retrieval: RetrievalResult | None = None  # owner: Retrieval
+    # NX-187: MatchSet-ul shadow (verdicte MATCH/MISMATCH/UNKNOWN per produs×constrângere + clase
+    # disjuncte). Owner UNIC: planner (post-retrieval, DOAR sub `match_gate_shadow_enabled`). NU
+    # afectează `reply` în v1 (shadow). `Any` ca să nu importăm src.agent în models (ciclu).
+    match_set: Any = None
     reply: Reply | None = None  # owner: orice stagiu (early exit)
     # NX-173 (P0): decizia de siguranță ACUMULATĂ a turului (`safety.Decision`). Owner UNIC la
     # scriere: `SafetyPolicy.gate` (via `_merge_decision`) — call-site-urile nu o setează direct.

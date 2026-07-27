@@ -32,6 +32,7 @@ if hasattr(sys.stdout, "reconfigure"):
         encoding="utf-8"
     )  # F4: diacritice pe consola Windows fără PYTHONIOENCODING
 
+from src.agent.match_gate import resolve_query_value, text_matches  # noqa: E402
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.domain.facets import FacetType, extract_value, is_valid_value  # noqa: E402
@@ -136,8 +137,15 @@ def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -
 def evaluate_constraint(facet, op: str, value, product_value) -> str:
     """F3 — tri-state de MĂSURARE (previziune pe query-uri reale): MATCH | MISMATCH | UNKNOWN (D7).
     Valoare lipsă/nevalidă = UNKNOWN, NU MISMATCH. NU e Match Gate-ul de runtime (acela e NX-187, cu
-    MatchSet disjunct + precedență); aici e doar evaluatorul pt distribuția pe qrels."""
+    MatchSet disjunct + precedență); aici e doar evaluatorul pt distribuția pe qrels.
+
+    Re-review #248: aceeași REGULĂ de vocabular ca runtime-ul (`resolve_query_value`) — o valoare de
+    query pe care fațeta nu o cunoaște e UNKNOWN, nu MISMATCH. Măsurarea și runtime-ul nu au voie să
+    dea verdicte diferite pe aceeași constrângere."""
     if product_value is None or not is_valid_value(facet, product_value):
+        return "UNKNOWN"
+    value = resolve_query_value(facet, value)
+    if value is None:
         return "UNKNOWN"
     if facet.value_type is FacetType.NUMBER:
         try:
@@ -151,7 +159,7 @@ def evaluate_constraint(facet, op: str, value, product_value) -> str:
     if facet.value_type is FacetType.LIST and isinstance(product_value, list):
         vals = {normalize(str(x)) for x in product_value}
         return "MATCH" if normalize(str(value)) in vals else "MISMATCH"
-    return "MATCH" if normalize(str(product_value)) == normalize(str(value)) else "MISMATCH"
+    return "MATCH" if text_matches(op, product_value, str(value)) else "MISMATCH"
 
 
 def query_match_distribution(facets, queries: list[dict], all_products: list[dict]) -> dict:
