@@ -298,3 +298,40 @@ async def test_shadow_starts_fts_and_semantic_retrieval_in_parallel(monkeypatch)
     )
 
     assert [candidate.product_id for candidate in result.candidates] == ["p-1"]
+
+
+@pytest.mark.asyncio
+async def test_shadow_skips_external_semantic_export_for_pii_like_query(monkeypatch):
+    async def fake_fts(*_args, **_kwargs):
+        return ["p-1"]
+
+    async def fake_products(*_args, **_kwargs):
+        return [{"id": "p-1", "attributes": {}}]
+
+    async def fake_refs(*_args, **_kwargs):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    async def must_not_export(*_args, **_kwargs):
+        raise AssertionError("nu trebuie apelat niciun serviciu semantic extern pentru PII")
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+    monkeypatch.setattr(shadow, "has_embeddings", must_not_export)
+    result = await shadow.search_entities_shadow(
+        object(),
+        "business-1",
+        RuntimeQuerySpec(
+            raw_query="ser 0712 345 678",
+            normalized_query="ser 0712 345 678",
+            search_text="ser",
+        ),
+        {"price": _PRICE},
+        llm=object(),
+    )
+
+    assert [candidate.product_id for candidate in result.candidates] == ["p-1"]

@@ -17,14 +17,15 @@ from src.domain.facets import TypedFacet
 from src.domain.identifier_resolution import resolve_identifier
 from src.domain.rerank_policy import decide_adaptive_rerank
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
+from src.safety.external_data import external_query_text
 from src.tools.reason_codes import annotate as annotate_reasons
 
 
 async def _load_shadow_semantic_products(
-    conn: Any, business_id: str, query_text: str, llm: Any | None, limit: int
+    conn: Any, business_id: str, query_text: str | None, llm: Any | None, limit: int
 ) -> list[dict]:
     """Calea semantică e degradabilă: orice eșec lasă FTS-ul disponibil."""
-    if llm is None:
+    if llm is None or not query_text:
         return []
     try:
         if not await has_embeddings(conn, business_id, embedding_doc_type="search_document_v1"):
@@ -78,7 +79,13 @@ async def search_entities_shadow(
                 locale=locale,
                 limit=max(limit, 1),
             ),
-            _load_shadow_semantic_products(conn, business_id, query_text, llm, limit),
+            _load_shadow_semantic_products(
+                conn,
+                business_id,
+                external_query_text(query_spec.normalized_query),
+                llm,
+                limit,
+            ),
         )
     if identifier.status != "not_found":
         semantic_products: list[dict] = []
