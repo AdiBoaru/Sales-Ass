@@ -1,7 +1,7 @@
 import pytest
 
 from src.domain.search_documents import build_search_artifacts
-from src.jobs.build_search_documents import build_for_business, upsert_artifacts
+from src.jobs.build_search_documents import build_for_business, plan_for_business, upsert_artifacts
 
 
 class _Conn:
@@ -38,6 +38,15 @@ async def test_writer_is_tenant_scoped_and_uses_weighted_shadow_fts():
     assert "to_tsvector('romanian', unaccent($7))" in sql
     assert "setweight" in sql and "product_embeddings" not in sql
     assert all(call[1][0] == "biz" for call in conn.calls)
+
+
+@pytest.mark.asyncio
+async def test_plan_is_read_only_and_generates_artifacts():
+    conn = _Conn([_product()])
+    artifacts = await plan_for_business(conn, "biz")
+    assert len(artifacts) == 1 and artifacts[0].business_id == "biz"
+    assert len(conn.calls) == 1
+    assert "where p.business_id = $1 and p.status = 'active'" in conn.calls[0][0]
 
 
 @pytest.mark.asyncio

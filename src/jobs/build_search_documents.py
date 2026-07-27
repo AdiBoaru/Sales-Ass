@@ -118,6 +118,16 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
         )
 
 
+async def plan_for_business(
+    conn: Any, business_id: str, *, locale: str = "ro"
+) -> list[SearchArtifacts]:
+    """Construiește shadow-ul în memorie, pentru dry-run/inspectare fără niciun INSERT/UPDATE."""
+    return [
+        build_search_artifacts(product, business_id=business_id, locale=locale)
+        for product in await load_active_products(conn, business_id)
+    ]
+
+
 async def build_for_business(conn: Any, business_id: str, *, locale: str = "ro") -> int:
     """Construiește artefactele pentru un tenant. Callerul decide tranzacția/job scheduling."""
     products = await load_active_products(conn, business_id)
