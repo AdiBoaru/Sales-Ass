@@ -32,6 +32,16 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.domain.contracts import CategoryRequirements  # noqa: E402
+from src.domain.loader import load_domain_pack  # noqa: E402
+from src.models import BusinessConfig  # noqa: E402
+
+# Verticalul al cărui contract de conținut îl auditează scriptul (catalogul demo e beauty).
+AUDIT_VERTICAL = "beauty_salon"
+
 DEFAULT_CATALOG = ROOT / "db" / "seed" / "catalog_v2.json"
 SCHEMA_PATH = ROOT / "db" / "seed" / "catalog_v2.schema.json"
 SCHEMA_V3_PATH = ROOT / "db" / "seed" / "catalog_v3.schema.json"
@@ -74,21 +84,18 @@ REQUIRED_ATTRS_BY_ROOT: dict[str, set[str]] = {
 # --- contract v3 (NX-168d) --------------------------------------------------------------------
 # Obligatorii per-categorie v3 — semantică de OVERRIDE (slug bate root; unealta nu cere concerns).
 # `best_for` e universal (R11 separat), deci NU apare aici.
+# NX-205: obligatoriile v3 NU mai sunt hardcodate aici — vin din DomainPack (P9: contractul de
+# conținut e config per-vertical, nu cod de audit). Semantica rămâne a lui R10: slug BATE root.
+# Pack lipsă/gunoi → cerințe goale (fail-closed pe încărcare, nu pe rulare).
+CATEGORY_REQUIREMENTS: CategoryRequirements = load_domain_pack(
+    BusinessConfig(id="audit", slug="audit", name="audit", vertical=AUDIT_VERTICAL, settings={})
+).required_attributes
+# Aliasuri păstrate pentru compatibilitate (consumatori/teste existente): derivate, nu sursă.
 REQUIRED_V3_BY_SLUG: dict[str, set[str]] = {
-    "fond-de-ten": {"finish", "coverage", "suitable_for", "texture"},
-    "creme-bb-si-cc": {"finish", "coverage", "suitable_for", "texture"},
-    "cushion": {"finish", "coverage"},
-    "anticearcan": {"coverage"},
-    "pensule-si-bureti-de-machiaj": {"key_benefit", "differentiators"},
-    # produse de OCHI: nu au „finish" de complexion (paletele au finishuri MIXTE) — cer key_benefit
-    "mascara": {"key_benefit"},
-    "creioane-si-tusuri-de-ochi": {"key_benefit"},
-    "farduri-de-ochi": {"key_benefit"},
+    k: set(v) for k, v in CATEGORY_REQUIREMENTS.by_slug.items()
 }
 REQUIRED_V3_BY_ROOT: dict[str, set[str]] = {
-    "ingrijirea-tenului": {"concerns", "texture", "usage", "key_ingredients"},
-    "ingrijirea-parului": {"hair_type", "usage"},
-    "machiaj": {"finish"},
+    k: set(v) for k, v in CATEGORY_REQUIREMENTS.by_root.items()
 }
 PROVENANCE_KINDS = frozenset({"ingredient", "badge", "certification"})
 # Vocabular canonic de ingrediente-activ pt R12 (audit offline — NU e NLP de pipeline). Un claim

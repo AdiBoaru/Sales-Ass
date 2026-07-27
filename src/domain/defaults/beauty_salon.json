@@ -37,19 +37,62 @@
   },
   "_query_expansions_note": "NX-208 (query understanding): frază colocvială → termeni canonici de căutare adăugați la search_text. Vocabular RO real, high-confidence, GENERIC (nu reverse-engineering pe ID-uri). Cheile se normalizează la încărcare (fără diacritice/lower). Separat de concern_map (acela e mapare la filtru pe attributes->'concerns').",
   "query_expansions": {
-    "mă lucesc": ["matifiant", "mat", "ten gras"],
-    "să nu lucesc": ["matifiant", "mat"],
-    "luciu": ["matifiant", "mat"],
-    "lucios": ["matifiant", "mat"],
-    "să reziste": ["rezistent", "long lasting"],
-    "rezistent la căldură": ["rezistent", "long lasting"],
-    "pe căldură": ["rezistent"],
-    "aspect natural": ["natural", "acoperire lejeră"],
-    "machiaj discret": ["natural", "lejer", "acoperire lejeră"],
-    "toată rutina": ["curățare", "ser", "cremă hidratantă", "hidratare"],
-    "rutina de față": ["curățare", "ser", "cremă hidratantă", "hidratare"],
-    "apă micelară": ["demachiant", "apă micelară"],
-    "reactiv": ["ten sensibil"]
+    "mă lucesc": [
+      "matifiant",
+      "mat",
+      "ten gras"
+    ],
+    "să nu lucesc": [
+      "matifiant",
+      "mat"
+    ],
+    "luciu": [
+      "matifiant",
+      "mat"
+    ],
+    "lucios": [
+      "matifiant",
+      "mat"
+    ],
+    "să reziste": [
+      "rezistent",
+      "long lasting"
+    ],
+    "rezistent la căldură": [
+      "rezistent",
+      "long lasting"
+    ],
+    "pe căldură": [
+      "rezistent"
+    ],
+    "aspect natural": [
+      "natural",
+      "acoperire lejeră"
+    ],
+    "machiaj discret": [
+      "natural",
+      "lejer",
+      "acoperire lejeră"
+    ],
+    "toată rutina": [
+      "curățare",
+      "ser",
+      "cremă hidratantă",
+      "hidratare"
+    ],
+    "rutina de față": [
+      "curățare",
+      "ser",
+      "cremă hidratantă",
+      "hidratare"
+    ],
+    "apă micelară": [
+      "demachiant",
+      "apă micelară"
+    ],
+    "reactiv": [
+      "ten sensibil"
+    ]
   },
   "fact_type_whitelist": [
     "skin_type",
@@ -92,89 +135,381 @@
     }
   },
   "greetings": {},
-  "settled_order_statuses": ["delivered", "completed", "closed"],
+  "settled_order_statuses": [
+    "delivered",
+    "completed",
+    "closed"
+  ],
   "_comparison_facets_note": "Tier 2 IZI-parity: rânduri de DOMENIU în tabel, din products.attributes. key_benefit + concerns sunt populate 500/500 (valori RO display-ready → fără value_labels). key_ingredients derivat din INCI de scripts/enrich_key_ingredients.py. Generic — nimic hardcodat în cod; un atribut nou (finish/SPF) apare adăugând o fațetă aici.",
   "comparison_facets": [
-    { "key": "key_benefit", "labels": { "ro": "Beneficiu principal", "en": "Key benefit", "hu": "Fő előny" } },
-    { "key": "key_ingredients", "labels": { "ro": "Ingrediente cheie", "en": "Key ingredients", "hu": "Fő összetevők" } },
+    {
+      "key": "key_benefit",
+      "labels": {
+        "ro": "Beneficiu principal",
+        "en": "Key benefit",
+        "hu": "Fő előny"
+      }
+    },
+    {
+      "key": "key_ingredients",
+      "labels": {
+        "ro": "Ingrediente cheie",
+        "en": "Key ingredients",
+        "hu": "Fő összetevők"
+      }
+    },
     {
       "key": "concerns",
-      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" },
+      "labels": {
+        "ro": "Potrivit pentru",
+        "en": "Suitable for",
+        "hu": "Kinek ajánlott"
+      },
       "value_labels": {
-        "oily": { "ro": "ten gras", "en": "oily skin", "hu": "zsíros bőr" },
-        "dry": { "ro": "ten uscat", "en": "dry skin", "hu": "száraz bőr" },
-        "sensitive": { "ro": "ten sensibil", "en": "sensitive skin", "hu": "érzékeny bőr" },
-        "combination": { "ro": "ten mixt", "en": "combination skin", "hu": "kombinált bőr" },
-        "acne": { "ro": "acnee", "en": "acne-prone", "hu": "aknés bőr" },
-        "anti_aging": { "ro": "anti-îmbătrânire", "en": "anti-aging", "hu": "öregedésgátló" },
-        "hyperpigmentation": { "ro": "pete pigmentare", "en": "hyperpigmentation", "hu": "pigmentfoltok" },
-        "hydration": { "ro": "hidratare", "en": "hydration", "hu": "hidratálás" }
+        "oily": {
+          "ro": "ten gras",
+          "en": "oily skin",
+          "hu": "zsíros bőr"
+        },
+        "dry": {
+          "ro": "ten uscat",
+          "en": "dry skin",
+          "hu": "száraz bőr"
+        },
+        "sensitive": {
+          "ro": "ten sensibil",
+          "en": "sensitive skin",
+          "hu": "érzékeny bőr"
+        },
+        "combination": {
+          "ro": "ten mixt",
+          "en": "combination skin",
+          "hu": "kombinált bőr"
+        },
+        "acne": {
+          "ro": "acnee",
+          "en": "acne-prone",
+          "hu": "aknés bőr"
+        },
+        "anti_aging": {
+          "ro": "anti-îmbătrânire",
+          "en": "anti-aging",
+          "hu": "öregedésgátló"
+        },
+        "hyperpigmentation": {
+          "ro": "pete pigmentare",
+          "en": "hyperpigmentation",
+          "hu": "pigmentfoltok"
+        },
+        "hydration": {
+          "ro": "hidratare",
+          "en": "hydration",
+          "hu": "hidratálás"
+        }
       }
     },
     {
       "key": "suitable_for",
-      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" },
+      "labels": {
+        "ro": "Potrivit pentru",
+        "en": "Suitable for",
+        "hu": "Kinek ajánlott"
+      },
       "value_labels": {
-        "oily": { "ro": "ten gras" }, "dry": { "ro": "ten uscat" }, "sensitive": { "ro": "ten sensibil" },
-        "combination": { "ro": "ten mixt" }, "normal": { "ro": "ten normal" }, "mature": { "ro": "ten matur" },
-        "acne": { "ro": "ten acneic" }, "hydration": { "ro": "hidratare" },
-        "damaged": { "ro": "păr deteriorat" }, "colored": { "ro": "păr vopsit" }, "curly": { "ro": "păr creț" },
-        "fine": { "ro": "păr fin" }, "thick": { "ro": "păr gros" }, "frizzy": { "ro": "păr rebel" }
+        "oily": {
+          "ro": "ten gras"
+        },
+        "dry": {
+          "ro": "ten uscat"
+        },
+        "sensitive": {
+          "ro": "ten sensibil"
+        },
+        "combination": {
+          "ro": "ten mixt"
+        },
+        "normal": {
+          "ro": "ten normal"
+        },
+        "mature": {
+          "ro": "ten matur"
+        },
+        "acne": {
+          "ro": "ten acneic"
+        },
+        "hydration": {
+          "ro": "hidratare"
+        },
+        "damaged": {
+          "ro": "păr deteriorat"
+        },
+        "colored": {
+          "ro": "păr vopsit"
+        },
+        "curly": {
+          "ro": "păr creț"
+        },
+        "fine": {
+          "ro": "păr fin"
+        },
+        "thick": {
+          "ro": "păr gros"
+        },
+        "frizzy": {
+          "ro": "păr rebel"
+        }
       }
     },
     {
       "key": "finish",
-      "labels": { "ro": "Finish", "en": "Finish", "hu": "Hatás" },
+      "labels": {
+        "ro": "Finish",
+        "en": "Finish",
+        "hu": "Hatás"
+      },
       "value_labels": {
-        "matte": { "ro": "mat" }, "dewy": { "ro": "luminos" }, "satin": { "ro": "satinat" }, "natural": { "ro": "natural" }
+        "matte": {
+          "ro": "mat"
+        },
+        "dewy": {
+          "ro": "luminos"
+        },
+        "satin": {
+          "ro": "satinat"
+        },
+        "natural": {
+          "ro": "natural"
+        }
       }
     },
     {
       "key": "coverage",
-      "labels": { "ro": "Acoperire", "en": "Coverage", "hu": "Fedés" },
+      "labels": {
+        "ro": "Acoperire",
+        "en": "Coverage",
+        "hu": "Fedés"
+      },
       "value_labels": {
-        "light": { "ro": "lejeră" }, "medium": { "ro": "medie" }, "full": { "ro": "completă" }, "buildable": { "ro": "ajustabilă" }
+        "light": {
+          "ro": "lejeră"
+        },
+        "medium": {
+          "ro": "medie"
+        },
+        "full": {
+          "ro": "completă"
+        },
+        "buildable": {
+          "ro": "ajustabilă"
+        }
       }
     },
-    { "key": "texture", "labels": { "ro": "Textură", "en": "Texture", "hu": "Textúra" } }
+    {
+      "key": "texture",
+      "labels": {
+        "ro": "Textură",
+        "en": "Texture",
+        "hu": "Textúra"
+      }
+    }
   ],
   "_searchable_facets_note": "Tier 2b p2: atribute pe care search-ul le filtreaza la cerere (ex. ceva cu niacinamida). key_ingredients e derivat din INCI de enrich_key_ingredients.py; match normalizat.",
-  "searchable_facets": ["key_ingredients"],
+  "searchable_facets": [
+    "key_ingredients"
+  ],
   "_facets_note": "NX-186: registru TIPIZAT (tip/operatori/valori/missing_value/provenance/prag coverage/labels). Sursa validata contra allowlist-ului din cod (facets.py): column∈{price,...} / category / attribute (cheie sigura, citita parametrizat). NIMIC nu se interpoleaza in SQL. min_coverage = pragul sub care fateta NU se aplica hard (input pt NX-188). provenance=claim → 'verified' cere claim_provenance; structural → self-evident.",
   "facets": [
-    { "key": "price", "value_type": "number", "source": "column", "source_key": "price",
-      "operators": ["lte", "gte", "eq"], "provenance": "structural", "min_coverage": 0.98,
-      "labels": { "ro": "Preț", "en": "Price", "hu": "Ár" } },
-    { "key": "category", "value_type": "enum", "source": "category",
-      "operators": ["eq"], "provenance": "structural", "min_coverage": 0.98,
-      "labels": { "ro": "Categorie", "en": "Category", "hu": "Kategória" } },
-    { "key": "fragrance_free", "value_type": "bool", "source": "attribute", "source_key": "fragrance_free",
-      "operators": ["eq"], "missing_value": "unknown", "provenance": "claim", "min_coverage": 0.4,
-      "labels": { "ro": "Fără parfum", "en": "Fragrance-free", "hu": "Illatmentes" } },
-    { "key": "concerns", "value_type": "list", "source": "attribute", "source_key": "concerns",
-      "operators": ["contains"], "list_semantics": "any", "provenance": "claim", "min_coverage": 0.5,
-      "values": ["oily", "dry", "combination", "sensitive", "normal", "acne", "anti_aging", "hyperpigmentation", "hydration"],
-      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" } },
-    { "key": "suitable_for", "value_type": "list", "source": "attribute", "source_key": "suitable_for",
-      "operators": ["contains"], "list_semantics": "any", "provenance": "claim", "min_coverage": 0.5,
-      "labels": { "ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajánlott" } },
-    { "key": "key_ingredients", "value_type": "list", "source": "attribute", "source_key": "key_ingredients",
-      "operators": ["contains"], "list_semantics": "any", "provenance": "claim", "min_coverage": 0.5,
-      "labels": { "ro": "Ingrediente cheie", "en": "Key ingredients", "hu": "Fő összetevők" } },
-    { "key": "finish", "value_type": "enum", "source": "attribute", "source_key": "finish",
-      "operators": ["eq"], "provenance": "structural", "min_coverage": 0.15,
-      "values": ["matte", "dewy", "satin", "natural"],
-      "labels": { "ro": "Finish", "en": "Finish", "hu": "Hatás" } },
-    { "key": "coverage", "value_type": "enum", "source": "attribute", "source_key": "coverage",
-      "operators": ["eq"], "provenance": "structural", "min_coverage": 0.1,
-      "values": ["light", "medium", "full", "buildable"],
-      "labels": { "ro": "Acoperire", "en": "Coverage", "hu": "Fedés" } },
-    { "key": "spf", "value_type": "number", "source": "attribute", "source_key": "spf",
-      "operators": ["gte", "lte", "eq"], "provenance": "structural", "min_coverage": 0.05,
-      "labels": { "ro": "SPF", "en": "SPF", "hu": "SPF" } },
-    { "key": "texture", "value_type": "text", "source": "attribute", "source_key": "texture",
-      "operators": ["eq", "contains"], "provenance": "structural", "min_coverage": 0.3,
-      "labels": { "ro": "Textură", "en": "Texture", "hu": "Textúra" } }
+    {
+      "key": "price",
+      "value_type": "number",
+      "source": "column",
+      "source_key": "price",
+      "operators": [
+        "lte",
+        "gte",
+        "eq"
+      ],
+      "provenance": "structural",
+      "min_coverage": 0.98,
+      "labels": {
+        "ro": "Preț",
+        "en": "Price",
+        "hu": "Ár"
+      }
+    },
+    {
+      "key": "category",
+      "value_type": "enum",
+      "source": "category",
+      "operators": [
+        "eq"
+      ],
+      "provenance": "structural",
+      "min_coverage": 0.98,
+      "labels": {
+        "ro": "Categorie",
+        "en": "Category",
+        "hu": "Kategória"
+      }
+    },
+    {
+      "key": "fragrance_free",
+      "value_type": "bool",
+      "source": "attribute",
+      "source_key": "fragrance_free",
+      "operators": [
+        "eq"
+      ],
+      "missing_value": "unknown",
+      "provenance": "claim",
+      "min_coverage": 0.4,
+      "labels": {
+        "ro": "Fără parfum",
+        "en": "Fragrance-free",
+        "hu": "Illatmentes"
+      }
+    },
+    {
+      "key": "concerns",
+      "value_type": "list",
+      "source": "attribute",
+      "source_key": "concerns",
+      "operators": [
+        "contains"
+      ],
+      "list_semantics": "any",
+      "provenance": "claim",
+      "min_coverage": 0.5,
+      "values": [
+        "oily",
+        "dry",
+        "combination",
+        "sensitive",
+        "normal",
+        "acne",
+        "anti_aging",
+        "hyperpigmentation",
+        "hydration"
+      ],
+      "labels": {
+        "ro": "Potrivit pentru",
+        "en": "Suitable for",
+        "hu": "Kinek ajánlott"
+      }
+    },
+    {
+      "key": "suitable_for",
+      "value_type": "list",
+      "source": "attribute",
+      "source_key": "suitable_for",
+      "operators": [
+        "contains"
+      ],
+      "list_semantics": "any",
+      "provenance": "claim",
+      "min_coverage": 0.5,
+      "labels": {
+        "ro": "Potrivit pentru",
+        "en": "Suitable for",
+        "hu": "Kinek ajánlott"
+      }
+    },
+    {
+      "key": "key_ingredients",
+      "value_type": "list",
+      "source": "attribute",
+      "source_key": "key_ingredients",
+      "operators": [
+        "contains"
+      ],
+      "list_semantics": "any",
+      "provenance": "claim",
+      "min_coverage": 0.5,
+      "labels": {
+        "ro": "Ingrediente cheie",
+        "en": "Key ingredients",
+        "hu": "Fő összetevők"
+      }
+    },
+    {
+      "key": "finish",
+      "value_type": "enum",
+      "source": "attribute",
+      "source_key": "finish",
+      "operators": [
+        "eq"
+      ],
+      "provenance": "structural",
+      "min_coverage": 0.15,
+      "values": [
+        "matte",
+        "dewy",
+        "satin",
+        "natural"
+      ],
+      "labels": {
+        "ro": "Finish",
+        "en": "Finish",
+        "hu": "Hatás"
+      }
+    },
+    {
+      "key": "coverage",
+      "value_type": "enum",
+      "source": "attribute",
+      "source_key": "coverage",
+      "operators": [
+        "eq"
+      ],
+      "provenance": "structural",
+      "min_coverage": 0.1,
+      "values": [
+        "light",
+        "medium",
+        "full",
+        "buildable"
+      ],
+      "labels": {
+        "ro": "Acoperire",
+        "en": "Coverage",
+        "hu": "Fedés"
+      }
+    },
+    {
+      "key": "spf",
+      "value_type": "number",
+      "source": "attribute",
+      "source_key": "spf",
+      "operators": [
+        "gte",
+        "lte",
+        "eq"
+      ],
+      "provenance": "structural",
+      "min_coverage": 0.05,
+      "labels": {
+        "ro": "SPF",
+        "en": "SPF",
+        "hu": "SPF"
+      }
+    },
+    {
+      "key": "texture",
+      "value_type": "text",
+      "source": "attribute",
+      "source_key": "texture",
+      "operators": [
+        "eq",
+        "contains"
+      ],
+      "provenance": "structural",
+      "min_coverage": 0.3,
+      "labels": {
+        "ro": "Textură",
+        "en": "Texture",
+        "hu": "Textúra"
+      }
+    }
   ],
   "_response_style_note": "NX-159 felia 3: ghid de STIL pentru compunerea raspunsurilor. INPUT de model; override per-tenant in businesses.settings.domain_pack.response_style.",
   "response_style": {
@@ -183,5 +518,56 @@
     "reguli_salut": "saluta o singura data per conversatie",
     "reguli_upsell": "mentioneaza un produs complementar doar daca ajuta natural contextul; nu insista",
     "disclaimere": "fara promisiuni medicale/terapeutice; nu promite stoc sau livrare neconfirmate; evita fraze ca «analizez catalogul», «compar optiunile», «iti explic exact de ce»"
+  },
+  "required_attributes": {
+    "by_slug": {
+      "fond-de-ten": [
+        "finish",
+        "coverage",
+        "suitable_for",
+        "texture"
+      ],
+      "creme-bb-si-cc": [
+        "finish",
+        "coverage",
+        "suitable_for",
+        "texture"
+      ],
+      "cushion": [
+        "finish",
+        "coverage"
+      ],
+      "anticearcan": [
+        "coverage"
+      ],
+      "pensule-si-bureti-de-machiaj": [
+        "key_benefit",
+        "differentiators"
+      ],
+      "mascara": [
+        "key_benefit"
+      ],
+      "creioane-si-tusuri-de-ochi": [
+        "key_benefit"
+      ],
+      "farduri-de-ochi": [
+        "key_benefit"
+      ]
+    },
+    "by_root": {
+      "ingrijirea-tenului": [
+        "concerns",
+        "texture",
+        "usage",
+        "key_ingredients"
+      ],
+      "ingrijirea-parului": [
+        "hair_type",
+        "usage"
+      ],
+      "machiaj": [
+        "finish"
+      ]
+    }
   }
 }

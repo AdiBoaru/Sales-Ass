@@ -494,7 +494,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→014), aplicate ORDONAT de scripts/migrate.py
+│   ├── 0NN_*.sql                ← migrări delta (003→035), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 036)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
@@ -534,6 +535,8 @@ nativx-assistant/
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)
 │   ├── domain/                  ← NX-114: DomainPack (config per-vertical din DB+seed)
 │   │   ├── pack.py + loader.py + normalize.py + defaults/*.json (ecommerce/beauty_salon/...)
+│   │   facets.py (NX-186: fațete tipizate) · contracts.py (NX-205: contractul de adevăr —
+│   │   Facts/Evidence/Provenance/DerivedSignals + obligatorii per categorie)
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
 │   │   └── tool_definitions.py  ← OpenAI tool schemas
