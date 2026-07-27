@@ -132,6 +132,67 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
     return done
 
 
+async def embed_shadow_pending(conn, llm, *, force: bool = False, limit: int = 0) -> int:
+    """Embed NX-207 search documents alongside the live product embeddings."""
+    model = llm.model_embed
+    rows = await conn.fetch(
+        """
+        select d.product_id::text as id,
+               d.business_id::text as business_id,
+               d.positive_search_document as text,
+               pe.content_hash as existing
+        from product_search_documents d
+        join products p on p.id = d.product_id and p.business_id = d.business_id
+        left join product_embeddings pe on pe.product_id = d.product_id
+          and pe.business_id = d.business_id
+          and pe.doc_type = 'search_document_v1'
+          and pe.model = $1
+        where p.status = 'active' and d.document_version = $2
+        order by d.product_id
+        """,
+        model,
+        1,
+    )
+
+    todo = []
+    for row in rows:
+        content_hash = _content_hash(row["text"], model)
+        if force or row["existing"] != content_hash:
+            todo.append((row, content_hash))
+
+    if limit:
+        todo = todo[:limit]
+
+    total = 0
+    for start in range(0, len(todo), BATCH):
+        chunk = todo[start : start + BATCH]
+        vectors = await llm.embed([row["text"] for row, _ in chunk])
+        async with conn.transaction():
+            for (row, content_hash), vector in zip(chunk, vectors, strict=True):
+                literal = "[" + ",".join(f"{value:.7f}" for value in vector) + "]"
+                await conn.execute(
+                    """
+                    insert into product_embeddings
+                      (product_id, business_id, model, doc_type, embedding, content_hash,
+                       updated_at)
+                    values ($1, $2, $3, 'search_document_v1', $4::vector, $5, now())
+                    on conflict (product_id, doc_type, model) do update set
+                      business_id = excluded.business_id,
+                      embedding = excluded.embedding,
+                      content_hash = excluded.content_hash,
+                      updated_at = now()
+                    """,
+                    row["id"],
+                    row["business_id"],
+                    model,
+                    literal,
+                    content_hash,
+                )
+        total += len(chunk)
+
+    return total
+
+
 async def _main() -> None:
     logging.basicConfig(level=logging.INFO)
     ap = argparse.ArgumentParser()
