@@ -550,13 +550,17 @@ async def main() -> int:
     dry = "--dry-run" in sys.argv
     archive_old = "--archive-old" in sys.argv
     # import DB lazy (importul modulului rămâne fără efecte secundare — vezi nota de sus)
+    from scripts.catalog_completeness import (
+        gate_violations as completeness_gate_violations,  # noqa: PLC0415
+    )
     from src.db.connection import admin_conn, close_pool, get_pool  # noqa: PLC0415
 
     data = json.loads(DATA.read_text(encoding="utf-8"))
 
-    # === PRE-FLIGHT GATE: audit static ÎNAINTE de orice scriere ===
-    # NX-168e: COMUTARE ATOMICĂ pe v3 — catalogul e la contract complet (evaluate v3 = 0).
-    blocking = gate_violations(data, contract="v3")  # schema+reguli v3; warnings NU blochează
+    # === PRE-FLIGHT GATE: NX-206 peste auditul static, ÎNAINTE de orice scriere ===
+    # Păstrează schema+R1-R13 și adaugă contractul NX-205 (formă + contradicții facts↔facts).
+    # Warnings rămân explicit în afara porții; nu există gate pe lungime de text.
+    blocking = completeness_gate_violations(data)
     if blocking:
         print(
             f"✗ AUDIT PICAT — {len(blocking)} violations; NU seedez. Rulează audit_catalog_v2.py."
