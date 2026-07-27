@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
@@ -243,3 +245,56 @@ async def test_shadow_does_not_exclude_not_recommended_without_matching_concern(
     )
 
     assert [candidate.product_id for candidate in result.candidates] == ["hard"]
+
+
+@pytest.mark.asyncio
+async def test_shadow_starts_fts_and_semantic_retrieval_in_parallel(monkeypatch):
+    fts_started = asyncio.Event()
+    semantic_started = asyncio.Event()
+
+    async def fake_fts(*_args, **_kwargs):
+        fts_started.set()
+        await semantic_started.wait()
+        return ["p-1"]
+
+    async def fake_has_embeddings(*_args, **_kwargs):
+        semantic_started.set()
+        await fts_started.wait()
+        return True
+
+    async def fake_products(*_args, **_kwargs):
+        return [{"id": "p-1", "attributes": {}}]
+
+    async def fake_semantic(*_args, **_kwargs):
+        return []
+
+    async def fake_refs(*_args, **_kwargs):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    class _LLM:
+        async def embed(self, texts):
+            assert texts == ["ser"]
+            return [[0.1]]
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "has_embeddings", fake_has_embeddings)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "search_products_semantic", fake_semantic)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+
+    result = await asyncio.wait_for(
+        shadow.search_entities_shadow(
+            object(),
+            "business-1",
+            RuntimeQuerySpec("ser", "ser", "ser"),
+            {"price": _PRICE},
+            llm=_LLM(),
+        ),
+        timeout=0.2,
+    )
+
+    assert [candidate.product_id for candidate in result.candidates] == ["p-1"]

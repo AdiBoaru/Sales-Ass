@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Mapping
 
 from src.agent.query_spec import RuntimeQuerySpec
@@ -17,6 +18,27 @@ from src.domain.identifier_resolution import resolve_identifier
 from src.domain.rerank_policy import decide_adaptive_rerank
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
 from src.tools.reason_codes import annotate as annotate_reasons
+
+
+async def _load_shadow_semantic_products(
+    conn: Any, business_id: str, query_text: str, llm: Any | None, limit: int
+) -> list[dict]:
+    """Calea semantică e degradabilă: orice eșec lasă FTS-ul disponibil."""
+    if llm is None:
+        return []
+    try:
+        if not await has_embeddings(conn, business_id, embedding_doc_type="search_document_v1"):
+            return []
+        query_embedding = (await llm.embed([query_text]))[0]
+        return await search_products_semantic(
+            conn,
+            business_id,
+            query_embedding,
+            pool=min(max(limit, 1), 6),
+            embedding_doc_type="search_document_v1",
+        )
+    except Exception:  # noqa: BLE001 — FTS shadow rămâne disponibil la eșec semantic
+        return []
 
 
 async def search_entities_shadow(
@@ -48,29 +70,20 @@ async def search_entities_shadow(
     elif identifier.status == "clarify":
         ids = list(identifier.candidate_ids)
     else:
-        ids = await search_shadow_fts(
-            conn,
-            business_id,
-            query_text,
-            locale=locale,
-            limit=max(limit, 1),
+        ids, semantic_products = await asyncio.gather(
+            search_shadow_fts(
+                conn,
+                business_id,
+                query_text,
+                locale=locale,
+                limit=max(limit, 1),
+            ),
+            _load_shadow_semantic_products(conn, business_id, query_text, llm, limit),
         )
+    if identifier.status != "not_found":
+        semantic_products: list[dict] = []
     products = await get_products_by_ids(conn, business_id, ids, limit=min(max(limit, 1), 6))
 
-    semantic_products: list[dict] = []
-    if llm is not None and identifier.status == "not_found":
-        try:
-            if await has_embeddings(conn, business_id, embedding_doc_type="search_document_v1"):
-                query_embedding = (await llm.embed([query_text]))[0]
-                semantic_products = await search_products_semantic(
-                    conn,
-                    business_id,
-                    query_embedding,
-                    pool=min(max(limit, 1), 6),
-                    embedding_doc_type="search_document_v1",
-                )
-        except Exception:  # noqa: BLE001 — FTS shadow rămâne disponibil la eșec semantic
-            semantic_products = []
     if semantic_products:
         products = fuse_candidates(products, semantic_products, sort_mode="relevance")[:limit]
 
