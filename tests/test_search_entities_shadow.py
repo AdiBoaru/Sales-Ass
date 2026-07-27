@@ -153,6 +153,7 @@ async def test_exact_identifier_skips_fts_and_embeddings(monkeypatch):
     assert [candidate.product_id for candidate in result.candidates] == ["p-sku"]
     assert result.identifier_status == "resolve"
     assert result.needs_refinement is False
+    assert result.rerank_decision and result.rerank_decision.requested is False
 
 
 @pytest.mark.asyncio

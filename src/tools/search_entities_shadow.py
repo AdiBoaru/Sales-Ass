@@ -14,6 +14,7 @@ from src.db.queries.search_entities import (
 )
 from src.domain.facets import TypedFacet
 from src.domain.identifier_resolution import resolve_identifier
+from src.domain.rerank_policy import decide_adaptive_rerank
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
 from src.tools.reason_codes import annotate as annotate_reasons
 
@@ -73,6 +74,12 @@ async def search_entities_shadow(
     if semantic_products:
         products = fuse_candidates(products, semantic_products, sort_mode="relevance")[:limit]
 
+    rerank_decision = decide_adaptive_rerank(
+        identifier_status=identifier.status,
+        constraints=query_spec.constraints,
+        lexical_ids=ids,
+        semantic_ids=[str(product["id"]) for product in semantic_products],
+    )
     products = annotate_reasons(products, concerns=concerns)
     product_ids = [str(product["id"]) for product in products]
     evidence = await load_evidence_references(conn, business_id, product_ids, locale=locale)
@@ -83,4 +90,5 @@ async def search_entities_shadow(
         evidence_by_product=evidence,
         identifier_status=identifier.status,
         refinement_required=identifier.status == "clarify",
+        rerank_decision=rerank_decision,
     )

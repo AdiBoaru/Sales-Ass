@@ -12,6 +12,7 @@ from typing import Mapping, Sequence
 from src.agent.match_gate import ConstraintResult, FacetCoverage, MatchSet, build_match_set
 from src.agent.query_spec import Constraint
 from src.domain.facets import TypedFacet
+from src.domain.rerank_policy import RerankDecision
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class SearchEntitiesResult:
     needs_refinement: bool
     identifier_status: str | None
     evidence: tuple[EvidenceReference, ...]
+    rerank_decision: RerankDecision | None = None
 
 
 def build_search_entities_result(
@@ -54,6 +56,7 @@ def build_search_entities_result(
     evidence_by_product: Mapping[str, Sequence[EvidenceReference]] | None = None,
     identifier_status: str | None = None,
     refinement_required: bool = False,
+    rerank_decision: RerankDecision | None = None,
 ) -> SearchEntitiesResult:
     """Împachetează candidații în ordinea retrievalului, fără enforcement sau reranking nou."""
     match_set: MatchSet = build_match_set(list(products), tuple(constraints), dict(facets_by_key))
@@ -91,4 +94,5 @@ def build_search_entities_result(
         needs_refinement=bool(missing) or not match_set.exact or refinement_required,
         identifier_status=identifier_status,
         evidence=tuple(evidence),
+        rerank_decision=rerank_decision,
     )
