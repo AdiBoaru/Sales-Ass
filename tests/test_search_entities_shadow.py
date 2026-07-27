@@ -2,6 +2,7 @@ import pytest
 
 from src.agent.query_spec import RuntimeQuerySpec
 from src.domain.facets import FacetSource, FacetType, TypedFacet
+from src.domain.identifier_resolution import IdentifierCandidate
 from src.domain.search_entities import EvidenceReference
 from src.tools import search_entities_shadow as shadow
 from src.tools.base import TOOL_REGISTRY
@@ -34,9 +35,13 @@ async def test_shadow_orchestrator_uses_search_text_and_is_not_a_registered_live
         calls.append(("evidence", conn, business_id, ids, kwargs))
         return {"p-2": (EvidenceReference("ev-2", "p-2", "benefit"),)}
 
+    async def no_identifiers(*_args):
+        return []
+
     monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
     monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
     monkeypatch.setattr(shadow, "load_evidence_references", fake_evidence)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
     spec = RuntimeQuerySpec(
         raw_query="telefon 0712345678 ser sub 80",
         normalized_query="telefon 0712345678 ser sub 80",
@@ -93,9 +98,13 @@ async def test_shadow_orchestrator_fuses_explicit_shadow_embeddings_and_falls_ba
             assert texts == ["ser sub 80"]
             return [[0.1, 0.2]]
 
+    async def no_identifiers(*_args):
+        return []
+
     monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
     monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
     monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
     monkeypatch.setattr(shadow, "has_embeddings", fake_has_embeddings)
     monkeypatch.setattr(shadow, "search_products_semantic", fake_semantic)
     monkeypatch.setattr(shadow, "fuse_candidates", fake_fuse)
@@ -114,3 +123,33 @@ async def test_shadow_orchestrator_fuses_explicit_shadow_embeddings_and_falls_ba
     assert calls[1][2]["embedding_doc_type"] == "search_document_v1"
     assert calls[2][0:3] == ("fuse", ["p-2", "p-1"], ["p-3"])
     assert [candidate.product_id for candidate in result.candidates] == ["p-3", "p-2", "p-1"]
+
+
+@pytest.mark.asyncio
+async def test_exact_identifier_skips_fts_and_embeddings(monkeypatch):
+    async def exact_candidates(*_args):
+        return [IdentifierCandidate("p-sku", "Ser X", skus=("SER-X",))]
+
+    async def products(*_args, **_kwargs):
+        return [{"id": "p-sku", "price": 50, "attributes": {}}]
+
+    async def refs(*_args, **_kwargs):
+        return {}
+
+    async def must_not_run(*_args, **_kwargs):
+        raise AssertionError("nu trebuie rulat pentru SKU exact")
+
+    monkeypatch.setattr(shadow, "load_identifier_candidates", exact_candidates)
+    monkeypatch.setattr(shadow, "get_products_by_ids", products)
+    monkeypatch.setattr(shadow, "load_evidence_references", refs)
+    monkeypatch.setattr(shadow, "search_shadow_fts", must_not_run)
+    monkeypatch.setattr(shadow, "has_embeddings", must_not_run)
+    spec = RuntimeQuerySpec(raw_query="SER-X", normalized_query="ser-x", search_text="SER-X")
+
+    result = await shadow.search_entities_shadow(
+        object(), "business-1", spec, {"price": _PRICE}, llm=object()
+    )
+
+    assert [candidate.product_id for candidate in result.candidates] == ["p-sku"]
+    assert result.identifier_status == "resolve"
+    assert result.needs_refinement is False

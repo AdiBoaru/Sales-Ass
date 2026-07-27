@@ -40,6 +40,7 @@ class SearchEntitiesResult:
     constraint_coverage: tuple[FacetCoverage, ...]
     missing_information: tuple[str, ...]
     needs_refinement: bool
+    identifier_status: str | None
     evidence: tuple[EvidenceReference, ...]
 
 
@@ -49,6 +50,8 @@ def build_search_entities_result(
     facets_by_key: Mapping[str, TypedFacet],
     *,
     evidence_by_product: Mapping[str, Sequence[EvidenceReference]] | None = None,
+    identifier_status: str | None = None,
+    refinement_required: bool = False,
 ) -> SearchEntitiesResult:
     """Împachetează candidații în ordinea retrievalului, fără enforcement sau reranking nou."""
     match_set: MatchSet = build_match_set(list(products), tuple(constraints), dict(facets_by_key))
@@ -73,6 +76,7 @@ def build_search_entities_result(
         candidates=tuple(candidates),
         constraint_coverage=match_set.coverage,
         missing_information=missing,
-        needs_refinement=bool(missing) or not match_set.exact,
+        needs_refinement=bool(missing) or not match_set.exact or refinement_required,
+        identifier_status=identifier_status,
         evidence=tuple(evidence),
     )

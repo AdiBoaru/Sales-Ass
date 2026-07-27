@@ -7,8 +7,13 @@ from typing import Any, Mapping
 from src.agent.query_spec import RuntimeQuerySpec
 from src.db.queries.catalog import get_products_by_ids, has_embeddings, search_products_semantic
 from src.db.queries.fusion import fuse_candidates
-from src.db.queries.search_entities import load_evidence_references, search_shadow_fts
+from src.db.queries.search_entities import (
+    load_evidence_references,
+    load_identifier_candidates,
+    search_shadow_fts,
+)
 from src.domain.facets import TypedFacet
+from src.domain.identifier_resolution import resolve_identifier
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
 
 
@@ -28,17 +33,23 @@ async def search_entities_shadow(
     `TurnContext` și nu poate modifica răspunsul live înainte de gate-ul NX-209.
     """
     query_text = query_spec.search_text or query_spec.raw_query
-    ids = await search_shadow_fts(
-        conn,
-        business_id,
-        query_text,
-        locale=locale,
-        limit=max(limit, 1),
-    )
+    identifier = resolve_identifier(query_text, await load_identifier_candidates(conn, business_id))
+    if identifier.status == "resolve":
+        ids = [identifier.product_id] if identifier.product_id else []
+    elif identifier.status == "clarify":
+        ids = list(identifier.candidate_ids)
+    else:
+        ids = await search_shadow_fts(
+            conn,
+            business_id,
+            query_text,
+            locale=locale,
+            limit=max(limit, 1),
+        )
     products = await get_products_by_ids(conn, business_id, ids, limit=min(max(limit, 1), 6))
 
     semantic_products: list[dict] = []
-    if llm is not None:
+    if llm is not None and identifier.status == "not_found":
         try:
             if await has_embeddings(conn, business_id, embedding_doc_type="search_document_v1"):
                 query_embedding = (await llm.embed([query_text]))[0]
@@ -61,4 +72,6 @@ async def search_entities_shadow(
         query_spec.constraints,
         facets_by_key,
         evidence_by_product=evidence,
+        identifier_status=identifier.status,
+        refinement_required=identifier.status == "clarify",
     )
