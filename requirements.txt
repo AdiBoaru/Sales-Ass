@@ -25,3 +25,5 @@ python-dotenv==1.2.2
 # Embeddings / vector
 numpy==2.4.6
 
+# NX-209 exact/fuzzy product identifier resolution (shadow)
+rapidfuzz==3.14.3
