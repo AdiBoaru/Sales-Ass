@@ -29,6 +29,8 @@ class SearchEntityCandidate:
     match_class: str  # exact | alternative | rejected
     constraint_results: tuple[ConstraintResult, ...]
     soft_penalty: int
+    reason_codes: tuple[str, ...]
+    warning: str | None
     evidence_ids: tuple[str, ...]
 
 
@@ -55,18 +57,28 @@ def build_search_entities_result(
 ) -> SearchEntitiesResult:
     """Împachetează candidații în ordinea retrievalului, fără enforcement sau reranking nou."""
     match_set: MatchSet = build_match_set(list(products), tuple(constraints), dict(facets_by_key))
+    products_by_id = {
+        str(product.get("id") or product.get("product_id") or ""): product for product in products
+    }
     evidence_by_product = evidence_by_product or {}
     evidence: list[EvidenceReference] = []
     candidates: list[SearchEntityCandidate] = []
     for verdict in match_set.verdicts:
         refs = tuple(evidence_by_product.get(verdict.product_id, ()))
         evidence.extend(refs)
+        product = products_by_id[verdict.product_id]
+        warning = product.get("warning") if isinstance(product.get("warning"), str) else None
+        reason_codes = (
+            product.get("reason_codes") if isinstance(product.get("reason_codes"), list) else []
+        )
         candidates.append(
             SearchEntityCandidate(
                 product_id=verdict.product_id,
                 match_class=verdict.match_class,
                 constraint_results=verdict.constraint_results,
-                soft_penalty=verdict.soft_penalty,
+                soft_penalty=verdict.soft_penalty + int(warning is not None),
+                reason_codes=tuple(code for code in reason_codes if isinstance(code, str)),
+                warning=warning,
                 evidence_ids=tuple(item.evidence_id for item in refs),
             )
         )

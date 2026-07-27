@@ -15,6 +15,7 @@ from src.db.queries.search_entities import (
 from src.domain.facets import TypedFacet
 from src.domain.identifier_resolution import resolve_identifier
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
+from src.tools.reason_codes import annotate as annotate_reasons
 
 
 async def search_entities_shadow(
@@ -34,6 +35,13 @@ async def search_entities_shadow(
     """
     query_text = query_spec.search_text or query_spec.raw_query
     identifier = resolve_identifier(query_text, await load_identifier_candidates(conn, business_id))
+    concerns = [
+        constraint.value
+        for constraint in query_spec.constraints
+        if constraint.facet in {"concern", "concerns"}
+        and constraint.op in {"eq", "contains"}
+        and isinstance(constraint.value, str)
+    ]
     if identifier.status == "resolve":
         ids = [identifier.product_id] if identifier.product_id else []
     elif identifier.status == "clarify":
@@ -65,6 +73,7 @@ async def search_entities_shadow(
     if semantic_products:
         products = fuse_candidates(products, semantic_products, sort_mode="relevance")[:limit]
 
+    products = annotate_reasons(products, concerns=concerns)
     product_ids = [str(product["id"]) for product in products]
     evidence = await load_evidence_references(conn, business_id, product_ids, locale=locale)
     return build_search_entities_result(

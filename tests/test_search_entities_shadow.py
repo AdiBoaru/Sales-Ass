@@ -1,6 +1,6 @@
 import pytest
 
-from src.agent.query_spec import RuntimeQuerySpec
+from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.domain.facets import FacetSource, FacetType, TypedFacet
 from src.domain.identifier_resolution import IdentifierCandidate
 from src.domain.search_entities import EvidenceReference
@@ -153,3 +153,92 @@ async def test_exact_identifier_skips_fts_and_embeddings(monkeypatch):
     assert [candidate.product_id for candidate in result.candidates] == ["p-sku"]
     assert result.identifier_status == "resolve"
     assert result.needs_refinement is False
+
+
+@pytest.mark.asyncio
+async def test_shadow_excludes_verified_hard_not_recommended_and_penalizes_soft(monkeypatch):
+    async def fake_fts(*_args, **_kwargs):
+        return ["soft", "safe", "hard"]
+
+    async def fake_products(*_args, **_kwargs):
+        return [
+            {
+                "id": "soft",
+                "attributes": {
+                    "not_recommended_for": [{"value": "sensitive", "level": "soft"}],
+                },
+            },
+            {"id": "safe", "attributes": {}},
+            {
+                "id": "hard",
+                "attributes": {
+                    "not_recommended_for": [
+                        {
+                            "value": "sensitive",
+                            "level": "hard",
+                            "source": "manufacturer_label",
+                            "verified_at": "2026-07-16",
+                        }
+                    ],
+                },
+            },
+        ]
+
+    async def fake_refs(*_args, **_kwargs):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+    spec = RuntimeQuerySpec(
+        raw_query="ser pentru ten sensibil",
+        normalized_query="ser pentru ten sensibil",
+        search_text="ser pentru ten sensibil",
+        constraints=(Constraint(facet="concern", op="contains", value="sensitive"),),
+    )
+
+    result = await shadow.search_entities_shadow(object(), "business-1", spec, {"price": _PRICE})
+
+    assert [candidate.product_id for candidate in result.candidates] == ["safe", "soft"]
+    assert result.candidates[0].warning is None
+    assert result.candidates[1].warning == "nu e ideal pentru sensitive"
+    assert result.candidates[1].soft_penalty == 1
+
+
+@pytest.mark.asyncio
+async def test_shadow_does_not_exclude_not_recommended_without_matching_concern(monkeypatch):
+    async def fake_fts(*_args, **_kwargs):
+        return ["hard"]
+
+    async def fake_products(*_args, **_kwargs):
+        return [
+            {
+                "id": "hard",
+                "attributes": {
+                    "not_recommended_for": [
+                        {"value": "sensitive", "level": "hard", "source": "x", "verified_at": "y"}
+                    ]
+                },
+            }
+        ]
+
+    async def fake_refs(*_args, **_kwargs):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+
+    result = await shadow.search_entities_shadow(
+        object(), "business-1", RuntimeQuerySpec("ser", "ser", "ser"), {"price": _PRICE}
+    )
+
+    assert [candidate.product_id for candidate in result.candidates] == ["hard"]
