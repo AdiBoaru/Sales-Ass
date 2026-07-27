@@ -111,7 +111,7 @@
       "query": "ser cu vitamina C dar să nu-mi irite tenul reactiv, sub 150",
       "locale": "ro",
       "provenance": "synthetic",
-      "category": "ser-pentru-ten",
+      "category": "seruri-pentru-ten",
       "catalog_version": "demo-2026-07-24",
       "judgments": [
         {
@@ -131,7 +131,7 @@
         {
           "facet": "category",
           "op": "eq",
-          "value": "ser-pentru-ten"
+          "value": "seruri-pentru-ten"
         },
         {
           "facet": "key_ingredient",
@@ -185,7 +185,7 @@
       "query": "cel mai ieftin ser cu niacinamidă, dar să fie de calitate bună",
       "locale": "ro",
       "provenance": "synthetic",
-      "category": "ser-pentru-ten",
+      "category": "seruri-pentru-ten",
       "catalog_version": "demo-2026-07-24",
       "judgments": [
         {
@@ -200,7 +200,7 @@
         {
           "facet": "category",
           "op": "eq",
-          "value": "ser-pentru-ten"
+          "value": "seruri-pentru-ten"
         },
         {
           "facet": "key_ingredient",

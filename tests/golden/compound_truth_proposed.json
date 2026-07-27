@@ -521,7 +521,7 @@
           {
             "facet": "category",
             "op": "eq",
-            "value": "ser-pentru-ten"
+            "value": "seruri-pentru-ten"
           },
           {
             "facet": "key_ingredient",
@@ -593,7 +593,7 @@
         ],
         "required_disclosures": [
           "Niciun rezultat Vit C nu are suitability=sensitive/reactive, iar concentrația lipsește; toleranța nu poate fi garantată.",
-          "category=ser-pentru-ten a fost adăugată hard deoarece textul cere explicit ser."
+          "category=seruri-pentru-ten a fost adăugată hard deoarece textul cere explicit ser."
         ],
         "forbidden_claims": [
           "medical",
@@ -1325,7 +1325,7 @@
           {
             "facet": "category",
             "op": "eq",
-            "value": "ser-pentru-ten"
+            "value": "seruri-pentru-ten"
           },
           {
             "facet": "key_ingredient",
@@ -1372,7 +1372,7 @@
         ],
         "required_disclosures": [
           "«Calitate bună» este aproximată prin ratingul 4,5; nu este verdict absolut.",
-          "category=ser-pentru-ten a fost adăugată hard pentru a exclude tonere/creme cu niacinamidă."
+          "category=seruri-pentru-ten a fost adăugată hard pentru a exclude tonere/creme cu niacinamidă."
         ],
         "forbidden_claims": [
           "medical",
