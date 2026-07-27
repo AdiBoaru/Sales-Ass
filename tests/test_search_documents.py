@@ -1,4 +1,10 @@
+from pathlib import Path
+
 from src.domain.search_documents import DOCUMENT_VERSION, build_search_artifacts
+
+_MIGRATION = (
+    Path(__file__).resolve().parents[1] / "docs/036_search_documents_shadow.sql"
+).read_text(encoding="utf-8")
 
 
 def _product():
@@ -64,5 +70,20 @@ def test_hash_changes_only_when_artifact_content_changes():
     product = _product()
     before = build_search_artifacts(product, business_id="biz", locale="ro")
     product["attributes"]["free_of"] = ["alcool"]
+
     after = build_search_artifacts(product, business_id="biz", locale="ro")
     assert before.content_hash != after.content_hash
+
+
+def test_shadow_migration_is_tenant_scoped_and_cannot_switch_live_retrieval():
+    """D13: tabele aditive, FK compus + RLS; indexul existent rămâne neatinse."""
+    for table in ("product_search_documents", "product_card_blurbs"):
+        body = _MIGRATION.split(f"create table if not exists {table}", 1)[1].split(");", 1)[0]
+        assert "business_id" in body
+        assert "foreign key (business_id, product_id) references products (business_id, id)" in body
+        assert f"alter table {table} enable row level security;" in _MIGRATION
+        assert f"grant select on {table} to bot_runtime;" in _MIGRATION
+        assert f"grant insert on {table} to bot_runtime;" not in _MIGRATION
+    assert "product_embeddings" not in _MIGRATION
+    assert "update products set" not in _MIGRATION
+    assert "fts_document             tsvector not null" in _MIGRATION
