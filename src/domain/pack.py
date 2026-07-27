@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from src.domain.facets import TypedFacet
+
 
 @dataclass(frozen=True)
 class FacetSpec:
@@ -74,6 +76,11 @@ class DomainPack:
     # („ceva cu niacinamidă" → key_ingredients). Match NORMALIZAT (lower + strip diacritice). Gol →
     # fără filtru de feature. Separat de concern_map (concerns are calea lor de mapare).
     searchable_facets: tuple[str, ...] = ()
+    # NX-186: fațete TIPIZATE (tip/operatori/valori/missing_value/labels/prag coverage) — contractul
+    # pt QuerySpec (NX-208) + Match Gate (NX-187). Aditiv peste `searchable_facets`. Sursa validată
+    # contra allowlist-ului din cod (facets.py), fail-closed pe config invalid. Gol → fără fațete
+    # tipizate (comportament de azi). Per-vertical (defaults JSON).
+    facets: tuple[TypedFacet, ...] = ()
     # NX-159 felia 3: profilul de STIL per business (ton / nivel_detaliu / reguli_salut /
     # reguli_upsell / disclaimere) — directive scurte (RO), INPUT de model pe căile de compunere
     # ale agentului (proză/order/rich), peste regulile dure de grounding și siguranță.

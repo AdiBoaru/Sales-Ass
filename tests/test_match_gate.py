@@ -1,0 +1,354 @@
+"""NX-187 — Match Gate (pur, fără DB/LLM): tri-state + MatchSet disjunct + soft = doar scor."""
+
+from src.agent.match_gate import (
+    build_match_set,
+    classify_product,
+    evaluate,
+)
+from src.agent.query_spec import Constraint
+from src.domain.facets import FacetSource, FacetType, TypedFacet
+
+_PRICE = TypedFacet(
+    key="price",
+    value_type=FacetType.NUMBER,
+    source=FacetSource.COLUMN,
+    source_key="price",
+    operators=("lte", "gte", "eq"),
+)
+_FF = TypedFacet(
+    key="fragrance_free",
+    value_type=FacetType.BOOL,
+    source=FacetSource.ATTRIBUTE,
+    source_key="fragrance_free",
+    operators=("eq",),
+)
+_CONCERNS = TypedFacet(
+    key="concerns",
+    value_type=FacetType.LIST,
+    source=FacetSource.ATTRIBUTE,
+    source_key="concerns",
+    operators=("contains",),
+)
+_FINISH = TypedFacet(
+    key="finish",
+    value_type=FacetType.ENUM,
+    source=FacetSource.ATTRIBUTE,
+    source_key="finish",
+    operators=("eq",),
+    values=("matte", "dewy"),
+)
+_REG = {f.key: f for f in (_PRICE, _FF, _CONCERNS, _FINISH)}
+
+
+def _hard(facet, op, value):
+    return Constraint(facet=facet, op=op, value=value, strength="hard", source="current_turn")
+
+
+def _soft(facet, op, value):
+    return Constraint(facet=facet, op=op, value=value, strength="soft", source="current_turn")
+
+
+def _p(pid, price=None, **attrs):
+    return {"id": pid, "price": price, "attributes": attrs}
+
+
+# --- evaluate: tri-state ----------------------------------------------------
+
+
+def test_evaluate_number():
+    assert evaluate(_PRICE, "lte", 80, 50) == "MATCH"
+    assert evaluate(_PRICE, "lte", 80, 120) == "MISMATCH"
+    assert evaluate(_PRICE, "lte", 80, None) == "UNKNOWN"  # lipsă ≠ MISMATCH (D7)
+
+
+def test_evaluate_bool_and_list():
+    assert evaluate(_FF, "eq", True, True) == "MATCH"
+    assert evaluate(_FF, "eq", True, False) == "MISMATCH"
+    assert evaluate(_FF, "eq", True, None) == "UNKNOWN"
+    assert evaluate(_CONCERNS, "contains", "sensitive", ["sensitive", "dry"]) == "MATCH"
+    assert evaluate(_CONCERNS, "contains", "sensitive", ["oily"]) == "MISMATCH"
+    assert evaluate(_CONCERNS, "contains", "sensitive", None) == "UNKNOWN"
+
+
+# --- MatchSet: precedență disjunctă -----------------------------------------
+
+
+def test_all_hard_match_is_exact():
+    v = classify_product(
+        _p("a", price=50, fragrance_free=True, concerns=["sensitive"]),
+        [
+            _hard("price", "lte", 80),
+            _hard("fragrance_free", "eq", True),
+            _hard("concerns", "contains", "sensitive"),
+        ],
+        _REG,
+    )
+    assert v.match_class == "exact"
+
+
+def test_hard_unknown_without_mismatch_is_alternative():
+    # fragrance_free lipsă → hard UNKNOWN, restul MATCH → alternative (nu exact, nu rejected)
+    v = classify_product(
+        _p("b", price=50, concerns=["sensitive"]),  # fără fragrance_free
+        [_hard("price", "lte", 80), _hard("fragrance_free", "eq", True)],
+        _REG,
+    )
+    assert v.match_class == "alternative"
+
+
+def test_hard_mismatch_is_rejected_even_with_unknown():
+    # buget depășit (MISMATCH) + fragrance_free lipsă (UNKNOWN) → rejected (MISMATCH are precedență)
+    v = classify_product(
+        _p("c", price=200),
+        [_hard("price", "lte", 80), _hard("fragrance_free", "eq", True)],
+        _REG,
+    )
+    assert v.match_class == "rejected"
+
+
+def test_soft_mismatch_stays_exact_only_penalized():
+    # toate hard MATCH + un soft mismatch (finish) → EXACT, nu alternative; doar soft_penalty crește
+    v = classify_product(
+        _p("d", price=50, fragrance_free=True, finish="dewy"),
+        [
+            _hard("price", "lte", 80),
+            _hard("fragrance_free", "eq", True),
+            _soft("finish", "eq", "matte"),
+        ],
+        _REG,
+    )
+    assert v.match_class == "exact"  # soft NU schimbă apartenența
+    assert v.soft_penalty == 1  # doar scorul
+
+
+def test_unknown_facet_is_unknown_not_match():
+    # constrângere pe o fațetă absentă din registru → UNKNOWN (conservator), deci alternative
+    v = classify_product(
+        _p("e", price=50),
+        [_hard("price", "lte", 80), _hard("spf", "gte", 30)],  # spf nu e în _REG
+        _REG,
+    )
+    assert v.match_class == "alternative"
+    assert {r.facet: r.status for r in v.constraint_results}["spf"] == "UNKNOWN"
+
+
+def test_facet_key_alias_singular_plural():
+    # QuerySpec emite „concern" (singular); registrul are „concerns" → aliasul le leagă
+    v = classify_product(
+        _p("f", concerns=["sensitive"]),
+        [_hard("concern", "contains", "sensitive")],
+        _REG,
+    )
+    assert v.match_class == "exact"
+
+
+# --- DoD happy: setul complet A/B/C/D ---------------------------------------
+
+
+def test_dod_happy_full_matchset():
+    # „fără parfum, sub 80, ten sensibil"
+    constraints = [
+        _hard("price", "lte", 80),
+        _hard("fragrance_free", "eq", True),
+        _hard("concerns", "contains", "sensitive"),
+    ]
+    products = [
+        _p("A", price=50, fragrance_free=True, concerns=["sensitive"]),  # exact
+        _p("B", price=50, concerns=["sensitive"]),  # UNKNOWN parfum → alternative
+        _p("C", price=200, fragrance_free=True, concerns=["sensitive"]),  # buget → rejected
+        _p("D", price=50, fragrance_free=False, concerns=["sensitive"]),  # parfum → rejected
+    ]
+    ms = build_match_set(products, constraints, _REG)
+    assert ms.exact == ("A",)
+    assert ms.alternatives == ("B",)
+    assert set(ms.rejected) == {"C", "D"}
+    # mulțimi DISJUNCTE
+    assert not (set(ms.exact) & set(ms.alternatives) & set(ms.rejected))
+    assert len(ms.verdicts) == 4
+
+
+def test_coverage_aggregate_reports_unknown():
+    # fragrance_free UNKNOWN peste tot (niciun produs nu-l are) → distribuție 100% UNKNOWN
+    products = [_p("x", price=50, concerns=["dry"]), _p("y", price=60, concerns=["oily"])]
+    ms = build_match_set(
+        products, [_hard("fragrance_free", "eq", True), _hard("price", "lte", 100)], _REG
+    )
+    cov = {r.facet: r for r in ms.coverage}
+    assert (cov["fragrance_free"].match, cov["fragrance_free"].unknown) == (0, 2)
+    assert (cov["price"].match, cov["price"].unknown) == (2, 0)
+
+
+def test_coverage_preserves_distribution_not_collapsed():
+    # Review #248: fațetă cu MATCH + UNKNOWN → distribuția PĂSTREAZĂ ambele (nu comprimă în MATCH)
+    products = [_p("a", fragrance_free=True), _p("b")]  # unul are, unul nu
+    ms = build_match_set(products, [_hard("fragrance_free", "eq", True)], _REG)
+    ff = ms.coverage[0]
+    assert ff.match == 1 and ff.unknown == 1 and ff.mismatch == 0  # UNKNOWN NU se pierde
+
+
+def test_invalid_operator_is_unknown_not_match():
+    # Review #248: operator neacceptat de fațetă (contains pe bool) → UNKNOWN, nu MATCH accidental
+    assert evaluate(_FF, "contains", True, True) == "UNKNOWN"
+    assert evaluate(_PRICE, "typo", 100, 50) == "UNKNOWN"  # op inexistent → UNKNOWN, nu eq tăcut
+
+
+def test_missing_query_value_is_unknown():
+    assert evaluate(_PRICE, "lte", None, 50) == "UNKNOWN"  # valoare de query lipsă → UNKNOWN
+
+
+def test_non_bool_value_for_bool_facet_is_unknown():
+    assert evaluate(_FF, "eq", "true", True) == "UNKNOWN"  # valoare invalidă pt bool → UNKNOWN
+
+
+def test_incompatible_value_type_is_unknown():
+    # Review re-review #248: valoare de query de TIP incompatibil cu fațeta → UNKNOWN, nu MATCH
+    assert (
+        evaluate(_PRICE, "eq", True, 1) == "UNKNOWN"
+    )  # bool pt NUMBER (fără el: 1.0==1.0 → MATCH)
+    assert evaluate(_FINISH, "eq", 123, "matte") == "UNKNOWN"  # int pt ENUM → UNKNOWN
+    assert evaluate(_CONCERNS, "contains", 5, ["5"]) == "UNKNOWN"  # non-str pt LIST → UNKNOWN
+
+
+def test_two_constraints_same_facet_no_double_coverage():
+    # Review re-review #248: 2 constrângeri hard pe aceeași fațetă → UN rând + UN vot/produs
+    products = [_p("a", price=50), _p("b", price=200)]
+    ms = build_match_set(products, [_hard("price", "gte", 20), _hard("price", "lte", 100)], _REG)
+    price_rows = [r for r in ms.coverage if r.facet == "price"]
+    assert len(price_rows) == 1  # un singur rând, nu dublat
+    r = price_rows[0]
+    assert r.match + r.mismatch + r.unknown == 2  # 2 produse, nu 4 (contoare nedublate)
+    assert r.match == 1 and r.mismatch == 1  # a: 50∈[20,100] MATCH; b: 200>100 MISMATCH
+
+
+def test_unknown_enum_value_is_unknown_not_mismatch():
+    """Re-review #248: valoare de query în AFARA vocabularului fațetei (typo/sinonim nemapat) =
+    constrângere pe care nu o putem interpreta → UNKNOWN. MISMATCH ar declara produsul incompatibil
+    pe baza unei cereri neînțelese (D7: UNKNOWN ≠ MISMATCH)."""
+    assert evaluate(_FINISH, "eq", "glowy", "matte") == "UNKNOWN"  # „glowy" nu e în vocabular
+    assert (
+        evaluate(_FINISH, "eq", "matte", "dewy") == "MISMATCH"
+    )  # cunoscută + diferită = contrazice
+    assert evaluate(_FINISH, "eq", "matte", "matte") == "MATCH"
+
+
+def test_unknown_enum_value_puts_product_in_alternatives_not_rejected():
+    """Consecința pe MatchSet: produsul NU e respins pe o constrângere neinterpretabilă."""
+    ms = build_match_set([_p("a", finish="matte")], [_hard("finish", "eq", "glowy")], _REG)
+    assert ms.rejected == () and ms.alternatives == ("a",)
+
+
+def test_enum_alias_resolved_before_vocabulary_check():
+    """Aliasul declarat în registru se rezolvă ÎNAINTE de verificarea vocabularului (nu devine
+    UNKNOWN doar pentru că e scris colocvial)."""
+    finish = TypedFacet(
+        key="finish",
+        value_type=FacetType.ENUM,
+        source=FacetSource.ATTRIBUTE,
+        source_key="finish",
+        operators=("eq",),
+        values=("matte", "dewy"),
+        aliases={"mat": "matte"},
+    )
+    assert evaluate(finish, "eq", "mat", "matte") == "MATCH"
+    assert evaluate(finish, "eq", "mat", "dewy") == "MISMATCH"
+
+
+_TEXTURE = TypedFacet(
+    key="texture",
+    value_type=FacetType.TEXT,
+    source=FacetSource.ATTRIBUTE,
+    source_key="texture",
+    operators=("eq", "contains"),
+)
+_REG_TEXT = {**_REG, "texture": _TEXTURE}
+
+
+def test_text_contains_is_not_equality():
+    """Re-review 2 #248: `contains` pe fațete TEXT era evaluat ca `eq` — `texture contains "gel"`
+    pe „gel-crema" întorcea MISMATCH. Registrul declară `contains` printre operatorii TEXT, deci
+    semantica trebuie să existe, nu doar permisiunea."""
+    assert evaluate(_TEXTURE, "contains", "gel", "gel-crema") == "MATCH"
+    assert evaluate(_TEXTURE, "contains", "gel", "gel") == "MATCH"
+    assert evaluate(_TEXTURE, "contains", "gel", "cremă bogată") == "MISMATCH"
+    # `eq` rămâne egalitate strictă (normalizată) — nu s-a lărgit accidental
+    assert evaluate(_TEXTURE, "eq", "gel", "gel-crema") == "MISMATCH"
+    assert evaluate(_TEXTURE, "eq", "gel-cremă", "gel-crema") == "MATCH"  # diacritice normalizate
+
+
+def test_text_contains_matches_whole_words_only():
+    """`contains` = cuvinte ÎNTREGI, nu substring: „gel" nu are voie să prindă „angel"."""
+    assert evaluate(_TEXTURE, "contains", "gel", "angel balm") == "MISMATCH"
+    assert evaluate(_TEXTURE, "contains", "gel crema", "gel-cremă ușoară") == "MATCH"  # frază
+
+
+def test_empty_query_value_is_unknown_not_match_all():
+    """Valoare de query goală → UNKNOWN; altfel `contains ""` ar da MATCH pe orice produs."""
+    assert evaluate(_TEXTURE, "contains", "", "gel-crema") == "UNKNOWN"
+    assert evaluate(_TEXTURE, "contains", "   ", "gel-crema") == "UNKNOWN"
+
+
+def test_text_contains_product_side_missing_is_unknown():
+    """Lipsa valorii pe produs rămâne UNKNOWN (nu MISMATCH) și pentru `contains`."""
+    assert evaluate(_TEXTURE, "contains", "gel", None) == "UNKNOWN"
+    v = classify_product(_p("t"), [_hard("texture", "contains", "gel")], _REG_TEXT)
+    assert v.match_class == "alternative"
+
+
+def test_facet_alias_and_canonical_key_share_one_coverage_row():
+    """Re-review #248: `concern` (aliasul din QuerySpec/qrels) și `concerns` (cheia catalogului)
+    sunt ACEEAȘI fațetă → UN rând de coverage și UN vot per produs, nu două."""
+    products = [_p("a", concerns=["oily"]), _p("b", concerns=["dry"])]
+    ms = build_match_set(
+        products,
+        [_hard("concern", "contains", "oily"), _hard("concerns", "contains", "oily")],
+        _REG,
+    )
+    assert [r.facet for r in ms.coverage] == ["concerns"]  # un singur rând, pe cheia canonică
+    r = ms.coverage[0]
+    assert r.match + r.mismatch + r.unknown == 2  # 2 produse, nu 4
+    assert r.match == 1 and r.mismatch == 1
+
+
+# --- shadow hook (kill-switch OFF by default, zero behavior change) ----------
+
+
+def _ctx():
+    from src.domain.loader import load_domain_pack
+    from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
+
+    biz = BusinessConfig(id="b", slug="s", name="n", vertical="beauty_salon", settings={})
+    biz.domain_pack = load_domain_pack(biz)
+    return TurnContext(
+        turn_id="t",
+        business=biz,
+        contact=Contact(id="c", business_id="b"),
+        message=InboundMessage(provider_msg_id="m", body="fond fără parfum sub 80"),
+        conversation_id="conv",
+        language="ro",
+    )
+
+
+def test_shadow_disabled_by_default(monkeypatch):
+    from src.agent.planner import _match_gate_shadow
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "match_gate_shadow_enabled", False)
+    ctx = _ctx()
+    _match_gate_shadow(ctx, [_p("a", price=50, fragrance_free=True)], "fond fără parfum sub 80")
+    assert ctx.match_set is None
+    assert not [e for e in ctx.events if e.type.startswith("match_gate")]
+
+
+def test_shadow_enabled_computes_matchset_no_pii(monkeypatch):
+    from src.agent.planner import _match_gate_shadow
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "match_gate_shadow_enabled", True)
+    ctx = _ctx()
+    _match_gate_shadow(ctx, [_p("a", price=50, fragrance_free=True)], "fond fără parfum sub 80")
+    assert ctx.match_set is not None  # MatchSet calculat în shadow
+    evs = [e for e in ctx.events if e.type == "match_gate_shadow"]
+    assert len(evs) == 1
+    blob = repr(evs[0].properties)
+    assert "fond" not in blob and "parfum" not in blob  # zero text brut/PII, doar numere+clase
+    assert evs[0].properties["n_candidates"] == 1

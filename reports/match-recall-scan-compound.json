@@ -1,0 +1,92 @@
+{
+  "_meta": {
+    "generated": "NX-187 recall vs scan exhaustiv (hard constraints pe TOT catalogul vs pool)",
+    "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+    "date": "2026-07-24",
+    "max_search_pool": 24,
+    "note": "relevant_exact = produse JUDECATE relevante (adevăr NX-202) care satisfac hard constraints (clasa exact). missed_by_pool = câte lipsesc din primii MAX_SEARCH_POOL serviți. pool_recall = 1 - missed/relevant_exact. exact_scan_catalog = câte hard-satisfac în tot scope-ul (informativ). facet_miss = în câte query-uri fațeta e implicată în miss."
+  },
+  "summary": {
+    "queries": 6,
+    "total_relevant_exact": 12,
+    "total_missed_by_pool": 8,
+    "pool_recall": 0.333,
+    "facet_miss": {
+      "price": 2,
+      "fragrance_free": 1
+    }
+  },
+  "per_query": [
+    {
+      "id": "compound-fond-mat-gras-buget-fara-parfum",
+      "hard_facets": [
+        "category",
+        "fragrance_free",
+        "price"
+      ],
+      "scope_size": 6,
+      "exact_scan_catalog": 5,
+      "relevant_exact": 1,
+      "relevant_in_pool": 1,
+      "missed_by_pool": 0
+    },
+    {
+      "id": "compound-antilucire-rezistent-caldura",
+      "hard_facets": [
+        "price"
+      ],
+      "scope_size": 300,
+      "exact_scan_catalog": 289,
+      "relevant_exact": 3,
+      "relevant_in_pool": 0,
+      "missed_by_pool": 3
+    },
+    {
+      "id": "compound-vitc-ten-reactiv-buget",
+      "hard_facets": [
+        "category",
+        "key_ingredient",
+        "price"
+      ],
+      "scope_size": 15,
+      "exact_scan_catalog": 0,
+      "relevant_exact": 0,
+      "relevant_in_pool": 0,
+      "missed_by_pool": 0
+    },
+    {
+      "id": "compound-machiaj-nunta-ten-mixt-buget",
+      "hard_facets": [
+        "price"
+      ],
+      "scope_size": 300,
+      "exact_scan_catalog": 300,
+      "relevant_exact": 3,
+      "relevant_in_pool": 2,
+      "missed_by_pool": 1
+    },
+    {
+      "id": "compound-cel-mai-ieftin-niacinamida-calitate",
+      "hard_facets": [
+        "category",
+        "key_ingredient"
+      ],
+      "scope_size": 15,
+      "exact_scan_catalog": 7,
+      "relevant_exact": 1,
+      "relevant_in_pool": 1,
+      "missed_by_pool": 0
+    },
+    {
+      "id": "compound-fara-parfum-rutina-fata",
+      "hard_facets": [
+        "fragrance_free"
+      ],
+      "scope_size": 300,
+      "exact_scan_catalog": 70,
+      "relevant_exact": 4,
+      "relevant_in_pool": 0,
+      "missed_by_pool": 4
+    }
+  ]
+}

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.config import get_settings
+from src.domain.facets import build_facets
 from src.domain.normalize import normalize
 from src.domain.pack import DomainPack, FacetSpec
 
@@ -203,6 +204,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         searchable_facets=tuple(
             k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
         ),
+        facets=build_facets(merged.get("facets")),  # NX-186: registru tipizat (fail-closed)
         response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
     )
 

@@ -14,6 +14,7 @@ rămâne la `validator`/`finalize` (P2); planner-ul DOAR decide, `render` (faza 
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -28,6 +29,8 @@ from src.agent.fallbacks import (
     _thin_path_chips,
 )
 from src.agent.finalize import _finalize_rich
+from src.agent.match_gate import build_match_set
+from src.agent.query_rewrite import build_query_spec
 from src.agent.validator import _valid
 from src.config import get_settings
 from src.db.queries.catalog import (
@@ -44,6 +47,44 @@ if TYPE_CHECKING:
     from src.agent.prompt_builder import PromptInputs
     from src.agent.tool_executor import ToolRun
     from src.worker.runner import PipelineDeps
+
+log = logging.getLogger(__name__)
+
+
+def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: str) -> None:
+    """NX-187: MatchSet în SHADOW post-retrieval (kill-switch `match_gate_shadow_enabled`, default
+    OFF). Construiește constrângerile din query (contractul NX-208) + registrul tipizat (NX-186),
+    clasează candidații și emite telemetrie FĂRĂ PII (clase + numere + status per fațetă). NU atinge
+    `reply` (shadow). Best-effort — orice eroare e înghițită (nu blochează turul, P6)."""
+    if not get_settings().match_gate_shadow_enabled:
+        return
+    dp = ctx.business.domain_pack
+    facets = {f.key: f for f in (dp.facets if dp else ())}
+    if not facets:
+        return
+    try:
+        spec = build_query_spec(query or "", dp, locale=ctx.language)
+        ms = build_match_set(products, spec.constraints, facets)
+        ctx.match_set = ms
+        ctx.emit(
+            "match_gate_shadow",
+            n_candidates=len(products),
+            n_exact=len(ms.exact),
+            n_alternative=len(ms.alternatives),
+            n_rejected=len(ms.rejected),
+            n_hard=sum(1 for c in spec.constraints if c.strength == "hard"),
+        )
+        for r in ms.coverage:  # distribuție per fațetă hard — cheie canonică + numere (fără PII)
+            ctx.emit(
+                "match_gate_outcome",
+                facet=r.facet,
+                match=r.match,
+                mismatch=r.mismatch,
+                unknown=r.unknown,
+            )
+    except Exception:  # noqa: BLE001 — shadow pur observabil; nu blochează niciodată turul
+        log.warning("match_gate_shadow failed", exc_info=True)
+
 
 # MOD SUPERLATIV (IZI): întrebare despre setul AFIȘAT de tip „care dintre ele e cea mai X". ÎNALTĂ
 # precizie (ca _COMPARE_RE): „care" + „cea/cel/cele mai" în aceeași frază, SAU „care dintre ele/
@@ -312,6 +353,7 @@ async def build_plan(
     # cardurile și `displayed_products`. Idempotent: pe un set deja gate-uit nu taie nimic.
     products = policy.gate(ctx, products, purpose="retrieval_final")[0]
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
+    _match_gate_shadow(ctx, products, query)  # NX-187: MatchSet shadow (OFF by default)
 
     return ResponsePlan(
         handled=False,
