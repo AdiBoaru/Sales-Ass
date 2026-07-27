@@ -7,8 +7,10 @@ class _Conn:
     def __init__(self, existing=None):
         self.existing = existing
         self.executed = []
+        self.fetched = None
 
-    async def fetch(self, _query, *_args):
+    async def fetch(self, query, *args):
+        self.fetched = (query, args)
         return [
             {
                 "id": "product-1",
@@ -41,10 +43,13 @@ async def test_shadow_embeddings_use_versioned_doc_type_and_tenant_scope():
     conn = _Conn()
     llm = _LLM()
 
-    done = await embed_shadow_pending(conn, llm)
+    done = await embed_shadow_pending(conn, llm, "business-1")
 
     assert done == 1
     assert llm.calls == [["Document pozitiv pentru cautare."]]
+    fetch_query, fetch_args = conn.fetched
+    assert "d.business_id = $2" in fetch_query
+    assert fetch_args == ("embed-model", "business-1", 1)
     query, args = conn.executed[0]
     assert "'search_document_v1'" in query
     assert "business_id" in query
@@ -56,7 +61,7 @@ async def test_shadow_embeddings_skip_document_with_matching_content_hash():
     conn = _Conn(existing=_content_hash(text, "embed-model"))
     llm = _LLM()
 
-    done = await embed_shadow_pending(conn, llm)
+    done = await embed_shadow_pending(conn, llm, "business-1")
 
     assert done == 0
     assert llm.calls == []

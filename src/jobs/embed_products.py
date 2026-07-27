@@ -132,7 +132,14 @@ async def embed_pending(conn, llm, *, force: bool = False, limit: int = 0) -> in
     return done
 
 
-async def embed_shadow_pending(conn, llm, *, force: bool = False, limit: int = 0) -> int:
+async def embed_shadow_pending(
+    conn,
+    llm,
+    business_id: str,
+    *,
+    force: bool = False,
+    limit: int = 0,
+) -> int:
     """Embed NX-207 search documents alongside the live product embeddings."""
     model = llm.model_embed
     rows = await conn.fetch(
@@ -147,10 +154,11 @@ async def embed_shadow_pending(conn, llm, *, force: bool = False, limit: int = 0
           and pe.business_id = d.business_id
           and pe.doc_type = 'search_document_v1'
           and pe.model = $1
-        where p.status = 'active' and d.document_version = $2
+        where p.status = 'active' and d.business_id = $2 and d.document_version = $3
         order by d.product_id
         """,
         model,
+        business_id,
         1,
     )
 
