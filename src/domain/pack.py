@@ -87,8 +87,10 @@ class DomainPack:
     # ale agentului (proză/order/rich), peste regulile dure de grounding și siguranță.
     # Gol → fără ghid de stil (byte-identic). Per-vertical (defaults JSON) + override per-tenant.
     response_style: dict[str, str] = field(default_factory=dict)
-    # NX-205: câmpurile OBLIGATORII per categorie (frunză + rădăcină, cumulate) — contractul de
-    # completitudine al catalogului. Erau hardcodate în `scripts/audit_catalog_v2.py`
+    # NX-205: câmpurile OBLIGATORII per categorie — contractul de completitudine al catalogului.
+    # Frunza BATE rădăcina (override, NU cumul — vezi `CategoryRequirements.required_for`): o
+    # categorie de ochi cere `key_benefit`, dar NU moștenește `finish`-ul rădăcinii `machiaj`.
+    # Erau hardcodate în `scripts/audit_catalog_v2.py`
     # (`REQUIRED_V3_BY_SLUG`/`_BY_ROOT`); acum sunt config per-vertical (P9), iar auditul le CITEȘTE
     # de aici. Gol → nicio cerință (verticalele fără contract de conținut rămân ca azi).
     required_attributes: CategoryRequirements = EMPTY_REQUIREMENTS

@@ -602,8 +602,25 @@ class VocabularyReport:
         return not self.problems and not self.unchecked
 
 
-_VOCAB_LIST_FIELDS = ("concerns", "suitable_for", "key_ingredients")
-_VOCAB_SCALAR_FIELDS = ("finish", "coverage", "texture", "routine_step")
+# Câmpurile de fapte care POT avea vocabular controlat. Listele și scalarii sunt separați doar
+# pentru că se iterează diferit — ambele familii se raportează la fel în `unchecked`.
+_VOCAB_LIST_FIELDS = (
+    "concerns",
+    "suitable_for",
+    "key_ingredients",
+    "free_of",
+    "differentiators",
+)
+_VOCAB_SCALAR_FIELDS = (
+    "finish",
+    "coverage",
+    "texture",
+    "routine_step",
+    "skin_type",
+    "hair_type",
+    "best_for",
+    "wear_time",
+)
 
 
 def validate_vocabulary(
@@ -613,7 +630,12 @@ def validate_vocabulary(
 
     Separat de validarea structurală din model: vocabularul e config per-vertical, deci nu are ce
     căuta într-un model Pydantic din cod. Câmpurile PREZENTE fără vocabular declarat se întorc în
-    `unchecked` — nu ca „ok"."""
+    `unchecked` — nu ca „ok".
+
+    Acoperirea e a TUTUROR câmpurilor de fapte care pot avea vocabular controlat, nu a unei
+    submulțimi: un câmp lăsat în afara listelor de mai jos ar fi devenit invizibil — nici în
+    `problems`, nici în `unchecked` — adică exact „nevalidat deghizat în valid" pe care raportul
+    ăsta există să-l prevină."""
     problems: list[str] = []
     unchecked: list[str] = []
     for field in _VOCAB_LIST_FIELDS + _VOCAB_SCALAR_FIELDS:
