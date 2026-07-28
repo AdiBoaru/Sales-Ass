@@ -94,6 +94,37 @@ async def test_blurb_absent_is_deleted_not_written_as_the_product_name():
 
 
 @pytest.mark.asyncio
+async def test_jsonb_columns_arrive_as_strings_and_must_be_decoded():
+    """Regresie, descoperită rulând pe un Postgres REAL: pool-ul nu înregistrează codec jsonb (doar
+    unul de `vector`), deci asyncpg întoarce `attributes`/`variants` ca STRING. Contractul le
+    respinge corect („așteptat obiect, primit str") și jobul crăpa pe PRIMUL produs — nu putea
+    procesa niciunul.
+
+    Testele nu-l puteau vedea pentru că dublura de conexiune întorcea dict-uri Python, adică
+    răspundea mai bine decât baza reală. De aceea rândul de aici e string, ca în producție."""
+    raw = _product()
+    raw["attributes"] = '{"concerns": ["oily"], "texture": "gel"}'
+    raw["variants"] = "[]"
+    conn = _Conn([raw])
+
+    artifacts = await plan_for_business(conn, "biz")
+
+    assert len(artifacts) == 1
+    assert "oily" in artifacts[0].positive_search_document
+    assert "gel" in artifacts[0].fts_document.b
+
+
+@pytest.mark.asyncio
+async def test_null_jsonb_becomes_empty_not_a_contract_error():
+    raw = _product()
+    raw["attributes"], raw["variants"] = None, None
+
+    artifacts = await plan_for_business(_Conn([raw]), "biz")
+
+    assert len(artifacts) == 1 and artifacts[0].positive_search_document
+
+
+@pytest.mark.asyncio
 async def test_plan_is_read_only_and_generates_artifacts():
     conn = _Conn([_product()])
     artifacts = await plan_for_business(conn, "biz")

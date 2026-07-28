@@ -12,6 +12,30 @@ from typing import Any
 from src.domain.search_documents import SearchArtifacts, build_search_artifacts
 
 
+def _decode_jsonb(row: Any) -> dict[str, Any]:
+    """`dict(row)` + decodare jsonb.
+
+    Fără asta, jobul nu putea procesa NICIUN produs: pool-ul nu înregistrează codec jsonb (doar
+    unul de `vector`, vezi `db/connection.py`), deci asyncpg întoarce `attributes` și `variants` ca
+    STRING. Contractul NX-205 le respinge corect („așteptat obiect, primit str") și
+    `build_search_artifacts` crapă pe primul produs.
+
+    Aceeași convenție ca `catalog.py::_row_to_product`, care o documentează explicit. Bug-ul a fost
+    invizibil pentru teste fiindcă dublura de conexiune întorcea dict-uri Python — un stub care
+    răspunde mai bine decât baza reală ascunde exact clasa asta de defect."""
+    out = dict(row)
+    for key, empty in (("attributes", {}), ("variants", [])):
+        value = out.get(key)
+        if isinstance(value, str):
+            try:
+                out[key] = json.loads(value)
+            except (ValueError, TypeError):
+                out[key] = empty
+        elif value is None:
+            out[key] = empty
+    return out
+
+
 async def load_active_products(conn: Any, business_id: str) -> list[dict[str, Any]]:
     """Încarcă numai produse ale tenantului.
 
@@ -38,7 +62,7 @@ async def load_active_products(conn: Any, business_id: str) -> list[dict[str, An
         """,
         business_id,
     )
-    return [dict(row) for row in rows]
+    return [_decode_jsonb(row) for row in rows]
 
 
 async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
