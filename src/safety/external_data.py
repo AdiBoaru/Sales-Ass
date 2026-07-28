@@ -1,4 +1,20 @@
-"""D14 — graniță fail-closed pentru text trimis către un serviciu extern."""
+"""D14 — graniță fail-closed pentru text trimis către un serviciu extern.
+
+Tiparele sunt împărțite în DOUĂ familii, pentru că nu au aceeași natură și nu au aceiași
+consumatori:
+
+- **IDENTIFICATORI** (`PII_PATTERNS`) — email, telefon, IBAN, card/CNP, adresă, nume declarat.
+  Sunt PII în sens strict: identifică o persoană. Orice text care îi conține e nepublicabil,
+  oriunde ar merge.
+- **SUBIECTE SENSIBILE** (`SENSITIVE_TOPIC_PATTERNS`) — date de sănătate. NU identifică pe nimeni;
+  sunt o categorie specială de date. Separate ca familie pentru că un consumator poate avea nevoie
+  să verifice doar identificatorii (ex. validarea qrels: „ten sensibil" e conținut legitim de
+  benchmark, un număr de telefon nu e).
+
+Un singur loc unde sunt definite: înainte existau două regex-uri de PII în branch
+(`src/evals/retrieval/validation.py` avea al doilea, deja divergent), adică două răspunsuri
+posibile la aceeași întrebare.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +37,25 @@ _HEALTH_RE = re.compile(
     r"astm|epilepsie|boala|afectiune|alergie (?:severa|medicala)|anemie|tiroida)\b"
 )
 
+#: Identifică o PERSOANĂ. Verificat de oricine exportă text în afara sistemului.
+PII_PATTERNS: tuple[re.Pattern[str], ...] = (
+    _EMAIL_RE,
+    _IBAN_RE,
+    _PHONE_RE,
+    _CARD_OR_CNP_RE,
+    _ADDRESS_RE,
+    _DECLARED_NAME_RE,
+)
+
+#: Categorie specială de date (sănătate). Nu identifică pe nimeni.
+SENSITIVE_TOPIC_PATTERNS: tuple[re.Pattern[str], ...] = (_HEALTH_RE,)
+
+
+def contains_pii(text: str) -> bool:
+    """True dacă textul conține un IDENTIFICATOR de persoană. Normalizează întâi (fără diacritice,
+    lower) — altfel „Bulevardul" și „bulevardul" ar fi întrebări diferite."""
+    return any(pattern.search(normalize(text)) for pattern in PII_PATTERNS)
+
 
 def external_query_text(normalized_query: str) -> str | None:
     """Întoarce singurul text de query permis către embedding/reranking extern.
@@ -33,13 +68,5 @@ def external_query_text(normalized_query: str) -> str | None:
     text = normalize(normalized_query).strip()
     if not text:
         return None
-    forbidden = (
-        _EMAIL_RE,
-        _IBAN_RE,
-        _PHONE_RE,
-        _CARD_OR_CNP_RE,
-        _ADDRESS_RE,
-        _DECLARED_NAME_RE,
-        _HEALTH_RE,
-    )
+    forbidden = (*PII_PATTERNS, *SENSITIVE_TOPIC_PATTERNS)
     return None if any(pattern.search(text) for pattern in forbidden) else text

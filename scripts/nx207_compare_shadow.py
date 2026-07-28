@@ -55,6 +55,9 @@ def _load_split(path: Path, split: Split, *, min_queries: int) -> QrelsSet:
         min_queries=min_queries,
         require_human_verified=True,
         require_real_per_category=True,
+        # Feliile de holdout trebuie să fie destul de mari ca să măsoare ceva: sub prag, un singur
+        # query greșit mișcă metrica cu zeci de puncte și „a trecut gate-ul" devine zgomot.
+        require_split_sizes=True,
     )
     if issues:
         raise ValueError("qrels nu trece gate-ul: " + "; ".join(issues))
