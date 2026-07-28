@@ -46,6 +46,10 @@ class SearchEntitiesResult:
     identifier_status: str | None
     evidence: tuple[EvidenceReference, ...]
     rerank_decision: RerankDecision | None = None
+    #: Ce NU a rulat și de ce — coduri fixe, fără query/PII. Un strat care cade tăcut e un strat
+    #: despre care nu afli niciodată că e mort: rezultatul arată la fel, doar mai slab. Aici
+    #: degradarea devine un fapt observabil, nu o absență.
+    degradations: tuple[str, ...] = ()
 
 
 def build_search_entities_result(
@@ -57,6 +61,7 @@ def build_search_entities_result(
     identifier_status: str | None = None,
     refinement_required: bool = False,
     rerank_decision: RerankDecision | None = None,
+    degradations: Sequence[str] = (),
 ) -> SearchEntitiesResult:
     """Împachetează candidații în ordinea retrievalului, fără enforcement sau reranking nou."""
     match_set: MatchSet = build_match_set(list(products), tuple(constraints), dict(facets_by_key))
@@ -95,4 +100,5 @@ def build_search_entities_result(
         identifier_status=identifier_status,
         evidence=tuple(evidence),
         rerank_decision=rerank_decision,
+        degradations=tuple(degradations),
     )

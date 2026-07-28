@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Mapping
 
 from src.agent.query_spec import RuntimeQuerySpec
@@ -20,15 +21,41 @@ from src.domain.search_entities import SearchEntitiesResult, build_search_entiti
 from src.safety.external_data import external_query_text
 from src.tools.reason_codes import annotate as annotate_reasons
 
+log = logging.getLogger(__name__)
+
+#: Câţi candidaţi lexicali cerem înainte de fuziune/rerank. Hidratarea rămâne plafonată la
+#: `limit` (contractul `get_products_by_ids`, care apără bugetul de context al agentului), dar
+#: `search_shadow_fts` întoarce DOAR id-uri — deci un bazin mai mare e aproape gratis şi e singura
+#: cale prin care decizia de rerank vede o listă reală de candidaţi. Cu bazinul egal cu `limit`,
+#: „rerank" ar fi însemnat reordonarea a şase elemente deja selectate.
+FTS_POOL = 30
+
 
 async def _load_shadow_semantic_products(
-    conn: Any, business_id: str, query_text: str | None, llm: Any | None, limit: int
+    conn: Any,
+    business_id: str,
+    query_text: str | None,
+    llm: Any | None,
+    limit: int,
+    degradations: list[str],
 ) -> list[dict]:
-    """Calea semantică e degradabilă: orice eșec lasă FTS-ul disponibil."""
-    if llm is None or not query_text:
+    """Calea semantică e degradabilă: orice eşec lasă FTS-ul disponibil.
+
+    Degradarea se ÎNREGISTREAZĂ. Înainte, un `except` fără log întorcea `[]`, iar rezultatul arăta
+    identic cu „n-a găsit nimic semantic" — deci un strat mort era indistinct de unul care
+    funcţionează şi nu are ce returna. Exact aşa au stat straturile gratuite moarte în producţie.
+    """
+    if llm is None:
+        degradations.append("semantic_skipped_no_llm")
+        return []
+    if not query_text:
+        # `external_query_text` a întors None → textul conţine un identificator de persoană.
+        # Codul e fix şi nu conţine nimic din query (P12).
+        degradations.append("semantic_blocked_pii")
         return []
     try:
         if not await has_embeddings(conn, business_id, embedding_doc_type="search_document_v1"):
+            degradations.append("semantic_skipped_no_shadow_embeddings")
             return []
         query_embedding = (await llm.embed([query_text]))[0]
         return await search_products_semantic(
@@ -38,7 +65,9 @@ async def _load_shadow_semantic_products(
             pool=min(max(limit, 1), 6),
             embedding_doc_type="search_document_v1",
         )
-    except Exception:  # noqa: BLE001 — FTS shadow rămâne disponibil la eșec semantic
+    except Exception:  # noqa: BLE001 — FTS shadow rămâne disponibil la eşec semantic
+        log.warning("search_entities_shadow: calea semantică a eşuat (fallback FTS)", exc_info=True)
+        degradations.append("semantic_failed")
         return []
 
 
@@ -54,8 +83,8 @@ async def search_entities_shadow(
 ) -> SearchEntitiesResult:
     """Rulează FTS shadow → hidratare catalog/evidence → Match Gate, fără side effects.
 
-    Este o funcție internă pentru benchmark/shadow. Nu are decoratorul `register`, nu schimbă
-    `TurnContext` și nu poate modifica răspunsul live înainte de gate-ul NX-209.
+    Este o funcţie internă pentru benchmark/shadow. Nu are decoratorul `register`, nu schimbă
+    `TurnContext` şi nu poate modifica răspunsul live înainte de gate-ul NX-209.
     """
     query_text = query_spec.search_text or query_spec.raw_query
     identifier = resolve_identifier(query_text, await load_identifier_candidates(conn, business_id))
@@ -66,30 +95,40 @@ async def search_entities_shadow(
         and constraint.op in {"eq", "contains"}
         and isinstance(constraint.value, str)
     ]
+
+    # Iniţializate explicit: înainte, `ids` şi `semantic_products` existau doar pe câte o ramură şi
+    # se salvau reciproc prin complementaritatea a două condiţii. Corect azi, `NameError` în ziua
+    # în care apare un al patrulea status.
+    ids: list[str] = []
+    semantic_products: list[dict] = []
+    degradations: list[str] = []
+
     if identifier.status == "resolve":
+        # Identificator exact: nici FTS, nici semantic, nici rerank. Cine cere un SKU anume nu vrea
+        # „ceva asemănător".
         ids = [identifier.product_id] if identifier.product_id else []
     elif identifier.status == "clarify":
         ids = list(identifier.candidate_ids)
     else:
         ids, semantic_products = await asyncio.gather(
-            search_shadow_fts(
-                conn,
-                business_id,
-                query_text,
-                locale=locale,
-                limit=max(limit, 1),
-            ),
+            search_shadow_fts(conn, business_id, query_text, locale=locale, limit=FTS_POOL),
             _load_shadow_semantic_products(
                 conn,
                 business_id,
                 external_query_text(query_spec.normalized_query),
                 llm,
                 limit,
+                degradations,
             ),
         )
-    if identifier.status != "not_found":
-        semantic_products: list[dict] = []
-    products = await get_products_by_ids(conn, business_id, ids, limit=min(max(limit, 1), 6))
+
+    # `respect_content_status=True`: asta E o cale de DISCOVERY (serveşte produse nevăzute), iar
+    # toate celelalte căi de discovery filtrează pe `published` (NX-171c). Fără el, shadow-ul putea
+    # scoate la suprafaţă produse `draft` — şi ar fi comparat, în benchmark, un univers de candidaţi
+    # mai mare decât cel al căii live.
+    products = await get_products_by_ids(
+        conn, business_id, ids, limit=min(max(limit, 1), 6), respect_content_status=True
+    )
 
     if semantic_products:
         products = fuse_candidates(products, semantic_products, sort_mode="relevance")[:limit]
@@ -111,4 +150,5 @@ async def search_entities_shadow(
         identifier_status=identifier.status,
         refinement_required=identifier.status == "clarify",
         rerank_decision=rerank_decision,
+        degradations=degradations,
     )

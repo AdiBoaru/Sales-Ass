@@ -35,6 +35,18 @@ def _norm(value: str) -> str:
     return normalize(value).replace(" ", "")
 
 
+def _best_ratio(query_normalized: str, candidate: IdentifierCandidate) -> float:
+    """Cel mai bun scor peste nume + SKU-uri + aliasuri aprobate.
+
+    `max` şi nu media: identificatorii sunt alternative pentru acelaşi produs, nu dovezi care se
+    cumulează. Un SKU potrivit perfect nu trebuie diluat de un nume lung care nu seamănă."""
+    return max(
+        float(ratio(query_normalized, _norm(value)))
+        for value in (candidate.name, *candidate.skus, *candidate.aliases)
+        if value
+    )
+
+
 def resolve_identifier(
     query: str, candidates: Sequence[IdentifierCandidate]
 ) -> IdentifierResolution:
@@ -56,11 +68,12 @@ def resolve_identifier(
             "clarify", None, 100.0, tuple(item.product_id for item in exact)
         )
 
+    # Fuzzy pe TOATE identificatorii, nu doar pe nume. Înainte se scora exclusiv `candidate.name`,
+    # deci un SKU tastat greşit („ABC-1234" → „ABC-1235") sau un alias aproximat nu se potrivea
+    # niciodată — într-un modul al cărui scop declarat e rezolvarea de nume/SKU/alias. Potrivirea
+    # exactă le acoperea, fuzzy-ul nu; adică exact cazul pentru care există fuzzy (tastare umană).
     scored = sorted(
-        (
-            (float(ratio(query_normalized, _norm(candidate.name))), candidate)
-            for candidate in candidates
-        ),
+        ((_best_ratio(query_normalized, candidate), candidate) for candidate in candidates),
         key=lambda item: (-item[0], item[1].product_id),
     )
     if not scored or scored[0][0] < _CLARIFY_THRESHOLD:

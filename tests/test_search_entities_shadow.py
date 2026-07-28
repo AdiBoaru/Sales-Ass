@@ -335,3 +335,133 @@ async def test_shadow_skips_external_semantic_export_for_pii_like_query(monkeypa
     )
 
     assert [candidate.product_id for candidate in result.candidates] == ["p-1"]
+
+
+# --- NX-209: degradarea nu mai e tăcută -------------------------------------
+
+
+def _spec(raw="ser pentru ten gras", normalized=None, search_text=None):
+    return RuntimeQuerySpec(
+        raw_query=raw,
+        normalized_query=normalized if normalized is not None else raw,
+        search_text=search_text if search_text is not None else raw,
+        constraints=(),
+    )
+
+
+async def _run(monkeypatch, *, llm=None, spec=None, products=None, fts_ids=("p-1",), **over):
+    async def fake_fts(conn, business_id, text, **kwargs):
+        over.setdefault("fts_kwargs", kwargs)
+        return list(fts_ids)
+
+    async def fake_products(conn, business_id, ids, **kwargs):
+        over["products_kwargs"] = kwargs
+        return products if products is not None else [{"id": i, "attributes": {}} for i in ids]
+
+    async def fake_evidence(*_a, **_k):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_evidence)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+    result = await shadow.search_entities_shadow(
+        object(), "business-1", spec or _spec(), {}, llm=llm, locale="ro"
+    )
+    return result, over
+
+
+@pytest.mark.asyncio
+async def test_pii_query_reports_the_degradation_instead_of_failing_silently(monkeypatch):
+    """Un strat care cade tăcut e un strat despre care nu afli niciodată că e mort: rezultatul
+    arată identic cu «n-a găsit nimic», doar că e mai slab."""
+
+    class _Llm:
+        async def embed(self, _texts):
+            raise AssertionError("nu trimitem text cu identificator de persoană în afară")
+
+    spec = _spec(raw="ma numesc ion popescu, caut un ser", search_text="ser")
+    result, _ = await _run(monkeypatch, llm=_Llm(), spec=spec)
+
+    assert "semantic_blocked_pii" in result.degradations
+    assert all("ion" not in code and "popescu" not in code for code in result.degradations)
+
+
+@pytest.mark.asyncio
+async def test_semantic_failure_is_recorded_not_swallowed(monkeypatch):
+    class _Llm:
+        async def embed(self, _texts):
+            raise RuntimeError("provider indisponibil")
+
+    async def yes(*_a, **_k):
+        return True
+
+    monkeypatch.setattr(shadow, "has_embeddings", yes)
+    result, _ = await _run(monkeypatch, llm=_Llm())
+
+    assert "semantic_failed" in result.degradations
+    assert result.candidates  # FTS rămâne disponibil — degradare, nu tăcere
+
+
+@pytest.mark.asyncio
+async def test_missing_shadow_embeddings_is_a_named_degradation(monkeypatch):
+    class _Llm:
+        async def embed(self, _texts):
+            return [[0.0]]
+
+    async def no(*_a, **_k):
+        return False
+
+    monkeypatch.setattr(shadow, "has_embeddings", no)
+    result, _ = await _run(monkeypatch, llm=_Llm())
+
+    assert "semantic_skipped_no_shadow_embeddings" in result.degradations
+
+
+@pytest.mark.asyncio
+async def test_no_llm_is_a_named_degradation(monkeypatch):
+    result, _ = await _run(monkeypatch)
+
+    assert result.degradations == ("semantic_skipped_no_llm",)
+
+
+@pytest.mark.asyncio
+async def test_discovery_path_filters_unpublished_products(monkeypatch):
+    """E o cale de DISCOVERY (servește produse nevăzute), iar toate celelalte filtrează pe
+    `published` (NX-171c). Fără filtru, shadow-ul ar fi comparat în benchmark un univers de
+    candidați mai mare decât cel al căii live."""
+    _, over = await _run(monkeypatch)
+
+    assert over["products_kwargs"]["respect_content_status"] is True
+
+
+@pytest.mark.asyncio
+async def test_lexical_pool_is_larger_than_the_hydration_limit(monkeypatch):
+    """`search_shadow_fts` întoarce doar id-uri, deci un bazin mai mare e aproape gratis — și e
+    singura cale prin care decizia de rerank vede o listă reală de candidați."""
+    captured = {}
+
+    async def fake_fts(conn, business_id, text, **kwargs):
+        captured.update(kwargs)
+        return ["p-1"]
+
+    async def fake_products(conn, business_id, ids, **kwargs):
+        return [{"id": i, "attributes": {}} for i in ids]
+
+    async def fake_evidence(*_a, **_k):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_evidence)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+
+    await shadow.search_entities_shadow(object(), "b", _spec(), {}, limit=6)
+
+    assert captured["limit"] == shadow.FTS_POOL > 6
