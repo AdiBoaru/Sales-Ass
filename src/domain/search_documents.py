@@ -3,6 +3,12 @@
 Acest modul nu citește/scrie DB și nu înlocuiește `ai_summary`. Construiește, din facts validate,
 documentul pozitiv, secțiunile FTS ponderabile, evidence și blurb-ul de card. Persistența și
 embeddingurile versionate se leagă ulterior peste aceste ieșiri pure.
+
+⚠ **RO-ONLY.** Funcția primește `locale` și îl pune pe artefacte, dar frazele pe care le COMPUNE
+sunt în română, hardcodat („fără X adăugat", „Nu este recomandat pentru …"). Cu `locale='en'` ar
+produce, tăcut, documente și evidence în română, etichetate ca engleză — un artefact greșit care
+arată corect. Pilotul e RO-only prin decizie explicită, deci e acceptabil AZI; înainte de al doilea
+locale, frazele astea trebuie să iasă din cod (per-locale, ca `_LABELS` din `worker/badges.py`).
 """
 
 from __future__ import annotations
@@ -39,7 +45,9 @@ class SearchArtifacts:
     positive_search_document: str
     fts_document: FtsDocument
     evidence_chunks: tuple[EvidenceChunk, ...]
-    card_blurb: str
+    # `None` = produsul n-are din ce compune un blurb util. Distinct de „blurb gol": vezi
+    # `build_search_artifacts`.
+    card_blurb: str | None
     content_hash: str
 
 
@@ -135,7 +143,10 @@ def build_search_artifacts(
             )
         )
 
-    card_blurb = short_description or facts.key_benefit or facts.best_for or name
+    # Fără cădere pe `name`: un blurb care e chiar numele produsului trece de `check length > 0` din
+    # 036 și arată, pentru orice consumator, exact ca un blurb bun — dar nu spune nimic în plus față
+    # de titlul de lângă el. `None` face golul VIZIBIL (poarta îl poate număra); un rând inutil nu.
+    card_blurb = short_description or facts.key_benefit or facts.best_for or None
     payload = {
         "document_version": DOCUMENT_VERSION,
         "schema_version": CONTRACT_SCHEMA_VERSION,

@@ -18,20 +18,25 @@ async def search_shadow_fts(
     document_version: int = 1,
     limit: int = 50,
 ) -> list[str]:
-    """Product IDs ordonate FTS; tenant/locale/document_version sunt toate predicate explicite."""
+    """Product IDs ordonate FTS; tenant/locale/document_version sunt toate predicate explicite.
+
+    Normalizarea e `'simple'` + `ro_unaccent` — ACEEAȘI ca la indexare (`build_search_documents`) și
+    ca pe calea lexicală live. 033 e explicit pe de ce: `unaccent()` nu e instalată în baza asta, și
+    normalizarea trebuie să fie identică pe ambele capete, altfel potrivirea pur și simplu nu se
+    produce."""
     if not query_text.strip():
         return []
     rows = await conn.fetch(
         """
         select d.product_id::text as product_id,
-               ts_rank_cd(d.fts_document, websearch_to_tsquery('romanian', unaccent($2))) as rank
+               ts_rank_cd(d.fts_document, websearch_to_tsquery('simple', ro_unaccent($2))) as rank
         from product_search_documents d
         join products p on p.id = d.product_id and p.business_id = d.business_id
         where d.business_id = $1
           and d.locale = $3
           and d.document_version = $4
           and p.status = 'active'
-          and d.fts_document @@ websearch_to_tsquery('romanian', unaccent($2))
+          and d.fts_document @@ websearch_to_tsquery('simple', ro_unaccent($2))
         order by rank desc, d.product_id
         limit $5
         """,

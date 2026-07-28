@@ -45,7 +45,18 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
     """Upsert idempotent al documentului/blurb-ului și refresh sigur al evidence generat.
 
     Toate operațiile filtrează `business_id`; writerul trebuie apelat prin `admin_conn`, niciodată
-    din worker. `fts_document` este construit cu romanian+unaccent în DB, păstrând ponderile A/B/C.
+    din worker.
+
+    `fts_document` folosește **`to_tsvector('simple', ro_unaccent(...))`**, identic cu
+    `products.search_tsv` (033) și cu calea lexicală live (`search_products_lexical`). Două motive,
+    ambele descoperite la verificare:
+      • `unaccent()` NU EXISTĂ în baza asta — 033 spune explicit că extensia e disponibilă dar
+        neinstalată, și de aceea proiectul are `ro_unaccent()` scrisă cu `translate` (imutabilă,
+        deci utilizabilă într-o coloană generată). Un writer care apelează `unaccent()` nu rulează.
+      • configurația `'romanian'` ar fi dat alt stemmer decât indexul live, pe text deja lipsit de
+        diacritice — adică benchmarkul NX-203 ar fi măsurat diferența de NORMALIZARE, nu documentul
+        nou. Un experiment pe stemmer se face deliberat și separat, nu ca efect secundar.
+    Ponderile A/B/C se păstrează.
     """
     fts = artifacts.fts_document
     await conn.execute(
@@ -54,9 +65,9 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
           (business_id, product_id, locale, document_version, schema_version,
            positive_search_document, fts_document, content_hash)
         values ($1, $2::uuid, $3, $4, $5, $6,
-          setweight(to_tsvector('romanian', unaccent($7)), 'A') ||
-          setweight(to_tsvector('romanian', unaccent($8)), 'B') ||
-          setweight(to_tsvector('romanian', unaccent($9)), 'C'), $10)
+          setweight(to_tsvector('simple', ro_unaccent($7)), 'A') ||
+          setweight(to_tsvector('simple', ro_unaccent($8)), 'B') ||
+          setweight(to_tsvector('simple', ro_unaccent($9)), 'C'), $10)
         on conflict (business_id, product_id, locale, document_version) do update set
           schema_version = excluded.schema_version,
           positive_search_document = excluded.positive_search_document,
@@ -76,46 +87,68 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
         " ".join(fts.c),
         artifacts.content_hash,
     )
-    await conn.execute(
-        """
-        insert into product_card_blurbs
-          (business_id, product_id, locale, document_version, schema_version, text, content_hash)
-        values ($1, $2::uuid, $3, $4, $5, $6, $7)
-        on conflict (business_id, product_id, locale, document_version) do update set
-          schema_version = excluded.schema_version, text = excluded.text,
-          content_hash = excluded.content_hash, updated_at = now()
-        where product_card_blurbs.content_hash is distinct from excluded.content_hash
-        """,
-        artifacts.business_id,
-        artifacts.product_id,
-        artifacts.locale,
-        artifacts.document_version,
-        artifacts.schema_version,
-        artifacts.card_blurb,
-        artifacts.content_hash,
-    )
-    await conn.execute(
-        """delete from product_evidence_chunks where business_id=$1 and product_id=$2::uuid
-           and locale=$3 and source in ('catalog.shortDescription', 'catalog.description',
-           'catalog.not_recommended_for')""",
-        artifacts.business_id,
-        artifacts.product_id,
-        artifacts.locale,
-    )
-    for chunk in artifacts.evidence_chunks:
+    # Blurb ABSENT ≠ blurb gol: dacă produsul n-are din ce compune un blurb util, nu scriem un rând
+    # care ar trece `check length > 0` fiind doar numele produsului. Un rând inutil arată la fel ca
+    # unul bun pentru orice consumator; absența se vede.
+    if artifacts.card_blurb:
         await conn.execute(
-            """insert into product_evidence_chunks
-              (business_id, product_id, role, text, source, locale, schema_version, content_hash)
-              values ($1, $2::uuid, $3, $4, $5, $6, $7, $8)""",
-            chunk.business_id,
-            chunk.product_id,
-            chunk.role,
-            chunk.text,
-            chunk.source,
-            chunk.locale,
-            chunk.schema_version,
-            json.dumps(chunk.model_dump(), ensure_ascii=False, sort_keys=True),
+            """
+            insert into product_card_blurbs
+              (business_id, product_id, locale, document_version, schema_version, text,
+               content_hash)
+            values ($1, $2::uuid, $3, $4, $5, $6, $7)
+            on conflict (business_id, product_id, locale, document_version) do update set
+              schema_version = excluded.schema_version, text = excluded.text,
+              content_hash = excluded.content_hash, updated_at = now()
+            where product_card_blurbs.content_hash is distinct from excluded.content_hash
+            """,
+            artifacts.business_id,
+            artifacts.product_id,
+            artifacts.locale,
+            artifacts.document_version,
+            artifacts.schema_version,
+            artifacts.card_blurb,
+            artifacts.content_hash,
         )
+    else:
+        await conn.execute(
+            """delete from product_card_blurbs where business_id=$1 and product_id=$2::uuid
+               and locale=$3 and document_version=$4""",
+            artifacts.business_id,
+            artifacts.product_id,
+            artifacts.locale,
+            artifacts.document_version,
+        )
+
+    # delete + insert ÎNTR-O SINGURĂ tranzacție: fără ea, o eroare între cele două lăsa produsul
+    # cu evidence ȘTERS și nescris la loc — pierdere tăcută de date, exact în stratul care există
+    # ca să fie citabil. `on conflict do nothing` ține pasul idempotent chiar dacă două fragmente
+    # ajung la același (rol, locale, hash).
+    async with conn.transaction():
+        await conn.execute(
+            """delete from product_evidence_chunks where business_id=$1 and product_id=$2::uuid
+               and locale=$3 and source in ('catalog.shortDescription', 'catalog.description',
+               'catalog.not_recommended_for')""",
+            artifacts.business_id,
+            artifacts.product_id,
+            artifacts.locale,
+        )
+        for chunk in artifacts.evidence_chunks:
+            await conn.execute(
+                """insert into product_evidence_chunks
+                  (business_id, product_id, role, text, source, locale, schema_version,
+                   content_hash)
+                  values ($1, $2::uuid, $3, $4, $5, $6, $7, $8)
+                  on conflict (business_id, product_id, role, locale, content_hash) do nothing""",
+                chunk.business_id,
+                chunk.product_id,
+                chunk.role,
+                chunk.text,
+                chunk.source,
+                chunk.locale,
+                chunk.schema_version,
+                json.dumps(chunk.model_dump(), ensure_ascii=False, sort_keys=True),
+            )
 
 
 async def plan_for_business(
