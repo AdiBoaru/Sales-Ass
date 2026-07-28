@@ -16478,8 +16478,6 @@
           "ferment de orez/galactomyces",
           "ceai verde"
         ],
-        "Lactobacillus/ Ferment de orez": "Bogat in proteine, vitamine, minerale si aminoacizi, care ajuta la hranirea pielii terne, imbunatateste textura pielii si ofera un tonus neted si uniform.",
-        "Extract de radacina de Morus Alba": "Imbunatateste continutul de hidratare, revitalizeaza straturile exterioare ale suprafetei pielii.",
         "concerns": [
           "hydration",
           "dry",
@@ -16545,7 +16543,17 @@
             "verified_at": "2026-07-16"
           }
         ],
-        "best_for": "ten deshidratat și uscat și sensibil"
+        "best_for": "ten deshidratat și uscat și sensibil",
+        "ingredient_benefits": [
+          {
+            "ingredient": "Extract de radacina de Morus Alba",
+            "benefit": "Imbunatateste continutul de hidratare, revitalizeaza straturile exterioare ale suprafetei pielii."
+          },
+          {
+            "ingredient": "Lactobacillus/ Ferment de orez",
+            "benefit": "Bogat in proteine, vitamine, minerale si aminoacizi, care ajuta la hranirea pielii terne, imbunatateste textura pielii si ofera un tonus neted si uniform."
+          }
+        ]
       },
       "variants": [
         {
@@ -17419,7 +17427,6 @@
         "key_ingredients": [
           "vitamina E"
         ],
-        "Fermenti probiotici si extract de orez": "Ingrediente care sustin o bariera protectoare sanatoasa si microbiomul pielii, reduc roseata si diminueaza inflamatia.",
         "concerns": [
           "hydration",
           "dry",
@@ -17463,7 +17470,13 @@
             "verified_at": "2026-07-16"
           }
         ],
-        "best_for": "ten deshidratat și uscat și sensibil"
+        "best_for": "ten deshidratat și uscat și sensibil",
+        "ingredient_benefits": [
+          {
+            "ingredient": "Fermenti probiotici si extract de orez",
+            "benefit": "Ingrediente care sustin o bariera protectoare sanatoasa si microbiomul pielii, reduc roseata si diminueaza inflamatia."
+          }
+        ]
       },
       "variants": [
         {
@@ -18395,10 +18408,6 @@
         "key_ingredients": [
           "vitamina E"
         ],
-        "Curatare profunda": "Uleiul de soia dizolva delicat murdaria si machiajul acumulat pe piele.",
-        "Ulei de soia (50%)": "Bogat in acizi grasi esentiali, curata porii fara a-i bloca si netezeste pielea.",
-        "Tehnologie micelara": "Micelii compuse din apa si ulei atrag si elimina impuritatile, oferind totodata hidratare in profunzime.",
-        "Ulei de seminte de ginseng (0,1%)": "Protejeaza pielea de factorii externi si ofera un parfum calmant, transformand curatarea intr-un moment de relaxare.",
         "concerns": [
           "dry",
           "sensitive",
@@ -18443,7 +18452,25 @@
             "verified_at": "2026-07-16"
           }
         ],
-        "best_for": "ten uscat și sensibil și deshidratat"
+        "best_for": "ten uscat și sensibil și deshidratat",
+        "ingredient_benefits": [
+          {
+            "ingredient": "Curatare profunda",
+            "benefit": "Uleiul de soia dizolva delicat murdaria si machiajul acumulat pe piele."
+          },
+          {
+            "ingredient": "Tehnologie micelara",
+            "benefit": "Micelii compuse din apa si ulei atrag si elimina impuritatile, oferind totodata hidratare in profunzime."
+          },
+          {
+            "ingredient": "Ulei de seminte de ginseng (0,1%)",
+            "benefit": "Protejeaza pielea de factorii externi si ofera un parfum calmant, transformand curatarea intr-un moment de relaxare."
+          },
+          {
+            "ingredient": "Ulei de soia (50%)",
+            "benefit": "Bogat in acizi grasi esentiali, curata porii fara a-i bloca si netezeste pielea."
+          }
+        ]
       },
       "variants": [
         {

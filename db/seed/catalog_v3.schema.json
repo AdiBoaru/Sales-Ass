@@ -151,6 +151,19 @@
         "usage": { "$ref": "#/$defs/usage" },
         "routine_step": { "$ref": "#/$defs/routineStep" },
         "key_ingredients": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ingredient_benefits": {
+          "type": "array",
+          "description": "NX-206: ce face FIECARE ingredient, ca pereche structurată. Textul ăsta ajungea în catalogul demo ca perechi cheie→descriere direct în `attributes` (chei de tipul «Ulei de soia (50%)») — conținut real, dar sub o cheie pe care nicio interogare nu o caută. Structurat, devine citabil per ingredient (EvidenceChunk role='ingredient', NX-207).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ingredient": { "type": "string", "minLength": 1 },
+              "benefit": { "type": "string", "minLength": 1 }
+            },
+            "required": ["ingredient", "benefit"],
+            "additionalProperties": false
+          }
+        },
         "key_benefit": { "type": "string", "minLength": 1 },
         "best_for": { "type": "string", "minLength": 1 },
         "differentiators": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },

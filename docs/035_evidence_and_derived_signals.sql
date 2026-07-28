@@ -68,6 +68,14 @@ create index if not exists product_evidence_chunks_product_idx
 
 -- ---------------------------------------------------------------------------
 -- Derived signals: ce am DEDUS, cu din ce și după ce regulă.
+--
+-- ⚠ STARE (NX-206): tabelul NU ARE WRITER și NU ARE CITITOR. Schema există, codul nu.
+--   Primul candidat evident — badge-urile — a fost DECIS altfel: proprietarul lor e RUNTIME-ul
+--   (`src/worker/badges.py` le derivă la afișare din rating/reducere, cu praguri per-vertical din
+--   `DomainPack.badge_rules`). A le persista și aici ar fi creat al doilea proprietar al aceleiași
+--   noțiuni — exact ce interzice P3 („un singur proprietar per câmp").
+--   Tabelul rămâne pentru semnalele derivate care VOR avea un consumator real; până atunci e
+--   schemă pregătită, nu funcționalitate livrată. Nu-l raporta ca implementat.
 -- ---------------------------------------------------------------------------
 create table if not exists product_derived_signals (
   id             uuid primary key default gen_random_uuid(),

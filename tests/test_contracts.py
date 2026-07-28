@@ -26,6 +26,7 @@ from src.domain.contracts import (
     ContractError,
     DerivedSignal,
     EvidenceChunk,
+    IngredientBenefit,
     LiveFacts,
     NotRecommendedFor,
     ProductFacts,
@@ -354,13 +355,15 @@ def test_parses_every_demo_product():
     assert any(f.net_content for f, _ in parsed) and any(f.claim_provenance for f, _ in parsed)
 
 
-def test_demo_catalog_is_contract_clean_and_badges_await_classification():
-    """După separarea D5, catalogul demo e CURAT la contract (300/300, zero probleme) — golul real
-    nu dispare, își schimbă natura: 195 produse au badge-uri care așteaptă clasificarea în
-    `DerivedSignal{rule_id}` (derivate din `badge_rules`) sau în `claim_provenance` (certificări).
+def test_demo_catalog_is_contract_clean_and_badges_are_runtime_derived():
+    """Catalogul demo e CURAT la contract (300/300) și badge-urile NU sunt un gol de proveniență.
 
-    Testul fixează constatarea pentru NX-206: dacă badge-urile se clasifică, numărul scade și
-    testul pică — atunci se actualizează deliberat, nu din inerție."""
+    NX-206 a decis PROPRIETARUL: badge-urile se derivă la RUNTIME (`src/worker/badges.py`, praguri
+    per-vertical din `DomainPack.badge_rules`), nu se citează din catalog. Toate cele 8 badge-uri
+    distincte ale demo-ului sunt derivabile din date pe care le avem deja („Fără parfum" ←
+    `fragrance_free`, „Cu SPF 30" ← `spf`, „Foarte bine cotat" ← `rating`+`review_count`); niciunul
+    nu e certificare externă. `derived_badge_candidates` rămâne INVENTAR — arată materia primă, nu
+    o datorie de proveniență."""
     products = _CATALOG["products"]
     problems = [
         (p["slug"], probs)
@@ -370,25 +373,39 @@ def test_demo_catalog_is_contract_clean_and_badges_await_classification():
     ]
     assert problems == [], f"catalogul demo nu mai e curat la contract: {problems[:3]}"
 
-    pending = [p for p in products if derived_badge_candidates(p)]
-    assert len(pending) == 195
+    assert len([p for p in products if derived_badge_candidates(p)]) == 195
     assert not any(
         f.confirmed_badges
         for p in products
         for f, _ in [parse_product(p, business_id="b", locale="ro")]
-    ), "zero badge-uri confirmate prin proveniență — exact golul pe care îl preia NX-206"
+    ), "zero badge-uri confirmate prin proveniență — corect: sunt derivate, nu citate"
 
 
-def test_audit_now_sees_product_level_badges():
-    """Regula R8 se uită în AMBELE locuri. Locul nou e warning (popularea datelor = NX-206), dar
-    nu mai e invizibil."""
+def test_badges_are_not_a_provenance_debt():
+    """R8 NU mai cere `claim_provenance` pentru badge-uri (NX-206: proprietarul e runtime-ul).
+
+    Schimbare DELIBERATĂ față de review #250, care ridicase badge-urile de la invizibile la
+    warning: un fapt DERIVAT nu are sursă de citat, are o regulă. Cerându-i proveniență produceam
+    195 de findings care nu se puteau închide decât inventând-o. Ce rămâne acoperit: ingredientele
+    (au sursă reală) și contraindicațiile."""
     from scripts.audit_catalog_v2 import rule_claim_provenance
 
-    findings = rule_claim_provenance(
-        [{"slug": "p1", "status": "active", "badges": ["Vegan"], "attributes": {}}]
+    assert (
+        rule_claim_provenance(
+            [{"slug": "p1", "status": "active", "badges": ["Vegan"], "attributes": {}}]
+        )
+        == []
     )
-    assert findings and findings[0]["severity"] == "warning"
-    assert "nivel produs" in findings[0]["message"]
+    assert (
+        rule_claim_provenance(
+            [{"slug": "p2", "status": "active", "attributes": {"badges": ["Vegan"]}}]
+        )
+        == []
+    )
+    # ingredientele rămân o datorie de proveniență reală — regula nu s-a golit, s-a restrâns.
+    assert rule_claim_provenance(
+        [{"slug": "p3", "status": "active", "attributes": {"key_ingredients": ["retinol"]}}]
+    )
 
 
 # --- parser: malformat ≠ necunoscut, iar raportul NU aruncă --------------------
@@ -516,13 +533,39 @@ def test_whitespace_fact_values_are_rejected_in_every_entry_path():
 
 
 def test_unknown_attribute_keys_are_visible_not_silent():
-    """Catalogul demo chiar are chei-gunoi (nume de ingredient folosit drept cheie). Contractul nu
-    le acceptă ca fapte, dar nici nu le înghite tăcut."""
-    junk = {k for p in _CATALOG["products"] for k in unknown_attribute_keys(p)}
-    assert junk, "dacă seed-ul se curăță, testul devine trivial — atunci scoate-l"
+    """Contractul nu acceptă chei netipizate ca fapte, dar nici nu le înghite tăcut.
+
+    Catalogul demo CHIAR avea așa ceva: 7 chei care erau nume de ingredient („Ulei de soia (50%)"),
+    cu descrierea beneficiului ca valoare — conținut real scris sub o cheie pe care nicio
+    interogare nu o caută. NX-206 le-a mutat în `ingredient_benefits` (câmp tipizat) și a cablat
+    funcția asta în poarta de publicare, deci seed-ul e acum curat. Verificarea rămâne pe intrare
+    sintetică: dacă s-ar strecura la loc, poarta le-ar prinde din nou."""
+    assert not {k for p in _CATALOG["products"] for k in unknown_attribute_keys(p)}, (
+        "seed-ul a căpătat din nou chei netipizate — poarta NX-206 ar trebui să le fi blocat"
+    )
     assert unknown_attribute_keys({"attributes": {"concerns": [], "Ulei de soia (50%)": "x"}}) == (
         "Ulei de soia (50%)",
     )
+
+
+def test_ingredient_benefits_are_typed_and_present_in_the_demo_catalog():
+    """NX-206: beneficiile per ingredient sunt PERECHI structurate, nu chei libere în `attributes`.
+
+    Testul e legat de datele reale intenționat: dacă migrarea se pierde la un re-seed, aici se
+    vede, nu la trei carduri distanță."""
+    with_benefits = [
+        (p["slug"], f.ingredient_benefits)
+        for p in _CATALOG["products"]
+        for f, _ in [parse_product(p, business_id="b", locale="ro")]
+        if f.ingredient_benefits
+    ]
+    assert len(with_benefits) == 3
+    assert sum(len(b) for _, b in with_benefits) == 7
+    ingredient, benefit = with_benefits[0][1][0].ingredient, with_benefits[0][1][0].benefit
+    assert ingredient.strip() == ingredient and benefit.strip() == benefit
+
+    with pytest.raises(ValidationError):  # o pereche fără beneficiu nu e un beneficiu
+        IngredientBenefit(ingredient="Ulei de soia", benefit="  ")
 
 
 # --- artefacte derivate: D3 -------------------------------------------------

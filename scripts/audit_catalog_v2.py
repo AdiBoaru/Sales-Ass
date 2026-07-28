@@ -527,9 +527,19 @@ def _provenance_index(a: dict[str, Any]) -> dict[str, set[str]]:
 
 
 def rule_claim_provenance(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """R8 (determinist, fără duplicare): FIECARE key_ingredient și FIECARE badge cer o intrare
-    `claim_provenance` (kind + sursă completă). `not_recommended_for` hard cere proveniență INLINE
-    (source+source_ref+verified_at); soft cere măcar `reason`."""
+    """R8 (determinist, fără duplicare): FIECARE key_ingredient cere o intrare `claim_provenance`
+    (kind + sursă completă). `not_recommended_for` hard cere proveniență INLINE
+    (source+source_ref+verified_at); soft cere măcar `reason`.
+
+    **Badge-urile NU intră în R8 (decizie NX-206).** Sunt DERIVATE la runtime din semnale de
+    produs — `src/worker/badges.py` le calculează din rating/reducere cu praguri per-vertical, iar
+    cele din seedul demo („Fără parfum" ← `fragrance_free`, „Cu SPF 30" ← `spf`, „Foarte bine
+    cotat" ← `rating`+`review_count`) sunt toate derivabile: niciunul nu e certificare externă.
+    Un fapt derivat nu are „sursă" de citat, are o REGULĂ — deci a cere `claim_provenance` pentru
+    el producea 195 de findings care nu se puteau repara decât inventând proveniență. Un badge care
+    chiar ar fi certificare (ISO, Ecocert) rămâne acoperit prin `claim_provenance(kind=badge)` și
+    apare în `ProductFacts.confirmed_badges` — dar atunci există prin construcție, deci nu poate fi
+    „fără sursă"."""
     out = []
     for p in products:
         slug = p.get("slug", "")
@@ -541,27 +551,6 @@ def rule_claim_provenance(products: list[dict[str, Any]]) -> list[dict[str, Any]
                     _f(
                         f"{slug}: ingredient «{ing}» fără claim_provenance (kind=ingredient+sursă)",
                         slug,
-                    )
-                )
-        # Review #250: badge-urile stau la nivel de PRODUS în seed-ul v3, nu în `attributes` —
-        # regula se uita doar în `attributes`, deci n-a validat NICIODATĂ vreun badge (0/195 pe
-        # catalogul demo). Acum se uită în ambele locuri. Locul nou intră ca WARNING, nu violation:
-        # popularea datelor e explicit NX-206, iar o violation ar bloca seed-ul pentru o gaură de
-        # DATE descoperită acum. NX-206 o ridică la violation (sau reclasifică badge-urile ca
-        # semnale DERIVATE cu rule_id — vezi src/domain/contracts.py::DerivedSignal).
-        for badge in a.get("badges") or []:
-            if _norm(str(badge)) not in cov["badge"]:
-                out.append(
-                    _f(f"{slug}: badge «{badge}» fără claim_provenance (kind=badge+sursă)", slug)
-                )
-        for badge in p.get("badges") or []:
-            if _norm(str(badge)) not in cov["badge"]:
-                out.append(
-                    _f(
-                        f"{slug}: badge «{badge}» (nivel produs) fără claim_provenance — NX-206 "
-                        f"decide: proveniență sau reclasificare ca semnal derivat",
-                        slug,
-                        severity="warning",
                     )
                 )
         for nrf in a.get("not_recommended_for") or []:
