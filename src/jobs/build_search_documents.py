@@ -66,7 +66,17 @@ async def load_active_products(conn: Any, business_id: str) -> list[dict[str, An
 
 
 async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
-    """Upsert idempotent al documentului/blurb-ului și refresh sigur al evidence generat.
+    """Scrie TOATE artefactele unui produs — document, blurb, evidence — ATOMIC.
+
+    **Tranzacția acoperă tot produsul, nu doar evidence** (review #251, runda 2). Înainte începea
+    abia la evidence, deci documentul și blurb-ul erau deja scrise când pica ceva: produsul rămânea
+    cu un `positive_search_document` NOU și evidence VECHI (sau șters). Cele trei artefacte descriu
+    același produs la aceeași `document_version` — dacă pot diverge, `content_hash` nu mai înseamnă
+    nimic, iar un cititor n-are cum să afle că se uită la o combinație care n-a existat niciodată.
+
+    Granularitatea e per PRODUS, nu per rulare: un job peste tot catalogul într-o singură tranzacție
+    ar ține un lock lung și ar arunca la gunoi munca bună a mii de produse pentru un singur rând
+    stricat. Produsul e unitatea de consistență pentru că e unitatea pe care o citește cineva.
 
     Toate operațiile filtrează `business_id`; writerul trebuie apelat prin `admin_conn`, niciodată
     din worker.
@@ -83,72 +93,70 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
     Ponderile A/B/C se păstrează.
     """
     fts = artifacts.fts_document
-    await conn.execute(
-        """
-        insert into product_search_documents
-          (business_id, product_id, locale, document_version, schema_version,
-           positive_search_document, fts_document, content_hash)
-        values ($1, $2::uuid, $3, $4, $5, $6,
-          setweight(to_tsvector('simple', ro_unaccent($7)), 'A') ||
-          setweight(to_tsvector('simple', ro_unaccent($8)), 'B') ||
-          setweight(to_tsvector('simple', ro_unaccent($9)), 'C'), $10)
-        on conflict (business_id, product_id, locale, document_version) do update set
-          schema_version = excluded.schema_version,
-          positive_search_document = excluded.positive_search_document,
-          fts_document = excluded.fts_document,
-          content_hash = excluded.content_hash,
-          updated_at = now()
-        where product_search_documents.content_hash is distinct from excluded.content_hash
-        """,
-        artifacts.business_id,
-        artifacts.product_id,
-        artifacts.locale,
-        artifacts.document_version,
-        artifacts.schema_version,
-        artifacts.positive_search_document,
-        " ".join(fts.a),
-        " ".join(fts.b),
-        " ".join(fts.c),
-        artifacts.content_hash,
-    )
-    # Blurb ABSENT ≠ blurb gol: dacă produsul n-are din ce compune un blurb util, nu scriem un rând
-    # care ar trece `check length > 0` fiind doar numele produsului. Un rând inutil arată la fel ca
-    # unul bun pentru orice consumator; absența se vede.
-    if artifacts.card_blurb:
+    async with conn.transaction():
         await conn.execute(
             """
-            insert into product_card_blurbs
-              (business_id, product_id, locale, document_version, schema_version, text,
-               content_hash)
-            values ($1, $2::uuid, $3, $4, $5, $6, $7)
+            insert into product_search_documents
+              (business_id, product_id, locale, document_version, schema_version,
+               positive_search_document, fts_document, content_hash)
+            values ($1, $2::uuid, $3, $4, $5, $6,
+              setweight(to_tsvector('simple', ro_unaccent($7)), 'A') ||
+              setweight(to_tsvector('simple', ro_unaccent($8)), 'B') ||
+              setweight(to_tsvector('simple', ro_unaccent($9)), 'C'), $10)
             on conflict (business_id, product_id, locale, document_version) do update set
-              schema_version = excluded.schema_version, text = excluded.text,
-              content_hash = excluded.content_hash, updated_at = now()
-            where product_card_blurbs.content_hash is distinct from excluded.content_hash
+              schema_version = excluded.schema_version,
+              positive_search_document = excluded.positive_search_document,
+              fts_document = excluded.fts_document,
+              content_hash = excluded.content_hash,
+              updated_at = now()
+            where product_search_documents.content_hash is distinct from excluded.content_hash
             """,
             artifacts.business_id,
             artifacts.product_id,
             artifacts.locale,
             artifacts.document_version,
             artifacts.schema_version,
-            artifacts.card_blurb,
+            artifacts.positive_search_document,
+            " ".join(fts.a),
+            " ".join(fts.b),
+            " ".join(fts.c),
             artifacts.content_hash,
         )
-    else:
-        await conn.execute(
-            """delete from product_card_blurbs where business_id=$1 and product_id=$2::uuid
-               and locale=$3 and document_version=$4""",
-            artifacts.business_id,
-            artifacts.product_id,
-            artifacts.locale,
-            artifacts.document_version,
-        )
+        # Blurb ABSENT ≠ blurb gol: dacă produsul n-are din ce compune un blurb util, nu scriem un
+        # rând care ar trece `check length > 0` fiind doar numele produsului. Un rând inutil arată
+        # la fel ca unul bun pentru orice consumator; absența se vede.
+        if artifacts.card_blurb:
+            await conn.execute(
+                """
+                insert into product_card_blurbs
+                  (business_id, product_id, locale, document_version, schema_version, text,
+                   content_hash)
+                values ($1, $2::uuid, $3, $4, $5, $6, $7)
+                on conflict (business_id, product_id, locale, document_version) do update set
+                  schema_version = excluded.schema_version, text = excluded.text,
+                  content_hash = excluded.content_hash, updated_at = now()
+                where product_card_blurbs.content_hash is distinct from excluded.content_hash
+                """,
+                artifacts.business_id,
+                artifacts.product_id,
+                artifacts.locale,
+                artifacts.document_version,
+                artifacts.schema_version,
+                artifacts.card_blurb,
+                artifacts.content_hash,
+            )
+        else:
+            await conn.execute(
+                """delete from product_card_blurbs where business_id=$1 and product_id=$2::uuid
+                   and locale=$3 and document_version=$4""",
+                artifacts.business_id,
+                artifacts.product_id,
+                artifacts.locale,
+                artifacts.document_version,
+            )
 
-    # delete + insert ÎNTR-O SINGURĂ tranzacție: fără ea, o eroare între cele două lăsa produsul
-    # cu evidence ȘTERS și nescris la loc — pierdere tăcută de date, exact în stratul care există
-    # ca să fie citabil. `on conflict do nothing` ține pasul idempotent chiar dacă două fragmente
-    # ajung la același (rol, locale, hash).
-    async with conn.transaction():
+        # `on conflict do nothing` ține pasul idempotent chiar dacă două fragmente ajung la același
+        # (rol, locale, hash).
         await conn.execute(
             """delete from product_evidence_chunks where business_id=$1 and product_id=$2::uuid
                and locale=$3 and source in ('catalog.shortDescription', 'catalog.description',

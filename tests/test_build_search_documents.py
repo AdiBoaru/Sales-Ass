@@ -139,3 +139,111 @@ async def test_build_loads_only_active_products_for_requested_tenant():
     assert await build_for_business(conn, "biz") == 1
     assert "where p.business_id = $1 and p.status = 'active'" in conn.calls[0][0]
     assert conn.calls[0][1] == ("biz",)
+
+
+# --- P1 review #251 runda 2: artefactele unui produs sunt ATOMICE -----------
+
+
+class _TxConn(_Conn):
+    """Conexiune care simulează o tranzacție REALĂ: ce s-a scris înăuntru se pierde la eșec.
+
+    `_Conn` doar numără; aici avem nevoie de rollback observabil, ca testul să poată afirma că
+    documentul vechi a rămas vechi — nu doar că s-a apelat `transaction()`."""
+
+    def __init__(self, fail_on: str | None = None):
+        super().__init__()
+        self.fail_on = fail_on
+        self.committed: list[str] = []
+        self._pending: list[str] = []
+
+    async def execute(self, sql, *params):
+        await super().execute(sql, *params)
+        if self.fail_on and self.fail_on in sql:
+            raise RuntimeError("insert de evidence a picat")
+        self._pending.append(sql)
+
+    @contextlib.asynccontextmanager
+    async def transaction(self):
+        self.tx_depth += 1
+        start = len(self._pending)
+        try:
+            yield self
+        except BaseException:
+            del self._pending[start:]  # rollback: scrierile din tranzacție dispar
+            raise
+        else:
+            if self.tx_depth == 1:
+                self.committed.extend(self._pending)
+                self._pending.clear()
+        finally:
+            self.tx_depth -= 1
+
+    def wrote(self, table: str) -> bool:
+        return any(table in sql for sql in self.committed)
+
+
+def _rich_product():
+    p = _product()
+    p["shortDescription"] = "Ser matifiant pentru ten gras."
+    p["description"] = "Reduce aspectul porilor."
+    return p
+
+
+@pytest.mark.asyncio
+async def test_all_artifacts_of_a_product_are_written_in_one_transaction():
+    """Tranzacția acoperă TOT produsul, nu doar evidence.
+
+    Înainte începea abia la evidence, deci documentul și blurb-ul erau deja scrise când pica ceva.
+    Cele trei artefacte descriu același produs la aceeași `document_version` — dacă pot diverge,
+    `content_hash` nu mai înseamnă nimic, iar un cititor n-are cum să afle că se uită la o
+    combinație care n-a existat niciodată."""
+    conn = _TxConn()
+    await upsert_artifacts(
+        conn, build_search_artifacts(_rich_product(), business_id="biz", locale="ro")
+    )
+
+    assert conn.calls, "nu s-a scris nimic"
+    assert all(conn.in_tx), "există scrieri în AFARA tranzacției"
+    for table in ("product_search_documents", "product_card_blurbs", "product_evidence_chunks"):
+        assert conn.wrote(table), f"{table} nu a fost scris"
+
+
+@pytest.mark.asyncio
+async def test_evidence_failure_rolls_back_document_and_blurb():
+    """Eșec forțat la inserarea evidence → documentul și blurb-ul NU se schimbă.
+
+    Ăsta e testul care contează: fără el, „am pus un `async with`" e o afirmație despre formă, nu
+    despre comportament."""
+    conn = _TxConn(fail_on="insert into product_evidence_chunks")
+
+    with pytest.raises(RuntimeError, match="evidence a picat"):
+        await upsert_artifacts(
+            conn, build_search_artifacts(_rich_product(), business_id="biz", locale="ro")
+        )
+
+    assert conn.committed == [], "documentul/blurb-ul au fost păstrate deși evidence a picat"
+    assert not conn.wrote("product_search_documents")
+    assert not conn.wrote("product_card_blurbs")
+
+
+@pytest.mark.asyncio
+async def test_transaction_granularity_is_per_product_not_per_run():
+    """Un job peste tot catalogul într-o singură tranzacție ar ține un lock lung și ar arunca munca
+    bună a mii de produse pentru un rând stricat. Produsul e unitatea de consistență pentru că e
+    unitatea pe care o citește cineva."""
+    conn = _TxConn()
+    conn.rows = [_rich_product(), _rich_product()]
+    depths = []
+
+    original = conn.transaction
+
+    @contextlib.asynccontextmanager
+    async def spy():
+        depths.append(conn.tx_depth + 1)
+        async with original():
+            yield conn
+
+    conn.transaction = spy
+    await build_for_business(conn, "biz", locale="ro")
+
+    assert depths == [1, 1], f"tranzacții imbricate sau una singură pe toată rularea: {depths}"
