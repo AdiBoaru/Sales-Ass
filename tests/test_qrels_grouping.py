@@ -110,3 +110,33 @@ def test_derived_queries_inherit_the_source_split_group():
         src = q.get("derived_from")
         if src and src in man:
             assert q["split_group_id"] == man[src]["split_group_id"], q["query"]
+
+
+def test_confirmed_qrels_have_both_ids_on_every_query():
+    """Niciun query fără ambele id-uri. Fără asta, tocmai intrările negrupate ar fi excluse tăcut
+    din agregarea pe familie şi din protecţia contra contaminării."""
+    d = json.loads(_CONFIRMED.read_text(encoding="utf-8"))
+    missing = [
+        q["id"] for q in d["queries"] if not q.get("family_id") or not q.get("split_group_id")
+    ]
+    assert not missing, missing
+    assert len(d["queries"]) == 10
+
+
+def test_partial_grouping_is_rejected_not_silently_skipped():
+    """Verificarea de dinainte făcea `if q.family_id and q.split_group_id`, deci o intrare fără
+    id-uri SĂREA controlul. O grupare parţială e mai rea decât niciuna: scuteşte exact ce n-a fost
+    acoperit, iar setul pare valid."""
+    with pytest.raises(ValidationError, match="grupare parţială"):
+        QrelsSet(
+            business_id="b",
+            queries=[
+                _q(id="q-1", family_id="fam-a", split_group_id="sg-1"),
+                _q(id="q-2", query="alt ser"),  # fără niciun id
+            ],
+        )
+
+
+def test_ungrouped_set_is_still_legitimate():
+    """Un set complet negrupat rămâne valid — fixture-uri şi seturi vechi n-au de ce să pice."""
+    assert QrelsSet(business_id="b", queries=[_q(id="q-1"), _q(id="q-2", query="alt ser")])

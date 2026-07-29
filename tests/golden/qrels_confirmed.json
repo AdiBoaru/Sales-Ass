@@ -234,7 +234,7 @@
       "derived_from": "caut un fond de ten cu acoperire medie, am subton cald.",
       "variation_kind": "constraint_removal",
       "split_group_id": "sg-4bbf64d0",
-      "family_id": null
+      "family_id": "fam-89b55edd"
     },
     {
       "id": "q-self-03",
@@ -301,7 +301,9 @@
           "value": "sensitive"
         }
       ],
-      "derived_from": null
+      "derived_from": null,
+      "family_id": "fam-890472b9",
+      "split_group_id": "sg-890472b9"
     },
     {
       "id": "q-con-03",
@@ -401,7 +403,7 @@
       "derived_from": "ai și o variantă fără parfum?",
       "variation_kind": "context_removal",
       "split_group_id": "sg-7789efb6",
-      "family_id": null
+      "family_id": "fam-28aeed1e"
     },
     {
       "id": "q-con-05",

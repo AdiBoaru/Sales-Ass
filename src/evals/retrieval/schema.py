@@ -108,6 +108,25 @@ class QrelsSet(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _grouping_is_all_or_nothing(self) -> QrelsSet:
+        """Gruparea e ori completă, ori absentă — niciodată parţială.
+
+        Varianta anterioară verifica `if q.family_id and q.split_group_id`, deci o intrare FĂRĂ
+        id-uri SĂREA verificarea. Fail-open: exact query-urile negrupate scăpau şi de agregare, şi
+        de protecţia contra contaminării, iar setul părea valid. O grupare parţială e mai rea decât
+        niciuna, pentru că scuteşte tăcut tocmai ce n-a fost acoperit."""
+        with_ids = [q for q in self.queries if q.family_id or q.split_group_id]
+        if not with_ids:
+            return self  # set negrupat: legitim (fixture-uri, seturi vechi)
+        incomplete = sorted(q.id for q in self.queries if not (q.family_id and q.split_group_id))
+        if incomplete:
+            raise ValueError(
+                f"grupare parţială: {len(incomplete)} query-uri fără ambele id-uri {incomplete[:5]}"
+                f" — ar fi excluse tăcut din agregare şi din protecţia de contaminare"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _family_within_one_split_group(self) -> QrelsSet:
         """O familie NU poate traversa două `split_group`-uri.
 
