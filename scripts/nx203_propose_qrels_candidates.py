@@ -64,7 +64,7 @@ QUERIES = [
         "real",
         "haircare",
         "categorie+diacritice",
-        {"cat": "sampoane"},
+        {"cat": ["sampoane", "sampon-uscat"]},
     ),
     (
         "q-cat-04",
@@ -72,7 +72,7 @@ QUERIES = [
         "real",
         "haircare",
         "categorie fara diacritice",
-        {"cat": "sampoane"},
+        {"cat": ["sampoane", "sampon-uscat"]},
     ),
     (
         "q-self-01",
@@ -225,7 +225,11 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
         return f"${len(params)}"
 
     if v := spec.get("cat"):
-        conds.append(f"c.slug = {ph(v)}")
+        # Lista, nu doar un slug: „ce sampon aveti?" trebuie sa acopere SI `sampon-uscat` — samponul
+        # uscat e tot sampon. Un bazin care exclude o subcategorie intreaga produce gold incomplet,
+        # iar retrieval-ul ar fi penalizat pentru raspunsuri corecte.
+        slugs = [v] if isinstance(v, str) else list(v)
+        conds.append(f"c.slug = any({ph(slugs)})")
     if v := spec.get("name_like"):
         conds.append(f"ro_unaccent(p.name) like ro_unaccent({ph(v)})")
     if v := spec.get("concern"):

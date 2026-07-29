@@ -135,7 +135,9 @@ def test_zero_overlap_is_diagnosed_as_id_space_mismatch_not_deleted_products():
     issues = integrity_issues(qset, catalog_product_ids=["slug-a", "slug-b"])
 
     assert len(issues) == 1
-    assert "spaţii diferite" in issues[0] or "spații diferite" in issues[0]
+    # A treia stare: nici trecut, nici picat — NEVERIFICAT. Un „a trecut" tăcut ar declara
+    # verificat exact ce n-a fost verificat niciodată.
+    assert "VERIFICARE INDISPONIBILĂ" in issues[0]
     assert "absente din catalog" not in issues[0]
 
 

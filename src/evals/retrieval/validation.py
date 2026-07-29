@@ -77,11 +77,16 @@ def integrity_issues(
     # cele două vorbesc despre identificatori DIFERIŢI (qrels pe UUID-uri din DB vs. catalog de
     # seed pe slug-uri), nu că fiecare produs judecat a dispărut. Fără gardă, verificarea scuipă un
     # zid de findings false — iar o poartă care minte des ajunge să fie ignorată cu totul.
+    #
+    # Formularea contează: NU e „qrels invalid", e „verificarea nu s-a putut face". A treia stare,
+    # distinctă şi de trecut, şi de picat. Un „a trecut" tăcut aici ar fi cel mai rău rezultat
+    # posibil: ar declara verificat exact ce n-a fost verificat niciodată.
     if known_products is not None and all_referenced and not (all_referenced & known_products):
         issues.append(
-            f"catalogul dat nu are NICIUN identificator comun cu qrels-ul "
-            f"({len(all_referenced)} referite, {len(known_products)} în catalog) — cel mai "
-            f"probabil compari spaţii diferite (UUID din DB vs. slug de seed), nu produse şterse"
+            f"VERIFICARE INDISPONIBILĂ (coerenţă cu catalogul): zero identificatori comuni "
+            f"({len(all_referenced)} referite în qrels, {len(known_products)} în catalogul dat). "
+            f"Qrels-ul foloseşte UUID-uri din DB, catalogul de seed foloseşte slug-uri. Nu s-a "
+            f"verificat nimic — dă o sursă de catalog cu UUID-uri (export din DB) ca să conteze."
         )
     else:
         issues.extend(missing_by_query)

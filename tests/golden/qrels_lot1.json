@@ -35,9 +35,22 @@
         "2500935f-44d7-4d5b-8445-67ca1b020408",
         "59e66303-a30c-4073-bd2d-41a9e162ebea",
         "f28bb84e-ec28-42ed-93d5-e972c2924407",
-        "c1eec351-f890-4dbd-b24c-0c912eb89a20"
+        "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+        "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+        "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c"
       ],
-      "hard_constraints": []
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ]
     },
     {
       "id": "q-cat-02",
@@ -73,9 +86,23 @@
         "2500935f-44d7-4d5b-8445-67ca1b020408",
         "59e66303-a30c-4073-bd2d-41a9e162ebea",
         "f28bb84e-ec28-42ed-93d5-e972c2924407",
-        "40c43ab4-2fb7-4d29-abbb-03a4968421f6"
+        "40c43ab4-2fb7-4d29-abbb-03a4968421f6",
+        "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+        "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+        "84e037ee-fedd-4ce2-8165-4112be1999a7"
       ],
-      "hard_constraints": []
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ]
     },
     {
       "id": "q-self-01",
@@ -97,9 +124,25 @@
       ],
       "forbidden_products": [
         "a7a2de21-f042-4e3a-b668-0e17771e9506",
-        "5ae3718a-e8db-4242-8d96-f20712e34311"
+        "5ae3718a-e8db-4242-8d96-f20712e34311",
+        "2500935f-44d7-4d5b-8445-67ca1b020408",
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+        "b26238af-e1c4-472d-9ec3-07d3389275b1",
+        "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+        "be701ebb-d12d-4b58-946b-8b964c40a70d"
       ],
-      "hard_constraints": []
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ]
     },
     {
       "id": "q-con-01",
@@ -124,9 +167,16 @@
         "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
         "020baf31-3e6a-4e16-86fd-4820e78b6090",
         "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
-        "eb408d2a-278b-47f0-980f-e1289a32ead4"
+        "eb408d2a-278b-47f0-980f-e1289a32ead4",
+        "6aa19230-cc04-4003-b62d-f7256f77ed4e"
       ],
-      "hard_constraints": []
+      "hard_constraints": [
+        {
+          "facet": "spf",
+          "op": "gte",
+          "value": 50
+        }
+      ]
     },
     {
       "id": "q-con-02",
@@ -157,7 +207,18 @@
         "858d69c2-a20a-497a-bebc-8cb4d434e66a",
         "717221bc-327f-47ac-be21-e9855289c381"
       ],
-      "hard_constraints": []
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "coverage",
+          "op": "eq",
+          "value": "medium"
+        }
+      ]
     }
   ]
 }

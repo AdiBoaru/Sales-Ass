@@ -201,7 +201,7 @@
       "provenance": "real",
       "category": "haircare",
       "_dim": "categorie+diacritice",
-      "_catalog_hits": 13,
+      "_catalog_hits": 20,
       "_truncated": false,
       "candidates": [
         {
@@ -213,8 +213,24 @@
           ]
         },
         {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
           "product_id": "925d704e-7489-4807-9d25-4e8366e88814",
           "name": "Bloom Volume Șampon",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
+          "name": "Elara Beauty Hydra Șampon uscat",
           "methods": [
             "catalog",
             "semantic"
@@ -245,6 +261,14 @@
           ]
         },
         {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
           "product_id": "b218e2dc-4664-42eb-9c8f-87749fd75346",
           "name": "Bloom Color Șampon pentru păr vopsit",
           "methods": [
@@ -254,6 +278,20 @@
         {
           "product_id": "cf9acc80-b7ec-4f2b-b5eb-98f1350d162a",
           "name": "Coral Theory Hydra Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
+          "name": "Coral Theory Hydra Șampon uscat",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "99aaec8e-b32d-45a3-bb2c-35ad55e6fb46",
+          "name": "Elara Beauty Repair Șampon uscat",
           "methods": [
             "catalog"
           ]
@@ -273,6 +311,13 @@
           ]
         },
         {
+          "product_id": "4d66a147-00e9-4c20-bb02-6779ccba8e2b",
+          "name": "Lumiere Skin Revive Șampon uscat",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
           "product_id": "c3b72d7d-e373-4184-8d46-c1ddbb50200a",
           "name": "Nera Rituals Hydra Șampon",
           "methods": [
@@ -282,6 +327,13 @@
         {
           "product_id": "1a0fd385-ba3d-4732-b455-289363a3d327",
           "name": "Nera Rituals Silk Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "18a2a1d9-8a77-4f18-9336-6134fe0a4e97",
+          "name": "Petala Soft Șampon uscat pentru păr închis",
           "methods": [
             "catalog"
           ]
@@ -298,27 +350,6 @@
           "name": "Verdea Repair Șampon",
           "methods": [
             "catalog"
-          ]
-        },
-        {
-          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
-          "name": "Bloom Fresh Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
-          "name": "Elara Beauty Hydra Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
-          "name": "Verdea Fresh Șampon uscat volumizant",
-          "methods": [
-            "semantic"
           ]
         }
       ]
@@ -329,12 +360,20 @@
       "provenance": "real",
       "category": "haircare",
       "_dim": "categorie fara diacritice",
-      "_catalog_hits": 13,
+      "_catalog_hits": 20,
       "_truncated": false,
       "candidates": [
         {
           "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
           "name": "Bloom Balance Șampon pentru scalp gras",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
           "methods": [
             "catalog",
             "semantic"
@@ -357,6 +396,14 @@
           ]
         },
         {
+          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
+          "name": "Coral Theory Hydra Șampon uscat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
           "product_id": "c9183cb6-ea84-4016-85f1-b60291a048a2",
           "name": "Nera Rituals Glow Șampon",
           "methods": [
@@ -373,8 +420,30 @@
           ]
         },
         {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
           "product_id": "b218e2dc-4664-42eb-9c8f-87749fd75346",
           "name": "Bloom Color Șampon pentru păr vopsit",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
+          "name": "Elara Beauty Hydra Șampon uscat",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "99aaec8e-b32d-45a3-bb2c-35ad55e6fb46",
+          "name": "Elara Beauty Repair Șampon uscat",
           "methods": [
             "catalog"
           ]
@@ -389,6 +458,13 @@
         {
           "product_id": "aada8628-5f07-4094-8cc7-265f555eb805",
           "name": "Iris & Co Pure Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "4d66a147-00e9-4c20-bb02-6779ccba8e2b",
+          "name": "Lumiere Skin Revive Șampon uscat",
           "methods": [
             "catalog"
           ]
@@ -415,6 +491,13 @@
           ]
         },
         {
+          "product_id": "18a2a1d9-8a77-4f18-9336-6134fe0a4e97",
+          "name": "Petala Soft Șampon uscat pentru păr închis",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
           "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
           "name": "Verdea Hydra Șampon hidratant",
           "methods": [
@@ -426,27 +509,6 @@
           "name": "Verdea Repair Șampon",
           "methods": [
             "catalog"
-          ]
-        },
-        {
-          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
-          "name": "Bloom Fresh Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
-          "name": "Coral Theory Hydra Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
-          "name": "Verdea Fresh Șampon uscat volumizant",
-          "methods": [
-            "semantic"
           ]
         }
       ]
