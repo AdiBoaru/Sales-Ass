@@ -120,7 +120,9 @@ def test_confirmed_qrels_have_both_ids_on_every_query():
         q["id"] for q in d["queries"] if not q.get("family_id") or not q.get("split_group_id")
     ]
     assert not missing, missing
-    assert len(d["queries"]) == 10
+    # fără număr hardcodat: setul creşte la fiecare lot, iar un test care cere o valoare fixă ar
+    # trebui editat de fiecare dată — devine zgomot, nu verificare.
+    assert len(d["queries"]) >= 10
 
 
 def test_partial_grouping_is_rejected_not_silently_skipped():

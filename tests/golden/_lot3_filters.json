@@ -27,14 +27,6 @@
       "note": "doar 2 produse au finish=matte — gold mic, confirmat ca acceptabil la review."
     },
     {
-      "n": 6,
-      "query": "ce-mi recomanzi pentru ten gras?",
-      "spec": {
-        "suitable_for": "oily"
-      },
-      "note": "fara categorie: cererea e deschisa („ce-mi recomanzi”), ca „ceva pentru prevenirea cosurilor”."
-    },
-    {
       "n": 7,
       "query": "Bună, caut o cremă cu protecție solară SPF 50 pentru față.",
       "spec": {
@@ -45,25 +37,6 @@
         ]
       },
       "note": "identic cu q-con-01 din lotul 1; candidat la acelasi split_group."
-    },
-    {
-      "n": 8,
-      "query": "compara mi te rog serim cu toner",
-      "spec": {
-        "cat_any": [
-          "seruri-pentru-ten",
-          "lotiuni-tonice"
-        ]
-      },
-      "note": "INCERTITUDINE: „serim” = „ser”, dar CARE ser si CARE toner? Cererea e subspecificata. Poate fi `contextual` daca presupune produse discutate anterior."
-    },
-    {
-      "n": 9,
-      "query": "Vreau sa compar fondurile voastre de ten dupa acoperire. Aveti mai multe?",
-      "spec": {
-        "cat": "fond-de-ten"
-      },
-      "note": "comparatie pe TOATA categoria; gold = toate fondurile, ordonarea conteaza mai putin."
     },
     {
       "n": 10,
@@ -87,24 +60,10 @@
       "n": 14,
       "query": "arata-mi creme de fata sub 80 lei.",
       "spec": {
-        "cat_any": [
-          "creme-hidratante",
-          "creme-de-ochi"
-        ],
+        "cat": "creme-hidratante",
         "price_max": 80
       },
-      "note": "INCERTITUDINE: „crema de fata” include cremele de ochi? Le-am inclus; daca nu, se scot."
-    },
-    {
-      "n": 16,
-      "query": "am tenul sensibil și iritat și uscat",
-      "spec": {
-        "suitable_for_all": [
-          "sensitive",
-          "dry"
-        ]
-      },
-      "note": "intersectie sensitive ∩ dry = 19 (fata de 44 doar pe sensitive). „iritat” NU are atribut modelabil: zero produse cu irritation/irritated -> limita consemnata ca catalog_gap pe acea dimensiune, dar query-ul ramane in qrels"
+      "note": "„crema de fata” NU include implicit cremele de ochi — bazin restrans la creme-hidratante. Cele 7 creme de ochi ies din contractul query-ului, dar NU devin forbidden: pur si simplu nu sunt cerute"
     },
     {
       "n": 17,
@@ -141,6 +100,10 @@
     "11": "Salut, caut un fond de ten matifiant, nuanță medie-deschisă. Aveți?",
     "12": "recomanda-mi 3 seruri cu vitamina c sub 150 lei.",
     "15": "Buna! Caut un ser cu acid hialuronic pentru ten gras, sa nu fie peste 150 lei.",
-    "20": "arată-mi două fonduri de ten"
+    "20": "arată-mi două fonduri de ten",
+    "6": "ce-mi recomanzi pentru ten gras?",
+    "8": "compara mi te rog serim cu toner",
+    "9": "Vreau sa compar fondurile voastre de ten dupa acoperire. Aveti mai multe?",
+    "16": "am tenul sensibil și iritat și uscat"
   }
 }
