@@ -38,6 +38,10 @@ def integrity_issues(
     # Atunci holdout-ul nu mai e independent, iar gate-ul măsoară ce a văzut deja la tuning.
     splits_by_text: dict[str, set[str]] = defaultdict(set)
     known_products = {str(p) for p in catalog_product_ids} if catalog_product_ids else None
+    # Acumulate ca să putem distinge „produse şterse din catalog" de „compari două spaţii de
+    # identificatori diferite" — vezi verificarea de după buclă.
+    all_referenced: set[str] = set()
+    missing_by_query: list[str] = []
 
     for query in qset.queries:
         if not query.query.strip():
@@ -63,8 +67,24 @@ def integrity_issues(
         if known_products is not None:
             referenced = {str(item.product_id) for item in query.judgments}
             referenced |= {str(p) for p in query.forbidden_products}
+            all_referenced |= referenced
             if missing := sorted(referenced - known_products):
-                issues.append(f"{query.id}: referă produse absente din catalog: {missing[:5]}")
+                missing_by_query.append(
+                    f"{query.id}: referă produse absente din catalog: {missing[:5]}"
+                )
+
+    # ZERO suprapunere între ce referă qrels-ul şi ce ştie catalogul înseamnă, aproape sigur, că
+    # cele două vorbesc despre identificatori DIFERIŢI (qrels pe UUID-uri din DB vs. catalog de
+    # seed pe slug-uri), nu că fiecare produs judecat a dispărut. Fără gardă, verificarea scuipă un
+    # zid de findings false — iar o poartă care minte des ajunge să fie ignorată cu totul.
+    if known_products is not None and all_referenced and not (all_referenced & known_products):
+        issues.append(
+            f"catalogul dat nu are NICIUN identificator comun cu qrels-ul "
+            f"({len(all_referenced)} referite, {len(known_products)} în catalog) — cel mai "
+            f"probabil compari spaţii diferite (UUID din DB vs. slug de seed), nu produse şterse"
+        )
+    else:
+        issues.extend(missing_by_query)
 
     for text, splits in sorted(splits_by_text.items()):
         if len(splits) > 1:

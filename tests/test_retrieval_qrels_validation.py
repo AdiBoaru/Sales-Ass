@@ -105,12 +105,38 @@ def test_judgments_must_reference_products_that_exist():
     """Un qrels care judecă produse inexistente produce metrici care arată bine și nu înseamnă
     nimic: recall-ul se calculează contra unui adevăr care nu mai e în catalog."""
     qset = QrelsSet(business_id="b", queries=[_query()])
-
     assert integrity_issues(qset, catalog_product_ids=["product-1"]) == []
+
+    # Suprapunere PARȚIALĂ: un produs judecat lipsește, altul există. Aici verificarea per query e
+    # cea corectă — spre deosebire de cazul cu zero suprapunere, testat mai jos.
+    partial = QrelsSet(
+        business_id="b",
+        queries=[
+            _query(
+                judgments=[
+                    QrelJudgment(product_id="product-1", relevance=Relevance.ideal),
+                    QrelJudgment(product_id="sters-din-catalog", relevance=Relevance.relevant),
+                ]
+            )
+        ],
+    )
     assert any(
         "absente din catalog" in issue
-        for issue in integrity_issues(qset, catalog_product_ids=["altul"])
+        for issue in integrity_issues(partial, catalog_product_ids=["product-1", "altul"])
     )
+
+
+def test_zero_overlap_is_diagnosed_as_id_space_mismatch_not_deleted_products():
+    """Qrels-ul referă UUID-uri din DB, catalogul de seed are slug-uri. Fără gardă, verificarea
+    raporta FIECARE produs judecat ca „absent din catalog" — un zid de findings false. O poartă
+    care minte des ajunge să fie ignorată cu totul."""
+    qset = QrelsSet(business_id="b", queries=[_query()])
+
+    issues = integrity_issues(qset, catalog_product_ids=["slug-a", "slug-b"])
+
+    assert len(issues) == 1
+    assert "spaţii diferite" in issues[0] or "spații diferite" in issues[0]
+    assert "absente din catalog" not in issues[0]
 
 
 def test_holdout_slices_too_small_to_measure_are_rejected():
