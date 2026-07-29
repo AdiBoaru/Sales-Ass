@@ -362,3 +362,16 @@ def test_contamination_check_uses_the_same_key_as_partition():
         ]
     )
     assert [i for i in integrity_issues(split_apart) if "contaminat" in i]
+
+
+def test_catalog_lookup_always_filters_active_and_published():
+    """Orice numărare pe catalog trebuie să excludă produsele nepublicabile ÎNAINTE de concluzie.
+
+    Fără asta am raportat „«vreau un parfum» → 4 produse reale, verificarea l-a salvat ca eligibil".
+    Cele 4 erau `archived`+`draft`: retrieval-ul nu le poate returna niciodată. Nu e cazul în care
+    n-am verificat — e cazul în care am verificat prost şi am tratat verificarea drept dovadă.
+
+    Verificare pe TEXTUL scriptului, nu pe execuţie: scriptul rulează `main()` la import."""
+    src = (_ROOT / "scripts/nx203_propose_qrels_candidates.py").read_text(encoding="utf-8")
+    for pred in ("p.status = 'active'", "p.content_status = 'published'"):
+        assert pred in src, f"filtrul de catalog nu mai conţine {pred!r}"
