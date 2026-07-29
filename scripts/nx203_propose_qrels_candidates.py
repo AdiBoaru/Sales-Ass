@@ -232,6 +232,18 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
         conds.append(f"c.slug = any({ph(slugs)})")
     if v := spec.get("name_like"):
         conds.append(f"ro_unaccent(p.name) like ro_unaccent({ph(v)})")
+    if v := spec.get("suitable_for_all"):
+        # INTERSECTIE, nu reuniune: „ten sensibil SI uscat" cere ambele, nu oricare. Cu `or` ar fi
+        # intors 44 in loc de 19 — un gold umflat cu produse care satisfac o singura conditie.
+        for val in v:
+            pa, pb = ph(val), ph(val)
+            conds.append(
+                f"(p.attributes->'suitable_for' ? {pa} or p.attributes->'concerns' ? {pb})"
+            )
+    if v := spec.get("cat_any"):
+        conds.append(f"c.slug = any({ph(list(v))})")
+    if v := spec.get("routine_step"):
+        conds.append(f"ro_unaccent(p.attributes->>'routine_step') = ro_unaccent({ph(v)})")
     if v := spec.get("concern"):
         conds.append(f"(p.attributes->'concerns' ? {ph(v)})")
     if v := spec.get("suitable_for"):
@@ -240,7 +252,7 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
         p1, p2 = ph(v), ph(v)
         conds.append(f"(p.attributes->'suitable_for' ? {p1} or p.attributes->'concerns' ? {p2})")
     if kv := spec.get("attr_eq"):
-        k, v = kv
+        k, v = kv[0], kv[1]
         conds.append(f"p.attributes->>{ph(k)} = {ph(v)}")
     if spec.get("fragrance_free"):
         conds.append("(p.attributes->>'fragrance_free')::boolean is true")
@@ -276,11 +288,34 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
     return [(r["id"], r["name"]) for r in rows], False
 
 
+def _load_queries() -> tuple[list, pathlib.Path]:
+    """Lotul de procesat: din `--filters <fisier>` daca e dat, altfel lotul 1 hardcodat.
+
+    Filtrele stau intr-un fisier SEPARAT de cod tocmai ca sa poata fi contestate unul cate unul la
+    review — sunt opinia mea exprimata in SQL, nu o masuratoare."""
+    argv = sys.argv[1:]
+    if "--filters" not in argv:
+        return QUERIES, ROOT / "tests" / "golden" / "_qrels_batch1_candidates.json"
+    path = pathlib.Path(argv[argv.index("--filters") + 1])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out = []
+    for f in data["filters"]:
+        spec = dict(f["spec"])
+        out.append(
+            (f"lot3-{f['n']:02d}", f["query"], "pending", "pending", f.get("note") or "", spec)
+        )
+    return out, path.with_name(path.name.replace("_filters", "_candidates"))
+
+
 async def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if sys.platform == "win32" and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+    queries, out_path = _load_queries()
     llm = get_llm()
     out = []
     async with tenant_conn(DEMO) as conn:
-        for qid, q, prov, cat, dim, spec in QUERIES:
+        for qid, q, prov, cat, dim, spec in queries:
             votes: dict[str, set[str]] = defaultdict(set)
             names: dict[str, str] = {}
 
@@ -329,7 +364,7 @@ async def main() -> int:
             )
 
     await close_pool()
-    path = ROOT / "tests" / "golden" / "_qrels_batch1_candidates.json"
+    path = out_path
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
             {

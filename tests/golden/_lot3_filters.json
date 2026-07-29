@@ -1,0 +1,146 @@
+{
+  "_note": "NX-203 lot 3 — filtre de catalog per query. Fiecare e o OPINIE exprimata in SQL, nu o masuratoare: eu aleg categoria si atributele. Precondtiile comune (status='active', content_status='published') sunt in generator, nu aici. Auditabile separat de cod tocmai ca sa poata fi contestate una cate una.",
+  "_precondition": "p.status = 'active' AND p.content_status = 'published' — aplicate de generator la TOATE",
+  "filters": [
+    {
+      "n": 3,
+      "query": "Imi recomanzi un fond de ten cu acoperire medie?",
+      "spec": {
+        "cat": "fond-de-ten",
+        "attr_eq": [
+          "coverage",
+          "medium"
+        ]
+      },
+      "note": "identic ca structura cu q-con-02 din lotul 1 — acelasi split_group daca se confirma."
+    },
+    {
+      "n": 5,
+      "query": "Cat costa un fond de ten matifiant?",
+      "spec": {
+        "cat": "fond-de-ten",
+        "attr_eq": [
+          "finish",
+          "matte"
+        ]
+      },
+      "note": "doar 2 produse au finish=matte — gold mic, confirmat ca acceptabil la review."
+    },
+    {
+      "n": 6,
+      "query": "ce-mi recomanzi pentru ten gras?",
+      "spec": {
+        "suitable_for": "oily"
+      },
+      "note": "fara categorie: cererea e deschisa („ce-mi recomanzi”), ca „ceva pentru prevenirea cosurilor”."
+    },
+    {
+      "n": 7,
+      "query": "Bună, caut o cremă cu protecție solară SPF 50 pentru față.",
+      "spec": {
+        "cat": "protectie-solara",
+        "attr_eq": [
+          "spf",
+          "50"
+        ]
+      },
+      "note": "identic cu q-con-01 din lotul 1; candidat la acelasi split_group."
+    },
+    {
+      "n": 8,
+      "query": "compara mi te rog serim cu toner",
+      "spec": {
+        "cat_any": [
+          "seruri-pentru-ten",
+          "lotiuni-tonice"
+        ]
+      },
+      "note": "INCERTITUDINE: „serim” = „ser”, dar CARE ser si CARE toner? Cererea e subspecificata. Poate fi `contextual` daca presupune produse discutate anterior."
+    },
+    {
+      "n": 9,
+      "query": "Vreau sa compar fondurile voastre de ten dupa acoperire. Aveti mai multe?",
+      "spec": {
+        "cat": "fond-de-ten"
+      },
+      "note": "comparatie pe TOATA categoria; gold = toate fondurile, ordonarea conteaza mai putin."
+    },
+    {
+      "n": 10,
+      "query": "caut un ser pentru hidratare",
+      "spec": {
+        "cat": "seruri-pentru-ten",
+        "concern": "hydration"
+      },
+      "note": null
+    },
+    {
+      "n": 13,
+      "query": "Imi recomanzi un fond de ten pana in 100 lei?",
+      "spec": {
+        "cat": "fond-de-ten",
+        "price_max": 100
+      },
+      "note": null
+    },
+    {
+      "n": 14,
+      "query": "arata-mi creme de fata sub 80 lei.",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "creme-de-ochi"
+        ],
+        "price_max": 80
+      },
+      "note": "INCERTITUDINE: „crema de fata” include cremele de ochi? Le-am inclus; daca nu, se scot."
+    },
+    {
+      "n": 16,
+      "query": "am tenul sensibil și iritat și uscat",
+      "spec": {
+        "suitable_for_all": [
+          "sensitive",
+          "dry"
+        ]
+      },
+      "note": "intersectie sensitive ∩ dry = 19 (fata de 44 doar pe sensitive). „iritat” NU are atribut modelabil: zero produse cu irritation/irritated -> limita consemnata ca catalog_gap pe acea dimensiune, dar query-ul ramane in qrels"
+    },
+    {
+      "n": 17,
+      "query": "Vreau o cremă cu SPF pentru zi, ceva sub 100 lei.",
+      "spec": {
+        "cat": "protectie-solara",
+        "price_max": 100
+      },
+      "note": "fara valoare de SPF: cererea nu specifica una."
+    },
+    {
+      "n": 19,
+      "query": "Bună, ce șampon recomandați pentru păr gras?",
+      "spec": {
+        "cat_any": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "oily"
+      },
+      "note": "bazinul include samponul uscat, ca la q-cat-03/04."
+    }
+  ],
+  "_deferred": {
+    "reason": "cereri de RUTINA — raspunsul corect e o SELECTIE de produse complementare, cate unul per pas, nu toate potrivirile. `routine_step` exista dar are alta semantica: valorile sunt PASII (cleanse/tone/treat/moisturize/protect/makeup_base/makeup_color/finish), nu momentul zilei. Filtrul #1 a lovit plafonul de avarie: 61 de produse.",
+    "queries": [
+      "Salut! Vreau o rutină completă pentru ten uscat, dar să nu trec de 200 lei. Ce-mi recomandați?",
+      "vreau sa am o rutina de dimineata penttru tenul meu",
+      "vreau o rutina de seara"
+    ]
+  },
+  "_routed_out": {
+    "2": "arata mi un rus rosu",
+    "11": "Salut, caut un fond de ten matifiant, nuanță medie-deschisă. Aveți?",
+    "12": "recomanda-mi 3 seruri cu vitamina c sub 150 lei.",
+    "15": "Buna! Caut un ser cu acid hialuronic pentru ten gras, sa nu fie peste 150 lei.",
+    "20": "arată-mi două fonduri de ten"
+  }
+}
