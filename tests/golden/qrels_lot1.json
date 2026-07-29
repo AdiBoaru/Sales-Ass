@@ -7,7 +7,7 @@
       "locale": "ro",
       "provenance": "real_sanitized",
       "category": "skincare",
-      "human_verified": false,
+      "human_verified": true,
       "catalog_version": "demo-2026-07-22",
       "judgments": [
         {
@@ -58,7 +58,7 @@
       "locale": "ro",
       "provenance": "real_sanitized",
       "category": "skincare",
-      "human_verified": false,
+      "human_verified": true,
       "catalog_version": "demo-2026-07-22",
       "judgments": [
         {
@@ -110,7 +110,7 @@
       "locale": "ro",
       "provenance": "real_sanitized",
       "category": "skincare",
-      "human_verified": false,
+      "human_verified": true,
       "catalog_version": "demo-2026-07-22",
       "judgments": [
         {
@@ -146,7 +146,7 @@
       "locale": "ro",
       "provenance": "real_sanitized",
       "category": "skincare",
-      "human_verified": false,
+      "human_verified": true,
       "catalog_version": "demo-2026-07-22",
       "judgments": [
         {
@@ -185,7 +185,7 @@
       "locale": "ro",
       "provenance": "paraphrase",
       "category": "makeup",
-      "human_verified": false,
+      "human_verified": true,
       "catalog_version": "demo-2026-07-22",
       "judgments": [
         {
