@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Iterable, Mapping
 
 from src.domain.normalize import normalize
@@ -15,6 +16,26 @@ from src.safety.external_data import contains_pii
 MIN_HOLDOUT_SLICE = 20
 
 
+@dataclass(frozen=True)
+class ValidationReport:
+    """TREI stări, nu două: trecut · picat · **neverificat**.
+
+    A treia nu e un detaliu de formulare. O verificare care n-a putut rula nu e nici o problemă de
+    date, nici o confirmare — iar dacă o îmbraci în oricare dintre celelalte două, minți în direcţii
+    diferite: ca eşec, produce alarme false şi ajunge ignorată; ca succes, declară verificat exact
+    ce n-a fost verificat niciodată.
+
+    `blocking` opreşte. `unavailable` spune ce N-A FOST verificat şi de ce."""
+
+    blocking: list[str] = field(default_factory=list)
+    unavailable: list[str] = field(default_factory=list)
+
+    @property
+    def is_clean(self) -> bool:
+        """Curat = zero blocaje ŞI zero verificări nerulate."""
+        return not self.blocking and not self.unavailable
+
+
 def integrity_issues(
     qset: QrelsSet,
     *,
@@ -24,8 +45,35 @@ def integrity_issues(
     require_split_sizes: bool = False,
     catalog_product_ids: Iterable[str] | None = None,
 ) -> list[str]:
-    """Întoarce problemele ce blochează o rulare; nu schimbă setul de date."""
+    """Toate problemele într-o singură listă — inclusiv verificările nerulate.
+
+    Păstrată pentru apelanţii care iau o decizie de GATE (`nx207_compare_shadow`): acolo o
+    verificare nerulată trebuie să blocheze la fel ca o problemă, fiindcă nu porneşti un switch pe
+    un qrels despre care nu ştii dacă e coerent. Cine are nevoie de distincţie foloseşte
+    `validate_integrity()`."""
+    report = validate_integrity(
+        qset,
+        min_queries=min_queries,
+        require_human_verified=require_human_verified,
+        require_real_per_category=require_real_per_category,
+        require_split_sizes=require_split_sizes,
+        catalog_product_ids=catalog_product_ids,
+    )
+    return report.blocking + report.unavailable
+
+
+def validate_integrity(
+    qset: QrelsSet,
+    *,
+    min_queries: int = 1,
+    require_human_verified: bool = False,
+    require_real_per_category: bool = False,
+    require_split_sizes: bool = False,
+    catalog_product_ids: Iterable[str] | None = None,
+) -> ValidationReport:
+    """Validare cu cele trei stări separate; nu schimbă setul de date."""
     issues: list[str] = []
+    unavailable: list[str] = []
     if len(qset.queries) < min_queries:
         issues.append(f"sunt {len(qset.queries)} query-uri, sub minimul cerut {min_queries}")
 
@@ -82,11 +130,10 @@ def integrity_issues(
     # distinctă şi de trecut, şi de picat. Un „a trecut" tăcut aici ar fi cel mai rău rezultat
     # posibil: ar declara verificat exact ce n-a fost verificat niciodată.
     if known_products is not None and all_referenced and not (all_referenced & known_products):
-        issues.append(
-            f"VERIFICARE INDISPONIBILĂ (coerenţă cu catalogul): zero identificatori comuni "
-            f"({len(all_referenced)} referite în qrels, {len(known_products)} în catalogul dat). "
-            f"Qrels-ul foloseşte UUID-uri din DB, catalogul de seed foloseşte slug-uri. Nu s-a "
-            f"verificat nimic — dă o sursă de catalog cu UUID-uri (export din DB) ca să conteze."
+        unavailable.append(
+            f"coerenţă cu catalogul: zero identificatori comuni ({len(all_referenced)} referite în "
+            f"qrels, {len(known_products)} în catalogul dat). Qrels-ul foloseşte UUID-uri din DB, "
+            f"catalogul de seed foloseşte slug-uri — dă un export din DB ca verificarea să conteze."
         )
     else:
         issues.extend(missing_by_query)
@@ -112,7 +159,7 @@ def integrity_issues(
                     f"{split.value}: {n} query-uri, sub pragul de {MIN_HOLDOUT_SLICE} — "
                     f"felia e prea mică pentru a măsura ceva"
                 )
-    return issues
+    return ValidationReport(blocking=issues, unavailable=unavailable)
 
 
 def _split_sizes(qset: QrelsSet) -> dict[str, int]:

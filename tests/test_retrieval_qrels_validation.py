@@ -3,7 +3,11 @@ from pydantic import ValidationError
 
 from src.evals.retrieval.schema import Provenance, QrelJudgment, QrelsQuery, QrelsSet, Relevance
 from src.evals.retrieval.splits import Split, assign_split
-from src.evals.retrieval.validation import MIN_HOLDOUT_SLICE, integrity_issues
+from src.evals.retrieval.validation import (
+    MIN_HOLDOUT_SLICE,
+    integrity_issues,
+    validate_integrity,
+)
 
 
 def _query(**overrides):
@@ -132,13 +136,17 @@ def test_zero_overlap_is_diagnosed_as_id_space_mismatch_not_deleted_products():
     care minte des ajunge să fie ignorată cu totul."""
     qset = QrelsSet(business_id="b", queries=[_query()])
 
-    issues = integrity_issues(qset, catalog_product_ids=["slug-a", "slug-b"])
+    report = validate_integrity(qset, catalog_product_ids=["slug-a", "slug-b"])
 
-    assert len(issues) == 1
-    # A treia stare: nici trecut, nici picat — NEVERIFICAT. Un „a trecut" tăcut ar declara
-    # verificat exact ce n-a fost verificat niciodată.
-    assert "VERIFICARE INDISPONIBILĂ" in issues[0]
-    assert "absente din catalog" not in issues[0]
+    # A treia stare e SEPARATĂ structural, nu doar în text: zero blocaje, o verificare nerulată.
+    assert report.blocking == []
+    assert len(report.unavailable) == 1
+    assert "zero identificatori comuni" in report.unavailable[0]
+    assert not report.is_clean  # „n-am verificat" NU e o promisiune de corectitudine
+
+    # `integrity_issues` le contopeşte intenţionat: cine ia o decizie de GATE nu porneşte un switch
+    # pe un qrels despre care nu ştie dacă e coerent.
+    assert len(integrity_issues(qset, catalog_product_ids=["slug-a", "slug-b"])) == 1
 
 
 def test_holdout_slices_too_small_to_measure_are_rejected():

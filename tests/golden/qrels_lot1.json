@@ -125,11 +125,7 @@
       "forbidden_products": [
         "a7a2de21-f042-4e3a-b668-0e17771e9506",
         "5ae3718a-e8db-4242-8d96-f20712e34311",
-        "2500935f-44d7-4d5b-8445-67ca1b020408",
-        "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
-        "b26238af-e1c4-472d-9ec3-07d3389275b1",
-        "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
-        "be701ebb-d12d-4b58-946b-8b964c40a70d"
+        "2500935f-44d7-4d5b-8445-67ca1b020408"
       ],
       "hard_constraints": [
         {
@@ -171,6 +167,11 @@
         "6aa19230-cc04-4003-b62d-f7256f77ed4e"
       ],
       "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "protectie-solara"
+        },
         {
           "facet": "spf",
           "op": "gte",
@@ -215,8 +216,11 @@
         },
         {
           "facet": "coverage",
-          "op": "eq",
-          "value": "medium"
+          "op": "in",
+          "value": [
+            "medium",
+            "buildable"
+          ]
         }
       ]
     }
