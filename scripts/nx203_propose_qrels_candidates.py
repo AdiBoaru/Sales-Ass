@@ -169,21 +169,18 @@ QUERIES = [
         "ingredient",
         {"ingredient": "retinol"},
     ),
-    (
-        "q-lex-01",
-        "sampon anti matreata",
-        "paraphrase",
-        "haircare",
-        "cerere FARA raspuns corect",
-        {"cat": "sampoane", "name_like": "%matrea%"},
-    ),
+    # SCOASE din lot (audit runda 3): „sampon anti matreata" (catalogul n-are asa ceva) si
+    # „asdfgh qwerty 12345" nu au NICIUN raspuns corect. Sunt incompatibile cu formatul:
+    # `integrity_issues` cere cel putin un produs cu relevance>0, iar `recall_at_k` intoarce 1.0
+    # cand nu exista relevante — deci un retrieval care intoarce gunoi ar primi scor perfect.
+    # Apartin unei suite de ABSTENTION (a sti sa nu raspunzi), nu unui benchmark de relevanta.
     (
         "q-lex-02",
         "masca de par pentru par uscat",
         "paraphrase",
         "haircare",
         "lexical",
-        {"cat": "masti-de-par"},
+        {"cat": "masti-de-par", "suitable_for": "dry"},
     ),
     (
         "q-lex-03",
@@ -209,7 +206,6 @@ QUERIES = [
         "SKU cu typo (O in loc de 0)",
         {"sku": "PETALAFRESHM-2057"},
     ),
-    ("q-neg-01", "asdfgh qwerty 12345", "real", "zgomot", "input fara sens", {}),
 ]
 
 
@@ -217,7 +213,11 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
     """Ce spune CATALOGUL ca s-ar potrivi. SQL pur. Intoarce (rezultate, s-a atins plafonul)."""
     if not spec:
         return [], False
-    conds = ["p.business_id = $1", "p.status = 'active'"]
+    # `content_status='published'`: calea de discovery live filtreaza pe el (NX-171c). Fara el,
+    # candidatii ar putea include produse pe care cautarea nu are voie sa le arate — iar gold-ul ar
+    # cere retrieval-ului exact ce ii e interzis. Azi toate cele 300 sunt published, deci nu schimba
+    # rezultatul; conteaza in ziua in care nu mai e asa.
+    conds = ["p.business_id = $1", "p.status = 'active'", "p.content_status = 'published'"]
     params: list = [DEMO]
 
     def ph(v):
@@ -261,7 +261,15 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
         f"where {' and '.join(conds)} order by p.name limit {SAFETY_CAP + 1}",
         *params,
     )
-    return [(r["id"], r["name"]) for r in rows[:SAFETY_CAP]], len(rows) > SAFETY_CAP
+    if len(rows) > SAFETY_CAP:
+        # Un lot incomplet e mai rau decat niciun lot: omul eticheteaza ce vede si crede ca a vazut
+        # tot. Oprim, nu livram pe jumatate.
+        raise SystemExit(
+            f"NX-203: filtrul a intors peste {SAFETY_CAP} candidati ({len(rows)}). Lotul ar fi "
+            f"incomplet, iar omul n-ar avea cum sa afle. Strange filtrul sau ridica plafonul "
+            f"DELIBERAT. spec={spec}"
+        )
+    return [(r["id"], r["name"]) for r in rows], False
 
 
 async def main() -> int:
@@ -300,7 +308,8 @@ async def main() -> int:
                     "category": cat,
                     "_dim": dim,
                     "_catalog_hits": len(catalog),
-                    "_truncated": hit_cap,  # daca e true, omul NU vede tot — se spune, nu se ascunde
+                    # daca ar fi true, omul NU vede tot — dar acum se opreste inainte
+                    "_truncated": hit_cap,
                     # TOTI candidatii, fara `[:N]`: o truncare aici ii ascunde de ochii omului.
                     "candidates": [
                         {"product_id": pid, "name": names.get(pid, "?"), "methods": sorted(m)}

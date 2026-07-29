@@ -1444,58 +1444,12 @@
       ]
     },
     {
-      "id": "q-lex-01",
-      "query": "sampon anti matreata",
-      "provenance": "paraphrase",
-      "category": "haircare",
-      "_dim": "cerere FARA raspuns corect",
-      "_catalog_hits": 0,
-      "_truncated": false,
-      "candidates": [
-        {
-          "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
-          "name": "Bloom Balance Șampon pentru scalp gras",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
-          "name": "Coral Theory Hydra Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
-          "name": "Elara Beauty Hydra Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "dc04d437-afa9-466e-b56c-c280b4e530ca",
-          "name": "Solora Fresh Deodorant",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
-          "name": "Verdea Fresh Șampon uscat volumizant",
-          "methods": [
-            "semantic"
-          ]
-        }
-      ]
-    },
-    {
       "id": "q-lex-02",
       "query": "masca de par pentru par uscat",
       "provenance": "paraphrase",
       "category": "haircare",
       "_dim": "lexical",
-      "_catalog_hits": 7,
+      "_catalog_hits": 1,
       "_truncated": false,
       "candidates": [
         {
@@ -1504,52 +1458,6 @@
           "methods": [
             "catalog",
             "lexical"
-          ]
-        },
-        {
-          "product_id": "834633ba-1884-452f-89e4-95ae21ea6762",
-          "name": "Iris & Co Pure Mască de păr",
-          "methods": [
-            "catalog",
-            "lexical"
-          ]
-        },
-        {
-          "product_id": "f08eab18-f505-4ead-9490-ef08e828d4c5",
-          "name": "Nova Botanics Pure Mască de păr",
-          "methods": [
-            "catalog",
-            "lexical"
-          ]
-        },
-        {
-          "product_id": "837900f3-f014-4248-a175-23e17fb2e4f9",
-          "name": "Verdea Repair Mască de păr",
-          "methods": [
-            "catalog",
-            "lexical"
-          ]
-        },
-        {
-          "product_id": "51e48872-3653-406c-b80a-63f0d15ca792",
-          "name": "Verdea Smooth Mască de păr",
-          "methods": [
-            "catalog",
-            "lexical"
-          ]
-        },
-        {
-          "product_id": "1904d0c5-89aa-419f-a330-5ad50d6b83b3",
-          "name": "Bloom Repair Mască de păr cu proteine",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "6b66ddc6-3765-4cb0-b7f5-6b6850d300c4",
-          "name": "Orchid Field Revive Mască de păr",
-          "methods": [
-            "catalog"
           ]
         },
         {
@@ -1574,8 +1482,22 @@
           ]
         },
         {
+          "product_id": "834633ba-1884-452f-89e4-95ae21ea6762",
+          "name": "Iris & Co Pure Mască de păr",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
           "product_id": "f28bb84e-ec28-42ed-93d5-e972c2924407",
           "name": "LumaDerm Hydra Mască pentru ten",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "f08eab18-f505-4ead-9490-ef08e828d4c5",
+          "name": "Nova Botanics Pure Mască de păr",
           "methods": [
             "lexical"
           ]
@@ -1634,6 +1556,20 @@
           "name": "Verdea Gloss Ulei de păr pentru strălucire",
           "methods": [
             "semantic"
+          ]
+        },
+        {
+          "product_id": "837900f3-f014-4248-a175-23e17fb2e4f9",
+          "name": "Verdea Repair Mască de păr",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "51e48872-3653-406c-b80a-63f0d15ca792",
+          "name": "Verdea Smooth Mască de păr",
+          "methods": [
+            "lexical"
           ]
         }
       ]
@@ -1877,73 +1813,6 @@
         {
           "product_id": "fcd23483-62d4-46a3-8ec5-eb3b4007d253",
           "name": "Petala Rose Fard de obraz cremos",
-          "methods": [
-            "semantic"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "q-neg-01",
-      "query": "asdfgh qwerty 12345",
-      "provenance": "real",
-      "category": "zgomot",
-      "_dim": "input fara sens",
-      "_catalog_hits": 0,
-      "_truncated": false,
-      "candidates": [
-        {
-          "product_id": "25fd56bf-4c75-46f6-bef1-abe84d590d95",
-          "name": "Aria Aura Creion de ochi",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
-          "name": "Aria Hydra Mist pentru ten",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
-          "name": "Aria Nude Ruj",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "e57036ae-a5ea-4943-9b0b-838b77cd8322",
-          "name": "Aria Set Pensule de machiaj (5 buc)",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "00a286ea-51cb-4062-8ecb-360333b39fd3",
-          "name": "Aria Sugar Scrub de buze",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "bab7ced2-a710-4587-a0ed-4d3a58ff52f7",
-          "name": "Petala Pure Deodorant natural",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "f9ec6ffe-ba9c-44bd-ba2c-e506fe67c709",
-          "name": "Verdea Leave-in Îngrijire fără clătire",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "6aa19230-cc04-4003-b62d-f7256f77ed4e",
-          "name": "Verdea Protect Spray termoprotector",
           "methods": [
             "semantic"
           ]
