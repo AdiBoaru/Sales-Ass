@@ -50,7 +50,9 @@
           "op": "contains",
           "value": "dry"
         }
-      ]
+      ],
+      "family_id": "fam-504a1a0e",
+      "split_group_id": "sg-504a1a0e"
     },
     {
       "id": "q-cat-02",
@@ -102,7 +104,9 @@
           "op": "contains",
           "value": "dry"
         }
-      ]
+      ],
+      "family_id": "fam-5d8a4d2c",
+      "split_group_id": "sg-5d8a4d2c"
     },
     {
       "id": "q-self-01",
@@ -138,7 +142,9 @@
           "op": "contains",
           "value": "oily"
         }
-      ]
+      ],
+      "family_id": "fam-a12ebd01",
+      "split_group_id": "sg-a12ebd01"
     },
     {
       "id": "q-con-01",
@@ -177,7 +183,9 @@
           "op": "gte",
           "value": 50
         }
-      ]
+      ],
+      "family_id": "fam-0c3952d1",
+      "split_group_id": "sg-0c3952d1"
     },
     {
       "id": "q-con-02",
@@ -222,13 +230,17 @@
             "buildable"
           ]
         }
-      ]
+      ],
+      "derived_from": "caut un fond de ten cu acoperire medie, am subton cald.",
+      "variation_kind": "constraint_removal",
+      "split_group_id": "sg-4bbf64d0",
+      "family_id": null
     },
     {
       "id": "q-self-03",
       "query": "sunt cu ten sensibil, ce curățare îmi trebuie?",
       "locale": "ro",
-      "provenance": "paraphrase",
+      "provenance": "synthetic",
       "category": "skincare",
       "human_verified": true,
       "catalog_version": "demo-2026-07-22",
@@ -288,13 +300,14 @@
           "op": "contains",
           "value": "sensitive"
         }
-      ]
+      ],
+      "derived_from": null
     },
     {
       "id": "q-con-03",
       "query": "vreau o cremă de mâini, le am cam uscate",
       "locale": "ro",
-      "provenance": "real_sanitized",
+      "provenance": "paraphrase",
       "category": "bodycare",
       "human_verified": true,
       "catalog_version": "demo-2026-07-22",
@@ -337,7 +350,11 @@
           "op": "eq",
           "value": "creme-de-maini"
         }
-      ]
+      ],
+      "derived_from": "vreau sa mi cumpar o crema de maini ca mi sunt cam uscate",
+      "variation_kind": "format_variant",
+      "split_group_id": "sg-c8af1b71",
+      "family_id": "fam-c8af1b71"
     },
     {
       "id": "q-con-04",
@@ -380,13 +397,17 @@
           "op": "eq",
           "value": true
         }
-      ]
+      ],
+      "derived_from": "ai și o variantă fără parfum?",
+      "variation_kind": "context_removal",
+      "split_group_id": "sg-7789efb6",
+      "family_id": null
     },
     {
       "id": "q-con-05",
       "query": "ceva pentru prevenirea coșurilor",
       "locale": "ro",
-      "provenance": "real_sanitized",
+      "provenance": "paraphrase",
       "category": "skincare",
       "human_verified": true,
       "catalog_version": "demo-2026-07-22",
@@ -462,7 +483,11 @@
           "op": "contains",
           "value": "acne"
         }
-      ]
+      ],
+      "derived_from": "ai ceva pentru prevenirea coșurilor",
+      "variation_kind": "format_variant",
+      "split_group_id": "sg-51331994",
+      "family_id": "fam-51331994"
     },
     {
       "id": "q-con-06",
@@ -518,7 +543,11 @@
           "op": "lte",
           "value": 150
         }
-      ]
+      ],
+      "derived_from": "salut! caut un ser cu vitamina c, ceva sub 150 de lei. aveți?",
+      "variation_kind": "format_variant",
+      "split_group_id": "sg-f77658cf",
+      "family_id": "fam-f77658cf"
     }
   ]
 }

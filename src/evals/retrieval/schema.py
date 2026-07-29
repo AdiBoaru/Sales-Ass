@@ -60,6 +60,18 @@ class QrelsQuery(BaseModel):
     provenance: Provenance
     category: str | None = None  # pentru stratificare pe categorii
     human_verified: bool = False  # obligatoriu la gate; explicit ca să nu presupunem verificarea
+    # DOUĂ niveluri de grupare, EXPLICITE în date — nu derivate la runtime din text. Derivarea ar
+    # însemna că o schimbare de normalizare rescrie tăcut ponderarea unui benchmark deja rulat.
+    #
+    # `family_id`     = același CONTRACT DE ADEVĂR (aceleași qrels). Variante de formă: diacritice,
+    #                   majuscule, typo, formulare echivalentă. Metricile se mediază ÎN interiorul
+    #                   familiei, apoi macro peste familii — altfel un query duplicat de două ori
+    #                   cântărește dublu în scorul headline.
+    # `split_group_id`= întrebări destul de apropiate încât una ar informa tuning-ul celeilalte.
+    #                   NU au voie în felii diferite, chiar dacă au gold diferit. Superset al
+    #                   familiei: aceeași familie ⇒ obligatoriu același split_group.
+    family_id: str | None = None
+    split_group_id: str | None = None
     catalog_version: str  # versiunea catalogului la care s-au făcut etichetele
     judgments: list[QrelJudgment] = Field(default_factory=list)  # produse relevante, graduale
     forbidden_products: list[str] = Field(
@@ -93,4 +105,20 @@ class QrelsSet(BaseModel):
         ids = [q.id for q in self.queries]
         if len(ids) != len(set(ids)):
             raise ValueError("id-uri de query duplicate în qrels")
+        return self
+
+    @model_validator(mode="after")
+    def _family_within_one_split_group(self) -> QrelsSet:
+        """O familie NU poate traversa două `split_group`-uri.
+
+        Invariantul e structural, nu o convenție: dacă două variante ale aceluiaşi contract de
+        adevăr ajung în felii diferite, holdout-ul e contaminat şi nicio agregare ulterioară nu mai
+        repară asta — metrica ar arăta corect şi ar fi greşită."""
+        groups: dict[str, set[str]] = {}
+        for q in self.queries:
+            if q.family_id and q.split_group_id:
+                groups.setdefault(q.family_id, set()).add(q.split_group_id)
+        split = {f: sorted(g) for f, g in groups.items() if len(g) > 1}
+        if split:
+            raise ValueError(f"familii împărţite între split_group-uri: {split}")
         return self
