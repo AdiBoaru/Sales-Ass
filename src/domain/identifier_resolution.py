@@ -14,6 +14,23 @@ _RESOLVE_THRESHOLD = 92.0
 _CLARIFY_THRESHOLD = 75.0
 _AMBIGUITY_MARGIN = 4.0
 
+# Cât din identificatorul candidat trebuie să acopere cererea ca potrivirea fuzzy să conteze.
+#
+# Fără asta, `ratio` pe şiruri fără spaţii tratează „cererea e un FRAGMENT al numelui" drept
+# similaritate mare: `'cremahidratanta'` (15) vs `'petalarichcremahidratanta'` (25) → exact 75.0,
+# adică pragul de `clarify`. Efectul măsurat: „cremă hidratantă" întorcea UN produs, sărind peste
+# FTS şi semantic, deşi 9 produse din catalog au „hidratant" în nume. O cerere de categorie
+# deturnată într-un identificator.
+#
+# Potrivirea fuzzy de identificator trebuie să fie despre un TYPO ÎNTR-UN IDENTIFICATOR ÎNTREG, nu
+# despre un fragment care se întâmplă să fie conţinut în el.
+#
+# Nu e un parametru de tuning: măturat pe catalogul real (300 de produse), orice valoare între 0.7
+# şi 0.9 dă exact acelaşi comportament — 0 cereri de categorie deturnate din 20, şi 40/40 nume
+# regăsite, atât exacte cât şi cu typo. Sub 0.7 deturnarea reapare. Deci pragul separă două regimuri
+# calitative, nu reglează fin un compromis.
+_MIN_COVERAGE = 0.7
+
 
 @dataclass(frozen=True)
 class IdentifierCandidate:
@@ -39,12 +56,18 @@ def _best_ratio(query_normalized: str, candidate: IdentifierCandidate) -> float:
     """Cel mai bun scor peste nume + SKU-uri + aliasuri aprobate.
 
     `max` şi nu media: identificatorii sunt alternative pentru acelaşi produs, nu dovezi care se
-    cumulează. Un SKU potrivit perfect nu trebuie diluat de un nume lung care nu seamănă."""
-    return max(
-        float(ratio(query_normalized, _norm(value)))
+    cumulează. Un SKU potrivit perfect nu trebuie diluat de un nume lung care nu seamănă.
+
+    Acoperirea se verifică PER VALOARE, nu pe candidat: o cerere care se potriveşte perfect cu un
+    SKU scurt are acoperire ~1.0 faţă de SKU chiar dacă numele produsului e lung."""
+    scores = [
+        float(ratio(query_normalized, normalized))
         for value in (candidate.name, *candidate.skus, *candidate.aliases)
         if value
-    )
+        for normalized in (_norm(value),)
+        if normalized and len(query_normalized) / len(normalized) >= _MIN_COVERAGE
+    ]
+    return max(scores) if scores else 0.0
 
 
 def resolve_identifier(

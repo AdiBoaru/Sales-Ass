@@ -7,9 +7,12 @@ Nu este invocat de worker/read-path. Se rulează explicit de un job de conținut
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from src.domain.search_documents import SearchArtifacts, build_search_artifacts
+
+log = logging.getLogger(__name__)
 
 
 def _decode_jsonb(row: Any) -> dict[str, Any]:
@@ -43,7 +46,8 @@ async def load_active_products(conn: Any, business_id: str) -> list[dict[str, An
     """
     rows = await conn.fetch(
         """
-        select p.id::text as id, p.slug, p.name, b.slug as "brandSlug",
+        select p.id::text as id, p.slug, p.name, p.updated_at as source_version,
+               b.slug as "brandSlug",
                c.slug as "primaryCategorySlug", p.short_description as "shortDescription",
                p.description, p.attributes,
                coalesce(jsonb_agg(jsonb_build_object(
@@ -65,8 +69,23 @@ async def load_active_products(conn: Any, business_id: str) -> list[dict[str, An
     return [_decode_jsonb(row) for row in rows]
 
 
-async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
+async def upsert_artifacts(
+    conn: Any, artifacts: SearchArtifacts, *, source_version: Any = None
+) -> bool:
     """Scrie TOATE artefactele unui produs — document, blurb, evidence — ATOMIC.
+
+    Întoarce `True` dacă s-a scris, `False` dacă produsul s-a schimbat între snapshot și scriere.
+
+    **`source_version` închide cursa produs → document** (review #251, runda 3). Artefactele se
+    construiesc dintr-un SNAPSHOT al produsului; între citire și scriere produsul poate fi
+    actualizat, iar noi publicam un document derivat din date VECHI, ștampilat cu un `content_hash`
+    care spune „ăsta e curent". Verificarea e concurență optimistă pe `products.updated_at` (are
+    trigger `trg_products_upd`), făcută ÎN tranzacție: dacă produsul a mișcat, nu scriem nimic.
+
+    Eșuează în SIGURANȚĂ: scrierea se sare, nu se reîncearcă. Rularea următoare o prinde oricum,
+    fiindcă va construi din datele noi și va obține alt hash. Fără lock-uri, fără retry.
+
+    `source_version=None` dezactivează verificarea (dry-run, teste pe artefacte construite manual).
 
     **Tranzacția acoperă tot produsul, nu doar evidence** (review #251, runda 2). Înainte începea
     abia la evidence, deci documentul și blurb-ul erau deja scrise când pica ceva: produsul rămânea
@@ -94,6 +113,17 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
     """
     fts = artifacts.fts_document
     async with conn.transaction():
+        if source_version is not None:
+            current = await conn.fetchval(
+                "select updated_at from products where id = $1::uuid and business_id = $2",
+                artifacts.product_id,
+                artifacts.business_id,
+            )
+            if current != source_version:
+                # Produsul s-a schimbat sub noi. Un document construit din snapshot-ul vechi ar fi
+                # o minciună cu ștampilă de prospețime — mai rău decât lipsa lui, pentru că
+                # `content_hash` l-ar declara actual.
+                return False
         await conn.execute(
             """
             insert into product_search_documents
@@ -181,6 +211,7 @@ async def upsert_artifacts(conn: Any, artifacts: SearchArtifacts) -> None:
                 chunk.schema_version,
                 json.dumps(chunk.model_dump(), ensure_ascii=False, sort_keys=True),
             )
+    return True
 
 
 async def plan_for_business(
@@ -194,9 +225,22 @@ async def plan_for_business(
 
 
 async def build_for_business(conn: Any, business_id: str, *, locale: str = "ro") -> int:
-    """Construiește artefactele pentru un tenant. Callerul decide tranzacția/job scheduling."""
+    """Construiește artefactele pentru un tenant. Callerul decide tranzacția/job scheduling.
+
+    Întoarce câte produse au fost SCRISE efectiv — nu câte au fost citite. Cele sărite (produsul s-a
+    schimbat sub snapshot) sunt logate și rămân pentru rularea următoare; a le număra ca procesate
+    ar fi exact raportarea care ascunde problema."""
     products = await load_active_products(conn, business_id)
+    written = 0
     for product in products:
         artifacts = build_search_artifacts(product, business_id=business_id, locale=locale)
-        await upsert_artifacts(conn, artifacts)
-    return len(products)
+        if await upsert_artifacts(conn, artifacts, source_version=product.get("source_version")):
+            written += 1
+        else:
+            log.info(
+                "search_documents: produs sărit, s-a schimbat între snapshot și scriere (id=%s)",
+                artifacts.product_id,
+            )
+    if skipped := len(products) - written:
+        log.warning("search_documents: %d produse sărite din %d", skipped, len(products))
+    return written

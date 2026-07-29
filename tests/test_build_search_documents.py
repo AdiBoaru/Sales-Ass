@@ -247,3 +247,61 @@ async def test_transaction_granularity_is_per_product_not_per_run():
     await build_for_business(conn, "biz", locale="ro")
 
     assert depths == [1, 1], f"tranzacții imbricate sau una singură pe toată rularea: {depths}"
+
+
+# --- P1 review #251 runda 3: cursa produs -> document -----------------------
+
+
+@pytest.mark.asyncio
+async def test_stale_snapshot_is_skipped_not_published():
+    """Produsul se poate schimba între snapshot şi scriere. Un document construit din snapshot-ul
+    vechi ar fi o minciună cu ştampilă de prospeţime: `content_hash` l-ar declara actual."""
+
+    class _MovedConn(_TxConn):
+        async def fetchval(self, sql, *params):
+            return "versiune-noua"  # produsul a fost actualizat sub noi
+
+    conn = _MovedConn()
+    written = await upsert_artifacts(
+        conn,
+        build_search_artifacts(_rich_product(), business_id="biz", locale="ro"),
+        source_version="versiune-veche",
+    )
+
+    assert written is False
+    assert conn.committed == [], "s-a scris ceva deşi produsul se schimbase"
+
+
+@pytest.mark.asyncio
+async def test_unchanged_snapshot_is_written():
+    class _StableConn(_TxConn):
+        async def fetchval(self, sql, *params):
+            return "versiune-veche"
+
+    conn = _StableConn()
+    written = await upsert_artifacts(
+        conn,
+        build_search_artifacts(_rich_product(), business_id="biz", locale="ro"),
+        source_version="versiune-veche",
+    )
+
+    assert written is True
+    assert conn.wrote("product_search_documents")
+
+
+@pytest.mark.asyncio
+async def test_skipped_products_are_not_counted_as_processed():
+    """A raporta produsele sărite ca procesate ar fi exact raportarea care ascunde problema."""
+
+    class _AllMovedConn(_TxConn):
+        async def fetch(self, sql, *params):
+            await super().fetch(sql, *params)
+            return self.rows
+
+        async def fetchval(self, sql, *params):
+            return "alta-versiune"
+
+    conn = _AllMovedConn()
+    conn.rows = [{**_rich_product(), "source_version": "veche"} for _ in range(3)]
+
+    assert await build_for_business(conn, "biz", locale="ro") == 0

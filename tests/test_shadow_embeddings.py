@@ -16,6 +16,7 @@ class _Conn:
                 "id": "product-1",
                 "business_id": "business-1",
                 "text": "Document pozitiv pentru cautare.",
+                "doc_hash": "doc-hash-1",
                 "existing": self.existing,
             }
         ]
