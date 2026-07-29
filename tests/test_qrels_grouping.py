@@ -302,3 +302,63 @@ def test_confirmed_qrels_split_groups_are_intact():
         for q in items:
             prev = seen.setdefault(q.split_group_id, slice_name.value)
             assert prev == slice_name.value, f"{q.split_group_id} în {prev} şi {slice_name.value}"
+
+
+def test_validator_split_sizes_match_the_partition_actually_executed():
+    """Poarta trebuie să valideze împărţirea care SE EXECUTĂ, nu una imaginară.
+
+    `_split_sizes` hash-uia `query.id`, în timp ce `partition()` foloseşte `split_group_id`. Pentru
+    un grup cu id-uri divergente, validatorul raporta două felii acolo unde partiţionarea reală
+    face una singură — deci putea semnala contaminare sau dimensiuni pentru altceva decât
+    ce rulează.
+    O poartă care verifică altceva decât ce se întâmplă e mai rea decât una lipsă: dă încredere."""
+    from src.evals.retrieval.splits import Split, assign_split, partition
+    from src.evals.retrieval.validation import _split_sizes
+
+    a = next(f"q-{n}" for n in range(5000) if assign_split(f"q-{n}") is Split.tuning)
+    b = next(f"q-{n}" for n in range(5000) if assign_split(f"q-{n}") is Split.holdout_h2)
+    assert assign_split(a) != assign_split(b), "premisa: id-urile diverg dacă se hash-uiesc separat"
+
+    qset = _set(
+        [
+            _q(id=a, query="sampon par uscat", family_id="fam-1", split_group_id="sg-comun"),
+            _q(
+                id=b,
+                query="sampon par uscat hidratant",
+                family_id="fam-2",
+                split_group_id="sg-comun",
+            ),
+        ]
+    )
+    real = {s.value: len(items) for s, items in partition(qset).items() if items}
+    assert _split_sizes(qset) == real == {"tuning": 2}
+
+
+def test_contamination_check_uses_the_same_key_as_partition():
+    """Acelaşi text în două grupuri diferite -> contaminare raportată. Acelaşi text în ACELAŞI grup
+    (doar cu id-uri divergente) -> nicio alarmă, fiindcă partiţionarea reală nu-l desparte."""
+    from src.evals.retrieval.splits import Split, assign_split
+    from src.evals.retrieval.validation import integrity_issues
+
+    a = next(f"q-{n}" for n in range(5000) if assign_split(f"q-{n}") is Split.tuning)
+    b = next(f"q-{n}" for n in range(5000) if assign_split(f"q-{n}") is Split.holdout_h2)
+
+    same_group = _set(
+        [
+            _q(id=a, query="ser ten gras", family_id="f1", split_group_id="sg-x"),
+            _q(id=b, query="Ser TEN gras ", family_id="f1", split_group_id="sg-x"),
+        ]
+    )
+    assert not [i for i in integrity_issues(same_group) if "contaminat" in i]
+
+    # grupurile trebuie ALESE ca să cadă în felii diferite — `sg-x`/`sg-y` sunt hash-uite la rândul
+    # lor și pot nimeri în aceeași felie, caz în care nu există contaminare de raportat.
+    g1 = next(f"sg-{n}" for n in range(5000) if assign_split(f"sg-{n}") is Split.tuning)
+    g2 = next(f"sg-{n}" for n in range(5000) if assign_split(f"sg-{n}") is Split.holdout_h1)
+    split_apart = _set(
+        [
+            _q(id=a, query="ser ten gras", family_id="f1", split_group_id=g1),
+            _q(id=b, query="Ser TEN gras ", family_id="f2", split_group_id=g2),
+        ]
+    )
+    assert [i for i in integrity_issues(split_apart) if "contaminat" in i]

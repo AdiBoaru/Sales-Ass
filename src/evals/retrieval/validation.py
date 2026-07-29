@@ -8,7 +8,7 @@ from typing import Iterable, Mapping
 
 from src.domain.normalize import normalize
 from src.evals.retrieval.schema import Provenance, QrelsSet
-from src.evals.retrieval.splits import Split, assign_split
+from src.evals.retrieval.splits import Split, assign_split, split_key
 from src.safety.external_data import contains_pii
 
 #: Sub pragul ăsta, o felie de holdout nu mai măsoară nimic: un singur query greșit mișcă metrica
@@ -80,10 +80,11 @@ def validate_integrity(
     real_by_category: dict[str | None, int] = defaultdict(int)
     # NB: id-urile duplicate NU se verifică aici — `QrelsSet._unique_ids` le respinge deja la
     # construcție, deci un set cu duplicate nu ajunge niciodată în funcția asta.
-    # text normalizat → feliile în care apare. Split-urile sunt derivate DETERMINIST din id, deci
-    # un query nu poate fi în două felii; ce se poate, însă, e ca ACELAȘI text (sau o parafrază
-    # identică după normalizare) să primească două id-uri și să aterizeze în tuning ȘI în holdout.
-    # Atunci holdout-ul nu mai e independent, iar gate-ul măsoară ce a văzut deja la tuning.
+    # text normalizat → feliile în care apare. Felia e derivată DETERMINIST din `split_key` (adică
+    # `split_group_id`, altfel `id`), deci un query nu poate fi în două felii; ce se poate, însă, e
+    # ca ACELAȘI text (sau o parafrază identică după normalizare) să ajungă în două grupuri diferite
+    # și să aterizeze în tuning ȘI în holdout. Atunci holdout-ul nu mai e independent, iar gate-ul
+    # măsoară ce a văzut deja la tuning.
     splits_by_text: dict[str, set[str]] = defaultdict(set)
     known_products = {str(p) for p in catalog_product_ids} if catalog_product_ids else None
     # Acumulate ca să putem distinge „produse şterse din catalog" de „compari două spaţii de
@@ -108,7 +109,10 @@ def validate_integrity(
             real_by_category[query.category] += 1
 
         if text := normalize(query.query).strip():
-            splits_by_text[text].add(assign_split(query.id).value)
+            # ACEEAŞI cheie ca `partition()`: `split_group_id` dacă există, altfel `id`. Cu
+            # `query.id`, validatorul raporta pentru o împărţire pe care nimeni n-o execută —
+            # o poartă care verifică altceva decât ce se întâmplă e mai rea decât una lipsă.
+            splits_by_text[text].add(assign_split(split_key(query)).value)
 
         # Un qrels care judecă produse inexistente produce metrici care arată bine și nu înseamnă
         # nimic: recall-ul se calculează contra unui adevăr care nu mai e în catalog.
@@ -163,7 +167,11 @@ def validate_integrity(
 
 
 def _split_sizes(qset: QrelsSet) -> dict[str, int]:
+    """Dimensiunile feliilor exact aşa cum le produce `partition()`.
+
+    Folosea `query.id`, deci pentru un `split_group` cu id-uri divergente raporta două felii acolo
+    unde partiţionarea reală face una singură. Gate-ul valida o împărţire imaginară."""
     sizes: dict[str, int] = defaultdict(int)
     for query in qset.queries:
-        sizes[assign_split(query.id).value] += 1
+        sizes[assign_split(split_key(query)).value] += 1
     return dict(sizes)
