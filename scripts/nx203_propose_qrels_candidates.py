@@ -1,24 +1,22 @@
-"""NX-203 — PROPUNERE de candidati pentru qrels (NU qrels, NU adevar)
+"""NX-203 — PROPUNERE de candidati pentru qrels (NU qrels, NU adevar).
 
 REGULA DE NOTARE, NECIRCULARA (audit Codex, PR #251):
   Gradul de relevanta (0-3) NU depinde de cate metode au gasit produsul. Daca acordul cu
   retrieval-ul ar ridica nota, benchmarkul ar rasplati exact ce sistemul gaseste deja — un examen
   in care elevul isi scrie baremul. Gradul vine din INTENTIA query-ului fata de PROPRIETATILE
-  produsului, si il da un OM.
-  Masinile produc doar MULTIMEA de candidati de examinat. Atat.
+  produsului, si il da un OM. Masinile produc doar MULTIMEA de candidati de examinat.
 
 CE E SQL-UL DE AICI: un generator de candidati. Filtrele sunt alese de mine per query, deci sunt
 o opinie exprimata in SQL — nu o masuratoare independenta. Nu are drept de vot asupra adevarului.
 
-NX-203 lot 1, varianta corectata: a treia sursa NU depinde de motorul de cautare.
+FARA ETICHETE `relevance=0`: evaluatorul trateaza deja produsele nejudecate ca gain 0
+(`metrics.ndcg_at_k`: `rmap.get(pid, 0)`), deci o eticheta explicita de zero nu adauga semnal
+metric. Incalcarile de constrangere se pun in `forbidden_products`, deliberat si separat.
 
-Prima varianta propunea judecatile din ce returnau lexical+semantic. Gresit: acolo unde retrieval-ul
-esueaza, propunerea codifica esecul ca adevar. Masurat pe „sunt insarcinata, ce crema antirid pot
-folosi?" — zero creme antirid returnate, deci propunerea ar fi fost inutila SI ar fi inghetat
-comportamentul gresit in benchmark.
-
-A treia sursa e o interogare SQL directa pe catalog (categorie + attributes), care raspunde la
-„ce ar TREBUI sa se potriveasca", independent de cum cauta sistemul azi.
+FARA PLAFOANE TACUTE: orice truncare ascunde candidati de ochii omului INAINTE sa-i vada. Varianta
+anterioara avea `limit 12` in SQL plus `[:10]` la iesire, deci la „ce sampon aveti?" elimina 4 din
+cele 13 sampoane existente. Acum se raporteaza tot; daca s-ar atinge plafonul de avarie, se spune
+explicit in `_truncated`.
 """
 
 import asyncio
@@ -37,9 +35,12 @@ from src.db.queries.catalog import search_products_lexical, search_products_sema
 
 DEMO = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 CATALOG_VERSION = "demo-2026-07-22"
+SAFETY_CAP = 60  # plafon de avarie; daca se atinge, se RAPORTEAZA, nu se taie tacut
 
-# Al treilea vot: ce spune CATALOGUL ca s-ar potrivi. `cat_like` filtreaza pe slug de categorie,
-# `attr` pe chei din attributes, `name_like` pe nume. Toate SQL pur, fara scoring.
+# Filtrele sunt STRANSE: categorie reala + valoarea exacta a atributului. Varianta anterioara
+# folosea `name_like '%hidratant%'` FARA categorie si scotea „Ser hidratant" / „Balsam de buze
+# hidratant" la o cerere de CREMA — apoi eu raportam „retrieval rateaza", cand de fapt filtrul meu
+# era gresit. Categoria `creme-hidratante` exista in catalog; trebuia folosita de la inceput.
 QUERIES = [
     (
         "q-cat-01",
@@ -47,7 +48,7 @@ QUERIES = [
         "real",
         "skincare",
         "categorie",
-        {"name_like": "%hidratant%", "attr_concern": "dry"},
+        {"cat": "creme-hidratante", "suitable_for": "dry"},
     ),
     (
         "q-cat-02",
@@ -55,7 +56,7 @@ QUERIES = [
         "real",
         "skincare",
         "categorie",
-        {"name_like": "%hidratant%", "attr_concern": "dry"},
+        {"cat": "creme-hidratante", "suitable_for": "dry"},
     ),
     (
         "q-cat-03",
@@ -63,7 +64,7 @@ QUERIES = [
         "real",
         "haircare",
         "categorie+diacritice",
-        {"cat_like": "sampoane"},
+        {"cat": "sampoane"},
     ),
     (
         "q-cat-04",
@@ -71,7 +72,7 @@ QUERIES = [
         "real",
         "haircare",
         "categorie fara diacritice",
-        {"cat_like": "sampoane"},
+        {"cat": "sampoane"},
     ),
     (
         "q-self-01",
@@ -79,23 +80,19 @@ QUERIES = [
         "real",
         "skincare",
         "descriere de sine",
-        {"cat_like": "seruri-pentru-ten", "attr_concern": "oily"},
+        {"cat": "seruri-pentru-ten", "suitable_for": "oily"},
     ),
-    (
-        "q-self-02",
-        "sunt însărcinată, ce cremă antirid pot folosi?",
-        "real",
-        "skincare",
-        "descriere de sine + SAFETY",
-        {"attr_concern": "anti_aging", "_expected": "safety_refusal"},
-    ),
+    # q-self-02 („sunt insarcinata, ce crema antirid pot folosi?") a fost SCOS din qrels-ul de
+    # retrieval. Raspunsul corect nu e o lista de produse, e un raspuns de siguranta: absenta
+    # retinolului NU dovedeste ca produsul e sigur in sarcina. Cazul apartine benchmarkului
+    # safety/conversational, nu unuia de relevanta. Vezi PR #251.
     (
         "q-self-03",
         "sunt cu ten sensibil, ce curățare îmi trebuie?",
         "paraphrase",
         "skincare",
         "descriere de sine",
-        {"cat_like": "curatarea-tenului", "attr_concern": "sensitive"},
+        {"cat": "curatarea-tenului", "suitable_for": "sensitive"},
     ),
     (
         "q-con-01",
@@ -103,7 +100,7 @@ QUERIES = [
         "real",
         "skincare",
         "constrangere atribut",
-        {"cat_like": "protectie-solara"},
+        {"cat": "protectie-solara", "attr_eq": ("spf", "50")},
     ),
     (
         "q-con-02",
@@ -111,7 +108,7 @@ QUERIES = [
         "real",
         "makeup",
         "constrangeri multiple",
-        {"cat_like": "fond-de-ten"},
+        {"cat": "fond-de-ten", "attr_eq": ("coverage", "medium")},
     ),
     (
         "q-con-03",
@@ -119,18 +116,18 @@ QUERIES = [
         "real",
         "bodycare",
         "exprimare naturala",
-        {"name_like": "%m%ini%"},
+        {"cat": "creme-de-maini"},
     ),
-    # ATENTIE: originalul din trafic — „ai si o varianta fara parfum?" — e o replica de
-    # CONTINUARE: „o varianta" a CE? Evaluata singura, produce gold fals (audit Codex #251).
-    # Pastram intentia, dar de sine statatoare, deci proveninta devine `paraphrase`, nu `real`.
+    # Originalul din trafic — „ai si o varianta fara parfum?" — e replica de CONTINUARE („o
+    # varianta" a CE?). Evaluat singur produce gold fals. Reformulat de sine statator, deci
+    # provenienta coboara onest de la `real` la `paraphrase`.
     (
         "q-con-04",
-        "caut o cremă de față fără parfum",
+        "caut o cremă hidratantă fără parfum",
         "paraphrase",
         "skincare",
-        "constrangere negativa (reformulat de sine statator)",
-        {"attr_fragrance_free": True},
+        "constrangere negativa",
+        {"cat": "creme-hidratante", "fragrance_free": True},
     ),
     (
         "q-con-05",
@@ -138,7 +135,7 @@ QUERIES = [
         "real",
         "skincare",
         "concern",
-        {"attr_concern": "acne"},
+        {"concern": "acne"},
     ),
     (
         "q-con-06",
@@ -146,7 +143,7 @@ QUERIES = [
         "paraphrase",
         "skincare",
         "ingredient + pret",
-        {"attr_ingredient": "vitamina c", "price_max": 150},
+        {"cat": "seruri-pentru-ten", "ingredient": "vitamina c", "price_max": 150},
     ),
     (
         "q-ing-01",
@@ -154,7 +151,7 @@ QUERIES = [
         "paraphrase",
         "skincare",
         "ingredient",
-        {"attr_ingredient": "acid hialuronic", "cat_like": "seruri-pentru-ten"},
+        {"cat": "seruri-pentru-ten", "ingredient": "acid hialuronic"},
     ),
     (
         "q-ing-02",
@@ -162,7 +159,7 @@ QUERIES = [
         "paraphrase",
         "skincare",
         "ingredient + concern",
-        {"attr_ingredient": "niacinamid"},
+        {"ingredient": "niacinamid", "concern": "oily"},
     ),
     (
         "q-ing-03",
@@ -170,15 +167,15 @@ QUERIES = [
         "synthetic",
         "skincare",
         "ingredient",
-        {"attr_ingredient": "retinol"},
+        {"ingredient": "retinol"},
     ),
     (
         "q-lex-01",
         "sampon anti matreata",
         "paraphrase",
         "haircare",
-        "typo/fara diacritice",
-        {"cat_like": "sampoane", "name_like": "%matrea%"},
+        "cerere FARA raspuns corect",
+        {"cat": "sampoane", "name_like": "%matrea%"},
     ),
     (
         "q-lex-02",
@@ -186,7 +183,7 @@ QUERIES = [
         "paraphrase",
         "haircare",
         "lexical",
-        {"cat_like": "masti-de-par"},
+        {"cat": "masti-de-par"},
     ),
     (
         "q-lex-03",
@@ -196,14 +193,30 @@ QUERIES = [
         "categorie scurta",
         {"name_like": "%balsam%buze%"},
     ),
+    (
+        "q-sku-01",
+        "PETALAFRESHM-2057",
+        "synthetic",
+        "identificator",
+        "SKU exact",
+        {"sku": "PETALAFRESHM-2057"},
+    ),
+    (
+        "q-sku-02",
+        "PETALAFRESHM-2O57",
+        "synthetic",
+        "identificator",
+        "SKU cu typo (O in loc de 0)",
+        {"sku": "PETALAFRESHM-2057"},
+    ),
     ("q-neg-01", "asdfgh qwerty 12345", "real", "zgomot", "input fara sens", {}),
 ]
 
 
-async def catalog_lookup(conn, spec: dict) -> list[tuple[str, str]]:
-    """Ce spune CATALOGUL ca s-ar potrivi. SQL pur — zero scoring, zero motor de cautare."""
+async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]:
+    """Ce spune CATALOGUL ca s-ar potrivi. SQL pur. Intoarce (rezultate, s-a atins plafonul)."""
     if not spec:
-        return []
+        return [], False
     conds = ["p.business_id = $1", "p.status = 'active'"]
     params: list = [DEMO]
 
@@ -211,15 +224,23 @@ async def catalog_lookup(conn, spec: dict) -> list[tuple[str, str]]:
         params.append(v)
         return f"${len(params)}"
 
-    if v := spec.get("cat_like"):
+    if v := spec.get("cat"):
         conds.append(f"c.slug = {ph(v)}")
     if v := spec.get("name_like"):
         conds.append(f"ro_unaccent(p.name) like ro_unaccent({ph(v)})")
-    if v := spec.get("attr_concern"):
-        conds.append(f"p.attributes->'concerns' ? {ph(v)}")
-    if spec.get("attr_fragrance_free"):
+    if v := spec.get("concern"):
+        conds.append(f"(p.attributes->'concerns' ? {ph(v)})")
+    if v := spec.get("suitable_for"):
+        # `suitable_for` = pentru CINE; `concerns` = ce trateaza. „pentru ten uscat" e despre
+        # destinatar, dar contractul v3 le suprapune, deci se accepta oricare din cele doua.
+        p1, p2 = ph(v), ph(v)
+        conds.append(f"(p.attributes->'suitable_for' ? {p1} or p.attributes->'concerns' ? {p2})")
+    if kv := spec.get("attr_eq"):
+        k, v = kv
+        conds.append(f"p.attributes->>{ph(k)} = {ph(v)}")
+    if spec.get("fragrance_free"):
         conds.append("(p.attributes->>'fragrance_free')::boolean is true")
-    if v := spec.get("attr_ingredient"):
+    if v := spec.get("ingredient"):
         conds.append(
             "exists (select 1 from jsonb_array_elements_text("
             "case when jsonb_typeof(p.attributes->'key_ingredients')='array' "
@@ -228,14 +249,19 @@ async def catalog_lookup(conn, spec: dict) -> list[tuple[str, str]]:
         )
     if v := spec.get("price_max"):
         conds.append(f"p.price <= {ph(v)}")
+    if v := spec.get("sku"):
+        conds.append(
+            "exists (select 1 from product_variants pv where pv.product_id = p.id "
+            f"and pv.business_id = p.business_id and pv.sku = {ph(v)})"
+        )
 
     rows = await conn.fetch(
         "select p.id::text as id, p.name from products p "
         "left join categories c on c.id = p.primary_category_id "
-        f"where {' and '.join(conds)} order by p.name limit 12",
+        f"where {' and '.join(conds)} order by p.name limit {SAFETY_CAP + 1}",
         *params,
     )
-    return [(r["id"], r["name"]) for r in rows]
+    return [(r["id"], r["name"]) for r in rows[:SAFETY_CAP]], len(rows) > SAFETY_CAP
 
 
 async def main() -> int:
@@ -257,9 +283,7 @@ async def main() -> int:
             except Exception as e:  # noqa: BLE001
                 print(f"  ! semantic esuat {qid}: {type(e).__name__}")
 
-            # SQL-ul GENEREAZA candidati; NU voteaza adevarul. Filtrele sunt alese de mine per
-            # query, deci sunt o opinie exprimata in SQL — nu o masuratoare (audit Codex #251).
-            catalog = await catalog_lookup(conn, spec)
+            catalog, hit_cap = await catalog_lookup(conn, spec)
             for pid, nm in catalog:
                 votes[pid].add("catalog")
                 names[pid] = nm
@@ -276,21 +300,33 @@ async def main() -> int:
                     "category": cat,
                     "_dim": dim,
                     "_catalog_hits": len(catalog),
+                    "_truncated": hit_cap,  # daca e true, omul NU vede tot — se spune, nu se ascunde
+                    # TOTI candidatii, fara `[:N]`: o truncare aici ii ascunde de ochii omului.
                     "candidates": [
                         {"product_id": pid, "name": names.get(pid, "?"), "methods": sorted(m)}
-                        for pid, m in ranked[:10]
+                        for pid, m in ranked
                     ],
                 }
             )
             only_cat = sum(1 for _, m in ranked if m == {"catalog"})
-            miss = "  <-- retrieval RATEAZA ce zice catalogul" if only_cat and catalog else ""
-            print(f"{qid:11} catalog={len(catalog):2d}  doar-catalog={only_cat:2d}{miss}")
+            flag = "  TRUNCAT" if hit_cap else ""
+            print(
+                f"{qid:11} catalog={len(catalog):3d} total={len(ranked):3d} "
+                f"doar-catalog={only_cat:3d}{flag}"
+            )
 
     await close_pool()
     path = ROOT / "tests" / "golden" / "_qrels_batch1_candidates.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
-            {"catalog_version": CATALOG_VERSION, "queries": out}, f, ensure_ascii=False, indent=2
+            {
+                "catalog_version": CATALOG_VERSION,
+                "_method": "candidati propusi; gradul si human_verified se dau de OM",
+                "queries": out,
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
         )
     print(f"\nscris: {path}")
     return 0

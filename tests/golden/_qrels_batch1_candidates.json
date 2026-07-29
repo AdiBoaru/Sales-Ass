@@ -1,5 +1,6 @@
 {
   "catalog_version": "demo-2026-07-22",
+  "_method": "candidati propusi; gradul si human_verified se dau de OM",
   "queries": [
     {
       "id": "q-cat-01",
@@ -7,7 +8,8 @@
       "provenance": "real",
       "category": "skincare",
       "_dim": "categorie",
-      "_catalog_hits": 5,
+      "_catalog_hits": 4,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
@@ -28,37 +30,30 @@
           ]
         },
         {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "name": "Auralis Rich Cremă de noapte",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "name": "LumaDerm Calm Cremă pentru ten sensibil",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
           "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
           "name": "Aria Light Cremă BB hidratantă",
           "methods": [
-            "catalog",
             "lexical"
-          ]
-        },
-        {
-          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
-          "name": "Auralis Hydra Ser hidratant",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "c8cc028f-e58e-4dde-ba6e-3c86ccb5eae9",
-          "name": "Solora Balsam de buze hidratant",
-          "methods": [
-            "catalog"
           ]
         },
         {
           "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
           "name": "Auralis Daily Cremă hidratantă",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
-          "name": "Auralis Rich Cremă de noapte",
           "methods": [
             "semantic"
           ]
@@ -83,6 +78,20 @@
           "methods": [
             "lexical"
           ]
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "name": "Solora Nourish Cremă de mâini",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c",
+          "name": "Velvet Root Pure Cremă de mâini",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -92,7 +101,8 @@
       "provenance": "real",
       "category": "skincare",
       "_dim": "categorie",
-      "_catalog_hits": 5,
+      "_catalog_hits": 4,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
@@ -113,25 +123,25 @@
           ]
         },
         {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "name": "Auralis Rich Cremă de noapte",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "name": "LumaDerm Calm Cremă pentru ten sensibil",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
           "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
           "name": "Aria Light Cremă BB hidratantă",
           "methods": [
-            "catalog",
             "lexical"
-          ]
-        },
-        {
-          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
-          "name": "Auralis Hydra Ser hidratant",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "c8cc028f-e58e-4dde-ba6e-3c86ccb5eae9",
-          "name": "Solora Balsam de buze hidratant",
-          "methods": [
-            "catalog"
           ]
         },
         {
@@ -149,13 +159,6 @@
           ]
         },
         {
-          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
-          "name": "Auralis Rich Cremă de noapte",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
           "product_id": "59e66303-a30c-4073-bd2d-41a9e162ebea",
           "name": "Calm Theory Fresh Mască de față",
           "methods": [
@@ -168,6 +171,27 @@
           "methods": [
             "semantic"
           ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "name": "Solora Nourish Cremă de mâini",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "84e037ee-fedd-4ce2-8165-4112be1999a7",
+          "name": "Solora Repair Cremă de mâini intensivă",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -177,7 +201,8 @@
       "provenance": "real",
       "category": "haircare",
       "_dim": "categorie+diacritice",
-      "_catalog_hits": 12,
+      "_catalog_hits": 13,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
@@ -252,6 +277,48 @@
           "name": "Nera Rituals Hydra Șampon",
           "methods": [
             "catalog"
+          ]
+        },
+        {
+          "product_id": "1a0fd385-ba3d-4732-b455-289363a3d327",
+          "name": "Nera Rituals Silk Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
+          "name": "Verdea Hydra Șampon hidratant",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "78f91986-2768-4810-befc-5e97f77c80d6",
+          "name": "Verdea Repair Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
+          "name": "Elara Beauty Hydra Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "semantic"
           ]
         }
       ]
@@ -262,7 +329,8 @@
       "provenance": "real",
       "category": "haircare",
       "_dim": "categorie fara diacritice",
-      "_catalog_hits": 12,
+      "_catalog_hits": 13,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
@@ -337,6 +405,48 @@
           "name": "Nera Rituals Hydra Șampon",
           "methods": [
             "catalog"
+          ]
+        },
+        {
+          "product_id": "1a0fd385-ba3d-4732-b455-289363a3d327",
+          "name": "Nera Rituals Silk Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
+          "name": "Verdea Hydra Șampon hidratant",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "78f91986-2768-4810-befc-5e97f77c80d6",
+          "name": "Verdea Repair Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
+          "name": "Coral Theory Hydra Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "semantic"
           ]
         }
       ]
@@ -348,6 +458,7 @@
       "category": "skincare",
       "_dim": "descriere de sine",
       "_catalog_hits": 2,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
@@ -416,92 +527,13 @@
       ]
     },
     {
-      "id": "q-self-02",
-      "query": "sunt însărcinată, ce cremă antirid pot folosi?",
-      "provenance": "real",
-      "category": "skincare",
-      "_dim": "descriere de sine + SAFETY",
-      "_catalog_hits": 7,
-      "candidates": [
-        {
-          "product_id": "8fc02c3b-0df7-4a46-8c43-65ec956af643",
-          "name": "Auralis Night Tratament local cu retinol",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
-          "name": "Auralis Retinol Ser de noapte",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "bb65ad5c-18f4-4add-8cc7-6103b359a0dc",
-          "name": "LumaDerm Renew Ser cu retinal",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "dfeac151-131f-46ca-9acc-ddbd23586fe6",
-          "name": "Nova Botanics Nutri Cremă de ochi",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "0cc369e3-4457-48a1-898d-183180bee07b",
-          "name": "Orchid Field Pure Cremă de ochi",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "9908b73c-9ede-488d-9c1c-d210704fe3d7",
-          "name": "Petala Hydra Cremă de ochi",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
-          "name": "Petala Youth Cremă de ochi antirid",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
-          "name": "Aria Light Cremă BB hidratantă",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "77ff52b6-8a4f-4dde-9979-b2613b2f381e",
-          "name": "Aria Radiant Anticearcăn",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
-          "name": "Auralis Daily Cremă cu SPF 30",
-          "methods": [
-            "semantic"
-          ]
-        }
-      ]
-    },
-    {
       "id": "q-self-03",
       "query": "sunt cu ten sensibil, ce curățare îmi trebuie?",
       "provenance": "paraphrase",
       "category": "skincare",
       "_dim": "descriere de sine",
       "_catalog_hits": 10,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
@@ -577,6 +609,27 @@
           "methods": [
             "catalog"
           ]
+        },
+        {
+          "product_id": "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+          "name": "Petala Gentle Spumă de curățare",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "bf822fca-9432-4824-a6cd-cd7c51c57a66",
+          "name": "Velvet Root Clear Gel de curățare",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "01755354-af34-428d-a7dd-f16f004b6219",
+          "name": "Velvet Root Fresh Loțiune tonică",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -586,7 +639,8 @@
       "provenance": "real",
       "category": "skincare",
       "_dim": "constrangere atribut",
-      "_catalog_hits": 6,
+      "_catalog_hits": 2,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
@@ -594,14 +648,6 @@
           "methods": [
             "catalog",
             "lexical",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
-          "name": "Auralis Daily Cremă cu SPF 30",
-          "methods": [
-            "catalog",
             "semantic"
           ]
         },
@@ -614,10 +660,16 @@
           ]
         },
         {
+          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+          "name": "Auralis Daily Cremă cu SPF 30",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
           "product_id": "020baf31-3e6a-4e16-86fd-4820e78b6090",
           "name": "Lumiere Skin Silk Stick cu SPF",
           "methods": [
-            "catalog",
             "semantic"
           ]
         },
@@ -625,7 +677,6 @@
           "product_id": "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
           "name": "Mira Atelier Silk Stick cu SPF",
           "methods": [
-            "catalog",
             "semantic"
           ]
         },
@@ -633,7 +684,6 @@
           "product_id": "eb408d2a-278b-47f0-980f-e1289a32ead4",
           "name": "Rhea Organics Glow Stick cu SPF",
           "methods": [
-            "catalog",
             "semantic"
           ]
         },
@@ -659,35 +709,12 @@
       "provenance": "real",
       "category": "makeup",
       "_dim": "constrangeri multiple",
-      "_catalog_hits": 6,
+      "_catalog_hits": 2,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
           "name": "Aria Silk Fond de ten",
-          "methods": [
-            "catalog",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
-          "name": "NudeLab Matte 24H Fond de ten",
-          "methods": [
-            "catalog",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
-          "name": "Petala Nude Fond de ten",
-          "methods": [
-            "catalog",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
-          "name": "Velora Second Skin Fond de ten serum",
           "methods": [
             "catalog",
             "semantic"
@@ -702,15 +729,15 @@
           ]
         },
         {
-          "product_id": "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
-          "name": "LumaDerm Luminous Fond de ten",
+          "product_id": "77ff52b6-8a4f-4dde-9979-b2613b2f381e",
+          "name": "Aria Radiant Anticearcăn",
           "methods": [
-            "catalog"
+            "semantic"
           ]
         },
         {
-          "product_id": "77ff52b6-8a4f-4dde-9979-b2613b2f381e",
-          "name": "Aria Radiant Anticearcăn",
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "name": "NudeLab Matte 24H Fond de ten",
           "methods": [
             "semantic"
           ]
@@ -723,8 +750,22 @@
           ]
         },
         {
+          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+          "name": "Petala Nude Fond de ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
           "product_id": "717221bc-327f-47ac-be21-e9855289c381",
           "name": "Velora Perfect Cover Anticearcăn",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
+          "name": "Velora Second Skin Fond de ten serum",
           "methods": [
             "semantic"
           ]
@@ -738,6 +779,7 @@
       "category": "bodycare",
       "_dim": "exprimare naturala",
       "_catalog_hits": 7,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "1efd6c2c-9b34-4b3e-a9ae-4842cd3d6c03",
@@ -807,80 +849,85 @@
     },
     {
       "id": "q-con-04",
-      "query": "caut o cremă de față fără parfum",
+      "query": "caut o cremă hidratantă fără parfum",
       "provenance": "paraphrase",
       "category": "skincare",
-      "_dim": "constrangere negativa (reformulat de sine statator)",
-      "_catalog_hits": 12,
+      "_dim": "constrangere negativa",
+      "_catalog_hits": 3,
+      "_truncated": false,
       "candidates": [
         {
-          "product_id": "cead6d84-6ca3-403e-a138-b8e91a4897c9",
-          "name": "Aria Brow Creion de sprâncene",
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "name": "LumaDerm Aqua Gel-cremă hidratantă",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "name": "LumaDerm Calm Cremă pentru ten sensibil",
           "methods": [
             "catalog"
           ]
         },
         {
-          "product_id": "4dd09a2c-5174-47d1-9884-1aa402f62373",
-          "name": "Aria Glow Fard de obraz",
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "name": "Auralis Daily Cremă hidratantă",
           "methods": [
-            "catalog"
+            "lexical",
+            "semantic"
           ]
         },
         {
-          "product_id": "dd27577f-5f47-4939-aea0-d8d5829a51cd",
-          "name": "Aria Glow Pudră iluminatoare",
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "name": "Petala Rich Cremă hidratantă",
           "methods": [
-            "catalog"
+            "lexical",
+            "semantic"
           ]
         },
         {
-          "product_id": "57dd5c43-ba5b-4cf9-b5bc-516afc8078e1",
-          "name": "Aria Lengthening Mascara",
+          "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+          "name": "Aria Light Cremă BB hidratantă",
           "methods": [
-            "catalog"
+            "lexical"
           ]
         },
         {
-          "product_id": "42be923a-28db-4d10-9e4a-e22f487e281e",
-          "name": "Aria Matte Spray de fixare",
+          "product_id": "40c43ab4-2fb7-4d29-abbb-03a4968421f6",
+          "name": "Auralis Hydra CC Cremă",
           "methods": [
-            "catalog"
+            "semantic"
           ]
         },
         {
-          "product_id": "aa0060e8-3c16-4af9-b1ce-d5b13ceb1cba",
-          "name": "Aria Nude Paletă farduri de ochi",
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "name": "Auralis Rich Cremă de noapte",
           "methods": [
-            "catalog"
+            "semantic"
           ]
         },
         {
-          "product_id": "77ff52b6-8a4f-4dde-9979-b2613b2f381e",
-          "name": "Aria Radiant Anticearcăn",
+          "product_id": "59e66303-a30c-4073-bd2d-41a9e162ebea",
+          "name": "Calm Theory Fresh Mască de față",
           "methods": [
-            "catalog"
+            "semantic"
           ]
         },
         {
-          "product_id": "20989367-b21a-45ea-9f95-c4d406bb97be",
-          "name": "Aria Radiant Iluminator",
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "name": "Coral Theory Balance Cremă hidratantă",
           "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
-          "name": "Aria Silk Fond de ten",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "354fc210-3901-4a32-95f6-d1c68abcf21d",
-          "name": "Aria Smooth Primer",
-          "methods": [
-            "catalog"
+            "lexical"
           ]
         }
       ]
@@ -891,7 +938,8 @@
       "provenance": "real",
       "category": "skincare",
       "_dim": "concern",
-      "_catalog_hits": 12,
+      "_catalog_hits": 15,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
@@ -962,6 +1010,55 @@
           "methods": [
             "catalog"
           ]
+        },
+        {
+          "product_id": "5ae3718a-e8db-4242-8d96-f20712e34311",
+          "name": "LumaDerm Smooth Exfoliant cu BHA",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "079e8ab2-2d78-4e73-a0e0-d815b358217f",
+          "name": "Nera Rituals Revive Tratament local",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "7cc7280a-516a-4476-9d3b-4e6bb338d12f",
+          "name": "Orchid Field Repair Tratament local",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "7f4aaa17-a9d7-4c82-8ed4-3208c32011f9",
+          "name": "Petala Clear Tratament local anti-imperfecțiuni",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "67b81989-0da0-44d0-bb0a-4e70cd039f23",
+          "name": "Verdea Nutri Tratament local",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "00a286ea-51cb-4062-8ecb-360333b39fd3",
+          "name": "Aria Sugar Scrub de buze",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "6aa19230-cc04-4003-b62d-f7256f77ed4e",
+          "name": "Verdea Protect Spray termoprotector",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -971,7 +1068,8 @@
       "provenance": "paraphrase",
       "category": "skincare",
       "_dim": "ingredient + pret",
-      "_catalog_hits": 12,
+      "_catalog_hits": 5,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
@@ -989,42 +1087,6 @@
             "catalog",
             "lexical",
             "semantic"
-          ]
-        },
-        {
-          "product_id": "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
-          "name": "Mira Atelier Pure Loțiune tonică cu niacinamidă",
-          "methods": [
-            "catalog",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "9d9357a7-b807-4868-8b02-bca19deb669b",
-          "name": "Bloom Calm Exfoliant pentru ten",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "1fb3c15b-e3c4-44e4-ae04-20368b64cdfc",
-          "name": "Iris & Co Revive Exfoliant pentru ten",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "24f3e8e2-0ea2-4aa4-b86a-67fd2e3f92c7",
-          "name": "Mira Atelier Balance Gel de curățare",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "a16963c7-3e92-4070-9565-3e0fb8b93696",
-          "name": "Mira Atelier Balance Loțiune tonică",
-          "methods": [
-            "catalog"
           ]
         },
         {
@@ -1047,6 +1109,48 @@
           "methods": [
             "catalog"
           ]
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "name": "Auralis Retinol Ser de noapte",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
+          "name": "Mira Atelier Pure Loțiune tonică cu niacinamidă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
+          "name": "Mira Atelier Silk Stick cu SPF",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "name": "Solora Shield Cremă cu protecție solară SPF 50",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
+          "name": "Solora Sun Cremă de mâini SPF 30",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "27882015-927d-478d-892c-9a62c225bae7",
+          "name": "Velora Glow Mist fixator cu vitamine",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -1057,6 +1161,7 @@
       "category": "skincare",
       "_dim": "ingredient",
       "_catalog_hits": 6,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
@@ -1134,6 +1239,13 @@
           "methods": [
             "semantic"
           ]
+        },
+        {
+          "product_id": "3fc9eae9-b3f3-4005-998b-c6f6e899b6b8",
+          "name": "Auralis Clear Loțiune tonică cu BHA",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -1143,7 +1255,8 @@
       "provenance": "paraphrase",
       "category": "skincare",
       "_dim": "ingredient + concern",
-      "_catalog_hits": 12,
+      "_catalog_hits": 8,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
@@ -1151,14 +1264,6 @@
           "methods": [
             "catalog",
             "lexical",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "8fc02c3b-0df7-4a46-8c43-65ec956af643",
-          "name": "Auralis Night Tratament local cu retinol",
-          "methods": [
-            "catalog",
             "semantic"
           ]
         },
@@ -1177,29 +1282,8 @@
           ]
         },
         {
-          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
-          "name": "Auralis Daily Cremă cu SPF 30",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
-          "name": "Auralis Hydra Ser hidratant",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
           "product_id": "2e5af3be-4684-429c-8a2f-f7ca8c7101a3",
           "name": "Auralis Spot Tratament local",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "df6a6ac3-6192-4dbc-a8e1-b77366ee899b",
-          "name": "Coral Theory Fresh Loțiune tonică",
           "methods": [
             "catalog"
           ]
@@ -1212,10 +1296,59 @@
           ]
         },
         {
-          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
-          "name": "LumaDerm Even Ser cu acid azelaic",
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "name": "LumaDerm Shield Fluid SPF 50+",
           "methods": [
             "catalog"
+          ]
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "name": "Mira Atelier Fresh Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "8fc02c3b-0df7-4a46-8c43-65ec956af643",
+          "name": "Auralis Night Tratament local cu retinol",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
+          "name": "Mira Atelier Pure Loțiune tonică cu niacinamidă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "4d112830-a436-46b7-8ffa-7110547d6a76",
+          "name": "Nera Rituals Silk Gel de duș",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "name": "Petala Bright Ser cu vitamina C",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "67b81989-0da0-44d0-bb0a-4e70cd039f23",
+          "name": "Verdea Nutri Tratament local",
+          "methods": [
+            "semantic"
           ]
         }
       ]
@@ -1227,6 +1360,7 @@
       "category": "skincare",
       "_dim": "ingredient",
       "_catalog_hits": 5,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "8fc02c3b-0df7-4a46-8c43-65ec956af643",
@@ -1299,6 +1433,13 @@
           "methods": [
             "semantic"
           ]
+        },
+        {
+          "product_id": "67b81989-0da0-44d0-bb0a-4e70cd039f23",
+          "name": "Verdea Nutri Tratament local",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -1307,8 +1448,9 @@
       "query": "sampon anti matreata",
       "provenance": "paraphrase",
       "category": "haircare",
-      "_dim": "typo/fara diacritice",
+      "_dim": "cerere FARA raspuns corect",
       "_catalog_hits": 0,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
@@ -1354,10 +1496,43 @@
       "category": "haircare",
       "_dim": "lexical",
       "_catalog_hits": 7,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "7273594f-64f2-4a7d-bbe7-d10ba78b7cd4",
           "name": "Bloom Hydra Mască de păr",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "834633ba-1884-452f-89e4-95ae21ea6762",
+          "name": "Iris & Co Pure Mască de păr",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "f08eab18-f505-4ead-9490-ef08e828d4c5",
+          "name": "Nova Botanics Pure Mască de păr",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "837900f3-f014-4248-a175-23e17fb2e4f9",
+          "name": "Verdea Repair Mască de păr",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "51e48872-3653-406c-b80a-63f0d15ca792",
+          "name": "Verdea Smooth Mască de păr",
           "methods": [
             "catalog",
             "lexical"
@@ -1371,20 +1546,6 @@
           ]
         },
         {
-          "product_id": "834633ba-1884-452f-89e4-95ae21ea6762",
-          "name": "Iris & Co Pure Mască de păr",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "f08eab18-f505-4ead-9490-ef08e828d4c5",
-          "name": "Nova Botanics Pure Mască de păr",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
           "product_id": "6b66ddc6-3765-4cb0-b7f5-6b6850d300c4",
           "name": "Orchid Field Revive Mască de păr",
           "methods": [
@@ -1392,17 +1553,10 @@
           ]
         },
         {
-          "product_id": "837900f3-f014-4248-a175-23e17fb2e4f9",
-          "name": "Verdea Repair Mască de păr",
+          "product_id": "ff036005-f7c8-4c71-8260-1191247d14a4",
+          "name": "Auralis Clay Mască pentru ten",
           "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "51e48872-3653-406c-b80a-63f0d15ca792",
-          "name": "Verdea Smooth Mască de păr",
-          "methods": [
-            "catalog"
+            "lexical"
           ]
         },
         {
@@ -1420,8 +1574,64 @@
           ]
         },
         {
+          "product_id": "f28bb84e-ec28-42ed-93d5-e972c2924407",
+          "name": "LumaDerm Hydra Mască pentru ten",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
           "product_id": "ec0b36a5-11b2-40c6-affc-0ef7ad65bc83",
           "name": "NudeLab Soft Cremă leave-in",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0191df14-bc4b-4bf2-a584-2389c5641176",
+          "name": "Petala Hydra Ulei de păr",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9d5d1bfe-3606-4862-b041-bdc35bf628a3",
+          "name": "Petala Silk Ulei de păr pentru vârfuri",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "2cedd814-e83c-4799-be4e-e7cd43b54882",
+          "name": "Petala Soft Balsam demachiant",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "18a2a1d9-8a77-4f18-9336-6134fe0a4e97",
+          "name": "Petala Soft Șampon uscat pentru păr închis",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "e344b7e0-46c7-45ce-b73c-50f88666c4d6",
+          "name": "Pure Arc Silk Șampon",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ae5baa6d-11b2-4f3d-8bfb-14877a2e061c",
+          "name": "Solora Repair Ulei de păr",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "edcb07ce-dbf4-4e4c-a634-31690ca40eed",
+          "name": "Verdea Gloss Ulei de păr pentru strălucire",
           "methods": [
             "semantic"
           ]
@@ -1435,6 +1645,7 @@
       "category": "makeup",
       "_dim": "categorie scurta",
       "_catalog_hits": 6,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "68df3296-c50c-4b83-a512-435623db637f",
@@ -1519,6 +1730,156 @@
           "methods": [
             "lexical"
           ]
+        },
+        {
+          "product_id": "3e0d34a4-eb02-44ad-91ee-5b3c9a2c24c4",
+          "name": "Verdea Hydra Balsam de păr",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "5026b700-b8d3-4aac-80f6-98471cad50b6",
+          "name": "Verdea Repair Balsam de păr",
+          "methods": [
+            "lexical"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q-sku-01",
+      "query": "PETALAFRESHM-2057",
+      "provenance": "synthetic",
+      "category": "identificator",
+      "_dim": "SKU exact",
+      "_catalog_hits": 1,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "dc94741d-c158-492f-8dcb-548b49d9bc5a",
+          "name": "Petala Fresh Mist pentru ten",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "name": "Mira Atelier Fresh Ser pentru ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "name": "Petala Bright Ser cu vitamina C",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7f4aaa17-a9d7-4c82-8ed4-3208c32011f9",
+          "name": "Petala Clear Tratament local anti-imperfecțiuni",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+          "name": "Petala Gentle Spumă de curățare",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "bab7ced2-a710-4587-a0ed-4d3a58ff52f7",
+          "name": "Petala Pure Deodorant natural",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "fcd23483-62d4-46a3-8ec5-eb3b4007d253",
+          "name": "Petala Rose Fard de obraz cremos",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q-sku-02",
+      "query": "PETALAFRESHM-2O57",
+      "provenance": "synthetic",
+      "category": "identificator",
+      "_dim": "SKU cu typo (O in loc de 0)",
+      "_catalog_hits": 1,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "dc94741d-c158-492f-8dcb-548b49d9bc5a",
+          "name": "Petala Fresh Mist pentru ten",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "name": "Petala Bright Ser cu vitamina C",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7f4aaa17-a9d7-4c82-8ed4-3208c32011f9",
+          "name": "Petala Clear Tratament local anti-imperfecțiuni",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ad3f7ac5-e0f4-44e2-b741-1573c70ee748",
+          "name": "Petala Coffee Scrub de corp",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+          "name": "Petala Gentle Spumă de curățare",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "bab7ced2-a710-4587-a0ed-4d3a58ff52f7",
+          "name": "Petala Pure Deodorant natural",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "fcd23483-62d4-46a3-8ec5-eb3b4007d253",
+          "name": "Petala Rose Fard de obraz cremos",
+          "methods": [
+            "semantic"
+          ]
         }
       ]
     },
@@ -1529,6 +1890,7 @@
       "category": "zgomot",
       "_dim": "input fara sens",
       "_catalog_hits": 0,
+      "_truncated": false,
       "candidates": [
         {
           "product_id": "25fd56bf-4c75-46f6-bef1-abe84d590d95",
