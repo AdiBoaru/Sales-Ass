@@ -140,3 +140,165 @@ def test_partial_grouping_is_rejected_not_silently_skipped():
 def test_ungrouped_set_is_still_legitimate():
     """Un set complet negrupat rămâne valid — fixture-uri şi seturi vechi n-au de ce să pice."""
     assert QrelsSet(business_id="b", queries=[_q(id="q-1"), _q(id="q-2", query="alt ser")])
+
+
+# --- agregare pe familie ----------------------------------------------------
+
+from src.evals.retrieval.harness import RunConfig, run_benchmark  # noqa: E402
+
+
+def _set(queries) -> QrelsSet:
+    return QrelsSet(business_id="b", queries=queries)
+
+
+def _run(qset, ranked_by_query):
+    return run_benchmark(qset, lambda q: ranked_by_query[q], RunConfig(label="t"))
+
+
+def test_format_only_duplicate_does_not_change_headline_weighting():
+    """Testul central al agregării. Un query cules de două ori (diacritice/typo) NU trebuie să
+    cântărească dublu: nu contează mai mult, doar a fost colectat de două ori.
+
+    Verificat pe o metrică de RANKING şi pe rata de interzise, fiindcă se agregă diferit —
+    prima prin medie, a doua prin OR."""
+    base = [
+        _q(id="a1", query="ser ten gras", family_id="fam-a", split_group_id="sg-a"),
+        _q(
+            id="b1",
+            query="crema ten uscat",
+            family_id="fam-b",
+            split_group_id="sg-b",
+            judgments=[QrelJudgment(product_id="p-2", relevance=Relevance.ideal)],
+        ),
+    ]
+    ranked = {"ser ten gras": ["p-1"], "crema ten uscat": ["x"], "ser ten gras?": ["p-1"]}
+    before = _run(_set(base), ranked)
+
+    # aceeaşi întrebare, a doua oară, doar altă formă — ACEEAŞI familie
+    dup = base + [_q(id="a2", query="ser ten gras?", family_id="fam-a", split_group_id="sg-a")]
+    after = _run(_set(dup), ranked)
+
+    assert before.n_queries == 2 and after.n_queries == 3
+    assert before.n_families == after.n_families == 2  # ambele expuse, ca diferenţa să se vadă
+    assert after.ndcg_at_6 == pytest.approx(before.ndcg_at_6)
+    assert after.recall_at_20 == pytest.approx(before.recall_at_20)
+
+
+def test_duplicate_in_its_own_family_would_have_skewed_the_score():
+    """Contra-proba: dacă duplicatul primeşte familie PROPRIE, scorul se mută — exact distorsiunea
+    pe care agregarea o elimină. Fără ea, testul de mai sus ar trece degeaba."""
+    base = [
+        _q(id="a1", query="ser ten gras", family_id="fam-a", split_group_id="sg-a"),
+        _q(
+            id="b1",
+            query="crema ten uscat",
+            family_id="fam-b",
+            split_group_id="sg-b",
+            judgments=[QrelJudgment(product_id="p-2", relevance=Relevance.ideal)],
+        ),
+    ]
+    ranked = {"ser ten gras": ["p-1"], "crema ten uscat": ["x"], "ser ten gras?": ["p-1"]}
+    before = _run(_set(base), ranked)
+    skewed = _run(
+        _set(
+            base
+            + [_q(id="a2", query="ser ten gras?", family_id="fam-DIFERIT", split_group_id="sg-a2")]
+        ),
+        ranked,
+    )
+    assert skewed.ndcg_at_6 != pytest.approx(before.ndcg_at_6)
+
+
+def test_forbidden_rate_is_or_within_family():
+    """O încălcare de constrângere nu se mediază, se numără: dacă o singură variantă scoate un
+    produs interzis, familia e violată. Altfel, adăugarea unei variante „curate" ar dilua-o."""
+    qs = [
+        _q(
+            id="a1",
+            query="q curat",
+            family_id="fam-a",
+            split_group_id="sg-a",
+            forbidden_products=["bad"],
+        ),
+        _q(
+            id="a2",
+            query="q murdar",
+            family_id="fam-a",
+            split_group_id="sg-a",
+            forbidden_products=["bad"],
+        ),
+    ]
+    # doar A DOUA variantă scoate produsul interzis
+    rep = _run(_set(qs), {"q curat": ["p-1"], "q murdar": ["bad", "p-1"]})
+    assert rep.n_families == 1
+    assert rep.forbidden_violation_rate == 1.0, (
+        "familia trebuie violată dacă ORICE variantă o violează"
+    )
+
+
+def test_legacy_ungrouped_set_treats_each_query_as_singleton_family():
+    """Seturile vechi, complet negrupate, rămân valide: fiecare query devine familie singleton, deci
+    agregarea coincide exact cu media pe query."""
+    qs = [_q(id="a1", query="q1"), _q(id="a2", query="q2")]
+    rep = _run(_set(qs), {"q1": ["p-1"], "q2": ["p-1"]})
+    assert rep.n_queries == rep.n_families == 2
+
+
+def test_comparison_rejects_different_family_counts():
+    """Cu alt număr de familii, deltele compară ponderări diferite şi arată ca o schimbare de
+    calitate care nu s-a întâmplat."""
+    from src.evals.retrieval.harness import compare_reports
+
+    a = _run(_set([_q(id="a1", query="q1", family_id="f1", split_group_id="s1")]), {"q1": ["p-1"]})
+    b = _run(
+        _set(
+            [
+                _q(id="a1", query="q1", family_id="f1", split_group_id="s1"),
+                _q(id="a2", query="q2", family_id="f2", split_group_id="s2"),
+            ]
+        ),
+        {"q1": ["p-1"], "q2": ["p-1"]},
+    )
+    with pytest.raises(ValueError, match="număr diferit"):
+        compare_reports(a, b)
+
+
+def test_split_group_never_crosses_tuning_and_holdout():
+    """Cerinţa centrală a nivelului doi. Fără ea, o întrebare în tuning şi varianta ei cu typo în
+    holdout contaminează holdout-ul — iar nicio verificare pe TEXT nu le prinde, fiindcă textele
+    chiar diferă."""
+    # id-uri alese ca să cadă în felii DIFERITE dacă atribuirea s-ar face pe id
+    from src.evals.retrieval.splits import Split, assign_split, partition, split_key
+
+    a = next(f"q-{n}" for n in range(5000) if assign_split(f"q-{n}") is Split.tuning)
+    b = next(f"q-{n}" for n in range(5000) if assign_split(f"q-{n}") is Split.holdout_h2)
+    assert assign_split(a) != assign_split(b)  # premisa testului
+
+    qset = _set(
+        [
+            _q(id=a, query="sampon par uscat", family_id="fam-1", split_group_id="sg-comun"),
+            _q(
+                id=b,
+                query="sampon par uscat hidratant",
+                family_id="fam-2",
+                split_group_id="sg-comun",
+            ),  # familie DIFERITĂ (alt gold), acelaşi grup de felie
+        ]
+    )
+    parts = partition(qset)
+    slices = {s for s, items in parts.items() if items}
+    assert len(slices) == 1, f"grupul a fost împărţit între {slices}"
+    assert all(split_key(q) == "sg-comun" for items in parts.values() for q in items)
+
+
+def test_confirmed_qrels_split_groups_are_intact():
+    """Pe datele reale, nu doar pe fixture."""
+    from src.evals.retrieval.splits import partition
+
+    d = json.loads(_CONFIRMED.read_text(encoding="utf-8"))
+    parts = partition(QrelsSet(**d))
+    seen: dict[str, str] = {}
+    for slice_name, items in parts.items():
+        for q in items:
+            prev = seen.setdefault(q.split_group_id, slice_name.value)
+            assert prev == slice_name.value, f"{q.split_group_id} în {prev} şi {slice_name.value}"

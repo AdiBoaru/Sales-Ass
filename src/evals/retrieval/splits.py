@@ -50,17 +50,34 @@ def assign_split(qid: str) -> Split:
     return Split.tuning
 
 
+def split_key(q: QrelsQuery) -> str:
+    """Cheia după care se atribuie felia: `split_group_id` dacă există, altfel `id`.
+
+    Fără asta, o întrebare şi varianta ei cu typo primesc chei diferite şi pot ajunge în felii
+    diferite — holdout contaminat, chiar dacă textele nu sunt identice şi nicio verificare pe text
+    nu le prinde. Gruparea trebuie să decidă felia, nu identitatea individuală."""
+    return q.split_group_id or q.id
+
+
 def partition(qset: QrelsSet) -> dict[Split, list[QrelsQuery]]:
     """Împarte qrels-ul pe felii, STRATIFICAT pe categorie: atribuirea deterministă se aplică în
-    cadrul fiecărei categorii, ca feliile să fie echilibrate pe tipuri de query, nu doar global."""
+    cadrul fiecărei categorii, ca feliile să fie echilibrate pe tipuri de query, nu doar global.
+
+    Atribuirea se face pe `split_group_id` (vezi `split_key`), deci tot grupul cade în aceeaşi
+    felie. Categoria se ia de la PRIMUL membru al grupului, în ordine stabilă — altfel un grup cu
+    membri în categorii diferite ar fi stratificat inconsistent."""
+    group_cat: dict[str, str | None] = {}
+    for q in sorted(qset.queries, key=lambda x: x.id):
+        group_cat.setdefault(split_key(q), q.category)
+
     by_cat: dict[str | None, list[QrelsQuery]] = defaultdict(list)
     for q in qset.queries:
-        by_cat[q.category].append(q)
+        by_cat[group_cat[split_key(q)]].append(q)
 
     out: dict[Split, list[QrelsQuery]] = {s: [] for s in Split}
     for _cat, items in by_cat.items():
         for q in sorted(items, key=lambda x: x.id):  # ordine stabilă
-            out[assign_split(q.id)].append(q)
+            out[assign_split(split_key(q))].append(q)
     return out
 
 
