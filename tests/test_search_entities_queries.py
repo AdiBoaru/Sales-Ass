@@ -78,3 +78,42 @@ async def test_identifier_candidates_are_active_approved_and_tenant_scoped():
     assert args == ("business-1",)
     assert candidates[0].skus == ("SER-X",)
     assert candidates[0].aliases == ("ser x",)
+
+
+# --- P1 review #251: quality-gate în BAZIN, nu după trunchiere ---------------
+
+
+class _SqlConn:
+    def __init__(self):
+        self.queries = []
+
+    async def fetch(self, sql, *params):
+        self.queries.append((sql, params))
+        return []
+
+
+@pytest.mark.asyncio
+async def test_content_status_filters_the_pool_not_the_hydration():
+    """`get_products_by_ids` taie lista la ≤6 ÎNAINTE să-și aplice filtrul de content_status
+    (catalog.py: `product_ids[:limit]`). Deci un filtru aplicat doar la hidratare producea ZERO
+    rezultate când primii candidați erau `draft`, deși mai jos în bazin existau produse publicate.
+    Filtrul trebuie să fie acolo unde se alege ordinea, nu după ce s-a tăiat din ea."""
+    conn = _SqlConn()
+    await search_shadow_fts(conn, "b", "ser pentru ten gras")
+
+    sql = conn.queries[0][0]
+    assert "content_status" in sql
+    # filtrul intră în WHERE, înainte de order/limit — altfel n-ar schimba ce candidați rămân
+    assert sql.index("content_status") < sql.index("order by rank desc")
+
+
+@pytest.mark.asyncio
+async def test_identifier_candidates_respect_the_same_quality_gate():
+    """Altfel identificatorul ar fi poarta din spate: un SKU exact ar rezolva un produs nepublicat
+    pe care căutarea nu are voie să-l arate."""
+    conn = _SqlConn()
+    await load_identifier_candidates(conn, "b")
+
+    sql = conn.queries[0][0]
+    assert "content_status" in sql
+    assert "'{}'::text[]" in sql  # f-string-ul nu a mâncat literalul de array gol

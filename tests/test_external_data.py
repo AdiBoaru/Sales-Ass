@@ -50,3 +50,40 @@ def test_external_query_normalizes_and_allows_product_intent_only():
         external_query_text("Cremă MATIFIANTĂ pentru ten gras")
         == "crema matifianta pentru ten gras"
     )
+
+
+# --- P1 review #251: numele declarat cu „sunt" -------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "sunt Ion Popescu si caut o crema",
+        "Sunt Maria Ionescu, ce imi recomanzi",
+        "sunt Ana Maria Popa",
+    ],
+)
+def test_declared_name_with_sunt_is_blocked_on_the_raw_text(raw):
+    """`normalized_query` vine DEJA lowercase din `query_spec`, iar majuscula e exact semnalul care
+    separă un nume de o descriere de sine. De aceea detecția rulează pe `detect_on` (textul brut),
+    în timp ce exportul rămâne mereu `normalized_query` — brutul n-are cale de ieșire."""
+    assert external_query_text(raw.lower(), detect_on=raw) is None
+
+
+def test_detection_input_is_never_what_gets_exported():
+    raw = "Crema MATIFIANTA pentru ten gras"
+    assert external_query_text(raw.lower(), detect_on=raw) == "crema matifianta pentru ten gras"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "sunt cu ten gras, ce fond imi recomanzi",
+        "Sunt foarte multumita de crema",
+        "sunt insarcinata, ce crema pot folosi",
+        "sunt alergica la parfum",
+        "sunt Ion",  # un singur token: prenume izolat, nu nume complet declarat
+    ],
+)
+def test_self_description_still_passes_with_raw_detection(raw):
+    assert external_query_text(raw.lower(), detect_on=raw) is not None

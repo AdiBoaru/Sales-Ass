@@ -115,7 +115,11 @@ async def search_entities_shadow(
             _load_shadow_semantic_products(
                 conn,
                 business_id,
-                external_query_text(query_spec.normalized_query),
+                # `detect_on=raw_query` e SEMNAL de detecţie, nu sursă de export: funcţia întoarce
+                # ori `normalized_query`, ori None. E necesar fiindcă `normalized_query` vine deja
+                # lowercase, iar majuscula e exact ce separă „sunt Ion Popescu" de „sunt cu ten
+                # gras" — fără el, tiparul n-ar detecta niciodată nimic în producţie.
+                external_query_text(query_spec.normalized_query, detect_on=query_spec.raw_query),
                 llm,
                 limit,
                 degradations,

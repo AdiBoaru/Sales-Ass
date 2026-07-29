@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from src.db.queries.catalog import _content_status_pred
 from src.domain.identifier_resolution import IdentifierCandidate
 from src.domain.search_entities import EvidenceReference
 
@@ -26,8 +27,13 @@ async def search_shadow_fts(
     produce."""
     if not query_text.strip():
         return []
+    # Quality-gate APLICAT ÎN BAZIN, nu după. `get_products_by_ids` taie lista la `limit` (≤6)
+    # ÎNAINTE să-și aplice filtrul de content_status — deci dacă primii candidați sunt `draft`,
+    # filtrarea la hidratare producea ZERO rezultate, deși mai jos în bazin existau produse
+    # publicate. Filtrul trebuie să fie acolo unde se alege ordinea, nu după ce s-a tăiat din ea.
+    cs = _content_status_pred()  # `$1` = business_id, alias `p` — la fel ca în catalog.py
     rows = await conn.fetch(
-        """
+        f"""
         select d.product_id::text as product_id,
                ts_rank_cd(d.fts_document, websearch_to_tsquery('simple', ro_unaccent($2))) as rank
         from product_search_documents d
@@ -36,6 +42,7 @@ async def search_shadow_fts(
           and d.locale = $3
           and d.document_version = $4
           and p.status = 'active'
+          {f"and {cs}" if cs else ""}
           and d.fts_document @@ websearch_to_tsquery('simple', ro_unaccent($2))
         order by rank desc, d.product_id
         limit $5
@@ -84,18 +91,23 @@ async def load_evidence_references(
 
 
 async def load_identifier_candidates(conn: Any, business_id: str) -> list[IdentifierCandidate]:
-    """Nume + SKU + numai aliasuri product aprobate, toate strict din tenantul cerut."""
+    """Nume + SKU + numai aliasuri product aprobate, toate strict din tenantul cerut.
+
+    Acelaşi quality-gate ca bazinul FTS: dacă tenantul a optat pentru `content_status`, un produs
+    nepublicat nu are voie să fie rezolvat nici prin SKU exact. Altfel identificatorul ar fi fost
+    poarta din spate prin care un `draft` ajungea în răspuns."""
+    cs = _content_status_pred()
     rows = await conn.fetch(
-        """
+        f"""
         select p.id::text as product_id,
                p.name,
                coalesce(
                  array_agg(distinct v.sku) filter (where v.sku is not null and v.sku <> ''),
-                 '{}'::text[]
+                 '{{}}'::text[]
                ) as skus,
                coalesce(
                  array_agg(distinct ia.phrase_norm) filter (where ia.phrase_norm is not null),
-                 '{}'::text[]
+                 '{{}}'::text[]
                ) as aliases
         from products p
         left join product_variants v on v.product_id = p.id and v.business_id = p.business_id
@@ -104,6 +116,7 @@ async def load_identifier_candidates(conn: Any, business_id: str) -> list[Identi
           and ia.target_kind = 'product'
           and ia.status = 'approved'
         where p.business_id = $1 and p.status = 'active'
+          {f"and {cs}" if cs else ""}
         group by p.id, p.name
         order by p.id
         """,
