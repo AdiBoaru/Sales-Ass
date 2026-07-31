@@ -1,0 +1,1215 @@
+{
+  "_meta": {
+    "ATENTIE": "DRAFT — human_verified=false peste tot. Notele sunt PROPUNERI.",
+    "regula_de_notare": "3=satisface tot · 2=are un atribut nedeclarat · 1=nu incalca nimic dar nu e din categoria ceruta · omis=incalca explicit",
+    "catalog_fingerprint": "live:300@2026-07-22T19:49:18+00:00:bc4897518792368d"
+  },
+  "schema_version": 1,
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "lot4-01",
+      "query": "arata rujuri",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "rujuri",
+      "human_verified": false,
+      "family_id": "fam-lot4-rujuri",
+      "split_group_id": "sg-rujuri",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "relevance": 3
+        },
+        {
+          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
+          "relevance": 3
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "relevance": 3
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "relevance": 3
+        },
+        {
+          "product_id": "e088eaee-d64c-45ef-83eb-4b5650c725ed",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "rujuri"
+        }
+      ],
+      "_nota_generatorului": "cerere de CATEGORIE, fara calificatori. Gold = toata categoria (6). Testeaza ca retrieval-ul nu inventeaza filtre pe care userul nu le-a cerut.",
+      "_omise": [
+        "Aria Nude Paletă farduri de ochi (incalca o constrangere)",
+        "Aria Peach Fard de obraz satinat (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-02",
+      "query": "vreau rujuri mate",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "rujuri",
+      "human_verified": false,
+      "family_id": "fam-lot4-ruj-mat",
+      "split_group_id": "sg-rujuri",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "relevance": 3
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "relevance": 3
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "rujuri"
+        },
+        {
+          "facet": "finish",
+          "op": "eq",
+          "value": "matte"
+        }
+      ],
+      "_nota_generatorului": "acelasi contract ca #3 minus bugetul — candidat la acelasi split_group daca se confirma.",
+      "_omise": [
+        "Aria Nude Ruj (incalca o constrangere)",
+        "Aurelia Lab Matte Bronzer (incalca o constrangere)",
+        "Velora Classic Ruj satinat (incalca o constrangere)",
+        "Velora HD Pudră matifiantă (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-03",
+      "query": "vreau rujuri mate sub 60 d eleu",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "rujuri",
+      "human_verified": false,
+      "family_id": "fam-lot4-ruj-mat-60",
+      "split_group_id": "sg-rujuri",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "relevance": 3
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "relevance": 3
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "rujuri"
+        },
+        {
+          "facet": "finish",
+          "op": "eq",
+          "value": "matte"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 60,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "typo real din trafic („d eleu\"), pastrat. Primul query de buget generat pe pret EFECTIV.",
+      "_omise": [
+        "Aria Nude Ruj (incalca o constrangere)",
+        "Aurelia Lab Matte Bronzer (incalca o constrangere)",
+        "NudeLab Soft Focus Pudră translucidă (incalca o constrangere)",
+        "Velora Classic Ruj satinat (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-04",
+      "query": "vreau sa vad un ruj sub 100 de lei",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "rujuri",
+      "human_verified": false,
+      "family_id": "fam-lot4-ruj-100",
+      "split_group_id": "sg-rujuri",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "relevance": 3
+        },
+        {
+          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
+          "relevance": 3
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "relevance": 3
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "relevance": 3
+        },
+        {
+          "product_id": "e088eaee-d64c-45ef-83eb-4b5650c725ed",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "rujuri"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 100,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "buget fara alt calificator.",
+      "_omise": [
+        "NudeLab Clear Gloss de buze (incalca o constrangere)",
+        "NudeLab Ink Tuș de ochi lichid (incalca o constrangere)",
+        "NudeLab Luxe Pudră (incalca o constrangere)",
+        "NudeLab Soft Blush Fard de obraz (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-05",
+      "query": "Caut un ruj lichid mat, ceva intr-o nuanta de rosu.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "rujuri",
+      "human_verified": false,
+      "family_id": "fam-lot4-ruj-lichid-mat",
+      "split_group_id": "sg-rujuri",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "relevance": 3
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "relevance": 3
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "rujuri"
+        },
+        {
+          "facet": "finish",
+          "op": "eq",
+          "value": "matte"
+        }
+      ],
+      "_nota_generatorului": "ATENTIE la etichetare: nuanta („rosu\") traieste pe VARIANTA, nu pe produs, deci filtrul nu o poate exprima. Omul decide daca un ruj mat fara nuanta rosie e relevant 2 sau 1.",
+      "_omise": [
+        "NudeLab Clear Gloss de buze (incalca o constrangere)",
+        "NudeLab Liquid Iluminator lichid (incalca o constrangere)",
+        "NudeLab Soft Blush Fard de obraz (incalca o constrangere)",
+        "NudeLab Soft Focus Pudră translucidă (incalca o constrangere)",
+        "Velvet Root Luxe Iluminator (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-06",
+      "query": "Aveți șampon pentru păr vopsit?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "human_verified": false,
+      "family_id": "fam-lot4-sampon-vopsit",
+      "split_group_id": "sg-sampon-vopsit",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "b218e2dc-4664-42eb-9c8f-87749fd75346",
+          "relevance": 3
+        },
+        {
+          "product_id": "18a2a1d9-8a77-4f18-9336-6134fe0a4e97",
+          "relevance": 1
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "relevance": 1
+        },
+        {
+          "product_id": "84619a68-8902-448f-96f1-774068e5975a",
+          "relevance": 1
+        },
+        {
+          "product_id": "925d704e-7489-4807-9d25-4e8366e88814",
+          "relevance": 1
+        },
+        {
+          "product_id": "e344b7e0-46c7-45ce-b73c-50f88666c4d6",
+          "relevance": 1
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "sampoane",
+            "sampon-uscat"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "colored"
+        }
+      ],
+      "_nota_generatorului": "gold MIC asteptat (1 produs cu suitable_for=colored). Daca e 1, e o realitate de catalog, nu o eroare de filtru — de confirmat la review, ca la finish=matte in lotul 3.",
+      "_omise": [
+        "Iris & Co Soft Balsam de păr (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-07",
+      "query": "Salut, am parul foarte uscat si degradat de vopsea. Ce sampon imi recomanzi?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "human_verified": false,
+      "family_id": "fam-lot4-sampon-uscat",
+      "split_group_id": "sg-sampon-uscat",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "173e4497-3ca7-4397-b1e9-21305ede1b09",
+          "relevance": 3
+        },
+        {
+          "product_id": "1a0fd385-ba3d-4732-b455-289363a3d327",
+          "relevance": 3
+        },
+        {
+          "product_id": "84619a68-8902-448f-96f1-774068e5975a",
+          "relevance": 3
+        },
+        {
+          "product_id": "aada8628-5f07-4094-8cc7-265f555eb805",
+          "relevance": 3
+        },
+        {
+          "product_id": "c3b72d7d-e373-4184-8d46-c1ddbb50200a",
+          "relevance": 3
+        },
+        {
+          "product_id": "c9183cb6-ea84-4016-85f1-b60291a048a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "cf9acc80-b7ec-4f2b-b5eb-98f1350d162a",
+          "relevance": 3
+        },
+        {
+          "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
+          "relevance": 3
+        },
+        {
+          "product_id": "e344b7e0-46c7-45ce-b73c-50f88666c4d6",
+          "relevance": 3
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "relevance": 1
+        },
+        {
+          "product_id": "78f91986-2768-4810-befc-5e97f77c80d6",
+          "relevance": 1
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "sampoane",
+            "sampon-uscat"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "_nota_generatorului": "„uscat SI degradat\" — filtrez doar pe `dry`, fiindca `damaged` are 1 produs si intersectia ar da gold degenerat. Omul poate ridica la 3 produsele care acopera ambele.",
+      "_omise": [
+        "Maison Verde Revive Balsam de păr (incalca o constrangere)",
+        "Verdea Repair Balsam de păr (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-08",
+      "query": "vreau un șampon pentru volum",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": "fam-lot4-sampon-volum",
+      "split_group_id": "sg-sampon-volum",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
+          "relevance": 3
+        },
+        {
+          "product_id": "925d704e-7489-4807-9d25-4e8366e88814",
+          "relevance": 3
+        },
+        {
+          "product_id": "99aaec8e-b32d-45a3-bb2c-35ad55e6fb46",
+          "relevance": 3
+        },
+        {
+          "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
+          "relevance": 1
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "relevance": 1
+        },
+        {
+          "product_id": "78f91986-2768-4810-befc-5e97f77c80d6",
+          "relevance": 1
+        },
+        {
+          "product_id": "b218e2dc-4664-42eb-9c8f-87749fd75346",
+          "relevance": 1
+        },
+        {
+          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
+          "relevance": 1
+        },
+        {
+          "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
+          "relevance": 1
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "sampoane",
+            "sampon-uscat"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "fine"
+        }
+      ],
+      "_nota_generatorului": "„volum\" nu e valoare de catalog; `fine` (par subtire) e cea mai apropiata. Traducerea e o OPINIE — de contestat la review daca nu tine.",
+      "_omise": []
+    },
+    {
+      "id": "lot4-09",
+      "query": "Caut o crema de ochi pentru cearcane sub 120 lei. Aveti cu cofeina si cu vitamina?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "creme-de-ochi",
+      "human_verified": false,
+      "family_id": "fam-lot4-ochi-cofeina",
+      "split_group_id": "sg-ochi-cearcane",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "relevance": 3
+        },
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "relevance": 3
+        },
+        {
+          "product_id": "0559231f-5763-4474-969d-c8e77cc75d05",
+          "relevance": 1
+        },
+        {
+          "product_id": "0cc369e3-4457-48a1-898d-183180bee07b",
+          "relevance": 1
+        },
+        {
+          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
+          "relevance": 1
+        },
+        {
+          "product_id": "9908b73c-9ede-488d-9c1c-d210704fe3d7",
+          "relevance": 1
+        },
+        {
+          "product_id": "dfeac151-131f-46ca-9acc-ddbd23586fe6",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-de-ochi"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 120,
+          "unit": "RON"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "cofeină",
+          "note": "termen din filtru: cofein -> ortografia din catalog: cofeină"
+        }
+      ],
+      "_nota_generatorului": "buget + ingredient. `ingredient` face like pe key_ingredients, deci prinde si „cofeină\" cu diacritice.",
+      "_omise": [
+        "Auralis Retinol Ser de noapte (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-10",
+      "query": "vreau o crema de ochi pentru cearcane, maxim 120 lei.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "creme-de-ochi",
+      "human_verified": false,
+      "family_id": "fam-lot4-ochi-120",
+      "split_group_id": "sg-ochi-cearcane",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "0559231f-5763-4474-969d-c8e77cc75d05",
+          "relevance": 3
+        },
+        {
+          "product_id": "0cc369e3-4457-48a1-898d-183180bee07b",
+          "relevance": 3
+        },
+        {
+          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
+          "relevance": 3
+        },
+        {
+          "product_id": "9908b73c-9ede-488d-9c1c-d210704fe3d7",
+          "relevance": 3
+        },
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "relevance": 3
+        },
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "relevance": 3
+        },
+        {
+          "product_id": "dfeac151-131f-46ca-9acc-ddbd23586fe6",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-de-ochi"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 120,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "acelasi buget ca #9, fara constrangerea de ingredient — pool mai larg, deci NU acelasi contract de adevar.",
+      "_omise": [
+        "Auralis Velvet Creion de ochi (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-11",
+      "query": "Buna, aveti o apa micelara blanda pentru ten sensibil?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "demachiante-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot4-apa-micelara",
+      "split_group_id": "sg-apa-micelara",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+          "relevance": 3
+        },
+        {
+          "product_id": "7c07dbf3-6927-4b64-9c76-0d5d84a8745b",
+          "relevance": 3
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "demachiante-pentru-ten"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "sensitive"
+        },
+        {
+          "facet": "texture",
+          "op": "eq",
+          "value": "apă"
+        }
+      ],
+      "_nota_generatorului": "„apa micelara\" = textura `apă` in catalog. Categorie neatinsa de loturile 1-3.",
+      "_omise": [
+        "LumaDerm Calm Mist pentru ten sensibil (incalca o constrangere)",
+        "Aria Hydra Mist pentru ten (incalca o constrangere)",
+        "Mira Atelier Calm Gel de curățare cu centella (incalca o constrangere)",
+        "Mira Atelier Pure Loțiune tonică (incalca o constrangere)",
+        "Petala Soft Balsam demachiant (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-12",
+      "query": "Vreau un ser cu niacinamida pentru ten gras si pori dilatati.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot4-ser-niacinamida",
+      "split_group_id": "sg-ser-oily",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 1
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 1
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "niacinamidă",
+          "note": "termen din filtru: niacinamid -> ortografia din catalog: niacinamidă"
+        }
+      ],
+      "_nota_generatorului": "„pori dilatati\" n-are valoare canonica; nu inventez una. Ingredientul + tipul de ten poarta cererea.",
+      "_omise": [
+        "Mira Atelier Pure Loțiune tonică cu niacinamidă (incalca o constrangere)",
+        "Petala Matte Cremă hidratantă (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-14",
+      "query": "Salut! Vreau un ser hidratant. Aveti cu acid hialuronic si cu niacinamida?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot4-ser-hidratant",
+      "split_group_id": "sg-ser-hidratare",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "concerns",
+          "op": "contains",
+          "value": "hydration"
+        }
+      ],
+      "_nota_generatorului": "intrebarea despre DOUA ingrediente e o cerere de disponibilitate, nu o intersectie: userul intreaba ce exista, nu cere ambele in acelasi produs.",
+      "_omise": [
+        "Mira Atelier Clear Loțiune tonică cu acid hialuronic (incalca o constrangere)",
+        "Mira Atelier Hydra Loțiune tonică (incalca o constrangere)",
+        "Mira Atelier Pure Loțiune tonică cu niacinamidă (incalca o constrangere)",
+        "Velvet Root Clear Loțiune tonică (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-15",
+      "query": "vreau o crema de maini",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "creme-de-maini",
+      "human_verified": false,
+      "family_id": "fam-lot4-crema-maini",
+      "split_group_id": "sg-c8af1b71",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "1efd6c2c-9b34-4b3e-a9ae-4842cd3d6c03",
+          "relevance": 3
+        },
+        {
+          "product_id": "27ad23a7-a32c-479b-84a8-09d0f707987e",
+          "relevance": 3
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "relevance": 3
+        },
+        {
+          "product_id": "84e037ee-fedd-4ce2-8165-4112be1999a7",
+          "relevance": 3
+        },
+        {
+          "product_id": "ccb61b64-b79b-4291-8216-3168e1ad543b",
+          "relevance": 3
+        },
+        {
+          "product_id": "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c",
+          "relevance": 3
+        },
+        {
+          "product_id": "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-de-maini"
+        }
+      ],
+      "_nota_generatorului": "categorie pura. Perechea fara calificator pentru q-con-03 (care are „le am cam uscate\") — acelasi split_group, contract diferit.",
+      "_omise": [
+        "Verdea Repair Cremă leave-in reparatoare (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-16",
+      "query": "vreau ceva de maini uscate",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "creme-de-maini",
+      "human_verified": false,
+      "family_id": "fam-c8af1b71",
+      "split_group_id": "sg-c8af1b71",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "1efd6c2c-9b34-4b3e-a9ae-4842cd3d6c03",
+          "relevance": 3
+        },
+        {
+          "product_id": "27ad23a7-a32c-479b-84a8-09d0f707987e",
+          "relevance": 3
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "relevance": 3
+        },
+        {
+          "product_id": "84e037ee-fedd-4ce2-8165-4112be1999a7",
+          "relevance": 3
+        },
+        {
+          "product_id": "ccb61b64-b79b-4291-8216-3168e1ad543b",
+          "relevance": 3
+        },
+        {
+          "product_id": "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c",
+          "relevance": 3
+        },
+        {
+          "product_id": "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-de-maini"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "_nota_generatorului": "formulare de trafic real, foarte scurta. Acelasi contract ca q-con-03 -> candidat la ACEEASI familie, de confirmat.",
+      "_omise": [
+        "NudeLab Soft Cremă leave-in (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-17",
+      "query": "ceva calmant pentru ten sensibil sub 80 lei",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": "fam-lot4-calmant-80",
+      "split_group_id": "sg-calmant",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+          "relevance": 3
+        },
+        {
+          "product_id": "22a10eea-6050-4425-83ee-7dc52c314938",
+          "relevance": 3
+        },
+        {
+          "product_id": "2cedd814-e83c-4799-be4e-e7cd43b54882",
+          "relevance": 3
+        },
+        {
+          "product_id": "2f0beb7e-5952-4192-b32e-fac5d2d6d9f1",
+          "relevance": 3
+        },
+        {
+          "product_id": "350c46db-5a89-4e31-8aa2-97edf6377801",
+          "relevance": 3
+        },
+        {
+          "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+          "relevance": 3
+        },
+        {
+          "product_id": "51f28654-3492-4931-8d02-6f9d70d0dc0a",
+          "relevance": 3
+        },
+        {
+          "product_id": "609e6f3e-c8e9-4bc5-9ed3-86bc1328073f",
+          "relevance": 3
+        },
+        {
+          "product_id": "67a2d71f-c9f2-46c2-b031-ff8cadcac5b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "71578045-3692-4b40-89af-b53a18aaa56f",
+          "relevance": 3
+        },
+        {
+          "product_id": "7a1e820d-aa15-4908-93ab-8b85eac7d85e",
+          "relevance": 3
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "relevance": 3
+        },
+        {
+          "product_id": "839cab86-b6b8-4a26-ac0d-a65ce65fa2d1",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "b78abc8f-1808-41e6-a6ce-31bfa4e2c381",
+          "relevance": 3
+        },
+        {
+          "product_id": "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
+          "relevance": 3
+        },
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "relevance": 3
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 3
+        },
+        {
+          "product_id": "e2870c8b-fc11-4707-a127-868cf84d4a71",
+          "relevance": 3
+        },
+        {
+          "product_id": "e6df7d75-9c72-48cb-adc6-03048e5b82b2",
+          "relevance": 3
+        },
+        {
+          "product_id": "faed8c5c-b879-4403-97ef-cf12b23afb61",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "curatarea-tenului",
+            "seruri-pentru-ten",
+            "lotiuni-tonice",
+            "masti-pentru-ten",
+            "creme-hidratante",
+            "demachiante-pentru-ten",
+            "mist-pentru-ten",
+            "creme-de-ochi",
+            "protectie-solara"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "sensitive"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 80,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "cross-categorie ca q-con-05: „ceva calmant\" nu numeste o categorie. Bugetul pe pret efectiv.",
+      "_omise": [
+        "Calm Theory Pure Ser pentru ten (incalca o constrangere)",
+        "Calm Theory Fresh Mască de față (incalca o constrangere)",
+        "Velvet Root Fresh Loțiune tonică (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-18",
+      "query": "Vreau o crema hidratanta pentru ten gras, sa nu lase luciu.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-lot4-hidratanta-gras",
+      "split_group_id": "sg-hidratanta-gras",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ],
+      "_nota_generatorului": "„sa nu lase luciu\" ar fi finish=matte, dar `creme-hidratante` n-are `finish` in catalog — nu inventez constrangerea. Ramane semnal pentru om.",
+      "_omise": [
+        "Auralis Hydra CC Cremă (incalca o constrangere)",
+        "LumaDerm Hydra Mască pentru ten (incalca o constrangere)",
+        "LumaDerm Purifying Gel de curățare (incalca o constrangere)",
+        "LumaDerm Smooth Exfoliant cu BHA (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-19",
+      "query": "Cat costa crema hidratanta cu acid hialuronic?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-lot4-hidratanta-ha",
+      "split_group_id": "sg-hidratanta-ha",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 1
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "acid hialuronic"
+        }
+      ],
+      "_nota_generatorului": "intrebare de PRET, dar retrieval-ul tot trebuie sa gaseasca produsul corect — asta se masoara aici, nu formularea raspunsului.",
+      "_omise": [
+        "Petala Hydra Ser cu acid hialuronic (incalca o constrangere)",
+        "Aria Light Cremă BB hidratantă (incalca o constrangere)",
+        "Auralis Hydra CC Cremă (incalca o constrangere)",
+        "Coral Theory Fresh Mască de față (incalca o constrangere)",
+        "Coral Theory Soft Mască de față (incalca o constrangere)",
+        "Mira Atelier Daily Mască de față (incalca o constrangere)",
+        "Orchid Field Soft Mască de față cu acid hialuronic (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot4-20",
+      "query": "Buna, caut un fond de ten pentru ten deschis, cu acoperire medie.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "fond-de-ten",
+      "human_verified": false,
+      "family_id": "fam-lot4-fond-medium",
+      "split_group_id": "sg-fond-medium",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
+          "relevance": 3
+        },
+        {
+          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "coverage",
+          "op": "eq",
+          "value": "medium"
+        }
+      ],
+      "_nota_generatorului": "„ten deschis\" = nuanta, traieste pe VARIANTA. Acelasi contract ca q-con-02/lot3-03 pe partea de acoperire -> candidat la acelasi split_group.",
+      "_omise": [
+        "NudeLab Fresh Cremă CC (incalca o constrangere)",
+        "NudeLab Matte 24H Fond de ten (incalca o constrangere)",
+        "NudeLab Natural Cover Anticearcăn (incalca o constrangere)",
+        "Petala Nude Fond de ten (incalca o constrangere)",
+        "Velora Second Skin Fond de ten serum (incalca o constrangere)",
+        "Verdea Prime Cremă BB (incalca o constrangere)"
+      ]
+    }
+  ]
+}

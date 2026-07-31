@@ -1,0 +1,817 @@
+{
+  "_meta": {
+    "ATENTIE": "DRAFT — human_verified=false peste tot. Notele sunt PROPUNERI.",
+    "regula_de_notare": "3=satisface tot · 2=are un atribut nedeclarat · 1=nu incalca nimic dar nu e din categoria ceruta · omis=incalca explicit",
+    "catalog_fingerprint": "live:300@2026-07-22T19:49:18+00:00:bc4897518792368d"
+  },
+  "schema_version": 1,
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "lot5a-01",
+      "query": "Salut! Caut un ser cu vitamina C.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot5a-ser-vitc",
+      "split_group_id": "sg-ser-vitc",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "forma de baza a familiei. Toate variantele de mai jos au ACELASI contract de adevar daca nu adauga un calificator real.",
+      "_omise": [
+        "Mira Atelier Balance Gel de curățare (incalca o constrangere)",
+        "Solora Shield Cremă cu protecție solară SPF 50 (incalca o constrangere)",
+        "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)",
+        "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-02",
+      "query": "Salut! Aveți seruri cu vitamina C?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot5a-ser-vitc",
+      "split_group_id": "sg-ser-vitc",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "varianta de forma a lui #1 (intrebare vs cerere). Candidat la ACEEASI familie.",
+      "_omise": [
+        "Solora Shield Cremă cu protecție solară SPF 50 (incalca o constrangere)",
+        "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-03",
+      "query": "Salut! Cât costă un ser cu vitamina C?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot5a-ser-vitc",
+      "split_group_id": "sg-ser-vitc",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "intrebare de PRET. Retrieval-ul are aceeasi sarcina; ce se schimba e formularea raspunsului, care nu se masoara aici. Candidat la aceeasi familie ca #1 — de confirmat.",
+      "_omise": [
+        "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-04",
+      "query": "Buna! Caut un ser cu vitamina C pentru un ten cam fara stralucire.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot5a-ser-vitc",
+      "split_group_id": "sg-ser-vitc",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "„fara stralucire\" nu are valoare canonica; cel mai apropiat ar fi `hyperpigmentation`, dar nu e acelasi lucru. NU adaug constrangere. Familie separata de #1 doar daca omul considera calificatorul real.",
+      "_omise": [
+        "Aria Light Cremă BB hidratantă (incalca o constrangere)",
+        "Mira Atelier Glow Mască de față (incalca o constrangere)",
+        "NudeLab Fresh Cremă CC (incalca o constrangere)",
+        "Petala Glow Mască exfoliantă cu AHA (incalca o constrangere)",
+        "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-05",
+      "query": "Buna! Caut un ser cu vitamina C pentru ten, vreau ceva care sa-mi lumineze pielea.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot5a-ser-vitc",
+      "split_group_id": "sg-ser-vitc",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "acelasi caz ca #4 — „sa lumineze\" e efectul asteptat, nu un atribut. Trei variante (#4, #5 si asta) testeaza exact daca agregarea pe familie nu lasa un query sa cantareasca triplu.",
+      "_omise": [
+        "Aria Light Cremă BB hidratantă (incalca o constrangere)",
+        "NudeLab Fresh Cremă CC (incalca o constrangere)",
+        "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-06",
+      "query": "Bună, am pete pigmentare și tenul matur. Caut ceva cu vitamina C care chiar ajută.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": null,
+      "human_verified": false,
+      "family_id": "fam-lot5a-vitc-pigmentare",
+      "split_group_id": "sg-ser-vitc",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "1fb9cfeb-a520-4a6b-9438-911e635990f9",
+          "relevance": 1
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 1
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        },
+        {
+          "product_id": "bb65ad5c-18f4-4add-8cc7-6103b359a0dc",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "seruri-pentru-ten",
+            "creme-hidratante",
+            "creme-de-ochi",
+            "masti-pentru-ten",
+            "lotiuni-tonice"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "hyperpigmentation"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "AICI calificatorul e real si canonic (`hyperpigmentation`), deci familie PROPRIE, nu varianta lui #1. Cross-categorie: userul n-a numit o categorie.",
+      "_omise": [
+        "NudeLab Fresh Cremă CC (incalca o constrangere)",
+        "Petala Velvet Cremă BB (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-07",
+      "query": "recomanda-mi un ser pentru ten gras",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-a12ebd01",
+      "split_group_id": "sg-a12ebd01",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "relevance": 1
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 1
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ],
+      "_nota_generatorului": "acelasi contract ca q-con-01... de fapt ca `q-self-01` („am tenul gras, ce ser imi recomanzi?\") — candidat la ACEEASI familie, formulare imperativa in loc de intrebare.",
+      "_omise": [
+        "Aria Revive Mist pentru ten (incalca o constrangere)",
+        "Auralis Clay Mască pentru ten (incalca o constrangere)",
+        "Petala Matte Cremă hidratantă (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-08",
+      "query": "salut! caut un ser hidratant pentru fata, ceva sub 150 de lei. aveti?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": "fam-lot5a-ser-hidr-150",
+      "split_group_id": "sg-ser-hidratare",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "concerns",
+          "op": "contains",
+          "value": "hydration"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 150,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "buget pe pret EFECTIV. Perechea cu prag a lui lot3-10 („caut un ser pentru hidratare\") — contract diferit, deci familie proprie, acelasi split_group.",
+      "_omise": [
+        "Calm Theory Fresh Mască de față (incalca o constrangere)",
+        "Elara Beauty Calm Mască de față (incalca o constrangere)",
+        "Elara Beauty Sun Balsam de buze (incalca o constrangere)",
+        "Mira Atelier Silk Stick cu SPF (incalca o constrangere)",
+        "Rhea Organics Pure Mască de față (incalca o constrangere)",
+        "Solora Balsam de buze hidratant (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)",
+        "Verdea Hydra Balsam de păr (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-09",
+      "query": "vreau o cremă hidratantă",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-lot5a-hidratanta",
+      "split_group_id": "sg-hidratanta",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        }
+      ],
+      "_nota_generatorului": "categorie pura, fara calificator. Perechea fara tip de ten pentru q-cat-01/02.",
+      "_omise": [
+        "Aria Light Cremă BB hidratantă (incalca o constrangere)",
+        "Auralis Contur ochi Cremă (incalca o constrangere)",
+        "Auralis Hydra CC Cremă (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-10",
+      "query": "vreau o crema de fata pentru ten uscat",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-504a1a0e",
+      "split_group_id": "sg-504a1a0e",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "_nota_generatorului": "acelasi contract ca q-cat-01/q-cat-02 („crema hidratanta pentru ten uscat\") — candidat la ACEEASI familie. „crema de fata\" vs „crema hidratanta\" e diferenta de vocabular, nu de intentie.",
+      "_omise": [
+        "Calm Theory Fresh Mască de față (incalca o constrangere)",
+        "LumaDerm Hydra Mască pentru ten (incalca o constrangere)",
+        "Petala Nourish Cremă de mâini (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)",
+        "Solora Repair Cremă de mâini intensivă (incalca o constrangere)",
+        "Velvet Root Pure Cremă de mâini (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-11",
+      "query": "Salut, am tenul uscat iarna si vreau o crema hidratanta mai bogata, ceva pana in 120 lei.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-lot5a-hidr-bogata-120",
+      "split_group_id": "sg-504a1a0e",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        },
+        {
+          "facet": "texture",
+          "op": "eq",
+          "value": "cremă"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 120,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "„mai bogata\" -> textura `cremă` (nu `gel`). Traducere contestabila, dar sustinuta de catalog: cremele pentru ten uscat sunt `cremă`, cele pentru ten gras `gel`.",
+      "_omise": [
+        "Solora Balsam de buze hidratant (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)",
+        "Solora Repair Cremă de mâini intensivă (incalca o constrangere)",
+        "Solora Rich Unt de corp (incalca o constrangere)",
+        "Velvet Root Pure Cremă de mâini (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-12",
+      "query": "caut o cremă hidratantă pentru ten gras",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-lot5a-hidr-gras",
+      "split_group_id": "sg-hidratanta-gras",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 1
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 1
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 1
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 1
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ],
+      "_nota_generatorului": "acelasi contract ca lot4-18 („crema hidratanta pentru ten gras, sa nu lase luciu\") minus calificatorul netraductibil — candidat la acelasi split_group.",
+      "_omise": [
+        "Aria Light Cremă BB hidratantă (incalca o constrangere)",
+        "Auralis Hydra CC Cremă (incalca o constrangere)",
+        "Calm Theory Fresh Mască de față (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5a-13",
+      "query": "caut o cremă pentru ten gras",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "creme-hidratante",
+      "human_verified": false,
+      "family_id": "fam-lot5a-crema-gras",
+      "split_group_id": "sg-hidratanta-gras",
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 1
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 1
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ],
+      "_nota_generatorului": "varianta de forma a lui #13 („crema\" vs „crema hidratanta\"). ACEEASI familie daca omul confirma ca nu schimba intentia.",
+      "_omise": [
+        "Auralis Clay Mască pentru ten (incalca o constrangere)",
+        "Bloom Calm Exfoliant pentru ten (incalca o constrangere)",
+        "Iris & Co Revive Exfoliant pentru ten (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)"
+      ]
+    }
+  ]
+}
