@@ -91,7 +91,10 @@
         "level": { "enum": ["hard", "soft"] },
         "source": { "type": "string" },
         "source_ref": { "type": "string" },
-        "verified_at": { "type": "string" }
+        "verified_at": { "type": "string" },
+        "rule_id": { "type": "string", "description": "NX-173: regula din safety_rules.json care a derivat intrarea — fără ea, o regulă greșită nu se poate repara global." },
+        "reviewed_by": { "type": "string" },
+        "matched_on": { "type": "string" }
       },
       "additionalProperties": false,
       "allOf": [

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.config import get_settings
+from src.domain.contracts import build_category_requirements
 from src.domain.facets import build_facets
 from src.domain.normalize import normalize
 from src.domain.pack import DomainPack, FacetSpec
@@ -206,6 +207,8 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         ),
         facets=build_facets(merged.get("facets")),  # NX-186: registru tipizat (fail-closed)
         response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
+        # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
+        required_attributes=build_category_requirements(merged.get("required_attributes")),
     )
 
 

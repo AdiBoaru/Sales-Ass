@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from src.domain.contracts import EMPTY_REQUIREMENTS, CategoryRequirements
 from src.domain.facets import TypedFacet
 
 
@@ -86,3 +87,8 @@ class DomainPack:
     # ale agentului (proză/order/rich), peste regulile dure de grounding și siguranță.
     # Gol → fără ghid de stil (byte-identic). Per-vertical (defaults JSON) + override per-tenant.
     response_style: dict[str, str] = field(default_factory=dict)
+    # NX-205: câmpurile OBLIGATORII per categorie (frunză + rădăcină, cumulate) — contractul de
+    # completitudine al catalogului. Erau hardcodate în `scripts/audit_catalog_v2.py`
+    # (`REQUIRED_V3_BY_SLUG`/`_BY_ROOT`); acum sunt config per-vertical (P9), iar auditul le CITEȘTE
+    # de aici. Gol → nicio cerință (verticalele fără contract de conținut rămân ca azi).
+    required_attributes: CategoryRequirements = EMPTY_REQUIREMENTS
