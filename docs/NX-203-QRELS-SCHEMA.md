@@ -44,8 +44,14 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
   încărcătorul) și în filtrul de buget din `nx203_propose_qrels_candidates.py` (unde 3-7 produse
   per prag lipseau din candidați — o gaură de recall în GOLD, pe care benchmarkul n-o poate
   detecta). `list_price` rămâne în snapshot ca diagnostic, exclus din amprentă.
-  **Consecință:** prețul efectiv depinde de ziua rulării (ferestre de promoție), deci baseline și
-  candidat se rulează în aceeași zi — altfel `compare_reports` refuză, corect.
+- **Regula operațională: un singur `CatalogSnapshot`, capturat o dată, pasat și la baseline, și la
+  candidat.** Nu „în aceeași zi" — ăla e sfat, nu garanție: o promoție care expiră la miezul nopții
+  sau un re-seed în timpul rulării produc tot două cataloage. Două gărzi, fiindcă sunt două
+  scurgeri diferite: retrieval-ul citește DB-ul *live*, deci produsele apărute după captură ies în
+  `unverifiable_products` (raport neverificat); iar `assert_catalog_unchanged()`, chemat la finalul
+  rulării, prinde schimbările la produse deja în snapshot — cazul în care ambele rapoarte poartă
+  amprenta veche și `compare_reports` ar accepta două măsurători contra unui catalog inexistent.
+  `updated_at` nu se schimbă când expiră o promoție; amprenta da.
 - **Un singur numărător de încălcări.** `metrics.violations_at_k` = REUNIUNEA dintre excepțiile
   explicite din qrels și violările derivate din constrângeri. Reuniune, nu sumă: un produs prins de
   ambele e o singură încălcare, altfel rata ar crește cu cât un caz e mai bine acoperit de

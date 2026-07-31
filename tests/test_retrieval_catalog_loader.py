@@ -12,7 +12,7 @@ import datetime as dt
 import pytest
 
 from src.db.queries.catalog import _EFFECTIVE_PRICE
-from src.evals.retrieval.catalog import load_catalog
+from src.evals.retrieval.catalog import assert_catalog_unchanged, load_catalog
 from src.evals.retrieval.constraints import VIOLATES, evaluate
 
 
@@ -105,3 +105,41 @@ async def test_same_second_price_change_still_changes_fingerprint():
 
     assert a.version == b.version
     assert a.fingerprint != b.fingerprint
+
+
+@pytest.mark.asyncio
+async def test_guard_accepts_stable_catalog():
+    conn = _FakeConn([_row()])
+    snapshot = await load_catalog(conn, "biz")
+
+    await assert_catalog_unchanged(_FakeConn([_row()]), "biz", snapshot)
+
+
+@pytest.mark.asyncio
+async def test_guard_rejects_catalog_changed_during_run():
+    """Re-seed sau promoţie expirată SUB rulare.
+
+    O singură captură garantează că baseline şi candidat compară acelaşi catalog între ele — dar
+    amândouă poartă amprenta VECHE, deci `compare_reports` ar accepta două măsurători făcute contra
+    unui catalog care nu mai există. Verificarea de final e singurul loc unde se vede."""
+    snapshot = await load_catalog(_FakeConn([_row(price=70)]), "biz")
+
+    with pytest.raises(ValueError, match="s-a schimbat în timpul rulării"):
+        await assert_catalog_unchanged(_FakeConn([_row(price=42)]), "biz", snapshot)
+
+
+@pytest.mark.asyncio
+async def test_guard_catches_change_invisible_to_updated_at():
+    """Cazul care motivează garda: promoţia expiră, `updated_at` NU se schimbă.
+
+    O verificare pe versiune (care vine din `updated_at`) ar trece. Amprenta prinde, fiindcă
+    acoperă preţul efectiv."""
+    stamp = dt.datetime(2026, 7, 30, 12, 0, 0)
+    snapshot = await load_catalog(_FakeConn([_row(price=60, updated_at=stamp)]), "biz")
+    dupa = _FakeConn([_row(price=100, updated_at=stamp)])
+
+    assert (await load_catalog(dupa, "biz")).version == snapshot.version
+    with pytest.raises(ValueError, match="s-a schimbat"):
+        await assert_catalog_unchanged(
+            _FakeConn([_row(price=100, updated_at=stamp)]), "biz", snapshot
+        )

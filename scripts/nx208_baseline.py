@@ -27,7 +27,10 @@ from src.evals.retrieval.adaptor import (  # noqa: E402
     retrieve_products,
     retrieve_products_rewritten,
 )
-from src.evals.retrieval.catalog import load_catalog  # noqa: E402
+from src.evals.retrieval.catalog import (  # noqa: E402
+    assert_catalog_unchanged,
+    load_catalog,
+)
 from src.evals.retrieval.harness import RunConfig, run_benchmark  # noqa: E402
 from src.evals.retrieval.schema import QrelsSet  # noqa: E402
 
@@ -94,6 +97,8 @@ async def main() -> None:
         print(f"  Forbidden@6:  {report.forbidden_violation_rate:.3f} (interzis in top-6)")
         print()
 
+    async with tenant_conn(qset.business_id) as conn:
+        await assert_catalog_unchanged(conn, qset.business_id, catalog)
     await close_pool()
 
     REPORT.parent.mkdir(exist_ok=True)

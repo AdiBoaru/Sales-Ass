@@ -26,7 +26,10 @@ from src.agent.llm import get_llm  # noqa: E402
 from src.config import get_settings  # noqa: E402
 from src.db.connection import tenant_conn  # noqa: E402
 from src.evals.retrieval.adaptor import retrieve_products  # noqa: E402
-from src.evals.retrieval.catalog import load_catalog  # noqa: E402
+from src.evals.retrieval.catalog import (  # noqa: E402
+    assert_catalog_unchanged,
+    load_catalog,
+)
 from src.evals.retrieval.harness import RunConfig, compare_reports, run_benchmark  # noqa: E402
 from src.evals.retrieval.schema import QrelsSet  # noqa: E402
 from src.evals.retrieval.splits import Split, partition  # noqa: E402
@@ -126,6 +129,11 @@ async def run(qrels_path: Path, split: Split, out_path: Path, *, min_queries: in
         ),
         catalog,
     )
+    # Garda de final: retrieval-ul a citit DB-ul LIVE. Daca s-a schimbat catalogul sub rulare,
+    # ambele rapoarte poarta amprenta veche, deci comparatia ar accepta doua masuratori facute
+    # contra unui catalog care nu mai exista.
+    async with tenant_conn(qset.business_id) as conn:
+        await assert_catalog_unchanged(conn, qset.business_id, catalog)
     comparison = compare_reports(baseline, candidate)
     payload = {
         "_meta": {

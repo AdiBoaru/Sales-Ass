@@ -9,11 +9,17 @@ inexistente în celălalt — iar diferenţa n-ar apărea nicăieri ca eroare.
 schimbă preţuri fără să adauge produse trebuie să producă altă versiune, altfel două rapoarte
 incomparabile ar trece drept comparabile.
 
-CONSECINŢĂ de reţinut: preţul efectiv depinde de FEREASTRA promoţiei, deci de ziua rulării. Acelaşi
-rând din DB dă alt preţ după expirarea unei promoţii — `updated_at` nu se schimbă, dar amprenta da,
-fiindcă acoperă conţinutul. Un baseline măsurat înainte de expirare nu se mai poate compara cu un
-candidat măsurat după, iar `compare_reports` va refuza. E corect: catalogul pe care îl vede
-clientul chiar s-a schimbat. Practic — baseline şi candidat se rulează în aceeaşi zi.
+REGULA OPERAŢIONALĂ: **acelaşi obiect `CatalogSnapshot`, capturat O DATĂ, pasat şi la baseline, şi
+la candidat.** Nu „în aceeaşi zi" — asta e sfat, nu garanţie: o promoţie care expiră la miezul
+nopţii sau un re-seed în timpul rulării produc tot două cataloage diferite. Preţul efectiv depinde
+de fereastra promoţiei, deci de MOMENTUL citirii; `updated_at` nu se schimbă la expirare, dar
+amprenta da, fiindcă acoperă conţinutul.
+
+Două capcane pe care o singură captură nu le acoperă, fiecare cu garda ei:
+  · retrieval-ul rulează pe DB-ul LIVE, deci poate întoarce produse apărute după captură →
+    `unverifiable_products`, raport neverificat (harness);
+  · catalogul se poate schimba SUB rulare, la produse deja în snapshot (preţ, promoţie expirată la
+    miezul nopţii) → `assert_catalog_unchanged()`, chemat după rulare.
 """
 
 from __future__ import annotations
@@ -79,3 +85,23 @@ async def load_catalog(conn: Any, business_id: str) -> CatalogSnapshot:
         }
     stamp = latest.isoformat(timespec="seconds") if latest is not None else "unknown"
     return CatalogSnapshot(version=f"live:{len(products)}@{stamp}", products=products)
+
+
+async def assert_catalog_unchanged(conn: Any, business_id: str, snapshot: CatalogSnapshot) -> None:
+    """Re-citeşte catalogul după rulare şi refuză dacă s-a schimbat între timp.
+
+    O singură captură garantează că baseline şi candidat compară acelaşi catalog ÎNTRE ELE, dar nu
+    că vreunul a măsurat contra realităţii: retrieval-ul citeşte DB-ul live. Un re-seed pornit în
+    timpul rulării, sau o promoţie care expiră la miezul nopţii, lasă rapoartele cu amprente
+    identice — pentru că amprenta vine din snapshotul vechi — şi rezultate calculate contra unui
+    catalog care nu mai există. Amprentele ar fi egale, deci `compare_reports` ar accepta.
+
+    Verificarea e la FINAL, nu la început: e singurul moment în care se poate şti dacă intervalul
+    rulării a fost stabil."""
+    dupa = await load_catalog(conn, business_id)
+    if dupa.fingerprint != snapshot.fingerprint:
+        raise ValueError(
+            f"catalogul s-a schimbat în timpul rulării ({snapshot.fingerprint} → "
+            f"{dupa.fingerprint}) — rezultatele s-au măsurat contra unui catalog care nu mai "
+            f"există, iar amprenta din raport ar arăta stabilitate. Repetă rularea."
+        )
