@@ -36,7 +36,10 @@ class ModelRates:
 # Tarife per model — NX-201 felia A: reconciliate cu lista de prețuri PUBLICATĂ de OpenAI
 # (https://developers.openai.com/api/docs/pricing, verificat 2026-07-31). NU mai sunt estimări
 # inventate: valorile de dinainte erau subevaluate de 2,25x-4,00x (delta în docs/NX-201-PRICING.md).
-# Modificarea lor schimbă când se declanșează plafoanele de cost — vezi nota din doc.
+# Modificarea lor schimbă când se declanșează plafoanele de cost — dar DOAR pe feliile alimentate
+# din `cost_for` (pipeline). Aftercare și contorul web per-vizitator scriu încă o euristică fixă din
+# config, deci NU se mișcă cu tarifele; cartografia celor trei alimentatori e în
+# docs/NX-201-PRICING.md.
 _DEFAULT_PRICING: dict[str, ModelRates] = {
     "gpt-5.4": ModelRates(input=2.50, cached_input=0.25, output=15.00),
     "gpt-5.4-mini": ModelRates(input=0.75, cached_input=0.075, output=4.50),

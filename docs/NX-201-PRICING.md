@@ -31,24 +31,42 @@ Măsurat pe tururi reale (prefixul curat al rulării NX-204a, 24 execuții pe ca
 configurație de producție `gpt-5.4-mini`): **cost median $0,00597/tur** la tarife reale — calculat
 per apel, cu tokenii cached la tarif redus.
 
-| Plafon | Valoare | Tururi până la plafon — ACUM (real) | Cât *părea* înainte |
-|---|---:|---:|---:|
-| `daily_cost_cap_usd` (business) | $5,00 | **~838** | ~1.880 – 3.350 |
-| `web_cost_cap_per_visitor_usd` | $0,50 | **~84** | ~188 – 335 |
-| `contact_daily_cost_cap_usd` | (vezi config) | ÷2,25–4,00 | — |
+### Cine alimentează contoarele de cost — TREI surse, DOUĂ unități
 
-> Intervalele „înainte" sunt derivate din factorii per-celulă, nu recalculate exact: harness-ul
-> nu înregistrează tokenii **cached** per tur, iar fără ei costul la tarifele vechi nu se poate
-> reconstitui punctual. `UsageAccumulator.cached_tokens` îi are — de instrumentat în felia B,
-> pentru raportul de baseline.
+Ăsta e faptul care contează, și nu e uniform. Tarifele corectate ating **doar** feliile alimentate
+din `pricing.cost_for`; restul contoarelor merg pe o euristică fixă din config, pe care acest PR
+NU o schimbă:
 
-### ⚠️ Decizie necesară: plafoanele se strâng de 2,25–4x fără să le fi atins nimeni
+| Contor | Alimentat din | Atins de acest PR |
+|---|---|---|
+| business daily — felia **pipeline** | `ctx.usage.cost_usd` = `pricing.cost_for` ([`processor.py:347`](../src/worker/processor.py#L347)) | **DA** (2,25–4,00x) |
+| business daily — felia **aftercare** | `settings.cost_triage_usd` fix ([`aftercare.py:240,290`](../src/worker/aftercare.py#L240)) | nu |
+| web **per-vizitator** (`webcost:*`) | `cost_triage_usd + cost_agent_usd` fix ([`app.py:257`](../src/web/app.py#L257)) | nu |
+
+Consecințe directe:
+
+- **`web_cost_cap_per_visitor_usd` NU e afectat de acest PR.** Contorul lui e euristica fixă
+  (0,0003 + 0,003 = $0,0033/tur implicit), deci pragul rămâne unde era, indiferent de tarife.
+- **`daily_cost_cap_usd` e afectat PARȚIAL.** Același contor primește cost real (pipeline) ȘI
+  euristică (aftercare) — deci nu se poate exprima onest ca „N tururi până la plafon": N depinde
+  de proporția pipeline/aftercare a traficului, care variază.
+
+> **Nu dăm aici cifre de tip „~N tururi până la plafon".** O versiune anterioară a acestui document
+> conținea „~838" și „~84"; ambele erau derivate presupunând un contor alimentat uniform din tarife.
+> Prima e parțială (ignoră felia aftercare), a doua e pur și simplu falsă (contorul web nici nu
+> citește tarifele). O decizie de business luată pe astfel de cifre ar recalibra plafoanele greșit.
+
+### ⚠️ Decizie de business, dar NU pe cifrele de acum
 
 Corectarea tarifelor **nu schimbă câți bani se cheltuie în realitate** — schimbă cât de repede
-*contorul* ajunge la plafon. Un tenant care mergea confortabil sub $5/zi poate fi acum tăiat la
-~838 tururi în loc de ~2.500. **Plafoanele trebuie recalibrate deliberat** (proporțional, sau
-la o valoare nouă gândită), altfel corectarea de acuratețe se transformă într-o întrerupere de
-serviciu. Nu e o decizie de cod — e una de business.
+urcă *felia pipeline* a contorului de business (de 2,25–4,00x, neuniform per model și per tip de
+token). Direcția e sigură: plafonul zilnic se atinge **mai devreme decât până acum**, deci merită
+o recalibrare deliberată înainte de trafic real de pilot.
+
+**Cât de devreme nu se poate spune corect până când cele trei contoare nu vorbesc aceeași unitate.**
+Remedierea structurală (un singur alimentator, din cost real, pe toate cele trei căi — cu teste)
+e schimbare de COMPORTAMENT pe web + aftercare și **nu intră în acest PR**, care rămâne o
+reconciliere de tarife. Card separat: [tasks/NX-201.md](../tasks/NX-201.md) → felia B.
 
 ## 3. Ce s-a schimbat în cod
 
@@ -68,6 +86,9 @@ serviciu. Nu e o decizie de cod — e una de business.
 - **Reconcilierea cu factura REALĂ.** Lista publicată nu arată praguri de volum, tarife
   long-context (`gpt-5.4` urcă la 5,00/22,50 peste 272K context), sau discounturi de cont.
   `usage_daily.cost_usd` rămâne o **plasă**, nu facturare. Cere acces la billing — rămas lui Adi.
+- **Unificarea celor trei alimentatori de contor** (web per-vizitator + aftercare încă pe euristica
+  fixă din config). E schimbare de comportament pe două căi de producție, cu teste proprii →
+  felia B, nu aici. Până atunci, orice cifră „N tururi până la plafon" e o aproximare, nu un fapt.
 - **Rescrierea istoricului `usage_daily`.** Rândurile vechi rămân subevaluate; nu se rescriu orb
   (factorul nu e un scalar). Dacă e nevoie de o serie comparabilă, se recalculează din
   `analytics_events` cu defalcarea `by_model`, nu prin înmulțire.
