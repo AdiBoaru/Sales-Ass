@@ -27,6 +27,7 @@ from src.evals.retrieval.adaptor import (  # noqa: E402
     retrieve_products,
     retrieve_products_rewritten,
 )
+from src.evals.retrieval.catalog import load_catalog  # noqa: E402
 from src.evals.retrieval.harness import RunConfig, run_benchmark  # noqa: E402
 from src.evals.retrieval.schema import QrelsSet  # noqa: E402
 
@@ -65,6 +66,11 @@ async def main() -> None:
     qset = QrelsSet(**{k: v for k, v in raw.items() if not k.startswith("_")})
     print(f"qrels: {len(qset.queries)} interogări grele\n")
 
+    async with tenant_conn(qset.business_id) as conn:
+        catalog = await load_catalog(conn, qset.business_id)
+    print(f"catalog: {len(catalog.products)} produse active+published — {catalog.fingerprint}")
+    print()
+
     reports = {}
     for label in ("raw_hybrid", "rewritten_hybrid", "hybrid_with_constraints"):
         fetched = await _prefetch(qset, label)
@@ -77,6 +83,7 @@ async def main() -> None:
                 reranker="none",
                 split="all-compound",
             ),
+            catalog,
         )
         reports[label] = report.model_dump()
         print(f"=== {label}")

@@ -146,15 +146,17 @@ def test_ungrouped_set_is_still_legitimate():
 
 # --- agregare pe familie ----------------------------------------------------
 
-from src.evals.retrieval.harness import RunConfig, run_benchmark  # noqa: E402
+from src.evals.retrieval.harness import CatalogSnapshot, RunConfig, run_benchmark  # noqa: E402
 
 
 def _set(queries) -> QrelsSet:
     return QrelsSet(business_id="b", queries=queries)
 
 
-def _run(qset, ranked_by_query):
-    return run_benchmark(qset, lambda q: ranked_by_query[q], RunConfig(label="t"))
+def _run(qset, ranked_by_query, catalog=None):
+    """Fără catalog, rata de interzise iese `None` — testele de AGREGARE privesc metrici de ranking,
+    deci nu-l cer. Îl primeşte doar testul care afirmă ceva despre constrângeri."""
+    return run_benchmark(qset, lambda q: ranked_by_query[q], RunConfig(label="t"), catalog)
 
 
 def test_format_only_duplicate_does_not_change_headline_weighting():
@@ -233,7 +235,14 @@ def test_forbidden_rate_is_or_within_family():
         ),
     ]
     # doar A DOUA variantă scoate produsul interzis
-    rep = _run(_set(qs), {"q curat": ["p-1"], "q murdar": ["bad", "p-1"]})
+    catalog = CatalogSnapshot(
+        version="grouping-fixture",
+        products={
+            "bad": {"category_slug": "seruri", "price": 50, "attributes": {}},
+            "p-1": {"category_slug": "seruri", "price": 50, "attributes": {}},
+        },
+    )
+    rep = _run(_set(qs), {"q curat": ["p-1"], "q murdar": ["bad", "p-1"]}, catalog)
     assert rep.n_families == 1
     assert rep.forbidden_violation_rate == 1.0, (
         "familia trebuie violată dacă ORICE variantă o violează"

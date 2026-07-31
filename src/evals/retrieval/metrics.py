@@ -62,27 +62,37 @@ def mrr(q: QrelsQuery, ranked: Sequence[str], min_rel: int = 2) -> float:
     return 0.0
 
 
-def constraint_violations(
+def forbidden_violations(q: QrelsQuery, ranked: Sequence[str], k: int) -> int:
+    """Câte EXCEPŢII EXPLICITE apar în primele k.
+
+    Componentă, nu metrica finală: acoperă doar incompatibilităţile fără reprezentare în atribute.
+    Raportul foloseşte `violations_at_k`, care o reuneşte cu cele derivate din constrângeri."""
+    forb = set(q.forbidden_products)
+    return sum(1 for pid in ranked[:k] if pid in forb)
+
+
+def violations_at_k(
     q: QrelsQuery, ranked: Sequence[str], k: int, catalog: Mapping[str, dict] | None
 ) -> int | None:
-    """Câte produse din top-k încalcă EXPLICIT o constrângere hard.
+    """Câte produse din top-k încalcă contractul query-ului. SINGURUL numărător folosit de raport.
 
     `None` dacă lipseşte catalogul: verificarea nu s-a putut face. A treia stare, nu zero — un zero
     tăcut ar raporta „nicio încălcare" acolo unde nimic n-a fost verificat.
 
-    Exista separat de `forbidden_violations` fiindcă sursele sunt diferite: aici se evalueaza
-    CONTRACTUL query-ului contra catalogului, independent de ce a returnat sistemul; acolo sunt
-    exceptiile explicite pe care atributele nu le pot exprima."""
+    REUNIUNE, nu sumă, între două surse diferite:
+      · EXCEPŢIILE EXPLICITE din qrels — incompatibilităţi reale pe care atributele nu le exprimă;
+      · violările DERIVATE din `hard_constraints` contra catalogului — independente de ce a
+        returnat sistemul testat.
+    Un produs prins de ambele e o singură încălcare; altfel rata ar creşte cu cât un caz e mai bine
+    acoperit de constrângeri, nu cu câte produse greşite au ieşit."""
     if catalog is None:
         return None
     from src.evals.retrieval.constraints import violates_any  # noqa: PLC0415
 
-    return sum(
-        1 for pid in ranked[:k] if (p := catalog.get(pid)) and violates_any(p, q.hard_constraints)
-    )
-
-
-def forbidden_violations(q: QrelsQuery, ranked: Sequence[str], k: int) -> int:
-    """Câte produse INTERZISE apar în primele k (trebuie 0 — încălcare de constrângere hard)."""
-    forb = set(q.forbidden_products)
-    return sum(1 for pid in ranked[:k] if pid in forb)
+    top = ranked[:k]
+    explicit_ids = set(q.forbidden_products)
+    explicit = {pid for pid in top if pid in explicit_ids}
+    derived = {
+        pid for pid in top if (p := catalog.get(pid)) and violates_any(p, q.hard_constraints)
+    }
+    return len(explicit | derived)

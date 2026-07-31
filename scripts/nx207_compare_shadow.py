@@ -26,6 +26,7 @@ from src.agent.llm import get_llm  # noqa: E402
 from src.config import get_settings  # noqa: E402
 from src.db.connection import tenant_conn  # noqa: E402
 from src.evals.retrieval.adaptor import retrieve_products  # noqa: E402
+from src.evals.retrieval.catalog import load_catalog  # noqa: E402
 from src.evals.retrieval.harness import RunConfig, compare_reports, run_benchmark  # noqa: E402
 from src.evals.retrieval.schema import QrelsSet  # noqa: E402
 from src.evals.retrieval.splits import Split, partition  # noqa: E402
@@ -96,6 +97,10 @@ async def run(qrels_path: Path, split: Split, out_path: Path, *, min_queries: in
     qset = _load_split(qrels_path, split, min_queries=min_queries)
     old, old_ms = await _prefetch(qset, shadow=False)
     shadow, shadow_ms = await _prefetch(qset, shadow=True)
+    # Acelasi snapshot pentru AMBELE rapoarte: comparatia refuza cataloage diferite, iar doua
+    # incarcari separate ar putea prinde un catalog schimbat intre ele.
+    async with tenant_conn(qset.business_id) as conn:
+        catalog = await load_catalog(conn, qset.business_id)
     settings = get_settings()
     baseline = run_benchmark(
         qset,
@@ -107,6 +112,7 @@ async def run(qrels_path: Path, split: Split, out_path: Path, *, min_queries: in
             reranker="none",
             split=split.value,
         ),
+        catalog,
     )
     candidate = run_benchmark(
         qset,
@@ -118,6 +124,7 @@ async def run(qrels_path: Path, split: Split, out_path: Path, *, min_queries: in
             reranker="none",
             split=split.value,
         ),
+        catalog,
     )
     comparison = compare_reports(baseline, candidate)
     payload = {
@@ -126,6 +133,7 @@ async def run(qrels_path: Path, split: Split, out_path: Path, *, min_queries: in
             "business_id": qset.business_id,
             "split": split.value,
             "query_count": len(qset.queries),
+            "catalog_fingerprint": baseline.catalog_fingerprint,
             "read_only": True,
             "note": "Nu marchează holdout-ul ca deschis; istoricul se actualizează "
             "numai după review uman.",
