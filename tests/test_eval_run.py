@@ -104,9 +104,11 @@ class _RecordingLLM:
 
     def __init__(self):
         self.seen_user_msgs = []
+        self.seen_models = []
 
     async def complete_schema(self, system, user, schema, model=None):
         self.seen_user_msgs.append(user)
+        self.seen_models.append(model)
         return {
             m: 4 for m in ("answered", "natural", "non_repetitive", "concise", "honest", "overall")
         }
@@ -125,3 +127,48 @@ async def test_judge_sees_current_question():
 
     assert llm.seen_user_msgs, "judge-ul n-a fost chemat"
     assert any("am tenul gras, ce ser?" in u for u in llm.seen_user_msgs)
+
+
+# --- NX-204: model-swap orb ---------------------------------------------------------------------
+
+
+async def test_judge_model_is_pinned_independent_of_agent_arm():
+    """Confound-ul central al NX-204: judge-ul moștenea `llm.model_agent`, deci un experiment de
+    model-swap ar fi comparat „mini judecat de mini" vs „frontier judecat de frontier" — două
+    rigle diferite. Judecătorul trebuie să rămână ACELAȘI pe ambele brațe."""
+    llm = _RecordingLLM()
+    llm.model_agent = "brat-frontier"  # brațul B tocmai a mutat modelul agentului
+
+    async def mk(_label):
+        return _FakeClient()
+
+    convo = {"id": "t", "turns": [{"user": "ce ser?", "gates": {}}]}
+    await eval_run._run_conversation(convo, mk, llm, 1, "judecator-pinuit")
+
+    assert llm.seen_models == ["judecator-pinuit"], (
+        f"judge-ul a folosit {llm.seen_models}, adică a urmat brațul agentului"
+    )
+
+
+def test_pricing_gate_rejects_model_without_explicit_rates():
+    """Poarta de cost: `rates_for` cade tăcut pe tarifele `mini` pentru un model necunoscut →
+    raportul ar minți exact pe cifra care decide swap-ul. `has_rates` face fallback-ul VIZIBIL."""
+    from src.agent.pricing import has_rates, rates_for
+
+    assert has_rates("gpt-5.4-mini") is True
+    assert has_rates("model-inexistent-xyz") is False
+    # dovada că fallback-ul chiar e tăcut (de-asta e nevoie de poartă, nu de `rates_for`)
+    assert rates_for("model-inexistent-xyz") == rates_for("gpt-5.4-mini")
+
+
+def test_cost_is_summed_per_call_model_not_from_aggregate_tokens():
+    """Un tur amestecă nano (triaj) cu agentul; costul dedus din tokenii agregați ar fi greșit.
+    `_summarize` însumează costul BRUT per tur×rulare, nu mediane."""
+    turns = [
+        {**_turn(5, 5, [100.0]), "cost_usd_raw": [0.001, 0.003]},
+        {**_turn(5, 5, [200.0]), "cost_usd_raw": [0.002]},
+    ]
+    s = eval_run._summarize([{"id": "c1", "turns": turns}])
+    assert s["n_cost_samples"] == 3
+    assert s["cost_usd_total"] == 0.006
+    assert s["cost_usd_per_turn_median"] == 0.002
