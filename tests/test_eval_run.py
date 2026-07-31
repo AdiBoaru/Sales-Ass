@@ -103,6 +103,7 @@ class _RecordingLLM:
     """Înregistrează mesajul USER pe care-l primește judge-ul (ca să dovedim că vede întrebarea)."""
 
     model_agent = "fake"
+    model_triage = "fake-nano"
 
     def __init__(self):
         self.seen_user_msgs = []
@@ -280,6 +281,7 @@ def _install_main_stubs(monkeypatch, tmp_path, client_factory, spy: _Cleanup):
 
     class _Settings:
         cache_enabled = True
+        daily_cost_cap_usd = 5.0
 
     monkeypatch.setattr(config_mod, "get_settings", lambda: _Settings())
     monkeypatch.setattr(llm_mod, "get_llm", _RecordingLLM)
@@ -287,9 +289,18 @@ def _install_main_stubs(monkeypatch, tmp_path, client_factory, spy: _Cleanup):
     async def _get_pool():
         return "POOL"
 
+    class _Conn:
+        """Conn minimal: preflight-ul de plafon citește `businesses.daily_cost_cap_usd`."""
+
+        def __init__(self, cap=50.0):
+            self.cap = cap
+
+        async def fetchrow(self, *a, **k):
+            return {"daily_cost_cap_usd": self.cap}
+
     @contextlib.asynccontextmanager
     async def _admin_conn(_pool):
-        yield object()
+        yield _Conn()
 
     async def _close_pool():
         spy.closed += 1
@@ -374,3 +385,150 @@ async def test_web_503_propagates_original_error_but_cleanup_runs(monkeypatch, t
     assert ei.value.status_code == 503, "eroarea originală a fost înlocuită"
     assert spy.purged == 1 and spy.closed == 1, "cleanup-ul nu a rulat pe calea de excepție"
     assert not (tmp_path / "reports").exists(), "raport scris dintr-o rulare căzută"
+
+
+async def test_init_failure_still_closes_pool(monkeypatch, tmp_path):
+    """Review #252: o eroare de INIȚIALIZARE (rezolvarea canalului, `_catalog_signature`, orice
+    query) apărea DUPĂ `get_pool()` dar ÎNAINTE de bucla de rulare — deci ocolea cleanup-ul și
+    lăsa poolul deschis. Curățarea are acum un singur proprietar, la nivelul poolului."""
+    spy = _Cleanup()
+    _install_main_stubs(monkeypatch, tmp_path, lambda: _FakeClient(), spy)
+
+    async def _boom(_conn, _biz):
+        raise RuntimeError("catalog signature a crăpat")
+
+    monkeypatch.setattr(eval_run, "_catalog_signature", _boom)
+
+    with pytest.raises(RuntimeError, match="catalog signature"):
+        await eval_run.main()
+
+    assert spy.closed == 1, "close_pool NU a rulat pe eroare de inițializare"
+    assert not (tmp_path / "reports").exists(), "raport scris dintr-o rulare care n-a pornit"
+
+
+async def test_missing_channel_closes_pool(monkeypatch, tmp_path):
+    """Aceeași gaură pe ramura „niciun canal webchat": ieșire timpurie cu poolul deja deschis."""
+    spy = _Cleanup()
+    _install_main_stubs(monkeypatch, tmp_path, lambda: _FakeClient(), spy)
+
+    async def _no_session(_conn, _token):
+        return None
+
+    import src.db.queries.channels as channels_mod
+
+    monkeypatch.setattr(channels_mod, "resolve_web_session", _no_session)
+    monkeypatch.setattr(sys, "argv", ["eval_run.py", "--runs", "1"])  # fără token → caută în DB
+
+    class _NoRowConn:
+        async def fetchrow(self, *a, **k):
+            return None
+
+    import contextlib
+
+    import src.db.connection as conn_mod
+
+    @contextlib.asynccontextmanager
+    async def _admin_conn(_pool):
+        yield _NoRowConn()
+
+    monkeypatch.setattr(conn_mod, "admin_conn", _admin_conn)
+
+    rc = await eval_run.main()
+
+    assert rc == 1
+    assert spy.closed == 1, "close_pool NU a rulat pe ieșirea „niciun canal webchat”"
+
+
+async def test_preflight_refuses_when_daily_cap_below_estimated_cost(monkeypatch, tmp_path):
+    """Plafonul zilnic sub costul estimat = rulare tăiată la mijloc de 429, după ~30 min și
+    credite consumate. Preflight-ul e READ-ONLY: refuză pornirea, NU ridică plafonul singur —
+    ajustarea rămâne o decizie deliberată și temporară a omului."""
+    import contextlib
+
+    import src.db.connection as conn_mod
+
+    spy = _Cleanup()
+    _install_main_stubs(monkeypatch, tmp_path, lambda: _FakeClient(), spy)
+
+    class _TightConn:
+        async def fetchrow(self, *a, **k):
+            return {"daily_cost_cap_usd": 0.001}  # sub costul oricărei rulări
+
+    @contextlib.asynccontextmanager
+    async def _admin_conn(_pool):
+        yield _TightConn()
+
+    monkeypatch.setattr(conn_mod, "admin_conn", _admin_conn)
+
+    rc = await eval_run.main()
+
+    assert rc == 1, "rularea a pornit deși plafonul o taie la mijloc"
+    assert spy.closed == 1, "close_pool NU a rulat pe refuzul de preflight"
+    assert not (tmp_path / "reports").exists()
+
+
+async def test_preflight_can_be_overridden_explicitly(monkeypatch, tmp_path):
+    """`--ignore-cost-cap` = ieșire de urgență explicită, nu implicit tăcut."""
+    import contextlib
+
+    import src.db.connection as conn_mod
+
+    spy = _Cleanup()
+    _install_main_stubs(monkeypatch, tmp_path, lambda: _FakeClient(), spy)
+
+    class _TightConn:
+        async def fetchrow(self, *a, **k):
+            return {"daily_cost_cap_usd": 0.001}
+
+    @contextlib.asynccontextmanager
+    async def _admin_conn(_pool):
+        yield _TightConn()
+
+    monkeypatch.setattr(conn_mod, "admin_conn", _admin_conn)
+    monkeypatch.setattr(
+        sys, "argv", ["eval_run.py", "--runs", "1", "--token", "tok", "--ignore-cost-cap"]
+    )
+
+    rc = await eval_run.main()
+
+    assert rc == 0, "override-ul explicit n-a lăsat rularea să pornească"
+    assert spy.closed == 1
+
+
+async def test_report_meta_carries_all_reproducibility_pins(monkeypatch, tmp_path):
+    """Pinurile din `meta` sunt CONTRACTUL de reproductibilitate al baseline-ului: fără ele nu poți
+    spune contra cărui sistem s-a măsurat. Un pin pierdut nu rupe nimic vizibil — raportul se scrie,
+    suita trece, iar peste o lună compari două rulări necomparabile. (S-a și întâmplat: o rescriere
+    mecanică a transformat `"cache_enabled": False` și `"kind"` în comentarii, fără ca ruff sau
+    testele să sesizeze.) Testul fixează cheile obligatorii."""
+    spy = _Cleanup()
+    _install_main_stubs(monkeypatch, tmp_path, lambda: _FakeClient(), spy)
+
+    rc = await eval_run.main()
+    assert rc == 0
+
+    reports = list((tmp_path / "reports").glob("*.json"))
+    assert len(reports) == 1
+    meta = json.loads(reports[0].read_text(encoding="utf-8"))["meta"]
+
+    for key in (
+        "kind",
+        "cache_enabled",
+        "valid",
+        "business_id",
+        "runs_per_case",
+        "model_triage",
+        "model_agent",
+        "judge_model",
+        "judge_model_pinned",
+        "judge_prompt_sha256",
+        "catalog_signature",
+        "fixtures_sha256",
+        "paired_mode",
+        "denominator",
+    ):
+        assert key in meta, f"pin de reproductibilitate lipsă din raport: {key}"
+
+    assert meta["cache_enabled"] is False, "cache-ul TREBUIE raportat ca oprit pe durata rulării"
+    assert meta["kind"] == "baseline"
+    assert meta["judge_model_pinned"] is True

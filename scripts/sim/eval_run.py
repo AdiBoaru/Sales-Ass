@@ -246,6 +246,36 @@ def _p95(values: list[float]) -> float:
     return round(s[k - 1], 1)
 
 
+# Cost median MĂSURAT per tur pe configurația de producție (`gpt-5.4-mini`), la tarifele
+# reconciliate în #253 — vezi docs/NX-201-PRICING.md. Folosit DOAR pentru preflight (estimare
+# înainte de rulare); cifra raportată la final rămâne cea calculată per apel, nu asta.
+EST_COST_PER_TURN_USD = 0.006
+
+
+async def _preflight_cost_cap(conn, business_id: str, est_total_usd: float) -> tuple[float, bool]:
+    """Preflight READ-ONLY: plafonul zilnic EFECTIV al tenantului vs costul estimat al rulării.
+
+    De ce: `/web/chat` respinge cu 429 „budget exceeded” când contorul zilnic atinge plafonul
+    (gard de ADMITERE, `src/web/app.py`). O rulare care lovește plafonul la mijloc se oprește
+    acum controlat — dar tot n-ai baseline, după ~30 de minute și credite consumate.
+
+    Nu scrie NIMIC și nu ajustează nimic: dacă plafonul e prea mic, ridicarea lui e o decizie
+    deliberată și temporară a omului, nu un efect secundar al instrumentului de măsură.
+
+    Întoarce `(plafon_efectiv, e_suficient)`. Plafon 0 = fără plafon configurat → suficient.
+    """
+    from src.config import get_settings  # noqa: PLC0415
+
+    row = await conn.fetchrow(
+        "select daily_cost_cap_usd from businesses where id = $1", business_id
+    )
+    biz_cap = float(row["daily_cost_cap_usd"] or 0) if row else 0.0
+    cap = biz_cap or float(get_settings().daily_cost_cap_usd or 0)
+    if cap <= 0:
+        return 0.0, True
+    return cap, cap > est_total_usd
+
+
 async def _catalog_signature(conn, business_id: str) -> str:
     """Semnătură deterministă a catalogului (count + sha256 pe (id, price) sortat) → pin de
     reproductibilitate: dacă se re-seedează catalogul, baseline-urile nu se compară orb."""
@@ -492,6 +522,12 @@ async def main() -> int:
     ap.add_argument("--flag", default=None, help="feature flag de togglat paired OFF vs ON")
     ap.add_argument("--token", default=None, help="public token webchat (default: din DB, demo)")
     ap.add_argument(
+        "--ignore-cost-cap",
+        action="store_true",
+        help="pornește chiar dacă plafonul zilnic al tenantului e sub costul estimat "
+        "(preflight read-only; implicit rularea se refuză)",
+    )
+    ap.add_argument(
         "--model-arm",
         default=None,
         help="NX-204: model pt brațul B al agentului (paired vs MODEL_AGENT curent). "
@@ -567,160 +603,193 @@ async def main() -> int:
     # rezolvă tokenul webchat + business (ca web_audit).
     token, biz_id = args.token, web_audit.DEMO_BIZ
     pool = await get_pool()
-    async with admin_conn(pool) as conn:
-        if token:
-            r = await resolve_web_session(conn, token)
-            if r:
-                biz_id = r["business_id"]
-        else:
-            row = await conn.fetchrow(
-                "select provider_account_id, business_id::text as business_id from channels "
-                "where business_id=$1 and kind='webchat' limit 1",
-                web_audit.DEMO_BIZ,
-            )
-            if row:
-                token, biz_id = row["provider_account_id"], row["business_id"]
-        if not token:
-            missing_channel = True
-        else:
-            missing_channel = False
-            catalog_sig = await _catalog_signature(conn, biz_id)
-    if missing_channel:
-        print("Niciun canal webchat pe tenantul demo.")
-        await _cleanup(pool, biz_id)  # poolul e deschis → se închide și pe calea asta
-        return 1
-
-    async def mk(label: str):
-        vid, sig = await web_audit._session(token, label)
-        return web_audit.WebClient(token, vid, sig, label)
-
-    def _apply(spec: dict[str, Any]) -> None:
-        if spec["kind"] == "flag":
-            setattr(settings, spec["flag"], spec["value"])  # settings e singleton mutabil
-        elif spec["kind"] == "model":
-            llm.model_agent = spec["model"]  # nimeni nu citește settings.model_agent la runtime
-
-    # INTERCALAT per conversație (OFF apoi ON pe ACELAȘI caz, înainte de următorul) — nu tot OFF
-    # apoi tot ON (fix #234): altfel diferența măsoară drift temporal (rate limit / warmup / oră),
-    # nu efectul flagului. Baseline (fără flag) = un singur pass, neschimbat.
-    print(
-        f"\n{'=' * 70}\nruns/case={args.runs} cache=OFF(scoped) "
-        f"passes={[s['label'] for s in pass_specs]} judge={judge_model} (pinuit)"
-    )
-    # #234: CACHE OFF DOAR pe durata rulării pipeline-ului, restaurat garantat (try/finally). Fără
-    # efect global de mediu. `settings` e singleton mutabil (get_settings lru_cached).
-    _cache_prev = settings.cache_enabled
-    settings.cache_enabled = False
-    pass_cases: dict[str, list] = {s["label"]: [] for s in pass_specs}
-    aborted: RunAborted | None = None
+    # OWNERSHIP UNIC al curățării: din clipa în care poolul există, ORICE ieșire trece prin
+    # `finally`-ul de mai jos — inclusiv o eroare de INIȚIALIZARE (rezolvarea canalului,
+    # `_catalog_signature`, un query căzut), care înainte scăpa cu poolul deschis. Un singur
+    # loc care curăță, imposibil de ocolit prin adăugarea unei ramuri noi.
     try:
-        for convo in convos:
-            print(f"  • {convo['id']} …", flush=True)
-            for spec in pass_specs:
-                _apply(spec)  # toggle paired per caz (flag SAU model)
-                pass_cases[spec["label"]].append(
-                    await _run_conversation(convo, mk, llm, args.runs, judge_model)
+        async with admin_conn(pool) as conn:
+            if token:
+                r = await resolve_web_session(conn, token)
+                if r:
+                    biz_id = r["business_id"]
+            else:
+                row = await conn.fetchrow(
+                    "select provider_account_id, business_id::text as business_id from channels "
+                    "where business_id=$1 and kind='webchat' limit 1",
+                    web_audit.DEMO_BIZ,
                 )
-    except RunAborted as e:
-        # Abandon CONTROLAT (eroare permanentă LLM sau respingere de admitere web): NU scriem
-        # raport. Un artefact pe jumătate, plin de fallback-uri, arată exact ca un rezultat slab
-        # — și ar fi citit ca atare peste o săptămână. Ieșirea propriu-zisă e DUPĂ `finally`,
-        # ca ordinea „curăț, apoi raportez ce s-a întâmplat" să fie aceeași pe toate căile.
-        aborted = e
-    finally:
-        # Restaurări + curățare pe ORICE cale de ieșire: succes, RunAborted, excepție
-        # neașteptată (503 la marginea web, DB căzut) sau întrerupere (Ctrl-C → CancelledError).
-        # NIMIC nu scrie raportul de aici: raportul e rezultatul unei rulări duse la capăt, nu un
-        # artefact de curățenie. `_cleanup` nu maschează excepția în zbor (vezi docstring-ul lui).
-        settings.cache_enabled = _cache_prev  # restaurare, orice s-ar întâmpla
-        llm.model_agent = base_model  # NX-204: brațul nu se scurge în afara rulării
-        await _cleanup(pool, biz_id)
-    if aborted is not None:
-        print(f"\n✖ RULARE ABANDONATĂ: {aborted}")
-        print(f"  Eșecuri LLM până la oprire: {_llm_failures['n']}. Niciun raport scris.")
-        return 1
-    report_passes = [
-        {
-            "pass": spec["label"],
-            "flag": spec.get("flag"),
-            "flag_value": spec.get("value"),
-            "model_agent": spec.get("model", base_model),
-            "summary": _summarize(pass_cases[spec["label"]]),
-            "cases": pass_cases[spec["label"]],
+                if row:
+                    token, biz_id = row["provider_account_id"], row["business_id"]
+            if not token:
+                missing_channel = True
+            else:
+                missing_channel = False
+                catalog_sig = await _catalog_signature(conn, biz_id)
+                n_exec = sum(len(c["turns"]) for c in convos) * args.runs * len(pass_specs)
+                est_total = n_exec * EST_COST_PER_TURN_USD
+                cap, cap_ok = await _preflight_cost_cap(conn, biz_id, est_total)
+        if missing_channel:
+            print("Niciun canal webchat pe tenantul demo.")
+            return 1
+
+        # Preflight de plafon: dacă bugetul zilnic al tenantului e sub costul estimat, rularea ar
+        # fi tăiată la mijloc de gardul de admitere (429) — 30 de minute și credite pentru zero
+        # baseline. Refuzăm pornirea; ridicarea plafonului rămâne decizia deliberată a omului.
+        print(
+            f"preflight: ~{n_exec} execuții × ${EST_COST_PER_TURN_USD:.4f} ≈ ${est_total:.2f} · "
+            f"plafon zilnic efectiv: {'fără plafon' if not cap else f'${cap:.2f}'}"
+        )
+        if not cap_ok and not args.ignore_cost_cap:
+            print(
+                f"\n✖ Plafonul zilnic (${cap:.2f}) e sub costul estimat al rulării "
+                f"(${est_total:.2f}).\n"
+                "  /web/chat ar respinge cu 429 «budget exceeded» la mijlocul rulării, iar "
+                "baseline-ul ar rămâne neterminat.\n"
+                "  Ridică DELIBERAT și TEMPORAR businesses.daily_cost_cap_usd pentru tenantul "
+                f"{biz_id}, apoi pune-l la loc.\n"
+                "  (Contorul zilnic e alimentat din costul REAL al pipeline-ului — vezi "
+                "docs/NX-201-PRICING.md.)\n"
+                "  Dacă vrei să pornești oricum, explicit: --ignore-cost-cap"
+            )
+            return 1
+
+        async def mk(label: str):
+            vid, sig = await web_audit._session(token, label)
+            return web_audit.WebClient(token, vid, sig, label)
+
+        def _apply(spec: dict[str, Any]) -> None:
+            if spec["kind"] == "flag":
+                setattr(settings, spec["flag"], spec["value"])  # settings e singleton mutabil
+            elif spec["kind"] == "model":
+                llm.model_agent = spec["model"]  # nimeni nu citește settings.model_agent la runtime
+
+        # INTERCALAT per conversație (OFF apoi ON pe ACELAȘI caz, înainte de următorul) — nu tot OFF
+        # apoi tot ON (fix #234): altfel diferența măsoară drift temporal (rate limit / warmup /
+        # oră), nu efectul flagului. Baseline (fără flag) = un singur pass, neschimbat.
+        print(
+            f"\n{'=' * 70}\nruns/case={args.runs} cache=OFF(scoped) "
+            f"passes={[s['label'] for s in pass_specs]} judge={judge_model} (pinuit)"
+        )
+        # #234: CACHE OFF DOAR pe durata rulării pipeline-ului, restaurat garantat (try/finally).
+        # Fără efect global de mediu. `settings` e singleton mutabil (get_settings lru_cached).
+        _cache_prev = settings.cache_enabled
+        settings.cache_enabled = False
+        pass_cases: dict[str, list] = {s["label"]: [] for s in pass_specs}
+        aborted: RunAborted | None = None
+        try:
+            for convo in convos:
+                print(f"  • {convo['id']} …", flush=True)
+                for spec in pass_specs:
+                    _apply(spec)  # toggle paired per caz (flag SAU model)
+                    pass_cases[spec["label"]].append(
+                        await _run_conversation(convo, mk, llm, args.runs, judge_model)
+                    )
+        except RunAborted as e:
+            # Abandon CONTROLAT (eroare permanentă LLM sau respingere de admitere web): NU scriem
+            # raport. Un artefact pe jumătate, plin de fallback-uri, arată exact ca un rezultat slab
+            # — și ar fi citit ca atare peste o săptămână. Ieșirea propriu-zisă e DUPĂ `finally`,
+            # ca ordinea „curăț, apoi raportez ce s-a întâmplat" să fie aceeași pe toate căile.
+            aborted = e
+        finally:
+            # DOAR restaurări de stare globală mutată de rulare (cache + brațul de model), pe orice
+            # cale de ieșire. Curățarea resurselor NU e aici: are un singur proprietar, `finally`-ul
+            # de la nivelul poolului. Nimic nu scrie raportul din `finally` — raportul e rezultatul
+            # unei rulări duse la capăt, nu un artefact de curățenie.
+            settings.cache_enabled = _cache_prev  # restaurare, orice s-ar întâmpla
+            llm.model_agent = base_model  # NX-204: brațul nu se scurge în afara rulării
+        if aborted is not None:
+            print(f"\n✖ RULARE ABANDONATĂ: {aborted}")
+            print(f"  Eșecuri LLM până la oprire: {_llm_failures['n']}. Niciun raport scris.")
+            return 1
+        report_passes = [
+            {
+                "pass": spec["label"],
+                "flag": spec.get("flag"),
+                "flag_value": spec.get("value"),
+                "model_agent": spec.get("model", base_model),
+                "summary": _summarize(pass_cases[spec["label"]]),
+                "cases": pass_cases[spec["label"]],
+            }
+            for spec in pass_specs
+        ]
+
+        # Verdict de validitate: un tur atins de un eșec LLM a rulat pe fallback, nu pe model — nu e
+        # „mai slab", e necomparabil. Peste prag, raportul se scrie (pt diagnostic) dar MARCAT
+        # invalid, iar sumarul comparativ NU se tipărește: cifrele n-ar însemna nimic.
+        n_executions = sum(t["runs"] for p in report_passes for c in p["cases"] for t in c["turns"])
+        failure_rate = (_llm_failures["n"] / n_executions) if n_executions else 0.0
+        is_valid = _llm_failures["n"] == 0 or failure_rate <= MAX_FAILURE_RATE
+
+        now = datetime.now(timezone.utc)
+        report = {
+            "meta": {
+                "generated_at": now.isoformat(),
+                "valid": is_valid,
+                "llm_failures": _llm_failures["n"],
+                "llm_failure_rate": round(failure_rate, 4),
+                "validity_note": (
+                    "OK"
+                    if is_valid
+                    else f"INVALID: {_llm_failures['n']} eșecuri LLM (>{MAX_FAILURE_RATE:.0%}) → "
+                    f"tururile afectate au rulat pe fallback, nu pe model. Nu compara brațele."
+                ),
+                "kind": (
+                    "paired_model" if args.model_arm else ("paired" if args.flag else "baseline")
+                ),
+                "business_id": biz_id,
+                "runs_per_case": args.runs,
+                # #234: mereu OFF pe durata rulării (scoped, restaurat după)
+                "cache_enabled": False,
+                "model_triage": llm.model_triage,
+                "model_agent": base_model,  # baza, nu ultimul braț rulat
+                "model_arm": args.model_arm,
+                "judge_model": judge_model,  # PINUIT: aceeași riglă pe ambele brațe (NX-204)
+                "judge_model_pinned": True,
+                "judge_prompt_sha256": eval_judge.judge_prompt_sha256(),
+                "judge_version": eval_judge.JUDGE_VERSION,
+                "catalog_signature": catalog_sig,
+                "fixtures_sha256": _fixtures_signature(),
+                "paired_mode": (
+                    "interleaved_per_conversation" if (args.flag or args.model_arm) else "single"
+                ),
+                "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0",
+            },
+            "passes": report_passes,
         }
-        for spec in pass_specs
-    ]
 
-    # Verdict de validitate: un tur atins de un eșec LLM a rulat pe fallback, nu pe model — nu e
-    # „mai slab", e necomparabil. Peste prag, raportul se scrie (pt diagnostic) dar MARCAT invalid,
-    # iar sumarul comparativ NU se tipărește: cifrele n-ar însemna nimic.
-    n_executions = sum(t["runs"] for p in report_passes for c in p["cases"] for t in c["turns"])
-    failure_rate = (_llm_failures["n"] / n_executions) if n_executions else 0.0
-    is_valid = _llm_failures["n"] == 0 or failure_rate <= MAX_FAILURE_RATE
+        OUT_DIR.mkdir(exist_ok=True)
+        stamp = now.strftime("%Y%m%d-%H%M%S")
+        if args.model_arm:
+            slug = f"model-{args.model_arm.replace('.', '_')}"
+        else:
+            slug = args.flag or "baseline"
+        out_path = OUT_DIR / f"eval-{slug}-{stamp}.json"
+        out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    now = datetime.now(timezone.utc)
-    report = {
-        "meta": {
-            "generated_at": now.isoformat(),
-            "valid": is_valid,
-            "llm_failures": _llm_failures["n"],
-            "llm_failure_rate": round(failure_rate, 4),
-            "validity_note": (
-                "OK"
-                if is_valid
-                else f"INVALID: {_llm_failures['n']} eșecuri LLM (>{MAX_FAILURE_RATE:.0%}) → "
-                f"tururile afectate au rulat pe fallback, nu pe model. Nu compara brațele."
-            ),
-            "kind": ("paired_model" if args.model_arm else ("paired" if args.flag else "baseline")),
-            "business_id": biz_id,
-            "runs_per_case": args.runs,
-            "cache_enabled": False,  # #234: mereu OFF pe durata rulării (scoped, restaurat după)
-            "model_triage": llm.model_triage,
-            "model_agent": base_model,  # baza, nu ultimul braț rulat
-            "model_arm": args.model_arm,
-            "judge_model": judge_model,  # PINUIT: aceeași riglă pe ambele brațe (NX-204)
-            "judge_model_pinned": True,
-            "judge_prompt_sha256": eval_judge.judge_prompt_sha256(),
-            "judge_version": eval_judge.JUDGE_VERSION,
-            "catalog_signature": catalog_sig,
-            "fixtures_sha256": _fixtures_signature(),
-            "paired_mode": (
-                "interleaved_per_conversation" if (args.flag or args.model_arm) else "single"
-            ),
-            "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0",
-        },
-        "passes": report_passes,
-    }
+        if not is_valid:
+            print(
+                f"\n✖ RAPORT INVALID: {_llm_failures['n']} eșecuri LLM din {n_executions} execuții "
+                f"({failure_rate:.0%}). Tururile afectate au rulat pe FALLBACK, nu pe model — "
+                f"sumarul comparativ nu se tipărește, fiindcă n-ar însemna nimic."
+            )
+            print(f"→ raport (marcat invalid, doar pt diagnostic): {out_path}")
+            return 1
 
-    OUT_DIR.mkdir(exist_ok=True)
-    stamp = now.strftime("%Y%m%d-%H%M%S")
-    if args.model_arm:
-        slug = f"model-{args.model_arm.replace('.', '_')}"
-    else:
-        slug = args.flag or "baseline"
-    out_path = OUT_DIR / f"eval-{slug}-{stamp}.json"
-    out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    if not is_valid:
-        print(
-            f"\n✖ RAPORT INVALID: {_llm_failures['n']} eșecuri LLM din {n_executions} execuții "
-            f"({failure_rate:.0%}). Tururile afectate au rulat pe FALLBACK, nu pe model — "
-            f"sumarul comparativ nu se tipărește, fiindcă n-ar însemna nimic."
-        )
-        print(f"→ raport (marcat invalid, doar pt diagnostic): {out_path}")
-        return 1
-
-    for p in report_passes:
-        s = p["summary"]
-        print(
-            f"\n[{p['pass']}] natural_med={s['judge_natural_median']} "
-            f"nat≥4={s['pct_turns_natural_ge4']}% fu_answered≥4={s['pct_followup_answered_ge4']}% "
-            f"gate_pass={s['det_gate_pass_rate_pct']}% p95={s['latency_ms_p95']}ms "
-            f"cost/tur={s['cost_usd_per_turn_median']:.5f}$ total={s['cost_usd_total']:.3f}$ "
-            f"unstable={len(s['unstable_turns'])} opening_repeats={s['opening_repeat_turns']}"
-        )
-    print(f"\n→ raport: {out_path}")
-    return 0
+        for p in report_passes:
+            s = p["summary"]
+            print(
+                f"\n[{p['pass']}] natural_med={s['judge_natural_median']} "
+                f"nat≥4={s['pct_turns_natural_ge4']}% "
+                f"fu_answered≥4={s['pct_followup_answered_ge4']}% "
+                f"gate_pass={s['det_gate_pass_rate_pct']}% p95={s['latency_ms_p95']}ms "
+                f"cost/tur={s['cost_usd_per_turn_median']:.5f}$ total={s['cost_usd_total']:.3f}$ "
+                f"unstable={len(s['unstable_turns'])} opening_repeats={s['opening_repeat_turns']}"
+            )
+        print(f"\n→ raport: {out_path}")
+        return 0
+    finally:
+        await _cleanup(pool, biz_id)
 
 
 if __name__ == "__main__":
