@@ -204,8 +204,9 @@ def test_harness_detects_forbidden_and_misses():
 
     def bad(query: str):
         q = by_query[query]
-        # întoarce produsele INTERZISE + rateaza relevantele
-        return list(q.forbidden_products) or ["nonexistent"]
+        # întoarce produsele INTERZISE + rateaza relevantele. Substitutul e un produs REAL din
+        # catalog, nu un id inventat: un id absent face raportul neverificat, nu „cu încălcări".
+        return list(q.forbidden_products) or ["px-scump"]
 
     report = run_benchmark(qset, bad, RunConfig(label="skeleton-badcase"), _catalog())
     # query-urile cu forbidden trebuie semnalate
@@ -224,7 +225,7 @@ def test_example_hard_constraints_parse():
 def test_comparison_uses_same_query_count_and_exposes_deltas():
     qset = QrelsSet(business_id="b", queries=[_q(id="one")])
     cat = _catalog()
-    baseline = run_benchmark(qset, lambda _query: ["miss"], RunConfig(label="legacy"), cat)
+    baseline = run_benchmark(qset, lambda _query: ["px-1"], RunConfig(label="legacy"), cat)
     candidate = run_benchmark(qset, lambda _query: [], RunConfig(label="shadow"), cat)
 
     comparison = compare_reports(baseline, candidate)
@@ -318,8 +319,123 @@ def test_catalog_with_disjoint_ids_is_blocked():
         products={"uuid-aaaa": {"category_slug": "creme-fata", "price": 10, "attributes": {}}},
     )
 
-    with pytest.raises(ValueError, match="spaţii de id diferite"):
+    with pytest.raises(ValueError, match="nu acoperă"):
         run_benchmark(qset, lambda _query: [], RunConfig(label="incompatibil"), foreign)
+
+
+def test_partial_snapshot_is_blocked_not_accepted_as_overlapping():
+    """Suprapunerea parţială NU e suficientă.
+
+    Regresie: verificarea cerea doar intersecţie nenulă, deci un snapshot care conţine produsul
+    judecat, dar nu şi restul catalogului, trecea drept compatibil."""
+    qset = QrelsSet(**json.loads(EXAMPLE.read_text(encoding="utf-8")))
+    partial = CatalogSnapshot(
+        version="partial",
+        products={"px-1": {"category_slug": "creme-fata", "price": 70, "attributes": {}}},
+    )
+    # intersecţia e nenulă — vechea condiţie ar fi acceptat snapshotul
+    assert set(partial.products) & {j.product_id for j in qset.queries[0].judgments}
+
+    with pytest.raises(ValueError, match="nu acoperă"):
+        run_benchmark(qset, lambda _query: [], RunConfig(label="partial"), partial)
+
+
+def test_product_outside_snapshot_makes_report_unverified_not_clean():
+    """Un produs din top-6 absent din snapshot ⇒ NEVERIFICAT, nu ignorat.
+
+    Regresie: produsul lipsă era sărit tăcut, deci un retrieval care întoarce exact produse din
+    afara catalogului raporta zero încălcări şi `verified` — cel mai prost rezultat posibil
+    prezentat drept cel mai bun."""
+    qset = QrelsSet(
+        business_id="b",
+        queries=[
+            _q(
+                id="q1",
+                query="x",
+                judgments=[QrelJudgment(product_id="px-1", relevance=Relevance.ideal)],
+                hard_constraints=[HardConstraint(facet="price", op="lte", value=90)],
+            )
+        ],
+    )
+    # snapshotul acoperă tot ce cere qrels-ul — blocajul de la intrare NU se aplică
+    catalog = CatalogSnapshot(
+        version="acoperitor",
+        products={"px-1": {"category_slug": "creme-fata", "price": 70, "attributes": {}}},
+    )
+
+    report = run_benchmark(qset, lambda _query: ["fantoma"], RunConfig(label="absent"), catalog)
+
+    assert report.constraint_validation == UNAVAILABLE
+    assert report.forbidden_violation_rate is None
+    assert report.per_query[0].forbidden_in_6 is None
+    # cauza e numită, altfel „neverificat" ar fi un verdict fără remediu
+    assert report.unverifiable_products == ["fantoma"]
+
+
+def test_unverified_by_missing_product_names_cause_in_comparison():
+    qset = QrelsSet(
+        business_id="b",
+        queries=[
+            _q(id="q1", judgments=[QrelJudgment(product_id="px-1", relevance=Relevance.ideal)])
+        ],
+    )
+    catalog = CatalogSnapshot(
+        version="acoperitor",
+        products={"px-1": {"category_slug": "creme-fata", "price": 70, "attributes": {}}},
+    )
+    ok = run_benchmark(qset, lambda _query: ["px-1"], RunConfig(label="ok"), catalog)
+    broken = run_benchmark(qset, lambda _query: ["fantoma"], RunConfig(label="rupt"), catalog)
+
+    with pytest.raises(ValueError, match="produse absente din catalog: \\['fantoma'\\]"):
+        compare_reports(ok, broken)
+
+
+def test_fingerprint_separates_snapshots_that_differ_only_in_content():
+    """Acelaşi `version`, acelaşi set de id-uri, alt PREŢ → altă amprentă.
+
+    Regresie: hash-ul acoperea doar setul de id-uri, iar `version` vine din `updated_at` trunchiat
+    la secundă — două modificări de preţ în aceeaşi secundă produceau amprente identice, deci două
+    rapoarte incomparabile treceau drept comparabile."""
+
+    def snap(price: float) -> CatalogSnapshot:
+        return CatalogSnapshot(
+            version="live:1@2026-07-31T12:00:00",
+            products={"p-1": {"category_slug": "creme-fata", "price": price, "attributes": {}}},
+        )
+
+    ieftin, scump = snap(70), snap(240)
+    assert ieftin.version == scump.version
+    assert set(ieftin.products) == set(scump.products)
+    assert ieftin.fingerprint != scump.fingerprint
+
+
+def test_fingerprint_is_stable_across_key_order_and_ignores_cosmetics():
+    """Amprenta e dovadă de identitate pentru CONSTRÂNGERI, nu checksum de rând.
+
+    Stabilă la ordinea cheilor (altfel două citiri ale aceluiaşi catalog ar părea diferite) şi
+    insensibilă la `name`, pe care nicio constrângere nu-l citeşte — o corectură de text n-are voie
+    să invalideze o comparaţie."""
+    a = CatalogSnapshot(
+        version="v",
+        products={"p": {"attributes": {"y": 1, "x": 2}, "price": 10, "category_slug": "seruri"}},
+    )
+    b = CatalogSnapshot(
+        version="v",
+        products={"p": {"category_slug": "seruri", "price": 10, "attributes": {"x": 2, "y": 1}}},
+    )
+    cosmetic = CatalogSnapshot(
+        version="v",
+        products={
+            "p": {
+                "category_slug": "seruri",
+                "price": 10,
+                "attributes": {"x": 2, "y": 1},
+                "name": "alt nume",
+            }
+        },
+    )
+
+    assert a.fingerprint == b.fingerprint == cosmetic.fingerprint
 
 
 def test_comparison_refuses_unverified_report():

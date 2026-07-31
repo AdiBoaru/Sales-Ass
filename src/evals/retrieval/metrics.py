@@ -71,13 +71,28 @@ def forbidden_violations(q: QrelsQuery, ranked: Sequence[str], k: int) -> int:
     return sum(1 for pid in ranked[:k] if pid in forb)
 
 
+def missing_from_catalog(
+    ranked: Sequence[str], k: int, catalog: Mapping[str, dict] | None
+) -> list[str]:
+    """Produsele din top-k care NU există în snapshot — deci nu pot fi evaluate.
+
+    Un produs absent nu e „fără încălcări", e neevaluabil. Dacă ar fi sărit tăcut (cum se întâmpla
+    cu `if p := catalog.get(pid)`), un retrieval care întoarce exact produse din afara snapshotului
+    ar produce zero încălcări şi un raport marcat `verified` — cel mai prost rezultat posibil
+    prezentat drept cel mai bun."""
+    if catalog is None:
+        return []
+    return [pid for pid in ranked[:k] if pid not in catalog]
+
+
 def violations_at_k(
     q: QrelsQuery, ranked: Sequence[str], k: int, catalog: Mapping[str, dict] | None
 ) -> int | None:
     """Câte produse din top-k încalcă contractul query-ului. SINGURUL numărător folosit de raport.
 
-    `None` dacă lipseşte catalogul: verificarea nu s-a putut face. A treia stare, nu zero — un zero
-    tăcut ar raporta „nicio încălcare" acolo unde nimic n-a fost verificat.
+    `None` în DOUĂ cazuri, ambele însemnând „nu s-a putut verifica", nu „e curat":
+      · lipseşte catalogul cu totul;
+      · măcar un produs din top-k lipseşte din catalog (vezi `missing_from_catalog`).
 
     REUNIUNE, nu sumă, între două surse diferite:
       · EXCEPŢIILE EXPLICITE din qrels — incompatibilităţi reale pe care atributele nu le exprimă;
@@ -85,7 +100,7 @@ def violations_at_k(
         returnat sistemul testat.
     Un produs prins de ambele e o singură încălcare; altfel rata ar creşte cu cât un caz e mai bine
     acoperit de constrângeri, nu cu câte produse greşite au ieşit."""
-    if catalog is None:
+    if catalog is None or missing_from_catalog(ranked, k, catalog):
         return None
     from src.evals.retrieval.constraints import violates_any  # noqa: PLC0415
 

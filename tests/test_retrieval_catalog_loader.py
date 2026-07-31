@@ -73,3 +73,18 @@ async def test_version_tracks_latest_update_not_only_count():
     assert len(older.products) == len(newer.products)
     assert older.version != newer.version
     assert older.fingerprint != newer.fingerprint
+
+
+@pytest.mark.asyncio
+async def test_same_second_price_change_still_changes_fingerprint():
+    """Coliziunea reală: `version` trunchiază `updated_at` la secundă.
+
+    Două modificări de preţ în aceeaşi secundă dau versiuni identice — dacă amprenta n-ar acoperi
+    conţinutul, două cataloage diferite ar produce `live:1@...:acelaşi_hash`, iar comparaţia
+    baseline-candidat ar accepta rapoarte incomparabile."""
+    stamp = dt.datetime(2026, 7, 31, 12, 0, 0)
+    a = await load_catalog(_FakeConn([_row(price=70, updated_at=stamp)]), "biz")
+    b = await load_catalog(_FakeConn([_row(price=240, updated_at=stamp)]), "biz")
+
+    assert a.version == b.version
+    assert a.fingerprint != b.fingerprint

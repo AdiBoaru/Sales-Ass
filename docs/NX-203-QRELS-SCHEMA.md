@@ -40,13 +40,19 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
   explicite din qrels și violările derivate din constrângeri. Reuniune, nu sumă: un produs prins de
   ambele e o singură încălcare, altfel rata ar crește cu cât un caz e mai bine acoperit de
   constrângeri, nu cu câte produse greșite au ieșit.
-- **Rapoartele își poartă catalogul.** `catalog_fingerprint` = versiune + hash peste setul de
-  id-uri. `compare_reports` refuză rapoarte cu cataloage diferite sau cu verificarea indisponibilă:
-  altfel deltele ar fi schimbări de DATE prezentate ca schimbări de calitate, iar un `None` tratat
-  ca 0 ar raporta „fără regresie de siguranță" pe o rulare în care nimic n-a fost măsurat.
-- **Spații de id incompatibile = oprire.** Un catalog fără niciun id comun cu qrels-ul (UUID din DB
-  vs. slug de seed) ridică eroare: fiecare căutare ar rata, deci raportul ar ieși cu zero încălcări
-  și marcat `verified`.
+- **Rapoartele își poartă catalogul.** `catalog_fingerprint` = versiune + hash peste **conținutul
+  canonic** (id + preț + categorie + `attributes`, chei sortate), nu peste setul de id-uri:
+  `version` vine din `updated_at` trunchiat la secundă, deci două modificări de preț în aceeași
+  secundă produceau amprente identice pe cataloage diferite. `compare_reports` refuză rapoarte cu
+  cataloage diferite sau cu verificarea indisponibilă: altfel deltele ar fi schimbări de DATE
+  prezentate ca schimbări de calitate, iar un `None` tratat ca 0 ar raporta „fără regresie de
+  siguranță" pe o rulare în care nimic n-a fost măsurat.
+- **Acoperire, în două momente.** Înainte de rulare, snapshotul trebuie să conțină **toate**
+  id-urile la care se referă qrels-ul — suprapunerea parțială nu ajunge (un snapshot cu doar
+  produsul judecat trecea drept compatibil). După rulare, orice produs returnat în top-k care
+  lipsește din snapshot face raportul neverificat, cu id-urile în `unverifiable_products` —
+  altfel un retrieval care întoarce exact produse din afara catalogului raporta zero încălcări
+  și `verified`, adică cel mai prost rezultat posibil prezentat drept cel mai bun.
 
 ## Ce NU e aici (rămâne la popularea NX-203, după validarea NX-202)
 - Datasetul real de 200-500 query-uri ro cu qrels (din etichetele NX-202 + trafic sanitizat).

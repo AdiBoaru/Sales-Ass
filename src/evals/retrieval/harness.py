@@ -15,6 +15,7 @@ poată apărea niciodată dintr-o verificare care n-a rulat.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Mapping, Sequence
 from statistics import mean
 
@@ -31,12 +32,21 @@ VERIFIED = "verified"
 UNAVAILABLE = "constraint_validation_unavailable"
 
 
+#: Câmpurile pe care `constraints.evaluate` chiar le citeşte. Amprenta se calculează DOAR peste
+#: ele: `name` ar schimba identitatea snapshotului la o corectură cosmetică de text, fără ca vreo
+#: constrângere să fie evaluată altfel.
+_FINGERPRINTED_FIELDS = ("price", "category_slug", "attributes")
+
+
 class CatalogSnapshot(BaseModel):
     """Catalogul contra căruia se evaluează `hard_constraints`, cu identitate proprie.
 
-    `version` + `fingerprint` există fiindcă un raport rulat pe alt catalog produce delte care
-    ARATĂ ca schimbări de calitate, dar sunt schimbări de DATE. Amprenta face incompatibilitatea
-    detectabilă mecanic, nu lăsată în seama disciplinei celui care compară.
+    Amprenta există fiindcă un raport rulat pe alt catalog produce delte care ARATĂ ca schimbări de
+    calitate, dar sunt schimbări de DATE. Ca să fie dovadă, nu etichetă, se calculează peste
+    CONŢINUTUL canonic (id + preţ + categorie + attributes, chei sortate), nu peste setul de
+    id-uri: două seed-uri care schimbă doar preţuri au acelaşi set de id-uri, iar `version` bazată
+    pe `updated_at` trunchiat la secundă coincide dacă modificările cad în aceeaşi secundă.
+    `version` rămâne partea lizibilă — utilă la citit, insuficientă ca identitate.
 
     `products` mapează product_id → dict-ul de produs (`price`, `category_slug`, `attributes`),
     exact forma consumată de `constraints.evaluate`."""
@@ -46,18 +56,27 @@ class CatalogSnapshot(BaseModel):
 
     @property
     def fingerprint(self) -> str:
-        ids = ",".join(sorted(self.products))
-        return f"{self.version}:{hashlib.sha256(ids.encode()).hexdigest()[:12]}"
+        canonical = {
+            pid: {f: product.get(f) for f in _FINGERPRINTED_FIELDS}
+            for pid, product in self.products.items()
+        }
+        # `default=str` acoperă Decimal/datetime venite din DB; `sort_keys` face amprenta
+        # independentă de ordinea în care au venit rândurile.
+        payload = json.dumps(
+            canonical, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str
+        )
+        return f"{self.version}:{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]}"
 
-    def covers(self, qset: QrelsSet) -> bool:
-        """False dacă qrels-ul şi catalogul folosesc spaţii de identificatori DIFERITE.
+    def coverage_gaps(self, qset: QrelsSet) -> list[str]:
+        """Id-urile la care qrels-ul se referă şi care LIPSESC din snapshot.
 
-        Cazul real: qrels cu UUID-uri din DB vs. un export pe slug-uri de seed. Fiecare căutare ar
-        rata, deci fiecare produs ar apărea „necunoscut" — iar raportul ar ieşi cu zero încălcări
-        şi marcat `verified`. Exact minciuna pe care starea a treia o previne."""
+        Suprapunerea parţială nu e suficientă: un snapshot care conţine doar produsul judecat, dar
+        nu şi ce întoarce retrieval-ul, trecea drept compatibil şi raporta zero încălcări. Cazul
+        limită (spaţii de id complet diferite — UUID din DB vs. slug de seed) e doar forma extremă
+        a aceleiaşi probleme, deci se verifică o singură dată, strict."""
         referenced = {j.product_id for q in qset.queries for j in q.judgments}
         referenced |= {p for q in qset.queries for p in q.forbidden_products}
-        return not referenced or bool(referenced & set(self.products))
+        return sorted(referenced - set(self.products))
 
 
 class RunConfig(BaseModel):
@@ -78,8 +97,12 @@ class QueryResult(BaseModel):
     ndcg_at_6: float
     top_6_hit: float
     mrr: float
-    #: `None` = NEVERIFICAT (fără catalog). Distinct de 0 = verificat şi curat.
+    #: `None` = NEVERIFICAT (fără catalog sau cu produse absente din el). Distinct de 0 = verificat
+    #: şi curat.
     forbidden_in_6: int | None = None
+    #: Produsele din top-6 care nu există în snapshot. Nesolicitat de contract, dar fără ele
+    #: „neverificat" ar fi un verdict fără cauză, deci nereparabil.
+    unverifiable_ids: list[str] = []
     family_id: str | None = None  # din qrels, NU derivat din text la runtime
 
 
@@ -110,6 +133,10 @@ class BenchmarkReport(BaseModel):
     #: fie nevoit să deducă starea dintr-un `None`.
     constraint_validation: str = UNAVAILABLE
     catalog_fingerprint: str | None = None
+    #: Toate produsele returnate care lipsesc din snapshot. Nevid ⇒ raportul e neverificat.
+    #: Verificarea e totul-sau-nimic la nivel de raport: o rată calculată doar pe query-urile
+    #: evaluabile ar fi corectă pe o submulţime tăcută, iar cititorul n-ar avea de unde şti pe care.
+    unverifiable_products: list[str] = []
     per_query: list[QueryResult]
 
 
@@ -137,10 +164,15 @@ def compare_reports(baseline: BenchmarkReport, candidate: BenchmarkReport) -> Be
             # Un raport neverificat are rata `None`. Comparaţia ar trebui să scadă un `None` — sau,
             # mai rău, l-ar trata ca 0 şi ar raporta „fără regresie de siguranţă" pe o rulare în
             # care nicio constrângere n-a fost măsurată.
+            cauza = (
+                f"; produse absente din catalog: {report.unverifiable_products[:5]}"
+                if report.unverifiable_products
+                else ""
+            )
             raise ValueError(
                 f"{label}: verificarea constrângerilor n-a rulat "
                 f"({report.constraint_validation}) — comparaţia ar prezenta ca egalitate ceva "
-                f"nemăsurat"
+                f"nemăsurat{cauza}"
             )
     if baseline.catalog_fingerprint != candidate.catalog_fingerprint:
         raise ValueError(
@@ -167,6 +199,7 @@ def evaluate_query(
     Excepţiile explicite singure nu spun nimic despre respectarea contractului: sunt tocmai cazurile
     care NU au reprezentare în atribute. Un număr calculat doar din ele ar arăta ca o verificare de
     constrângeri, fără să fie."""
+    products = catalog.products if catalog else None
     return QueryResult(
         id=q.id,
         family_id=q.family_id,
@@ -176,7 +209,8 @@ def evaluate_query(
         mrr=metrics.mrr(q, ranked),
         # Un singur numărător (reuniune excepţii ∪ derivate), în `metrics` — două implementări ar
         # ajunge să numere lucruri diferite fără ca vreun test să le pună faţă în faţă.
-        forbidden_in_6=metrics.violations_at_k(q, ranked, 6, catalog.products if catalog else None),
+        forbidden_in_6=metrics.violations_at_k(q, ranked, 6, products),
+        unverifiable_ids=metrics.missing_from_catalog(ranked, 6, products),
     )
 
 
@@ -202,12 +236,18 @@ def run_benchmark(
 
     `catalog` e input-ul fără de care constrângerile nu pot fi evaluate. Lipsa lui NU e o eroare —
     metricile de relevanţă (recall/nDCG/MRR) rămân valide — dar raportul iese marcat
-    `constraint_validation_unavailable`, cu rata `None`, şi nu mai poate intra într-o comparaţie."""
-    if catalog is not None and not catalog.covers(qset):
+    `constraint_validation_unavailable`, cu rata `None`, şi nu mai poate intra într-o comparaţie.
+
+    DOUĂ verificări de acoperire, la momente diferite:
+      · ÎNAINTE de rulare — snapshotul trebuie să conţină toate id-urile la care se referă qrels-ul
+        (altfel eroare: un snapshot parţial nu poate produce un verdict);
+      · DUPĂ rulare — dacă retrieval-ul a întors produse absente din snapshot, raportul devine
+        neverificat, cu id-urile respective în `unverifiable_products`."""
+    if catalog is not None and (gaps := catalog.coverage_gaps(qset)):
         raise ValueError(
-            "catalogul nu are niciun identificator comun cu qrels-ul — spaţii de id diferite "
-            "(UUID din DB vs. slug de seed). Verificarea ar raporta zero încălcări pe tot setul, "
-            "marcat ca verificat."
+            f"snapshotul nu acoperă {len(gaps)} identificatori din qrels {gaps[:5]} — snapshot "
+            "parţial sau spaţii de id diferite (UUID din DB vs. slug de seed). Produsele lipsă ar "
+            "fi raportate ca fără încălcări, iar raportul ar ieşi marcat ca verificat."
         )
     per_query = [evaluate_query(q, list(retrieve(q.query)), catalog) for q in qset.queries]
     fams = _families(per_query)
@@ -218,7 +258,11 @@ def run_benchmark(
             return 0.0
         return mean(mean(getattr(r, attr) for r in group) for group in fams.values())
 
-    if catalog is None:
+    unverifiable = sorted({pid for r in per_query for pid in r.unverifiable_ids})
+    if catalog is None or unverifiable:
+        # Totul-sau-nimic la nivel de raport. O rată calculată doar pe query-urile evaluabile ar fi
+        # corectă pe o submulţime pe care nimeni n-o vede — şi ar scădea exact când retrieval-ul
+        # scoate produse din afara catalogului, adică tocmai când e mai suspect.
         rate: float | None = None
         state = UNAVAILABLE
     else:
@@ -238,5 +282,6 @@ def run_benchmark(
         forbidden_violation_rate=rate,
         constraint_validation=state,
         catalog_fingerprint=catalog.fingerprint if catalog else None,
+        unverifiable_products=unverifiable,
         per_query=per_query,
     )
