@@ -48,7 +48,7 @@ pinurile lui sunt `catalog_signature: n=654`, judge `v1`, tarife LLM vechi. Înt
 | [NX-183](../tasks/NX-183.md) | Envelope V2-light + renderer text-only + `answer` inline | M | 180,181 + gate decizie | `response_envelope_v2_enabled` (per business) |
 | [NX-184](../tasks/NX-184.md) | Planner `response_shape`+`obligations` + FAQ mixed-intent | M | NX-183 | `response_shape_hints_enabled` |
 
-> **Stare (2026-07-31):** NX-180 merged (#234); NX-181 merged (#235); NX-182..184 merged (#236) — **toate cu kill-switch-ul default OFF**, deci construite dar **nemăsurate ON** pe catalogul de azi. Coloana „Depinde de" descrie ordinea de DECIZIE (gate pe baseline), nu de cod: codul e deja în `main`.
+> **Stare (2026-07-31):** NX-180 merged (#234) — **tooling offline, fără kill-switch runtime** (vezi cardul); NX-181 merged (#235) și NX-182..184 merged (#236) — **acestea cu kill-switch-ul default OFF**, deci construite dar **nemăsurate ON** pe catalogul de azi. Coloana „Depinde de" descrie ordinea de DECIZIE (gate pe baseline), nu de cod: codul e deja în `main`.
 
 ## Track B — Selection Correctness (shadow-first; separat, nu blochează A)
 | Card | Ce | Cplx | Depinde de | Kill-switch |
