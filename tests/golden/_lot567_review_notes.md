@@ -156,3 +156,61 @@ lot6-14 · lot7-04, lot7-05.
 Legitim, dar face metricile per-query zgomotoase: cu gold de 1, un singur miss duce Recall@20 de la
 1.0 la 0.0. La lot 6 sunt **7 din 17** — merită discutat dacă protecția solară și fondul de ten au
 destule produse ca să suporte query-uri cu trei constrângeri.
+
+---
+
+# Reluare 2026-07-31 — cele trei blocaje din nota de pauză
+
+Catalog re-verificat: `live:300@2026-07-22T19:49:18+00:00` — **neschimbat** față de
+`demo-2026-07-22`, deci etichetele existente NU au expirat. (Cele 804 produse din DB includ
+nepublicate; snapshot-ul de evaluare filtrează `active`+`published` = 300.)
+
+## ✅ REZOLVAT — `q-con-06`, constrângerea inertă „vitamina c"
+
+Nu era o problemă de etichetare, ci un **bug în comparator**: `key_ingredients` se testa exact,
+case-sensitive, iar listele tolerante întorc `unknown` la nepotrivire → constrângerea nu
+satisfăcea și nu încălca niciodată nimic. Arăta în qrels exact ca una validă.
+
+Reparat în `src/evals/retrieval/constraints.py` (normalizare de registru la comparație, nu la
+afișare). Efect măsurat:
+
+- „vitamina c" satisface acum **13 produse** (înainte: 0);
+- pe toate cele 3 constrângeri ale query-ului: **5 produse**, exact cele 5 deja etichetate;
+- **0 candidați neetichetați** → fixul *validează* etichetele existente, nu le invalidează.
+
+`_q-con-06_amendment_draft.json` devine inutil: amendarea presupunea schimbarea valorii din qrels,
+dar valoarea era corectă — comparația era greșită.
+
+## ⚠️ DE CONFIRMAT — verdict 11: `q-con-01` ⟷ `lot6-05` (SPF 50)
+
+`q-con-01` („ai protecție solară spf 50?") poartă `texture in [cremă, fluid]`; `lot6-05`
+(„Aveți crema SPF 50 pentru față disponibilă?") nu.
+
+**Dovadă din catalog:** constrângerea `texture` exclude **0 produse** — mulțimea e aceeași (2
+produse) cu sau fără ea. E **inertă**, iar textul lui `q-con-01` nu cere nicio formă („protecție
+solară spf 50", fără „cremă"). Exact tiparul semnalat de două ori în notele de mai sus:
+*o constrângere pe care userul n-o cere e o constrângere inventată, iar când nu discriminează
+nici măcar nu se vede că nu face nimic.*
+
+**Propunere:** scoate `texture` din `q-con-01` → fuziunea cu `lot6-05` devine validă.
+Amendează o intrare `human_verified`, dar **nu poate schimba nicio etichetă** (mulțimea de
+răspunsuri e identică). Ironia: `lot6-05` chiar spune „crema", deci dacă am ține constrângerea,
+ea ar aparține lui `lot6-05`, nu lui `q-con-01`.
+
+## ⚠️ DE CONFIRMAT — verdict 10: `q-con-03` ⟷ `lot6-14` (creme de mâini)
+
+`lot6-14` („mi se usucă mâinele des") poartă `suitable_for=dry`; `q-con-03` („vreau o cremă de
+mâini, le am cam uscate") nu. Ambele texte spun același lucru: mâini uscate.
+
+**Dovadă din catalog:** `dry` exclude **exact 1 produs** — *Solora Sun Cremă de mâini SPF 30*, care
+are `suitable_for = None`. Adică e exclus pentru **date lipsă**, nu pentru o incompatibilitate
+declarată. Exact eșecul contra căruia modulul își declară doctrina celor trei stări: *absenţa unui
+atribut NU e incompatibilitate.*
+
+**Propunere:** scoate `suitable_for=dry` din `lot6-14` (aliniere la `q-con-03`), păstrând
+uscăciunea ca semnal de **relevanță gradată**, nu ca hard constraint. Motiv: întreaga categorie
+„creme de mâini" există pentru mâini uscate — ridicat la hard, filtrul pedepsește un produs
+pentru metadate incomplete și introduce un fals-negativ în gold.
+
+> Ambele cer confirmarea ta: sunt amendări de contract, iar `human_verified` nu se ridică din
+> script — nici direct, nici indirect. Vezi antetul lui `scripts/nx203_draft_qrels.py`.

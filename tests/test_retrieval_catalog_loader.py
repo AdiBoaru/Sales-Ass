@@ -13,7 +13,7 @@ import pytest
 
 from src.db.queries.catalog import _EFFECTIVE_PRICE
 from src.evals.retrieval.catalog import assert_catalog_unchanged, load_catalog
-from src.evals.retrieval.constraints import VIOLATES, evaluate
+from src.evals.retrieval.constraints import SATISFIES, UNKNOWN, VIOLATES, evaluate
 
 
 class _FakeConn:
@@ -143,3 +143,45 @@ async def test_guard_catches_change_invisible_to_updated_at():
         await assert_catalog_unchanged(
             _FakeConn([_row(price=100, updated_at=stamp)]), "biz", snapshot
         )
+
+
+# --- comparaţie insensibilă la registru (NX-203, reluare 2026-07-31) -----------------------------
+
+
+def test_tolerant_list_match_is_case_insensitive():
+    """Constrângerea `key_ingredients contains "vitamina c"` era INERTĂ: catalogul scrie
+    `"vitamina C"`, membrul se testa exact, iar listele tolerante întorc `unknown` la nepotrivire
+    — deci constrângerea nu satisfăcea şi nu încălca niciodată nimic, arătând în qrels exact ca
+    una validă. `key_ingredients` are 66 de valori libere, cu acronime (`AHA`, `UVA/UVB`), deci
+    diferenţa de registru e normală, nu o eroare de date de curăţat una câte una."""
+    prod = {"attributes": {"key_ingredients": ["vitamina C", "acid glicolic/lactic (AHA)"]}}
+    assert evaluate(
+        prod, {"facet": "key_ingredients", "op": "contains", "value": "vitamina c"}
+    ) == (SATISFIES)
+    assert evaluate(prod, {"facet": "key_ingredients", "op": "contains", "value": "AHA"}) == UNKNOWN
+    assert (
+        evaluate(
+            prod,
+            {"facet": "key_ingredients", "op": "contains", "value": "acid glicolic/lactic (aha)"},
+        )
+        == SATISFIES
+    )
+    # absenţa reală rămâne `unknown`, nu `satisfies` — normalizarea nu slăbeşte semantica
+    assert (
+        evaluate(prod, {"facet": "key_ingredients", "op": "contains", "value": "retinol"})
+        == UNKNOWN
+    )
+
+
+def test_scalar_match_is_case_insensitive_and_still_violates():
+    """La scalari nepotrivirea întoarce `violates`, deci acolo un dezacord de registru ar fi mai
+    grav: un produs corect ar fi marcat ca încălcare. Azi vocabularele controlate sunt integral
+    minuscule, deci normalizarea nu schimbă nimic — e o plasă, nu o schimbare de semantică."""
+    prod = {"attributes": {"finish": "Matte", "texture": "cremă"}}
+    assert evaluate(prod, {"facet": "finish", "op": "eq", "value": "matte"}) == SATISFIES
+    assert (
+        evaluate(prod, {"facet": "texture", "op": "in", "value": ["Cremă", "fluid"]}) == SATISFIES
+    )
+    assert evaluate(prod, {"facet": "finish", "op": "eq", "value": "dewy"}) == VIOLATES
+    # atribut absent rămâne `unknown` (absenţa nu e incompatibilitate)
+    assert evaluate(prod, {"facet": "coverage", "op": "eq", "value": "medium"}) == UNKNOWN

@@ -33,6 +33,23 @@ _SCALAR = ("finish", "coverage", "texture", "routine_step")
 _TOLERANT_LISTS = ("suitable_for", "concerns", "key_ingredients")
 
 
+def _fold(v: Any) -> Any:
+    """Normalizează pentru COMPARAŢIE (nu pentru afişare): şirurile se compară case-insensitive.
+
+    Bug-ul care a impus asta: `key_ingredients contains "vitamina c"` era INERT — catalogul scrie
+    `"vitamina C"`, iar membrul se testa exact, deci constrângerea nu satisfăcea şi nu încălca
+    niciodată nimic. O constrângere care nu poate fi satisfăcută nu măsoară nimic, dar arată în
+    qrels exact ca una validă.
+
+    Se aplică şi la `_SCALAR`, unde acelaşi tip de nepotrivire ar fi MAI grav: acolo nepotrivirea
+    întoarce `violates`, deci un produs corect ar fi marcat ca încălcare. Azi vocabularele
+    controlate (`finish`/`texture`/…) sunt integral minuscule, deci nu schimbă nimic — dar
+    `key_ingredients` are 66 de valori libere, cu acronime (`AHA`, `UVA/UVB`), tocmai clasa în care
+    diferenţa de registru e normală, nu o eroare de date de reparat una câte una.
+    """
+    return v.casefold() if isinstance(v, str) else v
+
+
 def evaluate(product: dict[str, Any], constraint: dict[str, Any]) -> str:
     """Starea unui produs faţă de O constrângere, cu politica de `unknown` aplicată."""
     state = _state(product, constraint["facet"], constraint.get("op", "eq"), constraint["value"])
@@ -84,13 +101,16 @@ def _state(product: dict[str, Any], facet: str, op: str, value: Any) -> str:
         raw = attrs.get(facet)
         if raw in (None, ""):
             return UNKNOWN
-        return SATISFIES if (raw in value if op == "in" else raw == value) else VIOLATES
+        got = _fold(raw)
+        want = [_fold(v) for v in value] if op == "in" else _fold(value)
+        return SATISFIES if (got in want if op == "in" else got == want) else VIOLATES
 
     if facet == "fragrance_free":
         raw = attrs.get("fragrance_free")
         return UNKNOWN if raw is None else (SATISFIES if raw is value else VIOLATES)
 
     if facet in _TOLERANT_LISTS:
-        return SATISFIES if value in (attrs.get(facet) or []) else UNKNOWN
+        have = [_fold(x) for x in (attrs.get(facet) or [])]
+        return SATISFIES if _fold(value) in have else UNKNOWN
 
     return UNKNOWN
