@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from src.agent import pricing, usage
 from src.agent.llm import LLMClient
-from src.agent.pricing import cost_for, rates_for, savings_for
+from src.agent.pricing import ModelRates, cost_for, rates_for, savings_for
 from src.config import get_settings
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext, TurnUsage
 from src.worker.aftercare import _usage_event_props
@@ -48,8 +48,28 @@ class _Resp:
 # --- pricing -----------------------------------------------------------------
 
 
+def test_published_rates_are_pinned():
+    """NX-201 felia A: tarifele implicite sunt cele PUBLICATE de OpenAI, nu estimări inventate.
+
+    Pinuite ca să nu redevină ghicite pe tăcute: valorile de dinainte erau subevaluate de
+    2,25x-4,00x, ceea ce făcea ca plafoanele de cost să se declanșeze de 2-4x mai târziu decât
+    se credea. Sursă: https://developers.openai.com/api/docs/pricing (verificat 2026-07-31).
+    Dacă OpenAI schimbă prețurile, se actualizează AICI + în doc, deliberat.
+    """
+    from src.agent.pricing import _DEFAULT_PRICING
+
+    assert _DEFAULT_PRICING["gpt-5.4"] == ModelRates(input=2.50, cached_input=0.25, output=15.00)
+    assert _DEFAULT_PRICING["gpt-5.4-mini"] == ModelRates(
+        input=0.75, cached_input=0.075, output=4.50
+    )
+    assert _DEFAULT_PRICING["gpt-5.4-nano"] == ModelRates(
+        input=0.20, cached_input=0.02, output=1.25
+    )
+    assert _DEFAULT_PRICING["text-embedding-3-small"].input == 0.02
+    assert _DEFAULT_PRICING["omni-moderation-latest"].input == 0.0  # gratuit la OpenAI
+
+
 def test_cost_for_separates_cached():
-    # mini: input 0.25, cached 0.025, output 2.0 /1M
     r = rates_for("gpt-5.4-mini")
     full = cost_for("gpt-5.4-mini", prompt_tokens=1000, cached_tokens=0, completion_tokens=100)
     cached = cost_for("gpt-5.4-mini", prompt_tokens=1000, cached_tokens=800, completion_tokens=100)
@@ -86,8 +106,10 @@ def test_pricing_override_from_settings(monkeypatch):
     pricing._reset_pricing_cache()
     try:
         assert rates_for("gpt-5.4-mini").input == 9.0
-        # câmpurile neacoperite rămân la implicit
-        assert rates_for("gpt-5.4-mini").output == 2.00
+        # câmpurile neacoperite rămân la implicit (citit din sursă, nu hardcodat — altfel
+        # testul rugineşte la fiecare actualizare de tarife; pinuirea se face într-un singur
+        # loc, `test_published_rates_are_pinned`)
+        assert rates_for("gpt-5.4-mini").output == pricing._DEFAULT_PRICING["gpt-5.4-mini"].output
     finally:
         monkeypatch.delenv("LLM_PRICING_JSON", raising=False)
         get_settings.cache_clear()
@@ -99,7 +121,8 @@ def test_pricing_override_invalid_json_falls_back(monkeypatch):
     get_settings.cache_clear()
     pricing._reset_pricing_cache()
     try:
-        assert rates_for("gpt-5.4-mini").input == 0.25  # implicit, nu crapă
+        expected = pricing._DEFAULT_PRICING["gpt-5.4-mini"].input
+        assert rates_for("gpt-5.4-mini").input == expected  # implicit, nu crapă
     finally:
         monkeypatch.delenv("LLM_PRICING_JSON", raising=False)
         get_settings.cache_clear()
@@ -113,7 +136,8 @@ def test_pricing_override_bad_value_type_falls_back(monkeypatch):
     get_settings.cache_clear()
     pricing._reset_pricing_cache()
     try:
-        assert rates_for("gpt-5.4-mini").input == 0.25  # implicit
+        expected = pricing._DEFAULT_PRICING["gpt-5.4-mini"].input
+        assert rates_for("gpt-5.4-mini").input == expected  # implicit
         # și cost_for (hot path) NU aruncă
         assert cost_for("gpt-5.4-mini", 100, 0, 10) >= 0
     finally:
