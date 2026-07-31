@@ -84,12 +84,22 @@ def _constraints(spec: dict, catalog) -> list[dict]:
         out.append({"facet": "concerns", "op": "contains", "value": v})
     if kv := spec.get("attr_eq"):
         facet, value = kv[0], kv[1]
-        # `spf` e prag de SIGURANTA: un produs cu SPF nedeclarat NU satisface „SPF 50".
-        c = {"facet": facet, "op": "eq", "value": value}
         if facet == "spf":
-            c["unknown_is_violation"] = True
-            c["note"] = "prag de siguranta: SPF nedeclarat nu satisface cererea"
-        out.append(c)
+            # `gte`, nu `eq`, si INT, nu string — ca in contractul deja confirmat (q-con-01).
+            # „SPF 50" inseamna „cel putin 50": un SPF 50+ satisface cererea. Cu `eq` pe string,
+            # aceeasi intentie primea alt contract in qrels si fuziunea de familie devenea
+            # imposibila din motive de formatare, nu de sens.
+            out.append(
+                {
+                    "facet": "spf",
+                    "op": "gte",
+                    "value": int(value),
+                    "unknown_is_violation": True,
+                    "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface o cerinta de 50",
+                }
+            )
+        else:
+            out.append({"facet": facet, "op": "eq", "value": value})
     if v := spec.get("price_max"):
         out.append({"facet": "price", "op": "lte", "value": v, "unit": "RON"})
     if v := spec.get("ingredient"):
@@ -152,6 +162,56 @@ def _provenance(queries: list[dict]) -> dict[str, str]:
     return out
 
 
+def _canonicalize_families(queries: list[dict], catalog) -> list[dict]:
+    """O familie = UN contract canonic: aceleasi `hard_constraints`, aceleasi `judgments`, aceleasi
+    exceptii, la toate variantele.
+
+    De ce nu e optional. Metrica mediaza IN familie; daca variantele au gold-uri diferite, media nu
+    mai e „acelasi contract masurat pe mai multe formulari", ci o amestecatura. Iar diferentele de
+    aici NU sunt de contract — sunt de OBSERVATIE: fiecare formulare a scos alti candidati din
+    lexical/semantic. A le lasa in qrels ar transforma un artefact de colectare in adevar.
+
+    Pool-ul devine REUNIUNEA candidatilor tuturor variantelor, renotat identic. Daca doua variante
+    au constrangeri DIFERITE, nu se unifica nimic: fuziunea e invalida si se raporteaza, fiindca
+    atunci chiar sunt doua contracte."""
+    by_family: dict[str, list[dict]] = {}
+    for q in queries:
+        by_family.setdefault(q["family_id"] or q["id"], []).append(q)
+
+    for fam, group in by_family.items():
+        if len(group) == 1:
+            continue
+        contracts = {json.dumps(q["hard_constraints"], sort_keys=True) for q in group}
+        if len(contracts) > 1:
+            for q in group:
+                q["_fuziune_invalida"] = (
+                    f"familia {fam} are {len(contracts)} contracte de constrangeri diferite — "
+                    f"nu se poate canonicaliza, sunt contracte distincte"
+                )
+            continue
+        pool: dict[str, int] = {}
+        for q in group:
+            for j in q["judgments"]:
+                pool[j["product_id"]] = j["relevance"]
+        # renotare din CATALOG, nu din nota cea mai mare observata: nota vine din proprietatile
+        # produsului, deci trebuie sa fie aceeasi indiferent care varianta l-a scos la iveala.
+        hard = group[0]["hard_constraints"]
+        unified = []
+        for pid in pool:
+            grade = _grade(catalog.products[pid], hard)
+            if grade is not None:
+                unified.append({"product_id": pid, "relevance": grade})
+        unified.sort(key=lambda j: (-j["relevance"], j["product_id"]))
+        for q in group:
+            adaugate = len(unified) - len(q["judgments"])
+            q["judgments"] = [dict(j) for j in unified]
+            q["_pool_unificat"] = (
+                f"pool comun al familiei {fam} ({len(group)} variante): {len(unified)} produse"
+                + (f", +{adaugate} fata de candidatii proprii" if adaugate else "")
+            )
+    return queries
+
+
 async def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         if sys.platform == "win32" and hasattr(stream, "reconfigure"):
@@ -212,6 +272,7 @@ async def main() -> int:
                     "_omise": [f"{n} ({de_ce})" for n, de_ce in omise],
                 }
             )
+        queries = _canonicalize_families(queries, catalog)
         out = GOLDEN / f"_{lot}_draft.json"
         out.write_text(
             json.dumps(

@@ -1,0 +1,29 @@
+{
+  "_meta": {
+    "ATENTIE": "AMENDAMENT la un query DEJA human_verified. Acceptarea coboara q-con-06 la human_verified=false pana la re-confirmare.",
+    "doua_lucruri_separate": [
+      "1) constrangerea `key_ingredients='vitamina c'` e INERTA: catalogul scrie 'vitamina C'. Zero produse o satisfac, deci nu discrimineaza nimic si nu a derivat niciodata vreo interdictie. De reparat la 'vitamina C'.",
+      "2) cei doi candidati din auditul de recall satisfac categoria si pretul, dar NU contin vitamina C — au acid hialuronic/niacinamida. Cu constrangerea reparata sunt marginali (1), nu relevanti."
+    ],
+    "catalog_fingerprint": "live:300@2026-07-22T19:49:18+00:00:bc4897518792368d"
+  },
+  "query_id": "q-con-06",
+  "constrangere_de_reparat": {
+    "facet": "key_ingredients",
+    "de_la": "vitamina c",
+    "la": "vitamina C"
+  },
+  "judgments_de_adaugat": [
+    {
+      "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+      "relevance": 1,
+      "_nume": "Coral Theory Pure Ser pentru ten"
+    },
+    {
+      "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+      "relevance": 1,
+      "_nume": "Mira Atelier Clear Ser pentru ten"
+    }
+  ],
+  "human_verified": false
+}

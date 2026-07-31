@@ -41,6 +41,14 @@
         {
           "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
           "relevance": 1
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
         }
       ],
       "forbidden_products": [],
@@ -64,7 +72,8 @@
         "Solora Shield Cremă cu protecție solară SPF 50 (incalca o constrangere)",
         "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)",
         "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
-      ]
+      ],
+      "_pool_unificat": "pool comun al familiei fam-lot5a-ser-vitc (5 variante): 8 produse, +2 fata de candidatii proprii"
     },
     {
       "id": "lot5a-02",
@@ -102,6 +111,10 @@
           "relevance": 1
         },
         {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 1
+        },
+        {
           "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
           "relevance": 1
         }
@@ -125,7 +138,8 @@
       "_omise": [
         "Solora Shield Cremă cu protecție solară SPF 50 (incalca o constrangere)",
         "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)"
-      ]
+      ],
+      "_pool_unificat": "pool comun al familiei fam-lot5a-ser-vitc (5 variante): 8 produse, +1 fata de candidatii proprii"
     },
     {
       "id": "lot5a-03",
@@ -163,6 +177,10 @@
           "relevance": 1
         },
         {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 1
+        },
+        {
           "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
           "relevance": 1
         }
@@ -185,7 +203,8 @@
       "_nota_generatorului": "intrebare de PRET. Retrieval-ul are aceeasi sarcina; ce se schimba e formularea raspunsului, care nu se masoara aici. Candidat la aceeasi familie ca #1 — de confirmat.",
       "_omise": [
         "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
-      ]
+      ],
+      "_pool_unificat": "pool comun al familiei fam-lot5a-ser-vitc (5 variante): 8 produse, +1 fata de candidatii proprii"
     },
     {
       "id": "lot5a-04",
@@ -221,6 +240,14 @@
         {
           "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
           "relevance": 1
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
         }
       ],
       "forbidden_products": [],
@@ -245,7 +272,8 @@
         "NudeLab Fresh Cremă CC (incalca o constrangere)",
         "Petala Glow Mască exfoliantă cu AHA (incalca o constrangere)",
         "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
-      ]
+      ],
+      "_pool_unificat": "pool comun al familiei fam-lot5a-ser-vitc (5 variante): 8 produse, +2 fata de candidatii proprii"
     },
     {
       "id": "lot5a-05",
@@ -285,6 +313,10 @@
         {
           "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
           "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
         }
       ],
       "forbidden_products": [],
@@ -307,7 +339,8 @@
         "Aria Light Cremă BB hidratantă (incalca o constrangere)",
         "NudeLab Fresh Cremă CC (incalca o constrangere)",
         "Velora Glow Mist fixator cu vitamine (incalca o constrangere)"
-      ]
+      ],
+      "_pool_unificat": "pool comun al familiei fam-lot5a-ser-vitc (5 variante): 8 produse, +1 fata de candidatii proprii"
     },
     {
       "id": "lot5a-06",
