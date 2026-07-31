@@ -1,0 +1,389 @@
+{
+  "_meta": {
+    "ATENTIE": "DRAFT — human_verified=false peste tot. Notele sunt PROPUNERI.",
+    "regula_de_notare": "3=satisface tot · 2=are un atribut nedeclarat · 1=nu incalca nimic dar nu e din categoria ceruta · omis=incalca explicit",
+    "catalog_fingerprint": "live:300@2026-07-22T19:49:18+00:00:bc4897518792368d"
+  },
+  "schema_version": 1,
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "lot7-01",
+      "query": "Bună! Mai aveți pe stoc serul cu vitamina C?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "acelasi pool ca lot5-01, alta intentie. Daca ambele intra in cele 200 cu familii proprii, benchmarkul numara de doua ori acelasi pool — de aceea blocul asta se decide impreuna.",
+      "_omise": [
+        "Mira Atelier Pure Loțiune tonică cu niacinamidă (incalca o constrangere)",
+        "Solora Shield Cremă cu protecție solară SPF 50 (incalca o constrangere)",
+        "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot7-02",
+      "query": "Salut! Caut un ser cu vitamina C, de preferat concentrație mare. Aveți pe stoc?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina C",
+          "note": "termen din filtru: vitamina c -> ortografia din catalog: vitamina C"
+        }
+      ],
+      "_nota_generatorului": "„concentratie mare\" nu e atribut de catalog. Nu inventez o valoare; ramane calificator neexprimabil, semnalat omului.",
+      "_omise": [
+        "Mira Atelier Balance Gel de curățare (incalca o constrangere)",
+        "Mira Atelier Balance Loțiune tonică (incalca o constrangere)",
+        "Mira Atelier Pure Loțiune tonică cu niacinamidă (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot7-03",
+      "query": "Salut, aveti pe stoc serul hidratant cu acid hialuronic de 30ml?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "seruri-pentru-ten",
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "acid hialuronic"
+        }
+      ],
+      "_nota_generatorului": "FORMATUL (30ml) traieste pe varianta, in `net_content_value`. Filtrul nu-l exprima — deliberat, ca sa se vada daca retrieval-ul aduce produsul corect si abia apoi se discuta formatul.",
+      "_omise": [
+        "Mira Atelier Balance Loțiune tonică (incalca o constrangere)",
+        "Mira Atelier Clear Loțiune tonică cu acid hialuronic (incalca o constrangere)",
+        "Mira Atelier Silk Stick cu SPF (incalca o constrangere)",
+        "Orchid Field Soft Mască de față cu acid hialuronic (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot7-04",
+      "query": "Salut, crema SPF 50 de la voi mai e disponibilă?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "protectie-solara",
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "protectie-solara"
+        },
+        {
+          "facet": "spf",
+          "op": "gte",
+          "value": 50,
+          "unknown_is_violation": true,
+          "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface cererea"
+        }
+      ],
+      "_nota_generatorului": "„de la voi\" presupune un produs anume, dar nu-l numeste. Gold-ul e pool-ul SPF 50; daca omul considera ca userul se refera la unul singur, query-ul devine ambiguu si iese din cele 200.",
+      "_omise": [
+        "Auralis Daily Cremă cu SPF 30 (incalca o constrangere)",
+        "Lumiere Skin Silk Stick cu SPF (incalca o constrangere)",
+        "Mira Atelier Silk Stick cu SPF (incalca o constrangere)",
+        "NudeLab Fresh Cremă CC (incalca o constrangere)",
+        "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)",
+        "Velora Perfect BB Cremă SPF 30 (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot7-05",
+      "query": "Salut, crema de zi SPF 50 o aveti la 50ml?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "protectie-solara",
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "protectie-solara"
+        },
+        {
+          "facet": "spf",
+          "op": "gte",
+          "value": 50,
+          "unknown_is_violation": true,
+          "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface cererea"
+        }
+      ],
+      "_nota_generatorului": "acelasi caz ca #3: formatul e pe varianta. Candidat la acelasi split_group cu #4.",
+      "_omise": [
+        "Auralis Daily Cremă cu SPF 30 (incalca o constrangere)",
+        "Lumiere Skin Silk Stick cu SPF (incalca o constrangere)",
+        "Mira Atelier Silk Stick cu SPF (incalca o constrangere)",
+        "NudeLab Fresh Cremă CC (incalca o constrangere)",
+        "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)",
+        "Velora Perfect BB Cremă SPF 30 (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot7-06",
+      "query": "Buna, vreau rujul mat in nuanta Ruby Red. Mai aveti?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "rujuri",
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "relevance": 3
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "rujuri"
+        },
+        {
+          "facet": "finish",
+          "op": "eq",
+          "value": "matte"
+        }
+      ],
+      "_nota_generatorului": "NUANTA numita explicit. In catalog exista „Ruby\" (NudeLab Velvet Ruj mat) si „Classic Red\" (Velora Soft Matte) — nu exact „Ruby Red\". Cazul cel mai clar in care raspunsul corect ar putea fi „avem ceva apropiat\", nu o potrivire exacta.",
+      "_omise": [
+        "Aria Nude Ruj (incalca o constrangere)",
+        "NudeLab Clear Gloss de buze (incalca o constrangere)",
+        "NudeLab Soft Blush Fard de obraz (incalca o constrangere)",
+        "NudeLab Warm Bronzer pudră (incalca o constrangere)",
+        "Petala Berry Gloss de buze (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot7-07",
+      "query": "set cadou sub 100 lei",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "020df930-7c9c-4c54-95ab-f772d0737878",
+          "relevance": 3
+        },
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "39ac3ec4-9206-483f-88f9-e812b06caabc",
+          "relevance": 3
+        },
+        {
+          "product_id": "858d69c2-a20a-497a-bebc-8cb4d434e66a",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "aac693ac-19e0-452e-b1b9-e93fcc0c6e01",
+          "relevance": 3
+        },
+        {
+          "product_id": "b03cdfa5-ffed-4985-8bc2-a25808cd49ba",
+          "relevance": 3
+        },
+        {
+          "product_id": "bd79eeba-21cb-4e2a-b5fe-5e8e0d7aa007",
+          "relevance": 3
+        },
+        {
+          "product_id": "d3aecb68-4017-4105-b248-edfc964a7ba8",
+          "relevance": 3
+        },
+        {
+          "product_id": "e57036ae-a5ea-4943-9b0b-838b77cd8322",
+          "relevance": 3
+        },
+        {
+          "product_id": "e5c1d76d-e43a-4f74-9f77-0eac2fdf1353",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 100,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "ASTEPT ZERO sau aproape. Catalogul n-are seturi cadou ca atare. Il pun aici, nu in blocul de cadouri, fiindca e formulat ca o cautare de PRODUS cu buget, nu ca o cerere de recomandare.",
+      "_omise": []
+    }
+  ]
+}

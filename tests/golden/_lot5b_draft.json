@@ -1,0 +1,1086 @@
+{
+  "_meta": {
+    "ATENTIE": "DRAFT — human_verified=false peste tot. Notele sunt PROPUNERI.",
+    "regula_de_notare": "3=satisface tot · 2=are un atribut nedeclarat · 1=nu incalca nimic dar nu e din categoria ceruta · omis=incalca explicit",
+    "catalog_fingerprint": "live:300@2026-07-22T19:49:18+00:00:bc4897518792368d"
+  },
+  "schema_version": 1,
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "lot5b-01",
+      "query": "vreau ceva pt ten uscat",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "0247fc1e-bf48-43a1-9fb0-51700da5bf76",
+          "relevance": 3
+        },
+        {
+          "product_id": "047d1fa2-28a0-41f9-a2d2-f800cffd6c9b",
+          "relevance": 3
+        },
+        {
+          "product_id": "0559231f-5763-4474-969d-c8e77cc75d05",
+          "relevance": 3
+        },
+        {
+          "product_id": "08adac46-fc23-4676-a471-85ab4fa3be29",
+          "relevance": 3
+        },
+        {
+          "product_id": "13314269-66bd-4e24-8e2a-ad3a4047ff8d",
+          "relevance": 3
+        },
+        {
+          "product_id": "19a602e1-d717-4f38-acd9-6acf464a60e2",
+          "relevance": 3
+        },
+        {
+          "product_id": "1b39d726-54a3-40e2-86f6-252dff80658d",
+          "relevance": 3
+        },
+        {
+          "product_id": "22a10eea-6050-4425-83ee-7dc52c314938",
+          "relevance": 3
+        },
+        {
+          "product_id": "24202ed0-1667-45c0-bb72-5aac81ab902d",
+          "relevance": 3
+        },
+        {
+          "product_id": "24f3e8e2-0ea2-4aa4-b86a-67fd2e3f92c7",
+          "relevance": 3
+        },
+        {
+          "product_id": "2cedd814-e83c-4799-be4e-e7cd43b54882",
+          "relevance": 3
+        },
+        {
+          "product_id": "2e1864a7-affa-45aa-b108-5b20f7eac02a",
+          "relevance": 3
+        },
+        {
+          "product_id": "59e66303-a30c-4073-bd2d-41a9e162ebea",
+          "relevance": 3
+        },
+        {
+          "product_id": "62ad53e5-bf13-4852-a9b7-697e0d443bcd",
+          "relevance": 3
+        },
+        {
+          "product_id": "66b2303a-0c2c-4b9b-99ed-0826fe65b5fc",
+          "relevance": 3
+        },
+        {
+          "product_id": "67a2d71f-c9f2-46c2-b031-ff8cadcac5b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "685f9ed9-37e2-4f2e-94e5-eacdf3ccc86c",
+          "relevance": 3
+        },
+        {
+          "product_id": "7c07dbf3-6927-4b64-9c76-0d5d84a8745b",
+          "relevance": 3
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "relevance": 3
+        },
+        {
+          "product_id": "839cab86-b6b8-4a26-ac0d-a65ce65fa2d1",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "84576ab4-c9ae-405f-a570-8b42e8e56d81",
+          "relevance": 3
+        },
+        {
+          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
+          "relevance": 3
+        },
+        {
+          "product_id": "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+          "relevance": 3
+        },
+        {
+          "product_id": "a16963c7-3e92-4070-9565-3e0fb8b93696",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "ab957c93-b784-45db-8080-167095636b2c",
+          "relevance": 3
+        },
+        {
+          "product_id": "ae1b5fe7-5894-49dd-8bba-8be83bc485c6",
+          "relevance": 3
+        },
+        {
+          "product_id": "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
+          "relevance": 3
+        },
+        {
+          "product_id": "b7ebe55c-da08-4b28-a8eb-62ac1bc72b7b",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "bf822fca-9432-4824-a6cd-cd7c51c57a66",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "cdc98fcd-91da-4c24-baec-c46fc5e7f4f7",
+          "relevance": 3
+        },
+        {
+          "product_id": "cf766600-08ea-451c-bc0b-93b18d0b45d6",
+          "relevance": 3
+        },
+        {
+          "product_id": "d3dc2786-1f70-4c9b-b60b-51ca5742d58f",
+          "relevance": 3
+        },
+        {
+          "product_id": "d5d2ef1c-2db0-44c8-aec5-f3fab358e660",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "df6a6ac3-6192-4dbc-a8e1-b77366ee899b",
+          "relevance": 3
+        },
+        {
+          "product_id": "e6df7d75-9c72-48cb-adc6-03048e5b82b2",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        },
+        {
+          "product_id": "f28bb84e-ec28-42ed-93d5-e972c2924407",
+          "relevance": 3
+        },
+        {
+          "product_id": "f82a69f2-9e1d-40b6-9bed-b31a9a0c0460",
+          "relevance": 3
+        },
+        {
+          "product_id": "faed8c5c-b879-4403-97ef-cf12b23afb61",
+          "relevance": 3
+        },
+        {
+          "product_id": "51f28654-3492-4931-8d02-6f9d70d0dc0a",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "seruri-pentru-ten",
+            "curatarea-tenului",
+            "masti-pentru-ten",
+            "lotiuni-tonice",
+            "creme-de-ochi",
+            "mist-pentru-ten",
+            "demachiante-pentru-ten"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "_nota_generatorului": "„ceva\" = fara categorie. Cross-categorie ca q-con-05. Contract DIFERIT de #10, chiar daca tipul de ten e acelasi — pool-ul e alt pool.",
+      "_omise": [
+        "Elara Beauty Soft Cremă leave-in (incalca o constrangere)",
+        "NudeLab Soft Cremă leave-in (incalca o constrangere)",
+        "Verdea Fresh Șampon uscat volumizant (incalca o constrangere)",
+        "Verdea Hydra Balsam de păr (incalca o constrangere)",
+        "Verdea Hydra Șampon hidratant (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5b-02",
+      "query": "ce ai pentru ten gras?",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "020baf31-3e6a-4e16-86fd-4820e78b6090",
+          "relevance": 3
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "1fb3c15b-e3c4-44e4-ae04-20368b64cdfc",
+          "relevance": 3
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "2e5af3be-4684-429c-8a2f-f7ca8c7101a3",
+          "relevance": 3
+        },
+        {
+          "product_id": "3fc9eae9-b3f3-4005-998b-c6f6e899b6b8",
+          "relevance": 3
+        },
+        {
+          "product_id": "5ae3718a-e8db-4242-8d96-f20712e34311",
+          "relevance": 3
+        },
+        {
+          "product_id": "7f4aaa17-a9d7-4c82-8ed4-3208c32011f9",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "9d9357a7-b807-4868-8b02-bca19deb669b",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        },
+        {
+          "product_id": "a3436508-ce99-44d4-b7ea-4e87b57c4a55",
+          "relevance": 3
+        },
+        {
+          "product_id": "a7a2de21-f042-4e3a-b668-0e17771e9506",
+          "relevance": 3
+        },
+        {
+          "product_id": "accf0aa0-4ee5-498a-be96-6809073416b7",
+          "relevance": 3
+        },
+        {
+          "product_id": "c09e86ea-c9a6-4ffb-958d-b02b95c97a2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "ff036005-f7c8-4c71-8260-1191247d14a4",
+          "relevance": 3
+        },
+        {
+          "product_id": "50ddca9f-aaec-4850-9fd9-40410178d7b7",
+          "relevance": 1
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "relevance": 1
+        },
+        {
+          "product_id": "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
+          "relevance": 1
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 1
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 1
+        },
+        {
+          "product_id": "cdc98fcd-91da-4c24-baec-c46fc5e7f4f7",
+          "relevance": 1
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 1
+        },
+        {
+          "product_id": "e2870c8b-fc11-4707-a127-868cf84d4a71",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "seruri-pentru-ten",
+            "curatarea-tenului",
+            "masti-pentru-ten",
+            "lotiuni-tonice",
+            "exfoliante-pentru-ten",
+            "tratament-local",
+            "mist-pentru-ten",
+            "protectie-solara",
+            "demachiante-pentru-ten"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ],
+      "_nota_generatorului": "pandantul lui #11 pentru ten gras. Pool larg — de urmarit daca depaseste ce poate eticheta un om intr-o sedinta.",
+      "_omise": []
+    },
+    {
+      "id": "lot5b-03",
+      "query": "am tenul mixt, mai degrabă gras în zona t.",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "01755354-af34-428d-a7dd-f16f004b6219",
+          "relevance": 3
+        },
+        {
+          "product_id": "0247fc1e-bf48-43a1-9fb0-51700da5bf76",
+          "relevance": 3
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "08adac46-fc23-4676-a471-85ab4fa3be29",
+          "relevance": 3
+        },
+        {
+          "product_id": "13314269-66bd-4e24-8e2a-ad3a4047ff8d",
+          "relevance": 3
+        },
+        {
+          "product_id": "1b39d726-54a3-40e2-86f6-252dff80658d",
+          "relevance": 3
+        },
+        {
+          "product_id": "24202ed0-1667-45c0-bb72-5aac81ab902d",
+          "relevance": 3
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "2e1864a7-affa-45aa-b108-5b20f7eac02a",
+          "relevance": 3
+        },
+        {
+          "product_id": "2f0beb7e-5952-4192-b32e-fac5d2d6d9f1",
+          "relevance": 3
+        },
+        {
+          "product_id": "40aad7bc-51f6-41f0-b726-460e34dcf654",
+          "relevance": 3
+        },
+        {
+          "product_id": "51f28654-3492-4931-8d02-6f9d70d0dc0a",
+          "relevance": 3
+        },
+        {
+          "product_id": "5e07d132-2fa4-4bbd-9a96-e466ad05e632",
+          "relevance": 3
+        },
+        {
+          "product_id": "62ad53e5-bf13-4852-a9b7-697e0d443bcd",
+          "relevance": 3
+        },
+        {
+          "product_id": "652d9ffa-e9bc-486b-86f7-6c4c4c670c8e",
+          "relevance": 3
+        },
+        {
+          "product_id": "685f9ed9-37e2-4f2e-94e5-eacdf3ccc86c",
+          "relevance": 3
+        },
+        {
+          "product_id": "9107fcc2-81b1-429a-ac46-56f2bdbe03c1",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "a16963c7-3e92-4070-9565-3e0fb8b93696",
+          "relevance": 3
+        },
+        {
+          "product_id": "a7a2de21-f042-4e3a-b668-0e17771e9506",
+          "relevance": 3
+        },
+        {
+          "product_id": "ab957c93-b784-45db-8080-167095636b2c",
+          "relevance": 3
+        },
+        {
+          "product_id": "ae1b5fe7-5894-49dd-8bba-8be83bc485c6",
+          "relevance": 3
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "b78abc8f-1808-41e6-a6ce-31bfa4e2c381",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c09e86ea-c9a6-4ffb-958d-b02b95c97a2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "cf766600-08ea-451c-bc0b-93b18d0b45d6",
+          "relevance": 3
+        },
+        {
+          "product_id": "d5d2ef1c-2db0-44c8-aec5-f3fab358e660",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "df6a6ac3-6192-4dbc-a8e1-b77366ee899b",
+          "relevance": 3
+        },
+        {
+          "product_id": "e6df7d75-9c72-48cb-adc6-03048e5b82b2",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f82a69f2-9e1d-40b6-9bed-b31a9a0c0460",
+          "relevance": 3
+        },
+        {
+          "product_id": "ff036005-f7c8-4c71-8260-1191247d14a4",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "seruri-pentru-ten",
+            "curatarea-tenului",
+            "masti-pentru-ten",
+            "lotiuni-tonice",
+            "exfoliante-pentru-ten",
+            "mist-pentru-ten"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "combination"
+        }
+      ],
+      "_nota_generatorului": "userul descrie TENUL, nu cere un produs. Retrieval-ul tot trebuie sa aiba un pool corect, dar raspunsul bun poate fi o intrebare de clarificare — semnal pentru suita de clarify, nu doar pentru qrels.",
+      "_omise": [
+        "Aria Matte Spray de fixare (incalca o constrangere)",
+        "NudeLab Matte Primer matifiant (incalca o constrangere)",
+        "Velora HD Pudră matifiantă (incalca o constrangere)",
+        "Verdea Fresh Șampon uscat volumizant (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5b-04",
+      "query": "caut o crema de fata",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "020baf31-3e6a-4e16-86fd-4820e78b6090",
+          "relevance": 3
+        },
+        {
+          "product_id": "0559231f-5763-4474-969d-c8e77cc75d05",
+          "relevance": 3
+        },
+        {
+          "product_id": "0cc369e3-4457-48a1-898d-183180bee07b",
+          "relevance": 3
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
+          "relevance": 3
+        },
+        {
+          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
+          "relevance": 3
+        },
+        {
+          "product_id": "9908b73c-9ede-488d-9c1c-d210704fe3d7",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "relevance": 3
+        },
+        {
+          "product_id": "dfeac151-131f-46ca-9acc-ddbd23586fe6",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "eb408d2a-278b-47f0-980f-e1289a32ead4",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "creme-de-ochi",
+            "protectie-solara"
+          ]
+        }
+      ],
+      "_nota_generatorului": "sub-specificat DELIBERAT pastrat: e cazul „clarify-first\". Gold-ul e larg; valoarea query-ului e sa arate ca retrieval-ul nu se ingusteaza singur pe o subcategorie.",
+      "_omise": [
+        "Mira Atelier Glow Mască de față (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5b-05",
+      "query": "pai am un ten uscat dupa dus",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "0da70603-11e0-4d1c-bbaa-5649941c8307",
+          "relevance": 3
+        },
+        {
+          "product_id": "27d6766e-709f-44b3-9c03-a6be3ca8a0c5",
+          "relevance": 3
+        },
+        {
+          "product_id": "40247093-ba88-48e7-9abe-e0d42df23241",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "965c91aa-ed23-4c16-9aa5-e9e2b5bbaaac",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "lotiuni-de-corp",
+            "seruri-pentru-ten"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "_nota_generatorului": "trafic real, eliptic. „dupa dus\" ar putea trimite spre corp, nu fata — de aceea includ si `lotiuni-de-corp`. Ambiguitatea e reala, nu o curat.",
+      "_omise": [
+        "Mira Atelier Daily Gel de curățare (incalca o constrangere)",
+        "Petala Dewy Set Spray de fixare (incalca o constrangere)",
+        "Petala Fresh Mist pentru ten (incalca o constrangere)",
+        "Petala Gentle Spumă de curățare (incalca o constrangere)",
+        "Petala Glow Mască exfoliantă cu AHA (incalca o constrangere)",
+        "Petala Nourish Gel de duș (incalca o constrangere)",
+        "Petala Soft Balsam demachiant (incalca o constrangere)",
+        "Petala Soft Șampon uscat pentru păr închis (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5b-06",
+      "query": "pai o crema dupa ce fac dus ca mi se usuca fata",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "0da70603-11e0-4d1c-bbaa-5649941c8307",
+          "relevance": 3
+        },
+        {
+          "product_id": "27d6766e-709f-44b3-9c03-a6be3ca8a0c5",
+          "relevance": 3
+        },
+        {
+          "product_id": "40247093-ba88-48e7-9abe-e0d42df23241",
+          "relevance": 3
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "965c91aa-ed23-4c16-9aa5-e9e2b5bbaaac",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "lotiuni-de-corp",
+            "seruri-pentru-ten"
+          ]
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "_nota_generatorului": "acelasi caz ca #18, dar cu „fata\" explicit. Candidat la acelasi split_group; familii separate daca precizarea schimba gold-ul.",
+      "_omise": [
+        "Calm Theory Fresh Mască de față (incalca o constrangere)",
+        "NudeLab Soft Cremă leave-in (incalca o constrangere)",
+        "Petala Nourish Cremă de mâini (incalca o constrangere)",
+        "Rhea Organics Pure Mască de față (incalca o constrangere)",
+        "Solora Nourish Cremă de mâini (incalca o constrangere)",
+        "Solora Repair Cremă de mâini intensivă (incalca o constrangere)",
+        "Velvet Root Pure Cremă de mâini (incalca o constrangere)"
+      ]
+    },
+    {
+      "id": "lot5b-07",
+      "query": "vreau ceva sun 50 de lei pentru fata",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": null,
+      "human_verified": false,
+      "family_id": null,
+      "split_group_id": null,
+      "catalog_version": "live:300@2026-07-22T19:49:18+00:00",
+      "judgments": [
+        {
+          "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+          "relevance": 3
+        },
+        {
+          "product_id": "13314269-66bd-4e24-8e2a-ad3a4047ff8d",
+          "relevance": 3
+        },
+        {
+          "product_id": "1fb9cfeb-a520-4a6b-9438-911e635990f9",
+          "relevance": 3
+        },
+        {
+          "product_id": "24202ed0-1667-45c0-bb72-5aac81ab902d",
+          "relevance": 3
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "27882015-927d-478d-892c-9a62c225bae7",
+          "relevance": 3
+        },
+        {
+          "product_id": "2f0beb7e-5952-4192-b32e-fac5d2d6d9f1",
+          "relevance": 3
+        },
+        {
+          "product_id": "350c46db-5a89-4e31-8aa2-97edf6377801",
+          "relevance": 3
+        },
+        {
+          "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+          "relevance": 3
+        },
+        {
+          "product_id": "51f28654-3492-4931-8d02-6f9d70d0dc0a",
+          "relevance": 3
+        },
+        {
+          "product_id": "609e6f3e-c8e9-4bc5-9ed3-86bc1328073f",
+          "relevance": 3
+        },
+        {
+          "product_id": "652d9ffa-e9bc-486b-86f7-6c4c4c670c8e",
+          "relevance": 3
+        },
+        {
+          "product_id": "67a2d71f-c9f2-46c2-b031-ff8cadcac5b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+          "relevance": 3
+        },
+        {
+          "product_id": "7a1e820d-aa15-4908-93ab-8b85eac7d85e",
+          "relevance": 3
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "relevance": 3
+        },
+        {
+          "product_id": "84576ab4-c9ae-405f-a570-8b42e8e56d81",
+          "relevance": 3
+        },
+        {
+          "product_id": "9a08f349-be2a-4ea9-9bf5-52147fa956cb",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        },
+        {
+          "product_id": "a7a2de21-f042-4e3a-b668-0e17771e9506",
+          "relevance": 3
+        },
+        {
+          "product_id": "ab957c93-b784-45db-8080-167095636b2c",
+          "relevance": 3
+        },
+        {
+          "product_id": "ae1b5fe7-5894-49dd-8bba-8be83bc485c6",
+          "relevance": 3
+        },
+        {
+          "product_id": "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c09e86ea-c9a6-4ffb-958d-b02b95c97a2f",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "cdc98fcd-91da-4c24-baec-c46fc5e7f4f7",
+          "relevance": 3
+        },
+        {
+          "product_id": "cf766600-08ea-451c-bc0b-93b18d0b45d6",
+          "relevance": 3
+        },
+        {
+          "product_id": "d3dc2786-1f70-4c9b-b60b-51ca5742d58f",
+          "relevance": 3
+        },
+        {
+          "product_id": "d5d2ef1c-2db0-44c8-aec5-f3fab358e660",
+          "relevance": 3
+        },
+        {
+          "product_id": "dc94741d-c158-492f-8dcb-548b49d9bc5a",
+          "relevance": 3
+        },
+        {
+          "product_id": "e2870c8b-fc11-4707-a127-868cf84d4a71",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "ff036005-f7c8-4c71-8260-1191247d14a4",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "forbidden_rationale": {},
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "creme-hidratante",
+            "seruri-pentru-ten",
+            "curatarea-tenului",
+            "masti-pentru-ten",
+            "lotiuni-tonice",
+            "creme-de-ochi",
+            "mist-pentru-ten",
+            "protectie-solara",
+            "demachiante-pentru-ten",
+            "exfoliante-pentru-ten"
+          ]
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 50,
+          "unit": "RON"
+        }
+      ],
+      "_nota_generatorului": "typo real („sun\" = sub). Buget SINGUR, fara alt calificator — testeaza direct pretul efectiv pe un pool larg.",
+      "_omise": [
+        "Petala Sun Glow Bronzer cremos (incalca o constrangere)",
+        "Solora Sun Cremă de mâini SPF 30 (incalca o constrangere)",
+        "Velora Perfect BB Cremă SPF 30 (incalca o constrangere)",
+        "Velora Sun Bronzer (incalca o constrangere)",
+        "Verdea Prime Cremă BB (incalca o constrangere)",
+        "Verdea Protect Spray termoprotector (incalca o constrangere)"
+      ]
+    }
+  ]
+}
