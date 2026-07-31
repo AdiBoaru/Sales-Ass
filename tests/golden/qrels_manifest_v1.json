@@ -4,24 +4,24 @@
   "target": 190,
   "_method": "triaj mecanic -> dispozitie + motiv. NU e verdict de eligibilitate: `eligibility_confirmed` se pune de om, per intrare selectata.",
   "counts": {
-    "too_short": 13,
-    "cart_action": 7,
-    "pii_rejected": 1,
-    "contextual": 93,
-    "eligible": 104,
-    "broad_discovery": 11,
-    "already_labeled": 8,
-    "non_retrieval": 25,
-    "safety_route": 3,
     "abstention": 16,
+    "already_labeled": 16,
+    "broad_discovery": 11,
+    "cart_action": 7,
     "catalog_gap": 5,
-    "result_cardinality": 2,
-    "red_team": 3,
-    "test_artifact": 1,
-    "product_education": 2,
+    "composition": 3,
+    "contextual": 93,
+    "eligible": 96,
     "locale_mismatch": 1,
+    "non_retrieval": 25,
+    "pii_rejected": 1,
+    "product_education": 2,
     "prompt_injection": 1,
-    "composition": 3
+    "red_team": 3,
+    "result_cardinality": 2,
+    "safety_route": 3,
+    "test_artifact": 1,
+    "too_short": 13
   },
   "entries": [
     {
@@ -399,13 +399,13 @@
       "text": "arata-mi creme de fata sub 80 lei.",
       "source": "real_traffic",
       "seen": 1,
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-14",
       "selected_for_retrieval": false,
       "eligibility_confirmed": true,
       "review_index": 19,
-      "family_id": "fam-2faab028",
-      "split_group_id": "sg-2faab028"
+      "family_id": "fam-e1d4c313",
+      "split_group_id": "sg-e1d4c313"
     },
     {
       "text": "arată-mi doar opțiuni roșii",
@@ -897,13 +897,13 @@
       "text": "caut un ser pentru hidratare",
       "source": "real_traffic",
       "seen": 1,
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-10",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
       "review_index": 38,
-      "family_id": "fam-712e5fa0",
-      "split_group_id": "sg-712e5fa0"
+      "family_id": "fam-9a712354",
+      "split_group_id": "sg-9a712354"
     },
     {
       "text": "cauta-mi ceva ieftin (model emits broken json args).",
@@ -2637,13 +2637,13 @@
       "text": "Imi recomanzi un fond de ten cu acoperire medie?",
       "source": "qa_suite",
       "qa_category": "Product Recommendation",
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-03",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
       "review_index": 5,
-      "family_id": "fam-a9ee2aee",
-      "split_group_id": "sg-a9ee2aee"
+      "family_id": "fam-520d9f3d",
+      "split_group_id": "sg-4bbf64d0"
     },
     {
       "text": "Am parul foarte uscat si deteriorat, ce sampon imi recomanzi?",
@@ -2685,25 +2685,25 @@
       "text": "Bună, caut o cremă cu protecție solară SPF 50 pentru față.",
       "source": "qa_suite",
       "qa_category": "Product Comparison",
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-07",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
       "review_index": 15,
-      "family_id": "fam-daa3b18b",
-      "split_group_id": "sg-daa3b18b"
+      "family_id": "fam-d09c2a49",
+      "split_group_id": "sg-0c3952d1"
     },
     {
       "text": "Bună, ce șampon recomandați pentru păr gras?",
       "source": "qa_suite",
       "qa_category": "Product Comparison",
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-19",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
       "review_index": 2,
-      "family_id": "fam-2d5c52fb",
-      "split_group_id": "sg-2d5c52fb"
+      "family_id": "fam-93408c3f",
+      "split_group_id": "sg-93408c3f"
     },
     {
       "text": "Salut, caut un fond de ten cu acoperire medie pentru ten mixt.",
@@ -2793,13 +2793,13 @@
       "text": "Cat costa un fond de ten matifiant?",
       "source": "qa_suite",
       "qa_category": "Pricing",
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-05",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
       "review_index": 24,
-      "family_id": "fam-1b59becf",
-      "split_group_id": "sg-1b59becf"
+      "family_id": "fam-43516b19",
+      "split_group_id": "sg-43516b19"
     },
     {
       "text": "Salut, cat e samponul pentru par vopsit?",
@@ -3081,13 +3081,13 @@
       "text": "Imi recomanzi un fond de ten pana in 100 lei?",
       "source": "qa_suite",
       "qa_category": "Pricing",
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-13",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
-      "family_id": "fam-2888afd9",
+      "family_id": "fam-228ba975",
       "review_index": 19,
-      "split_group_id": "sg-2888afd9"
+      "split_group_id": "sg-228ba975"
     },
     {
       "text": "Cat e samponul anti-matreata?",
@@ -3129,13 +3129,13 @@
       "text": "Vreau o cremă cu SPF pentru zi, ceva sub 100 lei.",
       "source": "qa_suite",
       "qa_category": "Product Search",
-      "disposition": "eligible",
-      "reason": "confirmat de om: de sine statatoare, retrieval de produs",
+      "disposition": "already_labeled",
+      "reason": "deja prezent in qrels_confirmed.json ca lot3-17",
       "selected_for_retrieval": true,
       "eligibility_confirmed": true,
-      "family_id": "fam-c4bf2037",
+      "family_id": "fam-b28518e6",
       "review_index": 24,
-      "split_group_id": "sg-c4bf2037"
+      "split_group_id": "sg-b28518e6"
     },
     {
       "text": "Aveți șampon pentru păr vopsit?",
@@ -3559,5 +3559,5 @@
     }
   ],
   "family_count": 277,
-  "split_group_count": 267
+  "split_group_count": 265
 }

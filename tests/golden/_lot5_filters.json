@@ -1,0 +1,127 @@
+{
+  "_note": "NX-203 lot 5 — seruri (vitamina C, hidratare, ten gras) + creme hidratante pe tip de ten. Fiecare filtru e o OPINIE exprimata in SQL, cu valorile luate din catalog, nu ghicite.",
+  "_precondition": "p.status = 'active' AND p.content_status = 'published' — aplicate de generator la TOATE",
+  "_tema": "Blocul cu cea mai densa familie de variante din trafic: „ser cu vitamina C\" apare in 6 formulari diferite. Aici se vede daca agregarea pe familie chiar tine — daca ar cadea, blocul asta singur ar cantari cat un sfert din benchmark.",
+  "filters": [
+    {
+      "n": 1,
+      "query": "Salut! Caut un ser cu vitamina C.",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "forma de baza a familiei. Toate variantele de mai jos au ACELASI contract de adevar daca nu adauga un calificator real."
+    },
+    {
+      "n": 2,
+      "query": "Salut! Aveți seruri cu vitamina C?",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "varianta de forma a lui #1 (intrebare vs cerere). Candidat la ACEEASI familie."
+    },
+    {
+      "n": 3,
+      "query": "Salut! Cât costă un ser cu vitamina C?",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "intrebare de PRET. Retrieval-ul are aceeasi sarcina; ce se schimba e formularea raspunsului, care nu se masoara aici. Candidat la aceeasi familie ca #1 — de confirmat."
+    },
+    {
+      "n": 4,
+      "query": "Buna! Caut un ser cu vitamina C pentru un ten cam fara stralucire.",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "„fara stralucire\" nu are valoare canonica; cel mai apropiat ar fi `hyperpigmentation`, dar nu e acelasi lucru. NU adaug constrangere. Familie separata de #1 doar daca omul considera calificatorul real."
+    },
+    {
+      "n": 5,
+      "query": "Buna! Caut un ser cu vitamina C pentru ten, vreau ceva care sa-mi lumineze pielea.",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "acelasi caz ca #4 — „sa lumineze\" e efectul asteptat, nu un atribut. Trei variante (#4, #5 si asta) testeaza exact daca agregarea pe familie nu lasa un query sa cantareasca triplu."
+    },
+    {
+      "n": 6,
+      "query": "Bună, am pete pigmentare și tenul matur. Caut ceva cu vitamina C care chiar ajută.",
+      "spec": { "cat_any": ["seruri-pentru-ten", "creme-hidratante", "creme-de-ochi", "masti-pentru-ten", "lotiuni-tonice"], "ingredient": "vitamina c", "suitable_for": "hyperpigmentation" },
+      "note": "AICI calificatorul e real si canonic (`hyperpigmentation`), deci familie PROPRIE, nu varianta lui #1. Cross-categorie: userul n-a numit o categorie."
+    },
+    {
+      "n": 7,
+      "query": "recomanda-mi un ser pentru ten gras",
+      "spec": { "cat": "seruri-pentru-ten", "suitable_for": "oily" },
+      "note": "acelasi contract ca q-con-01... de fapt ca `q-self-01` („am tenul gras, ce ser imi recomanzi?\") — candidat la ACEEASI familie, formulare imperativa in loc de intrebare."
+    },
+    {
+      "n": 8,
+      "query": "salut! caut un ser hidratant pentru fata, ceva sub 150 de lei. aveti?",
+      "spec": { "cat": "seruri-pentru-ten", "concern": "hydration", "price_max": 150 },
+      "note": "buget pe pret EFECTIV. Perechea cu prag a lui lot3-10 („caut un ser pentru hidratare\") — contract diferit, deci familie proprie, acelasi split_group."
+    },
+    {
+      "n": 9,
+      "query": "vreau o cremă hidratantă",
+      "spec": { "cat": "creme-hidratante" },
+      "note": "categorie pura, fara calificator. Perechea fara tip de ten pentru q-cat-01/02."
+    },
+    {
+      "n": 10,
+      "query": "vreau o crema de fata pentru ten uscat",
+      "spec": { "cat": "creme-hidratante", "suitable_for": "dry" },
+      "note": "acelasi contract ca q-cat-01/q-cat-02 („crema hidratanta pentru ten uscat\") — candidat la ACEEASI familie. „crema de fata\" vs „crema hidratanta\" e diferenta de vocabular, nu de intentie."
+    },
+    {
+      "n": 11,
+      "query": "vreau ceva pt ten uscat",
+      "spec": { "cat_any": ["creme-hidratante", "seruri-pentru-ten", "curatarea-tenului", "masti-pentru-ten", "lotiuni-tonice", "creme-de-ochi", "mist-pentru-ten", "demachiante-pentru-ten"], "suitable_for": "dry" },
+      "note": "„ceva\" = fara categorie. Cross-categorie ca q-con-05. Contract DIFERIT de #10, chiar daca tipul de ten e acelasi — pool-ul e alt pool."
+    },
+    {
+      "n": 12,
+      "query": "Salut, am tenul uscat iarna si vreau o crema hidratanta mai bogata, ceva pana in 120 lei.",
+      "spec": { "cat": "creme-hidratante", "suitable_for": "dry", "attr_eq": ["texture", "cremă"], "price_max": 120 },
+      "note": "„mai bogata\" -> textura `cremă` (nu `gel`). Traducere contestabila, dar sustinuta de catalog: cremele pentru ten uscat sunt `cremă`, cele pentru ten gras `gel`."
+    },
+    {
+      "n": 13,
+      "query": "caut o cremă hidratantă pentru ten gras",
+      "spec": { "cat": "creme-hidratante", "suitable_for": "oily" },
+      "note": "acelasi contract ca lot4-18 („crema hidratanta pentru ten gras, sa nu lase luciu\") minus calificatorul netraductibil — candidat la acelasi split_group."
+    },
+    {
+      "n": 14,
+      "query": "caut o cremă pentru ten gras",
+      "spec": { "cat": "creme-hidratante", "suitable_for": "oily" },
+      "note": "varianta de forma a lui #13 („crema\" vs „crema hidratanta\"). ACEEASI familie daca omul confirma ca nu schimba intentia."
+    },
+    {
+      "n": 15,
+      "query": "ce ai pentru ten gras?",
+      "spec": { "cat_any": ["creme-hidratante", "seruri-pentru-ten", "curatarea-tenului", "masti-pentru-ten", "lotiuni-tonice", "exfoliante-pentru-ten", "tratament-local", "mist-pentru-ten", "protectie-solara", "demachiante-pentru-ten"], "suitable_for": "oily" },
+      "note": "pandantul lui #11 pentru ten gras. Pool larg — de urmarit daca depaseste ce poate eticheta un om intr-o sedinta."
+    },
+    {
+      "n": 16,
+      "query": "am tenul mixt, mai degrabă gras în zona t.",
+      "spec": { "cat_any": ["creme-hidratante", "seruri-pentru-ten", "curatarea-tenului", "masti-pentru-ten", "lotiuni-tonice", "exfoliante-pentru-ten", "mist-pentru-ten"], "suitable_for": "combination" },
+      "note": "userul descrie TENUL, nu cere un produs. Retrieval-ul tot trebuie sa aiba un pool corect, dar raspunsul bun poate fi o intrebare de clarificare — semnal pentru suita de clarify, nu doar pentru qrels."
+    },
+    {
+      "n": 17,
+      "query": "caut o crema de fata",
+      "spec": { "cat_any": ["creme-hidratante", "creme-de-ochi", "protectie-solara"] },
+      "note": "sub-specificat DELIBERAT pastrat: e cazul „clarify-first\". Gold-ul e larg; valoarea query-ului e sa arate ca retrieval-ul nu se ingusteaza singur pe o subcategorie."
+    },
+    {
+      "n": 18,
+      "query": "pai am un ten uscat dupa dus",
+      "spec": { "cat_any": ["creme-hidratante", "lotiuni-de-corp", "seruri-pentru-ten"], "suitable_for": "dry" },
+      "note": "trafic real, eliptic. „dupa dus\" ar putea trimite spre corp, nu fata — de aceea includ si `lotiuni-de-corp`. Ambiguitatea e reala, nu o curat."
+    },
+    {
+      "n": 19,
+      "query": "pai o crema dupa ce fac dus ca mi se usuca fata",
+      "spec": { "cat_any": ["creme-hidratante", "lotiuni-de-corp", "seruri-pentru-ten"], "suitable_for": "dry" },
+      "note": "acelasi caz ca #18, dar cu „fata\" explicit. Candidat la acelasi split_group; familii separate daca precizarea schimba gold-ul."
+    },
+    {
+      "n": 20,
+      "query": "vreau ceva sun 50 de lei pentru fata",
+      "spec": { "cat_any": ["creme-hidratante", "seruri-pentru-ten", "curatarea-tenului", "masti-pentru-ten", "lotiuni-tonice", "creme-de-ochi", "mist-pentru-ten", "protectie-solara", "demachiante-pentru-ten", "exfoliante-pentru-ten"], "price_max": 50 },
+      "note": "typo real („sun\" = sub). Buget SINGUR, fara alt calificator — testeaza direct pretul efectiv pe un pool larg."
+    }
+  ]
+}

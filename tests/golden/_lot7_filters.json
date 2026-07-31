@@ -1,0 +1,50 @@
+{
+  "_note": "NX-203 lot 7 — DISPONIBILITATE. Query-uri unde userul intreaba daca un produs anume mai e pe stoc, uneori intr-un anumit format.",
+  "_precondition": "p.status = 'active' AND p.content_status = 'published' — aplicate de generator la TOATE",
+  "_de_ce_separat": "Sunt masurabile prin retrieval (produsul corect trebuie sa apara), dar au o a doua jumatate pe care retrieval-ul NU o acopera: raspunsul corect depinde de stoc si de existenta formatului cerut. Le tin intr-un lot propriu ca sa se poata decide, ca bloc, daca intra in cele 200 sau intr-o suita de disponibilitate. Nu le amestec cu retrieval-ul pur, unde ar arata ca query-uri obisnuite.",
+  "_atentie": "Precondtia `content_status='published'` filtreaza catalogul, dar NU stocul. Un produs publicat cu stoc 0 e in gold aici — corect pentru retrieval, insuficient pentru raspuns. Diferenta e exact ce trebuie decis.",
+  "filters": [
+    {
+      "n": 1,
+      "query": "Bună! Mai aveți pe stoc serul cu vitamina C?",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "acelasi pool ca lot5-01, alta intentie. Daca ambele intra in cele 200 cu familii proprii, benchmarkul numara de doua ori acelasi pool — de aceea blocul asta se decide impreuna."
+    },
+    {
+      "n": 2,
+      "query": "Salut! Caut un ser cu vitamina C, de preferat concentrație mare. Aveți pe stoc?",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "vitamina c" },
+      "note": "„concentratie mare\" nu e atribut de catalog. Nu inventez o valoare; ramane calificator neexprimabil, semnalat omului."
+    },
+    {
+      "n": 3,
+      "query": "Salut, aveti pe stoc serul hidratant cu acid hialuronic de 30ml?",
+      "spec": { "cat": "seruri-pentru-ten", "ingredient": "acid hialuronic" },
+      "note": "FORMATUL (30ml) traieste pe varianta, in `net_content_value`. Filtrul nu-l exprima — deliberat, ca sa se vada daca retrieval-ul aduce produsul corect si abia apoi se discuta formatul."
+    },
+    {
+      "n": 4,
+      "query": "Salut, crema SPF 50 de la voi mai e disponibilă?",
+      "spec": { "cat": "protectie-solara", "attr_eq": ["spf", "50"] },
+      "note": "„de la voi\" presupune un produs anume, dar nu-l numeste. Gold-ul e pool-ul SPF 50; daca omul considera ca userul se refera la unul singur, query-ul devine ambiguu si iese din cele 200."
+    },
+    {
+      "n": 5,
+      "query": "Salut, crema de zi SPF 50 o aveti la 50ml?",
+      "spec": { "cat": "protectie-solara", "attr_eq": ["spf", "50"] },
+      "note": "acelasi caz ca #3: formatul e pe varianta. Candidat la acelasi split_group cu #4."
+    },
+    {
+      "n": 6,
+      "query": "Buna, vreau rujul mat in nuanta Ruby Red. Mai aveti?",
+      "spec": { "cat": "rujuri", "attr_eq": ["finish", "matte"], "variant_label_any": ["ruby", "red", "rosu"] },
+      "note": "NUANTA numita explicit. In catalog exista „Ruby\" (NudeLab Velvet Ruj mat) si „Classic Red\" (Velora Soft Matte) — nu exact „Ruby Red\". Cazul cel mai clar in care raspunsul corect ar putea fi „avem ceva apropiat\", nu o potrivire exacta."
+    },
+    {
+      "n": 7,
+      "query": "set cadou sub 100 lei",
+      "spec": { "name_like": "%set%", "price_max": 100 },
+      "note": "ASTEPT ZERO sau aproape. Catalogul n-are seturi cadou ca atare. Il pun aici, nu in blocul de cadouri, fiindca e formulat ca o cautare de PRODUS cu buget, nu ca o cerere de recomandare."
+    }
+  ]
+}

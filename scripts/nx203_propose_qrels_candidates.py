@@ -278,6 +278,20 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
             "exists (select 1 from product_variants pv where pv.product_id = p.id "
             f"and pv.business_id = p.business_id and pv.sku = {ph(v)})"
         )
+    if v := spec.get("variant_label_any"):
+        # NUANTA traieste pe VARIANTA, nu pe produs („rujuri rosii" = produse care AU o nuanta
+        # rosie). Fara asta, cererile de culoare nu erau exprimabile deloc si ajungeau la om ca
+        # „filtru pe categorie", adica o intrebare diferita de cea pusa.
+        # Lista de termeni, nu unul singur: culoarea e scrisa si in romana, si in engleza, si prin
+        # nume de nuanta („Rosu intens", „Classic Red", „Cherry") — un singur termen ar rata
+        # jumatate din catalog, iar gold-ul ar fi incomplet fara ca nimeni sa observe.
+        ors = " or ".join(
+            f"ro_unaccent(pv.label) ilike ro_unaccent({ph(f'%{term}%')})" for term in v
+        )
+        conds.append(
+            "exists (select 1 from product_variants pv where pv.product_id = p.id "
+            f"and pv.business_id = p.business_id and ({ors}))"
+        )
 
     rows = await conn.fetch(
         "select p.id::text as id, p.name from products p "
