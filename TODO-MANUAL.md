@@ -4,7 +4,47 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-07-17_
+_Ultima actualizare: 2026-07-31_
+
+---
+
+## 🔴 BLOCHEAZĂ Quality Overhaul — decizii/etichetare care cer judecata ta (2026-07-31)
+
+Faza 1 din Quality Overhaul (NX-202 golden set + NX-203 qrels) e blocată aici, nu pe cod.
+Consecință: **NX-204, NX-209 și NX-210 nu pot începe** — toate depind de un metru de măsură validat
+de om. Nu e ceva ce se deblochează scriind mai mult cod.
+
+### NX-203 — corpus de retrieval (pauzat înainte de etichetare)
+
+Tot ce s-a generat e în PR #251. Nimic nu e `human_verified`; niciun script nu ridică steagul.
+
+- [ ] **Aprobă/corectează drafturile** `tests/golden/_lot4_draft.json` (19 query-uri) și
+      `_lot5a_draft.json` (13). Notele propuse vin din proprietățile produsului față de
+      constrângeri — nu din ce găsește retrieval-ul.
+- [ ] **Două fuziuni de familie invalide**, găsite de matricea de egalitate. Ambele cer ori
+      amendarea unei intrări deja `human_verified`, ori anularea fuziunii:
+      - verdict 10: `q-con-03` n-are `suitable_for=dry`, deși textul zice „le am cam uscate";
+      - verdict 11: `q-con-01` are `texture in [cremă, fluid]`, `lot6-05` nu.
+- [ ] **Amendamentul `q-con-06`** (`tests/golden/_q-con-06_amendment_draft.json`): constrângerea
+      `key_ingredients='vitamina c'` e **inertă** (catalogul scrie `'vitamina C'`, zero produse o
+      satisfac). Plus doi candidați marginali din auditul de recall. Acceptarea coboară q-con-06 la
+      `human_verified=false` până la reconfirmare.
+- [ ] **Blocul de disponibilitate** (lot7, 7 query-uri): intră în corpus sau într-o suită separată?
+      Se decide ca bloc, nu query cu query.
+- [ ] **Deficitul de familii.** 79 query-uri ≈ 64 familii, ținta e 100. Se acoperă cu **intenții
+      noi** (trafic real nou sau intenții scrise de la zero, ancorate în catalog), **nu cu
+      parafraze** — o parafrază intră în familia existentă și nu urcă numărătoarea.
+
+### NX-202 — golden set conversațional
+
+- [ ] Cardul te are ca owner pentru etichetare/validare, dar e încă **DRAFT**. Până nu există,
+      NX-204 (model-swap orb) nu poate rula, deși pare independent.
+
+### Decizii de gate, când ajungem acolo
+
+- [ ] **Deschiderea holdout-ului H2** pentru NX-209 — feliile sunt single-use, deci e o decizie, nu
+      un pas tehnic.
+- [ ] **GO/NO-GO la NX-210** (migrarea la arhitectura creier-unic).
 
 ---
 
