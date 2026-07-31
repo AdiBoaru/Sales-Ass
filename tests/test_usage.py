@@ -79,7 +79,13 @@ def test_cost_for_separates_cached():
 
 
 def test_cost_for_unknown_model_uses_default():
-    assert cost_for("model-x", 1000, 0, 0) == cost_for("gpt-5.4-mini", 1000, 0, 0)
+    """Invariantul e `_DEFAULT` (constanta de cod), NU „cât costă mini azi".
+
+    Comparația directă cu `cost_for("gpt-5.4-mini", ...)` pica pe orice mediu cu
+    `LLM_PRICING_JSON` în `.env`: override-ul mută `rates_for("mini")`, dar nu și `_DEFAULT` —
+    deci testul măsura mediul, nu invariantul. Aceeași clasă cu celelalte trei teste de aici care
+    hardcodau tarifele vechi."""
+    assert cost_for("model-x", 1000, 0, 0) == 1000 * pricing._DEFAULT.input / 1_000_000
 
 
 def test_cost_for_clamps_cached_over_prompt():
