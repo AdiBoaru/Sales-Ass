@@ -225,3 +225,152 @@ def test_cost_is_summed_per_call_model_not_from_aggregate_tokens():
     assert s["n_cost_samples"] == 3
     assert s["cost_usd_total"] == 0.006
     assert s["cost_usd_per_turn_median"] == 0.002
+
+
+# --- #252 review: garduri de admitere web (429) + cleanup structural --------------------------
+
+
+def test_admission_reason_only_for_429():
+    """Doar 429 (respingere de ADMITERE la marginea web) devine abandon controlat. 503 & co.
+    rămân eroarea originală — un defect de mediu nu se ascunde sub un mesaj prietenos."""
+    from fastapi import HTTPException
+
+    cost = eval_run._admission_reason(HTTPException(status_code=429, detail="budget exceeded"))
+    assert cost is not None and "plafonul de cost" in cost
+
+    rl = eval_run._admission_reason(HTTPException(status_code=429, detail="rate limited"))
+    assert rl is not None and "rate limit" in rl
+
+    assert eval_run._admission_reason(HTTPException(status_code=503, detail="unavailable")) is None
+    assert eval_run._admission_reason(HTTPException(status_code=413, detail="too big")) is None
+    assert eval_run._admission_reason(RuntimeError("ceva")) is None
+
+
+class _Cleanup:
+    """Urmărește dacă purja + închiderea poolului chiar au rulat."""
+
+    def __init__(self):
+        self.purged = 0
+        self.closed = 0
+
+
+def _install_main_stubs(monkeypatch, tmp_path, client_factory, spy: _Cleanup):
+    """Montează `main()` pe stub-uri: fără DB, fără OpenAI, fără fakeredis global. Lăsăm intacte
+    exact bucățile testate — ordinea try/finally, maparea 429 și cleanup-ul."""
+    import contextlib
+
+    import web_audit
+
+    import src.agent.llm as llm_mod
+    import src.config as config_mod
+    import src.db.connection as conn_mod
+    import src.db.queries.channels as channels_mod
+
+    monkeypatch.setattr(eval_run, "OUT_DIR", tmp_path / "reports")
+    monkeypatch.setattr(eval_run, "_install_token_meter", lambda: None)
+    monkeypatch.setattr(eval_run, "_install_failure_meter", lambda: None)
+    monkeypatch.setattr(web_audit, "_install_fake_redis", lambda: None)
+    monkeypatch.setattr(
+        eval_run,
+        "_load_conversations",
+        lambda only=None: [
+            {"id": "t", "turns": [{"user": "a", "gates": {}}, {"user": "b", "gates": {}}]}
+        ],
+    )
+
+    class _Settings:
+        cache_enabled = True
+
+    monkeypatch.setattr(config_mod, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(llm_mod, "get_llm", _RecordingLLM)
+
+    async def _get_pool():
+        return "POOL"
+
+    @contextlib.asynccontextmanager
+    async def _admin_conn(_pool):
+        yield object()
+
+    async def _close_pool():
+        spy.closed += 1
+
+    monkeypatch.setattr(conn_mod, "get_pool", _get_pool)
+    monkeypatch.setattr(conn_mod, "admin_conn", _admin_conn)
+    monkeypatch.setattr(conn_mod, "close_pool", _close_pool)
+
+    async def _resolve(_conn, _token):
+        return {"business_id": "biz"}
+
+    monkeypatch.setattr(channels_mod, "resolve_web_session", _resolve)
+
+    async def _purge(_conn, _biz):
+        spy.purged += 1
+        return 1
+
+    monkeypatch.setattr(web_audit, "_purge_audit", _purge)
+
+    async def _catalog_sig(_conn, _biz):
+        return "n=1;sha256=deadbeef"
+
+    monkeypatch.setattr(eval_run, "_catalog_signature", _catalog_sig)
+
+    async def _session(_token, _label):
+        return ("vid", "sig")
+
+    monkeypatch.setattr(web_audit, "_session", _session)
+    monkeypatch.setattr(web_audit, "WebClient", lambda *a, **k: client_factory())
+    monkeypatch.setattr(sys, "argv", ["eval_run.py", "--runs", "1", "--token", "tok"])
+
+
+class _FailingClient:
+    """Turul 1 trece, turul 2 e respins de marginea web cu `status`."""
+
+    def __init__(self, status, detail):
+        self.status, self.detail = status, detail
+        self.n = 0
+
+    async def say(self, msg):
+        from fastapi import HTTPException
+
+        self.n += 1
+        if self.n >= 2:
+            raise HTTPException(status_code=self.status, detail=self.detail)
+        return _FakeTurn(f"răspuns la {msg}")
+
+
+async def test_web_429_aborts_controlled_and_still_cleans_up(monkeypatch, tmp_path):
+    """Finding CONFIRMED #252: cost-guard-ul web NU degradează fără LLM — `/web/chat` ridică
+    429 înainte de `handle_turn`. Excepția urca necontrolat, ocolind purja și `close_pool`."""
+    monkeypatch.setitem(eval_run._llm_failures, "fatal", None)
+    monkeypatch.setitem(eval_run._llm_failures, "n", 0)
+    spy = _Cleanup()
+    _install_main_stubs(monkeypatch, tmp_path, lambda: _FailingClient(429, "budget exceeded"), spy)
+
+    rc = await eval_run.main()
+
+    assert rc == 1, "abandon controlat, nu ieșire de succes"
+    assert spy.purged == 1, "purja vizitatorilor de eval NU a rulat"
+    assert spy.closed == 1, "close_pool NU a rulat"
+    assert (
+        not list((tmp_path / "reports").glob("*.json")) and not (tmp_path / "reports").exists()
+    ), "s-a scris raport dintr-o rulare abandonată"
+
+
+async def test_web_503_propagates_original_error_but_cleanup_runs(monkeypatch, tmp_path):
+    """503 nu e gard de admitere: eroarea rămâne EROAREA ORIGINALĂ (diagnosticabilă), dar
+    curățarea trebuie să ruleze la fel — cleanup-ul e o proprietate a ieșirii, nu o ramură."""
+    from fastapi import HTTPException
+
+    monkeypatch.setitem(eval_run._llm_failures, "fatal", None)
+    monkeypatch.setitem(eval_run._llm_failures, "n", 0)
+    spy = _Cleanup()
+    _install_main_stubs(
+        monkeypatch, tmp_path, lambda: _FailingClient(503, "business unavailable"), spy
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        await eval_run.main()
+
+    assert ei.value.status_code == 503, "eroarea originală a fost înlocuită"
+    assert spy.purged == 1 and spy.closed == 1, "cleanup-ul nu a rulat pe calea de excepție"
+    assert not (tmp_path / "reports").exists(), "raport scris dintr-o rulare căzută"

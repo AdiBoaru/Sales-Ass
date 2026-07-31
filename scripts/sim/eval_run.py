@@ -164,6 +164,77 @@ def _check_fatal() -> None:
         raise RunAborted(_llm_failures["fatal"])
 
 
+def _admission_reason(exc: BaseException) -> str | None:
+    """Motivul, dacă excepția e o RESPINGERE DE ADMITERE de la marginea web (HTTP 429).
+
+    `/web/chat` NU degradează fără LLM ca worker-ul: cost-guard-ul și rate-limit-ul sunt garduri
+    de ADMITERE care ridică `HTTPException(429)` ÎNAINTE de `handle_turn`
+    ([`src/web/app.py`](../../src/web/app.py)) — deci nu există `cost_guard_tripped` în
+    `ctx.events` și niciun fallback de evaluat. Pe această rută harness-ul nu are ce măsura:
+    tururile următoare ar fi respinse identic, deci abandonăm controlat, ca la eroarea permanentă.
+
+    DOAR 429 devine `RunAborted`. Orice alt status (503 „business unavailable", 413, 401…) rămâne
+    eroarea ORIGINALĂ și se propagă: e un defect de mediu de diagnosticat, nu o rulare de oprit
+    cu un mesaj prietenos care i-ar ascunde cauza.
+    """
+    if getattr(exc, "status_code", None) != 429:
+        return None
+    detail = str(getattr(exc, "detail", "") or "").strip()
+    if "budget" in detail.lower():
+        return (
+            f"gard de admitere web: 429 „{detail}” — plafonul de cost al tenantului sau al "
+            "vizitatorului s-a atins (businesses.daily_cost_cap_usd / "
+            "web_cost_cap_per_visitor_usd). Ridică plafonul pentru rulare sau resetează "
+            "contorul, apoi reia."
+        )
+    return (
+        f"gard de admitere web: 429 „{detail}” — rate limit pe /web/chat. Tururile următoare ar "
+        "fi respinse la fel; reia rularea după fereastra de limitare."
+    )
+
+
+async def _say_or_abort(client: Any, user_msg: str):
+    """Un tur prin `/web/chat`, cu respingerile de admitere transformate în abandon CONTROLAT.
+
+    Fără asta, `HTTPException(429)` urca necontrolat din `_run_conversation` până afară din
+    `main()`, ocolind purja vizitatorilor de eval și `close_pool()` (finding CONFIRMED pe #252).
+    """
+    try:
+        return await client.say(user_msg)
+    except Exception as e:  # noqa: BLE001 — clasificăm, apoi RunAborted sau re-raise curat
+        reason = _admission_reason(e)
+        if reason:
+            raise RunAborted(reason) from e
+        raise
+
+
+async def _cleanup(pool: Any, biz_id: str) -> None:
+    """Purjă vizitatorii de eval + închide poolul. Chemat din `finally`, deci pe ORICE cale de
+    ieșire: succes, abandon controlat, excepție neașteptată, întrerupere.
+
+    Contract: **nu maschează excepția în zbor.** Prinde doar `Exception` — `CancelledError` și
+    `KeyboardInterrupt` sunt `BaseException` și trec nestingherite, deci un Ctrl-C rămâne un
+    Ctrl-C, nu se transformă tăcut într-o ieșire „curată". Nu returnează nimic și nu scrie
+    raportul: raportul e rezultatul unei rulări duse la capăt, nu un artefact de curățenie.
+
+    Poolul se închide în `try` separat: dacă purja crapă (DB indisponibil), conexiunile TOT
+    trebuie eliberate.
+    """
+    from src.db.connection import admin_conn, close_pool  # noqa: PLC0415
+
+    try:
+        async with admin_conn(pool) as conn:
+            purged = await web_audit._purge_audit(conn, biz_id)
+        if purged:
+            print(f"Auto-curățat {purged} vizitator(i) de eval.")
+    except Exception as e:  # noqa: BLE001 — curățarea nu maschează rezultatul
+        print(f"⚠ auto-curățarea a eșuat ({type(e).__name__}).")
+    try:
+        await close_pool()
+    except Exception as e:  # noqa: BLE001 — idem: un pool care nu se închide nu rescrie verdictul
+        print(f"⚠ închiderea poolului a eșuat ({type(e).__name__}).")
+
+
 def _p95(values: list[float]) -> float:
     """Percentila 95 nearest-rank (robustă pt n mic). Gol → 0."""
     if not values:
@@ -259,7 +330,7 @@ async def _run_conversation(
             _turn_tokens["in"] = _turn_tokens["out"] = 0
             _turn_tokens["cost_usd"] = 0.0
             t0 = time.perf_counter()
-            turn = await client.say(user_msg)  # calea /web/chat REALĂ
+            turn = await _say_or_abort(client, user_msg)  # calea /web/chat REALĂ
             latency_ms = round((time.perf_counter() - t0) * 1000, 1)
             tokens = {
                 "in": _turn_tokens["in"],
@@ -447,7 +518,7 @@ async def main() -> int:
 
     from src.agent.llm import get_llm  # noqa: PLC0415
     from src.config import get_settings  # noqa: PLC0415
-    from src.db.connection import admin_conn, close_pool, get_pool  # noqa: PLC0415
+    from src.db.connection import admin_conn, get_pool  # noqa: PLC0415
     from src.db.queries.channels import resolve_web_session  # noqa: PLC0415
 
     llm = get_llm()
@@ -456,36 +527,14 @@ async def main() -> int:
         return 1
     settings = get_settings()
 
-    # rezolvă tokenul webchat + business (ca web_audit).
-    token, biz_id = args.token, web_audit.DEMO_BIZ
-    pool = await get_pool()
-    async with admin_conn(pool) as conn:
-        if token:
-            r = await resolve_web_session(conn, token)
-            if r:
-                biz_id = r["business_id"]
-        else:
-            row = await conn.fetchrow(
-                "select provider_account_id, business_id::text as business_id from channels "
-                "where business_id=$1 and kind='webchat' limit 1",
-                web_audit.DEMO_BIZ,
-            )
-            if row:
-                token, biz_id = row["provider_account_id"], row["business_id"]
-        if not token:
-            print("Niciun canal webchat pe tenantul demo.")
-            return 1
-        catalog_sig = await _catalog_signature(conn, biz_id)
-
-    async def mk(label: str):
-        vid, sig = await web_audit._session(token, label)
-        return web_audit.WebClient(token, vid, sig, label)
-
     # Modelul de bază + judecătorul se fixează ÎNAINTE de orice braț: `llm.model_agent` se mută
     # per braț, deci citit mai târziu ar raporta ultimul braț rulat, nu baza.
     base_model = llm.model_agent
     judge_model = args.judge_model or base_model
 
+    # Brațele + porțile care NU ating DB-ul se rezolvă ÎNAINTE de a deschide poolul: o poartă care
+    # respinge rularea nu trebuie să lase în urmă conexiuni deschise (aceeași clasă cu cleanup-ul
+    # de mai jos — curățarea nu e o ramură, e o proprietate a ieșirii).
     if args.flag:
         pass_specs = [
             {"kind": "flag", "flag": args.flag, "value": False, "label": f"{args.flag}=False"},
@@ -515,6 +564,36 @@ async def main() -> int:
     else:
         pass_specs = [{"kind": "baseline", "label": "baseline"}]
 
+    # rezolvă tokenul webchat + business (ca web_audit).
+    token, biz_id = args.token, web_audit.DEMO_BIZ
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        if token:
+            r = await resolve_web_session(conn, token)
+            if r:
+                biz_id = r["business_id"]
+        else:
+            row = await conn.fetchrow(
+                "select provider_account_id, business_id::text as business_id from channels "
+                "where business_id=$1 and kind='webchat' limit 1",
+                web_audit.DEMO_BIZ,
+            )
+            if row:
+                token, biz_id = row["provider_account_id"], row["business_id"]
+        if not token:
+            missing_channel = True
+        else:
+            missing_channel = False
+            catalog_sig = await _catalog_signature(conn, biz_id)
+    if missing_channel:
+        print("Niciun canal webchat pe tenantul demo.")
+        await _cleanup(pool, biz_id)  # poolul e deschis → se închide și pe calea asta
+        return 1
+
+    async def mk(label: str):
+        vid, sig = await web_audit._session(token, label)
+        return web_audit.WebClient(token, vid, sig, label)
+
     def _apply(spec: dict[str, Any]) -> None:
         if spec["kind"] == "flag":
             setattr(settings, spec["flag"], spec["value"])  # settings e singleton mutabil
@@ -533,6 +612,7 @@ async def main() -> int:
     _cache_prev = settings.cache_enabled
     settings.cache_enabled = False
     pass_cases: dict[str, list] = {s["label"]: [] for s in pass_specs}
+    aborted: RunAborted | None = None
     try:
         for convo in convos:
             print(f"  • {convo['id']} …", flush=True)
@@ -542,15 +622,23 @@ async def main() -> int:
                     await _run_conversation(convo, mk, llm, args.runs, judge_model)
                 )
     except RunAborted as e:
-        # Eroare permanentă: NU scriem raport. Un artefact pe jumătate, plin de fallback-uri,
-        # arată exact ca un rezultat slab — și ar fi citit ca atare peste o săptămână.
-        print(f"\n✖ RULARE ABANDONATĂ: {e}")
-        print(f"  Eșecuri LLM până la oprire: {_llm_failures['n']}. Niciun raport scris.")
-        await close_pool()
-        return 1
+        # Abandon CONTROLAT (eroare permanentă LLM sau respingere de admitere web): NU scriem
+        # raport. Un artefact pe jumătate, plin de fallback-uri, arată exact ca un rezultat slab
+        # — și ar fi citit ca atare peste o săptămână. Ieșirea propriu-zisă e DUPĂ `finally`,
+        # ca ordinea „curăț, apoi raportez ce s-a întâmplat" să fie aceeași pe toate căile.
+        aborted = e
     finally:
+        # Restaurări + curățare pe ORICE cale de ieșire: succes, RunAborted, excepție
+        # neașteptată (503 la marginea web, DB căzut) sau întrerupere (Ctrl-C → CancelledError).
+        # NIMIC nu scrie raportul de aici: raportul e rezultatul unei rulări duse la capăt, nu un
+        # artefact de curățenie. `_cleanup` nu maschează excepția în zbor (vezi docstring-ul lui).
         settings.cache_enabled = _cache_prev  # restaurare, orice s-ar întâmpla
         llm.model_agent = base_model  # NX-204: brațul nu se scurge în afara rulării
+        await _cleanup(pool, biz_id)
+    if aborted is not None:
+        print(f"\n✖ RULARE ABANDONATĂ: {aborted}")
+        print(f"  Eșecuri LLM până la oprire: {_llm_failures['n']}. Niciun raport scris.")
+        return 1
     report_passes = [
         {
             "pass": spec["label"],
@@ -612,16 +700,6 @@ async def main() -> int:
         slug = args.flag or "baseline"
     out_path = OUT_DIR / f"eval-{slug}-{stamp}.json"
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # curățare vizitatori de audit (reutilizăm purja dovedită din web_audit).
-    try:
-        async with admin_conn(pool) as conn:
-            purged = await web_audit._purge_audit(conn, biz_id)
-        if purged:
-            print(f"Auto-curățat {purged} vizitator(i) de eval.")
-    except Exception as e:  # noqa: BLE001 — curățarea nu maschează rezultatul
-        print(f"⚠ auto-curățarea a eșuat ({type(e).__name__}).")
-    await close_pool()
 
     if not is_valid:
         print(
