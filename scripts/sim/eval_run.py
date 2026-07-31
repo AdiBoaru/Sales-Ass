@@ -94,6 +94,76 @@ def _install_token_meter() -> None:
     usage_mod.record_chat = _patched  # type: ignore[assignment]
 
 
+# --- contorul de EȘECURI LLM + poarta de validitate a rulării -------------------------------------
+# Lecția rulării din 2026-07-31: creditele OpenAI s-au epuizat la a 4-a conversație. SDK-ul
+# raportează `insufficient_quota` tot ca `RateLimitError` (429), deci retry-ul din adaptor l-a
+# tratat ca TRANZITORIU, a reîncercat inutil, iar stagiile au degradat grațios (P6 — corect în
+# prod!). Rezultatul: 1,5h de rulare în care 80% din tururi n-au făcut NICIUN apel LLM reușit,
+# iar harness-ul a tipărit un sumar comparativ ca și cum ar fi un rezultat.
+#
+# Degradarea grațioasă e corectă în producție și GREȘITĂ într-un instrument de măsură: un
+# baseline construit din fallback-uri nu e „mai slab", e INEXISTENT. Deci harness-ul:
+#   • ABANDONEAZĂ imediat la o eroare PERMANENTĂ (cotă/credite) — 2 minute, nu 1,5 ore;
+#   • marchează raportul `valid=false` dacă eșecurile depășesc pragul, și REFUZĂ să tipărească
+#     sumarul comparativ (cifrele n-ar însemna nimic).
+_llm_failures: dict[str, Any] = {"n": 0, "fatal": None}
+
+# Peste atât, comparabilitatea între brațe e compromisă (un braț degradat vs unul intact).
+MAX_FAILURE_RATE = 0.02
+
+
+class RunAborted(RuntimeError):
+    """Rulare oprită de o eroare permanentă — nu se scrie raport (n-ar avea ce măsura)."""
+
+
+def _permanent_reason(exc: BaseException) -> str | None:
+    """Distinge eroarea PERMANENTĂ (cotă/credite/cheie) de throttling-ul tranzitoriu. Ambele vin
+    ca 429 `RateLimitError`, dar una se rezolvă în secunde și cealaltă niciodată."""
+    body = getattr(exc, "body", None)
+    code = ""
+    if isinstance(body, dict):
+        err = body.get("error") or {}
+        if isinstance(err, dict):
+            code = f"{err.get('code') or ''} {err.get('type') or ''}".strip()
+    blob = (code + " " + str(exc)).lower()
+    for marker in ("insufficient_quota", "credit_balance_exhausted", "billing", "no credits"):
+        if marker in blob:
+            return "credite/cotă OpenAI epuizate — adaugă credit și reia rularea"
+    if "invalid_api_key" in blob or getattr(exc, "status_code", None) == 401:
+        return "cheie OpenAI invalidă"
+    return None
+
+
+def _install_failure_meter() -> None:
+    """Numără eșecurile LLM epuizate și ridică steagul FATAL la prima eroare permanentă.
+
+    Patch pe `llm._with_retry` (modul-level, rezolvat la fiecare apel din `_chat` → monkeypatch-ul
+    prinde). Nu schimbă comportamentul: doar observă și lasă excepția să curgă mai departe, ca
+    stagiile să degradeze exact ca în prod.
+    """
+    import src.agent.llm as llm_mod  # noqa: PLC0415
+
+    orig = llm_mod._with_retry
+
+    async def _patched(factory, *, max_retries):
+        try:
+            return await orig(factory, max_retries=max_retries)
+        except Exception as e:
+            _llm_failures["n"] += 1
+            if _llm_failures["fatal"] is None:
+                reason = _permanent_reason(e)
+                if reason:
+                    _llm_failures["fatal"] = reason
+            raise
+
+    llm_mod._with_retry = _patched  # type: ignore[assignment]
+
+
+def _check_fatal() -> None:
+    if _llm_failures["fatal"]:
+        raise RunAborted(_llm_failures["fatal"])
+
+
 def _p95(values: list[float]) -> float:
     """Percentila 95 nearest-rank (robustă pt n mic). Gol → 0."""
     if not values:
@@ -225,6 +295,7 @@ async def _run_conversation(
             )
             transcript.append({"role": "bot", "text": turn.content[:280]})
             prev_dict = cur
+            _check_fatal()  # eroare permanentă → oprim aici, nu după încă 1,5h de fallback-uri
 
     return {
         "id": convo["id"],
@@ -372,6 +443,7 @@ async def main() -> int:
 
     web_audit._install_fake_redis()  # ÎNAINTE de importurile care capturează get_redis
     _install_token_meter()
+    _install_failure_meter()
 
     from src.agent.llm import get_llm  # noqa: PLC0415
     from src.config import get_settings  # noqa: PLC0415
@@ -469,6 +541,13 @@ async def main() -> int:
                 pass_cases[spec["label"]].append(
                     await _run_conversation(convo, mk, llm, args.runs, judge_model)
                 )
+    except RunAborted as e:
+        # Eroare permanentă: NU scriem raport. Un artefact pe jumătate, plin de fallback-uri,
+        # arată exact ca un rezultat slab — și ar fi citit ca atare peste o săptămână.
+        print(f"\n✖ RULARE ABANDONATĂ: {e}")
+        print(f"  Eșecuri LLM până la oprire: {_llm_failures['n']}. Niciun raport scris.")
+        await close_pool()
+        return 1
     finally:
         settings.cache_enabled = _cache_prev  # restaurare, orice s-ar întâmpla
         llm.model_agent = base_model  # NX-204: brațul nu se scurge în afara rulării
@@ -484,10 +563,26 @@ async def main() -> int:
         for spec in pass_specs
     ]
 
+    # Verdict de validitate: un tur atins de un eșec LLM a rulat pe fallback, nu pe model — nu e
+    # „mai slab", e necomparabil. Peste prag, raportul se scrie (pt diagnostic) dar MARCAT invalid,
+    # iar sumarul comparativ NU se tipărește: cifrele n-ar însemna nimic.
+    n_executions = sum(t["runs"] for p in report_passes for c in p["cases"] for t in c["turns"])
+    failure_rate = (_llm_failures["n"] / n_executions) if n_executions else 0.0
+    is_valid = _llm_failures["n"] == 0 or failure_rate <= MAX_FAILURE_RATE
+
     now = datetime.now(timezone.utc)
     report = {
         "meta": {
             "generated_at": now.isoformat(),
+            "valid": is_valid,
+            "llm_failures": _llm_failures["n"],
+            "llm_failure_rate": round(failure_rate, 4),
+            "validity_note": (
+                "OK"
+                if is_valid
+                else f"INVALID: {_llm_failures['n']} eșecuri LLM (>{MAX_FAILURE_RATE:.0%}) → "
+                f"tururile afectate au rulat pe fallback, nu pe model. Nu compara brațele."
+            ),
             "kind": ("paired_model" if args.model_arm else ("paired" if args.flag else "baseline")),
             "business_id": biz_id,
             "runs_per_case": args.runs,
@@ -527,6 +622,15 @@ async def main() -> int:
     except Exception as e:  # noqa: BLE001 — curățarea nu maschează rezultatul
         print(f"⚠ auto-curățarea a eșuat ({type(e).__name__}).")
     await close_pool()
+
+    if not is_valid:
+        print(
+            f"\n✖ RAPORT INVALID: {_llm_failures['n']} eșecuri LLM din {n_executions} execuții "
+            f"({failure_rate:.0%}). Tururile afectate au rulat pe FALLBACK, nu pe model — "
+            f"sumarul comparativ nu se tipărește, fiindcă n-ar însemna nimic."
+        )
+        print(f"→ raport (marcat invalid, doar pt diagnostic): {out_path}")
+        return 1
 
     for p in report_passes:
         s = p["summary"]

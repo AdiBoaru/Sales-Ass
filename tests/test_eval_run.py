@@ -9,6 +9,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "sim"))
 
 import eval_run  # noqa: E402
@@ -153,12 +155,63 @@ async def test_judge_model_is_pinned_independent_of_agent_arm():
 def test_pricing_gate_rejects_model_without_explicit_rates():
     """Poarta de cost: `rates_for` cade tăcut pe tarifele `mini` pentru un model necunoscut →
     raportul ar minți exact pe cifra care decide swap-ul. `has_rates` face fallback-ul VIZIBIL."""
-    from src.agent.pricing import has_rates, rates_for
+    from src.agent import pricing
 
-    assert has_rates("gpt-5.4-mini") is True
-    assert has_rates("model-inexistent-xyz") is False
-    # dovada că fallback-ul chiar e tăcut (de-asta e nevoie de poartă, nu de `rates_for`)
-    assert rates_for("model-inexistent-xyz") == rates_for("gpt-5.4-mini")
+    assert pricing.has_rates("gpt-5.4-mini") is True
+    assert pricing.has_rates("model-inexistent-xyz") is False
+    # Dovada că fallback-ul chiar e TĂCUT (de-asta e nevoie de poartă, nu de `rates_for`):
+    # un model necunoscut primește tarifele implicite, fără niciun semnal.
+    # Comparat cu `_DEFAULT`, NU cu `rates_for("gpt-5.4-mini")` — al doilea depinde de
+    # `LLM_PRICING_JSON` din mediu (override-ul NX-204a îl schimbă) și ar face testul fragil.
+    assert pricing.rates_for("model-inexistent-xyz") == pricing._DEFAULT
+
+
+def test_permanent_errors_distinguished_from_transient_throttling():
+    """Lecția rulării din 2026-07-31: creditele epuizate vin tot ca `RateLimitError` (429), deci
+    retry-ul le trata ca tranzitorii → 1,5h de fallback-uri prezentate ca rezultat. Eroarea
+    PERMANENTĂ trebuie recunoscută după corp/cod, nu după statusul HTTP."""
+
+    class _Err(Exception):
+        def __init__(self, body=None, status_code=None, msg=""):
+            super().__init__(msg)
+            self.body = body
+            self.status_code = status_code
+
+    quota = _Err(body={"error": {"code": "credit_balance_exhausted", "type": "insufficient_quota"}})
+    assert eval_run._permanent_reason(quota) is not None
+    assert "credite" in eval_run._permanent_reason(quota)
+
+    # throttling REAL (se rezolvă în secunde) → NU se abandonează rularea
+    throttle = _Err(body={"error": {"code": "rate_limit_exceeded", "type": "requests"}})
+    assert eval_run._permanent_reason(throttle) is None
+
+    assert eval_run._permanent_reason(_Err(status_code=401, msg="invalid_api_key")) is not None
+    assert eval_run._permanent_reason(_Err(msg="connection reset")) is None
+
+
+async def test_run_aborts_on_permanent_error_instead_of_collecting_fallbacks(monkeypatch):
+    """Abandonul e imediat: un tur pe fallback nu e „mai slab", e necomparabil."""
+    monkeypatch.setitem(eval_run._llm_failures, "fatal", None)
+    monkeypatch.setitem(eval_run._llm_failures, "n", 0)
+    llm = _RecordingLLM()
+
+    async def mk(_label):
+        return _FakeClient()
+
+    # primul tur ridică steagul fatal (ca și cum adaptorul ar fi epuizat retry-urile)
+    convo = {"id": "t", "turns": [{"user": "a", "gates": {}}, {"user": "b", "gates": {}}]}
+    original_check = eval_run._check_fatal
+    calls = {"n": 0}
+
+    def _fake_check():
+        calls["n"] += 1
+        eval_run._llm_failures["fatal"] = "credite/cotă OpenAI epuizate"
+        original_check()
+
+    monkeypatch.setattr(eval_run, "_check_fatal", _fake_check)
+    with pytest.raises(eval_run.RunAborted):
+        await eval_run._run_conversation(convo, mk, llm, 1)
+    assert calls["n"] == 1, "s-a oprit la PRIMUL tur, nu a mai colectat fallback-uri"
 
 
 def test_cost_is_summed_per_call_model_not_from_aggregate_tokens():
