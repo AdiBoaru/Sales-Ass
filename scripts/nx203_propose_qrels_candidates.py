@@ -311,11 +311,15 @@ def _load_queries() -> tuple[list, pathlib.Path]:
         return QUERIES, ROOT / "tests" / "golden" / "_qrels_batch1_candidates.json"
     path = pathlib.Path(argv[argv.index("--filters") + 1])
     data = json.loads(path.read_text(encoding="utf-8"))
+    # Prefixul vine din NUMELE lotului, nu hardcodat. Era `lot3-` fix, deci lotul 4 ar fi produs
+    # `lot3-13/14/17` — id-uri care EXISTA deja in qrels_confirmed. Coliziunea ar fi fost prinsa
+    # abia de `QrelsSet._unique_ids`, la scriere, dupa ce omul ar fi etichetat tot lotul.
+    prefix = path.stem.lstrip("_").replace("_filters", "") or "lot"
     out = []
     for f in data["filters"]:
         spec = dict(f["spec"])
         out.append(
-            (f"lot3-{f['n']:02d}", f["query"], "pending", "pending", f.get("note") or "", spec)
+            (f"{prefix}-{f['n']:02d}", f["query"], "pending", "pending", f.get("note") or "", spec)
         )
     return out, path.with_name(path.name.replace("_filters", "_candidates"))
 
