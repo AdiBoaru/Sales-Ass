@@ -79,6 +79,7 @@ def test_forbidden_violations():
     q = _q(
         judgments=[QrelJudgment(product_id="a", relevance=Relevance.ideal)],
         forbidden_products=["bad"],
+        forbidden_rationale={"bad": "fixture: produs interzis de test"},
     )
     assert metrics.forbidden_violations(q, ["a", "bad", "c"], 6) == 1
     assert metrics.forbidden_violations(q, ["a", "c"], 6) == 0

@@ -32,12 +32,7 @@
         }
       ],
       "forbidden_products": [
-        "2500935f-44d7-4d5b-8445-67ca1b020408",
-        "59e66303-a30c-4073-bd2d-41a9e162ebea",
-        "f28bb84e-ec28-42ed-93d5-e972c2924407",
-        "c1eec351-f890-4dbd-b24c-0c912eb89a20",
-        "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
-        "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c"
+        "2500935f-44d7-4d5b-8445-67ca1b020408"
       ],
       "hard_constraints": [
         {
@@ -52,7 +47,10 @@
         }
       ],
       "family_id": "fam-504a1a0e",
-      "split_group_id": "sg-504a1a0e"
+      "split_group_id": "sg-504a1a0e",
+      "forbidden_rationale": {
+        "2500935f-44d7-4d5b-8445-67ca1b020408": "profil declarat oily/combination in `suitable_for`, incompatibil cu o cerere pentru ten uscat. Regula generala trateaza «lista prezenta fara valoarea ceruta» drept necunoscut, deci constrangerea nu o poate deriva fara a transforma date incomplete in erori false"
+      }
     },
     {
       "id": "q-cat-02",
@@ -85,13 +83,7 @@
         }
       ],
       "forbidden_products": [
-        "2500935f-44d7-4d5b-8445-67ca1b020408",
-        "59e66303-a30c-4073-bd2d-41a9e162ebea",
-        "f28bb84e-ec28-42ed-93d5-e972c2924407",
-        "40c43ab4-2fb7-4d29-abbb-03a4968421f6",
-        "c1eec351-f890-4dbd-b24c-0c912eb89a20",
-        "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
-        "84e037ee-fedd-4ce2-8165-4112be1999a7"
+        "2500935f-44d7-4d5b-8445-67ca1b020408"
       ],
       "hard_constraints": [
         {
@@ -106,7 +98,10 @@
         }
       ],
       "family_id": "fam-5d8a4d2c",
-      "split_group_id": "sg-5d8a4d2c"
+      "split_group_id": "sg-5d8a4d2c",
+      "forbidden_rationale": {
+        "2500935f-44d7-4d5b-8445-67ca1b020408": "profil declarat oily/combination in `suitable_for`, incompatibil cu o cerere pentru ten uscat. Regula generala trateaza «lista prezenta fara valoarea ceruta» drept necunoscut, deci constrangerea nu o poate deriva fara a transforma date incomplete in erori false"
+      }
     },
     {
       "id": "q-self-01",
@@ -126,11 +121,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "a7a2de21-f042-4e3a-b668-0e17771e9506",
-        "5ae3718a-e8db-4242-8d96-f20712e34311",
-        "2500935f-44d7-4d5b-8445-67ca1b020408"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -144,7 +135,8 @@
         }
       ],
       "family_id": "fam-a12ebd01",
-      "split_group_id": "sg-a12ebd01"
+      "split_group_id": "sg-a12ebd01",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-con-01",
@@ -164,14 +156,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
-        "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
-        "020baf31-3e6a-4e16-86fd-4820e78b6090",
-        "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
-        "eb408d2a-278b-47f0-980f-e1289a32ead4",
-        "6aa19230-cc04-4003-b62d-f7256f77ed4e"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -179,13 +164,25 @@
           "value": "protectie-solara"
         },
         {
+          "facet": "texture",
+          "op": "in",
+          "value": [
+            "cremă",
+            "fluid"
+          ],
+          "note": "forma ceruta: crema/fluid. Stick-urile ies structural"
+        },
+        {
           "facet": "spf",
           "op": "gte",
-          "value": 50
+          "value": 50,
+          "unknown_is_violation": true,
+          "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface o cerinta de 50"
         }
       ],
       "family_id": "fam-0c3952d1",
-      "split_group_id": "sg-0c3952d1"
+      "split_group_id": "sg-0c3952d1",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-con-02",
@@ -209,13 +206,7 @@
           "relevance": 2
         }
       ],
-      "forbidden_products": [
-        "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
-        "0dea9466-e2e6-4452-b392-9a225b31aeee",
-        "77ff52b6-8a4f-4dde-9979-b2613b2f381e",
-        "858d69c2-a20a-497a-bebc-8cb4d434e66a",
-        "717221bc-327f-47ac-be21-e9855289c381"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -234,7 +225,8 @@
       "derived_from": "caut un fond de ten cu acoperire medie, am subton cald.",
       "variation_kind": "constraint_removal",
       "split_group_id": "sg-4bbf64d0",
-      "family_id": "fam-89b55edd"
+      "family_id": "fam-89b55edd",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-self-03",
@@ -286,9 +278,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "01755354-af34-428d-a7dd-f16f004b6219"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -303,7 +293,8 @@
       ],
       "derived_from": null,
       "family_id": "fam-890472b9",
-      "split_group_id": "sg-890472b9"
+      "split_group_id": "sg-890472b9",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-con-03",
@@ -343,9 +334,7 @@
           "relevance": 1
         }
       ],
-      "forbidden_products": [
-        "ec0b36a5-11b2-40c6-affc-0ef7ad65bc83"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -356,7 +345,8 @@
       "derived_from": "vreau sa mi cumpar o crema de maini ca mi sunt cam uscate",
       "variation_kind": "format_variant",
       "split_group_id": "sg-c8af1b71",
-      "family_id": "fam-c8af1b71"
+      "family_id": "fam-c8af1b71",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-con-04",
@@ -380,14 +370,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
-        "c41d269f-a9c6-4715-8fe5-83410cc54dee",
-        "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
-        "c1eec351-f890-4dbd-b24c-0c912eb89a20",
-        "40c43ab4-2fb7-4d29-abbb-03a4968421f6",
-        "59e66303-a30c-4073-bd2d-41a9e162ebea"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -403,7 +386,8 @@
       "derived_from": "ai și o variantă fără parfum?",
       "variation_kind": "context_removal",
       "split_group_id": "sg-7789efb6",
-      "family_id": "fam-28aeed1e"
+      "family_id": "fam-28aeed1e",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-con-05",
@@ -475,21 +459,37 @@
           "relevance": 2
         }
       ],
-      "forbidden_products": [
-        "00a286ea-51cb-4062-8ecb-360333b39fd3",
-        "6aa19230-cc04-4003-b62d-f7256f77ed4e"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "concerns",
           "op": "contains",
           "value": "acne"
+        },
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "curatarea-tenului",
+            "seruri-pentru-ten",
+            "lotiuni-tonice",
+            "masti-pentru-ten",
+            "exfoliante-pentru-ten",
+            "tratament-local",
+            "creme-hidratante",
+            "demachiante-pentru-ten",
+            "mist-pentru-ten",
+            "creme-de-ochi",
+            "protectie-solara"
+          ],
+          "note": "scope de INGRIJIRE FACIALA: scrubul de buze si sprayul termoprotector ies structural, fara dependenta de ce a returnat retrieval-ul"
         }
       ],
       "derived_from": "ai ceva pentru prevenirea coșurilor",
       "variation_kind": "format_variant",
       "split_group_id": "sg-51331994",
-      "family_id": "fam-51331994"
+      "family_id": "fam-51331994",
+      "forbidden_rationale": {}
     },
     {
       "id": "q-con-06",
@@ -522,12 +522,7 @@
         }
       ],
       "forbidden_products": [
-        "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
-        "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
-        "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
-        "a165fd7e-13f6-46ee-b12e-3e60bc932612",
-        "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
-        "27882015-927d-478d-892c-9a62c225bae7"
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01"
       ],
       "hard_constraints": [
         {
@@ -549,7 +544,10 @@
       "derived_from": "salut! caut un ser cu vitamina c, ceva sub 150 de lei. aveți?",
       "variation_kind": "format_variant",
       "split_group_id": "sg-f77658cf",
-      "family_id": "fam-f77658cf"
+      "family_id": "fam-f77658cf",
+      "forbidden_rationale": {
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01": "produs identificat explicit ca RETINOL, nu ser cu vitamina C. `key_ingredients` exista si nu contine ingredientul cerut — absenta valorii, nu incompatibilitate exprimabila"
+      }
     },
     {
       "id": "lot3-03",
@@ -573,13 +571,7 @@
           "relevance": 2
         }
       ],
-      "forbidden_products": [
-        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
-        "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
-        "0dea9466-e2e6-4452-b392-9a225b31aeee",
-        "77ff52b6-8a4f-4dde-9979-b2613b2f381e",
-        "5bf285a5-8c73-4519-a150-03fa7f2d64dd"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -598,7 +590,8 @@
       "family_id": "fam-520d9f3d",
       "split_group_id": "sg-4bbf64d0",
       "derived_from": "caut un fond de ten cu acoperire medie",
-      "variation_kind": "constraint_refinement"
+      "variation_kind": "constraint_refinement",
+      "forbidden_rationale": {}
     },
     {
       "id": "lot3-05",
@@ -614,10 +607,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
-        "0dea9466-e2e6-4452-b392-9a225b31aeee"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -631,7 +621,8 @@
         }
       ],
       "family_id": "fam-43516b19",
-      "split_group_id": "sg-43516b19"
+      "split_group_id": "sg-43516b19",
+      "forbidden_rationale": {}
     },
     {
       "id": "lot3-07",
@@ -651,14 +642,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
-        "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
-        "1d6d79c0-bb0e-4d43-898c-a96c5e31077e",
-        "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
-        "eb408d2a-278b-47f0-980f-e1289a32ead4",
-        "9c3150bb-c723-4a19-9dbf-01894253d6ef"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -666,15 +650,25 @@
           "value": "protectie-solara"
         },
         {
+          "facet": "texture",
+          "op": "in",
+          "value": [
+            "cremă",
+            "fluid"
+          ]
+        },
+        {
           "facet": "spf",
           "op": "gte",
-          "value": 50
+          "value": 50,
+          "unknown_is_violation": true
         }
       ],
       "family_id": "fam-d09c2a49",
       "split_group_id": "sg-0c3952d1",
       "derived_from": "ai protecție solară spf 50?",
-      "variation_kind": "constraint_refinement"
+      "variation_kind": "constraint_refinement",
+      "forbidden_rationale": {}
     },
     {
       "id": "lot3-10",
@@ -726,10 +720,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
-        "cdc98fcd-91da-4c24-baec-c46fc5e7f4f7"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -743,7 +734,8 @@
         }
       ],
       "family_id": "fam-9a712354",
-      "split_group_id": "sg-9a712354"
+      "split_group_id": "sg-9a712354",
+      "forbidden_rationale": {}
     },
     {
       "id": "lot3-13",
@@ -775,11 +767,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b",
-        "652d9ffa-e9bc-486b-86f7-6c4c4c670c8e",
-        "b1f37789-9c6f-4809-8bd2-ceb64d240cb2"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -793,7 +781,8 @@
         }
       ],
       "family_id": "fam-228ba975",
-      "split_group_id": "sg-228ba975"
+      "split_group_id": "sg-228ba975",
+      "forbidden_rationale": {}
     },
     {
       "id": "lot3-14",
@@ -829,14 +818,7 @@
           "relevance": 3
         }
       ],
-      "forbidden_products": [
-        "c1eec351-f890-4dbd-b24c-0c912eb89a20",
-        "9c3150bb-c723-4a19-9dbf-01894253d6ef",
-        "40bc5ff7-63c7-41b8-92a6-e8f6555f0b9a",
-        "00a286ea-51cb-4062-8ecb-360333b39fd3",
-        "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
-        "652d9ffa-e9bc-486b-86f7-6c4c4c670c8e"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "category",
@@ -850,7 +832,8 @@
         }
       ],
       "family_id": "fam-e1d4c313",
-      "split_group_id": "sg-e1d4c313"
+      "split_group_id": "sg-e1d4c313",
+      "forbidden_rationale": {}
     },
     {
       "id": "lot3-17",
@@ -877,10 +860,7 @@
       "forbidden_products": [
         "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
         "eb408d2a-278b-47f0-980f-e1289a32ead4",
-        "020baf31-3e6a-4e16-86fd-4820e78b6090",
-        "9c3150bb-c723-4a19-9dbf-01894253d6ef",
-        "1d6d79c0-bb0e-4d43-898c-a96c5e31077e",
-        "f0be66f2-cbd3-4859-9ea7-335d0ddc2138"
+        "020baf31-3e6a-4e16-86fd-4820e78b6090"
       ],
       "hard_constraints": [
         {
@@ -892,10 +872,24 @@
           "facet": "price",
           "op": "lte",
           "value": 100
+        },
+        {
+          "facet": "texture",
+          "op": "in",
+          "value": [
+            "cremă",
+            "fluid"
+          ],
+          "note": "cererea specifica o CREMA; fara politica speciala pe SPF — nu are prag minim"
         }
       ],
       "family_id": "fam-b28518e6",
-      "split_group_id": "sg-b28518e6"
+      "split_group_id": "sg-b28518e6",
+      "forbidden_rationale": {
+        "94023de6-10e7-4aeb-a2a4-6eeaa7344eef": "forma STICK, identificabila din produs, incompatibila cu o cerere de crema. `texture` e absent, iar `unknown_is_violation` pe textura ar interzice cele 163 de produse fara atribut",
+        "eb408d2a-278b-47f0-980f-e1289a32ead4": "forma STICK, incompatibila cu o cerere de crema; `texture` absent (vezi mai sus)",
+        "020baf31-3e6a-4e16-86fd-4820e78b6090": "forma STICK, incompatibila cu o cerere de crema; `texture` absent (vezi mai sus)"
+      }
     },
     {
       "id": "lot3-19",
@@ -923,18 +917,26 @@
           "relevance": 2
         }
       ],
-      "forbidden_products": [
-        "157b7f91-8cf3-45d7-b79a-1a17b749062b"
-      ],
+      "forbidden_products": [],
       "hard_constraints": [
         {
           "facet": "suitable_for",
           "op": "contains",
           "value": "oily"
+        },
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "sampoane",
+            "sampon-uscat"
+          ],
+          "note": "balsamul devine forbidden STRUCTURAL, nu prin observatie"
         }
       ],
       "family_id": "fam-93408c3f",
-      "split_group_id": "sg-93408c3f"
+      "split_group_id": "sg-93408c3f",
+      "forbidden_rationale": {}
     }
   ]
 }

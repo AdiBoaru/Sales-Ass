@@ -38,9 +38,14 @@ class HardConstraint(BaseModel):
     """Constrângere inviolabilă (D7) așteptată a fi respectată de retrieval/selection."""
 
     facet: str
-    op: str = "eq"  # eq | lte | gte | contains | ...
+    op: str = "eq"  # eq | lte | gte | in | contains | ...
     value: object = None
     unit: str | None = None
+    #: Politică EXPLICITĂ pentru starea „necunoscut" (atribut absent). Implicit `False`: absenţa nu
+    #: e incompatibilitate. `True` doar pentru praguri de SIGURANŢĂ — la o cerere de SPF 50, un
+    #: produs cu SPF nedeclarat NU satisface cerinţa. Se scrie lângă constrângere, nu în cod.
+    unknown_is_violation: bool = False
+    note: str | None = None
 
 
 class QrelJudgment(BaseModel):
@@ -74,9 +79,15 @@ class QrelsQuery(BaseModel):
     split_group_id: str | None = None
     catalog_version: str  # versiunea catalogului la care s-au făcut etichetele
     judgments: list[QrelJudgment] = Field(default_factory=list)  # produse relevante, graduale
-    forbidden_products: list[str] = Field(
-        default_factory=list
-    )  # NU trebuie să apară (off-constraint)
+    # EXCEPȚII explicite, nu lista derivabilă din constrângeri. Un produs ajunge aici doar dacă
+    # incompatibilitatea e reală dar NU are reprezentare sigură în atributele catalogului.
+    # Restul se evaluează din `hard_constraints`, independent de ce a returnat retrieval-ul —
+    # altfel gold-ul ar depinde de sistemul testat.
+    forbidden_products: list[str] = Field(default_factory=list)
+    #: product_id → DE CE e o excepție. Obligatoriu pentru fiecare intrare din
+    #: `forbidden_products`: o excepție fără justificare scrisă e indistinctă de un fals-pozitiv
+    #: cules din retrieval, exact confuzia pe care politica o elimină.
+    forbidden_rationale: dict[str, str] = Field(default_factory=dict)
     hard_constraints: list[HardConstraint] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -89,6 +100,12 @@ class QrelsQuery(BaseModel):
         dup = len(self.forbidden_products) != len(set(self.forbidden_products))
         if dup:
             raise ValueError(f"{self.id}: forbidden_products conține duplicate")
+        if missing := sorted(set(self.forbidden_products) - set(self.forbidden_rationale)):
+            raise ValueError(
+                f"{self.id}: excepţii fără raţiune scrisă: {missing[:3]} — o excepţie "
+                f"nejustificată "
+                f"e indistinctă de un fals-pozitiv cules din retrieval"
+            )
         return self
 
 

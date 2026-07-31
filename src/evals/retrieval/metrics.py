@@ -11,7 +11,7 @@ Un „rezultat de retrieval" = lista ordonată de `product_id` (cel mai relevant
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from src.evals.retrieval.schema import QrelsQuery
 
@@ -60,6 +60,26 @@ def mrr(q: QrelsQuery, ranked: Sequence[str], min_rel: int = 2) -> float:
         if pid in good:
             return 1.0 / (i + 1)
     return 0.0
+
+
+def constraint_violations(
+    q: QrelsQuery, ranked: Sequence[str], k: int, catalog: Mapping[str, dict] | None
+) -> int | None:
+    """Câte produse din top-k încalcă EXPLICIT o constrângere hard.
+
+    `None` dacă lipseşte catalogul: verificarea nu s-a putut face. A treia stare, nu zero — un zero
+    tăcut ar raporta „nicio încălcare" acolo unde nimic n-a fost verificat.
+
+    Exista separat de `forbidden_violations` fiindcă sursele sunt diferite: aici se evalueaza
+    CONTRACTUL query-ului contra catalogului, independent de ce a returnat sistemul; acolo sunt
+    exceptiile explicite pe care atributele nu le pot exprima."""
+    if catalog is None:
+        return None
+    from src.evals.retrieval.constraints import violates_any  # noqa: PLC0415
+
+    return sum(
+        1 for pid in ranked[:k] if (p := catalog.get(pid)) and violates_any(p, q.hard_constraints)
+    )
 
 
 def forbidden_violations(q: QrelsQuery, ranked: Sequence[str], k: int) -> int:

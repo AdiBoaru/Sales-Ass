@@ -221,6 +221,7 @@ def test_forbidden_rate_is_or_within_family():
             family_id="fam-a",
             split_group_id="sg-a",
             forbidden_products=["bad"],
+            forbidden_rationale={"bad": "fixture: exceptie de test"},
         ),
         _q(
             id="a2",
@@ -228,6 +229,7 @@ def test_forbidden_rate_is_or_within_family():
             family_id="fam-a",
             split_group_id="sg-a",
             forbidden_products=["bad"],
+            forbidden_rationale={"bad": "fixture: exceptie de test"},
         ),
     ]
     # doar A DOUA variantă scoate produsul interzis
@@ -377,3 +379,50 @@ def test_catalog_lookup_always_filters_active_and_published():
     src = (_ROOT / "scripts/nx203_propose_qrels_candidates.py").read_text(encoding="utf-8")
     for pred in ("p.status = 'active'", "p.content_status = 'published'"):
         assert pred in src, f"filtrul de catalog nu mai conţine {pred!r}"
+
+
+# --- politica forbidden: derivata din constrangeri, nu din retrieval --------
+
+
+def test_every_forbidden_exception_has_a_written_rationale():
+    """O excepţie fără justificare scrisă e indistinctă de un fals-pozitiv cules din retrieval —
+    exact confuzia pe care politica o elimină. Raţiunea trăieşte în DATE, nu într-un commit."""
+    d = json.loads(_CONFIRMED.read_text(encoding="utf-8"))
+    for q in d["queries"]:
+        missing = set(q.get("forbidden_products", [])) - set(q.get("forbidden_rationale", {}))
+        assert not missing, f"{q['id']}: {missing}"
+        for pid, why in q.get("forbidden_rationale", {}).items():
+            assert len(why) > 30, f"{q['id']}/{pid}: raţiune prea scurtă ca să fie auditabilă"
+
+
+def test_forbidden_lists_stay_small_not_materialized_catalogs():
+    """`forbidden_products` nu e lista derivabilă din constrângeri. Materializarea ei ar însemna
+    ~290 de id-uri per query, iar o schimbare de catalog ar cere rescrierea tuturor qrels-urilor."""
+    d = json.loads(_CONFIRMED.read_text(encoding="utf-8"))
+    for q in d["queries"]:
+        assert len(q.get("forbidden_products", [])) <= 10, (
+            f"{q['id']}: {len(q['forbidden_products'])} excepţii — pare catalog materializat"
+        )
+
+
+def test_unknown_attribute_is_not_a_violation_unless_declared():
+    """Absenţa nu e incompatibilitate: la `texture`, 163 din 300 de produse n-au atributul, deci
+    tratarea necunoscutului ca violare ar transforma date incomplete în erori false. Excepţia se
+    declară explicit, per constrângere."""
+    from src.evals.retrieval.constraints import UNKNOWN, VIOLATES, evaluate
+
+    fara_spf = {"attributes": {}, "price": 10, "category_slug": "protectie-solara"}
+    assert evaluate(fara_spf, {"facet": "spf", "op": "gte", "value": 50}) == UNKNOWN
+    assert (
+        evaluate(fara_spf, {"facet": "spf", "op": "gte", "value": 50, "unknown_is_violation": True})
+        == VIOLATES
+    )
+
+
+def test_list_present_without_requested_value_stays_unknown():
+    """Regula venită din cazul celor patru seruri fără `oily`: lista prezentă fără valoarea cerută
+    e absenţa unei valori, nu o incompatibilitate declarată."""
+    from src.evals.retrieval.constraints import UNKNOWN, evaluate
+
+    p = {"attributes": {"suitable_for": ["dry", "sensitive"]}}
+    assert evaluate(p, {"facet": "suitable_for", "op": "contains", "value": "oily"}) == UNKNOWN

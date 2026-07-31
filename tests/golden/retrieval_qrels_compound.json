@@ -70,7 +70,11 @@
           "op": "eq",
           "value": true
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b": "fixture: exceptie de test, fara corespondent in catalog",
+        "8cb6faed-d058-4303-845b-7a53a894b9e2": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-antilucire-rezistent-caldura",
@@ -104,7 +108,11 @@
           "value": 120,
           "unit": "RON"
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b": "fixture: exceptie de test, fara corespondent in catalog",
+        "39ac3ec4-9206-483f-88f9-e812b06caabc": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-vitc-ten-reactiv-buget",
@@ -144,7 +152,11 @@
           "value": 150,
           "unit": "RON"
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01": "fixture: exceptie de test, fara corespondent in catalog",
+        "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-machiaj-nunta-ten-mixt-buget",
@@ -178,7 +190,11 @@
           "value": 200,
           "unit": "RON"
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "39ac3ec4-9206-483f-88f9-e812b06caabc": "fixture: exceptie de test, fara corespondent in catalog",
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-cel-mai-ieftin-niacinamida-calitate",
@@ -207,7 +223,10 @@
           "op": "contains",
           "value": "niacinamida"
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-alternativa-la-scump",
@@ -229,7 +248,10 @@
       "forbidden_products": [
         "b7ebe55c-da08-4b28-a8eb-62ac1bc72b7b"
       ],
-      "hard_constraints": []
+      "hard_constraints": [],
+      "forbidden_rationale": {
+        "b7ebe55c-da08-4b28-a8eb-62ac1bc72b7b": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-fara-parfum-rutina-fata",
@@ -267,7 +289,12 @@
           "op": "eq",
           "value": true
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "9a08f349-be2a-4ea9-9bf5-52147fa956cb": "fixture: exceptie de test, fara corespondent in catalog",
+        "e95ab838-a685-4d8d-9db8-81c1c569e4eb": "fixture: exceptie de test, fara corespondent in catalog",
+        "6ece5c7f-5f12-49fd-8a3c-bb6a00b6af7b": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compound-birou-natural-ten-normal",
@@ -293,7 +320,10 @@
       "forbidden_products": [
         "835d38ab-7a5a-448a-aeb8-03d1e2ce1857"
       ],
-      "hard_constraints": []
+      "hard_constraints": [],
+      "forbidden_rationale": {
+        "835d38ab-7a5a-448a-aeb8-03d1e2ce1857": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compare-doua-fonduri",
@@ -321,7 +351,10 @@
           "op": "eq",
           "value": 2
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "8cb6faed-d058-4303-845b-7a53a894b9e2": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compare-doua-seruri-vitc",
@@ -349,7 +382,10 @@
           "op": "eq",
           "value": 2
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compare-doua-creme-uscat",
@@ -377,7 +413,10 @@
           "op": "eq",
           "value": 2
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "2500935f-44d7-4d5b-8445-67ca1b020408": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "compare-doua-spf",
@@ -405,7 +444,10 @@
           "op": "eq",
           "value": 2
         }
-      ]
+      ],
+      "forbidden_rationale": {
+        "020baf31-3e6a-4e16-86fd-4820e78b6090": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     }
   ]
 }
