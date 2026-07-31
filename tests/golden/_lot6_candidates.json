@@ -357,73 +357,6 @@
     },
     {
       "id": "lot6-06",
-      "query": "Buna, caut un fond de ten pentru ten gras, cu acoperire medie.",
-      "provenance": "pending",
-      "category": "pending",
-      "_dim": "acoperire + tip de ten. Contract diferit de q-con-02 (doar acoperire), deci familie proprie, acelasi split_group.",
-      "_catalog_hits": 0,
-      "_truncated": false,
-      "candidates": [
-        {
-          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
-          "name": "Aria Silk Fond de ten",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "ff036005-f7c8-4c71-8260-1191247d14a4",
-          "name": "Auralis Clay Mască pentru ten",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
-          "name": "NudeLab Matte 24H Fond de ten",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "67691d8e-a703-478f-93f6-e1b8fe36873f",
-          "name": "NudeLab Matte Primer matifiant",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
-          "name": "Petala Nude Fond de ten",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "3d6887f7-b9f1-40bb-8daf-7f9a04c718fb",
-          "name": "Velora HD Pudră matifiantă",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
-          "name": "Velora Second Skin Fond de ten serum",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
-          "name": "Velora Skin Match Fond de ten",
-          "methods": [
-            "semantic"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "lot6-07",
       "query": "Salut, caut un fond de ten cu acoperire medie pentru ten mixt.",
       "provenance": "pending",
       "category": "pending",
@@ -492,7 +425,7 @@
       ]
     },
     {
-      "id": "lot6-08",
+      "id": "lot6-07",
       "query": "Caut un fond de ten.",
       "provenance": "pending",
       "category": "pending",
@@ -571,7 +504,7 @@
       ]
     },
     {
-      "id": "lot6-09",
+      "id": "lot6-08",
       "query": "vreau rujuri rosii ?",
       "provenance": "pending",
       "category": "pending",
@@ -643,7 +576,7 @@
       ]
     },
     {
-      "id": "lot6-10",
+      "id": "lot6-09",
       "query": "arata niste rujuri rosii ieftine",
       "provenance": "pending",
       "category": "pending",
@@ -727,7 +660,7 @@
       ]
     },
     {
-      "id": "lot6-11",
+      "id": "lot6-10",
       "query": "arata ruj mat sub 60 delei",
       "provenance": "pending",
       "category": "pending",
@@ -798,7 +731,7 @@
       ]
     },
     {
-      "id": "lot6-12",
+      "id": "lot6-11",
       "query": "Salut! Am parul uscat si deteriorat, ce sampon hidratant imi recomanzi?",
       "provenance": "pending",
       "category": "pending",
@@ -904,7 +837,7 @@
       ]
     },
     {
-      "id": "lot6-13",
+      "id": "lot6-12",
       "query": "Am parul foarte uscat si deteriorat, ce sampon imi recomanzi?",
       "provenance": "pending",
       "category": "pending",
@@ -1016,7 +949,7 @@
       ]
     },
     {
-      "id": "lot6-14",
+      "id": "lot6-13",
       "query": "Salut, cat e samponul pentru par vopsit?",
       "provenance": "pending",
       "category": "pending",
@@ -1086,74 +1019,7 @@
       ]
     },
     {
-      "id": "lot6-15",
-      "query": "Cat e samponul anti-matreata?",
-      "provenance": "pending",
-      "category": "pending",
-      "_dim": "ASTEPT ZERO. In catalog nu exista niciun produs anti-matreata (cel mai apropiat: „Sampon pentru scalp gras\"). Nu largesc filtrul ca sa umplu gold-ul — e catalog_gap sau abstention, ca lot4-13, si decizia e a omului.",
-      "_catalog_hits": 0,
-      "_truncated": false,
-      "candidates": [
-        {
-          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
-          "name": "Bloom Fresh Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
-          "name": "Coral Theory Hydra Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
-          "name": "Elara Beauty Hydra Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "99aaec8e-b32d-45a3-bb2c-35ad55e6fb46",
-          "name": "Elara Beauty Repair Șampon uscat",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "834633ba-1884-452f-89e4-95ae21ea6762",
-          "name": "Iris & Co Pure Mască de păr",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
-          "name": "Petala Matte Cremă hidratantă",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "18a2a1d9-8a77-4f18-9336-6134fe0a4e97",
-          "name": "Petala Soft Șampon uscat pentru păr închis",
-          "methods": [
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
-          "name": "Verdea Fresh Șampon uscat volumizant",
-          "methods": [
-            "semantic"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "lot6-16",
+      "id": "lot6-14",
       "query": "sal mi s eusuca mainele des si nush ce crema sa folosesc",
       "provenance": "pending",
       "category": "pending",
@@ -1238,61 +1104,6 @@
           "name": "Solora Sun Cremă de mâini SPF 30",
           "methods": [
             "semantic"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "lot6-17",
-      "query": "spune-mi mai multe despre calm theory glow crema pentru protectie",
-      "provenance": "pending",
-      "category": "pending",
-      "_dim": "PROBLEMA: produsul numit NU EXISTA. Nu e niciun „Calm Theory Glow\" si nicio protectie solara de la brandul asta (exista masca, lotiune, ser, spray, fard, balsam). Filtrul meu a prins BRANDUL, nu produsul. Query-ul cere re-dispozitionare: ori `contextual` (se referea la ceva spus intr-un tur anterior), ori abstention/red-team (raspunsul corect e „nu avem asta\", nu un rezultat de retrieval). NU intra in cele 200 asa cum e.",
-      "_catalog_hits": 6,
-      "_truncated": false,
-      "candidates": [
-        {
-          "product_id": "59e66303-a30c-4073-bd2d-41a9e162ebea",
-          "name": "Calm Theory Fresh Mască de față",
-          "methods": [
-            "catalog",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "23102120-b720-4725-897d-f1066d6a30e8",
-          "name": "Calm Theory Nude Spray de fixare",
-          "methods": [
-            "catalog",
-            "semantic"
-          ]
-        },
-        {
-          "product_id": "839cab86-b6b8-4a26-ac0d-a65ce65fa2d1",
-          "name": "Calm Theory Pure Loțiune tonică",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
-          "name": "Calm Theory Pure Ser pentru ten",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "714fd4e2-0042-434e-9804-3cd80626325d",
-          "name": "Calm Theory Silk Fard de ochi",
-          "methods": [
-            "catalog"
-          ]
-        },
-        {
-          "product_id": "68df3296-c50c-4b83-a512-435623db637f",
-          "name": "Calm Theory Sun Balsam de buze",
-          "methods": [
-            "catalog"
           ]
         }
       ]

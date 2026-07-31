@@ -162,3 +162,60 @@ def test_holdout_slices_too_small_to_measure_are_rejected():
 
     assert any(f"sub pragul de {MIN_HOLDOUT_SLICE}" in issue for issue in issues)
     assert any("holdout_h2" in issue for issue in issues)  # feliile goale se raportează, nu se sar
+
+
+# --- ţinta de corpus e în FAMILII, nu în query-uri ---------------------------
+
+
+def test_family_target_is_not_satisfied_by_paraphrases():
+    """Miezul schimbării de contract: 30 de query-uri în 3 familii NU trec o ţintă de 10 familii.
+
+    Sub ţinta veche („≥N query-uri"), deficitul se putea acoperi adăugând diacritice şi typo-uri —
+    fără ca benchmarkul să poată distinge nimic în plus, fiindcă agregă pe familie."""
+    from src.evals.retrieval.schema import Provenance, QrelJudgment, QrelsQuery, QrelsSet, Relevance
+    from src.evals.retrieval.validation import validate_integrity, verified_family_count
+
+    queries = [
+        QrelsQuery(
+            id=f"q-{fam}-{i}",
+            query=f"varianta {i} a intenţiei {fam}",
+            provenance=Provenance.paraphrase,
+            catalog_version="v0",
+            human_verified=True,
+            family_id=f"fam-{fam}",
+            split_group_id=f"sg-{fam}",
+            judgments=[QrelJudgment(product_id="p-1", relevance=Relevance.ideal)],
+        )
+        for fam in ("a", "b", "c")
+        for i in range(10)
+    ]
+    qset = QrelsSet(business_id="b", queries=queries)
+
+    assert len(qset.queries) == 30
+    assert verified_family_count(qset) == 3
+    report = validate_integrity(qset, min_families=10)
+    assert any("familii integral human-verified" in msg for msg in report.blocking)
+    # ...iar aceleaşi 30 trec o poartă pe QUERY-uri: exact iluzia pe care schimbarea o elimină
+    assert not validate_integrity(qset, min_queries=30).blocking
+
+
+def test_partially_verified_family_does_not_count():
+    """O familie cu o variantă verificată şi restul neverificate contribuie la scor cu adevăr
+    necontrolat — a o număra ca acoperită ar declara verificat ce e verificat pe sfert."""
+    from src.evals.retrieval.schema import Provenance, QrelJudgment, QrelsQuery, QrelsSet, Relevance
+    from src.evals.retrieval.validation import verified_family_count
+
+    def q(i, verified):
+        return QrelsQuery(
+            id=f"q{i}",
+            query=f"varianta {i}",
+            provenance=Provenance.synthetic,
+            catalog_version="v0",
+            human_verified=verified,
+            family_id="fam-x",
+            split_group_id="sg-x",
+            judgments=[QrelJudgment(product_id="p-1", relevance=Relevance.ideal)],
+        )
+
+    assert verified_family_count(QrelsSet(business_id="b", queries=[q(1, True), q(2, False)])) == 0
+    assert verified_family_count(QrelsSet(business_id="b", queries=[q(1, True), q(2, True)])) == 1

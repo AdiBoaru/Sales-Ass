@@ -15,6 +15,18 @@ from src.safety.external_data import contains_pii
 #: cu zeci de puncte, iar „a trecut gate-ul" devine zgomot prezentat ca dovadă.
 MIN_HOLDOUT_SLICE = 20
 
+#: ŢINTA DE CORPUS, în FAMILII DISTINCTE human-verified — nu în query-uri.
+#:
+#: Unitatea metricii e familia: `run_benchmark` face media ÎN familie, apoi macro peste familii,
+#: tocmai ca o întrebare culeasă de două ori să nu cântărească dublu. Deci rezoluţia benchmarkului
+#: creşte cu numărul de CONTRACTE DE ADEVĂR distincte, nu cu numărul de formulări. Un corpus de 200
+#: de query-uri care sunt parafraze ale aceloraşi 60 de intenţii măsoară exact cât 60.
+#:
+#: Ţinta veche („≥200 query-uri") putea fi atinsă adăugând diacritice şi typo-uri — adică fără să
+#: se schimbe nimic din ce poate distinge benchmarkul. `n_queries` rămâne raportat, ca indicator de
+#: robusteţe la formă, dar nu e poarta de calitate.
+TARGET_FAMILIES = 100
+
 
 @dataclass(frozen=True)
 class ValidationReport:
@@ -40,6 +52,7 @@ def integrity_issues(
     qset: QrelsSet,
     *,
     min_queries: int = 1,
+    min_families: int | None = None,
     require_human_verified: bool = False,
     require_real_per_category: bool = False,
     require_split_sizes: bool = False,
@@ -54,6 +67,7 @@ def integrity_issues(
     report = validate_integrity(
         qset,
         min_queries=min_queries,
+        min_families=min_families,
         require_human_verified=require_human_verified,
         require_real_per_category=require_real_per_category,
         require_split_sizes=require_split_sizes,
@@ -62,20 +76,45 @@ def integrity_issues(
     return report.blocking + report.unavailable
 
 
+def verified_family_count(qset: QrelsSet) -> int:
+    """Câte FAMILII sunt integral human-verified — unitatea în care se măsoară corpusul.
+
+    „Integral", nu „măcar una": metrica mediază peste TOATE query-urile familiei, deci o familie cu
+    o variantă verificată şi trei neverificate ar contribui la scor cu adevăr necontrolat. A o
+    număra ca acoperită ar declara verificat ceva ce e verificat pe sfert.
+
+    Query-urile fără `family_id` (seturi legacy, negrupate) sunt familii singleton — la fel ca în
+    `harness._families`, ca cele două numărători să nu spună lucruri diferite despre acelaşi set."""
+    families: dict[str, list[bool]] = defaultdict(list)
+    for query in qset.queries:
+        families[query.family_id or f"__singleton__:{query.id}"].append(query.human_verified)
+    return sum(1 for verified in families.values() if all(verified))
+
+
 def validate_integrity(
     qset: QrelsSet,
     *,
     min_queries: int = 1,
+    min_families: int | None = None,
     require_human_verified: bool = False,
     require_real_per_category: bool = False,
     require_split_sizes: bool = False,
     catalog_product_ids: Iterable[str] | None = None,
 ) -> ValidationReport:
-    """Validare cu cele trei stări separate; nu schimbă setul de date."""
+    """Validare cu cele trei stări separate; nu schimbă setul de date.
+
+    `min_families` e poarta de CORPUS (vezi `TARGET_FAMILIES`); `min_queries` rămâne o verificare de
+    minim brut, utilă pentru fixture-uri, dar nu e ţinta."""
     issues: list[str] = []
     unavailable: list[str] = []
     if len(qset.queries) < min_queries:
         issues.append(f"sunt {len(qset.queries)} query-uri, sub minimul cerut {min_queries}")
+    if min_families is not None and (found := verified_family_count(qset)) < min_families:
+        issues.append(
+            f"sunt {found} familii integral human-verified, sub ţinta de {min_families}. "
+            f"({len(qset.queries)} query-uri — dar parafrazele nu ridică rezoluţia: metrica "
+            f"agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)"
+        )
 
     real_by_category: dict[str | None, int] = defaultdict(int)
     # NB: id-urile duplicate NU se verifică aici — `QrelsSet._unique_ids` le respinge deja la

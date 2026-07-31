@@ -58,19 +58,6 @@
     },
     {
       "n": 6,
-      "query": "Buna, caut un fond de ten pentru ten gras, cu acoperire medie.",
-      "spec": {
-        "cat": "fond-de-ten",
-        "attr_eq": [
-          "coverage",
-          "medium"
-        ],
-        "suitable_for": "oily"
-      },
-      "note": "acoperire + tip de ten. Contract diferit de q-con-02 (doar acoperire), deci familie proprie, acelasi split_group."
-    },
-    {
-      "n": 7,
       "query": "Salut, caut un fond de ten cu acoperire medie pentru ten mixt.",
       "spec": {
         "cat": "fond-de-ten",
@@ -83,7 +70,7 @@
       "note": "acelasi tipar ca #6, alt tip de ten. Familii distincte, acelasi split_group — nu au voie in felii diferite."
     },
     {
-      "n": 8,
+      "n": 7,
       "query": "Caut un fond de ten.",
       "spec": {
         "cat": "fond-de-ten"
@@ -91,7 +78,7 @@
       "note": "categorie pura. Perechea fara calificator pentru q-con-02/lot3-03/#6/#7 — testeaza ca retrieval-ul nu ingusteaza singur."
     },
     {
-      "n": 9,
+      "n": 8,
       "query": "vreau rujuri rosii ?",
       "spec": {
         "cat": "rujuri",
@@ -107,7 +94,7 @@
       "note": "prima cerere de CULOARE din tot setul. Fara `variant_label_any` ar fi ajuns la om ca simplu filtru pe categorie, adica alta intrebare decat cea pusa."
     },
     {
-      "n": 10,
+      "n": 9,
       "query": "arata niste rujuri rosii ieftine",
       "spec": {
         "cat": "rujuri",
@@ -123,7 +110,7 @@
       "note": "„ieftine\" e VAG si l-am tradus initial intr-un prag de 45 — pe care l-am SCOS: toate cele 6 rujuri costa sub 45, deci pragul nu discrimina nimic si ar fi fost o constrangere inventata de mine, prezenta in gold fara ca userul s-o fi spus. Ramane acelasi contract ca #9; candidat la aceeasi familie, cu „ieftine\" semnalat ca vag."
     },
     {
-      "n": 11,
+      "n": 10,
       "query": "arata ruj mat sub 60 delei",
       "spec": {
         "cat": "rujuri",
@@ -136,7 +123,7 @@
       "note": "ACELASI contract ca lot4-03 (unde pragul nu discrimina nimic: toate rujurile mate sunt sub 60). Candidat la aceeasi familie ca lot4-02/lot4-03."
     },
     {
-      "n": 12,
+      "n": 11,
       "query": "Salut! Am parul uscat si deteriorat, ce sampon hidratant imi recomanzi?",
       "spec": {
         "cat": [
@@ -148,7 +135,7 @@
       "note": "acelasi contract ca lot4-07 — candidat la ACEEASI familie (doua formulari ale aceleiasi cereri)."
     },
     {
-      "n": 13,
+      "n": 12,
       "query": "Am parul foarte uscat si deteriorat, ce sampon imi recomanzi?",
       "spec": {
         "cat": [
@@ -160,7 +147,7 @@
       "note": "a treia formulare a aceleiasi cereri. Trei variante in aceeasi familie = exact cazul pentru care exista agregarea."
     },
     {
-      "n": 14,
+      "n": 13,
       "query": "Salut, cat e samponul pentru par vopsit?",
       "spec": {
         "cat": [
@@ -172,33 +159,14 @@
       "note": "intrebare de pret pe acelasi pool ca lot4-06. Gold MIC asteptat (1 produs) — realitate de catalog, de confirmat."
     },
     {
-      "n": 15,
-      "query": "Cat e samponul anti-matreata?",
-      "spec": {
-        "cat": [
-          "sampoane",
-          "sampon-uscat"
-        ],
-        "name_like": "%matreat%"
-      },
-      "note": "ASTEPT ZERO. In catalog nu exista niciun produs anti-matreata (cel mai apropiat: „Sampon pentru scalp gras\"). Nu largesc filtrul ca sa umplu gold-ul — e catalog_gap sau abstention, ca lot4-13, si decizia e a omului."
-    },
-    {
-      "n": 16,
+      "n": 14,
       "query": "sal mi s eusuca mainele des si nush ce crema sa folosesc",
       "spec": {
         "cat": "creme-de-maini",
         "suitable_for": "dry"
       },
       "note": "trafic real cu typos grele („s eusuca\", „nush\"). ACELASI contract ca q-con-03/lot4-16 — candidat la aceeasi familie; testeaza robustetea la forma."
-    },
-    {
-      "n": 17,
-      "query": "spune-mi mai multe despre calm theory glow crema pentru protectie",
-      "spec": {
-        "name_like": "%calm theory%"
-      },
-      "note": "PROBLEMA: produsul numit NU EXISTA. Nu e niciun „Calm Theory Glow\" si nicio protectie solara de la brandul asta (exista masca, lotiune, ser, spray, fard, balsam). Filtrul meu a prins BRANDUL, nu produsul. Query-ul cere re-dispozitionare: ori `contextual` (se referea la ceva spus intr-un tur anterior), ori abstention/red-team (raspunsul corect e „nu avem asta\", nu un rezultat de retrieval). NU intra in cele 200 asa cum e."
     }
-  ]
+  ],
+  "_reclasificate": "Trei query-uri generate initial aici au fost mutate la `abstention` in manifest si SCOASE din lot: „fond de ten ten gras + acoperire medie\" (constrangeri modelabile, sortiment fara potrivire), „sampon anti-matreata\" (produsul nu exista) si „calm theory glow crema pentru protectie\" (produsul numit nu exista, query de sine statator). Nu se acopera cu variatii — apartin suitei de abstentie."
 }

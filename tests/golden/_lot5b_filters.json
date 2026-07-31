@@ -1,0 +1,121 @@
+{
+  "_note": "NX-203 lot 5b — cereri CROSS-CATEGORIE: userul nu numeste o categorie („ceva pt ten uscat\", „ce ai pentru ten gras?\", „vreau ceva sub 50 de lei pentru fata\"). Pool-urile sunt mari prin natura intrebarii, nu dintr-un filtru prost.",
+  "_precondition": "p.status = 'active' AND p.content_status = 'published' — aplicate de generator la TOATE",
+  "_tema": "Blocul cu cea mai densa familie de variante din trafic: „ser cu vitamina C\" apare in 6 formulari diferite. Aici se vede daca agregarea pe familie chiar tine — daca ar cadea, blocul asta singur ar cantari cat un sfert din benchmark.",
+  "_de_ce_separat": "Lotul 5 initial avea 363 de perechi de etichetat, peste ce poate fi etichetat atent intr-o sedinta. Aici stau cele 7 query-uri grele; se eticheteaza separat, cu rabdare, fiindca aici apar deciziile dificile (ce inseamna „relevant\" cand pool-ul e o treime din catalog).",
+  "filters": [
+    {
+      "n": 1,
+      "query": "vreau ceva pt ten uscat",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "seruri-pentru-ten",
+          "curatarea-tenului",
+          "masti-pentru-ten",
+          "lotiuni-tonice",
+          "creme-de-ochi",
+          "mist-pentru-ten",
+          "demachiante-pentru-ten"
+        ],
+        "suitable_for": "dry"
+      },
+      "note": "„ceva\" = fara categorie. Cross-categorie ca q-con-05. Contract DIFERIT de #10, chiar daca tipul de ten e acelasi — pool-ul e alt pool."
+    },
+    {
+      "n": 2,
+      "query": "ce ai pentru ten gras?",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "seruri-pentru-ten",
+          "curatarea-tenului",
+          "masti-pentru-ten",
+          "lotiuni-tonice",
+          "exfoliante-pentru-ten",
+          "tratament-local",
+          "mist-pentru-ten",
+          "protectie-solara",
+          "demachiante-pentru-ten"
+        ],
+        "suitable_for": "oily"
+      },
+      "note": "pandantul lui #11 pentru ten gras. Pool larg — de urmarit daca depaseste ce poate eticheta un om intr-o sedinta."
+    },
+    {
+      "n": 3,
+      "query": "am tenul mixt, mai degrabă gras în zona t.",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "seruri-pentru-ten",
+          "curatarea-tenului",
+          "masti-pentru-ten",
+          "lotiuni-tonice",
+          "exfoliante-pentru-ten",
+          "mist-pentru-ten"
+        ],
+        "suitable_for": "combination"
+      },
+      "note": "userul descrie TENUL, nu cere un produs. Retrieval-ul tot trebuie sa aiba un pool corect, dar raspunsul bun poate fi o intrebare de clarificare — semnal pentru suita de clarify, nu doar pentru qrels."
+    },
+    {
+      "n": 4,
+      "query": "caut o crema de fata",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "creme-de-ochi",
+          "protectie-solara"
+        ]
+      },
+      "note": "sub-specificat DELIBERAT pastrat: e cazul „clarify-first\". Gold-ul e larg; valoarea query-ului e sa arate ca retrieval-ul nu se ingusteaza singur pe o subcategorie."
+    },
+    {
+      "n": 5,
+      "query": "pai am un ten uscat dupa dus",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "lotiuni-de-corp",
+          "seruri-pentru-ten"
+        ],
+        "suitable_for": "dry"
+      },
+      "note": "trafic real, eliptic. „dupa dus\" ar putea trimite spre corp, nu fata — de aceea includ si `lotiuni-de-corp`. Ambiguitatea e reala, nu o curat."
+    },
+    {
+      "n": 6,
+      "query": "pai o crema dupa ce fac dus ca mi se usuca fata",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "lotiuni-de-corp",
+          "seruri-pentru-ten"
+        ],
+        "suitable_for": "dry"
+      },
+      "note": "acelasi caz ca #18, dar cu „fata\" explicit. Candidat la acelasi split_group; familii separate daca precizarea schimba gold-ul."
+    },
+    {
+      "n": 7,
+      "query": "vreau ceva sun 50 de lei pentru fata",
+      "spec": {
+        "cat_any": [
+          "creme-hidratante",
+          "seruri-pentru-ten",
+          "curatarea-tenului",
+          "masti-pentru-ten",
+          "lotiuni-tonice",
+          "creme-de-ochi",
+          "mist-pentru-ten",
+          "protectie-solara",
+          "demachiante-pentru-ten",
+          "exfoliante-pentru-ten"
+        ],
+        "price_max": 50
+      },
+      "note": "typo real („sun\" = sub). Buget SINGUR, fara alt calificator — testeaza direct pretul efectiv pe un pool larg."
+    }
+  ]
+}

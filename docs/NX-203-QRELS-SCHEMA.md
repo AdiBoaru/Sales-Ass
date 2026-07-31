@@ -21,6 +21,29 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
 | `tests/test_retrieval_harness.py` | 13 teste: corectitudinea metricilor, integritatea qrels, spliturile single-use, harness pe exemplu. |
 | `requirements-dev.txt` | `ir-measures` pinned (cross-check la rularea completă; harness-ul nu depinde de el la runtime). |
 
+## Contract de corpus (schimbat 2026-07-31)
+
+**Ținta headline e în FAMILII DISTINCTE human-verified, nu în query-uri.** `TARGET_FAMILIES = 100`
+(`src/evals/retrieval/validation.py`), verificat prin `validate_integrity(min_families=...)`.
+
+De ce s-a schimbat: metrica agregă media *în* familie, apoi macro peste familii — deci rezoluția
+benchmarkului crește cu numărul de **contracte de adevăr distincte**, nu cu numărul de formulări.
+Ținta veche („≥200 query-uri") putea fi atinsă adăugând diacritice și typo-uri, fără ca benchmarkul
+să poată distinge nimic în plus. Un corpus de 200 de query-uri care sunt parafraze ale acelorași 60
+de intenții măsoară exact cât 60.
+
+`n_queries` rămâne raportat în `BenchmarkReport`, ca indicator de **robustețe la formă** — util,
+dar nu poarta de calitate. Dacă „200" se păstrează, e indicator secundar de variație.
+
+**Deficitul se acoperă cu intenții NOI, nu cu parafraze.** O familie se numără doar dacă e
+*integral* human-verified: o familie cu o variantă verificată și trei neverificate ar contribui la
+scor cu adevăr necontrolat.
+
+**Reconcilierea manifestului e obligatorie după fiecare lot** —
+`scripts/nx203_reconcile_manifest.py --apply`, impusă de `tests/test_qrels_manifest_reconciled.py`.
+A fost sărită o dată: 8 query-uri scrise la lotul 3 au rămas `eligible` în manifest cu `family_id`
+divergent, deci aceeași întrebare avea două identități și ar fi cântărit dublu.
+
 ## Decizii de design (de ce așa)
 
 - **`retrieve_fn` injectat.** Harness-ul nu știe de `search_products`/`search_entities` → aceeași
