@@ -11,6 +11,7 @@ import datetime as dt
 
 import pytest
 
+from src.db.queries.catalog import _EFFECTIVE_PRICE
 from src.evals.retrieval.catalog import load_catalog
 from src.evals.retrieval.constraints import VIOLATES, evaluate
 
@@ -31,6 +32,7 @@ def _row(**kw):
         "name": "Cremă test",
         "price": 70,
         "attributes": {},
+        "list_price": 70,
         "category_slug": "creme-fata",
         "updated_at": dt.datetime(2026, 7, 30, 12, 0, 0),
     }
@@ -60,6 +62,21 @@ async def test_filters_active_and_published():
     assert "p.status = 'active'" in sql
     assert "p.content_status = 'published'" in sql
     assert args == ("biz",)
+
+
+@pytest.mark.asyncio
+async def test_projects_effective_price_from_production_expression():
+    """Preţul proiectat e cel EFECTIV, prin chiar expresia din calea de producţie.
+
+    Verificarea e pe SQL fiindcă divergenţa se naşte în proiecţie; efectul real (100 de listă, 60
+    efectiv, prag 90 → satisfies) e testat pe DB în `test_retrieval_effective_price.py`."""
+    conn = _FakeConn([_row()])
+    await load_catalog(conn, "biz")
+
+    sql, _args = conn.calls[0]
+    assert _EFFECTIVE_PRICE in sql, "snapshotul trebuie să poarte preţul pe care îl vede clientul"
+    assert "product_variants" in sql, "minimul variantelor face parte din preţul efectiv"
+    assert "sale_start" in sql and "sale_end" in sql, "fereastra promoţiei, nu doar sale_price"
 
 
 @pytest.mark.asyncio

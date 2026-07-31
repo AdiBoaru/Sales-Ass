@@ -15,7 +15,7 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
 | `src/evals/retrieval/metrics.py` | Recall@k, nDCG@k (grade reale), Top-k hit, MRR, forbidden-violations. Pure-Python, determinist, testat cu valori de mână. |
 | `src/evals/retrieval/splits.py` | Felii SINGLE-USE per gate: tuning + H1(NX-207)/H2(NX-209)/H3(NX-210). Atribuire deterministă (hash pe id, fără random) + stratificată pe categorie. `holdout_slice_for_gate` impune că fiecare gate folosește felie distinctă. |
 | `src/evals/retrieval/constraints.py` | Evaluarea `hard_constraints` contra unui produs, in TREI stari (`satisfies`/`violates`/`unknown`). Sursa UNICA: o importa si scriptul de derivare a exceptiilor, si metrica. Absenta unui atribut NU e incompatibilitate; exceptia se declara per constrangere (`unknown_is_violation`, praguri de siguranta). |
-| `src/evals/retrieval/catalog.py` | `load_catalog(conn, business_id)` → `CatalogSnapshot` (filtru comun `status='active'` + `content_status='published'`; decodeaza `jsonb`-ul intors ca string de asyncpg). |
+| `src/evals/retrieval/catalog.py` | `load_catalog(conn, business_id)` → `CatalogSnapshot`: filtru comun `status='active'` + `content_status='published'`, prețul EFECTIV proiectat cu chiar `_EFFECTIVE_PRICE` din calea de producție (promoție în fereastră + minimul variantelor), decodare a `jsonb`-ului întors ca string de asyncpg. |
 | `src/evals/retrieval/harness.py` | `run_benchmark(qset, retrieve_fn, config, catalog=None)` → `BenchmarkReport` (metrici agregate + config-ul complet al rularii: embeddings, document_version, reranker, ponderi, split). `retrieve_fn` injectat → aceeasi masurare compara orice configuratie. |
 | `tests/golden/retrieval_qrels_example.json` | EXEMPLU minuscul (3 query-uri fictive) ca harness-ul să ruleze — NU e datasetul. |
 | `tests/test_retrieval_harness.py` | 13 teste: corectitudinea metricilor, integritatea qrels, spliturile single-use, harness pe exemplu. |
@@ -36,6 +36,16 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
   contra produselor, nu contra qrels-ului. Fără `catalog=`, `forbidden_violation_rate` e `None` și
   raportul iese marcat `constraint_validation_unavailable` — **niciodată 0**, fiindcă un zero ar fi
   indistinct de o rulare curată. Metricile de relevanță (recall/nDCG/MRR) rămân valide.
+- **Prețul din snapshot = prețul pe care îl vede clientul.** `load_catalog` proiectează
+  `_EFFECTIVE_PRICE` (promoție în fereastră + minimul variantelor), importat din calea de
+  producție, nu rescris. Pe `p.price`, un produs de 100 lei vândut cu 60 apărea ca încălcând un
+  prag de 90 — un fals-pozitiv raportat ca `verified`, deci mai rău decât o stare neverificată: un
+  răspuns greșit dat cu încredere. Aceeași corecție în `nx203_derive_forbidden.py` (folosește acum
+  încărcătorul) și în filtrul de buget din `nx203_propose_qrels_candidates.py` (unde 3-7 produse
+  per prag lipseau din candidați — o gaură de recall în GOLD, pe care benchmarkul n-o poate
+  detecta). `list_price` rămâne în snapshot ca diagnostic, exclus din amprentă.
+  **Consecință:** prețul efectiv depinde de ziua rulării (ferestre de promoție), deci baseline și
+  candidat se rulează în aceeași zi — altfel `compare_reports` refuză, corect.
 - **Un singur numărător de încălcări.** `metrics.violations_at_k` = REUNIUNEA dintre excepțiile
   explicite din qrels și violările derivate din constrângeri. Reuniune, nu sumă: un produs prins de
   ambele e o singură încălcare, altfel rata ar crește cu cât un caz e mai bine acoperit de

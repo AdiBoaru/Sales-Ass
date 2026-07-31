@@ -31,7 +31,12 @@ if str(ROOT) not in sys.path:
 
 from src.agent.llm import get_llm  # noqa: E402
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
-from src.db.queries.catalog import search_products_lexical, search_products_semantic  # noqa: E402
+from src.db.queries.catalog import (  # noqa: E402
+    _EFFECTIVE_PRICE,
+    _VARIANT_SALE_ON,
+    search_products_lexical,
+    search_products_semantic,
+)
 
 DEMO = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 CATALOG_VERSION = "demo-2026-07-22"
@@ -264,7 +269,10 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
             f"where ro_unaccent(ki) like ro_unaccent({ph(f'%{v}%')}))"
         )
     if v := spec.get("price_max"):
-        conds.append(f"p.price <= {ph(v)}")
+        # Pretul EFECTIV, ca la client (promotie in fereastra + minim variante). Pe `p.price`,
+        # un produs de 100 vandut cu 60 lipsea dintre candidatii pentru „sub 90" — o gaura de
+        # recall in GOLD, adica exact eroarea pe care benchmarkul n-are cum s-o detecteze.
+        conds.append(f"{_EFFECTIVE_PRICE} <= {ph(v)}")
     if v := spec.get("sku"):
         conds.append(
             "exists (select 1 from product_variants pv where pv.product_id = p.id "
@@ -274,6 +282,11 @@ async def catalog_lookup(conn, spec: dict) -> tuple[list[tuple[str, str]], bool]
     rows = await conn.fetch(
         "select p.id::text as id, p.name from products p "
         "left join categories c on c.id = p.primary_category_id "
+        "left join lateral ("
+        f"  select min(case when {_VARIANT_SALE_ON} then v.sale_price else v.price end) as price"
+        "  from product_variants v"
+        "  where v.product_id = p.id and v.business_id = p.business_id"
+        ") vp on true "
         f"where {' and '.join(conds)} order by p.name limit {SAFETY_CAP + 1}",
         *params,
     )

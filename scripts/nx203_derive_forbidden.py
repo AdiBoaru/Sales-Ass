@@ -45,6 +45,7 @@ RATIONALE: dict[str, str] = json.loads(
 QRELS = ROOT / "tests" / "golden" / "qrels_confirmed.json"
 
 
+from src.evals.retrieval.catalog import load_catalog  # noqa: E402
 from src.evals.retrieval.constraints import VIOLATES, evaluate  # noqa: E402
 
 
@@ -54,23 +55,16 @@ async def main() -> int:
             stream.reconfigure(encoding="utf-8")
     from src.db.connection import close_pool, tenant_conn  # noqa: PLC0415
 
+    # Acelasi incarcator ca benchmarkul. Varianta anterioara isi facea propriul SELECT pe
+    # `p.price`, deci un produs de 100 lei vandut cu 60 aparea ca incalcand un prag de 90 si
+    # ajungea derivat ca INTERZIS. Doua definitii ale pretului = doua adevaruri diferite despre
+    # acelasi produs, iar cel din audit nu e cel pe care il vede clientul.
     async with tenant_conn(DEMO) as conn:
-        rows = await conn.fetch(
-            "select p.id::text as id, p.name, p.price, p.attributes, c.slug as category_slug "
-            "from products p left join categories c on c.id = p.primary_category_id "
-            "where p.business_id = $1::uuid and p.status = 'active' "
-            "and p.content_status = 'published'",
-            DEMO,
-        )
+        snapshot = await load_catalog(conn, DEMO)
     await close_pool()
-    catalog = []
-    for r in rows:
-        d = dict(r)
-        if isinstance(d["attributes"], str):
-            d["attributes"] = json.loads(d["attributes"])
-        catalog.append(d)
+    catalog = [{"id": pid, **prod} for pid, prod in snapshot.products.items()]
     names = {p["id"]: p["name"] for p in catalog}
-    print(f"catalog active+published: {len(catalog)}\n")
+    print(f"catalog active+published: {len(catalog)} — {snapshot.fingerprint}\n")
 
     data = json.loads(QRELS.read_text(encoding="utf-8"))
     apply = "--apply" in sys.argv
