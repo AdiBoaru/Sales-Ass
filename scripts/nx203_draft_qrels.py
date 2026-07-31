@@ -95,7 +95,7 @@ def _constraints(spec: dict, catalog) -> list[dict]:
                     "op": "gte",
                     "value": int(value),
                     "unknown_is_violation": True,
-                    "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface o cerinta de 50",
+                    "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface cererea",
                 }
             )
         else:
