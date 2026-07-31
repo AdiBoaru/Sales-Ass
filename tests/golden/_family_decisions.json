@@ -1,0 +1,52 @@
+{
+  "_note": "NX-203 — verdictele lui Adi pe fuziunile de familie (2026-07-31). Sursa de adevar pentru identitatea query-urilor din drafturi. Fiecare cheie e un query nou; valoarea spune la ce familie/split_group apartine.",
+  "_principiu_derivat": "Din verdictele 7 (ACCEPTAT: „ieftine\" nu creeaza contract nou) si 8 (RESPINS: „sub 60\" creeaza contract nou) rezulta regula: un calificator VAG se contopeste, un prag NUMERIC explicit ramane familie proprie — chiar daca in catalogul de azi nu discrimineaza nimic, fiindca pretul se schimba iar contractul query-ului nu. Aplicat consecvent la lot4-03 (ramane separat de lot4-02, acelasi split_group).",
+  "_verdicte": {
+    "acceptate": [1, 2, 4, 5, 6, 7, 10, 11],
+    "respinse": [3, 8, 9],
+    "respins_3": "lot5a-13 („caut o crema pentru ten gras\") ramane familie proprie fata de lot5a-12 („crema hidratanta pentru ten gras\") — acelasi split_group.",
+    "respins_8": "lot6-10 („ruj mat sub 60\") ramane familie proprie fata de lot4-02/lot4-03.",
+    "respins_9": "lot6-12 ramane familie proprie fata de lot6-11 si lot4-07."
+  },
+  "familii_existente": {
+    "q-self-01": { "family_id": "fam-a12ebd01", "split_group_id": "sg-a12ebd01" },
+    "q-cat-01": { "family_id": "fam-504a1a0e", "split_group_id": "sg-504a1a0e" },
+    "q-con-01": { "family_id": "fam-0c3952d1", "split_group_id": "sg-0c3952d1" },
+    "q-con-03": { "family_id": "fam-c8af1b71", "split_group_id": "sg-c8af1b71" }
+  },
+  "atribuiri": {
+    "lot4-01": { "family_id": "fam-lot4-rujuri", "split_group_id": "sg-rujuri" },
+    "lot4-02": { "family_id": "fam-lot4-ruj-mat", "split_group_id": "sg-rujuri" },
+    "lot4-03": { "family_id": "fam-lot4-ruj-mat-60", "split_group_id": "sg-rujuri", "de_ce": "verdict 8 respins -> pragul numeric e contract propriu" },
+    "lot4-04": { "family_id": "fam-lot4-ruj-100", "split_group_id": "sg-rujuri" },
+    "lot4-05": { "family_id": "fam-lot4-ruj-lichid-mat", "split_group_id": "sg-rujuri" },
+    "lot4-06": { "family_id": "fam-lot4-sampon-vopsit", "split_group_id": "sg-sampon-vopsit" },
+    "lot4-07": { "family_id": "fam-lot4-sampon-uscat", "split_group_id": "sg-sampon-uscat" },
+    "lot4-08": { "family_id": "fam-lot4-sampon-volum", "split_group_id": "sg-sampon-volum" },
+    "lot4-09": { "family_id": "fam-lot4-ochi-cofeina", "split_group_id": "sg-ochi-cearcane" },
+    "lot4-10": { "family_id": "fam-lot4-ochi-120", "split_group_id": "sg-ochi-cearcane" },
+    "lot4-11": { "family_id": "fam-lot4-apa-micelara", "split_group_id": "sg-apa-micelara" },
+    "lot4-12": { "family_id": "fam-lot4-ser-niacinamida", "split_group_id": "sg-ser-oily" },
+    "lot4-14": { "family_id": "fam-lot4-ser-hidratant", "split_group_id": "sg-ser-hidratare" },
+    "lot4-15": { "family_id": "fam-lot4-crema-maini", "split_group_id": "sg-c8af1b71" },
+    "lot4-16": { "family_id": "fam-c8af1b71", "split_group_id": "sg-c8af1b71", "de_ce": "verdict 10 acceptat -> aceeasi familie cu q-con-03" },
+    "lot4-17": { "family_id": "fam-lot4-calmant-80", "split_group_id": "sg-calmant" },
+    "lot4-18": { "family_id": "fam-lot4-hidratanta-gras", "split_group_id": "sg-hidratanta-gras" },
+    "lot4-19": { "family_id": "fam-lot4-hidratanta-ha", "split_group_id": "sg-hidratanta-ha" },
+    "lot4-20": { "family_id": "fam-lot4-fond-medium", "split_group_id": "sg-fond-medium" },
+
+    "lot5a-01": { "family_id": "fam-lot5a-ser-vitc", "split_group_id": "sg-ser-vitc" },
+    "lot5a-02": { "family_id": "fam-lot5a-ser-vitc", "split_group_id": "sg-ser-vitc", "de_ce": "verdict 1 acceptat" },
+    "lot5a-03": { "family_id": "fam-lot5a-ser-vitc", "split_group_id": "sg-ser-vitc", "de_ce": "verdict 1 acceptat" },
+    "lot5a-04": { "family_id": "fam-lot5a-ser-vitc", "split_group_id": "sg-ser-vitc", "de_ce": "verdict 2 acceptat" },
+    "lot5a-05": { "family_id": "fam-lot5a-ser-vitc", "split_group_id": "sg-ser-vitc", "de_ce": "verdict 2 acceptat" },
+    "lot5a-06": { "family_id": "fam-lot5a-vitc-pigmentare", "split_group_id": "sg-ser-vitc" },
+    "lot5a-07": { "family_id": "fam-a12ebd01", "split_group_id": "sg-a12ebd01", "de_ce": "verdict 4 acceptat -> aceeasi familie cu q-self-01" },
+    "lot5a-08": { "family_id": "fam-lot5a-ser-hidr-150", "split_group_id": "sg-ser-hidratare" },
+    "lot5a-09": { "family_id": "fam-lot5a-hidratanta", "split_group_id": "sg-hidratanta" },
+    "lot5a-10": { "family_id": "fam-504a1a0e", "split_group_id": "sg-504a1a0e", "de_ce": "verdict 5 acceptat -> aceeasi familie cu q-cat-01/02" },
+    "lot5a-11": { "family_id": "fam-lot5a-hidr-bogata-120", "split_group_id": "sg-504a1a0e" },
+    "lot5a-12": { "family_id": "fam-lot5a-hidr-gras", "split_group_id": "sg-hidratanta-gras" },
+    "lot5a-13": { "family_id": "fam-lot5a-crema-gras", "split_group_id": "sg-hidratanta-gras", "de_ce": "verdict 3 RESPINS -> familie proprie, acelasi split_group" }
+  }
+}

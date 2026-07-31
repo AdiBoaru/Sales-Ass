@@ -18,6 +18,10 @@ sys.path.insert(0, str(ROOT))
 from src.agent.llm import get_llm  # noqa: E402
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.evals.retrieval.adaptor import retrieve_products  # noqa: E402
+from src.evals.retrieval.catalog import (  # noqa: E402
+    assert_catalog_unchanged,
+    load_catalog,
+)
 from src.evals.retrieval.harness import RunConfig, run_benchmark  # noqa: E402
 from src.evals.retrieval.schema import QrelsSet  # noqa: E402
 
@@ -49,6 +53,11 @@ async def main() -> None:
     qset = QrelsSet(**{k: v for k, v in raw.items() if not k.startswith("_")})
     print(f"qrels: {len(qset.queries)} interogări grele\n")
 
+    async with tenant_conn(qset.business_id) as conn:
+        catalog = await load_catalog(conn, qset.business_id)
+    print(f"catalog: {len(catalog.products)} produse active+published — {catalog.fingerprint}")
+    print()
+
     reports = {}
     for label, apply_c in (("raw_hybrid", False), ("hybrid_with_constraints", True)):
         fetched = await _prefetch(qset, apply_constraints=apply_c)
@@ -61,6 +70,7 @@ async def main() -> None:
                 reranker="none",
                 split="all-compound",
             ),
+            catalog,
         )
         reports[label] = report.model_dump()
         print(f"=== {label}")
@@ -71,6 +81,8 @@ async def main() -> None:
         print(f"  Forbidden@6:  {report.forbidden_violation_rate:.3f} (interzis in top-6)")
         print()
 
+    async with tenant_conn(qset.business_id) as conn:
+        await assert_catalog_unchanged(conn, qset.business_id, catalog)
     await close_pool()
 
     REPORT.parent.mkdir(exist_ok=True)
@@ -80,7 +92,7 @@ async def main() -> None:
                 "_meta": {
                     "generated": "NX-203 baseline pe qrels compus (12 interogări grele)",
                     "source_qrels": "tests/golden/retrieval_qrels_compound.json",
-                    "catalog": "demo 300 produse, read-only",
+                    "catalog": catalog.fingerprint,
                     "note": "raw = retrieval pe text brut, zero filtre; with_constraints = "
                     "price_max+category aplicate (plafon cu înțelegere perfectă). Diferența = "
                     "cât ține de retrieval vs query understanding (NX-208).",

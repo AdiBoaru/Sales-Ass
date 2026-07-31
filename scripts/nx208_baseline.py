@@ -27,6 +27,10 @@ from src.evals.retrieval.adaptor import (  # noqa: E402
     retrieve_products,
     retrieve_products_rewritten,
 )
+from src.evals.retrieval.catalog import (  # noqa: E402
+    assert_catalog_unchanged,
+    load_catalog,
+)
 from src.evals.retrieval.harness import RunConfig, run_benchmark  # noqa: E402
 from src.evals.retrieval.schema import QrelsSet  # noqa: E402
 
@@ -65,6 +69,11 @@ async def main() -> None:
     qset = QrelsSet(**{k: v for k, v in raw.items() if not k.startswith("_")})
     print(f"qrels: {len(qset.queries)} interogări grele\n")
 
+    async with tenant_conn(qset.business_id) as conn:
+        catalog = await load_catalog(conn, qset.business_id)
+    print(f"catalog: {len(catalog.products)} produse active+published — {catalog.fingerprint}")
+    print()
+
     reports = {}
     for label in ("raw_hybrid", "rewritten_hybrid", "hybrid_with_constraints"):
         fetched = await _prefetch(qset, label)
@@ -77,6 +86,7 @@ async def main() -> None:
                 reranker="none",
                 split="all-compound",
             ),
+            catalog,
         )
         reports[label] = report.model_dump()
         print(f"=== {label}")
@@ -87,6 +97,8 @@ async def main() -> None:
         print(f"  Forbidden@6:  {report.forbidden_violation_rate:.3f} (interzis in top-6)")
         print()
 
+    async with tenant_conn(qset.business_id) as conn:
+        await assert_catalog_unchanged(conn, qset.business_id, catalog)
     await close_pool()
 
     REPORT.parent.mkdir(exist_ok=True)

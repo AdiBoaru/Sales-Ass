@@ -15,15 +15,38 @@
       "category": "creme-fata",
       "catalog_version": "example-v0",
       "judgments": [
-        {"product_id": "px-1", "relevance": 3},
-        {"product_id": "px-2", "relevance": 2},
-        {"product_id": "px-3", "relevance": 1}
+        {
+          "product_id": "px-1",
+          "relevance": 3
+        },
+        {
+          "product_id": "px-2",
+          "relevance": 2
+        },
+        {
+          "product_id": "px-3",
+          "relevance": 1
+        }
       ],
-      "forbidden_products": ["px-off-category"],
+      "forbidden_products": [
+        "px-off-category"
+      ],
       "hard_constraints": [
-        {"facet": "category", "op": "eq", "value": "creme-fata"},
-        {"facet": "price", "op": "lte", "value": 90, "unit": "RON"}
-      ]
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-fata"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 90,
+          "unit": "RON"
+        }
+      ],
+      "forbidden_rationale": {
+        "px-off-category": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     },
     {
       "id": "ex-ser-vitc",
@@ -33,12 +56,22 @@
       "category": "seruri",
       "catalog_version": "example-v0",
       "judgments": [
-        {"product_id": "px-4", "relevance": 3},
-        {"product_id": "px-5", "relevance": 2}
+        {
+          "product_id": "px-4",
+          "relevance": 3
+        },
+        {
+          "product_id": "px-5",
+          "relevance": 2
+        }
       ],
       "forbidden_products": [],
       "hard_constraints": [
-        {"facet": "key_ingredient", "op": "contains", "value": "vitamina_c"}
+        {
+          "facet": "key_ingredient",
+          "op": "contains",
+          "value": "vitamina_c"
+        }
       ]
     },
     {
@@ -49,12 +82,24 @@
       "category": "creme-fata",
       "catalog_version": "example-v0",
       "judgments": [
-        {"product_id": "px-6", "relevance": 3}
+        {
+          "product_id": "px-6",
+          "relevance": 3
+        }
       ],
-      "forbidden_products": ["px-cu-parfum"],
+      "forbidden_products": [
+        "px-cu-parfum"
+      ],
       "hard_constraints": [
-        {"facet": "fragrance_free", "op": "eq", "value": true}
-      ]
+        {
+          "facet": "fragrance_free",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "forbidden_rationale": {
+        "px-cu-parfum": "fixture: exceptie de test, fara corespondent in catalog"
+      }
     }
   ]
 }

@@ -172,10 +172,14 @@ def test_r8_key_ingredient_without_provenance():
     assert _viol(_data(p)).get("claim_provenance")
 
 
-def test_r8_badge_without_provenance():
+def test_r8_ignores_badges_they_are_runtime_derived():
+    """NX-206: badge-urile NU mai sunt o datorie de proveniență — proprietarul lor e runtime-ul
+    (`src/worker/badges.py`, praguri din `DomainPack.badge_rules`). Un fapt derivat nu are sursă de
+    citat, are o regulă; cerându-i proveniență produceam findings care nu se puteau închide decât
+    inventând-o. Schimbare deliberată față de comportamentul anterior."""
     p = _fond()
     p["attributes"]["badges"] = ["vegan"]  # fără claim_provenance
-    assert _viol(_data(p)).get("claim_provenance")
+    assert not _viol(_data(p)).get("claim_provenance")
 
 
 # --- Happy R8: cu proveniență corespunzătoare → trece ------------------------------------------

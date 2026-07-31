@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "de_ce": "produse invizibile pentru vechiul filtru pe `p.price`; relevance=null => NEETICHETAT, decizia e a omului",
+    "catalog_fingerprint": "live:300@2026-07-22T19:49:18+00:00:bc4897518792368d",
+    "nu_scrie_in_qrels": true
+  },
+  "queries": [
+    {
+      "query_id": "q-con-06",
+      "query": "ser cu vitamina C sub 150 lei",
+      "family_id": "fam-f77658cf",
+      "split_group_id": "sg-f77658cf",
+      "price_max": 150,
+      "candidates": [
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "name": "Coral Theory Pure Ser pentru ten",
+          "list_price": 166.99,
+          "effective_price": 100.19,
+          "relevance": null
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "name": "Mira Atelier Clear Ser pentru ten",
+          "list_price": 156.99,
+          "effective_price": 102.04,
+          "relevance": null
+        }
+      ]
+    }
+  ]
+}

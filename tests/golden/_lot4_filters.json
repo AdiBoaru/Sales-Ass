@@ -1,0 +1,217 @@
+{
+  "_note": "NX-203 lot 4 — filtre de catalog per query. Fiecare e o OPINIE exprimata in SQL, nu o masuratoare: eu aleg categoria si atributele, iar valorile sunt luate din ce EXISTA in catalog (nu ghicite). Preconditiile comune (status='active', content_status='published') sunt in generator. Auditabile una cate una, tocmai ca sa poata fi contestate.",
+  "_precondition": "p.status = 'active' AND p.content_status = 'published' — aplicate de generator la TOATE",
+  "_pretul": "Filtrul de buget foloseste acum pretul EFECTIV (promotie in fereastra + minim variante), nu `p.price`. Lot 4 e primul lot generat dupa fixul asta — vezi si _budget_recall_gap.json pentru ce a lipsit din loturile vechi.",
+  "_acoperire": "Lot 4 intra deliberat pe teren neacoperit de loturile 1-3: rujuri (0 qrels pana acum), ingrijirea parului dincolo de par gras, creme de ochi/cearcane, demachiere, seruri pe ingredient activ. Loturile 1-3 erau concentrate pe creme hidratante / fond de ten / protectie solara.",
+  "filters": [
+    {
+      "n": 1,
+      "query": "arata rujuri",
+      "spec": {
+        "cat": "rujuri"
+      },
+      "note": "cerere de CATEGORIE, fara calificatori. Gold = toata categoria (6). Testeaza ca retrieval-ul nu inventeaza filtre pe care userul nu le-a cerut."
+    },
+    {
+      "n": 2,
+      "query": "vreau rujuri mate",
+      "spec": {
+        "cat": "rujuri",
+        "attr_eq": [
+          "finish",
+          "matte"
+        ]
+      },
+      "note": "acelasi contract ca #3 minus bugetul — candidat la acelasi split_group daca se confirma."
+    },
+    {
+      "n": 3,
+      "query": "vreau rujuri mate sub 60 d eleu",
+      "spec": {
+        "cat": "rujuri",
+        "attr_eq": [
+          "finish",
+          "matte"
+        ],
+        "price_max": 60
+      },
+      "note": "typo real din trafic („d eleu\"), pastrat. Primul query de buget generat pe pret EFECTIV."
+    },
+    {
+      "n": 4,
+      "query": "vreau sa vad un ruj sub 100 de lei",
+      "spec": {
+        "cat": "rujuri",
+        "price_max": 100
+      },
+      "note": "buget fara alt calificator."
+    },
+    {
+      "n": 5,
+      "query": "Caut un ruj lichid mat, ceva intr-o nuanta de rosu.",
+      "spec": {
+        "cat": "rujuri",
+        "attr_eq": [
+          "finish",
+          "matte"
+        ]
+      },
+      "note": "ATENTIE la etichetare: nuanta („rosu\") traieste pe VARIANTA, nu pe produs, deci filtrul nu o poate exprima. Omul decide daca un ruj mat fara nuanta rosie e relevant 2 sau 1."
+    },
+    {
+      "n": 6,
+      "query": "Aveți șampon pentru păr vopsit?",
+      "spec": {
+        "cat": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "colored"
+      },
+      "note": "gold MIC asteptat (1 produs cu suitable_for=colored). Daca e 1, e o realitate de catalog, nu o eroare de filtru — de confirmat la review, ca la finish=matte in lotul 3."
+    },
+    {
+      "n": 7,
+      "query": "Salut, am parul foarte uscat si degradat de vopsea. Ce sampon imi recomanzi?",
+      "spec": {
+        "cat": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "dry"
+      },
+      "note": "„uscat SI degradat\" — filtrez doar pe `dry`, fiindca `damaged` are 1 produs si intersectia ar da gold degenerat. Omul poate ridica la 3 produsele care acopera ambele."
+    },
+    {
+      "n": 8,
+      "query": "vreau un șampon pentru volum",
+      "spec": {
+        "cat": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "fine"
+      },
+      "note": "„volum\" nu e valoare de catalog; `fine` (par subtire) e cea mai apropiata. Traducerea e o OPINIE — de contestat la review daca nu tine."
+    },
+    {
+      "n": 9,
+      "query": "Caut o crema de ochi pentru cearcane sub 120 lei. Aveti cu cofeina si cu vitamina?",
+      "spec": {
+        "cat": "creme-de-ochi",
+        "ingredient": "cofein",
+        "price_max": 120
+      },
+      "note": "buget + ingredient. `ingredient` face like pe key_ingredients, deci prinde si „cofeină\" cu diacritice."
+    },
+    {
+      "n": 10,
+      "query": "vreau o crema de ochi pentru cearcane, maxim 120 lei.",
+      "spec": {
+        "cat": "creme-de-ochi",
+        "price_max": 120
+      },
+      "note": "acelasi buget ca #9, fara constrangerea de ingredient — pool mai larg, deci NU acelasi contract de adevar."
+    },
+    {
+      "n": 11,
+      "query": "Buna, aveti o apa micelara blanda pentru ten sensibil?",
+      "spec": {
+        "cat": "demachiante-pentru-ten",
+        "attr_eq": [
+          "texture",
+          "apă"
+        ],
+        "suitable_for": "sensitive"
+      },
+      "note": "„apa micelara\" = textura `apă` in catalog. Categorie neatinsa de loturile 1-3."
+    },
+    {
+      "n": 12,
+      "query": "Vreau un ser cu niacinamida pentru ten gras si pori dilatati.",
+      "spec": {
+        "cat": "seruri-pentru-ten",
+        "ingredient": "niacinamid",
+        "suitable_for": "oily"
+      },
+      "note": "„pori dilatati\" n-are valoare canonica; nu inventez una. Ingredientul + tipul de ten poarta cererea."
+    },
+    {
+      "n": 14,
+      "query": "Salut! Vreau un ser hidratant. Aveti cu acid hialuronic si cu niacinamida?",
+      "spec": {
+        "cat": "seruri-pentru-ten",
+        "concern": "hydration"
+      },
+      "note": "intrebarea despre DOUA ingrediente e o cerere de disponibilitate, nu o intersectie: userul intreaba ce exista, nu cere ambele in acelasi produs."
+    },
+    {
+      "n": 15,
+      "query": "vreau o crema de maini",
+      "spec": {
+        "cat": "creme-de-maini"
+      },
+      "note": "categorie pura. Perechea fara calificator pentru q-con-03 (care are „le am cam uscate\") — acelasi split_group, contract diferit."
+    },
+    {
+      "n": 16,
+      "query": "vreau ceva de maini uscate",
+      "spec": {
+        "cat": "creme-de-maini",
+        "suitable_for": "dry"
+      },
+      "note": "formulare de trafic real, foarte scurta. Acelasi contract ca q-con-03 -> candidat la ACEEASI familie, de confirmat."
+    },
+    {
+      "n": 17,
+      "query": "ceva calmant pentru ten sensibil sub 80 lei",
+      "spec": {
+        "cat_any": [
+          "curatarea-tenului",
+          "seruri-pentru-ten",
+          "lotiuni-tonice",
+          "masti-pentru-ten",
+          "creme-hidratante",
+          "demachiante-pentru-ten",
+          "mist-pentru-ten",
+          "creme-de-ochi",
+          "protectie-solara"
+        ],
+        "suitable_for": "sensitive",
+        "price_max": 80
+      },
+      "note": "cross-categorie ca q-con-05: „ceva calmant\" nu numeste o categorie. Bugetul pe pret efectiv."
+    },
+    {
+      "n": 18,
+      "query": "Vreau o crema hidratanta pentru ten gras, sa nu lase luciu.",
+      "spec": {
+        "cat": "creme-hidratante",
+        "suitable_for": "oily"
+      },
+      "note": "„sa nu lase luciu\" ar fi finish=matte, dar `creme-hidratante` n-are `finish` in catalog — nu inventez constrangerea. Ramane semnal pentru om."
+    },
+    {
+      "n": 19,
+      "query": "Cat costa crema hidratanta cu acid hialuronic?",
+      "spec": {
+        "cat": "creme-hidratante",
+        "ingredient": "acid hialuronic"
+      },
+      "note": "intrebare de PRET, dar retrieval-ul tot trebuie sa gaseasca produsul corect — asta se masoara aici, nu formularea raspunsului."
+    },
+    {
+      "n": 20,
+      "query": "Buna, caut un fond de ten pentru ten deschis, cu acoperire medie.",
+      "spec": {
+        "cat": "fond-de-ten",
+        "attr_eq": [
+          "coverage",
+          "medium"
+        ]
+      },
+      "note": "„ten deschis\" = nuanta, traieste pe VARIANTA. Acelasi contract ca q-con-02/lot3-03 pe partea de acoperire -> candidat la acelasi split_group."
+    }
+  ],
+  "_reclasificat": "lot4-13 („ser cu acid hialuronic pentru ten gras\") a fost mutat la `abstention` in manifest si scos din lot: exista 6 seruri cu acid hialuronic, niciunul etichetat `oily`. Nu se acopera cu variatii."
+}

@@ -1,0 +1,10 @@
+{
+  "_note": "NX-203 — ratiunea fiecarei EXCEPTII din `forbidden_products`. Traieste in DATE, nu intr-un mesaj de commit: altfel nimeni nu mai poate distinge o exceptie justificata de un fals-pozitiv cules din retrieval. Fiecare descrie o proprietate a PRODUSULUI, independenta de ce a returnat sistemul.",
+  "by_product_name": {
+    "Petala Matte Cremă hidratantă": "profil declarat oily/combination in `suitable_for`, incompatibil cu o cerere pentru ten uscat. Regula generala trateaza «lista prezenta fara valoarea ceruta» drept necunoscut, deci constrangerea nu o poate deriva fara a transforma date incomplete in erori false",
+    "Auralis Retinol Ser de noapte": "produs identificat explicit ca RETINOL, nu ser cu vitamina C. `key_ingredients` exista si nu contine ingredientul cerut — absenta valorii, nu incompatibilitate exprimabila",
+    "Mira Atelier Silk Stick cu SPF": "forma STICK, identificabila din produs, incompatibila cu o cerere de crema. `texture` e absent, iar `unknown_is_violation` pe textura ar interzice cele 163 de produse fara atribut",
+    "Rhea Organics Glow Stick cu SPF": "forma STICK, incompatibila cu o cerere de crema; `texture` absent (vezi mai sus)",
+    "Lumiere Skin Silk Stick cu SPF": "forma STICK, incompatibila cu o cerere de crema; `texture` absent (vezi mai sus)"
+  }
+}

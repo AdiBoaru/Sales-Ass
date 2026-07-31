@@ -35,5 +35,23 @@
     "reguli_salut": "saluta o singura data per conversatie",
     "reguli_upsell": "upsell soft, contextual (accesoriu/varianta), doar daca ajuta natural — nu insista",
     "disclaimere": "nu promite stoc, livrare sau reduceri neconfirmate in date; evita fraze ca «analizez catalogul», «compar optiunile», «iti explic exact de ce»"
+  },
+  "_required_attributes_note": "NX-205: campurile OBLIGATORII per categorie (contractul de continut, R10). Semantica: slug BATE root (override, NU cumul). Tenantul demo ruleaza pe vertical='ecommerce' cu override in businesses.settings.domain_pack, deci contractul TREBUIE sa existe si aici, nu doar in beauty_salon.json — altfel pack-ul lui incarca zero cerinte. Categoriile sunt cele ale catalogului demo (beauty).",
+  "required_attributes": {
+    "by_slug": {
+      "fond-de-ten": ["finish", "coverage", "suitable_for", "texture"],
+      "creme-bb-si-cc": ["finish", "coverage", "suitable_for", "texture"],
+      "cushion": ["finish", "coverage"],
+      "anticearcan": ["coverage"],
+      "pensule-si-bureti-de-machiaj": ["key_benefit", "differentiators"],
+      "mascara": ["key_benefit"],
+      "creioane-si-tusuri-de-ochi": ["key_benefit"],
+      "farduri-de-ochi": ["key_benefit"]
+    },
+    "by_root": {
+      "ingrijirea-tenului": ["concerns", "texture", "usage", "key_ingredients"],
+      "ingrijirea-parului": ["hair_type", "usage"],
+      "machiaj": ["finish"]
+    }
   }
 }

@@ -1,0 +1,1644 @@
+{
+  "catalog_version": "demo-2026-07-22",
+  "_method": "candidati propusi; gradul si human_verified se dau de OM",
+  "queries": [
+    {
+      "id": "lot4-01",
+      "query": "arata rujuri",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "cerere de CATEGORIE, fara calificatori. Gold = toata categoria (6). Testeaza ca retrieval-ul nu inventeaza filtre pe care userul nu le-a cerut.",
+      "_catalog_hits": 6,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
+          "name": "Aria Nude Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "name": "NudeLab Velvet Ruj mat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "name": "Rhea Organics Glow Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e088eaee-d64c-45ef-83eb-4b5650c725ed",
+          "name": "Velora Classic Ruj satinat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "name": "Velora Matte Ruj lichid",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "name": "Velora Soft Matte Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aa0060e8-3c16-4af9-b1ce-d5b13ceb1cba",
+          "name": "Aria Nude Paletă farduri de ochi",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e8202666-b0a6-45dd-9fd2-f84bad051866",
+          "name": "Aria Peach Fard de obraz satinat",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-02",
+      "query": "vreau rujuri mate",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "acelasi contract ca #3 minus bugetul — candidat la acelasi split_group daca se confirma.",
+      "_catalog_hits": 4,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "name": "NudeLab Velvet Ruj mat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "name": "Rhea Organics Glow Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "name": "Velora Matte Ruj lichid",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "name": "Velora Soft Matte Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
+          "name": "Aria Nude Ruj",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "b73bb474-25ae-4466-b73f-e330c1a4fb63",
+          "name": "Aurelia Lab Matte Bronzer",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e088eaee-d64c-45ef-83eb-4b5650c725ed",
+          "name": "Velora Classic Ruj satinat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "3d6887f7-b9f1-40bb-8daf-7f9a04c718fb",
+          "name": "Velora HD Pudră matifiantă",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-03",
+      "query": "vreau rujuri mate sub 60 d eleu",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "typo real din trafic („d eleu\"), pastrat. Primul query de buget generat pe pret EFECTIV.",
+      "_catalog_hits": 4,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "name": "NudeLab Velvet Ruj mat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "name": "Rhea Organics Glow Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "name": "Velora Matte Ruj lichid",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "name": "Velora Soft Matte Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
+          "name": "Aria Nude Ruj",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "b73bb474-25ae-4466-b73f-e330c1a4fb63",
+          "name": "Aurelia Lab Matte Bronzer",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c403698-dfd3-47f3-b661-620f1ec0bd12",
+          "name": "NudeLab Soft Focus Pudră translucidă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e088eaee-d64c-45ef-83eb-4b5650c725ed",
+          "name": "Velora Classic Ruj satinat",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-04",
+      "query": "vreau sa vad un ruj sub 100 de lei",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "buget fara alt calificator.",
+      "_catalog_hits": 6,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "7c013538-ca5c-44d3-9d51-8668938cd4c1",
+          "name": "Aria Nude Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "name": "NudeLab Velvet Ruj mat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "name": "Velora Matte Ruj lichid",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "name": "Velora Soft Matte Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "name": "Rhea Organics Glow Ruj",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "e088eaee-d64c-45ef-83eb-4b5650c725ed",
+          "name": "Velora Classic Ruj satinat",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "dfae9321-43a1-4697-b1a1-00fd6a79976d",
+          "name": "NudeLab Clear Gloss de buze",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aac693ac-19e0-452e-b1b9-e93fcc0c6e01",
+          "name": "NudeLab Ink Tuș de ochi lichid",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "101bf1cf-f7d3-4bc1-bf1e-ad4a5a4441eb",
+          "name": "NudeLab Luxe Pudră",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "d3aecb68-4017-4105-b248-edfc964a7ba8",
+          "name": "NudeLab Soft Blush Fard de obraz",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-05",
+      "query": "Caut un ruj lichid mat, ceva intr-o nuanta de rosu.",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "ATENTIE la etichetare: nuanta („rosu\") traieste pe VARIANTA, nu pe produs, deci filtrul nu o poate exprima. Omul decide daca un ruj mat fara nuanta rosie e relevant 2 sau 1.",
+      "_catalog_hits": 4,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "295d46e9-dd23-4d40-be60-a7c21816af2f",
+          "name": "NudeLab Velvet Ruj mat",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "4a868507-e2ab-43e4-a9f4-14daf03ee867",
+          "name": "Velora Matte Ruj lichid",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a83bf554-dca4-476d-9a24-1490efa2df3d",
+          "name": "Velora Soft Matte Ruj",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "8520a154-97f7-40d0-bdd7-0e8056e5134e",
+          "name": "Rhea Organics Glow Ruj",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "dfae9321-43a1-4697-b1a1-00fd6a79976d",
+          "name": "NudeLab Clear Gloss de buze",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "b1f37789-9c6f-4809-8bd2-ceb64d240cb2",
+          "name": "NudeLab Liquid Iluminator lichid",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "d3aecb68-4017-4105-b248-edfc964a7ba8",
+          "name": "NudeLab Soft Blush Fard de obraz",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c403698-dfd3-47f3-b661-620f1ec0bd12",
+          "name": "NudeLab Soft Focus Pudră translucidă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ea9cbee5-c08f-4c69-b79b-de357947587b",
+          "name": "Velvet Root Luxe Iluminator",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-06",
+      "query": "Aveți șampon pentru păr vopsit?",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "gold MIC asteptat (1 produs cu suitable_for=colored). Daca e 1, e o realitate de catalog, nu o eroare de filtru — de confirmat la review, ca la finish=matte in lotul 3.",
+      "_catalog_hits": 1,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "b218e2dc-4664-42eb-9c8f-87749fd75346",
+          "name": "Bloom Color Șampon pentru păr vopsit",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "18a2a1d9-8a77-4f18-9336-6134fe0a4e97",
+          "name": "Petala Soft Șampon uscat pentru păr închis",
+          "methods": [
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "925d704e-7489-4807-9d25-4e8366e88814",
+          "name": "Bloom Volume Șampon",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "bccb0268-7ab1-42e1-a71e-5484a82f47ea",
+          "name": "Iris & Co Soft Balsam de păr",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "84619a68-8902-448f-96f1-774068e5975a",
+          "name": "Nera Rituals Clear Șampon",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e344b7e0-46c7-45ce-b73c-50f88666c4d6",
+          "name": "Pure Arc Silk Șampon",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-07",
+      "query": "Salut, am parul foarte uscat si degradat de vopsea. Ce sampon imi recomanzi?",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "„uscat SI degradat\" — filtrez doar pe `dry`, fiindca `damaged` are 1 produs si intersectia ar da gold degenerat. Omul poate ridica la 3 produsele care acopera ambele.",
+      "_catalog_hits": 9,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "84619a68-8902-448f-96f1-774068e5975a",
+          "name": "Nera Rituals Clear Șampon",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e344b7e0-46c7-45ce-b73c-50f88666c4d6",
+          "name": "Pure Arc Silk Șampon",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
+          "name": "Verdea Hydra Șampon hidratant",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "cf9acc80-b7ec-4f2b-b5eb-98f1350d162a",
+          "name": "Coral Theory Hydra Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "173e4497-3ca7-4397-b1e9-21305ede1b09",
+          "name": "Iris & Co Glow Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "aada8628-5f07-4094-8cc7-265f555eb805",
+          "name": "Iris & Co Pure Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "c9183cb6-ea84-4016-85f1-b60291a048a2",
+          "name": "Nera Rituals Glow Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "c3b72d7d-e373-4184-8d46-c1ddbb50200a",
+          "name": "Nera Rituals Hydra Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "1a0fd385-ba3d-4732-b455-289363a3d327",
+          "name": "Nera Rituals Silk Șampon",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "42c9f094-4a35-42e8-8cc4-fc4fc0e0deb1",
+          "name": "Maison Verde Revive Balsam de păr",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5026b700-b8d3-4aac-80f6-98471cad50b6",
+          "name": "Verdea Repair Balsam de păr",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "78f91986-2768-4810-befc-5e97f77c80d6",
+          "name": "Verdea Repair Șampon",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-08",
+      "query": "vreau un șampon pentru volum",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "„volum\" nu e valoare de catalog; `fine` (par subtire) e cea mai apropiata. Traducerea e o OPINIE — de contestat la review daca nu tine.",
+      "_catalog_hits": 3,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "925d704e-7489-4807-9d25-4e8366e88814",
+          "name": "Bloom Volume Șampon",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c510b80-147b-4727-9d19-139350f003f2",
+          "name": "Coral Theory Hydra Șampon uscat",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "99aaec8e-b32d-45a3-bb2c-35ad55e6fb46",
+          "name": "Elara Beauty Repair Șampon uscat",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "b218e2dc-4664-42eb-9c8f-87749fd75346",
+          "name": "Bloom Color Șampon pentru păr vopsit",
+          "methods": [
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
+          "name": "Bloom Balance Șampon pentru scalp gras",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "name": "Bloom Fresh Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
+          "name": "Elara Beauty Hydra Șampon uscat",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "name": "Verdea Fresh Șampon uscat volumizant",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "d900b466-1c83-4b3a-8170-f6c4c62b73b2",
+          "name": "Verdea Hydra Șampon hidratant",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "78f91986-2768-4810-befc-5e97f77c80d6",
+          "name": "Verdea Repair Șampon",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-09",
+      "query": "Caut o crema de ochi pentru cearcane sub 120 lei. Aveti cu cofeina si cu vitamina?",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "buget + ingredient. `ingredient` face like pe key_ingredients, deci prinde si „cofeină\" cu diacritice.",
+      "_catalog_hits": 2,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "name": "Auralis Contur ochi Cremă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "name": "LumaDerm Bright Cremă de ochi cu cofeină",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "name": "Auralis Retinol Ser de noapte",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "dfeac151-131f-46ca-9acc-ddbd23586fe6",
+          "name": "Nova Botanics Nutri Cremă de ochi",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0cc369e3-4457-48a1-898d-183180bee07b",
+          "name": "Orchid Field Pure Cremă de ochi",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9908b73c-9ede-488d-9c1c-d210704fe3d7",
+          "name": "Petala Hydra Cremă de ochi",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
+          "name": "Petala Youth Cremă de ochi antirid",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0559231f-5763-4474-969d-c8e77cc75d05",
+          "name": "Pure Arc Revive Cremă de ochi",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-10",
+      "query": "vreau o crema de ochi pentru cearcane, maxim 120 lei.",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "acelasi buget ca #9, fara constrangerea de ingredient — pool mai larg, deci NU acelasi contract de adevar.",
+      "_catalog_hits": 7,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "name": "Auralis Contur ochi Cremă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "name": "LumaDerm Bright Cremă de ochi cu cofeină",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "dfeac151-131f-46ca-9acc-ddbd23586fe6",
+          "name": "Nova Botanics Nutri Cremă de ochi",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0cc369e3-4457-48a1-898d-183180bee07b",
+          "name": "Orchid Field Pure Cremă de ochi",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9908b73c-9ede-488d-9c1c-d210704fe3d7",
+          "name": "Petala Hydra Cremă de ochi",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "971a87dd-649d-4924-aab8-f8414c4c9b8c",
+          "name": "Petala Youth Cremă de ochi antirid",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0559231f-5763-4474-969d-c8e77cc75d05",
+          "name": "Pure Arc Revive Cremă de ochi",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e541377b-be99-4ead-92eb-770be778d16f",
+          "name": "Auralis Velvet Creion de ochi",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-11",
+      "query": "Buna, aveti o apa micelara blanda pentru ten sensibil?",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "„apa micelara\" = textura `apă` in catalog. Categorie neatinsa de loturile 1-3.",
+      "_catalog_hits": 3,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+          "name": "Auralis Apa micelară demachiantă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "name": "Maison Verde Fresh Apă micelară",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7c07dbf3-6927-4b64-9c76-0d5d84a8745b",
+          "name": "Orchid Field Glow Apă micelară",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "609e6f3e-c8e9-4bc5-9ed3-86bc1328073f",
+          "name": "LumaDerm Calm Mist pentru ten sensibil",
+          "methods": [
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
+          "name": "Aria Hydra Mist pentru ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "22a10eea-6050-4425-83ee-7dc52c314938",
+          "name": "Mira Atelier Calm Gel de curățare cu centella",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9107fcc2-81b1-429a-ac46-56f2bdbe03c1",
+          "name": "Mira Atelier Pure Loțiune tonică",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "2cedd814-e83c-4799-be4e-e7cd43b54882",
+          "name": "Petala Soft Balsam demachiant",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-12",
+      "query": "Vreau un ser cu niacinamida pentru ten gras si pori dilatati.",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "„pori dilatati\" n-are valoare canonica; nu inventez una. Ingredientul + tipul de ten poarta cererea.",
+      "_catalog_hits": 2,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "name": "Auralis Clarity Ser cu niacinamidă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "name": "Mira Atelier Fresh Ser pentru ten",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "66add6ca-b37b-4825-acab-9dbaf4cc6e01",
+          "name": "Auralis Retinol Ser de noapte",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "name": "LumaDerm Even Ser cu acid azelaic",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "name": "Mira Atelier Glow Ser pentru ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
+          "name": "Mira Atelier Pure Loțiune tonică cu niacinamidă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "name": "Petala Bright Ser cu vitamina C",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-14",
+      "query": "Salut! Vreau un ser hidratant. Aveti cu acid hialuronic si cu niacinamida?",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "intrebarea despre DOUA ingrediente e o cerere de disponibilitate, nu o intersectie: userul intreaba ce exista, nu cere ambele in acelasi produs.",
+      "_catalog_hits": 10,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "name": "Petala Hydra Ser cu acid hialuronic",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "name": "Auralis Hydra Ser hidratant",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "name": "Mira Atelier Clear Ser pentru ten",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "name": "Calm Theory Pure Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "name": "Coral Theory Pure Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "name": "LumaDerm Vitamin C Ser luminozitate",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "name": "Mira Atelier Balance Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "name": "Mira Atelier Fresh Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "name": "Mira Atelier Glow Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "name": "Pure Arc Glow Ser pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "ce09d63b-6203-4fa3-a209-516c549bdcb1",
+          "name": "Mira Atelier Clear Loțiune tonică cu acid hialuronic",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "1b39d726-54a3-40e2-86f6-252dff80658d",
+          "name": "Mira Atelier Hydra Loțiune tonică",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "aea9a14b-07b4-413a-8f4c-d1b5cca2f6e9",
+          "name": "Mira Atelier Pure Loțiune tonică cu niacinamidă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "685f9ed9-37e2-4f2e-94e5-eacdf3ccc86c",
+          "name": "Velvet Root Clear Loțiune tonică",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-15",
+      "query": "vreau o crema de maini",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "categorie pura. Perechea fara calificator pentru q-con-03 (care are „le am cam uscate\") — acelasi split_group, contract diferit.",
+      "_catalog_hits": 7,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "1efd6c2c-9b34-4b3e-a9ae-4842cd3d6c03",
+          "name": "Bloom Clean Cremă de mâini",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "27ad23a7-a32c-479b-84a8-09d0f707987e",
+          "name": "Petala Nourish Cremă de mâini",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ccb61b64-b79b-4291-8216-3168e1ad543b",
+          "name": "Rhea Organics Ritual Cremă de mâini",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "name": "Solora Nourish Cremă de mâini",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "84e037ee-fedd-4ce2-8165-4112be1999a7",
+          "name": "Solora Repair Cremă de mâini intensivă",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
+          "name": "Solora Sun Cremă de mâini SPF 30",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c",
+          "name": "Velvet Root Pure Cremă de mâini",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "c0318785-7d5d-4be1-a2a7-f50e243e160b",
+          "name": "Verdea Repair Cremă leave-in reparatoare",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-16",
+      "query": "vreau ceva de maini uscate",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "formulare de trafic real, foarte scurta. Acelasi contract ca q-con-03 -> candidat la ACEEASI familie, de confirmat.",
+      "_catalog_hits": 6,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "1efd6c2c-9b34-4b3e-a9ae-4842cd3d6c03",
+          "name": "Bloom Clean Cremă de mâini",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "27ad23a7-a32c-479b-84a8-09d0f707987e",
+          "name": "Petala Nourish Cremă de mâini",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ccb61b64-b79b-4291-8216-3168e1ad543b",
+          "name": "Rhea Organics Ritual Cremă de mâini",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "name": "Solora Nourish Cremă de mâini",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "84e037ee-fedd-4ce2-8165-4112be1999a7",
+          "name": "Solora Repair Cremă de mâini intensivă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c",
+          "name": "Velvet Root Pure Cremă de mâini",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ec0b36a5-11b2-40c6-affc-0ef7ad65bc83",
+          "name": "NudeLab Soft Cremă leave-in",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
+          "name": "Solora Sun Cremă de mâini SPF 30",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-17",
+      "query": "ceva calmant pentru ten sensibil sub 80 lei",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "cross-categorie ca q-con-05: „ceva calmant\" nu numeste o categorie. Bugetul pe pret efectiv.",
+      "_catalog_hits": 24,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "name": "LumaDerm Calm Cremă pentru ten sensibil",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "609e6f3e-c8e9-4bc5-9ed3-86bc1328073f",
+          "name": "LumaDerm Calm Mist pentru ten sensibil",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "bbff7f5a-f1b6-4175-a39a-b5bb8afd59e5",
+          "name": "Aria Hydra Mist pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "e2870c8b-fc11-4707-a127-868cf84d4a71",
+          "name": "Aria Pure Mist pentru ten",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "4f7ff352-c981-4400-b9c0-816b6bbff5f4",
+          "name": "Auralis Apa micelară demachiantă",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "d1b13dda-8bdb-443a-a4dc-f6f642ad9da8",
+          "name": "Auralis Contur ochi Cremă",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+          "name": "Auralis Gentle Gel de curățare",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "839cab86-b6b8-4a26-ac0d-a65ce65fa2d1",
+          "name": "Calm Theory Pure Loțiune tonică",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "7a1e820d-aa15-4908-93ab-8b85eac7d85e",
+          "name": "Coral Theory Soft Mască de față",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "67a2d71f-c9f2-46c2-b031-ff8cadcac5b1",
+          "name": "Elara Beauty Calm Mască de față",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "a816703b-a0cf-4298-b0cd-086b1ab7e54b",
+          "name": "LumaDerm Bright Cremă de ochi cu cofeină",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "name": "LumaDerm Even Ser cu acid azelaic",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "name": "LumaDerm Shield Fluid SPF 50+",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "7ddf1d5f-6eae-49d0-953d-de3db3d4adab",
+          "name": "Maison Verde Fresh Apă micelară",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "350c46db-5a89-4e31-8aa2-97edf6377801",
+          "name": "Mira Atelier Calm Gel de curățare",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "22a10eea-6050-4425-83ee-7dc52c314938",
+          "name": "Mira Atelier Calm Gel de curățare cu centella",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "b78abc8f-1808-41e6-a6ce-31bfa4e2c381",
+          "name": "Orchid Field Clear Mască de față",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "71578045-3692-4b40-89af-b53a18aaa56f",
+          "name": "Orchid Field Hydra Gel de curățare",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "2f0beb7e-5952-4192-b32e-fac5d2d6d9f1",
+          "name": "Orchid Field Soft Mască de față",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "2cedd814-e83c-4799-be4e-e7cd43b54882",
+          "name": "Petala Soft Balsam demachiant",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "faed8c5c-b879-4403-97ef-cf12b23afb61",
+          "name": "Rhea Organics Hydra Gel de curățare",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "name": "Solora Shield Cremă cu protecție solară SPF 50",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "e6df7d75-9c72-48cb-adc6-03048e5b82b2",
+          "name": "Velvet Root Balance Loțiune tonică",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "51f28654-3492-4931-8d02-6f9d70d0dc0a",
+          "name": "Velvet Root Soft Gel de curățare",
+          "methods": [
+            "catalog"
+          ]
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "name": "Calm Theory Pure Ser pentru ten",
+          "methods": [
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "59e66303-a30c-4073-bd2d-41a9e162ebea",
+          "name": "Calm Theory Fresh Mască de față",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "01755354-af34-428d-a7dd-f16f004b6219",
+          "name": "Velvet Root Fresh Loțiune tonică",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-18",
+      "query": "Vreau o crema hidratanta pentru ten gras, sa nu lase luciu.",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "„sa nu lase luciu\" ar fi finish=matte, dar `creme-hidratante` n-are `finish` in catalog — nu inventez constrangerea. Ramane semnal pentru om.",
+      "_catalog_hits": 2,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "name": "LumaDerm Aqua Gel-cremă hidratantă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "40c43ab4-2fb7-4d29-abbb-03a4968421f6",
+          "name": "Auralis Hydra CC Cremă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "name": "Auralis Rich Cremă de noapte",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "f28bb84e-ec28-42ed-93d5-e972c2924407",
+          "name": "LumaDerm Hydra Mască pentru ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "accf0aa0-4ee5-498a-be96-6809073416b7",
+          "name": "LumaDerm Purifying Gel de curățare",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5ae3718a-e8db-4242-8d96-f20712e34311",
+          "name": "LumaDerm Smooth Exfoliant cu BHA",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "name": "Solora Nourish Cremă de mâini",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-19",
+      "query": "Cat costa crema hidratanta cu acid hialuronic?",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "intrebare de PRET, dar retrieval-ul tot trebuie sa gaseasca produsul corect — asta se masoara aici, nu formularea raspunsului.",
+      "_catalog_hits": 3,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "name": "Auralis Daily Cremă hidratantă",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "name": "Petala Matte Cremă hidratantă",
+          "methods": [
+            "catalog",
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "name": "LumaDerm Aqua Gel-cremă hidratantă",
+          "methods": [
+            "catalog",
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "name": "Petala Hydra Ser cu acid hialuronic",
+          "methods": [
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "name": "Petala Rich Cremă hidratantă",
+          "methods": [
+            "lexical",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "c1eec351-f890-4dbd-b24c-0c912eb89a20",
+          "name": "Aria Light Cremă BB hidratantă",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "40c43ab4-2fb7-4d29-abbb-03a4968421f6",
+          "name": "Auralis Hydra CC Cremă",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "name": "Coral Theory Balance Cremă hidratantă",
+          "methods": [
+            "lexical"
+          ]
+        },
+        {
+          "product_id": "62ad53e5-bf13-4852-a9b7-697e0d443bcd",
+          "name": "Coral Theory Fresh Mască de față",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "7a1e820d-aa15-4908-93ab-8b85eac7d85e",
+          "name": "Coral Theory Soft Mască de față",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "ae1b5fe7-5894-49dd-8bba-8be83bc485c6",
+          "name": "Mira Atelier Daily Mască de față",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "24202ed0-1667-45c0-bb72-5aac81ab902d",
+          "name": "Orchid Field Soft Mască de față cu acid hialuronic",
+          "methods": [
+            "lexical"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lot4-20",
+      "query": "Buna, caut un fond de ten pentru ten deschis, cu acoperire medie.",
+      "provenance": "pending",
+      "category": "pending",
+      "_dim": "„ten deschis\" = nuanta, traieste pe VARIANTA. Acelasi contract ca q-con-02/lot3-03 pe partea de acoperire -> candidat la acelasi split_group.",
+      "_catalog_hits": 2,
+      "_truncated": false,
+      "candidates": [
+        {
+          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
+          "name": "Aria Silk Fond de ten",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+          "name": "Velora Skin Match Fond de ten",
+          "methods": [
+            "catalog",
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "9c3150bb-c723-4a19-9dbf-01894253d6ef",
+          "name": "NudeLab Fresh Cremă CC",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "name": "NudeLab Matte 24H Fond de ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "858d69c2-a20a-497a-bebc-8cb4d434e66a",
+          "name": "NudeLab Natural Cover Anticearcăn",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+          "name": "Petala Nude Fond de ten",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
+          "name": "Velora Second Skin Fond de ten serum",
+          "methods": [
+            "semantic"
+          ]
+        },
+        {
+          "product_id": "5bf285a5-8c73-4519-a150-03fa7f2d64dd",
+          "name": "Verdea Prime Cremă BB",
+          "methods": [
+            "semantic"
+          ]
+        }
+      ]
+    }
+  ]
+}

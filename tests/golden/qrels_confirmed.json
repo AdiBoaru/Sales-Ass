@@ -1,0 +1,942 @@
+{
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "queries": [
+    {
+      "id": "q-cat-01",
+      "query": "ce cremă hidratantă e bună pentru ten uscat?",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 2
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [
+        "2500935f-44d7-4d5b-8445-67ca1b020408"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "family_id": "fam-504a1a0e",
+      "split_group_id": "sg-504a1a0e",
+      "forbidden_rationale": {
+        "2500935f-44d7-4d5b-8445-67ca1b020408": "profil declarat oily/combination in `suitable_for`, incompatibil cu o cerere pentru ten uscat. Regula generala trateaza «lista prezenta fara valoarea ceruta» drept necunoscut, deci constrangerea nu o poate deriva fara a transforma date incomplete in erori false"
+      }
+    },
+    {
+      "id": "q-cat-02",
+      "query": "caut o cremă hidratantă pentru ten uscat",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "8439023b-85d9-4f97-8deb-54e6613cc5a2",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 2
+        },
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [
+        "2500935f-44d7-4d5b-8445-67ca1b020408"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "dry"
+        }
+      ],
+      "family_id": "fam-5d8a4d2c",
+      "split_group_id": "sg-5d8a4d2c",
+      "forbidden_rationale": {
+        "2500935f-44d7-4d5b-8445-67ca1b020408": "profil declarat oily/combination in `suitable_for`, incompatibil cu o cerere pentru ten uscat. Regula generala trateaza «lista prezenta fara valoarea ceruta» drept necunoscut, deci constrangerea nu o poate deriva fara a transforma date incomplete in erori false"
+      }
+    },
+    {
+      "id": "q-self-01",
+      "query": "am tenul gras, ce ser îmi recomanzi?",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        }
+      ],
+      "family_id": "fam-a12ebd01",
+      "split_group_id": "sg-a12ebd01",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-con-01",
+      "query": "ai protecție solară spf 50?",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "protectie-solara"
+        },
+        {
+          "facet": "texture",
+          "op": "in",
+          "value": [
+            "cremă",
+            "fluid"
+          ],
+          "note": "forma ceruta: crema/fluid. Stick-urile ies structural"
+        },
+        {
+          "facet": "spf",
+          "op": "gte",
+          "value": 50,
+          "unknown_is_violation": true,
+          "note": "prag numeric de SIGURANTA: SPF necunoscut NU satisface o cerinta de 50"
+        }
+      ],
+      "family_id": "fam-0c3952d1",
+      "split_group_id": "sg-0c3952d1",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-con-02",
+      "query": "caut un fond de ten cu acoperire medie",
+      "locale": "ro",
+      "provenance": "paraphrase",
+      "category": "makeup",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
+          "relevance": 3
+        },
+        {
+          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+          "relevance": 3
+        },
+        {
+          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "coverage",
+          "op": "in",
+          "value": [
+            "medium",
+            "buildable"
+          ]
+        }
+      ],
+      "derived_from": "caut un fond de ten cu acoperire medie, am subton cald.",
+      "variation_kind": "constraint_removal",
+      "split_group_id": "sg-4bbf64d0",
+      "family_id": "fam-89b55edd",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-self-03",
+      "query": "sunt cu ten sensibil, ce curățare îmi trebuie?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "04bb4c58-c703-4fd5-9f79-aa1e8669c645",
+          "relevance": 3
+        },
+        {
+          "product_id": "350c46db-5a89-4e31-8aa2-97edf6377801",
+          "relevance": 3
+        },
+        {
+          "product_id": "22a10eea-6050-4425-83ee-7dc52c314938",
+          "relevance": 3
+        },
+        {
+          "product_id": "2e1864a7-affa-45aa-b108-5b20f7eac02a",
+          "relevance": 3
+        },
+        {
+          "product_id": "51f28654-3492-4931-8d02-6f9d70d0dc0a",
+          "relevance": 3
+        },
+        {
+          "product_id": "f82a69f2-9e1d-40b6-9bed-b31a9a0c0460",
+          "relevance": 3
+        },
+        {
+          "product_id": "66b2303a-0c2c-4b9b-99ed-0826fe65b5fc",
+          "relevance": 3
+        },
+        {
+          "product_id": "19a602e1-d717-4f38-acd9-6acf464a60e2",
+          "relevance": 3
+        },
+        {
+          "product_id": "71578045-3692-4b40-89af-b53a18aaa56f",
+          "relevance": 3
+        },
+        {
+          "product_id": "faed8c5c-b879-4403-97ef-cf12b23afb61",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "curatarea-tenului"
+        },
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "sensitive"
+        }
+      ],
+      "derived_from": null,
+      "family_id": "fam-890472b9",
+      "split_group_id": "sg-890472b9",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-con-03",
+      "query": "vreau o cremă de mâini, le am cam uscate",
+      "locale": "ro",
+      "provenance": "paraphrase",
+      "category": "bodycare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "1efd6c2c-9b34-4b3e-a9ae-4842cd3d6c03",
+          "relevance": 3
+        },
+        {
+          "product_id": "27ad23a7-a32c-479b-84a8-09d0f707987e",
+          "relevance": 3
+        },
+        {
+          "product_id": "ccb61b64-b79b-4291-8216-3168e1ad543b",
+          "relevance": 3
+        },
+        {
+          "product_id": "6df0682b-1938-4d4e-ae19-7ab7bd28c70b",
+          "relevance": 3
+        },
+        {
+          "product_id": "84e037ee-fedd-4ce2-8165-4112be1999a7",
+          "relevance": 3
+        },
+        {
+          "product_id": "ea23b0fe-66e7-4abe-99fd-248bb2ae5f7c",
+          "relevance": 3
+        },
+        {
+          "product_id": "f0be66f2-cbd3-4859-9ea7-335d0ddc2138",
+          "relevance": 1
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-de-maini"
+        }
+      ],
+      "derived_from": "vreau sa mi cumpar o crema de maini ca mi sunt cam uscate",
+      "variation_kind": "format_variant",
+      "split_group_id": "sg-c8af1b71",
+      "family_id": "fam-c8af1b71",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-con-04",
+      "query": "caut o cremă hidratantă fără parfum",
+      "locale": "ro",
+      "provenance": "paraphrase",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "fragrance_free",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "derived_from": "ai și o variantă fără parfum?",
+      "variation_kind": "context_removal",
+      "split_group_id": "sg-7789efb6",
+      "family_id": "fam-28aeed1e",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-con-05",
+      "query": "ceva pentru prevenirea coșurilor",
+      "locale": "ro",
+      "provenance": "paraphrase",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "2e5af3be-4684-429c-8a2f-f7ca8c7101a3",
+          "relevance": 3
+        },
+        {
+          "product_id": "f0fd85ac-0661-4081-bcde-50e81c99d2fc",
+          "relevance": 3
+        },
+        {
+          "product_id": "079e8ab2-2d78-4e73-a0e0-d815b358217f",
+          "relevance": 3
+        },
+        {
+          "product_id": "7cc7280a-516a-4476-9d3b-4e6bb338d12f",
+          "relevance": 3
+        },
+        {
+          "product_id": "7f4aaa17-a9d7-4c82-8ed4-3208c32011f9",
+          "relevance": 3
+        },
+        {
+          "product_id": "67b81989-0da0-44d0-bb0a-4e70cd039f23",
+          "relevance": 3
+        },
+        {
+          "product_id": "a341f639-be5b-439b-8c55-4d6da7919792",
+          "relevance": 3
+        },
+        {
+          "product_id": "3fc9eae9-b3f3-4005-998b-c6f6e899b6b8",
+          "relevance": 3
+        },
+        {
+          "product_id": "9d9357a7-b807-4868-8b02-bca19deb669b",
+          "relevance": 2
+        },
+        {
+          "product_id": "1fb3c15b-e3c4-44e4-ae04-20368b64cdfc",
+          "relevance": 2
+        },
+        {
+          "product_id": "5ae3718a-e8db-4242-8d96-f20712e34311",
+          "relevance": 2
+        },
+        {
+          "product_id": "ff036005-f7c8-4c71-8260-1191247d14a4",
+          "relevance": 2
+        },
+        {
+          "product_id": "accf0aa0-4ee5-498a-be96-6809073416b7",
+          "relevance": 2
+        },
+        {
+          "product_id": "de178da4-6667-4dea-9032-fdf007c2858c",
+          "relevance": 2
+        },
+        {
+          "product_id": "8fc02c3b-0df7-4a46-8c43-65ec956af643",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "concerns",
+          "op": "contains",
+          "value": "acne"
+        },
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "curatarea-tenului",
+            "seruri-pentru-ten",
+            "lotiuni-tonice",
+            "masti-pentru-ten",
+            "exfoliante-pentru-ten",
+            "tratament-local",
+            "creme-hidratante",
+            "demachiante-pentru-ten",
+            "mist-pentru-ten",
+            "creme-de-ochi",
+            "protectie-solara"
+          ],
+          "note": "scope de INGRIJIRE FACIALA: scrubul de buze si sprayul termoprotector ies structural, fara dependenta de ce a returnat retrieval-ul"
+        }
+      ],
+      "derived_from": "ai ceva pentru prevenirea coșurilor",
+      "variation_kind": "format_variant",
+      "split_group_id": "sg-51331994",
+      "family_id": "fam-51331994",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "q-con-06",
+      "query": "ser cu vitamina C sub 150 lei",
+      "locale": "ro",
+      "provenance": "paraphrase",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "fe2d6b98-a23e-4cf1-9d0d-a6ea23969a33",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 2
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 2
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "key_ingredients",
+          "op": "contains",
+          "value": "vitamina c"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 150
+        }
+      ],
+      "derived_from": "salut! caut un ser cu vitamina c, ceva sub 150 de lei. aveți?",
+      "variation_kind": "format_variant",
+      "split_group_id": "sg-f77658cf",
+      "family_id": "fam-f77658cf",
+      "forbidden_rationale": {
+        "66add6ca-b37b-4825-acab-9dbaf4cc6e01": "produs identificat explicit ca RETINOL, nu ser cu vitamina C. `key_ingredients` exista si nu contine ingredientul cerut — absenta valorii, nu incompatibilitate exprimabila"
+      }
+    },
+    {
+      "id": "lot3-03",
+      "query": "Imi recomanzi un fond de ten cu acoperire medie?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "makeup",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
+          "relevance": 3
+        },
+        {
+          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+          "relevance": 3
+        },
+        {
+          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "coverage",
+          "op": "in",
+          "value": [
+            "medium",
+            "buildable"
+          ]
+        }
+      ],
+      "family_id": "fam-520d9f3d",
+      "split_group_id": "sg-4bbf64d0",
+      "derived_from": "caut un fond de ten cu acoperire medie",
+      "variation_kind": "constraint_refinement",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "lot3-05",
+      "query": "Cat costa un fond de ten matifiant?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "makeup",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "finish",
+          "op": "eq",
+          "value": "matte"
+        }
+      ],
+      "family_id": "fam-43516b19",
+      "split_group_id": "sg-43516b19",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "lot3-07",
+      "query": "Bună, caut o cremă cu protecție solară SPF 50 pentru față.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "protectie-solara"
+        },
+        {
+          "facet": "texture",
+          "op": "in",
+          "value": [
+            "cremă",
+            "fluid"
+          ]
+        },
+        {
+          "facet": "spf",
+          "op": "gte",
+          "value": 50,
+          "unknown_is_violation": true
+        }
+      ],
+      "family_id": "fam-d09c2a49",
+      "split_group_id": "sg-0c3952d1",
+      "derived_from": "ai protecție solară spf 50?",
+      "variation_kind": "constraint_refinement",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "lot3-10",
+      "query": "caut un ser pentru hidratare",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "f21a76b5-1ace-44b2-bc9a-62e92574ef7b",
+          "relevance": 3
+        },
+        {
+          "product_id": "b26238af-e1c4-472d-9ec3-07d3389275b1",
+          "relevance": 3
+        },
+        {
+          "product_id": "ec1c5bd3-68f5-44cb-9e31-4bba80fe6d58",
+          "relevance": 3
+        },
+        {
+          "product_id": "deafbf94-d05b-42eb-8d7f-2227eaed4b70",
+          "relevance": 3
+        },
+        {
+          "product_id": "be701ebb-d12d-4b58-946b-8b964c40a70d",
+          "relevance": 3
+        },
+        {
+          "product_id": "c4eb6b40-f89f-4abe-86c3-dd44b0ab0db3",
+          "relevance": 3
+        },
+        {
+          "product_id": "da2f1dde-7721-4b27-8208-85a8f423e59d",
+          "relevance": 3
+        },
+        {
+          "product_id": "b3c825cb-510b-48d5-8f25-25c3bd8c3301",
+          "relevance": 3
+        },
+        {
+          "product_id": "075b8480-a9b4-4e9f-94f9-70989f71f4a8",
+          "relevance": 3
+        },
+        {
+          "product_id": "c1587799-6ef3-419e-ad23-7b0f563d6eb1",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "seruri-pentru-ten"
+        },
+        {
+          "facet": "concerns",
+          "op": "contains",
+          "value": "hydration"
+        }
+      ],
+      "family_id": "fam-9a712354",
+      "split_group_id": "sg-9a712354",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "lot3-13",
+      "query": "Imi recomanzi un fond de ten pana in 100 lei?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "makeup",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "371bad3c-3f6e-47ba-8ec0-e22e50c700a3",
+          "relevance": 3
+        },
+        {
+          "product_id": "835d38ab-7a5a-448a-aeb8-03d1e2ce1857",
+          "relevance": 3
+        },
+        {
+          "product_id": "0dea9466-e2e6-4452-b392-9a225b31aeee",
+          "relevance": 3
+        },
+        {
+          "product_id": "0412ae26-080c-4116-be71-a30677f01a43",
+          "relevance": 3
+        },
+        {
+          "product_id": "896945ed-787a-40a3-b298-ab05452d26d5",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "fond-de-ten"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 100
+        }
+      ],
+      "family_id": "fam-228ba975",
+      "split_group_id": "sg-228ba975",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "lot3-14",
+      "query": "arata-mi creme de fata sub 80 lei.",
+      "locale": "ro",
+      "provenance": "real_sanitized",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "b4e3fd78-e29a-4f95-90bb-ab5ad4bcdf10",
+          "relevance": 3
+        },
+        {
+          "product_id": "c41d269f-a9c6-4715-8fe5-83410cc54dee",
+          "relevance": 3
+        },
+        {
+          "product_id": "929f60fe-b840-4cf7-9c00-c195cda290b3",
+          "relevance": 3
+        },
+        {
+          "product_id": "aa5bde75-91e7-4af1-a754-fb243cef36af",
+          "relevance": 3
+        },
+        {
+          "product_id": "2500935f-44d7-4d5b-8445-67ca1b020408",
+          "relevance": 3
+        },
+        {
+          "product_id": "e95ab838-a685-4d8d-9db8-81c1c569e4eb",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "creme-hidratante"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 80
+        }
+      ],
+      "family_id": "fam-e1d4c313",
+      "split_group_id": "sg-e1d4c313",
+      "forbidden_rationale": {}
+    },
+    {
+      "id": "lot3-17",
+      "query": "Vreau o cremă cu SPF pentru zi, ceva sub 100 lei.",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "skincare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "73ef01ed-eef2-4536-a720-dcdcb5dd3623",
+          "relevance": 3
+        },
+        {
+          "product_id": "a165fd7e-13f6-46ee-b12e-3e60bc932612",
+          "relevance": 3
+        },
+        {
+          "product_id": "8c5171d3-e28e-4c7a-8d0a-813bfd0ab055",
+          "relevance": 3
+        }
+      ],
+      "forbidden_products": [
+        "94023de6-10e7-4aeb-a2a4-6eeaa7344eef",
+        "eb408d2a-278b-47f0-980f-e1289a32ead4",
+        "020baf31-3e6a-4e16-86fd-4820e78b6090"
+      ],
+      "hard_constraints": [
+        {
+          "facet": "category",
+          "op": "eq",
+          "value": "protectie-solara"
+        },
+        {
+          "facet": "price",
+          "op": "lte",
+          "value": 100
+        },
+        {
+          "facet": "texture",
+          "op": "in",
+          "value": [
+            "cremă",
+            "fluid"
+          ],
+          "note": "cererea specifica o CREMA; fara politica speciala pe SPF — nu are prag minim"
+        }
+      ],
+      "family_id": "fam-b28518e6",
+      "split_group_id": "sg-b28518e6",
+      "forbidden_rationale": {
+        "94023de6-10e7-4aeb-a2a4-6eeaa7344eef": "forma STICK, identificabila din produs, incompatibila cu o cerere de crema. `texture` e absent, iar `unknown_is_violation` pe textura ar interzice cele 163 de produse fara atribut",
+        "eb408d2a-278b-47f0-980f-e1289a32ead4": "forma STICK, incompatibila cu o cerere de crema; `texture` absent (vezi mai sus)",
+        "020baf31-3e6a-4e16-86fd-4820e78b6090": "forma STICK, incompatibila cu o cerere de crema; `texture` absent (vezi mai sus)"
+      }
+    },
+    {
+      "id": "lot3-19",
+      "query": "Bună, ce șampon recomandați pentru păr gras?",
+      "locale": "ro",
+      "provenance": "synthetic",
+      "category": "haircare",
+      "human_verified": true,
+      "catalog_version": "demo-2026-07-22",
+      "judgments": [
+        {
+          "product_id": "0b6f0491-fce0-4086-80ce-621f3ebf5f0d",
+          "relevance": 3
+        },
+        {
+          "product_id": "5c22d991-3b30-43af-bc86-7488a37d5c1f",
+          "relevance": 2
+        },
+        {
+          "product_id": "c7cda88b-f508-45a5-947b-7f911805d31b",
+          "relevance": 2
+        },
+        {
+          "product_id": "f30c56dc-5dda-46af-a9a6-2d376ac8c765",
+          "relevance": 2
+        }
+      ],
+      "forbidden_products": [],
+      "hard_constraints": [
+        {
+          "facet": "suitable_for",
+          "op": "contains",
+          "value": "oily"
+        },
+        {
+          "facet": "category",
+          "op": "in",
+          "value": [
+            "sampoane",
+            "sampon-uscat"
+          ],
+          "note": "balsamul devine forbidden STRUCTURAL, nu prin observatie"
+        }
+      ],
+      "family_id": "fam-93408c3f",
+      "split_group_id": "sg-93408c3f",
+      "forbidden_rationale": {}
+    }
+  ]
+}

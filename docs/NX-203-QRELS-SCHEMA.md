@@ -14,10 +14,35 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
 | `src/evals/retrieval/schema.py` | `QrelsQuery`/`QrelsSet` (Pydantic): relevanță GRADUALĂ (0-3), `hard_constraints`, `forbidden_products`, `provenance` (real_sanitized/synthetic/paraphrase), `catalog_version`, validare de integritate (relevant∩interzis=∅, fără duplicate). |
 | `src/evals/retrieval/metrics.py` | Recall@k, nDCG@k (grade reale), Top-k hit, MRR, forbidden-violations. Pure-Python, determinist, testat cu valori de mână. |
 | `src/evals/retrieval/splits.py` | Felii SINGLE-USE per gate: tuning + H1(NX-207)/H2(NX-209)/H3(NX-210). Atribuire deterministă (hash pe id, fără random) + stratificată pe categorie. `holdout_slice_for_gate` impune că fiecare gate folosește felie distinctă. |
-| `src/evals/retrieval/harness.py` | `run_benchmark(qset, retrieve_fn, config)` → `BenchmarkReport` (metrici agregate + config-ul complet al rulării: embeddings, document_version, reranker, ponderi, split). `retrieve_fn` injectat → aceeași măsurare compară orice configurație. |
+| `src/evals/retrieval/constraints.py` | Evaluarea `hard_constraints` contra unui produs, in TREI stari (`satisfies`/`violates`/`unknown`). Sursa UNICA: o importa si scriptul de derivare a exceptiilor, si metrica. Absenta unui atribut NU e incompatibilitate; exceptia se declara per constrangere (`unknown_is_violation`, praguri de siguranta). |
+| `src/evals/retrieval/catalog.py` | `load_catalog(conn, business_id)` → `CatalogSnapshot`: filtru comun `status='active'` + `content_status='published'`, prețul EFECTIV proiectat cu chiar `_EFFECTIVE_PRICE` din calea de producție (promoție în fereastră + minimul variantelor), decodare a `jsonb`-ului întors ca string de asyncpg. |
+| `src/evals/retrieval/harness.py` | `run_benchmark(qset, retrieve_fn, config, catalog=None)` → `BenchmarkReport` (metrici agregate + config-ul complet al rularii: embeddings, document_version, reranker, ponderi, split). `retrieve_fn` injectat → aceeasi masurare compara orice configuratie. |
 | `tests/golden/retrieval_qrels_example.json` | EXEMPLU minuscul (3 query-uri fictive) ca harness-ul să ruleze — NU e datasetul. |
 | `tests/test_retrieval_harness.py` | 13 teste: corectitudinea metricilor, integritatea qrels, spliturile single-use, harness pe exemplu. |
 | `requirements-dev.txt` | `ir-measures` pinned (cross-check la rularea completă; harness-ul nu depinde de el la runtime). |
+
+## Contract de corpus (schimbat 2026-07-31)
+
+**Ținta headline e în FAMILII DISTINCTE human-verified, nu în query-uri.** `TARGET_FAMILIES = 100`
+(`src/evals/retrieval/validation.py`), verificat prin `validate_integrity(min_families=...)`.
+
+De ce s-a schimbat: metrica agregă media *în* familie, apoi macro peste familii — deci rezoluția
+benchmarkului crește cu numărul de **contracte de adevăr distincte**, nu cu numărul de formulări.
+Ținta veche („≥200 query-uri") putea fi atinsă adăugând diacritice și typo-uri, fără ca benchmarkul
+să poată distinge nimic în plus. Un corpus de 200 de query-uri care sunt parafraze ale acelorași 60
+de intenții măsoară exact cât 60.
+
+`n_queries` rămâne raportat în `BenchmarkReport`, ca indicator de **robustețe la formă** — util,
+dar nu poarta de calitate. Dacă „200" se păstrează, e indicator secundar de variație.
+
+**Deficitul se acoperă cu intenții NOI, nu cu parafraze.** O familie se numără doar dacă e
+*integral* human-verified: o familie cu o variantă verificată și trei neverificate ar contribui la
+scor cu adevăr necontrolat.
+
+**Reconcilierea manifestului e obligatorie după fiecare lot** —
+`scripts/nx203_reconcile_manifest.py --apply`, impusă de `tests/test_qrels_manifest_reconciled.py`.
+A fost sărită o dată: 8 query-uri scrise la lotul 3 au rămas `eligible` în manifest cu `family_id`
+divergent, deci aceeași întrebare avea două identități și ar fi cântărit dublu.
 
 ## Decizii de design (de ce așa)
 
@@ -30,6 +55,43 @@ harness-ul și spliturile, fără generarea masivă a datasetului." Exact asta e
   se refolosește la altul (anti-contaminare, D13).
 - **Truth-first.** `hard_constraints`/`forbidden_products` din qrels sunt același adevăr de business
   ca în NX-202 — se alimentează din etichetele Adi, nu se re-inventează.
+- **Catalogul e input pentru orice afirmație despre constrângeri.** `hard_constraints` se evaluează
+  contra produselor, nu contra qrels-ului. Fără `catalog=`, `forbidden_violation_rate` e `None` și
+  raportul iese marcat `constraint_validation_unavailable` — **niciodată 0**, fiindcă un zero ar fi
+  indistinct de o rulare curată. Metricile de relevanță (recall/nDCG/MRR) rămân valide.
+- **Prețul din snapshot = prețul pe care îl vede clientul.** `load_catalog` proiectează
+  `_EFFECTIVE_PRICE` (promoție în fereastră + minimul variantelor), importat din calea de
+  producție, nu rescris. Pe `p.price`, un produs de 100 lei vândut cu 60 apărea ca încălcând un
+  prag de 90 — un fals-pozitiv raportat ca `verified`, deci mai rău decât o stare neverificată: un
+  răspuns greșit dat cu încredere. Aceeași corecție în `nx203_derive_forbidden.py` (folosește acum
+  încărcătorul) și în filtrul de buget din `nx203_propose_qrels_candidates.py` (unde 3-7 produse
+  per prag lipseau din candidați — o gaură de recall în GOLD, pe care benchmarkul n-o poate
+  detecta). `list_price` rămâne în snapshot ca diagnostic, exclus din amprentă.
+- **Regula operațională: un singur `CatalogSnapshot`, capturat o dată, pasat și la baseline, și la
+  candidat.** Nu „în aceeași zi" — ăla e sfat, nu garanție: o promoție care expiră la miezul nopții
+  sau un re-seed în timpul rulării produc tot două cataloage. Două gărzi, fiindcă sunt două
+  scurgeri diferite: retrieval-ul citește DB-ul *live*, deci produsele apărute după captură ies în
+  `unverifiable_products` (raport neverificat); iar `assert_catalog_unchanged()`, chemat la finalul
+  rulării, prinde schimbările la produse deja în snapshot — cazul în care ambele rapoarte poartă
+  amprenta veche și `compare_reports` ar accepta două măsurători contra unui catalog inexistent.
+  `updated_at` nu se schimbă când expiră o promoție; amprenta da.
+- **Un singur numărător de încălcări.** `metrics.violations_at_k` = REUNIUNEA dintre excepțiile
+  explicite din qrels și violările derivate din constrângeri. Reuniune, nu sumă: un produs prins de
+  ambele e o singură încălcare, altfel rata ar crește cu cât un caz e mai bine acoperit de
+  constrângeri, nu cu câte produse greșite au ieșit.
+- **Rapoartele își poartă catalogul.** `catalog_fingerprint` = versiune + hash peste **conținutul
+  canonic** (id + preț + categorie + `attributes`, chei sortate), nu peste setul de id-uri:
+  `version` vine din `updated_at` trunchiat la secundă, deci două modificări de preț în aceeași
+  secundă produceau amprente identice pe cataloage diferite. `compare_reports` refuză rapoarte cu
+  cataloage diferite sau cu verificarea indisponibilă: altfel deltele ar fi schimbări de DATE
+  prezentate ca schimbări de calitate, iar un `None` tratat ca 0 ar raporta „fără regresie de
+  siguranță" pe o rulare în care nimic n-a fost măsurat.
+- **Acoperire, în două momente.** Înainte de rulare, snapshotul trebuie să conțină **toate**
+  id-urile la care se referă qrels-ul — suprapunerea parțială nu ajunge (un snapshot cu doar
+  produsul judecat trecea drept compatibil). După rulare, orice produs returnat în top-k care
+  lipsește din snapshot face raportul neverificat, cu id-urile în `unverifiable_products` —
+  altfel un retrieval care întoarce exact produse din afara catalogului raporta zero încălcări
+  și `verified`, adică cel mai prost rezultat posibil prezentat drept cel mai bun.
 
 ## Ce NU e aici (rămâne la popularea NX-203, după validarea NX-202)
 - Datasetul real de 200-500 query-uri ro cu qrels (din etichetele NX-202 + trafic sanitizat).

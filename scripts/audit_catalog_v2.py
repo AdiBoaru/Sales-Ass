@@ -28,6 +28,7 @@ import re
 import sys
 import unicodedata
 from collections import Counter, defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -86,37 +87,51 @@ REQUIRED_ATTRS_BY_ROOT: dict[str, set[str]] = {
 # `best_for` e universal (R11 separat), deci NU apare aici.
 # NX-205: obligatoriile v3 NU mai sunt hardcodate aici — vin din DomainPack (P9: contractul de
 # conținut e config per-vertical, nu cod de audit). Semantica rămâne a lui R10: slug BATE root.
-# Pack lipsă/gunoi → cerințe goale (fail-closed pe încărcare, nu pe rulare).
-def _load_requirements() -> CategoryRequirements:
-    """Obligatoriile per categorie din DEFAULTS-ul verticalului.
+class ContentContractMissing(RuntimeError):
+    """Contractul de conținut al verticalului lipsește — auditul NU poate rula.
+
+    Excepție, nu `SystemExit`: modulul e importat de seed, enrich, backfill și de teste, iar un
+    `SystemExit` la import omoară procesul apelantului pentru o problemă de CONFIG. Cine rulează
+    auditul ca program o traduce în cod de ieșire (vezi `main`); cine îl importă o poate prinde."""
+
+
+@lru_cache(maxsize=None)
+def _load_requirements(vertical: str | None = None) -> CategoryRequirements:
+    """Obligatoriile per categorie din DEFAULTS-ul verticalului. LAZY (`lru_cache`) — se citește la
+    prima folosire, nu la import.
 
     Review #250: `load_domain_pack` întoarce None când `DOMAIN_PACK_ENABLED=false` (kill-switch de
     RUNTIME) — auditul crăpa. Dar nici „pack lipsă → zero cerințe" nu e acceptabil: R10 ar trece
     tăcut pe orice catalog. Auditul e o unealtă OFFLINE, deci citește defaults-ul DIRECT, fără să
     depindă de un flag de runtime, și eșuează EXPLICIT dacă fișierul de contract lipsește."""
+    vertical = vertical or AUDIT_VERTICAL
     try:
-        raw = _load_default_json(_default_name(AUDIT_VERTICAL))
+        raw = _load_default_json(_default_name(vertical))
     except Exception as e:  # noqa: BLE001 — contract de conținut lipsă = audit imposibil, nu „gol"
-        raise SystemExit(
-            f"NX-205: nu pot citi contractul de conținut pentru verticalul {AUDIT_VERTICAL!r}: {e}"
+        raise ContentContractMissing(
+            f"NX-205: nu pot citi contractul de conținut pentru verticalul {vertical!r}: {e}"
         ) from e
     reqs = build_category_requirements(raw.get("required_attributes"))
     if not reqs.by_slug and not reqs.by_root:
-        raise SystemExit(
-            f"NX-205: verticalul {AUDIT_VERTICAL!r} nu declară `required_attributes` — R10 ar "
-            f"trece tăcut. Completează src/domain/defaults/{AUDIT_VERTICAL}.json."
+        raise ContentContractMissing(
+            f"NX-205: verticalul {vertical!r} nu declară `required_attributes` — R10 ar trece "
+            f"tăcut. Completează src/domain/defaults/{_default_name(vertical)}.json."
         )
     return reqs
 
 
-CATEGORY_REQUIREMENTS: CategoryRequirements = _load_requirements()
-# Aliasuri păstrate pentru compatibilitate (consumatori/teste existente): derivate, nu sursă.
-REQUIRED_V3_BY_SLUG: dict[str, set[str]] = {
-    k: set(v) for k, v in CATEGORY_REQUIREMENTS.by_slug.items()
-}
-REQUIRED_V3_BY_ROOT: dict[str, set[str]] = {
-    k: set(v) for k, v in CATEGORY_REQUIREMENTS.by_root.items()
-}
+def __getattr__(name: str) -> Any:
+    """Aliasuri LAZY pentru consumatorii/testele existente (PEP 562): se rezolvă la prima citire a
+    atributului, nu la import. Derivate, nu sursă — sursa e `_load_requirements()`."""
+    if name == "CATEGORY_REQUIREMENTS":
+        return _load_requirements()
+    if name == "REQUIRED_V3_BY_SLUG":
+        return {k: set(v) for k, v in _load_requirements().by_slug.items()}
+    if name == "REQUIRED_V3_BY_ROOT":
+        return {k: set(v) for k, v in _load_requirements().by_root.items()}
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 PROVENANCE_KINDS = frozenset({"ingredient", "badge", "certification"})
 # Vocabular canonic de ingrediente-activ pt R12 (audit offline — NU e NLP de pipeline). Un claim
 # pozitiv de ingredient în ai_summary care nu e în key_ingredients = ai_summary inventat.
@@ -512,9 +527,19 @@ def _provenance_index(a: dict[str, Any]) -> dict[str, set[str]]:
 
 
 def rule_claim_provenance(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """R8 (determinist, fără duplicare): FIECARE key_ingredient și FIECARE badge cer o intrare
-    `claim_provenance` (kind + sursă completă). `not_recommended_for` hard cere proveniență INLINE
-    (source+source_ref+verified_at); soft cere măcar `reason`."""
+    """R8 (determinist, fără duplicare): FIECARE key_ingredient cere o intrare `claim_provenance`
+    (kind + sursă completă). `not_recommended_for` hard cere proveniență INLINE
+    (source+source_ref+verified_at); soft cere măcar `reason`.
+
+    **Badge-urile NU intră în R8 (decizie NX-206).** Sunt DERIVATE la runtime din semnale de
+    produs — `src/worker/badges.py` le calculează din rating/reducere cu praguri per-vertical, iar
+    cele din seedul demo („Fără parfum" ← `fragrance_free`, „Cu SPF 30" ← `spf`, „Foarte bine
+    cotat" ← `rating`+`review_count`) sunt toate derivabile: niciunul nu e certificare externă.
+    Un fapt derivat nu are „sursă" de citat, are o REGULĂ — deci a cere `claim_provenance` pentru
+    el producea 195 de findings care nu se puteau repara decât inventând proveniență. Un badge care
+    chiar ar fi certificare (ISO, Ecocert) rămâne acoperit prin `claim_provenance(kind=badge)` și
+    apare în `ProductFacts.confirmed_badges` — dar atunci există prin construcție, deci nu poate fi
+    „fără sursă"."""
     out = []
     for p in products:
         slug = p.get("slug", "")
@@ -526,27 +551,6 @@ def rule_claim_provenance(products: list[dict[str, Any]]) -> list[dict[str, Any]
                     _f(
                         f"{slug}: ingredient «{ing}» fără claim_provenance (kind=ingredient+sursă)",
                         slug,
-                    )
-                )
-        # Review #250: badge-urile stau la nivel de PRODUS în seed-ul v3, nu în `attributes` —
-        # regula se uita doar în `attributes`, deci n-a validat NICIODATĂ vreun badge (0/195 pe
-        # catalogul demo). Acum se uită în ambele locuri. Locul nou intră ca WARNING, nu violation:
-        # popularea datelor e explicit NX-206, iar o violation ar bloca seed-ul pentru o gaură de
-        # DATE descoperită acum. NX-206 o ridică la violation (sau reclasifică badge-urile ca
-        # semnale DERIVATE cu rule_id — vezi src/domain/contracts.py::DerivedSignal).
-        for badge in a.get("badges") or []:
-            if _norm(str(badge)) not in cov["badge"]:
-                out.append(
-                    _f(f"{slug}: badge «{badge}» fără claim_provenance (kind=badge+sursă)", slug)
-                )
-        for badge in p.get("badges") or []:
-            if _norm(str(badge)) not in cov["badge"]:
-                out.append(
-                    _f(
-                        f"{slug}: badge «{badge}» (nivel produs) fără claim_provenance — NX-206 "
-                        f"decide: proveniență sau reclasificare ca semnal derivat",
-                        slug,
-                        severity="warning",
                     )
                 )
         for nrf in a.get("not_recommended_for") or []:
@@ -611,9 +615,9 @@ def rule_required_attrs_v3(
         if not _is_active(p):
             continue
         primary = p.get("primaryCategorySlug", "")
-        req = REQUIRED_V3_BY_SLUG.get(primary)
-        if req is None:
-            req = REQUIRED_V3_BY_ROOT.get(roots.get(primary, ""), set())
+        # `required_for` E semantica R10 (slug BATE root, nu se cumulează) — o folosim în loc s-o
+        # rescriem aici: două copii ale aceleiași reguli se despart la prima modificare.
+        req = _load_requirements().required_for(primary, roots.get(primary, ""))
         a = _attrs(p)
         missing = [k for k in sorted(req) if not a.get(k)]
         if missing:
@@ -867,6 +871,7 @@ def has_global_blocker(result: dict[str, dict[str, list[dict[str, Any]]]]) -> bo
 
 
 def main() -> int:
+    global AUDIT_VERTICAL
     if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
@@ -874,7 +879,22 @@ def main() -> int:
     ap.add_argument("--contract", choices=["v2", "v3"], default="v2", help="contractul de audit")
     ap.add_argument("--examples", type=int, default=6, help="câte exemple per regulă să listez")
     ap.add_argument("--no-schema", action="store_true", help="sări peste validarea de schemă")
+    ap.add_argument(
+        "--vertical",
+        default=AUDIT_VERTICAL,
+        help="verticalul al cărui contract de conținut se aplică (R10). Implicit: catalogul demo.",
+    )
     args = ap.parse_args()
+
+    # Verticalul e ales ÎNAINTE de prima citire a cerințelor; cache-ul se golește ca o rulare cu
+    # alt vertical în același proces să nu moștenească contractul precedent.
+    AUDIT_VERTICAL = args.vertical
+    _load_requirements.cache_clear()
+    try:
+        _load_requirements()
+    except ContentContractMissing as e:
+        print(f"✗ {e}")
+        return 2
 
     path = Path(args.catalog)
     if not path.exists():

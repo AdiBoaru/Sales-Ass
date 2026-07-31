@@ -1,0 +1,415 @@
+{
+  "tranche": "b",
+  "entries": [
+    {
+      "text": "Salut, crema SPF 50 de la voi mai e disponibilă?",
+      "source": "qa_suite",
+      "qa_category": "Inventory",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Salut, crema de zi SPF 50 o aveti la 50ml?",
+      "source": "qa_suite",
+      "qa_category": "Inventory",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Crema cu SPF 50 e la reducere acum?",
+      "source": "qa_suite",
+      "qa_category": "Pricing",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Buna, crema cu SPF 50 e la reducere acum?",
+      "source": "qa_suite",
+      "qa_category": "Pricing",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Imi recomanzi un fond de ten pana in 100 lei?",
+      "source": "qa_suite",
+      "qa_category": "Pricing",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "Salut! Cât costă un ser cu vitamina C?",
+      "source": "qa_suite",
+      "qa_category": "Pricing",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "Salut, caut un fond de ten cu acoperire medie pentru ten mixt.",
+      "source": "qa_suite",
+      "qa_category": "Product Comparison",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Salut! Vreau un ser hidratant. Aveti cu acid hialuronic si cu niacinamida?",
+      "source": "qa_suite",
+      "qa_category": "Product Comparison",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Caut o crema de ochi pentru cearcane sub 120 lei. Aveti cu cofeina si cu vitamina C?",
+      "source": "qa_suite",
+      "qa_category": "Product Comparison",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "Buna, caut un fond de ten pentru ten deschis, cu acoperire medie.",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Am parul foarte uscat si deteriorat, ce sampon imi recomanzi?",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Salut! Am parul uscat si deteriorat, ce sampon hidratant imi recomanzi?",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Vreau o crema hidratanta pentru ten gras, sa nu lase luciu.",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Buna! Caut un ser cu vitamina C pentru un ten cam fara stralucire.",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Salut! Caut un ser bun cu acid hialuronic pentru ten gras, dar să nu fie foarte scump.",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Salut! Vreau o crema hidratanta de fata pentru iarna, am tenul uscat. Buget pana in 100 lei.",
+      "source": "qa_suite",
+      "qa_category": "Product Recommendation",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "Aveti vreun sampon anti-matreata?",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "Caut un fond de ten.",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Vreau un ser cu niacinamida pentru ten gras si pori dilatati.",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Aveți șampon pentru păr vopsit?",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "Bună, vreau o cremă de zi cu SPF pentru ten sensibil. Ce-mi recomanzi?",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Buna, vreau o crema de zi cu SPF pentru ten sensibil.",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "Salut! Caut un ser cu vitamina C, ceva sub 150 de lei. Aveți?",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "Vreau o cremă cu SPF pentru zi, ceva sub 100 lei.",
+      "source": "qa_suite",
+      "qa_category": "Product Search",
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "ce sampon aveti?",
+      "source": "real_traffic",
+      "seen": 4,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "vreau un șampon pentru volum",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "caut o crema de fata",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "caut o crema",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "pai o crema dupa ce fac dus ca mi se usuca fata",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "aveti vreun sampon anti-matreata?",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "sunt însărcinată, ce cremă antirid pot folosi?",
+      "source": "real_traffic",
+      "seen": 5,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "categorie"
+    },
+    {
+      "text": "recomanda-mi un ser pentru ten gras",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "caut o cremă hidratantă pentru ten gras",
+      "source": "real_traffic",
+      "seen": 13,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "am tenul gras, ce ser imi recomanzi?",
+      "source": "real_traffic",
+      "seen": 3,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "caut o cremă pentru ten gras",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "ce cremă hidratantă e bună pentru ten uscat?",
+      "source": "real_traffic",
+      "seen": 9,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "caut un fond de ten cu acoperire medie, am subton cald.",
+      "source": "real_traffic",
+      "seen": 4,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "concern"
+    },
+    {
+      "text": "ai protecție solară spf 50?",
+      "source": "real_traffic",
+      "seen": 5,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "ingredient"
+    },
+    {
+      "text": "salut! caut un ser cu vitamina c, ceva sub 150 de lei. aveți?",
+      "source": "real_traffic",
+      "seen": 2,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "vreau o crema de ochi pentru cearcane, maxim 120 lei.",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    },
+    {
+      "text": "ce alt ser e mai ieftin?",
+      "source": "real_traffic",
+      "seen": 1,
+      "disposition": "candidate",
+      "reason": "de sine statatoare, numeste un tip de produs, fara semnale de excludere",
+      "selected_for_retrieval": true,
+      "eligibility_confirmed": false,
+      "_intent": "stoc/pret"
+    }
+  ]
+}

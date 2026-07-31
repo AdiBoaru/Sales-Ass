@@ -11,7 +11,7 @@ Un „rezultat de retrieval" = lista ordonată de `product_id` (cel mai relevant
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from src.evals.retrieval.schema import QrelsQuery
 
@@ -63,6 +63,51 @@ def mrr(q: QrelsQuery, ranked: Sequence[str], min_rel: int = 2) -> float:
 
 
 def forbidden_violations(q: QrelsQuery, ranked: Sequence[str], k: int) -> int:
-    """Câte produse INTERZISE apar în primele k (trebuie 0 — încălcare de constrângere hard)."""
+    """Câte EXCEPŢII EXPLICITE apar în primele k.
+
+    Componentă, nu metrica finală: acoperă doar incompatibilităţile fără reprezentare în atribute.
+    Raportul foloseşte `violations_at_k`, care o reuneşte cu cele derivate din constrângeri."""
     forb = set(q.forbidden_products)
     return sum(1 for pid in ranked[:k] if pid in forb)
+
+
+def missing_from_catalog(
+    ranked: Sequence[str], k: int, catalog: Mapping[str, dict] | None
+) -> list[str]:
+    """Produsele din top-k care NU există în snapshot — deci nu pot fi evaluate.
+
+    Un produs absent nu e „fără încălcări", e neevaluabil. Dacă ar fi sărit tăcut (cum se întâmpla
+    cu `if p := catalog.get(pid)`), un retrieval care întoarce exact produse din afara snapshotului
+    ar produce zero încălcări şi un raport marcat `verified` — cel mai prost rezultat posibil
+    prezentat drept cel mai bun."""
+    if catalog is None:
+        return []
+    return [pid for pid in ranked[:k] if pid not in catalog]
+
+
+def violations_at_k(
+    q: QrelsQuery, ranked: Sequence[str], k: int, catalog: Mapping[str, dict] | None
+) -> int | None:
+    """Câte produse din top-k încalcă contractul query-ului. SINGURUL numărător folosit de raport.
+
+    `None` în DOUĂ cazuri, ambele însemnând „nu s-a putut verifica", nu „e curat":
+      · lipseşte catalogul cu totul;
+      · măcar un produs din top-k lipseşte din catalog (vezi `missing_from_catalog`).
+
+    REUNIUNE, nu sumă, între două surse diferite:
+      · EXCEPŢIILE EXPLICITE din qrels — incompatibilităţi reale pe care atributele nu le exprimă;
+      · violările DERIVATE din `hard_constraints` contra catalogului — independente de ce a
+        returnat sistemul testat.
+    Un produs prins de ambele e o singură încălcare; altfel rata ar creşte cu cât un caz e mai bine
+    acoperit de constrângeri, nu cu câte produse greşite au ieşit."""
+    if catalog is None or missing_from_catalog(ranked, k, catalog):
+        return None
+    from src.evals.retrieval.constraints import violates_any  # noqa: PLC0415
+
+    top = ranked[:k]
+    explicit_ids = set(q.forbidden_products)
+    explicit = {pid for pid in top if pid in explicit_ids}
+    derived = {
+        pid for pid in top if (p := catalog.get(pid)) and violates_any(p, q.hard_constraints)
+    }
+    return len(explicit | derived)

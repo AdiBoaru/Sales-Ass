@@ -1,0 +1,172 @@
+{
+  "_note": "NX-203 lot 6 — protectie solara, fond de ten, rujuri pe nuanta, ingrijirea parului, maini. Ultimul lot de retrieval pur din familiile eligibile ramase.",
+  "_precondition": "p.status = 'active' AND p.content_status = 'published' — aplicate de generator la TOATE",
+  "_nuanta": "Rujurile pe culoare folosesc `variant_label_any`, adaugat in generator pentru lotul asta: nuanta traieste pe VARIANTA, nu pe produs. Termenii acopera romana si engleza si numele de nuanta („Rosu intens\", „Classic Red\", „Cherry\", „Visiniu\") — un singur termen ar rata jumatate din catalog si gold-ul ar fi incomplet fara ca nimeni sa observe.",
+  "filters": [
+    {
+      "n": 1,
+      "query": "buna, vreau o crema de zi cu spf pentru ten sensibil.",
+      "spec": {
+        "cat": "protectie-solara",
+        "suitable_for": "sensitive"
+      },
+      "note": "familia cu CELE MAI MULTE variante din tot manifestul (5 formulari). Aici agregarea pe familie chiar conteaza."
+    },
+    {
+      "n": 2,
+      "query": "Ce crema cu protectie solara imi recomanzi pentru fata? Am tenul sensibil.",
+      "spec": {
+        "cat": "protectie-solara",
+        "suitable_for": "sensitive"
+      },
+      "note": "varianta de forma a lui #1 — aceeasi familie, de confirmat."
+    },
+    {
+      "n": 3,
+      "query": "Bună, am tenul sensibil și se înroșește repede. Vreau o cremă cu SPF de zi care să nu irite.",
+      "spec": {
+        "cat": "protectie-solara",
+        "suitable_for": "sensitive"
+      },
+      "note": "„se inroseste\" / „sa nu irite\" sunt simptom si asteptare, nu atribute de catalog. Nu inventez constrangeri; ramane varianta lui #1."
+    },
+    {
+      "n": 4,
+      "query": "Bună! Vreau o cremă de zi cu SPF 50 pentru ten gras, dar am buget maxim 150 lei.",
+      "spec": {
+        "cat": "protectie-solara",
+        "attr_eq": [
+          "spf",
+          "50"
+        ],
+        "suitable_for": "oily",
+        "price_max": 150
+      },
+      "note": "TREI constrangeri reale (spf + tip de ten + buget). ATENTIE: `spf` e prag de SIGURANTA, deci `unknown_is_violation=true` la etichetare — un produs cu SPF nedeclarat NU satisface „SPF 50\"."
+    },
+    {
+      "n": 5,
+      "query": "Aveți crema SPF 50 pentru față disponibilă?",
+      "spec": {
+        "cat": "protectie-solara",
+        "attr_eq": [
+          "spf",
+          "50"
+        ]
+      },
+      "note": "intrebare de DISPONIBILITATE. Retrieval-ul are aceeasi sarcina; raspunsul difera. Candidat la familia lui q-con-01, de confirmat."
+    },
+    {
+      "n": 6,
+      "query": "Salut, caut un fond de ten cu acoperire medie pentru ten mixt.",
+      "spec": {
+        "cat": "fond-de-ten",
+        "attr_eq": [
+          "coverage",
+          "medium"
+        ],
+        "suitable_for": "combination"
+      },
+      "note": "acelasi tipar ca #6, alt tip de ten. Familii distincte, acelasi split_group — nu au voie in felii diferite."
+    },
+    {
+      "n": 7,
+      "query": "Caut un fond de ten.",
+      "spec": {
+        "cat": "fond-de-ten"
+      },
+      "note": "categorie pura. Perechea fara calificator pentru q-con-02/lot3-03/#6/#7 — testeaza ca retrieval-ul nu ingusteaza singur."
+    },
+    {
+      "n": 8,
+      "query": "vreau rujuri rosii ?",
+      "spec": {
+        "cat": "rujuri",
+        "variant_label_any": [
+          "rosu",
+          "rosie",
+          "red",
+          "cherry",
+          "visiniu",
+          "ruby"
+        ]
+      },
+      "note": "prima cerere de CULOARE din tot setul. Fara `variant_label_any` ar fi ajuns la om ca simplu filtru pe categorie, adica alta intrebare decat cea pusa."
+    },
+    {
+      "n": 9,
+      "query": "arata niste rujuri rosii ieftine",
+      "spec": {
+        "cat": "rujuri",
+        "variant_label_any": [
+          "rosu",
+          "rosie",
+          "red",
+          "cherry",
+          "visiniu",
+          "ruby"
+        ]
+      },
+      "note": "„ieftine\" e VAG si l-am tradus initial intr-un prag de 45 — pe care l-am SCOS: toate cele 6 rujuri costa sub 45, deci pragul nu discrimina nimic si ar fi fost o constrangere inventata de mine, prezenta in gold fara ca userul s-o fi spus. Ramane acelasi contract ca #9; candidat la aceeasi familie, cu „ieftine\" semnalat ca vag."
+    },
+    {
+      "n": 10,
+      "query": "arata ruj mat sub 60 delei",
+      "spec": {
+        "cat": "rujuri",
+        "attr_eq": [
+          "finish",
+          "matte"
+        ],
+        "price_max": 60
+      },
+      "note": "ACELASI contract ca lot4-03 (unde pragul nu discrimina nimic: toate rujurile mate sunt sub 60). Candidat la aceeasi familie ca lot4-02/lot4-03."
+    },
+    {
+      "n": 11,
+      "query": "Salut! Am parul uscat si deteriorat, ce sampon hidratant imi recomanzi?",
+      "spec": {
+        "cat": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "dry"
+      },
+      "note": "acelasi contract ca lot4-07 — candidat la ACEEASI familie (doua formulari ale aceleiasi cereri)."
+    },
+    {
+      "n": 12,
+      "query": "Am parul foarte uscat si deteriorat, ce sampon imi recomanzi?",
+      "spec": {
+        "cat": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "dry"
+      },
+      "note": "a treia formulare a aceleiasi cereri. Trei variante in aceeasi familie = exact cazul pentru care exista agregarea."
+    },
+    {
+      "n": 13,
+      "query": "Salut, cat e samponul pentru par vopsit?",
+      "spec": {
+        "cat": [
+          "sampoane",
+          "sampon-uscat"
+        ],
+        "suitable_for": "colored"
+      },
+      "note": "intrebare de pret pe acelasi pool ca lot4-06. Gold MIC asteptat (1 produs) — realitate de catalog, de confirmat."
+    },
+    {
+      "n": 14,
+      "query": "sal mi s eusuca mainele des si nush ce crema sa folosesc",
+      "spec": {
+        "cat": "creme-de-maini",
+        "suitable_for": "dry"
+      },
+      "note": "trafic real cu typos grele („s eusuca\", „nush\"). ACELASI contract ca q-con-03/lot4-16 — candidat la aceeasi familie; testeaza robustetea la forma."
+    }
+  ],
+  "_reclasificate": "Trei query-uri generate initial aici au fost mutate la `abstention` in manifest si SCOASE din lot: „fond de ten ten gras + acoperire medie\" (constrangeri modelabile, sortiment fara potrivire), „sampon anti-matreata\" (produsul nu exista) si „calm theory glow crema pentru protectie\" (produsul numit nu exista, query de sine statator). Nu se acopera cu variatii — apartin suitei de abstentie."
+}

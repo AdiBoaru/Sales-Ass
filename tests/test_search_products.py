@@ -6,12 +6,30 @@ Marcate `integration` → excluse din CI. Rulează local: pytest -m integration
 import pytest
 
 from src.db.connection import close_pool, get_pool, tenant_conn
-from src.db.queries.catalog import get_products_by_ids, search_cheaper_than, search_products
+from src.db.queries.catalog import (
+    _PRODUCT_PRICE,
+    _VARIANT_SALE_ON,
+    get_products_by_ids,
+    search_cheaper_than,
+    search_products,
+)
 
 pytestmark = pytest.mark.integration
 
 DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 OTHER_BIZ = "00000000-0000-0000-0000-000000000000"
+
+# NX-191: preţul efectiv ţine cont de FEREASTRA promoţiei. Oracolele de mai jos importă chiar
+# expresiile din producţie în loc să le rescrie cu `coalesce(sale_price, price)`.
+#
+# Varianta rescrisă a picat de la sine când promoţia demo a expirat (fereastră încheiată
+# 2026-07-24): testul cerea preţul de promoţie, producţia întorcea corect preţul de listă. Un
+# oracol care redefineşte regula testată nu verifică nimic — se contrazice cu ea la prima
+# schimbare de dată.
+_MIN_VARIANT_PRICE = (
+    f"select min(case when {_VARIANT_SALE_ON} then v.sale_price else v.price end)::float8 "
+    "from product_variants v join products p on p.id = v.product_id where v.product_id = $1"
+)
 
 FIELDS = {
     "id",
@@ -95,15 +113,11 @@ async def test_price_reflects_variant_not_product(pool):
         rows = await search_products(conn, DEMO_BIZ, limit=6)
         assert rows
         for r in rows:
-            min_variant = await conn.fetchval(
-                "select min(coalesce(sale_price, price))::float8 "
-                "from product_variants where product_id = $1",
-                r["id"],
-            )
+            min_variant = await conn.fetchval(_MIN_VARIANT_PRICE, r["id"])
             expected = min_variant
             if expected is None:  # fără variante → prețul produsului
                 expected = await conn.fetchval(
-                    "select coalesce(sale_price, price)::float8 from products where id = $1",
+                    f"select {_PRODUCT_PRICE}::float8 from products p where p.id = $1",
                     r["id"],
                 )
             assert r["price"] == expected
@@ -117,7 +131,8 @@ async def test_price_is_min_variant_when_product_has_variants(pool):
     ramura greșită."""
     async with tenant_conn(DEMO_BIZ) as conn:
         row = await conn.fetchrow(
-            "select p.id::text id, min(coalesce(v.sale_price, v.price))::float8 mn "
+            "select p.id::text id, "
+            f"min(case when {_VARIANT_SALE_ON} then v.sale_price else v.price end)::float8 mn "
             "from products p join product_variants v on v.product_id = p.id "
             "where p.business_id = $1 and p.status = 'active' "
             "group by p.id having count(v.id) > 1 limit 1",
@@ -139,9 +154,10 @@ async def test_sort_mode_price_asc_surfaces_global_cheapest(pool):
         prices = [r["price"] for r in rows]
         assert prices == sorted(prices)  # crescător
         global_min = await conn.fetchval(
-            "select min(coalesce(vp.price, p.sale_price, p.price))::float8 "
+            f"select min(coalesce(vp.price, {_PRODUCT_PRICE}))::float8 "
             "from products p left join lateral ("
-            "  select min(coalesce(v.sale_price, v.price)) as price from product_variants v"
+            f"  select min(case when {_VARIANT_SALE_ON} then v.sale_price else v.price end)"
+            "   as price from product_variants v"
             "  where v.product_id = p.id) vp on true "
             "where p.business_id = $1 and p.status = 'active'",
             DEMO_BIZ,

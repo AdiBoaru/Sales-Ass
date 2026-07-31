@@ -67,6 +67,7 @@ KNOWN_ATTRIBUTE_KEYS: frozenset[str] = frozenset(
         "suitable_for",
         "not_recommended_for",
         "key_ingredients",
+        "ingredient_benefits",
         "free_of",
         "claim_provenance",
         "finish",
@@ -150,6 +151,23 @@ class NotRecommendedFor(BaseModel):
     def is_enforceable(self) -> bool:
         """True dacă poate produce o EXCLUDERE dură (aceeași condiție ca `not_recommended_gate`)."""
         return self.level == "hard" and bool(self.source) and bool(self.verified_at)
+
+
+class IngredientBenefit(BaseModel):
+    """Ce face UN ingredient, ca pereche structurată (NX-206).
+
+    Există pentru că, altfel, textul ăsta ajunge unde l-am găsit în catalogul demo: perechi
+    cheie→descriere puse direct în `attributes`, cu chei de forma «Ulei de soia (50%)». Conținut
+    real, scris ca să nu fie citit niciodată — nicio interogare nu caută o cheie numită așa, iar
+    `key_ingredients` structurat era mai SĂRAC decât cheia rătăcită de lângă el.
+
+    Structurat, devine citabil per ingredient (`EvidenceChunk(role="ingredient")`, NX-207) în loc
+    de proză topită în `description`."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ingredient: NonBlank
+    benefit: NonBlank
 
 
 class NetContent(BaseModel):
@@ -251,6 +269,7 @@ class ProductFacts(_DerivedArtifact):
     concerns: tuple[NonBlank, ...] | None = None
     suitable_for: tuple[NonBlank, ...] | None = None
     key_ingredients: tuple[NonBlank, ...] | None = None
+    ingredient_benefits: tuple[IngredientBenefit, ...] | None = None
     free_of: tuple[NonBlank, ...] | None = None
     differentiators: tuple[NonBlank, ...] | None = None
     finish: NonBlank | None = None
@@ -454,6 +473,7 @@ def _collect_facts(
         "concerns": _strs("concerns"),
         "suitable_for": _strs("suitable_for"),
         "key_ingredients": _strs("key_ingredients"),
+        "ingredient_benefits": _items("ingredient_benefits", IngredientBenefit),
         "free_of": _strs("free_of"),
         "differentiators": _strs("differentiators"),
         "finish": _str("finish"),
@@ -602,8 +622,25 @@ class VocabularyReport:
         return not self.problems and not self.unchecked
 
 
-_VOCAB_LIST_FIELDS = ("concerns", "suitable_for", "key_ingredients")
-_VOCAB_SCALAR_FIELDS = ("finish", "coverage", "texture", "routine_step")
+# Câmpurile de fapte care POT avea vocabular controlat. Listele și scalarii sunt separați doar
+# pentru că se iterează diferit — ambele familii se raportează la fel în `unchecked`.
+_VOCAB_LIST_FIELDS = (
+    "concerns",
+    "suitable_for",
+    "key_ingredients",
+    "free_of",
+    "differentiators",
+)
+_VOCAB_SCALAR_FIELDS = (
+    "finish",
+    "coverage",
+    "texture",
+    "routine_step",
+    "skin_type",
+    "hair_type",
+    "best_for",
+    "wear_time",
+)
 
 
 def validate_vocabulary(
@@ -613,7 +650,12 @@ def validate_vocabulary(
 
     Separat de validarea structurală din model: vocabularul e config per-vertical, deci nu are ce
     căuta într-un model Pydantic din cod. Câmpurile PREZENTE fără vocabular declarat se întorc în
-    `unchecked` — nu ca „ok"."""
+    `unchecked` — nu ca „ok".
+
+    Acoperirea e a TUTUROR câmpurilor de fapte care pot avea vocabular controlat, nu a unei
+    submulțimi: un câmp lăsat în afara listelor de mai jos ar fi devenit invizibil — nici în
+    `problems`, nici în `unchecked` — adică exact „nevalidat deghizat în valid" pe care raportul
+    ăsta există să-l prevină."""
     problems: list[str] = []
     unchecked: list[str] = []
     for field in _VOCAB_LIST_FIELDS + _VOCAB_SCALAR_FIELDS:
