@@ -474,3 +474,49 @@ async def test_web_chat_rate_limited_429(monkeypatch):
 
 async def _coro(value):
     return value
+
+
+async def test_web_chat_uses_real_pipeline_and_aftercare_cost(monkeypatch):
+    from src.models import Reply
+
+    captured = {}
+    redis = FakeRedis()
+
+    async def fake_verify(token, visitor_id, sig):
+        return WebSession(business_id="b", token=token, visitor_id=visitor_id)
+
+    async def fake_resolve_channel(conn, kind, token):
+        return {"channel_id": "chan", "business_id": "b"}
+
+    async def fake_load_business(conn, business_id):
+        return SimpleNamespace(id=business_id, daily_cost_cap_usd=None)
+
+    async def fake_handle_turn(*args, **kwargs):
+        reply = Reply(text="Salut!")
+        work = SimpleNamespace(ctx=SimpleNamespace(usage=SimpleNamespace(cost_usd=0.003)))
+        return TurnResult(
+            "c", "ct", "t", reply.text, None, reply=reply, language="ro", aftercare=work
+        )
+
+    async def fake_aftercare(db, supplied_redis, work):
+        assert supplied_redis is redis
+        assert work.ctx.usage.cost_usd == 0.003
+        return 0.004
+
+    async def fake_add_visitor(supplied_redis, business_id, visitor_id, amount):
+        captured["args"] = (supplied_redis, business_id, visitor_id, amount)
+
+    monkeypatch.setattr(wa, "_verify", fake_verify)
+    monkeypatch.setattr(wa, "get_redis", lambda: _coro(redis))
+    monkeypatch.setattr(wa, "get_pool", lambda: _coro(None))
+    monkeypatch.setattr(wa, "admin_conn", _fake_cm)
+    monkeypatch.setattr(wa, "tenant_conn", _fake_cm)
+    monkeypatch.setattr(wa, "resolve_channel", fake_resolve_channel)
+    monkeypatch.setattr(wa, "load_business", fake_load_business)
+    monkeypatch.setattr(wa, "handle_turn", fake_handle_turn)
+    monkeypatch.setattr(wa, "run_aftercare", fake_aftercare)
+    monkeypatch.setattr(wa, "web_cost_add_visitor", fake_add_visitor)
+
+    await wa.web_chat(WebChatIn(token="tok", visitor_id="web_1", sig="s", message="hei"), _Req())
+
+    assert captured["args"] == (redis, "b", "web_1", pytest.approx(0.007))

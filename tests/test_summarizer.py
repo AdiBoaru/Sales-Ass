@@ -111,9 +111,6 @@ def _patch(monkeypatch, *, total, prev, to_summarize, gen="REZUMAT"):
         sink["insert"] = {"watermark": watermark, "summary": summary}
         return "sid"
 
-    async def f_cost(redis, b, amount):
-        sink["cost"] = amount
-
     async def f_events(conn, b, events, *, conversation_id=None, contact_id=None):
         sink["events"] = [e.type for e in events]
 
@@ -122,7 +119,6 @@ def _patch(monkeypatch, *, total, prev, to_summarize, gen="REZUMAT"):
     monkeypatch.setattr(proc, "get_messages_for_summary", f_window)
     monkeypatch.setattr(proc, "generate_summary", f_generate)
     monkeypatch.setattr(proc, "insert_conversation_summary", f_insert)
-    monkeypatch.setattr(proc, "cost_add", f_cost)
     monkeypatch.setattr(proc, "insert_events", f_events)
     return sink
 
@@ -140,7 +136,7 @@ async def test_first_summary_triggers_with_honest_watermark(monkeypatch):
     assert sink["insert"]["summary"] == "REZUMAT"
     assert sink["insert"]["watermark"] == window[-1].created_at  # cel mai nou INCLUS, nu MAX global
     assert sink["after"] is None  # prima generare: de la început
-    assert sink["cost"] > 0 and sink["events"] == ["summarizer_run"]  # G2c + analytics
+    assert sink["events"] == ["summarizer_run"]
 
 
 async def test_regen_skipped_when_too_few_new(monkeypatch):
@@ -176,4 +172,4 @@ async def test_best_effort_on_failure(monkeypatch):
     monkeypatch.setattr(proc, "insert_conversation_summary", boom)
     # nu trebuie să propage (turul a răspuns deja)
     await proc._summarize_if_needed(static_db(_FakeConn()), object(), "b", "conv", _Ctx(), object())
-    assert "cost" not in sink  # n-a ajuns la cost_add după eșecul de insert
+    assert "events" not in sink  # summary insert failed before analytics
