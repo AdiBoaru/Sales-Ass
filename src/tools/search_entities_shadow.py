@@ -17,7 +17,7 @@ from src.db.queries.search_entities import (
 from src.domain.facets import TypedFacet
 from src.domain.identifier_resolution import resolve_identifier
 from src.domain.rerank_policy import decide_adaptive_rerank
-from src.domain.rerank_provider import apply_adaptive_rerank, RerankProvider
+from src.domain.rerank_provider import RerankProvider, apply_adaptive_rerank
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
 from src.safety.external_data import external_query_text
 from src.tools.reason_codes import annotate as annotate_reasons
