@@ -127,7 +127,6 @@ async def test_shadow_orchestrator_fuses_explicit_shadow_embeddings_and_falls_ba
     assert [candidate.product_id for candidate in result.candidates] == ["p-3", "p-2", "p-1"]
 
 
-
 @pytest.mark.asyncio
 async def test_shadow_uses_large_semantic_pool_but_bounds_final_output(monkeypatch):
     calls = []
