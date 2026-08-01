@@ -36,7 +36,9 @@ class RerankProvider(Protocol):
     """Async provider contract; implementations stay outside the search domain."""
 
     async def rerank(
-        self, query: str, candidates: Sequence[RerankCandidate]
+        self,
+        query: str,
+        candidates: Sequence[RerankCandidate],
     ) -> Sequence[str]:
         """Return candidate IDs in descending relevance order."""
 
