@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 #: `search_shadow_fts` întoarce DOAR id-uri — deci un bazin mai mare e aproape gratis şi e singura
 #: cale prin care decizia de rerank vede o listă reală de candidaţi. Cu bazinul egal cu `limit`,
 #: „rerank" ar fi însemnat reordonarea a şase elemente deja selectate.
+# Shadow hydration is batched; only the final result keeps the live context cap of six.
 FTS_POOL = 30
 
 
