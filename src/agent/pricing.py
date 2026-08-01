@@ -9,7 +9,7 @@ o PLASĂ, nu facturare: reconcilierea finală se face din factura reală (pragur
 long-context, discounturi de cont nu se văd din listă). Două căi de editare:
   • implicit: editezi `PRICING` aici (sursa documentată);
   • prod, fără redeploy: `LLM_PRICING_JSON` în .env (override JSON parțial, merge peste implicit) —
-    ex. {"gpt-5.4-mini": {"input": 0.30, "cached_input": 0.03, "output": 2.40}}.
+    ex. {"gpt-5.6-terra": {"input": 2.50, "cached_input": 0.25, "output": 15.00}}.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ class ModelRates:
 # config, deci NU se mișcă cu tarifele; cartografia celor trei alimentatori e în
 # docs/NX-201-PRICING.md.
 _DEFAULT_PRICING: dict[str, ModelRates] = {
+    "gpt-5.6-terra": ModelRates(input=2.50, cached_input=0.25, output=15.00),
     "gpt-5.4": ModelRates(input=2.50, cached_input=0.25, output=15.00),
     "gpt-5.4-mini": ModelRates(input=0.75, cached_input=0.075, output=4.50),
     "gpt-5.4-nano": ModelRates(input=0.20, cached_input=0.02, output=1.25),

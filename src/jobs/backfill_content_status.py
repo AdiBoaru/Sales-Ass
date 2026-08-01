@@ -1,7 +1,7 @@
 """NX-171c: backfill `content_status` per tenant (JOB — deliberat NU în migrare).
 
 SQL nu poate ști dacă un produs trece auditul de coerență (168d) → clasificarea e un job Python.
-Rulează `audit(contract="v3")` O DATĂ pe catalogul COMPLET al tenantului (auditul verifică duplicate
+Rulează poarta NX-206 O DATĂ pe catalogul COMPLET al tenantului (auditul verifică duplicate
 cross-produs — SKU/GTIN/nume — deci NU se poate rula per produs) → produsele care apar în ≥1
 violation = 'draft', restul = 'published'. Idempotent (UPDATE re-rulabil). Citește
 `entry['product_slugs']` MACHINE-READABLE, NU parsează textul CLI.
@@ -29,30 +29,32 @@ DEMO_CATALOG = ROOT / "db" / "seed" / "catalog_v2.json"
 
 
 def classify_content_status(data: dict[str, Any]) -> dict[str, str]:
-    """Pur (fără DB): `evaluate(v3)` (SCHEMĂ + reguli, sursă UNICĂ cu poarta seed) pe snapshot-ul
-    COMPLET → `{slug: 'draft'|'published'}`. Un slug care apare în ≥1 violation = 'draft'; restul =
-    'published', citind `entry['product_slugs']` machine-readable.
+    """Pur (fara DB): poarta NX-206 pe snapshot-ul COMPLET -> {slug: 'draft'|'published'}.
 
-    FAIL-CLOSED (NX-171c): dacă există un blocker GLOBAL (`has_global_blocker` — violation fără
-    `product_slugs`, ex. schemă invalidă / `brands` lipsă / fail-closed jsonschema), NU putem mapa
-    eroarea la un produs → NU publicăm NIMIC pe tenant: TOATE produsele rămân 'draft'. (`audit()`
-    direct ar fi ratat acest caz și ar fi publicat produse peste o schemă coruptă.)"""
-    from scripts.audit_catalog_v2 import evaluate, has_global_blocker  # lazy: import ușor
+    NX-206 este stratul de publicare, nu doar auditul v3: pastreaza SCHEMA + R1-R13 si adauga
+    contractul tipizat NX-205 (facts malformate, contradictii facts-facts, chei netipizate). Un slug
+    care apare in >=1 violation = 'draft'; restul = 'published', citind entry['product_slugs']
+    machine-readable.
 
-    result = evaluate(data, contract="v3")
+    FAIL-CLOSED (NX-171c): daca exista un blocker GLOBAL (violation fara product_slugs, ex. schema
+    invalida / brands lipsa / fail-closed jsonschema), NU putem mapa eroarea la un produs -> NU
+    publicam NIMIC pe tenant: TOATE produsele raman 'draft'.
+    """
+    from scripts.catalog_completeness import completeness_report  # lazy: import usor
+
+    report = completeness_report(data)
     products = [
         p
         for p in data.get("products") or []
         if isinstance(p, dict) and isinstance(p.get("slug"), str) and p["slug"]
     ]
-    if has_global_blocker(result):
-        return {p["slug"]: "draft" for p in products}  # fail-closed: nimic published
+    if report["global_violations"]:
+        return {p["slug"]: "draft" for p in products}
     flagged: set[str] = set()
-    for entries in result["violations"].values():
-        for entry in entries:
-            for slug in entry.get("product_slugs") or []:
-                if slug:
-                    flagged.add(slug)
+    for entry in report["violations"]:
+        for slug in entry.get("product_slugs") or []:
+            if slug:
+                flagged.add(slug)
     return {p["slug"]: ("draft" if p["slug"] in flagged else "published") for p in products}
 
 

@@ -127,7 +127,7 @@ class LLMClient:
         model_agent: str,
         model_embed: str = "text-embedding-3-small",
         model_moderation: str = "omni-moderation-latest",
-        model_vision: str = "gpt-5.4-mini",
+        model_vision: str = "gpt-5.6-terra",
     ) -> None:
         self._client = client
         self.model_triage = model_triage
@@ -153,6 +153,8 @@ class LLMClient:
         out: dict[str, Any] = {}
         if agent:
             out["max_completion_tokens"] = s.llm_max_tokens_agent
+            if effort := (getattr(s, "llm_reasoning_effort_agent", "") or "").strip():
+                out["reasoning_effort"] = effort
         if s.llm_sampling_enabled:
             out["temperature"] = s.llm_temperature_agent if agent else s.llm_temperature_triage
         return out

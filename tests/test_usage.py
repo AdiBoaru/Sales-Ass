@@ -58,6 +58,9 @@ def test_published_rates_are_pinned():
     """
     from src.agent.pricing import _DEFAULT_PRICING
 
+    assert _DEFAULT_PRICING["gpt-5.6-terra"] == ModelRates(
+        input=2.50, cached_input=0.25, output=15.00
+    )
     assert _DEFAULT_PRICING["gpt-5.4"] == ModelRates(input=2.50, cached_input=0.25, output=15.00)
     assert _DEFAULT_PRICING["gpt-5.4-mini"] == ModelRates(
         input=0.75, cached_input=0.075, output=4.50
