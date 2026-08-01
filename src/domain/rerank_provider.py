@@ -136,9 +136,12 @@ async def apply_adaptive_rerank(
     except Exception:  # noqa: BLE001 - provider outage must leave retrieval available
         return _fallback(original, "rerank_failed")
 
-    if isinstance(ordered, (str, bytes)):
+    if isinstance(ordered, (str, bytes, dict)):
         return _fallback(original, "rerank_invalid_response")
-    ordered_ids = list(ordered)
+    try:
+        ordered_ids = list(ordered)
+    except Exception:  # noqa: BLE001 - malformed provider payload must fall back
+        return _fallback(original, "rerank_invalid_response")
     if (
         not ordered_ids
         or any(not isinstance(product_id, str) for product_id in ordered_ids)

@@ -210,3 +210,22 @@ async def test_shadow_applies_provider_order_before_final_output_cap(monkeypatch
         f"p-{index}" for index in range(1, 8)
     ]
     assert result.degradations == ("semantic_skipped_no_llm",)
+
+
+@pytest.mark.asyncio
+async def test_non_iterable_provider_order_falls_back_without_raising():
+    class Provider:
+        async def rerank(self, _query, _candidates):
+            return None
+
+    products = [{"id": "p-1", "attributes": {}}, {"id": "p-2", "attributes": {}}]
+    result = await apply_adaptive_rerank(
+        products,
+        _requested(),
+        normalized_query="ser",
+        raw_query="ser",
+        provider=Provider(),
+    )
+
+    assert [product["id"] for product in result.products] == ["p-1", "p-2"]
+    assert result.degradation == "rerank_invalid_response"
