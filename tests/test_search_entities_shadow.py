@@ -127,6 +127,123 @@ async def test_shadow_orchestrator_fuses_explicit_shadow_embeddings_and_falls_ba
     assert [candidate.product_id for candidate in result.candidates] == ["p-3", "p-2", "p-1"]
 
 
+
+@pytest.mark.asyncio
+async def test_shadow_uses_large_semantic_pool_but_bounds_final_output(monkeypatch):
+    calls = []
+
+    async def fake_fts(*_args, **_kwargs):
+        return [f"p-{index}" for index in range(1, shadow.FTS_POOL + 1)]
+
+    async def fake_products(_conn, _business_id, ids, **kwargs):
+        calls.append((list(ids), kwargs))
+        return [{"id": product_id, "attributes": {}} for product_id in ids]
+
+    async def fake_refs(*_args, **_kwargs):
+        return {}
+
+    async def fake_has_embeddings(*_args, **_kwargs):
+        return True
+
+    async def fake_semantic(_conn, _business_id, _embedding, **kwargs):
+        calls.append(("semantic", kwargs))
+        return [{"id": "semantic-1", "attributes": {}}]
+
+    async def no_identifiers(*_args):
+        return []
+
+    class _LLM:
+        async def embed(self, _texts):
+            return [[0.1, 0.2]]
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+    monkeypatch.setattr(shadow, "has_embeddings", fake_has_embeddings)
+    monkeypatch.setattr(shadow, "search_products_semantic", fake_semantic)
+
+    result = await shadow.search_entities_shadow(
+        object(),
+        "business-1",
+        RuntimeQuerySpec("ser", "ser", "ser"),
+        {},
+        llm=_LLM(),
+        limit=6,
+    )
+
+    semantic_call = next(call for call in calls if call[0] == "semantic")
+    assert semantic_call[1] == {
+        "pool": shadow.FTS_POOL,
+        "embedding_doc_type": "search_document_v1",
+    }
+    hydration = [call for call in calls if isinstance(call[0], list)]
+    assert [len(ids) for ids, _kwargs in hydration] == [6, 6, 6, 6, 6]
+    assert all(kwargs["respect_content_status"] is True for _ids, kwargs in hydration)
+    assert len(result.candidates) == 6
+
+
+@pytest.mark.asyncio
+async def test_shadow_backfills_after_hard_exclusion_before_output_cap(monkeypatch):
+    async def fake_fts(*_args, **_kwargs):
+        return [f"p-{index}" for index in range(1, 8)]
+
+    async def fake_products(_conn, _business_id, ids, **_kwargs):
+        return [
+            {
+                "id": product_id,
+                "attributes": (
+                    {
+                        "not_recommended_for": [
+                            {
+                                "value": "sensitive",
+                                "level": "hard",
+                                "source": "manufacturer_label",
+                                "verified_at": "2026-07-16",
+                            }
+                        ]
+                    }
+                    if product_id == "p-1"
+                    else {}
+                ),
+            }
+            for product_id in ids
+        ]
+
+    async def fake_refs(*_args, **_kwargs):
+        return {}
+
+    async def no_identifiers(*_args):
+        return []
+
+    monkeypatch.setattr(shadow, "search_shadow_fts", fake_fts)
+    monkeypatch.setattr(shadow, "get_products_by_ids", fake_products)
+    monkeypatch.setattr(shadow, "load_evidence_references", fake_refs)
+    monkeypatch.setattr(shadow, "load_identifier_candidates", no_identifiers)
+
+    result = await shadow.search_entities_shadow(
+        object(),
+        "business-1",
+        RuntimeQuerySpec(
+            "ser pentru ten sensibil",
+            "ser pentru ten sensibil",
+            "ser pentru ten sensibil",
+            constraints=(Constraint(facet="concern", op="contains", value="sensitive"),),
+        ),
+        {},
+        limit=6,
+    )
+
+    assert [candidate.product_id for candidate in result.candidates] == [
+        "p-2",
+        "p-3",
+        "p-4",
+        "p-5",
+        "p-6",
+        "p-7",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_exact_identifier_skips_fts_and_embeddings(monkeypatch):
     async def exact_candidates(*_args):

@@ -31,6 +31,30 @@ log = logging.getLogger(__name__)
 FTS_POOL = 30
 
 
+async def _hydrate_shadow_products(
+    conn: Any, business_id: str, product_ids: list[str], *, pool: int
+) -> list[dict]:
+    """Hydrate the shadow pool in batches without widening the live helper cap.
+
+    get_products_by_ids intentionally caps each call at six products for agent context. The
+    offline shadow still needs the larger lexical/vector pool before fusion, so it batches the
+    same tenant-scoped query and preserves retrieval order.
+    """
+    selected = product_ids[: max(pool, 1)]
+    products: list[dict] = []
+    for start in range(0, len(selected), 6):
+        products.extend(
+            await get_products_by_ids(
+                conn,
+                business_id,
+                selected[start : start + 6],
+                limit=6,
+                respect_content_status=True,
+            )
+        )
+    return products
+
+
 async def _load_shadow_semantic_products(
     conn: Any,
     business_id: str,
@@ -62,7 +86,7 @@ async def _load_shadow_semantic_products(
             conn,
             business_id,
             query_embedding,
-            pool=min(max(limit, 1), 6),
+            pool=FTS_POOL,
             embedding_doc_type="search_document_v1",
         )
     except Exception:  # noqa: BLE001 — FTS shadow rămâne disponibil la eşec semantic
@@ -130,12 +154,18 @@ async def search_entities_shadow(
     # toate celelalte căi de discovery filtrează pe `published` (NX-171c). Fără el, shadow-ul putea
     # scoate la suprafaţă produse `draft` — şi ar fi comparat, în benchmark, un univers de candidaţi
     # mai mare decât cel al căii live.
-    products = await get_products_by_ids(
-        conn, business_id, ids, limit=min(max(limit, 1), 6), respect_content_status=True
-    )
+    products = await _hydrate_shadow_products(conn, business_id, ids, pool=FTS_POOL)
 
     if semantic_products:
-        products = fuse_candidates(products, semantic_products, sort_mode="relevance")[:limit]
+        products = fuse_candidates(products, semantic_products, sort_mode="relevance")
+
+    # Apply hard exclusions and soft warnings before the output cap so rejected pool entries do
+    # not consume a slot that a valid candidate could fill.
+    products = annotate_reasons(products, concerns=concerns)
+
+    # The larger pool is for ranking and coverage only; the shadow contract mirrors the live
+    # context budget at its boundary.
+    products = products[: min(max(limit, 1), 6)]
 
     rerank_decision = decide_adaptive_rerank(
         identifier_status=identifier.status,
@@ -143,7 +173,6 @@ async def search_entities_shadow(
         lexical_ids=ids,
         semantic_ids=[str(product["id"]) for product in semantic_products],
     )
-    products = annotate_reasons(products, concerns=concerns)
     product_ids = [str(product["id"]) for product in products]
     evidence = await load_evidence_references(conn, business_id, product_ids, locale=locale)
     return build_search_entities_result(
