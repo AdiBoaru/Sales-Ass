@@ -17,6 +17,7 @@ from src.db.queries.search_entities import (
 from src.domain.facets import TypedFacet
 from src.domain.identifier_resolution import resolve_identifier
 from src.domain.rerank_policy import decide_adaptive_rerank
+from src.domain.rerank_provider import apply_adaptive_rerank, RerankProvider
 from src.domain.search_entities import SearchEntitiesResult, build_search_entities_result
 from src.safety.external_data import external_query_text
 from src.tools.reason_codes import annotate as annotate_reasons
@@ -103,6 +104,7 @@ async def search_entities_shadow(
     facets_by_key: Mapping[str, TypedFacet],
     *,
     llm: Any | None = None,
+    reranker: RerankProvider | None = None,
     locale: str = "ro",
     limit: int = 6,
 ) -> SearchEntitiesResult:
@@ -160,20 +162,29 @@ async def search_entities_shadow(
     if semantic_products:
         products = fuse_candidates(products, semantic_products, sort_mode="relevance")
 
-    # Apply hard exclusions and soft warnings before the output cap so rejected pool entries do
-    # not consume a slot that a valid candidate could fill.
-    products = annotate_reasons(products, concerns=concerns)
-
-    # The larger pool is for ranking and coverage only; the shadow contract mirrors the live
-    # context budget at its boundary.
-    products = products[: min(max(limit, 1), 6)]
-
     rerank_decision = decide_adaptive_rerank(
         identifier_status=identifier.status,
         constraints=query_spec.constraints,
         lexical_ids=ids,
         semantic_ids=[str(product["id"]) for product in semantic_products],
     )
+
+    # Apply hard exclusions before reranking so the provider cannot resurrect unsafe products.
+    products = annotate_reasons(products, concerns=concerns)
+    rerank_application = await apply_adaptive_rerank(
+        products,
+        rerank_decision,
+        normalized_query=query_spec.normalized_query,
+        raw_query=query_spec.raw_query,
+        provider=reranker,
+    )
+    products = list(rerank_application.products)
+    if rerank_application.degradation is not None:
+        degradations.append(rerank_application.degradation)
+
+    # The larger pool is for ranking and coverage only; the shadow contract mirrors the live
+    # context budget at its boundary.
+    products = products[: min(max(limit, 1), 6)]
     product_ids = [str(product["id"]) for product in products]
     evidence = await load_evidence_references(conn, business_id, product_ids, locale=locale)
     return build_search_entities_result(
