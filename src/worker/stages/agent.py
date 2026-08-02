@@ -17,6 +17,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
+from src.agent.answer_plan_guard import enforce_answer_plan
 from src.agent.deterministic import (
     _CHEAPER_RE,  # noqa: F401 — re-export (teste)
     _COMPARE_RE,  # noqa: F401 — re-export (teste)
@@ -391,7 +392,20 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # `handled=True` = build_plan a răspuns deja direct (login/cross-sell/„deja cel mai ieftin")
     # → render sare peste tur (fără ValidationResult de proză).
     validation: ValidationResult | None = None
-    if not plan.handled:
+    settings = get_settings()
+    if getattr(settings, "answer_plan_enabled", False) and not is_order:
+        validation = await enforce_answer_plan(
+            ctx,
+            deps,
+            plan,
+            render,
+            products=plan.products or run.retrieved,
+            successful_action_ids=plan.successful_action_ids,
+            critic_enabled=getattr(settings, "answer_plan_critic_enabled", False),
+            coverage_threshold=getattr(settings, "answer_plan_critic_coverage_threshold", 0.99),
+            max_quality=getattr(settings, "answer_plan_max_quality", False),
+        )
+    elif not plan.handled:
         validation = await render(ctx, deps, plan)
     # NX-146 felia 2 (fix DoD): emis DUPĂ validare (nu înainte) — corelează per-tur prompt↔
     # grounding↔rezultatul validatorului pentru Turn Replay (P10 — observabilitate din runner;

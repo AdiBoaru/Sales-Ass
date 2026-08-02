@@ -6,6 +6,7 @@ pytest-asyncio==1.4.0
 fakeredis==2.36.1  # 2.28 incompatibil cu redis-py 8.0 (assert pe orice comandă)
 pytest-cov==6.2.1
 
+hypothesis==6.165.0  # NX-211 property tests for hard AnswerPlan guarantees
 # Linting
 ruff==0.11.13
 

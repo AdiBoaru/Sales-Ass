@@ -1,0 +1,24 @@
+{
+  "task": "NX-211",
+  "implementation_mode": "dormant",
+  "answer_plan_default_enabled": false,
+  "critic_default_enabled": false,
+  "automated_coverage": {
+    "tenant_isolation": true,
+    "pii_rejection": true,
+    "price_stock_url_grounding": true,
+    "exact_product_variant_identity": true,
+    "unknown_not_mismatch": true,
+    "successful_action_confirmation": true,
+    "single_revision_cap": true,
+    "critic_unavailable_fallback": true,
+    "p6_non_empty_fallback": true
+  },
+  "activation_blockers": [
+    "nx210_h3_not_run",
+    "quality_holdout_unavailable",
+    "decision_policy_unavailable",
+    "adi_signature_unavailable"
+  ],
+  "gate_targets_measured": false
+}
