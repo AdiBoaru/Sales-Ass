@@ -159,9 +159,7 @@ def _safe_artifact(artifact: ResponseArtifact) -> ResponseArtifact:
         update={
             "text": _safe_report_text(artifact.text),
             "product_ids": tuple(
-                product_id
-                for product_id in artifact.product_ids
-                if not contains_pii(product_id)
+                product_id for product_id in artifact.product_ids if not contains_pii(product_id)
             ),
         }
     )
@@ -218,10 +216,7 @@ def paired_bootstrap_ci(
     if not deltas:
         raise ValueError("paired bootstrap requires observations")
     rng = random.Random(seed)
-    estimates = sorted(
-        mean(rng.choice(deltas) for _ in deltas)
-        for _sample in range(samples)
-    )
+    estimates = sorted(mean(rng.choice(deltas) for _ in deltas) for _sample in range(samples))
     alpha = (1 - confidence) / 2
     low_index = max(0, int(alpha * samples))
     high_index = min(samples - 1, int((1 - alpha) * samples))
@@ -258,14 +253,9 @@ def evaluate_decision(
 ) -> DecisionReport:
     """Apply the pre-registered gate. A machine can only nominate a candidate for Adi."""
 
-    deltas = [
-        item.candidate_scores.overall - item.baseline_scores.overall
-        for item in observations
-    ]
+    deltas = [item.candidate_scores.overall - item.baseline_scores.overall for item in observations]
     fact_regressions = sum(
-        1
-        for item in observations
-        if item.candidate_fact_failures > item.baseline_fact_failures
+        1 for item in observations if item.candidate_fact_failures > item.baseline_fact_failures
     )
     hard_failures = sum(item.candidate_hard_failures for item in observations)
     missing_cost = any(item.candidate_cost_usd is None for item in observations)

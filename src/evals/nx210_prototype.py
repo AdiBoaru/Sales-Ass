@@ -202,10 +202,7 @@ def _stop_after_result(
     eligible = _eligible_ids(result)
     if result.identifier_status == "resolve" and eligible:
         return "exact_identifier"
-    if (
-        len(_grounded_ids(result)) >= min_grounded_candidates
-        and not result.missing_information
-    ):
+    if len(_grounded_ids(result)) >= min_grounded_candidates and not result.missing_information:
         return "sufficient_grounded_candidates"
     if eligible and not result.needs_refinement:
         return "complete_coverage"
@@ -238,9 +235,7 @@ def _make_plan(
         disposition = "clarify"
     else:
         disposition = "answer"
-    selected_ids = tuple(
-        item.product_id for item in selected if not contains_pii(item.product_id)
-    )
+    selected_ids = tuple(item.product_id for item in selected if not contains_pii(item.product_id))
     if len(selected_ids) != len(selected):
         safe_degradations.append("report_identifier_redacted")
     evidence_ids = tuple(
@@ -447,9 +442,7 @@ async def run_offline_prototype(
         except Exception:  # noqa: BLE001 - telemetry failure is a named degradation
             plan = plan.model_copy(
                 update={
-                    "degradations": tuple(
-                        dict.fromkeys((*plan.degradations, "cost_meter_failed"))
-                    )
+                    "degradations": tuple(dict.fromkeys((*plan.degradations, "cost_meter_failed")))
                 }
             )
     return PrototypeRun(
