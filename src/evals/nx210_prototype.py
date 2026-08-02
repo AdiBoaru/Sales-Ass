@@ -7,6 +7,7 @@ experimental and disposable by default; it is not the production contract planne
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -17,8 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.agent.query_spec import Constraint, RuntimeQuerySpec, SafeQuerySpec, SafeVocabulary
 from src.domain.search_entities import SearchEntitiesResult
+from src.safety.external_data import contains_pii
 
 Disposition = Literal["answer", "clarify", "fallback"]
+SpanStage = Literal["query_spec", "search_entities", "query_refinement"]
 StopReason = Literal[
     "sufficient_grounded_candidates",
     "complete_coverage",
@@ -34,6 +37,27 @@ StopReason = Literal[
     "search_unavailable",
     "validator_rejected",
 ]
+
+_SAFE_DEGRADATIONS = frozenset(
+    {
+        "answer_plan_invalid",
+        "cost_meter_failed",
+        "query_refinement_failed",
+        "query_spec_failed",
+        "report_identifier_redacted",
+        "rerank_blocked_pii",
+        "rerank_failed",
+        "rerank_invalid_response",
+        "rerank_skipped_no_provider",
+        "rerank_skipped_no_safe_candidates",
+        "rerank_timeout",
+        "search_entities_failed",
+        "semantic_blocked_pii",
+        "semantic_failed",
+        "semantic_skipped_no_llm",
+        "semantic_skipped_no_shadow_embeddings",
+    }
+)
 
 
 class QuerySpecAgent(Protocol):
@@ -84,7 +108,7 @@ class OfflineSpan(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    stage: Literal["query_spec", "search_entities", "query_refinement"]
+    stage: SpanStage
     attempt: int = Field(ge=0, le=3)
     latency_ms: float = Field(ge=0)
 
@@ -194,13 +218,15 @@ def _make_plan(
     stop_reason: StopReason,
     attempts: int,
     degradations: Sequence[str],
+    vocabulary: SafeVocabulary | None,
 ) -> AnswerPlanV0:
+    safe_degradations = [code for code in degradations if code in _SAFE_DEGRADATIONS]
     if result is None:
         return AnswerPlanV0(
             disposition="fallback",
             stop_reason=stop_reason,
             search_attempts=attempts,
-            degradations=tuple(dict.fromkeys(degradations)),
+            degradations=tuple(dict.fromkeys(safe_degradations)),
         )
 
     exact = [item for item in result.candidates if item.match_class == "exact"]
@@ -212,18 +238,31 @@ def _make_plan(
         disposition = "clarify"
     else:
         disposition = "answer"
-    selected_ids = tuple(item.product_id for item in selected)
+    selected_ids = tuple(
+        item.product_id for item in selected if not contains_pii(item.product_id)
+    )
+    if len(selected_ids) != len(selected):
+        safe_degradations.append("report_identifier_redacted")
     evidence_ids = tuple(
-        dict.fromkeys(evidence_id for item in selected for evidence_id in item.evidence_ids)
+        dict.fromkeys(
+            evidence_id
+            for item in selected
+            for evidence_id in item.evidence_ids
+            if not contains_pii(evidence_id)
+        )
     )
     return AnswerPlanV0(
         disposition=disposition,
         selected_product_ids=selected_ids,
         evidence_ids=evidence_ids,
-        missing_information=result.missing_information,
+        missing_information=tuple(
+            facet
+            for facet in result.missing_information
+            if vocabulary is not None and vocabulary.knows_facet(facet)
+        ),
         stop_reason=stop_reason,
         search_attempts=attempts,
-        degradations=tuple(dict.fromkeys(degradations)),
+        degradations=tuple(dict.fromkeys(safe_degradations)),
     )
 
 
@@ -258,7 +297,7 @@ def validate_answer_plan_v0(
     return tuple(dict.fromkeys(failures))
 
 
-def _span(stage: OfflineSpan.__annotations__["stage"], attempt: int, started: float) -> OfflineSpan:
+def _span(stage: SpanStage, attempt: int, started: float) -> OfflineSpan:
     return OfflineSpan(
         stage=stage,
         attempt=attempt,
@@ -271,10 +310,14 @@ def _budget_reason(
     budget: PrototypeBudget,
     cost: CostFn | None,
 ) -> StopReason | None:
-    if (perf_counter() - started) * 1_000 >= budget.max_elapsed_ms:
+    if (perf_counter() - started) * 1_000 > budget.max_elapsed_ms:
         return "time_budget"
-    if cost is not None and float(cost()) >= budget.max_cost_usd:
-        return "cost_budget"
+    if cost is not None:
+        try:
+            if float(cost()) > budget.max_cost_usd:
+                return "cost_budget"
+        except Exception:  # noqa: BLE001 - telemetry failure cannot silence an offline run
+            pass
     return None
 
 
@@ -384,15 +427,30 @@ async def run_offline_prototype(
         stop_reason=stop_reason,
         attempts=attempts,
         degradations=degradations,
+        vocabulary=vocabulary,
     )
     if validate_answer_plan_v0(plan, result):
         plan = _make_plan(
             None,
             stop_reason="validator_rejected",
             attempts=attempts,
-            degradations=[*degradations, "answer_plan_invalid"],
+            degradations=[*plan.degradations, "answer_plan_invalid"],
+            vocabulary=vocabulary,
         )
-    measured_cost = float(cost()) if cost is not None else None
+    measured_cost: float | None = None
+    if cost is not None:
+        try:
+            measured_cost = float(cost())
+            if not math.isfinite(measured_cost) or measured_cost < 0:
+                raise ValueError("cost meter returned an invalid value")
+        except Exception:  # noqa: BLE001 - telemetry failure is a named degradation
+            plan = plan.model_copy(
+                update={
+                    "degradations": tuple(
+                        dict.fromkeys((*plan.degradations, "cost_meter_failed"))
+                    )
+                }
+            )
     return PrototypeRun(
         plan=plan,
         safe_query_spec=safe_spec,

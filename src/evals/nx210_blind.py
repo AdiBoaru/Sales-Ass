@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 from dataclasses import dataclass
 from statistics import mean
@@ -15,6 +16,16 @@ from src.safety.external_data import contains_pii
 
 Side = Literal["A", "B"]
 Decision = Literal["insufficient_data", "no_go", "candidate_for_adi_review"]
+DeterministicFailure = Literal[
+    "fact_error",
+    "hard_constraint_violation",
+    "missing_link",
+    "missing_price",
+    "missing_stock",
+    "silence",
+    "ungrounded_claim",
+    "validator_rejected",
+]
 
 
 class ResponseArtifact(BaseModel):
@@ -22,7 +33,14 @@ class ResponseArtifact(BaseModel):
 
     text: str
     product_ids: tuple[str, ...] = ()
-    deterministic_failures: tuple[str, ...] = ()
+
+
+class RunMetrics(BaseModel):
+    """Sealed until ratings are complete so metadata cannot unblind evaluators."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    deterministic_failures: tuple[DeterministicFailure, ...] = ()
     latency_ms: float = Field(ge=0)
     cost_usd: float | None = Field(default=None, ge=0)
 
@@ -33,6 +51,8 @@ class BlindCase:
     prompt: str
     baseline: ResponseArtifact
     candidate: ResponseArtifact
+    baseline_metrics: RunMetrics
+    candidate_metrics: RunMetrics
 
 
 class BlindPair(BaseModel):
@@ -50,14 +70,40 @@ class RevealEntry(BaseModel):
     pair_id: str
     case_id: str
     candidate_side: Side
+    baseline_metrics: RunMetrics
+    candidate_metrics: RunMetrics
+
+
+class RubricScores(BaseModel):
+    """Human rubric frozen before H3; all dimensions use the same 1-5 scale."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_success: float = Field(ge=1, le=5)
+    factual_grounding: float = Field(ge=1, le=5)
+    constraint_adherence: float = Field(ge=1, le=5)
+    clarity: float = Field(ge=1, le=5)
+
+    @property
+    def overall(self) -> float:
+        return mean(self.model_dump().values())
+
+
+class DimensionDeltas(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_success: float
+    factual_grounding: float
+    constraint_adherence: float
+    clarity: float
 
 
 class PairedObservation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     pair_id: str
-    baseline_score: float = Field(ge=1, le=5)
-    candidate_score: float = Field(ge=1, le=5)
+    baseline_scores: RubricScores
+    candidate_scores: RubricScores
     baseline_fact_failures: int = Field(default=0, ge=0)
     candidate_fact_failures: int = Field(default=0, ge=0)
     candidate_hard_failures: int = Field(default=0, ge=0)
@@ -71,7 +117,7 @@ class DecisionPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     version: Literal["nx210-v0"] = "nx210-v0"
-    min_pairs: int = Field(default=30, ge=30)
+    min_pairs: int = Field(default=50, ge=30)
     practical_delta: float = Field(default=0.25, gt=0)
     confidence: float = Field(default=0.95, gt=0.5, lt=1)
     bootstrap_samples: int = Field(default=5_000, ge=1_000)
@@ -93,6 +139,7 @@ class DecisionReport(BaseModel):
     ci_low: float | None
     ci_high: float | None
     fact_regressions: int
+    dimension_mean_deltas: DimensionDeltas | None
     hard_failures: int
     candidate_latency_p90_ms: float | None
     candidate_cost_mean_usd: float | None
@@ -108,7 +155,16 @@ def _safe_report_text(text: str) -> str:
 
 
 def _safe_artifact(artifact: ResponseArtifact) -> ResponseArtifact:
-    return artifact.model_copy(update={"text": _safe_report_text(artifact.text)})
+    return artifact.model_copy(
+        update={
+            "text": _safe_report_text(artifact.text),
+            "product_ids": tuple(
+                product_id
+                for product_id in artifact.product_ids
+                if not contains_pii(product_id)
+            ),
+        }
+    )
 
 
 def build_blind_pairs(
@@ -145,6 +201,8 @@ def build_blind_pairs(
                 pair_id=pair_id,
                 case_id=case.case_id,
                 candidate_side=candidate_side,
+                baseline_metrics=case.baseline_metrics,
+                candidate_metrics=case.candidate_metrics,
             )
         )
     return tuple(pairs), tuple(reveal)
@@ -172,8 +230,24 @@ def paired_bootstrap_ci(
 
 def _nearest_rank(values: list[float], percentile: float) -> float:
     ordered = sorted(values)
-    index = max(0, min(len(ordered) - 1, int(percentile * len(ordered) - 1)))
+    index = max(0, min(len(ordered) - 1, math.ceil(percentile * len(ordered)) - 1))
     return ordered[index]
+
+
+def _dimension_deltas(observations: list[PairedObservation]) -> DimensionDeltas:
+    return DimensionDeltas(
+        **{
+            dimension: round(
+                mean(
+                    getattr(item.candidate_scores, dimension)
+                    - getattr(item.baseline_scores, dimension)
+                    for item in observations
+                ),
+                4,
+            )
+            for dimension in RubricScores.model_fields
+        }
+    )
 
 
 def evaluate_decision(
@@ -184,7 +258,10 @@ def evaluate_decision(
 ) -> DecisionReport:
     """Apply the pre-registered gate. A machine can only nominate a candidate for Adi."""
 
-    deltas = [item.candidate_score - item.baseline_score for item in observations]
+    deltas = [
+        item.candidate_scores.overall - item.baseline_scores.overall
+        for item in observations
+    ]
     fact_regressions = sum(
         1
         for item in observations
@@ -204,6 +281,7 @@ def evaluate_decision(
             hard_failures=hard_failures,
             candidate_latency_p90_ms=None,
             candidate_cost_mean_usd=None,
+            dimension_mean_deltas=_dimension_deltas(observations) if observations else None,
             failures=("insufficient_pairs",),
             policy_fingerprint=policy.fingerprint,
         )
@@ -251,6 +329,7 @@ def evaluate_decision(
         hard_failures=hard_failures,
         candidate_latency_p90_ms=round(latency_p90, 3),
         candidate_cost_mean_usd=round(cost_mean, 6) if cost_mean is not None else None,
+        dimension_mean_deltas=_dimension_deltas(observations),
         failures=tuple(failures),
         policy_fingerprint=policy.fingerprint,
     )

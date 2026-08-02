@@ -3,18 +3,34 @@ from src.evals.nx210_blind import (
     DecisionPolicy,
     PairedObservation,
     ResponseArtifact,
+    RubricScores,
+    RunMetrics,
     build_blind_pairs,
     evaluate_decision,
     paired_bootstrap_ci,
 )
 
 
-def _artifact(text: str) -> ResponseArtifact:
-    return ResponseArtifact(text=text, latency_ms=100, cost_usd=0.01)
+def _artifact(text: str, product_ids=()) -> ResponseArtifact:
+    return ResponseArtifact(text=text, product_ids=tuple(product_ids))
+
+
+def _metrics() -> RunMetrics:
+    return RunMetrics(latency_ms=100, cost_usd=0.01)
+
+
+def _scores(value: float) -> RubricScores:
+    return RubricScores(
+        task_success=value,
+        factual_grounding=value,
+        constraint_adherence=value,
+        clarity=value,
+    )
 
 
 def _policy() -> DecisionPolicy:
     return DecisionPolicy(
+        min_pairs=30,
         provisional_slo_ms=1_000,
         max_cost_usd=0.05,
         bootstrap_samples=1_000,
@@ -24,8 +40,8 @@ def _policy() -> DecisionPolicy:
 def _observation(index: int, *, delta=1.0, facts=0, hard=0, cost=0.01):
     return PairedObservation(
         pair_id=f"pair-{index}",
-        baseline_score=3.0,
-        candidate_score=3.0 + delta,
+        baseline_scores=_scores(3.0),
+        candidate_scores=_scores(3.0 + delta),
         baseline_fact_failures=0,
         candidate_fact_failures=facts,
         candidate_hard_failures=hard,
@@ -41,6 +57,8 @@ def test_blind_packets_are_deterministic_and_keep_reveal_separate():
             prompt="caut un ser",
             baseline=_artifact("baseline"),
             candidate=_artifact("candidate"),
+            baseline_metrics=_metrics(),
+            candidate_metrics=_metrics(),
         )
         for index in range(8)
     ]
@@ -51,6 +69,7 @@ def test_blind_packets_are_deterministic_and_keep_reveal_separate():
     assert pairs == repeated and reveal == repeated_reveal
     assert {item.candidate_side for item in reveal} == {"A", "B"}
     assert all("candidate_side" not in pair.model_dump() for pair in pairs)
+    assert all("latency_ms" not in pair.model_dump_json() for pair in pairs)
 
 
 def test_blind_artifact_fails_closed_on_pii():
@@ -59,8 +78,10 @@ def test_blind_artifact_fails_closed_on_pii():
             BlindCase(
                 case_id="pii",
                 prompt="Sunt Ion Popescu si caut un ser",
-                baseline=_artifact("telefon 0712 345 678"),
+                baseline=_artifact("telefon 0712 345 678", ("0712345678",)),
                 candidate=_artifact("raspuns sigur"),
+                baseline_metrics=_metrics(),
+                candidate_metrics=_metrics(),
             )
         ],
         seed="sealed",
