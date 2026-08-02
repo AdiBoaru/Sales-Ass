@@ -100,7 +100,7 @@ def _context(
                 unknown_is_violation=unknown_is_violation,
             ),
         ),
-        successful_action_ids=("checkout-1",),
+        successful_action_ids=("checkout_link:1",),
         known_need_ids=("need-1",),
     )
 
@@ -154,7 +154,7 @@ def _raw_plan() -> dict:
         "uncertainties": [],
         "unmet_constraints": [],
         "confirmed_actions": [
-            {"action": "checkout_link", "action_id": "checkout-1", "reference_id": "ref-1"}
+            {"action": "checkout_link", "action_id": "checkout_link:1", "reference_id": "ref-1"}
         ],
     }
 
