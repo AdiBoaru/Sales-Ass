@@ -1,78 +1,59 @@
-# NX-210 H3 Runbook
+# NX-210 Quality H3 runbook
 
-This runbook handles only offline artifacts. It does not call production workers, register tools,
-or write to a database.
+H3 is a conversational quality decision, not a retrieval benchmark. Its primary input is a
+sealed `QualityH3Set` owned by NX-202. NX-203/NX-209 qrels remain a separate prerequisite that
+proves the retrieval layer is ready; they never supply the prompts scored by evaluators.
 
-## 1. Readiness
+## Preconditions
 
-Without an approved NX-201 policy, readiness reports `decision_policy_unavailable` and exits 2:
+The runner fails closed until all of these are available:
+
+- at least 50 human-verified, sealed quality cases;
+- at least 30 `hard` cases and 10 `simple_fact` cases;
+- sanitized prompt, history, and profile fields with no detected PII;
+- a frozen `DecisionPolicy` including provisional latency and cost limits;
+- a green NX-209 retrieval readiness gate over independently maintained qrels;
+- baseline and candidate artifacts covering exactly the same quality case IDs and business.
+
+The current legacy golden inventory is useful source material, but it is not implicitly treated as
+sealed H3 data. Rewrites, validation, difficulty labels, and holdout sealing remain explicit NX-202
+work.
+
+## Commands
+
+Generate a PII-safe readiness projection without opening the holdout:
 
 ```powershell
-$env:PYTHONPATH='.'
-python scripts/nx210_h3.py readiness `
-  --qrels tests/golden/qrels_confirmed.json `
+python -m scripts.nx210_h3 readiness `
+  --quality-h3 path/to/quality-h3.json `
+  --retrieval-qrels tests/golden/qrels_confirmed.json `
+  --policy path/to/frozen-policy.json `
   --output reports/nx210-h3-readiness.json
 ```
 
-After NX-201 is approved, store the exact `DecisionPolicy` JSON outside evaluator packets and pass
-it with `--policy`. The policy fingerprint is copied into every subsequent artifact.
-
-## 2. Run Artifacts
-
-Generate one JSON file per system on the same H3 cases. The runner requires exact case-ID coverage,
-the qrels `business_id`, and the correct variant label:
-
-```json
-{
-  "schema_version": 1,
-  "business_id": "server-owned-business-id",
-  "variant": "baseline",
-  "cases": [
-    {
-      "case_id": "controlled-case-id",
-      "response": {"text": "response text", "product_ids": ["controlled-product-id"]},
-      "metrics": {
-        "deterministic_failures": [],
-        "latency_ms": 1000,
-        "cost_usd": 0.01
-      }
-    }
-  ]
-}
-```
-
-Allowed deterministic failures are fixed by `RunMetrics`; arbitrary strings are rejected.
-
-## 3. Seal Blind Packets
-
-Run this only when readiness is green. Keep the reveal file away from evaluators:
+Seal blind evaluator packets and keep the reveal key in a separate restricted location:
 
 ```powershell
-python scripts/nx210_h3.py pack `
-  --qrels tests/golden/qrels_confirmed.json `
-  --policy path/to/nx210-policy.json `
+python -m scripts.nx210_h3 pack `
+  --quality-h3 path/to/quality-h3.json `
+  --retrieval-qrels path/to/ready-qrels.json `
+  --policy path/to/frozen-policy.json `
   --baseline path/to/baseline-run.json `
   --candidate path/to/candidate-run.json `
-  --seed sealed-random-seed `
+  --seed sealed-run-seed `
   --packets-output path/to/evaluator-packets.json `
-  --reveal-output path/to/sealed-reveal.json
+  --reveal-output restricted/path/to/reveal.json
 ```
 
-Evaluator packets contain no side label, latency, cost, deterministic failure, or case ID. The
-separate reveal contains controlled IDs and metrics, but no prompts or response text.
-
-## 4. Ratings and Decision
-
-Ratings use the same four 1-5 rubric dimensions for responses A and B. They must cover every pair
-exactly once and carry the policy fingerprint.
+After every blind pair is scored, reveal and evaluate:
 
 ```powershell
-python scripts/nx210_h3.py evaluate `
-  --policy path/to/nx210-policy.json `
-  --ratings path/to/blind-ratings.json `
-  --reveal path/to/sealed-reveal.json `
-  --output reports/nx210-h3-decision.json
+python -m scripts.nx210_h3 evaluate `
+  --policy path/to/frozen-policy.json `
+  --ratings path/to/ratings.json `
+  --reveal restricted/path/to/reveal.json `
+  --output path/to/decision-report.json
 ```
 
-Exit 0 means only `candidate_for_adi_review`. Exit 3 means `insufficient_data` or `no_go`. No
-software path can emit a signed GO; Adi records the final decision in the ADR.
+The automated outcome is only `insufficient_data`, `no_go`, or `candidate_for_adi_review`.
+Production rollout still requires Adi's explicit signature.

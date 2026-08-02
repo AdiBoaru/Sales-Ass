@@ -1,4 +1,4 @@
-"""NX-210 H3 CLI: readiness, blind packet sealing, and post-rating evaluation."""
+"""NX-210 quality H3 CLI: readiness, packet sealing, and evaluation."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from src.evals.nx210_blind import DecisionPolicy, evaluate_decision
 from src.evals.nx210_h3 import (
+    QualityH3Set,
     RatingsEnvelope,
     RevealEnvelope,
     RunArtifact,
@@ -43,10 +44,40 @@ def _model_json(model: BaseModel) -> dict[str, object]:
     return model.model_dump(mode="json")
 
 
+def _legacy_inventory(
+    cases_path: Path,
+    conversations_path: Path,
+    classification_path: Path,
+) -> tuple[int, int]:
+    inventory = len(_read_json(cases_path)) + len(_read_json(conversations_path))
+    classification = _read_json(classification_path)
+    entries = [
+        entry
+        for section in ("cases", "conversations")
+        for entry in classification.get(section, {}).values()
+    ]
+    rewrite_count = sum(
+        entry.get("role") == "ro-quality" and entry.get("bucket") == "rewrite" for entry in entries
+    )
+    return inventory, rewrite_count
+
+
 def _readiness(args: argparse.Namespace) -> int:
-    qrels = _load_qrels(args.qrels)
+    quality_h3 = _load_model(args.quality_h3, QualityH3Set) if args.quality_h3 else None
+    retrieval_qrels = _load_qrels(args.retrieval_qrels) if args.retrieval_qrels else None
     policy = _load_model(args.policy, DecisionPolicy) if args.policy else None
-    report = assess_h3_readiness(qrels, policy)
+    inventory, rewrite_count = _legacy_inventory(
+        args.legacy_cases,
+        args.legacy_conversations,
+        args.classification,
+    )
+    report = assess_h3_readiness(
+        quality_h3,
+        policy,
+        retrieval_qrels,
+        inventory_count=inventory,
+        rewrite_count=rewrite_count,
+    )
     payload = {**_model_json(report), "ready": report.ready}
     if args.output:
         _write_json(args.output, payload)
@@ -56,11 +87,19 @@ def _readiness(args: argparse.Namespace) -> int:
 
 
 def _pack(args: argparse.Namespace) -> int:
-    qrels = _load_qrels(args.qrels)
+    quality_h3 = _load_model(args.quality_h3, QualityH3Set)
+    retrieval_qrels = _load_qrels(args.retrieval_qrels)
     policy = _load_model(args.policy, DecisionPolicy)
     baseline = _load_model(args.baseline, RunArtifact)
     candidate = _load_model(args.candidate, RunArtifact)
-    bundle = build_h3_packets(qrels, baseline, candidate, policy, seed=args.seed)
+    bundle = build_h3_packets(
+        quality_h3,
+        retrieval_qrels,
+        baseline,
+        candidate,
+        policy,
+        seed=args.seed,
+    )
     _write_json(args.packets_output, _model_json(bundle.packets))
     _write_json(args.reveal_output, _model_json(bundle.reveal))
     return 0
@@ -83,13 +122,26 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     readiness = commands.add_parser("readiness")
-    readiness.add_argument("--qrels", type=Path, required=True)
+    readiness.add_argument("--quality-h3", type=Path)
+    readiness.add_argument("--retrieval-qrels", type=Path)
     readiness.add_argument("--policy", type=Path)
+    readiness.add_argument("--legacy-cases", type=Path, default=Path("tests/golden/cases.json"))
+    readiness.add_argument(
+        "--legacy-conversations",
+        type=Path,
+        default=Path("tests/golden/conversations.json"),
+    )
+    readiness.add_argument(
+        "--classification",
+        type=Path,
+        default=Path("tests/golden/classification.json"),
+    )
     readiness.add_argument("--output", type=Path)
     readiness.set_defaults(handler=_readiness)
 
     pack = commands.add_parser("pack")
-    pack.add_argument("--qrels", type=Path, required=True)
+    pack.add_argument("--quality-h3", type=Path, required=True)
+    pack.add_argument("--retrieval-qrels", type=Path, required=True)
     pack.add_argument("--policy", type=Path, required=True)
     pack.add_argument("--baseline", type=Path, required=True)
     pack.add_argument("--candidate", type=Path, required=True)
