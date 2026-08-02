@@ -421,7 +421,8 @@ async def run_offline_prototype(
             break
         current = refined
 
-    safe_spec = (current or initial).to_safe(vocabulary) if (current or initial) else SafeQuerySpec()
+    reportable_spec = current or initial
+    safe_spec = reportable_spec.to_safe(vocabulary) if reportable_spec else SafeQuerySpec()
     plan = _make_plan(
         result,
         stop_reason=stop_reason,
