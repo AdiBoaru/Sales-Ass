@@ -1,0 +1,16 @@
+{
+  "gate": "NX-210",
+  "split": "holdout_h3",
+  "query_count": 4,
+  "verified_family_count": 4,
+  "required_pairs": 50,
+  "policy_fingerprint": null,
+  "blocking_codes": [
+    "qrels_integrity_blocked",
+    "h3_sample_too_small"
+  ],
+  "unavailable_codes": [
+    "decision_policy_unavailable"
+  ],
+  "ready": false
+}
