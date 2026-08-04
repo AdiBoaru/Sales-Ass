@@ -1,0 +1,24 @@
+{
+  "gate": "NX-210",
+  "split": "quality_holdout_h3",
+  "inventory_count": 75,
+  "rewrite_count": 27,
+  "sealed_case_count": 0,
+  "hard_case_count": 0,
+  "simple_fact_case_count": 0,
+  "required_pairs": 50,
+  "required_hard_cases": 30,
+  "required_simple_fact_cases": 10,
+  "policy_fingerprint": null,
+  "blocking_codes": [
+    "quality_h3_sample_too_small",
+    "quality_h3_hard_slice_too_small",
+    "quality_h3_simple_fact_slice_too_small",
+    "nx209_retrieval_gate_blocked"
+  ],
+  "unavailable_codes": [
+    "quality_holdout_unavailable",
+    "decision_policy_unavailable"
+  ],
+  "ready": false
+}
