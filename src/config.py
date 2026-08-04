@@ -383,6 +383,19 @@ class Settings(BaseSettings):
     safety_medical_guardrail_enabled: bool = Field(
         default=True, validation_alias="SAFETY_MEDICAL_GUARDRAIL_ENABLED"
     )
+    # NX-211: dormant until NX-210 H3 GO. OFF preserves the pre-NX-211 render path.
+    answer_plan_enabled: bool = Field(default=False, validation_alias="ANSWER_PLAN_ENABLED")
+    answer_plan_critic_enabled: bool = Field(
+        default=False,
+        validation_alias="ANSWER_PLAN_CRITIC_ENABLED",
+    )
+    answer_plan_critic_coverage_threshold: float = Field(
+        default=0.99,
+        ge=0,
+        le=1,
+        validation_alias="ANSWER_PLAN_CRITIC_COVERAGE_THRESHOLD",
+    )
+    answer_plan_max_quality: bool = Field(default=False, validation_alias="ANSWER_PLAN_MAX_QUALITY")
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e

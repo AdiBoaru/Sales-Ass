@@ -93,6 +93,8 @@ class ToolRun:
     search_relevance: Any = None  # izi-parity: relevanța ultimului search_products (off-category)
     failed_commerce: set[str] = field(default_factory=set)  # NX-137: cart/checkout eșuate
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
+    # NX-211: server-owned IDs for mutations that returned ok=True.
+    successful_action_ids: set[str] = field(default_factory=set)
 
     def _safe_products(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """NX-173: plasa de siguranță peste rezultatul ORICĂRUI tool.
@@ -144,6 +146,9 @@ class ToolRun:
             self.failed_commerce.add(name)
         if name == "checkout_link" and result.ok and result.links:
             self.checkout_url = result.links[0]  # NX-137: → Offer(open_url) pe reply
+        if name in ("cart_add", "checkout_link", "subscribe_back_in_stock") and result.ok:
+            action_id = f"{name}:{len(self.successful_action_ids) + 1}"
+            self.successful_action_ids.add(action_id)
         if name == "check_order":
             if result.ok and result.llm_view:
                 self.order_views.append(result.llm_view)

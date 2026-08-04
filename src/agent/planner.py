@@ -126,6 +126,7 @@ class ResponsePlan:
     grounded_prices: set[float] = field(default_factory=set)
     order_views: list[str] = field(default_factory=list)
     checkout_url: str | None = None
+    successful_action_ids: set[str] = field(default_factory=set)
 
 
 def _plan_mode(
@@ -378,4 +379,5 @@ async def build_plan(
         grounded_prices=run.grounded_prices,
         order_views=run.order_views,
         checkout_url=run.checkout_url,
+        successful_action_ids=set(run.successful_action_ids),
     )
