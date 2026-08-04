@@ -250,19 +250,26 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
             defer_aftercare=True,
         )
     # conn ELIBERAT ↑ (async with închis).
-    # NX-120: contor de cost per-vizitator (estimare-plasă de admitere; precizia per-tur = NX-125).
-    # Best-effort: un fail de Redis aici NU rupe răspunsul deja calculat.
+    pipeline_cost_usd = (
+        result.aftercare.ctx.usage.cost_usd
+        if result.aftercare is not None and result.aftercare.ctx.usage is not None
+        else 0.0
+    )
+    post_turn_cost_usd = 0.0
+    # Aftercare uses separate DB checkouts. Its real cost is added to the web visitor cap below.
+    if result.aftercare is not None:
+        post_turn_cost_usd = await run_aftercare(
+            tenant_db(session.business_id), redis, result.aftercare
+        )
     try:
         await web_cost_add_visitor(
-            redis, session.business_id, req.visitor_id, s.cost_triage_usd + s.cost_agent_usd
+            redis,
+            session.business_id,
+            req.visitor_id,
+            pipeline_cost_usd + post_turn_cost_usd,
         )
-    except Exception:  # noqa: BLE001 — best-effort: NU rupem un răspuns deja calculat (orice eroare)
-        log.warning("web_cost_add_visitor a eșuat (răspunsul a fost livrat)")
-    # NX-161 F1: aftercare cu conn eliberat (checkout-uri scurte, fără conn pe durata LLM). ATENȚIE
-    # (Codex rule 2): pe web SINCRON asta blochează răspunsul HTTP pe durata aftercare-ului —
-    # acceptabil pt F1 (DB-ul e liber), dar ideal ulterior = background task (nu întârzie clientul).
-    if result.aftercare is not None:
-        await run_aftercare(tenant_db(session.business_id), redis, result.aftercare)
+    except Exception:  # noqa: BLE001 - the reply is more important than telemetry
+        log.warning("web_cost_add_visitor failed after the reply was built")
     return _build_chat_response(result)
 
 

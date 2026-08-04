@@ -39,7 +39,7 @@ from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Event, TurnContext
 from src.safety.policy import SafetyPolicy
 from src.worker.canonicalize import canonical_keys_for
-from src.worker.limits import cost_add
+from src.worker.limits import cost_add_and_total
 from src.worker.memory import process_facts
 from src.worker.profile import (
     build_ref_map,
@@ -235,9 +235,6 @@ async def _summarize_if_needed(
                 [Event("summarizer_run", {"messages": len(to_summarize), "turn_id": ctx.turn_id})],
                 conversation_id=conversation_id,
             )
-        # Cost guard (G2c): apelul nano extra trebuie contabilizat, altfel scapă plafonului zilnic.
-        if redis is not None and settings.cost_guard_enabled:
-            await cost_add(redis, business_id, settings.cost_triage_usd)
         log.info(
             "summarizer: rezumat scris conv=%s msgs=%d len=%dch",
             conversation_id,
@@ -286,8 +283,6 @@ async def _extract_profile_and_score(
         )
         if delta is None:
             return  # parse/API fail → fail-soft, nimic de scris
-        if redis is not None and settings.cost_guard_enabled:
-            await cost_add(redis, ctx.business.id, settings.cost_triage_usd)
 
         # PROCESARE PURĂ (fără conn) — construim events + `kept` + `fact_types` înainte de writes.
         patch, dropped = filter_profile_patch(delta.profile_patch, ctx.business.vertical)
@@ -432,7 +427,21 @@ async def _extract_profile_and_score(
         log.exception("extractor profil a eșuat (turul continuă)")
 
 
-async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork) -> None:
+async def _record_aftercare_cost(redis: Redis | None, work: AftercareWork, cost_usd: float) -> None:
+    """Record the real post-turn LLM cost exactly once."""
+    settings = get_settings()
+    if redis is None or not settings.cost_guard_enabled or cost_usd <= 0:
+        return
+    try:
+        total = await cost_add_and_total(redis, work.business.id, cost_usd)
+        cap = work.business.daily_cost_cap_usd or settings.daily_cost_cap_usd
+        if cap and total >= cap:
+            work.ctx.emit("cost_guard_tripped", cap_usd=cap, total_usd=round(total, 6))
+    except Exception as exc:  # noqa: BLE001 - the guard remains best-effort
+        log.warning("cost guard aftercare: add failed (%s)", type(exc).__name__)
+
+
+async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork) -> float:
     """Orchestrează munca POST-TUR (best-effort): cache write-back + summarizer + profil/facts,
     într-un acumulator de usage propriu (al doilea `llm_usage`, phase=post_turn, ca fundalul să NU
     scape rollup-ului). `db` = PROVIDER: inline (static_db) = vechi; deferred (tenant_db) = conn
@@ -458,7 +467,9 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
         log.exception("aftercare a eșuat (turul continuă)")  # să propage (reply e deja commis)
     finally:
         usage.pop(post_token)
+    post_cost_usd = round(post_acc.cost_usd, 6)
     if post_acc.calls:
+        await _record_aftercare_cost(redis, work, post_cost_usd)
         # NX-122: prin ctx.emit → turn_id atașat (corelează costul post-tur cu turul).
         work.ctx.emit("llm_usage", **_usage_event_props(post_acc, phase="post_turn"))
         # best-effort: eșecul de CHECKOUT sau de insert NU rupe turul (review Codex #208) — pe web
@@ -474,3 +485,4 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
                 )
         except Exception:  # noqa: BLE001 — persistarea llm_usage e best-effort
             log.exception("persistarea llm_usage post-tur a eșuat (turul continuă)")
+    return post_cost_usd

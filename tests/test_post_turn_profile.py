@@ -295,9 +295,6 @@ def _patch(monkeypatch, *, delta, boom_update=False):
             raise RuntimeError("db down")
         sink["update"] = {"patch": patch, "score": score, "contact_id": contact_id}
 
-    async def f_cost(redis, business_id, amount):
-        sink["cost"] = amount
-
     async def f_events(conn, business_id, events, *, conversation_id=None, contact_id=None):
         sink["events"] = [(e.type, e.properties) for e in events]
         sink["events_contact"] = contact_id
@@ -305,7 +302,6 @@ def _patch(monkeypatch, *, delta, boom_update=False):
     monkeypatch.setattr(proc, "extract_profile", f_extract)
     monkeypatch.setattr(proc, "get_messages_for_extraction", f_window)
     monkeypatch.setattr(proc, "update_contact_profile_and_score", f_update)
-    monkeypatch.setattr(proc, "cost_add", f_cost)
     monkeypatch.setattr(proc, "insert_events", f_events)
     return sink
 
@@ -332,7 +328,6 @@ async def test_happy_path_filters_patch_and_scores(monkeypatch):
     ) in sink["events"]
     assert ("lead_score_updated", {"old": 0.0, "new": 100.0, "turn_id": "turn-1"}) in sink["events"]
     assert sink["events_contact"] == "contact1"
-    assert sink["cost"] > 0  # apelul nano contabilizat (G2c)
 
 
 async def test_score_only_update_when_patch_empty(monkeypatch):
@@ -358,7 +353,6 @@ async def test_no_write_when_empty_patch_and_score_unchanged(monkeypatch):
     )
     assert "update" not in sink
     assert "events" not in sink
-    assert sink["cost"] > 0  # apelul nano a avut loc oricum → contat
 
 
 async def test_llm_none_skips_everything(monkeypatch):
@@ -366,7 +360,7 @@ async def test_llm_none_skips_everything(monkeypatch):
     await proc._extract_profile_and_score(
         static_db(_FakeConn()), object(), _ctx(), None, shadow_mode=False
     )
-    assert "extract_called" not in sink and "update" not in sink and "cost" not in sink
+    assert "extract_called" not in sink and "update" not in sink
 
 
 async def test_shadow_mode_skips(monkeypatch):
@@ -391,7 +385,7 @@ async def test_extract_returns_none_no_update(monkeypatch):
     await proc._extract_profile_and_score(
         static_db(_FakeConn()), object(), _ctx(), object(), shadow_mode=False
     )
-    assert sink["extract_called"] and "update" not in sink and "cost" not in sink
+    assert sink["extract_called"] and "update" not in sink
 
 
 async def test_db_failure_is_best_effort(monkeypatch):
@@ -405,7 +399,6 @@ async def test_db_failure_is_best_effort(monkeypatch):
     )
     assert "update" not in sink  # a aruncat → nimic capturat
     assert "events" not in sink  # am sărit la except înainte de insert
-    assert sink["cost"] > 0  # apelul nano a avut loc înainte de eșecul DB
 
 
 async def test_dropped_keys_emitted_even_without_db_write(monkeypatch):
