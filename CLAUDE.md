@@ -556,6 +556,8 @@ nativx-assistant/
 │       ├── cleanup_dedupe.py    ← purjă inbound_dedupe >48h (admin_conn, zilnic)
 │       ├── lifecycle.py         ← Val3: scrie contacts.lifecycle nocturn (new/engaged/customer/repeat/churn_risk)
 │       ├── rollup_usage.py      ← TODO: nocturn: analytics_events → usage_daily
+│       ├── rollup_demand.py     ← NX-217: nocturn: faptele de cerere → demand_daily
+│       │                          (o trecere/zi, toți tenanții; --from --to pt backfill)
 │       ├── embed_products.py    ← TODO: ai_summary → product_embeddings (content_hash)
 │       └── cleanup.py           ← TODO: drop partiții vechi, expire semantic_cache
 ├── tests/

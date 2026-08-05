@@ -12,8 +12,11 @@ from src.jobs import scheduler as sch
 from src.jobs.scheduler import Job, _build_jobs, _compute_next, _run_due, _safe_run
 
 
-def _settings(*, key="sk-x", embed=True, proactive=True, initiators=True, lifecycle=True):
+def _settings(
+    *, key="sk-x", embed=True, proactive=True, initiators=True, lifecycle=True, demand=True
+):
     return SimpleNamespace(
+        demand_rollup_enabled=demand,
         openai_api_key=key,
         embed_job_enabled=embed,
         scheduler_rollup_hour_utc=0,
@@ -87,6 +90,7 @@ def test_build_jobs_includes_embed_with_key(monkeypatch):
     assert [j.name for j in _build_jobs()] == [
         "rollup_usage",
         "cleanup_dedupe",
+        "rollup_demand",
         "embed_products",
         "proactive_initiators",
         "lifecycle",
@@ -97,7 +101,13 @@ def test_build_jobs_excludes_embed_without_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="", embed=True))
     names = [j.name for j in _build_jobs()]
     # rollup + cleanup + initiators + lifecycle chiar fără cheie OpenAI (doar embed cere cheie)
-    assert names == ["rollup_usage", "cleanup_dedupe", "proactive_initiators", "lifecycle"]
+    assert names == [
+        "rollup_usage",
+        "cleanup_dedupe",
+        "rollup_demand",
+        "proactive_initiators",
+        "lifecycle",
+    ]
 
 
 def test_build_jobs_excludes_embed_when_disabled(monkeypatch):
@@ -130,6 +140,19 @@ def test_build_jobs_includes_lifecycle_anchored_nightly(monkeypatch):
 def test_build_jobs_excludes_lifecycle_when_disabled(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(lifecycle=False))
     assert "lifecycle" not in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_includes_demand_rollup_nightly(monkeypatch):
+    """NX-217: rollup-ul de cerere rulează în aceeași fereastră nocturnă cu rollup_usage —
+    ambele citesc ziua UTC încheiată."""
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings())
+    rd = next(j for j in _build_jobs() if j.name == "rollup_demand")
+    assert rd.at_hour_utc == 0 and rd.interval_seconds == 86400
+
+
+def test_build_jobs_excludes_demand_rollup_when_disabled(monkeypatch):
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings(demand=False))
+    assert "rollup_demand" not in [j.name for j in _build_jobs()]
 
 
 # --------------------------------------------------------------------------- #
