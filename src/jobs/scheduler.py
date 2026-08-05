@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.config import get_settings
 from src.db.connection import close_pool
-from src.jobs import cleanup_dedupe
+from src.jobs import cleanup_dedupe, partition_maintenance
 
 log = logging.getLogger(__name__)
 
@@ -134,6 +134,14 @@ def _build_jobs() -> list[Job]:
             interval_seconds=s.scheduler_dedupe_interval_seconds,
         ),
     ]
+    if s.partition_job_enabled:  # NX-218: partițiile lunii viitoare, create ÎNAINTE de scrieri
+        jobs.append(
+            Job(
+                "partition_maintenance",
+                lambda: partition_maintenance.run(months_ahead=s.partition_months_ahead),
+                interval_seconds=s.scheduler_partition_interval_seconds,
+            )
+        )
     if s.embed_job_enabled and s.openai_api_key:  # embed cere cheie OpenAI
         jobs.append(
             Job(
