@@ -32,7 +32,7 @@ EVIDENCE_CAP = 5
 # Reason-urile de `unmet_query` acceptate → `unmet_<reason>`. Allowlist explicit: un `reason`
 # nou/greșit din properties NU trebuie să inventeze un `signal_kind` (constrângerea din DB l-ar
 # respinge oricum și ar pica tot rollup-ul).
-_UNMET_REASONS = (
+UNMET_REASONS = (
     "no_result",
     "named_not_found",
     "out_of_stock",
@@ -47,21 +47,10 @@ _SAFE_IDS = """
          then e.properties->'product_ids' else '[]'::jsonb end
 """
 
-_FACTS_SQL = f"""
-with ev as (
-    select business_id, conversation_id, event_type, properties, created_at
-    from analytics_events
-    where created_at >= ($1::date)::timestamp at time zone 'UTC'
-      and created_at <  ($1::date + 1)::timestamp at time zone 'UTC'
-),
-unmet as (
-    select business_id, conversation_id, properties, created_at,
-           'unmet_' || (properties->>'reason') as signal_kind
-    from ev
-    where event_type = 'unmet_query'
-      and properties->>'reason' = any($2::text[])
-),
-facts as (
+# Fereastra + filtrul de tenant sunt PARAMETRI ai CTE-ului: același flux de fapte alimentează
+# rollup-ul nocturn (o zi, toți tenanții) ȘI citirea live a zilei curente (un tenant, interval).
+# O singură definiție a faptelor = imposibil ca raportul „azi" să numere altfel decât istoricul.
+_FACTS_BODY = f"""facts as (
     -- cerere neîmplinită × brand / categorie / produs (scalar) / variantă
     select business_id, signal_kind, 'brand' as dimension_kind,
            btrim(properties->>'brand') as dimension_key, conversation_id, created_at
@@ -143,12 +132,48 @@ evidence as (
     ) t
     group by 1, 2, 3, 4
 )
+"""
+
+
+def facts_cte(ev_where: str, reasons_ph: str) -> str:
+    """Compune CTE-urile `ev` / `unmet` / `facts` / `counts` / `evidence` cu fereastra dată.
+
+    `ev_where` = predicatul de selecție a evenimentelor (o zi întreagă la rollup; interval +
+    tenant la citirea live a zilei curente); `reasons_ph` = placeholder-ul pentru allowlist-ul
+    de reason-uri. O singură definiție a faptelor pentru ambele căi."""
+    return (
+        f"""
+with ev as (
+    select business_id, conversation_id, event_type, properties, created_at
+    from analytics_events
+    where {ev_where}
+),
+unmet as (
+    select business_id, conversation_id, properties, created_at,
+           'unmet_' || (properties->>'reason') as signal_kind
+    from ev
+    where event_type = 'unmet_query'
+      and properties->>'reason' = any({reasons_ph}::text[])
+),
+"""
+        + _FACTS_BODY
+    )
+
+
+_ROLLUP_DAY_WHERE = (
+    "created_at >= ($1::date)::timestamp at time zone 'UTC'"
+    " and created_at <  ($1::date + 1)::timestamp at time zone 'UTC'"
+)
+
+_FACTS_SQL = (
+    facts_cte(_ROLLUP_DAY_WHERE, "$2")
+    + """
 insert into demand_daily (
     business_id, day, signal_kind, dimension_kind, dimension_key,
     request_count, conversation_count, evidence_conversation_ids
 )
 select c.business_id, $1::date, c.signal_kind, c.dimension_kind, c.dimension_key,
-       c.request_count, c.conversation_count, coalesce(e.ids, '{{}}'::uuid[])
+       c.request_count, c.conversation_count, coalesce(e.ids, '{}'::uuid[])
 from counts c
 left join evidence e
        on e.business_id = c.business_id
@@ -156,6 +181,7 @@ left join evidence e
       and e.dimension_kind = c.dimension_kind
       and e.dimension_key = c.dimension_key
 """
+)
 
 
 async def rollup_demand_day(conn: asyncpg.Connection, day: date) -> int:
@@ -166,5 +192,5 @@ async def rollup_demand_day(conn: asyncpg.Connection, day: date) -> int:
     Întoarce câte rânduri au fost scrise. `conn` = admin."""
     async with conn.transaction():
         await conn.execute("delete from demand_daily where day = $1", day)
-        status = await conn.execute(_FACTS_SQL, day, list(_UNMET_REASONS))
+        status = await conn.execute(_FACTS_SQL, day, list(UNMET_REASONS))
     return int(status.rsplit(" ", 1)[-1]) if status.startswith("INSERT") else 0

@@ -298,6 +298,13 @@ class Settings(BaseSettings):
     # NX-217: rollup nocturn al faptelor de cerere (demand_daily). Rulează în aceeași fereastră
     # cu rollup_usage — ambele citesc ziua UTC încheiată din analytics_events.
     demand_rollup_enabled: bool = Field(default=True, validation_alias="DEMAND_ROLLUP_ENABLED")
+    # NX-217 felia 3: câte cereri sunt necesare ca o dimensiune să devină ACȚIUNE, și pe ce
+    # fereastră se citește raportul. Praguri în config, nu în cod: un raport necalibrabil pe
+    # tenanții mici ajunge ignorat.
+    demand_action_min_requests: int = Field(
+        default=3, validation_alias="DEMAND_ACTION_MIN_REQUESTS"
+    )
+    demand_report_window_days: int = Field(default=30, validation_alias="DEMAND_REPORT_WINDOW_DAYS")
 
     # --- Extractor profil + lead_score (NX-88, post-tur stagiul 9) ---
     # Botul „învață" clientul: nano extrage semnale de profil → patch whitelist pe
