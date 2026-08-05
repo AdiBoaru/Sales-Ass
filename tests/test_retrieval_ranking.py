@@ -76,7 +76,7 @@ def test_relax_ladder_pins_price_when_flag_on(flag_on):
     steps = _relax_ladder(price_max=80.0, concerns=["oily"], category="parfum", in_stock_only=False)
     assert all(s["price_max"] == 80.0 for s in steps)  # prețul NU se relaxează niciodată
     assert any(s["concerns"] is None for s in steps)  # softul (concerns) se relaxează
-    assert any(s["category"] is None for s in steps)
+    assert all(s["category"] == "parfum" for s in steps)  # categoria explicită rămâne hard
 
 
 def test_relax_ladder_legacy_drops_price_first(flag_off):
@@ -85,7 +85,7 @@ def test_relax_ladder_legacy_drops_price_first(flag_off):
 
 
 def test_relax_ladder_features_relax_last(flag_on):
-    # Tier 2b p2: feature („cu niacinamidă") e hard requirement → relaxat DUPĂ category (P6).
+    # Feature („cu niacinamidă") se relaxează după concerns; categoria rămâne hard (NX-220).
     steps = _relax_ladder(
         price_max=None,
         concerns=["oily"],
@@ -96,8 +96,9 @@ def test_relax_ladder_features_relax_last(flag_on):
     assert steps[0]["features"] == ["niacinamida"]  # prima treaptă = strict
     assert steps[-1]["features"] is None  # feature relaxat la final
     feat_idx = next(i for i, s in enumerate(steps) if s["features"] is None)
-    cat_idx = next(i for i, s in enumerate(steps) if s["category"] is None)
-    assert feat_idx > cat_idx  # feature relaxat DUPĂ category (păstrat cât mai mult)
+    concern_idx = next(i for i, s in enumerate(steps) if s["concerns"] is None)
+    assert feat_idx > concern_idx
+    assert all(s["category"] == "creme" for s in steps)
 
 
 # --- matcher intenție „mai ieftin" -------------------------------------------

@@ -139,7 +139,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "function": {
             "name": "compare_products",
             "description": (
-                "Compară 2-3 produse (preț, rating, plusuri/minusuri). Folosește când clientul "
+                "Compară 2-4 produse (preț, rating, plusuri/minusuri). Folosește când clientul "
                 "ezită între produse sau cere o comparație."
             ),
             "strict": True,
@@ -150,7 +150,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     "product_ids": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "2-3 id-uri de produs (din rezultatele search_products).",
+                        "description": "2-4 id-uri de produs (din rezultatele search_products).",
                     },
                 },
                 "required": ["product_ids"],

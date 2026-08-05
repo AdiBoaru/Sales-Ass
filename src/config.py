@@ -486,6 +486,9 @@ class Settings(BaseSettings):
     # Follow-up de recenzii pe produsele deja afișate: rezolvă produsul din nume/ordinal sau cere
     # explicit alegerea, apoi compune numai din review_summary/top_pros/top_cons/rating.
     review_intent_enabled: bool = Field(default=True, validation_alias="REVIEW_INTENT_ENABLED")
+    # Follow-up de DETALIU pe un produs deja afișat („spune-mi mai multe”, „detalii despre primul”)
+    # → răspuns determinist din catalog, nu o nouă recomandare compusă de model.
+    detail_intent_enabled: bool = Field(default=True, validation_alias="DETAIL_INTENT_ENABLED")
     # IZI-parity: întrebare de tip SUPERLATIV pe setul AFIȘAT („care dintre ele e cea mai
     # ușoară/ieftină/hidratantă") → re-hidratează ÎNTREGUL set afișat și lasă modelul să RĂSPUNDĂ
     # la superlativ peste toate candidatele (nu o căutare nouă, nu 1 produs). Precede cheaper.
@@ -550,19 +553,30 @@ class Settings(BaseSettings):
     # `categories.path`). Repară „cerere pe părinte (machiaj) ratează copiii (fond-de-ten)". OFF
     # (fail-safe) → match exact pe slug/nume al `primary_category_id`, byte-identic cu azi.
     search_category_tree_enabled: bool = Field(
-        default=False, validation_alias="SEARCH_CATEGORY_TREE_ENABLED"
+        default=True, validation_alias="SEARCH_CATEGORY_TREE_ENABLED"
+    )
+    # O categorie explicită este o constrângere de raft, nu un criteriu soft. ON → ladder-ul poate
+    # relaxa nevoi/features, dar nu scoate categoria doar pentru a umple numărul de rezultate.
+    search_category_hard_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_CATEGORY_HARD_ENABLED"
     )
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
     # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.
     search_offcategory_guard_enabled: bool = Field(
-        default=False, validation_alias="SEARCH_OFFCATEGORY_GUARD_ENABLED"
+        default=True, validation_alias="SEARCH_OFFCATEGORY_GUARD_ENABLED"
     )
     # NX-167 (C): „compară primele 2" refuză produse din ramuri incoerente (root-branch diferit din
     # `categories.path`, ex. machiaj vs. par) → cade pe bucla LLM (re-caută coerent). Fail-open la
     # `path` lipsă. OFF → comportamentul vechi (compară orice 2 afișate).
     compare_coherence_guard_enabled: bool = Field(
-        default=False, validation_alias="COMPARE_COHERENCE_GUARD_ENABLED"
+        default=True, validation_alias="COMPARE_COHERENCE_GUARD_ENABLED"
+    )
+    # Fragmentele din recenzii sunt dovezi sociale, nu motive contextuale de recomandare. OFF
+    # implicit → cardul folosește doar fit-ul grounded din descriere/fațete; recenziile rămân în
+    # răspunsurile explicite de review/detail și în tabelul comparativ.
+    rich_review_anchor_enabled: bool = Field(
+        default=False, validation_alias="RICH_REVIEW_ANCHOR_ENABLED"
     )
     # ARCH-2026 P0: cardurile rich sunt ORDONATE de rankingul de retrieval (determinist), iar
     # „Recomandarea mea" = produsul cel mai bine clasat afișat — NU alegerea liberă a modelului

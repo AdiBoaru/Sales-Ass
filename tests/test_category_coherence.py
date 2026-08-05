@@ -177,6 +177,8 @@ async def test_offcategory_guard_suppresses_when_category_dropped(monkeypatch):
     from src.worker.runner import PipelineDeps
 
     monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", True)
+    # NX-220 default keeps category hard; disable it here to exercise the legacy drop + guard seam.
+    monkeypatch.setattr(get_settings(), "search_category_hard_enabled", False)
     _stub_dropping_search(monkeypatch)
 
     ctx = _fresh_ctx("vreau makeup")
@@ -197,6 +199,8 @@ async def test_offcategory_guard_off_keeps_cards(monkeypatch):
     from src.worker.runner import PipelineDeps
 
     monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", False)
+    # Explicitly restore the legacy category-drop ladder tested by this kill-switch case.
+    monkeypatch.setattr(get_settings(), "search_category_hard_enabled", False)
     _stub_dropping_search(monkeypatch)
 
     ctx = _fresh_ctx("vreau makeup")

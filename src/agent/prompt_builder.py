@@ -145,7 +145,9 @@ REGULI DURE:
   diferit. Preferă propoziții simple, concrete, cu un singur pas următor.
 
 - Pentru fiecare produs ales: `product_id` = un id EXACT din listă; `pro_index` = indicele unui
-  avantaj REAL din lista lui (nu inventa avantaje); `fit_clause` = UN rând SCURT de potrivire (max
+  avantaj REAL din lista lui (nu inventa avantaje), folosit doar ca dovadă socială. NU transforma
+  o opinie generică din recenzii (ex. „exact cum voiam”, „ambalaj practic”) în motivul recomandării.
+  `fit_clause` = UN rând SCURT de potrivire (max
   ~14 cuvinte): spune pentru CINE/CÂND e potrivit + 1-2 CARACTERISTICI REALE ale produsului (din
   „fațete"/„descriere": ingredient / finish / proprietate / tip de ten) legate de o NEVOIE sau un UZ
   concret. Poți deschide cu un conector („Bun pentru… / Potrivit dacă… / Ideal dacă…"), dar sunt

@@ -13,6 +13,8 @@ folosește, dar dacă e safe poate fi injectat cu `raw_key` formatat prezentabil
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -82,6 +84,54 @@ def _norm_key(key: str) -> str:
     """Normalizează o cheie: lower + strip + spații/cratime → underscore. Match O(1) robust
     peste variații de formatare emise de model (`Preferred Brand` → `preferred_brand`)."""
     return "_".join((key or "").strip().lower().replace("-", " ").split())
+
+
+_CLARIFY_ALIASES: dict[str, str] = {
+    "intent": "intent",
+    "category": "category",
+    "category_key": "category",
+    "product_type": "category",
+    "tip_produs": "category",
+    "recipient": "recipient",
+    "gift_recipient": "recipient",
+    "budget": "budget_max",
+    "budget_max": "budget_max",
+    "budget_band": "budget_max",
+    "use_case": "use_case",
+    "occasion": "use_case",
+    "brand": "brand",
+    "preferred_brand": "brand",
+    "size": "size",
+    # Sloturi interne, create exclusiv de cod pentru follow-up-uri pe un produs afișat.
+    "product_for_reviews": "product_for_reviews",
+    "product_for_details": "product_for_details",
+}
+
+
+def canonicalize_clarify_field(raw_field: str | None, pack: DomainPack | None = None) -> str:
+    """Map an LLM ``missing_field`` to a stable slot; never persist explanatory prose as a key."""
+    normalized = _norm_key(raw_field or "")
+    if normalized in _CLARIFY_ALIASES:
+        return _CLARIFY_ALIASES[normalized]
+    # Cheile compacte deja persistate de versiuni mai vechi / extensii rămân stabile. Problema pe
+    # care o reparăm este propoziția liberă folosită drept cheie, nu sloturile identificator valide.
+    if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]{0,63}", raw_field or ""):
+        return normalized
+    canonical = resolve_canonical(normalized, pack)
+    if canonical:
+        return canonical
+
+    text = unicodedata.normalize("NFKD", (raw_field or "").lower())
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    if re.search(r"\b(categori|tip(?:ul)? de produs|ce produs|product type|what product)", text):
+        return "category"
+    if re.search(r"\b(pentru cine|destinatar|recipient|iubit|iubita|cadou pentru)", text):
+        return "recipient"
+    if re.search(r"\b(buget|pret|maxim|budget|price)", text):
+        return "budget_max"
+    if re.search(r"\b(ocazie|scop|purpose|occasion|use case)", text):
+        return "use_case"
+    return "intent"
 
 
 def canonical_keys_for(pack: DomainPack | None) -> list[str]:

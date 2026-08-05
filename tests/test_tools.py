@@ -3,6 +3,7 @@
 Query-urile de catalog sunt monkeypatch-uite; testăm: dispatch, validare args, vederile
 compacte, izolarea (business_id din ctx), degradarea (tool inexistent / args invalide)."""
 
+from src.config import get_settings
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
 from src.tools.base import enabled_tools, run_tool
@@ -379,6 +380,9 @@ async def test_search_relaxed_discloses(monkeypatch):
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    # Exercită explicit calea legacy de category-drop; NX-220 o dezactivează implicit.
+    monkeypatch.setattr(get_settings(), "search_category_hard_enabled", False)
+    monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", False)
     ctx = _ctx()
     res = await run_tool(
         ctx, _deps(_LLM()), "search_products", {"query": "x", "category": "skincare"}

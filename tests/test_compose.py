@@ -1,8 +1,8 @@
 """Teste pentru compoziția recomandării bogate (model iZi) — src/worker/compose.py.
 
 Garanția centrală: faptele (preț/rating/link) vin DOAR din retrieval; proza LLM e
-scrubuită; un product_id necunoscut e aruncat tăcut; motivul cardului e ancorat pe un
-avantaj REAL (top_pro). Pur, fără I/O — zero DB/LLM.
+scrubuită; un product_id necunoscut e aruncat tăcut. Fragmentele din recenzii nu sunt folosite
+implicit ca motiv de recomandare; kill-switch-ul legacy rămâne testat separat. Pur, fără I/O.
 """
 
 from types import SimpleNamespace
@@ -219,7 +219,7 @@ def test_assemble_hydrates_facts_and_drops_unknown_ids() -> None:
     assert [it.product_id for it in rich.items] == ["A", "B"]  # ZZ aruncat
     a = rich.items[0]
     assert a.price == 34.99 and a.rating == 4.7  # din date, nu din LLM
-    assert a.reason == "pentru hidratare zilnică — hidratează intens"  # fit + ancoră reală
+    assert a.reason == "pentru hidratare zilnică"  # fit contextual, fără review generic lipit
     assert rich.pick[0] == "A" and "acoperă bine uscăciunea" in rich.pick[1]
     labels = [c.label for c in rich.chips]  # chips = sugestiile LLM, contextuale (nu hardcodate)
     assert "Una mai ieftină" in labels and "Ceva fără parfum" in labels
@@ -248,7 +248,7 @@ def test_suggestion_chips_are_normalized_capped_not_hardcoded() -> None:
     assert all(c.payload == c.label for c in chips)  # tap → trimite labelul ca mesaj nou
 
 
-def test_assemble_scrubs_bad_fit_but_keeps_real_anchor() -> None:
+def test_assemble_scrubs_bad_fit_without_substituting_a_review_snippet() -> None:
     retrieved = [{"id": "A", "name": "A", "price": 10.0, "top_pros": ["hidratează"]}]
     j = {
         "intro": None,
@@ -258,10 +258,11 @@ def test_assemble_scrubs_bad_fit_but_keeps_real_anchor() -> None:
         "items": [{"product_id": "A", "pro_index": 0, "fit_clause": "4.9 stele garantat"}],
     }
     rich = compose.assemble(_ctx(), j, retrieved)
-    assert rich.items[0].reason == "hidratează"  # fit scrubuit, ancora reală rămâne
+    assert rich.items[0].reason is None  # fit nesigur cade; review-ul nu devine motiv artificial
 
 
-def test_assemble_invalid_pro_index_falls_back_to_first() -> None:
+def test_assemble_review_anchor_kill_switch_restores_legacy_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(compose.get_settings(), "rich_review_anchor_enabled", True)
     retrieved = [{"id": "A", "name": "A", "price": 10.0, "top_pros": ["primul", "al doilea"]}]
     j = {
         "intro": None,
@@ -293,8 +294,7 @@ def test_assemble_orders_cards_by_retrieval_rank_not_model() -> None:
     }
     rich = compose.assemble(_ctx(), j, retrieved)
     assert [it.product_id for it in rich.items] == ["B", "A"]  # ordinea de retrieval, nu modelul
-    assert rich.pick[0] == "B"  # pick = cel mai bine clasat AFIȘAT, nu alegerea liberă a modelului
-    assert rich.pick[1] == "b1"  # model-pick ≠ top → ancora reală a top-ului (top_pro)
+    assert rich.pick is None  # fără motiv contextual pentru B, nu fabricăm unul din review
 
 
 def test_assemble_pick_reuses_model_justification_when_agrees() -> None:
@@ -313,7 +313,7 @@ def test_assemble_pick_reuses_model_justification_when_agrees() -> None:
     rich = compose.assemble(_ctx(), j, retrieved)
     assert rich.pick[0] == "TOP"
     assert "intră repede în piele" in rich.pick[1]  # justificarea modelului (non-superlativ)
-    assert "pro real" in rich.pick[1]  # + ancora factuală reală
+    assert "pro real" not in rich.pick[1]  # review-ul rămâne separat de motivul recomandării
 
 
 def test_assemble_killswitch_off_keeps_model_order_and_pick(monkeypatch) -> None:

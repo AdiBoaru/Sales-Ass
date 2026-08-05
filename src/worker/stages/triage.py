@@ -28,6 +28,7 @@ from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
 from src.models import Route, RouteDecision, TurnContext
 from src.safety.policy import SafetyPolicy
+from src.worker.canonicalize import canonicalize_clarify_field
 from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
@@ -359,11 +360,16 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     filters = _normalize_slots(out.slots, ctx.business.domain_pack)
     # A2: purchase_intent are sens DOAR pe sales (a cumpăra un produs); pe alte rute → False.
     purchase_intent = bool(out.purchase_intent) and route == Route.SALES
+    missing_field = (
+        canonicalize_clarify_field(out.missing_field, ctx.business.domain_pack)
+        if out.missing_field
+        else None
+    )
     ctx.route = RouteDecision(
         route=route,
         category_key=category_key,
         filters=filters,
-        missing_field=out.missing_field,
+        missing_field=missing_field,
         purchase_intent=purchase_intent,
     )
     ctx.emit(
@@ -408,7 +414,7 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         sugg = [s.strip() for s in out.suggestions if isinstance(s, str) and s.strip()][:4]
         ctx.set_clarify(
             text,
-            field=out.missing_field or "intent",
+            field=missing_field or "intent",
             resume_route=Route.SALES.value,
             suggestions=sugg,
         )
