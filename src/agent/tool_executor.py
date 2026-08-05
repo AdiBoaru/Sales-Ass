@@ -14,6 +14,7 @@ emite din `execute` (cu `turn_id`, P10); args-urile sunt whitelisted (`_safe_too
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -95,6 +96,9 @@ class ToolRun:
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
     # NX-211: server-owned IDs for mutations that returned ok=True.
     successful_action_ids: set[str] = field(default_factory=set)
+    # Shared asyncpg connections only support one active operation at a time. The LLM adapter may
+    # dispatch several calls together, so serialize this run's DB access and state mutations.
+    _execution_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     def _safe_products(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """NX-173: plasa de siguranță peste rezultatul ORICĂRUI tool.
@@ -113,6 +117,10 @@ class ToolRun:
         ]
 
     async def execute(self, name: str, args: dict[str, Any]) -> str:
+        async with self._execution_lock:
+            return await self._execute_serialized(name, args)
+
+    async def _execute_serialized(self, name: str, args: dict[str, Any]) -> str:
         """Callback al buclei: rulează tool-ul, acumulează produse + linkuri + sume grounded,
         întoarce vederea compactă modelului. `business_id` se ia din `ctx` (nu din `args`)."""
         ctx, deps = self.ctx, self.deps

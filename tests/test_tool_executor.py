@@ -5,6 +5,7 @@ corect în câmpuri, emite `tool_call` cu args sanitizate (fără PII) și pasea
 securitate: `business_id` din context, nu din args). Zero LLM/DB.
 """
 
+import asyncio
 from types import SimpleNamespace
 
 from src.agent import tool_executor as te
@@ -131,3 +132,27 @@ def test_safe_tool_args_whitelist():
     assert _safe_tool_args("search_products", {"category": "x", "secret": "y"}) == {"category": "x"}
     assert _safe_tool_args("check_order", {"order_number": "123"}) == {"has_arg": True}
     assert _safe_tool_args("unknown_tool", {"a": 1}) == {}
+
+
+async def test_execute_serializes_parallel_calls_on_shared_connection(monkeypatch):
+    active = 0
+    max_active = 0
+
+    async def fake_run_tool(ctx, deps, name, args):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0)
+        active -= 1
+        return _result(llm_view=name)
+
+    monkeypatch.setattr(te, "run_tool", fake_run_tool)
+    run = ToolRun(_ctx(), object())
+    results = await asyncio.gather(
+        run.execute("get_product_details", {"product_id": "p1"}),
+        run.execute("get_product_details", {"product_id": "p2"}),
+        run.execute("get_product_details", {"product_id": "p3"}),
+    )
+
+    assert results == ["get_product_details"] * 3
+    assert max_active == 1
