@@ -39,6 +39,11 @@ from src.tools.taxonomy import map_concerns
 # spre model). ~50 = standardul de product-RAG; recall bun fără să umfle latența.
 _FUSION_POOL = 50
 
+# NX-163b: cât de lungă poate fi eticheta de variantă dusă în evenimente ca ATRIBUT normalizat
+# (nuanță/mărime). Triaj-ul o extrage deja structurat (max 80 la parsare); aici o scurtăm ca să
+# rămână o dimensiune de raport, nu o propoziție (P12: atribute, nu text de user).
+_VARIANT_ATTR_MAX = 40
+
 # Pool epuizat: semnal pt agent (NX-119b randează mesajul determinist cacheable=False per-locale).
 _NO_MORE_VIEW = (
     "(sesiune de căutare epuizată — nu mai sunt alte produse pe filtrele curente. "
@@ -857,6 +862,31 @@ async def search_products_tool(
             brand=a.brand,
             locale=ctx.language,
         )
+    elif a.variant_label and not products:
+        # NX-163b: `variant_label` e filtru DUR (NX-135) → zero rezultate NU spune singur dacă
+        # lipsește PRODUSUL sau doar VARIANTA. Verificăm o dată, DOAR pe calea de eșec: aceeași
+        # căutare fără filtrul de variantă. Produs prezent → «missing_variant» (extinde gama);
+        # absent → cade pe «no_result» (adu în catalog). Precizia contează: eticheta greșită aici
+        # trimite comerciantul să cumpere stoc de care n-are nevoie.
+        base = await search_products_lexical(
+            deps.conn,
+            ctx.business.id,
+            query_text=a.query,
+            category=a.category,
+            brand=a.brand,
+            searchable_facets=searchable_facets,
+            pool=6,
+        )
+        ctx.emit(
+            "unmet_query",
+            reason="missing_variant" if base else "no_result",
+            # Atribut NORMALIZAT (nuanță/mărime), nu text de user: lower + fără diacritice + cap.
+            variant_attr=normalize(a.variant_label)[:_VARIANT_ATTR_MAX] if base else None,
+            product_ids=product_ids_from_dicts(base) if base else None,
+            category_key=a.category,
+            brand=a.brand,
+            locale=ctx.language,
+        )
     elif not had_any_match:
         ctx.emit(
             "unmet_query",
@@ -988,6 +1018,17 @@ async def get_product_details_tool(
     # (222, din NX-171b) existau și nu le citea nimeni. Alternativele intră și în `products`, ca
     # validatorul (stagiul 8) să accepte prețul lor dacă modelul îl rostește.
     if (p.get("availability") or "") == "out_of_stock":
+        # NX-163b: cerere pe un produs EPUIZAT = semnal de reaprovizionare, capturat determinist
+        # la sursă (clientul a cerut explicit produsul ăsta, nu e inferență). Dimensiunea e
+        # `product_id` (ref, P8) + brandul; fără text de user (P12). Alimentează acțiunea
+        # `restock` din raportul de cerere (NX-217), alături de back_in_stock_subscriptions.
+        ctx.emit(
+            "unmet_query",
+            reason="out_of_stock",
+            product_id=p["id"],
+            brand=p.get("brand"),
+            locale=ctx.language,
+        )
         subs = await get_substitutes(deps.conn, ctx.business.id, p["id"], limit=2)
         subs, _ = _safety_gate(ctx, subs, purpose="details")
         if subs:

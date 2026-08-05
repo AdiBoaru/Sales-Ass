@@ -13,9 +13,19 @@ from src.jobs.scheduler import Job, _build_jobs, _compute_next, _run_due, _safe_
 
 
 def _settings(
-    *, key="sk-x", embed=True, proactive=True, initiators=True, lifecycle=True, demand=True
+    *,
+    key="sk-x",
+    embed=True,
+    proactive=True,
+    initiators=True,
+    lifecycle=True,
+    partitions=True,
+    demand=True,
 ):
     return SimpleNamespace(
+        partition_job_enabled=partitions,
+        scheduler_partition_interval_seconds=86400,
+        partition_months_ahead=1,
         demand_rollup_enabled=demand,
         openai_api_key=key,
         embed_job_enabled=embed,
@@ -90,6 +100,7 @@ def test_build_jobs_includes_embed_with_key(monkeypatch):
     assert [j.name for j in _build_jobs()] == [
         "rollup_usage",
         "cleanup_dedupe",
+        "partition_maintenance",
         "rollup_demand",
         "embed_products",
         "proactive_initiators",
@@ -100,10 +111,12 @@ def test_build_jobs_includes_embed_with_key(monkeypatch):
 def test_build_jobs_excludes_embed_without_key(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="", embed=True))
     names = [j.name for j in _build_jobs()]
-    # rollup + cleanup + initiators + lifecycle chiar fără cheie OpenAI (doar embed cere cheie)
+    # rollup + cleanup + partiții + demand + initiators + lifecycle chiar fără cheie OpenAI
+    # (doar embed cere cheie)
     assert names == [
         "rollup_usage",
         "cleanup_dedupe",
+        "partition_maintenance",
         "rollup_demand",
         "proactive_initiators",
         "lifecycle",
@@ -140,6 +153,19 @@ def test_build_jobs_includes_lifecycle_anchored_nightly(monkeypatch):
 def test_build_jobs_excludes_lifecycle_when_disabled(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(lifecycle=False))
     assert "lifecycle" not in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_includes_partition_maintenance(monkeypatch):
+    """NX-218: partițiile lunii viitoare se creează zilnic, nu ancorat la oră (nu e nocturn —
+    trebuie doar să apuce înainte de întâi ale lunii)."""
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings())
+    pj = next(j for j in _build_jobs() if j.name == "partition_maintenance")
+    assert pj.interval_seconds == 86400 and pj.at_hour_utc is None
+
+
+def test_build_jobs_excludes_partition_maintenance_when_disabled(monkeypatch):
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings(partitions=False))
+    assert "partition_maintenance" not in [j.name for j in _build_jobs()]
 
 
 def test_build_jobs_includes_demand_rollup_nightly(monkeypatch):

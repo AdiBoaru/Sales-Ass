@@ -295,6 +295,14 @@ class Settings(BaseSettings):
     lifecycle_job_enabled: bool = Field(default=True, validation_alias="LIFECYCLE_JOB_ENABLED")
     lifecycle_hour_utc: int = Field(default=2, validation_alias="LIFECYCLE_HOUR_UTC")
     lifecycle_churn_days: int = Field(default=30, validation_alias="LIFECYCLE_CHURN_DAYS")
+    # NX-218: creează din timp partițiile lunare (analytics_events/messages). Fără el, scrierile
+    # cad în partiția DEFAULT (s-a întâmplat de la 1 aug 2026) → scanări în creștere + retenție
+    # pe interval imposibilă. Zilnic e suficient: asigurăm luna curentă + următoarea.
+    partition_job_enabled: bool = Field(default=True, validation_alias="PARTITION_JOB_ENABLED")
+    scheduler_partition_interval_seconds: int = Field(
+        default=86400, validation_alias="SCHEDULER_PARTITION_INTERVAL_SECONDS"
+    )
+    partition_months_ahead: int = Field(default=1, validation_alias="PARTITION_MONTHS_AHEAD")
     # NX-217: rollup nocturn al faptelor de cerere (demand_daily). Rulează în aceeași fereastră
     # cu rollup_usage — ambele citesc ziua UTC încheiată din analytics_events.
     demand_rollup_enabled: bool = Field(default=True, validation_alias="DEMAND_ROLLUP_ENABLED")
