@@ -46,8 +46,12 @@ async def top_unmet(
     reason: str,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    """Cerere neîmplinită grupată pe brand/categorie, pentru un `reason` dat (`no_result` /
-    `named_not_found` azi; `out_of_stock`/`missing_variant` întorc gol până le emite NX-163b).
+    """Cerere neîmplinită grupată pe brand/categorie, pentru un `reason` dat.
+
+    Reason-uri emise: `no_result` / `named_not_found` (NX-163) + `out_of_stock` / `missing_variant`
+    / `price_gap` (NX-163b). NB: ultimele trei au dimensiunea pe `product_id`/`variant_attr`
+    (nu brand+categorie), deci gruparea de aici le arată agregat pe brand — drilldown-ul fin pe
+    produs/variantă îl face rollup-ul `demand_daily` (NX-217 felia 2).
     `WHERE business_id = $1` (P7). Rândul = {brand, category_key, request_count, evidence...}."""
     rows = await conn.fetch(
         f"""
