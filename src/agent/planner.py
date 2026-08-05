@@ -32,6 +32,7 @@ from src.agent.finalize import _finalize_rich
 from src.agent.match_gate import build_match_set
 from src.agent.query_rewrite import build_query_spec
 from src.agent.validator import _valid
+from src.analytics.demand import clean_ids
 from src.config import get_settings
 from src.db.queries.catalog import (
     get_complementary_products,
@@ -318,6 +319,22 @@ async def build_plan(
         if cheaper:
             products = _dedupe(cheaper)
         else:
+            # NX-163b: „ceva mai ieftin" + zero rezultate = GOL DE PREȚ în categoria setului
+            # afișat — cerere reală pe care catalogul n-o acoperă. Marcat LA SURSĂ (aici se știe
+            # că turul a fost o intenție de preț), NU inferat post-hoc din `no_result`: din
+            # rollup n-ai cum să distingi „n-am găsit nimic" de „n-am găsit nimic mai ieftin".
+            # Dimensiunea = categoria (acțiunea derivată e „adaugă opțiune entry-level"), pragul
+            # e preț rotunjit — atribute, nu text de user (P12).
+            # `product_ids` = setul AFIȘAT (ref-uri deja în mână, zero query în plus): rollup-ul
+            # derivă categoria prin join pe `products`. Dimensiunea se calculează unde se agregă,
+            # nu în calea de răspuns a clientului — care n-are voie să crape pentru o etichetă.
+            ctx.emit(
+                "unmet_query",
+                reason="price_gap",
+                product_ids=clean_ids(ref_ids),
+                price_below=round(baseline, 2),
+                locale=ctx.language,
+            )
             # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI
             # client; un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
             ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
