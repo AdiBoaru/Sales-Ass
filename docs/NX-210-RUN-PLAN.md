@@ -100,5 +100,5 @@ Nu porni rularea acum. Ordinea corectă:
 3. Îngheață `policy.json` + seed-ul în ADR, semnat, ÎNAINTE de orice rulare.
 4. Rulează pașii 0-3 de mai sus într-o singură sesiune.
 
-Între timp, **NX-165 (Analytics Faza 3)** nu depinde de nimic din lanțul ăsta și poate merge
+Între timp, **NX-217 (Analytics Faza 3)** nu depinde de nimic din lanțul ăsta și poate merge
 în paralel.
