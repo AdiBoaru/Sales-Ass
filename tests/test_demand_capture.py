@@ -178,3 +178,112 @@ async def test_events_tenant_scoped(monkeypatch):
     unmet = _events(ctx, "unmet_query")[0]
     assert unmet.properties["turn_id"] == "t"
     assert ctx.business.id == "biz-XYZ"  # scopul de scriere = tenantul din ctx (insert_events)
+
+
+# --- NX-163b: out_of_stock / missing_variant / price_gap ---------------------
+# Cele trei reason-uri care lipseau: fără ele, acțiunile `restock`, `add_variant` și `price_gap`
+# din raportul de cerere (NX-217) sunt structural goale. Toate emise DETERMINIST la sursă.
+
+OOS = {
+    "id": "p-oos",
+    "name": "Ser Vitamina C 30ml",
+    "brand": "BrandA",
+    "price": 99.0,
+    "availability": "out_of_stock",
+}
+
+
+def _patch_detail(monkeypatch, product, *, substitutes=()):
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [dict(product)]
+
+    async def fake_subs(conn, business_id, product_id, *, limit=2):
+        return [dict(s) for s in substitutes]
+
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+    monkeypatch.setattr(ct, "get_substitutes", fake_subs)
+
+
+async def test_out_of_stock_emits_unmet_with_product_ref(monkeypatch):
+    """Cerere pe un produs EPUIZAT → semnal de reaprovizionare, cu dimensiunea = product_id."""
+    _patch_detail(monkeypatch, OOS)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(), "get_product_details", {"product_id": "p-oos"})
+    assert res.ok
+    unmet = _events(ctx, "unmet_query")
+    assert len(unmet) == 1
+    assert unmet[0].properties["reason"] == "out_of_stock"
+    assert unmet[0].properties["product_id"] == "p-oos"
+    assert unmet[0].properties["brand"] == "BrandA"
+
+
+async def test_in_stock_detail_emits_no_unmet(monkeypatch):
+    """Produs pe stoc → nicio cerere neîmplinită (altfel am umfla fals semnalul de restock)."""
+    _patch_detail(monkeypatch, {**OOS, "availability": "in_stock"})
+    ctx = _ctx()
+    await run_tool(ctx, _deps(), "get_product_details", {"product_id": "p-oos"})
+    assert _events(ctx, "unmet_query") == []
+
+
+def _patch_variant_search(monkeypatch, *, with_variant, without_variant):
+    """`search_products_lexical` întoarce seturi diferite după cum e filtrul de variantă activ —
+    exact distincția pe care se sprijină «missing_variant» vs «no_result»."""
+
+    async def fake_lex(conn, business_id, **k):
+        return list(with_variant if k.get("variant_label") else without_variant)
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+
+
+async def test_missing_variant_when_base_product_exists(monkeypatch):
+    """Nuanța cerută lipsește, dar produsul există → «missing_variant» (extinde gama), NU
+    «no_result» (adu în catalog): acțiuni de business complet diferite."""
+    _patch_variant_search(monkeypatch, with_variant=[], without_variant=PRODUCTS)
+    ctx = _ctx()
+    await run_tool(
+        ctx, _deps(), "search_products", {"query": "fond de ten", "variant_label": "Medium Bej"}
+    )
+    unmet = _events(ctx, "unmet_query")
+    assert len(unmet) == 1
+    props = unmet[0].properties
+    assert props["reason"] == "missing_variant"
+    assert props["variant_attr"] == "medium bej"  # normalizat (lower, fără diacritice)
+    assert set(props["product_ids"]) == {"p1", "p2"}  # produsele de bază, ca ref-uri
+
+
+async def test_missing_variant_falls_back_to_no_result_when_product_absent(monkeypatch):
+    """Nici produsul de bază nu există → «no_result». Eticheta greșită aici ar trimite
+    comerciantul să extindă gama unui produs pe care nu-l are."""
+    _patch_variant_search(monkeypatch, with_variant=[], without_variant=[])
+    ctx = _ctx()
+    await run_tool(
+        ctx, _deps(), "search_products", {"query": "fond de ten", "variant_label": "Medium"}
+    )
+    unmet = _events(ctx, "unmet_query")
+    assert len(unmet) == 1 and unmet[0].properties["reason"] == "no_result"
+    assert unmet[0].properties["variant_attr"] is None
+
+
+async def test_variant_found_emits_no_unmet(monkeypatch):
+    _patch_variant_search(monkeypatch, with_variant=PRODUCTS, without_variant=PRODUCTS)
+    ctx = _ctx()
+    await run_tool(
+        ctx, _deps(), "search_products", {"query": "fond de ten", "variant_label": "Medium"}
+    )
+    assert _events(ctx, "unmet_query") == []
+
+
+async def test_variant_label_normalized_and_capped(monkeypatch):
+    """Eticheta intră ca ATRIBUT normalizat și capat — dimensiune de raport, nu text de user."""
+    _patch_variant_search(monkeypatch, with_variant=[], without_variant=PRODUCTS)
+    ctx = _ctx()
+    await run_tool(
+        ctx,
+        _deps(),
+        "search_products",
+        {"query": "fond", "variant_label": "NUANȚĂ " + "x" * 60},
+    )
+    attr = _events(ctx, "unmet_query")[0].properties["variant_attr"]
+    assert attr == ("nuanta " + "x" * 60)[: ct._VARIANT_ATTR_MAX]
+    assert len(attr) <= ct._VARIANT_ATTR_MAX

@@ -2,6 +2,8 @@
 produselor strict mai ieftine (search_cheaper_than), NU re-rank pe setul afișat. Pinning-ul
 bug-ului live „cea mai ieftină 80.99 când există 18.99". LLM + DB mockuite (zero apeluri reale)."""
 
+import json
+
 import pytest
 
 from src.agent import planner as planner_mod
@@ -139,3 +141,41 @@ async def test_killswitch_off_skips_deterministic_cheaper(monkeypatch):
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=FakeLLM(final="")))
 
     assert called["n"] == 0  # cu flag OFF, calea deterministă „mai ieftin" e sărită
+
+
+async def test_no_cheaper_emits_price_gap_demand_signal(monkeypatch):
+    """NX-163b: „ceva mai ieftin" + zero rezultate = GOL DE PREȚ — cerere reală pe care catalogul
+    n-o acoperă. Marcat aici, unde se ȘTIE că turul a fost o intenție de preț: din rollup n-ai cum
+    să distingi „n-am găsit nimic" de „n-am găsit nimic mai ieftin". Dimensiunea o derivă
+    rollup-ul din `product_ids` (join pe products) — calea de răspuns nu face query în plus."""
+
+    async def empty_cheaper(conn, business_id, ref_ids, max_excl, *, limit=6):
+        return []
+
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", empty_cheaper)
+
+    ctx = _ctx()
+    await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=FakeLLM()))
+
+    unmet = [e for e in ctx.events if e.type == "unmet_query"]
+    assert len(unmet) == 1
+    props = unmet[0].properties
+    assert props["reason"] == "price_gap"
+    assert props["price_below"] == 80.99  # pragul cerut = cel mai ieftin AFIȘAT
+    assert set(props["product_ids"]) == {"p-mid", "p-hi", "p-top"}
+    # fapt determinist: fără estimări, fără text de user (P12)
+    assert "confidence" not in props and "estimated_value" not in props
+    assert "ieftin" not in json.dumps(props, ensure_ascii=False)
+
+
+async def test_cheaper_found_emits_no_price_gap(monkeypatch):
+    """Există ceva mai ieftin → nu e gol de preț (altfel am umfla fals semnalul)."""
+
+    async def fake_cheaper(conn, business_id, ref_ids, max_excl, *, limit=6):
+        return [dict(CHEAPER)]
+
+    monkeypatch.setattr(planner_mod, "search_cheaper_than", fake_cheaper)
+
+    ctx = _ctx()
+    await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=FakeLLM()))
+    assert [e for e in ctx.events if e.type == "unmet_query"] == []
