@@ -398,7 +398,7 @@ class ComparisonRow:
 
 @dataclass
 class Comparison:
-    """Tabel comparativ structurat (2-3 produse), neutru de canal. Owner: stagiul Agent."""
+    """Tabel comparativ structurat (2-4 produse), neutru de canal. Owner: stagiul Agent."""
 
     columns: list[ComparisonColumn]
     rows: list[ComparisonRow]
@@ -420,7 +420,7 @@ class Reply:
     # NX-richreply: recomandare structurată (model iZi). Dacă setată, Sender-ul o
     # randează bogat (Telegram); `text` rămâne aplatizarea ei (floor pt WhatsApp/cache).
     rich: RichReply | None = None
-    # IZI-compare: tabel comparativ structurat (2-3 produse). Dacă setat, marginile care îl
+    # IZI-compare: tabel comparativ structurat (2-4 produse). Dacă setat, marginile care îl
     # suportă (web, Capability.COMPARISON) îl randează ca tabel; restul primesc `text` (floor
     # aplatizat). Coexistă cu `products` (cardurile produselor comparate). Owner: stagiul Agent.
     comparison: Comparison | None = None

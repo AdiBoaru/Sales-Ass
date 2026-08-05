@@ -1,7 +1,7 @@
 """Tool-uri de catalog (G7 Faza 1) — read-only, grounded pe catalog real.
 
 Trei tool-uri pe care agentul le poate chema (max 3/tur): `search_products` (caută),
-`get_product_details` (detalii + recenzii D3), `compare_products` (compară 2-3). Toate scoped
+`get_product_details` (detalii + recenzii D3), `compare_products` (compară 2-4). Toate scoped
 pe `ctx.business.id` (modelul NU primește business_id). Argumentele modelului sunt validate
 Pydantic ÎNAINTE de execuție. `llm_view` = reprezentare COMPACTĂ (fără PII).
 """
@@ -93,7 +93,7 @@ class DetailArgs(BaseModel):
 
 
 class CompareArgs(BaseModel):
-    product_ids: list[str] = Field(min_length=2, max_length=3)
+    product_ids: list[str] = Field(min_length=2, max_length=4)
 
 
 # --- vederi compacte pentru model (≤6×8, fără PII) ---------------------------
@@ -421,14 +421,14 @@ def _relax_ladder(
         # prețul + stocul rămân fixate; relaxăm softul
         if concerns:
             steps.append({**steps[-1], "concerns": None})
-        if category:
+        if category and not getattr(get_settings(), "search_category_hard_enabled", True):
             steps.append({**steps[-1], "category": None})
     else:
         if price_max is not None:
             steps.append({**steps[-1], "price_max": None})
         if concerns:
             steps.append({**steps[-1], "concerns": None})
-        if category:
+        if category and not getattr(get_settings(), "search_category_hard_enabled", True):
             steps.append({**steps[-1], "category": None})
     if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
         steps.append({**steps[-1], "features": None})
@@ -944,8 +944,8 @@ async def search_products_tool(
     # ceva → agentul trebuie să fie sincer că nu e potrivire exactă pe ce a cerut (P6, nu tăcere).
     if relaxed:
         notes.append(
-            "(relaxat: n-am găsit potrivire exactă pe nevoia/categoria cerută; cele de mai jos "
-            "sunt cele mai apropiate — spune sincer clientului că nu e match exact)"
+            "(au fost relaxate doar criterii secundare; nu afirma că lipsește categoria dacă "
+            "produsele sunt încă în categoria cerută)"
         )
     # NX-170: reason_codes (de ce se potrivește) + gate not_recommended_for (hard exclude / soft
     # atenționare), determinist, sub kill-switch. Modifică `products` (excluderi + adnotări).
@@ -1042,9 +1042,9 @@ async def get_product_details_tool(
 async def compare_products_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
 ) -> ToolResult:
-    """Compară 2-3 produse (preț, rating, plusuri/minusuri din recenzii)."""
+    """Compară 2-4 produse (preț, rating, plusuri/minusuri din recenzii)."""
     a = CompareArgs(**args)
-    products = await get_products_by_ids(deps.conn, ctx.business.id, a.product_ids, limit=3)
+    products = await get_products_by_ids(deps.conn, ctx.business.id, a.product_ids, limit=4)
     # NX-173 (P0): comparația e tot afișare — un produs exclus nu are voie să reintre pe ușa asta.
     # Gate ÎNAINTE de pragul `need_2`: dacă din 2 produse unul e contraindicat, rezultatul corect e
     # „nu compar asta", nu o comparație tăcută pe restul (și nici `need_2`, care ar minți despre

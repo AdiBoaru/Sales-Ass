@@ -60,8 +60,9 @@ _COMPARE_RE = re.compile(
     r"\bcompar[aăie]\w*|\bversus\b|\bvs\.?\b|\b[öo]sszehasonl\w*|\bhasonl[íi]ts\w*",
     re.IGNORECASE,
 )
-# „trei/three/3/három" în cerere → comparăm 3; altfel 2 (perechea = cazul dominant „primele două").
+# Numărul explicit din cerere controlează comparația; implicit rămâne perechea dominantă.
 _THREE_RE = re.compile(r"\btrei\b|\bthree\b|\b3\b|\bh[áa]rom\b", re.IGNORECASE)
+_FOUR_RE = re.compile(r"\bpatru\b|\bfour\b|\b4\b|\bn[ée]gy\b", re.IGNORECASE)
 
 # NX-119b: „mai arată-mi"/„show more" = INTENȚIE de PAGINARE (NU un tool nou). Pe o sesiune activă
 # → pagina următoare DETERMINIST, fără bucla LLM. NU prinde „mai ieftin" (= cheaper_intent). Ancorat
@@ -96,6 +97,13 @@ _LINK_RE = re.compile(
 # Follow-up de recenzii pe un set deja afișat. Rulează pe text normalizat fără diacritice, astfel
 # încât aceeași intenție să funcționeze în RO/HU/EN și când clientul tastează fără diacritice.
 _REVIEW_RE = re.compile(r"(?<![a-z0-9])(?:recenzi|parer|opini|review|velemen)[a-z]*", re.IGNORECASE)
+_DETAIL_RE = re.compile(
+    r"\b(?:spune|zi)-?mi\s+mai\s+multe\b"
+    r"|\bmai\s+multe\s+detali\w*\b|\bdetali\w*\s+(?:despre|pentru)\b"
+    r"|\b(?:vreau|as vrea)\s+detali\w*\b|\bmore\s+(?:details|about)\b"
+    r"|\btell\s+me\s+more\b|\btovabbi\s+reszletek\b",
+    re.IGNORECASE,
+)
 
 _ORDINALS: tuple[tuple[int, re.Pattern[str]], ...] = (
     (0, re.compile(r"(?<![a-z0-9])(?:prima|primul|intai|first|elso)(?![a-z0-9])")),
@@ -262,6 +270,109 @@ async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str
     ctx.emit("review_intent", served=1, has_evidence=has_evidence)
 
 
+def _detail_copy(language: str) -> dict[str, str]:
+    if language == "en":
+        return {
+            "which": "Which product would you like more details about?",
+            "why": "Why I recommend it",
+            "features": "Main features",
+            "reviews": "What customers say",
+            "empty_features": "I don't have additional specifications for this product yet.",
+            "unavailable": "That product is no longer available, so I can't show reliable details.",
+            "chip": "Details: {name}",
+            "review_chip": "View reviews",
+            "link_chip": "View product",
+            "compare_chip": "Compare with another",
+        }
+    if language == "hu":
+        return {
+            "which": "Melyik termékről szeretnél további részleteket?",
+            "why": "Miért ajánlom",
+            "features": "Fő jellemzők",
+            "reviews": "Amit a vásárlók mondanak",
+            "empty_features": "Ehhez a termékhez még nincs további specifikációm.",
+            "unavailable": (
+                "Ez a termék már nem elérhető, ezért nem tudok megbízható részleteket mutatni."
+            ),
+            "chip": "Részletek: {name}",
+            "review_chip": "Vélemények",
+            "link_chip": "Termék megtekintése",
+            "compare_chip": "Összehasonlítás",
+        }
+    return {
+        "which": "Pentru care produs vrei mai multe detalii?",
+        "why": "De ce ți-l recomand",
+        "features": "Caracteristici principale",
+        "reviews": "Ce spun clienții",
+        "empty_features": "Nu am încă specificații suplimentare pentru acest produs.",
+        "unavailable": "Produsul nu mai este disponibil, așa că nu îți pot arăta detalii sigure.",
+        "chip": "Detalii: {name}",
+        "review_chip": "Vezi recenzii",
+        "link_chip": "Vezi produsul",
+        "compare_chip": "Compară cu alt produs",
+    }
+
+
+def _detail_choice_chips(refs: list[ProductRef], language: str) -> list[str]:
+    template = _detail_copy(language)["chip"]
+    return [
+        template.format(name=f"{i}. {ref.name[:22].rstrip()}")[:40]
+        for i, ref in enumerate(refs[:4], 1)
+    ]
+
+
+def _detail_answer(product: dict, ctx: TurnContext) -> str:
+    """Build a product deep-dive exclusively from catalog facets and review aggregates."""
+    copy = _detail_copy(ctx.language)
+    summary = " ".join(str(product.get("ai_summary") or "").split()).strip()
+    if not summary or has_medical_claim(summary):
+        summary = str(product.get("name") or "Produs")
+
+    pack = getattr(ctx.business, "domain_pack", None)
+    facet_text = compose.facet_summary(
+        product, (pack.comparison_facets if pack else ()), ctx.language
+    )
+    facts = [part.strip() for part in facet_text.split(";") if part.strip()][:6]
+    feature_lines = [f"✓ {fact}" for fact in facts]
+    features = "\n".join(feature_lines) or copy["empty_features"]
+    reviews, _ = _review_answer(product, ctx.language)
+    return (
+        f"{copy['why']}\n\n{summary}\n\n"
+        f"{copy['features']}\n\n{features}\n\n"
+        f"{copy['reviews']}\n\n{reviews}"
+    )
+
+
+async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
+    refs = ctx.state.displayed_products
+    selected = _resolve_review_product(query, refs)
+    if selected is None:
+        ctx.set_clarify(
+            _detail_copy(ctx.language)["which"],
+            field="product_for_details",
+            resume_route=Route.SALES.value,
+            suggestions=_detail_choice_chips(refs, ctx.language),
+        )
+        ctx.emit("detail_intent", served=0, reason="ambiguous", candidates=len(refs))
+        return
+
+    products = await get_products_by_ids(deps.conn, ctx.business.id, [selected.product_id], limit=1)
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
+    if not products:
+        ctx.set_reply(_detail_copy(ctx.language)["unavailable"], cacheable=False)
+        ctx.emit("detail_intent", served=0, reason="unavailable")
+        return
+
+    product = products[0]
+    copy = _detail_copy(ctx.language)
+    ctx.retrieval = RetrievalResult(products=products, source="detail_intent")
+    ctx.set_reply(
+        _detail_answer(product, ctx), products=_card_products(products, n=1), cacheable=False
+    )
+    ctx.reply.suggestions = [copy["review_chip"], copy["link_chip"], copy["compare_chip"]]
+    ctx.emit("detail_intent", served=1)
+
+
 async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Servește o cerere de LINK pe produsele DEJA arătate, FĂRĂ bucla LLM (NX-131) — ca
     show_more/cheaper. State ține doar ref-uri (P8) → fetch `product_url` PROASPĂT din catalog
@@ -310,9 +421,10 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     link/show_more/cheaper. State ține doar ref-uri (P8) → re-fetch detaliile proaspete (preț/
     rating/avantaje/minusuri/disponibilitate/brand) → tabel structurat DETERMINIST (build_comparison
     → zero proză LLM în celule). Implicit primele 2 (perechea = cazul dominant „compară primele
-    două"); „trei/3/három" → 3. `get_products_by_ids` păstrează ORDINEA afișată (deixis ordinal
+    două"); un număr explicit poate extinde tabelul la 3 sau 4. `get_products_by_ids` păstrează
+    ORDINEA afișată (deixis ordinal
     corect). <2 valide → False → cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
-    n = 3 if _THREE_RE.search(query) else 2
+    n = 4 if _FOUR_RE.search(query) else (3 if _THREE_RE.search(query) else 2)
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
     products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
     # NX-173 (P0): ca la link — set vechi din state, cale care ocolește tool loop-ul. Dacă
@@ -327,9 +439,15 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     # False` → cade pe bucla LLM (poate re-căuta coerent), nu un mesaj-perete. Kill-switch OFF →
     # comportamentul vechi (compară orice 2 afișate).
     if get_settings().compare_coherence_guard_enabled and len(products) >= 2:
-        roots = await product_category_roots(
-            deps.conn, ctx.business.id, [p["id"] for p in products]
-        )
+        # Lipsa metadatelor este fail-open, la fel ca produse fără path: comparația rămâne utilă
+        # chiar dacă query-ul opțional de coerență nu poate rula într-un adaptor degradat.
+        try:
+            roots = await product_category_roots(
+                deps.conn, ctx.business.id, [p["id"] for p in products]
+            )
+        except Exception:  # noqa: BLE001 — metadate opționale; produsele sunt deja grounded
+            roots = {}
+            ctx.emit("compare_coherence_unavailable")
         distinct = {r for r in roots.values() if r}
         if len(distinct) >= 2:
             ctx.emit("compare_incoherent_blocked", n=len(products), root_branches=len(distinct))
@@ -376,6 +494,20 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     )
     if review_intent:
         await _handle_review_intent(ctx, deps, query)
+        return True
+
+    explicit_detail = _DETAIL_RE.search(_norm_followup(query)) is not None
+    resolves_pending_detail = (
+        pending.get("field") == "product_for_details"
+        and _resolve_review_product(query, displayed) is not None
+    )
+    detail_intent = (
+        getattr(get_settings(), "detail_intent_enabled", True)
+        and bool(displayed)
+        and (explicit_detail or resolves_pending_detail)
+    )
+    if detail_intent:
+        await _handle_detail_intent(ctx, deps, query)
         return True
 
     # NX-131: cerere de LINK pe un produs deja arătat = intenție DETERMINISTĂ, NU re-recomandare.

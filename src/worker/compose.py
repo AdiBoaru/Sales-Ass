@@ -196,6 +196,20 @@ def _pros(p: dict[str, Any]) -> list[str]:
     return [s.strip() for s in raw if isinstance(s, str) and s.strip()]
 
 
+def _recommendation_anchor(p: dict[str, Any], index: int | None = None) -> str | None:
+    """Return review evidence only when the legacy card-reason behavior is explicitly enabled.
+
+    Review snippets are social proof, not a contextual reason why a product fits the request.
+    Explicit review/detail flows still expose the same review data.
+    """
+    if not getattr(get_settings(), "rich_review_anchor_enabled", False):
+        return None
+    pros = _pros(p)
+    if isinstance(index, int) and 0 <= index < len(pros):
+        return pros[index]
+    return pros[0] if pros else None
+
+
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:
     """Motivul cardului = clauza de potrivire (LLM, scrubuită) — avantaj real (dată). Dedup:
     dacă clauza modelului și avantajul real sunt cvasi-identice (unul îl conține pe altul, după
@@ -313,12 +327,12 @@ def _select_pick(
             if isinstance(pj, dict) and pj.get("product_id") == top.product_id
             else None
         )
-        anchor = (_pros(facts[top.product_id]) or [None])[0]
+        anchor = _recommendation_anchor(facts[top.product_id])
         reason = _drop_unfounded_stock(_join_reason(just, anchor), stock_present)
         return (top.product_id, reason) if reason else None
     # Legacy (kill-switch OFF): pick-ul liber al modelului, ancorat pe un pro real.
     if isinstance(pj, dict) and pj.get("product_id") in facts:
-        anchor = (_pros(facts[pj["product_id"]]) or [None])[0]
+        anchor = _recommendation_anchor(facts[pj["product_id"]])
         reason = _drop_unfounded_stock(
             _join_reason(scrub_prose(pj.get("justification")), anchor), stock_present
         )
@@ -365,10 +379,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     def _build(pid: str) -> RichItem:
         p = facts[pid]
         it = llm_items[pid]
-        pros = _pros(p)
         idx = it.get("pro_index")
-        in_range = isinstance(idx, int) and 0 <= idx < len(pros)
-        anchor = pros[idx] if in_range else (pros[0] if pros else None)
+        anchor = _recommendation_anchor(p, idx)
         rc = p.get("review_count")
         eff = float(p["price"])
         lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
@@ -747,7 +759,7 @@ def build_comparison(
     language: str | None,
     facets: Sequence[FacetSpec] = (),
 ) -> Comparison | None:
-    """Tabel comparativ STRUCTURAT din 2-3 produse retrievate (get_products_by_ids). Determinist:
+    """Tabel comparativ STRUCTURAT din 2-4 produse retrievate (get_products_by_ids). Determinist:
     fiecare celulă e un fapt real (preț/rating/disponibilitate/avantaje-minusuri din recenzii/brand)
     — NICIUN text LLM → zero halucinație prin construcție. `None` dacă < 2 produse valide.
 
@@ -760,7 +772,7 @@ def build_comparison(
     `list_price` → fără anchor (prețul afișat e cel efectiv, ca azi)."""
     chosen = [
         p
-        for p in products[:3]
+        for p in products[:4]
         if p.get("id") and p.get("name") is not None and p.get("price") is not None
     ]
     if len(chosen) < 2:

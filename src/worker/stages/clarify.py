@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from src.config import get_settings
 from src.models import Route, RouteDecision, TurnContext
+from src.worker.canonicalize import canonicalize_clarify_field
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -43,7 +44,7 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return  # body gol (ex. media fără descriere) → nu consumăm slotul; rămâne pt data viitoare
 
     # 1. mesajul curent umple slotul cerut → memorie scurtă citită de context_blocks (state_block).
-    field = pq.get("field") or "intent"
+    field = canonicalize_clarify_field(pq.get("field"), ctx.business.domain_pack)
     ctx.state.constraints[field] = answer
     # NX-112: marchează slotul ca „deja întrebat" (semnal anti-loop citit de context_blocks/NX-116).
     # Dedup + cap 8 (P4). Mutația pe ctx.state e persistată de processor (merge canonic, P3).
