@@ -17,6 +17,7 @@ follow-up de preț («mai ieftin») NU e link/compare/paginare, ci re-căutare (
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import TYPE_CHECKING
 
 from src.agent.fallbacks import (
@@ -28,9 +29,10 @@ from src.agent.fallbacks import (
 )
 from src.config import get_settings
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
-from src.models import Offer, RetrievalResult, Route, TurnContext
+from src.models import Offer, ProductRef, RetrievalResult, Route, TurnContext
 from src.safety.policy import SafetyPolicy
 from src.worker import compose
+from src.worker.text_scrub import has_medical_claim
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -90,6 +92,174 @@ _LINK_RE = re.compile(
     r"|\bhol\s+(?:tudom\s+)?(?:veszem|vehetem|megvenni|megveszem)\b",
     re.IGNORECASE,
 )
+
+# Follow-up de recenzii pe un set deja afișat. Rulează pe text normalizat fără diacritice, astfel
+# încât aceeași intenție să funcționeze în RO/HU/EN și când clientul tastează fără diacritice.
+_REVIEW_RE = re.compile(r"(?<![a-z0-9])(?:recenzi|parer|opini|review|velemen)[a-z]*", re.IGNORECASE)
+
+_ORDINALS: tuple[tuple[int, re.Pattern[str]], ...] = (
+    (0, re.compile(r"(?<![a-z0-9])(?:prima|primul|intai|first|elso)(?![a-z0-9])")),
+    (
+        1,
+        re.compile(r"(?<![a-z0-9])(?:a[ ]+doua|al[ ]+doilea|second|masodik)(?![a-z0-9])"),
+    ),
+    (
+        2,
+        re.compile(r"(?<![a-z0-9])(?:a[ ]+treia|al[ ]+treilea|third|harmadik)(?![a-z0-9])"),
+    ),
+)
+_NUMERIC_ORDINALS: tuple[tuple[int, re.Pattern[str]], ...] = tuple(
+    (
+        index - 1,
+        re.compile(rf"(?:recenzi|parer|opini|review|velemen)[a-z]*[ :#.-]*{index}(?:[^0-9]|$)"),
+    )
+    for index in range(1, 5)
+)
+
+
+def _norm_followup(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def _resolve_review_product(query: str, refs: list[ProductRef]) -> ProductRef | None:
+    """Rezolvă deixis-ul fără LLM: produs unic, ordinal, nume complet sau tokeni unici."""
+    if not refs:
+        return None
+    if len(refs) == 1:
+        return refs[0]
+    normalized = _norm_followup(query)
+    for index, pattern in (*_ORDINALS, *_NUMERIC_ORDINALS):
+        if index < len(refs) and pattern.search(normalized):
+            return refs[index]
+
+    normalized_names = [_norm_followup(ref.name).strip() for ref in refs]
+    exact = [ref for ref, name in zip(refs, normalized_names, strict=True) if name in normalized]
+    if len(exact) == 1:
+        return exact[0]
+
+    # Numele din chip poate fi scurtat. Alegem numai un scor unic, ca un termen comun precum
+    # „cremă” să nu selecteze arbitrar unul dintre mai multe produse.
+    query_tokens = set(re.findall(r"[a-z0-9]+", normalized))
+    scores: list[int] = []
+    for name in normalized_names:
+        tokens = {token for token in re.findall(r"[a-z0-9]+", name) if len(token) >= 3}
+        scores.append(sum(1 for token in tokens if token in query_tokens))
+    best = max(scores, default=0)
+    winners = [index for index, score in enumerate(scores) if score == best]
+    if best >= 1 and len(winners) == 1:
+        return refs[winners[0]]
+    return None
+
+
+def _review_copy(language: str) -> dict[str, str]:
+    if language == "en":
+        return {
+            "which": "Which product would you like reviews for?",
+            "summary": "Review summary for {name}: {value}",
+            "pros": "What customers liked: {value}.",
+            "cons": "Worth considering: {value}.",
+            "rating": "Rating: {rating}/5 from {count} reviews.",
+            "empty": "I don't have enough review data for {name} yet.",
+            "chip": "Reviews: {name}",
+        }
+    if language == "hu":
+        return {
+            "which": "Melyik termék véleményeit szeretnéd látni?",
+            "summary": "A(z) {name} véleményeinek összefoglalója: {value}",
+            "pros": "Amit a vásárlók kedveltek: {value}.",
+            "cons": "Amit érdemes mérlegelni: {value}.",
+            "rating": "Értékelés: {rating}/5, {count} vélemény alapján.",
+            "empty": "Még nincs elég véleményadat a(z) {name} termékről.",
+            "chip": "Vélemények: {name}",
+        }
+    return {
+        "which": "Pentru care produs vrei să vezi recenziile?",
+        "summary": "Rezumatul recenziilor pentru {name}: {value}",
+        "pros": "Ce au apreciat clienții: {value}.",
+        "cons": "De luat în calcul: {value}.",
+        "rating": "Rating: {rating}/5 din {count} recenzii.",
+        "empty": "Nu am încă suficiente date din recenzii pentru {name}.",
+        "chip": "Recenzii: {name}",
+    }
+
+
+def _safe_review_text(value: object) -> str | None:
+    text = str(value or "").strip().rstrip(".")
+    return text if text and not has_medical_claim(text) else None
+
+
+def _review_answer(product: dict, language: str) -> tuple[str, bool]:
+    copy = _review_copy(language)
+    name = str(product.get("name") or "produs")
+    lines: list[str] = []
+    summary = _safe_review_text(product.get("review_summary"))
+    pros = [_safe_review_text(value) for value in (product.get("top_pros") or [])]
+    cons = [_safe_review_text(value) for value in (product.get("top_cons") or [])]
+    pros = [value for value in pros if value]
+    cons = [value for value in cons if value]
+    if summary:
+        lines.append(copy["summary"].format(name=name, value=summary) + ".")
+    if pros:
+        lines.append(copy["pros"].format(value=", ".join(pros[:3])))
+    if cons:
+        lines.append(copy["cons"].format(value=", ".join(cons[:2])))
+    rating = product.get("rating")
+    count = int(product.get("review_count") or 0)
+    if rating is not None and count > 0:
+        rating_text = f"{float(rating):.1f}"
+        if language != "en":
+            rating_text = rating_text.replace(".", ",")
+        lines.append(copy["rating"].format(rating=rating_text, count=count))
+    has_evidence = bool(lines)
+    return (chr(10).join(lines) if lines else copy["empty"].format(name=name), has_evidence)
+
+
+def _review_choice_chips(refs: list[ProductRef], language: str) -> list[str]:
+    template = _review_copy(language)["chip"]
+    return [
+        template.format(name=f"{index}. {ref.name[:24].rstrip()}")[:40]
+        for index, ref in enumerate(refs[:4], start=1)
+    ]
+
+
+def _review_next_steps(language: str) -> list[str]:
+    if language == "en":
+        return ["Tell me more", "View product", "Add to cart"]
+    if language == "hu":
+        return ["További részletek", "Termék megtekintése", "Kosárba"]
+    return ["Spune-mi mai multe", "Vezi produsul", "Adaugă în coș"]
+
+
+async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
+    """Răspunde din recenziile produsului afișat; nu lasă modelul să aleagă ancora."""
+    refs = ctx.state.displayed_products
+    selected = _resolve_review_product(query, refs)
+    if selected is None:
+        ctx.set_clarify(
+            _review_copy(ctx.language)["which"],
+            field="product_for_reviews",
+            resume_route=Route.SALES.value,
+            suggestions=_review_choice_chips(refs, ctx.language),
+        )
+        ctx.emit("review_intent", served=0, reason="ambiguous", candidates=len(refs))
+        return
+
+    products = await get_products_by_ids(deps.conn, ctx.business.id, [selected.product_id], limit=1)
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="review_intent")[0]
+    if not products:
+        ctx.set_reply(
+            _review_copy(ctx.language)["empty"].format(name=selected.name), cacheable=False
+        )
+        ctx.emit("review_intent", served=0, reason="unavailable")
+        return
+
+    product = products[0]
+    text, has_evidence = _review_answer(product, ctx.language)
+    ctx.retrieval = RetrievalResult(products=products, source="review_intent")
+    ctx.set_reply(text, products=_card_products(products, n=1), cacheable=False)
+    ctx.reply.suggestions = _review_next_steps(ctx.language)
+    ctx.emit("review_intent", served=1, has_evidence=has_evidence)
 
 
 async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -188,6 +358,25 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     query = (ctx.message.body or "").strip()
     if not query:
         return False
+
+    # Un follow-up de recenzii se referă la setul deja afișat chiar dacă triajul a propagat filtre
+    # istorice. Cu mai multe produse, handlerul cere ancora în loc să aleagă primul card.
+    displayed = ctx.state.displayed_products
+    raw_pending = getattr(ctx.state, "pending_question", None)
+    pending = raw_pending if isinstance(raw_pending, dict) else {}
+    explicit_review = _REVIEW_RE.search(_norm_followup(query)) is not None
+    resolves_pending_review = (
+        pending.get("field") == "product_for_reviews"
+        and _resolve_review_product(query, displayed) is not None
+    )
+    review_intent = (
+        getattr(get_settings(), "review_intent_enabled", True)
+        and bool(displayed)
+        and (explicit_review or resolves_pending_review)
+    )
+    if review_intent:
+        await _handle_review_intent(ctx, deps, query)
+        return True
 
     # NX-131: cerere de LINK pe un produs deja arătat = intenție DETERMINISTĂ, NU re-recomandare.
     # Calea rich interzice modelului linkurile → cererea de link cădea în re-randarea bogată cu

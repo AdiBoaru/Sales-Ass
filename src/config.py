@@ -483,6 +483,9 @@ class Settings(BaseSettings):
     # OFF → cade
     # pe bucla LLM (modelul decide dacă compară).
     compare_intent_enabled: bool = Field(default=True, validation_alias="COMPARE_INTENT_ENABLED")
+    # Follow-up de recenzii pe produsele deja afișate: rezolvă produsul din nume/ordinal sau cere
+    # explicit alegerea, apoi compune numai din review_summary/top_pros/top_cons/rating.
+    review_intent_enabled: bool = Field(default=True, validation_alias="REVIEW_INTENT_ENABLED")
     # IZI-parity: întrebare de tip SUPERLATIV pe setul AFIȘAT („care dintre ele e cea mai
     # ușoară/ieftină/hidratantă") → re-hidratează ÎNTREGUL set afișat și lasă modelul să RĂSPUNDĂ
     # la superlativ peste toate candidatele (nu o căutare nouă, nu 1 produs). Precede cheaper.
