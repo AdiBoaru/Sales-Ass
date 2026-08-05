@@ -66,7 +66,8 @@ o recalibrare deliberată înainte de trafic real de pilot.
 **Cât de devreme nu se poate spune corect până când cele trei contoare nu vorbesc aceeași unitate.**
 Remedierea structurală (un singur alimentator, din cost real, pe toate cele trei căi — cu teste)
 e schimbare de COMPORTAMENT pe web + aftercare și **nu intră în acest PR**, care rămâne o
-reconciliere de tarife. Card separat: [tasks/NX-201.md](../tasks/NX-201.md) → felia B.
+reconciliere de tarife. Card separat: [tasks/NX-201.md](../tasks/NX-201.md) → **felia E**
+(numele „felia B” era deja luat de instrumentarea OTel din același card).
 
 ## 3. Ce s-a schimbat în cod
 
@@ -88,7 +89,7 @@ reconciliere de tarife. Card separat: [tasks/NX-201.md](../tasks/NX-201.md) → 
   `usage_daily.cost_usd` rămâne o **plasă**, nu facturare. Cere acces la billing — rămas lui Adi.
 - **Unificarea celor trei alimentatori de contor** (web per-vizitator + aftercare încă pe euristica
   fixă din config). E schimbare de comportament pe două căi de producție, cu teste proprii →
-  felia B, nu aici. Până atunci, orice cifră „N tururi până la plafon" e o aproximare, nu un fapt.
+  felia E, nu aici. Până atunci, orice cifră „N tururi până la plafon" e o aproximare, nu un fapt.
 - **Rescrierea istoricului `usage_daily`.** Rândurile vechi rămân subevaluate; nu se rescriu orb
   (factorul nu e un scalar). Dacă e nevoie de o serie comparabilă, se recalculează din
   `analytics_events` cu defalcarea `by_model`, nu prin înmulțire.

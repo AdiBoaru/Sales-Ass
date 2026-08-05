@@ -130,12 +130,21 @@ async def judge_turn(
     bot_reply: str,
     products: list[dict[str, Any]] | None = None,
     offer: dict[str, Any] | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Cheamă judge-ul pe UN tur (experiența completă: text + carduri + offer). Scoruri clampate
-    1-5 + `note`. Model = agent (mini). Eroare API → scoruri None (judge indisponibil, nu 1)."""
+    1-5 + `note`. Eroare API → scoruri None (judge indisponibil, nu 1).
+
+    `model` PINUIEȘTE judecătorul (NX-204). Fără el, judge-ul moștenea `llm.model_agent` — corect
+    câtă vreme nimeni nu schimba modelul agentului, dar FATAL într-un experiment de model-swap:
+    brațele s-ar compara „mini judecat de mini" vs „frontier judecat de frontier", adică două
+    rigle diferite. Judecătorul trebuie să fie ACEEAȘI riglă pe ambele brațe.
+    """
     user = build_user_message(transcript, bot_reply, products, offer)
     try:
-        raw = await llm.complete_schema(JUDGE_PROMPT, user, JUDGE_SCHEMA, model=llm.model_agent)
+        raw = await llm.complete_schema(
+            JUDGE_PROMPT, user, JUDGE_SCHEMA, model=model or llm.model_agent
+        )
     except Exception as e:  # noqa: BLE001 — judge indisponibil ≠ scor 1 (nu falsifică baseline-ul)
         return {"error": type(e).__name__, **{m: None for m in _METRICS}, "note": ""}
     return {**{m: _clamp(raw.get(m)) for m in _METRICS}, "note": str(raw.get("note") or "")[:200]}

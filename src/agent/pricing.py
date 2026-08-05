@@ -114,6 +114,17 @@ def rates_for(model: str) -> ModelRates:
     return _pricing().get(model, _DEFAULT)
 
 
+def has_rates(model: str) -> bool:
+    """`True` dacă modelul are tarife EXPLICITE (implicit sau prin `LLM_PRICING_JSON`).
+
+    `rates_for` cade grațios pe `_DEFAULT` (tarifele `mini`) — comportament corect în prod
+    (nu rupem botul pentru un model nou), dar o MINCIUNĂ TĂCUTĂ într-un raport de cost:
+    un model frontier raportat la tariful lui `mini`. Harness-urile de măsurare (NX-204)
+    verifică asta ÎNAINTE de rulare și refuză să pornească fără tarife reale.
+    """
+    return model in _pricing()
+
+
 def cost_for(model: str, prompt_tokens: int, cached_tokens: int, completion_tokens: int) -> float:
     """Cost USD pentru un apel. `prompt_tokens` INCLUDE `cached_tokens` (convenția OpenAI);
     cei cached se taxează la `cached_input`, restul la `input`. Negativii sunt clampați."""
