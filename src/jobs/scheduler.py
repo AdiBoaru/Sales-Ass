@@ -56,6 +56,16 @@ async def rollup_usage_run() -> None:
         await rollup_usage.run_rollup(conn, day=rollup_usage.yesterday_utc())
 
 
+async def rollup_demand_run() -> None:
+    """NX-217: faptele de cerere ale zilei încheiate → demand_daily (o trecere, toți tenanții)."""
+    from src.db.connection import admin_conn, get_pool
+    from src.jobs import rollup_demand
+
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        await rollup_demand.run_rollup(conn, day=rollup_demand.yesterday_utc())
+
+
 async def embed_products_run() -> None:
     from src.agent.llm import get_llm
     from src.db.connection import admin_conn, get_pool
@@ -140,6 +150,15 @@ def _build_jobs() -> list[Job]:
                 "partition_maintenance",
                 lambda: partition_maintenance.run(months_ahead=s.partition_months_ahead),
                 interval_seconds=s.scheduler_partition_interval_seconds,
+            )
+        )
+    if s.demand_rollup_enabled:  # NX-217: rollup nocturn al faptelor de cerere
+        jobs.append(
+            Job(
+                "rollup_demand",
+                rollup_demand_run,
+                interval_seconds=86400,
+                at_hour_utc=s.scheduler_rollup_hour_utc,
             )
         )
     if s.embed_job_enabled and s.openai_api_key:  # embed cere cheie OpenAI

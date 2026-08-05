@@ -303,6 +303,9 @@ class Settings(BaseSettings):
         default=86400, validation_alias="SCHEDULER_PARTITION_INTERVAL_SECONDS"
     )
     partition_months_ahead: int = Field(default=1, validation_alias="PARTITION_MONTHS_AHEAD")
+    # NX-217: rollup nocturn al faptelor de cerere (demand_daily). Rulează în aceeași fereastră
+    # cu rollup_usage — ambele citesc ziua UTC încheiată din analytics_events.
+    demand_rollup_enabled: bool = Field(default=True, validation_alias="DEMAND_ROLLUP_ENABLED")
 
     # --- Extractor profil + lead_score (NX-88, post-tur stagiul 9) ---
     # Botul „învață" clientul: nano extrage semnale de profil → patch whitelist pe
