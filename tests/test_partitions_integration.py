@@ -27,8 +27,11 @@ UTC = timezone.utc
 
 @pytest.fixture
 async def probe():
-    """Tabel partiționat pe lună, cu DEFAULT — copia structurii din schema_v2 (identity + PK
-    compus pe (id, created_at)), ca testul să prindă și capcanele de identity."""
+    """Tabel partiționat pe lună, cu DEFAULT — copia structurii reale: coloană `identity`
+    (ca `analytics_events.id`) ȘI coloană GENERATED (ca `messages.latency_s`). Ambele sunt
+    capcane la reinserare: identity cere `overriding system value`, generated REFUZĂ orice
+    scriere explicită. Un tabel-probă fără ele ar lăsa migrarea să treacă testul și să pice
+    în producție — exact ce s-a întâmplat la prima rulare."""
     pool = await get_pool()
     name = f"nx218_probe_{uuid4().hex[:8]}"
     async with admin_conn(pool) as conn:
@@ -37,6 +40,8 @@ async def probe():
             create table {name} (
               id         bigint generated always as identity,
               created_at timestamptz not null default now(),
+              latency_ms integer,
+              latency_s  numeric generated always as (latency_ms / 1000.0) stored,
               primary key (id, created_at)
             ) partition by range (created_at);
             create table {name}_default partition of {name} default;
@@ -51,7 +56,7 @@ async def probe():
 
 
 async def _insert_at(conn, table: str, when: datetime) -> None:
-    await conn.execute(f"insert into {table} (created_at) values ($1)", when)
+    await conn.execute(f"insert into {table} (created_at, latency_ms) values ($1, 1500)", when)
 
 
 async def _partition_of(conn, table: str, when: datetime) -> str:
@@ -105,13 +110,24 @@ async def test_rows_already_in_default_block_creation_and_are_reported(probe):
 async def test_migration_037_move_technique(probe):
     """Validează MECANISMUL migrării 037 (partea riscantă), pe un tabel throwaway: mută rândurile
     din DEFAULT → creează partiția → reinserează prin părinte. Verifică inclusiv `overriding
-    system value` (fără el, reinserarea unui `generated always as identity` crapă) și că ID-urile
-    se PĂSTREAZĂ (nu se regenerează — altfel s-ar rupe orice referință externă)."""
+    system value` (fără el, reinserarea unui `generated always as identity` crapă), EXCLUDEREA
+    coloanelor generate (bug prins la prima rulare pe DB reală: `messages.latency_s`) și că
+    ID-urile se PĂSTREAZĂ (nu se regenerează — altfel s-ar rupe orice referință externă)."""
     pool = await get_pool()
     async with admin_conn(pool) as conn:
         when = datetime(2026, 10, 3, 8, 0, tzinfo=UTC)
         await _insert_at(conn, probe, when)
         original_id = await conn.fetchval(f"select id from {probe} where created_at = $1", when)
+
+        # Lista de coloane SCRIIBILE, exact ca în migrare: fără cele generate.
+        cols = await conn.fetchval(
+            """select string_agg(quote_ident(attname), ', ' order by attnum)
+                 from pg_attribute
+                where attrelid = $1::regclass and attnum > 0
+                  and not attisdropped and attgenerated = ''""",
+            probe,
+        )
+        assert "latency_s" not in cols  # coloana generată e EXCLUSĂ, altfel insert-ul crapă
 
         async with conn.transaction():
             await conn.execute(
@@ -119,7 +135,7 @@ async def test_migration_037_move_technique(probe):
                     with moved as (
                       delete from {probe}_default
                       where created_at >= '2026-10-01' and created_at < '2026-11-01'
-                      returning *
+                      returning {cols}
                     )
                     select * from moved"""
             )
@@ -127,7 +143,9 @@ async def test_migration_037_move_technique(probe):
                 f"create table {probe}_2026_10 partition of {probe} "
                 f"for values from ('2026-10-01') to ('2026-11-01')"
             )
-            await conn.execute(f"insert into {probe} overriding system value select * from _mv")
+            await conn.execute(
+                f"insert into {probe} ({cols}) overriding system value select {cols} from _mv"
+            )
             await conn.execute("drop table _mv")
 
         assert await _partition_of(conn, probe, when) == f"{probe}_2026_10"

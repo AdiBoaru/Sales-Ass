@@ -39,6 +39,7 @@ declare
   v_moved  bigint;
   v_left   bigint;
   v_ovr    text;
+  v_cols   text;
 begin
   foreach v_table in array v_tables loop
     -- `overriding system value` e obligatoriu la reinserarea unui id de tip
@@ -52,6 +53,18 @@ begin
            ) then 'overriding system value' else '' end
       into v_ovr;
 
+    -- Lista EXPLICITĂ de coloane, fără cele GENERATE (`messages.latency_s` e
+    -- `generated always as ... stored`): un `insert ... select *` ar încerca să scrie
+    -- în ele și Postgres refuză. Derivată din catalog, deci rezistă la schimbări
+    -- viitoare de schemă — nu o listă hardcodată care se strică tăcut.
+    select string_agg(quote_ident(attname), ', ' order by attnum)
+      into v_cols
+      from pg_attribute
+     where attrelid = v_table::regclass
+       and attnum > 0
+       and not attisdropped
+       and attgenerated = '';
+
     for v_month in
       select generate_series('2026-08-01'::date, '2026-12-01'::date, interval '1 month')::date
     loop
@@ -61,16 +74,17 @@ begin
       v_lo := v_month::timestamptz;
       v_hi := (v_month + interval '1 month')::timestamptz;
 
-      -- 1. scoate din DEFAULT rândurile care aparțin intervalului
+      -- 1. scoate din DEFAULT rândurile care aparțin intervalului (doar coloanele
+      --    scriibile — cele generate se recalculează singure la reinserare)
       execute format(
         'create temp table _nx218_move as
            with moved as (
              delete from %I
              where created_at >= %L and created_at < %L
-             returning *
+             returning %s
            )
            select * from moved',
-        v_table || '_default', v_lo, v_hi
+        v_table || '_default', v_lo, v_hi, v_cols
       );
       execute 'select count(*) from _nx218_move' into v_moved;
 
@@ -82,7 +96,9 @@ begin
 
       -- 3. reinserează prin PĂRINTE → routing-ul le duce în partiția nouă
       if v_moved > 0 then
-        execute format('insert into %I %s select * from _nx218_move', v_table, v_ovr);
+        execute format(
+          'insert into %I (%s) %s select %s from _nx218_move', v_table, v_cols, v_ovr, v_cols
+        );
       end if;
       execute 'drop table _nx218_move';
 
