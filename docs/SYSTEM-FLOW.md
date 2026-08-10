@@ -237,7 +237,10 @@ Altfel, **scriere ATOMICĂ** într-o singură tranzacție
 - `enqueue_outbox(... turn_id ...)` — **`turn_id` = `idempotency_key`** → un
   singur outbox per tur,
 - `patch_conversation_state(... state_version ...)` — optimistic lock,
-  `touch_outbound=True`.
+  `touch_outbound=True`. **NX-221:** un `StateConflict` NU mai pierde reply-ul —
+  retry 1× pe starea RE-CITITĂ (`get_state_and_version` + `_build_new_state`),
+  apoi drop-patch cu event (`state_conflict_retried` / `state_conflict_dropped`);
+  insert-urile de mesaje/outbox din aceeași TX rămân comise.
 
 **Dispatcher** (proces separat,
 [`src/worker/dispatcher.py:118-144`](../src/worker/dispatcher.py)): `claim_due`
@@ -379,7 +382,16 @@ un side-effect descoperit la rollup. Toate calculele de venit sunt în UTC.
 - **`turn_id` = `idempotency_key`** pe outbox → un singur mesaj per tur
   ([`processor.py:377-383`](../src/worker/processor.py)).
 - **`state_version` optimistic lock** la `patch_conversation_state` →
-  pierderi-de-update prevenite ([`processor.py:384-391`](../src/worker/processor.py)).
+  pierderi-de-update prevenite ([`processor.py:384-391`](../src/worker/processor.py));
+  NX-221: conflictul se rezolvă cu retry pe stare proaspătă / drop-patch cu event —
+  reply-ul nu se sacrifică niciodată (principiul 6).
+- **Serializare ture pe web (NX-221):** `/web/chat` (sincron, in-process — lock-ul
+  NX-85 dintre replici nu îl acoperă) ia un lock Redis per (business, expeditor) la
+  margine ([`web/app.py`](../src/web/app.py),
+  [`worker/turn_lock.py`](../src/worker/turn_lock.py)); rafalele aceleiași
+  conversații se serializează. Timeout / Redis jos → BYPASS cu event
+  (`turn_lock_bypass`), plasa rămâne `state_version`. Kill-switch:
+  `WEB_TURN_LOCK_ENABLED` (default ON).
 - **ZERO prețuri/linkuri inventate:** validator `_prices_ok` / `_links_ok`
   ([`agent.py:79-105`](../src/worker/stages/agent.py)).
 - **`XACK` chiar și la eșec** → coada nu blochează ([`consumer.py:128-130`](../src/worker/consumer.py)).

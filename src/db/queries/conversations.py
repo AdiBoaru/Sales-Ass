@@ -146,6 +146,30 @@ async def patch_conversation_state(
     return new_version
 
 
+async def get_state_and_version(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+) -> tuple[dict[str, Any], int] | None:
+    """Re-citește `(state, state_version)` curente — folosit de retry-ul de patch la
+    `StateConflict` (NX-221): pierzătorul re-construiește patch-ul pe starea PROASPĂTĂ
+    a câștigătorului (last-writer-wins per cheie), nu pe snapshot-ul stale al turului.
+    `None` = conversația nu există (nu ar trebui să se întâmple într-un tur viu)."""
+    row = await conn.fetchrow(
+        """
+        select state, state_version
+          from conversations
+         where business_id = $1 and id = $2
+        """,
+        business_id,
+        conversation_id,
+    )
+    if row is None:
+        return None
+    state = json.loads(row["state"]) if isinstance(row["state"], str) else (row["state"] or {})
+    return state, row["state_version"]
+
+
 async def set_handoff(
     conn: asyncpg.Connection,
     business_id: str,

@@ -123,6 +123,14 @@ class Settings(BaseSettings):
     # `exp` (toleranță mică la drift între gazdă și bot).
     web_identity_enabled: bool = Field(default=False, validation_alias="WEB_IDENTITY_ENABLED")
     web_identity_leeway_s: int = Field(default=30, validation_alias="WEB_IDENTITY_LEEWAY_S")
+    # NX-221: serializare ture per conversație pe calea web SINCRONĂ (/web/chat). Lock Redis scurt
+    # (SET NX PX) la margine, ÎNAINTE de handle_turn — două mesaje în rafală nu mai rulează două
+    # pipeline-uri concurente pe același snapshot de stare. Default ON (fix de corectitudine, nu
+    # feature); OFF = comportamentul vechi, byte-identic. Timeout de așteptare → BYPASS cu event
+    # (principiul 6 — un lock blocat nu lasă clientul fără răspuns); TTL = plasă anti-deadlock.
+    web_turn_lock_enabled: bool = Field(default=True, validation_alias="WEB_TURN_LOCK_ENABLED")
+    turn_lock_ttl_ms: int = Field(default=15000, validation_alias="TURN_LOCK_TTL_MS")
+    turn_lock_wait_max_ms: int = Field(default=10000, validation_alias="TURN_LOCK_WAIT_MAX_MS")
 
     @property
     def web_cors_origins_list(self) -> list[str]:
