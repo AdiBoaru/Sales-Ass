@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
@@ -75,6 +76,10 @@ class SearchArgs(BaseModel):
     # Tier 2b p2: ingrediente/caracteristici cerute EXPLICIT („cu niacinamidă") → filtru pe
     # DomainPack.searchable_facets (key_ingredients), match normalizat. Altfel [] (fără filtru).
     features: list[str] | None = None
+    # NX-222: excluderi EXPLICITE ale clientului („fără parfum", „sunt alergic la X") → filtru DUR,
+    # NERELAXABIL, pe aceleași searchable_facets. Clasă de constrângere diferită de `features`:
+    # aceea e preferință, asta e protecție.
+    exclude_features: list[str] | None = None
     sort_mode: str = "relevance"  # relevance | price_asc | price_desc | rating_desc (clamp în SQL)
     in_stock_only: bool = False
     limit: int = Field(default=6, ge=1, le=6)
@@ -405,6 +410,12 @@ def _relax_ladder(
     """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
     (P6). Brand-ul NU se relaxează niciodată.
 
+    NX-222 — clasa PROTECȚIE (`exclude_features`, „fără parfum") NU apare deloc în trepte: nu e
+    un filtru care se relaxează mai devreme sau mai târziu, ci unul care nu se relaxează NICIODATĂ,
+    nici cu disclosure. Se pasează direct retrieverelor la fiecare treaptă (ca `brand` și
+    `variant_label`). „N-am găsit nimic fără parfum" e un răspuns onest; a arăta un produs cu
+    parfum pentru că lista ieșise goală nu e degradare grațioasă, e exact eroarea de evitat.
+
     Cu `SEARCH_SORT_MODE_ENABLED` (ARCH-product-retrieval): prețul + disponibilitatea sunt
     constrângeri DURE, NU se relaxează — relaxăm doar SOFTUL (concerns → category). Altfel un
     „sub 80" supra-constrâns ar scoate bound-ul de preț și ar întoarce un 149.99 (bug-ul de preț).
@@ -557,7 +568,10 @@ def _safety_gate(
 
 
 def _session_filters(
-    a: SearchArgs, concern_keys: list[str] | None, features: list[str] | None = None
+    a: SearchArgs,
+    concern_keys: list[str] | None,
+    features: list[str] | None = None,
+    exclude_features: list[str] | None = None,
 ) -> dict[str, Any]:
     """Setul canonic de filtre care DEFINEȘTE o sesiune de căutare (baza fp-ului). Rafinarea
     oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119).
@@ -577,6 +591,9 @@ def _session_filters(
         "brand": a.brand,
         "concerns": concern_keys,
         "features": features,
+        # NX-222: „fără parfum" adăugat pe aceeași căutare TREBUIE să dea fp nou — altfel sesiunea
+        # ar servi pool-ul vechi, adică exact produsele pe care clientul le-a exclus.
+        "exclude_features": exclude_features,
         "price_max": a.price_max,
         "sort_mode": a.sort_mode,
         "in_stock_only": a.in_stock_only,
@@ -680,6 +697,31 @@ async def search_products_tool(
         norm_features = [
             normalize(f) for f in a.features if isinstance(f, str) and f.strip()
         ] or None
+    # NX-222: excluderile cerute EXPLICIT („fără parfum") — aceeași normalizare ca `features` (o
+    # singură normalizare în tot lanțul, P11), același gating pe searchable_facets.
+    norm_exclusions: list[str] | None = None
+    if searchable_facets and a.exclude_features:
+        norm_exclusions = [
+            normalize(f) for f in a.exclude_features if isinstance(f, str) and f.strip()
+        ] or None
+    # Clientul a cerut o excludere, dar NU s-a putut transforma în filtru (pack fără
+    # searchable_facets / kill-switch OFF / termeni nenormalizabili). A o ignora în tăcere ar lăsa
+    # modelul să scrie „fără parfum, cum ai cerut" peste rezultate nefiltrate — nota de mai jos e
+    # singurul lucru care ține răspunsul onest. Se pune pe TOATE ieșirile tool-ului, inclusiv cele
+    # goale și paginile de sesiune: „n-am găsit nimic fără parfum" e la fel de fals când n-am
+    # căutat pe criteriul ăla.
+    exclusion_note = (
+        "(clientul a cerut o EXCLUDERE, dar catalogul nu o poate aplica pe aceste criterii — NU "
+        "afirma că rezultatele o respectă. Spune-i sincer că nu poți filtra după asta și "
+        "îndrumă-l să verifice compoziția pe pagina produsului.)"
+        if (a.exclude_features and not norm_exclusions)
+        else ""
+    )
+
+    def _noted(text: str) -> str:
+        """Prefixează nota de excludere neaplicată (dacă există) pe orice ieșire a tool-ului."""
+        return f"{exclusion_note}\n{text}" if exclusion_note else text
+
     sessions_on = (
         get_settings().search_sessions_enabled
     )  # kill-switch (OFF → fiecare căutare fresh)
@@ -701,14 +743,18 @@ async def search_products_tool(
         if inherited:
             ctx.emit("search_filter_inherited", fields=inherited)
     seen = _displayed_ids(ctx)
-    filters = _session_filters(a, concern_keys, norm_features)
+    filters = _session_filters(a, concern_keys, norm_features, norm_exclusions)
     fp = _fp(filters)
     sess = ctx.state.active_search or {}
 
     # === CONTINUARE sesiune (NX-119): aceleași filtre (fp) + pool stocat → pagina URMĂTOARE,
     # FĂRĂ re-fetch/embed. Paginare deterministă (pool stabil, tie-break p.id) + unseen-dedup.
     if sessions_on and sess.get("fp") == fp and sess.get("pool"):
-        return await continue_search_session(ctx, deps, sess, a.limit)
+        page = await continue_search_session(ctx, deps, sess, a.limit)
+        # NX-222: o excludere NEAPLICABILĂ nu schimbă fp-ul (n-a devenit filtru) → turul poate
+        # ateriza aici, pe pool-ul dinainte de cerere. Pagina e corectă, dar nota trebuie să vină
+        # cu ea, altfel exact acest drum e cel pe care modelul confirmă „fără parfum".
+        return replace(page, llm_view=_noted(page.llm_view)) if exclusion_note else page
 
     # === SESIUNE NOUĂ: retrieval hibrid → pool stabil (top MAX_SEARCH_POOL) + prima pagină ===
     ladder = _relax_ladder(
@@ -747,6 +793,8 @@ async def search_products_tool(
             price_max=f["price_max"],
             concerns=f["concerns"],
             features=f["features"],
+            # NX-222: PROTECȚIE — în afara treptelor, deci activă la FIECARE nivel de relaxare.
+            exclude_features=norm_exclusions,
             searchable_facets=searchable_facets,
             variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
             category=f["category"],
@@ -765,6 +813,7 @@ async def search_products_tool(
                     price_max=f["price_max"],
                     concerns=f["concerns"],
                     features=f["features"],
+                    exclude_features=norm_exclusions,  # NX-222: paritate cu lexical (vezi ladder)
                     searchable_facets=searchable_facets,
                     variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă
                     category=f["category"],
@@ -843,6 +892,9 @@ async def search_products_tool(
         had_category=a.category is not None,
         had_brand=a.brand is not None,
         n_concerns=len(concern_keys or []),
+        # NX-222: cât de des cer clienții excluderi și dacă golesc rezultatele (count, nu termeni —
+        # P12). `unmet_query`/`no_result` existent acoperă deja „excluderea a golit tot".
+        n_exclusions=len(norm_exclusions or []),
         relaxed=relaxed,
         fused=bool(lexical_pool_n) and bool(vector_pool_n),
         lexical_pool=lexical_pool_n,
@@ -934,7 +986,7 @@ async def search_products_tool(
         return ToolResult(
             ok=True,
             products=[],
-            llm_view=(
+            llm_view=_noted(
                 f"Nu am găsit niciun produs de la brandul «{a.brand}» în catalog. "
                 f"Nu prezenta alt brand ca fiind «{a.brand}». Poți oferi alternative din alte "
                 f"branduri, dar spune explicit că sunt alt brand."
@@ -943,7 +995,7 @@ async def search_products_tool(
 
     # A1: produs NUMIT inexistent (nu doar brand) → disclosure anti-bait-and-switch. Produsele
     # întoarse (dacă există) rămân ALTERNATIVE, dar agentul spune clar că nu e cel cerut.
-    notes: list[str] = []
+    notes: list[str] = [exclusion_note] if exclusion_note else []
     if (
         named_miss
     ):  # NX-163: precomputat mai sus (= același predicat, reuse — și driver de unmet_query)
@@ -995,7 +1047,7 @@ async def search_products_tool(
         return ToolResult(
             ok=True,
             products=[],
-            llm_view=(
+            llm_view=_noted(
                 f"Nu am găsit produse pe categoria «{a.category}» în catalog. NU prezenta produse "
                 f"din altă categorie ca fiind «{a.category}». Întreabă clientul ce anume caută sau "
                 f"propune-i o categorie înrudită — nu inventa o potrivire."
