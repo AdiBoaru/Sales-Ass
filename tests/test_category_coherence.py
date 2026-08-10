@@ -169,7 +169,8 @@ def _stub_dropping_search(monkeypatch):
     monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
     monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
     monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
-    monkeypatch.setattr(ct, "map_concerns", lambda dp, c: ([str(x) for x in c] if c else None))
+    # NX-227: tool-ul cere `split_concerns` → (mapate, nemapate); identitate, fără DomainPack.
+    monkeypatch.setattr(ct, "split_concerns", lambda dp, c: ([str(x) for x in c] if c else [], []))
 
 
 async def test_offcategory_guard_suppresses_when_category_dropped(monkeypatch):
