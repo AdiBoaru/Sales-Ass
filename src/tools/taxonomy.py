@@ -63,6 +63,33 @@ _BEAUTY_RAW: dict[str, str] = {
 _BEAUTY: dict[str, str] = {_norm(k): v for k, v in _BEAUTY_RAW.items()}
 
 
+def split_concerns(
+    domain_pack: DomainPack | None, raw: list[str] | None
+) -> tuple[list[str], list[str]]:
+    """`(mapate_canonice, nemapate_normalizate)` — aceeași politică de filtrare, pierdere VIZIBILĂ.
+
+    NX-227: politica rămâne cea de la NX-124 (necunoscutele NU devin filtru — mai bine zero filtru
+    decât unul greșit care golește rezultatul). Ce se schimbă: termenii căzuți nu mai dispar tăcut.
+    Apelantul îi raportează în analytics (golurile de vocabular ale DomainPack-ului sunt aceeași
+    marfă ca `unmet_query`: cerere pe care n-o înțelegem) și îi spune modelului că filtrul n-a
+    rulat — altfel poate prezenta rezultatele ca fiind potrivite „pentru ten reactiv".
+
+    Pack lipsă / `concern_map` gol → `([], toți termenii normalizați)`: golul de configurare E
+    semnalul, nu o excepție de tăcut. Ambele liste: unice, ordine stabilă (determinist, P2).
+    Un termen fără nicio literă/cifră după normalizare („  ", „🙂", „!!") nu e vocabular: nu
+    devine filtru și nici raport (ar polua exact lista din care creștem `concern_map`).
+    """
+    if not raw:
+        return [], []
+    table = domain_pack.concern_map if domain_pack else {}
+    norm = [
+        n for n in (_norm(c) for c in raw if isinstance(c, str)) if any(ch.isalnum() for ch in n)
+    ]
+    mapped = sorted(dict.fromkeys(table[n] for n in norm if n in table))
+    unmapped = sorted(dict.fromkeys(n for n in norm if n not in table))
+    return mapped, unmapped
+
+
 def map_concerns(domain_pack: DomainPack | None, raw: list[str] | None) -> list[str]:
     """Termeni liberi → chei canonice din `attributes->'concerns'`, prin `domain_pack.concern_map`
     (config DB per-vertical, NX-124).
@@ -70,11 +97,8 @@ def map_concerns(domain_pack: DomainPack | None, raw: list[str] | None) -> list[
     Necunoscutele se IGNORĂ (nu inventăm un filtru fals care ar goli rezultatul — mai bine zero
     filtru decât unul greșit, P6 indirect). DomainPack lipsă / `concern_map` gol → `[]` (fără crash,
     fără filtru). Întoarce chei unice, ordine stabilă (determinist → testabil + cache-friendly).
+
+    Wrapper peste `split_concerns` (NX-227) — comportament NEschimbat pentru apelanții care nu au
+    ce face cu termenii căzuți.
     """
-    if not raw:
-        return []
-    table = domain_pack.concern_map if domain_pack else {}
-    if not table:
-        return []
-    out = [table[_norm(c)] for c in raw if _norm(c) in table]
-    return sorted(dict.fromkeys(out))
+    return split_concerns(domain_pack, raw)[0]
