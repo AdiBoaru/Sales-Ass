@@ -449,6 +449,11 @@ class Settings(BaseSettings):
     # NX-207: citirea embeddings-urilor shadow se activează numai după benchmark. OFF păstrează
     # exact doc_type='product', deci este kill switch-ul de revenire imediată la retrieval-ul live.
     search_shadow_enabled: bool = Field(default=False, validation_alias="SEARCH_SHADOW_ENABLED")
+    # NX-226: rangul lexical pe `relevance` cu ambele semnale normalizate în [0,1] relativ la
+    # pool-ul query-ului + ponderi explicite FTS/trgm (0.6/0.4). OFF (default) → suma brută
+    # `ts_rank_cd + similarity`, byte-identic cu main. Se aprinde DUPĂ diff-ul produs de
+    # `scripts/lexical_rank_compare.py` (D15: nicio schimbare de ranking pe speranță).
+    lexical_rank_v2_enabled: bool = Field(default=False, validation_alias="LEXICAL_RANK_V2_ENABLED")
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).
