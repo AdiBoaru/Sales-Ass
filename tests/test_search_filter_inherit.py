@@ -80,7 +80,8 @@ def _capture_lexical(monkeypatch):
     monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
     monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
     # concerns mapate identitate (fără DomainPack în test): „dry" rămâne „dry".
-    monkeypatch.setattr(ct, "map_concerns", lambda dp, c: ([str(x) for x in c] if c else None))
+    # NX-227: tool-ul cere `split_concerns` → (mapate, nemapate).
+    monkeypatch.setattr(ct, "split_concerns", lambda dp, c: ([str(x) for x in c] if c else [], []))
     return seen
 
 

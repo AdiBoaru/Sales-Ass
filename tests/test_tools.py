@@ -1040,3 +1040,125 @@ def test_fp_guard_accepts_exempt_and_known_args():
     """Anti-fals-pozitiv: `limit` (exceptat) și argumentele care NU merg la retrievere nu pică."""
     assert _fp_gaps({"limit"}, _retriever_params(), _fp_keys()) == set()
     assert _fp_gaps({"nu_ajunge_la_retriever"}, _retriever_params(), _fp_keys()) == set()
+
+
+# --- NX-227: nevoie NEMAPATĂ → telemetrie + disclosure (nu se mai pierde tăcut) ----------------
+
+
+def _unmapped_terms(ctx) -> list[str]:
+    return _events(ctx, "concern_unmapped")[0].properties["terms"]
+
+
+async def _search_with_concerns(monkeypatch, ctx, concerns: list[str], **extra):
+    """Rulează search-ul pe cale lexical-only, capturând `concerns` ajunse la retriever."""
+    captured: dict = {}
+
+    async def fake_lex(conn, business_id, **k):
+        captured["concerns"] = k.get("concerns")
+        return list(PRODUCTS)
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "crema", "concerns": concerns, **extra}
+    )
+    return res, captured
+
+
+async def test_unmapped_concern_emits_and_discloses(monkeypatch):
+    """Mixt mapat+nemapat: filtrul rulează pe ce știm, restul devine event + notă către model."""
+    ctx = _ctx_beauty()
+    res, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras", "ten reactiv-x"])
+
+    assert captured["concerns"] == ["oily"]  # politica de filtrare NEschimbată
+    ev = _events(ctx, "concern_unmapped")[0]
+    assert ev.properties["terms"] == ["ten reactiv-x"]
+    assert ev.properties["locale"] == ctx.language  # P11: „ten reactiv" pe ro ≠ pe hu
+    assert "ten reactiv-x" in res.llm_view  # disclosure
+    assert "NU sunt filtrate" in res.llm_view  # ... precis: filtrul n-a rulat
+    assert "query" not in ev.properties  # P12: vocabular, nu textul clientului
+
+
+async def test_all_concerns_mapped_stays_silent(monkeypatch):
+    """Anti-zgomot: vocabular acoperit → ZERO event, ZERO notă (drum identic cu main)."""
+    ctx = _ctx_beauty()
+    res, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras", "acnee"])
+
+    assert captured["concerns"] == ["acne", "oily"]
+    assert _events(ctx, "concern_unmapped") == []
+    assert "nu sunt filtre cunoscute" not in res.llm_view
+
+
+async def test_all_concerns_unmapped_no_filter_but_signal(monkeypatch):
+    """Nimic mapat → fără filtru (ca azi), dar cu semnal complet + disclosure."""
+    ctx = _ctx_beauty()
+    res, captured = await _search_with_concerns(monkeypatch, ctx, ["frigider", "ten reactiv-x"])
+
+    assert captured["concerns"] is None  # niciun filtru fals care ar goli (P6)
+    assert _unmapped_terms(ctx) == ["frigider", "ten reactiv-x"]
+    assert "nu sunt filtre cunoscute" in res.llm_view
+
+
+async def test_missing_domain_pack_reports_every_term(monkeypatch):
+    """Pack absent = gol de CONFIGURARE; e exact semnalul, nu o excepție de tăcut."""
+    ctx = _ctx()  # fără domain_pack
+    _, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras"])
+
+    assert captured["concerns"] is None
+    assert _unmapped_terms(ctx) == ["ten gras"]
+
+
+async def test_unmapped_terms_count_is_capped(monkeypatch):
+    """Plafon de NUMĂR: 6 termeni trimiși → 5 în event (raport, nu transcriere; P12)."""
+    ctx = _ctx_beauty()
+    await _search_with_concerns(monkeypatch, ctx, [f"nevoie-{i}" for i in range(6)] + ["ten gras"])
+
+    terms = _unmapped_terms(ctx)
+    assert len(terms) == ct._UNMAPPED_TERMS_MAX == 5
+    assert set(terms) < {f"nevoie-{i}" for i in range(6)}  # submulțime strictă, deterministă
+
+
+async def test_unmapped_term_length_is_capped(monkeypatch):
+    """Plafon de LUNGIME: termen de 60 de caractere → tăiat la 40 în event."""
+    ctx = _ctx_beauty()
+    lung = "x" * 60
+    res, _ = await _search_with_concerns(monkeypatch, ctx, [lung])
+
+    assert _unmapped_terms(ctx) == [lung[: ct._VARIANT_ATTR_MAX]]
+    assert lung in res.llm_view  # nota către model păstrează termenul REAL al clientului
+
+
+async def test_unmapped_term_does_not_change_session_fp(monkeypatch):
+    """Termenii nemapați nu ating retrieval-ul → n-au voie să spargă sesiunea (fp identic).
+
+    Query IDENTIC, variază DOAR lista `concerns` (query-ul e el însuși în fp).
+    """
+    monkeypatch.setattr(get_settings(), "search_sessions_enabled", True)
+
+    pool = [{**PRODUCTS[0], "id": f"p{i}", "name": f"P{i}"} for i in range(10)]
+
+    async def fake_lex(conn, business_id, **k):
+        return list(pool)
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        by_id = {p["id"]: p for p in pool}
+        return [by_id[i] for i in ids if i in by_id]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+
+    ctx1 = _ctx_beauty()
+    await run_tool(
+        ctx1, _deps_no_llm(), "search_products", {"query": "crema", "concerns": ["ten gras"]}
+    )
+    ctx2 = _ctx_beauty()
+    ctx2.state.active_search = ctx1.state_patch["active_search"]
+    await run_tool(
+        ctx2,
+        _deps_no_llm(),
+        "search_products",
+        {"query": "crema", "concerns": ["ten gras", "nevoie-necunoscuta"]},
+    )
+
+    ses = next(e for e in reversed(ctx2.events) if e.type == "search_session")
+    assert ses.properties["action"] == "page"  # aceeași sesiune, nu una nouă
+    assert _events(ctx2, "concern_unmapped") == []  # paginarea nu re-numără aceeași cerere
