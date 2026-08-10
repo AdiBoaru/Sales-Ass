@@ -735,9 +735,15 @@ async def search_products_tool(
             if timeout_ms > 0:
                 call = asyncio.wait_for(call, timeout=timeout_ms / 1000)
             query_vec = (await call)[0]
-        except TimeoutError:
-            # DOAR al nostru: adaptorul ridică `openai.APITimeoutError`, nu builtin-ul (llm.py).
-            ctx.emit("embed_timeout", timeout_ms=timeout_ms)
+        except TimeoutError as e:
+            # `embed_timeout` înseamnă „bugetul NOSTRU a tăiat" (adaptorul ridică
+            # `openai.APITimeoutError`, nu builtin-ul — llm.py). Cu bugetul oprit nu putem tăia
+            # nimic, deci un TimeoutError venit de altundeva e „mort", nu „lent": nu raportăm
+            # `embed_timeout{timeout_ms: 0}`, care ar minți dashboardul.
+            if timeout_ms > 0:
+                ctx.emit("embed_timeout", timeout_ms=timeout_ms)
+            else:
+                ctx.emit("embed_failed", error_type=type(e).__name__)
             query_vec = None
         except Exception as e:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
             ctx.emit("embed_failed", error_type=type(e).__name__)  # tipul, NU mesajul (P12)

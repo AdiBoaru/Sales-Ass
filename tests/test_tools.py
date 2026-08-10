@@ -586,6 +586,27 @@ async def test_search_embed_timeout_zero_disables_budget(monkeypatch):
     assert not llm.cancelled and _events(ctx, "embed_timeout") == []
 
 
+async def test_search_embed_builtin_timeout_with_budget_off_is_failure(monkeypatch):
+    """Cu bugetul OPRIT nu putem tăia noi nimic: un `TimeoutError` venit din altă parte e „mort",
+    nu „lent" — altfel dashboardul ar primi `embed_timeout{timeout_ms: 0}`, adică o minciună."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 0)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    class _BuiltinTimeoutLLM:
+        async def embed(self, texts, *, model=None):
+            raise TimeoutError("socket timeout")
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_BuiltinTimeoutLLM()), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2  # degradarea e aceeași (P6)
+    assert _events(ctx, "embed_failed")[0].properties["error_type"] == "TimeoutError"
+    assert _events(ctx, "embed_timeout") == []
+
+
 async def test_search_no_embeddings_never_calls_embed(monkeypatch):
     """`has_embeddings` False → embed-ul nici nu se apelează (bugetul nu atinge drumul ăsta)."""
     monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
