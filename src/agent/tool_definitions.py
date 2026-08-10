@@ -58,6 +58,17 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                             "componentă/proprietate anume, nu o nevoie; altfel null."
                         ),
                     },
+                    "exclude_features": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": (
+                            "Ingrediente / caracteristici pe care clientul le-a exclus EXPLICIT "
+                            "(„fără parfum”, „fără alcool”, „sunt alergic la X”). Doar termenul "
+                            "exclus, fără „fără” (ex. [„parfum”]). NU deduce excluderi din context "
+                            "și nu adăuga aici precauții pe care clientul nu le-a cerut; altfel "
+                            "null."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Câte produse (1-6).",
@@ -103,6 +114,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     "brand",
                     "concerns",
                     "features",
+                    "exclude_features",
                     "limit",
                     "sort_mode",
                     "in_stock_only",

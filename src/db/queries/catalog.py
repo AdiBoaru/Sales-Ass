@@ -255,6 +255,37 @@ def _feature_clause(facet_keys: tuple[str, ...], values: list[str], placeholder:
     )
 
 
+def _exclusion_clause(facet_keys: tuple[str, ...], values: list[str], placeholder: Any) -> str:
+    """NX-222: condiție SQL „produsul NU are NICIUNA din valorile EXCLUSE de client" („fără
+    parfum"), peste aceeași uniune de atribute-array din `facet_keys` ca `_feature_clause`.
+    `values` deja normalizate de caller. Chei PARAMETRIZATE (safe).
+
+    Clauză DEDICATĂ, nu `not _feature_clause(...)`: includerea și excluderea sunt clase diferite
+    de constrângere (preferință vs protecție) și nu au voie să fie legate. Astăzi negarea ar da
+    același rezultat, dar dacă cineva schimbă vreodată semantica de includere în „le are pe TOATE",
+    negația ei ar deveni tăcut „nu le are pe toate" — adică ar lăsa să treacă un produs cu parfum.
+
+    Normalizarea e `ro_unaccent` (033), nu `translate`-ul inline din `_feature_clause`: acoperă în
+    plus formele cu sedilă (ş/ţ). Diferența e intenționată și merge în direcția SIGURĂ — excluderea
+    prinde strict mai mult decât includerea, deci nu scapă produse.
+
+    POLITICA DE ABSENȚĂ: excludem DOAR pe match POZITIV. Un produs cu fațeta nepopulată (`'[]'`)
+    trece filtrul — garanția e „nu conține în fațetele CUNOSCUTE", nu o garanție de compoziție.
+    Afirmațiile absolute („sigur fără alergeni") rămân interzise de validator (stagiul 8)."""
+    arrays = []
+    for k in facet_keys:
+        kp = placeholder(k)
+        arrays.append(
+            f"(case when jsonb_typeof(p.attributes->{kp})='array' "
+            f"then p.attributes->{kp} else '[]'::jsonb end)"
+        )
+    union = " || ".join(arrays)
+    return (
+        f"not exists (select 1 from jsonb_array_elements_text({union}) xf "
+        f"where ro_unaccent(xf) = any({placeholder(values)}::text[]))"
+    )
+
+
 def _variant_label_clause(label: str, placeholder: Any) -> str:
     """NX-135: produsul are o VARIANTĂ cu eticheta cerută (nuanță/mărime) — filtru DUR pentru
     fallback-ul gradat („alte game care CHIAR au Warm Beige"). Match NORMALIZAT (lower + strip
@@ -371,6 +402,7 @@ async def search_products_lexical(
     brand: str | None = None,
     concerns: list[str] | None = None,
     features: list[str] | None = None,
+    exclude_features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
     variant_label: str | None = None,
     price_max: float | None = None,
@@ -412,6 +444,8 @@ async def search_products_lexical(
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
+    if exclude_features and searchable_facets:  # NX-222: excludere DURĂ, nerelaxabilă
+        conds.append(_exclusion_clause(searchable_facets, exclude_features, placeholder))
     if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)
         conds.append(_variant_label_clause(variant_label, placeholder))
     if price_max is not None:
@@ -867,6 +901,7 @@ async def search_products_semantic(
     price_max: float | None = None,
     concerns: list[str] | None = None,
     features: list[str] | None = None,
+    exclude_features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
     variant_label: str | None = None,
     category: str | None = None,
@@ -890,7 +925,10 @@ async def search_products_semantic(
     NX-113c: `query_embedding` se trimite ca `list[float]` DIRECT (codecul pgvector din pool îl
     encodează) — fără literalul text de ~15KB inline pe hot path. SELECT-ul expune și
     `cosine_distance` (distanța vectorială a rândului) ca semnal de calitate (`top_cosine_distance`
-    în emit)."""
+    în emit).
+
+    NX-222: `exclude_features` e filtru DUR și AICI, obligatoriu — un filtru de protecție aplicat
+    doar pe un picior al hibridului lasă celălalt să reintroducă produsul prin fuziunea RRF."""
     sql_limit = pool if pool is not None else min(limit, 6)
 
     conds = ["p.business_id = $1", "p.status = 'active'"]
@@ -914,6 +952,8 @@ async def search_products_semantic(
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
+    if exclude_features and searchable_facets:  # NX-222: PARITATE cu lexical — vezi docstring
+        conds.append(_exclusion_clause(searchable_facets, exclude_features, placeholder))
     if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)
         conds.append(_variant_label_clause(variant_label, placeholder))
     if in_stock_only:

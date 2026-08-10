@@ -5,8 +5,11 @@ compacte, izolarea (business_id din ctx), degradarea (tool inexistent / args inv
 
 import inspect
 
+import pytest
+
 from src.config import get_settings
 from src.db.queries.catalog import search_products_lexical, search_products_semantic
+from src.domain.normalize import normalize
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
 from src.tools.base import enabled_tools, run_tool
@@ -903,3 +906,432 @@ def test_fp_guard_accepts_exempt_and_known_args():
     """Anti-fals-pozitiv: `limit` (exceptat) și argumentele care NU merg la retrievere nu pică."""
     assert _fp_gaps({"limit"}, _retriever_params(), _fp_keys()) == set()
     assert _fp_gaps({"nu_ajunge_la_retriever"}, _retriever_params(), _fp_keys()) == set()
+
+
+# =============================================================================================
+# NX-222 — `exclude_features`: excludere DURĂ, nerelaxabilă („fără parfum")
+#
+# Filtrarea reală o face SQL-ul (contractul clauzei e testat în test_catalog_queries.py). Aici
+# retrieverele fake EMULEAZĂ semantica `_exclusion_clause` — altfel testele ar trece și cu filtrul
+# complet rupt, adică exact bug-ul pe care taskul îl repară.
+# =============================================================================================
+
+_FACETS = ("key_ingredients",)
+
+
+def _p(pid: str, ingredients: list[str] | None = None) -> dict:
+    """Produs minimal; `ingredients=None` → fațeta LIPSEȘTE (politica de absență)."""
+    return {
+        "id": pid,
+        "name": f"Ser {pid}",
+        "brand": "BrandX",
+        "price": 50.0,
+        "url": f"https://shop/{pid}",
+        "ai_summary": "",
+        "availability": "in_stock",
+        "rating": 4.0,
+        "attributes": {} if ingredients is None else {"key_ingredients": ingredients},
+    }
+
+
+def _excluded(product: dict, exclude: list[str] | None) -> bool:
+    """Emulează `_exclusion_clause`: exclus DOAR pe match POZITIV normalizat, peste fațete."""
+    if not exclude:
+        return False
+    attrs = product.get("attributes") or {}
+    values = [str(v) for k in _FACETS for v in (attrs.get(k) or [])]
+    return bool({normalize(v) for v in values} & set(exclude))
+
+
+def _ctx_facets() -> TurnContext:
+    """Ctx cu DomainPack care ARE `searchable_facets` (gating-ul excluderii)."""
+    from src.domain.pack import DomainPack
+
+    business = BusinessConfig(id="biz-1", slug="s", name="n", vertical="beauty")
+    business.domain_pack = DomainPack(vertical="beauty_salon", searchable_facets=_FACETS)
+    return TurnContext(
+        turn_id="t",
+        business=business,
+        contact=Contact(id="c", business_id="biz-1"),
+        message=InboundMessage(provider_msg_id="m", body="x"),
+        conversation_id="conv",
+    )
+
+
+def _patch_exclusion_aware(monkeypatch, products: list[dict], *, calls: list | None = None):
+    """Ambele retrievere onorează `exclude_features` (ca SQL-ul real, pe ambele picioare)."""
+
+    async def fake_lex(conn, business_id, **k):
+        if calls is not None:
+            calls.append(("lexical", k))
+        return [p for p in products if not _excluded(p, k.get("exclude_features"))]
+
+    async def fake_sem(conn, business_id, vec, **k):
+        if calls is not None:
+            calls.append(("semantic", k))
+        return [p for p in products if not _excluded(p, k.get("exclude_features"))]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    return calls
+
+
+# --- Happy path -------------------------------------------------------------------------------
+
+
+async def test_exclusion_drops_matching_product_lexical(monkeypatch):
+    """DoD: „ser fără parfum" nu întoarce NICIUN produs cu „parfum" în fațetele searchable."""
+    _patch_exclusion_aware(
+        monkeypatch,
+        [
+            _p("p1", ["parfum", "glicerina"]),
+            _p("p2", ["niacinamida"]),
+            _p("p3", ["acid salicilic"]),
+        ],
+    )
+    ctx = _ctx_facets()
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "ser", "exclude_features": ["parfum"]}
+    )
+    assert [p["id"] for p in res.products] == ["p2", "p3"]  # celelalte 2, în ordinea normală
+
+
+async def test_exclusion_drops_matching_product_semantic(monkeypatch):
+    """Același contract pe piciorul VECTORIAL, testat separat (DoD: ambele retrievere)."""
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["parfum"]), _p("p2", ["niacinamida"])])
+
+    async def no_lex(conn, business_id, **k):  # doar vectorul contribuie
+        return []
+
+    monkeypatch.setattr(ct, "search_products_lexical", no_lex)
+    res = await run_tool(
+        _ctx_facets(),
+        _deps(_LLM()),
+        "search_products",
+        {"query": "ser", "exclude_features": ["parfum"]},
+    )
+    assert [p["id"] for p in res.products] == ["p2"]
+
+
+async def test_exclusion_reaches_both_retrievers_normalized(monkeypatch):
+    """Paritate + P11: ambele picioare primesc excluderea, NORMALIZATĂ (lower + fără diacritice)."""
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    calls: list = []
+    _patch_exclusion_aware(monkeypatch, [_p("p2", ["niacinamida"])], calls=calls)
+    await run_tool(
+        _ctx_facets(),
+        _deps(_LLM()),
+        "search_products",
+        {"query": "ser", "exclude_features": ["Párfum", "ALCOOL"]},
+    )
+    assert {leg for leg, _ in calls} == {"lexical", "semantic"}  # niciun picior nefiltrat
+    assert all(k["exclude_features"] == ["parfum", "alcool"] for _, k in calls)
+
+
+async def test_exclusion_intersects_with_normal_filters(monkeypatch):
+    """Excludere + filtre normale (categorie + preț) → intersecția corectă, nu înlocuire."""
+    calls: list = []
+    _patch_exclusion_aware(
+        monkeypatch, [_p("p1", ["parfum"]), _p("p2", ["glicerina"])], calls=calls
+    )
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "category": "seruri", "price_max": 80, "exclude_features": ["parfum"]},
+    )
+    assert [p["id"] for p in res.products] == ["p2"]
+    _, k = calls[0]
+    assert k["category"] == "seruri" and k["price_max"] == 80
+    assert k["exclude_features"] == ["parfum"]
+
+
+# --- Nerelaxabilitate (clasa PROTECȚIE) -------------------------------------------------------
+
+
+async def test_exclusion_survives_every_relaxation_rung(monkeypatch):
+    """DoD: excluderea supraviețuiește TUTUROR treptelor. `features` se relaxează (treapta 2),
+    excluderea NU — nu e în ladder deloc, se pasează direct la fiecare treaptă."""
+    calls: list = []
+    products = [_p("p1", ["parfum"]), _p("p2", ["glicerina"])]
+
+    async def fake_lex(conn, business_id, **k):
+        calls.append(k)
+        if k.get("features"):  # treapta strictă nu găsește nimic → forțează relaxarea
+            return []
+        return [p for p in products if not _excluded(p, k.get("exclude_features"))]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "features": ["niacinamida"], "exclude_features": ["parfum"]},
+    )
+    assert len(calls) >= 2  # chiar s-a relaxat
+    assert any(k["features"] is None for k in calls)  # feature-ul a căzut…
+    assert all(k["exclude_features"] == ["parfum"] for k in calls)  # …excluderea NICIODATĂ
+    assert [p["id"] for p in res.products] == ["p2"]
+
+
+async def test_exclusion_emptying_results_does_not_relax_it(monkeypatch):
+    """Edge: TOT catalogul are termenul exclus → zero rezultate + `no_result` (mesaj onest),
+    NU relaxarea excluderii ca să iasă ceva. „N-am nimic fără parfum" e răspunsul corect."""
+    calls: list = []
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["parfum"]), _p("p2", ["parfum"])], calls=calls)
+    ctx = _ctx_facets()
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "ser", "exclude_features": ["parfum"]}
+    )
+    assert res.products == []
+    assert all(k["exclude_features"] == ["parfum"] for _, k in calls)  # nicio treaptă fără ea
+    unmet = next(e for e in ctx.events if e.type == "unmet_query")
+    assert unmet.properties["reason"] == "no_result"
+
+
+# --- Multi-termen, diacritice, politica de absență ---------------------------------------------
+
+
+async def test_exclusion_multi_term_means_none_present(monkeypatch):
+    """DoD: `["parfum","alcool"]` = NICIUNUL prezent (nu „nu ambele")."""
+    _patch_exclusion_aware(
+        monkeypatch,
+        [
+            _p("only_parfum", ["parfum"]),
+            _p("only_alcool", ["alcool"]),
+            _p("both", ["parfum", "alcool"]),
+            _p("neither", ["glicerina"]),
+        ],
+    )
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["parfum", "alcool"]},
+    )
+    assert [p["id"] for p in res.products] == ["neither"]  # nu doar „both" scos
+
+
+@pytest.mark.parametrize("term", ["parfum", "párfum", "PARFUM", "Parfum"])
+async def test_exclusion_is_diacritic_and_case_insensitive(monkeypatch, term):
+    """DoD: aceeași excludere indiferent de diacritice/caps, la AMBELE capete (query + catalog)."""
+    _patch_exclusion_aware(monkeypatch, [_p("p2", ["Parfúm"]), _p("p3")])
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": [term]},
+    )
+    assert [p["id"] for p in res.products] == ["p3"]  # valoarea din catalog, tot normalizată
+
+
+async def test_product_with_unpopulated_facet_passes(monkeypatch):
+    """DoD: produs cu fațeta NEPOPULATĂ trece filtrul — excludem doar pe match POZITIV.
+    Garanția e „nu conține în fațetele cunoscute", nu una absolută de compoziție."""
+    _patch_exclusion_aware(monkeypatch, [_p("no_facet"), _p("has_parfum", ["parfum"])])
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["parfum"]},
+    )
+    assert [p["id"] for p in res.products] == ["no_facet"]
+
+
+async def test_unknown_excluded_term_is_noop(monkeypatch):
+    """Edge: termen exclus inexistent în catalog → filtrul e no-op, rezultate neschimbate."""
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["glicerina"]), _p("p2", ["niacinamida"])])
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["zzz-inexistent"]},
+    )
+    assert [p["id"] for p in res.products] == ["p1", "p2"]
+
+
+# --- Fingerprint de sesiune -------------------------------------------------------------------
+
+
+async def test_exclusion_changes_session_fingerprint(monkeypatch):
+    """DoD: „fără parfum" pe aceeași căutare → fp DIFERIT → sesiune NOUĂ. Altfel s-ar servi
+    pool-ul vechi, adică exact produsele pe care clientul le-a exclus."""
+    from src.models import ProductRef
+
+    pool = [_p(f"p{i}", ["glicerina"]) for i in range(10)]
+    _patch_exclusion_aware(monkeypatch, pool)
+    by_id = {p["id"]: p for p in pool}
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [by_id[i] for i in ids if i in by_id]
+
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+    ctx1 = _ctx_facets()
+    res1 = await run_tool(ctx1, _deps_no_llm(), "search_products", {"query": "ser"})
+    fp1 = ctx1.state_patch["active_search"]["fp"]
+
+    ctx2 = _ctx_facets()
+    ctx2.state.active_search = ctx1.state_patch["active_search"]
+    ctx2.state.displayed_products = [
+        ProductRef(p["id"], p["name"], p["price"]) for p in res1.products
+    ]
+    await run_tool(
+        ctx2, _deps_no_llm(), "search_products", {"query": "ser", "exclude_features": ["parfum"]}
+    )
+    assert ctx2.state_patch["active_search"]["fp"] != fp1
+    ev = next(e for e in reversed(ctx2.events) if e.type == "search_session")
+    assert ev.properties["action"] == "new"  # NU „page" din pool-ul vechi
+
+
+# --- Absența excluderii = comportament byte-identic cu main ------------------------------------
+
+
+@pytest.mark.parametrize("args", [{}, {"exclude_features": None}, {"exclude_features": []}])
+async def test_no_exclusion_is_unchanged(monkeypatch, args):
+    """DoD: fără excludere (lipsă / None / listă goală) → retrieverele primesc None, zero notă."""
+    calls: list = []
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["parfum"])], calls=calls)
+    ctx = _ctx_facets()
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", {"query": "ser", **args})
+    assert [p["id"] for p in res.products] == ["p1"]  # nimic filtrat
+    assert all(k["exclude_features"] is None for _, k in calls)
+    assert "EXCLUDERE" not in res.llm_view
+    assert _search_event(ctx).properties["n_exclusions"] == 0
+
+
+async def test_pack_without_facets_is_byte_identical_but_noted(monkeypatch):
+    """DoD + Failure case 2: fără `searchable_facets` retrieverele rulează ca pe main (excluderea
+    NU ajunge filtru) — dar tool-ul spune modelului că nu a putut fi aplicată. A o ignora tăcut ar
+    lăsa modelul să confirme „fără parfum, cum ai cerut" peste rezultate nefiltrate."""
+    calls: list = []
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["parfum"])], calls=calls)
+    ctx = _ctx()  # pack lipsă → searchable_facets = ()
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "ser", "exclude_features": ["parfum"]}
+    )
+    assert [p["id"] for p in res.products] == ["p1"]  # byte-identic: nefiltrat
+    assert all(k["exclude_features"] is None for _, k in calls)
+    assert "EXCLUDERE" in res.llm_view  # nota de onestitate
+    assert _search_event(ctx).properties["n_exclusions"] == 0
+
+
+async def test_facet_search_kill_switch_off_notes_unapplied(monkeypatch):
+    """Kill-switch `FACET_SEARCH_ENABLED=False` → aceeași notă (nu tăcere)."""
+    monkeypatch.setattr(get_settings(), "facet_search_enabled", False)
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["parfum"])])
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["parfum"]},
+    )
+    assert "EXCLUDERE" in res.llm_view
+
+
+async def test_unapplied_exclusion_noted_even_with_zero_products(monkeypatch):
+    """Nota apare și pe ieșirile GOALE: „n-am găsit nimic fără parfum" e la fel de fals când n-am
+    căutat pe criteriul ăla (calea brand-absent)."""
+    _patch_exclusion_aware(monkeypatch, [])
+    res = await run_tool(
+        _ctx(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "brand": "Chanel", "exclude_features": ["parfum"]},
+    )
+    assert res.products == [] and "EXCLUDERE" in res.llm_view
+    assert "Chanel" in res.llm_view  # mesajul de brand absent rămâne intact
+
+
+# --- Failure cases ----------------------------------------------------------------------------
+
+
+async def test_unnormalizable_terms_are_dropped(monkeypatch):
+    """Failure case 1: termeni doar-spații → filtrați înainte de SQL; nimic invalid, fără crash."""
+    calls: list = []
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["parfum"])], calls=calls)
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["   ", "", "\t\n"]},
+    )
+    assert res.ok
+    assert all(k["exclude_features"] is None for _, k in calls)  # nicio listă goală spre SQL
+    assert "EXCLUDERE" in res.llm_view  # a cerut o excludere, n-a putut fi aplicată → onest
+
+
+async def test_emoji_term_is_passed_safely_as_parameter(monkeypatch):
+    """Termen exotic (emoji) → rămâne un PARAMETRU inofensiv: nu se potrivește cu nimic, nu se
+    interpolează în SQL, nu golește rezultatele."""
+    calls: list = []
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["glicerina"])], calls=calls)
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["🙂"]},
+    )
+    assert res.ok and [p["id"] for p in res.products] == ["p1"]
+    assert calls[0][1]["exclude_features"] == ["🙂"]
+
+
+async def test_non_list_exclusion_is_rejected():
+    """Model care trimite gunoi tipizat → Pydantic respinge; args invalide, fără crash."""
+    res = await run_tool(
+        _ctx_facets(),
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": "parfum"},
+    )
+    assert res.ok is False  # string în loc de listă → validare, nu execuție
+
+
+# --- Analytics --------------------------------------------------------------------------------
+
+
+async def test_search_event_counts_exclusions(monkeypatch):
+    """`product_search.n_exclusions` = count, nu termeni (P12): cât de des cer clienții
+    excluderi și dacă golesc rezultatele."""
+    _patch_exclusion_aware(monkeypatch, [_p("p1", ["glicerina"])])
+    ctx = _ctx_facets()
+    await run_tool(
+        ctx,
+        _deps_no_llm(),
+        "search_products",
+        {"query": "ser", "exclude_features": ["parfum", "alcool"]},
+    )
+    ev = _search_event(ctx)
+    assert ev.properties["n_exclusions"] == 2
+    assert "exclude_features" not in ev.properties  # fără termenii bruți în analytics
+
+
+async def test_unapplied_exclusion_noted_on_session_page(monkeypatch):
+    """O excludere NEAPLICABILĂ nu schimbă fp-ul (n-a devenit filtru) → al doilea tur cade pe
+    paginarea din pool-ul dinainte de cerere. Pagina e corectă, dar fără notă exact ACEST drum e
+    cel pe care modelul ar confirma „iată-le pe cele fără parfum"."""
+    from src.models import ProductRef
+
+    pool = [_p(f"p{i}", ["parfum"]) for i in range(10)]
+    _patch_exclusion_aware(monkeypatch, pool)
+    by_id = {p["id"]: p for p in pool}
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [by_id[i] for i in ids if i in by_id]
+
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+    ctx1 = _ctx()  # pack lipsă → excluderea NU poate fi aplicată
+    res1 = await run_tool(ctx1, _deps_no_llm(), "search_products", {"query": "ser"})
+
+    ctx2 = _ctx()
+    ctx2.state.active_search = ctx1.state_patch["active_search"]
+    ctx2.state.displayed_products = [
+        ProductRef(p["id"], p["name"], p["price"]) for p in res1.products
+    ]
+    res2 = await run_tool(
+        ctx2, _deps_no_llm(), "search_products", {"query": "ser", "exclude_features": ["parfum"]}
+    )
+    ev = next(e for e in reversed(ctx2.events) if e.type == "search_session")
+    assert ev.properties["action"] == "page"  # chiar e drumul de paginare din pool
+    assert res2.products  # pagina a fost servită normal
+    assert "EXCLUDERE" in res2.llm_view  # …dar cu nota de onestitate atașată
