@@ -649,6 +649,12 @@ class Settings(BaseSettings):
     # „reasoning" care resping `temperature` ne-default → OFF lasă apelurile fără sampling params.
     llm_timeout_s: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_S")
     llm_retry_max: int = Field(default=2, validation_alias="LLM_RETRY_MAX")
+    # NX-225: buget de TIMP pentru embed-ul de query din `search_products` (P4 — bugetul stă în cod,
+    # nu în speranță). `llm_timeout_s` × retry = până la ~90s de așteptare pe un furnizor lent, deși
+    # piciorul lexical răspunde în milisecunde: la depășire cădem pe lexical-only, ca la eroare
+    # (P6). 800ms lasă loc de jitter peste p99-ul normal al `text-embedding-3-small` (~sub 500ms).
+    # 0 = dezactivat (fără wait_for, comportamentul de dinainte) — kill-switch numeric, fără flag.
+    embed_timeout_ms: int = Field(default=800, validation_alias="EMBED_TIMEOUT_MS")
     llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
     # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
     # triajul (clasificare) vrea determinism → mic; agentul (copy către client) vrea variație → mai
