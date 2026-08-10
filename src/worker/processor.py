@@ -27,7 +27,9 @@ from src.db.pool_metrics import take_acquire_wait
 from src.db.provider import static_db, tenant_db
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import (
+    StateConflict,
     get_or_create_conversation,
+    get_state_and_version,
     patch_conversation_state,
     touch_last_inbound,
 )
@@ -197,6 +199,97 @@ def _displayed_product_refs(products: list[dict] | None) -> list[dict]:
     return refs
 
 
+def _build_new_state(
+    base_state: dict, ctx: TurnContext, *, is_rich: bool, has_products: bool
+) -> dict:
+    """Construiește state-ul de persistat din starea de bază + deltele turului (Sender, P3).
+
+    Extras ca funcție PURĂ (NX-221) ca retry-ul de `StateConflict` să poată re-aplica
+    ACELEAȘI delte pe starea PROASPĂTĂ re-citită (last-writer-wins per cheie), nu pe
+    snapshot-ul stale de la începutul turului."""
+    new_state = base_state
+    if (is_rich or has_products) and ctx.reply.products:
+        # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
+        # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
+        new_state = {
+            **base_state,
+            "displayed_products": _displayed_product_refs(ctx.reply.products),
+        }
+    # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
+    # pending_question default None) → nu lăsăm întrebări zombi în state.
+    new_state = {**new_state, "pending_question": ctx.reply.pending_question}
+    # NX-112 (P3: processor = singurul scriitor explicit): merge canonic din ctx.state pentru
+    # câmpurile pe care stagiile le mută IN-PLACE (clarify umple constraints; clarify scrie
+    # asked_intents). Fără asta, un slot NOU (ex. „buget 200") trăiește doar pe ctx.state
+    # (dict detașat de from_jsonb) și se pierde silențios la write-back → botul „uită".
+    # `cart` rămâne owned de Agent prin state_patch (ctx.state.cart NU e ținut sincron de
+    # cart_add) → NU îl includem aici; persistă via starea de bază brută + state_patch mai jos.
+    new_state = {
+        **new_state,
+        "constraints": ctx.state.constraints,
+        "asked_intents": ctx.state.asked_intents,
+        # NX-133: stiva de constrângeri de căutare (mutată in-place de agent) — la fel ca
+        # `constraints`, trebuie merge-uită canonic aici, altfel se pierde la write-back.
+        "search_constraints": ctx.state.search_constraints,
+    }
+    # NX-119b: resetează sesiunea de căutare dacă reply-ul NU e o căutare de produse (fără
+    # sesiuni zombi — un „mai arată-mi" ulterior nu trebuie să reia o sesiune veche, fără
+    # legătură). Dacă tool-ul/agentul a scris `active_search` în state_patch (căutare nouă sau
+    # pagină), acela are întâietate prin merge-ul de mai jos.
+    if not (is_rich or has_products):
+        new_state = {**new_state, "active_search": None}
+    # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
+    # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
+    # Rămâne ULTIMUL → state_patch (Agent) are întâietate peste merge-ul canonic.
+    if ctx.state_patch:
+        new_state = {**new_state, **ctx.state_patch}
+    return new_state
+
+
+async def _patch_state_with_retry(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    ctx: TurnContext,
+    new_state: dict,
+    expected_version: int,
+    *,
+    is_rich: bool,
+    has_products: bool,
+) -> None:
+    """NX-221: `StateConflict` nu mai omoară reply-ul. Conflictul (altă scriere între citirea
+    de la începutul turului și patch) → re-citim `(state, state_version)` PROASPETE și re-aplicăm
+    deltele turului O SINGURĂ DATĂ. Al doilea eșec → pierdem patch-ul de stare, NU răspunsul
+    (principiul 6): emitem `state_conflict_dropped` și continuăm — insert-urile de mesaje/outbox
+    din aceeași TX rămân comise. Retry-ul e DOAR pe UPDATE-ul de stare, nu re-rulează insert-uri.
+    Fără PII în log (P12): doar id-uri."""
+    try:
+        await patch_conversation_state(
+            conn, business_id, conversation_id, new_state, expected_version, touch_outbound=True
+        )
+        return
+    except StateConflict:
+        pass
+    fresh = await get_state_and_version(conn, business_id, conversation_id)
+    if fresh is not None:
+        fresh_state, fresh_version = fresh
+        retry_state = _build_new_state(fresh_state, ctx, is_rich=is_rich, has_products=has_products)
+        try:
+            await patch_conversation_state(
+                conn, business_id, conversation_id, retry_state, fresh_version, touch_outbound=True
+            )
+            ctx.emit("state_conflict_retried")
+            return
+        except StateConflict:
+            pass
+    ctx.emit("state_conflict_dropped")
+    log.warning(
+        "state conflict: patch de stare pierdut, reply livrat (conv=%s turn=%s)",
+        conversation_id,
+        ctx.turn_id,
+    )
+
+
 async def handle_turn(
     conn: asyncpg.Connection,
     business: BusinessConfig,
@@ -321,6 +414,16 @@ async def handle_turn(
     if _s.pool_metrics_enabled:
         ctx.emit("pool_metrics", acquire_wait_ms=take_acquire_wait(), **bot_pool_stats())
 
+    # NX-221 (P10): telemetria lock-ului de tur — măsurată la MARGINEA web (calea sincronă) și
+    # pasată prin envelope; stagiile nu știu de lock, processor-ul doar o emite pe traiectoria
+    # turului (turn_id atașat de ctx.emit). `turn_lock_wait` DOAR când s-a așteptat efectiv (>0);
+    # bypass = lock neobținut în fereastră / Redis jos → procesat oricum (principiul 6).
+    lock_wait_ms = event.get("turn_lock_wait_ms")
+    if event.get("turn_lock_bypass"):
+        ctx.emit("turn_lock_bypass", waited_ms=round(float(lock_wait_ms or 0.0), 1))
+    elif lock_wait_ms:
+        ctx.emit("turn_lock_wait", wait_ms=round(float(lock_wait_ms), 1))
+
     # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
     if verified_customer_ref:
         ctx.emit("web_identity_verified")
@@ -379,43 +482,12 @@ async def handle_turn(
     else:
         fragments = split_reply(reply_text, limit=get_settings().reply_split_chars)
 
+    # NX-221: evenimentele emise de aici încolo (conflict de stare, reply_split) apar DUPĂ
+    # `_persist_events`-ul principal → le persistăm separat la final (coada listei).
+    events_persisted = len(ctx.events)
+
     async with conn.transaction():
-        new_state = conv["state"]
-        if (is_rich or has_products) and ctx.reply.products:
-            # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
-            # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
-            new_state = {
-                **conv["state"],
-                "displayed_products": _displayed_product_refs(ctx.reply.products),
-            }
-        # NX-130: persistă slotul de clarificare (reply CLARIFY) sau curăță-l (orice alt reply →
-        # pending_question default None) → nu lăsăm întrebări zombi în state.
-        new_state = {**new_state, "pending_question": ctx.reply.pending_question}
-        # NX-112 (P3: processor = singurul scriitor explicit): merge canonic din ctx.state pentru
-        # câmpurile pe care stagiile le mută IN-PLACE (clarify umple constraints; clarify scrie
-        # asked_intents). Fără asta, un slot NOU (ex. „buget 200") trăiește doar pe ctx.state
-        # (dict detașat de from_jsonb) și se pierde silențios la write-back → botul „uită".
-        # `cart` rămâne owned de Agent prin state_patch (ctx.state.cart NU e ținut sincron de
-        # cart_add) → NU îl includem aici; persistă via conv["state"] brut + state_patch mai jos.
-        new_state = {
-            **new_state,
-            "constraints": ctx.state.constraints,
-            "asked_intents": ctx.state.asked_intents,
-            # NX-133: stiva de constrângeri de căutare (mutată in-place de agent) — la fel ca
-            # `constraints`, trebuie merge-uită canonic aici, altfel se pierde la write-back.
-            "search_constraints": ctx.state.search_constraints,
-        }
-        # NX-119b: resetează sesiunea de căutare dacă reply-ul NU e o căutare de produse (fără
-        # sesiuni zombi — un „mai arată-mi" ulterior nu trebuie să reia o sesiune veche, fără
-        # legătură). Dacă tool-ul/agentul a scris `active_search` în state_patch (căutare nouă sau
-        # pagină), acela are întâietate prin merge-ul de mai jos.
-        if not (is_rich or has_products):
-            new_state = {**new_state, "active_search": None}
-        # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
-        # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
-        # Rămâne ULTIMUL → state_patch (Agent) are întâietate peste merge-ul canonic.
-        if ctx.state_patch:
-            new_state = {**new_state, **ctx.state_patch}
+        new_state = _build_new_state(conv["state"], ctx, is_rich=is_rich, has_products=has_products)
 
         first_outbox_id = None
         for i, frag in enumerate(fragments):
@@ -478,13 +550,19 @@ async def handle_turn(
             )
             if first_outbox_id is None:
                 first_outbox_id = outbox_id
-        await patch_conversation_state(
+        # NX-221: conflictul de versiune NU mai omoară reply-ul — retry 1× pe stare proaspătă,
+        # apoi drop-patch cu event. Retry-ul e DOAR pe UPDATE-ul de stare (insert-urile de mai
+        # sus, din aceeași TX, nu se re-rulează). StateConflict e ridicat din Python după un
+        # UPDATE care n-a prins niciun rând (nu o eroare de DB) → tranzacția rămâne utilizabilă.
+        await _patch_state_with_retry(
             conn,
             business.id,
             conv["id"],
+            ctx,
             new_state,
             conv["state_version"],
-            touch_outbound=True,
+            is_rich=is_rich,
+            has_products=has_products,
         )
         # NX-86: finalizează claim-ul ÎN aceeași TX cu outbox → atomic. Crash înainte de commit →
         # completed_at NULL → orfan recuperabil; commit → finalizat, niciodată reprocesat.
@@ -493,10 +571,15 @@ async def handle_turn(
 
     outbox_id = first_outbox_id
     if len(fragments) > 1:
-        # Observabilitate (P10): emis după persistarea principală de events → persistăm separat.
+        # Observabilitate (P10): emis după persistarea principală de events.
         # NX-122: prin ctx.emit → primește turn_id (parte din traiectoria aceluiași tur).
         ctx.emit("reply_split", parts=len(fragments))
-        await _persist_events(conn, business.id, conv["id"], contact.id, [ctx.events[-1]])
+    # NX-221: persistăm coada de evenimente emise după `_persist_events`-ul principal
+    # (state_conflict_retried/dropped + reply_split) — o singură scriere, fără dubluri.
+    if len(ctx.events) > events_persisted:
+        await _persist_events(
+            conn, business.id, conv["id"], contact.id, ctx.events[events_persisted:]
+        )
 
     # Log per-tur la succes (fără PII: doar id-uri + lungimea reply-ului, nu corpul).
     log.info(
