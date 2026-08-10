@@ -3,7 +3,10 @@
 Query-urile de catalog sunt monkeypatch-uite; testăm: dispatch, validare args, vederile
 compacte, izolarea (business_id din ctx), degradarea (tool inexistent / args invalide)."""
 
+import inspect
+
 from src.config import get_settings
+from src.db.queries.catalog import search_products_lexical, search_products_semantic
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
 from src.tools.base import enabled_tools, run_tool
@@ -834,3 +837,69 @@ async def test_variant_label_too_long_is_rejected():
     long = "x" * 200
     res = await run_tool(_ctx(), _deps(), "search_products", {"query": "y", "variant_label": long})
     assert res.ok is False
+
+
+# --- NX-223: guard de completitudine al fingerprint-ului de sesiune ---------------------
+#
+# Regula pe care o păzește: fp-ul sesiunii (`_session_filters`) trebuie să conțină ORICE argument
+# din `SearchArgs` care ajunge filtru în retrievere. Un argument nou pasat retrieverelor dar uitat
+# în fp NU se vede ca eroare — se vede ca „bot-ul răspunde din pool-ul vechi", luni mai târziu.
+# De aceea guard-ul e derivat prin introspecție din semnăturile REALE, nu dintr-o listă scrisă de
+# mână care ar rămâne și ea în urmă.
+
+# `SearchArgs.query` ajunge la retriever sub alt nume (`query_text`) — singura redenumire.
+_ARG_TO_RETRIEVER_PARAM = {"query": "query_text"}
+
+# Excepții EXPLICITE: argumente pasate retrieverelor care NU definesc sesiunea.
+# `limit` = mărimea PAGINII servite din pool, nu un filtru — aceeași sesiune se paginează cu
+# limite diferite (vezi test_page_index_monotonic_when_limit_varies).
+_FP_EXEMPT = {"limit"}
+
+
+def _retriever_params() -> set[str]:
+    """Parametrii ACCEPTAȚI de cele două retrievere (sursa de adevăr = semnăturile lor)."""
+    return {
+        name
+        for fn in (search_products_lexical, search_products_semantic)
+        for name in inspect.signature(fn).parameters
+    }
+
+
+def _fp_gaps(arg_fields: set[str], retriever_params: set[str], fp_keys: set[str]) -> set[str]:
+    """Argumentele de `SearchArgs` care ajung la retrievere dar LIPSESC din fp (pur, testabil)."""
+    return {
+        f
+        for f in arg_fields - _FP_EXEMPT
+        if _ARG_TO_RETRIEVER_PARAM.get(f, f) in retriever_params and f not in fp_keys
+    }
+
+
+def _fp_keys() -> set[str]:
+    """Cheile fp-ului (statice — nu depind de valori); `SearchArgs` minimal valid ca sondă."""
+    return set(ct._session_filters(ct.SearchArgs(query="q"), None, None))
+
+
+def test_session_fp_covers_every_filtering_arg():
+    """NX-223: fiecare câmp de `SearchArgs` care ajunge filtru în retrievere e în fp."""
+    gaps = _fp_gaps(set(ct.SearchArgs.model_fields), _retriever_params(), _fp_keys())
+    assert gaps == set(), (
+        f"argumente de filtrare absente din `_session_filters`: {sorted(gaps)} — "
+        "rafinarea pe ele ar servi pool-ul VECHI (NX-223). Adaugă-le în fp sau, dacă chiar nu "
+        "schimbă setul de rezultate, în `_FP_EXEMPT` cu justificare."
+    )
+
+
+def test_fp_guard_catches_a_new_unfingerprinted_filter():
+    """Guard-ul chiar prinde: un filtru NOU pasat retrieverelor și uitat în fp → roșu."""
+    gaps = _fp_gaps(
+        {"query", "brand", "shade_family"},  # câmp fictiv nou de `SearchArgs`
+        _retriever_params() | {"shade_family"},  # …pasat retrieverelor
+        _fp_keys(),  # …dar absent din fp
+    )
+    assert gaps == {"shade_family"}
+
+
+def test_fp_guard_accepts_exempt_and_known_args():
+    """Anti-fals-pozitiv: `limit` (exceptat) și argumentele care NU merg la retrievere nu pică."""
+    assert _fp_gaps({"limit"}, _retriever_params(), _fp_keys()) == set()
+    assert _fp_gaps({"nu_ajunge_la_retriever"}, _retriever_params(), _fp_keys()) == set()
