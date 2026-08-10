@@ -1,18 +1,65 @@
 # Nativx Assistant — Workflow Architecture (n8n-style)
 
-> Generat prin reverse-engineering pe codul real (branch `feat/NX-139-decision-axes`, 2026-07-02).
-> Schelet verificat contra `arch_explorer/` (AST-derivat: 719 noduri / 555 muchii) și a codului sursă.
+> **Revizia auditată: `6bbeb6f` (2026-08-10).** Când citești asta pe alt commit, prima
+> întrebare e cât de departe ai ajuns de aici: `git log --oneline 6bbeb6f..HEAD`.
+>
 > **Regulă de evidență:** fiecare muchie corespunde unui call/import real, citat `file:line`.
-> **Verificat prin trace invers de execuție** (2026-07-02): fiecare entry point simulat până la
-> terminare, 17 nepotriviri corectate (v. Diagram 4a/4b split).
-> **Runda 2 — audit adversarial** (2026-07-02): sweep pe fișierele necitite la prima trecere →
-> +Diagram 4c (compunerea rich / grounding) și Diagram 10 (proactiv), +18 noduri/muchii
-> (rute de margine, price-check cache, typing-bypass, operator webhook, media download,
-> XADD trim). Cod mort și seams neapelate marcate în audit. Simplificări asumate, notate:
-> Vision fail-soft păstrează caption-ul (`gates.py:397-434`), debounce coalescing N→1
-> (`debounce.py:76-79`), `_persist_events`/`_record_turn_cost` între pipeline și reply
-> (`processor.py:529-532`), kill-switch `DB_ISOLATION_ASSERT=off` (`connection.py:181-184`).
+> Scheletul e verificat contra `arch_explorer/` (AST-derivat, regenerabil determinist:
+> `python arch_explorer/analyze.py --repo . --root src` → **182 fișiere / 1272 noduri /
+> 941 muchii**, plus `verify.py` care re-derivă graful printr-o metodă DIFERITĂ, regex vs AST,
+> și cade dacă cele două nu sunt de acord).
+>
+> **Poartă anti-putrezire (CI):** `python scripts/verify_architecture_doc.py` compară blocurile
+> ```` ```claim:...` ```` de la finalul documentului cu codul. Divergență → CI roșu. Ce garantează:
+> LISTELE (stagii în ordine, tool-uri, procese, rute, flag-uri, migrări). Ce **nu** garantează:
+> săgețile dintre ele. O diagramă poate avea toate stagiile corecte și o muchie greșită.
+>
 > Diagramele se randează în VS Code (extensia Mermaid Chart) sau pe GitHub.
+
+<details>
+<summary>Istoricul verificărilor (2026-07-02 → 2026-08-10)</summary>
+
+- **2026-07-02, redactare inițială** (branch `feat/NX-139-decision-axes`, AST: 719 noduri /
+  555 muchii). Verificat prin trace invers de execuție: fiecare entry point simulat până la
+  terminare, 17 nepotriviri corectate (v. split-ul Diagram 4a/4b).
+- **2026-07-02, runda 2 — audit adversarial**: sweep pe fișierele necitite la prima trecere →
+  +Diagram 4c (compunerea rich / grounding) și Diagram 10 (proactiv), +18 noduri/muchii
+  (rute de margine, price-check cache, typing-bypass, operator webhook, media download, XADD trim).
+- **2026-08-10, resincronizare**. Documentul rămăsese în urmă cu ~6 săptămâni. Măsurat, nu
+  presupus: din 229 de citări `file:line`, **201 încă aterizau în interval**; cele 27 în afară
+  erau concentrate în exact două fișiere — `src/worker/stages/agent.py` (1411 → 423 linii) și
+  `src/worker/processor.py`. Cauza: modularizarea agentului (NX-142/143/144) a spart monolitul
+  în 19 module `src/agent/*`, deci **Diagram 4b a fost rescrisă din temelii**. Adăugate
+  subsistemele apărute după 2026-07-02, absente complet: `src/safety/`, `src/knowledge/`,
+  `src/commerce/`, `answer_plan`, `match_gate`, `query_spec`/`query_rewrite`,
+  `search_documents`, rollup-ul de cerere. Restructurat pe niveluri + lentile.
+
+</details>
+
+---
+
+## Cum se citește documentul
+
+Un singur desen „cu tot proiectul" nu există aici, deliberat: sistemul are axe **ortogonale**
+pe care un flowchart nu le poate purta simultan. În loc de asta, patru **niveluri** de zoom și
+șase **lentile** peste același schelet.
+
+**Regula de includere** (de ce un pas apare pe diagramă și altul nu): un pas primește nod dacă
+face cel puțin unul dintre — *poate ieși devreme*, *cheamă un LLM*, *atinge DB/Redis/serviciu
+extern*, *e stins/aprins de un flag*, *poate eșua într-un fel care schimbă răspunsul trimis*.
+Restul e detaliu de implementare și stă în cod.
+
+| Nivel | Întrebarea la care răspunde | Unde |
+| --- | --- | --- |
+| **1 · Context** | Cine vorbește cu sistemul și de ce servicii externe depinde | Diagram 1 |
+| **2 · Procese** | Ce rulează, în ce container, și cine cu cine vorbește | Diagram 2 + tabelul de mai jos |
+| **3 · Pipeline** | Cele 11 stagii, în ordine, cu toate ieșirile devreme | Diagram 4a |
+| **4 · Un tur** | „Intră un mesaj — ce se întâmplă, pas cu pas" | Diagram 3 (+4b pentru interiorul agentului) |
+
+**Lentilele** (aceleași stagii, întrebări diferite): Cost · Date · Eșec · Flag-uri · Izolare ·
+Siguranță → secțiunea [Lentile](#lentile).
+
+---
 
 **Procese** ([docker-compose.yml:31-98](../docker-compose.yml)):
 
@@ -447,9 +494,23 @@ flowchart TD
 
 ---
 
-## Diagram 4b — Agent Stage Internals (agent.py:957)
+## Diagram 4b — Agent Stage Internals (fazele A–F după modularizare)
 
-Intențiile deterministe PRE-loop scurtcircuitează bucla LLM (cost zero); compunerea POST-loop e cod determinist peste `ctx.retrieval` — modelul nu are ultimul cuvânt pe cifre/linkuri.
+Monolitul `agent.py` (1411 linii) a fost spart în 19 module `src/agent/*` (NX-142/143/144).
+`agent_stage` ([src/worker/stages/agent.py:267](../src/worker/stages/agent.py)) a rămas **doar
+regia**: A→B→C→D → `build_plan` → `render`.
+
+| Fază | Unde trăiește | Ce decide |
+| --- | --- | --- |
+| **A · Regie + siguranță** | `stages/agent.py:267` · `_persist_safety_context:217` | Porți de intrare (fără LLM / rută ≠ sales,order / mesaj gol → no-op). Persistă contextul de siguranță ÎNAINTE de orice cale care servește produse |
+| **B · Intenții pre-loop** | `deterministic.py:469` (`try_pre_intents`) | Link / comparație / detaliu / recenzii pe setul deja afișat → răspuns determinist, **$0 inferență** |
+| **C · Compunerea promptului** | `prompt_builder` · `merge_constraints:126` · `context.py` | System GENERAT din DB (P9); stiva de constrângeri multi-tur; hint-uri per-tur (filtre, cumpărare, lead score) |
+| **D · Bucla de tool-uri** | `llm.py:227` (`run_tool_loop`) · `tool_executor.py` (`ToolRun`) | Modelul alege tool-urile (max 3/tur, cap dur). `show_more` ocolește complet bucla → paginare deterministă |
+| **E · Planner** | `planner.py:162` (`build_plan`) | Shaping determinist post-loop → `ResponsePlan`. Patru căi aduc produse din DB **în afara** `ToolRun` — fiecare cu gate de siguranță propriu |
+| **F · Render** | `finalize.py:325` (`render`) | Comparație → rich → proză → order → no-result. Validator + retry + fallback determinist |
+
+**Invariantul central:** modelul nu are ultimul cuvânt pe cifre și linkuri. Fazele E și F sunt cod
+determinist peste `ctx.retrieval`; validatorul respinge orice preț/link/număr care nu e în retrieval.
 
 ```mermaid
 flowchart TD
@@ -458,111 +519,138 @@ flowchart TD
   classDef free fill:#a3e4d7,stroke:#148f77,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
 
-  IN2["route = sales / order"]:::step
+  IN2["route = sales / order<br/>agent.py:267"]:::step
 
-  subgraph PRE["PRE-loop deterministic intents — no LLM"]
-    LNK{"link request on displayed?<br/>:984"}:::dec
-    SLNK["serve product_url from state<br/>+ Offer — :894"]:::free
-    CMPI{"compare on displayed set?<br/>:1001"}:::dec
-    HCMP{"2+ valid products fetched?<br/>:933"}:::dec
-    CTAB["deterministic comparison table"]:::free
-    SM{"show-more on active session?<br/>:1019"}:::dec
+  subgraph A["A · Regie + siguranță — agent.py:267-295"]
+    GRD0{"llm None? rută ≠ sales/order?<br/>mesaj gol? :270-277"}:::dec
+    NOOP["no-op → fallback_stage"]:::step
+    SAFEP["_persist_safety_context :217<br/>SafetyPolicy.for_turn · policy.py:85"]:::safe
+    PRUNE["_prune_displayed :235 — hidratează din catalog<br/>+ taie contraindicatele din state"]:::safe
   end
 
-  MERGEC["merge_constraints stack — sales only<br/>:1098-1112"]:::step
-  PAGE2["continue_search_session :1135"]:::free
-  PGOK{"page has products?"}:::dec
-  NOMORE["no-more message :1139"]:::out
-
-  subgraph LOOPG["LLM tool loop"]
-    PROMPT["build_agent_system from DB<br/>prompt_builder.py:279"]:::step
-    LOOP["run_tool_loop max 3 steps<br/>llm.py:227"]:::llm
-    EXEC["execute → run_tool + bookkeeping :1041-1086<br/>10 tools: search·details·compare·cart·checkout<br/>reorder·back_in_stock·faq·check_order·request_human"]:::step
+  subgraph B["B · Intenții deterministe pre-loop — deterministic.py:469"]
+    PRE{"link / compare / detaliu / recenzie<br/>pe setul afișat?"}:::dec
+    PREOUT["răspuns determinist — $0 inferență"]:::free
   end
 
-  subgraph POST["POST-loop deterministic composition"]
-    LOGIN{"check_order hit login wall?<br/>:1155"}:::dec
-    LWALL["login-required msg"]:::out
-    CKF{"purchase intent + cart lines,<br/>no link yet? :1174"}:::dec
-    CKEXEC["code calls checkout_link itself<br/>:1195"]:::step
-    XS{"cart_add ok + no link? :1204"}:::dec
-    XSELL["cross-sell complementary cards<br/>:1213-1236"]:::out
-    ATQ{"superlative on displayed set?<br/>:1246"}:::dec
-    HYD1["rehydrate displayed set :1255"]:::step
-    CHP{"cheaper intent? :1265"}:::dec
-    CHS["search_cheaper_than :1276"]:::step
-    CH0{"anything cheaper?"}:::dec
-    CHMSG["already-cheapest msg :1283"]:::out
-    RHD{"no products + displayed +<br/>text ungrounded? :1291"}:::dec
-    HYD2["get_products_by_ids :1300"]:::step
-    CMPD{"model called compare_products?<br/>:1314"}:::dec
-    CTAB2["deterministic table :1315-1324"]:::out
+  subgraph C["C · Prompt — prompt_builder · agent.py:299-350"]
+    MERGEC["merge_constraints :126 — stivă multi-tur<br/>rafinarea NU pierde constrângerile"]:::step
+    HINTS["hint-uri per-tur: filtre · purchase_intent<br/>· lead_score · context · istoric (max 8)"]:::step
+    SYS["build_agent_system — GENERAT din DB (P9)"]:::step
   end
 
-  subgraph FIN["Finalize + validator"]
-    PRD{"products retrieved?"}:::dec
-    RICHC["_finalize_rich structured JSON :1330<br/>+ decision axes NX-139 input :704-720<br/>grounding chain → Diagram 4c"]:::llm
-    ROK{"rich has items?"}:::dec
-    RICHOUT["rich reply: cards + chips<br/>+ checkout Offer :1340-1348"]:::out
-    VALID{"_valid: prices / links / bare numbers /<br/>claims / medical — agent.py:472"}:::dec
-    RETRY["1 retry, allowed prices only :587"]:::llm
-    V2{"valid now?"}:::dec
-    DETR["deterministic reply :523"]:::free
-    PROSE["prose reply + cards :1379"]:::out
-    ORD{"order route?"}:::dec
-    GRND["_finalize_grounded on order views<br/>:1389"]:::llm
-    TXTOK{"text valid without products?<br/>:1398"}:::dec
-    NORES["safe no-result / login msg<br/>:1405 · :1406-1411"]:::out
+  subgraph D["D · Buclă tool-uri — llm.py:227"]
+    SM{"show_more?<br/>deterministic.py:541"}:::dec
+    PAGE["continue_search_session — paginare<br/>deterministă, fără LLM"]:::free
+    PGOK{"pool epuizat?"}:::dec
+    NOMORE["mesaj determinist, cacheable=False"]:::out
+    LOOP["run_tool_loop — max 3 tool calls"]:::llm
+    EXEC["ToolRun.execute — acumulează<br/>produse / linkuri / sume"]:::step
   end
 
-  IN2 --> LNK
-  LNK -- yes --> SLNK
-  LNK -- no --> CMPI
-  CMPI -- yes --> HCMP
-  HCMP -- yes --> CTAB
-  HCMP -- "no → fall through :1009" --> MERGEC
-  CMPI -- no --> MERGEC
-  MERGEC --> SM
-  SM -- yes --> PAGE2 --> PGOK
-  PGOK -- no --> NOMORE
-  PGOK -- "yes, skip loop" --> LOGIN
-  SM -- no --> PROMPT --> LOOP <--> EXEC
+  subgraph E["E · Planner — planner.py:162"]
+    LOGIN{"check_order pe web anonim?<br/>run.order_gated_login :187"}:::dec
+    LWALL["mesaj login determinist → handled"]:::out
+    CKF{"purchase_intent fără checkout_url?<br/>:206-214"}:::dec
+    CKEXEC["codul creează linkul<br/>prin ACELAȘI execute :227"]:::step
+    XS{"cart_add fără link?<br/>:236-242"}:::dec
+    XSELL["cross-sell complementare<br/>+ policy.gate :251"]:::safe
+    ATQ{"superlativ pe setul afișat?<br/>_ATTR_QUERY_RE :282-288"}:::dec
+    HYD1["rehidratează setul afișat<br/>+ policy.gate :294"]:::safe
+    CHP{"„ceva mai ieftin"?<br/>:304-311"}:::dec
+    CHS["search_cheaper_than<br/>+ policy.gate :317"]:::safe
+    CH0{"găsit ceva mai ieftin?"}:::dec
+    UNMET["unmet_query reason=price_gap :331<br/>= gol de catalog, marcat LA SURSĂ"]:::step
+    CHMSG["„deja cel mai ieftin" + chips → handled"]:::out
+    RHD{"zero produse + set afișat?<br/>plasa R3 :352-359"}:::dec
+    HYD2["rehidratează din state + policy.gate :363"]:::safe
+    FINALG["policy.gate purpose=retrieval_final :372<br/>ULTIMUL punct înainte de validator/carduri"]:::safe
+    RETR["ctx.retrieval = RetrievalResult :373"]:::step
+    MGS["match_gate_shadow :374 — OFF by default"]:::step
+  end
+
+  subgraph F["F · Render — finalize.py:325"]
+    APLAN{"answer_plan_enabled?<br/>agent.py:396 — OFF by default"}:::dec
+    AGUARD["enforce_answer_plan<br/>answer_plan_guard.py:20"]:::llm
+    CMPD{"compared?"}:::dec
+    CTAB["tabel comparativ determinist<br/>ZERO proză LLM în celule"]:::free
+    PRD{"produse?"}:::dec
+    RICHC["_finalize_rich :266 — apel structurat"]:::llm
+    ROK{"rich cu items?"}:::dec
+    RICHOUT["set_rich_reply + checkout offer<br/>+ agent_recommended"]:::out
+    DOWN["rich_downgraded :396 — motiv emis"]:::step
+    VALID{"validate_prose :195<br/>preț · link · număr bar · claim · stoc · safety"}:::dec
+    RETRY["1 retry cu feedback"]:::llm
+    V2{"valid acum?"}:::dec
+    DETR["formulare deterministă fără cifre"]:::free
+    PROSE["proză + carduri"]:::out
+    ORD{"rută order?"}:::dec
+    GRND["_finalize_grounded :149 pe order views"]:::llm
+    TXTOK{"text valid fără produse?"}:::dec
+    NORES["no-result sigur, cacheable=False<br/>+ chips de continuare :211"]:::out
+  end
+
+  IN2 --> GRD0
+  GRD0 -- da --> NOOP
+  GRD0 -- nu --> SAFEP --> PRUNE --> PRE
+  PRE -- da --> PREOUT
+  PRE -- nu --> MERGEC --> HINTS --> SYS --> SM
+  SM -- da --> PAGE --> PGOK
+  PGOK -- da --> NOMORE
+  PGOK -- nu --> LOGIN
+  SM -- nu --> LOOP <--> EXEC
   LOOP --> LOGIN
-  LOGIN -- yes --> LWALL
-  LOGIN -- no --> CKF
-  CKF -- yes --> CKEXEC --> XS
-  CKF -- no --> XS
-  XS -- yes --> XSELL
-  XSELL -- "no complement / rich fail → continue :1238" --> ATQ
-  XS -- no --> ATQ
-  ATQ -- yes --> HYD1 --> CMPD
-  ATQ -- no --> CHP
-  CHP -- yes --> CHS --> CH0
-  CH0 -- no --> CHMSG
-  CH0 -- yes --> CMPD
-  CHP -- no --> RHD
-  RHD -- yes --> HYD2 --> CMPD
-  RHD -- no --> CMPD
-  CMPD -- yes --> CTAB2
-  CMPD -- no --> PRD
-  PRD -- "yes + sales" --> RICHC --> ROK
-  ROK -- yes --> RICHOUT
-  ROK -- "no → prose downgrade :1350" --> VALID
-  PRD -- "yes + order" --> VALID
+  LOGIN -- da --> LWALL
+  LOGIN -- nu --> CKF
+  CKF -- da --> CKEXEC --> XS
+  CKF -- nu --> XS
+  XS -- da --> XSELL
+  XSELL -- "fără complement / rich eșuat → continuă" --> ATQ
+  XS -- nu --> ATQ
+  ATQ -- da --> HYD1 --> FINALG
+  ATQ -- nu --> CHP
+  CHP -- da --> CHS --> CH0
+  CH0 -- nu --> UNMET --> CHMSG
+  CH0 -- da --> FINALG
+  CHP -- nu --> RHD
+  RHD -- da --> HYD2 --> FINALG
+  RHD -- nu --> FINALG
+  FINALG --> RETR --> MGS --> APLAN
+  APLAN -- da --> AGUARD
+  APLAN -- nu --> CMPD
+  CMPD -- da --> CTAB
+  CMPD -- nu --> PRD
+  PRD -- "da + sales" --> RICHC --> ROK
+  ROK -- da --> RICHOUT
+  ROK -- nu --> DOWN --> VALID
+  PRD -- "da + order" --> VALID
   VALID -- ok --> PROSE
   VALID -- invalid --> RETRY --> V2
-  V2 -- yes --> PROSE
-  V2 -- no --> DETR
-  PRD -- "no, but final text" --> ORD
-  ORD -- yes --> GRND
-  ORD -- no --> TXTOK
-  TXTOK -- yes --> PROSE
-  TXTOK -- no --> NORES
-  PRD -- "no, no text" --> NORES
+  V2 -- da --> PROSE
+  V2 -- nu --> DETR
+  PRD -- "nu, dar există text" --> ORD
+  ORD -- da --> GRND
+  ORD -- nu --> TXTOK
+  TXTOK -- da --> PROSE
+  TXTOK -- nu --> NORES
+  PRD -- "nu, fără text" --> NORES
 ```
 
-Memoria (istoric/profil/state/rezumat) intră în prompturi prin `conversation_transcript` + `context_blocks` (`src/worker/context.py:23`; folosite la `triage.py:223-226` și `agent.py:1088-1091`). System-promptul agentului e GENERAT din DB (`src/agent/prompt_builder.py:279`, principiul 9).
+**Cele patru căi care ocolesc `ToolRun`** (cross-sell, superlativ, „mai ieftin", rehidratare) aduc
+produse direct din DB. Fiecare are `policy.gate` propriu, iar `retrieval_final`
+([planner.py:372](../src/agent/planner.py)) e plasa de siguranță: idempotent pe un set deja filtrat,
+dar prinde orice cale VIITOARE care uită gate-ul. Fără el, un `cart_add` perfect sigur putea trage
+un complement contraindicat.
+
+**`unmet_query` cu `reason="price_gap"`** ([planner.py:331](../src/agent/planner.py)) e marcat exact
+unde se știe că turul a fost o intenție de preț. Din rollup n-ai cum să distingi post-hoc „n-am găsit
+nimic" de „n-am găsit nimic mai ieftin" — de aceea faptul se scrie la sursă, nu se inferă.
+
+Memoria (istoric / profil / state / rezumat) intră în prompturi prin `conversation_transcript` +
+`context_blocks` ([src/worker/context.py:23](../src/worker/context.py)). System-promptul agentului e
+GENERAT din DB ([src/agent/prompt_builder.py](../src/agent/prompt_builder.py), principiul 9).
 
 ---
 
@@ -1054,7 +1142,330 @@ flowchart TD
 
 ---
 
+---
+
+# Lentile
+
+Aceleași 11 stagii, șase întrebări diferite. O lentilă nu adaugă noduri — recolorează scheletul
+din Diagram 4a. Deciziile arhitecturale se iau pe lentile, nu pe topologie.
+
+## Lentila 1 · COST — unde se duc banii pe tur
+
+Zece puncte în care sistemul cheamă un model. Restul e cod determinist.
+
+| Punct | Model | Când | Evitabil prin |
+| --- | --- | --- | --- |
+| Moderation | `omni-moderation-latest` | Gates, fiecare mesaj text | `moderation_enabled` |
+| Vision | `gpt-5.4-mini` | Gates, doar imagini | `vision_enabled` |
+| Embedding query | `text-embedding-3-small` | Cache + FAQ lookup | — (ieftin, e chiar mecanismul de economie) |
+| Triaj | `gpt-5.4-nano` | Orice mesaj care trece de straturile gratuite | alias / cache / FAQ hit |
+| Triaj compune „simple" | `gpt-5.4-nano` | Rută `simple` | — |
+| Buclă tool-uri | `gpt-5.4-mini` | Rute `sales` / `order` | intenții pre-loop · `show_more` |
+| Compunere rich | `gpt-5.4-mini` | Recomandare cu produse | — |
+| Finalizare proză (+1 retry) | `gpt-5.4-mini` | Când rich eșuează sau ruta e order | — |
+| Extractor profil | `gpt-5.4-nano` | Post-tur, async | `profile_extraction_enabled` |
+| Summarizer | `gpt-5.4-mini` | Conversații > 20 mesaje | `summary_enabled` |
+
+**Căile cu cost zero de inferență** (ținta: 40-60% din trafic): alias exact · cache semantic ·
+FAQ · salut determinist · intenții pre-loop (link/compare/detaliu/recenzie) · paginare
+`show_more` · tabel comparativ · căutarea „mai ieftin" · toate mesajele de fallback.
+
+**Plafoane impuse în cod**, nu în prompturi: max 3 tool calls/tur · istoric max 8 mesaje ·
+state ≤ 8KB (CHECK în DB ca plasă) · max 6 produse × 8 câmpuri în tool results · cost guard
+zilnic per business (`cost_guard_enabled`, contor Redis; sursa de facturare rămâne `usage_daily`).
+Prefixul de system e byte-identic între tururi → prompt caching (75-90% discount) — orice hint
+per-tur se pune în USER, nu în prefix.
+
+## Lentila 2 · DATE — un singur proprietar per câmp
+
+Principiul 3 din CLAUDE.md e verificabil: fiecare câmp din `TurnContext` are exact un stagiu
+care îl scrie. Când două vor să scrie același câmp, arhitectura e greșită.
+
+| Câmp | Proprietar unic | Notă |
+| --- | --- | --- |
+| `language` | `language_stage` | Cheie în TOATE lookup-urile (faqs / semantic_cache / wa_templates) |
+| `route` | `triage_stage` | Excepții documentate: `alias_stage` setează ruta fără reply; `handoff_stage` o rescrie în SALES pe canale fără operator; `clarify_resume` o restaurează |
+| `retrieval` | `planner.build_plan` | Singurul scriitor — de aceea gate-ul de siguranță final stă tot acolo |
+| `reply` | orice stagiu (early exit) | Un singur punct de IEȘIRE (Sender), dar multe puncte de decizie |
+| `halt` | `gates_stage` | Tăcere INTENȚIONATĂ, fără reply — distinctă de „n-am produs nimic" |
+| `from_cache` | `cache_stage` | — |
+| `state.safety` | `agent_stage` (faza A) | Persistat de processor din `state_patch` |
+| `state.search_constraints` | `agent_stage` (faza C) | Stiva multi-tur |
+
+**State = ref-uri, nu obiecte** (P8): `displayed_products` ține `{product_id, name, price}`.
+De aceea toate cele patru căi din faza E **rehidratează din catalog** înainte să judece —
+un ref nu-și trădează retinalul în nume.
+
+## Lentila 3 · EȘEC — unde poate ieși tăcere
+
+Principiul 6 („niciodată tăcere") are un lanț de degradare explicit. Fiecare treaptă e cod, nu
+speranță.
+
+```
+rich eșuat ──→ rich_downgraded ──→ proză
+proză invalidă ──→ 1 retry cu feedback ──→ formulare deterministă fără cifre
+buclă LLM eșuată ──→ no-op ──→ fallback_stage (întrebare de clarificare)
+fără cheie LLM / cost guard depășit ──→ llm=None ──→ pipeline degradat, tot cu reply
+tool eșuat ──→ commerce_note ──→ chips-urile nu promit acțiunea refuzată
+zero rezultate ──→ mesaj sigur, cacheable=False ──→ chips de continuare
+```
+
+**Cele două locuri unde tăcerea e corectă**, ambele intenționate: `halt` din Gates (om a preluat
+conversația / burst de rate-limit) și dedupe (retry Meta pe un mesaj deja procesat).
+
+**Cache poisoning** e clasa de bug care revine: orice reply de tip „n-am găsit" trebuie
+`cacheable=False`. Altfel un `hit_count` care crește servește „n-am găsit" la orice query similar,
+sărind agentul. S-a întâmplat live pe demo.
+
+## Lentila 4 · FLAG-URI — ce rulează de fapt
+
+**86 de flag-uri bool** în `Settings`; **71 ON**, **15 OFF** by default. Lista exactă e în blocul
+`claim:flags` — CI-ul cade dacă divergeaza. Ce contează arhitectural:
+
+**Stratul shadow** — rulează în paralel cu producția, observă, nu atinge `reply`:
+`query_spec_shadow_enabled` · `match_gate_shadow_enabled` · `search_shadow_enabled`.
+Toate OFF. Asta e o dimensiune întreagă a sistemului pe care nicio diagramă de dinainte n-o arăta:
+măsurăm calitatea căutării fără să riscăm răspunsul.
+
+**Construit dar neactivat**: `answer_plan_enabled` (+ `_critic`, `_max_quality`) ·
+`injection_screen_enabled` · `web_identity_enabled` · `ai_disclaimer_enabled` ·
+`faq_locale_fallback_enabled` · `replay_store_prompt_enabled` · `validator_stock_claims_enabled`.
+
+**Atenție la citire**: `web_enabled` e OFF în default-urile din cod și ON în `.env.prod`.
+Un flag OFF în `config.py` nu înseamnă OFF în producție — înseamnă „decizia se ia în env".
+
+## Lentila 5 · IZOLARE — unde se poate scurge un tenant
+
+Izolarea primară e `WHERE business_id = $1` în cod. RLS e plasa, nu mecanismul.
+
+| Cale | Rol DB | Ce poate atinge |
+| --- | --- | --- |
+| `tenant_conn` (pipeline, joburi per-tenant) | `bot_runtime`, FĂRĂ `bypassrls` | Doar rândurile tenantului (`app.business_id` setat per checkout) |
+| `admin_conn` (control plane) | privilegiat | **Excepție unică documentată**: `resolve_channel` (canal → business, rulează ÎNAINTE ca tenantul să fie cunoscut) + mentenanță non-PII |
+
+**Orice alt query pe `admin_conn` e un bug de izolare.** CI-ul are un test dedicat
+(`scripts/check_no_raw_conn.py` + jobul „Izolare concurentă NX-53").
+
+**PII trăiește într-un singur loc**: `channel_identities` (telefon E.164 / id canal + hash).
+Nici în `orders`, nici în loguri (redaction în logger), nici în `analytics_events` — de aceea
+whitelist-ul de argumente pentru evenimentul `tool_call` exclude deliberat `search_products.query`
+(ar putea ecoua fraza userului) și întoarce `{}` pentru tool-urile cu argumente PII.
+
+## Lentila 6 · SIGURANȚĂ — gate-uri P0
+
+Două familii, ambele cu kill-switch, ambele verificate prin mutație (o protecție inertă e teatru
+de siguranță).
+
+**Contraindicații** (`src/safety/policy.py`): `SafetyPolicy.for_turn` o dată per tur, aplicat în
+**cinci** puncte — `cross_sell`, `attr_query`, `cheaper`, `rehydrate`, `retrieval_final` — plus
+`state_prune` pe `displayed_products`. Contextul declarat (ex. sarcină) se **persistă** în
+`state.safety`, pentru că istoricul e plafonat la 8 mesaje: fără persistare, o declarație de la
+turul 9 dispărea și produsul contraindicat reintra.
+
+**Claim-uri medicale** (`validator._safety_ok`, `safety_medical_guardrail_enabled`): niciun claim
+terapeutic („tratează", „sigur în sarcină", „fără alergeni", „recomandat de medic"). Pe proză:
+invalid → retry → fallback. Pe calea bogată: scrub → DROP. Răspundere juridică, nu preferință de ton.
+
+---
+
+# Contract verificat
+
+Blocurile de mai jos sunt comparate cu codul de `scripts/verify_architecture_doc.py`, rulat în CI.
+Nu le edita de mână: `python scripts/verify_architecture_doc.py --emit-claims` le regenerează.
+
+Ce se verifică: **listele**. Ce nu: **săgețile**. O diagramă poate avea toate stagiile corecte și
+o muchie greșită între ele — pentru muchii rămân `arch_explorer/verify.py` și cititorul.
+
+```claim:stages
+gates_stage
+language_stage
+clarify_resume_stage
+greeting_stage
+alias_stage
+cache_stage
+faq_stage
+triage_stage
+handoff_stage
+agent_stage
+fallback_stage
+```
+
+```claim:tools
+cart_add
+check_order
+checkout_link
+compare_products
+faq_lookup
+get_product_details
+reorder
+request_human
+search_products
+subscribe_back_in_stock
+```
+
+```claim:processes
+dispatcher
+proactive
+redis
+scheduler
+telegram-poller
+webhook
+worker
+```
+
+```claim:routes
+GET /bootstrap
+GET /r/{business_id}/{ref_code}
+GET /stream
+GET /webhook
+POST /chat
+POST /messages
+POST /webhook
+POST /webhook/orders/{business_id}
+```
+
+```claim:flags
+admission_enabled = true
+ai_disclaimer_enabled = false
+alias_enabled = true
+answer_plan_critic_enabled = false
+answer_plan_enabled = false
+answer_plan_max_quality = false
+attr_query_enabled = true
+cache_enabled = true
+card_badges_enabled = true
+catalog_projection_v2_enabled = true
+catalog_reason_codes_enabled = true
+cheaper_intent_enabled = true
+cheapest_alternatives_enabled = true
+checkout_intent_fallback_enabled = true
+closure_chips_enabled = true
+compare_coherence_guard_enabled = true
+compare_intent_enabled = true
+comparison_facets_enabled = true
+content_status_filter_enabled = true
+conv_lock_enabled = true
+conversation_facts_enabled = true
+cost_guard_enabled = true
+cross_sell_enabled = true
+decision_axes_enabled = true
+demand_rollup_enabled = true
+detail_intent_enabled = true
+domain_pack_enabled = true
+embed_job_enabled = true
+facet_search_enabled = true
+faq_enabled = true
+faq_locale_fallback_enabled = false
+faq_policy_gate_on_faq_kind = true
+faq_rerank_enabled = true
+injection_screen_enabled = false
+input_pii_mask_enabled = true
+lead_score_hint_enabled = true
+lifecycle_job_enabled = true
+link_intent_enabled = true
+llm_sampling_enabled = true
+match_gate_shadow_enabled = false
+memory_canonicalize_enabled = true
+memory_open_capture_enabled = true
+memory_safe_injection_enabled = true
+memory_v2_enabled = true
+moderation_enabled = true
+no_result_alternatives_enabled = true
+partition_job_enabled = true
+pool_metrics_enabled = true
+proactive_enabled = true
+proactive_initiators_enabled = true
+profile_extraction_enabled = true
+query_spec_shadow_enabled = false
+rate_limit_enabled = true
+relations_first_enabled = true
+replay_store_prompt_enabled = false
+response_style_enabled = true
+response_telemetry_enabled = true
+review_intent_enabled = true
+rich_facets_enabled = true
+rich_pick_deterministic_enabled = true
+rich_pick_relevance_gate_enabled = true
+rich_pick_web_enabled = false
+rich_review_anchor_enabled = false
+safety_contraindications_enabled = true
+safety_medical_guardrail_enabled = true
+search_blended_rank_enabled = true
+search_category_hard_enabled = true
+search_category_tree_enabled = true
+search_diversify_enabled = true
+search_offcategory_guard_enabled = true
+search_sessions_enabled = true
+search_shadow_enabled = false
+search_sort_mode_enabled = true
+short_ack_guard_enabled = true
+spec_digits_grounded_enabled = true
+summary_enabled = true
+triage_factual_guard_enabled = true
+turn_budget_alerts_enabled = true
+typing_enabled = true
+validator_bare_numbers_enabled = true
+validator_claims_enabled = true
+validator_stock_claims_enabled = false
+vision_enabled = true
+web_enabled = false
+web_identity_enabled = false
+welcome_enabled = true
+```
+
+```claim:migrations
+003_bot_runtime_role.sql
+004_inbound_dedupe.sql
+005_bot_runtime_login.sql
+006_semantic_cache_v2.sql
+007_semantic_cache_invalidation.sql
+008_order_items_insert.sql
+009_gdpr_svc_role.sql
+010_conversations_one_open.sql
+011_bot_runtime_read_aliases_faqs.sql
+012_inbound_dedupe_completion.sql
+013_usage_cached_tokens.sql
+014_schema_migrations.sql
+015_fts_index.sql
+016_analytics_turn_trace.sql
+017_faqs_embedding_model.sql
+018_orders_external_customer_ref.sql
+019_proactive_job_dedupe.sql
+020_messages_latency_seconds.sql
+021_outbox_priority_dispatcher.sql
+022_analytics_turn_id_index.sql
+023_conversation_facts.sql
+024_conversation_facts_memory_v2.sql
+025_usage_split_attribution.sql
+026_variant_gtin_net_content.sql
+027_product_relations.sql
+028_product_content_status.sql
+029_product_embeddings_versioned.sql
+032_commerce_and_content.sql
+033_ro_unaccent_search.sql
+034_semantic_cache_prompt_version.sql
+035_evidence_and_derived_signals.sql
+036_search_documents_shadow.sql
+037_partition_maintenance.sql
+038_demand_daily.sql
+039_public_read_categories.sql
+```
+
+
+---
+
 # Refactoring — plan cu evidență
+
+> **Stare la resincronizarea din 2026-08-10.** Tabelul de mai jos e din 2026-07-02; citările lui
+> către `agent.py:472-1216` trimit la un fișier care între timp a fost spart în 19 module.
+> Verificat pe cod, nu presupus:
+>
+> - **R2 REZOLVAT** — validatorul trăiește în [`src/agent/validator.py`](../src/agent/validator.py).
+> - **R3 REZOLVAT** — intențiile deterministe în [`src/agent/deterministic.py`](../src/agent/deterministic.py) (pre-loop) și `planner.py` (post-loop).
+> - **R4 DESCHIS** — `src/worker/deps.py` nu există; ciclul runner↔stages e tot pe late-import.
+> - **R7 DESCHIS** — `fallback_stage` are și azi textul RO hardcodat (încalcă P11).
+> - R1/R5/R6/R8 — neverificate la această trecere; tratează-le ca necunoscute, nu ca deschise.
+
 
 | #  | Problemă                                                                      | Evidență                                  | Soluție                                                                                      | Impact                                                                                  | Card             |
 | -- | ------------------------------------------------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------- |
