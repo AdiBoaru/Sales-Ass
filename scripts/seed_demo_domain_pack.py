@@ -130,6 +130,34 @@ QUERY_EXPANSIONS: dict[str, list[str]] = {
     "reactiv": ["ten sensibil"],
 }
 
+# Makeup (NX-makeup): rânduri de comparație pe fondurile de ten (finish/coverage din products.
+# attributes). Generic — rândul TOT-gol e sărit de engine (skincare n-are finish → nu apare).
+# Value_labels = display RO al valorilor canonice stocate (matte/dewy/full...).
+COMPARISON_FACETS: list[dict] = [
+    {
+        "key": "finish",
+        "labels": {"ro": "Finish", "en": "Finish"},
+        "value_labels": {
+            "natural": {"ro": "natural", "en": "natural"},
+            "matte": {"ro": "mat", "en": "matte"},
+            "dewy": {"ro": "dewy (luminos)", "en": "dewy"},
+            "satin": {"ro": "satinat", "en": "satin"},
+        },
+    },
+    {
+        "key": "coverage",
+        "labels": {"ro": "Acoperire", "en": "Coverage"},
+        "value_labels": {
+            "light": {"ro": "lejeră", "en": "light"},
+            "medium": {"ro": "medie", "en": "medium"},
+            "full": {"ro": "mare", "en": "full"},
+            "buildable": {"ro": "buildabilă", "en": "buildable"},
+        },
+    },
+    {"key": "key_benefit", "labels": {"ro": "Beneficiu principal", "en": "Key benefit"}},
+    {"key": "concerns", "labels": {"ro": "Potrivit pentru", "en": "Suitable for"}},
+]
+
 
 async def main() -> None:
     pool = await get_pool()
@@ -140,6 +168,7 @@ async def main() -> None:
             dp = settings.get("domain_pack") or {}
             dp["concern_map"] = CONCERN_MAP
             dp["query_expansions"] = QUERY_EXPANSIONS  # NX-208
+            dp["comparison_facets"] = COMPARISON_FACETS  # NX-makeup: finish/coverage + skincare
             settings["domain_pack"] = dp
             await conn.execute(
                 "update businesses set settings = $2::jsonb where id = $1",
@@ -148,7 +177,8 @@ async def main() -> None:
             )
             print(
                 f"OK: domain_pack override scris pe {DEMO_BIZ} — concern_map ({len(CONCERN_MAP)} "
-                f"intrări) + query_expansions ({len(QUERY_EXPANSIONS)} intrări)"
+                f"intrări) + query_expansions ({len(QUERY_EXPANSIONS)} intrări) "
+                f"+ comparison_facets ({len(COMPARISON_FACETS)} rânduri)"
             )
     finally:
         await close_pool()
