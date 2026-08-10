@@ -298,6 +298,63 @@ def compare(facts: dict[str, object], claims: dict[str, list[str]]) -> list[str]
     return problems
 
 
+_MERMAID_RE = re.compile(r"^```mermaid\n(.*?)^```", re.M | re.S)
+
+
+def check_mermaid(doc_text: str) -> list[str]:
+    """Sanity pe blocurile mermaid: o etichetă cu ghilimele NEPERECHE rupe parserul.
+
+    Capcana concretă (prinsă live pe Diagram 4b): în română deschizi cu `„` și e tentant să
+    închizi cu `"` drept. Mermaid citește ghilimeaua dreaptă ca sfârșit de string, eticheta se
+    taie în două, iar diagrama nu se mai randează deloc — se vede sursa brută. Închide cu `”`.
+
+    Verificare ieftină și deterministă: număr impar de `"` pe o linie de mermaid = string neînchis.
+    NU e un parser de mermaid; prinde exact clasa de eroare care a scăpat.
+    """
+    problems: list[str] = []
+    for block in _MERMAID_RE.findall(doc_text):
+        for i, line in enumerate(block.splitlines(), 1):
+            if line.count('"') % 2:
+                problems.append(f"[mermaid] ghilimele neperechi, linia {i}: {line.strip()[:90]}")
+    return problems
+
+
+_CITATION_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_/\.]*\.py):(\d+)(?:-(\d+))?")
+
+
+def check_citations(doc_text: str) -> list[str]:
+    """Fiecare citare `fișier.py:linie` trimite la un fișier real, la o linie care există.
+
+    Documentul își câștigă autoritatea din citări; una care arată spre linia 1411 a unui fișier
+    de 423 de linii e mai rea decât nicio citare, pentru că pare verificată. Se întâmplă tăcut
+    la orice refactorizare — de aceea e în poartă, nu în disciplina cititorului.
+
+    LENIENT deliberat: raportează doar linii peste sfârșitul fișierului (drift dovedit), nu și
+    dacă linia mai conține ce spune citarea — asta n-o poate ști un script.
+    """
+    files = list((REPO / "src").rglob("*.py")) + list((REPO / "scripts").rglob("*.py"))
+    by_path = {p.relative_to(REPO).as_posix(): p for p in files}
+    by_name: dict[str, list[Path]] = {}
+    for p in files:
+        by_name.setdefault(p.name, []).append(p)
+    length = {p: len(_read(p).splitlines()) for p in files}
+
+    problems: list[str] = []
+    for name, lo, hi in _CITATION_RE.findall(doc_text):
+        line = int(hi or lo)
+        if "/" in name:
+            hit = by_path.get(name) or by_path.get("src/" + name)
+            cands = [hit] if hit else [p for p in files if p.as_posix().endswith("/" + name)]
+        else:
+            cands = by_name.get(name, [])
+        if not cands:
+            continue  # fișier necunoscut (poate e dintr-un alt repo / istoric) — nu inventăm erori
+        if not any(line <= length[c] for c in cands):
+            n = length[cands[0]]
+            problems.append(f"[citare] {name}:{line} — fișierul are {n} linii (cod mutat?)")
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -336,7 +393,10 @@ def main() -> int:
         )
         return 1
 
+    doc_text = _read(args.doc)
     problems = compare(facts, claims)
+    problems += check_mermaid(doc_text)
+    problems += check_citations(doc_text)
     if problems:
         print(f"FAIL: {args.doc.name} a divergat de cod\n", file=sys.stderr)
         for p in problems:

@@ -559,11 +559,11 @@ flowchart TD
     XSELL["cross-sell complementare<br/>+ policy.gate :251"]:::safe
     ATQ{"superlativ pe setul afișat?<br/>_ATTR_QUERY_RE :282-288"}:::dec
     HYD1["rehidratează setul afișat<br/>+ policy.gate :294"]:::safe
-    CHP{"„ceva mai ieftin"?<br/>:304-311"}:::dec
+    CHP{"„ceva mai ieftin”?<br/>:304-311"}:::dec
     CHS["search_cheaper_than<br/>+ policy.gate :317"]:::safe
     CH0{"găsit ceva mai ieftin?"}:::dec
     UNMET["unmet_query reason=price_gap :331<br/>= gol de catalog, marcat LA SURSĂ"]:::step
-    CHMSG["„deja cel mai ieftin" + chips → handled"]:::out
+    CHMSG["„deja cel mai ieftin” + chips → handled"]:::out
     RHD{"zero produse + set afișat?<br/>plasa R3 :352-359"}:::dec
     HYD2["rehidratează din state + policy.gate :363"]:::safe
     FINALG["policy.gate purpose=retrieval_final :372<br/>ULTIMUL punct înainte de validator/carduri"]:::safe
@@ -1467,7 +1467,7 @@ welcome_enabled = true
 # Refactoring — plan cu evidență
 
 > **Stare la resincronizarea din 2026-08-10.** Tabelul de mai jos e din 2026-07-02; citările lui
-> către `agent.py:472-1216` trimit la un fișier care între timp a fost spart în 19 module.
+> către `agent.py` (liniile 472-1216 de ATUNCI) trimit la un fișier care între timp a fost spart în 19 module.
 > Verificat pe cod, nu presupus:
 >
 > - **R2 REZOLVAT** — validatorul trăiește în [`src/agent/validator.py`](../src/agent/validator.py).
@@ -1480,8 +1480,8 @@ welcome_enabled = true
 | #  | Problemă                                                                      | Evidență                                  | Soluție                                                                                      | Impact                                                                                  | Card             |
 | -- | ------------------------------------------------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------- |
 | R1 | Excepție de procesare → ACK + drop, client fără răspuns                   | `consumer.py:228-230`                     | Re-queue cu contor; la epuizare → fallback reply în outbox + event`turn_failed`, apoi ACK | Erorile tranzitorii se auto-vindecă; cele permanente produc mesaj + semnal, nu tăcere | **NX-140** |
-| R2 | Validatorul (apărarea critică) trăiește ca funcții private în god-module | `agent.py:472-502, 560-688`               | Mutare pură în`src/worker/validator.py`                                                   | Testare izolată; auditabilitate de securitate pe un fișier                            | —               |
-| R3 | Intențiile deterministe împletite în`agent_stage`                         | `agent.py:984-1027, 1174-1216`            | `stages/intents.py` cu registru `[(predicate, handler)]` înaintea buclei LLM             | Intent nou = fișier nou + intrare în registru                                         | —               |
+| R2 | Validatorul (apărarea critică) trăiește ca funcții private în god-module | `agent.py` @2026-07-02, 472-502 + 560-688               | Mutare pură în`src/worker/validator.py`                                                   | Testare izolată; auditabilitate de securitate pe un fișier                            | —               |
+| R3 | Intențiile deterministe împletite în`agent_stage`                         | `agent.py` @2026-07-02, 984-1027 + 1174-1216            | `stages/intents.py` cu registru `[(predicate, handler)]` înaintea buclei LLM             | Intent nou = fișier nou + intrare în registru                                         | —               |
 | R4 | Ciclu import runner↔stages prin late-import                                   | `runner.py:189-199`, `gates.py:37-38`   | `PipelineDeps` în `src/worker/deps.py`                                                   | Graf de importuri aciclic real                                                          | —               |
 | R5 | Conexiune DB ținută prin apelurile LLM → plafon ~10 tururi concurente       | `processor.py:345`, `connection.py:227` | Fazează handle_turn: load → release conn → LLM fără conn → TX pe conn proaspăt         | Concurența limitată de LLM, nu de pool                                                | **NX-141** |
 | R6 | Dispatcher serial + poll 2s                                                    | `dispatcher.py:233-251`                   | gather bounded per tenant; tenanti în paralel; idle 0.5s                                     | Latență de livrare constantă sub load mixt                                           | —               |
