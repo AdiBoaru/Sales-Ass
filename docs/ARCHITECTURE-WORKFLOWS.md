@@ -44,6 +44,10 @@ Un singur desen „cu tot proiectul" nu există aici, deliberat: sistemul are ax
 pe care un flowchart nu le poate purta simultan. În loc de asta, patru **niveluri** de zoom și
 șase **lentile** peste același schelet.
 
+**Regula etichetelor** (2026-08-10): prima linie a unui chenar spune CE se întâmplă, pe
+românește, fără jargon; citarea `(fișier:linie)` din paranteză e dovada, nu mesajul.
+Diagramele 1/2/7/8/9/10 rămân în limbaj de componente — publicul lor e operatorul.
+
 **Regula de includere** (de ce un pas apare pe diagramă și altul nu): un pas primește nod dacă
 face cel puțin unul dintre — *poate ieși devreme*, *cheamă un LLM*, *atinge DB/Redis/serviciu
 extern*, *e stins/aprins de un flag*, *poate eșua într-un fel care schimbă răspunsul trimis*.
@@ -279,97 +283,97 @@ flowchart TD
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
   classDef err fill:#f1948a,stroke:#922b21,color:#000
 
-  MSG["Inbound message"]:::edge
-  CAP{"body over cap?<br/>enforce_body_cap app.py:99-101"}:::dec
-  R413["413 payload too large"]:::err
-  SIG{"signature valid?<br/>webhook/app.py:103"}:::dec
-  JSONV{"valid JSON?<br/>app.py:106-109"}:::dec
-  R400["400 bad request"]:::err
-  R403["403 forbidden"]:::err
-  DED1{"message seen before? dedupe L1 Redis<br/>MESSAGES only — statuses skip :112-118<br/>redis_bus.py:53"}:::dec
-  SKIP1["skip — Meta retry"]:::step
-  XADD["XADD stream inbound<br/>maxlen ~100k trim — oldest LOST under backlog<br/>redis_bus.py:68-73"]:::queue
-  RDOWN{"Redis down?"}:::dec
-  R503["503 → Meta retries"]:::err
-  ACK200["ACK 200 under 50ms"]:::step
+  MSG["Mesaj primit<br/>(WhatsApp / Telegram / site)"]:::edge
+  CAP{"Mesajul e anormal de mare?<br/>(apărare anti-OOM) (app.py:99-101)"}:::dec
+  R413["Refuzat: prea mare (413)"]:::err
+  SIG{"Semnătura Meta e autentică?<br/>(webhook/app.py:103)"}:::dec
+  JSONV{"E JSON valid? (:106-109)"}:::dec
+  R400["Refuzat: cerere stricată (400)"]:::err
+  R403["Refuzat: semnătură falsă (403)"]:::err
+  DED1{"L-am mai văzut? — Meta re-trimite<br/>agresiv; doar MESAJELE se deduplică<br/>(redis_bus.py:53)"}:::dec
+  SKIP1["Ignorat: e o dublură"]:::step
+  XADD["Pus la coadă în Redis<br/>(limită ~100k — sub avalanșă cele mai<br/>vechi se PIERD) (redis_bus.py:68-73)"]:::queue
+  RDOWN{"Redis e căzut?"}:::dec
+  R503["503 → Meta va re-încerca"]:::err
+  ACK200["Confirmăm către Meta imediat<br/>(sub 50ms)"]:::step
 
-  XREAD["consumer XREADGROUP<br/>consumer.py:198"]:::step
-  KIND{"event kind?<br/>consumer.py:219"}:::dec
-  TYPING["typing indicator fire-and-forget<br/>consumer.py:74-81"]:::step
-  DEB["Debouncer 3s coalesce<br/>debounce.py:57"]:::step
-  ORDERK["process_order — attribution<br/>webhook/orders.py:64"]:::step
-  RESOLVE["resolve_channel → business_id<br/>admin_conn, consumer.py:123"]:::db
-  STATUSK["record_status_event<br/>delivered/read/failed"]:::db
-  LOCK{"conv lock acquired?<br/>consumer.py:159"}:::dec
-  REQUEUE["requeue + backoff, capped<br/>consumer.py:96-102"]:::queue
-  DROPQ["over requeue cap → event DROPPED<br/>log only — consumer.py:99-100"]:::err
-  ADM{"admission per business?<br/>frână de concurență — consumer.py:197-210"}:::dec
-  REQA["re-queue FĂRĂ drop, fără cap<br/>_requeue_admission :106-119"]:::queue
-  LOADB["load_business + DomainPack attach<br/>consumer.py:222 · businesses.py:60"]:::db
-  CBK{"callback?"}:::dec
-  CAROUSEL["handle_callback — carousel nav<br/>callback.py:36"]:::step
+  XREAD["Un worker ia mesajul din coadă<br/>(consumer.py:245)"]:::step
+  KIND{"Ce fel de eveniment e?<br/>(process_event :123, :155-158)"}:::dec
+  TYPING["Arătăm «scrie...» instant (:74-81)"]:::step
+  DEB["Așteptăm 3s să termine de scris —<br/>o rafală de mesaje devine UNUL<br/>(debounce.py:57)"]:::step
+  ORDERK["Comandă nouă de pe site → o legăm<br/>de conversație (webhook/orders.py:64)"]:::step
+  RESOLVE["Aflăm CĂRUI magazin îi aparține<br/>(canal → business) (consumer.py:145)"]:::db
+  STATUSK["Notăm statusul: livrat / citit / eșuat"]:::db
+  LOCK{"Conversația e deja în lucru?<br/>(lacăt per conversație)"}:::dec
+  REQUEUE["Ocupat → repunem la coadă<br/>cu pauză (:96-102)"]:::queue
+  DROPQ["Prea multe reîncercări → mesaj<br/>PIERDUT (doar log) (:99-100)"]:::err
+  ADM{"Magazinul are loc liber?<br/>(frână de concurență) (:197-210)"}:::dec
+  REQA["Peste capacitate → repus la coadă,<br/>NIMIC pierdut (:106-119)"]:::queue
+  LOADB["Încărcăm magazinul + configurația<br/>lui de vertical (consumer.py:222)"]:::db
+  CBK{"E o apăsare de buton (carusel)?"}:::dec
+  CAROUSEL["Navigare în carusel — drum determinist,<br/>fără AI (callback.py:71)"]:::step
 
-  HT["handle_turn processor.py:200"]:::step
-  DED2{"claim_inbound dedupe L2 DB?<br/>processor.py:238"}:::dec
-  SKIP2["deduped — return"]:::step
-  CTX["contact + conversation + insert inbound msg<br/>+ history max 8 + state + summary"]:::db
-  SEEDC["seed_daily_cost lazy reseed from usage_daily<br/>processor.py:336"]:::step
-  GUARD{"cost guard over budget?<br/>processor.py:116"}:::dec
-  NOLLM["llm=None — degraded pipeline"]:::err
-  PIPE["run_pipeline — see Diagram 4"]:::step
-  REPLY{"reply produced?"}:::dec
-  HALT["intentional silence / no-reply logged<br/>processor.py:361"]:::step
-  DISC["ensure_disclaimer processor.py:368"]:::step
-  SPLIT{"text over limit + not rich?"}:::dec
-  FRAG["split into max 2 fragments"]:::step
-  TX["TX: outbound messages + outbox rows<br/>+ state patch + mark_inbound_completed<br/>processor.py:382-492"]:::db
-  POST["post-tur OFF-CONN (NX-161): conn eliberat,<br/>apoi run_aftercare — cache writeback + summarizer<br/>+ profil/facts — consumer.py:236 · aftercare.py:444"]:::step
+  HT["Începe procesarea turului<br/>(processor.py:200)"]:::step
+  DED2{"Dublură scăpată de Redis?<br/>(plasa a doua, în DB) (:238)"}:::dec
+  SKIP2["Ignorat: deja procesat"]:::step
+  CTX["Încărcăm: cine e clientul, conversația,<br/>ultimele 8 mesaje, starea, faptele știute"]:::db
+  SEEDC["Pornim contorul de cost al zilei (:336)"]:::step
+  GUARD{"Magazinul a depășit bugetul zilnic<br/>de AI? (:116)"}:::dec
+  NOLLM["AI oprit pe azi → răspundem degradat,<br/>dar RĂSPUNDEM"]:::err
+  PIPE["Rulăm cele 11 stagii → Diagram 4a"]:::step
+  REPLY{"A ieșit un răspuns?"}:::dec
+  HALT["Tăcere intenționată — logată (:361)"]:::step
+  DISC["Adăugăm disclaimerul, dacă e cazul (:368)"]:::step
+  SPLIT{"Text prea lung (și nu e cu carduri)?"}:::dec
+  FRAG["Îl spargem în maxim 2 mesaje"]:::step
+  TX["Salvăm TOTUL dintr-o mișcare: mesajele +<br/>coada de trimis + starea discuției<br/>(:382-492)"]:::db
+  POST["După răspuns, în fundal: cache, rezumat,<br/>profil, fapte noi — cu conexiunea DB<br/>deja eliberată (consumer.py:236 · aftercare.py:444)"]:::step
 
-  DISP["dispatcher claim_due FOR UPDATE SKIP LOCKED"]:::step
-  RENDER{"choose_render by capabilities<br/>dispatcher.py:101"}:::dec
-  SEND["send via ChannelSender<br/>rich/carousel/cards/template/text"]:::edge
-  SENT["mark_sent + link provider_msg_id TX<br/>dispatcher.py:215"]:::db
-  FAIL["mark_failed → backoff → dead<br/>dispatcher.py:211"]:::err
-  RP["render_path event if requested ≠ delivered<br/>dispatcher.py:69-98"]:::step
+  DISP["Dispecerul (alt proces) ia din coadă<br/>ce e de trimis"]:::step
+  RENDER{"Alegem forma după ce POATE canalul:<br/>carduri / carusel / șablon / text<br/>(dispatcher.py:101)"}:::dec
+  SEND["Trimitem prin canal (Meta / Telegram)"]:::edge
+  SENT["Marcat trimis + legăm id-ul de la<br/>provider (dispatcher.py:215)"]:::db
+  FAIL["Eșec → reîncercăm cu pauze crescânde<br/>→ marcat mort (dispatcher.py:211)"]:::err
+  RP["Notăm când forma cerută ≠ forma<br/>livrată (dispatcher.py:69-98)"]:::step
 
   MSG --> CAP
-  CAP -- yes --> R413
-  CAP -- no --> SIG
-  SIG -- no --> R403
-  SIG -- yes --> JSONV
-  JSONV -- no --> R400
-  JSONV -- yes --> DED1
-  DED1 -- yes --> SKIP1
-  DED1 -- no --> XADD --> RDOWN
-  RDOWN -- yes --> R503
-  RDOWN -- no --> ACK200
+  CAP -- da --> R413
+  CAP -- nu --> SIG
+  SIG -- nu --> R403
+  SIG -- da --> JSONV
+  JSONV -- nu --> R400
+  JSONV -- da --> DED1
+  DED1 -- da --> SKIP1
+  DED1 -- nu --> XADD --> RDOWN
+  RDOWN -- da --> R503
+  RDOWN -- nu --> ACK200
   XADD -.-> XREAD --> KIND
-  KIND -- message --> TYPING --> DEB
-  KIND -- order --> ORDERK
-  KIND -- "status/callback" --> RESOLVE
-  DEB -- "flush after 3s idle" --> RESOLVE
+  KIND -- mesaj --> TYPING --> DEB
+  KIND -- comandă --> ORDERK
+  KIND -- "status / buton" --> RESOLVE
+  DEB -- "trimite după 3s de liniște" --> RESOLVE
   RESOLVE --> STATUSK
   RESOLVE --> LOCK
-  LOCK -- busy --> REQUEUE
-  REQUEUE -- "cap exceeded" --> DROPQ
-  LOCK -- ok --> ADM
+  LOCK -- ocupat --> REQUEUE
+  REQUEUE -- "limita depășită" --> DROPQ
+  LOCK -- liber --> ADM
   ADM -- "peste capacitate" --> REQA
   ADM -- admis --> LOADB --> CBK
-  CBK -- yes --> CAROUSEL
-  CBK -- no --> HT --> DED2
-  DED2 -- "already done" --> SKIP2
-  DED2 -- claimed --> CTX --> SEEDC --> GUARD
-  GUARD -- yes --> NOLLM --> PIPE
-  GUARD -- no --> PIPE
+  CBK -- da --> CAROUSEL
+  CBK -- nu --> HT --> DED2
+  DED2 -- "deja procesat" --> SKIP2
+  DED2 -- "revendicat" --> CTX --> SEEDC --> GUARD
+  GUARD -- da --> NOLLM --> PIPE
+  GUARD -- nu --> PIPE
   PIPE --> REPLY
-  REPLY -- no --> HALT
-  REPLY -- yes --> DISC --> SPLIT
-  SPLIT -- yes --> FRAG --> TX
-  SPLIT -- no --> TX
+  REPLY -- nu --> HALT
+  REPLY -- da --> DISC --> SPLIT
+  SPLIT -- da --> FRAG --> TX
+  SPLIT -- nu --> TX
   TX --> POST
   TX -.-> DISP --> RENDER --> SEND
   SEND -- ok --> SENT --> RP
-  SEND -- error --> FAIL
+  SEND -- eroare --> FAIL
 ```
 
 Calea **sincronă** `/web/chat` diferă doar la capete: sesiune HMAC + rate-limit fail-closed + gard de buget (`src/web/app.py:197-240`) → `handle_turn(deliver=False)` — fără outbox, răspunsul HTTP e transportul (`src/web/app.py:241-252`, `src/worker/processor.py:345,382-492`).
@@ -390,103 +394,103 @@ flowchart TD
   classDef err fill:#f1948a,stroke:#922b21,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
 
-  IN["TurnContext"]:::stage
+  IN["Mesajul intră în pipeline"]:::stage
 
-  subgraph G["1· Gates — deterministic, gates.py:439"]
-    G1{"bot_active? blocked?<br/>handoff active? :442-453"}:::dec
-    G2{"rate limited? :323"}:::dec
-    G3{"moderation flagged?<br/>OpenAI moderation :348"}:::llm
-    MODB["flag counter 24h — over threshold<br/>block_contact :305-318"]:::err
-    G4{"risk pattern?<br/>human/legal :468"}:::dec
-    G5{"image? :482"}:::dec
-    VIS["Vision describe → search text<br/>fail-soft keeps caption :385-436"]:::llm
-    GRD["input guardrails: clamp + PII mask<br/>+ injection screen :487"]:::stage
+  subgraph G["1 · Porți — cod pur, fără AI (gates.py:439)"]
+    G1{"Botul e oprit pe conversația asta?<br/>Clientul e blocat? A preluat un om?<br/>(:442-453)"}:::dec
+    G2{"Trimite prea multe mesaje? (:323)"}:::dec
+    G3{"Mesaj abuziv? — moderare automată (:348)"}:::llm
+    MODB["Prea multe abateri în 24h →<br/>contactul e blocat (:305-318)"]:::err
+    G4{"Semne de risc: amenințare legală,<br/>cere explicit un om? (:468)"}:::dec
+    G5{"A trimis o poză? (:482)"}:::dec
+    VIS["AI descrie poza → devine text de căutare<br/>(dacă pică, păstrăm descrierea clientului)<br/>(:385-436)"]:::llm
+    GRD["Curățăm mesajul: tăiem excesul,<br/>mascăm datele personale (:487)"]:::stage
   end
 
-  HALT["HALT — intentional silence"]:::err
-  THR["throttle message, once :340-342"]:::out
-  NEU["neutral reply"]:::out
-  ESC["request_human + transition msg<br/>gates.py:473-476"]:::out
+  HALT["TĂCERE intenționată — nu răspundem<br/>(un om se ocupă / rafală de spam)"]:::err
+  THR["Îi spunem O singură dată<br/>«hai mai încet» (:340-342)"]:::out
+  NEU["Răspuns neutru, fără discuție"]:::out
+  ESC["Chemăm un operator + mesaj de tranziție<br/>(gates.py:473-476)"]:::out
 
-  LANG["2· language_stage — RO/HU/EN<br/>language.py:27"]:::stage
+  LANG["2 · Detectăm limba: RO / HU / EN<br/>(language.py:27)"]:::stage
 
-  subgraph CL3["3· clarify_resume — clarify.py:28"]
-    CLR{"pending_question in state?"}:::dec
-    CONS["fill constraints slot + asked_intents<br/>clarify.py:41-52"]:::stage
-    ATT{"attempts over max?<br/>clarify.py:59"}:::dec
-    RESUME["route = resume_route<br/>clarify.py:69-73"]:::stage
-    ESCR["route = HANDOFF if field=intent<br/>else SALES — clarify.py:61-62"]:::stage
+  subgraph CL3["3 · Reluăm clarificarea începută (clarify.py:28)"]
+    CLR{"Îi pusesem o întrebare turul trecut?"}:::dec
+    CONS["Răspunsul lui completează formularul:<br/>buget, nevoie, categorie (:41-52)"]:::stage
+    ATT{"A răspuns vag de prea multe ori? (:59)"}:::dec
+    RESUME["Reluăm de unde rămăsese<br/>(ruta salvată) (:69-73)"]:::stage
+    ESCR["Prea multe încercări → om<br/>sau vânzare (:61-62)"]:::stage
   end
 
-  GREET{"4· pure greeting?<br/>greeting.py:184 — does NOT check route"}:::dec
-  WELCOME["deterministic welcome, no LLM"]:::free
-  ALIAS{"5· exact alias match?<br/>alias.py:46"}:::dec
-  AFAQ["serve FAQ answer<br/>alias.py:64-72"]:::free
-  AROUTE["set ctx.route ONLY — no reply<br/>alias.py:73-82"]:::stage
-  SKIPS["cache / FAQ / triage SKIP — route set<br/>cache.py:93 · faq.py:49 · triage.py:214"]:::stage
-  CACHE{"6· semantic cache hit?<br/>cache.py:89 — L1 exact → L2 cosine<br/>realtime/contextual bypass :100<br/>dynamic hit → price-check, stale evict = miss :46-78"}:::dec
-  CHIT["serve cached answer, no LLM"]:::free
-  FAQ{"7· FAQ embed match?<br/>faq.py:45 — tau high / policy tau :64-77<br/>locale fallback :88-101"}:::dec
-  FHIT["serve FAQ answer"]:::free
+  GREET{"4 · E doar un salut? («bună»)<br/>(greeting.py:184)"}:::dec
+  WELCOME["Mesaj de bun venit scris de noi — fără AI"]:::free
+  ALIAS{"5 · Frază pe care o știm exact?<br/>(alias aprobat) (alias.py:46)"}:::dec
+  AFAQ["Servim răspunsul pregătit dinainte (:64-72)"]:::free
+  AROUTE["Știm doar ÎNCOTRO merge (ruta),<br/>nu și răspunsul (:73-82)"]:::stage
+  SKIPS["Sărim cache / FAQ / triaj —<br/>ruta e deja știută<br/>(cache.py:93 · faq.py:49 · triage.py:214)"]:::stage
+  CACHE{"6 · Am mai răspuns la o întrebare<br/>aproape identică? (cache semantic)<br/>preț/stoc se re-verifică, nu se servesc orb<br/>(cache.py:46-100)"}:::dec
+  CHIT["Servim răspunsul din memorie — fără AI"]:::free
+  FAQ{"7 · Se potrivește cu o întrebare<br/>frecventă? (prag + rerank) (faq.py:45-101)"}:::dec
+  FHIT["Servim răspunsul din FAQ"]:::free
 
-  TRI["8· triage — GPT-5.4-nano JSON<br/>triage.py:212"]:::llm
-  TVAL{"valid JSON + category real?<br/>triage.py:247-255"}:::dec
-  TGUARD{"factual bait on simple?<br/>triage.py:261"}:::dec
-  TCONF{"confidence low?<br/>triage.py:272"}:::dec
-  ROUTE{"route?"}:::dec
-  SIMPLE["reply by nano + closure chips<br/>triage.py:298-308"]:::out
-  CLARIFY["clarify + suggestions + persist slot<br/>triage.py:309-319"]:::out
+  TRI["8 · AI-ul MIC clasifică mesajul:<br/>vânzare / comandă / simplu / neclar<br/>(triage.py:212)"]:::llm
+  TVAL{"Clasificarea e validă? Categoria<br/>chiar există la noi? (:247-255)"}:::dec
+  TGUARD{"Întrebare cu cifre/fapte deghizată<br/>în «simplu»? (:261)"}:::dec
+  TCONF{"AI-ul e nesigur pe clasificare? (:272)"}:::dec
+  ROUTE{"Încotro merge mesajul?"}:::dec
+  SIMPLE["AI-ul mic răspunde direct<br/>+ butoane de continuare (:298-308)"]:::out
+  CLARIFY["Punem O întrebare de clarificare<br/>+ variante de răspuns (:309-319)"]:::out
 
-  HOFF{"9· handoff — channel has operator?<br/>handoff.py:39"}:::dec
-  HESC["request_human + notify_operator<br/>+ confirm msg — handoff.py:44-49"]:::out
-  HSUP["route rewritten to SALES<br/>handoff.py:40-42"]:::stage
+  HOFF{"9 · Canalul are operator uman?<br/>(handoff.py:39)"}:::dec
+  HESC["Anunțăm operatorul + îi confirmăm<br/>clientului (:44-49)"]:::out
+  HSUP["Pe site nu e operator → tratăm<br/>ca vânzare (:40-42)"]:::stage
 
-  AGENT["10· agent_stage — Diagram 4b<br/>stages/agent.py:267"]:::llm
-  FB["11· fallback_stage — clarify question<br/>RO-only — runner.py:169"]:::out
-  SEND["Reply → Sender TX"]:::out
+  AGENT["10 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:267)"]:::llm
+  FB["11 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
+  SEND["Răspunsul pleacă spre client<br/>(un singur punct de ieșire)"]:::out
 
   IN --> G1
-  G1 -- yes --> HALT
-  G1 -- no --> G2
-  G2 -- "first over cap" --> THR
-  G2 -- "burst continues :343" --> HALT
-  G2 -- no --> G3
-  G3 -- yes --> MODB --> NEU
-  G3 -- no --> G4
-  G4 -- "yes + operator channel" --> ESC
-  G4 -- "yes, no operator — suppressed :470" --> G5
-  G4 -- no --> G5
-  G5 -- yes --> VIS --> GRD
-  G5 -- no --> GRD
+  G1 -- da --> HALT
+  G1 -- nu --> G2
+  G2 -- "prima dată peste limită" --> THR
+  G2 -- "rafala continuă (:343)" --> HALT
+  G2 -- nu --> G3
+  G3 -- da --> MODB --> NEU
+  G3 -- nu --> G4
+  G4 -- "da + canal cu operator" --> ESC
+  G4 -- "da, fără operator → continuăm (:470)" --> G5
+  G4 -- nu --> G5
+  G5 -- da --> VIS --> GRD
+  G5 -- nu --> GRD
   GRD --> LANG --> CLR
-  CLR -- yes --> CONS --> ATT
-  ATT -- yes --> ESCR --> GREET
-  ATT -- no --> RESUME --> GREET
-  CLR -- no --> GREET
-  GREET -- yes --> WELCOME
-  GREET -- no --> ALIAS
-  ALIAS -- "faq target" --> AFAQ
-  ALIAS -- "route/product/category" --> AROUTE --> SKIPS --> ROUTE
-  ALIAS -- miss --> CACHE
-  CACHE -- hit --> CHIT
-  CACHE -- miss --> FAQ
-  FAQ -- hit --> FHIT
-  FAQ -- miss --> TRI --> TVAL
-  TVAL -- "invalid → route None" --> FB
+  CLR -- da --> CONS --> ATT
+  ATT -- da --> ESCR --> GREET
+  ATT -- nu --> RESUME --> GREET
+  CLR -- nu --> GREET
+  GREET -- da --> WELCOME
+  GREET -- nu --> ALIAS
+  ALIAS -- "țintă: răspuns FAQ" --> AFAQ
+  ALIAS -- "țintă: rută / produs / categorie" --> AROUTE --> SKIPS --> ROUTE
+  ALIAS -- nu --> CACHE
+  CACHE -- da --> CHIT
+  CACHE -- nu --> FAQ
+  FAQ -- da --> FHIT
+  FAQ -- nu --> TRI --> TVAL
+  TVAL -- "invalid → fără rută" --> FB
   TVAL -- ok --> TGUARD
-  TGUARD -- "yes → sales" --> ROUTE
-  TGUARD -- no --> TCONF
-  TCONF -- "yes → clarify" --> ROUTE
-  TCONF -- no --> ROUTE
-  ROUTE -- "simple + reply" --> SIMPLE
-  ROUTE -- "simple, no reply text :298" --> FB
-  ROUTE -- clarify --> CLARIFY
-  ROUTE -- handoff --> HOFF
-  HOFF -- yes --> HESC --> SEND
-  HOFF -- "no — web" --> HSUP --> AGENT
-  ROUTE -- "sales / order" --> AGENT
-  AGENT -- "reply composed" --> SEND
-  AGENT -- "no reply — LLM fail :1148" --> FB
+  TGUARD -- "da → vânzare" --> ROUTE
+  TGUARD -- nu --> TCONF
+  TCONF -- "da → clarificare" --> ROUTE
+  TCONF -- nu --> ROUTE
+  ROUTE -- "simplu + are răspuns" --> SIMPLE
+  ROUTE -- "simplu, fără text (:298)" --> FB
+  ROUTE -- clarificare --> CLARIFY
+  ROUTE -- "cere om" --> HOFF
+  HOFF -- da --> HESC --> SEND
+  HOFF -- "nu — site" --> HSUP --> AGENT
+  ROUTE -- "vânzare / comandă" --> AGENT
+  AGENT -- "răspuns compus" --> SEND
+  AGENT -- "AI-ul a picat → fără răspuns (:370)" --> FB
   FB --> SEND
   SIMPLE --> SEND
   CLARIFY --> SEND
@@ -526,23 +530,23 @@ flowchart LR
   classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
 
-  A["A · Regie + siguranță<br/>agent.py:267-295"]:::safe
-  B["B · Intenții pre-loop<br/>deterministic.py:469"]:::free
-  C["C · Prompt din DB<br/>agent.py:299-350"]:::step
-  D["D · Buclă tool-uri<br/>llm.py:227 — max 3 calls"]:::llm
-  E["E · Planner determinist<br/>planner.py:162"]:::step
-  F["F · Render + validator<br/>finalize.py:325"]:::llm
-  X1["răspuns determinist<br/>$0 inferență"]:::out
-  X2["paginare din pool<br/>$0 inferență"]:::free
+  A["A · Pregătire + siguranță:<br/>ce restricții a declarat clientul<br/>(sarcină...) se rețin ACUM<br/>(agent.py:267-295)"]:::safe
+  B["B · Scurtături fără AI:<br/>«dă-mi linkul», «compară-le»,<br/>«detalii», «ce zic recenziile»<br/>(deterministic.py:469)"]:::free
+  C["C · Construim instrucțiunile<br/>pentru AI din datele magazinului<br/>+ tot ce știm din discuție<br/>(agent.py:299-350)"]:::step
+  D["D · AI-ul MARE caută în catalog<br/>cu unelte controlate<br/>(maxim 3 căutări) (llm.py:227)"]:::llm
+  E["E · CODUL decide ce arătăm<br/>de fapt (planner.py:162)"]:::step
+  F["F · Compunem răspunsul + verificăm<br/>fiecare preț și link<br/>(finalize.py:325)"]:::llm
+  X1["Răspuns imediat —<br/>zero cost AI"]:::out
+  X2["«mai arată-mi» → pagina următoare<br/>din ce am găsit deja"]:::free
 
   A --> B
-  B -- "link · compară · detaliu · recenzie" --> X1
+  B -- "scurtătură prinsă" --> X1
   B --> C --> D --> E --> F
-  C -- show_more --> X2 --> E
+  C -- "«mai arată-mi»" --> X2 --> E
 ```
 
 **Faza E nu e un arbore — e o listă de precedență.** Primul caz care se potrivește câștigă;
-tot ce aduce produse din DB în afara `ToolRun` trece prin `policy.gate` propriu:
+orice cale care aduce produse din DB ocolind uneltele trece prin propriul filtru de siguranță:
 
 ```mermaid
 flowchart TD
@@ -551,20 +555,20 @@ flowchart TD
   classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
 
-  P1{"1 · check_order pe web anonim?<br/>run.order_gated_login :187"}:::dec
-  O1["mesaj login determinist → handled"]:::out
-  P2{"2 · purchase_intent fără checkout_url? :206-214"}:::dec
-  S2["codul creează linkul prin ACELAȘI execute :227"]:::step
-  P3{"3 · cart_add fără link creat? :236-242"}:::dec
-  S3["cross-sell complementare + policy.gate :251<br/>rich reușit → handled; altfel continuă"]:::safe
-  P4{"4 · superlativ pe setul afișat?<br/>_ATTR_QUERY_RE :282-288"}:::dec
-  S4["rehidratează setul + policy.gate :294"]:::safe
-  P5{"5 · «ceva mai ieftin»? :304-311"}:::dec
-  S5["search_cheaper_than + policy.gate :317<br/>nimic mai ieftin → unmet_query price_gap :331<br/>+ «deja cel mai ieftin» → handled"]:::safe
-  P6{"6 · zero produse + set afișat?<br/>plasa R3 :352-359"}:::dec
-  S6["rehidratează din state + policy.gate :363"]:::safe
-  GATE["policy.gate purpose=retrieval_final :372<br/>ULTIMUL punct — prinde orice cale viitoare<br/>care uită gate-ul"]:::safe
-  RETR["ctx.retrieval = RetrievalResult :373<br/>+ match_gate_shadow :374 (OFF)"]:::step
+  P1{"1 · Întreabă de comanda lui,<br/>dar nu e logat pe site? (:187)"}:::dec
+  O1["Îi cerem să se logheze — fără cont<br/>nu-i putem căuta comanda"]:::out
+  P2{"2 · Vrea să CUMPERE, dar AI-ul a uitat<br/>să-i facă linkul de plată? (:206-214)"}:::dec
+  S2["Codul creează el linkul de plată,<br/>pe același drum contabilizat (:227)"]:::step
+  P3{"3 · Tocmai a pus ceva în coș<br/>(și nu are link de plată)? (:236-242)"}:::dec
+  S3["Îi arătăm produse care MERG ÎMPREUNĂ<br/>cu ce a luat, filtrate de siguranță (:251)<br/>a mers → gata; n-a mers → continuăm"]:::safe
+  P4{"4 · Întreabă «care dintre ELE e cea mai...»?<br/>— superlativ pe ce i-am arătat (:282-288)"}:::dec
+  S4["Recitim din catalog produsele deja arătate,<br/>ca să răspundem pe FAPTE, nu din memorie (:294)"]:::safe
+  P5{"5 · Cere «ceva mai ieftin»? (:304-311)"}:::dec
+  S5["Căutăm STRICT mai ieftin decât ce a văzut (:317)<br/>nu există → îi spunem cinstit + notăm golul<br/>de preț pentru comerciant (:331) → gata"]:::safe
+  P6{"6 · AI-ul n-a adus produse, dar clientul<br/>vorbește despre cele deja arătate? (:352-359)"}:::dec
+  S6["Le recitim din catalog — plasa care evită<br/>un «n-am găsit» absurd (:363)"]:::safe
+  GATE["FILTRUL FINAL de siguranță: orice produs<br/>contraindicat (ex. sarcină) e scos AICI,<br/>orice ar fi adus căile de mai sus (:372)"]:::safe
+  RETR["Setul final = SINGURA sursă pentru<br/>răspuns, carduri și memoria discuției (:373)"]:::step
 
   P1 -- da --> O1
   P1 -- nu --> P2
@@ -581,7 +585,7 @@ flowchart TD
   GATE --> RETR
 ```
 
-**Faza F — dispatch-ul de render**, cu fall-through-uri (comparație → produse, rich → proză):
+**Faza F — cum se alege forma răspunsului**, cu căderi în trepte (comparație → carduri → text):
 
 ```mermaid
 flowchart TD
@@ -591,33 +595,33 @@ flowchart TD
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
 
-  APLAN{"answer_plan_enabled?<br/>agent.py:396 — OFF by default"}:::dec
-  AGUARD["enforce_answer_plan<br/>answer_plan_guard.py:20"]:::llm
-  CMPD{"compared?"}:::dec
-  CTAB["tabel comparativ determinist<br/>ZERO proză LLM în celule"]:::free
-  PRD{"produse?"}:::dec
-  RICHC["_finalize_rich :266 — apel structurat"]:::llm
-  ROK{"rich cu items?"}:::dec
-  RICHOUT["set_rich_reply + checkout offer<br/>+ agent_recommended"]:::out
-  DOWN["rich_downgraded :396 — motiv emis"]:::step
-  VALID{"validate_prose validator.py:195<br/>preț · link · număr bar · claim · stoc · safety"}:::dec
-  RETRY["1 retry cu feedback"]:::llm
-  V2{"valid acum?"}:::dec
-  DETR["formulare deterministă fără cifre"]:::free
-  PROSE["proză + carduri"]:::out
-  ORD{"rută order?"}:::dec
-  GRND["_finalize_grounded :149 pe order views"]:::llm
-  TXTOK{"text valid fără produse?"}:::dec
-  NORES["no-result sigur, cacheable=False<br/>+ chips de continuare :211"]:::out
+  APLAN{"Modul strict «answer plan» e pornit?<br/>(azi: OPRIT) (agent.py:396)"}:::dec
+  AGUARD["Verificare suplimentară cu AI<br/>(answer_plan_guard.py:20)"]:::llm
+  CMPD{"A cerut o COMPARAȚIE?"}:::dec
+  CTAB["Tabel comparativ făcut de COD —<br/>AI-ul nu scrie nicio cifră în celule"]:::free
+  PRD{"Avem produse de arătat?"}:::dec
+  RICHC["AI-ul compune recomandarea<br/>structurată (carduri) (:266)"]:::llm
+  ROK{"A ieșit ceva valid?"}:::dec
+  RICHOUT["Trimitem cardurile + butonul de plată<br/>+ notăm ce am recomandat"]:::out
+  DOWN["Cădem pe text simplu —<br/>motivul se înregistrează (:396)"]:::step
+  VALID{"Verificăm textul: fiecare preț, link,<br/>cifră, afirmație de stoc sau sănătate<br/>(validator.py:195)"}:::dec
+  RETRY["O reîncercare, cu explicația greșelii"]:::llm
+  V2{"Acum e valid?"}:::dec
+  DETR["Formulare scrisă de cod, fără cifre"]:::free
+  PROSE["Text + carduri către client"]:::out
+  ORD{"Era despre o comandă?"}:::dec
+  GRND["Răspuns legat STRICT de datele<br/>comenzii lui (:149)"]:::llm
+  TXTOK{"Text sigur, fără produse?<br/>(o clarificare, de pildă)"}:::dec
+  NORES["«Nu am găsit» sigur + butoane de<br/>continuare — NU se salvează în cache (:211)"]:::out
 
   APLAN -- da --> AGUARD
   APLAN -- nu --> CMPD
   CMPD -- da --> CTAB
   CMPD -- nu --> PRD
-  PRD -- "da + sales" --> RICHC --> ROK
+  PRD -- "da + vânzare" --> RICHC --> ROK
   ROK -- da --> RICHOUT
   ROK -- nu --> DOWN --> VALID
-  PRD -- "da + order" --> VALID
+  PRD -- "da + comandă" --> VALID
   VALID -- ok --> PROSE
   VALID -- invalid --> RETRY --> V2
   V2 -- da --> PROSE
@@ -712,34 +716,34 @@ flowchart TD
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
   classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
 
-  Q["search_products args de la model<br/>catalog_tools.py:646"]:::step
-  CONC["concerns → chei canonice (DomainPack) :662<br/>+ features → searchable_facets normalizat :665-670"]:::step
-  INH{"sesiune activă + fără<br/>categorie/concerns noi? :681"}:::dec
-  INHERIT["moștenește filtrele sesiunii<br/>anti-drift «mai ifetin» — :683-690"]:::step
-  FP{"același fingerprint filtre<br/>+ pool stocat? :698"}:::dec
-  PAGE["continue_search_session :594<br/>pagina următoare, zero LLM"]:::step
+  Q["AI-ul cere o căutare în catalog<br/>(catalog_tools.py:646)"]:::step
+  CONC["Traducem vorbele clientului în chei de<br/>catalog: «ten gras» → oily (:662)<br/>+ ingrediente cerute: «cu niacinamidă» (:665-670)"]:::step
+  INH{"Căutare în aceeași discuție,<br/>fără categorie nouă? (:681)"}:::dec
+  INHERIT["Păstrăm raftul curent — un typo<br/>(«mai ifetin») nu ne mai aruncă<br/>pe alt raft (:683-690)"]:::step
+  FP{"E exact aceeași căutare<br/>ca data trecută? (:698)"}:::dec
+  PAGE["Pagina următoare din ce am găsit<br/>deja — fără AI, fără cost (:594)"]:::step
 
-  LADDER["scară de relaxare :702<br/>(_relax_ladder :397)"]:::step
-  EMB{"LLM + embeddings? :713"}:::dec
-  VEC["embed query — UN apel :715"]:::llm
-  LEX["lexical FTS + pg_trgm :731"]:::db
-  SEM["semantic pgvector HNSW :749"]:::db
-  FUSE["fuse_candidates RRF + blended rank :770"]:::step
-  ANY{"rezultate la treapta asta?"}:::dec
-  RELAX["relaxează următorul filtru soft"]:::step
-  EXH{"scara epuizată?"}:::dec
-  EMPTY["ToolResult gol → agentul compune<br/>mesaj no-result — finalize.py:203"]:::out
+  LADDER["Plan de rezervă: ce criterii slăbim,<br/>în ce ordine, dacă nu iese nimic (:702)"]:::step
+  EMB{"Avem AI + vectori pregătiți? (:713)"}:::dec
+  VEC["Înțelesul frazei → vector<br/>(UN singur apel) (:715)"]:::llm
+  LEX["Căutare pe CUVINTE în catalog (:731)"]:::db
+  SEM["Căutare pe ÎNȚELES în catalog (:749)"]:::db
+  FUSE["Combinăm cele două liste<br/>într-un singur clasament (:770)"]:::step
+  ANY{"Am găsit ceva la pasul ăsta?"}:::dec
+  RELAX["Slăbim următorul criteriu secundar<br/>(brandul cerut NU se slăbește niciodată)"]:::step
+  EXH{"Am epuizat planul de rezervă?"}:::dec
+  EMPTY["Chiar nu există → AI-ul spune cinstit<br/>«nu am găsit» (finalize.py:203)"]:::out
 
-  SAFE["gate contraindicații pe setul FUZIONAT<br/>ÎNAINTE de pool/pagină — :786"]:::safe
-  DIV{"sort=relevance + nu produs numit? :792"}:::dec
-  DIVER["diversify_pool: terțile de preț + branduri<br/>:798 (def :463)"]:::step
-  PAGE1["prima pagină prin _next_page :807<br/>unseen-dedup vs displayed, cap 6"]:::step
-  TEL["telemetrie determinstă: product_search :826<br/>+ unmet_query LA SURSĂ (named_not_found /<br/>missing_variant / no_result) :857-897"]:::step
-  SESS["seamănă sesiunea: pool + cursor + fp<br/>:901-908"]:::db
-  BRAND{"brand cerut + zero match real? :921"}:::dec
-  BDISC["disclosure: «nu avem brandul X» —<br/>NU prezenta alt brand ca al lui :922-930"]:::out
-  RC["reason_codes + gate not_recommended_for<br/>(NX-170, ON) :952-955 + disclosure produs<br/>numit inexistent :934-942"]:::step
-  RES["ToolResult: produse complete → validator<br/>llm_view compact max 6×8 → model"]:::out
+  SAFE["FILTRU de contraindicații pe TOT setul,<br/>ÎNAINTE să-l ținem minte (:786)"]:::safe
+  DIV{"Sortare pe relevanță și nu caută<br/>un produs anume? (:792)"}:::dec
+  DIVER["Prima pagină acoperă ieftin / mediu /<br/>scump + branduri diferite —<br/>nu 6 clone (:798)"]:::step
+  PAGE1["Prima pagină: maxim 6, fără cele<br/>deja arătate clientului (:807)"]:::step
+  TEL["Notăm CEREREA pentru comerciant: ce s-a<br/>căutat și ce NU s-a găsit — produs lipsă /<br/>variantă lipsă / nimic (:826-897)"]:::step
+  SESS["Ținem minte restul rezultatelor<br/>pentru «mai arată-mi» (:901-908)"]:::db
+  BRAND{"A cerut un brand pe care<br/>nu-l avem deloc? (:921)"}:::dec
+  BDISC["Spunem cinstit «nu lucrăm cu brandul X» —<br/>NU îi prezentăm altul drept al lui (:922-930)"]:::out
+  RC["Fiecare produs primește motivul potrivirii +<br/>scoatem ce e nerecomandat pentru el (:952-955)<br/>produs numit inexistent → spunem clar (:934-942)"]:::step
+  RES["Rezultat: produsele complete merg la<br/>verificator, AI-ul vede rezumatul<br/>compact (max 6 × 8 câmpuri)"]:::out
 
   Q --> CONC --> INH
   INH -- da --> INHERIT --> FP
@@ -778,41 +782,41 @@ flowchart TD
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
 
-  subgraph Load["TURN START — load memory processor.py:280-310"]
-    H["history: last 8 messages<br/>get_recent_messages"]:::read
-    ST["state jsonb max 8KB<br/>displayed_products refs + constraints + cart"]:::read
-    SUM["rolling summary<br/>get_summary_for_context"]:::read
-    PROF["contact profile + lead_score"]:::read
-    FCT["facts stabile visibility='inject'<br/>(NX-148/160, ON) → ctx.facts — processor.py:307"]:::read
+  subgraph Load["ÎNCEPUTUL TURULUI — ce ne amintim (processor.py:280-310)"]
+    H["Ultimele 8 mesaje"]:::read
+    ST["Starea discuției (max 8KB): ce i-am arătat,<br/>ce caută, coșul"]:::read
+    SUM["Rezumatul discuției, dacă e lungă"]:::read
+    PROF["Profilul clientului + scorul de interes"]:::read
+    FCT["Fapte STABILE despre el: buget, brand<br/>preferat, restricții (processor.py:307)"]:::read
   end
 
-  subgraph Use["IN PROMPTS — context.py"]
-    TRANS["conversation_transcript max 6 turns / 1200ch<br/>context.py:23"]:::read
-    BLOCKS["profile block :40 + facts block :87<br/>+ state block — asamblate :155"]:::read
+  subgraph Use["CE VEDE AI-UL — context.py"]
+    TRANS["Transcriptul compact<br/>(max 6 tururi / 1200 caractere) (:23)"]:::read
+    BLOCKS["Blocurile: profil + fapte + stare<br/>(:40 · :87 · :155)"]:::read
   end
 
-  subgraph Mutate["DURING TURN"]
-    AG["agent mutates in-place:<br/>search_constraints, active_search"]:::write
-    TP["tools request state_patch<br/>cart_add → ctx.state_patch<br/>tools/base.py:38-40"]:::write
-    LNG["language_stage persists conv.locale<br/>direct DB write, best-effort — language.py:44"]:::db
+  subgraph Mutate["ÎN TIMPUL TURULUI"]
+    AG["Agentul actualizează: ce caută clientul,<br/>căutarea activă"]:::write
+    TP["Uneltele cer modificări — coșul<br/>(tools/base.py:38-40)"]:::write
+    LNG["Limba detectată se salvează pe conversație<br/>(language.py:44)"]:::db
   end
 
-  subgraph Persist["SENDER TX — processor.py:382-492, in code order"]
-    DP["displayed_products ← reply.products"]:::write
-    PQ["pending_question set or cleared"]:::write
-    MERGE["canonical merge: constraints +<br/>asked_intents + search_constraints"]:::write
-    ASR["active_search reset when reply<br/>has no products"]:::write
-    PATCH["state_patch wins LAST"]:::write
-    OPT["optimistic lock state_version<br/>patch_conversation_state"]:::db
+  subgraph Persist["LA SALVARE — totul într-o singură tranzacție (processor.py:382-492)"]
+    DP["Ce i-am ARĂTAT — doar id + nume + preț"]:::write
+    PQ["Întrebarea pusă (sau ștearsă)"]:::write
+    MERGE["Constrângerile adunate din discuție"]:::write
+    ASR["Căutarea activă se resetează dacă<br/>răspunsul n-are produse"]:::write
+    PATCH["Modificările uneltelor câștigă ULTIMELE"]:::write
+    OPT["Salvat cu lacăt optimist — nu suprascriem<br/>alt worker care a apucat înainte"]:::db
   end
 
-  subgraph PostTurn["POST-TUR OFF-CONN (NX-161) — consumer.py:236 → aftercare.py:444<br/>conn eliberat pe durata LLM-ului de fundal; usage separat phase=post_turn"]
-    CW{"cacheable reply?"}:::dec
-    CWB["semantic_cache upsert<br/>static days / dynamic minutes + price snapshot<br/>aftercare.py:106"]:::db
-    SQ{"messages over threshold?"}:::dec
-    SUMGEN["generate_summary NANO<br/>aftercare.py:193 → conversation_summaries<br/>honest watermark"]:::llm
-    PE{"route ran + not shadow?"}:::dec
-    PEX["extract_profile NANO → whitelist patch<br/>+ lead_score determinist + process_facts<br/>(facts + memory v2) — aftercare.py:248-281"]:::llm
+  subgraph PostTurn["DUPĂ RĂSPUNS, ÎN FUNDAL — conexiunea DB e deja eliberată (NX-161)<br/>consumer.py:236 → aftercare.py:444"]
+    CW{"Răspunsul merită salvat<br/>și pentru alți clienți?"}:::dec
+    CWB["În cache-ul semantic: zile pentru statice,<br/>minute pentru preț/stoc (aftercare.py:106)"]:::db
+    SQ{"Discuția a depășit pragul<br/>de lungime?"}:::dec
+    SUMGEN["AI-ul mic scrie rezumatul<br/>(aftercare.py:193)"]:::llm
+    PE{"Turul a rulat normal?"}:::dec
+    PEX["AI-ul mic extrage fapte noi despre client<br/>+ actualizează scorul de interes<br/>(aftercare.py:248-281)"]:::llm
   end
 
   H --> TRANS
@@ -826,11 +830,11 @@ flowchart TD
   TP --> PATCH
   DP --> PQ --> MERGE --> ASR --> PATCH --> OPT
   OPT --> CW
-  CW -- yes --> CWB
+  CW -- da --> CWB
   OPT --> SQ
-  SQ -- yes --> SUMGEN
+  SQ -- da --> SUMGEN
   OPT --> PE
-  PE -- yes --> PEX
+  PE -- da --> PEX
 ```
 
 Facts memory (NX-148/160) e LIVE: migrările 023/024 sunt aplicate, `conversation_facts_enabled=true`,
