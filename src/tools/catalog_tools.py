@@ -189,6 +189,25 @@ _REASON_RO = {
 }
 
 
+# NX-224: constrângerea renunțată → cum o spune modelul clientului. Frazele sunt scurte și
+# CONCRETE („iese din buget", nu „potrivire parțială"): clientul trebuie să afle EXACT ce nu
+# respectă produsul de umplere, nu că e „aproximativ". Cheile = cele din ladder (`_relax_ladder`).
+_DROPPED_RO = {
+    "price_max": "iese din buget",
+    "concerns": "fără nevoia cerută",
+    "category": "din altă categorie",
+    "features": "fără ingredientul cerut",
+    "in_stock_only": "nu e pe stoc",
+}
+
+
+def _partial_str(p: dict[str, Any]) -> str:
+    """NX-224: marcajul de potrivire PARȚIALĂ pentru `_brief` — ce criteriu NU respectă produsul de
+    umplere. Vine din `partial_match` (diff de ladder, pus de cod), nu din judecata modelului."""
+    parts = [_DROPPED_RO[k] for k in p.get("partial_match") or [] if k in _DROPPED_RO]
+    return " | aproape de criterii: " + ", ".join(parts) if parts else ""
+
+
 def _reason_str(p: dict[str, Any]) -> str:
     codes = p.get("reason_codes") or []
     parts = [_REASON_RO.get(c, c) for c in codes]
@@ -211,12 +230,15 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
         avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
         # NX-135: produsul are varianta cerută (search pe variant_label) → fit grounded.
         vmatch = " | are varianta cerută" if p.get("variant_match") else ""
+        # NX-224: produs de UMPLERE (potrivire parțială) → spune CE nu respectă. Marcajul e per
+        # produs, ca modelul să nu poată prezenta umplutura ca potrivire completă.
+        pmatch = _partial_str(p)
         variants = _variant_view(p.get("variants"), limit=4)
         vline = f" | variante: {variants}" if variants else ""
         summ = (p.get("ai_summary") or "")[:120]
         base = (
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
-            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch}{vline}"
+            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch}{pmatch}{vline}"
         )
         if proj:
             a = _pattrs(p)
@@ -434,6 +456,81 @@ def _relax_ladder(
     if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
         steps.append({**steps[-1], "features": None})
     return steps
+
+
+# NX-224: cheile de constrângere ale unei trepte de ladder (ordine stabilă → marcaj determinist).
+# Brand și `variant_label` NU sunt aici: nu se relaxează niciodată, deci nu pot fi „umplute" peste.
+_LADDER_KEYS = ("price_max", "concerns", "category", "features", "in_stock_only")
+
+
+def _constraint_active(v: Any) -> bool:
+    """O constrângere e ACTIVĂ dacă filtrează ceva: `None` (lipsă) și `False` (`in_stock_only`
+    dezactivat) nu filtrează. Lista goală nu apare — apelantul o normalizează la `None`."""
+    return v is not None and v is not False
+
+
+def _dropped_constraints(strict: dict[str, Any], relaxed: dict[str, Any]) -> list[str]:
+    """NX-224: constrângerile ACTIVE în treapta `strict` care NU mai sunt active în `relaxed` —
+    adică exact ce nu respectă un produs adus de treapta relaxată. Diff pur de ladder (cod
+    determinist, P2): modelul primește eticheta, nu decide el ce e strict și ce e parțial. Trepte
+    identice → listă goală → produsul NU primește marcaj fals de parțial."""
+    return [
+        k
+        for k in _LADDER_KEYS
+        if _constraint_active(strict.get(k)) and not _constraint_active(relaxed.get(k))
+    ]
+
+
+async def _retrieve_step(
+    deps: PipelineDeps,
+    ctx: TurnContext,
+    a: SearchArgs,
+    step: dict[str, Any],
+    *,
+    searchable_facets: tuple[str, ...],
+    query_vec: list[float] | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Ambele retrievere pe O treaptă de ladder → `(lexical, vector)`. Filtrele DURE (brand,
+    `variant_label` — NX-135) se aplică pe amândouă și NU sunt în treaptă: nu se relaxează
+    niciodată. Vector doar cu `query_vec`; semanticul pică în tur → `[]`, lexicalul rămâne (P6).
+
+    NB (NX-219): cele două rulează SERIAL — împart aceeași conexiune asyncpg."""
+    lexical = await search_products_lexical(
+        deps.conn,
+        ctx.business.id,
+        query_text=a.query,
+        price_max=step["price_max"],
+        concerns=step["concerns"],
+        features=step["features"],
+        searchable_facets=searchable_facets,
+        variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
+        category=step["category"],
+        brand=a.brand,
+        sort_mode=a.sort_mode,
+        in_stock_only=step["in_stock_only"],
+        pool=_FUSION_POOL,
+    )
+    vector: list[dict[str, Any]] = []
+    if query_vec is not None:
+        try:
+            vector = await search_products_semantic(
+                deps.conn,
+                ctx.business.id,
+                query_vec,
+                price_max=step["price_max"],
+                concerns=step["concerns"],
+                features=step["features"],
+                searchable_facets=searchable_facets,
+                variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă
+                category=step["category"],
+                brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
+                sort_mode=a.sort_mode,
+                in_stock_only=step["in_stock_only"],
+                pool=_FUSION_POOL,
+            )
+        except Exception:  # noqa: BLE001 — semantic pică în tur → lexical rămâne (P6)
+            vector = []
+    return lexical, vector
 
 
 def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
@@ -755,41 +852,9 @@ async def search_products_tool(
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
     top_cosine = None  # cea mai mică distanță cosine (cel mai apropiat vector) — semnal de calitate
     for i, f in enumerate(ladder):
-        lexical = await search_products_lexical(
-            deps.conn,
-            ctx.business.id,
-            query_text=a.query,
-            price_max=f["price_max"],
-            concerns=f["concerns"],
-            features=f["features"],
-            searchable_facets=searchable_facets,
-            variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
-            category=f["category"],
-            brand=a.brand,
-            sort_mode=a.sort_mode,
-            in_stock_only=f["in_stock_only"],
-            pool=_FUSION_POOL,
+        lexical, vector = await _retrieve_step(
+            deps, ctx, a, f, searchable_facets=searchable_facets, query_vec=query_vec
         )
-        vector: list[dict[str, Any]] = []
-        if query_vec is not None:
-            try:
-                vector = await search_products_semantic(
-                    deps.conn,
-                    ctx.business.id,
-                    query_vec,
-                    price_max=f["price_max"],
-                    concerns=f["concerns"],
-                    features=f["features"],
-                    searchable_facets=searchable_facets,
-                    variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă
-                    category=f["category"],
-                    brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
-                    sort_mode=a.sort_mode,
-                    in_stock_only=f["in_stock_only"],
-                    pool=_FUSION_POOL,
-                )
-            except Exception:  # noqa: BLE001 — semantic pică în tur → lexical rămâne (P6)
-                vector = []
         relax_depth, lexical_pool_n, vector_pool_n = i, len(lexical), len(vector)
         cosines = [p["cosine_distance"] for p in vector if p.get("cosine_distance") is not None]
         if cosines:
@@ -804,6 +869,46 @@ async def search_products_tool(
             relaxed = i > 0
             winning_step = f
             break
+
+    # NX-224: TOP-UP — strictul întâi, apoi umplere ETICHETATĂ din treptele rămase. Bucla de mai sus
+    # se oprește la PRIMA treaptă cu rezultate (`if ranked: break`): o treaptă care produce 1 produs
+    # lasă clientul cu 1 card, acolo unde 6 (1 strict + 5 apropiate, spuse cinstit) vând mai bine.
+    # Umplem DOAR restul paginii și marcăm PER PRODUS ce criteriu nu respectă — `partial_match` =
+    # diff-ul treptelor, calculat din ladder (P2: codul clasifică, modelul doar formulează).
+    # Filtrele DURE (brand, `variant_label`) nu sunt în ladder → prin construcție umplutura le
+    # respectă. Rulează ÎNAINTE de safety gate: niciun produs de umplere nu ocolește gate-ul.
+    topup_depth = 0  # cea mai adâncă treaptă din care s-a umplut (0 = nu s-a umplut)
+    if (
+        get_settings().search_topup_enabled
+        and winning_step is not None
+        and 0 < len(ranked_final) < a.limit
+    ):
+        have = {str(p["id"]) for p in ranked_final}
+        for j in range(relax_depth + 1, len(ladder)):
+            dropped = _dropped_constraints(winning_step, ladder[j])
+            lex_j, vec_j = await _retrieve_step(
+                deps, ctx, a, ladder[j], searchable_facets=searchable_facets, query_vec=query_vec
+            )
+            # Candidații vector ai treptei intră în setul care decide `mode=semantic`: dacă un
+            # produs de umplere venit din vector supraviețuiește pe pagină, „lexical" ar minți
+            # (ar cere degeaba jobul de embed pe tenant).
+            vector_final = vector_final + vec_j
+            fused_j = fuse_candidates(
+                lex_j, vec_j, sort_mode=a.sort_mode, concerns=concern_keys, weights=rank_weights
+            )
+            for p in fused_j:
+                pid = str(p["id"])
+                if pid in have:  # același produs pe două trepte → o singură dată, ca STRICT
+                    continue
+                # Copie: dict-urile vin direct din retriever, nu le adnotăm pe cele partajate.
+                # `dropped` gol (trepte identice pe constrângeri) → fără marcaj fals de parțial.
+                ranked_final.append({**p, "partial_match": dropped} if dropped else dict(p))
+                have.add(pid)
+                topup_depth = j
+                if len(ranked_final) >= a.limit:
+                    break
+            if len(ranked_final) >= a.limit:
+                break
 
     # NX-173 (P0): gate de contraindicații pe setul FUZIONAT, ÎNAINTE de diversificare/pool/pagină.
     # Poziția e esențială: `pool_ids` (mai jos) semănează sesiunea din `ranked_final`, iar sesiunea
@@ -850,6 +955,10 @@ async def search_products_tool(
     # NX-163: produs NUMIT cerut dar absent din setul întors — precomputat aici (o dată) fiindcă e
     # și semnalul de unmet «named_not_found» (mai jos) și condiția de disclosure (nota de mai jos).
     named_miss = bool(a.product_name) and not _named_product_found(a.product_name, products)
+    # NX-224: câte potriviri parțiale au ajuns EFECTIV pe pagină (post-safety, post-dedup), nu câte
+    # a produs bucla de umplere. `topup_added=0` cu `topup_depth>0` = s-a umplut, dar gate-ul (ori
+    # dedupul) a tăiat tot — exact semnalul care ar rămâne invizibil dacă am număra la sursă.
+    topup_added = sum(1 for p in products if p.get("partial_match"))
     ctx.emit(
         "product_search",
         mode=mode,
@@ -863,6 +972,8 @@ async def search_products_tool(
         lexical_pool=lexical_pool_n,
         vector_pool=vector_pool_n,
         relax_depth=relax_depth,
+        topup_added=topup_added,  # NX-224: potriviri parțiale servite (0 = OFF / pagină plină)
+        topup_depth=topup_depth,  # cea mai adâncă treaptă folosită la umplere
         zero_result=not products,
         top_cosine_distance=top_cosine,
         had_variant_label=a.variant_label
@@ -980,6 +1091,26 @@ async def search_products_tool(
         products = annotate_reasons(
             products, concerns=a.concerns, price_max=a.price_max, features=a.features
         )
+    # NX-224: nota AGREGATĂ de umplere — dublează marcajul per produs din `_brief` cu instrucțiunea
+    # de onestitate. Calculată DUPĂ `annotate_reasons` (care poate exclude/reordona), pe lista
+    # finală: numărăm PREFIXUL de produse stricte, deci cifra rămâne adevărată chiar dacă ordinea
+    # s-a schimbat (sub-numără, nu minte). Zero stricte (gate-ul le-a tăiat) → altă frază.
+    if any(p.get("partial_match") for p in products):
+        n_strict = next(
+            (i for i, p in enumerate(products) if p.get("partial_match")), len(products)
+        )
+        if n_strict == 0:  # gate-ul a tăiat tot ce era strict → nu pretinde că a rămas ceva exact
+            notes.append(
+                "(niciun produs de mai jos nu respectă toate criteriile cerute — toate sunt "
+                "marcate «aproape de criterii»; spune explicit ce nu respectă fiecare)"
+            )
+        else:
+            head = "primul produs" if n_strict == 1 else f"primele {n_strict} produse"
+            notes.append(
+                f"({head} de mai jos respectă toate criteriile cerute; restul sunt marcate "
+                "«aproape de criterii» — spune explicit ce nu respectă fiecare, nu le prezenta ca "
+                "potrivire completă)"
+            )
     # NX-173: O linie de context (nu copy) — modelul alege coerent („în sarcină, aș merge pe ceva
     # simplu"), dar NU scrie avertismentul: fraza garantată o adaugă codul la compunere.
     if safety_hint:

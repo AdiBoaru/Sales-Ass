@@ -1019,3 +1019,298 @@ def test_fp_guard_accepts_exempt_and_known_args():
     """Anti-fals-pozitiv: `limit` (exceptat) și argumentele care NU merg la retrievere nu pică."""
     assert _fp_gaps({"limit"}, _retriever_params(), _fp_keys()) == set()
     assert _fp_gaps({"nu_ajunge_la_retriever"}, _retriever_params(), _fp_keys()) == set()
+
+
+# --- NX-224: top-up — pagina se umple cu potriviri PARȚIALE, etichetate ------------------
+#
+# Bucla de relaxare se oprea la PRIMA treaptă cu rezultate: o treaptă care dă 1 produs lăsa
+# clientul cu 1 card. Top-up-ul umple RESTUL paginii din treptele rămase, marcând per produs ce
+# criteriu nu respectă. Ce se păzește aici: ordinea (strictele primele), corectitudinea marcajului
+# (diff REAL de ladder, față de treapta CÂȘTIGĂTOARE), faptul că umplutura NU ocolește safety
+# gate-ul și că filtrele DURE (brand/variantă) rămân aplicate pe toate treptele.
+
+_TOPUP_ARGS = {"query": "ser", "concerns": ["ten gras"], "features": ["niacinamida"]}
+
+
+def _ctx_topup(body: str = "x") -> TurnContext:
+    """Ctx cu DomainPack care activează AMBELE constrângeri soft relaxabile (concerns + features)
+    → ladder de 3 trepte: [0] strict · [1] fără concerns · [2] fără concerns + fără features."""
+    from src.domain.pack import DomainPack
+    from src.tools.taxonomy import _BEAUTY
+
+    business = BusinessConfig(id="biz-1", slug="s", name="n", vertical="beauty")
+    business.domain_pack = DomainPack(
+        vertical="beauty_salon", concern_map=_BEAUTY, searchable_facets=("key_ingredients",)
+    )
+    return TurnContext(
+        turn_id="t",
+        business=business,
+        contact=Contact(id="c", business_id="biz-1"),
+        message=InboundMessage(provider_msg_id="m", body=body),
+        conversation_id="conv",
+    )
+
+
+def _tp(i: int, **over) -> dict:
+    return {
+        "id": f"t{i}",
+        "name": f"Produs {i}",
+        "brand": f"B{i}",
+        "price": 50.0 + i,
+        "url": f"https://shop/t{i}",
+        "ai_summary": "",
+        "availability": "in_stock",
+        "rating": 4.0,
+        **over,
+    }
+
+
+def _ladder_step(k: dict) -> int:
+    """Treapta de ladder din care vine apelul, dedusă din filtrele primite de retriever."""
+    if k.get("concerns"):
+        return 0
+    return 1 if k.get("features") else 2
+
+
+def _patch_ladder(monkeypatch, by_step: dict[int, list[dict]], *, calls: list | None = None):
+    """Retriever lexical care răspunde DIFERIT pe fiecare treaptă (copii — dict-urile de test nu
+    trebuie adnotate global). `calls` colectează kwargs-urile fiecărui apel."""
+
+    async def fake_lex(conn, business_id, **k):
+        if calls is not None:
+            calls.append(k)
+        return [dict(p) for p in by_step.get(_ladder_step(k), [])]
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+
+
+def _topup(monkeypatch, value: bool = True) -> None:
+    monkeypatch.setattr(get_settings(), "search_topup_enabled", value)
+
+
+def _partial(products: list[dict]) -> dict[str, list[str]]:
+    """id → constrângerile pe care produsul NU le respectă (doar produsele marcate)."""
+    return {p["id"]: p["partial_match"] for p in products if p.get("partial_match")}
+
+
+# --- unit: diff-ul de trepte (sursa marcajului) ------------------------------------------
+
+
+def test_dropped_constraints_identical_steps_is_empty():
+    """Failure case: trepte identice → listă goală → produsul NU primește marcaj fals de parțial."""
+    step = {"price_max": 100, "concerns": ["oily"], "category": "seruri", "features": None}
+    assert ct._dropped_constraints(step, dict(step)) == []
+
+
+def test_dropped_constraints_reports_only_real_drops():
+    strict = {"price_max": 100, "concerns": ["oily"], "category": "seruri", "features": ["niac"]}
+    assert ct._dropped_constraints(strict, {**strict, "concerns": None}) == ["concerns"]
+    # ordine stabilă (`_LADDER_KEYS`), independentă de ordinea de relaxare
+    assert ct._dropped_constraints(strict, {**strict, "category": None, "concerns": None}) == [
+        "concerns",
+        "category",
+    ]
+    # constrângere deja absentă în treapta strictă → nu poate fi „renunțată"
+    lax = {**strict, "concerns": None}
+    assert ct._dropped_constraints(lax, lax) == []
+
+
+def test_dropped_constraints_handles_boolean_relaxation():
+    """`in_stock_only` e bool, nu None: True→False = renunțare reală (marcaj corect, nu tăcere)."""
+    assert ct._dropped_constraints({"in_stock_only": True}, {"in_stock_only": False}) == [
+        "in_stock_only"
+    ]
+    assert ct._dropped_constraints({"in_stock_only": False}, {"in_stock_only": False}) == []
+
+
+def test_hard_filters_are_not_ladder_keys():
+    """Structural: brand / variant_label (și orice filtru DUR viitor, ex. excluderile NX-222) NU
+    sunt în ladder → prin construcție top-up-ul nu poate umple peste ele."""
+    assert "brand" not in ct._LADDER_KEYS and "variant_label" not in ct._LADDER_KEYS
+    step0 = ct._relax_ladder(
+        price_max=1.0, concerns=["oily"], category="c", in_stock_only=True, features=["f"]
+    )[0]
+    assert set(ct._LADDER_KEYS) == set(step0)  # marcajul acoperă TOT ce poate relaxa ladder-ul
+
+
+def test_partial_marker_in_brief_only_on_partial_products():
+    """`_brief`: marcajul apare DOAR pe produsele de umplere și spune CE nu respectă."""
+    view = ct._brief([_tp(0), _tp(1, partial_match=["price_max", "concerns"])])
+    strict_line, filler_line = view.split("\n")
+    assert "aproape de criterii" not in strict_line
+    assert "aproape de criterii: iese din buget, fără nevoia cerută" in filler_line
+
+
+# --- happy path -------------------------------------------------------------------------
+
+
+async def test_topup_fills_page_strict_first_with_labels(monkeypatch):
+    """DoD: strict = 2, relaxat = alte 7 → pagina are 6: cele 2 stricte PRIMELE, 4 marcate cu
+    diff-ul REAL al treptelor."""
+    _patch_ladder(monkeypatch, {0: [_tp(0), _tp(1)], 1: [_tp(i) for i in range(2, 9)]})
+    _topup(monkeypatch)
+    ctx = _ctx_topup()
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+
+    ids = [p["id"] for p in res.products]
+    assert len(ids) == 6 and ids[:2] == ["t0", "t1"]  # strictele primele, în ordinea lor
+    marked = _partial(res.products)
+    assert set(marked) == set(ids[2:])  # exact umplutura e marcată
+    assert all(v == ["concerns"] for v in marked.values())
+    ev = _search_event(ctx)
+    assert ev.properties["topup_added"] == 4 and ev.properties["topup_depth"] == 1
+    assert ev.properties["relax_depth"] == 0  # treapta câștigătoare rămâne cea strictă
+
+
+async def test_topup_view_discloses_partial_matches(monkeypatch):
+    """Modelul primește marcaj PER produs + nota agregată cu câte sunt potriviri complete."""
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: [_tp(i) for i in range(1, 9)]})
+    _topup(monkeypatch)
+    res = await run_tool(_ctx_topup(), _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    lines = res.llm_view.split("\n")
+    assert "primul produs de mai jos respectă toate criteriile" in lines[0]
+    assert res.llm_view.count("aproape de criterii: fără nevoia cerută") == 5
+    assert lines[1].startswith("[t0]") and "aproape de criterii" not in lines[1]
+
+
+async def test_full_strict_page_skips_topup(monkeypatch):
+    """Strict ≥ limit → zero top-up: nici query în plus, nici marcaje, `topup_added=0`."""
+    calls: list = []
+    _patch_ladder(monkeypatch, {0: [_tp(i) for i in range(7)]}, calls=calls)
+    _topup(monkeypatch)
+    ctx = _ctx_topup()
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    assert len(calls) == 1  # o singură treaptă interogată (fără latență cheltuită degeaba)
+    assert _partial(res.products) == {} and "aproape de criterii" not in res.llm_view
+    ev = _search_event(ctx)
+    assert ev.properties["topup_added"] == 0 and ev.properties["topup_depth"] == 0
+
+
+async def test_topup_flag_off_leaves_page_hungry(monkeypatch):
+    """Kill-switch OFF (default) → pagina rămâne înfometată, exact ca înainte: 2 produse, zero
+    query-uri în plus, zero marcaje, `topup_added=0`."""
+    calls: list = []
+    _patch_ladder(monkeypatch, {0: [_tp(0), _tp(1)], 1: [_tp(i) for i in range(2, 9)]}, calls=calls)
+    _topup(monkeypatch, False)
+    ctx = _ctx_topup()
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    assert [p["id"] for p in res.products] == ["t0", "t1"] and len(calls) == 1
+    assert _partial(res.products) == {} and "aproape de criterii" not in res.llm_view
+    ev = _search_event(ctx)
+    assert ev.properties["topup_added"] == 0 and ev.properties["topup_depth"] == 0
+
+
+async def test_topup_labels_are_relative_to_winning_step(monkeypatch):
+    """Strict = 0 → prima treaptă NEVIDĂ câștigă (comportament existent, NEschimbat) și devine
+    referința marcajului: umplutura de pe treapta 2 e marcată DOAR cu ce a pierdut față de EA."""
+    _patch_ladder(monkeypatch, {0: [], 1: [_tp(1), _tp(2)], 2: [_tp(3)]})
+    _topup(monkeypatch)
+    ctx = _ctx_topup()
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    assert [p["id"] for p in res.products] == ["t1", "t2", "t3"]
+    assert _partial(res.products) == {"t3": ["features"]}  # NU ["concerns", "features"]
+    assert "fără ingredientul cerut" in res.llm_view and "fără nevoia cerută" not in res.llm_view
+    ev = _search_event(ctx)
+    assert ev.properties["relax_depth"] == 1 and ev.properties["topup_depth"] == 2
+
+
+# --- safety + filtre dure ---------------------------------------------------------------
+
+
+async def test_topup_products_go_through_safety_gate(monkeypatch):
+    """DoD (P0): produsul contraindicat adus de treapta relaxată NU ajunge la client — top-up-ul
+    rulează ÎNAINTE de gate, deci umplutura n-are ușă din dos (nici spre pool)."""
+    unsafe = _tp(9, name="Ser Retinol de noapte", attributes={"key_ingredients": ["retinal"]})
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: [unsafe, _tp(1), _tp(2)]})
+    _topup(monkeypatch)
+    ctx = _ctx_topup("sunt însărcinată, ce ser antirid pot folosi?")
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    ids = [p["id"] for p in res.products]
+    assert "t9" not in ids and ids[0] == "t0" and {"t1", "t2"} <= set(ids)
+    assert "Retinol" not in res.llm_view
+    assert "t9" not in ((ctx.state_patch.get("active_search") or {}).get("pool") or [])
+
+
+async def test_topup_all_filler_blocked_keeps_survivors(monkeypatch):
+    """Edge: safety taie TOATĂ umplutura → pagina rămâne cu ce a supraviețuit (fără re-fetch în
+    buclă). `topup_added=0` cu `topup_depth>0` = «s-a umplut, dar gate-ul a tăiat»."""
+    unsafe = [
+        _tp(8, name="Ser Retinol A", attributes={"key_ingredients": ["retinal"]}),
+        _tp(9, name="Ser Retinol B", attributes={"key_ingredients": ["retinol"]}),
+    ]
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: unsafe})
+    _topup(monkeypatch)
+    ctx = _ctx_topup("sunt însărcinată, ce ser antirid pot folosi?")
+    res = await run_tool(ctx, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    assert [p["id"] for p in res.products] == ["t0"]
+    ev = _search_event(ctx)
+    assert ev.properties["topup_added"] == 0 and ev.properties["topup_depth"] == 1
+
+
+async def test_topup_keeps_hard_filters_on_every_step(monkeypatch):
+    """DoD: brand + variant_label cerute → TOATE interogările (strictă și de umplere) le poartă;
+    umplutura nu poate ieși din ele."""
+    calls: list = []
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: [_tp(1), _tp(2)]}, calls=calls)
+    _topup(monkeypatch)
+    args = {**_TOPUP_ARGS, "brand": "B0", "variant_label": "Warm Beige"}
+    res = await run_tool(_ctx_topup(), _deps_no_llm(), "search_products", args)
+    assert len(calls) == 3 and len(res.products) == 3  # treapta strictă + 2 trepte de umplere
+    assert all(c["brand"] == "B0" and c["variant_label"] == "Warm Beige" for c in calls)
+
+
+# --- edge / failure ---------------------------------------------------------------------
+
+
+async def test_topup_dedups_products_seen_on_earlier_step(monkeypatch):
+    """Edge: același produs apare și pe treapta relaxată → o SINGURĂ dată, ca STRICT (nemarcat)."""
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: [_tp(0), _tp(1)]})
+    _topup(monkeypatch)
+    res = await run_tool(_ctx_topup(), _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    assert [p["id"] for p in res.products] == ["t0", "t1"]
+    assert _partial(res.products) == {"t1": ["concerns"]}
+
+
+async def test_topup_short_page_pools_in_served_order_then_exhausts(monkeypatch):
+    """Edge: toate treptele sub limit cumulat → pagină de 3, pool = stricte + umplutură ÎN ORDINEA
+    servită (paginarea continuă natural în zona de umplutură), fără epuizare falsă; „mai arată-mi"
+    (fp identic) → `_NO_MORE_VIEW`, nu repetarea produselor deja arătate."""
+    from src.models import ProductRef
+
+    async def no_ids(conn, business_id, ids, **k):
+        return []
+
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: [_tp(1), _tp(2)]})
+    monkeypatch.setattr(ct, "get_products_by_ids", no_ids)
+    _topup(monkeypatch)
+    ctx1 = _ctx_topup()
+    res1 = await run_tool(ctx1, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    sess = ctx1.state_patch["active_search"]
+    assert [p["id"] for p in res1.products] == ["t0", "t1", "t2"]
+    assert sess["pool"] == ["t0", "t1", "t2"] and sess["cursor"] == 3
+
+    ctx2 = _ctx_topup()
+    ctx2.state.active_search = sess
+    ctx2.state.displayed_products = [
+        ProductRef(p["id"], p["name"], p["price"]) for p in res1.products
+    ]
+    res2 = await run_tool(ctx2, _deps_no_llm(), "search_products", dict(_TOPUP_ARGS))
+    assert res2.products == [] and res2.llm_view == ct._NO_MORE_VIEW
+    assert _events(ctx2, "search_session")[-1].properties["action"] == "exhausted"
+
+
+async def test_topup_survives_semantic_failure(monkeypatch):
+    """Failure: semanticul aruncă pe treapta de umplere → umplutura continuă lexical-only (aceeași
+    degradare ca bucla principală, P6)."""
+
+    async def boom_sem(conn, business_id, vec, **k):
+        raise RuntimeError("pgvector down")
+
+    _patch_ladder(monkeypatch, {0: [_tp(0)], 1: [_tp(1), _tp(2)]})
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    monkeypatch.setattr(ct, "search_products_semantic", boom_sem)
+    _topup(monkeypatch)
+    res = await run_tool(_ctx_topup(), _deps(_LLM()), "search_products", dict(_TOPUP_ARGS))
+    assert [p["id"] for p in res.products] == ["t0", "t1", "t2"]
+    assert _partial(res.products) == {"t1": ["concerns"], "t2": ["concerns"]}

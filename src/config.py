@@ -568,6 +568,12 @@ class Settings(BaseSettings):
     search_category_hard_enabled: bool = Field(
         default=True, validation_alias="SEARCH_CATEGORY_HARD_ENABLED"
     )
+    # NX-224: pagina înfometată se UMPLE cu potriviri parțiale, etichetate per produs. Bucla de
+    # relaxare se oprește la PRIMA treaptă cu rezultate → o treaptă care dă 1 produs lasă clientul
+    # cu 1 card, acolo unde 6 (1 strict + 5 apropiate, spuse cinstit) vând mai bine. Umplutura vine
+    # DOAR din treptele rămase, marcată cu ce criteriu nu respectă (diff de ladder, calculat în
+    # cod), și trece prin ACELAȘI safety gate. OFF (default) → byte-identic cu azi.
+    search_topup_enabled: bool = Field(default=False, validation_alias="SEARCH_TOPUP_ENABLED")
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
     # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.

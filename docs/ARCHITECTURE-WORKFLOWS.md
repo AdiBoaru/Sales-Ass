@@ -642,6 +642,9 @@ flowchart TD
   ANY{"results at this step?"}:::dec
   RELAX["relax next filter in ladder"]:::step
   EXH{"ladder exhausted?"}:::dec
+  HUNGRY{"NX-224: fewer results than limit?<br/>flag SEARCH_TOPUP_ENABLED"}:::dec
+  TOPUP["top-up: fill the rest of the page from the<br/>remaining ladder steps, each filler tagged<br/>partial_match = dropped constraints"]:::step
+  SAFE["safety gate on strict + filler"]:::step
   EMPTY["empty ToolResult → AGENT composes<br/>no-result msg — agent.py:1411"]:::out
 
   DIV{"sort=relevance + not named product?"}:::dec
@@ -661,13 +664,18 @@ flowchart TD
   ANY -- no --> EXH
   EXH -- no --> RELAX --> LEX
   EXH -- yes --> EMPTY
-  ANY -- yes --> DIV
+  ANY -- yes --> HUNGRY
+  HUNGRY -- yes --> TOPUP --> SAFE
+  HUNGRY -- no --> SAFE
+  SAFE --> DIV
   DIV -- yes --> DIVER --> DEDUP
   DIV -- no --> DEDUP
   DEDUP --> SESS --> RES
 ```
 
 Degradare: `embed` picat → `query_vec=None` → lexical-only (`catalog_tools.py:447-454`); semantic picat în tur → rămâne lexical (`catalog_tools.py:501-502`).
+
+NX-224 (top-up): bucla de relaxare se oprește la prima treaptă cu rezultate, deci o treaptă care produce 1 produs lăsa pagina cu 1 card. Când setul câștigător e sub `limit`, coborâm treptele rămase și umplem DOAR restul paginii, marcând fiecare produs de umplere cu `partial_match` = constrângerile renunțate față de treapta câștigătoare (diff de ladder, cod determinist). Ordinea rămâne strict-întâi (și în pool, deci paginarea continuă natural în zona de umplutură), iar safety gate-ul rulează DUPĂ umplere, pe uniune — niciun produs de umplere nu-l ocolește. Filtrele dure (brand, `variant_label`) nu sunt în ladder, deci prin construcție umplutura le respectă.
 
 ---
 
