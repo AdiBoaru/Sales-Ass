@@ -372,7 +372,7 @@ Calea **sincronă** `/web/chat` diferă doar la capete: sesiune HMAC + rate-limi
 
 ---
 
-## Diagram 4a — Pipeline Routing Workflow (stagiile 1-9 + fallback)
+## Diagram 4a — Pipeline Routing Workflow (cele 11 stagii)
 
 Ordinea stagiilor: `DEFAULT_STAGES`, `src/worker/runner.py:207-219`. Internele stagiului Agent → Diagram 4b.
 *(Corectat după trace-ul invers: alias route-hit continuă spre agent, clarify are escaladare pe attempts, greeting rulează și după resume, handoff are ramura web→SALES, rate-limit are tăcere pe burst.)*
