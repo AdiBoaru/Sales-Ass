@@ -1,0 +1,58 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 5 — Product Search Workflow
+flowchart TD
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
+
+  Q["AI-ul cere o căutare în catalog<br/>(catalog_tools.py:646)"]:::step
+  CONC["Traducem vorbele clientului în chei de<br/>catalog: «ten gras» → oily (:662)<br/>+ ingrediente cerute: «cu niacinamidă» (:665-670)"]:::step
+  INH{"Căutare în aceeași discuție,<br/>fără categorie nouă? (:681)"}:::dec
+  INHERIT["Păstrăm raftul curent — un typo<br/>(«mai ifetin») nu ne mai aruncă<br/>pe alt raft (:683-690)"]:::step
+  FP{"E exact aceeași căutare<br/>ca data trecută? (:698)"}:::dec
+  PAGE["Pagina următoare din ce am găsit<br/>deja — fără AI, fără cost (:594)"]:::step
+
+  LADDER["Plan de rezervă: ce criterii slăbim,<br/>în ce ordine, dacă nu iese nimic (:702)"]:::step
+  EMB{"Avem AI + vectori pregătiți? (:713)"}:::dec
+  VEC["Înțelesul frazei → vector<br/>(UN singur apel) (:715)"]:::llm
+  LEX["Căutare pe CUVINTE în catalog (:731)"]:::db
+  SEM["Căutare pe ÎNȚELES în catalog (:749)"]:::db
+  FUSE["Combinăm cele două liste<br/>într-un singur clasament (:770)"]:::step
+  ANY{"Am găsit ceva la pasul ăsta?"}:::dec
+  RELAX["Slăbim următorul criteriu secundar<br/>(brandul cerut NU se slăbește niciodată)"]:::step
+  EXH{"Am epuizat planul de rezervă?"}:::dec
+  EMPTY["Chiar nu există → AI-ul spune cinstit<br/>«nu am găsit» (finalize.py:203)"]:::out
+
+  SAFE["FILTRU de contraindicații pe TOT setul,<br/>ÎNAINTE să-l ținem minte (:786)"]:::safe
+  DIV{"Sortare pe relevanță și nu caută<br/>un produs anume? (:792)"}:::dec
+  DIVER["Prima pagină acoperă ieftin / mediu /<br/>scump + branduri diferite —<br/>nu 6 clone (:798)"]:::step
+  PAGE1["Prima pagină: maxim 6, fără cele<br/>deja arătate clientului (:807)"]:::step
+  TEL["Notăm CEREREA pentru comerciant: ce s-a<br/>căutat și ce NU s-a găsit — produs lipsă /<br/>variantă lipsă / nimic (:826-897)"]:::step
+  SESS["Ținem minte restul rezultatelor<br/>pentru «mai arată-mi» (:901-908)"]:::db
+  BRAND{"A cerut un brand pe care<br/>nu-l avem deloc? (:921)"}:::dec
+  BDISC["Spunem cinstit «nu lucrăm cu brandul X» —<br/>NU îi prezentăm altul drept al lui (:922-930)"]:::out
+  RC["Fiecare produs primește motivul potrivirii +<br/>scoatem ce e nerecomandat pentru el (:952-955)<br/>produs numit inexistent → spunem clar (:934-942)"]:::step
+  RES["Rezultat: produsele complete merg la<br/>verificator, AI-ul vede rezumatul<br/>compact (max 6 × 8 câmpuri)"]:::out
+
+  Q --> CONC --> INH
+  INH -- da --> INHERIT --> FP
+  INH -- nu --> FP
+  FP -- da --> PAGE --> RES
+  FP -- nu --> LADDER --> EMB
+  EMB -- da --> VEC --> LEX
+  EMB -- nu --> LEX
+  LEX --> SEM --> FUSE --> ANY
+  ANY -- nu --> EXH
+  EXH -- nu --> RELAX --> LEX
+  EXH -- da --> EMPTY
+  ANY -- da --> SAFE --> DIV
+  DIV -- da --> DIVER --> PAGE1
+  DIV -- nu --> PAGE1
+  PAGE1 --> TEL --> SESS --> BRAND
+  BRAND -- da --> BDISC
+  BRAND -- nu --> RC --> RES

@@ -1,0 +1,83 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 2 — Application Startup
+flowchart TD
+  classDef proc fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef gate fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+
+  subgraph WorkerBoot["worker: python -m src.worker.consumer"]
+    W0["_main consumer.py:364"]:::proc
+    W1["get_pool — admin pool"]:::step
+    W2{"assert_migrations_current<br/>scripts/migrate.py"}:::gate
+    W3["get_bot_pool EAGER"]:::step
+    W4{"current_user == bot_runtime?<br/>connection.py:96"}:::gate
+    W5["register pgvector codec<br/>connection.py:138"]:::step
+    W6["get_redis"]:::step
+    W7["build_registry — Meta/TG senders<br/>dispatcher.py:348"]:::step
+    W8["ensure_group XGROUP MKSTREAM<br/>consumer.py:81"]:::step
+    W9["run_consumer loop READY"]:::proc
+    WFAIL["BOOT REFUSED — crash loud"]:::gate
+  end
+
+  subgraph WebhookBoot["webhook: uvicorn src.webhook.app"]
+    A0["FastAPI app import app.py:22"]:::proc
+    A1["body-size middleware app.py:25"]:::step
+    A2{"web_enabled?"}:::gate
+    A3["mount /web router + CORS<br/>app.py:159-177"]:::step
+    A4["serve READY"]:::proc
+  end
+
+  subgraph DispatcherBoot["dispatcher: python -m src.worker.dispatcher"]
+    D0["_main dispatcher.py:369"]:::proc
+    D1["get_pool + get_bot_pool eager"]:::step
+    D2{"web_enabled?"}:::gate
+    D3["get_redis → WebSender"]:::step
+    D4["build_registry by credentials"]:::step
+    D5["run_dispatcher loop READY"]:::proc
+  end
+
+  subgraph OtherBoot["scheduler / proactive / telegram-poller"]
+    J0["jobs._main scheduler.py:224<br/>job list built by flags :122-162"]:::proc
+    J1["loop: run due jobs + heartbeat<br/>scheduler.py:186-194"]:::step
+    P0["proactive._main scheduler.py:262"]:::proc
+    P1{"proactive_enabled? :265"}:::gate
+    P2["get_pool + get_bot_pool eager<br/>:268-269"]:::step
+    P3["run_scheduler loop READY"]:::proc
+    PX["exit — process ends :266-267"]:::gate
+    T0["poller._main poller.py:118"]:::proc
+    T1{"telegram_bot_token? :122"}:::gate
+    T2["get_me → account_id :129-130"]:::step
+    T3["run_poller loop READY"]:::proc
+    TX2["exit — no token :123-124"]:::gate
+  end
+
+  subgraph Config["Configuration"]
+    CFG["Settings pydantic-settings<br/>config.py:19 — .env"]:::db
+  end
+
+  CFG -.-> W0
+  CFG -.-> A0
+  CFG -.-> D0
+  CFG -.-> J0
+  J0 --> J1
+  P0 --> P1
+  P1 -- no --> PX
+  P1 -- yes --> P2 --> P3
+  T0 --> T1
+  T1 -- no --> TX2
+  T1 -- yes --> T2 --> T3
+  W0 --> W1 --> W2
+  W2 -- "pending migration" --> WFAIL
+  W2 -- ok --> W3 --> W4
+  W4 -- "wrong role" --> WFAIL
+  W4 -- ok --> W5 --> W6 --> W7 --> W8 --> W9
+  A0 --> A1 --> A2
+  A2 -- yes --> A3 --> A4
+  A2 -- no --> A4
+  D0 --> D1 --> D2
+  D2 -- yes --> D3 --> D4
+  D2 -- no --> D4
+  D4 --> D5

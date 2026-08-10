@@ -1,0 +1,103 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 3 — User Message Workflow (async: WhatsApp / Telegram / web-SSE)
+flowchart TD
+  classDef edge fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef queue fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+  classDef err fill:#f1948a,stroke:#922b21,color:#000
+
+  MSG["Mesaj primit<br/>(WhatsApp / Telegram / site)"]:::edge
+  CAP{"Mesajul e anormal de mare?<br/>(apărare anti-OOM) (app.py:99-101)"}:::dec
+  R413["Refuzat: prea mare (413)"]:::err
+  SIG{"Semnătura Meta e autentică?<br/>(webhook/app.py:103)"}:::dec
+  JSONV{"E JSON valid? (:106-109)"}:::dec
+  R400["Refuzat: cerere stricată (400)"]:::err
+  R403["Refuzat: semnătură falsă (403)"]:::err
+  DED1{"L-am mai văzut? — Meta re-trimite<br/>agresiv; doar MESAJELE se deduplică<br/>(redis_bus.py:53)"}:::dec
+  SKIP1["Ignorat: e o dublură"]:::step
+  XADD["Pus la coadă în Redis<br/>(limită ~100k — sub avalanșă cele mai<br/>vechi se PIERD) (redis_bus.py:68-73)"]:::queue
+  RDOWN{"Redis e căzut?"}:::dec
+  R503["503 → Meta va re-încerca"]:::err
+  ACK200["Confirmăm către Meta imediat<br/>(sub 50ms)"]:::step
+
+  XREAD["Un worker ia mesajul din coadă<br/>(consumer.py:245)"]:::step
+  KIND{"Ce fel de eveniment e?<br/>(process_event :123, :155-158)"}:::dec
+  TYPING["Arătăm «scrie...» instant (:74-81)"]:::step
+  DEB["Așteptăm 3s să termine de scris —<br/>o rafală de mesaje devine UNUL<br/>(debounce.py:57)"]:::step
+  ORDERK["Comandă nouă de pe site → o legăm<br/>de conversație (webhook/orders.py:64)"]:::step
+  RESOLVE["Aflăm CĂRUI magazin îi aparține<br/>(canal → business) (consumer.py:145)"]:::db
+  STATUSK["Notăm statusul: livrat / citit / eșuat"]:::db
+  LOCK{"Conversația e deja în lucru?<br/>(lacăt per conversație)"}:::dec
+  REQUEUE["Ocupat → repunem la coadă<br/>cu pauză (:96-102)"]:::queue
+  DROPQ["Prea multe reîncercări → mesaj<br/>PIERDUT (doar log) (:99-100)"]:::err
+  ADM{"Magazinul are loc liber?<br/>(frână de concurență) (:197-210)"}:::dec
+  REQA["Peste capacitate → repus la coadă,<br/>NIMIC pierdut (:106-119)"]:::queue
+  LOADB["Încărcăm magazinul + configurația<br/>lui de vertical (consumer.py:222)"]:::db
+  CBK{"E o apăsare de buton (carusel)?"}:::dec
+  CAROUSEL["Navigare în carusel — drum determinist,<br/>fără AI (callback.py:71)"]:::step
+
+  HT["Începe procesarea turului<br/>(processor.py:200)"]:::step
+  DED2{"Dublură scăpată de Redis?<br/>(plasa a doua, în DB) (:238)"}:::dec
+  SKIP2["Ignorat: deja procesat"]:::step
+  CTX["Încărcăm: cine e clientul, conversația,<br/>ultimele 8 mesaje, starea, faptele știute"]:::db
+  SEEDC["Pornim contorul de cost al zilei (:336)"]:::step
+  GUARD{"Magazinul a depășit bugetul zilnic<br/>de AI? (:116)"}:::dec
+  NOLLM["AI oprit pe azi → răspundem degradat,<br/>dar RĂSPUNDEM"]:::err
+  PIPE["Rulăm cele 11 stagii → Diagram 4a"]:::step
+  REPLY{"A ieșit un răspuns?"}:::dec
+  HALT["Tăcere intenționată — logată (:361)"]:::step
+  DISC["Adăugăm disclaimerul, dacă e cazul (:368)"]:::step
+  SPLIT{"Text prea lung (și nu e cu carduri)?"}:::dec
+  FRAG["Îl spargem în maxim 2 mesaje"]:::step
+  TX["Salvăm TOTUL dintr-o mișcare: mesajele +<br/>coada de trimis + starea discuției<br/>(:382-492)"]:::db
+  POST["După răspuns, în fundal: cache, rezumat,<br/>profil, fapte noi — cu conexiunea DB<br/>deja eliberată (consumer.py:236 · aftercare.py:444)"]:::step
+
+  DISP["Dispecerul (alt proces) ia din coadă<br/>ce e de trimis"]:::step
+  RENDER{"Alegem forma după ce POATE canalul:<br/>carduri / carusel / șablon / text<br/>(dispatcher.py:101)"}:::dec
+  SEND["Trimitem prin canal (Meta / Telegram)"]:::edge
+  SENT["Marcat trimis + legăm id-ul de la<br/>provider (dispatcher.py:215)"]:::db
+  FAIL["Eșec → reîncercăm cu pauze crescânde<br/>→ marcat mort (dispatcher.py:211)"]:::err
+  RP["Notăm când forma cerută ≠ forma<br/>livrată (dispatcher.py:69-98)"]:::step
+
+  MSG --> CAP
+  CAP -- da --> R413
+  CAP -- nu --> SIG
+  SIG -- nu --> R403
+  SIG -- da --> JSONV
+  JSONV -- nu --> R400
+  JSONV -- da --> DED1
+  DED1 -- da --> SKIP1
+  DED1 -- nu --> XADD --> RDOWN
+  RDOWN -- da --> R503
+  RDOWN -- nu --> ACK200
+  XADD -.-> XREAD --> KIND
+  KIND -- mesaj --> TYPING --> DEB
+  KIND -- comandă --> ORDERK
+  KIND -- "status / buton" --> RESOLVE
+  DEB -- "trimite după 3s de liniște" --> RESOLVE
+  RESOLVE --> STATUSK
+  RESOLVE --> LOCK
+  LOCK -- ocupat --> REQUEUE
+  REQUEUE -- "limita depășită" --> DROPQ
+  LOCK -- liber --> ADM
+  ADM -- "peste capacitate" --> REQA
+  ADM -- admis --> LOADB --> CBK
+  CBK -- da --> CAROUSEL
+  CBK -- nu --> HT --> DED2
+  DED2 -- "deja procesat" --> SKIP2
+  DED2 -- "revendicat" --> CTX --> SEEDC --> GUARD
+  GUARD -- da --> NOLLM --> PIPE
+  GUARD -- nu --> PIPE
+  PIPE --> REPLY
+  REPLY -- nu --> HALT
+  REPLY -- da --> DISC --> SPLIT
+  SPLIT -- da --> FRAG --> TX
+  SPLIT -- nu --> TX
+  TX --> POST
+  TX -.-> DISP --> RENDER --> SEND
+  SEND -- ok --> SENT --> RP
+  SEND -- eroare --> FAIL

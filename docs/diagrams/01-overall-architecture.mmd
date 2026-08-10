@@ -1,0 +1,75 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 1 — Overall Architecture
+flowchart LR
+  classDef user fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef edge fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef queue fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef worker fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef ai fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+  classDef ext fill:#fad7a0,stroke:#af601a,color:#000
+  classDef bg fill:#a3e4d7,stroke:#148f77,color:#000
+
+  subgraph Users["Users"]
+    WA_USER["WhatsApp customer"]:::user
+    TG_USER["Telegram tester"]:::user
+    WEB_USER["Website visitor widget"]:::user
+    SHOP["Shop platform orders"]:::ext
+  end
+
+  subgraph Ingress["Ingress Edges — thin, no DB"]
+    WEBHOOK["GET /webhook verify · POST /webhook<br/>signature + dedupe L1"]:::edge
+    ORDERS["POST /webhook/orders/:biz<br/>HMAC"]:::edge
+    WEB_API["GET /web/bootstrap session<br/>POST /web/messages async · POST /web/chat sync"]:::edge
+    POLLER["Telegram poller<br/>getUpdates loop"]:::edge
+  end
+
+  subgraph Queue["Redis Backbone"]
+    STREAM[("Stream 'inbound'<br/>XADD / XREADGROUP")]:::queue
+    LOCKS[("conv locks · dedupe L1<br/>cost counters · SSE pub/sub")]:::queue
+  end
+
+  subgraph Worker["Worker process"]
+    CONSUMER["Consumer + Debouncer 3s"]:::worker
+    PROCESSOR["handle_turn<br/>contact→conv→pipeline→outbox TX"]:::worker
+    PIPELINE["Pipeline 11 stages<br/>gates→free layers→triage→agent"]:::ai
+  end
+
+  subgraph Egress["Egress"]
+    OUTBOX[("outbox table")]:::db
+    DISPATCHER["Dispatcher<br/>claim_due → send → mark"]:::worker
+    META_C["MetaClient"]:::ext
+    TG_C["TelegramClient"]:::ext
+    WEB_S["WebSender → SSE"]:::ext
+  end
+
+  subgraph Background["Background processes"]
+    JOBS["jobs.scheduler — 7 joburi<br/>rollup_usage·rollup_demand·embed·lifecycle<br/>cleanup·partition_maintenance·initiators"]:::bg
+    PROACTIVE["proactive.scheduler<br/>proactive_jobs → outbox"]:::bg
+  end
+
+  subgraph Data["Data plane"]
+    PG[("Supabase Postgres 16<br/>RLS bot_runtime + admin pool")]:::db
+    OPENAI["OpenAI API<br/>nano triage · mini agent<br/>embed · vision · moderation"]:::ai
+  end
+
+  WA_USER --> WEBHOOK --> STREAM
+  SHOP --> ORDERS --> STREAM
+  WEB_USER --> WEB_API
+  WEB_API -- "async envelope" --> STREAM
+  WEB_API -- "sync in-process" --> PROCESSOR
+  TG_USER --> POLLER --> STREAM
+  STREAM --> CONSUMER --> PROCESSOR --> PIPELINE
+  PIPELINE <--> OPENAI
+  PIPELINE <--> PG
+  PROCESSOR --> OUTBOX --> DISPATCHER
+  DISPATCHER --> META_C --> WA_USER
+  DISPATCHER --> TG_C --> TG_USER
+  DISPATCHER --> WEB_S -- "SSE /web/stream" --> WEB_USER
+  JOBS --> PG
+  JOBS --> PROACTIVE
+  PROACTIVE --> OUTBOX
+  CONSUMER <--> LOCKS
+  CONSUMER -. "typing direct — ocolește outbox<br/>consumer.py:63-81" .-> META_C

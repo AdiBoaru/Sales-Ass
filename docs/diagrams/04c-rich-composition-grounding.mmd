@@ -1,0 +1,43 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 4c — Rich Composition & Grounding (compose.py — adăugată la auditul adversarial)
+flowchart TD
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef free fill:#a3e4d7,stroke:#148f77,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef err fill:#f1948a,stroke:#922b21,color:#000
+
+  AXES["decision_axes + spec_numbers — NX-139<br/>axe REALE pe care variază setul<br/>compose.py:696 · :739"]:::step
+  BNDL["_rich_bundle: facts per product<br/>facets from DomainPack — agent/finalize.py:229"]:::step
+  JIN["structured JSON from mini<br/>complete_schema + _RICH_SCHEMA — agent/finalize.py:266"]:::llm
+
+  ASM["assemble — hydrate by product_id refs<br/>compose.py:344"]:::step
+  MEM{"item references a REAL<br/>retrieved product?"}:::dec
+  DROPI["item dropped — membership grounding"]:::err
+
+  SCRB["scrub field-by-field: intro / fit / education<br/>digits · % · unverifiable claims → field=None<br/>scrub_prose :132 · scrub_intro :161 · scrub_education :283"]:::step
+  MED{"medical claim in field?<br/>_unsafe_medical :125"}:::dec
+  DROPF["field DROPPED — P0 safety<br/>liability, not style"]:::err
+
+  BDG["badge from REAL signals only<br/>deal > top, DomainPack thresholds<br/>badges.py:36-78 — gated card_badges_enabled"]:::free
+  PICK["_select_pick deterministic :308<br/>suppressed when off-category :95"]:::step
+  STK["drop unfounded stock line"]:::step
+  CHIPS["suggestion chips<br/>client voice → NO scrub"]:::step
+  FLAT["flatten / flatten_framing :500 · :534<br/>floor text for non-rich channels"]:::step
+  OUTR["RichReply → set_rich_reply<br/>models.py:580"]:::out
+
+  CMPB["build_comparison :757<br/>facet_summary :681 + axes + spec numbers<br/>lead determinist — ZERO LLM in cells"]:::free
+  OUTC["Comparison → set_comparison_reply<br/>models.py:596"]:::out
+
+  AXES --> JIN
+  BNDL --> JIN
+  JIN --> ASM --> MEM
+  MEM -- no --> DROPI
+  MEM -- yes --> SCRB --> MED
+  MED -- yes --> DROPF --> BDG
+  MED -- no --> BDG
+  BDG --> PICK --> STK --> CHIPS --> FLAT --> OUTR
+  CMPB --> OUTC

@@ -390,6 +390,34 @@ def check_citations(doc_text: str) -> list[str]:
     return problems
 
 
+def check_exports() -> list[str]:
+    """Exporturile per-figură (docs/diagrams/*.mmd) sunt sincronizate cu documentul.
+
+    `scripts/export_diagrams.py` generează fișierele; poarta doar VERIFICĂ — un export
+    divergent sau orfan e o diagramă care minte pe alt canal decât documentul. Rulat prin
+    modulul de export (aceeași logică, un singur loc), nu duplicat aici.
+    """
+    try:
+        import export_diagrams  # același folder scripts/ — pe sys.path la rulare ca script
+    except ImportError:
+        return ["[exports] scripts/export_diagrams.py nu poate fi importat"]
+    problems: list[str] = []
+    wanted = export_diagrams.extract()
+    names = {n for n, _, _ in wanted}
+    out = export_diagrams.OUT
+    for name, title, code in wanted:
+        path = out / name
+        if not path.exists():
+            problems.append(f"[exports] lipsește {name} — rulează scripts/export_diagrams.py")
+        elif path.read_text(encoding="utf-8") != export_diagrams.render_file(title, code):
+            problems.append(f"[exports] divergent {name} — rulează scripts/export_diagrams.py")
+    if out.exists():
+        for stray in out.glob("*.mmd"):
+            if stray.name not in names:
+                problems.append(f"[exports] orfan {stray.name} (nu mai există în doc)")
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -432,6 +460,7 @@ def main() -> int:
     problems = compare(facts, claims)
     problems += check_mermaid(doc_text)
     problems += check_citations(doc_text)
+    problems += check_exports()
     if problems:
         print(f"FAIL: {args.doc.name} a divergat de cod\n", file=sys.stderr)
         for p in problems:

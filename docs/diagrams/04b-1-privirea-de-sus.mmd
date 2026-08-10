@@ -1,0 +1,24 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 4b — Agent Stage Internals (fazele A–F după modularizare) · figura 1 (privirea-de-sus)
+flowchart LR
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef free fill:#a3e4d7,stroke:#148f77,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  A["A · Pregătire + siguranță:<br/>ce restricții a declarat clientul<br/>(sarcină...) se rețin ACUM<br/>(agent.py:267-295)"]:::safe
+  B["B · Scurtături fără AI:<br/>«dă-mi linkul», «compară-le»,<br/>«detalii», «ce zic recenziile»<br/>(deterministic.py:469)"]:::free
+  C["C · Construim instrucțiunile<br/>pentru AI din datele magazinului<br/>+ tot ce știm din discuție<br/>(agent.py:299-350)"]:::step
+  D["D · AI-ul MARE caută în catalog<br/>cu unelte controlate<br/>(maxim 3 căutări) (llm.py:227)"]:::llm
+  E["E · CODUL decide ce arătăm<br/>de fapt (planner.py:162)"]:::step
+  F["F · Compunem răspunsul + verificăm<br/>fiecare preț și link<br/>(finalize.py:325)"]:::llm
+  X1["Răspuns imediat —<br/>zero cost AI"]:::out
+  X2["«mai arată-mi» → pagina următoare<br/>din ce am găsit deja"]:::free
+
+  A --> B
+  B -- "scurtătură prinsă" --> X1
+  B --> C --> D --> E --> F
+  C -- "«mai arată-mi»" --> X2 --> E

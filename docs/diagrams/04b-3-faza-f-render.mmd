@@ -1,0 +1,48 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 4b — Agent Stage Internals (fazele A–F după modularizare) · figura 3 (faza-f-render)
+flowchart TD
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef free fill:#a3e4d7,stroke:#148f77,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+
+  APLAN{"Modul strict «answer plan» e pornit?<br/>(azi: OPRIT) (agent.py:396)"}:::dec
+  AGUARD["Verificare suplimentară cu AI<br/>(answer_plan_guard.py:20)"]:::llm
+  CMPD{"A cerut o COMPARAȚIE?"}:::dec
+  CTAB["Tabel comparativ făcut de COD —<br/>AI-ul nu scrie nicio cifră în celule"]:::free
+  PRD{"Avem produse de arătat?"}:::dec
+  RICHC["AI-ul compune recomandarea<br/>structurată (carduri) (:266)"]:::llm
+  ROK{"A ieșit ceva valid?"}:::dec
+  RICHOUT["Trimitem cardurile + butonul de plată<br/>+ notăm ce am recomandat"]:::out
+  DOWN["Cădem pe text simplu —<br/>motivul se înregistrează (:396)"]:::step
+  VALID{"Verificăm textul: fiecare preț, link,<br/>cifră, afirmație de stoc sau sănătate<br/>(validator.py:195)"}:::dec
+  RETRY["O reîncercare, cu explicația greșelii"]:::llm
+  V2{"Acum e valid?"}:::dec
+  DETR["Formulare scrisă de cod, fără cifre"]:::free
+  PROSE["Text + carduri către client"]:::out
+  ORD{"Era despre o comandă?"}:::dec
+  GRND["Răspuns legat STRICT de datele<br/>comenzii lui (:149)"]:::llm
+  TXTOK{"Text sigur, fără produse?<br/>(o clarificare, de pildă)"}:::dec
+  NORES["«Nu am găsit» sigur + butoane de<br/>continuare — NU se salvează în cache (:211)"]:::out
+
+  APLAN -- da --> AGUARD
+  APLAN -- nu --> CMPD
+  CMPD -- da --> CTAB
+  CMPD -- nu --> PRD
+  PRD -- "da + vânzare" --> RICHC --> ROK
+  ROK -- da --> RICHOUT
+  ROK -- nu --> DOWN --> VALID
+  PRD -- "da + comandă" --> VALID
+  VALID -- ok --> PROSE
+  VALID -- invalid --> RETRY --> V2
+  V2 -- da --> PROSE
+  V2 -- nu --> DETR
+  PRD -- "nu, dar există text" --> ORD
+  ORD -- da --> GRND
+  ORD -- nu --> TXTOK
+  TXTOK -- da --> PROSE
+  TXTOK -- nu --> NORES
+  PRD -- "nu, fără text" --> NORES
