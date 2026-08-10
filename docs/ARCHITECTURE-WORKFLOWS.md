@@ -154,7 +154,7 @@ flowchart LR
   JOBS --> PROACTIVE
   PROACTIVE --> OUTBOX
   CONSUMER <--> LOCKS
-  CONSUMER -. "typing direct — bypasses outbox<br/>consumer.py:59-78" .-> META_C
+  CONSUMER -. "typing direct — ocolește outbox<br/>consumer.py:63-81" .-> META_C
 ```
 
 **Metadata (noduri cheie):**
@@ -169,17 +169,17 @@ flowchart LR
 | Stream inbound       | `src/redis_bus.py:66`                | `enqueue_inbound()`  | XADD cu maxlen ~100k                                                        |
 | Consumer             | `src/worker/consumer.py:333`         | `run_consumer()`     | XREADGROUP + debounce + reaper PEL                                          |
 | handle_turn          | `src/worker/processor.py:200`        | `handle_turn()`      | Miezul turului: dedupe L2 → context → pipeline → outbox TX               |
-| Pipeline             | `src/worker/runner.py:47`            | `run_pipeline()`     | Stagii în ordine fixă, early-exit pe reply/halt, măsoară                |
-| Dispatcher           | `src/worker/dispatcher.py:245`       | `run_dispatcher()`   | Singurul punct de trimitere: outbox → ChannelSender                        |
+| Pipeline             | `src/worker/runner.py:62`            | `run_pipeline()`     | Stagii în ordine fixă, early-exit pe reply/halt, măsoară                |
+| Dispatcher           | `src/worker/dispatcher.py:325`       | `run_dispatcher()`   | Singurul punct de trimitere: outbox → ChannelSender                        |
 | MetaClient           | `src/meta_client.py:28`              | `MetaClient`         | WhatsApp Cloud API send (text/template/typing)                              |
-| TelegramClient       | `src/channels/telegram/client.py:62` | `TelegramClient`     | Bot API send + edit carusel                                                 |
+| TelegramClient       | `src/channels/telegram/client.py:78` | `TelegramClient`     | Bot API send + edit carusel                                                 |
 | WebSender            | `src/channels/web/sender.py:34`      | `WebSender`          | Publish SSE pe`web:out:{visitor}` + backlog replay                        |
-| Proactive            | `src/proactive/scheduler.py:181`     | `run_scheduler()`    | Joburi scadente → poartă consent/24h → outbox                            |
+| Proactive            | `src/proactive/scheduler.py:253`     | `run_scheduler()`    | Joburi scadente → poartă consent/24h → outbox                            |
 | Jobs scheduler       | `src/jobs/scheduler.py:132`          | `Job` loop           | rollup_usage · rollup_demand · embed_products · lifecycle · cleanup_dedupe · partition_maintenance · proactive_initiators |
 | GET /webhook         | `src/webhook/app.py:62`              | `verify_webhook()`   | Handshake verificare Meta (token → challenge / 403)                        |
 | GET /web/bootstrap   | `src/web/app.py:136`                 | `web_bootstrap()`    | Emite sesiunea vizitatorului (HMAC) + verificare Origin server-side         |
-| Rich compose         | `src/worker/compose.py:329`          | `assemble()`         | Lanțul de grounding al căii bogate — v. Diagram 4c                       |
-| Proactive gate       | `src/proactive/templates.py:39`      | `decide_proactive()` | Consent per kind + fereastra 24h + template aprobat — v. Diagram 10        |
+| Rich compose         | `src/worker/compose.py:344`          | `assemble()`         | Lanțul de grounding al căii bogate — v. Diagram 4c                       |
+| Proactive gate       | `src/proactive/templates.py:83`      | `decide_proactive()` | Consent per kind + fereastra 24h + template aprobat — v. Diagram 10        |
 
 ---
 
@@ -193,14 +193,14 @@ flowchart TD
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
 
   subgraph WorkerBoot["worker: python -m src.worker.consumer"]
-    W0["_main consumer.py:306"]:::proc
+    W0["_main consumer.py:364"]:::proc
     W1["get_pool — admin pool"]:::step
     W2{"assert_migrations_current<br/>scripts/migrate.py"}:::gate
     W3["get_bot_pool EAGER"]:::step
     W4{"current_user == bot_runtime?<br/>connection.py:96"}:::gate
     W5["register pgvector codec<br/>connection.py:138"]:::step
     W6["get_redis"]:::step
-    W7["build_registry — Meta/TG senders<br/>dispatcher.py:254"]:::step
+    W7["build_registry — Meta/TG senders<br/>dispatcher.py:348"]:::step
     W8["ensure_group XGROUP MKSTREAM<br/>consumer.py:81"]:::step
     W9["run_consumer loop READY"]:::proc
     WFAIL["BOOT REFUSED — crash loud"]:::gate
@@ -215,7 +215,7 @@ flowchart TD
   end
 
   subgraph DispatcherBoot["dispatcher: python -m src.worker.dispatcher"]
-    D0["_main dispatcher.py:275"]:::proc
+    D0["_main dispatcher.py:369"]:::proc
     D1["get_pool + get_bot_pool eager"]:::step
     D2{"web_enabled?"}:::gate
     D3["get_redis → WebSender"]:::step
@@ -224,13 +224,13 @@ flowchart TD
   end
 
   subgraph OtherBoot["scheduler / proactive / telegram-poller"]
-    J0["jobs._main scheduler.py:197<br/>job list built by flags :122-162"]:::proc
+    J0["jobs._main scheduler.py:224<br/>job list built by flags :122-162"]:::proc
     J1["loop: run due jobs + heartbeat<br/>scheduler.py:186-194"]:::step
-    P0["proactive._main scheduler.py:190"]:::proc
-    P1{"proactive_enabled? :193"}:::gate
-    P2["get_pool + get_bot_pool eager<br/>:196-197"]:::step
+    P0["proactive._main scheduler.py:262"]:::proc
+    P1{"proactive_enabled? :265"}:::gate
+    P2["get_pool + get_bot_pool eager<br/>:268-269"]:::step
     P3["run_scheduler loop READY"]:::proc
-    PX["exit — process ends :194-195"]:::gate
+    PX["exit — process ends :266-267"]:::gate
     T0["poller._main poller.py:118"]:::proc
     T1{"telegram_bot_token? :122"}:::gate
     T2["get_me → account_id :129-130"]:::step
@@ -267,8 +267,8 @@ flowchart TD
   D4 --> D5
 ```
 
-Evidență: poarta de boot pe migrări `src/worker/consumer.py:315-321`; assert rol `bot_runtime` `src/db/connection.py:96-107`; pool eager („parolă greșită crapă la boot, nu la primul mesaj") `src/worker/consumer.py:322`.
-**Shutdown** (audit adversarial): worker `finally: close_media + close_redis + close_pool` (`consumer.py:331-334`); dispatcher idem (`dispatcher.py:286-289`). Singletoni lazy la runtime (nu la boot): `get_llm`, `get_media_registry` (`channels/media.py:34-43`), `SessionSecretCache` (`web/session.py:98-101`).
+Evidență: poarta de boot pe migrări `src/worker/consumer.py:373-386`; assert rol `bot_runtime` `src/db/connection.py:96-107`; pool eager („parolă greșită crapă la boot, nu la primul mesaj") `src/worker/consumer.py:388`.
+**Shutdown** (audit adversarial): worker `finally: close_media + close_redis + close_pool` (`consumer.py:397-401`); dispatcher idem (`dispatcher.py:286-289`). Singletoni lazy la runtime (nu la boot): `get_llm`, `get_media_registry` (`channels/media.py:34-43`), `SessionSecretCache` (`web/session.py:98-101`).
 
 ---
 
@@ -664,27 +664,27 @@ flowchart TD
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
   classDef err fill:#f1948a,stroke:#922b21,color:#000
 
-  AXES["decision_axes + spec_numbers — NX-139<br/>axe REALE pe care variază setul<br/>compose.py:661 · :704 — gated :708"]:::step
+  AXES["decision_axes + spec_numbers — NX-139<br/>axe REALE pe care variază setul<br/>compose.py:696 · :739"]:::step
   BNDL["_rich_bundle: facts per product<br/>facets from DomainPack — agent/finalize.py:229"]:::step
   JIN["structured JSON from mini<br/>complete_schema + _RICH_SCHEMA — agent/finalize.py:266"]:::llm
 
-  ASM["assemble — hydrate by product_id refs<br/>compose.py:329"]:::step
+  ASM["assemble — hydrate by product_id refs<br/>compose.py:344"]:::step
   MEM{"item references a REAL<br/>retrieved product?"}:::dec
   DROPI["item dropped — membership grounding"]:::err
 
-  SCRB["scrub field-by-field: intro / fit / education<br/>digits · % · unverifiable claims → field=None<br/>scrub_prose :131 · scrub_intro :160 · scrub_education :268"]:::step
-  MED{"medical claim in field?<br/>_unsafe_medical :124"}:::dec
+  SCRB["scrub field-by-field: intro / fit / education<br/>digits · % · unverifiable claims → field=None<br/>scrub_prose :132 · scrub_intro :161 · scrub_education :283"]:::step
+  MED{"medical claim in field?<br/>_unsafe_medical :125"}:::dec
   DROPF["field DROPPED — P0 safety<br/>liability, not style"]:::err
 
   BDG["badge from REAL signals only<br/>deal > top, DomainPack thresholds<br/>badges.py:36-78 — gated card_badges_enabled"]:::free
-  PICK["_select_pick deterministic :293<br/>suppressed when off-category :95"]:::step
-  STK["drop unfounded stock line :260"]:::step
-  CHIPS["suggestion chips :232<br/>client voice → NO scrub"]:::step
-  FLAT["flatten / flatten_framing :466 · :499<br/>floor text for non-rich channels"]:::step
-  OUTR["RichReply → set_rich_reply<br/>models.py:540"]:::out
+  PICK["_select_pick deterministic :308<br/>suppressed when off-category :95"]:::step
+  STK["drop unfounded stock line"]:::step
+  CHIPS["suggestion chips<br/>client voice → NO scrub"]:::step
+  FLAT["flatten / flatten_framing :500 · :534<br/>floor text for non-rich channels"]:::step
+  OUTR["RichReply → set_rich_reply<br/>models.py:580"]:::out
 
-  CMPB["build_comparison :722<br/>facet_summary :646 + axes + spec numbers<br/>deterministic lead :590 — ZERO LLM in cells"]:::free
-  OUTC["Comparison → set_comparison_reply<br/>models.py:556"]:::out
+  CMPB["build_comparison :757<br/>facet_summary :681 + axes + spec numbers<br/>lead determinist — ZERO LLM in cells"]:::free
+  OUTC["Comparison → set_comparison_reply<br/>models.py:596"]:::out
 
   AXES --> JIN
   BNDL --> JIN
@@ -697,7 +697,7 @@ flowchart TD
   CMPB --> OUTC
 ```
 
-Cine o folosește: `_finalize_rich` (agent/finalize.py:266-311, recomandare + cross-sell) și randorul web (`flatten_framing` la `channels/web/render.py:150`). Comparația (CMPB) e apelată din ambele căi de compare (agent/deterministic.py:469, :1315).
+Cine o folosește: `_finalize_rich` (agent/finalize.py:266-311, recomandare + cross-sell) și randorul web (`flatten_framing` la `channels/web/render.py:127`). Comparația (CMPB) e apelată din ambele căi de compare (`agent/deterministic.py:422, :455` și `agent/finalize.py:348`).
 
 ---
 
@@ -854,16 +854,16 @@ flowchart TD
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
 
   subgraph Pools["Two pools — connection.py"]
-    ADMIN["admin_pool — privileged<br/>get_pool :76 — control plane ONLY"]:::pool
-    BOT["bot_pool — role bot_runtime, NO bypassrls<br/>get_bot_pool :207"]:::pool
+    ADMIN["admin_pool — privileged<br/>get_pool :78 — control plane ONLY"]:::pool
+    BOT["bot_pool — role bot_runtime, NO bypassrls<br/>get_bot_pool :209"]:::pool
   end
 
-  subgraph Tenant["tenant_conn checkout — connection.py:261"]
+  subgraph Tenant["tenant_conn checkout — connection.py:270"]
     SETBIZ["set_config app.business_id"]:::step
-    ISO{"isolation assert:<br/>role + GUC match? :187"}:::dec
+    ISO{"isolation assert:<br/>role + GUC match? :191"}:::dec
     ISOERR["IsolationError — log CRITICAL<br/>reset GUC, raise"]:::err
     RLS["RLS policies filter every query<br/>wrong query → 0 rows, not other tenant"]:::db
-    RESET["reset GUC on release :294"]:::step
+    RESET["reset GUC on release :309"]:::step
   end
 
   subgraph Reads["Hot reads — bot_pool"]
@@ -884,7 +884,7 @@ flowchart TD
 
   CTRL["resolve_channel: provider_account_id → business_id<br/>the ONLY pre-tenant lookup — channels.py"]:::step
   JOBS["admin jobs: rollup usage/demand · embed<br/>cleanup · lifecycle · partiții"]:::step
-  SSC["in-process SessionSecretCache LRU+TTL<br/>+ NEGATIVE cache anti-flood<br/>web/session.py:67-101"]:::step
+  SSC["in-process SessionSecretCache LRU+TTL<br/>+ NEGATIVE cache anti-flood<br/>web/session.py:73-101"]:::step
 
   SSC -- miss --> ADMIN
   ADMIN --> CTRL
@@ -904,7 +904,7 @@ flowchart TD
   RLS --> WLOC
 ```
 
-Tranzacția Sender (mesaje + outbox + state + dedupe-complete, atomic): `src/worker/processor.py:382-492`. Scrierile best-effort rulează în savepoint propriu (`processor.py:159-161, 218, 278`).
+Tranzacția Sender (mesaje + outbox + state + dedupe-complete, atomic): `src/worker/processor.py:382-492`. Scrierile best-effort (analytics, cache, rezumat) rulează în `try/except` propriu, cu tranzacții imbricate unde e nevoie (`aftercare.py:72-87, :165, :227`) — un eșec se loghează, turul continuă.
 
 ---
 
@@ -922,7 +922,7 @@ flowchart LR
     MINI["chat mini: agent tool loop :227<br/>compose :211 · schema :188"]:::llm
     EMBD["embeddings: cache/FAQ/search/products"]:::llm
     MOD["moderation — free, gates"]:::llm
-    VISN["vision: photo → search query :109"]:::llm
+    VISN["vision: photo → search query :305"]:::llm
     RTY["bounded retry _with_retry :45<br/>respects Retry-After"]:::sys
   end
 
@@ -938,12 +938,12 @@ flowchart LR
 
   subgraph TG["Telegram Bot API"]
     TIN["long polling getUpdates<br/>poller.py:70"]:::ext
-    TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:62"]:::ext
+    TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:78"]:::ext
   end
 
   subgraph Web["Web widget — FE repo separat"]
     WIN["POST /web/messages · /chat HMAC session"]:::ext
-    WOUT2["SSE /web/stream + backlog replay<br/>web/app.py:279"]:::ext
+    WOUT2["SSE /web/stream + backlog replay<br/>web/app.py:300"]:::ext
   end
 
   subgraph Shop["Shop platform"]
@@ -993,27 +993,27 @@ flowchart TD
   subgraph LLMErr["LLM failures"]
     L1["API error / 429"]:::err
     L2{"bounded retry ok?<br/>llm.py:45"}:::dec
-    L3["triage fail → route None<br/>triage.py:247-251"]:::deg
+    L3["triage fail → route None<br/>triage.py:316"]:::deg
     L4["agent loop fail → return<br/>stages/agent.py:370"]:::deg
     L5["fallback_stage: clarify question<br/>NEVER silence — runner.py:169"]:::ok
   end
 
   subgraph ValErr["Validator failures — agent/validator.py:195"]
     V1{"reply valid? prices/links/claims"}:::dec
-    V2["1 retry with allowed prices :587"]:::deg
+    V2["1 retry with allowed prices<br/>finalize.py:94-148"]:::deg
     V3{"valid now?"}:::dec
-    V4["deterministic reply from DB products :595"]:::ok
+    V4["deterministic reply from DB products<br/>finalize.py:94-148"]:::ok
   end
 
-  subgraph CostErr["Cost guard — processor.py:308"]
+  subgraph CostErr["Cost guard — limits.py:59-91 · processor.py:116"]
     C1{"daily cap business/contact hit?"}:::dec
     C2["llm=None: gates + cache still work<br/>LLM stages skip"]:::deg
   end
 
   subgraph InfraErr["Infra failures"]
-    I1["Redis down at webhook → 503, Meta retries<br/>webhook/app.py:119"]:::err
-    I2["cache/FAQ error → miss, turn continues<br/>cache.py:146"]:::deg
-    I3["analytics fail → log only<br/>processor.py:112"]:::deg
+    I1["Redis down at webhook → 503, Meta retries<br/>webhook/app.py:127-128"]:::err
+    I2["cache/FAQ error → miss, turn continues<br/>cache.py:169"]:::deg
+    I3["analytics fail → log only<br/>aftercare.py:86"]:::deg
     I4["conv lock busy → requeue capped<br/>consumer.py:96-102"]:::deg
     I5["consumer crash mid-turn → un-ACKed<br/>reaper XAUTOCLAIM re-claims :293"]:::ok
     I6["processing exception → ACK + log<br/>consumer.py:286-288 — WARNING: turn LOST"]:::err
@@ -1022,9 +1022,9 @@ flowchart TD
   end
 
   subgraph BgErr["Background process failures"]
-    B1["proactive job crash → mark failed<br/>+ event, clean savepoint<br/>proactive/scheduler.py:148-162"]:::deg
-    B2["maintenance job crash → log + skip,<br/>retry next interval — jobs/scheduler.py:101-108"]:::deg
-    B3["poller getUpdates fail → log +<br/>sleep 3s + retry — poller.py:113-115"]:::deg
+    B1["proactive job crash → mark failed<br/>+ event, clean savepoint<br/>proactive/scheduler.py:214-227"]:::deg
+    B2["maintenance job crash → log + skip,<br/>retry next interval — jobs/scheduler.py:117-118"]:::deg
+    B3["poller getUpdates fail → log +<br/>sleep 3s + retry — poller.py:113-116"]:::deg
   end
 
   subgraph SendErr["Delivery failures — dispatcher"]
@@ -1068,37 +1068,37 @@ flowchart TD
   classDef bg fill:#a3e4d7,stroke:#148f77,color:#000
 
   subgraph Feed["FEED — jobs.scheduler runs initiators"]
-    SW1["sweep_abandoned_cart<br/>initiators.py:136-143"]:::bg
-    SW2["sweep_back_in_stock<br/>initiators.py:145-146"]:::bg
+    SW1["sweep_abandoned_cart<br/>initiators.py:49"]:::bg
+    SW2["sweep_back_in_stock<br/>initiators.py:77"]:::bg
     SEAM["event seams — DEFINED, NEVER CALLED:<br/>schedule_awb_update :160 · schedule_follow_up :190<br/>TODO: orders webhook should call them"]:::err
   end
 
   PJ[("proactive_jobs")]:::db
 
-  subgraph Engine["ENGINE — proactive.scheduler loop :181"]
-    CTL["control plane: tenants with due jobs<br/>scheduler.py:170-171"]:::step
-    CLAIM["claim_due_jobs FOR UPDATE SKIP LOCKED<br/>:141 — savepoint per job :146"]:::step
-    ROUTEP["resolve conversation + channel +<br/>recipient identity :65-75"]:::step
-    RERR["no route → ProactiveRouteError<br/>→ mark failed :49-51"]:::err
-    BUILD["build_message_spec — builders.py<br/>text per kind :77"]:::step
-    CANQ{"spec.cancel?<br/>:78"}:::dec
-    CANC["mark cancelled :79-81"]:::out
+  subgraph Engine["ENGINE — proactive.scheduler loop :253"]
+    CTL["control plane: tenants with due jobs<br/>scheduler.py:253-260"]:::step
+    CLAIM["claim_due_jobs FOR UPDATE SKIP LOCKED<br/>:213 — savepoint per job :218-219"]:::step
+    ROUTEP["resolve conversation + channel +<br/>recipient identity :113-120"]:::step
+    RERR["no route → ProactiveRouteError<br/>→ mark failed :63-64, :120-124"]:::err
+    BUILD["build_message_spec — builders.py<br/>text per kind :143"]:::step
+    CANQ{"spec.cancel?<br/>:144"}:::dec
+    CANC["mark cancelled :145-146"]:::out
   end
 
   subgraph Gate["GATE — decide_proactive, templates.py (NX-71)"]
-    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — :39"}:::dec
+    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — templates.py:83"}:::dec
     SK1["skipped_no_optin"]:::out
     WIN{"in 24h window?<br/>is_in_24h_window"}:::dec
     TPL{"approved template<br/>in locale? P11"}:::dec
     SK2["skipped_no_window"]:::out
-    FREE["mode=free → payload type=text<br/>scheduler.py:117-119"]:::step
-    TMPL["mode=template → name+language+params<br/>scheduler.py:106-116"]:::step
+    FREE["mode=free → payload type=text<br/>scheduler.py:184-185"]:::step
+    TMPL["mode=template → name+language+params<br/>scheduler.py:172-183"]:::step
   end
 
-  OB[("outbox — idempotency proactive:job_id<br/>scheduler.py:120-122")]:::db
-  SENTP["mark sent + proactive_enqueued event<br/>:123-129"]:::out
-  FAILP["job exception → mark failed +<br/>proactive_failed event, clean savepoint<br/>:148-162"]:::err
-  DISPP["dispatcher — TEMPLATE capability?<br/>WhatsApp: send_template · else degrade to text<br/>dispatcher.py:117-119"]:::step
+  OB[("outbox — idempotency proactive:job_id<br/>scheduler.py:186-194")]:::db
+  SENTP["mark sent + proactive_enqueued event<br/>:195-200"]:::out
+  FAILP["job exception → mark failed +<br/>proactive_failed event, clean savepoint<br/>:220-227"]:::err
+  DISPP["dispatcher — TEMPLATE capability?<br/>WhatsApp: send_template · else degrade to text<br/>dispatcher.py:158-160, :218"]:::step
 
   SW1 --> PJ
   SW2 --> PJ
