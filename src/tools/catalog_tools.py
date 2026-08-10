@@ -560,7 +560,17 @@ def _session_filters(
     a: SearchArgs, concern_keys: list[str] | None, features: list[str] | None = None
 ) -> dict[str, Any]:
     """Setul canonic de filtre care DEFINEȘTE o sesiune de căutare (baza fp-ului). Rafinarea
-    oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119)."""
+    oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119).
+
+    NX-223 — REGULA: fp-ul conține ORICE argument care schimbă setul de rezultate. `variant_label`
+    e filtru DUR în ambele retrievere (NX-135) și `product_name` schimbă diversificarea + named-miss
+    disclosure; fără ele, „aveți în Warm Beige?" pe același text de query dădea fp identic →
+    `continue_search_session` servea pool-ul VECHI, nefiltrat pe variantă. Un argument nou de
+    filtrare adăugat fără cheie aici = bug tăcut → păzit de guard-ul de completitudine din teste.
+
+    Cele două se NORMALIZEAZĂ (lower + fără diacritice, ca restul lanțului): „warm beige" ≡
+    „Warm Beige" nu trebuie să spargă sesiunea degeaba (P11). String gol → `None` (același fp ca
+    lipsa lui — exact truthiness-ul cu care retrieverul decide dacă aplică clauza)."""
     return {
         "query": a.query,
         "category": a.category,
@@ -570,6 +580,8 @@ def _session_filters(
         "price_max": a.price_max,
         "sort_mode": a.sort_mode,
         "in_stock_only": a.in_stock_only,
+        "variant_label": normalize(a.variant_label) if a.variant_label else None,
+        "product_name": normalize(a.product_name) if a.product_name else None,
     }
 
 

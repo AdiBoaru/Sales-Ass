@@ -327,3 +327,106 @@ def test_active_search_under_8kb_budget():
         "fp": "abcdef0123456789",
     }
     assert len(json.dumps({"active_search": sess}).encode()) < 2000  # mult sub CHECK-ul de 8KB
+
+
+# --- NX-223: fp-ul conține TOT ce filtrează retrieval-ul ------------------------
+
+
+def _args(**kw) -> ct.SearchArgs:
+    return ct.SearchArgs(**{"query": "fond de ten", **kw})
+
+
+def _fp_of(**kw) -> str:
+    return ct._fp(ct._session_filters(_args(**kw), None, None))
+
+
+def _patch_variant_aware(monkeypatch, products: list[dict], variant_ids: set[str]) -> None:
+    """Retriever care ONOREAZĂ `variant_label` ca filtru DUR (ca SQL-ul real, NX-135) — altfel
+    testul ar trece și cu filtrul rupt."""
+    by_id = {p["id"]: p for p in products}
+
+    async def fake_lex(conn, business_id, **k):
+        if k.get("variant_label"):
+            return [p for p in products if p["id"] in variant_ids]
+        return list(products)
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        return [by_id[i] for i in ids if i in by_id]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+
+
+async def test_variant_label_refinement_starts_new_session(monkeypatch):
+    """REPRO NX-223: aceeași căutare + `variant_label` (filtru DUR nou) → fp NOU → sesiune NOUĂ.
+
+    Înainte de fix, `variant_label` lipsea din fp: fp identic → `continue_search_session` servea
+    pagina 2 din pool-ul VECHI — produse fără nuanța cerută, nemarcate `variant_match`, adică
+    prezentate ca și cum ar avea-o. Exact la pasul de dinaintea adăugării în coș."""
+    _patch_variant_aware(monkeypatch, [_prod(i) for i in range(10)], {"p7", "p8"})
+    ctx1 = _ctx()
+    res1 = await run_tool(ctx1, _deps(), "search_products", {"query": "fond de ten"})
+    fp1 = ctx1.state_patch["active_search"]["fp"]
+
+    ctx2 = _continue_ctx(ctx1, res1.products)
+    res2 = await run_tool(
+        ctx2, _deps(), "search_products", {"query": "fond de ten", "variant_label": "Warm Beige"}
+    )
+    assert _session_event(ctx2).properties["action"] == "new"  # NU „page" din pool-ul vechi
+    assert ctx2.state_patch["active_search"]["fp"] != fp1
+    assert [p["id"] for p in res2.products] == ["p7", "p8"]  # doar cele CU varianta
+    assert all(p.get("variant_match") is True for p in res2.products)
+
+
+async def test_product_name_refinement_starts_new_session(monkeypatch):
+    """`product_name` schimbă diversificarea + named-miss disclosure → aparține fp-ului."""
+    _patch(monkeypatch, [_prod(i) for i in range(10)])
+    ctx1 = _ctx()
+    res1 = await run_tool(ctx1, _deps(), "search_products", {"query": "fond de ten"})
+    ctx2 = _continue_ctx(ctx1, res1.products)
+    await run_tool(
+        ctx2, _deps(), "search_products", {"query": "fond de ten", "product_name": "Hidra Boost"}
+    )
+    assert _session_event(ctx2).properties["action"] == "new"
+
+
+def test_fp_normalizes_variant_and_product_name():
+    """P11: doar diacritice/caps diferite → ACELAȘI fp (nu spargem sesiunea degeaba)."""
+    assert _fp_of(variant_label="Warm Beige") == _fp_of(variant_label="warm beige")
+    assert _fp_of(variant_label="Nuanță 03") == _fp_of(variant_label="nuanta 03")
+    assert _fp_of(product_name="Hidra Boost Ultră") == _fp_of(product_name="hidra boost ultra")
+    # …dar o etichetă chiar DIFERITĂ rămâne un fp diferit
+    assert _fp_of(variant_label="Warm Beige") != _fp_of(variant_label="Cool Ivory")
+
+
+def test_fp_empty_variant_label_equals_absent():
+    """Failure case: `variant_label=""` → tratat ca None (retrieverul nici nu aplică clauza)."""
+    assert _fp_of(variant_label="") == _fp_of()
+    assert _fp_of(product_name="") == _fp_of()
+
+
+async def test_pre_fix_session_in_state_degrades_to_new_session(monkeypatch):
+    """Sesiune semănată ÎNAINTE de fix (fp peste cheile vechi) → prima căutare de după deploy dă
+    fp nou → sesiune nouă, fără crash și fără migrare de state."""
+    _patch(monkeypatch, [_prod(i) for i in range(10)])
+    old_filters = {  # exact forma pre-NX-223, fără variant_label/product_name
+        "query": "fond de ten",
+        "category": None,
+        "brand": None,
+        "concerns": None,
+        "features": None,
+        "price_max": None,
+        "sort_mode": "relevance",
+        "in_stock_only": False,
+    }
+    ctx = _ctx()
+    ctx.state.active_search = {
+        "filters": old_filters,
+        "pool": [f"p{i}" for i in range(10)],
+        "cursor": 6,
+        "fp": ct._fp(old_filters),
+        "page": 1,
+    }
+    res = await run_tool(ctx, _deps(), "search_products", {"query": "fond de ten"})
+    assert res.ok and res.products
+    assert _session_event(ctx).properties["action"] == "new"
