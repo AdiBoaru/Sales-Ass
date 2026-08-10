@@ -68,7 +68,7 @@ Siguranță → secțiunea [Lentile](#lentile).
 | `webhook`         | `uvicorn src.webhook.app:app`            | Ingress HTTP (Meta + orders + /web/*)                         |
 | `worker`          | `python -m src.worker.consumer`          | Consumer Redis Streams → pipeline                            |
 | `dispatcher`      | `python -m src.worker.dispatcher`        | outbox → canale (singurul punct de trimitere)                |
-| `scheduler`       | `python -m src.jobs.scheduler`           | Joburi mentenanță (rollup/embed/lifecycle/cleanup)          |
+| `scheduler`       | `python -m src.jobs.scheduler`           | Joburi mentenanță (7: rollup usage/demand, embed, lifecycle, cleanup, partiții, inițiatori)          |
 | `proactive`       | `python -m src.proactive.scheduler`      | proactive_jobs → outbox                                      |
 | `telegram-poller` | `python -m src.channels.telegram.poller` | Long polling Telegram (canal TEST)                            |
 | `redis`           | —                                         | Streams · locks · dedupe L1 · cost counters · SSE pub/sub |
@@ -124,7 +124,7 @@ flowchart LR
   end
 
   subgraph Background["Background processes"]
-    JOBS["jobs.scheduler<br/>rollup·embed·lifecycle·cleanup·initiators"]:::bg
+    JOBS["jobs.scheduler — 7 joburi<br/>rollup_usage·rollup_demand·embed·lifecycle<br/>cleanup·partition_maintenance·initiators"]:::bg
     PROACTIVE["proactive.scheduler<br/>proactive_jobs → outbox"]:::bg
   end
 
@@ -164,14 +164,14 @@ flowchart LR
 | Telegram poller      | `src/channels/telegram/poller.py:70` | `poll_once()`        | getUpdates → envelope neutru pe stream                                     |
 | Stream inbound       | `src/redis_bus.py:66`                | `enqueue_inbound()`  | XADD cu maxlen ~100k                                                        |
 | Consumer             | `src/worker/consumer.py:275`         | `run_consumer()`     | XREADGROUP + debounce + reaper PEL                                          |
-| handle_turn          | `src/worker/processor.py:418`        | `handle_turn()`      | Miezul turului: dedupe L2 → context → pipeline → outbox TX               |
+| handle_turn          | `src/worker/processor.py:200`        | `handle_turn()`      | Miezul turului: dedupe L2 → context → pipeline → outbox TX               |
 | Pipeline             | `src/worker/runner.py:47`            | `run_pipeline()`     | Stagii în ordine fixă, early-exit pe reply/halt, măsoară                |
 | Dispatcher           | `src/worker/dispatcher.py:245`       | `run_dispatcher()`   | Singurul punct de trimitere: outbox → ChannelSender                        |
 | MetaClient           | `src/meta_client.py:28`              | `MetaClient`         | WhatsApp Cloud API send (text/template/typing)                              |
 | TelegramClient       | `src/channels/telegram/client.py:62` | `TelegramClient`     | Bot API send + edit carusel                                                 |
 | WebSender            | `src/channels/web/sender.py:34`      | `WebSender`          | Publish SSE pe`web:out:{visitor}` + backlog replay                        |
 | Proactive            | `src/proactive/scheduler.py:181`     | `run_scheduler()`    | Joburi scadente → poartă consent/24h → outbox                            |
-| Jobs scheduler       | `src/jobs/scheduler.py:36`           | `Job` loop           | rollup_usage · embed_products · lifecycle · cleanup_dedupe · initiators |
+| Jobs scheduler       | `src/jobs/scheduler.py:132`          | `Job` loop           | rollup_usage · rollup_demand · embed_products · lifecycle · cleanup_dedupe · partition_maintenance · proactive_initiators |
 | GET /webhook         | `src/webhook/app.py:62`              | `verify_webhook()`   | Handshake verificare Meta (token → challenge / 403)                        |
 | GET /web/bootstrap   | `src/web/app.py:136`                 | `web_bootstrap()`    | Emite sesiunea vizitatorului (HMAC) + verificare Origin server-side         |
 | Rich compose         | `src/worker/compose.py:329`          | `assemble()`         | Lanțul de grounding al căii bogate — v. Diagram 4c                       |
@@ -307,21 +307,21 @@ flowchart TD
   CBK{"callback?"}:::dec
   CAROUSEL["handle_callback — carousel nav<br/>callback.py:36"]:::step
 
-  HT["handle_turn processor.py:418"]:::step
-  DED2{"claim_inbound dedupe L2 DB?<br/>processor.py:456"}:::dec
+  HT["handle_turn processor.py:200"]:::step
+  DED2{"claim_inbound dedupe L2 DB?<br/>processor.py:238"}:::dec
   SKIP2["deduped — return"]:::step
   CTX["contact + conversation + insert inbound msg<br/>+ history max 8 + state + summary"]:::db
-  SEEDC["seed_daily_cost lazy reseed from usage_daily<br/>processor.py:523-524"]:::step
-  GUARD{"cost guard over budget?<br/>processor.py:525"}:::dec
+  SEEDC["seed_daily_cost lazy reseed from usage_daily<br/>processor.py:336"]:::step
+  GUARD{"cost guard over budget?<br/>processor.py:116"}:::dec
   NOLLM["llm=None — degraded pipeline"]:::err
   PIPE["run_pipeline — see Diagram 4"]:::step
   REPLY{"reply produced?"}:::dec
-  HALT["intentional silence / no-reply logged<br/>processor.py:534-545"]:::step
-  DISC["ensure_disclaimer processor.py:551"]:::step
+  HALT["intentional silence / no-reply logged<br/>processor.py:361"]:::step
+  DISC["ensure_disclaimer processor.py:368"]:::step
   SPLIT{"text over limit + not rich?"}:::dec
   FRAG["split into max 2 fragments"]:::step
-  TX["TX: outbound messages + outbox rows<br/>+ state patch + mark_inbound_completed<br/>processor.py:565-667"]:::db
-  POST["post-turn async: cache writeback<br/>+ summarizer + profile extract<br/>processor.py:689-699"]:::step
+  TX["TX: outbound messages + outbox rows<br/>+ state patch + mark_inbound_completed<br/>processor.py:382-492"]:::db
+  POST["post-turn async: cache writeback<br/>+ summarizer + profile extract<br/>processor.py:509"]:::step
 
   DISP["dispatcher claim_due FOR UPDATE SKIP LOCKED"]:::step
   RENDER{"choose_render by capabilities<br/>dispatcher.py:101"}:::dec
@@ -368,7 +368,7 @@ flowchart TD
   SEND -- error --> FAIL
 ```
 
-Calea **sincronă** `/web/chat` diferă doar la capete: sesiune HMAC + rate-limit fail-closed + gard de buget (`src/web/app.py:197-240`) → `handle_turn(deliver=False)` — fără outbox, răspunsul HTTP e transportul (`src/web/app.py:241-252`, `src/worker/processor.py:560,613-621`).
+Calea **sincronă** `/web/chat` diferă doar la capete: sesiune HMAC + rate-limit fail-closed + gard de buget (`src/web/app.py:197-240`) → `handle_turn(deliver=False)` — fără outbox, răspunsul HTTP e transportul (`src/web/app.py:241-252`, `src/worker/processor.py:345,382-492`).
 
 ---
 
@@ -437,7 +437,7 @@ flowchart TD
   HESC["request_human + notify_operator<br/>+ confirm msg — handoff.py:44-49"]:::out
   HSUP["route rewritten to SALES<br/>handoff.py:40-42"]:::stage
 
-  AGENT["10· agent_stage — Diagram 4b<br/>agent.py:957"]:::llm
+  AGENT["10· agent_stage — Diagram 4b<br/>stages/agent.py:267"]:::llm
   FB["11· fallback_stage — clarify question<br/>RO-only — runner.py:169"]:::out
   SEND["Reply → Sender TX"]:::out
 
@@ -668,8 +668,8 @@ flowchart TD
   classDef err fill:#f1948a,stroke:#922b21,color:#000
 
   AXES["decision_axes + spec_numbers — NX-139<br/>axe REALE pe care variază setul<br/>compose.py:661 · :704 — gated :708"]:::step
-  BNDL["_rich_bundle: facts per product<br/>facets from DomainPack — agent.py:724"]:::step
-  JIN["structured JSON from mini<br/>complete_schema + _RICH_SCHEMA — agent.py:727"]:::llm
+  BNDL["_rich_bundle: facts per product<br/>facets from DomainPack — agent/finalize.py:229"]:::step
+  JIN["structured JSON from mini<br/>complete_schema + _RICH_SCHEMA — agent/finalize.py:266"]:::llm
 
   ASM["assemble — hydrate by product_id refs<br/>compose.py:329"]:::step
   MEM{"item references a REAL<br/>retrieved product?"}:::dec
@@ -700,7 +700,7 @@ flowchart TD
   CMPB --> OUTC
 ```
 
-Cine o folosește: `_finalize_rich` (agent.py:688-731, recomandare + cross-sell) și randorul web (`flatten_framing` la `channels/web/render.py:150`). Comparația (CMPB) e apelată din ambele căi de compare (agent.py:933, :1315).
+Cine o folosește: `_finalize_rich` (agent/finalize.py:266-311, recomandare + cross-sell) și randorul web (`flatten_framing` la `channels/web/render.py:150`). Comparația (CMPB) e apelată din ambele căi de compare (agent/deterministic.py:469, :1315).
 
 ---
 
@@ -730,7 +730,7 @@ flowchart TD
   ANY{"results at this step?"}:::dec
   RELAX["relax next filter in ladder"]:::step
   EXH{"ladder exhausted?"}:::dec
-  EMPTY["empty ToolResult → AGENT composes<br/>no-result msg — agent.py:1411"]:::out
+  EMPTY["empty ToolResult → AGENT composes<br/>no-result msg — agent/finalize.py:203"]:::out
 
   DIV{"sort=relevance + not named product?"}:::dec
   DIVER["diversify pool: price tertiles + brands<br/>catalog_tools.py:518"]:::step
@@ -787,7 +787,7 @@ flowchart TD
     LNG["language_stage persists conv.locale<br/>direct DB write, best-effort — language.py:44"]:::db
   end
 
-  subgraph Persist["SENDER TX — processor.py:565-598, in code order"]
+  subgraph Persist["SENDER TX — processor.py:382-492, in code order"]
     DP["displayed_products ← reply.products<br/>:567-570"]:::write
     PQ["pending_question set or cleared :573"]:::write
     MERGE["canonical merge: constraints +<br/>asked_intents + search_constraints :580-587"]:::write
@@ -796,7 +796,7 @@ flowchart TD
     OPT["optimistic lock state_version<br/>patch_conversation_state :656"]:::db
   end
 
-  subgraph PostTurn["POST-TURN async, best-effort — processor.py:689-699"]
+  subgraph PostTurn["POST-TURN async, best-effort — processor.py:509"]
     CW{"cacheable reply?"}:::dec
     CWB["semantic_cache upsert<br/>static days / dynamic minutes + price snapshot<br/>processor.py:116"]:::db
     SQ{"messages over threshold?"}:::dec
@@ -864,7 +864,7 @@ flowchart TD
   end
 
   CTRL["resolve_channel: provider_account_id → business_id<br/>the ONLY pre-tenant lookup — channels.py"]:::step
-  JOBS["admin jobs: rollup·embed·cleanup·lifecycle"]:::step
+  JOBS["admin jobs: rollup usage/demand · embed<br/>cleanup · lifecycle · partiții"]:::step
   SSC["in-process SessionSecretCache LRU+TTL<br/>+ NEGATIVE cache anti-flood<br/>web/session.py:67-101"]:::step
 
   SSC -- miss --> ADMIN
@@ -885,7 +885,7 @@ flowchart TD
   RLS --> WLOC
 ```
 
-Tranzacția Sender (mesaje + outbox + state + dedupe-complete, atomic): `src/worker/processor.py:565-667`. Scrierile best-effort rulează în savepoint propriu (`processor.py:159-161, 218, 278`).
+Tranzacția Sender (mesaje + outbox + state + dedupe-complete, atomic): `src/worker/processor.py:382-492`. Scrierile best-effort rulează în savepoint propriu (`processor.py:159-161, 218, 278`).
 
 ---
 
@@ -975,11 +975,11 @@ flowchart TD
     L1["API error / 429"]:::err
     L2{"bounded retry ok?<br/>llm.py:45"}:::dec
     L3["triage fail → route None<br/>triage.py:247-251"]:::deg
-    L4["agent loop fail → return<br/>agent.py:1148"]:::deg
+    L4["agent loop fail → return<br/>stages/agent.py:370"]:::deg
     L5["fallback_stage: clarify question<br/>NEVER silence — runner.py:169"]:::ok
   end
 
-  subgraph ValErr["Validator failures — agent.py:560"]
+  subgraph ValErr["Validator failures — agent/validator.py:195"]
     V1{"reply valid? prices/links/claims"}:::dec
     V2["1 retry with allowed prices :587"]:::deg
     V3{"valid now?"}:::dec
@@ -1110,8 +1110,8 @@ flowchart TD
 
 1. **CLAUDE.md e în urmă:** secțiunea „Structura proiectului" spune `stages/ … TODO: gates, free_layers; echo=fallback` — dar `gates.py`, `greeting.py`, `alias.py`, `cache.py`, `faq.py`, `clarify.py`, `handoff.py`, `language.py` există și sunt LIVE în `src/worker/runner.py:207-219`.
 2. **Docstring stale în runner:** `src/worker/runner.py:8-10` descrie „un singur stagiu real (`echo_stage`)" — `echo_stage` nu există în `DEFAULT_STAGES`; pipeline-ul are 11 stagii.
-3. **„Validatorul (stagiul 8)" din CLAUDE.md nu e stagiu separat:** e implementat ca funcții interne ale stagiului Agent (`src/worker/stages/agent.py:472-502`, `560-595`) — comportamentul e cel documentat, structura diferă.
-4. **arch_explorer e ușor stale pe branch-ul curent:** raportează `agent_stage` la linia 858 și `triage_stage` la 179; în cod sunt la `agent.py:957` și `triage.py:212`. Necesită re-rulare `arch_explorer/analyze.py`.
+3. **„Validatorul (stagiul 8)" din CLAUDE.md nu e stagiu separat:** trăiește în [`src/agent/validator.py`](../src/agent/validator.py) (`validate_prose:195`) și e chemat din faza F a agentului, nu ca stagiu al pipeline-ului. Comportamentul e cel documentat, structura diferă. *(Actualizat 2026-08-10: până la NX-142 erau funcții private în monolitul `agent.py` — de aceea R2 din tabelul de refactoring apare ca rezolvat.)*
+4. **arch_explorer e ușor stale pe branch-ul curent:** raportează `agent_stage` la linia 858 și `triage_stage` la 179; în cod sunt la `stages/agent.py:267` și `triage.py:212`. Necesită re-rulare `arch_explorer/analyze.py`.
 5. **`webhook/status.py` NU există** — CLAUDE.md îl listează ca LIVE; statusurile sunt parsate în `webhook/meta.py:104` (`parse_statuses`) și scrise de worker (`consumer.py:137-146`).
 6. **STT/Whisper NU e implementat** — CLAUDE.md promite „vocale → STT (Whisper)"; `audio` e doar un tip de media parsat cu caption drept body (`webhook/meta.py:27,36-39`), ne-rutat spre vreo transcriere (gates rutează DOAR `image`, `gates.py:482`).
 7. **Tool-ul `delivery_eta` NU există** — CLAUDE.md îl listează; registry-ul real are 10 tool-uri (grep `@register` în `src/tools/`), fără `delivery_eta`.
@@ -1119,8 +1119,8 @@ flowchart TD
 ## Puncte forte
 
 - **Pipeline liniar cu un singur owner per câmp** — runner generic; observabilitatea (latency + tokens per stagiu + buget per tur) e în runner, nu în stagii (`src/worker/runner.py:47-105`).
-- **Un singur punct de ieșire, tranzacțional** — reply + outbox + state + dedupe-complete într-o singură TX (`src/worker/processor.py:565-667`); dispatcher cu visibility-timeout self-healing (`src/worker/dispatcher.py:8-13`).
-- **Validatorul e apărarea load-bearing anti-halucinație și anti-prompt-injection** — orice preț/link/produs trebuie să existe în `ctx.retrieval` (`src/worker/stages/agent.py:486-489`); degradarea finală e un reply determinist din DB (`agent.py:523`).
+- **Un singur punct de ieșire, tranzacțional** — reply + outbox + state + dedupe-complete într-o singură TX (`src/worker/processor.py:382-492`); dispatcher cu visibility-timeout self-healing (`src/worker/dispatcher.py:8-13`).
+- **Validatorul e apărarea load-bearing anti-halucinație și anti-prompt-injection** — orice preț/link/produs trebuie să existe în `ctx.retrieval` (`src/agent/validator.py:78-104`); degradarea finală e un reply determinist din DB (`src/agent/fallbacks.py:23`).
 - **Izolare multi-tenant în straturi** — rol LOGIN fără bypassrls + GUC per checkout + assert de izolare la fiecare checkout (`src/db/connection.py:187-204, 274-287`); boot-gate pe migrări (`src/worker/consumer.py:315-321`).
 - **Fiabilitate pe coadă** — dedupe 2 straturi (Redis + DB claim-or-resume), ACK-after-flush (`src/worker/debounce.py:11-15`), reaper XAUTOCLAIM (`src/worker/consumer.py:234-272`).
 - **Cost governance pe 3 niveluri** — business/zi, contact/zi, vizitator web, reseed din `usage_daily`, enforcement post-increment fără TOCTOU (`src/worker/processor.py:308-379`).
@@ -1131,14 +1131,14 @@ flowchart TD
 2. **`agent.py` e un god-module** — 1200+ linii; `agent_stage` (`:957+`) amestecă 3 intenții deterministe, bucla LLM, login-wall, checkout-fallback, cross-sell; validatorul + 3 căi de finalize în același fișier.
 3. **Cuplaj maxim în processor** — `handle_turn` are fan-out 45 (cel mai mare din sistem, `arch_explorer/GRAPH_REPORT.md`) și ~300 linii: orchestrare + politică de state-merge + sender + post-tur.
 4. **Ciclu de import gestionat manual** — stagiile importă `PipelineDeps` din runner sub `TYPE_CHECKING` (`src/worker/stages/gates.py:37-38`); runner-ul importă stagiile la sfârșitul fișierului (`src/worker/runner.py:189-199`).
-5. **Conexiune DB ținută pe durata apelurilor LLM** — pipeline-ul rulează pe `conn` din `bot_pool` (max_size=10, `src/db/connection.py:224-229`) în timp ce agentul face 1-4 apeluri LLM (`src/worker/processor.py:528`); la fel `/web/chat` (`src/web/app.py:223-243`). Plafon ~10 tururi concurente/proces; pooler Supabase capat la ~15 sesiuni. **Bottleneck-ul #1 de scalare.** → **NX-141**
+5. **Conexiune DB ținută pe durata apelurilor LLM** — pipeline-ul rulează pe `conn` din `bot_pool` (max_size=10, `src/db/connection.py:224-229`) în timp ce agentul face 1-4 apeluri LLM (`src/worker/processor.py:345`); la fel `/web/chat` (`src/web/app.py:223-243`). Plafon ~10 tururi concurente/proces; pooler Supabase capat la ~15 sesiuni. **Bottleneck-ul #1 de scalare.** → **NX-141**
 6. **Dispatcher secvențial + poll de 2s** — rând cu rând, tenant cu tenant (`src/worker/dispatcher.py:233-241`), sleep 2s la idle (`:245-251`). Un tenant lent întârzie toți ceilalți; +0-2s latență pe calea async.
 7. **Fallback-ul final e doar în română** — `src/worker/runner.py:173-176`, deși pipeline-ul e RO/HU/EN și triage are `_CLARIFY_FALLBACK` per-locale (`src/worker/stages/triage.py:313`). Încalcă P11.
 8. **SSL fără verificare pe orice win32** — `src/db/connection.py:56-73` dezactivează verificarea certificatului condiționat de platformă, nu de env. Prod e Linux → risc latent.
 9. **Cuplaj src→scripts la runtime** — `src/worker/consumer.py:315` importă `scripts.migrate`; a produs deja incidentul Dockerfile (imagine fără `scripts/` → crash-loop, PR #132).
-10. **Duplicare mică de asamblare context** — `history_block`/`context_block` construite identic în triage (`triage.py:223-226`) și agent (`agent.py:1088-1091`).
+10. **Duplicare mică de asamblare context** — `history_block`/`context_block` construite identic în triage (`triage.py:223-226`) și agent (`stages/agent.py:309-312`).
 
-**Circular dependencies:** doar ciclul runner↔stages gestionat prin late-import (pct. 4). **Dead code (corectat la auditul adversarial):** `estimate_turn_cost` (`src/worker/limits.py:186`) — definit, referit doar într-un comentariu (`processor.py:355`), înlocuit de costul real NX-125 → de șters. **Unreachable seams (intenționate, TODO):** `schedule_awb_update` (`initiators.py:160-187`) și `schedule_follow_up` (`initiators.py:190`) — definite, niciun apelant; webhook-ul de comenzi ar trebui să le cheme la expediere.
+**Circular dependencies:** doar ciclul runner↔stages gestionat prin late-import (pct. 4). **Dead code (corectat la auditul adversarial):** `estimate_turn_cost` (`src/worker/limits.py:186`) — definit, referit doar într-un comentariu (`processor.py:133`), înlocuit de costul real NX-125 → de șters. **Unreachable seams (intenționate, TODO):** `schedule_awb_update` (`initiators.py:160-187`) și `schedule_follow_up` (`initiators.py:190`) — definite, niciun apelant; webhook-ul de comenzi ar trebui să le cheme la expediere.
 
 ---
 
@@ -1324,6 +1324,16 @@ POST /webhook
 POST /webhook/orders/{business_id}
 ```
 
+```claim:jobs
+cleanup_dedupe
+embed_products
+lifecycle
+partition_maintenance
+proactive_initiators
+rollup_demand
+rollup_usage
+```
+
 ```claim:flags
 admission_enabled = true
 ai_disclaimer_enabled = false
@@ -1473,7 +1483,7 @@ welcome_enabled = true
 | R2 | Validatorul (apărarea critică) trăiește ca funcții private în god-module | `agent.py:472-502, 560-688`               | Mutare pură în`src/worker/validator.py`                                                   | Testare izolată; auditabilitate de securitate pe un fișier                            | —               |
 | R3 | Intențiile deterministe împletite în`agent_stage`                         | `agent.py:984-1027, 1174-1216`            | `stages/intents.py` cu registru `[(predicate, handler)]` înaintea buclei LLM             | Intent nou = fișier nou + intrare în registru                                         | —               |
 | R4 | Ciclu import runner↔stages prin late-import                                   | `runner.py:189-199`, `gates.py:37-38`   | `PipelineDeps` în `src/worker/deps.py`                                                   | Graf de importuri aciclic real                                                          | —               |
-| R5 | Conexiune DB ținută prin apelurile LLM → plafon ~10 tururi concurente       | `processor.py:528`, `connection.py:227` | Fazează handle_turn: load → release conn → LLM fără conn → TX pe conn proaspăt         | Concurența limitată de LLM, nu de pool                                                | **NX-141** |
+| R5 | Conexiune DB ținută prin apelurile LLM → plafon ~10 tururi concurente       | `processor.py:345`, `connection.py:227` | Fazează handle_turn: load → release conn → LLM fără conn → TX pe conn proaspăt         | Concurența limitată de LLM, nu de pool                                                | **NX-141** |
 | R6 | Dispatcher serial + poll 2s                                                    | `dispatcher.py:233-251`                   | gather bounded per tenant; tenanti în paralel; idle 0.5s                                     | Latență de livrare constantă sub load mixt                                           | —               |
 | R7 | fallback_stage RO-only (încalcă P11)                                         | `runner.py:173-176`                       | Dict per-locale ro/hu/en pe`ctx.language`                                                   | Paritate multilingvă pe toate ieșirile                                                | —               |
 | R8 | Docstring-uri/documentație stale                                              | `runner.py:8-10`, CLAUDE.md „Structura"  | Update + re-rulare`arch_explorer/analyze.py`                                                | Previne decizii greșite pe documentație veche                                         | —               |

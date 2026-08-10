@@ -168,6 +168,34 @@ def extract_migrations() -> list[str]:
     return sorted(files, key=lambda n: int(n.split("_", 1)[0]))
 
 
+def extract_jobs() -> list[str]:
+    """Joburile pe care le rulează `src/jobs/scheduler.py`, după numele lor de înregistrare.
+
+    Adăugat pe 2026-08-10 pentru că exact clasa asta de drift scăpase: doc-ul lista 5 joburi
+    (`rollup·embed·lifecycle·cleanup·initiators`) când scheduler-ul rula 7 — `partition_maintenance`
+    și `rollup_demand` apăruseră între timp și nu le observase nimeni. O listă enumerabilă care nu e
+    în poartă e o listă care va diverge.
+
+    Include și joburile gardate de flag (`partition_maintenance`, `rollup_demand`, ...): lista
+    răspunde la „ce poate rula scheduler-ul", nu la „ce rulează cu env-ul de azi.
+    """
+    tree = ast.parse(_read(REPO / "src" / "jobs" / "scheduler.py"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        # STRICT `Job("nume", ...)` — o euristică mai largă (orice apel cu prim argument string)
+        # ar fi înghițit primul mesaj de log care seamănă a nume de job.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "Job"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            names.add(node.args[0].value)
+    return sorted(names)
+
+
 def extract_entrypoints() -> list[str]:
     """Modulele rulabile cu `python -m` (au `if __name__ == ...`)."""
     out: list[str] = []
@@ -203,6 +231,7 @@ def collect_facts() -> dict[str, object]:
         "routes": extract_routes(),
         "flags": extract_flags(),
         "migrations": extract_migrations(),
+        "jobs": extract_jobs(),
         "entrypoints": extract_entrypoints(),
         "models": extract_models(),
     }
@@ -287,7 +316,7 @@ def main() -> int:
         return 0
 
     if args.emit_claims:
-        for name in ("stages", "tools", "processes", "routes", "flags", "migrations"):
+        for name in ("stages", "tools", "processes", "routes", "jobs", "flags", "migrations"):
             print(f"```claim:{name}")
             for line in _fact_as_lines(name, facts[name]):
                 print(line)
