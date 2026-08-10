@@ -3,7 +3,9 @@
 Query-urile de catalog sunt monkeypatch-uite; testăm: dispatch, validare args, vederile
 compacte, izolarea (business_id din ctx), degradarea (tool inexistent / args invalide)."""
 
+import asyncio
 import inspect
+import time
 
 from src.config import get_settings
 from src.db.queries.catalog import search_products_lexical, search_products_semantic
@@ -60,6 +62,23 @@ class _RaisingLLM:
 
     async def embed(self, texts, *, model=None):
         raise RuntimeError("embed down")
+
+
+class _SlowLLM:
+    """NX-225: furnizor LENT, nu mort — răspunde corect, dar târziu. `cancelled` confirmă că
+    anularea de la `wait_for` a ajuns în corutină și că `CancelledError` NU scapă în tur."""
+
+    def __init__(self, delay_s: float):
+        self.delay_s = delay_s
+        self.cancelled = False
+
+    async def embed(self, texts, *, model=None):
+        try:
+            await asyncio.sleep(self.delay_s)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return [[0.0] * 8 for _ in texts]
 
 
 async def _has_emb_true(conn, business_id):
@@ -125,6 +144,11 @@ def test_enabled_tools_phase1_and_2():
 def _search_event(ctx):
     """Ultimul event `product_search` emis (pentru aserții pe mode/PII)."""
     return next(e for e in reversed(ctx.events) if e.type == "product_search")
+
+
+def _events(ctx, type_):
+    """Toate evenimentele de un tip (lista goală = semnalul NU s-a emis)."""
+    return [e for e in ctx.events if e.type == type_]
 
 
 async def test_search_products_tool(monkeypatch):
@@ -483,6 +507,98 @@ async def test_search_embed_error_falls_back_sql(monkeypatch):
     res = await run_tool(ctx, _deps(_RaisingLLM()), "search_products", {"query": "x"})
     assert res.ok and len(res.products) == 2
     assert _search_event(ctx).properties["mode"] == "lexical"
+    # NX-225: furnizorul MORT are semnalul lui — tipul erorii, niciodată mesajul (P12).
+    assert _events(ctx, "embed_failed")[0].properties["error_type"] == "RuntimeError"
+    assert _events(ctx, "embed_timeout") == []  # mort ≠ lent
+
+
+# --- NX-225: buget de timp pe embed-ul de query (lent = același drum ca mort) ------
+
+
+async def test_search_embed_timeout_falls_back_lexical(monkeypatch):
+    """Furnizor LENT (nu mort): wait_for taie la buget → lexical-only + `embed_timeout`, iar
+    turul NU așteaptă cele 5s ale furnizorului (P4/P6)."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    sem_calls = []
+
+    async def fake_sem(conn, business_id, vec, **k):
+        sem_calls.append(vec)
+        return PRODUCTS
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _SlowLLM(delay_s=5.0)
+    t0 = time.monotonic()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    elapsed_ms = (time.monotonic() - t0) * 1000
+
+    assert res.ok and len(res.products) == 2  # rezultate LEXICALE, nu tăcere
+    assert _search_event(ctx).properties["mode"] == "lexical"
+    assert sem_calls == []  # fără query_vec → retrieverul semantic nici nu e chemat
+    assert _events(ctx, "embed_timeout")[0].properties["timeout_ms"] == 200
+    assert _events(ctx, "embed_failed") == []  # lent ≠ mort
+    assert elapsed_ms < 400  # < 2× timeout (nu cele 5000ms ale furnizorului)
+    assert llm.cancelled  # corutina a fost anulată, iar CancelledError n-a scăpat în tur
+
+
+async def test_search_embed_fast_emits_no_degradation_events(monkeypatch):
+    """Anti-regresie: embed rapid → semantic activ, ZERO events noi (nu poluăm analytics)."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return PRODUCTS
+
+    async def fake_sql(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2 and llm.embed_calls == 1
+    assert _search_event(ctx).properties["mode"] == "semantic"
+    assert _events(ctx, "embed_timeout") == [] and _events(ctx, "embed_failed") == []
+
+
+async def test_search_embed_timeout_zero_disables_budget(monkeypatch):
+    """`embed_timeout_ms=0` = kill-switch numeric: fără buget de timp, exact ca înainte —
+    embed-ul lent apucă să răspundă și calea semantică rămâne activă."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 0)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return PRODUCTS
+
+    async def fake_sql(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _SlowLLM(delay_s=0.15)  # ar depăși orice buget rezonabil
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2
+    assert _search_event(ctx).properties["mode"] == "semantic"  # vectorul a ajuns întreg
+    assert not llm.cancelled and _events(ctx, "embed_timeout") == []
+
+
+async def test_search_no_embeddings_never_calls_embed(monkeypatch):
+    """`has_embeddings` False → embed-ul nici nu se apelează (bugetul nu atinge drumul ăsta)."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    assert res.ok and llm.embed_calls == 0
+    assert _events(ctx, "embed_timeout") == [] and _events(ctx, "embed_failed") == []
 
 
 async def test_search_all_empty_is_graceful(monkeypatch):

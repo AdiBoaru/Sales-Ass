@@ -8,6 +8,7 @@ Pydantic ÎNAINTE de execuție. `llm_view` = reprezentare COMPACTĂ (fără PII)
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -721,11 +722,25 @@ async def search_products_tool(
 
     # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
     # degradare grațioasă la lexical-only (P6), fără tăcere.
+    # NX-225: LENTOAREA furnizorului = același drum ca EȘECUL lui. Un embed care răspunde în 8s nu
+    # aruncă nimic, dar ține tot turul (clientul stă pe typing indicator) deși lexicalul e gata în
+    # milisecunde → buget de timp explicit (P4). Două events distincte: lent (`embed_timeout`) vs
+    # mort (`embed_failed`) — fără ele degradarea semantică rămâne invizibilă (layer mort tăcut).
     query_vec: list[float] | None = None
     if deps.llm is not None and await has_embeddings(deps.conn, ctx.business.id):
+        timeout_ms = get_settings().embed_timeout_ms
         try:
-            query_vec = (await deps.llm.embed([a.query]))[0]
-        except Exception:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
+            call = deps.llm.embed([a.query])
+            # 0 = kill-switch numeric → await direct, fără wait_for (comportamentul de dinainte).
+            if timeout_ms > 0:
+                call = asyncio.wait_for(call, timeout=timeout_ms / 1000)
+            query_vec = (await call)[0]
+        except TimeoutError:
+            # DOAR al nostru: adaptorul ridică `openai.APITimeoutError`, nu builtin-ul (llm.py).
+            ctx.emit("embed_timeout", timeout_ms=timeout_ms)
+            query_vec = None
+        except Exception as e:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
+            ctx.emit("embed_failed", error_type=type(e).__name__)  # tipul, NU mesajul (P12)
             query_vec = None
 
     # ARCH-2026 P0: ponderile scorului blended (din DomainPack / defaults); None = kill-switch OFF

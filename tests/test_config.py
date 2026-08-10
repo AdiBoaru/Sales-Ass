@@ -45,6 +45,13 @@ def test_defaults(monkeypatch):
     assert s.env == "dev"
 
 
+def test_embed_timeout_default(monkeypatch):
+    """NX-225: env vechi (fără EMBED_TIMEOUT_MS) → default 800ms din Pydantic, fără crash."""
+    monkeypatch.delenv("EMBED_TIMEOUT_MS", raising=False)
+    assert _settings(monkeypatch).embed_timeout_ms == 800
+    assert _settings(monkeypatch, EMBED_TIMEOUT_MS="0").embed_timeout_ms == 0  # kill-switch
+
+
 def test_database_url_alias(monkeypatch):
     """Compat: DATABASE_URL e acceptat ca alias pentru SUPABASE_DB_URL."""
     monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
