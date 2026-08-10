@@ -308,14 +308,49 @@ def check_mermaid(doc_text: str) -> list[str]:
     închizi cu `"` drept. Mermaid citește ghilimeaua dreaptă ca sfârșit de string, eticheta se
     taie în două, iar diagrama nu se mai randează deloc — se vede sursa brută. Închide cu `”`.
 
-    Verificare ieftină și deterministă: număr impar de `"` pe o linie de mermaid = string neînchis.
-    NU e un parser de mermaid; prinde exact clasa de eroare care a scăpat.
+    Trei verificări ieftine și deterministe (NU un parser de mermaid — pentru parse REAL există
+    scratchpad-ul cu `mermaid.parse()` prin node; aici prindem clasele de eroare care au scăpat):
+      1. număr impar de `"` pe o linie = string neînchis;
+      2. `subgraph` fără `end` (sau invers) = tot blocul cade;
+      3. muchie către un nod NEDECLARAT = mermaid îl inventează tăcut ca dreptunghi gol cu
+         id-ul drept etichetă — diagrama se randează dar minte (tipic: typo în id).
     """
     problems: list[str] = []
-    for block in _MERMAID_RE.findall(doc_text):
+    edge_re = re.compile(r"^([A-Za-z][\w]*)\s*(?:<?--|-\.-|==)")
+    tgt_re = re.compile(r"(?:-->|-\.->|==>|--->|<-->)\s*(?:\|[^|]*\|\s*)?([A-Za-z][\w]*)")
+    decl_re = re.compile(r"^([A-Za-z][\w]*)\s*[\[\{\(>]")
+    for bi, block in enumerate(_MERMAID_RE.findall(doc_text), 1):
+        declared: set[str] = set()
+        used: set[str] = set()
+        depth = 0
         for i, line in enumerate(block.splitlines(), 1):
-            if line.count('"') % 2:
-                problems.append(f"[mermaid] ghilimele neperechi, linia {i}: {line.strip()[:90]}")
+            s = line.strip()
+            if s.count('"') % 2:
+                problems.append(f"[mermaid #{bi}] ghilimele neperechi, linia {i}: {s[:90]}")
+            if s.startswith("subgraph "):
+                depth += 1
+                m = re.match(r"subgraph\s+([A-Za-z][\w]*)", s)
+                if m:
+                    declared.add(m.group(1))
+            elif s == "end":
+                depth -= 1
+            if s.startswith(("classDef", "linkStyle", "style ", "%%", "flowchart", "graph")):
+                continue
+            m = decl_re.match(s)
+            if m:
+                declared.add(m.group(1))
+            if "--" in s or "==" in s:
+                m = edge_re.match(s)
+                if m:
+                    used.add(m.group(1))
+                used.update(tgt_re.findall(s))
+        if depth != 0:
+            problems.append(f"[mermaid #{bi}] subgraph/end dezechilibrat (delta={depth})")
+        for node in sorted(used - declared):
+            problems.append(
+                f"[mermaid #{bi}] muchie către nod nedeclarat «{node}» — typo de id? "
+                f"(mermaid l-ar desena ca dreptunghi gol)"
+            )
     return problems
 
 

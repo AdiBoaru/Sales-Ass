@@ -163,7 +163,7 @@ flowchart LR
 | POST /web/messages   | `src/web/app.py:157`                 | `web_message()`      | Envelope neutru pe stream; reply prin SSE                                   |
 | Telegram poller      | `src/channels/telegram/poller.py:70` | `poll_once()`        | getUpdates → envelope neutru pe stream                                     |
 | Stream inbound       | `src/redis_bus.py:66`                | `enqueue_inbound()`  | XADD cu maxlen ~100k                                                        |
-| Consumer             | `src/worker/consumer.py:275`         | `run_consumer()`     | XREADGROUP + debounce + reaper PEL                                          |
+| Consumer             | `src/worker/consumer.py:333`         | `run_consumer()`     | XREADGROUP + debounce + reaper PEL                                          |
 | handle_turn          | `src/worker/processor.py:200`        | `handle_turn()`      | Miezul turului: dedupe L2 → context → pipeline → outbox TX               |
 | Pipeline             | `src/worker/runner.py:47`            | `run_pipeline()`     | Stagii în ordine fixă, early-exit pe reply/halt, măsoară                |
 | Dispatcher           | `src/worker/dispatcher.py:245`       | `run_dispatcher()`   | Singurul punct de trimitere: outbox → ChannelSender                        |
@@ -295,15 +295,17 @@ flowchart TD
 
   XREAD["consumer XREADGROUP<br/>consumer.py:198"]:::step
   KIND{"event kind?<br/>consumer.py:219"}:::dec
-  TYPING["typing indicator fire-and-forget<br/>consumer.py:222"]:::step
+  TYPING["typing indicator fire-and-forget<br/>consumer.py:74-81"]:::step
   DEB["Debouncer 3s coalesce<br/>debounce.py:57"]:::step
   ORDERK["process_order — attribution<br/>webhook/orders.py:64"]:::step
   RESOLVE["resolve_channel → business_id<br/>admin_conn, consumer.py:123"]:::db
   STATUSK["record_status_event<br/>delivered/read/failed"]:::db
   LOCK{"conv lock acquired?<br/>consumer.py:159"}:::dec
-  REQUEUE["requeue + backoff, capped<br/>consumer.py:90"]:::queue
-  DROPQ["over requeue cap → event DROPPED<br/>log only — consumer.py:95-96"]:::err
-  LOADB["load_business + DomainPack attach<br/>consumer.py:173 · businesses.py:60"]:::db
+  REQUEUE["requeue + backoff, capped<br/>consumer.py:96-102"]:::queue
+  DROPQ["over requeue cap → event DROPPED<br/>log only — consumer.py:99-100"]:::err
+  ADM{"admission per business?<br/>frână de concurență — consumer.py:197-210"}:::dec
+  REQA["re-queue FĂRĂ drop, fără cap<br/>_requeue_admission :106-119"]:::queue
+  LOADB["load_business + DomainPack attach<br/>consumer.py:222 · businesses.py:60"]:::db
   CBK{"callback?"}:::dec
   CAROUSEL["handle_callback — carousel nav<br/>callback.py:36"]:::step
 
@@ -321,7 +323,7 @@ flowchart TD
   SPLIT{"text over limit + not rich?"}:::dec
   FRAG["split into max 2 fragments"]:::step
   TX["TX: outbound messages + outbox rows<br/>+ state patch + mark_inbound_completed<br/>processor.py:382-492"]:::db
-  POST["post-turn async: cache writeback<br/>+ summarizer + profile extract<br/>processor.py:509"]:::step
+  POST["post-tur OFF-CONN (NX-161): conn eliberat,<br/>apoi run_aftercare — cache writeback + summarizer<br/>+ profil/facts — consumer.py:236 · aftercare.py:444"]:::step
 
   DISP["dispatcher claim_due FOR UPDATE SKIP LOCKED"]:::step
   RENDER{"choose_render by capabilities<br/>dispatcher.py:101"}:::dec
@@ -350,7 +352,9 @@ flowchart TD
   RESOLVE --> LOCK
   LOCK -- busy --> REQUEUE
   REQUEUE -- "cap exceeded" --> DROPQ
-  LOCK -- ok --> LOADB --> CBK
+  LOCK -- ok --> ADM
+  ADM -- "peste capacitate" --> REQA
+  ADM -- admis --> LOADB --> CBK
   CBK -- yes --> CAROUSEL
   CBK -- no --> HT --> DED2
   DED2 -- "already done" --> SKIP2
@@ -512,6 +516,73 @@ regia**: A→B→C→D → `build_plan` → `render`.
 **Invariantul central:** modelul nu are ultimul cuvânt pe cifre și linkuri. Fazele E și F sunt cod
 determinist peste `ctx.retrieval`; validatorul respinge orice preț/link/număr care nu e în retrieval.
 
+**Privirea de sus — cele șase faze.** Patru din șase nu cheamă niciun model:
+
+```mermaid
+flowchart LR
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef free fill:#a3e4d7,stroke:#148f77,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  A["A · Regie + siguranță<br/>agent.py:267-295"]:::safe
+  B["B · Intenții pre-loop<br/>deterministic.py:469"]:::free
+  C["C · Prompt din DB<br/>agent.py:299-350"]:::step
+  D["D · Buclă tool-uri<br/>llm.py:227 — max 3 calls"]:::llm
+  E["E · Planner determinist<br/>planner.py:162"]:::step
+  F["F · Render + validator<br/>finalize.py:325"]:::llm
+  X1["răspuns determinist<br/>$0 inferență"]:::out
+  X2["paginare din pool<br/>$0 inferență"]:::free
+
+  A --> B
+  B -- "link · compară · detaliu · recenzie" --> X1
+  B --> C --> D --> E --> F
+  C -- show_more --> X2 --> E
+```
+
+**Faza E nu e un arbore — e o listă de precedență.** Primul caz care se potrivește câștigă;
+tot ce aduce produse din DB în afara `ToolRun` trece prin `policy.gate` propriu:
+
+```mermaid
+flowchart TD
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+
+  P1{"1 · check_order pe web anonim?<br/>run.order_gated_login :187"}:::dec
+  O1["mesaj login determinist → handled"]:::out
+  P2{"2 · purchase_intent fără checkout_url? :206-214"}:::dec
+  S2["codul creează linkul prin ACELAȘI execute :227"]:::step
+  P3{"3 · cart_add fără link creat? :236-242"}:::dec
+  S3["cross-sell complementare + policy.gate :251<br/>rich reușit → handled; altfel continuă"]:::safe
+  P4{"4 · superlativ pe setul afișat?<br/>_ATTR_QUERY_RE :282-288"}:::dec
+  S4["rehidratează setul + policy.gate :294"]:::safe
+  P5{"5 · «ceva mai ieftin»? :304-311"}:::dec
+  S5["search_cheaper_than + policy.gate :317<br/>nimic mai ieftin → unmet_query price_gap :331<br/>+ «deja cel mai ieftin» → handled"]:::safe
+  P6{"6 · zero produse + set afișat?<br/>plasa R3 :352-359"}:::dec
+  S6["rehidratează din state + policy.gate :363"]:::safe
+  GATE["policy.gate purpose=retrieval_final :372<br/>ULTIMUL punct — prinde orice cale viitoare<br/>care uită gate-ul"]:::safe
+  RETR["ctx.retrieval = RetrievalResult :373<br/>+ match_gate_shadow :374 (OFF)"]:::step
+
+  P1 -- da --> O1
+  P1 -- nu --> P2
+  P2 -- da --> S2 --> P3
+  P2 -- nu --> P3
+  P3 -- da --> S3 --> P4
+  P3 -- nu --> P4
+  P4 -- da --> S4 --> GATE
+  P4 -- nu --> P5
+  P5 -- da --> S5 --> GATE
+  P5 -- nu --> P6
+  P6 -- da --> S6 --> GATE
+  P6 -- nu --> GATE
+  GATE --> RETR
+```
+
+**Faza F — dispatch-ul de render**, cu fall-through-uri (comparație → produse, rich → proză):
+
 ```mermaid
 flowchart TD
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
@@ -519,105 +590,26 @@ flowchart TD
   classDef free fill:#a3e4d7,stroke:#148f77,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
-  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
 
-  IN2["route = sales / order<br/>agent.py:267"]:::step
+  APLAN{"answer_plan_enabled?<br/>agent.py:396 — OFF by default"}:::dec
+  AGUARD["enforce_answer_plan<br/>answer_plan_guard.py:20"]:::llm
+  CMPD{"compared?"}:::dec
+  CTAB["tabel comparativ determinist<br/>ZERO proză LLM în celule"]:::free
+  PRD{"produse?"}:::dec
+  RICHC["_finalize_rich :266 — apel structurat"]:::llm
+  ROK{"rich cu items?"}:::dec
+  RICHOUT["set_rich_reply + checkout offer<br/>+ agent_recommended"]:::out
+  DOWN["rich_downgraded :396 — motiv emis"]:::step
+  VALID{"validate_prose validator.py:195<br/>preț · link · număr bar · claim · stoc · safety"}:::dec
+  RETRY["1 retry cu feedback"]:::llm
+  V2{"valid acum?"}:::dec
+  DETR["formulare deterministă fără cifre"]:::free
+  PROSE["proză + carduri"]:::out
+  ORD{"rută order?"}:::dec
+  GRND["_finalize_grounded :149 pe order views"]:::llm
+  TXTOK{"text valid fără produse?"}:::dec
+  NORES["no-result sigur, cacheable=False<br/>+ chips de continuare :211"]:::out
 
-  subgraph A["A · Regie + siguranță — agent.py:267-295"]
-    GRD0{"llm None? rută ≠ sales/order?<br/>mesaj gol? :270-277"}:::dec
-    NOOP["no-op → fallback_stage"]:::step
-    SAFEP["_persist_safety_context :217<br/>SafetyPolicy.for_turn · policy.py:85"]:::safe
-    PRUNE["_prune_displayed :235 — hidratează din catalog<br/>+ taie contraindicatele din state"]:::safe
-  end
-
-  subgraph B["B · Intenții deterministe pre-loop — deterministic.py:469"]
-    PRE{"link / compare / detaliu / recenzie<br/>pe setul afișat?"}:::dec
-    PREOUT["răspuns determinist — $0 inferență"]:::free
-  end
-
-  subgraph C["C · Prompt — prompt_builder · agent.py:299-350"]
-    MERGEC["merge_constraints :126 — stivă multi-tur<br/>rafinarea NU pierde constrângerile"]:::step
-    HINTS["hint-uri per-tur: filtre · purchase_intent<br/>· lead_score · context · istoric (max 8)"]:::step
-    SYS["build_agent_system — GENERAT din DB (P9)"]:::step
-  end
-
-  subgraph D["D · Buclă tool-uri — llm.py:227"]
-    SM{"show_more?<br/>deterministic.py:541"}:::dec
-    PAGE["continue_search_session — paginare<br/>deterministă, fără LLM"]:::free
-    PGOK{"pool epuizat?"}:::dec
-    NOMORE["mesaj determinist, cacheable=False"]:::out
-    LOOP["run_tool_loop — max 3 tool calls"]:::llm
-    EXEC["ToolRun.execute — acumulează<br/>produse / linkuri / sume"]:::step
-  end
-
-  subgraph E["E · Planner — planner.py:162"]
-    LOGIN{"check_order pe web anonim?<br/>run.order_gated_login :187"}:::dec
-    LWALL["mesaj login determinist → handled"]:::out
-    CKF{"purchase_intent fără checkout_url?<br/>:206-214"}:::dec
-    CKEXEC["codul creează linkul<br/>prin ACELAȘI execute :227"]:::step
-    XS{"cart_add fără link?<br/>:236-242"}:::dec
-    XSELL["cross-sell complementare<br/>+ policy.gate :251"]:::safe
-    ATQ{"superlativ pe setul afișat?<br/>_ATTR_QUERY_RE :282-288"}:::dec
-    HYD1["rehidratează setul afișat<br/>+ policy.gate :294"]:::safe
-    CHP{"„ceva mai ieftin”?<br/>:304-311"}:::dec
-    CHS["search_cheaper_than<br/>+ policy.gate :317"]:::safe
-    CH0{"găsit ceva mai ieftin?"}:::dec
-    UNMET["unmet_query reason=price_gap :331<br/>= gol de catalog, marcat LA SURSĂ"]:::step
-    CHMSG["„deja cel mai ieftin” + chips → handled"]:::out
-    RHD{"zero produse + set afișat?<br/>plasa R3 :352-359"}:::dec
-    HYD2["rehidratează din state + policy.gate :363"]:::safe
-    FINALG["policy.gate purpose=retrieval_final :372<br/>ULTIMUL punct înainte de validator/carduri"]:::safe
-    RETR["ctx.retrieval = RetrievalResult :373"]:::step
-    MGS["match_gate_shadow :374 — OFF by default"]:::step
-  end
-
-  subgraph F["F · Render — finalize.py:325"]
-    APLAN{"answer_plan_enabled?<br/>agent.py:396 — OFF by default"}:::dec
-    AGUARD["enforce_answer_plan<br/>answer_plan_guard.py:20"]:::llm
-    CMPD{"compared?"}:::dec
-    CTAB["tabel comparativ determinist<br/>ZERO proză LLM în celule"]:::free
-    PRD{"produse?"}:::dec
-    RICHC["_finalize_rich :266 — apel structurat"]:::llm
-    ROK{"rich cu items?"}:::dec
-    RICHOUT["set_rich_reply + checkout offer<br/>+ agent_recommended"]:::out
-    DOWN["rich_downgraded :396 — motiv emis"]:::step
-    VALID{"validate_prose :195<br/>preț · link · număr bar · claim · stoc · safety"}:::dec
-    RETRY["1 retry cu feedback"]:::llm
-    V2{"valid acum?"}:::dec
-    DETR["formulare deterministă fără cifre"]:::free
-    PROSE["proză + carduri"]:::out
-    ORD{"rută order?"}:::dec
-    GRND["_finalize_grounded :149 pe order views"]:::llm
-    TXTOK{"text valid fără produse?"}:::dec
-    NORES["no-result sigur, cacheable=False<br/>+ chips de continuare :211"]:::out
-  end
-
-  IN2 --> GRD0
-  GRD0 -- da --> NOOP
-  GRD0 -- nu --> SAFEP --> PRUNE --> PRE
-  PRE -- da --> PREOUT
-  PRE -- nu --> MERGEC --> HINTS --> SYS --> SM
-  SM -- da --> PAGE --> PGOK
-  PGOK -- da --> NOMORE
-  PGOK -- nu --> LOGIN
-  SM -- nu --> LOOP <--> EXEC
-  LOOP --> LOGIN
-  LOGIN -- da --> LWALL
-  LOGIN -- nu --> CKF
-  CKF -- da --> CKEXEC --> XS
-  CKF -- nu --> XS
-  XS -- da --> XSELL
-  XSELL -- "fără complement / rich eșuat → continuă" --> ATQ
-  XS -- nu --> ATQ
-  ATQ -- da --> HYD1 --> FINALG
-  ATQ -- nu --> CHP
-  CHP -- da --> CHS --> CH0
-  CH0 -- nu --> UNMET --> CHMSG
-  CH0 -- da --> FINALG
-  CHP -- nu --> RHD
-  RHD -- da --> HYD2 --> FINALG
-  RHD -- nu --> FINALG
-  FINALG --> RETR --> MGS --> APLAN
   APLAN -- da --> AGUARD
   APLAN -- nu --> CMPD
   CMPD -- da --> CTAB
@@ -637,6 +629,7 @@ flowchart TD
   TXTOK -- nu --> NORES
   PRD -- "nu, fără text" --> NORES
 ```
+
 
 **Cele patru căi care ocolesc `ToolRun`** (cross-sell, superlativ, „mai ieftin", rehidratare) aduc
 produse direct din DB. Fiecare are `policy.gate` propriu, iar `retrieval_final`
@@ -706,6 +699,10 @@ Cine o folosește: `_finalize_rich` (agent/finalize.py:266-311, recomandare + cr
 
 ## Diagram 5 — Product Search Workflow
 
+Calea LIVE a lui `search_products` ([catalog_tools.py:646](../src/tools/catalog_tools.py)).
+NX-208 (query understanding) NU e aici: expansiunile rulează doar în shadow
+(`query_spec_shadow`, OFF) și în benchmark-ul offline — calea servită primește query-ul modelului.
+
 ```mermaid
 flowchart TD
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
@@ -713,49 +710,61 @@ flowchart TD
   classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
 
-  Q["search_products args from model<br/>catalog_tools.py:383"]:::step
-  CONC["map concerns via DomainPack<br/>catalog_tools.py:399"]:::step
-  INH{"active session +<br/>no new category/concerns?"}:::dec
-  INHERIT["inherit session filters<br/>catalog_tools.py:417-427"]:::step
-  FP{"same filters fingerprint<br/>+ stored pool?"}:::dec
-  PAGE["continue_search_session<br/>next page, zero LLM cost<br/>catalog_tools.py:343"]:::step
+  Q["search_products args de la model<br/>catalog_tools.py:646"]:::step
+  CONC["concerns → chei canonice (DomainPack) :662<br/>+ features → searchable_facets normalizat :665-670"]:::step
+  INH{"sesiune activă + fără<br/>categorie/concerns noi? :681"}:::dec
+  INHERIT["moștenește filtrele sesiunii<br/>anti-drift «mai ifetin» — :683-690"]:::step
+  FP{"același fingerprint filtre<br/>+ pool stocat? :698"}:::dec
+  PAGE["continue_search_session :594<br/>pagina următoare, zero LLM"]:::step
 
-  LADDER["build relax ladder<br/>catalog_tools.py:439"]:::step
-  EMB{"LLM + embeddings available?"}:::dec
-  VEC["embed query — ONE call<br/>catalog_tools.py:450"]:::llm
-  LEX["lexical search FTS + pg_trgm<br/>catalog_tools.py:468"]:::db
-  SEM["semantic search pgvector HNSW<br/>catalog_tools.py:486"]:::db
-  FUSE["fuse_candidates RRF + blended rank<br/>catalog_tools.py:507"]:::step
-  ANY{"results at this step?"}:::dec
-  RELAX["relax next filter in ladder"]:::step
-  EXH{"ladder exhausted?"}:::dec
-  EMPTY["empty ToolResult → AGENT composes<br/>no-result msg — agent/finalize.py:203"]:::out
+  LADDER["scară de relaxare :702<br/>(_relax_ladder :397)"]:::step
+  EMB{"LLM + embeddings? :713"}:::dec
+  VEC["embed query — UN apel :715"]:::llm
+  LEX["lexical FTS + pg_trgm :731"]:::db
+  SEM["semantic pgvector HNSW :749"]:::db
+  FUSE["fuse_candidates RRF + blended rank :770"]:::step
+  ANY{"rezultate la treapta asta?"}:::dec
+  RELAX["relaxează următorul filtru soft"]:::step
+  EXH{"scara epuizată?"}:::dec
+  EMPTY["ToolResult gol → agentul compune<br/>mesaj no-result — finalize.py:203"]:::out
 
-  DIV{"sort=relevance + not named product?"}:::dec
-  DIVER["diversify pool: price tertiles + brands<br/>catalog_tools.py:518"]:::step
-  DEDUP["dedupe vs displayed_products, cap 6"]:::step
-  SESS["store session pool + fingerprint in state"]:::db
-  RES["ToolResult: full products → validator<br/>compact llm_view max 6x8 → model"]:::out
+  SAFE["gate contraindicații pe setul FUZIONAT<br/>ÎNAINTE de pool/pagină — :786"]:::safe
+  DIV{"sort=relevance + nu produs numit? :792"}:::dec
+  DIVER["diversify_pool: terțile de preț + branduri<br/>:798 (def :463)"]:::step
+  PAGE1["prima pagină prin _next_page :807<br/>unseen-dedup vs displayed, cap 6"]:::step
+  TEL["telemetrie determinstă: product_search :826<br/>+ unmet_query LA SURSĂ (named_not_found /<br/>missing_variant / no_result) :857-897"]:::step
+  SESS["seamănă sesiunea: pool + cursor + fp<br/>:901-908"]:::db
+  BRAND{"brand cerut + zero match real? :921"}:::dec
+  BDISC["disclosure: «nu avem brandul X» —<br/>NU prezenta alt brand ca al lui :922-930"]:::out
+  RC["reason_codes + gate not_recommended_for<br/>(NX-170, ON) :952-955 + disclosure produs<br/>numit inexistent :934-942"]:::step
+  RES["ToolResult: produse complete → validator<br/>llm_view compact max 6×8 → model"]:::out
 
   Q --> CONC --> INH
-  INH -- yes --> INHERIT --> FP
-  INH -- no --> FP
-  FP -- yes --> PAGE --> RES
-  FP -- no --> LADDER --> EMB
-  EMB -- yes --> VEC --> LEX
-  EMB -- no --> LEX
+  INH -- da --> INHERIT --> FP
+  INH -- nu --> FP
+  FP -- da --> PAGE --> RES
+  FP -- nu --> LADDER --> EMB
+  EMB -- da --> VEC --> LEX
+  EMB -- nu --> LEX
   LEX --> SEM --> FUSE --> ANY
-  ANY -- no --> EXH
-  EXH -- no --> RELAX --> LEX
-  EXH -- yes --> EMPTY
-  ANY -- yes --> DIV
-  DIV -- yes --> DIVER --> DEDUP
-  DIV -- no --> DEDUP
-  DEDUP --> SESS --> RES
+  ANY -- nu --> EXH
+  EXH -- nu --> RELAX --> LEX
+  EXH -- da --> EMPTY
+  ANY -- da --> SAFE --> DIV
+  DIV -- da --> DIVER --> PAGE1
+  DIV -- nu --> PAGE1
+  PAGE1 --> TEL --> SESS --> BRAND
+  BRAND -- da --> BDISC
+  BRAND -- nu --> RC --> RES
 ```
 
-Degradare: `embed` picat → `query_vec=None` → lexical-only (`catalog_tools.py:447-454`); semantic picat în tur → rămâne lexical (`catalog_tools.py:501-502`).
+Degradare: `embed` picat → `query_vec=None` → lexical-only (`catalog_tools.py:716-717`); semantic
+picat în tur → rămâne lexical (`:764-765`). Poziția gate-ului de siguranță (`:786`) e esențială:
+filtrat DUPĂ pool, un produs contraindicat ar rămâne în `active_search.pool` și ar reapărea la
+„arată-mi altele". `unmet_query` e emis și pe căile CU rezultate (produs numit absent → alternativele
+se servesc, dar golul de catalog tot se înregistrează).
 
 ---
 
@@ -769,16 +778,17 @@ flowchart TD
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
 
-  subgraph Load["TURN START — load memory processor.py:490-510"]
+  subgraph Load["TURN START — load memory processor.py:280-310"]
     H["history: last 8 messages<br/>get_recent_messages"]:::read
     ST["state jsonb max 8KB<br/>displayed_products refs + constraints + cart"]:::read
     SUM["rolling summary<br/>get_summary_for_context"]:::read
     PROF["contact profile + lead_score"]:::read
+    FCT["facts stabile visibility='inject'<br/>(NX-148/160, ON) → ctx.facts — processor.py:307"]:::read
   end
 
   subgraph Use["IN PROMPTS — context.py"]
     TRANS["conversation_transcript max 6 turns / 1200ch<br/>context.py:23"]:::read
-    BLOCKS["profile block :40 + state block :59"]:::read
+    BLOCKS["profile block :40 + facts block :87<br/>+ state block — asamblate :155"]:::read
   end
 
   subgraph Mutate["DURING TURN"]
@@ -788,26 +798,27 @@ flowchart TD
   end
 
   subgraph Persist["SENDER TX — processor.py:382-492, in code order"]
-    DP["displayed_products ← reply.products<br/>:567-570"]:::write
-    PQ["pending_question set or cleared :573"]:::write
-    MERGE["canonical merge: constraints +<br/>asked_intents + search_constraints :580-587"]:::write
-    ASR["active_search reset when reply<br/>has no products :592-593"]:::write
-    PATCH["state_patch wins LAST :597-598"]:::write
-    OPT["optimistic lock state_version<br/>patch_conversation_state :656"]:::db
+    DP["displayed_products ← reply.products"]:::write
+    PQ["pending_question set or cleared"]:::write
+    MERGE["canonical merge: constraints +<br/>asked_intents + search_constraints"]:::write
+    ASR["active_search reset when reply<br/>has no products"]:::write
+    PATCH["state_patch wins LAST"]:::write
+    OPT["optimistic lock state_version<br/>patch_conversation_state"]:::db
   end
 
-  subgraph PostTurn["POST-TURN async, best-effort — processor.py:509"]
+  subgraph PostTurn["POST-TUR OFF-CONN (NX-161) — consumer.py:236 → aftercare.py:444<br/>conn eliberat pe durata LLM-ului de fundal; usage separat phase=post_turn"]
     CW{"cacheable reply?"}:::dec
-    CWB["semantic_cache upsert<br/>static days / dynamic minutes + price snapshot<br/>processor.py:116"]:::db
+    CWB["semantic_cache upsert<br/>static days / dynamic minutes + price snapshot<br/>aftercare.py:106"]:::db
     SQ{"messages over threshold?"}:::dec
-    SUMGEN["generate_summary NANO<br/>summarizer.py:66 → conversation_summaries<br/>honest watermark"]:::llm
+    SUMGEN["generate_summary NANO<br/>aftercare.py:193 → conversation_summaries<br/>honest watermark"]:::llm
     PE{"route ran + not shadow?"}:::dec
-    PEX["extract_profile NANO → whitelist patch<br/>+ deterministic lead_score<br/>processor.py:244"]:::llm
+    PEX["extract_profile NANO → whitelist patch<br/>+ lead_score determinist + process_facts<br/>(facts + memory v2) — aftercare.py:248-281"]:::llm
   end
 
   H --> TRANS
   PROF --> BLOCKS
   ST --> BLOCKS
+  FCT --> BLOCKS
   SUM --> TRANS
   TRANS --> AG
   BLOCKS --> AG
@@ -821,6 +832,10 @@ flowchart TD
   OPT --> PE
   PE -- yes --> PEX
 ```
+
+Facts memory (NX-148/160) e LIVE: migrările 023/024 sunt aplicate, `conversation_facts_enabled=true`,
+iar blocul de facts intră în prompturi între profil și state ([context.py:155](../src/worker/context.py)).
+Doar facts cu `visibility='inject'` ajung în prompt — PII/medical filtrate la sursă.
 
 ---
 
@@ -995,10 +1010,10 @@ flowchart TD
     I1["Redis down at webhook → 503, Meta retries<br/>webhook/app.py:119"]:::err
     I2["cache/FAQ error → miss, turn continues<br/>cache.py:146"]:::deg
     I3["analytics fail → log only<br/>processor.py:112"]:::deg
-    I4["conv lock busy → requeue capped<br/>consumer.py:90"]:::deg
-    I5["consumer crash mid-turn → un-ACKed<br/>reaper XAUTOCLAIM re-claims :234"]:::ok
-    I6["processing exception → ACK + log<br/>consumer.py:228 — WARNING: turn LOST"]:::err
-    I7["requeue cap exceeded → event DROPPED<br/>consumer.py:95-96 — WARNING: turn LOST"]:::err
+    I4["conv lock busy → requeue capped<br/>consumer.py:96-102"]:::deg
+    I5["consumer crash mid-turn → un-ACKed<br/>reaper XAUTOCLAIM re-claims :293"]:::ok
+    I6["processing exception → ACK + log<br/>consumer.py:286-288 — WARNING: turn LOST"]:::err
+    I7["requeue cap exceeded → event DROPPED<br/>consumer.py:99-100 — WARNING: turn LOST"]:::err
     I8["inbound stream maxlen ~100k trim →<br/>oldest LOST under backlog — redis_bus.py:68-73"]:::err
   end
 
@@ -1122,12 +1137,12 @@ flowchart TD
 - **Un singur punct de ieșire, tranzacțional** — reply + outbox + state + dedupe-complete într-o singură TX (`src/worker/processor.py:382-492`); dispatcher cu visibility-timeout self-healing (`src/worker/dispatcher.py:8-13`).
 - **Validatorul e apărarea load-bearing anti-halucinație și anti-prompt-injection** — orice preț/link/produs trebuie să existe în `ctx.retrieval` (`src/agent/validator.py:78-104`); degradarea finală e un reply determinist din DB (`src/agent/fallbacks.py:23`).
 - **Izolare multi-tenant în straturi** — rol LOGIN fără bypassrls + GUC per checkout + assert de izolare la fiecare checkout (`src/db/connection.py:187-204, 274-287`); boot-gate pe migrări (`src/worker/consumer.py:315-321`).
-- **Fiabilitate pe coadă** — dedupe 2 straturi (Redis + DB claim-or-resume), ACK-after-flush (`src/worker/debounce.py:11-15`), reaper XAUTOCLAIM (`src/worker/consumer.py:234-272`).
+- **Fiabilitate pe coadă** — dedupe 2 straturi (Redis + DB claim-or-resume), ACK-after-flush (`src/worker/debounce.py:11-15`), reaper XAUTOCLAIM (`src/worker/consumer.py:293-330`).
 - **Cost governance pe 3 niveluri** — business/zi, contact/zi, vizitator web, reseed din `usage_daily`, enforcement post-increment fără TOCTOU (`src/worker/processor.py:308-379`).
 
 ## Puncte slabe / riscuri
 
-1. **⚠ Cel mai serios: excepție de procesare = tur pierdut tăcut.** La orice excepție în `process_event`, consumer-ul face ACK și doar loghează (`src/worker/consumer.py:228-230`; la fel reaper-ul `:267-269`). Meta a primit deja 200 → nu re-trimite. Clientul nu primește NIMIC — încălcare a principiului 6 exact pe calea de eroare pe care principiul o vizează. **A doua cale de pierdere (găsită la trace-ul invers):** lock ocupat persistent → după `conv_lock_max_requeues` evenimentul e DROPAT cu un simplu log (`consumer.py:95-96`). → **NX-140**
+1. **⚠ Cel mai serios: excepție de procesare = tur pierdut tăcut.** La orice excepție în `process_event`, consumer-ul face ACK și doar loghează (`src/worker/consumer.py:286-288`; la fel reaper-ul, per-intrare, `:308`). Meta a primit deja 200 → nu re-trimite. Clientul nu primește NIMIC — încălcare a principiului 6 exact pe calea de eroare pe care principiul o vizează. **A doua cale de pierdere (găsită la trace-ul invers):** lock ocupat persistent → după `conv_lock_max_requeues` evenimentul e DROPAT cu un simplu log (`consumer.py:99-100`). → **NX-140**
 2. **`agent.py` e un god-module** — 1200+ linii; `agent_stage` (`:957+`) amestecă 3 intenții deterministe, bucla LLM, login-wall, checkout-fallback, cross-sell; validatorul + 3 căi de finalize în același fișier.
 3. **Cuplaj maxim în processor** — `handle_turn` are fan-out 45 (cel mai mare din sistem, `arch_explorer/GRAPH_REPORT.md`) și ~300 linii: orchestrare + politică de state-merge + sender + post-tur.
 4. **Ciclu de import gestionat manual** — stagiile importă `PipelineDeps` din runner sub `TYPE_CHECKING` (`src/worker/stages/gates.py:37-38`); runner-ul importă stagiile la sfârșitul fișierului (`src/worker/runner.py:189-199`).
