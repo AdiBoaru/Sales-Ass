@@ -1390,6 +1390,7 @@ faq_rerank_enabled = true
 injection_screen_enabled = false
 input_pii_mask_enabled = true
 lead_score_hint_enabled = true
+lexical_rank_v2_enabled = false
 lifecycle_job_enabled = true
 link_intent_enabled = true
 llm_sampling_enabled = true
@@ -1439,6 +1440,7 @@ validator_stock_claims_enabled = false
 vision_enabled = true
 web_enabled = false
 web_identity_enabled = false
+web_turn_lock_enabled = true
 welcome_enabled = true
 ```
 
