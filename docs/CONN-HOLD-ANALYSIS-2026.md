@@ -242,6 +242,36 @@ ultimul, dar semaforul mai devreme; (5) debouncer = datorie separată.
 → gates → free layers → agent prompt → agent tools → curățare). **Opțiunea A = arhitectura finală.**
 Fairness per-tenant complet = **epic separat** cu dependență explicită.
 
+### 10.1 Stare — ÎNCHIS de NX-231 (2026-08-11)
+
+Feliile 2-7 au fost livrate împreună, în cardul `tasks/stage1/NX-231.md`, fiindcă a le separa ar fi
+însemnat luni cu jumătate din pipeline pe un contract și cealaltă jumătate pe celălalt. Ce e în cod:
+
+| Felie planificată | Cum a fost livrată |
+|---|---|
+| 0A instrumentare | păstrată; `pool_metrics` raportează acum MAXIMUL acquire-wait-ului (un tur face N checkout-uri, „ultimul câștigă" ar fi ascuns vârful) + `db_ops` per operație |
+| 0B provider | `deps.db("operație")` — eticheta e obligatorie pe calea de runtime, altfel metrica nu are subiect |
+| 0C admission | rescris DISTRIBUIT (lease-uri Redis) + plafon per-tenant activ implicit + deadline + fallback bounded |
+| 1 aftercare | rămâne (era deja livrat) |
+| 2 load batching | `TurnLoadSnapshot` — un checkout, date imutabile, fără connection handle |
+| 3-5 gates/free layers/prompt | migrate la checkout-uri scurte |
+| 6 agent tool loop | fiecare tool își ia conexiunea lui; perechile atomice folosesc `db_tx` |
+| 7 curățare | `deps.conn` = zero în `src/`; guard-ul CI e HARD-FAIL cu 3 reguli (vezi mai jos) |
+
+În plus față de plan, fiindcă aveau EXACT același anti-pattern în alt proces:
+
+- **ruta web sincronă** (`/web/chat`) nu mai ține o conexiune peste pipeline și trece prin aceeași
+  poartă de admission ca workerul;
+- **dispatcher-ul** nu mai ține `tenant_conn` peste `send_*` (HTTP-ul providerului de canal).
+
+Guard-ul (`scripts/check_no_raw_conn.py`) verifică acum trei lucruri, nu unul: `deps.conn` în `src/`
+(R1), **o conexiune ținută peste un await extern** (R2 — regula care contează, restul sunt
+simptome) și un punct de intrare (stagiu/tool) care primește `conn` (R3). Excepțiile cer motiv
+scris; la închiderea NX-231 lista e goală.
+
+Măsurarea before/after: `scripts/sim/conn_hold_probe.py` (stub de model cu delay controlat, 2×
+tururi față de pool, health-probe în paralel — zero cost OpenAI).
+
 ## 11. Referințe
 `src/worker/processor.py`, `src/db/connection.py`, `src/worker/runner.py`, `src/worker/consumer.py`,
 `src/worker/debounce.py`, `src/worker/stages/*`, `src/tools/*`, `src/agent/llm.py`.

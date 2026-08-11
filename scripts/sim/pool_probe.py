@@ -38,7 +38,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.agent.llm import get_llm  # noqa: E402
+from src.db import op_metrics  # noqa: E402
 from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn  # noqa: E402
+from src.db.provider import tenant_db  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.db.queries.channels import upsert_channel  # noqa: E402
 from src.worker.processor import handle_turn  # noqa: E402
@@ -128,43 +130,57 @@ async def main() -> int:
             "body": text,
             "sender_name": "Client",
         }
-        acc = {"db_ms": 0.0, "calls": 0}
-        # held = wall-clock cât ține handle_turn conexiunea pinned; db_ms = cât execută query-uri.
-        async with tenant_conn(DEMO_BIZ) as raw:
-            timed = TimedConn(raw, acc)
-            t0 = time.perf_counter()
-            result = await handle_turn(timed, biz, channel_id, event, redis=None)
-            held = (time.perf_counter() - t0) * 1000.0
-        idle = held - acc["db_ms"]
-        rows.append((i, text, held, acc["db_ms"], idle, acc["calls"], result.reply_text))
+        # NX-231: turul nu mai ține O conexiune — face N checkout-uri scurte. `held` devine SUMA
+        # hold-urilor (cât timp cumulat a existat o conexiune în mâna turului), iar `db_active`
+        # vine din proxy-ul de timing (`DB_QUERY_TIMING_ENABLED`). Diferența = idle-held: exact
+        # cifra pe care fix-ul o duce spre zero.
+        acc, token = op_metrics.push()
+        t0 = time.perf_counter()
+        try:
+            result = await handle_turn(tenant_db(DEMO_BIZ), biz, channel_id, event, redis=None)
+        finally:
+            op_metrics.pop(token)
+        wall = (time.perf_counter() - t0) * 1000.0
+        held = acc.hold_ms
+        db_ms = acc.query_ms
+        idle = max(0.0, held - db_ms)
+        n_queries = sum(r.queries for r in acc.by_op.values())
+        rows.append((i, text, wall, held, db_ms, idle, acc.checkouts, result.reply_text))
         print(
             f"[tur {i}] {text!r}\n"
-            f"   held={_fmt(held)}  db_active={_fmt(acc['db_ms'])} ({acc['calls']} query-uri)  "
-            f"idle_held={_fmt(idle)}  →  idle={100 * idle / held:.0f}% din hold\n"
+            f"   wall={_fmt(wall)}  held(total)={_fmt(held)}  db_active={_fmt(db_ms)} "
+            f"({acc.checkouts} checkout-uri, {n_queries} query-uri)"
+            f"  idle_held={_fmt(idle)}\n"
+            f"   hold/wall={100 * held / wall:.0f}%  ← înainte de NX-231 era ~100% (o conexiune "
+            f"ținută tot turul)\n"
         )
 
     # Analiza pe tururile de sales (index >=1) — calea scumpă (agent + tools). Turul 0 (salut)
     # e mai ieftin + include one-off-ul de creare contact/conv, nereprezentativ pt steady-state.
     sales = [r for r in rows if r[0] >= 1]
-    avg_held = sum(r[2] for r in sales) / len(sales)
-    avg_db = sum(r[3] for r in sales) / len(sales)
-    idle_pct = 100 * (avg_held - avg_db) / avg_held
+    avg_wall = sum(r[2] for r in sales) / len(sales)
+    avg_held = sum(r[3] for r in sales) / len(sales)
+    avg_db = sum(r[4] for r in sales) / len(sales)
 
     print(f"{'=' * 78}\nSTEADY-STATE (tururi de sales, medie pe {len(sales)}):")
-    print(f"   held={_fmt(avg_held)}  db_active={_fmt(avg_db)}  idle={idle_pct:.0f}% din hold")
+    print(
+        f"   wall={_fmt(avg_wall)}  held(total)={_fmt(avg_held)}  db_active={_fmt(avg_db)}  "
+        f"hold/wall={100 * avg_held / avg_wall:.0f}%"
+    )
     print(f"{'=' * 78}\nSATURAȚIE (legea lui Little: λ_max = pool / held_s):\n")
     pool_size = 10
-    held_s = avg_held / 1000.0
-    db_s = avg_db / 1000.0
-    lam_now = pool_size / held_s
-    lam_fix = pool_size / db_s if db_s > 0 else float("inf")
+    lam_before = pool_size / (avg_wall / 1000.0)  # un tur ținea conexiunea TOT wall-clock-ul
+    lam_now = pool_size / (avg_held / 1000.0) if avg_held > 0 else float("inf")
     print(
-        f"   ACUM  (conn ținut pe durata LLM):  ~{lam_now:.1f} tururi/s = ~{lam_now * 60:.0f}/min"
+        f"   ÎNAINTE (conn ținut tot turul): ~{lam_before:.1f} tururi/s "
+        f"= ~{lam_before * 60:.0f}/min"
     )
-    print(
-        f"   FIX   (conn eliberat pe durata LLM): ~{lam_fix:.1f} tururi/s = ~{lam_fix * 60:.0f}/min"
-    )
-    print(f"   headroom cumpărat de fix: ×{avg_held / avg_db:.1f}\n{'=' * 78}\n")
+    print(f"   ACUM    (conn-per-op):          ~{lam_now:.1f} tururi/s = ~{lam_now * 60:.0f}/min")
+    print(f"   headroom câștigat: ×{avg_wall / avg_held:.1f}\n{'=' * 78}\n")
+    if avg_db <= 0:
+        print(
+            "NOTĂ: `db_active` e 0 → rulează cu DB_QUERY_TIMING_ENABLED=1 pentru idle-held real.\n"
+        )
 
     await close_pool()
     return 0

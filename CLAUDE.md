@@ -473,6 +473,25 @@ tenantul să fie cunoscut — e operația care îl derivă. Suprafața e limitat
 maparea canal→business + mentenanță non-PII (cleanup inbound_dedupe). Orice
 alt query pe admin_conn = bug de izolare.
 
+**Conexiunea aparține OPERAȚIEI, nu turului (NX-231).** Stagiile și tool-urile nu
+primesc un `conn` viu, ci PROVIDERUL `deps.db`:
+
+```python
+async with deps.db("search_products") as conn:   # checkout SCURT, etichetat
+    ...                                          # doar muncă de DB
+emb = await deps.llm.embed([q])                  # extern → ZERO conexiune ținută
+```
+
+Un tur = `load` (un checkout) → `compute` (fără conexiune) → `commit` (un checkout,
+O tranzacție) → `aftercare` (checkout-uri proprii) — contractul din
+`src/worker/turn_uow.py`. **Interzis:** orice await extern (LLM/embed/moderation/
+media/HTTP de provider/backoff/SSE/așteptare de coadă) în interiorul unui checkout;
+query-urile care trebuie atomice se grupează cu `db_tx(deps.db, "op")`, nu ținând
+conexiunea între apeluri. Guard mecanic în CI: `python scripts/check_no_raw_conn.py`
+(excepțiile cer motiv în `scripts/conn_allowlist.json`). Frâna de concurență nu mai
+e poolul, ci `admission` (lease-uri Redis, plafon global + per-tenant, aceeași
+poartă pe worker și pe `/web/chat`). Detalii: `docs/db_connections.md`.
+
 ---
 
 ## Principii — respectă-le în tot codul
@@ -523,6 +542,8 @@ nativx-assistant/
 │   ├── redis_bus.py             ← client Redis + dedupe layer 1 + XADD inbound
 │   ├── db/
 │   │   ├── connection.py        ← pool asyncpg, tenant_conn (RLS) + admin_conn (control plane)
+│   │   ├── provider.py          ← NX-231: `deps.db("op")` = checkout SCURT tenant-scoped + db_tx
+│   │   ├── op_metrics.py        ← NX-231: db_checkout_ms/db_hold_ms pe operație (+ idle-held)
 │   │   └── queries/             ← SQL per domeniu (contacts, conversations, messages,
 │   │                              outbox, inbound_dedupe, catalog, channels, businesses)
 │   ├── webhook/
@@ -533,7 +554,9 @@ nativx-assistant/
 │   │   └── orders.py            ← TODO: webhook comenzi → match ref_code → atribuire
 │   ├── worker/
 │   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK) + entrypoint __main__
-│   │   ├── processor.py         ← handle_turn: dedupe L2 → contact/conv → pipeline → outbox (+log per-tur)
+│   │   ├── processor.py         ← handle_turn: load → compute (fără conn) → commit → aftercare
+│   │   ├── turn_uow.py          ← NX-231: TurnLoadSnapshot (imutabil) + TurnCommit (o tranzacție)
+│   │   ├── admission.py         ← frâna de concurență: lease-uri Redis, plafon global + per-tenant
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
 │   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (Meta/Telegram), retry idempotent
 │   │   ├── context.py           ← stagiul 6: istoric conversație bugetat (triaj+agent)
