@@ -115,6 +115,41 @@ def mint_id_token(customer_ref: str, identity_secret: str, ttl_s: int = 300) -> 
 - **PII** — telefonul/numele, dacă vizitatorul le scrie, merg prin mesaj → pipeline →
   `channel_identities` (server-side). Niciodată salvate în browser.
 
+## Marginea de securitate (NX-229)
+
+Threat model complet: [`WEB-EDGE-THREAT-MODEL.md`](WEB-EDGE-THREAT-MODEL.md). Pentru integratorul
+care pune widgetul pe site, contează patru lucruri:
+
+**1. Originul trebuie declarat exact.** `Origin` se verifică **server-side pe toate** endpointurile
+`/web/*` (nu doar la bootstrap): CORS-ul browserului oprește doar citirea răspunsului de către JS,
+nu procesarea pe server — un bot îl ignoră complet. Potrivirea e exactă după normalizare:
+`https://demo.exemplu.ro` ≠ `https://www.demo.exemplu.ro` ≠ `http://demo.exemplu.ro` ≠
+`https://demo.exemplu.ro:8443`. Portul implicit și slash-ul final sunt normalizate, restul nu.
+Allowlist gol ⇒ niciun origin de browser acceptat (secure-by-default).
+
+Originile se pot declara **per canal** în `channels.settings.allowed_origins` (CSV) — mai strâns
+decât `WEB_CORS_ORIGINS`, care rămâne allowlistul procesului.
+
+**2. Sesiunile expiră.** Sesiunea v2 poartă `exp` (implicit 12h), `key_id` și, opțional, originul
+care a cerut-o. Un `403` pe o sesiune veche e comportament normal: cere `GET /web/bootstrap` din
+nou. Widgetul nu interpretează `sig` în nicio versiune — pentru el e opac.
+
+**3. `id_token` are un singur transport: body-ul.** Nu se citește din headere. Site-ul gazdă îl
+semnează cu `identity_secret`-ul tenantului; widgetul îl forwardează neschimbat. Opțional se pot
+configura `iss`/`aud` — verificate doar dacă sunt setate.
+
+**4. `Authorization: Bearer` nu identifică clientul.** Dacă e activat
+(`WEB_DEMO_ACCESS_ENABLED`), e o **poartă de acces la site**: verificată explicit, dar nu produce
+niciodată un `customer_ref`. Un client care vrea shopper identificat emite `id_token`. Cât timp
+poarta e oprită, headerul nici nu e acceptat de CORS — nu invităm un credential pe care nu-l
+citește nimeni.
+
+### Rotația cheii de sesiune
+
+Schimbare de date, nu de configurare: mută `session_secret` în `session_secret_prev`, scrie noul
+secret în `session_secret`, așteaptă 12h, șterge `session_secret_prev`. Ambele chei verifică în
+overlap, deci nimeni nu e deconectat la mijlocul unei conversații.
+
 ## Temă per client
 
 V1: tema vine din atributele `data-*` ale snippet-ului (agenția le completează la onboarding).

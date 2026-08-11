@@ -140,3 +140,32 @@ def test_apply_identity_noop_when_feature_off(monkeypatch):
     )
     webapp._apply_identity(ev, session, _mint({"sub": "cust_7", "exp": _FUTURE}))
     assert ev.verified_customer_ref is None  # feature off → anonim, indiferent de token
+
+
+# --- NX-229: issuer/audience optionale + o singura primitiva criptografica ------------------
+
+
+def test_identity_issuer_enforced_only_when_configured():
+    """Un host care nu emite `iss` nu e penalizat; unul care il emite e tinut de cuvant."""
+    tok = _mint({"sub": "cust-1", "exp": int(time.time()) + 600, "iss": "shop-a"})
+    assert verify_identity_token(tok, SECRET) == ("cust-1", None)
+    assert verify_identity_token(tok, SECRET, issuer="shop-a") == ("cust-1", None)
+    assert verify_identity_token(tok, SECRET, issuer="shop-b") == (None, "bad_issuer")
+
+
+def test_identity_audience_enforced_only_when_configured():
+    tok = _mint({"sub": "cust-1", "exp": int(time.time()) + 600, "aud": ["web", "app"]})
+    assert verify_identity_token(tok, SECRET) == ("cust-1", None)
+    assert verify_identity_token(tok, SECRET, audience="web") == ("cust-1", None)
+    assert verify_identity_token(tok, SECRET, audience="alt") == (None, "bad_audience")
+
+
+def test_identity_and_demo_gate_share_one_crypto_primitive():
+    """Doua implementari de JWT in acelasi repo inseamna ca intr-o zi doar una primeste fixul."""
+    import inspect
+
+    from src.web import identity as ident
+
+    src = inspect.getsource(ident)
+    assert "hmac.new" not in src, "criptografia trebuie sa traiasca in security.verify_hs256_claims"
+    assert "verify_hs256_claims" in src

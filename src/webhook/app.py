@@ -171,13 +171,27 @@ if get_settings().web_enabled:
     # se gate-uiește pe allowlist-ul de origin-uri (CSV în WEB_CORS_ORIGINS). Gol → fără origin-uri
     # permise (doar same-origin). Endpointurile NE-browser (webhook Meta/orders) n-au Origin →
     # neafectate. Gardele reale rămân server-side: token public + sig HMAC + rate-limit.
-    cors_origins = get_settings().web_cors_origins_list
+    from src.web.security import normalize_allowlist
+
+    _s = get_settings()
+    # NX-229: originile se NORMALIZEAZĂ înainte de a ajunge în middleware. `https://x:443/` și
+    # `https://x` sunt același origin, dar browserul trimite mereu forma canonică — o intrare
+    # necanonică în config n-ar prinde niciodată, tăcut. Ce nu se poate canoniza e dropat, deci o
+    # greșeală de scriere nu devine „permite orice".
+    cors_origins = sorted(normalize_allowlist(_s.web_cors_origins_list))
     if cors_origins:
+        # `Authorization` intră în allowlist DOAR dacă poarta de acces demo chiar îl validează
+        # (card: „headers numai dacă sunt efectiv validate"). Altfel l-am invita pe client să
+        # trimită un credential pe care nu-l citește nimeni — exact situația din v1, unde
+        # frontendul trimitea un Supabase JWT ignorat tăcut de backend.
+        allow_headers = ["Content-Type", "Last-Event-ID"]
+        if _s.web_demo_access_enabled:
+            allow_headers.append("Authorization")
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cors_origins,
             allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["Content-Type", "Last-Event-ID"],
+            allow_headers=allow_headers,
         )
 
     app.include_router(web_router)

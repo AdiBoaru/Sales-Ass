@@ -29,7 +29,9 @@ async def resolve_web_session(
         """
         select business_id::text as business_id,
                settings->>'session_secret' as session_secret,
-               settings->>'identity_secret' as identity_secret
+               settings->>'session_secret_prev' as session_secret_prev,
+               settings->>'identity_secret' as identity_secret,
+               settings->>'allowed_origins' as allowed_origins
         from channels
         where kind = 'webchat'
           and provider_account_id = $1
@@ -42,7 +44,14 @@ async def resolve_web_session(
     return {
         "business_id": row["business_id"],
         "session_secret": row["session_secret"],
+        # NX-229: cheia PRECEDENTĂ, pentru overlapul de rotație. Absentă = nicio rotație în curs;
+        # sesiunile semnate cu ea rămân valide până le expiră singure, deci rotația nu mai
+        # deconectează pe toată lumea deodată.
+        "session_secret_prev": row["session_secret_prev"],
         "identity_secret": row["identity_secret"],
+        # NX-229: allowlist de origini PER CANAL (CSV). Absent → se folosește cel global din
+        # settings. Un tenant nu trebuie să poată vedea sau moșteni originile altuia.
+        "allowed_origins": row["allowed_origins"],
     }
 
 
