@@ -3,7 +3,12 @@
 Query-urile de catalog sunt monkeypatch-uite; testăm: dispatch, validare args, vederile
 compacte, izolarea (business_id din ctx), degradarea (tool inexistent / args invalide)."""
 
+import asyncio
+import inspect
+import time
+
 from src.config import get_settings
+from src.db.queries.catalog import search_products_lexical, search_products_semantic
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
 from src.tools.base import enabled_tools, run_tool
@@ -57,6 +62,23 @@ class _RaisingLLM:
 
     async def embed(self, texts, *, model=None):
         raise RuntimeError("embed down")
+
+
+class _SlowLLM:
+    """NX-225: furnizor LENT, nu mort — răspunde corect, dar târziu. `cancelled` confirmă că
+    anularea de la `wait_for` a ajuns în corutină și că `CancelledError` NU scapă în tur."""
+
+    def __init__(self, delay_s: float):
+        self.delay_s = delay_s
+        self.cancelled = False
+
+    async def embed(self, texts, *, model=None):
+        try:
+            await asyncio.sleep(self.delay_s)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return [[0.0] * 8 for _ in texts]
 
 
 async def _has_emb_true(conn, business_id):
@@ -122,6 +144,11 @@ def test_enabled_tools_phase1_and_2():
 def _search_event(ctx):
     """Ultimul event `product_search` emis (pentru aserții pe mode/PII)."""
     return next(e for e in reversed(ctx.events) if e.type == "product_search")
+
+
+def _events(ctx, type_):
+    """Toate evenimentele de un tip (lista goală = semnalul NU s-a emis)."""
+    return [e for e in ctx.events if e.type == type_]
 
 
 async def test_search_products_tool(monkeypatch):
@@ -480,6 +507,119 @@ async def test_search_embed_error_falls_back_sql(monkeypatch):
     res = await run_tool(ctx, _deps(_RaisingLLM()), "search_products", {"query": "x"})
     assert res.ok and len(res.products) == 2
     assert _search_event(ctx).properties["mode"] == "lexical"
+    # NX-225: furnizorul MORT are semnalul lui — tipul erorii, niciodată mesajul (P12).
+    assert _events(ctx, "embed_failed")[0].properties["error_type"] == "RuntimeError"
+    assert _events(ctx, "embed_timeout") == []  # mort ≠ lent
+
+
+# --- NX-225: buget de timp pe embed-ul de query (lent = același drum ca mort) ------
+
+
+async def test_search_embed_timeout_falls_back_lexical(monkeypatch):
+    """Furnizor LENT (nu mort): wait_for taie la buget → lexical-only + `embed_timeout`, iar
+    turul NU așteaptă cele 5s ale furnizorului (P4/P6)."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+    sem_calls = []
+
+    async def fake_sem(conn, business_id, vec, **k):
+        sem_calls.append(vec)
+        return PRODUCTS
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _SlowLLM(delay_s=5.0)
+    t0 = time.monotonic()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    elapsed_ms = (time.monotonic() - t0) * 1000
+
+    assert res.ok and len(res.products) == 2  # rezultate LEXICALE, nu tăcere
+    assert _search_event(ctx).properties["mode"] == "lexical"
+    assert sem_calls == []  # fără query_vec → retrieverul semantic nici nu e chemat
+    assert _events(ctx, "embed_timeout")[0].properties["timeout_ms"] == 200
+    assert _events(ctx, "embed_failed") == []  # lent ≠ mort
+    assert elapsed_ms < 400  # < 2× timeout (nu cele 5000ms ale furnizorului)
+    assert llm.cancelled  # corutina a fost anulată, iar CancelledError n-a scăpat în tur
+
+
+async def test_search_embed_fast_emits_no_degradation_events(monkeypatch):
+    """Anti-regresie: embed rapid → semantic activ, ZERO events noi (nu poluăm analytics)."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return PRODUCTS
+
+    async def fake_sql(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2 and llm.embed_calls == 1
+    assert _search_event(ctx).properties["mode"] == "semantic"
+    assert _events(ctx, "embed_timeout") == [] and _events(ctx, "embed_failed") == []
+
+
+async def test_search_embed_timeout_zero_disables_budget(monkeypatch):
+    """`embed_timeout_ms=0` = kill-switch numeric: fără buget de timp, exact ca înainte —
+    embed-ul lent apucă să răspundă și calea semantică rămâne activă."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 0)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    async def fake_sem(conn, business_id, vec, **k):
+        return PRODUCTS
+
+    async def fake_sql(conn, business_id, **k):
+        return []
+
+    monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _SlowLLM(delay_s=0.15)  # ar depăși orice buget rezonabil
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2
+    assert _search_event(ctx).properties["mode"] == "semantic"  # vectorul a ajuns întreg
+    assert not llm.cancelled and _events(ctx, "embed_timeout") == []
+
+
+async def test_search_embed_builtin_timeout_with_budget_off_is_failure(monkeypatch):
+    """Cu bugetul OPRIT nu putem tăia noi nimic: un `TimeoutError` venit din altă parte e „mort",
+    nu „lent" — altfel dashboardul ar primi `embed_timeout{timeout_ms: 0}`, adică o minciună."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 0)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_true)
+
+    class _BuiltinTimeoutLLM:
+        async def embed(self, texts, *, model=None):
+            raise TimeoutError("socket timeout")
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx = _ctx()
+    res = await run_tool(ctx, _deps(_BuiltinTimeoutLLM()), "search_products", {"query": "x"})
+    assert res.ok and len(res.products) == 2  # degradarea e aceeași (P6)
+    assert _events(ctx, "embed_failed")[0].properties["error_type"] == "TimeoutError"
+    assert _events(ctx, "embed_timeout") == []
+
+
+async def test_search_no_embeddings_never_calls_embed(monkeypatch):
+    """`has_embeddings` False → embed-ul nici nu se apelează (bugetul nu atinge drumul ăsta)."""
+    monkeypatch.setattr(get_settings(), "embed_timeout_ms", 200)
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+
+    async def fake_sql(conn, business_id, **k):
+        return PRODUCTS
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
+    ctx, llm = _ctx(), _LLM()
+    res = await run_tool(ctx, _deps(llm), "search_products", {"query": "x"})
+    assert res.ok and llm.embed_calls == 0
+    assert _events(ctx, "embed_timeout") == [] and _events(ctx, "embed_failed") == []
 
 
 async def test_search_all_empty_is_graceful(monkeypatch):
@@ -834,3 +974,191 @@ async def test_variant_label_too_long_is_rejected():
     long = "x" * 200
     res = await run_tool(_ctx(), _deps(), "search_products", {"query": "y", "variant_label": long})
     assert res.ok is False
+
+
+# --- NX-223: guard de completitudine al fingerprint-ului de sesiune ---------------------
+#
+# Regula pe care o păzește: fp-ul sesiunii (`_session_filters`) trebuie să conțină ORICE argument
+# din `SearchArgs` care ajunge filtru în retrievere. Un argument nou pasat retrieverelor dar uitat
+# în fp NU se vede ca eroare — se vede ca „bot-ul răspunde din pool-ul vechi", luni mai târziu.
+# De aceea guard-ul e derivat prin introspecție din semnăturile REALE, nu dintr-o listă scrisă de
+# mână care ar rămâne și ea în urmă.
+
+# `SearchArgs.query` ajunge la retriever sub alt nume (`query_text`) — singura redenumire.
+_ARG_TO_RETRIEVER_PARAM = {"query": "query_text"}
+
+# Excepții EXPLICITE: argumente pasate retrieverelor care NU definesc sesiunea.
+# `limit` = mărimea PAGINII servite din pool, nu un filtru — aceeași sesiune se paginează cu
+# limite diferite (vezi test_page_index_monotonic_when_limit_varies).
+_FP_EXEMPT = {"limit"}
+
+
+def _retriever_params() -> set[str]:
+    """Parametrii ACCEPTAȚI de cele două retrievere (sursa de adevăr = semnăturile lor)."""
+    return {
+        name
+        for fn in (search_products_lexical, search_products_semantic)
+        for name in inspect.signature(fn).parameters
+    }
+
+
+def _fp_gaps(arg_fields: set[str], retriever_params: set[str], fp_keys: set[str]) -> set[str]:
+    """Argumentele de `SearchArgs` care ajung la retrievere dar LIPSESC din fp (pur, testabil)."""
+    return {
+        f
+        for f in arg_fields - _FP_EXEMPT
+        if _ARG_TO_RETRIEVER_PARAM.get(f, f) in retriever_params and f not in fp_keys
+    }
+
+
+def _fp_keys() -> set[str]:
+    """Cheile fp-ului (statice — nu depind de valori); `SearchArgs` minimal valid ca sondă."""
+    return set(ct._session_filters(ct.SearchArgs(query="q"), None, None))
+
+
+def test_session_fp_covers_every_filtering_arg():
+    """NX-223: fiecare câmp de `SearchArgs` care ajunge filtru în retrievere e în fp."""
+    gaps = _fp_gaps(set(ct.SearchArgs.model_fields), _retriever_params(), _fp_keys())
+    assert gaps == set(), (
+        f"argumente de filtrare absente din `_session_filters`: {sorted(gaps)} — "
+        "rafinarea pe ele ar servi pool-ul VECHI (NX-223). Adaugă-le în fp sau, dacă chiar nu "
+        "schimbă setul de rezultate, în `_FP_EXEMPT` cu justificare."
+    )
+
+
+def test_fp_guard_catches_a_new_unfingerprinted_filter():
+    """Guard-ul chiar prinde: un filtru NOU pasat retrieverelor și uitat în fp → roșu."""
+    gaps = _fp_gaps(
+        {"query", "brand", "shade_family"},  # câmp fictiv nou de `SearchArgs`
+        _retriever_params() | {"shade_family"},  # …pasat retrieverelor
+        _fp_keys(),  # …dar absent din fp
+    )
+    assert gaps == {"shade_family"}
+
+
+def test_fp_guard_accepts_exempt_and_known_args():
+    """Anti-fals-pozitiv: `limit` (exceptat) și argumentele care NU merg la retrievere nu pică."""
+    assert _fp_gaps({"limit"}, _retriever_params(), _fp_keys()) == set()
+    assert _fp_gaps({"nu_ajunge_la_retriever"}, _retriever_params(), _fp_keys()) == set()
+
+
+# --- NX-227: nevoie NEMAPATĂ → telemetrie + disclosure (nu se mai pierde tăcut) ----------------
+
+
+def _unmapped_terms(ctx) -> list[str]:
+    return _events(ctx, "concern_unmapped")[0].properties["terms"]
+
+
+async def _search_with_concerns(monkeypatch, ctx, concerns: list[str], **extra):
+    """Rulează search-ul pe cale lexical-only, capturând `concerns` ajunse la retriever."""
+    captured: dict = {}
+
+    async def fake_lex(conn, business_id, **k):
+        captured["concerns"] = k.get("concerns")
+        return list(PRODUCTS)
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "crema", "concerns": concerns, **extra}
+    )
+    return res, captured
+
+
+async def test_unmapped_concern_emits_and_discloses(monkeypatch):
+    """Mixt mapat+nemapat: filtrul rulează pe ce știm, restul devine event + notă către model."""
+    ctx = _ctx_beauty()
+    res, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras", "ten reactiv-x"])
+
+    assert captured["concerns"] == ["oily"]  # politica de filtrare NEschimbată
+    ev = _events(ctx, "concern_unmapped")[0]
+    assert ev.properties["terms"] == ["ten reactiv-x"]
+    assert ev.properties["locale"] == ctx.language  # P11: „ten reactiv" pe ro ≠ pe hu
+    assert "ten reactiv-x" in res.llm_view  # disclosure
+    assert "NU sunt filtrate" in res.llm_view  # ... precis: filtrul n-a rulat
+    assert "query" not in ev.properties  # P12: vocabular, nu textul clientului
+
+
+async def test_all_concerns_mapped_stays_silent(monkeypatch):
+    """Anti-zgomot: vocabular acoperit → ZERO event, ZERO notă (drum identic cu main)."""
+    ctx = _ctx_beauty()
+    res, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras", "acnee"])
+
+    assert captured["concerns"] == ["acne", "oily"]
+    assert _events(ctx, "concern_unmapped") == []
+    assert "nu sunt filtre cunoscute" not in res.llm_view
+
+
+async def test_all_concerns_unmapped_no_filter_but_signal(monkeypatch):
+    """Nimic mapat → fără filtru (ca azi), dar cu semnal complet + disclosure."""
+    ctx = _ctx_beauty()
+    res, captured = await _search_with_concerns(monkeypatch, ctx, ["frigider", "ten reactiv-x"])
+
+    assert captured["concerns"] is None  # niciun filtru fals care ar goli (P6)
+    assert _unmapped_terms(ctx) == ["frigider", "ten reactiv-x"]
+    assert "nu sunt filtre cunoscute" in res.llm_view
+
+
+async def test_missing_domain_pack_reports_every_term(monkeypatch):
+    """Pack absent = gol de CONFIGURARE; e exact semnalul, nu o excepție de tăcut."""
+    ctx = _ctx()  # fără domain_pack
+    _, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras"])
+
+    assert captured["concerns"] is None
+    assert _unmapped_terms(ctx) == ["ten gras"]
+
+
+async def test_unmapped_terms_count_is_capped(monkeypatch):
+    """Plafon de NUMĂR: 6 termeni trimiși → 5 în event (raport, nu transcriere; P12)."""
+    ctx = _ctx_beauty()
+    await _search_with_concerns(monkeypatch, ctx, [f"nevoie-{i}" for i in range(6)] + ["ten gras"])
+
+    terms = _unmapped_terms(ctx)
+    assert len(terms) == ct._UNMAPPED_TERMS_MAX == 5
+    assert set(terms) < {f"nevoie-{i}" for i in range(6)}  # submulțime strictă, deterministă
+
+
+async def test_unmapped_term_length_is_capped(monkeypatch):
+    """Plafon de LUNGIME: termen de 60 de caractere → tăiat la 40 în event."""
+    ctx = _ctx_beauty()
+    lung = "x" * 60
+    res, _ = await _search_with_concerns(monkeypatch, ctx, [lung])
+
+    assert _unmapped_terms(ctx) == [lung[: ct._VARIANT_ATTR_MAX]]
+    assert lung in res.llm_view  # nota către model păstrează termenul REAL al clientului
+
+
+async def test_unmapped_term_does_not_change_session_fp(monkeypatch):
+    """Termenii nemapați nu ating retrieval-ul → n-au voie să spargă sesiunea (fp identic).
+
+    Query IDENTIC, variază DOAR lista `concerns` (query-ul e el însuși în fp).
+    """
+    monkeypatch.setattr(get_settings(), "search_sessions_enabled", True)
+
+    pool = [{**PRODUCTS[0], "id": f"p{i}", "name": f"P{i}"} for i in range(10)]
+
+    async def fake_lex(conn, business_id, **k):
+        return list(pool)
+
+    async def fake_by_ids(conn, business_id, ids, **k):
+        by_id = {p["id"]: p for p in pool}
+        return [by_id[i] for i in ids if i in by_id]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
+
+    ctx1 = _ctx_beauty()
+    await run_tool(
+        ctx1, _deps_no_llm(), "search_products", {"query": "crema", "concerns": ["ten gras"]}
+    )
+    ctx2 = _ctx_beauty()
+    ctx2.state.active_search = ctx1.state_patch["active_search"]
+    await run_tool(
+        ctx2,
+        _deps_no_llm(),
+        "search_products",
+        {"query": "crema", "concerns": ["ten gras", "nevoie-necunoscuta"]},
+    )
+
+    ses = next(e for e in reversed(ctx2.events) if e.type == "search_session")
+    assert ses.properties["action"] == "page"  # aceeași sesiune, nu una nouă
+    assert _events(ctx2, "concern_unmapped") == []  # paginarea nu re-numără aceeași cerere

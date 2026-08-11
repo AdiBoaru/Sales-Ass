@@ -50,6 +50,7 @@ from src.worker.limits import (
     web_cost_over_visitor_cap,
 )
 from src.worker.processor import TurnResult, handle_turn
+from src.worker.turn_lock import acquire_turn_lock, release_turn_lock
 
 log = logging.getLogger(__name__)
 
@@ -222,33 +223,59 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
     _apply_identity(event_obj, session, req.id_token)  # NX-129: login passthrough (opțional)
     event = event_obj.to_dict()
     s = get_settings()
-    async with tenant_conn(session.business_id) as conn:
-        business = await load_business(conn, session.business_id)
-        if business is None:
-            raise HTTPException(status_code=503, detail="business unavailable")
-        # NX-120: gard de admitere de cost ÎNAINTE de pipeline — nu cheltui LLM dacă bugetul
-        # tenantului SAU al vizitatorului e atins. Redis căzut → fail-CLOSED (429), consecvent cu
-        # rate-limit-ul. (Precizia per-tur + cap per-contact pe canalele async = NX-125.)
-        cap = business.daily_cost_cap_usd or s.daily_cost_cap_usd
-        try:
-            over_budget = await cost_over_budget(
-                redis, session.business_id, cap
-            ) or await web_cost_over_visitor_cap(
-                redis, session.business_id, req.visitor_id, s.web_cost_cap_per_visitor_usd
-            )
-        except (RedisError, OSError):
-            over_budget = True  # fail-CLOSED: dacă nu pot verifica, NU cheltui
-        if over_budget:
-            raise HTTPException(status_code=429, detail="budget exceeded")
-        result = await handle_turn(
-            conn,
-            business,
-            channel["channel_id"],
-            event,
-            redis=redis,
-            deliver=False,
-            defer_aftercare=True,
+    # NX-221: serializare ture per conversație — calea sincronă rulează pipeline-ul IN-PROCESS,
+    # deci lock-ul NX-85 dintre replicile de consumer NU o acoperă. Lock Redis scurt la margine
+    # (P10: wait-ul se măsoară aici, stagiile nu știu), cheie tenant+expeditor (P7; identitatea e
+    # proxy 1:1 pt conversația deschisă — conversation_id nu e cunoscut fără round-trip în DB).
+    # Neobținut în fereastră / Redis jos → BYPASS: procesăm oricum (principiul 6 — un lock blocat
+    # nu lasă clientul fără răspuns); plasa rămâne optimistic lock-ul din processor (NX-221 fix 2).
+    lock = None
+    if s.web_turn_lock_enabled:
+        sender_key = f"webchat:{req.token}:{event_obj.verified_customer_ref or req.visitor_id}"
+        lock = await acquire_turn_lock(
+            redis,
+            session.business_id,
+            sender_key,
+            ttl_ms=s.turn_lock_ttl_ms,
+            wait_max_ms=s.turn_lock_wait_max_ms,
         )
+        if not lock.acquired:
+            event["turn_lock_bypass"] = True
+        if lock.waited_ms > 0:
+            event["turn_lock_wait_ms"] = lock.waited_ms
+    try:
+        async with tenant_conn(session.business_id) as conn:
+            business = await load_business(conn, session.business_id)
+            if business is None:
+                raise HTTPException(status_code=503, detail="business unavailable")
+            # NX-120: gard de admitere de cost ÎNAINTE de pipeline — nu cheltui LLM dacă bugetul
+            # tenantului SAU al vizitatorului e atins. Redis căzut → fail-CLOSED (429), consecvent
+            # cu rate-limit-ul. (Precizia per-tur + cap per-contact pe canalele async = NX-125.)
+            cap = business.daily_cost_cap_usd or s.daily_cost_cap_usd
+            try:
+                over_budget = await cost_over_budget(
+                    redis, session.business_id, cap
+                ) or await web_cost_over_visitor_cap(
+                    redis, session.business_id, req.visitor_id, s.web_cost_cap_per_visitor_usd
+                )
+            except (RedisError, OSError):
+                over_budget = True  # fail-CLOSED: dacă nu pot verifica, NU cheltui
+            if over_budget:
+                raise HTTPException(status_code=429, detail="budget exceeded")
+            result = await handle_turn(
+                conn,
+                business,
+                channel["channel_id"],
+                event,
+                redis=redis,
+                deliver=False,
+                defer_aftercare=True,
+            )
+    finally:
+        # Release DUPĂ ce turul (reply + patch de state) e persistat, dar ÎNAINTE de aftercare
+        # (LLM de fundal — nu ținem turul următor blocat pe muncă best-effort). TTL = plasă.
+        if lock is not None:
+            await release_turn_lock(redis, lock)
     # conn ELIBERAT ↑ (async with închis).
     pipeline_cost_usd = (
         result.aftercare.ctx.usage.cost_usd

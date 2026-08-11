@@ -8,6 +8,7 @@ Pydantic ÎNAINTE de execuție. `llm_view` = reprezentare COMPACTĂ (fără PII)
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -33,7 +34,7 @@ from src.safety.compose import model_hint as safety_model_hint
 from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
 from src.tools.reason_codes import annotate as annotate_reasons
-from src.tools.taxonomy import map_concerns
+from src.tools.taxonomy import split_concerns
 
 # Candidați per retriever înainte de fuziune (P4: pool intern mare, dar tool result rămâne 6×8
 # spre model). ~50 = standardul de product-RAG; recall bun fără să umfle latența.
@@ -43,6 +44,11 @@ _FUSION_POOL = 50
 # (nuanță/mărime). Triaj-ul o extrage deja structurat (max 80 la parsare); aici o scurtăm ca să
 # rămână o dimensiune de raport, nu o propoziție (P12: atribute, nu text de user).
 _VARIANT_ATTR_MAX = 40
+
+# NX-227: câți termeni de nevoie NEMAPAȚI intră într-un event. Semnalul e „ce vocabular ne
+# lipsește", nu transcrierea cererii — un plafon ține evenimentul o dimensiune de raport
+# (P12), iar lungimea per termen reia `_VARIANT_ATTR_MAX` (aceeași politică).
+_UNMAPPED_TERMS_MAX = 5
 
 # Pool epuizat: semnal pt agent (NX-119b randează mesajul determinist cacheable=False per-locale).
 _NO_MORE_VIEW = (
@@ -560,7 +566,17 @@ def _session_filters(
     a: SearchArgs, concern_keys: list[str] | None, features: list[str] | None = None
 ) -> dict[str, Any]:
     """Setul canonic de filtre care DEFINEȘTE o sesiune de căutare (baza fp-ului). Rafinarea
-    oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119)."""
+    oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119).
+
+    NX-223 — REGULA: fp-ul conține ORICE argument care schimbă setul de rezultate. `variant_label`
+    e filtru DUR în ambele retrievere (NX-135) și `product_name` schimbă diversificarea + named-miss
+    disclosure; fără ele, „aveți în Warm Beige?" pe același text de query dădea fp identic →
+    `continue_search_session` servea pool-ul VECHI, nefiltrat pe variantă. Un argument nou de
+    filtrare adăugat fără cheie aici = bug tăcut → păzit de guard-ul de completitudine din teste.
+
+    Cele două se NORMALIZEAZĂ (lower + fără diacritice, ca restul lanțului): „warm beige" ≡
+    „Warm Beige" nu trebuie să spargă sesiunea degeaba (P11). String gol → `None` (același fp ca
+    lipsa lui — exact truthiness-ul cu care retrieverul decide dacă aplică clauza)."""
     return {
         "query": a.query,
         "category": a.category,
@@ -570,6 +586,8 @@ def _session_filters(
         "price_max": a.price_max,
         "sort_mode": a.sort_mode,
         "in_stock_only": a.in_stock_only,
+        "variant_label": normalize(a.variant_label) if a.variant_label else None,
+        "product_name": normalize(a.product_name) if a.product_name else None,
     }
 
 
@@ -659,7 +677,10 @@ async def search_products_tool(
     # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
     # NX-124: maparea vine din DomainPack (config DB per-vertical), nu hardcodat beauty → generic.
     # Determinist (P2); necunoscutele/pack lipsă → fără filtru fals care golește (P6).
-    concern_keys = map_concerns(ctx.business.domain_pack, a.concerns) or None
+    # NX-227: ce NU s-a mapat se păstrează — se raportează (gol de vocabular DomainPack) și i se
+    # spune modelului că filtrul n-a rulat. Politica de filtrare rămâne identică.
+    concern_keys, unmapped_concerns = split_concerns(ctx.business.domain_pack, a.concerns)
+    concern_keys = concern_keys or None
     # Tier 2b p2: features („cu niacinamidă") → filtru pe searchable_facets, NORMALIZAT (lower+strip
     # diacritice, ca SQL) → „niacinamida"/„niacinamidă" se potrivesc. Fără searchable_facets → None.
     searchable_facets = _searchable_facets(ctx)
@@ -699,6 +720,18 @@ async def search_products_tool(
         return await continue_search_session(ctx, deps, sess, a.limit)
 
     # === SESIUNE NOUĂ: retrieval hibrid → pool stabil (top MAX_SEARCH_POOL) + prima pagină ===
+    # NX-227: nevoile pe care `concern_map` nu le cunoaște = gol de vocabular, prioritizabil pe
+    # frecvență reală (aceeași logică ca `unmet_query`, aplicată la vocabular, nu la produse).
+    # Emis AICI, nu la mapare: pe continuarea de sesiune (pagina 2, 3...) e aceeași cerere, nu
+    # una nouă — numărătoarea ar fi inflată de paginare. Doar termeni NORMALIZAȚI, scurți și
+    # plafonați (P12: vocabular, nu text de user, fără PII).
+    if unmapped_concerns:
+        ctx.emit(
+            "concern_unmapped",
+            terms=[t[:_VARIANT_ATTR_MAX] for t in unmapped_concerns[:_UNMAPPED_TERMS_MAX]],
+            locale=ctx.language,
+            category_key=a.category,
+        )
     ladder = _relax_ladder(
         price_max=a.price_max,
         concerns=concern_keys,
@@ -709,11 +742,31 @@ async def search_products_tool(
 
     # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
     # degradare grațioasă la lexical-only (P6), fără tăcere.
+    # NX-225: LENTOAREA furnizorului = același drum ca EȘECUL lui. Un embed care răspunde în 8s nu
+    # aruncă nimic, dar ține tot turul (clientul stă pe typing indicator) deși lexicalul e gata în
+    # milisecunde → buget de timp explicit (P4). Două events distincte: lent (`embed_timeout`) vs
+    # mort (`embed_failed`) — fără ele degradarea semantică rămâne invizibilă (layer mort tăcut).
     query_vec: list[float] | None = None
     if deps.llm is not None and await has_embeddings(deps.conn, ctx.business.id):
+        timeout_ms = get_settings().embed_timeout_ms
         try:
-            query_vec = (await deps.llm.embed([a.query]))[0]
-        except Exception:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
+            call = deps.llm.embed([a.query])
+            # 0 = kill-switch numeric → await direct, fără wait_for (comportamentul de dinainte).
+            if timeout_ms > 0:
+                call = asyncio.wait_for(call, timeout=timeout_ms / 1000)
+            query_vec = (await call)[0]
+        except TimeoutError as e:
+            # `embed_timeout` înseamnă „bugetul NOSTRU a tăiat" (adaptorul ridică
+            # `openai.APITimeoutError`, nu builtin-ul — llm.py). Cu bugetul oprit nu putem tăia
+            # nimic, deci un TimeoutError venit de altundeva e „mort", nu „lent": nu raportăm
+            # `embed_timeout{timeout_ms: 0}`, care ar minți dashboardul.
+            if timeout_ms > 0:
+                ctx.emit("embed_timeout", timeout_ms=timeout_ms)
+            else:
+                ctx.emit("embed_failed", error_type=type(e).__name__)
+            query_vec = None
+        except Exception as e:  # noqa: BLE001 — embed/rețea pică → cădem pe lexical-only (P6)
+            ctx.emit("embed_failed", error_type=type(e).__name__)  # tipul, NU mesajul (P12)
             query_vec = None
 
     # ARCH-2026 P0: ponderile scorului blended (din DomainPack / defaults); None = kill-switch OFF
@@ -939,6 +992,17 @@ async def search_products_tool(
         notes.append(
             f"(produsul «{a.product_name}» nu există ca atare în catalog — NU prezenta alt produs "
             f"ca fiind «{a.product_name}»; cele de mai jos sunt ALTERNATIVE similare, spune clar)"
+        )
+    # NX-227: nevoia cerută nu are corespondent în `concern_map` → filtrul pe ea NU a rulat.
+    # Fără disclosure, modelul poate prezenta rezultatele ca potrivite „pentru ten reactiv" deși
+    # nimic nu le-a verificat. Formularea e precisă: semanticul tot a văzut termenul (e în textul
+    # embedat), deci „nu sunt FILTRATE", nu „nu s-a ținut cont deloc". Clarificarea rămâne decizia
+    # agentului, nu a codului (anti over-clarify, NX-176a).
+    if unmapped_concerns:
+        termeni = ", ".join(unmapped_concerns[:_UNMAPPED_TERMS_MAX])
+        notes.append(
+            f"(nevoile «{termeni}» nu sunt filtre cunoscute în catalog — rezultatele NU sunt "
+            f"filtrate pe ele; nu afirma potrivirea pe aceste nevoi, poți cere o clarificare)"
         )
     # Relaxare cu disclosure: search a renunțat la o constrângere SOFT (nevoie/categorie) ca să iasă
     # ceva → agentul trebuie să fie sincer că nu e potrivire exactă pe ce a cerut (P6, nu tăcere).

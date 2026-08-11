@@ -123,6 +123,14 @@ class Settings(BaseSettings):
     # `exp` (toleranță mică la drift între gazdă și bot).
     web_identity_enabled: bool = Field(default=False, validation_alias="WEB_IDENTITY_ENABLED")
     web_identity_leeway_s: int = Field(default=30, validation_alias="WEB_IDENTITY_LEEWAY_S")
+    # NX-221: serializare ture per conversație pe calea web SINCRONĂ (/web/chat). Lock Redis scurt
+    # (SET NX PX) la margine, ÎNAINTE de handle_turn — două mesaje în rafală nu mai rulează două
+    # pipeline-uri concurente pe același snapshot de stare. Default ON (fix de corectitudine, nu
+    # feature); OFF = comportamentul vechi, byte-identic. Timeout de așteptare → BYPASS cu event
+    # (principiul 6 — un lock blocat nu lasă clientul fără răspuns); TTL = plasă anti-deadlock.
+    web_turn_lock_enabled: bool = Field(default=True, validation_alias="WEB_TURN_LOCK_ENABLED")
+    turn_lock_ttl_ms: int = Field(default=15000, validation_alias="TURN_LOCK_TTL_MS")
+    turn_lock_wait_max_ms: int = Field(default=10000, validation_alias="TURN_LOCK_WAIT_MAX_MS")
 
     @property
     def web_cors_origins_list(self) -> list[str]:
@@ -441,6 +449,11 @@ class Settings(BaseSettings):
     # NX-207: citirea embeddings-urilor shadow se activează numai după benchmark. OFF păstrează
     # exact doc_type='product', deci este kill switch-ul de revenire imediată la retrieval-ul live.
     search_shadow_enabled: bool = Field(default=False, validation_alias="SEARCH_SHADOW_ENABLED")
+    # NX-226: rangul lexical pe `relevance` cu ambele semnale normalizate în [0,1] relativ la
+    # pool-ul query-ului + ponderi explicite FTS/trgm (0.6/0.4). OFF (default) → suma brută
+    # `ts_rank_cd + similarity`, byte-identic cu main. Se aprinde DUPĂ diff-ul produs de
+    # `scripts/lexical_rank_compare.py` (D15: nicio schimbare de ranking pe speranță).
+    lexical_rank_v2_enabled: bool = Field(default=False, validation_alias="LEXICAL_RANK_V2_ENABLED")
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).
@@ -641,6 +654,12 @@ class Settings(BaseSettings):
     # „reasoning" care resping `temperature` ne-default → OFF lasă apelurile fără sampling params.
     llm_timeout_s: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_S")
     llm_retry_max: int = Field(default=2, validation_alias="LLM_RETRY_MAX")
+    # NX-225: buget de TIMP pentru embed-ul de query din `search_products` (P4 — bugetul stă în cod,
+    # nu în speranță). `llm_timeout_s` × retry = până la ~90s de așteptare pe un furnizor lent, deși
+    # piciorul lexical răspunde în milisecunde: la depășire cădem pe lexical-only, ca la eroare
+    # (P6). 800ms lasă loc de jitter peste p99-ul normal al `text-embedding-3-small` (~sub 500ms).
+    # 0 = dezactivat (fără wait_for, comportamentul de dinainte) — kill-switch numeric, fără flag.
+    embed_timeout_ms: int = Field(default=800, validation_alias="EMBED_TIMEOUT_MS")
     llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
     # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
     # triajul (clasificare) vrea determinism → mic; agentul (copy către client) vrea variație → mai

@@ -44,6 +44,48 @@ _SHRUNK_RATING = (
 # Moduri de sortare (allowlist → zero injection; sort_mode e structural, nu param bindabil).
 _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 
+# NX-226 — rangul lexical aduna două semnale cu SCALE diferite. `ts_rank_cd` peste `search_tsv`
+# trăiește tipic în 0,01–0,3: migrările 015/033 construiesc vectorul FĂRĂ `setweight`, deci toate
+# lexemele au greutatea D (0.1). `similarity` (pg_trgm) trăiește în 0,3–1, pentru că pragul `%` e
+# 0.3. Suma brută `ts_rank_cd + similarity` înseamnă deci că typo-match-ul decide practic singur
+# ordinea, iar fraza naturală bine potrivită pierde în fața unui nume care „seamănă". La catalogul
+# de azi abia se vede; la 5k+ produse decide CINE intră în pool-ul de candidați — exact ce fuziunea
+# RRF nu mai poate repara în aval.
+#
+# De ce NU `ts_rank_cd(..., 32)` (rank/(rank+1)), cum propunea prima formulare a cardului: e
+# monoton și mărginit, dar pentru valorile mici de aici e practic identitatea (0,1 → 0,09). Ar
+# lăsa FTS-ul la fel de mic și, înmulțit cu 0.6, l-ar face și mai slab decât azi — adică exact
+# opusul scopului. Mărginit ≠ comparabil.
+#
+# Normalizăm RELATIV la pool-ul de candidați AL ACELUIAȘI query (`max(...) over ()`): fiecare
+# semnal ajunge în [0,1] raportat la cel mai bun candidat al lui, apoi ponderi explicite. Scorul
+# nu are sens între query-uri diferite — și nici nu trebuie: e folosit exclusiv ca `ORDER BY` în
+# interiorul unui singur query. Fereastra vede toate rândurile care trec de `WHERE`, înainte de
+# `LIMIT`, deci normalizarea e peste tot pool-ul, nu peste primele 50.
+#
+# Ponderile sunt constante de MODUL, nu config per business: e corectitudinea formulei (ca RRF_K
+# în fusion.py), nu o preferință de tenant.
+_LEX_W_FTS = 0.6  # fraza naturală = semnalul primar
+_LEX_W_TRGM = 0.4  # typo/SKU = plasă secundară; 0.4 ≠ 0, „sanpon" trebuie să găsească „șampon"
+
+
+def _lexical_rank_expr(q_ph: str) -> str:
+    """Expresia de rang pentru `sort_mode='relevance'` în `search_products_lexical`.
+
+    Kill-switch `lexical_rank_v2_enabled` (default OFF) → suma brută de dinainte de NX-226,
+    byte-identic. Nu atinge `WHERE` (recall-ul), doar ordinea candidaților."""
+    fts = f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({q_ph})))"
+    trgm = f"similarity(ro_unaccent(p.name), ro_unaccent({q_ph}))"
+    if not get_settings().lexical_rank_v2_enabled:
+        return f"{fts} + {trgm}"
+    # `nullif(max(...), 0)` → pool fără niciun match FTS (doar trgm) dă NULL, nu diviziune cu
+    # zero; `coalesce(..., 0)` îl duce înapoi la 0, deci semnalul lipsă contribuie zero.
+    return (
+        f"{_LEX_W_FTS} * coalesce({fts} / nullif(max({fts}) over (), 0), 0)"
+        f" + {_LEX_W_TRGM} * coalesce({trgm} / nullif(max({trgm}) over (), 0), 0)"
+    )
+
+
 # Varianta NU are fereastră proprie: MOȘTENEȘTE fereastra produsului (promoția e a produsului,
 # nuanțele doar o poartă). Fără asta, o promoție expirată ar rămâne activă pe variante — adică fix
 # pe prețul EFECTIV, cel pe care îl vede clientul.
@@ -382,7 +424,8 @@ async def search_products_lexical(
     (`websearch_to_tsquery('simple', $q)` pe `search_tsv`) SAU pe `pg_trgm` similarity pe nume
     (typo / SKU / cod-piesă — esențial pe HVAC/auto, generic). ACELEAȘI filtre dure ca
     `search_products` (paritate). Întoarce ~`pool` rânduri; pe `relevance` ordinea = rang lexical
-    (`ts_rank_cd + similarity`), deci POZIȚIA în listă = rangul pt RRF (NX-113b). Pe sort explicit
+    (`_lexical_rank_expr`: suma brută, sau NX-226 normalizat+ponderat sub kill-switch), deci
+    POZIȚIA în listă = rangul pt RRF (NX-113b). Pe sort explicit
     (price/rating) delegă `_order_clause`. Config `'simple'` = limbă-agnostic (P11). `conn`
     tenant-scoped (P7: `business_id = $1`)."""
     conds = ["p.business_id = $1", "p.status = 'active'"]
@@ -422,11 +465,7 @@ async def search_products_lexical(
         conds.append(cs)
 
     if sort_mode == "relevance":
-        rank = (
-            f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({q_ph})))"
-            f" + similarity(ro_unaccent(p.name), ro_unaccent({q_ph}))"
-        )
-        order = f" order by ({rank}) desc, p.id"
+        order = f" order by ({_lexical_rank_expr(q_ph)}) desc, p.id"
     else:
         order = _order_clause(sort_mode)  # price/rating explicit → sort pe subsetul lexical filtrat
 
