@@ -211,6 +211,15 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   Fără fereastră 24h, fără template-uri. Handoff dezactivat by default (fără operator). Identitate:
   anonim by default; login passthrough JWT în spatele `WEB_IDENTITY_ENABLED` (NX-128/129/130).
   Audit conversațional pe calea reală: `scripts/sim/web_audit.py`.
+  > **Contract v2 (NX-228), INERT — nicio rută nu îl servește încă.** Contractul de mai sus e
+  > **v1 și rămâne activ, neatins, până la cutoverul NX-249**. În paralel există `web-view.v2`
+  > ([`src/web/contracts_v2.py`](src/web/contracts_v2.py)), în care backendul livrează un
+  > ViewModel **display-ready**: prețul e `"89,00 lei"`, nu `89.0`; reducerea vine calculată;
+  > tot copy-ul (chrome, composer, anunțuri a11y) e server-owned. Frontendul devine renderer
+  > pasiv. Matricea `field → owner → source of truth → validator → renderer`:
+  > [`docs/WEB-WIDGET-BOUNDARY-V2.md`](docs/WEB-WIDGET-BOUNDARY-V2.md); forma pentru FE:
+  > [`docs/FRONTEND-CONTRACT-IZI-V2.md`](docs/FRONTEND-CONTRACT-IZI-V2.md). **Nu modifica v1
+  > in-place** ca să adaugi ceva în v2 — sunt contracte, randori și validatori separați.
 - **WhatsApp** — Meta Cloud API, webhook semnat. Codul e LIVE și testat, dar canalul **n-a fost
   niciodată conectat** (0 conversații reale; lipsește `phone_number_id` — T013). **ÎNGHEȚAT.**
   Fereastră 24h + template-uri (proactiv) — relevant doar când se reia.
@@ -499,7 +508,9 @@ nativx-assistant/
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
-│   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web (carduri+comparison) pt randarea FE (paritate iZi)
+│   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web v1 (carduri+comparison) pt randarea FE (paritate iZi)
+│   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
+│   ├── WEB-WIDGET-BOUNDARY-V2.md← NX-228: matricea de ownership + regula „frontend pasiv"
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
 ├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); apply_0NN.py
