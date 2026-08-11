@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 
 from src.db.connection import close_pool, get_pool
+from src.db.provider import static_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel_by_phone
 from src.worker.processor import handle_turn
@@ -117,7 +118,7 @@ async def test_handle_turn_echo_writes_outbox(pool):
     async with tenant_tx(pool) as (conn, channel_id):
         biz = await load_business(conn, DEMO_BIZ)
         result = await handle_turn(
-            conn, biz, channel_id, _event(body="ce preț are X?"), stages=[_echo_stage]
+            static_db(conn), biz, channel_id, _event(body="ce preț are X?"), stages=[_echo_stage]
         )
 
         # reply determinist din stage-ul de test (plumbing, fără LLM)
@@ -158,7 +159,7 @@ async def test_handle_turn_splits_long_reply_into_two_outbox(pool):
     async with tenant_tx(pool) as (conn, channel_id):
         biz = await load_business(conn, DEMO_BIZ)
         result = await handle_turn(
-            conn, biz, channel_id, _event(body="zi-mi tot"), stages=[_long_stage]
+            static_db(conn), biz, channel_id, _event(body="zi-mi tot"), stages=[_long_stage]
         )
 
         rows = await conn.fetch(
@@ -188,11 +189,57 @@ async def test_handle_turn_same_contact_same_conversation(pool):
         biz = await load_business(conn, DEMO_BIZ)
         ev1 = _event(body="salut")
         ev2 = {**ev1, "provider_msg_id": "wamid.second", "body": "încă unul"}
-        r1 = await handle_turn(conn, biz, channel_id, ev1, stages=[_echo_stage])
-        r2 = await handle_turn(conn, biz, channel_id, ev2, stages=[_echo_stage])
+        r1 = await handle_turn(static_db(conn), biz, channel_id, ev1, stages=[_echo_stage])
+        r2 = await handle_turn(static_db(conn), biz, channel_id, ev2, stages=[_echo_stage])
         assert r1.conversation_id == r2.conversation_id
         assert r1.contact_id == r2.contact_id
         assert r1.turn_id != r2.turn_id
+
+
+async def test_turn_commit_is_atomic_on_real_postgres(pool, monkeypatch):
+    """NX-231 DoD — commitul e o SINGURĂ tranzacție pe DB REAL.
+
+    Un eșec la patch-ul de stare trebuie să ia cu el insert-urile de mesaje și rândurile de outbox
+    din aceeași fază. Altfel un tur crăpat la jumătate ar lăsa un mesaj outbound „livrat" fără
+    starea care îl explică — exact felul de inconsistență pe care conn-per-op ar putea-o introduce
+    dacă fazele s-ar scurge una în alta."""
+    from src.worker import turn_uow as uow
+
+    async with tenant_tx(pool) as (conn, channel_id):
+        biz = await load_business(conn, DEMO_BIZ)
+        ev = _event(body="commit atomic?")
+
+        async def _boom(*a, **k):
+            raise RuntimeError("DB down la patch-ul de stare")
+
+        monkeypatch.setattr(uow, "patch_conversation_state", _boom)
+        with pytest.raises(RuntimeError):
+            await handle_turn(static_db(conn), biz, channel_id, ev, stages=[_echo_stage])
+
+        # Faza de LOAD s-a comis (conversația + mesajul inbound există — dedupe-ul depinde de ea),
+        # dar faza de COMMIT nu a lăsat nimic în urmă.
+        conv_id = await conn.fetchval(
+            "select conversation_id::text from messages where provider_msg_id = $1",
+            ev["provider_msg_id"],
+        )
+        assert conv_id is not None
+        n_out = await conn.fetchval(
+            "select count(*) from messages where conversation_id = $1 and direction = 'outbound'",
+            conv_id,
+        )
+        assert n_out == 0
+        n_outbox = await conn.fetchval(
+            "select count(*) from outbox where conversation_id = $1", conv_id
+        )
+        assert n_outbox == 0
+        # Claim-ul de dedupe NU a fost finalizat → mesajul rămâne recuperabil (NX-86), nu pierdut.
+        completed = await conn.fetchval(
+            "select completed_at from inbound_dedupe "
+            "where business_id = $1 and provider_msg_id = $2",
+            DEMO_BIZ,
+            ev["provider_msg_id"],
+        )
+        assert completed is None
 
 
 # --------------------------------------------------------------------------- #

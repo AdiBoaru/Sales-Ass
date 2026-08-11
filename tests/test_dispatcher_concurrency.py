@@ -88,9 +88,14 @@ async def test_dispatch_due_respects_global_and_tenant_concurrency(monkeypatch):
     async def fake_admin_conn(pool):
         yield _FakeConn("admin")
 
-    @asynccontextmanager
-    async def fake_tenant_conn(business_id):
-        yield _FakeConn(business_id)
+    def fake_tenant_db(business_id):
+        # NX-231: dispatcher-ul cere un PROVIDER, nu o conexiune — fiecare operatie isi ia una
+        # scurta, iar HTTP-ul providerului ruleaza fara conexiune in mana.
+        @asynccontextmanager
+        async def _cm(operation="test"):
+            yield _FakeConn(business_id)
+
+        return _cm
 
     async def fake_business_ids(conn):
         return list(rows)
@@ -99,7 +104,7 @@ async def test_dispatch_due_respects_global_and_tenant_concurrency(monkeypatch):
         assert conn.business_id == business_id
         return rows[business_id][:limit]
 
-    async def fake_dispatch_row(conn, business_id, registry, row):
+    async def fake_dispatch_row(db, business_id, registry, row):
         nonlocal active_global, max_global
         active_global += 1
         active_by_tenant[business_id] += 1
@@ -115,7 +120,7 @@ async def test_dispatch_due_respects_global_and_tenant_concurrency(monkeypatch):
         return len(events)
 
     monkeypatch.setattr(disp, "admin_conn", fake_admin_conn)
-    monkeypatch.setattr(disp, "tenant_conn", fake_tenant_conn)
+    monkeypatch.setattr(disp, "tenant_db", fake_tenant_db)
     monkeypatch.setattr(disp, "business_ids_with_due_outbox", fake_business_ids)
     monkeypatch.setattr(disp, "claim_due", fake_claim_due)
     monkeypatch.setattr(disp, "dispatch_row", fake_dispatch_row)
@@ -144,9 +149,14 @@ async def test_slow_tenant_waiter_does_not_consume_global_slot(monkeypatch):
     async def fake_admin_conn(pool):
         yield _FakeConn("admin")
 
-    @asynccontextmanager
-    async def fake_tenant_conn(business_id):
-        yield _FakeConn(business_id)
+    def fake_tenant_db(business_id):
+        # NX-231: dispatcher-ul cere un PROVIDER, nu o conexiune — fiecare operatie isi ia una
+        # scurta, iar HTTP-ul providerului ruleaza fara conexiune in mana.
+        @asynccontextmanager
+        async def _cm(operation="test"):
+            yield _FakeConn(business_id)
+
+        return _cm
 
     async def fake_business_ids(conn):
         return ["A", "B"]
@@ -154,7 +164,7 @@ async def test_slow_tenant_waiter_does_not_consume_global_slot(monkeypatch):
     async def fake_claim_due(conn, business_id, *, limit):
         return rows[business_id][:limit]
 
-    async def fake_dispatch_row(conn, business_id, registry, row):
+    async def fake_dispatch_row(db, business_id, registry, row):
         if row["id"] == "A-1":
             await asyncio.sleep(0.05)
         else:
@@ -166,7 +176,7 @@ async def test_slow_tenant_waiter_does_not_consume_global_slot(monkeypatch):
         return len(events)
 
     monkeypatch.setattr(disp, "admin_conn", fake_admin_conn)
-    monkeypatch.setattr(disp, "tenant_conn", fake_tenant_conn)
+    monkeypatch.setattr(disp, "tenant_db", fake_tenant_db)
     monkeypatch.setattr(disp, "business_ids_with_due_outbox", fake_business_ids)
     monkeypatch.setattr(disp, "claim_due", fake_claim_due)
     monkeypatch.setattr(disp, "dispatch_row", fake_dispatch_row)

@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 
 from src.db.connection import close_pool, get_pool
+from src.db.provider import static_db
 from src.db.queries.businesses import load_business
 from src.db.queries.inbound_dedupe import claim_inbound, cleanup_inbound_dedupe
 from src.worker.processor import handle_turn
@@ -103,7 +104,7 @@ async def test_handle_turn_dedupes_retry(pool):
         biz = await load_business(conn, DEMO_BIZ)
         ev = _event(wamid=f"wamid.{uuid4().hex}")
 
-        r1 = await handle_turn(conn, biz, channel_id, ev)
+        r1 = await handle_turn(static_db(conn), biz, channel_id, ev)
         assert r1.deduped is False
         assert r1.outbox_id is not None
 
@@ -120,7 +121,7 @@ async def test_handle_turn_dedupes_retry(pool):
         before = await _counts()
 
         # exact același payload (retry Meta care a scăpat de Redis layer 1)
-        r2 = await handle_turn(conn, biz, channel_id, ev)
+        r2 = await handle_turn(static_db(conn), biz, channel_id, ev)
         assert r2.deduped is True
         assert r2.outbox_id is None
 

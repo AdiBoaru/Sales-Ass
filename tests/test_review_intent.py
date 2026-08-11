@@ -1,7 +1,5 @@
 """Follow-up-uri de recenzii ancorate în produsele afișate, fără LLM sau alegere arbitrară."""
 
-from types import SimpleNamespace
-
 import pytest
 
 from src.agent import deterministic as det
@@ -22,6 +20,12 @@ from src.worker.stages.agent import agent_stage
 class _NoLoopLLM:
     async def run_tool_loop(self, *args, **kwargs):
         raise AssertionError("review follow-up must not enter the LLM loop")
+
+
+def _deps() -> PipelineDeps:
+    """NX-231: stagiile iau conexiunea prin `deps.db(...)`, deci un `SimpleNamespace(conn=...)` nu
+    mai e un dublu valid. `PipelineDeps(conn=...)` capătă automat providerul static."""
+    return PipelineDeps(conn=object())
 
 
 def _ctx(body: str, *, refs: list[ProductRef] | None = None) -> TurnContext:
@@ -84,7 +88,7 @@ async def test_single_product_returns_real_review_evidence_without_llm(monkeypat
     ctx = _ctx("Vezi recenzii")
     ctx.route.filters = {"price_max": 100, "concerns": ["cadou pentru ea"]}
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
 
     assert "Nu lasă film alb" in ctx.reply.text
     assert "finish non-gras" in ctx.reply.text
@@ -122,7 +126,7 @@ async def test_generic_reviews_with_multiple_products_clarifies_without_db(monke
     ]
     ctx = _ctx("Vezi recenzii", refs=refs)
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
 
     assert ctx.reply.pending_question["field"] == "product_for_reviews"
     assert ctx.reply.text == "Pentru care produs vrei să vezi recenziile?"
@@ -149,7 +153,7 @@ async def test_ordinal_resolves_second_displayed_product(monkeypatch):
     ]
     ctx = _ctx("Arată-mi recenziile pentru a doua", refs=refs)
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
     assert seen == ["p2"]
     assert ctx.reply.products[0]["product_id"] == "p2"
 
@@ -169,7 +173,7 @@ async def test_pending_review_question_accepts_bare_ordinal(monkeypatch):
     ctx = _ctx("a doua", refs=refs)
     ctx.state.pending_question = {"field": "product_for_reviews", "attempts": 1}
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
     assert seen == ["p2"]
 
 
@@ -181,7 +185,7 @@ async def test_pending_review_question_does_not_capture_a_new_intent():
     ctx = _ctx("nu, vreau ceva mai ieftin", refs=refs)
     ctx.state.pending_question = {"field": "product_for_reviews", "attempts": 1}
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is False
+    assert await det.try_pre_intents(ctx, _deps()) is False
     assert ctx.reply is None
 
 
@@ -199,7 +203,7 @@ async def test_product_name_resolves_displayed_product(monkeypatch):
     ]
     ctx = _ctx("Recenzii NudeLab Soft Blush", refs=refs)
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
     assert seen == ["p2"]
 
 
@@ -212,7 +216,7 @@ async def test_missing_review_data_is_honest_and_never_silent(monkeypatch):
     monkeypatch.setattr(det, "get_products_by_ids", fake_by_ids)
     ctx = _ctx("Ce păreri are?")
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
     assert ctx.reply is not None
     assert "Nu am încă suficiente date" in ctx.reply.text
 
@@ -232,7 +236,7 @@ async def test_unsafe_review_claim_is_not_repeated(monkeypatch):
     monkeypatch.setattr(det, "get_products_by_ids", fake_by_ids)
     ctx = _ctx("Vezi recenzii")
 
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is True
+    assert await det.try_pre_intents(ctx, _deps()) is True
     assert "Tratează acneea" not in ctx.reply.text
     assert "Nu am încă suficiente date" in ctx.reply.text
 
@@ -240,12 +244,12 @@ async def test_unsafe_review_claim_is_not_repeated(monkeypatch):
 async def test_no_displayed_product_falls_through():
     ctx = _ctx("Vezi recenzii")
     ctx.state.displayed_products = []
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is False
+    assert await det.try_pre_intents(ctx, _deps()) is False
     assert ctx.reply is None
 
 
 async def test_review_intent_kill_switch_falls_through(monkeypatch):
     monkeypatch.setattr(get_settings(), "review_intent_enabled", False)
     ctx = _ctx("Vezi recenzii")
-    assert await det.try_pre_intents(ctx, SimpleNamespace(conn=object())) is False
+    assert await det.try_pre_intents(ctx, _deps()) is False
     assert ctx.reply is None
