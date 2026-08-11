@@ -1,0 +1,380 @@
+{
+  "meta": {
+    "generated_at": "2026-07-18T15:26:58.059114+00:00",
+    "kind": "paired",
+    "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+    "runs_per_case": 1,
+    "cache_enabled": false,
+    "model_triage": "gpt-5.4-nano",
+    "model_agent": "gpt-5.4-mini",
+    "judge_model": "gpt-5.4-mini",
+    "judge_prompt_sha256": "77672c1576c66969c5e73ab47b0abd632d460493cf2c809fda3b870c6932aafa",
+    "judge_version": "v1",
+    "catalog_signature": "n=654;sha256=b73aa5df41b1debf",
+    "fixtures_sha256": "8bcb4d39636128bc",
+    "paired_mode": "interleaved_per_conversation",
+    "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0"
+  },
+  "passes": [
+    {
+      "pass": "prompt_vnext_enabled=False",
+      "flag": "prompt_vnext_enabled",
+      "flag_value": false,
+      "summary": {
+        "n_conversations": 1,
+        "n_turns": 3,
+        "n_followup_turns": 2,
+        "judge_natural_median": 3,
+        "pct_turns_natural_ge4": 0.0,
+        "pct_turns_natural_AND_answered_ge4": 0.0,
+        "pct_followup_answered_ge4": 50.0,
+        "det_gate_pass_rate_pct": 66.7,
+        "ungrounded_price_hits": 0,
+        "new_cards_on_followup_hits": 0,
+        "opening_repeat_turns": 0,
+        "unstable_turns": [],
+        "latency_ms_p95": 20092.8,
+        "latency_ms_p50": 15757.2,
+        "n_latency_samples": 3
+      },
+      "cases": [
+        {
+          "id": "discovery_oily_serum",
+          "turns": [
+            {
+              "user": "am tenul gras, ce ser imi recomanzi?",
+              "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                20092.8
+              ],
+              "latency_ms_p95": 20092.8,
+              "latency_ms_median": 20092.8,
+              "tokens_out_median": 822,
+              "tokens_in_median": 17514,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "La serurile pentru ten gras, merită să te uiți la efectul pe sebum și la cum arată porii după folosire.",
+                  "n_cards": 2,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "dintre ele care e mai lejera?",
+              "judge_focus": "raspunde superlativ pe setul afisat, TEXT-ONLY (fara re-listare de carduri), fara sa repete intro",
+              "runs": 1,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:2>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 1,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                12186.3
+              ],
+              "latency_ms_p95": 12186.3,
+              "latency_ms_median": 12186.3,
+              "tokens_out_median": 467,
+              "tokens_in_median": 14851,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Iată diferențele principale — alege în funcție de ce contează pentru tine. Cea mai accesibilă: Auralis Hydra Ser hidratant. Cea mai bine cotată: Auralis Hydra Ser hidratant.",
+                  "n_cards": 2,
+                  "fails": [
+                    "too_many_cards:2>0"
+                  ]
+                }
+              ]
+            },
+            {
+              "user": "una mai ieftina?",
+              "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                15757.2
+              ],
+              "latency_ms_p95": 15757.2,
+              "latency_ms_median": 15757.2,
+              "tokens_out_median": 695,
+              "tokens_in_median": 19887,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dacă vrei prioritar senzație ușoară și hidratare, mergi pe Hydra; dacă urmărești mai mult aspectul de ten luminos, Bright e alegerea potrivită. Pentru bugetul tău, eu aș rămâne la Hydra.",
+                  "n_cards": 2,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "pass": "prompt_vnext_enabled=True",
+      "flag": "prompt_vnext_enabled",
+      "flag_value": true,
+      "summary": {
+        "n_conversations": 1,
+        "n_turns": 3,
+        "n_followup_turns": 2,
+        "judge_natural_median": 4,
+        "pct_turns_natural_ge4": 66.7,
+        "pct_turns_natural_AND_answered_ge4": 66.7,
+        "pct_followup_answered_ge4": 50.0,
+        "det_gate_pass_rate_pct": 66.7,
+        "ungrounded_price_hits": 0,
+        "new_cards_on_followup_hits": 0,
+        "opening_repeat_turns": 0,
+        "unstable_turns": [],
+        "latency_ms_p95": 17003.2,
+        "latency_ms_p50": 16830.9,
+        "n_latency_samples": 3
+      },
+      "cases": [
+        {
+          "id": "discovery_oily_serum",
+          "turns": [
+            {
+              "user": "am tenul gras, ce ser imi recomanzi?",
+              "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 4,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                16830.9
+              ],
+              "latency_ms_p95": 16830.9,
+              "latency_ms_median": 16830.9,
+              "tokens_out_median": 809,
+              "tokens_in_median": 17855,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Pentru ten gras, aș merge pe un ser care reglează sebumul și lasă tenul mai uniform. Din opțiunile astea, unul e clar pentru controlul luciului, iar altul e mai mult pentru hidratare.\n\nDacă vrei controlul luciului și un aspect mai uniform, mergi pe niacinamidă cu zinc. Dacă simți",
+                  "n_cards": 2,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "dintre ele care e mai lejera?",
+              "judge_focus": "raspunde superlativ pe setul afisat, TEXT-ONLY (fara re-listare de carduri), fara sa repete intro",
+              "runs": 1,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:2>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 4,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                17003.2
+              ],
+              "latency_ms_p95": 17003.2,
+              "latency_ms_median": 17003.2,
+              "tokens_out_median": 767,
+              "tokens_in_median": 25373,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dintre ele, varianta hidratantă e mai lejeră la senzație. Serul cu niacinamidă e mai concentrat pe controlul sebumului și poate părea mai activ pe ten.",
+                  "n_cards": 2,
+                  "fails": [
+                    "too_many_cards:2>0"
+                  ]
+                }
+              ]
+            },
+            {
+              "user": "una mai ieftina?",
+              "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                14275.8
+              ],
+              "latency_ms_p95": 14275.8,
+              "latency_ms_median": 14275.8,
+              "tokens_out_median": 691,
+              "tokens_in_median": 20035,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dacă prioritatea ta e confortul și hidratarea, Hydra rămâne mai potrivit. Dacă vrei mai mult focus pe aspectul tern sau pete, Bright are direcția asta.",
+                  "n_cards": 2,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

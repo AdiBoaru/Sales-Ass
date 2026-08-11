@@ -52,7 +52,7 @@ Valorile reale le iei din vault-ul echipei / dashboard-uri. Minim pentru a rula:
 ### DB: aplică plasa RLS (o singură dată per proiect)
 
 ```bash
-python scripts/apply_003.py      # rol bot_runtime + RLS + guard 8KB; testează izolarea
+python scripts/archive/apply_003.py  # rol bot_runtime + RLS + guard 8KB; testează izolarea
 python scripts/db_check.py       # verificare read-only: tabele, extensii, business demo
 ```
 

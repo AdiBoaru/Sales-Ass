@@ -1,0 +1,64 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 10 — Proactive Lifecycle (adăugată la auditul adversarial)
+flowchart TD
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+  classDef err fill:#f1948a,stroke:#922b21,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef bg fill:#a3e4d7,stroke:#148f77,color:#000
+
+  subgraph Feed["FEED — jobs.scheduler runs initiators"]
+    SW1["sweep_abandoned_cart<br/>initiators.py:49"]:::bg
+    SW2["sweep_back_in_stock<br/>initiators.py:77"]:::bg
+    SEAM["event seams — DEFINED, NEVER CALLED:<br/>schedule_awb_update :160 · schedule_follow_up :190<br/>TODO: orders webhook should call them"]:::err
+  end
+
+  PJ[("proactive_jobs")]:::db
+
+  subgraph Engine["ENGINE — proactive.scheduler loop :253"]
+    CTL["control plane: tenants with due jobs<br/>scheduler.py:253-260"]:::step
+    CLAIM["claim_due_jobs FOR UPDATE SKIP LOCKED<br/>:213 — savepoint per job :218-219"]:::step
+    ROUTEP["resolve conversation + channel +<br/>recipient identity :113-120"]:::step
+    RERR["no route → ProactiveRouteError<br/>→ mark failed :63-64, :120-124"]:::err
+    BUILD["build_message_spec — builders.py<br/>text per kind :143"]:::step
+    CANQ{"spec.cancel?<br/>:144"}:::dec
+    CANC["mark cancelled :145-146"]:::out
+  end
+
+  subgraph Gate["GATE — decide_proactive, templates.py (NX-71)"]
+    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — templates.py:83"}:::dec
+    SK1["skipped_no_optin"]:::out
+    WIN{"in 24h window?<br/>is_in_24h_window"}:::dec
+    TPL{"approved template<br/>in locale? P11"}:::dec
+    SK2["skipped_no_window"]:::out
+    FREE["mode=free → payload type=text<br/>scheduler.py:184-185"]:::step
+    TMPL["mode=template → name+language+params<br/>scheduler.py:172-183"]:::step
+  end
+
+  OB[("outbox — idempotency proactive:job_id<br/>scheduler.py:186-194")]:::db
+  SENTP["mark sent + proactive_enqueued event<br/>:195-200"]:::out
+  FAILP["job exception → mark failed +<br/>proactive_failed event, clean savepoint<br/>:220-227"]:::err
+  DISPP["dispatcher — TEMPLATE capability?<br/>WhatsApp: send_template · else degrade to text<br/>dispatcher.py:158-160, :218"]:::step
+
+  SW1 --> PJ
+  SW2 --> PJ
+  SEAM -.-> PJ
+  PJ --> CTL --> CLAIM --> ROUTEP
+  ROUTEP -- fail --> RERR
+  ROUTEP -- ok --> BUILD --> CANQ
+  CANQ -- yes --> CANC
+  CANQ -- no --> CONS
+  CONS -- no --> SK1
+  CONS -- yes --> WIN
+  WIN -- yes --> FREE
+  WIN -- no --> TPL
+  TPL -- no --> SK2
+  TPL -- yes --> TMPL
+  FREE --> OB
+  TMPL --> OB
+  OB --> SENTP
+  CLAIM -. "exception" .-> FAILP
+  OB --> DISPP

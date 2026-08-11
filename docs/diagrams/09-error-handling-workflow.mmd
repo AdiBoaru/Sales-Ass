@@ -1,0 +1,70 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 9 — Error Handling Workflow
+flowchart TD
+  classDef err fill:#f1948a,stroke:#922b21,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef ok fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef deg fill:#fad7a0,stroke:#af601a,color:#000
+
+  subgraph LLMErr["LLM failures"]
+    L1["API error / 429"]:::err
+    L2{"bounded retry ok?<br/>llm.py:45"}:::dec
+    L3["triage fail → route None<br/>triage.py:316"]:::deg
+    L4["agent loop fail → return<br/>stages/agent.py:370"]:::deg
+    L5["fallback_stage: clarify question<br/>NEVER silence — runner.py:169"]:::ok
+  end
+
+  subgraph ValErr["Validator failures — agent/validator.py:195"]
+    V1{"reply valid? prices/links/claims"}:::dec
+    V2["1 retry with allowed prices<br/>finalize.py:94-148"]:::deg
+    V3{"valid now?"}:::dec
+    V4["deterministic reply from DB products<br/>finalize.py:94-148"]:::ok
+  end
+
+  subgraph CostErr["Cost guard — limits.py:59-91 · processor.py:116"]
+    C1{"daily cap business/contact hit?"}:::dec
+    C2["llm=None: gates + cache still work<br/>LLM stages skip"]:::deg
+  end
+
+  subgraph InfraErr["Infra failures"]
+    I1["Redis down at webhook → 503, Meta retries<br/>webhook/app.py:127-128"]:::err
+    I2["cache/FAQ error → miss, turn continues<br/>cache.py:169"]:::deg
+    I3["analytics fail → log only<br/>aftercare.py:86"]:::deg
+    I4["conv lock busy → requeue capped<br/>consumer.py:96-102"]:::deg
+    I5["consumer crash mid-turn → un-ACKed<br/>reaper XAUTOCLAIM re-claims :293"]:::ok
+    I6["processing exception → ACK + log<br/>consumer.py:286-288 — WARNING: turn LOST"]:::err
+    I7["requeue cap exceeded → event DROPPED<br/>consumer.py:99-100 — WARNING: turn LOST"]:::err
+    I8["inbound stream maxlen ~100k trim →<br/>oldest LOST under backlog — redis_bus.py:68-73"]:::err
+  end
+
+  subgraph BgErr["Background process failures"]
+    B1["proactive job crash → mark failed<br/>+ event, clean savepoint<br/>proactive/scheduler.py:214-227"]:::deg
+    B2["maintenance job crash → log + skip,<br/>retry next interval — jobs/scheduler.py:117-118"]:::deg
+    B3["poller getUpdates fail → log +<br/>sleep 3s + retry — poller.py:113-116"]:::deg
+  end
+
+  subgraph SendErr["Delivery failures — dispatcher"]
+    S1{"send failed?"}:::dec
+    S2["mark_failed → backoff retry :211"]:::deg
+    S3{"attempts exhausted?"}:::dec
+    S4["status dead — visible, not silent"]:::err
+    S5["dispatcher dead between claim/mark →<br/>visibility timeout, row redeemed"]:::ok
+  end
+
+  subgraph Human["Human handoff"]
+    H1["risk pattern / route handoff"]:::dec
+    H2["request_human: set handoff_until + notify<br/>gates.py:473"]:::ok
+    H3["next turns: gates → intentional silence"]:::deg
+  end
+
+  L1 --> L2
+  L2 -- no --> L3 --> L5
+  L2 -- no --> L4 --> L5
+  V1 -- invalid --> V2 --> V3
+  V3 -- no --> V4
+  C1 -- yes --> C2
+  S1 -- yes --> S2 --> S3
+  S3 -- yes --> S4
+  H1 --> H2 --> H3

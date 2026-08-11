@@ -33,7 +33,7 @@ Ce a mai rămas (OPȚIONAL / pasul următor):
 Rollup-ul nocturn `usage_daily` are nevoie de coloana `cached_tokens`. Afișarea per-mesaj
 în sim NU depinde de asta (citește din `analytics_events`), dar rollup-ul/dashboard-ul da.
 
-- [ ] `python scripts/apply_013.py` (aditiv + idempotent — rulabil de două ori fără eroare)
+- [ ] `python scripts/archive/apply_013.py` (aditiv + idempotent — rulabil de două ori fără eroare)
 - [ ] (opțional) `LLM_PRICING_JSON` în `.env.prod` dacă vrei să tunezi tarifele fără redeploy
 
 ---
@@ -94,7 +94,7 @@ Până faci pașii de mai jos, codul cade **grațios** pe modul compat (`SUPABAS
 trafic real cu mai mulți clienți):
 
 - [ ] Generează o parolă pt `bot_runtime` (vault) și rulează:
-      `BOT_RUNTIME_PASSWORD='...' python scripts/apply_005.py`
+      `BOT_RUNTIME_PASSWORD='...' python scripts/archive/apply_005.py`
       (face `ALTER ROLE bot_runtime LOGIN PASSWORD` + verifică login/bypassrls/super)
 - [ ] Pune în `.env`: `DATABASE_URL_BOT=postgresql://bot_runtime:<parola>@<host>:5432/postgres`
       (separat de `SUPABASE_DB_URL`). ⚠️ Parola percent-encoded dacă are caractere speciale.

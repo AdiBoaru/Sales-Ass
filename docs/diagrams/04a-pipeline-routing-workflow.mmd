@@ -1,0 +1,116 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 4a — Pipeline Routing Workflow (cele 11 stagii)
+flowchart TD
+  classDef stage fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef free fill:#a3e4d7,stroke:#148f77,color:#000
+  classDef err fill:#f1948a,stroke:#922b21,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  IN["Mesajul intră în pipeline"]:::stage
+
+  subgraph G["1 · Porți — cod pur, fără AI (gates.py:439)"]
+    G1{"Botul e oprit pe conversația asta?<br/>Clientul e blocat? A preluat un om?<br/>(:442-453)"}:::dec
+    G2{"Trimite prea multe mesaje? (:323)"}:::dec
+    G3{"Mesaj abuziv? — moderare automată (:348)"}:::llm
+    MODB["Prea multe abateri în 24h →<br/>contactul e blocat (:305-318)"]:::err
+    G4{"Semne de risc: amenințare legală,<br/>cere explicit un om? (:468)"}:::dec
+    G5{"A trimis o poză? (:482)"}:::dec
+    VIS["AI descrie poza → devine text de căutare<br/>(dacă pică, păstrăm descrierea clientului)<br/>(:385-436)"]:::llm
+    GRD["Curățăm mesajul: tăiem excesul,<br/>mascăm datele personale (:487)"]:::stage
+  end
+
+  HALT["TĂCERE intenționată — nu răspundem<br/>(un om se ocupă / rafală de spam)"]:::err
+  THR["Îi spunem O singură dată<br/>«hai mai încet» (:340-342)"]:::out
+  NEU["Răspuns neutru, fără discuție"]:::out
+  ESC["Chemăm un operator + mesaj de tranziție<br/>(gates.py:473-476)"]:::out
+
+  LANG["2 · Detectăm limba: RO / HU / EN<br/>(language.py:27)"]:::stage
+
+  subgraph CL3["3 · Reluăm clarificarea începută (clarify.py:28)"]
+    CLR{"Îi pusesem o întrebare turul trecut?"}:::dec
+    CONS["Răspunsul lui completează formularul:<br/>buget, nevoie, categorie (:41-52)"]:::stage
+    ATT{"A răspuns vag de prea multe ori? (:59)"}:::dec
+    RESUME["Reluăm de unde rămăsese<br/>(ruta salvată) (:69-73)"]:::stage
+    ESCR["Prea multe încercări → om<br/>sau vânzare (:61-62)"]:::stage
+  end
+
+  GREET{"4 · E doar un salut? («bună»)<br/>(greeting.py:184)"}:::dec
+  WELCOME["Mesaj de bun venit scris de noi — fără AI"]:::free
+  ALIAS{"5 · Frază pe care o știm exact?<br/>(alias aprobat) (alias.py:46)"}:::dec
+  AFAQ["Servim răspunsul pregătit dinainte (:64-72)"]:::free
+  AROUTE["Știm doar ÎNCOTRO merge (ruta),<br/>nu și răspunsul (:73-82)"]:::stage
+  SKIPS["Sărim cache / FAQ / triaj —<br/>ruta e deja știută<br/>(cache.py:93 · faq.py:49 · triage.py:214)"]:::stage
+  CACHE{"6 · Am mai răspuns la o întrebare<br/>aproape identică? (cache semantic)<br/>preț/stoc se re-verifică, nu se servesc orb<br/>(cache.py:46-100)"}:::dec
+  CHIT["Servim răspunsul din memorie — fără AI"]:::free
+  FAQ{"7 · Se potrivește cu o întrebare<br/>frecventă? (prag + rerank) (faq.py:45-101)"}:::dec
+  FHIT["Servim răspunsul din FAQ"]:::free
+
+  TRI["8 · AI-ul MIC clasifică mesajul:<br/>vânzare / comandă / simplu / neclar<br/>(triage.py:212)"]:::llm
+  TVAL{"Clasificarea e validă? Categoria<br/>chiar există la noi? (:247-255)"}:::dec
+  TGUARD{"Întrebare cu cifre/fapte deghizată<br/>în «simplu»? (:261)"}:::dec
+  TCONF{"AI-ul e nesigur pe clasificare? (:272)"}:::dec
+  ROUTE{"Încotro merge mesajul?"}:::dec
+  SIMPLE["AI-ul mic răspunde direct<br/>+ butoane de continuare (:298-308)"]:::out
+  CLARIFY["Punem O întrebare de clarificare<br/>+ variante de răspuns (:309-319)"]:::out
+
+  HOFF{"9 · Canalul are operator uman?<br/>(handoff.py:39)"}:::dec
+  HESC["Anunțăm operatorul + îi confirmăm<br/>clientului (:44-49)"]:::out
+  HSUP["Pe site nu e operator → tratăm<br/>ca vânzare (:40-42)"]:::stage
+
+  AGENT["10 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:267)"]:::llm
+  FB["11 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
+  SEND["Răspunsul pleacă spre client<br/>(un singur punct de ieșire)"]:::out
+
+  IN --> G1
+  G1 -- da --> HALT
+  G1 -- nu --> G2
+  G2 -- "prima dată peste limită" --> THR
+  G2 -- "rafala continuă (:343)" --> HALT
+  G2 -- nu --> G3
+  G3 -- da --> MODB --> NEU
+  G3 -- nu --> G4
+  G4 -- "da + canal cu operator" --> ESC
+  G4 -- "da, fără operator → continuăm (:470)" --> G5
+  G4 -- nu --> G5
+  G5 -- da --> VIS --> GRD
+  G5 -- nu --> GRD
+  GRD --> LANG --> CLR
+  CLR -- da --> CONS --> ATT
+  ATT -- da --> ESCR --> GREET
+  ATT -- nu --> RESUME --> GREET
+  CLR -- nu --> GREET
+  GREET -- da --> WELCOME
+  GREET -- nu --> ALIAS
+  ALIAS -- "țintă: răspuns FAQ" --> AFAQ
+  ALIAS -- "țintă: rută / produs / categorie" --> AROUTE --> SKIPS --> ROUTE
+  ALIAS -- nu --> CACHE
+  CACHE -- da --> CHIT
+  CACHE -- nu --> FAQ
+  FAQ -- da --> FHIT
+  FAQ -- nu --> TRI --> TVAL
+  TVAL -- "invalid → fără rută" --> FB
+  TVAL -- ok --> TGUARD
+  TGUARD -- "da → vânzare" --> ROUTE
+  TGUARD -- nu --> TCONF
+  TCONF -- "da → clarificare" --> ROUTE
+  TCONF -- nu --> ROUTE
+  ROUTE -- "simplu + are răspuns" --> SIMPLE
+  ROUTE -- "simplu, fără text (:298)" --> FB
+  ROUTE -- clarificare --> CLARIFY
+  ROUTE -- "cere om" --> HOFF
+  HOFF -- da --> HESC --> SEND
+  HOFF -- "nu — site" --> HSUP --> AGENT
+  ROUTE -- "vânzare / comandă" --> AGENT
+  AGENT -- "răspuns compus" --> SEND
+  AGENT -- "AI-ul a picat → fără răspuns (:370)" --> FB
+  FB --> SEND
+  SIMPLE --> SEND
+  CLARIFY --> SEND
+  WELCOME --> SEND
+  CHIT --> SEND
+  FHIT --> SEND
+  AFAQ --> SEND

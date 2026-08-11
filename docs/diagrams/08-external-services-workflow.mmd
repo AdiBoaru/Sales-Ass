@@ -1,0 +1,66 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 8 — External Services Workflow
+flowchart LR
+  classDef sys fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef ext fill:#fad7a0,stroke:#af601a,color:#000
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef q fill:#f5b7b1,stroke:#922b21,color:#000
+
+  subgraph OpenAI["OpenAI — the ONLY LLM seam, agent/llm.py"]
+    NANO["chat nano: triage · summarizer · profile<br/>classify_json :168"]:::llm
+    MINI["chat mini: agent tool loop :227<br/>compose :211 · schema :188"]:::llm
+    EMBD["embeddings: cache/FAQ/search/products"]:::llm
+    MOD["moderation — free, gates"]:::llm
+    VISN["vision: photo → search query :305"]:::llm
+    RTY["bounded retry _with_retry :45<br/>respects Retry-After"]:::sys
+  end
+
+  subgraph Meta["Meta Cloud API"]
+    MIN["webhook inbound signed<br/>X-Hub-Signature-256"]:::ext
+    MOUT["MetaClient send text/template/typing<br/>meta_client.py:28"]:::ext
+    MMED["media download GET — fetch_media<br/>meta_client.py:137 · media.py:34-43"]:::ext
+  end
+
+  subgraph Operator["Operator (handoff)"]
+    OPW["notify webhook POST, best-effort, no PII<br/>handoff_tools.py:28-47"]:::ext
+  end
+
+  subgraph TG["Telegram Bot API"]
+    TIN["long polling getUpdates<br/>poller.py:70"]:::ext
+    TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:78"]:::ext
+  end
+
+  subgraph Web["Web widget — FE repo separat"]
+    WIN["POST /web/messages · /chat HMAC session"]:::ext
+    WOUT2["SSE /web/stream + backlog replay<br/>web/app.py:300"]:::ext
+  end
+
+  subgraph Shop["Shop platform"]
+    OIN["orders webhook HMAC<br/>webhook/app.py:127 → attribution"]:::ext
+  end
+
+  subgraph RedisSvc["Redis"]
+    RS["streams · locks · dedupe L1<br/>cost counters · SSE pub/sub · TG offset"]:::q
+  end
+
+  SYS["Nativx pipeline"]:::sys
+
+  MIN --> SYS
+  TIN --> SYS
+  WIN --> SYS
+  OIN --> SYS
+  MMED --> SYS
+  SYS --> OPW
+  SYS --> MOUT
+  SYS --> TOUT
+  SYS --> WOUT2
+  SYS <--> RS
+  SYS <--> NANO
+  SYS <--> MINI
+  SYS <--> EMBD
+  SYS <--> MOD
+  SYS <--> VISN
+  NANO -.-> RTY
+  MINI -.-> RTY

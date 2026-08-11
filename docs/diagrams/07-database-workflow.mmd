@@ -1,0 +1,60 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 7 — Database Workflow
+flowchart TD
+  classDef pool fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+  classDef err fill:#f1948a,stroke:#922b21,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+
+  subgraph Pools["Two pools — connection.py"]
+    ADMIN["admin_pool — privileged<br/>get_pool :78 — control plane ONLY"]:::pool
+    BOT["bot_pool — role bot_runtime, NO bypassrls<br/>get_bot_pool :209"]:::pool
+  end
+
+  subgraph Tenant["tenant_conn checkout — connection.py:270"]
+    SETBIZ["set_config app.business_id"]:::step
+    ISO{"isolation assert:<br/>role + GUC match? :191"}:::dec
+    ISOERR["IsolationError — log CRITICAL<br/>reset GUC, raise"]:::err
+    RLS["RLS policies filter every query<br/>wrong query → 0 rows, not other tenant"]:::db
+    RESET["reset GUC on release :309"]:::step
+  end
+
+  subgraph Reads["Hot reads — bot_pool"]
+    RCAT["products + product_embeddings HNSW<br/>faqs · semantic_cache · intent_aliases"]:::db
+    RCONV["contacts · conversations · messages partitioned"]:::db
+  end
+
+  subgraph Writes["Writes — bot_pool"]
+    WMSG["messages inbound/outbound"]:::db
+    WOUT["outbox — idempotency_key turn:i"]:::db
+    WSTATE["conversations.state + state_version"]:::db
+    WDED["inbound_dedupe claim → completed<br/>claim-or-resume NX-86"]:::db
+    WANA["analytics_events INSERT-only, best-effort"]:::db
+    WCACHE["semantic_cache / summaries — savepoints"]:::db
+    WSTS["message_status_events → messages.status"]:::db
+    WLOC["conversations.locale — language stage :44"]:::db
+  end
+
+  CTRL["resolve_channel: provider_account_id → business_id<br/>the ONLY pre-tenant lookup — channels.py"]:::step
+  JOBS["admin jobs: rollup usage/demand · embed<br/>cleanup · lifecycle · partiții"]:::step
+  SSC["in-process SessionSecretCache LRU+TTL<br/>+ NEGATIVE cache anti-flood<br/>web/session.py:73-101"]:::step
+
+  SSC -- miss --> ADMIN
+  ADMIN --> CTRL
+  ADMIN --> JOBS
+  BOT --> SETBIZ --> ISO
+  ISO -- fail --> ISOERR
+  ISO -- ok --> RLS --> RESET
+  RLS --> RCAT
+  RLS --> RCONV
+  RLS --> WMSG
+  RLS --> WOUT
+  RLS --> WSTATE
+  RLS --> WDED
+  RLS --> WANA
+  RLS --> WCACHE
+  RLS --> WSTS
+  RLS --> WLOC

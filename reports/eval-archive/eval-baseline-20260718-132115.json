@@ -1,0 +1,183 @@
+{
+  "meta": {
+    "generated_at": "2026-07-18T13:21:15.269267+00:00",
+    "kind": "baseline",
+    "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+    "runs_per_case": 1,
+    "cache_enabled": false,
+    "model_triage": "gpt-5.4-nano",
+    "model_agent": "gpt-5.4-mini",
+    "judge_model": "gpt-5.4-mini",
+    "judge_prompt_sha256": "819a473d869bc40366f7d3884432ca1729415be8ddf708a80b6619ff1396bea8",
+    "judge_version": "v1",
+    "catalog_signature": "n=654;sha256=57ce6c9e8195ad91",
+    "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0"
+  },
+  "passes": [
+    {
+      "pass": "baseline",
+      "flag": null,
+      "flag_value": false,
+      "summary": {
+        "n_conversations": 1,
+        "n_turns": 3,
+        "n_followup_turns": 2,
+        "judge_natural_median": 3,
+        "pct_turns_natural_ge4": 33.3,
+        "pct_followup_answered_ge4": 50.0,
+        "det_gate_pass_rate_pct": 100.0,
+        "ungrounded_price_hits": 0,
+        "new_cards_on_followup_hits": 0,
+        "opening_repeat_turns": 0,
+        "unstable_turns": [],
+        "latency_ms_p95": 27234.5,
+        "latency_ms_p50": 14930.1
+      },
+      "cases": [
+        {
+          "id": "discovery_oily_serum",
+          "turns": [
+            {
+              "user": "am tenul gras, ce ser imi recomanzi?",
+              "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 5,
+                  "spread": 0
+                }
+              },
+              "latency_ms_p95": 27234.5,
+              "latency_ms_median": 27234.5,
+              "tokens_out_median": 927,
+              "tokens_in_median": 17596,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dacă vrei controlul luciului și al porilor, mergi pe serul cu niacinamidă; dacă problema principală e senzația de tensiune, varianta hidratantă e mai potrivită.",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "dintre ele care e mai lejera?",
+              "judge_focus": "raspunde superlativ pe setul afisat, FARA sa reintroduca 4 carduri sau sa repete intro",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 0
+                }
+              },
+              "latency_ms_p95": 14430.4,
+              "latency_ms_median": 14430.4,
+              "tokens_out_median": 774,
+              "tokens_in_median": 19024,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dintre ele, varianta hidratantă e mai lejeră la aplicare, fiind un gel care se absoarbe rapid. Serul cu niacinamidă e mai orientat spre controlul luciului și al porilor, deci se simte puțin mai „activ”.\n\nDacă vrei senzație cât mai ușoară pe ten, caută formule gel și produse care ",
+                  "n_cards": 1,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "una mai ieftina?",
+              "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 1,
+                  "spread": 0
+                }
+              },
+              "latency_ms_p95": 14930.1,
+              "latency_ms_median": 14930.1,
+              "tokens_out_median": 703,
+              "tokens_in_median": 19642,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "",
+                  "n_cards": 2,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

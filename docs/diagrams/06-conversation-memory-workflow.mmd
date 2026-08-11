@@ -1,0 +1,64 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 6 — Conversation Memory Workflow
+flowchart TD
+  classDef read fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef write fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef llm fill:#d7bde2,stroke:#6c3483,color:#000
+  classDef db fill:#d5dbdb,stroke:#566573,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+
+  subgraph Load["ÎNCEPUTUL TURULUI — ce ne amintim (processor.py:280-310)"]
+    H["Ultimele 8 mesaje"]:::read
+    ST["Starea discuției (max 8KB): ce i-am arătat,<br/>ce caută, coșul"]:::read
+    SUM["Rezumatul discuției, dacă e lungă"]:::read
+    PROF["Profilul clientului + scorul de interes"]:::read
+    FCT["Fapte STABILE despre el: buget, brand<br/>preferat, restricții (processor.py:307)"]:::read
+  end
+
+  subgraph Use["CE VEDE AI-UL — context.py"]
+    TRANS["Transcriptul compact<br/>(max 6 tururi / 1200 caractere) (:23)"]:::read
+    BLOCKS["Blocurile: profil + fapte + stare<br/>(:40 · :87 · :155)"]:::read
+  end
+
+  subgraph Mutate["ÎN TIMPUL TURULUI"]
+    AG["Agentul actualizează: ce caută clientul,<br/>căutarea activă"]:::write
+    TP["Uneltele cer modificări — coșul<br/>(tools/base.py:38-40)"]:::write
+    LNG["Limba detectată se salvează pe conversație<br/>(language.py:44)"]:::db
+  end
+
+  subgraph Persist["LA SALVARE — totul într-o singură tranzacție (processor.py:382-492)"]
+    DP["Ce i-am ARĂTAT — doar id + nume + preț"]:::write
+    PQ["Întrebarea pusă (sau ștearsă)"]:::write
+    MERGE["Constrângerile adunate din discuție"]:::write
+    ASR["Căutarea activă se resetează dacă<br/>răspunsul n-are produse"]:::write
+    PATCH["Modificările uneltelor câștigă ULTIMELE"]:::write
+    OPT["Salvat cu lacăt optimist — nu suprascriem<br/>alt worker care a apucat înainte"]:::db
+  end
+
+  subgraph PostTurn["DUPĂ RĂSPUNS, ÎN FUNDAL — conexiunea DB e deja eliberată (NX-161)<br/>consumer.py:236 → aftercare.py:444"]
+    CW{"Răspunsul merită salvat<br/>și pentru alți clienți?"}:::dec
+    CWB["În cache-ul semantic: zile pentru statice,<br/>minute pentru preț/stoc (aftercare.py:106)"]:::db
+    SQ{"Discuția a depășit pragul<br/>de lungime?"}:::dec
+    SUMGEN["AI-ul mic scrie rezumatul<br/>(aftercare.py:193)"]:::llm
+    PE{"Turul a rulat normal?"}:::dec
+    PEX["AI-ul mic extrage fapte noi despre client<br/>+ actualizează scorul de interes<br/>(aftercare.py:248-281)"]:::llm
+  end
+
+  H --> TRANS
+  PROF --> BLOCKS
+  ST --> BLOCKS
+  FCT --> BLOCKS
+  SUM --> TRANS
+  TRANS --> AG
+  BLOCKS --> AG
+  AG --> MERGE
+  TP --> PATCH
+  DP --> PQ --> MERGE --> ASR --> PATCH --> OPT
+  OPT --> CW
+  CW -- da --> CWB
+  OPT --> SQ
+  SQ -- da --> SUMGEN
+  OPT --> PE
+  PE -- da --> PEX

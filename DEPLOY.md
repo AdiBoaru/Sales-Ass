@@ -40,7 +40,7 @@ cp .env.prod.example .env
 nano .env                       # completează (vezi §3 pentru valorile Traefik)
 
 # 3. Provisioning rol bot_runtime pe Supabase (o singură dată, dacă nu e făcut)
-BOT_RUNTIME_PASSWORD='...' python scripts/apply_005.py
+BOT_RUNTIME_PASSWORD='...' python scripts/archive/apply_005.py
 ```
 
 > `.env` conține `COMPOSE_FILE=docker-compose.prod.yml` + `COMPOSE_PROJECT_NAME=nativx`,
@@ -130,7 +130,7 @@ DNS nou** (același `WEBHOOK_HOST`). `/web/chat` (sincron) rulează pipeline-ul 
 2. **Activează gateway-ul** în `.env` (deja setate în `.env.prod.example`):
    ```bash
    WEB_ENABLED=true
-   WEB_CORS_ORIGINS=https://shop.nativextech.com   # originea EXACTĂ a site-ului, fără slash final
+   WEB_CORS_ORIGINS=https://demo.nativextech.com   # originea EXACTĂ a site-ului, fără slash final
    ```
    apoi `docker compose up -d webhook`. Endpointurile devin live:
    `https://WEBHOOK_HOST/web/bootstrap` + `/web/chat`.
@@ -144,7 +144,7 @@ DNS nou** (același `WEBHOOK_HOST`). `/web/chat` (sincron) rulează pipeline-ul 
    # → {"content":"...","products":[...],"suggestions":[...]}
    ```
    Verifică din browser-ul site-ului că NU apare eroare CORS (originea trebuie să fie EXACT
-   în `WEB_CORS_ORIGINS`; `https://shop.nativextech.com` ≠ `https://www.shop.nativextech.com`
+   în `WEB_CORS_ORIGINS`; `https://demo.nativextech.com` ≠ `https://www.demo.nativextech.com`
    ≠ cu slash final).
 4. **Frontend**: dă echipei `VITE_CHAT_API_BASE=https://WEBHOOK_HOST` + `VITE_CHAT_PUBLIC_TOKEN=<public_token>`
    (vezi `docs/web-widget-embed.md` §sincron pt contractul `{content, products, suggestions}`).

@@ -1,0 +1,38 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 4b — Agent Stage Internals (fazele A–F după modularizare) · figura 2 (faza-e-precedenta)
+flowchart TD
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+
+  P1{"1 · Întreabă de comanda lui,<br/>dar nu e logat pe site? (:187)"}:::dec
+  O1["Îi cerem să se logheze — fără cont<br/>nu-i putem căuta comanda"]:::out
+  P2{"2 · Vrea să CUMPERE, dar AI-ul a uitat<br/>să-i facă linkul de plată? (:206-214)"}:::dec
+  S2["Codul creează el linkul de plată,<br/>pe același drum contabilizat (:227)"]:::step
+  P3{"3 · Tocmai a pus ceva în coș<br/>(și nu are link de plată)? (:236-242)"}:::dec
+  S3["Îi arătăm produse care MERG ÎMPREUNĂ<br/>cu ce a luat, filtrate de siguranță (:251)<br/>a mers → gata; n-a mers → continuăm"]:::safe
+  P4{"4 · Întreabă «care dintre ELE e cea mai...»?<br/>— superlativ pe ce i-am arătat (:282-288)"}:::dec
+  S4["Recitim din catalog produsele deja arătate,<br/>ca să răspundem pe FAPTE, nu din memorie (:294)"]:::safe
+  P5{"5 · Cere «ceva mai ieftin»? (:304-311)"}:::dec
+  S5["Căutăm STRICT mai ieftin decât ce a văzut (:317)<br/>nu există → îi spunem cinstit + notăm golul<br/>de preț pentru comerciant (:331) → gata"]:::safe
+  P6{"6 · AI-ul n-a adus produse, dar clientul<br/>vorbește despre cele deja arătate? (:352-359)"}:::dec
+  S6["Le recitim din catalog — plasa care evită<br/>un «n-am găsit» absurd (:363)"]:::safe
+  GATE["FILTRUL FINAL de siguranță: orice produs<br/>contraindicat (ex. sarcină) e scos AICI,<br/>orice ar fi adus căile de mai sus (:372)"]:::safe
+  RETR["Setul final = SINGURA sursă pentru<br/>răspuns, carduri și memoria discuției (:373)"]:::step
+
+  P1 -- da --> O1
+  P1 -- nu --> P2
+  P2 -- da --> S2 --> P3
+  P2 -- nu --> P3
+  P3 -- da --> S3 --> P4
+  P3 -- nu --> P4
+  P4 -- da --> S4 --> GATE
+  P4 -- nu --> P5
+  P5 -- da --> S5 --> GATE
+  P5 -- nu --> P6
+  P6 -- da --> S6 --> GATE
+  P6 -- nu --> GATE
+  GATE --> RETR
