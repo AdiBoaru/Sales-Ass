@@ -23,7 +23,8 @@ from src.channels.base import Capability, ChannelSenderRegistry
 from src.channels.telegram.client import TelegramClient
 from src.channels.web.sender import WebSender
 from src.config import get_settings
-from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
+from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool
+from src.db.provider import DbProvider, tenant_db
 from src.db.queries.analytics import insert_events
 from src.db.queries.messages import set_message_provider_id
 from src.db.queries.outbox import (
@@ -167,13 +168,21 @@ def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability])
     return "text"
 
 
-async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, row: dict) -> str:
+async def dispatch_row(
+    db: DbProvider, business_id: str, registry: ChannelSenderRegistry, row: dict
+) -> str:
     """Trimite un singur rând de outbox prin canalul lui. Întoarce statusul rezultat.
 
-    Alege transportul din registru după `channel_kind` (NX-60). `conn` e
-    tenant-scoped pe `business_id`. Succesul (mark_sent + leagă provider_msg_id pe
-    mesajul outbound) e tranzacțional ca să nu rămână outbox 'sent' cu mesaj fără
-    id. Eșecul → mark_failed (backoff sau 'dead')."""
+    Alege transportul din registru după `channel_kind` (NX-60). `db` e providerul tenant-scoped
+    pe `business_id`.
+
+    NX-231: apelul HTTP către provider (Meta/Telegram/web publish) rulează cu ZERO conexiune
+    ținută. Înainte, `_dispatch_claimed_row` deschidea `tenant_conn` și îl păstra peste `send_*`
+    — exact anti-pattern-ul pe care îl scoatem din calea turului, doar în alt proces: sub un
+    provider lent, dispatcher-ul epuiza poolul pe timp de rețea, nu pe muncă de DB.
+
+    Succesul (mark_sent + leagă provider_msg_id pe mesajul outbound) rămâne tranzacțional, ca să
+    nu rămână outbox 'sent' cu mesaj fără id. Eșecul → mark_failed (backoff sau 'dead')."""
     payload = row["payload"]
     outbox_kind = row.get("kind", "message")
     ptype = payload.get("type")
@@ -191,14 +200,18 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
             outbox_kind,
             ptype,
         )
-        await mark_failed(conn, business_id, row["id"], 999, "tip nesuportat de dispatcher")
+        async with db("outbox_mark_failed") as conn:
+            await mark_failed(conn, business_id, row["id"], 999, "tip nesuportat de dispatcher")
         return "dead"
 
     channel_kind = row["channel_kind"]
     sender = registry.get(channel_kind)
     if sender is None:
         log.warning("outbox %s: niciun sender pentru channel_kind=%s", row["id"], channel_kind)
-        await mark_failed(conn, business_id, row["id"], 999, f"canal nesuportat: {channel_kind}")
+        async with db("outbox_mark_failed") as conn:
+            await mark_failed(
+                conn, business_id, row["id"], 999, f"canal nesuportat: {channel_kind}"
+            )
         return "dead"
 
     # NX-115: matrice de capabilități în loc de scară `hasattr`. Ramura aleasă pur (testabil)
@@ -207,7 +220,8 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
     branch = choose_render(payload, ptype, caps)
     if branch == "edit_unsupported":
         log.warning("outbox %s: edit_media pe canal fără EDIT (%s)", row["id"], channel_kind)
-        await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")
+        async with db("outbox_mark_failed") as conn:
+            await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")
         return "dead"
 
     try:
@@ -249,18 +263,22 @@ async def dispatch_row(conn, business_id: str, registry: ChannelSenderRegistry, 
             # (conține deja recomandarea + offer-ul aplatizat — degradare grațioasă, P6).
             provider_id = await sender.send_text(account_id, payload["to"], payload["text"])
     except Exception as e:  # noqa: BLE001 — orice eroare de transport/HTTP → retry
-        status = await mark_failed(conn, business_id, row["id"], row["attempts"], str(e)[:500])
+        async with db("outbox_mark_failed") as conn:
+            status = await mark_failed(conn, business_id, row["id"], row["attempts"], str(e)[:500])
         log.warning("outbox %s: trimitere eșuată (%s) → %s", row["id"], type(e).__name__, status)
         return status
 
-    async with conn.transaction():
-        await mark_sent(conn, business_id, row["id"], sent_message_id=payload.get("message_id"))
-        if payload.get("message_id"):
-            await set_message_provider_id(conn, business_id, payload["message_id"], provider_id)
-    log.info("outbox %s trimis pe %s (provider_msg_id=%s)", row["id"], channel_kind, provider_id)
-    await _emit_render_path(
-        conn, business_id, channel_kind, payload, ptype, branch, row.get("conversation_id")
-    )
+    # Checkout scurt DUPĂ ce providerul a răspuns: marcarea rezultatului rămâne atomică, dar
+    # conexiunea n-a existat cât a durat rețeaua.
+    async with db("outbox_mark_sent") as conn:
+        async with conn.transaction():
+            await mark_sent(conn, business_id, row["id"], sent_message_id=payload.get("message_id"))
+            if payload.get("message_id"):
+                await set_message_provider_id(conn, business_id, payload["message_id"], provider_id)
+        log.info("outbox %s trimis pe %s (provider=%s)", row["id"], channel_kind, provider_id)
+        await _emit_render_path(
+            conn, business_id, channel_kind, payload, ptype, branch, row.get("conversation_id")
+        )
     return "sent"
 
 
@@ -276,16 +294,22 @@ async def _dispatch_claimed_row(
         async with global_sem:
             start = datetime.now(UTC)
             status = "error"
-            async with tenant_conn(business_id) as conn:
+            db = tenant_db(business_id)
+            try:
+                status = await dispatch_row(db, business_id, registry, row)
+            except Exception:  # noqa: BLE001 - one bad row must not stop the batch
+                log.exception("eroare neasteptata la dispatch outbox %s", row["id"])
+            finally:
+                duration_ms = int((datetime.now(UTC) - start).total_seconds() * 1000)
+                # NX-231: telemetria își ia propriul checkout scurt, DUPĂ trimitere — nu mai
+                # ținem o conexiune deschisă doar ca să avem unde scrie la final.
                 try:
-                    status = await dispatch_row(conn, business_id, registry, row)
-                except Exception:  # noqa: BLE001 - one bad row must not stop the batch
-                    log.exception("eroare neasteptata la dispatch outbox %s", row["id"])
-                finally:
-                    duration_ms = int((datetime.now(UTC) - start).total_seconds() * 1000)
-                    await _emit_outbox_dispatch(
-                        conn, business_id, row, status, duration_ms=duration_ms
-                    )
+                    async with db("outbox_dispatch_event") as conn:
+                        await _emit_outbox_dispatch(
+                            conn, business_id, row, status, duration_ms=duration_ms
+                        )
+                except Exception as e:  # noqa: BLE001 - observability best-effort
+                    log.warning("outbox_dispatch: checkout esuat (%s)", type(e).__name__)
     return 1
 
 
@@ -306,7 +330,7 @@ async def dispatch_due(
     tenant_sems: dict[str, asyncio.Semaphore] = {}
     tasks: list[asyncio.Task[int]] = []
     for business_id in business_ids:
-        async with tenant_conn(business_id) as conn:
+        async with tenant_db(business_id)("outbox_claim_due") as conn:
             rows = await claim_due(conn, business_id, limit=batch)
         tenant_sem = tenant_sems.setdefault(
             business_id, asyncio.Semaphore(max(1, tenant_concurrency))
