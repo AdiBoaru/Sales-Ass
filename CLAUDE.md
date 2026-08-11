@@ -502,8 +502,8 @@ nativx-assistant/
 │   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web (carduri+comparison) pt randarea FE (paritate iZi)
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
-├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); apply_0NN.py
-│                                  DEPRECATE (istoric); db_check.py, spot_check.py
+├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); db_check.py,
+│                                  spot_check.py; archive/ = apply_0NN.py istorice (înlocuite de migrate.py)
 ├── db/
 │   └── seed/                    ← seed.ts + embed.ts (Supabase JS client, tsx)
 ├── src/

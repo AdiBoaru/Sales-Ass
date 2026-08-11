@@ -40,7 +40,7 @@ cp .env.prod.example .env
 nano .env                       # completează (vezi §3 pentru valorile Traefik)
 
 # 3. Provisioning rol bot_runtime pe Supabase (o singură dată, dacă nu e făcut)
-BOT_RUNTIME_PASSWORD='...' python scripts/apply_005.py
+BOT_RUNTIME_PASSWORD='...' python scripts/archive/apply_005.py
 ```
 
 > `.env` conține `COMPOSE_FILE=docker-compose.prod.yml` + `COMPOSE_PROJECT_NAME=nativx`,

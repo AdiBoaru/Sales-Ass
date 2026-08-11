@@ -58,3 +58,11 @@ backups/
 
 # Doc de referință binar (păstrat local, nu în repo)
 docs/semantic-cache-architecture-review.md.pdf
+
+# Worktree-uri locale (Claude/Codex) — copii de lucru, niciodată în repo
+worktrees/
+.codex-worktrees/
+.claude/worktrees/
+
+# Artefacte de rulare sim (dump-uri de debug, regenerabile)
+scripts/sim/runs/
