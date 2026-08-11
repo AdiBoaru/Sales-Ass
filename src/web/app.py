@@ -34,7 +34,7 @@ from src.channels.base import InboundEvent
 from src.channels.web.render import render_web
 from src.channels.web.sender import backlog_key, out_channel
 from src.config import get_settings
-from src.db.connection import admin_conn, get_pool, tenant_conn
+from src.db.connection import admin_conn, get_pool
 from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
@@ -57,6 +57,7 @@ from src.web.session import (
     verify_web_session_any,
 )
 from src.webhook.body_limit import enforce_body_cap
+from src.worker.admission import get_admission, tenant_bucket
 from src.worker.aftercare import run_aftercare
 from src.worker.limits import (
     cost_over_budget,
@@ -374,40 +375,67 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
             event["turn_lock_bypass"] = True
         if lock.waited_ms > 0:
             event["turn_lock_wait_ms"] = lock.waited_ms
+    db = tenant_db(session.business_id)
+    admission = get_admission(redis) if s.web_admission_enabled else None
+    slot = None
     try:
-        async with tenant_conn(session.business_id) as conn:
+        async with db("load_business") as conn:
             business = await load_business(conn, session.business_id)
-            if business is None:
-                raise HTTPException(status_code=503, detail="business unavailable")
-            # NX-120: gard de admitere de cost ÎNAINTE de pipeline — nu cheltui LLM dacă bugetul
-            # tenantului SAU al vizitatorului e atins. Redis căzut → fail-CLOSED (429), consecvent
-            # cu rate-limit-ul. (Precizia per-tur + cap per-contact pe canalele async = NX-125.)
-            cap = business.daily_cost_cap_usd or s.daily_cost_cap_usd
-            try:
-                over_budget = await cost_over_budget(
-                    redis, session.business_id, cap
-                ) or await web_cost_over_visitor_cap(
-                    redis, session.business_id, req.visitor_id, s.web_cost_cap_per_visitor_usd
-                )
-            except (RedisError, OSError):
-                over_budget = True  # fail-CLOSED: dacă nu pot verifica, NU cheltui
-            if over_budget:
-                raise HTTPException(status_code=429, detail="budget exceeded")
-            result = await handle_turn(
-                conn,
-                business,
-                channel["channel_id"],
-                event,
-                redis=redis,
-                deliver=False,
-                defer_aftercare=True,
+        if business is None:
+            raise HTTPException(status_code=503, detail="business unavailable")
+        # NX-120: gard de admitere de cost ÎNAINTE de pipeline — nu cheltui LLM dacă bugetul
+        # tenantului SAU al vizitatorului e atins. Redis căzut → fail-CLOSED (429), consecvent
+        # cu rate-limit-ul. (Precizia per-tur + cap per-contact pe canalele async = NX-125.)
+        cap = business.daily_cost_cap_usd or s.daily_cost_cap_usd
+        try:
+            over_budget = await cost_over_budget(
+                redis, session.business_id, cap
+            ) or await web_cost_over_visitor_cap(
+                redis, session.business_id, req.visitor_id, s.web_cost_cap_per_visitor_usd
             )
+        except (RedisError, OSError):
+            over_budget = True  # fail-CLOSED: dacă nu pot verifica, NU cheltui
+        if over_budget:
+            raise HTTPException(status_code=429, detail="budget exceeded")
+        # NX-231: ACEEAȘI poartă de admission ca workerul (lease-uri distribuite, plafon global +
+        # per-tenant). Ruta sincronă cheltuie LLM in-process, deci fără ea un burst pe web ocolea
+        # complet frâna sistemului. Zero conexiune ținută cât așteptăm un slot. Peste deadline →
+        # 429 ONEST cu `Retry-After` (echivalentul web al re-queue-ului: niciun payload gol, P6);
+        # store indisponibil → fallback local BOUNDED, nu bypass tăcut.
+        if admission is not None:
+            slot = await admission.acquire(session.business_id, s.admission_web_wait_ms / 1000.0)
+            if not slot.admitted:
+                log.warning(
+                    "web admission: respins (%s) bucket=%s",
+                    slot.reason,
+                    tenant_bucket(session.business_id),
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail="busy",
+                    headers={"Retry-After": "1"},
+                )
+            if slot.wait_ms > 0:
+                event["admission_wait_ms"] = round(slot.wait_ms, 1)
+            if slot.degraded:
+                event["admission_degraded"] = True
+        result = await handle_turn(
+            db,
+            business,
+            channel["channel_id"],
+            event,
+            redis=redis,
+            deliver=False,
+            defer_aftercare=True,
+        )
     finally:
+        if admission is not None and slot is not None:
+            await admission.release(slot)
         # Release DUPĂ ce turul (reply + patch de state) e persistat, dar ÎNAINTE de aftercare
         # (LLM de fundal — nu ținem turul următor blocat pe muncă best-effort). TTL = plasă.
         if lock is not None:
             await release_turn_lock(redis, lock)
-    # conn ELIBERAT ↑ (async with închis).
+    # Conexiunile turului sunt DEJA înapoi în pool: fiecare fază și-a luat una scurtă.
     pipeline_cost_usd = (
         result.aftercare.ctx.usage.cost_usd
         if result.aftercare is not None and result.aftercare.ctx.usage is not None
@@ -416,9 +444,7 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
     post_turn_cost_usd = 0.0
     # Aftercare uses separate DB checkouts. Its real cost is added to the web visitor cap below.
     if result.aftercare is not None:
-        post_turn_cost_usd = await run_aftercare(
-            tenant_db(session.business_id), redis, result.aftercare
-        )
+        post_turn_cost_usd = await run_aftercare(db, redis, result.aftercare)
     try:
         await web_cost_add_visitor(
             redis,

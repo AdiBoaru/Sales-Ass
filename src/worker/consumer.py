@@ -27,7 +27,7 @@ from redis.exceptions import ResponseError
 from src.channels.base import Capability, ChannelSenderRegistry
 from src.channels.media import close_media
 from src.config import get_settings
-from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
+from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool
 from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
@@ -42,7 +42,7 @@ from src.redis_bus import (
 )
 from src.safety.contraindications import registry_healthy
 from src.webhook.orders import process_order
-from src.worker.admission import get_admission
+from src.worker.admission import get_admission, tenant_bucket
 from src.worker.aftercare import run_aftercare
 from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
@@ -132,7 +132,7 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
         if not business_id:
             log.warning("order fără business_id — ignorat")
             return
-        async with tenant_conn(business_id) as conn:
+        async with tenant_db(business_id)("process_order") as conn:
             try:
                 await process_order(conn, business_id, event.get("order") or {})
             except Exception:  # noqa: BLE001 — un order rău nu blochează coada (e logat)
@@ -154,9 +154,11 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
     business_id = channel["business_id"]
     kind = event.get("kind", "message")
 
+    db = tenant_db(business_id)
+
     # Statusurile sunt idempotente (delivered/read/failed pe provider_msg_id) → fără lock.
     if kind == "status":
-        async with tenant_conn(business_id) as conn:
+        async with db("record_status_event") as conn:
             await record_status_event(
                 conn,
                 business_id,
@@ -190,53 +192,61 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
             return
 
     try:
-        # NX-161 Felia 0C: frâna de admission — luată ÎNAINTE de tenant_conn (fără conn ținut cât
-        # aștepți un slot; invariant: NU în interiorul tenant_conn). Peste capacitate → re-queue cu
-        # backoff (P6, nu drop tăcut). Setată > pool → azi nu bindează (poolul bindează primul), dar
-        # e plasa pentru când conn-per-op eliberează poolul din rolul de frână accidentală.
-        admission = get_admission()
-        wait_ms = await admission.acquire(
-            business_id, settings.admission_acquire_timeout_ms / 1000.0
-        )
-        admitted = wait_ms is not None
-        if not admitted and redis is not None:  # peste capacitate → defer FĂRĂ drop (P6)
+        # NX-231: frâna de admission, acum DISTRIBUITĂ (lease-uri Redis) — luată ÎNAINTE de orice
+        # checkout DB (invariant: nu se așteaptă un slot cu o conexiune în mână). Peste capacitate →
+        # re-queue cu backoff (P6, nu drop tăcut). Cu conn-per-op poolul nu mai bindează primul,
+        # deci ĂSTA e plafonul real de concurență al sistemului, comun tuturor replicilor.
+        admission = get_admission(redis)
+        slot = await admission.acquire(business_id, settings.admission_acquire_timeout_ms / 1000.0)
+        if not slot.admitted and redis is not None:  # peste capacitate → defer FĂRĂ drop (P6)
             status = await _requeue_admission(redis, event, settings)
             log.info(
-                "admission: peste capacitate → re-queue (business=%s, inflight=%d, %s)",
-                business_id,
+                "admission: respins (%s) → re-queue (bucket=%s, inflight=%d, %s)",
+                slot.reason,
+                tenant_bucket(business_id),
                 admission.inflight,
                 status,
             )
             return
-        # admis (slot luat / frână off) sau redis None → fail-open (procesăm, nu pierdem turul).
-        if admitted and wait_ms and wait_ms > 50:  # contenție reală — vizibil, fără spam la wait ~0
-            log.info(
-                "admission: slot după %dms (business=%s, inflight=%d)",
-                round(wait_ms),
-                business_id,
-                admission.inflight,
+        if not slot.admitted:
+            # Fără Redis nu putem re-queue → procesăm oricum (P6: mai bine un tur peste plafon
+            # decât un mesaj de client pierdut tăcut). Vizibil în log, nu tăcut.
+            log.warning(
+                "admission: respins (%s), dar fără Redis nu putem re-queue → procesăm", slot.reason
             )
+        if slot.wait_ms > 50:  # contenție reală — vizibil, fără spam la wait ~0
+            log.info(
+                "admission: slot după %dms (bucket=%s, backend=%s)",
+                round(slot.wait_ms),
+                tenant_bucket(business_id),
+                slot.backend,
+            )
+            # P10: wait-ul intră pe traiectoria turului (ca `turn_lock_wait_ms`) → processor-ul
+            # îl emite cu turn_id; respingerile n-au tur, deci rămân log + contor.
+            event = {**event, "admission_wait_ms": round(slot.wait_ms, 1)}
+        if slot.degraded:
+            event = {**event, "admission_degraded": True}
         try:
             result = None
-            async with tenant_conn(business_id) as conn:
+            async with db("load_business") as conn:
                 business = await load_business(conn, business_id)
-                if business is None:
-                    log.warning("business %s lipsește — ignorat", business_id)
-                    return
-                if kind == "callback":
-                    # navigare carusel (R2): drum determinist, NU pipeline LLM.
+            if business is None:
+                log.warning("business %s lipsește — ignorat", business_id)
+                return
+            if kind == "callback":
+                # navigare carusel (R2): drum determinist, NU pipeline LLM.
+                async with db("handle_callback") as conn:
                     await handle_callback(conn, business, channel["channel_id"], event)
-                    return
-                result = await handle_turn(
-                    conn, business, channel["channel_id"], event, redis=redis, defer_aftercare=True
-                )
-            # NX-161 F1: conn ELIBERAT ↑ (async with închis) → aftercare-ul rulează cu checkout-uri
-            # scurte proaspete (tenant_db), fără conn ținut pe durata LLM-ului de fundal.
+                return
+            result = await handle_turn(
+                db, business, channel["channel_id"], event, redis=redis, defer_aftercare=True
+            )
+            # Aftercare-ul rulează cu checkout-uri scurte proaspete, fără conexiune ținută pe
+            # durata LLM-ului de fundal (summarizer/profil/embed de cache).
             if result is not None and result.aftercare is not None:
-                await run_aftercare(tenant_db(business_id), redis, result.aftercare)
+                await run_aftercare(db, redis, result.aftercare)
         finally:
-            if admitted:
-                admission.release(business_id)
+            await admission.release(slot)
     finally:
         if locked is True:
             await release_conv_lock(redis, business_id, sender_key, token)
