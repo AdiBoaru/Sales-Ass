@@ -86,6 +86,23 @@ async def _persist_events(conn, business_id, conversation_id, contact_id, events
         log.exception("persistarea analytics_events a eșuat (turul continuă)")
 
 
+async def persist_events(
+    db: DbProvider, business_id, conversation_id, contact_id, events, *, operation="persist_events"
+) -> None:
+    """Varianta pe PROVIDER (NX-231): checkout scurt propriu pentru analytics.
+
+    Deliberat în AFARA tranzacției de commit: o eroare de observabilitate n-are voie să dea
+    rollback pe răspunsul clientului. Și eșecul de CHECKOUT e best-effort — pe web sincron o
+    excepție aici ar da 500 după ce reply-ul a fost deja calculat."""
+    if not events:
+        return
+    try:
+        async with db(operation) as conn:
+            await _persist_events(conn, business_id, conversation_id, contact_id, events)
+    except Exception:  # noqa: BLE001 — checkout eșuat → analytics pierdut, turul continuă
+        log.exception("checkout pentru analytics_events a eșuat (turul continuă)")
+
+
 def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
     """Props pentru un event `llm_usage` dintr-un acumulator (POST-tur: summarizer + profil + cache
     embed). Aceeași formă ca runner-ul → rollup-ul/raportul le tratează uniform; `phase` separă

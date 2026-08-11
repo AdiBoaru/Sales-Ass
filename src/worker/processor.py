@@ -1,62 +1,51 @@
 """Procesarea unui mesaj inbound — de la eveniment la răspuns în outbox.
 
-`handle_turn` e miezul determinist al unui tur, pe o conexiune DEJA tenant-scoped:
-  1. rezolvă contactul (identity resolution) + conversația
-  2. scrie mesajul inbound + alimentează fereastra 24h (last_inbound_at)
-  3. construiește TurnContext + rulează pipeline-ul (runner)
-  4. dacă a ieșit un reply → îl scrie TRANZACȚIONAL: mesaj outbound (queued) +
-     rând în outbox (idempotent pe turn_id) + patch state (touch_outbound) —
-     exact contractul Sender-ului (stagiul 9): un singur punct de ieșire, atomic.
+`handle_turn` e miezul determinist al unui tur. NX-231: primește un PROVIDER de conexiuni, nu o
+conexiune. Turul e împărțit explicit în patru faze (contractul din `turn_uow.py`):
 
-Dispatcher-ul (separat) citește outbox, trimite la Meta și leagă provider_msg_id.
+  1. **load**    (checkout scurt) — dedupe claim → contact → conversație → mesaj inbound →
+                 `last_inbound_at` → istoric/rezumat/facts. Rezultat: `TurnLoadSnapshot`, date
+                 imutabile, fără connection handle.
+  2. **compute** (ZERO conexiune ținută) — pipeline-ul (runner). Stagiile iau checkout-uri scurte
+                 pentru operațiile lor; triajul, agentul, tool-urile și embed-urile rulează cu
+                 poolul liber.
+  3. **commit**  (checkout scurt + O tranzacție) — mesaje outbound + outbox (idempotent pe turn_id)
+                 + patch de stare (state_version) + `mark_inbound_completed`. Atomic sau deloc.
+  4. **aftercare** — primește ID-uri și un snapshot, niciodată o conexiune.
+
+Înainte, toate cele patru rulau pe UNA și aceeași conexiune, ținută de la primul query până la
+ultimul — inclusiv peste apelurile la OpenAI. Poolul (max 10) devenea frâna accidentală a
+sistemului, iar ~79% din hold era timp în care conexiunea nu făcea nimic
+(docs/CONN-HOLD-ANALYSIS-2026.md).
+
+Dispatcher-ul (separat) citește outbox, trimite la canal și leagă provider_msg_id.
 """
 
 import logging
 from dataclasses import asdict, dataclass
 from uuid import uuid4
 
-import asyncpg
 from redis.asyncio import Redis
 
 from src.agent.llm import get_llm
 from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
+from src.db import op_metrics
 from src.db.connection import bot_pool_stats
-from src.db.pool_metrics import take_acquire_wait
-from src.db.provider import static_db, tenant_db
-from src.db.queries.contacts import get_or_create_contact
-from src.db.queries.conversations import (
-    StateConflict,
-    get_or_create_conversation,
-    get_state_and_version,
-    patch_conversation_state,
-    touch_last_inbound,
-)
-from src.db.queries.facts import (
-    fetch_relevant_facts,
-)
-from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
-from src.db.queries.messages import (
-    get_recent_messages,
-    insert_message,
-)
-from src.db.queries.outbox import enqueue_outbox
-from src.db.queries.summaries import (
-    get_summary_for_context,
-)
+from src.db.pool_metrics import take_acquire_stats
+from src.db.provider import DbProvider
 from src.models import (
-    Author,
     BusinessConfig,
     ConversationState,
-    Direction,
     InboundMessage,
     Reply,
     TurnContext,
     TurnUsage,
 )
 from src.privacy import apply_boundary
-from src.worker.aftercare import AftercareWork, _persist_events, run_aftercare
+from src.worker.admission import tenant_bucket
+from src.worker.aftercare import AftercareWork, persist_events, run_aftercare
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import (
     CONTACT_COST_WINDOW_S,
@@ -69,6 +58,14 @@ from src.worker.limits import (
 )
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
+from src.worker.turn_uow import (
+    OutboundFragment,
+    TurnCommit,
+    TurnLoadSnapshot,
+    commit_turn,
+    complete_without_reply,
+    load_turn,
+)
 
 log = logging.getLogger(__name__)
 
@@ -247,52 +244,8 @@ def _build_new_state(
     return new_state
 
 
-async def _patch_state_with_retry(
-    conn: asyncpg.Connection,
-    business_id: str,
-    conversation_id: str,
-    ctx: TurnContext,
-    new_state: dict,
-    expected_version: int,
-    *,
-    is_rich: bool,
-    has_products: bool,
-) -> None:
-    """NX-221: `StateConflict` nu mai omoară reply-ul. Conflictul (altă scriere între citirea
-    de la începutul turului și patch) → re-citim `(state, state_version)` PROASPETE și re-aplicăm
-    deltele turului O SINGURĂ DATĂ. Al doilea eșec → pierdem patch-ul de stare, NU răspunsul
-    (principiul 6): emitem `state_conflict_dropped` și continuăm — insert-urile de mesaje/outbox
-    din aceeași TX rămân comise. Retry-ul e DOAR pe UPDATE-ul de stare, nu re-rulează insert-uri.
-    Fără PII în log (P12): doar id-uri."""
-    try:
-        await patch_conversation_state(
-            conn, business_id, conversation_id, new_state, expected_version, touch_outbound=True
-        )
-        return
-    except StateConflict:
-        pass
-    fresh = await get_state_and_version(conn, business_id, conversation_id)
-    if fresh is not None:
-        fresh_state, fresh_version = fresh
-        retry_state = _build_new_state(fresh_state, ctx, is_rich=is_rich, has_products=has_products)
-        try:
-            await patch_conversation_state(
-                conn, business_id, conversation_id, retry_state, fresh_version, touch_outbound=True
-            )
-            ctx.emit("state_conflict_retried")
-            return
-        except StateConflict:
-            pass
-    ctx.emit("state_conflict_dropped")
-    log.warning(
-        "state conflict: patch de stare pierdut, reply livrat (conv=%s turn=%s)",
-        conversation_id,
-        ctx.turn_id,
-    )
-
-
 async def handle_turn(
-    conn: asyncpg.Connection,
+    db: DbProvider,
     business: BusinessConfig,
     channel_id: str,
     event: dict,
@@ -302,7 +255,11 @@ async def handle_turn(
     deliver: bool = True,
     defer_aftercare: bool = False,
 ) -> TurnResult:
-    """Procesează un mesaj inbound pe o conexiune tenant-scoped pe `business.id`.
+    """Procesează un mesaj inbound cu un provider tenant-scoped pe `business.id`.
+
+    `db` (NX-231) = PROVIDER, nu conexiune: fiecare fază ia conexiunea doar cât are nevoie.
+    Testele pot pasa `static_db(fake_conn)` ca să injecteze un conn unic (comportament de
+    dinainte de migrare).
 
     `event` = envelope-ul neutru (InboundEvent.to_dict): channel_kind,
     channel_account_id, sender_external_id, provider_msg_id, content_type, body, ...
@@ -323,41 +280,14 @@ async def handle_turn(
     # (`customer_ref` din JWT host-signed), rezolvăm contactul pe EA (verified=true → contact stabil
     # peste sesiuni/device-uri), nu pe visitor_id-ul anonim. Absent → comportament anonim (ca azi).
     verified_customer_ref = event.get("verified_customer_ref")
-    identity_external_id = verified_customer_ref or sender_external_id
-
-    # Dedupe layer 2 (durabil): retry Meta care a scăpat de Redis (FLUSHALL/restart).
-    # Guard ÎNAINTE de orice scriere — un duplicat nu produce mesaj, nici outbox.
-    # NX-86 (dead-letter închis): claim-or-resume — un crash în mijlocul turului lasă
-    # completed_at NULL → orfanul e reclamat după CLAIM_TTL (nu mai e „văzut dar neprocesat").
-    # mark_inbound_completed (mai jos, în TX-ul de outbox) îl finalizează atomic la succes.
-    if provider_msg_id and not await claim_inbound(conn, business.id, provider_msg_id):
-        log.info("dedupe_hit_db: %s deja procesat (business %s)", provider_msg_id, business.id)
-        return TurnResult(None, None, None, None, None, deduped=True)
-
-    contact = await get_or_create_contact(
-        conn,
-        business.id,
-        channel_kind,
-        identity_external_id,
-        display_name=event.get("sender_name"),
-        verified=bool(verified_customer_ref),
-    )
-    conv = await get_or_create_conversation(
-        conn,
-        business.id,
-        contact.id,
-        channel_id,
-        locale=business.default_locale,
-    )
 
     # NX-230 — FRONTIERA DE PRIVACY. Aici, înainte de PRIMA scriere durabilă, nu în gates.
     #
     # Până acum ordinea era inversă: `insert_message` scria `event["body"]` BRUT, iar masca de PII
-    # (NX-121) rula abia în gates, ~100 de linii mai jos. Comentariul din `gates.py` recunoștea
-    # deschis consecința — istoricul reintroduce PII-ul în promptul turului următor. Bucla era
-    # închisă: turul 1 maschează telefonul pentru model, îl scrie brut în `messages.body`, turul 2
-    # îl citește înapoi din DB prin `context.conversation_transcript`. Masca era o perdea în fața
-    # unei uși deschise.
+    # (NX-121) rula abia în gates. Comentariul din `gates.py` recunoștea deschis consecința —
+    # istoricul reintroduce PII-ul în promptul turului următor. Bucla era închisă: turul 1
+    # maschează telefonul pentru model, îl scrie brut în `messages.body`, turul 2 îl citește înapoi
+    # din DB prin `context.conversation_transcript`. Masca era o perdea în fața unei uși deschise.
     #
     # `raw_inbound` rămâne disponibil în memoria turului (D6); `safe_inbound` e singurul care are
     # voie să atingă un disc.
@@ -368,38 +298,95 @@ async def handle_turn(
         # Fail-safe: detectorul a picat, deci NU scriem textul original „ca să nu pierdem mesajul".
         log.warning("privacy_guard_failed stage=ingress reason=degraded")
 
-    inbound_msg_id = await insert_message(
-        conn,
-        business.id,
-        conv["id"],
-        contact.id,
-        Direction.INBOUND,
-        Author.CONTACT,
-        body=safe_inbound.text,
-        content_type=event.get("content_type", "text"),
-        provider_msg_id=event.get("provider_msg_id"),
-        media_ref=event.get("media_id"),
-        # NX-146 felia 2 (fix): turn_id în payload → Turn Replay citește EXACT mesajele turului,
-        # nu o euristică „ultimele N ale conversației" (greșită dacă discuția a continuat).
-        # fragment_index=0: un singur mesaj inbound per tur, dar `get_turn_messages` ordonează
-        # uniform pe (direction, fragment_index) — vezi fix-ul de mai jos pe outbound.
-        payload={"turn_id": turn_id, "fragment_index": 0},
-    )
-    await touch_last_inbound(conn, business.id, conv["id"])
-
-    # NX-148: memoria structurată (facts) încărcată o dată, injectată de facts_block. Guardată de
-    # kill-switch (OFF → gol → bloc absent). BEST-EFFORT (ca summary/cache): un fail de citire nu
-    # blochează turul — degradare la history+state (P6). Owner: processor.
-    facts: list = []
     _s = get_settings()
-    # NX-160: injectăm doar dacă memoria E ON ȘI injectarea safe e permisă (flag separat: facts se
-    # pot persista fără a fi injectate). fetch_relevant_facts întoarce DOAR visibility='inject'.
-    if _s.conversation_facts_enabled and _s.memory_safe_injection_enabled:
-        try:
-            facts = await fetch_relevant_facts(conn, business.id, contact.id)
-        except Exception:  # noqa: BLE001 — memoria e opțională, turul răspunde oricum
-            log.exception("încărcarea facts a eșuat (turul continuă)")
+    # NX-231 (P10): contabilizarea checkout-urilor turului. Deschis ÎNAINTE de faza 1 → prinde și
+    # `turn_load`; închis în `finally`, ca un tur care crapă să nu lase acumulatorul agățat.
+    db_acc, db_token = op_metrics.push()
+    try:
+        # === FAZA 1 — LOAD (un checkout scurt) ==============================================
+        snap = await load_turn(
+            db,
+            business,
+            channel_id,
+            event,
+            turn_id=turn_id,
+            safe_body=safe_inbound.text,
+            identity_external_id=verified_customer_ref or sender_external_id,
+            verified_customer_ref=verified_customer_ref,
+            load_facts=_s.conversation_facts_enabled and _s.memory_safe_injection_enabled,
+        )
+        if snap.deduped:
+            log.info("dedupe_hit_db: %s deja procesat (business %s)", provider_msg_id, business.id)
+            return TurnResult(None, None, None, None, None, deduped=True)
 
+        return await _run_turn(
+            db,
+            business,
+            event,
+            snap,
+            turn_id=turn_id,
+            raw_body=raw_inbound.body.value,
+            safe_body=safe_inbound.text,
+            channel_kind=channel_kind,
+            sender_external_id=sender_external_id,
+            provider_msg_id=provider_msg_id,
+            verified_customer_ref=verified_customer_ref,
+            redis=redis,
+            stages=stages,
+            deliver=deliver,
+            defer_aftercare=defer_aftercare,
+            db_acc=db_acc,
+        )
+    finally:
+        op_metrics.pop(db_token)
+
+
+def _emit_db_metrics(ctx: TurnContext, db_acc: op_metrics.DbOpAccumulator) -> None:
+    """NX-231 (P10): cât a ținut fiecare OPERAȚIE o conexiune, plus ocuparea poolului.
+
+    `pool_metrics` (NX-161 Felia 0A) raporta un singur acquire-wait, fiindcă exista un singur
+    checkout pe tur. Acum sunt N: raportăm maximul (vârful de contenție) și totalul, iar `db_ops`
+    dă defalcarea pe operație — altfel „poolul e plin" rămâne o observație fără vinovat."""
+    s = get_settings()
+    if s.pool_metrics_enabled:
+        stats = take_acquire_stats()
+        n, total, mx = stats if stats is not None else (0, 0.0, 0.0)
+        ctx.emit(
+            "pool_metrics",
+            acquire_wait_ms=round(mx, 2) if n else None,
+            db_pool_wait_ms=round(mx, 2) if n else None,
+            db_pool_wait_total_ms=round(total, 2) if n else None,
+            db_checkouts=n,
+            **bot_pool_stats(),
+        )
+    if s.db_op_metrics_enabled and db_acc.checkouts:
+        ctx.emit("db_ops", **db_acc.as_event_props())
+
+
+async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja validați de apelant
+    db: DbProvider,
+    business: BusinessConfig,
+    event: dict,
+    snap: TurnLoadSnapshot,
+    *,
+    turn_id: str,
+    raw_body: str,
+    safe_body: str | None,
+    channel_kind: str,
+    sender_external_id: str,
+    provider_msg_id: str | None,
+    verified_customer_ref: str | None,
+    redis: Redis | None,
+    stages: list[Stage],
+    deliver: bool,
+    defer_aftercare: bool,
+    db_acc: op_metrics.DbOpAccumulator,
+) -> TurnResult:
+    """Fazele 2-4 pe un `TurnLoadSnapshot` deja citit: compute (fără conexiune) → commit →
+    aftercare. Separată de `handle_turn` ca faza de load să se vadă ca fază, nu ca preambul."""
+    _s = get_settings()
+    contact = snap.contact
+    conversation_id = snap.conversation_id
     ctx = TurnContext(
         turn_id=turn_id,
         business=business,
@@ -409,32 +396,26 @@ async def handle_turn(
             content_type=event.get("content_type", "text"),
             # D6: agentul principal vede query-ul BRUT, în memoria turului. Ce s-a schimbat e că
             # forma brută nu mai e și forma persistată — `safe_body` merge la orice sink durabil.
-            body=raw_inbound.body.value,
-            safe_body=safe_inbound.text,
+            body=raw_body,
+            safe_body=safe_body,
             media_ref=event.get("media_id"),
             channel_kind=channel_kind,
             channel_account_id=event.get("channel_account_id", ""),
         ),
-        conversation_id=conv["id"],
-        history=await get_recent_messages(conn, business.id, conv["id"]),
-        state=ConversationState.from_jsonb(conv["state"]),  # G6-2: agentul vede ce-a afișat
-        summary=await get_summary_for_context(conn, business.id, conv["id"]),  # G6-2 felia 2
-        facts=facts,  # NX-148: memorie structurată (facts_block)
-        language=conv["locale"] or business.default_locale,
-        bot_active=conv["bot_active"],
-        handoff_until=conv["handoff_until"],
+        conversation_id=conversation_id,
+        history=snap.history,
+        state=ConversationState.from_jsonb(snap.state),  # G6-2: agentul vede ce-a afișat
+        summary=snap.summary,  # G6-2 felia 2
+        facts=snap.facts,  # NX-148: memorie structurată (facts_block)
+        language=snap.locale or business.default_locale,
+        bot_active=snap.bot_active,
+        handoff_until=snap.handoff_until,
         verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
 
     # NX-148: acoperirea memoriei (chei/contoare, nu valori — P12).
-    if facts:
-        ctx.emit("facts_injected", n_injected=len(facts))
-
-    # Felia 0A (NX-161): semnalul de WAIT (acquire-wait al checkout-ului, din tenant_conn prin
-    # ContextVar) + ocuparea pool-ului (in_use/idle/inflight), corelat pe tur. Declanșatorul
-    # deciziei de conn-per-op (docs/CONN-HOLD-ANALYSIS-2026.md §Faza 0A). P10/P12: fără PII.
-    if _s.pool_metrics_enabled:
-        ctx.emit("pool_metrics", acquire_wait_ms=take_acquire_wait(), **bot_pool_stats())
+    if snap.facts:
+        ctx.emit("facts_injected", n_injected=len(snap.facts))
 
     # NX-221 (P10): telemetria lock-ului de tur — măsurată la MARGINEA web (calea sincronă) și
     # pasată prin envelope; stagiile nu știu de lock, processor-ul doar o emite pe traiectoria
@@ -445,6 +426,18 @@ async def handle_turn(
         ctx.emit("turn_lock_bypass", waited_ms=round(float(lock_wait_ms or 0.0), 1))
     elif lock_wait_ms:
         ctx.emit("turn_lock_wait", wait_ms=round(float(lock_wait_ms), 1))
+
+    # NX-231 (P10): cât a stat turul în coada de admission, pe traiectoria LUI. Marginea (worker /
+    # web) măsoară și pasează prin envelope — stagiile nu știu de frână. Respingerile n-au tur, deci
+    # rămân contoare + log în `admission.py`. `tenant_bucket` = etichetă low-cardinality (P12).
+    admission_wait_ms = event.get("admission_wait_ms")
+    if admission_wait_ms:
+        ctx.emit(
+            "admission_wait",
+            wait_ms=round(float(admission_wait_ms), 1),
+            tenant_bucket=tenant_bucket(business.id),
+            degraded=bool(event.get("admission_degraded")),
+        )
 
     # NX-129: observabilitate login passthrough (P12: fără PII — doar succes/motiv, nu valoarea).
     if verified_customer_ref:
@@ -457,18 +450,22 @@ async def handle_turn(
     # Cost guard (G2c): peste plafonul zilnic → llm=None (degradare). Gates rulează oricum.
     # NX-125: reseed LAZY al contorului zilei din usage_daily (supraviețuiește pierderii Redis),
     # ÎNAINTE de pre-check; santinelă internă → o singură dată/zi, best-effort.
-    if redis is not None and get_settings().cost_guard_enabled:
-        await seed_daily_cost(conn, redis, business.id)
+    if redis is not None and _s.cost_guard_enabled:
+        async with db("seed_daily_cost") as conn:
+            await seed_daily_cost(conn, redis, business.id)
     llm = await _llm_within_budget(ctx, redis, business, channel_kind=channel_kind)
     # Media routing (NX-76): registry de fetchers (singleton, ca llm) → gate-ul descarcă poza.
     media = get_media_registry()
-    # NX-161 Felia 0B: providerul tenant-scoped e disponibil pentru stagii (deps.db()), dar în 0B
-    # NICIUN stagiu nu-l apelează încă → stagiile folosesc `conn` (viu, ca înainte) = zero schimbare
-    # de runtime. Feliile următoare migrează gradual la deps.db(). AMBELE trecute intenționat:
-    # __post_init__ NU suprascrie `db` explicit cu static(conn).
-    deps = PipelineDeps(conn=conn, db=tenant_db(business.id), redis=redis, llm=llm, media=media)
+
+    # === FAZA 2 — COMPUTE (ZERO conexiune ținută) ==========================================
+    # Stagiile primesc DOAR providerul: fiecare operație își ia conexiunea și o dă înapoi. Între
+    # ele (triaj nano, agent mini, tool loop, embed) poolul e liber (NX-231).
+    deps = PipelineDeps(db=db, redis=redis, llm=llm, media=media)
     await run_pipeline(ctx, deps, stages)
-    await _persist_events(conn, business.id, conv["id"], contact.id, ctx.events)
+    await persist_events(db, business.id, conversation_id, contact.id, ctx.events)
+    # Evenimentele emise de aici încolo (metrici DB, conflict de stare, reply_split) apar DUPĂ
+    # persistarea principală → coada listei se scrie separat, o singură dată, la final.
+    events_persisted = len(ctx.events)
     await _record_turn_cost(
         redis, business, ctx, llm_used=llm is not None, channel_kind=channel_kind
     )
@@ -476,15 +473,18 @@ async def handle_turn(
     if ctx.reply is None:
         if ctx.halt:
             # tăcere INTENȚIONATĂ (Gates): handoff activ / bot oprit — omul se ocupă.
-            log.info("tăcere intenționată (handoff): conv=%s turn=%s", conv["id"], turn_id)
+            log.info("tăcere intenționată (handoff): conv=%s turn=%s", conversation_id, turn_id)
         else:
             # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
             # aici doar raportăm că turul n-a produs reply.
-            log.info("tur procesat fără reply: conv=%s turn=%s", conv["id"], turn_id)
+            log.info("tur procesat fără reply: conv=%s turn=%s", conversation_id, turn_id)
         # NX-86: tur DONE (halt/no-reply) → finalizează claim-ul (altfel reaper-ul l-ar reprocesa).
-        if provider_msg_id:
-            await mark_inbound_completed(conn, business.id, provider_msg_id)
-        return TurnResult(conv["id"], contact.id, turn_id, None, None, language=ctx.language)
+        await complete_without_reply(db, business.id, provider_msg_id)
+        _emit_db_metrics(ctx, db_acc)
+        await persist_events(
+            db, business.id, conversation_id, contact.id, ctx.events[events_persisted:]
+        )
+        return TurnResult(conversation_id, contact.id, turn_id, None, None, language=ctx.language)
 
     # Sender (P5): garantează disclaimer-ul AI (art. 50) pe text, o singură dată, pt TOATE
     # rutele (simple/clarify/prose/fallback/cache). Idempotent — rich/welcome și-l aplatizează
@@ -502,135 +502,85 @@ async def handle_turn(
     if is_rich or has_products or not deliver:
         fragments = [reply_text]
     else:
-        fragments = split_reply(reply_text, limit=get_settings().reply_split_chars)
+        fragments = split_reply(reply_text, limit=_s.reply_split_chars)
 
-    # NX-221: evenimentele emise de aici încolo (conflict de stare, reply_split) apar DUPĂ
-    # `_persist_events`-ul principal → le persistăm separat la final (coada listei).
-    events_persisted = len(ctx.events)
-
-    async with conn.transaction():
-        new_state = _build_new_state(conv["state"], ctx, is_rich=is_rich, has_products=has_products)
-
-        first_outbox_id = None
-        for i, frag in enumerate(fragments):
-            out_msg_id = await insert_message(
-                conn,
-                business.id,
-                conv["id"],
-                contact.id,
-                Direction.OUTBOUND,
-                Author.BOT,
-                body=frag,
-                content_type="text",
-                # Sync: livrarea e răspunsul HTTP → mesajul e deja `sent` (n-are dispatcher care
-                # să-l ducă din `queued`). Async: `queued` până trece dispatcher-ul.
-                status="queued" if deliver else "sent",
-                # NX-103: cost/tokeni/latență/model pe PRIMUL fragment (reply-ul botului). Split-ul
-                # (frag 2) e același reply → nu dublăm costul. messages.cost_usd devine real.
-                **(_message_usage_kwargs(ctx.usage) if i == 0 else {}),
-                # NX-146 felia 2 (fix, corectat pe finding Codex): turn_id + fragment_index în
-                # payload. Fragmentele outbound se scriu în ACEEAȘI tranzacție → `created_at` poate
-                # fi identic (now() e constant per tranzacție) → `created_at asc` NU garantează
-                # ordinea. `fragment_index` = poziția reală a fragmentului (split NX-90, max 2).
-                payload={"turn_id": turn_id, "fragment_index": i},
+    # === FAZA 3 — COMMIT (un checkout, O tranzacție) =======================================
+    commit = TurnCommit(
+        business_id=business.id,
+        conversation_id=conversation_id,
+        contact_id=contact.id,
+        fragments=[
+            _build_fragment(
+                ctx,
+                frag,
+                index=i,
+                turn_id=turn_id,
+                to=sender_external_id,
+                deliver=deliver,
+                is_rich=is_rich,
+                has_products=has_products,
             )
-            if not deliver:
-                # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
-                # Persistăm doar mesajul outbound (history) + state mai jos.
-                continue
-            payload = {
-                "type": "text",
-                "to": sender_external_id,
-                "text": frag,
-                "message_id": out_msg_id,
-                "language": ctx.language,  # NX-127: randorul de canal re-aplică disclaimer/locale
-            }
-            # Extras-urile bogate stau pe PRIMUL fragment (rich/carusel = un fragment oricum):
-            # `type=text` rămâne (allow-list); canalele cu send_rich/carousel randează bogat.
-            if i == 0 and is_rich:
-                payload["rich"] = asdict(ctx.reply.rich)
-            elif i == 0 and ctx.reply.comparison is not None:
-                # IZI-compare: tabelul structurat + cardurile produselor comparate. `type` rămâne
-                # 'text' (floor = tabelul aplatizat pe canalele fără COMPARISON); web rutează pe
-                # send_rich după payload['comparison']. reply_from_outbox îl reconstruiește.
-                payload["comparison"] = asdict(ctx.reply.comparison)
-                if ctx.reply.products:
-                    payload["products"] = ctx.reply.products
-            elif i == 0 and has_products:
-                payload["type"] = "carousel"
-                payload["products"] = ctx.reply.products
-            # NX-127: offer neutru (NX-114) pe primul fragment → randat NATIV (buton web / CTA),
-            # nu doar floor-uit în text. reply_from_outbox îl reconstruiește pe ruta async.
-            if i == 0 and ctx.reply.offer is not None:
-                payload["offer"] = asdict(ctx.reply.offer)
-            outbox_id = await enqueue_outbox(
-                conn,
-                business.id,
-                conv["id"],
-                f"{turn_id}:{i}",  # idempotency_key per fragment (turn:0 / turn:1)
-                payload,
-            )
-            if first_outbox_id is None:
-                first_outbox_id = outbox_id
-        # NX-221: conflictul de versiune NU mai omoară reply-ul — retry 1× pe stare proaspătă,
-        # apoi drop-patch cu event. Retry-ul e DOAR pe UPDATE-ul de stare (insert-urile de mai
-        # sus, din aceeași TX, nu se re-rulează). StateConflict e ridicat din Python după un
-        # UPDATE care n-a prins niciun rând (nu o eroare de DB) → tranzacția rămâne utilizabilă.
-        await _patch_state_with_retry(
-            conn,
-            business.id,
-            conv["id"],
-            ctx,
-            new_state,
-            conv["state_version"],
-            is_rich=is_rich,
-            has_products=has_products,
-        )
-        # NX-86: finalizează claim-ul ÎN aceeași TX cu outbox → atomic. Crash înainte de commit →
-        # completed_at NULL → orfan recuperabil; commit → finalizat, niciodată reprocesat.
-        if provider_msg_id:
-            await mark_inbound_completed(conn, business.id, provider_msg_id)
-
-    outbox_id = first_outbox_id
+            for i, frag in enumerate(fragments)
+        ],
+        new_state=_build_new_state(snap.state, ctx, is_rich=is_rich, has_products=has_products),
+        expected_version=snap.state_version,
+        provider_msg_id=provider_msg_id,
+        deliver=deliver,
+    )
+    commit_result = await commit_turn(
+        db,
+        commit,
+        # NX-221: la conflict de versiune, deltele turului se re-aplică pe starea PROASPĂTĂ
+        # (last-writer-wins per cheie), nu pe snapshotul stale de la începutul turului.
+        rebuild_state=lambda fresh: _build_new_state(
+            fresh, ctx, is_rich=is_rich, has_products=has_products
+        ),
+    )
+    outbox_id = commit_result.first_outbox_id
+    if commit_result.state_conflict == "retried":
+        ctx.emit("state_conflict_retried")
+    elif commit_result.state_conflict == "dropped":
+        ctx.emit("state_conflict_dropped")
     if len(fragments) > 1:
         # Observabilitate (P10): emis după persistarea principală de events.
         # NX-122: prin ctx.emit → primește turn_id (parte din traiectoria aceluiași tur).
         ctx.emit("reply_split", parts=len(fragments))
-    # NX-221: persistăm coada de evenimente emise după `_persist_events`-ul principal
-    # (state_conflict_retried/dropped + reply_split) — o singură scriere, fără dubluri.
-    if len(ctx.events) > events_persisted:
-        await _persist_events(
-            conn, business.id, conv["id"], contact.id, ctx.events[events_persisted:]
-        )
+    _emit_db_metrics(ctx, db_acc)
+    # Persistăm coada de evenimente emise după persistarea principală (metrici DB +
+    # state_conflict_* + reply_split) — o singură scriere, fără dubluri, în afara tranzacției de
+    # commit (observabilitatea nu are voie să dea rollback pe răspuns).
+    await persist_events(
+        db, business.id, conversation_id, contact.id, ctx.events[events_persisted:]
+    )
 
     # Log per-tur la succes (fără PII: doar id-uri + lungimea reply-ului, nu corpul).
     log.info(
         "tur procesat: conv=%s turn=%s reply=%dch outbox=%s",
-        conv["id"],
+        conversation_id,
         turn_id,
         len(reply_text),
         outbox_id,
     )
-    # POST-TUR (cache write-back + summarizer + profil/facts) — best-effort, DUPĂ outbox, nu
-    # întârzie livrarea. NX-161 F1: mutat în `run_aftercare(db_provider, ...)`. INLINE (static_db —
-    # calea sync/teste/sim) = comportament vechi (conn viu). DEFERRED (producție, `defer_aftercare`)
-    # → apelantul îl rulează cu `tenant_db(biz)` DUPĂ ce închide `tenant_conn` → conn ELIBERAT pe
-    # durata LLM-ului de fundal. Un eșec NU afectează reply/outbox/completed (deja commise).
+    # === FAZA 4 — AFTERCARE (cache write-back + summarizer + profil/facts) =================
+    # Best-effort, DUPĂ commit, nu întârzie livrarea. Primește ID-uri + snapshot, NICIODATĂ o
+    # conexiune (`aftercare.py` ia checkout-uri scurte, cu LLM-ul de fundal între ele).
+    # INLINE = rulat aici, pe ACELAȘI provider. DEFERRED (`defer_aftercare`) → apelantul îl rulează
+    # după ce a livrat răspunsul. Un eșec NU afectează reply/outbox/completed (deja commise).
     work = AftercareWork(
         business=business,
-        conversation_id=conv["id"],
+        conversation_id=conversation_id,
         contact_id=contact.id,
         ctx=ctx,
-        inbound_msg_id=inbound_msg_id,
-        shadow_mode=bool(conv.get("shadow_mode")),
+        inbound_msg_id=snap.inbound_msg_id,
+        shadow_mode=snap.shadow_mode,
         llm=llm,
         language=ctx.language,
     )
     if not defer_aftercare:
-        await run_aftercare(static_db(conn), redis, work)
+        await run_aftercare(db, redis, work)
         work = None  # rulat inline → nimic de întors apelantului
     return TurnResult(
-        conv["id"],
+        conversation_id,
         contact.id,
         turn_id,
         ctx.reply.text,
@@ -639,3 +589,59 @@ async def handle_turn(
         language=ctx.language,
         aftercare=work,  # deferred → apelantul rulează run_aftercare; inline → None
     )
+
+
+def _build_fragment(
+    ctx: TurnContext,
+    body: str,
+    *,
+    index: int,
+    turn_id: str,
+    to: str,
+    deliver: bool,
+    is_rich: bool,
+    has_products: bool,
+) -> OutboundFragment:
+    """Un fragment de răspuns → descrierea lui de persistat (mesaj + eventual rând de outbox).
+
+    Funcție PURĂ: alege payload-ul, nu scrie nimic. Extras-urile bogate (rich/comparison/carusel/
+    offer) stau pe PRIMUL fragment — rich/carusel sunt un fragment oricum, iar spargerea unui
+    lead-in ar strica ordinea cardurilor."""
+    message_payload = {
+        # NX-146 felia 2: turn_id + fragment_index. Fragmentele outbound se scriu în ACEEAȘI
+        # tranzacție → `created_at` poate fi identic (now() e constant per tranzacție) →
+        # `created_at asc` NU garantează ordinea. `fragment_index` = poziția reală (split NX-90).
+        "turn_id": turn_id,
+        "fragment_index": index,
+    }
+    # NX-103: cost/tokeni/latență/model pe PRIMUL fragment. Split-ul (frag 2) e același reply →
+    # nu dublăm costul. `messages.cost_usd` devine real.
+    usage_kwargs = _message_usage_kwargs(ctx.usage) if index == 0 else {}
+    if not deliver:
+        # Sync (deliver=False): NU punem în outbox — răspunsul HTTP e transportul.
+        return OutboundFragment(body, message_payload, usage_kwargs, None, "")
+
+    payload: dict = {
+        "type": "text",
+        "to": to,
+        "text": body,
+        "language": ctx.language,  # NX-127: randorul de canal re-aplică disclaimer/locale
+    }
+    if index == 0 and is_rich:
+        payload["rich"] = asdict(ctx.reply.rich)
+    elif index == 0 and ctx.reply.comparison is not None:
+        # IZI-compare: tabelul structurat + cardurile produselor comparate. `type` rămâne 'text'
+        # (floor = tabelul aplatizat pe canalele fără COMPARISON); web rutează pe send_rich după
+        # payload['comparison']. reply_from_outbox îl reconstruiește.
+        payload["comparison"] = asdict(ctx.reply.comparison)
+        if ctx.reply.products:
+            payload["products"] = ctx.reply.products
+    elif index == 0 and has_products:
+        payload["type"] = "carousel"
+        payload["products"] = ctx.reply.products
+    # NX-127: offer neutru (NX-114) pe primul fragment → randat NATIV (buton web / CTA), nu doar
+    # floor-uit în text. reply_from_outbox îl reconstruiește pe ruta async.
+    if index == 0 and ctx.reply.offer is not None:
+        payload["offer"] = asdict(ctx.reply.offer)
+    # idempotency_key per fragment (turn:0 / turn:1)
+    return OutboundFragment(body, message_payload, usage_kwargs, payload, f"{turn_id}:{index}")
