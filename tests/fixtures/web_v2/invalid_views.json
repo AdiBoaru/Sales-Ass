@@ -1,0 +1,421 @@
+{
+  "_note": "Fixturi `web-view.v2` care TREBUIE respinse de parse_view. `reason` spune ce anume apără cazul. Acoperă failure matrix-ul din NX-228 și planul de atac al lui Codex. Un caz care trece = finding, nu curiozitate.",
+
+  "_shell_note": "Fiecare payload e un envelope COMPLET, ca să fie clar că singura problemă e cea din `reason` — nu un câmp lipsă întâmplător.",
+
+  "cases": [
+    {
+      "name": "terminal_completed_without_messages",
+      "reason": "P6: `completed` fără niciun bloc = tăcere livrată ca succes",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "terminal_completed_with_empty_blocks",
+      "reason": "un mesaj fără blocuri e la fel de gol ca lipsa mesajului",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": []}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "terminal_failed_without_blocks",
+      "reason": "acelasi invariant P6 pentru `failed` — eșecul se ANUNȚĂ, nu se tace",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "failed"},
+        "messages": [],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}},
+        "error": {"code": "boom", "message": "ceva"}
+      }
+    },
+    {
+      "name": "terminal_cancelled_without_blocks",
+      "reason": "acelasi invariant P6 pentru `cancelled`",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "cancelled"},
+        "messages": [],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "terminal_with_only_a_divider",
+      "reason": "un `divider` nu e un răspuns; blocurile fără conținut nu satisfac P6",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "divider"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "unknown_block_type",
+      "reason": "union FINIT: un tip necunoscut respinge ÎNTREG payloadul, nu doar blocul (fără skip best-effort)",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b1", "type": "text", "text": "text valid"},
+          {"id": "b2", "type": "video_carousel", "src": "https://x.invalid/v.mp4"}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "extra_field_in_block",
+      "reason": "`extra=forbid`: un câmp în plus ar strecura semantică pe care rendererul nu o afișează",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b1", "type": "text", "text": "salut", "className": "bg-red-500 animate-pulse"}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "extra_field_in_envelope",
+      "reason": "acelasi `extra=forbid` la nivel de envelope",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}},
+        "custom_css": ".chat { display:none }"
+      }
+    },
+    {
+      "name": "javascript_url_in_action",
+      "reason": "schemă de URL interzisă într-un `navigate`",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "action_row", "actions": [
+            {"id": "a", "label": "Click", "activation": {"type": "navigate", "href": "javascript:alert(document.cookie)"}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "data_url_in_image",
+      "reason": "`data:` poate cara SVG cu script; imaginile vin de pe https sau din rute relative",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "product_list", "items": [
+            {"view_id": "pv", "title": "X", "image": {"src": "data:image/svg+xml;base64,PHN2Zz48c2NyaXB0Pg==", "alt": "X"}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "protocol_relative_url",
+      "reason": "`//host/x` moștenește schema paginii gazdă, deci poate ajunge http în clar",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "action_row", "actions": [
+            {"id": "a", "label": "Click", "activation": {"type": "navigate", "href": "//evil.invalid/p"}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "plain_http_url",
+      "reason": "http în clar nu e în allowlist",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "action_row", "actions": [
+            {"id": "a", "label": "Click", "activation": {"type": "navigate", "href": "http://shop.invalid/p"}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "url_scheme_obfuscated_with_newline",
+      "reason": "„java\\nscript:\" e bypass clasic de prefix; whitespace intern e respins înainte de comparație",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "action_row", "actions": [
+            {"id": "a", "label": "Click", "activation": {"type": "navigate", "href": "java\nscript:alert(1)"}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "missing_chrome_label",
+      "reason": "un label de chrome lipsă ar însemna că FE compune text local — interzis de boundary",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "missing_announcement",
+      "reason": "un status fără anunț e tăcere pentru cine nu vede ecranul (NX-245 citește live region-ul)",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f"}}
+      }
+    },
+    {
+      "name": "blank_announcement",
+      "reason": "„gol deghizat\": whitespace se strip-uiește ÎNAINTE de min_length, deci e tot gol",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "   ", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "comparison_misaligned",
+      "reason": "celule nealiniate 1:1 cu headerele = tabel care minte vizual",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "comparison", "headers": ["A", "B"], "rows": [
+            {"label": "Preț", "cells": [{"text": "10 lei"}]}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "comparison_single_column",
+      "reason": "o comparație cu o singură coloană nu compară nimic",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "comparison", "headers": ["A"], "rows": [{"label": "Preț", "cells": [{"text": "10 lei"}]}]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "unknown_tone",
+      "reason": "vocabular închis: un ton necunoscut ar cădea pe „neutral\" în FE și ar pierde tăcut sensul",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "status_list", "items": [{"label": "X", "tone": "catastrophic"}]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "unknown_icon",
+      "reason": "iconul cerut trebuie să existe în rendererul canonic, altfel rândul e mut",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "status_list", "items": [{"label": "X", "icon": "rocket"}]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "failed_without_error",
+      "reason": "`failed` fără `error.code` stabil nu poate fi nici măsurat, nici reîncercat",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "failed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "notice", "level": "error", "text": "eroare"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "error_on_completed",
+      "reason": "un envelope nu e simultan reușit și eșuat",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}},
+        "error": {"code": "boom", "message": "ceva"}
+      }
+    },
+    {
+      "name": "progress_on_terminal",
+      "reason": "progresul pe un status terminal ar ține un spinner viu peste un răspuns gata",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "progress": {"label": "Încă lucrez"},
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "action_without_activation",
+      "reason": "un buton fără activare e un control mort",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "action_row", "actions": [{"id": "a", "label": "Click"}]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "unknown_major_version",
+      "reason": "major necunoscut: refuz, nu interpretare best-effort",
+      "payload": {
+        "schema_version": "web-view.v3",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "text", "text": "salut"}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "image_without_alt",
+      "reason": "o poză fără alt e invizibilă pentru cititorul de ecran",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "product_list", "items": [
+            {"view_id": "pv", "title": "X", "image": {"src": "https://cdn.invalid/x.jpg"}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "product_list_empty",
+      "reason": "o listă de produse fără produse e un titlu care minte",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [{"id": "b", "type": "product_list", "items": []}]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    },
+    {
+      "name": "numeric_price_instead_of_display_text",
+      "reason": "un număr în contract e o invitație la aritmetică în browser; prețul e text deja formatat",
+      "payload": {
+        "schema_version": "web-view.v2",
+        "conversation": {"id": "c", "revision": 1},
+        "turn": {"id": "t", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+        "messages": [{"id": "m", "role": "assistant", "blocks": [
+          {"id": "b", "type": "product_list", "items": [
+            {"view_id": "pv", "title": "X", "price": {"current": 89.0, "previous": 109.0}}
+          ]}
+        ]}],
+        "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie…", "send_label": "Trimite"},
+        "chrome": {"launcher_label": "L", "dialog_title": "T", "dialog_description": "D", "close_label": "C", "new_chat_label": "N"},
+        "a11y": {"announcements": {"accepted": "a", "working": "w", "validating": "v", "completed": "c", "failed": "f", "cancelled": "x"}}
+      }
+    }
+  ]
+}

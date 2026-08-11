@@ -1,0 +1,108 @@
+{
+  "_note": "Fixturi `web-turn.v2` (browser → backend). `valid` trebuie să treacă de parse_turn_request; `invalid` trebuie să pice, iar `reason` spune de ce. Browserul NU trimite business_id, preț, stoc, nume, badge, total, constraints sau stare de conversație.",
+
+  "valid": {
+    "text_minimal": {
+      "schema_version": "web-turn.v2",
+      "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+      "input": {"type": "text", "text": "Caut o cremă bună pentru ten uscat"}
+    },
+
+    "text_on_product_page": {
+      "schema_version": "web-turn.v2",
+      "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3302",
+      "input": {"type": "text", "text": "Compară-l cu ceva mai ieftin"},
+      "context": {
+        "surface": "product",
+        "product_id": "opq_p_8812",
+        "variant_id": null,
+        "category_id": null,
+        "cart_ref": "opq_cart_v7",
+        "locale": "ro-RO"
+      }
+    },
+
+    "action_chip": {
+      "schema_version": "web-turn.v2",
+      "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3303",
+      "input": {"type": "action", "action_token": "eyJhbGciOiJIUzI1NiJ9.opaque.signed"},
+      "context": {"surface": "product", "product_id": "opq_p_8812"}
+    },
+
+    "logged_in_passthrough": {
+      "schema_version": "web-turn.v2",
+      "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3304",
+      "input": {"type": "text", "text": "Unde e comanda mea?"},
+      "id_token": "host.signed.jwt"
+    }
+  },
+
+  "invalid": [
+    {
+      "reason": "client_turn_id lipsă — fără el nu există idempotency, deci nici replay la refresh (NX-232)",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "input": {"type": "text", "text": "salut"}
+      }
+    },
+    {
+      "reason": "client_turn_id nu e UUID",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "client_turn_id": "turn-7",
+        "input": {"type": "text", "text": "salut"}
+      }
+    },
+    {
+      "reason": "text ȘI action simultan — inputul e union EXCLUSIV; discriminatorul acceptă un singur tip, iar `text` devine câmp extra",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3305",
+        "input": {"type": "action", "action_token": "opq", "text": "salut"}
+      }
+    },
+    {
+      "reason": "schema_version necunoscut — refuz, nu interpretare best-effort",
+      "payload": {
+        "schema_version": "web-turn.v3",
+        "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3306",
+        "input": {"type": "text", "text": "salut"}
+      }
+    },
+    {
+      "reason": "browserul trimite business_id — server-owned (P7), niciodată din browser",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3307",
+        "input": {"type": "text", "text": "salut"},
+        "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158"
+      }
+    },
+    {
+      "reason": "contextul cară FAPTE (preț/nume), nu ID-uri opace — rehidratarea e server-side (NX-234)",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3308",
+        "input": {"type": "text", "text": "adaugă-l în coș"},
+        "context": {"surface": "product", "product_id": "opq_p_1", "price": 89.0, "name": "Ser X"}
+      }
+    },
+    {
+      "reason": "text gol (whitespace) — strip înainte de min_length, „gol deghizat\" e tot gol",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3309",
+        "input": {"type": "text", "text": "   "}
+      }
+    },
+    {
+      "reason": "surface în afara vocabularului închis",
+      "payload": {
+        "schema_version": "web-turn.v2",
+        "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c330a",
+        "input": {"type": "text", "text": "salut"},
+        "context": {"surface": "blog"}
+      }
+    }
+  ]
+}

@@ -273,3 +273,229 @@ def validate_web_payload(
         failures.append("delivery ETA claim without explicit source")
 
     return WebResponseCheck(passed=not failures, failures=failures)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════
+# NX-228 — checker v2, SEPARAT. Nimic de mai sus nu se schimbă: v1 rămâne neatins până la
+# cutoverul NX-249, iar cele două contracte au randori, endpointuri și verificatori distincți.
+#
+# `src/web/contracts_v2.py` garantează FORMA; ăsta verifică ADEVĂRUL: fiecare preț afișat vine
+# dintr-un preț din sursă, fiecare discount afișat chiar rezultă din perechea lui de prețuri,
+# fiecare produs afișat trimite la un produs real, fiecare link e din catalog.
+#
+# `view_index` (view_id → product_id) e obligatoriu tocmai pentru că v2 ASCUNDE `product_id` de
+# browser. Maparea trăiește la projector (NX-240), unde există și sursa — deci grounding-ul se
+# verifică acolo unde adevărul e încă la îndemână, nu ghicind dintr-un payload deja plecat.
+# ═══════════════════════════════════════════════════════════════════════════════════════════
+
+# „1.234,56 lei" (ro) și „1,234.56 lei" (en) cu aceeași expresie: separatorul ZECIMAL e ultimul
+# dintre `.`/`,` care apare, restul sunt separatori de mii.
+_DISPLAY_NUMBER_RE = re.compile("-?\\d[\\d.,  ]*\\d|-?\\d")
+_PERCENT_RE = re.compile("-?\\d+\\s*%")
+
+
+def _display_price(value: Any) -> float | None:
+    """„89,00 lei" → 89.0. None dacă textul nu conține un număr citibil."""
+    if not isinstance(value, str):
+        return None
+    match = _DISPLAY_NUMBER_RE.search(value)
+    if not match:
+        return None
+    raw = match.group(0).replace(" ", "").replace(" ", "")
+    last_dot, last_comma = raw.rfind("."), raw.rfind(",")
+    if last_dot > last_comma:
+        raw = raw.replace(",", "")
+    elif last_comma > last_dot:
+        raw = raw.replace(".", "").replace(",", ".")
+    try:
+        return round(float(raw), 2)
+    except ValueError:
+        return None
+
+
+def _check_price_view(
+    price: Any,
+    *,
+    allowed: set[float],
+    have_source: bool,
+    failures: list[str],
+    prefix: str,
+) -> set[float]:
+    """Prețurile afișate trebuie să existe în sursă, iar `discount` să rezulte din perechea lui.
+
+    Discountul e cazul care contează cel mai mult: în v1 îl calcula frontendul, deci nimeni nu
+    îl verifica. Mutat în backend devine o afirmație — iar o afirmație se verifică.
+    """
+    seen: set[float] = set()
+    if not isinstance(price, dict):
+        return seen
+    current = _display_price(price.get("current"))
+    previous = _display_price(price.get("previous"))
+    if price.get("current") is not None and current is None:
+        failures.append(f"{prefix}: `price.current` nu conține un număr citibil")
+    if current is not None:
+        seen.add(current)
+        if have_source and not _near(current, allowed):
+            failures.append(f"{prefix}: prețul afișat {current} nu există în sursă")
+    if previous is not None:
+        seen.add(previous)
+        if have_source and not _near(previous, allowed):
+            failures.append(f"{prefix}: prețul tăiat {previous} nu există în sursă")
+        if current is not None and previous <= current:
+            failures.append(
+                f"{prefix}: `previous` {previous} nu e peste `current` {current} — "
+                "un preț tăiat care nu e mai mare e o reducere inventată"
+            )
+    discount = price.get("discount")
+    if discount is not None:
+        if current is None or previous is None:
+            failures.append(f"{prefix}: `discount` fără pereche current/previous")
+        else:
+            match = _PERCENT_RE.search(str(discount))
+            if not match:
+                failures.append(f"{prefix}: `discount` {discount!r} nu e un procent")
+            else:
+                claimed = abs(int(match.group(0).replace("%", "").strip()))
+                actual = round((previous - current) / previous * 100)
+                if abs(claimed - actual) > 1:
+                    failures.append(
+                        f"{prefix}: discount afișat {claimed}% != {actual}% calculat din "
+                        f"{previous} -> {current}"
+                    )
+    return seen
+
+
+def _block_actions(block: dict[str, Any]) -> list[dict[str, Any]]:
+    actions = list(block.get("actions") or [])
+    for key in ("items", "lines"):
+        for entry in block.get(key) or []:
+            if isinstance(entry, dict):
+                actions.extend(entry.get("actions") or [])
+    return [a for a in actions if isinstance(a, dict)]
+
+
+def validate_web_view_v2(
+    view: dict[str, Any],
+    *,
+    source_products: Any = None,
+    view_index: dict[str, str] | None = None,
+) -> WebResponseCheck:
+    """Grounding pentru un envelope `web-view.v2` DEJA validat structural.
+
+    Nu re-validează forma — asta o face `parse_view`. Verifică faptele: prețuri, discounturi,
+    identitatea produselor, linkurile și invariantul P6. Fără `source_products` verifică doar ce
+    e intern-consistent; nu inventează un PASS din lipsă de date.
+    """
+    failures: list[str] = []
+    if not isinstance(view, dict):
+        return WebResponseCheck(False, ["view is not an object"])
+
+    source_by_id = _source_map(source_products)
+    index = view_index or {}
+    have_source = bool(source_by_id)
+    source_prices: set[float] = set()
+    for src in source_by_id.values():
+        for key in ("price", "list_price", "sale_price"):
+            if (p := _price(src.get(key))) is not None:
+                source_prices.add(p)
+    source_urls = {
+        str(u) for src in source_by_id.values() if (u := src.get("url") or src.get("product_url"))
+    }
+
+    shown_prices: set[float] = set()
+    for mi, message in enumerate(view.get("messages") or []):
+        if not isinstance(message, dict):
+            failures.append(f"messages[{mi}] is not an object")
+            continue
+        for bi, block in enumerate(message.get("blocks") or []):
+            if not isinstance(block, dict):
+                failures.append(f"messages[{mi}].blocks[{bi}] is not an object")
+                continue
+            prefix = f"messages[{mi}].blocks[{bi}]"
+
+            for ii, item in enumerate(block.get("items") or []):
+                if not isinstance(item, dict) or "view_id" not in item:
+                    continue
+                view_id = str(item["view_id"])
+                item_prefix = f"{prefix}.items[{ii}]"
+                if have_source:
+                    pid = index.get(view_id)
+                    if pid is None:
+                        failures.append(
+                            f"{item_prefix}: view_id {view_id!r} nu e in view_index "
+                            "(produs afisat fara urma spre catalog)"
+                        )
+                    elif pid not in source_by_id:
+                        failures.append(
+                            f"{item_prefix}: view_id {view_id!r} trimite la produsul {pid!r}, "
+                            "absent din sursa"
+                        )
+                shown_prices |= _check_price_view(
+                    item.get("price"),
+                    allowed=source_prices,
+                    have_source=have_source,
+                    failures=failures,
+                    prefix=item_prefix,
+                )
+
+            for li, line in enumerate(block.get("lines") or []):
+                if isinstance(line, dict):
+                    shown_prices |= _check_price_view(
+                        line.get("price"),
+                        allowed=source_prices,
+                        have_source=have_source,
+                        failures=failures,
+                        prefix=f"{prefix}.lines[{li}]",
+                    )
+            shown_prices |= _check_price_view(
+                block.get("total"),
+                allowed=source_prices,
+                have_source=False,  # totalul e o SUMĂ, nu un preț de catalog
+                failures=failures,
+                prefix=f"{prefix}.total",
+            )
+
+            for ai, action in enumerate(_block_actions(block)):
+                activation = action.get("activation")
+                href = activation.get("href") if isinstance(activation, dict) else None
+                # Rutele relative sunt acoperite de contract (n-au host, deci nu pot scoate
+                # clientul din magazin); doar absolutele se verifică contra catalogului.
+                if (
+                    href
+                    and str(href).startswith("http")
+                    and source_urls
+                    and str(href) not in source_urls
+                ):
+                    failures.append(
+                        f"{prefix}.actions[{ai}]: link {href!r} nu e in catalog "
+                        "(products.product_url)"
+                    )
+
+            text = block.get("text")
+            if isinstance(text, str):
+                reference = shown_prices | source_prices
+                if reference:
+                    for raw in _PRICE_RE.findall(text):
+                        value = _price(raw)
+                        if value is not None and not _near(value, reference):
+                            failures.append(
+                                f"{prefix}: pretul {value} din text nu apare in view/sursa"
+                            )
+                for url in _URL_RE.findall(text):
+                    if source_urls and url not in source_urls:
+                        failures.append(f"{prefix}: URL din text absent din catalog: {url}")
+
+    turn = view.get("turn")
+    status = turn.get("status") if isinstance(turn, dict) else None
+    if status in {"completed", "failed", "cancelled"}:
+        renderable = sum(
+            1
+            for m in (view.get("messages") or [])
+            if isinstance(m, dict)
+            for b in (m.get("blocks") or [])
+            if isinstance(b, dict) and b.get("type") != "divider"
+        )
+        if renderable == 0:
+            failures.append(f"status terminal {status!r} fara niciun bloc randabil (P6)")
+
+    return WebResponseCheck(passed=not failures, failures=failures)

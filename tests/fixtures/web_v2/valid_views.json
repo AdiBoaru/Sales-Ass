@@ -1,0 +1,246 @@
+{
+  "_note": "Fixturi `web-view.v2` care TREBUIE să treacă de parse_view. Scrise de mână, nu generate din modele: o fixtură generată din model nu poate contrazice modelul, deci nu poate prinde nimic. Fiecare valoare afișabilă e text deja localizat — niciun număr de formatat, niciun procent de calculat, niciun `kind` de interpretat în browser.",
+
+  "greeting": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 1},
+    "turn": {"id": "opq_turn_1", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_1",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "text", "variant": "lead", "text": "Bună! Îți spun ce se potrivește și de ce. Ce cauți?"},
+        {"id": "b2", "type": "action_row", "actions": [
+          {"id": "a1", "label": "Cremă de față", "appearance": "chip", "activation": {"type": "submit", "token": "opq.tok.greet.1"}},
+          {"id": "a2", "label": "Șampon", "appearance": "chip", "activation": {"type": "submit", "token": "opq.tok.greet.2"}}
+        ]}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "recommendation": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 4},
+    "turn": {"id": "opq_turn_2", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3302", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_2",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "text", "variant": "lead", "text": "Pentru ten uscat merg astea două. Prima hidratează mai intens, a doua e mai ușoară dacă nu îți place senzația grasă."},
+        {"id": "b2", "type": "product_list", "items": [
+          {
+            "view_id": "pv_1",
+            "title": "Petala Rich Cremă hidratantă",
+            "subtitle": "Petala",
+            "image": {"src": "https://cdn.example.invalid/petala-rich.jpg", "alt": "Petala Rich Cremă hidratantă"},
+            "price": {"current": "89,00 lei", "previous": "109,00 lei", "discount": "-18%"},
+            "rating": "4,8 din 5 (120 recenzii)",
+            "availability": "În stoc",
+            "reason": "Cea mai bogată din listă, pentru ten care se strânge după spălare.",
+            "badges": [{"label": "Super preț", "tone": "danger"}],
+            "actions": [
+              {"id": "a1", "label": "Vezi produsul", "appearance": "primary", "activation": {"type": "navigate", "href": "https://shop.example.invalid/p/petala-rich", "target": "_blank"}},
+              {"id": "a2", "label": "Adaugă în coș", "appearance": "secondary", "icon": "tag", "activation": {"type": "submit", "token": "opq.tok.add.pv1"}}
+            ]
+          },
+          {
+            "view_id": "pv_2",
+            "title": "Auralis Daily Cremă hidratantă",
+            "price": {"current": "64,00 lei"},
+            "rating": "4,6 din 5 (48 recenzii)",
+            "availability": "Ultimele 3 bucăți",
+            "reason": "Textură ușoară, se absoarbe repede.",
+            "actions": [
+              {"id": "a3", "label": "Vezi produsul", "appearance": "primary", "activation": {"type": "navigate", "href": "/p/auralis-daily"}}
+            ]
+          }
+        ]},
+        {"id": "b3", "type": "action_row", "actions": [
+          {"id": "a4", "label": "Ceva mai ieftin", "appearance": "chip", "activation": {"type": "submit", "token": "opq.tok.cheaper"}},
+          {"id": "a5", "label": "Compară-le", "appearance": "chip", "activation": {"type": "submit", "token": "opq.tok.compare"}}
+        ]}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "comparison": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 5},
+    "turn": {"id": "opq_turn_3", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3303", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_3",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "text", "variant": "lead", "text": "Diferența mare e textura, nu prețul."},
+        {"id": "b2", "type": "comparison",
+          "headers": ["Petala Rich", "Auralis Daily"],
+          "rows": [
+            {"label": "Preț", "cells": [{"text": "89,00 lei", "tone": "info"}, {"text": "64,00 lei", "tone": "success"}]},
+            {"label": "Textură", "cells": [{"text": "bogată"}, {"text": "ușoară"}]},
+            {"label": "Parfum", "cells": [{"text": "fără"}, {"text": null}]}
+          ]
+        },
+        {"id": "b3", "type": "divider"},
+        {"id": "b4", "type": "text", "variant": "caption", "text": "Celulele goale înseamnă că nu am informația, nu că produsul nu are."}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "no_result": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 6},
+    "turn": {"id": "opq_turn_4", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3304", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_4",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "notice", "level": "warning", "text": "Fonduri de ten nu am în magazin. Ce am aproape sunt cremele colorate, dacă vrei să le vezi."},
+        {"id": "b2", "type": "action_row", "actions": [
+          {"id": "a1", "label": "Arată-mi cremele", "appearance": "primary", "activation": {"type": "submit", "token": "opq.tok.bb"}}
+        ]}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "routine_and_facts": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 7},
+    "turn": {"id": "opq_turn_5", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3305", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_5",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "routine", "title": "Cum le folosești", "steps": [
+          {"title": "Dimineața", "detail": "Curăță, apoi crema ușoară."},
+          {"title": "Seara", "detail": "Crema bogată, pe ten curat."}
+        ]},
+        {"id": "b2", "type": "key_value", "title": "Pe scurt", "rows": [
+          {"label": "Volum", "value": "50 ml"},
+          {"label": "Potrivit pentru", "value": "ten uscat, sensibil"}
+        ]},
+        {"id": "b3", "type": "memory", "title": "Ce știu despre ce cauți", "criteria": ["ten uscat", "sub 100 lei", "fără parfum"]},
+        {"id": "b4", "type": "text", "variant": "disclosure", "text": "Sunt un asistent automat."}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "order_status": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 8},
+    "turn": {"id": "opq_turn_6", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3306", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_6",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "status_list", "items": [
+          {"label": "Comanda 10432", "detail": "Livrată marți", "tone": "success", "icon": "check", "freshness": "verificat acum 2 minute"},
+          {"label": "Comanda 10455", "detail": "În curs de livrare", "tone": "info", "icon": "truck", "freshness": "verificat acum 2 minute"}
+        ]}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "cart_summary": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 9},
+    "turn": {"id": "opq_turn_7", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3307", "status": "completed"},
+    "messages": [{
+      "id": "opq_m_7",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "cart_summary", "title": "Coșul tău", "lines": [
+          {"view_id": "cl_1", "title": "Petala Rich Cremă hidratantă", "quantity": "1 buc.", "price": {"current": "89,00 lei"}},
+          {"view_id": "cl_2", "title": "Auralis Daily Cremă hidratantă", "quantity": "2 buc.", "price": {"current": "128,00 lei"}}
+        ], "total": {"current": "217,00 lei"}, "actions": [
+          {"id": "a1", "label": "Finalizează comanda", "appearance": "primary", "activation": {"type": "navigate", "href": "https://shop.example.invalid/checkout?ref=opq"}}
+        ]}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "status_accepted": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 10},
+    "turn": {"id": "opq_turn_8", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3308", "status": "accepted"},
+    "messages": [],
+    "composer": {"enabled": false, "label": "Mesaj", "placeholder": "Aștept răspunsul…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "status_working": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 10},
+    "turn": {"id": "opq_turn_8", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3308", "status": "working"},
+    "messages": [],
+    "progress": {"label": "Caut în catalog", "detail": "Verific stocul și prețurile"},
+    "composer": {"enabled": false, "label": "Mesaj", "placeholder": "Aștept răspunsul…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "status_validating": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 10},
+    "turn": {"id": "opq_turn_8", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3308", "status": "validating"},
+    "messages": [],
+    "progress": {"label": "Verific răspunsul"},
+    "composer": {"enabled": false, "label": "Mesaj", "placeholder": "Aștept răspunsul…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  },
+
+  "terminal_failed": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 11},
+    "turn": {"id": "opq_turn_9", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3309", "status": "failed"},
+    "messages": [{
+      "id": "opq_m_9",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "notice", "level": "error", "text": "Nu am reușit să termin răspunsul. Încearcă din nou, te rog."}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}},
+    "error": {"code": "agent_deadline_exceeded", "message": "Răspunsul a depășit timpul alocat.", "retryable": true, "retry_action": {"id": "a1", "label": "Încearcă din nou", "appearance": "primary", "activation": {"type": "submit", "token": "opq.tok.retry.9"}}}
+  },
+
+  "terminal_cancelled": {
+    "schema_version": "web-view.v2",
+    "conversation": {"id": "opq_conv_1", "revision": 12},
+    "turn": {"id": "opq_turn_10", "client_turn_id": "3f2504e0-4f89-41d3-9a0c-0305e82c330a", "status": "cancelled"},
+    "messages": [{
+      "id": "opq_m_10",
+      "role": "assistant",
+      "blocks": [
+        {"id": "b1", "type": "notice", "level": "info", "text": "Am oprit răspunsul. Scrie-mi când vrei să continuăm."}
+      ]
+    }],
+    "composer": {"enabled": true, "label": "Mesaj", "placeholder": "Scrie un mesaj…", "send_label": "Trimite"},
+    "chrome": {"launcher_label": "Deschide asistentul", "dialog_title": "Asistent de cumpărături", "dialog_description": "Recomandări și informații despre produse", "close_label": "Închide asistentul", "new_chat_label": "Conversație nouă"},
+    "a11y": {"announcements": {"accepted": "Am primit mesajul.", "working": "Pregătesc răspunsul.", "validating": "Verific răspunsul.", "completed": "Răspunsul este gata.", "failed": "Nu am putut finaliza răspunsul.", "cancelled": "Răspunsul a fost anulat."}}
+  }
+}
