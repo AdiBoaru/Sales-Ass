@@ -75,9 +75,11 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # cădem pe top-1 (comportamentul de dinainte), byte-identic pt back-compat.
         clarify: FaqDecision | None = None
         if s.faq_rerank_enabled:
-            cands = await semantic_topk(
-                deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model, k=s.faq_topk
-            )
+            # NX-231: embed-ul (extern) s-a terminat deja mai sus → checkout scurt doar pt lookup.
+            async with deps.db("faq_semantic_topk") as conn:
+                cands = await semantic_topk(
+                    conn, ctx.business.id, ctx.language, emb, embedding_model=model, k=s.faq_topk
+                )
             decision = rerank(
                 canon,
                 [
@@ -110,9 +112,10 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                     "similarity": decision.confidence,
                 }
         else:
-            hit = await semantic_lookup(
-                deps.conn, ctx.business.id, ctx.language, emb, embedding_model=model
-            )
+            async with deps.db("faq_semantic_lookup") as conn:
+                hit = await semantic_lookup(
+                    conn, ctx.business.id, ctx.language, emb, embedding_model=model
+                )
         sim = float(hit["similarity"]) if hit else 0.0
         # Prag RELAXAT pe întrebări de politică/livrare (regex = precizie): mesajele mixte
         # („rituals suna bine, aveti livrare?") diluează embedding-ul sub faq_tau_high → altfel
@@ -151,9 +154,10 @@ async def faq_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # cunoștința corectă din altă limbă decât deflecție 0%.
         default_locale = ctx.business.default_locale
         if s.faq_locale_fallback_enabled and default_locale and ctx.language != default_locale:
-            fb = await semantic_lookup(
-                deps.conn, ctx.business.id, default_locale, emb, embedding_model=model
-            )
+            async with deps.db("faq_locale_fallback") as conn:
+                fb = await semantic_lookup(
+                    conn, ctx.business.id, default_locale, emb, embedding_model=model
+                )
             fb_sim = float(fb["similarity"]) if fb else 0.0
             if fb is not None and fb_sim >= s.faq_fallback_tau:
                 # cacheable=False: răspunsul e în `default_locale`, nu în `ctx.language` — cache-uit

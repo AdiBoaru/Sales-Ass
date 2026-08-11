@@ -41,7 +41,9 @@ async def handoff_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.emit("handoff_suppressed", source="triage")
         return
     try:
-        await request_human(deps.conn, ctx, "user_request", source="triage")
+        async with deps.db("set_handoff") as conn:
+            await request_human(conn, ctx, "user_request", source="triage")
+        # NX-231: notificarea operatorului e un POST HTTP → rulează cu conexiunea DEJA eliberată.
         await notify_operator(ctx, "user_request")
     except Exception as e:  # noqa: BLE001 — escaladarea eșuată NU trebuie să tacă turul (P6)
         log.warning("handoff: escaladare eșuată (%s) — răspundem oricum", type(e).__name__)

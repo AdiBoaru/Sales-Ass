@@ -94,7 +94,8 @@ async def _closure_chips(deps: PipelineDeps, ctx: TurnContext) -> tuple[list[str
     if not slug:
         return [], None
     try:
-        names = await sibling_categories(deps.conn, ctx.business.id, slug, limit=4)
+        async with deps.db("sibling_categories") as conn:
+            names = await sibling_categories(conn, ctx.business.id, slug, limit=4)
     except Exception as e:  # noqa: BLE001 — best-effort: DB pică → doar mesajul cald (fără chips)
         log.warning("closure: sibling_categories eșuat (%s) → fără chips", type(e).__name__)
         return [], slug
@@ -287,7 +288,10 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not body:
         return
 
-    categories = await list_category_slugs(deps.conn, ctx.business.id)
+    # Checkout scurt DOAR pentru vocabularul de categorii; apelul nano de mai jos rulează cu
+    # conexiunea eliberată (NX-231).
+    async with deps.db("list_category_slugs") as conn:
+        categories = await list_category_slugs(conn, ctx.business.id)
     transcript = conversation_transcript(ctx.history)
     history_block = f"Conversație până acum:\n{transcript}\n\n" if transcript else ""
     context = context_blocks(ctx)

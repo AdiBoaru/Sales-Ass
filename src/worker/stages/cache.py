@@ -45,16 +45,19 @@ log = logging.getLogger(__name__)
 _PRICE_EPS = 0.005
 
 
-async def _is_fresh_dynamic(ctx: TurnContext, deps: PipelineDeps, entry: dict[str, Any]) -> bool:
+async def _is_fresh_dynamic(ctx: TurnContext, conn: Any, entry: dict[str, Any]) -> bool:
     """Price-check self-healing pe un candidat de hit dynamic. True = poate fi servit;
-    False = învechit (semnătură coruptă, data_version diferit, sau orice preț schimbat)."""
+    False = învechit (semnătură coruptă, data_version diferit, sau orice preț schimbat).
+
+    NX-231: primește `conn` (nu `deps`) fiindcă rulează ÎNĂUNTRUL checkout-ului deschis de
+    apelant — price-check + evict + touch sunt aceeași operație, nu trei checkout-uri."""
     sig = entry.get("retrieval_signature")
     if not sig:  # semnătură goală/None pe un entry dynamic = corupt → evict
         return False
-    if entry.get("data_version") != await get_data_version(deps.conn, ctx.business.id):
+    if entry.get("data_version") != await get_data_version(conn, ctx.business.id):
         return False
     pids = [s["product_id"] for s in sig]
-    current = await current_prices(deps.conn, ctx.business.id, pids)
+    current = await current_prices(conn, ctx.business.id, pids)
     for s in sig:
         cur = current.get(s["product_id"])
         if cur is None or abs(cur - float(s["price"])) > _PRICE_EPS:
@@ -64,7 +67,7 @@ async def _is_fresh_dynamic(ctx: TurnContext, deps: PipelineDeps, entry: dict[st
 
 async def _serve(
     ctx: TurnContext,
-    deps: PipelineDeps,
+    conn: Any,
     entry: dict[str, Any],
     volatility: str,
     *,
@@ -74,11 +77,11 @@ async def _serve(
     """Servește un candidat de hit. Pe `dynamic` aplică price-check ÎNAINTE: dacă e
     învechit → evict lazy + emit `stale_evict` + întoarce False (tratat ca miss).
     Pe hit valid: setează reply + from_cache, touch_hit, emit `cache_lookup`."""
-    if volatility == "dynamic" and not await _is_fresh_dynamic(ctx, deps, entry):
-        await delete_entry(deps.conn, ctx.business.id, entry["id"])
+    if volatility == "dynamic" and not await _is_fresh_dynamic(ctx, conn, entry):
+        await delete_entry(conn, ctx.business.id, entry["id"])
         ctx.emit("cache_lookup", layer="stale_evict", volatility=volatility)
         return False
-    await touch_hit(deps.conn, ctx.business.id, entry["id"])
+    await touch_hit(conn, ctx.business.id, entry["id"])
     ctx.from_cache = True
     ctx.set_reply(entry["answer"])
     props: dict[str, Any] = {"layer": layer, "volatility": volatility}
@@ -128,40 +131,47 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # ACEEAȘI sursă ca la write-back (aftercare) → nu servim un răspuns compus cu alt prompt.
     prompt_version = cache_prompt_version(ctx.business)
 
+    similarity = 0.0
     try:
-        # L1 exact (O(1), zero false-positive).
-        hit = await exact_lookup(
-            deps.conn,
-            ctx.business.id,
-            ctx.language,
-            canonical_hash,
-            volatility_class=volatility,
-            prompt_version=prompt_version,
-        )
-        if hit is not None and await _serve(ctx, deps, hit, volatility, layer="exact"):
-            return
+        # L1 exact (O(1), zero false-positive). Checkout scurt: lookup + price-check + touch.
+        async with deps.db("cache_exact_lookup") as conn:
+            hit = await exact_lookup(
+                conn,
+                ctx.business.id,
+                ctx.language,
+                canonical_hash,
+                volatility_class=volatility,
+                prompt_version=prompt_version,
+            )
+            if hit is not None and await _serve(ctx, conn, hit, volatility, layer="exact"):
+                return
 
         # L2 semantic (paraphrase). Fără LLM → nu putem embed → miss grațios.
         if deps.llm is None:
             ctx.emit("cache_lookup", layer="miss", volatility=volatility)
             return
+        # NX-231: embed-ul rulează ÎNTRE cele două checkout-uri, cu conexiunea eliberată. Înainte,
+        # cache-ul (stagiul 4, pe TOT traficul) ținea o conexiune peste un apel la OpenAI.
         embedding = (await deps.llm.embed([canonical]))[0]
-        cand = await semantic_lookup(
-            deps.conn,
-            ctx.business.id,
-            ctx.language,
-            embedding,
-            volatility_class=volatility,
-            embedding_model=settings.model_embed,
-            prompt_version=prompt_version,
-        )
-        similarity = float(cand["similarity"]) if cand else 0.0
-        if (
-            cand is not None
-            and similarity >= settings.cache_tau_high
-            and await _serve(ctx, deps, cand, volatility, layer="semantic", similarity=similarity)
-        ):
-            return
+        async with deps.db("cache_semantic_lookup") as conn:
+            cand = await semantic_lookup(
+                conn,
+                ctx.business.id,
+                ctx.language,
+                embedding,
+                volatility_class=volatility,
+                embedding_model=settings.model_embed,
+                prompt_version=prompt_version,
+            )
+            similarity = float(cand["similarity"]) if cand else 0.0
+            if (
+                cand is not None
+                and similarity >= settings.cache_tau_high
+                and await _serve(
+                    ctx, conn, cand, volatility, layer="semantic", similarity=similarity
+                )
+            ):
+                return
         # sub prag SAU evict pe price-check → miss (gray-zone verify = faza 2).
         ctx.emit(
             "cache_lookup", layer="miss", similarity=round(similarity, 4), volatility=volatility
