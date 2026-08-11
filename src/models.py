@@ -104,6 +104,12 @@ class InboundMessage:
     channel_kind: str = "whatsapp"
     channel_account_id: str = ""
     payload: dict[str, Any] = field(default_factory=dict)
+    # NX-230: forma REDACTATĂ a lui `body`, calculată o singură dată la frontiera de privacy.
+    # `body` rămâne brut în memoria turului (D6: agentul principal poate vedea query-ul brut);
+    # `safe_body` e ce are voie să ajungă în DB, loguri, analytics, cache sau ledger. Când sunt
+    # amândouă disponibile, alegerea între ele e o decizie explicită la locul apelului, nu un
+    # accident — vezi src/privacy/policy.py.
+    safe_body: str | None = None
 
 
 @dataclass

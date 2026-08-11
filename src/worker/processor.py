@@ -55,6 +55,7 @@ from src.models import (
     TurnContext,
     TurnUsage,
 )
+from src.privacy import apply_boundary
 from src.worker.aftercare import AftercareWork, _persist_events, run_aftercare
 from src.worker.compose import ensure_disclaimer
 from src.worker.limits import (
@@ -349,6 +350,24 @@ async def handle_turn(
         locale=business.default_locale,
     )
 
+    # NX-230 — FRONTIERA DE PRIVACY. Aici, înainte de PRIMA scriere durabilă, nu în gates.
+    #
+    # Până acum ordinea era inversă: `insert_message` scria `event["body"]` BRUT, iar masca de PII
+    # (NX-121) rula abia în gates, ~100 de linii mai jos. Comentariul din `gates.py` recunoștea
+    # deschis consecința — istoricul reintroduce PII-ul în promptul turului următor. Bucla era
+    # închisă: turul 1 maschează telefonul pentru model, îl scrie brut în `messages.body`, turul 2
+    # îl citește înapoi din DB prin `context.conversation_transcript`. Masca era o perdea în fața
+    # unei uși deschise.
+    #
+    # `raw_inbound` rămâne disponibil în memoria turului (D6); `safe_inbound` e singurul care are
+    # voie să atingă un disc.
+    raw_inbound, safe_inbound = apply_boundary(
+        event.get("body"), content_type=event.get("content_type", "text")
+    )
+    if safe_inbound.degraded:
+        # Fail-safe: detectorul a picat, deci NU scriem textul original „ca să nu pierdem mesajul".
+        log.warning("privacy_guard_failed stage=ingress reason=degraded")
+
     inbound_msg_id = await insert_message(
         conn,
         business.id,
@@ -356,7 +375,7 @@ async def handle_turn(
         contact.id,
         Direction.INBOUND,
         Author.CONTACT,
-        body=event.get("body"),
+        body=safe_inbound.text,
         content_type=event.get("content_type", "text"),
         provider_msg_id=event.get("provider_msg_id"),
         media_ref=event.get("media_id"),
@@ -388,7 +407,10 @@ async def handle_turn(
         message=InboundMessage(
             provider_msg_id=event.get("provider_msg_id", ""),
             content_type=event.get("content_type", "text"),
-            body=event.get("body"),
+            # D6: agentul principal vede query-ul BRUT, în memoria turului. Ce s-a schimbat e că
+            # forma brută nu mai e și forma persistată — `safe_body` merge la orice sink durabil.
+            body=raw_inbound.body.value,
+            safe_body=safe_inbound.text,
             media_ref=event.get("media_id"),
             channel_kind=channel_kind,
             channel_account_id=event.get("channel_account_id", ""),
