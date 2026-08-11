@@ -16,10 +16,16 @@ from __future__ import annotations
 import contextvars
 from typing import Any
 
-# Acquire-wait al checkout-ului curent (ms). Setat de tenant_conn, citit+resetat de handle_turn.
-# ContextVar → izolat per task async (ca `usage`): două tururi concurente nu-și amestecă valorile.
-_acquire_wait_ms: contextvars.ContextVar[float | None] = contextvars.ContextVar(
-    "pool_acquire_wait_ms", default=None
+# Acquire-wait-ul checkout-urilor turului curent (ms). Setat de tenant_conn, citit+resetat de
+# handle_turn. ContextVar → izolat per task async (ca `usage`): două tururi concurente nu-și
+# amestecă valorile.
+#
+# NX-231: un tur făcea UN checkout, deci „ultimul câștigă" era exact. Cu conn-per-op face N, iar
+# ultimul e de obicei cel mai ieftin (commit-ul) — ar fi ascuns exact vârful pe care îl căutăm.
+# Acumulăm: (n, total, max). `db_pool_wait_ms` raportat = MAXIMUL (cea mai lungă așteptare de
+# conexiune din tur = semnalul de contenție), plus totalul pentru bugetul de latență.
+_acquire: contextvars.ContextVar[tuple[int, float, float] | None] = contextvars.ContextVar(
+    "pool_acquire_wait", default=None
 )
 
 # Gauge de tururi „în zbor" (checkout-uri bot_pool active). asyncio e single-thread → int simplu,
@@ -29,17 +35,30 @@ _inflight: int = 0
 
 
 def record_acquire_wait(ms: float) -> None:
-    """`tenant_conn` raportează durata `pool.acquire()` (contenția). Ultimul checkout câștigă."""
-    _acquire_wait_ms.set(ms)
+    """`tenant_conn` raportează durata `pool.acquire()` (contenția). Acumulează n/total/max."""
+    prev = _acquire.get()
+    if prev is None:
+        _acquire.set((1, ms, ms))
+    else:
+        n, total, mx = prev
+        _acquire.set((n + 1, total + ms, max(mx, ms)))
+
+
+def take_acquire_stats() -> tuple[int, float, float] | None:
+    """`handle_turn` citește + RESETează statistica de acquire a turului: `(n, total_ms, max_ms)`.
+    None = niciun checkout instrumentat (sau deja consumat) — un al doilea emit în același tur nu
+    re-raportează valori stale."""
+    v = _acquire.get()
+    if v is not None:
+        _acquire.set(None)
+    return v
 
 
 def take_acquire_wait() -> float | None:
-    """`handle_turn` citește + RESETează acquire-wait-ul checkout-ului curent (None = neinstrumentat
-    / deja consumat). Reset → un al doilea emit în același tur nu re-raportează o valoare stale."""
-    v = _acquire_wait_ms.get()
-    if v is not None:
-        _acquire_wait_ms.set(None)
-    return v
+    """Compat: cea mai lungă așteptare de conexiune din tur (None = neinstrumentat/consumat).
+    Cu conn-per-op maximul e cifra utilă — media ascunde exact vârful care produce timeouts."""
+    stats = take_acquire_stats()
+    return None if stats is None else stats[2]
 
 
 def inc_inflight() -> int:
@@ -73,6 +92,9 @@ def pool_snapshot(pool: Any) -> dict[str, int]:
             "pool_in_use": size - idle,
             "pool_max": pool.get_max_size(),
             "pool_inflight": _inflight,
+            # NX-231: numele din card pentru dashboard (`db_pool_active`). Aceeași cifră ca
+            # `pool_in_use`, expusă sub eticheta pe care o cere raportul before/after.
+            "db_pool_active": size - idle,
         }
     except Exception:  # noqa: BLE001 — stats best-effort, nu blochează turul
         return {"pool_inflight": _inflight}

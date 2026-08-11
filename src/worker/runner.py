@@ -34,14 +34,18 @@ log = logging.getLogger(__name__)
 class PipelineDeps:
     """Resursele pe care le primesc stagiile.
 
-    NX-161 Felia 0B: `db` (provider tenant-scoped) e noul contract — `async with deps.db() as conn`
-    ia o conexiune DOAR cât ține operația. `conn` (DEPRECATED, scos la Felia 7) rămâne pentru compat
-    cât timp stagiile nu-s migrate. Puntea de compat (`__post_init__`): `PipelineDeps(conn=...)` —
-    cele 114 usage-uri din teste — primesc automat un provider static, fără rescriere.
+    NX-231: `db` (provider tenant-scoped) e SINGURUL contract de acces la DB —
+    `async with deps.db("nume_operație") as conn` ia o conexiune DOAR cât ține operația, iar
+    între operații (LLM/embed/HTTP) nu se ține nimic. Eticheta alimentează
+    `db_checkout_ms{operation}` / `db_hold_ms{operation}`.
+
+    `conn` a rămas EXCLUSIV ca punte pentru teste: cele ~140 de `PipelineDeps(conn=fake)` din
+    suită primesc automat un provider static care yield-uiește fake-ul. În `src/` nu-l mai
+    citește nimeni (guard mecanic: `scripts/check_no_raw_conn.py --strict`).
     `llm` poate fi None (fără cheie OpenAI) → stagiile LLM degradează grațios.
     `media` poate fi None (fără canal cu download configurat) → media routing fail-soft (NX-76)."""
 
-    conn: asyncpg.Connection | None = None  # DEPRECATED (Felia 7 îl scoate) — vezi `db`
+    conn: asyncpg.Connection | None = None  # TEST-ONLY: puntea spre `db` (vezi __post_init__)
     redis: Redis | None = None
     llm: LLMClient | None = None
     media: MediaFetcherRegistry | None = None
@@ -49,9 +53,14 @@ class PipelineDeps:
 
     def __post_init__(self) -> None:
         # Puntea de compat: `PipelineDeps(conn=...)` capătă un provider static → `deps.db()`
-        # yield-uiește conn-ul injectat, fără checkout nou. `db` explicit are întâietate (nu-l
-        # suprascriem). `conn=None` (multe teste) → `db` rămâne None (stagiul nu-l atinge oricum).
-        if self.db is None and self.conn is not None:
+        # yield-uiește conn-ul injectat, fără checkout nou. `db` explicit are întâietate.
+        #
+        # NX-231: puntea se construiește ȘI când `conn` e None. Înainte, `db` rămânea None fiindcă
+        # nimeni nu-l apela; acum stagiile apelează `deps.db(...)` întotdeauna, iar testele care
+        # construiesc `PipelineDeps(llm=...)` și monkeypatch-uiesc query-ul trebuie să primească
+        # exact ce primeau prin `deps.conn`: None. Un provider static peste None face asta;
+        # `db=None` ar da `TypeError` pe o cale care înainte mergea.
+        if self.db is None:
             self.db = static_db(self.conn)
 
 
