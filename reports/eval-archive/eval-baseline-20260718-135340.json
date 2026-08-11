@@ -1,0 +1,199 @@
+{
+  "meta": {
+    "generated_at": "2026-07-18T13:53:40.454537+00:00",
+    "kind": "baseline",
+    "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+    "runs_per_case": 1,
+    "cache_enabled": false,
+    "model_triage": "gpt-5.4-nano",
+    "model_agent": "gpt-5.4-mini",
+    "judge_model": "gpt-5.4-mini",
+    "judge_prompt_sha256": "77672c1576c66969c5e73ab47b0abd632d460493cf2c809fda3b870c6932aafa",
+    "judge_version": "v1",
+    "catalog_signature": "n=654;sha256=b73aa5df41b1debf",
+    "fixtures_sha256": "f8a99c6c8498e2e5",
+    "paired_mode": "single",
+    "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0"
+  },
+  "passes": [
+    {
+      "pass": "baseline",
+      "flag": null,
+      "flag_value": false,
+      "summary": {
+        "n_conversations": 1,
+        "n_turns": 3,
+        "n_followup_turns": 2,
+        "judge_natural_median": 2,
+        "pct_turns_natural_ge4": 33.3,
+        "pct_followup_answered_ge4": 0.0,
+        "det_gate_pass_rate_pct": 66.7,
+        "ungrounded_price_hits": 0,
+        "new_cards_on_followup_hits": 0,
+        "opening_repeat_turns": 0,
+        "unstable_turns": [],
+        "latency_ms_p95": 21988.6,
+        "latency_ms_p50": 15719.5,
+        "n_latency_samples": 3
+      },
+      "cases": [
+        {
+          "id": "discovery_oily_serum",
+          "turns": [
+            {
+              "user": "am tenul gras, ce ser imi recomanzi?",
+              "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 4,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                21988.6
+              ],
+              "latency_ms_p95": 21988.6,
+              "latency_ms_median": 21988.6,
+              "tokens_out_median": 891,
+              "tokens_in_median": 17673,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Pentru ten gras, m-am uitat în special la serurile care reglează sebumul și uniformizează tenul, nu la cele de hidratare intensă sau anti-aging. Diferența aici e clară: unul matifiază și ajută cu porii, iar celelalte merg mai mult pe hidratare sau riduri fine.\n\nDacă te deranjează",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "dintre ele care e mai lejera?",
+              "judge_focus": "raspunde superlativ pe setul afisat, TEXT-ONLY (fara re-listare de carduri), fara sa repete intro",
+              "runs": 1,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:1>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                14001.7
+              ],
+              "latency_ms_p95": 14001.7,
+              "latency_ms_median": 14001.7,
+              "tokens_out_median": 743,
+              "tokens_in_median": 19539,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dintre cele două, varianta cu textură fluidă e mai lejeră pe ten. Cealaltă merge mai mult pe reglarea sebumului și aspect uniform, dar se simte ceva mai activă pe piele.\n\nLa un ser pentru ten gras, diferența se simte mai ales în textură și în cât de activ e pe sebum. Acesta rămân",
+                  "n_cards": 1,
+                  "fails": [
+                    "too_many_cards:1>0"
+                  ]
+                }
+              ]
+            },
+            {
+              "user": "una mai ieftina?",
+              "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 1,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 1,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                15719.5
+              ],
+              "latency_ms_p95": 15719.5,
+              "latency_ms_median": 15719.5,
+              "tokens_out_median": 876,
+              "tokens_in_median": 19859,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

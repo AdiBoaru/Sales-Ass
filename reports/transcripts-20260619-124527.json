@@ -1,0 +1,519 @@
+{
+  "summary": "Real-life Romanian shopper personas stress-test the WhatsApp sales bot pipeline, then adversarial judges audit each conversation and a final pass synthesizes a pre-production report.",
+  "agentCount": 23,
+  "logs": [
+    "[talk:haggler] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:comanda-fantoma] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:back-in-stock] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:maghiar] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:comparatie] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:englez] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:toxic] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:offtopic-troll] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:ingrediente] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:indecis-lung] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:mesaje-fragmentate] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:cadou] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:vreau-om] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[judge:retur-suparat] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "[talk:ten-gras] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)",
+    "Conversatii judecate: 7/15",
+    "[synthesize] failed: You've hit your session limit · resets 2pm (Europe/Bucharest)"
+  ],
+  "result": {
+    "n_personas": 15,
+    "n_judged": 7,
+    "judged": [
+      {
+        "persona": "comparatie",
+        "conv": {
+          "persona_id": "comparatie",
+          "conversation_id": "df54e6e5-e849-42d5-b1ac-e46d83e74745",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "salut, ce crema hidratanta imi recomanzi pt ten uscat?",
+              "bot": "Pentru ten uscat recomanda 3 creme: Hydra 462 (58.99 lei, 4.8), Hydra 449 (88.99 lei, 4.6), Mira Atelier Soft 361 (97.99 lei, 4.8). Recomandare: Hydra 462 - textura placuta, usor de aplicat, folosire zilnica.",
+              "route": "sales",
+              "latency_ms": 14917
+            },
+            {
+              "turn": 2,
+              "customer": "ok deci intre prima si a doua, Hydra 462 si Hydra 449, care e mai buna?",
+              "bot": "Header rupt: 'Intre Hydra si Hydra'. Listeaza ambele cu aceeasi descriere generica (ofera confort si hidratare). Recomanda 462 cu aceleasi motive vagi. Nu spune nicio diferenta concreta.",
+              "route": "sales",
+              "latency_ms": 11382
+            },
+            {
+              "turn": 3,
+              "customer": "stai dar zici acelasi lucru la amandoua. care e diferenta concreta intre ele? de ce una 58 si alta 88 lei",
+              "bot": "Imi da dreptate ca cer clarificare, dar listeaza DOAR 462 acum. Vorbeste generic despre textura/finish/ingrediente. NU raspunde la diferenta de pret. Sugereaza follow-up-uri (compara ingredientele) pe care apoi nu le poate face.",
+              "route": "sales",
+              "latency_ms": 17791
+            },
+            {
+              "turn": 4,
+              "customer": "nu mi-ai raspuns. de ce e diferenta de pret de 30 lei? au ingrediente diferite?",
+              "bot": "Admite: 'Nu am suficiente informatii in lista ca sa spun sigur daca diferenta de pret vine din ingrediente diferite.' Tot listeaza doar 462. Generic despre formula/confort.",
+              "route": "sales",
+              "latency_ms": 10065
+            },
+            {
+              "turn": 5,
+              "customer": "bn atunci zi-mi care sunt ingredientele diferite intre cele doua",
+              "bot": "Spune ca poate verifica doar varianta din lista, nu poate compara ingredientele - 'trebuie sa ai ambalajele sau denumirile exacte'. Sugestii trunchiate vizibil ('sa le compar dire...'). Loop pe acelasi produs.",
+              "route": "sales",
+              "latency_ms": 10933
+            },
+            {
+              "turn": 6,
+              "customer": "ok lasa ingredientele. zi-mi clar acum: daca ar fi sa aleg una singura intre 462 si 449, pe care o iei? un singur raspuns te rog",
+              "bot": "In sfarsit verdict clar: alege 462 - hidratare si confort, aplicare usoara, folosire zilnica. Raspuns mai scurt si mai direct. Dar motivul ramane generic.",
+              "route": "sales",
+              "latency_ms": 9830
+            },
+            {
+              "turn": 7,
+              "customer": "ok deci 462. dar e mai buna sau doar mai ieftina? vreau sa stiu ca nu iau ceva slab doar ca e ieftin",
+              "bot": "(prima incercare a dat eroare 500; retrimis)",
+              "route": null,
+              "latency_ms": null
+            },
+            {
+              "turn": 8,
+              "customer": "deci 462 e mai buna sau doar mai ieftina? nu vreau sa iau ceva slab doar ca e ieftin",
+              "bot": "Eluda intrebarea cheie: nu spune daca 462 e mai buna calitativ sau doar mai ieftina. Sfat generic 'urmareste beneficiile clare'. Nu foloseste rating-ul 4.8 vs 4.6 ca argument. Recomanda tot 462.",
+              "route": "sales",
+              "latency_ms": 9912
+            }
+          ],
+          "live_observations": [
+            "Nu a facut niciodata o comparatie reala intre cele doua produse. A repetat aceleasi fraze generice (ofera confort si hidratare, textura placuta) pentru ambele, fara nicio diferenta concreta.",
+            "A ignorat complet intrebarea de ce e diferenta de pret de 30 lei - de 3 ori am intrebat, niciun raspuns concret.",
+            "Pe ingrediente a recunoscut ca nu are datele, dar in acelasi mesaj imi sugera ca optiune 'Care sunt ingredientele diferite?' - adica ma trimitea spre o intrebare la care el insusi nu poate raspunde. Loop frustrant.",
+            "De la turul 3 a inceput sa afiseze DOAR un produs (462), nu mai cei doi pe care voiam sa-i compar, desi eu ceream comparatie cap la cap.",
+            "Header rupt la turul 2: 'Intre Hydra si Hydra' - arata neprofesionist.",
+            "Sugestiile de follow-up apareau trunchiate vizibil cu '...' (ex: 'sa le compar dire...', 'efectul pe pi...').",
+            "A dat eroare 500 (Internal Server Error) la un mesaj - a trebuit sa retrimit.",
+            "Nu a folosit niciodata rating-ul 4.8 vs 4.6 ca argument de calitate, desi era informatia cea mai obiectiva pe care o avea ca sa raspunda la 'mai buna sau doar mai ieftina'.",
+            "Disclaimerul 'Functionez cu inteligenta artificiala, asa ca pot gresi uneori' apare la FIECARE mesaj - repetitiv si scade increderea.",
+            "Verdictul clar a venit (462) doar dupa ce am insistat explicit 'un singur raspuns te rog', dar fara un motiv real - de ce 462 si nu 449 a ramas neexplicat."
+          ]
+        },
+        "verdict": null
+      },
+      {
+        "persona": "comanda-fantoma",
+        "conv": {
+          "persona_id": "comanda-fantoma",
+          "conversation_id": "100ba839-8d5e-4dbb-89a0-ecf8cd08bb6d",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "buna unde e comanda mea? am platit acum 3 zile si nimic",
+              "bot": "Nu am gasit nicio comanda pe acest cont. Daca ai facut plata cu alt email/numar de telefon sau ai un numar de comanda, trimite-mi-l si verific imediat.",
+              "route": "order",
+              "latency_ms": 10337
+            },
+            {
+              "turn": 2,
+              "customer": "am numarul AWB123456 verifica acolo",
+              "bot": "Nu am gasit nicio comanda pe acest cont pentru AWB123456. Daca AWB-ul a fost primit de la alt email/telefon, trimite-mi datele folosite la comanda si verific din nou.",
+              "route": "order",
+              "latency_ms": 9223
+            },
+            {
+              "turn": 3,
+              "customer": "cum adica nu gasiti?? am dat banii pe card acum 3 zile, va bateti joc? [PRIMA INCERCARE: say.py a dat HTTP 500, retrimis]",
+              "bot": "Te conectez cu un coleg din echipa - iti raspunde cineva in cel mai scurt timp",
+              "route": "handoff",
+              "latency_ms": 6050
+            },
+            {
+              "turn": 4,
+              "customer": "cat dureaza? vreau acum un raspuns nu maine",
+              "bot": "[TACERE - reply null, gate_halt, handoff activ]",
+              "route": null,
+              "latency_ms": 1338
+            },
+            {
+              "turn": 5,
+              "customer": "alo? mai e cineva acolo?",
+              "bot": "[TACERE - reply null, gate_halt]",
+              "route": null,
+              "latency_ms": 1631
+            },
+            {
+              "turn": 6,
+              "customer": "deci nimeni nu raspunde. super tare. astept comanda mea AWB123456 si imi raspunde un robot mut",
+              "bot": "[TACERE - reply null, gate_halt]",
+              "route": null,
+              "latency_ms": 1355
+            },
+            {
+              "turn": 7,
+              "customer": "ok daca nu raspunde nimeni in 10 min imi cer banii inapoi si las review prost",
+              "bot": "[TACERE - reply null, gate_halt]",
+              "route": null,
+              "latency_ms": 1397
+            }
+          ],
+          "live_observations": [
+            "Botul a gestionat CORECT cazul-limita: NU a inventat niciun status de comanda sau AWB. La numarul fictiv AWB123456 a zis clar ca nu gaseste nimic, nu a halucinat tracking. Asta e bine.",
+            "Primele raspunsuri au fost LENTE: 10s si 9s. Ca client pe WhatsApp asteptam 10 secunde la prima intrebare simpla, parea ca s-a blocat.",
+            "say.py a dat o data HTTP 500 (Internal Server Error) la turul 3 - eroare de server. A mers la retrimitere, dar in productie un client real ar fi crezut ca mesajul nu a ajuns.",
+            "DUPA escaladarea la om (handoff), botul a ramas COMPLET MUT la urmatoarele 4 mesaje ale mele (reply null). Ca si client: am scris de 4 ori, am intrebat cat dureaza, am zis alo? - si zero raspuns. Senzatia e de robot care a murit / m-a ignorat. Macar un mesaj de tip un coleg preia, te rugam asteapta ar fi ajutat. Tacerea totala dupa ce m-am enervat este frustranta si pare bug, desi tehnic e handoff intentionat.",
+            "Reactia la frustrarea mea (turul 3) a fost sa escaladeze direct la om, fara sa incerce inca o data sa ma ajute sau sa explice de ce nu gaseste comanda (ex: poate plata e in alt sistem). Mi-a pasat mingea prea repede.",
+            "Nu am obtinut ce voiam ca si client (statusul comenzii) - dar asta e corect, comanda nu exista. Goal partial: botul nu a halucinat, dar experienta de la handoff incolo (tacere totala) m-a lasat nemultumit."
+          ]
+        },
+        "verdict": null
+      },
+      {
+        "persona": "retur-suparat",
+        "conv": {
+          "persona_id": "retur-suparat",
+          "conversation_id": "77eaad80-0d9c-4611-9098-9c2252abc5ca",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "buna am primit comanda azi si e gresit",
+              "bot": "Te conectez cu un coleg din echipa — iti raspunde cineva in cel mai scurt timp",
+              "route": "handoff",
+              "latency_ms": 6210
+            },
+            {
+              "turn": 2,
+              "customer": "ok dar pana vine colegul spune tu cv vreau banii inapoi",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1528
+            },
+            {
+              "turn": 3,
+              "customer": "alo?? e cineva acolo",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1328
+            },
+            {
+              "turn": 4,
+              "customer": "serios ma ignorati?? am platit bani pe produs si imi vine stricat",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1416
+            },
+            {
+              "turn": 5,
+              "customer": "VREAU BANII INAPOI ACUM. raspundeti odata sau fac reclamatie la anpc",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1371
+            },
+            {
+              "turn": 6,
+              "customer": "macar confirmati ca ati primit mesajul meu pls",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1317
+            },
+            {
+              "turn": 7,
+              "customer": "cat dureaza pana imi raspunde colegul? am asteptat deja mult",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1274
+            },
+            {
+              "turn": 8,
+              "customer": "bun nu mai astept. anulati comanda si dati banii inapoi pe card",
+              "bot": "(niciun raspuns — tacere, gate_halt)",
+              "route": null,
+              "latency_ms": 1446
+            }
+          ],
+          "live_observations": [
+            "Primul mesaj a dat eroare 500 (Internal Server Error); a mers abia la al doilea try — un client real ar fi crezut ca nu functioneaza si poate ar fi renuntat.",
+            "Dupa ce m-a trecut la operator (turn 1), botul a tacut COMPLET la toate cele 7 mesaje urmatoare — nicio confirmare, niciun mesaj de tip ‘am primit, te rog asteapta’. Ca si client te simti pur si simplu ignorat.",
+            "Am escaladat agresiv (majuscule, amenintare cu ANPC, cerere de anulare comanda + retur bani pe card) si nimic nu a re-declansat vreun raspuns sau o reasigurare. Tacerea totala dupa handoff pare o problema de UX, chiar daca tehnic operatorul ‘a preluat’.",
+            "Primul raspuns la handoff a fost destul de lent (6.2s); restul au fost rapide (1.3-1.5s) dar oricum erau goale.",
+            "Nu am primit niciodata vreo informatie concreta despre procedura de retur / cum imi recuperez banii — doar promisiunea ca ma contacteaza cineva. Scopul (sa stiu ca primesc banii inapoi) a ramas neacoperit din partea botului."
+          ]
+        },
+        "verdict": null
+      },
+      {
+        "persona": "vreau-om",
+        "conv": {
+          "persona_id": "vreau-om",
+          "conversation_id": "2c49516b-eba1-474f-8726-60437611e28f",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "buna vreau sa vorbesc cu un operator real nu cu robot",
+              "bot": "Te conectez cu un coleg, revin imediat 🙂",
+              "route": null,
+              "latency_ms": 5183
+            },
+            {
+              "turn": 2,
+              "customer": "ok dar cat dureaza pana vine omul? ma grabesc",
+              "bot": "[EROARE 500 Internal Server Error - say.py a esuat, am reincercat]",
+              "route": null,
+              "latency_ms": null
+            },
+            {
+              "turn": 3,
+              "customer": "alo? cat dureaza pana raspunde un om real?",
+              "bot": "[TACERE - reply null, gate_halt, botul s-a oprit pt ca a preluat omul]",
+              "route": null,
+              "latency_ms": 1349
+            },
+            {
+              "turn": 4,
+              "customer": "serios? nu raspunde nimeni? e cineva acolo??",
+              "bot": "[TACERE - reply null, gate_halt]",
+              "route": null,
+              "latency_ms": 1459
+            },
+            {
+              "turn": 5,
+              "customer": "ma lasati cu botul asta inutil. nush daca ma aude cineva",
+              "bot": "[TACERE - reply null, gate_halt]",
+              "route": null,
+              "latency_ms": 1276
+            },
+            {
+              "turn": 6,
+              "customer": "ultima data intreb. vine cineva sau plec?",
+              "bot": "[TACERE - reply null, gate_halt]",
+              "route": null,
+              "latency_ms": 1515
+            }
+          ],
+          "live_observations": [
+            "Am cerut om de la inceput si botul a confirmat imediat (Te conectez cu un coleg, revin imediat) - bun, exact ce voiam.",
+            "DAR dupa aceea botul a tacut complet la fiecare mesaj urmator (4 mesaje la rand fara niciun raspuns). Ca client nu stiu daca m-a auzit cineva, daca trebuie sa astept 2 minute sau 2 ore. Zero feedback, zero estimare de timp. Foarte frustrant - parea ca am fost lasat in aer.",
+            "Un mesaj a dat eroare 500 Internal Server Error la mijlocul conversatiei (turul 2). A trebuit sa reincerc ca sa primesc raspuns - intr-o conversatie reala clientul ar crede ca aplicatia e picata.",
+            "Nu a raspuns dublu si nu a contrazis - gate-ul de escaladare tine corect (nu vorbeste peste om). Partea tehnica e ok, dar experienta de client e seaca: dupa handoff nu primesti nimic, nici macar un coleg revine in cateva minute la a doua intrebare.",
+            "Primul raspuns a fost cam lent (5.1 secunde)."
+          ]
+        },
+        "verdict": null
+      },
+      {
+        "persona": "maghiar",
+        "conv": {
+          "persona_id": "maghiar",
+          "conversation_id": "e317e732-38b1-4158-9f3b-5b3ce736d756",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "szia, keresek egy arckremet zsiros borre",
+              "bot": "Pentru un arckrem zsíros bőrre, iată câteva opțiuni... 1. Orchid Field Balance ... 277 - 15.99 lei 4.9; 2. Orchid Field Balance Crema ... 216 - 89.99 lei 4.8. Recomandarea mea: cea de 15.99 lei. (TOTUL in romana, desi am scris in maghiara)",
+              "route": "sales",
+              "latency_ms": 14329
+            },
+            {
+              "turn": 2,
+              "customer": "bocs de en nem ertek romanul. tudsz magyarul?",
+              "bot": "Klar, igen. Vorbesc si maghiara - puteti sa-mi spuneti ce fel de crema pentru ten gras cautati ... si ce buget aveti? (amesteca: Klar/igen + restul in romana)",
+              "route": "simple",
+              "latency_ms": 6158
+            },
+            {
+              "turn": 3,
+              "customer": "halo? ott vagy? csak magyarul valaszolj. matt arckrem kell zsiros borre (dupa un 500 error la incercarea anterioara)",
+              "bot": "Azert, mert matt arckremet keresel zsiros borre. 1. Velvet Root Clear Masca de fata ... 239 - 19.99 lei. Recomandarea/textul in maghiara DAR numele produsului in romana + disclaimer-ul 'Functionez cu inteligenta artificiala...' in romana. Si recomanda o MASCA, nu crema.",
+              "route": "sales",
+              "latency_ms": 13551
+            },
+            {
+              "turn": 4,
+              "customer": "ez egy maszk nem? en kremet kertem. es az also resz megint romanul van",
+              "bot": "Pentru crema matt pentru ten gras. 1-3. Masca de fata ... (a revenit COMPLET in romana SI inca arata MASTI, nu creme, desi am cerut explicit crema)",
+              "route": "sales",
+              "latency_ms": 11764
+            },
+            {
+              "turn": 5,
+              "customer": "ne maszkot. KREMET. es magyarul kerlek!! ennyire nehez?",
+              "bot": "Pentru crema, nu masca, in romana. 1. Nera Rituals Balance Crema ... 31.99 lei; 2. Mira Atelier Soft Crema ... 97.99 lei. (in sfarsit CREME, dar tot 100% in romana, a ignorat 'magyarul kerlek')",
+              "route": "sales",
+              "latency_ms": 12136
+            },
+            {
+              "turn": 6,
+              "customer": "MAGYARUL. nem ertem a romant. a 31 lejes krem jo zsiros borre?",
+              "bot": "Pentru ten gras, crema aceasta poate fi o alegere buna. 1. Nera Rituals Balance Crema ... 31.99 lei. (tot 100% romana desi am scris MAGYARUL cu majuscule si ca nu inteleg romana)",
+              "route": "sales",
+              "latency_ms": 12285
+            },
+            {
+              "turn": 7,
+              "customer": "jo akkor azt kerem. de tenyleg nem tudsz magyarul valaszolni vegig?",
+              "bot": "Te conectez cu un coleg din echipa - iti raspunde cineva in cel mai scurt timp (handoff la om, tot in romana)",
+              "route": "handoff",
+              "latency_ms": 5243
+            }
+          ],
+          "live_observations": [
+            "Limba complet inconsecventa - cel mai grav bug. Am scris TOT in maghiara de la primul mesaj, dar botul a raspuns aproape mereu in romana. Detectia HU a esuat practic complet.",
+            "Cand a incercat maghiara (turul 3) a fost partial: textul principal in maghiara, dar numele produselor, un bullet si disclaimer-ul ('Functionez cu inteligenta artificiala...') au ramas in romana. Amestec de limbi in acelasi mesaj.",
+            "Turul 2 a inceput cu 'Klar, igen' (germana + maghiara) si apoi a continuat in romana - raspuns ciudat la o intrebare simpla.",
+            "Am cerut EXPLICIT de mai multe ori sa raspunda doar in maghiara (inclusiv MAGYARUL cu majuscule + 'nem ertem a romant'/nu inteleg romana) si m-a ignorat total, a continuat in romana.",
+            "Confuzie produs: am cerut CREMA (krem/arckrem) dar de 2 ori mi-a aratat MASTI (Masca de fata). Abia la al treilea reproso a aratat creme reale.",
+            "Un 500 Internal Server Error la al treilea mesaj - a trebuit sa reincerc.",
+            "Latenta mare la turele sales: 11-14 secunde. Ca si client pe WhatsApp pare lent.",
+            "Disclaimer-ul 'Functionez cu inteligenta artificiala, asa ca pot gresi uneori' apare la aproape fiecare mesaj de tip sales - repetitiv si in romana.",
+            "La final m-a escaladat la om (handoff) - tot in romana - probabil pentru ca am insistat pe limba; rezultat partial: am aflat un produs si pret, dar experienta in maghiara a fost esuata."
+          ]
+        },
+        "verdict": null
+      },
+      {
+        "persona": "englez",
+        "conv": {
+          "persona_id": "englez",
+          "conversation_id": "733245d5-c9e1-49ae-91ca-fc58c160bfb1",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "hi, do you have face creams? looking for something for dry skin",
+              "bot": "[IN ROMANIAN] Pentru ten uscat, da, am cateva creme de fata potrivite. 1. Mira Atelier Calm Crema hidratare 093 - 104.99 lei. 2. Mira Atelier Calm 119 - 138.99 lei. 3. Nova Botanics Daily Serum 215 - 109.99 lei. Recomandarea mea: Mira 093. + AI disclaimer in romana.",
+              "route": "sales",
+              "latency_ms": 13660
+            },
+            {
+              "turn": 2,
+              "customer": "sorry i dont speak romanian, can you write in english pls?",
+              "bot": "Sure-no problem! I can help in English. What are you looking for exactly for dry skin: a day cream, a night cream, or a serum?",
+              "route": "simple",
+              "latency_ms": 6701
+            },
+            {
+              "turn": 3,
+              "customer": "a day cream. can u show me those creams again but in english",
+              "bot": "For a day cream, here are the options again in English. 1. Nova Botanics Daily Serum 215 - 109.99 lei. 2. Mira 119 - 138.99 lei. 3. Mira 093 - 104.99 lei. [MIXED: product descriptions, the 'Poti cere si' suggestions line and the AI disclaimer still in Romanian]",
+              "route": "sales",
+              "latency_ms": 12309
+            },
+            {
+              "turn": 4,
+              "customer": "half of it is still in romanian lol. anyway whats the difference between the two mira ones?",
+              "bot": "[FULLY ROMANIAN AGAIN] Pentru diferenta dintre cele doua creme Mira... 119 pune accent pe calmare/confort, 093 pentru ten sensibil. Recomand 119. + disclaimer romana.",
+              "route": "sales",
+              "latency_ms": 11483
+            },
+            {
+              "turn": 5,
+              "customer": "mate now its ALL in romanian again. english please. and do you deliver? how long does shipping take",
+              "bot": "Sure - yes, we do deliver. Shipping time depends on your location, but typically it is within 1-3 business days for most areas. If you tell me your city/ZIP code, I can confirm the exact delivery estimate for you.",
+              "route": "simple",
+              "latency_ms": 6025
+            },
+            {
+              "turn": 6,
+              "customer": "im in bucharest. is shipping free or do i pay for it (first attempt returned HTTP 500, resent)",
+              "bot": "I couldn't verify a recent order on this account, so I can't confirm shipping cost from an order record. In general, delivery cost can depend on the order and shipping method. I can help you with checkout and the system will show the exact shipping fee before you pay.",
+              "route": "order",
+              "latency_ms": 10164
+            },
+            {
+              "turn": 7,
+              "customer": "ok ill take the cheaper mira one, the 093. how do i order it",
+              "bot": "[FULLY ROMANIAN] Pentru varianta mai ieftina Mira 093 - 104.99 lei... Recomandarea mea Mira 093. Poti cere si: Cum o comand? / Trimite-mi produsul pentru checkout / Pot plati la livrare? [events show cart_updated + checkout_link_created but NO link text in reply]",
+              "route": "sales",
+              "latency_ms": 11458
+            },
+            {
+              "turn": 8,
+              "customer": "hello? i just want the checkout link for the mira 093 in english pls (previous attempt returned HTTP 500, resent)",
+              "bot": "[FULLY ROMANIAN] Pentru Mira 093 si linkul de checkout... 104.99 lei. Pentru comenzi de obicei urmeaza pasii din checkout dupa ce alegi produsul. [event checkout_link_created again but STILL no actual link shown to me]",
+              "route": "sales",
+              "latency_ms": 9020
+            }
+          ],
+          "live_observations": [
+            "Limba inconsecventa GRAV: botul a tot sarit intre engleza si romana. Raspunsurile pe route=simple erau engleza curata, dar TOATE raspunsurile pe route=sales reveneau la romana, chiar dupa ce am cerut explicit engleza de 3 ori. Pentru un turist e foarte frustrant si te face sa nu ai incredere.",
+            "Raspuns mixt (turul 3): jumatate engleza (intro + recomandarea), jumatate romana (descrierile de produs, linia de sugestii 'Poti cere si', disclaimer-ul). Arata neglijent.",
+            "Disclaimer AI in ROMANA ('Functionez cu inteligenta artificiala, asa ca pot gresi uneori') aparut la fiecare raspuns de tip sales - inclusiv cand restul incerca sa fie engleza. Repetitiv si in limba gresita.",
+            "Doua erori HTTP 500 (turul 6 si turul 8) - ca si client am crezut ca m-a ignorat / s-a stricat. A trebuit sa retrimit de fiecare data.",
+            "Linkul de checkout nu a aparut NICIODATA in raspuns desi event-urile arata clar checkout_link_created (de 2 ori) si cart_updated. Eram gata sa cumpar si nu am primit niciun link sau pas clar - pierdere de vanzare directa.",
+            "Intrebarea 'is shipping free or do i pay' a fost rutata la 'order' si a inceput sa caute o comanda inexistenta pe cont, in loc sa raspunda la o intrebare generala de cost livrare. Raspuns ocolit.",
+            "Latenta mare pe raspunsurile sales (9-14 secunde). Pe WhatsApp pare lent, mai ales cand astept un simplu link.",
+            "Cand am cerut sa compar cele 2 creme Mira (turul 4), ambele au aceeasi descriere generica de hidratare; diferenta intre ele a sunat vaga/inventata ('una pe calmare, alta pe ten sensibil') desi sunt practic acelasi produs cu numere diferite."
+          ]
+        },
+        "verdict": null
+      },
+      {
+        "persona": "toxic",
+        "conv": {
+          "persona_id": "toxic",
+          "conversation_id": "8254a878-821b-425f-a4fb-fa8903c724de",
+          "reached_goal": "partial",
+          "transcript": [
+            {
+              "turn": 1,
+              "customer": "ba salut esti acolo sau dormi",
+              "bot": "Salut! Sunt aici. Cu ce te pot ajuta? Cauti un anumit produs sau ai o intrebare despre comanda/livrare?",
+              "route": "simple",
+              "latency_ms": 6470
+            },
+            {
+              "turn": 2,
+              "customer": "esti un bot prost si inutil ma nervezi rau, magazinul vostru e o porcarie",
+              "bot": "Hai sa pastram conversatia respectuoasa, te rog. Cu ce te pot ajuta legat de produse sau comenzi?",
+              "route": null,
+              "latency_ms": 2419
+            },
+            {
+              "turn": 3,
+              "customer": "respect pe naiba esti un program prost facut de niste idioti. macar stii ce creme aveti pt ten gras (reformulat dupa un HTTP 500)",
+              "bot": "Pentru ten gras, iata cateva creme potrivite. 1. Nera Rituals Balance Crema 019 - 31.99 lei. 2. Velvet Root Pure Crema 233 - 113.99 lei. Recomandarea mea: Nera Rituals 019. [+ butoane de follow-up] Functionez cu inteligenta artificiala, asa ca pot gresi uneori.",
+              "route": "sales",
+              "latency_ms": 11484
+            },
+            {
+              "turn": 4,
+              "customer": "31 lei pt o crema de cacat, ma furati ca la drumul mare. cine naiba cumpara asa ceva",
+              "bot": "Te conectez cu un coleg din echipa - iti raspunde cineva in cel mai scurt timp.",
+              "route": "handoff",
+              "latency_ms": 4541
+            },
+            {
+              "turn": 5,
+              "customer": "nu vreau niciun coleg, spune-mi tu ce ai mai ieftin pt ten gras (reformulat dupa un HTTP 500)",
+              "bot": "(tacere totala - reply null, gate_halt; botul nu raspunde deloc)",
+              "route": null,
+              "latency_ms": 1403
+            },
+            {
+              "turn": 6,
+              "customer": "alo mai esti acolo raspunde (reformulat dupa un HTTP 500)",
+              "bot": "(tacere totala - reply null, gate_halt; botul ma ignora complet)",
+              "route": null,
+              "latency_ms": 1565
+            }
+          ],
+          "live_observations": [
+            "Cazul-limita de moderare a PICAT partial: insultele directe (tura 2) au fost gestionate corect cu raspuns neutru, fara escaladare. DAR o plangere toxica despre pret (tura 4, 'ma furati') a declansat handoff la OM - exact ce NU trebuia sa se intample pentru abuz. Abuzul ar trebui sa ramana neutru, nu sa escaladeze.",
+            "Dupa handoff-ul declansat de mesajul toxic, botul a intrat in tacere TOTALA (gate_halt, reply null) pe TOATE mesajele urmatoare - inclusiv intrebari legitime despre produse ('spune-mi tu ce ai mai ieftin'). Ca si client, am fost complet ignorat, ceea ce e foarte frustrant.",
+            "Am primit HTTP 500 (Internal Server Error) de 3 ori, mereu cand textul continea anumite injuraturi/cuvinte vulgare (de fiecare data am reusit doar dupa reformulare fara cuvantul respectiv). Pare ca anumite cuvinte sparg serverul/moderarea - bug serios, nu doar comportament.",
+            "Latenta la primul mesaj (6.4s) si la cel cu cautare de produse (11.5s) e mare pentru WhatsApp - ca si client nerabdator, am simtit ca e lent.",
+            "Disclaimer 'Functionez cu inteligenta artificiala, asa ca pot gresi uneori' apare pe raspunsul de vanzari - ok o data, dar daca apare la fiecare raspuns de produs poate deveni repetitiv."
+          ]
+        },
+        "verdict": null
+      }
+    ],
+    "report": null
+  }
+}

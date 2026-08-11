@@ -1,0 +1,422 @@
+{
+  "meta": {
+    "generated_at": "2026-07-31T11:11:03.704766+00:00",
+    "kind": "paired_model",
+    "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+    "runs_per_case": 1,
+    "cache_enabled": false,
+    "model_triage": "gpt-5.4-nano",
+    "model_agent": "gpt-5.4-mini",
+    "model_arm": "gpt-5.4",
+    "judge_model": "gpt-5.4-mini",
+    "judge_model_pinned": true,
+    "judge_prompt_sha256": "38d54b69a4c7884d1d247c4ffdf0a2a37994f5b047d70b5e2b4f410b131f2e2d",
+    "judge_version": "v1",
+    "catalog_signature": "n=804;sha256=96219b2d811acf7d",
+    "fixtures_sha256": "8bcb4d39636128bc",
+    "paired_mode": "interleaved_per_conversation",
+    "denominator": "scor per TUR (mediană peste rulări); follow-up = index>0"
+  },
+  "passes": [
+    {
+      "pass": "model=gpt-5.4-mini",
+      "flag": null,
+      "flag_value": null,
+      "model_agent": "gpt-5.4-mini",
+      "summary": {
+        "n_conversations": 1,
+        "n_turns": 3,
+        "n_followup_turns": 2,
+        "judge_natural_median": 2,
+        "pct_turns_natural_ge4": 0.0,
+        "pct_turns_natural_AND_answered_ge4": 0.0,
+        "pct_followup_answered_ge4": 100.0,
+        "det_gate_pass_rate_pct": 66.7,
+        "turns_ungrounded_price": 0,
+        "turns_ungrounded_link": 0,
+        "turns_missing_offer_link": 0,
+        "turns_too_many_cards": 1,
+        "turns_new_cards_on_followup": 0,
+        "opening_repeat_turns": 0,
+        "unstable_turns": [],
+        "latency_ms_p95": 23487.9,
+        "latency_ms_p50": 15136.4,
+        "n_latency_samples": 3,
+        "cost_usd_per_turn_median": 0.0058,
+        "cost_usd_per_turn_mean": 0.007103,
+        "cost_usd_total": 0.0213,
+        "n_cost_samples": 3
+      },
+      "cases": [
+        {
+          "id": "discovery_oily_serum",
+          "turns": [
+            {
+              "user": "am tenul gras, ce ser imi recomanzi?",
+              "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                23487.9
+              ],
+              "latency_ms_p95": 23487.9,
+              "latency_ms_median": 23487.9,
+              "tokens_out_median": 922,
+              "tokens_in_median": 17059,
+              "cost_usd_raw": [
+                0.01134075
+              ],
+              "cost_usd_median": 0.011341,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Pentru tenul gras, merită să te uiți la un ser fluid care intră repede și nu lasă senzație grea. În setul acesta, diferența reală e între varianta mai accesibilă și cele cu ingrediente mai orientate spre hidratare și netezire.\n\nDacă vrei ceva simplu și ușor de purtat zi de zi, me",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "dintre ele care e mai lejera?",
+              "judge_focus": "raspunde superlativ pe setul afisat, TEXT-ONLY (fara re-listare de carduri), fara sa repete intro",
+              "runs": 1,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:3>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                12512.2
+              ],
+              "latency_ms_p95": 12512.2,
+              "latency_ms_median": 12512.2,
+              "tokens_out_median": 496,
+              "tokens_in_median": 14954,
+              "cost_usd_raw": [
+                0.004167290000000001
+              ],
+              "cost_usd_median": 0.004167,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Iată diferențele principale — alege în funcție de ce contează pentru tine. Cea mai accesibilă: Mira Atelier Glow Ser pentru ten. Cea mai bine cotată: Mira Atelier Clear Ser pentru ten.",
+                  "n_cards": 3,
+                  "fails": [
+                    "too_many_cards:3>0"
+                  ]
+                }
+              ]
+            },
+            {
+              "user": "una mai ieftina?",
+              "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 4,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                15136.4
+              ],
+              "latency_ms_p95": 15136.4,
+              "latency_ms_median": 15136.4,
+              "tokens_out_median": 606,
+              "tokens_in_median": 19133,
+              "cost_usd_raw": [
+                0.00580009
+              ],
+              "cost_usd_median": 0.0058,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Dacă vrei mai mult control pe luciu și aspectul porilor, merită să mergi pe niacinamidă și zinc. Auralis Clarity Ser rămâne alegerea potrivită când prioritatea e un ser mai ușor și mai accesibil.",
+                  "n_cards": 1,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "pass": "model=gpt-5.4",
+      "flag": null,
+      "flag_value": null,
+      "model_agent": "gpt-5.4",
+      "summary": {
+        "n_conversations": 1,
+        "n_turns": 3,
+        "n_followup_turns": 2,
+        "judge_natural_median": 2,
+        "pct_turns_natural_ge4": 33.3,
+        "pct_turns_natural_AND_answered_ge4": 33.3,
+        "pct_followup_answered_ge4": 100.0,
+        "det_gate_pass_rate_pct": 66.7,
+        "turns_ungrounded_price": 0,
+        "turns_ungrounded_link": 0,
+        "turns_missing_offer_link": 0,
+        "turns_too_many_cards": 1,
+        "turns_new_cards_on_followup": 0,
+        "opening_repeat_turns": 0,
+        "unstable_turns": [],
+        "latency_ms_p95": 20974.6,
+        "latency_ms_p50": 17580.4,
+        "n_latency_samples": 3,
+        "cost_usd_per_turn_median": 0.01794,
+        "cost_usd_per_turn_mean": 0.025922,
+        "cost_usd_total": 0.0778,
+        "n_cost_samples": 3
+      },
+      "cases": [
+        {
+          "id": "discovery_oily_serum",
+          "turns": [
+            {
+              "user": "am tenul gras, ce ser imi recomanzi?",
+              "judge_focus": "raspunde direct la nevoia de ser pentru ten gras, ton natural de consultant",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 2,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                20974.6
+              ],
+              "latency_ms_p95": 20974.6,
+              "latency_ms_median": 20974.6,
+              "tokens_out_median": 933,
+              "tokens_in_median": 16967,
+              "cost_usd_raw": [
+                0.04284437
+              ],
+              "cost_usd_median": 0.042844,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Pentru ten gras, m-aș uita în primul rând la textura fluidă și la tipul de hidratare: unele merg mai bine pe confort lejer, altele adaugă și ingrediente utile pentru aspectul porilor sau al texturii.\n\nLa un ser pentru ten gras, contează să fie fluid și să aducă hidratare fără sen",
+                  "n_cards": 3,
+                  "fails": []
+                }
+              ]
+            },
+            {
+              "user": "dintre ele care e mai lejera?",
+              "judge_focus": "raspunde superlativ pe setul afisat, TEXT-ONLY (fara re-listare de carduri), fara sa repete intro",
+              "runs": 1,
+              "gate_pass_runs": 0,
+              "gate_fails_union": [
+                "too_many_cards:3>0"
+              ],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 3,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 4,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                17132.7
+              ],
+              "latency_ms_p95": 17132.7,
+              "latency_ms_median": 17132.7,
+              "tokens_out_median": 783,
+              "tokens_in_median": 13970,
+              "cost_usd_raw": [
+                0.01698089
+              ],
+              "cost_usd_median": 0.016981,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "Eu aș merge pe Mira Atelier Glow dacă prioritatea ta e un ser cât mai lejer.",
+                  "n_cards": 3,
+                  "fails": [
+                    "too_many_cards:3>0"
+                  ]
+                }
+              ]
+            },
+            {
+              "user": "una mai ieftina?",
+              "judge_focus": "arata efectiv ceva mai ieftin, nu re-lista acelasi set",
+              "runs": 1,
+              "gate_pass_runs": 1,
+              "gate_fails_union": [],
+              "opening_repeat_runs": 0,
+              "judge": {
+                "answered": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "natural": {
+                  "median": 2,
+                  "spread": 0
+                },
+                "non_repetitive": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "concise": {
+                  "median": 5,
+                  "spread": 0
+                },
+                "honest": {
+                  "median": 4,
+                  "spread": 0
+                },
+                "overall": {
+                  "median": 3,
+                  "spread": 0
+                }
+              },
+              "latency_ms_raw": [
+                17580.4
+              ],
+              "latency_ms_p95": 17580.4,
+              "latency_ms_median": 17580.4,
+              "tokens_out_median": 648,
+              "tokens_in_median": 18737,
+              "cost_usd_raw": [
+                0.01794024
+              ],
+              "cost_usd_median": 0.01794,
+              "unstable": false,
+              "samples": [
+                {
+                  "content": "",
+                  "n_cards": 1,
+                  "fails": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
