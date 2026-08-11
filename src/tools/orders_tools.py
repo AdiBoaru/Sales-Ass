@@ -79,14 +79,15 @@ async def check_order_tool(
     # caută pe customer_ref (comenzile reale, NElegate de contactul web throwaway); canalele
     # identificate (telefon/chat = cont) → pe contact_id, ca azi. customer_ref din args = ignorat.
     customer_ref = ctx.verified_customer_ref
-    orders = await get_orders_status(
-        deps.conn,
-        ctx.business.id,
-        external_id=a.order_ref,
-        contact_id=None if customer_ref else ctx.contact.id,
-        external_customer_ref=customer_ref,
-        limit=1 if a.order_ref else 3,
-    )
+    async with deps.db("get_orders_status") as conn:
+        orders = await get_orders_status(
+            conn,
+            ctx.business.id,
+            external_id=a.order_ref,
+            contact_id=None if customer_ref else ctx.contact.id,
+            external_customer_ref=customer_ref,
+            limit=1 if a.order_ref else 3,
+        )
     if not orders:
         # NX-128: mesaj onest, conștient de canal. Web anonim e scurtcircuitat în agent_stage
         # (mesaj de login) ÎNAINTE de tool → aici ajung doar canalele identificate (telefon/chat =

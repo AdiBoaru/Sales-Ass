@@ -242,9 +242,10 @@ async def build_plan(
     ):
         cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
         exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
-        complementary = await get_complementary_products(
-            deps.conn, ctx.business.id, str(added["id"]), exclude_ids=exclude_ids, limit=4
-        )
+        async with deps.db("cross_sell_complementary") as conn:
+            complementary = await get_complementary_products(
+                conn, ctx.business.id, str(added["id"]), exclude_ids=exclude_ids, limit=4
+            )
         # NX-173 (P0): cross-sell-ul e un set NOU, adus direct din DB, în afara `ToolRun` → nu-l
         # vede niciun backstop de tool. Un `cart_add` perfect sigur putea trage un complement
         # contraindicat (review Codex).
@@ -288,7 +289,8 @@ async def build_plan(
     )
     if attr_query:
         ids = [p.product_id for p in ctx.state.displayed_products]
-        hydrated = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+        async with deps.db("attr_query_hydrate") as conn:
+            hydrated = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
         # NX-173 (P0): superlativ pe setul AFIȘAT = state vechi (posibil de dinaintea declarației).
         # „care e cea mai bună?" nu are voie să reintroducă un retinoid afișat la turul 1.
         hydrated = policy.gate(ctx, hydrated, purpose="attr_query")[0]
@@ -312,7 +314,8 @@ async def build_plan(
     if cheaper_intent:
         baseline = min(p.price for p in ctx.state.displayed_products)
         ref_ids = [p.product_id for p in ctx.state.displayed_products]
-        cheaper = await search_cheaper_than(deps.conn, ctx.business.id, ref_ids, baseline, limit=6)
+        async with deps.db("search_cheaper_than") as conn:
+            cheaper = await search_cheaper_than(conn, ctx.business.id, ref_ids, baseline, limit=6)
         # NX-173 (P0): „ceva mai ieftin" e o CĂUTARE NOUĂ în DB, în afara `ToolRun` → gate propriu.
         cheaper = policy.gate(ctx, cheaper, purpose="cheaper")[0]
         ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
@@ -358,7 +361,8 @@ async def build_plan(
         and not (final and _valid(final, [], run.generated_links, run.grounded_prices))
     ):
         ids = [p.product_id for p in ctx.state.displayed_products]
-        products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+        async with deps.db("rehydrate_displayed") as conn:
+            products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
         # NX-173 (P0): plasa de grounding rehidratează state vechi → gate ca pe orice altă cale.
         products = policy.gate(ctx, products, purpose="rehydrate")[0]
         rehydrated = True

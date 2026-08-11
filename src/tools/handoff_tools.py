@@ -71,14 +71,16 @@ async def request_human_tool(
             ),
         )
     a = RequestHumanArgs(**args)
-    await set_handoff(
-        deps.conn,
-        ctx.business.id,
-        ctx.conversation_id,
-        window_minutes=get_settings().handoff_window_minutes,
-        risk_flag="agent_request",
-    )
+    async with deps.db("set_handoff") as conn:
+        await set_handoff(
+            conn,
+            ctx.business.id,
+            ctx.conversation_id,
+            window_minutes=get_settings().handoff_window_minutes,
+            risk_flag="agent_request",
+        )
     ctx.emit("handoff_requested", reason="agent_request", source="agent")
+    # NX-231: POST-ul spre operator e HTTP → rulează cu conexiunea deja întoarsă în pool.
     await notify_operator(ctx, a.reason)
     return ToolResult(
         ok=True,
