@@ -67,16 +67,22 @@ async def test_conn_creates_static_provider():
         assert c is fake
 
 
-def test_conn_none_leaves_db_none():
-    # `conn=None` (multe teste de stagiu) → db rămâne None (stagiul nu-l atinge oricum).
+async def test_conn_none_still_gets_a_provider():
+    # NX-231: stagiile apelează ÎNTOTDEAUNA `deps.db(...)`. Testele care construiesc
+    # `PipelineDeps(llm=...)` fără conexiune (și monkeypatch-uiesc query-ul) trebuie să primească
+    # exact ce primeau prin `deps.conn`: None. `db=None` ar fi dat TypeError pe o cale care mergea.
     deps = PipelineDeps(conn=None, llm=None)
-    assert deps.db is None
+    assert deps.db is not None
+    async with deps.db("op") as c:
+        assert c is None
 
 
-def test_no_args_is_valid():
+async def test_no_args_is_valid():
     # toate câmpurile au default → construcție goală validă (loosening inofensiv).
     deps = PipelineDeps()
-    assert deps.conn is None and deps.db is None
+    assert deps.conn is None
+    async with deps.db() as c:  # eticheta e opțională → apelul vechi `db()` rămâne valid
+        assert c is None
 
 
 async def test_explicit_db_wins_over_conn():

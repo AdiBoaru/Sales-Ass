@@ -44,14 +44,16 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
     # excepția „produs desfăcut" pe o întrebare generică de retur. Tool-ul NU clarifică (agentul
     # gestionează dialogul) — la ambiguitate/miss întoarce vederea neutră. Kill-switch → top-1.
     if s.faq_rerank_enabled:
-        cands = await semantic_topk(
-            deps.conn,
-            ctx.business.id,
-            ctx.language,
-            emb,
-            embedding_model=s.model_embed,
-            k=s.faq_topk,
-        )
+        # NX-231: embed-ul (extern) e deja făcut → checkout scurt doar cât ține lookup-ul.
+        async with deps.db("faq_tool_topk") as conn:
+            cands = await semantic_topk(
+                conn,
+                ctx.business.id,
+                ctx.language,
+                emb,
+                embedding_model=s.model_embed,
+                k=s.faq_topk,
+            )
         decision = rerank(
             canon,
             [
@@ -65,9 +67,10 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
             else None
         )
     else:
-        hit = await semantic_lookup(
-            deps.conn, ctx.business.id, ctx.language, emb, embedding_model=s.model_embed
-        )
+        async with deps.db("faq_tool_lookup") as conn:
+            hit = await semantic_lookup(
+                conn, ctx.business.id, ctx.language, emb, embedding_model=s.model_embed
+            )
     if hit is None or float(hit["similarity"]) < s.faq_tau_tool:
         return ToolResult(
             ok=True,

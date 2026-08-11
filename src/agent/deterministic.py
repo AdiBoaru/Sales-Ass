@@ -253,7 +253,8 @@ async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str
         ctx.emit("review_intent", served=0, reason="ambiguous", candidates=len(refs))
         return
 
-    products = await get_products_by_ids(deps.conn, ctx.business.id, [selected.product_id], limit=1)
+    async with deps.db("review_intent_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [selected.product_id], limit=1)
     products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="review_intent")[0]
     if not products:
         ctx.set_reply(
@@ -356,7 +357,8 @@ async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str
         ctx.emit("detail_intent", served=0, reason="ambiguous", candidates=len(refs))
         return
 
-    products = await get_products_by_ids(deps.conn, ctx.business.id, [selected.product_id], limit=1)
+    async with deps.db("detail_intent_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [selected.product_id], limit=1)
     products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
     if not products:
         ctx.set_reply(_detail_copy(ctx.language)["unavailable"], cacheable=False)
@@ -379,7 +381,8 @@ async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
     (sursa de adevăr). Link real → Offer(open_url) + card(uri); `product_url` NULL (gaură de date
     demo) → mesaj ONEST, NU link inventat (PP-F4). Mereu setează un reply (P6, niciodată tăcere)."""
     ids = [p.product_id for p in ctx.state.displayed_products]
-    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+    async with deps.db("link_intent_products") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
     # NX-173 (P0): `displayed_products` e STATE VECHI — poate conține produse afișate ÎNAINTE ca
     # clientul să declare contextul („arată-mi seruri" → „sunt însărcinată, dă-mi linkul"). Calea
     # asta iese înainte de tool loop, deci backstop-ul din executor n-o vede: gate aici, ori deloc.
@@ -426,7 +429,8 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     corect). <2 valide → False → cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
     n = 4 if _FOUR_RE.search(query) else (3 if _THREE_RE.search(query) else 2)
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
-    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=n)
+    async with deps.db("compare_intent_products") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=n)
     # NX-173 (P0): ca la link — set vechi din state, cale care ocolește tool loop-ul. Dacă
     # gate-ul taie sub 2, întoarcem False → cade pe bucla LLM, care caută FRESH (deja filtrat de
     # policy) — nu comparăm tăcut ce a mai rămas și nu prezentăm produsul exclus.
@@ -442,9 +446,10 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
         # Lipsa metadatelor este fail-open, la fel ca produse fără path: comparația rămâne utilă
         # chiar dacă query-ul opțional de coerență nu poate rula într-un adaptor degradat.
         try:
-            roots = await product_category_roots(
-                deps.conn, ctx.business.id, [p["id"] for p in products]
-            )
+            async with deps.db("product_category_roots") as conn:
+                roots = await product_category_roots(
+                    conn, ctx.business.id, [p["id"] for p in products]
+                )
         except Exception:  # noqa: BLE001 — metadate opționale; produsele sunt deja grounded
             roots = {}
             ctx.emit("compare_coherence_unavailable")

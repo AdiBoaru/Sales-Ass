@@ -13,6 +13,7 @@ import pytest
 
 from src.channels.base import ChannelSenderRegistry
 from src.db.connection import close_pool, get_pool
+from src.db.provider import static_db
 from src.db.queries.businesses import load_business
 from src.db.queries.outbox import business_ids_with_due_outbox, claim_due
 from src.worker.dispatcher import dispatch_row
@@ -85,7 +86,7 @@ def _registry(sender, kind="whatsapp") -> ChannelSenderRegistry:
 async def _enqueue_via_turn(conn, channel_id):
     """Produce un rând de outbox prin fluxul real (handle_turn echo)."""
     biz = await load_business(conn, DEMO_BIZ)
-    result = await handle_turn(conn, biz, channel_id, _event())
+    result = await handle_turn(static_db(conn), biz, channel_id, _event())
     return result
 
 
@@ -143,7 +144,7 @@ async def test_dispatch_row_success_marks_sent_and_links_wamid(pool):
         row = await _claim_mine(conn, turn)
 
         meta = FakeMeta()
-        status = await dispatch_row(conn, DEMO_BIZ, _registry(meta), row)
+        status = await dispatch_row(static_db(conn), DEMO_BIZ, _registry(meta), row)
 
         assert status == "sent"
         assert len(meta.calls) == 1  # un singur apel pe canal
@@ -176,7 +177,7 @@ async def test_dispatch_row_failure_marks_failed_with_backoff(pool):
         row = await _claim_mine(conn, turn)
 
         meta = FakeMeta(fail=httpx.ConnectError("boom"))
-        status = await dispatch_row(conn, DEMO_BIZ, _registry(meta), row)
+        status = await dispatch_row(static_db(conn), DEMO_BIZ, _registry(meta), row)
 
         assert status == "failed"
         ob = await conn.fetchrow(
@@ -195,7 +196,7 @@ async def test_dispatch_row_unknown_channel_is_dead(pool):
         turn = await _enqueue_via_turn(conn, channel_id)
         row = await _claim_mine(conn, turn)
         empty_registry = ChannelSenderRegistry()  # niciun sender
-        status = await dispatch_row(conn, DEMO_BIZ, empty_registry, row)
+        status = await dispatch_row(static_db(conn), DEMO_BIZ, empty_registry, row)
         assert status == "dead"
 
 

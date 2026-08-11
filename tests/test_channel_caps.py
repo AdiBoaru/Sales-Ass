@@ -9,6 +9,7 @@ import pytest
 from src.channels.base import CAPABILITY_METHODS, Capability
 from src.channels.telegram.client import TelegramClient
 from src.channels.web.sender import WebSender
+from src.db.provider import static_db
 from src.meta_client import MetaClient
 from src.worker import dispatcher as disp
 from src.worker.dispatcher import choose_render
@@ -190,7 +191,7 @@ def _stub_outbox(monkeypatch):
 async def test_dispatch_rich_calls_send_rich(_stub_outbox):
     sender = _FakeSender(RICH_CAPS)
     payload = {"type": "text", "to": "u", "rich": {"items": []}, "text": "floor", "message_id": "m"}
-    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    status = await disp.dispatch_row(static_db(_FakeConn()), "biz", _reg(sender), _row(payload))
     assert status == "sent" and sender.calls == ["send_rich"]
 
 
@@ -203,7 +204,7 @@ async def test_dispatch_products_degrades_to_text_on_text_only(_stub_outbox):
         "text": "lead",
         "message_id": "m",
     }
-    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    status = await disp.dispatch_row(static_db(_FakeConn()), "biz", _reg(sender), _row(payload))
     assert status == "sent" and sender.calls == ["send_text"]  # degradare grațioasă (P6)
 
 
@@ -216,7 +217,7 @@ async def test_dispatch_carousel_degrades_to_products_with_cards(_stub_outbox):
         "text": "t",
         "message_id": "m",
     }
-    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    status = await disp.dispatch_row(static_db(_FakeConn()), "biz", _reg(sender), _row(payload))
     assert status == "sent" and sender.calls == ["send_products"]
 
 
@@ -232,7 +233,7 @@ async def test_dispatch_template_calls_send_template(_stub_outbox):
         "params": ["123", "FAN"],
         "message_id": "m",
     }
-    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    status = await disp.dispatch_row(static_db(_FakeConn()), "biz", _reg(sender), _row(payload))
     assert status == "sent" and sender.calls == ["send_template"]
 
 
@@ -248,7 +249,7 @@ async def test_dispatch_template_degrades_to_text_without_cap(_stub_outbox):
         "params": ["123", "FAN"],
         "message_id": "m",
     }
-    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    status = await disp.dispatch_row(static_db(_FakeConn()), "biz", _reg(sender), _row(payload))
     assert status == "sent" and sender.calls == ["send_text"]
 
 
@@ -262,6 +263,6 @@ async def test_dispatch_edit_media_dead_without_edit_cap(_stub_outbox):
         "index": 1,
         "message_id": "m",
     }
-    status = await disp.dispatch_row(_FakeConn(), "biz", _reg(sender), _row(payload))
+    status = await disp.dispatch_row(static_db(_FakeConn()), "biz", _reg(sender), _row(payload))
     assert status == "dead" and sender.calls == []  # nu degradează la text
     assert "edit_media" in _stub_outbox["err"]

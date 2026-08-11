@@ -156,7 +156,7 @@ def _setup_chat(monkeypatch, redis):
     monkeypatch.setattr(wa, "get_redis", lambda: _coro(redis))
     monkeypatch.setattr(wa, "get_pool", lambda: _coro(None))
     monkeypatch.setattr(wa, "admin_conn", _fake_cm)
-    monkeypatch.setattr(wa, "tenant_conn", _fake_cm)
+    monkeypatch.setattr(wa, "tenant_db", lambda business_id: _fake_cm)
     monkeypatch.setattr(wa, "resolve_channel", fake_resolve_channel)
     monkeypatch.setattr(wa, "load_business", fake_load_business)
     monkeypatch.setattr(wa, "handle_turn", fake_handle_turn)

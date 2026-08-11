@@ -1354,6 +1354,7 @@ rollup_usage
 ```
 
 ```claim:flags
+admission_distributed_enabled = true
 admission_enabled = true
 ai_disclaimer_enabled = false
 alias_enabled = true
@@ -1377,6 +1378,8 @@ conv_lock_enabled = true
 conversation_facts_enabled = true
 cost_guard_enabled = true
 cross_sell_enabled = true
+db_op_metrics_enabled = true
+db_query_timing_enabled = false
 decision_axes_enabled = true
 demand_rollup_enabled = true
 detail_intent_enabled = true
@@ -1438,6 +1441,7 @@ validator_bare_numbers_enabled = true
 validator_claims_enabled = true
 validator_stock_claims_enabled = false
 vision_enabled = true
+web_admission_enabled = true
 web_demo_access_enabled = false
 web_enabled = false
 web_identity_enabled = false

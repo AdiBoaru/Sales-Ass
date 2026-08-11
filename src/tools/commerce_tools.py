@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from src.analytics.demand import clean_ids
 from src.config import get_settings
+from src.db.provider import db_tx
 from src.db.queries.catalog import get_products_by_ids
 from src.db.queries.commerce import (
     create_checkout_link,
@@ -96,7 +97,8 @@ async def checkout_link_tool(
 
     # Validăm produsele contra catalogului (scoped pe business) — nu linkuim ce nu există.
     ids = list(dict.fromkeys(it.product_id for it in a.cart_items))
-    products = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=6)
+    async with deps.db("checkout_link_products") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
     by_id = {p["id"]: p for p in products}
 
     cart: list[dict[str, Any]] = []
@@ -144,16 +146,17 @@ async def checkout_link_tool(
     sep = "&" if "?" in base else "?"
     url = f"{base}{sep}ref={ctx.turn_id}"
     expires_at = datetime.now(UTC) + timedelta(days=get_settings().checkout_link_ttl_days)
-    await create_checkout_link(
-        deps.conn,
-        ctx.business.id,
-        ctx.conversation_id,
-        ctx.contact.id,
-        ctx.turn_id,  # ref_code = turn_id → idempotent per tur
-        cart,
-        url,
-        expires_at,
-    )
+    async with deps.db("create_checkout_link") as conn:
+        await create_checkout_link(
+            conn,
+            ctx.business.id,
+            ctx.conversation_id,
+            ctx.contact.id,
+            ctx.turn_id,  # ref_code = turn_id → idempotent per tur
+            cart,
+            url,
+            expires_at,
+        )
     total = round(total, 2)
     # NX-163: ce a ajuns în checkout, ca ref-uri (P8) — leagă recomandare→coș→comandă în raportul de
     # cerere (NX-164). Doar product_id-uri, fără PII.
@@ -195,7 +198,8 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
     Validează produsul contra catalogului (scoped pe business); merge pe (product_id, variant_id)
     → re-apel crește cantitatea, nu duplică linia. Întoarce totalul grounded (validator, P8)."""
     a = CartAddArgs(**args)
-    products = await get_products_by_ids(deps.conn, ctx.business.id, [a.product_id], limit=1)
+    async with deps.db("cart_add_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [a.product_id], limit=1)
     p = products[0] if products else None
     if p is None or p.get("price") is None:
         return ToolResult(
@@ -271,7 +275,8 @@ async def reorder_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any
             reason="web_unidentified_reorder",
         )
         return ToolResult(ok=False, error="login_required", llm_view=login_required_for_ctx(ctx))
-    orders = await get_orders_status(deps.conn, ctx.business.id, contact_id=ctx.contact.id, limit=3)
+    async with deps.db("reorder_history") as conn:
+        orders = await get_orders_status(conn, ctx.business.id, contact_id=ctx.contact.id, limit=3)
     if not orders:
         return ToolResult(
             ok=False, error="no_orders", llm_view="Nu găsesc comenzi anterioare pe contul tău."
@@ -307,7 +312,8 @@ async def subscribe_back_in_stock_tool(
     cu guard pe `variant_id IS NULL` (NULL distinct în UNIQUE → ON CONFLICT nu prinde). NU
     trimite confirmarea de restock — aia e proactivul (NX-70), care citește rândul scris aici."""
     a = BackInStockArgs(**args)
-    products = await get_products_by_ids(deps.conn, ctx.business.id, [a.product_id], limit=1)
+    async with deps.db("back_in_stock_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [a.product_id], limit=1)
     if not products:
         return ToolResult(ok=False, error="not_found", llm_view="Produsul nu există în catalog.")
     p = products[0]
@@ -324,16 +330,26 @@ async def subscribe_back_in_stock_tool(
             products=[p],
             llm_view=f"{p['name']} este pe stoc acum — nu e nevoie de notificare.",
         )
-    # Guard variant NULL: dacă deja abonat, nu mai inserăm (evită duplicatul pe NULL distinct).
-    if a.variant_id is None and await has_back_in_stock_sub(
-        deps.conn, ctx.business.id, ctx.contact.id, a.product_id, None
-    ):
+    # NX-231: check-then-insert e o SINGURĂ operație atomică → un checkout scurt + o tranzacție
+    # internă (`db_tx`), nu o conexiune ținută între apeluri de tool. Guard variant NULL: dacă
+    # deja abonat, nu mai inserăm (în Postgres NULL e DISTINCT în UNIQUE → ON CONFLICT nu prinde);
+    # fără tranzacție, două tururi concurente ale aceluiași client puteau strecura un duplicat
+    # între verificare și insert.
+    async with db_tx(deps.db, "back_in_stock_subscribe") as conn:
+        already = a.variant_id is None and await has_back_in_stock_sub(
+            conn, ctx.business.id, ctx.contact.id, a.product_id, None
+        )
+        res = (
+            None
+            if already
+            else await subscribe_back_in_stock(
+                conn, ctx.business.id, ctx.contact.id, a.product_id, a.variant_id
+            )
+        )
+    if already:
         ctx.emit("back_in_stock_subscribed", product_id=a.product_id, created=False)
         return ToolResult(
             ok=True, products=[p], llm_view=f"Ești deja pe lista de notificare pentru {p['name']}."
         )
-    res = await subscribe_back_in_stock(
-        deps.conn, ctx.business.id, ctx.contact.id, a.product_id, a.variant_id
-    )
     ctx.emit("back_in_stock_subscribed", product_id=a.product_id, created=res["created"])
     return ToolResult(ok=True, products=[p], llm_view=f"Te anunț când {p['name']} revine pe stoc.")

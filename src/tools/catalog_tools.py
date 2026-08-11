@@ -622,15 +622,14 @@ async def continue_search_session(
     page_ids, new_cursor = _next_page(pool, cursor, seen, limit)
     page = int(sess.get("page") or 0) + 1
     ctx.state_patch["active_search"] = {**sess, "cursor": new_cursor, "page": page}
-    products = (
+    products: list[dict[str, Any]] = []
+    if page_ids:
         # NX-171c: pagina servește produse NOI nevăzute din pool → respectă filtrul published
         # (spre deosebire de re-hidratarea produselor deja afișate, care NU se filtrează).
-        await get_products_by_ids(
-            deps.conn, ctx.business.id, page_ids, limit=limit, respect_content_status=True
-        )
-        if page_ids
-        else []
-    )
+        async with deps.db("search_page_products") as conn:
+            products = await get_products_by_ids(
+                conn, ctx.business.id, page_ids, limit=limit, respect_content_status=True
+            )
     # NX-173 (P0): pool-ul poate fi SEMĂNAT ÎNAINTE ca clientul să declare contextul („arată-mi
     # seruri" → „…dar sunt însărcinată" → „mai arată-mi") sau de un build fără gate. Re-filtrăm la
     # servire — pool-ul stocat nu e de încredere, doar ce iese pe pagină contează.
@@ -747,7 +746,14 @@ async def search_products_tool(
     # milisecunde → buget de timp explicit (P4). Două events distincte: lent (`embed_timeout`) vs
     # mort (`embed_failed`) — fără ele degradarea semantică rămâne invizibilă (layer mort tăcut).
     query_vec: list[float] | None = None
-    if deps.llm is not None and await has_embeddings(deps.conn, ctx.business.id):
+    embeddings_available = False
+    if deps.llm is not None:
+        # NX-231: checkout scurt DOAR pentru verificare; embed-ul de mai jos (extern, cu buget de
+        # timp propriu) rulează cu poolul liber — el era exact locul unde o conexiune stătea
+        # blocată pe timp de rețea.
+        async with deps.db("has_embeddings") as conn:
+            embeddings_available = await has_embeddings(conn, ctx.business.id)
+    if embeddings_available:
         timeout_ms = get_settings().embed_timeout_ms
         try:
             call = deps.llm.embed([a.query])
@@ -780,56 +786,60 @@ async def search_products_tool(
     relax_depth = 0  # treapta de relaxare la care s-a oprit (0 = filtre stricte)
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
     top_cosine = None  # cea mai mică distanță cosine (cel mai apropiat vector) — semnal de calitate
-    for i, f in enumerate(ladder):
-        lexical = await search_products_lexical(
-            deps.conn,
-            ctx.business.id,
-            query_text=a.query,
-            price_max=f["price_max"],
-            concerns=f["concerns"],
-            features=f["features"],
-            searchable_facets=searchable_facets,
-            variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
-            category=f["category"],
-            brand=a.brand,
-            sort_mode=a.sort_mode,
-            in_stock_only=f["in_stock_only"],
-            pool=_FUSION_POOL,
-        )
-        vector: list[dict[str, Any]] = []
-        if query_vec is not None:
-            try:
-                vector = await search_products_semantic(
-                    deps.conn,
-                    ctx.business.id,
-                    query_vec,
-                    price_max=f["price_max"],
-                    concerns=f["concerns"],
-                    features=f["features"],
-                    searchable_facets=searchable_facets,
-                    variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă
-                    category=f["category"],
-                    brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
-                    sort_mode=a.sort_mode,
-                    in_stock_only=f["in_stock_only"],
-                    pool=_FUSION_POOL,
-                )
-            except Exception:  # noqa: BLE001 — semantic pică în tur → lexical rămâne (P6)
-                vector = []
-        relax_depth, lexical_pool_n, vector_pool_n = i, len(lexical), len(vector)
-        cosines = [p["cosine_distance"] for p in vector if p.get("cosine_distance") is not None]
-        if cosines:
-            top_cosine = min(cosines)
-        ranked = fuse_candidates(
-            lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys, weights=rank_weights
-        )
-        had_any_match = had_any_match or bool(ranked)
-        if ranked:
-            ranked_final = ranked
-            vector_final = vector
-            relaxed = i > 0
-            winning_step = f
-            break
+    # NX-231: treptele de relaxare sunt PUR DB (fuziunea/rankarea sunt cod pur, fără await extern)
+    # → un singur checkout pentru toată scara, eliberat înainte de restul tool-ului. Embed-ul a
+    # rulat deja, mai sus, cu poolul liber.
+    async with deps.db("search_products_ladder") as conn:
+        for i, f in enumerate(ladder):
+            lexical = await search_products_lexical(
+                conn,
+                ctx.business.id,
+                query_text=a.query,
+                price_max=f["price_max"],
+                concerns=f["concerns"],
+                features=f["features"],
+                searchable_facets=searchable_facets,
+                variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
+                category=f["category"],
+                brand=a.brand,
+                sort_mode=a.sort_mode,
+                in_stock_only=f["in_stock_only"],
+                pool=_FUSION_POOL,
+            )
+            vector: list[dict[str, Any]] = []
+            if query_vec is not None:
+                try:
+                    vector = await search_products_semantic(
+                        conn,
+                        ctx.business.id,
+                        query_vec,
+                        price_max=f["price_max"],
+                        concerns=f["concerns"],
+                        features=f["features"],
+                        searchable_facets=searchable_facets,
+                        variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă
+                        category=f["category"],
+                        brand=a.brand,  # brand = filtru DUR și pe vector (nu se relaxează)
+                        sort_mode=a.sort_mode,
+                        in_stock_only=f["in_stock_only"],
+                        pool=_FUSION_POOL,
+                    )
+                except Exception:  # noqa: BLE001 — semantic pică în tur → lexical rămâne (P6)
+                    vector = []
+            relax_depth, lexical_pool_n, vector_pool_n = i, len(lexical), len(vector)
+            cosines = [p["cosine_distance"] for p in vector if p.get("cosine_distance") is not None]
+            if cosines:
+                top_cosine = min(cosines)
+            ranked = fuse_candidates(
+                lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys, weights=rank_weights
+            )
+            had_any_match = had_any_match or bool(ranked)
+            if ranked:
+                ranked_final = ranked
+                vector_final = vector
+                relaxed = i > 0
+                winning_step = f
+                break
 
     # NX-173 (P0): gate de contraindicații pe setul FUZIONAT, ÎNAINTE de diversificare/pool/pagină.
     # Poziția e esențială: `pool_ids` (mai jos) semănează sesiunea din `ranked_final`, iar sesiunea
@@ -921,15 +931,16 @@ async def search_products_tool(
         # căutare fără filtrul de variantă. Produs prezent → «missing_variant» (extinde gama);
         # absent → cade pe «no_result» (adu în catalog). Precizia contează: eticheta greșită aici
         # trimite comerciantul să cumpere stoc de care n-are nevoie.
-        base = await search_products_lexical(
-            deps.conn,
-            ctx.business.id,
-            query_text=a.query,
-            category=a.category,
-            brand=a.brand,
-            searchable_facets=searchable_facets,
-            pool=6,
-        )
+        async with deps.db("search_variant_probe") as conn:
+            base = await search_products_lexical(
+                conn,
+                ctx.business.id,
+                query_text=a.query,
+                category=a.category,
+                brand=a.brand,
+                searchable_facets=searchable_facets,
+                pool=6,
+            )
         ctx.emit(
             "unmet_query",
             reason="missing_variant" if base else "no_result",
@@ -1063,7 +1074,8 @@ async def get_product_details_tool(
 ) -> ToolResult:
     """Detalii complete + rezumat de recenzii (D3) pentru un produs."""
     a = DetailArgs(**args)
-    products = await get_products_by_ids(deps.conn, ctx.business.id, [a.product_id], limit=1)
+    async with deps.db("get_product_details") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [a.product_id], limit=1)
     if not products:
         return ToolResult(ok=False, error="not_found", llm_view="Produsul nu există în catalog.")
     # NX-173 (P0): și calea de DETALIU e o cale de afișare — „spune-mi mai multe despre X" nu are
@@ -1093,7 +1105,8 @@ async def get_product_details_tool(
             brand=p.get("brand"),
             locale=ctx.language,
         )
-        subs = await get_substitutes(deps.conn, ctx.business.id, p["id"], limit=2)
+        async with deps.db("get_substitutes") as conn:
+            subs = await get_substitutes(conn, ctx.business.id, p["id"], limit=2)
         subs, _ = _safety_gate(ctx, subs, purpose="details")
         if subs:
             alt = "; ".join(f"[{s['id']}] {s['name']} — {float(s['price']):.2f} lei" for s in subs)
@@ -1108,7 +1121,8 @@ async def compare_products_tool(
 ) -> ToolResult:
     """Compară 2-4 produse (preț, rating, plusuri/minusuri din recenzii)."""
     a = CompareArgs(**args)
-    products = await get_products_by_ids(deps.conn, ctx.business.id, a.product_ids, limit=4)
+    async with deps.db("compare_products") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, a.product_ids, limit=4)
     # NX-173 (P0): comparația e tot afișare — un produs exclus nu are voie să reintre pe ușa asta.
     # Gate ÎNAINTE de pragul `need_2`: dacă din 2 produse unul e contraindicat, rezultatul corect e
     # „nu compar asta", nu o comparație tăcută pe restul (și nici `need_2`, care ar minți despre

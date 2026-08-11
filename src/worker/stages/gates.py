@@ -314,7 +314,8 @@ async def _record_flag_and_maybe_block(ctx: TurnContext, deps: PipelineDeps) -> 
         if count == 1:
             await deps.redis.expire(key, _FLAG_WINDOW_S)
         if count >= get_settings().moderation_block_threshold:
-            await block_contact(deps.conn, ctx.business.id, ctx.contact.id)
+            async with deps.db("block_contact") as conn:
+                await block_contact(conn, ctx.business.id, ctx.contact.id)
             ctx.emit("contact_blocked", flag_count=count)
     except Exception as e:  # noqa: BLE001 — contorul e best-effort, răspunsul neutru rămâne
         log.warning("moderation: contor/blocklist eșuat (%s)", type(e).__name__)
@@ -470,7 +471,8 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         if not handoff_enabled_for(ctx.message.channel_kind):
             ctx.emit("handoff_suppressed", reason=reason, source="risk")
         else:
-            await request_human(deps.conn, ctx, reason, source="risk")
+            async with deps.db("set_handoff") as conn:
+                await request_human(conn, ctx, reason, source="risk")
             # NX-126: necacheabil — escaladarea scrisă în semantic_cache ar fi servită altui user
             # FĂRĂ ca un om să fie notificat (cache poisoning → tăcere de facto, încalcă P6).
             ctx.set_reply("Te conectez cu un coleg, revin imediat 🙂", cacheable=False)

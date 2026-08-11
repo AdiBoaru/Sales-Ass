@@ -1,0 +1,14 @@
+{
+  "_doc": [
+    "Excepții pentru scripts/check_no_raw_conn.py (NX-231). O intrare FĂRĂ `reason` e refuzată",
+    "explicit de checker: o regulă dezactivată în tăcere e mai rea decât o regulă absentă.",
+    "Format: {rule: R1|R2|R3, path: cale relativă cu /, detail: exact ce a raportat checkerul,",
+    "reason: de ce e legitim}. `detail` trebuie să fie identic cu textul din raport — o excepție",
+    "nu are voie să acopere din greșeală un caz vecin.",
+    "",
+    "Starea la închiderea NX-231: LISTĂ GOALĂ. Calea de runtime nu mai are nicio conexiune ținută",
+    "peste un await extern, deci nu există nimic de scutit. Dacă lista începe să crească, ăsta e",
+    "semnalul că invariantul se erodează — nu că regula e prea strictă."
+  ],
+  "allow": []
+}

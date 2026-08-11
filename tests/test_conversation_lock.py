@@ -96,11 +96,11 @@ def _patch_pipeline(monkeypatch, calls, *, conv_lock_enabled=True):
     async def fake_load_business(conn, bid):
         return BusinessConfig(id="b", slug="s", name="n")
 
-    async def fake_handle_turn(conn, business, channel_id, event, **k):
+    async def fake_handle_turn(db, business, channel_id, event, **k):
         calls.append("handle_turn")
 
     monkeypatch.setattr(cons, "admin_conn", _acm)
-    monkeypatch.setattr(cons, "tenant_conn", _acm)
+    monkeypatch.setattr(cons, "tenant_db", lambda business_id: _acm)
     monkeypatch.setattr(cons, "resolve_channel", fake_resolve)
     monkeypatch.setattr(cons, "load_business", fake_load_business)
     monkeypatch.setattr(cons, "handle_turn", fake_handle_turn)

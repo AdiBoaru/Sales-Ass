@@ -41,6 +41,7 @@ async def language_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # Persistă → limba „se lipește" pentru tururile următoare. Best-effort: un eșec
     # nu rupe turul (limba detectată rămâne pe ctx pentru ACEST tur).
     try:
-        await set_conversation_locale(deps.conn, ctx.business.id, ctx.conversation_id, detected)
+        async with deps.db("set_conversation_locale") as conn:
+            await set_conversation_locale(conn, ctx.business.id, ctx.conversation_id, detected)
     except Exception as e:  # noqa: BLE001 — persist best-effort
         log.warning("language: persist locale eșuat (%s)", type(e).__name__)

@@ -754,6 +754,14 @@ class Settings(BaseSettings):
     # observabilitate (P10), ZERO PII (P12 — business_id e UUID de tenant). OFF → nu se emite
     # evenimentul (gauge-ul inflight din pool_metrics rămâne, folosit și de health).
     pool_metrics_enabled: bool = Field(default=True, validation_alias="POOL_METRICS_ENABLED")
+    # NX-231: `db_ops` per tur — cât ține FIECARE operație conexiunea (checkout/hold pe operație).
+    # Cu conn-per-op un tur face N checkout-uri, nu unul: fără defalcare nu poți spune care
+    # operație e cea care contează. Pur observabilitate (P10), zero PII (nume de operație din cod).
+    db_op_metrics_enabled: bool = Field(default=True, validation_alias="DB_OP_METRICS_ENABLED")
+    # Mod DIAGNOSTIC: proxy de timing pe conexiune → `query_ms` real, deci `idle_held_ms` real
+    # (hold − query). E cifra care demonstrează fix-ul, dar cere un wrapper pe fiecare query →
+    # OFF pe calea fierbinte, ON doar la rularea de raport (scripts/sim/conn_hold_probe.py).
+    db_query_timing_enabled: bool = Field(default=False, validation_alias="DB_QUERY_TIMING_ENABLED")
 
     # --- Admission control (NX-161 Felia 0C) — frâna EXPLICITĂ de concurență a tururilor ---
     # Semafor GLOBAL: câte tururi procesează SIMULTAN (bounds LLM concurrency). Poolul DB (max 10) e
@@ -779,6 +787,35 @@ class Settings(BaseSettings):
     admission_requeue_warn_every: int = Field(
         default=20, validation_alias="ADMISSION_REQUEUE_WARN_EVERY"
     )
+
+    # --- Admission DISTRIBUIT (NX-231) ---
+    # 0C avea un semafor PER PROCES: cu N replici, capacitatea reală era N × cap, tăcut. Conn-per-op
+    # scoate poolul DB din rolul de frână accidentală, deci frâna trebuie să fie reală și comună.
+    # Backend Redis (aceeași instanță ca lock-ul de tur), leasing cu TTL → o replică moartă nu-și
+    # ține sloturile la infinit.
+    admission_distributed_enabled: bool = Field(
+        default=True, validation_alias="ADMISSION_DISTRIBUTED_ENABLED"
+    )
+    # TTL-ul unui slot (lease). Peste el, slotul e considerat abandonat și recuperat de următorul
+    # acquire. Trebuie > durata maximă plauzibilă a unui tur (LLM lent), altfel se eliberează sub
+    # un tur încă viu; menținut mic cât să nu blocheze capacitatea după un crash.
+    admission_lease_ttl_ms: int = Field(default=120_000, validation_alias="ADMISSION_LEASE_TTL_MS")
+    # Fairness: plafonul per-business e ACTIV implicit acum (0C îl avea 0 = off). Un tenant în
+    # burst nu poate lua mai mult decât atât din capacitatea globală → alt tenant găsește mereu loc.
+    admission_max_per_business_distributed: int = Field(
+        default=6, validation_alias="ADMISSION_MAX_PER_BUSINESS_DISTRIBUTED"
+    )
+    # Store indisponibil (Redis jos) → NU „cap N×proces în tăcere". Cădem pe un semafor local
+    # BOUNDED, explicit mai mic, și raportăm `admission_degraded`. 0 = fail-closed total (respinge
+    # traficul nou cât timp nu putem coordona).
+    admission_local_fallback_max: int = Field(
+        default=4, validation_alias="ADMISSION_LOCAL_FALLBACK_MAX"
+    )
+    # Deadline de așteptare în coadă pe calea SINCRONĂ web (request/response). Mai scurt decât cel
+    # al workerului: acolo re-queue-ul e gratis, aici clientul stă pe un socket deschis.
+    admission_web_wait_ms: int = Field(default=1500, validation_alias="ADMISSION_WEB_WAIT_MS")
+    # Poarta de admission pe ruta web sincronă. OFF → comportamentul de dinainte (web fără frână).
+    web_admission_enabled: bool = Field(default=True, validation_alias="WEB_ADMISSION_ENABLED")
 
     @property
     def is_prod(self) -> bool:

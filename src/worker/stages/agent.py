@@ -100,8 +100,9 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     """Citește categoriile + aliasele aprobate (scoped pe business) și compune `PromptInputs`
     (NX-78). Determinist (query-uri `order by`) → prefix de cache stabil. Ridicarea unei
     excepții de DB se propagă în `try`-ul din `agent_stage` (→ echo fallback, P6)."""
-    categories = await list_category_names(deps.conn, ctx.business.id)
-    aliases = await list_routing_aliases(deps.conn, ctx.business.id)
+    async with deps.db("prompt_inputs") as conn:
+        categories = await list_category_names(conn, ctx.business.id)
+        aliases = await list_routing_aliases(conn, ctx.business.id)
     # NX-159 felia 3 / NX-165: profilul de STIL (DomainPack) intră în TOATE system-urile de
     # compunere (buclă/retry/rich). Gated; pack absent / OFF → None → prefix byte-identic.
     pack = getattr(ctx.business, "domain_pack", None)
@@ -249,7 +250,8 @@ async def _prune_displayed(ctx: TurnContext, deps: PipelineDeps, policy: SafetyP
         return
     ids = [p.product_id for p in displayed]
     try:
-        hydrated = await get_products_by_ids(deps.conn, ctx.business.id, ids, limit=len(ids))
+        async with deps.db("safety_prune_displayed") as conn:
+            hydrated = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
     except Exception as e:  # noqa: BLE001 — prune best-effort; garanția reală e la rehidratare
         log.warning("safety: prune displayed eșuat (%s) — state neatins", type(e).__name__)
         return

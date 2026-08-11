@@ -28,8 +28,10 @@ import src.worker.stages.cache as cache_mod
 import src.worker.stages.faq as faq_mod
 import src.worker.stages.triage as triage_mod
 from src.agent import planner as planner_mod
+from src.db.provider import static_db
 from src.models import BusinessConfig, Contact
 from src.tools import catalog_tools as ct
+from src.worker import turn_uow as uow
 from src.worker.runner import DEFAULT_STAGES
 from src.worker.stages import agent as agent_mod
 
@@ -254,17 +256,17 @@ def store(monkeypatch):
     async def _noop_profile(*a, **k):
         return None
 
-    monkeypatch.setattr(proc, "claim_inbound", _claim_inbound)
-    monkeypatch.setattr(proc, "mark_inbound_completed", _mark_completed)
-    monkeypatch.setattr(proc, "get_or_create_contact", _get_contact)
-    monkeypatch.setattr(proc, "get_or_create_conversation", _get_conv)
-    monkeypatch.setattr(proc, "touch_last_inbound", _touch_inbound)
-    monkeypatch.setattr(proc, "insert_message", _insert_message)
-    monkeypatch.setattr(proc, "get_recent_messages", _get_recent)
-    monkeypatch.setattr(proc, "get_summary_for_context", _get_summary)
-    monkeypatch.setattr(proc, "enqueue_outbox", _enqueue_outbox)
-    monkeypatch.setattr(proc, "patch_conversation_state", _patch_state)
-    monkeypatch.setattr(proc, "_persist_events", _noop_writeback)
+    monkeypatch.setattr(uow, "claim_inbound", _claim_inbound)
+    monkeypatch.setattr(uow, "mark_inbound_completed", _mark_completed)
+    monkeypatch.setattr(uow, "get_or_create_contact", _get_contact)
+    monkeypatch.setattr(uow, "get_or_create_conversation", _get_conv)
+    monkeypatch.setattr(uow, "touch_last_inbound", _touch_inbound)
+    monkeypatch.setattr(uow, "insert_message", _insert_message)
+    monkeypatch.setattr(uow, "get_recent_messages", _get_recent)
+    monkeypatch.setattr(uow, "get_summary_for_context", _get_summary)
+    monkeypatch.setattr(uow, "enqueue_outbox", _enqueue_outbox)
+    monkeypatch.setattr(uow, "patch_conversation_state", _patch_state)
+    monkeypatch.setattr(proc, "persist_events", _noop_writeback)
     monkeypatch.setattr(proc, "run_aftercare", _noop_writeback)
 
     # --- straturi gratuite (alias/cache/faq) → MISS, ca să ajungem la triaj+agent -----------
@@ -359,8 +361,16 @@ def _patch_catalog_search(monkeypatch, products):
 
 async def _turn(conn, biz, store, body, llm):
     store.llm_holder["llm"] = llm  # proc.get_llm() (patched) îl întoarce pe ăsta acestui tur
+    # NX-231: `handle_turn` primește un PROVIDER; `static_db` yield-uiește mereu ACELAȘI fake conn
+    # → round-trip-ul de state între tururi rămâne exact ce testăm aici.
     return await proc.handle_turn(
-        conn, biz, "ch-1", _event(body), redis=None, stages=DEFAULT_STAGES, deliver=False
+        static_db(conn),
+        biz,
+        "ch-1",
+        _event(body),
+        redis=None,
+        stages=DEFAULT_STAGES,
+        deliver=False,
     )
 
 

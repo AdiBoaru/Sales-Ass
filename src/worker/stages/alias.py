@@ -56,15 +56,20 @@ async def alias_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not phrase_norm:
         return
     try:
-        alias = await lookup_alias(deps.conn, ctx.business.id, phrase_norm)
-        if alias is None:
-            ctx.emit("alias_lookup", hit=False)
-            return
-        kind = alias["target_kind"]
-        if kind == "faq":
-            answer = await get_faq_answer(
-                deps.conn, ctx.business.id, alias["target_id"], ctx.language
+        # Un singur checkout pentru tot stratul: lookup + (eventual) răspunsul FAQ. Zero await
+        # extern între ele (alias e cod pur, fără LLM) → conexiunea nu stă degeaba (NX-231).
+        async with deps.db("alias_lookup") as conn:
+            alias = await lookup_alias(conn, ctx.business.id, phrase_norm)
+            if alias is None:
+                ctx.emit("alias_lookup", hit=False)
+                return
+            kind = alias["target_kind"]
+            answer = (
+                await get_faq_answer(conn, ctx.business.id, alias["target_id"], ctx.language)
+                if kind == "faq"
+                else None
             )
+        if kind == "faq":
             if answer is None:  # FAQ lipsă în limba curentă → miss grațios (P11)
                 ctx.emit("alias_lookup", hit=False, target_kind=kind, reason="faq_locale_miss")
                 return

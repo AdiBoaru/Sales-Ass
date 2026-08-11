@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 
 from src.db.connection import close_pool, get_pool
+from src.db.provider import static_db
 from src.db.queries.analytics import insert_events
 from src.db.queries.businesses import load_business
 from src.models import Event
@@ -122,7 +123,7 @@ async def test_fetch_turn_events_preserves_insertion_order_on_created_at_tie(poo
 async def test_handle_turn_persists_runner_events(pool):
     async with tenant_tx(pool) as (conn, channel_id):
         biz = await load_business(conn, DEMO_BIZ)
-        result = await handle_turn(conn, biz, channel_id, _event())
+        result = await handle_turn(static_db(conn), biz, channel_id, _event())
 
         await conn.execute("reset role")
         types = await conn.fetch(

@@ -19,12 +19,14 @@ from types import SimpleNamespace
 from redis.exceptions import RedisError
 
 from src.config import get_settings
+from src.db.provider import static_db
 from src.db.queries.conversations import StateConflict
 from src.models import BusinessConfig, Contact, Reply
 from src.web import app as wa
 from src.web.app import WebChatIn
 from src.web.session import WebSession
 from src.worker import processor as proc
+from src.worker import turn_uow as uow
 from src.worker.processor import TurnResult, handle_turn
 from src.worker.turn_lock import acquire_turn_lock, release_turn_lock, turn_lock_key
 
@@ -214,7 +216,7 @@ def _wire_web_chat(monkeypatch, redis, store, *, work_s=0.05):
     monkeypatch.setattr(wa, "get_redis", lambda: _coro(redis))
     monkeypatch.setattr(wa, "get_pool", lambda: _coro(None))
     monkeypatch.setattr(wa, "admin_conn", _FakeCm)
-    monkeypatch.setattr(wa, "tenant_conn", _FakeCm)
+    monkeypatch.setattr(wa, "tenant_db", lambda business_id: _FakeCm)
     monkeypatch.setattr(wa, "resolve_channel", fake_resolve_channel)
     monkeypatch.setattr(wa, "load_business", fake_load_business)
     monkeypatch.setattr(wa, "handle_turn", fake_handle_turn)
@@ -367,20 +369,20 @@ async def _run_processor(
         ctx.state.constraints["budget_max"] = "100"
         ctx.set_reply("raspunsul turului")
 
-    monkeypatch.setattr(proc, "claim_inbound", fake_claim)
-    monkeypatch.setattr(proc, "mark_inbound_completed", anoop)
-    monkeypatch.setattr(proc, "get_or_create_contact", fake_contact)
-    monkeypatch.setattr(proc, "get_or_create_conversation", fake_conv)
-    monkeypatch.setattr(proc, "insert_message", fake_insert_msg)
-    monkeypatch.setattr(proc, "touch_last_inbound", anoop)
-    monkeypatch.setattr(proc, "get_recent_messages", anoop)
-    monkeypatch.setattr(proc, "get_summary_for_context", anoop)
-    monkeypatch.setattr(proc, "fetch_relevant_facts", anoop)
-    monkeypatch.setattr(proc, "enqueue_outbox", fake_outbox)
-    monkeypatch.setattr(proc, "patch_conversation_state", fake_patch)
+    monkeypatch.setattr(uow, "claim_inbound", fake_claim)
+    monkeypatch.setattr(uow, "mark_inbound_completed", anoop)
+    monkeypatch.setattr(uow, "get_or_create_contact", fake_contact)
+    monkeypatch.setattr(uow, "get_or_create_conversation", fake_conv)
+    monkeypatch.setattr(uow, "insert_message", fake_insert_msg)
+    monkeypatch.setattr(uow, "touch_last_inbound", anoop)
+    monkeypatch.setattr(uow, "get_recent_messages", anoop)
+    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
+    monkeypatch.setattr(uow, "fetch_relevant_facts", anoop)
+    monkeypatch.setattr(uow, "enqueue_outbox", fake_outbox)
+    monkeypatch.setattr(uow, "patch_conversation_state", fake_patch)
     # raising=False: pe main funcția nu există → repro-ul rămâne rulabil pe codul vechi
-    monkeypatch.setattr(proc, "get_state_and_version", fake_fresh, raising=False)
-    monkeypatch.setattr(proc, "_persist_events", fake_persist)
+    monkeypatch.setattr(uow, "get_state_and_version", fake_fresh, raising=False)
+    monkeypatch.setattr(proc, "persist_events", fake_persist)
     monkeypatch.setattr(proc, "_record_turn_cost", anoop)
     monkeypatch.setattr(proc, "_llm_within_budget", anoop)
     monkeypatch.setattr(proc, "run_aftercare", anoop)
@@ -394,7 +396,7 @@ async def _run_processor(
         "body": "salut",
         **(event_extra or {}),
     }
-    result = await handle_turn(_FakeConn(), business, "chan-1", event, stages=[stage])
+    result = await handle_turn(static_db(_FakeConn()), business, "chan-1", event, stages=[stage])
     return result, patch_calls, persisted
 
 

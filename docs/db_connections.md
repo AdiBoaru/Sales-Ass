@@ -52,6 +52,44 @@ cross-tenant. → două pool-uri, două roluri.
   → `tenant_conn`. Suprafața e limitată intenționat la maparea canal→business +
   mentenanță non-PII.
 
+## Cine deține conexiunea: OPERAȚIA, nu turul (NX-231)
+
+Până la NX-231, `handle_turn` primea o conexiune și o ținea de la primul query până la ultimul —
+inclusiv peste triaj, agent, tool-uri și embed-uri. Conexiunea aparținea TURULUI. Efectul:
+`bot_pool.max_size` devenea, accidental, plafonul de concurență al întregului sistem, iar ~79% din
+timpul cât o conexiune era ocupată nu se executa niciun query (măsurat: `scripts/sim/pool_probe.py`,
+docs/CONN-HOLD-ANALYSIS-2026.md).
+
+Regula de azi:
+
+```python
+async with deps.db("nume_operație") as conn:   # checkout SCURT, etichetat
+    rows = await conn.fetch(...)               # doar muncă de DB
+# conexiunea e deja înapoi în pool
+emb = await deps.llm.embed([q])                # apelul extern rulează FĂRĂ conexiune
+async with deps.db("write_back") as conn:      # alt checkout scurt
+    await conn.execute(...)
+```
+
+- **Provider, nu conexiune.** Stagiile și tool-urile primesc `deps.db` (`src/db/provider.py`),
+  tenant-scoped la construcție. `business_id` NU e argument al lui `db()` → un tool controlat de
+  model nu-l poate schimba (P7: server-owned).
+- **Unit of Work per tur** (`src/worker/turn_uow.py`): `load` (un checkout) → `compute` (zero
+  conexiune) → `commit` (un checkout + O tranzacție) → `aftercare` (checkout-uri proprii). Faza de
+  commit e atomică: mesaje outbound + outbox + `state_version` + `mark_inbound_completed`.
+- **Query-uri atomice = o metodă cu tranzacție internă** (`db_tx(deps.db, "op")`), nu o conexiune
+  ținută între apeluri de tool.
+- **Interzis:** orice await extern (LLM/embed/moderation/media/HTTP de provider/backoff/SSE/
+  așteptare de coadă) în interiorul unui checkout. Guard mecanic în CI:
+  `python scripts/check_no_raw_conn.py` (3 reguli, excepțiile cer motiv scris în
+  `scripts/conn_allowlist.json`).
+- **Frâna e acum explicită.** Poolul nu mai limitează concurența, deci limitează `admission`
+  (`src/worker/admission.py`): lease-uri Redis cu plafon global + per-tenant, comune tuturor
+  replicilor. Aceeași poartă pe worker și pe ruta web sincronă.
+- **Observabilitate:** `db_ops` per tur (`db_checkout_ms`/`db_hold_ms` defalcate pe operație) +
+  `pool_metrics` (`db_pool_wait_ms`, `db_pool_active`). `idle_held` cere modul diagnostic
+  `DB_QUERY_TIMING_ENABLED=1` — fără el raportăm „nu știm", nu 0.
+
 ## Mod compat (dev/test înainte de provisioning)
 
 Dacă `DATABASE_URL_BOT` lipsește, `bot_pool` cade pe `SUPABASE_DB_URL` și coboară

@@ -4,6 +4,7 @@ Stage-level: set_clarify (persistă slotul), clarify_resume_stage (reluare făr�
 garda din triaj (un singur owner pe `route`). Processor: pending_question scris/curățat în
 new_state. ZERO OpenAI/DB real (stub conn + funcții monkeypatch-uite, pattern G8-1)."""
 
+from src.db.provider import static_db
 from src.models import (
     BusinessConfig,
     Contact,
@@ -13,6 +14,7 @@ from src.models import (
     TurnContext,
 )
 from src.worker import processor as proc
+from src.worker import turn_uow as uow
 from src.worker.processor import handle_turn
 from src.worker.runner import PipelineDeps
 from src.worker.stages.clarify import clarify_resume_stage
@@ -237,17 +239,17 @@ async def _run_handle_turn(monkeypatch, stage):
     async def fake_budget(*a, **k):
         return None  # llm=None; folosim `stages` custom oricum
 
-    monkeypatch.setattr(proc, "claim_inbound", fake_claim)
-    monkeypatch.setattr(proc, "mark_inbound_completed", anoop)  # NX-86: finalizare claim
-    monkeypatch.setattr(proc, "get_or_create_contact", fake_contact)
-    monkeypatch.setattr(proc, "get_or_create_conversation", fake_conv)
-    monkeypatch.setattr(proc, "insert_message", fake_insert_msg)
-    monkeypatch.setattr(proc, "touch_last_inbound", anoop)
-    monkeypatch.setattr(proc, "get_recent_messages", anoop)
-    monkeypatch.setattr(proc, "get_summary_for_context", anoop)
-    monkeypatch.setattr(proc, "enqueue_outbox", fake_outbox)
-    monkeypatch.setattr(proc, "patch_conversation_state", fake_patch)
-    monkeypatch.setattr(proc, "_persist_events", anoop)
+    monkeypatch.setattr(uow, "claim_inbound", fake_claim)
+    monkeypatch.setattr(uow, "mark_inbound_completed", anoop)  # NX-86: finalizare claim
+    monkeypatch.setattr(uow, "get_or_create_contact", fake_contact)
+    monkeypatch.setattr(uow, "get_or_create_conversation", fake_conv)
+    monkeypatch.setattr(uow, "insert_message", fake_insert_msg)
+    monkeypatch.setattr(uow, "touch_last_inbound", anoop)
+    monkeypatch.setattr(uow, "get_recent_messages", anoop)
+    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
+    monkeypatch.setattr(uow, "enqueue_outbox", fake_outbox)
+    monkeypatch.setattr(uow, "patch_conversation_state", fake_patch)
+    monkeypatch.setattr(proc, "persist_events", anoop)
     monkeypatch.setattr(proc, "_record_turn_cost", anoop)
     monkeypatch.setattr(proc, "_llm_within_budget", fake_budget)
     monkeypatch.setattr(proc, "run_aftercare", anoop)
@@ -260,7 +262,7 @@ async def _run_handle_turn(monkeypatch, stage):
         "content_type": "text",
         "body": "salut",
     }
-    await handle_turn(_FakeConn(), business, "chan-1", event, stages=[stage])
+    await handle_turn(static_db(_FakeConn()), business, "chan-1", event, stages=[stage])
     return captured["new_state"]
 
 

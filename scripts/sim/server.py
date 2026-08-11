@@ -39,6 +39,7 @@ from pydantic import BaseModel  # noqa: E402
 
 from src.agent.llm import get_llm  # noqa: E402
 from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn  # noqa: E402
+from src.db.provider import tenant_db  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.db.queries.channels import upsert_channel  # noqa: E402
 from src.worker.processor import handle_turn  # noqa: E402
@@ -224,9 +225,11 @@ async def turn(inp: TurnIn):
         # ts0 într-o pâlpâire scurtă de admin (NU ținem admin pe durata turului).
         async with admin_conn(pool) as actx:
             ts0 = await actx.fetchval("select now()")
-        # turul REAL pe calea de producție (bot_runtime + RLS) — o SINGURĂ conexiune lungă.
-        async with tenant_conn(DEMO_BIZ) as conn:
-            result = await handle_turn(conn, _state["biz"], _state["channel_id"], event, redis=None)
+        # Turul REAL pe calea de producție (bot_runtime + RLS). NX-231: providerul dă fiecărei
+        # operații un checkout SCURT — nu mai există „o singură conexiune lungă" per tur.
+        result = await handle_turn(
+            tenant_db(DEMO_BIZ), _state["biz"], _state["channel_id"], event, redis=None
+        )
         # inspecția evenimentelor pe admin (bot_runtime are DOAR insert pe analytics_events).
         if result.conversation_id:
             async with admin_conn(pool) as actx:

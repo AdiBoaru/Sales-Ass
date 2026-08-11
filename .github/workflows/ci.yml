@@ -25,9 +25,11 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
 
-      # NX-161: guard conn-per-op. LENIENT în 0B→migrare (raportează câte `deps.conn` rămân în src/,
-      # nu pică). Devine `--strict` (hard-fail) la Felia 7, când src/ nu mai are conn viu.
-      - name: Guard conn-per-op (NX-161, lenient)
+      # NX-231: guard conn-per-op, acum HARD-FAIL (allowlistul runtime a ajuns la zero). Trei
+      # reguli: `deps.conn` în src/, conexiune ținută peste un await extern (LLM/HTTP/backoff),
+      # punct de intrare (stagiu/tool) care primește `conn`. Excepțiile cer motiv scris în
+      # scripts/conn_allowlist.json.
+      - name: Guard conn-per-op (NX-231)
         run: python scripts/check_no_raw_conn.py
 
       # Documentația de arhitectură a devenit falsă o dată (redactată 2026-07-02, resincronizată
