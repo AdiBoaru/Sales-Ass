@@ -1438,8 +1438,12 @@ validator_bare_numbers_enabled = true
 validator_claims_enabled = true
 validator_stock_claims_enabled = false
 vision_enabled = true
+web_demo_access_enabled = false
 web_enabled = false
 web_identity_enabled = false
+web_session_origin_binding = false
+web_session_v2_enabled = false
+web_session_v2_required = false
 web_turn_lock_enabled = true
 welcome_enabled = true
 ```

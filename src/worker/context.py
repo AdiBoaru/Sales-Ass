@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from src.config import get_settings
 from src.models import Direction, Message
+from src.privacy import make_safe
 
 if TYPE_CHECKING:
     from src.models import Contact, ConversationState, TurnContext
@@ -25,15 +26,25 @@ def conversation_transcript(
 ) -> str:
     """Transcript compact „Client/Asistent" al mesajelor ANTERIOARE (fără cel curent
     — ultimul din `history` e mesajul în curs de procesare). Gol dacă nu există
-    context anterior. Bugetat: ultimele `max_turns` mesaje, tăiat la `max_chars`."""
+    context anterior. Bugetat: ultimele `max_turns` mesaje, tăiat la `max_chars`.
+
+    NX-230 — REDACTARE LA CITIRE. De aici încolo mesajele se scriu deja redactate (frontiera din
+    `processor.handle_turn`), dar rândurile SCRISE ÎNAINTE de cardul ăsta sunt brute și nu dispar
+    singure. Fără trecerea asta, exact bucla pe care o repară cardul ar supraviețui în datele
+    vechi: un telefon scris luna trecută s-ar întoarce în promptul de mâine.
+
+    Redactarea la citire e ieftină și idempotentă — un text deja redactat trece neschimbat, deci
+    nu plătim de două ori pentru rândurile noi. E și plasa care ține dacă vreun drum de scriere
+    scapă neconvertit: istoricul e ultimul loc de dinaintea promptului."""
     prior = history[:-1] if history else []
     lines: list[str] = []
     for m in prior[-max_turns:]:
         body = (m.body or "").strip()
         if not body:
             continue
+        safe_body = make_safe(body).text
         role = "Client" if m.direction == Direction.INBOUND else "Asistent"
-        lines.append(f"{role}: {body}")
+        lines.append(f"{role}: {safe_body}")
     return "\n".join(lines)[-max_chars:]
 
 
