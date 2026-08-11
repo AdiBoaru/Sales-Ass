@@ -40,7 +40,22 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.identity import verify_identity_token
-from src.web.session import WebSession, get_session_cache, issue_visitor, verify_web_session
+from src.web.security import (
+    check_origin,
+    normalize_allowlist,
+    normalize_origin,
+    origin_bucket,
+    redact_secret,
+    verify_demo_access,
+    visitor_bucket,
+)
+from src.web.session import (
+    WebSession,
+    get_session_cache,
+    issue_session_v2,
+    issue_visitor,
+    verify_web_session_any,
+)
 from src.webhook.body_limit import enforce_body_cap
 from src.worker.aftercare import run_aftercare
 from src.worker.limits import (
@@ -91,10 +106,92 @@ async def _resolve_token(token: str) -> dict | None:
 
 
 async def _verify(token: str, visitor_id: str, sig: str) -> WebSession | None:
-    """(token, visitor_id, sig) → sesiune validă sau None (token necunoscut / sig invalidă)."""
+    """(token, visitor_id, sig) → sesiune validă sau None (token necunoscut / sig invalidă).
+
+    NX-229: acceptă ambele versiuni de semnătură în overlap (v1 HMAC plat, v2 claims semnate).
+    Semnătura rămâne cu TREI argumente poziționale — e seam-ul monkeypatch-uit de teste, iar
+    legarea de origin se verifică separat, pe claims (`_enforce_session_origin`)."""
     pool = await get_pool()
+    s = get_settings()
     async with admin_conn(pool) as conn:
-        return await verify_web_session(conn, token, visitor_id, sig)
+        session, reason = await verify_web_session_any(
+            conn, token, visitor_id, sig, v2_required=s.web_session_v2_required
+        )
+    if reason is not None:
+        # Reason code LOW-CARDINALITY, fără token/sig/visitor în clar (P12).
+        log.info("web_session_rejected reason=%s tok=%s", reason, redact_secret(token))
+    return session
+
+
+# --- NX-229: poarta de margine (origin, acces demo, legare de sesiune) -------
+
+
+def _allowlist_for(resolved: dict | None) -> frozenset[str]:
+    """Originile permise pentru un canal: cele PER CANAL dacă există, altfel globalul.
+
+    Per-canal contează pentru că allowlistul e per-tenant prin natura lui: originul unui client
+    n-are ce căuta în poarta altuia. Globalul rămâne ca fallback pentru seed-urile care n-au
+    declarat încă nimic."""
+    per_channel = (resolved or {}).get("allowed_origins")
+    if per_channel:
+        return normalize_allowlist([o.strip() for o in str(per_channel).split(",") if o.strip()])
+    return normalize_allowlist(get_settings().web_cors_origins_list)
+
+
+def _enforce_origin(request: Request, resolved: dict | None = None) -> str | None:
+    """Verifică `Origin` server-side și întoarce forma canonică (pentru legarea sesiunii).
+
+    Se aplică pe TOATE endpointurile, nu doar pe bootstrap: CORS-ul browserului oprește doar
+    CITIREA răspunsului de către JS, nu procesarea pe server — un bot îl ignoră complet. În v1
+    verificarea exista numai la bootstrap, deci `/chat` (calea care cheltuie LLM) era descoperită.
+
+    Se cheamă în DOUĂ etape, și asta e deliberat. Fără `resolved`, poarta e allowlistul GLOBAL —
+    ieftină, rulează ÎNAINTE de orice lookup de tenant, ca un origin de gunoi să nu atingă DB-ul
+    (failure matrix: „zero lookup tenant data"). Cu `resolved`, poarta se STRÂNGE pe allowlistul
+    canalului. Globalul e prin construcție reuniunea originilor tenanților — e aceeași listă pe
+    care o folosește middleware-ul CORS al procesului, deci un origin absent din ea n-ar funcționa
+    în browser oricum.
+    """
+    raw = request.headers.get("origin")
+    ok, reason = check_origin(raw, _allowlist_for(resolved))
+    if not ok:
+        # Originul brut poate identifica tenantul → în log intră doar bucketul.
+        log.warning("web_origin_rejected reason=%s bucket=%s", reason, origin_bucket(raw))
+        raise HTTPException(status_code=403, detail="origin not allowed")
+    return normalize_origin(raw)
+
+
+def _enforce_demo_access(request: Request) -> None:
+    """Poarta de acces la site-ul demo. Validată EXPLICIT sau deloc — niciodată ignorată tăcut.
+
+    Nu produce identitate: `verify_demo_access` întoarce `(ok, reason)`, fără claims. Cine e
+    clientul rămâne treaba lui `id_token` din body (NX-129), singurul transport canonic în v2."""
+    s = get_settings()
+    if not s.web_demo_access_enabled:
+        return
+    ok, reason = verify_demo_access(
+        request.headers.get("authorization"),
+        s.web_demo_access_secret,
+        leeway_s=s.web_demo_access_leeway_s,
+        issuer=s.web_demo_access_issuer or None,
+        audience=s.web_demo_access_audience or None,
+    )
+    if not ok:
+        log.warning("web_demo_access_rejected reason=%s", reason)
+        raise HTTPException(status_code=401, detail="access denied")
+
+
+def _enforce_session_origin(session: WebSession, origin: str | None) -> None:
+    """O sesiune v2 legată de un origin nu poate fi folosită de pe altul.
+
+    Sesiunile v1 (`claims is None`) n-au legătură de origin și trec — asta e overlapul, nu o
+    scăpare: cutoverul se face cu `WEB_SESSION_V2_REQUIRED`, după ce v1 expiră natural."""
+    claims = session.claims
+    if claims is None or not claims.origin:
+        return
+    if origin and claims.origin != origin:
+        log.warning("web_session_rejected reason=origin_mismatch bucket=%s", origin_bucket(origin))
+        raise HTTPException(status_code=403, detail="invalid session")
 
 
 def _apply_identity(event: InboundEvent, session: WebSession, id_token: str | None) -> None:
@@ -146,13 +243,39 @@ async def web_bootstrap(token: str, request: Request) -> dict:
     allowlistat → 403 (secure-by-default: allowlist GOL → ORICE Origin de browser e respins; un
     widget real setează mereu WEB_CORS_ORIGINS). Origin absent (non-browser / same-origin / health)
     → permis (suprafața reală de abuz e browser-driven)."""
-    origin = request.headers.get("origin")
-    if origin and origin not in get_settings().web_cors_origins_list:
-        raise HTTPException(status_code=403, detail="origin not allowed")
+    _enforce_demo_access(request)
+    # Etapa 1: allowlist GLOBAL, înainte de orice atingere de DB (failure matrix: un origin
+    # nepermis nu declanșează lookup de date de tenant).
+    origin = _enforce_origin(request)
     resolved = await _resolve_token(token)
     if resolved is None:
         raise HTTPException(status_code=403, detail="unknown token")
-    visitor_id, sig = issue_visitor(token, resolved["session_secret"])
+    # Etapa 2: acum știm tenantul → poarta se strânge pe allowlistul CANALULUI, dacă declară unul.
+    _enforce_origin(request, resolved)
+    # NX-229: bootstrapul era NELIMITAT — un atacator putea coase oricâte visitor_id-uri proaspete
+    # ca să ocolească limita per-visitor de pe /chat. Cheie pe tenant+IP: `visitor_id` încă nu
+    # există aici, iar IP-ul nu intră în clar (bucket hash-uit, P12).
+    s = get_settings()
+    redis = await get_redis()
+    ip = request.client.host if request.client else "unknown"
+    try:
+        minted = await incr_window(
+            redis, f"webrl:boot:{token}:{visitor_bucket(ip)}", s.web_rate_limit_window_s
+        )
+    except (RedisError, OSError):
+        # Emiterea de sesiuni e ieftină, dar e poarta de intrare: fail-CLOSED, ca /chat.
+        raise HTTPException(status_code=429, detail="rate limited") from None
+    if minted > s.web_bootstrap_rate_limit_max:
+        raise HTTPException(status_code=429, detail="rate limited")
+    if s.web_session_v2_enabled:
+        visitor_id, sig = issue_session_v2(
+            token,
+            resolved["session_secret"],
+            ttl_s=s.web_session_ttl_s,
+            origin=origin if s.web_session_origin_binding else None,
+        )
+    else:
+        visitor_id, sig = issue_visitor(token, resolved["session_secret"])
     return {"token": token, "visitor_id": visitor_id, "sig": sig, "sse_url": "/web/stream"}
 
 
@@ -161,9 +284,12 @@ async def web_message(req: WebMessageIn, request: Request) -> dict:
     """Client → bot: verifică sesiunea + rate limit → envelope neutru pe stream. NU trimite reply
     (ăla iese prin outbox → dispatcher → WebSender, P5)."""
     await enforce_body_cap(request, get_settings().web_max_body_bytes)  # NX-120
+    _enforce_demo_access(request)
+    origin = _enforce_origin(request)  # NX-229: lipsea complet pe această cale
     session = await _verify(req.token, req.visitor_id, req.sig)
     if session is None:
         raise HTTPException(status_code=403, detail="invalid session")
+    _enforce_session_origin(session, origin)
     redis = await get_redis()
     ip = request.client.host if request.client else "unknown"
     # NX-120: fail-OPEN (doar pune envelope pe stream; spend-ul real se evaluează în worker).
@@ -197,9 +323,14 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
     AICI răspunsul HTTP e transportul. Trece prin TOT pipeline-ul (gates, validator, căutare reală,
     analytics) — multi-tenant garantat de `tenant_conn(business_id)` derivat din token (P7)."""
     await enforce_body_cap(request, get_settings().web_max_body_bytes)  # NX-120: cap de body
+    _enforce_demo_access(request)
+    # NX-229: calea care CHELTUIE LLM n-avea nicio verificare de origin. Un bot cu tokenul public
+    # (care e public prin definiție) putea arde bugetul de pe orice pagină.
+    origin = _enforce_origin(request)
     session = await _verify(req.token, req.visitor_id, req.sig)
     if session is None:
         raise HTTPException(status_code=403, detail="invalid session")
+    _enforce_session_origin(session, origin)
     redis = await get_redis()
     ip = request.client.host if request.client else "unknown"
     # NX-120: calea care CHELTUIE LLM → fail-CLOSED (Redis căzut = 429, nu „lasă să treacă").
@@ -334,9 +465,12 @@ async def web_stream(
 ) -> StreamingResponse:
     """Bot → client: conexiune SSE persistentă. Abonat la `web:out:{visitor_id}`, replay backlog
     la reconectare, heartbeat la idle (ține proxy-ul deschis), iese curat la deconectare."""
+    _enforce_demo_access(request)
+    origin = _enforce_origin(request)  # NX-229: lipsea și aici
     session = await _verify(token, visitor_id, sig)
     if session is None:
         raise HTTPException(status_code=403, detail="invalid session")
+    _enforce_session_origin(session, origin)
     redis = await get_redis()
     heartbeat = get_settings().web_sse_heartbeat_s
 

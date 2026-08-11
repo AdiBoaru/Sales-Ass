@@ -131,6 +131,34 @@ class Settings(BaseSettings):
     web_turn_lock_enabled: bool = Field(default=True, validation_alias="WEB_TURN_LOCK_ENABLED")
     turn_lock_ttl_ms: int = Field(default=15000, validation_alias="TURN_LOCK_TTL_MS")
     turn_lock_wait_max_ms: int = Field(default=10000, validation_alias="TURN_LOCK_WAIT_MAX_MS")
+    # NX-229 — sesiune v2: claims semnate cu expirare + key id + rotație dual-key + origin binding.
+    # Emiterea e în spatele flagului; VERIFICAREA acceptă mereu ambele versiuni în overlap, ca o
+    # întoarcere pe v1 să nu invalideze sesiunile v2 deja emise (cerința de rollback din card).
+    web_session_v2_enabled: bool = Field(default=False, validation_alias="WEB_SESSION_V2_ENABLED")
+    # Cutover: refuză semnăturile v1. Se aprinde DUPĂ ce toate sesiunile v1 au expirat natural.
+    web_session_v2_required: bool = Field(default=False, validation_alias="WEB_SESSION_V2_REQUIRED")
+    # 12h: destul cât o sesiune de cumpărături să nu se rupă în mijloc, destul de scurt cât o
+    # semnătură scursă să nu fie utilă mult timp. v1 nu expira NICIODATĂ.
+    web_session_ttl_s: int = Field(default=43200, validation_alias="WEB_SESSION_TTL_S")
+    # Leagă sesiunea de originul care a cerut-o. Separat de flagul v2: se aprinde după ce
+    # allowlistul e confirmat în producție, altfel ar rupe tenanții cu origini nedeclarate.
+    web_session_origin_binding: bool = Field(
+        default=False, validation_alias="WEB_SESSION_ORIGIN_BINDING"
+    )
+    # NX-229 — poarta de acces la site-ul demo (`Authorization: Bearer <jwt>`). NU e identitate de
+    # cumpărător: `verify_demo_access` întoarce doar (ok, reason), niciodată claims. Identitatea
+    # shopperului rămâne `id_token` în body, singurul transport canonic în v2. Suportă DOAR HS256;
+    # un proiect migrat pe chei asimetrice cade pe `bad_alg` — fail-closed, vizibil.
+    web_demo_access_enabled: bool = Field(default=False, validation_alias="WEB_DEMO_ACCESS_ENABLED")
+    web_demo_access_secret: str = Field(default="", validation_alias="WEB_DEMO_ACCESS_SECRET")
+    web_demo_access_issuer: str = Field(default="", validation_alias="WEB_DEMO_ACCESS_ISSUER")
+    web_demo_access_audience: str = Field(default="", validation_alias="WEB_DEMO_ACCESS_AUDIENCE")
+    web_demo_access_leeway_s: int = Field(default=30, validation_alias="WEB_DEMO_ACCESS_LEEWAY_S")
+    # NX-229 — rate limit pe bootstrap. Lipsea complet: emiterea de sesiuni era nelimitată, deci
+    # un atacator putea coase oricâte visitor_id-uri proaspete ca să ocolească limita per-visitor.
+    web_bootstrap_rate_limit_max: int = Field(
+        default=10, validation_alias="WEB_BOOTSTRAP_RATE_LIMIT_MAX"
+    )
 
     @property
     def web_cors_origins_list(self) -> list[str]:

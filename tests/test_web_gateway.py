@@ -165,11 +165,26 @@ async def test_message_rate_limited_429(monkeypatch):
 # --- GET /web/bootstrap ------------------------------------------------------
 
 
+class _BootRedis:
+    """Redis minimal pentru limita de bootstrap (NX-229)."""
+
+    def __init__(self) -> None:
+        self.counts: dict[str, int] = {}
+
+    async def incr(self, key):
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    async def expire(self, key, ttl):
+        return True
+
+
 async def test_bootstrap_issues_verifiable_session(monkeypatch):
     async def fake_resolve(token):
         return {"business_id": "b", "session_secret": "sek"}
 
     monkeypatch.setattr(wa, "_resolve_token", fake_resolve)
+    monkeypatch.setattr(wa, "get_redis", lambda: _coro(_BootRedis()))
     res = await wa.web_bootstrap("tok", _Req())
     assert res["token"] == "tok" and res["visitor_id"].startswith("web_")
     assert verify_sig("tok", res["visitor_id"], res["sig"], "sek")  # semnătura e validă
@@ -246,6 +261,8 @@ class _StreamReq:
         self._n = 0
         self._after = disconnect_after
         self.client = SimpleNamespace(host="1.1.1.1")
+        # NX-229: poarta de origin se aplică și pe SSE, deci stub-ul are nevoie de headere.
+        self.headers = {}
 
     async def is_disconnected(self):
         self._n += 1

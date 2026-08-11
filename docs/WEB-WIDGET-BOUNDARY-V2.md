@@ -122,6 +122,32 @@ Astea sunt decizii de prezentare. Nu sunt decizii despre ce e adevărat.
    browserul. Adevăr abia după rehidratarea NX-234. `business_id` nu apare deloc în request —
    e server-owned (P7).
 
+## 4bis. Marginea: tenant, sesiune, identitate (NX-229)
+
+Ownership-ul de mai sus presupune că serverul știe *al cui* e requestul. Cum se stabilește asta e
+tot o graniță, cu aceeași regulă: frontendul **forwardează** credențiale, nu le interpretează.
+
+| Credențial | Cine îl emite | Ce face FE cu el | Ce dovedește |
+|---|---|---|---|
+| `widget_public_token` | noi, per canal | îl trimite | care tenant — **nu** că apelantul e autorizat (e public) |
+| `visitor_id` + `sig` | backend, la bootstrap | le păstrează și le retrimite opac | sesiune emisă de noi, neexpirată, legată de token și (opțional) de origin |
+| `id_token` | site-ul gazdă | îl forwardează **neschimbat**, în body | identitatea shopperului |
+| `Authorization: Bearer` | site-ul demo | îl trimite dacă gazda i-l dă | drept de acces la site — **niciodată** cine e clientul |
+
+`business_id` nu apare în niciunul. E derivat exclusiv server-side din tokenul public.
+
+Trei consecințe care schimbă ce trebuie să facă frontendul:
+
+- **Sesiunile expiră.** În v1 nu expirau niciodată. Un `403` pe o sesiune veche nu e un bug — e
+  contractul; FE cere bootstrap nou și continuă. Restaurarea transcriptului rămâne server-side.
+- **`Origin` se verifică pe toate endpointurile**, nu doar la bootstrap, și trebuie să fie exact
+  cel allowlistat (subdomeniu ≠ același origin, port ≠ același origin).
+- **`Authorization` nu produce identitate.** Dacă gazda vrea un client identificat, emite
+  `id_token`; headerul nu e o scurtătură.
+
+Detaliile — scenarii de atac, procedura de rotație a cheii și ce **nu** apără marginea — sunt în
+[`WEB-EDGE-THREAT-MODEL.md`](WEB-EDGE-THREAT-MODEL.md).
+
 ## 5. URL-uri
 
 Permis: `https://` absolut, sau rută relativă care începe cu `/`.
