@@ -1382,6 +1382,7 @@ compare_intent_enabled = true
 comparison_facets_enabled = true
 content_status_filter_enabled = true
 conv_lock_enabled = true
+conversation_cart_enabled = false
 conversation_facts_enabled = true
 conversation_sensitive_memory_enabled = false
 conversation_state_v2_enabled = false
@@ -1508,6 +1509,7 @@ welcome_enabled = true
 038_demand_daily.sql
 039_public_read_categories.sql
 040_web_turns.sql
+041_conversation_carts.sql
 ```
 
 
