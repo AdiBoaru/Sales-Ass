@@ -261,6 +261,9 @@ async def handle_turn(
     deliver: bool = True,
     defer_aftercare: bool = False,
     commit_hook: "CommitHook | None" = None,
+    turn_id: str | None = None,
+    preinserted_inbound_msg_id: str | None = None,
+    stage_hook: Callable[[str], None] | None = None,
 ) -> TurnResult:
     """Procesează un mesaj inbound cu un provider tenant-scoped pe `business.id`.
 
@@ -283,9 +286,15 @@ async def handle_turn(
     ridică, TOT commit-ul (mesaj + stare + outbox) face rollback. Folosit de ledgerul web ca
     rezultatul terminal, mesajul asistentului și patch-ul de stare să se vadă împreună sau
     deloc. Pipeline-ul nu știe CE scrie hook-ul (cuplajul de canal rămâne la margine).
+
+    NX-233 (executorul web async): `turn_id` poate veni de la MARGINE (= id-ul rândului din
+    `web_turns`) ca traiectoria turului să fie corelabilă cu ledgerul; absent → uuid nou, ca
+    până acum. `preinserted_inbound_msg_id` = mesajul inbound a fost DEJA persistat la accept
+    (în același checkout cu rândul de ledger) → `load_turn` nu-l mai inserează o dată.
+    `stage_hook` = seam-ul PUR de observabilitate al runner-ului (phase working/validating).
     """
     stages = stages or DEFAULT_STAGES
-    turn_id = str(uuid4())
+    turn_id = turn_id or str(uuid4())
     channel_kind = event.get("channel_kind", "whatsapp")
     sender_external_id = event["sender_external_id"]
     provider_msg_id = event.get("provider_msg_id")
@@ -327,6 +336,7 @@ async def handle_turn(
             identity_external_id=verified_customer_ref or sender_external_id,
             verified_customer_ref=verified_customer_ref,
             load_facts=_s.conversation_facts_enabled and _s.memory_safe_injection_enabled,
+            preinserted_msg_id=preinserted_inbound_msg_id,
         )
         if snap.deduped:
             log.info("dedupe_hit_db: %s deja procesat (business %s)", provider_msg_id, business.id)
@@ -350,6 +360,7 @@ async def handle_turn(
             defer_aftercare=defer_aftercare,
             db_acc=db_acc,
             commit_hook=commit_hook,
+            stage_hook=stage_hook,
         )
     finally:
         op_metrics.pop(db_token)
@@ -396,6 +407,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     defer_aftercare: bool,
     db_acc: op_metrics.DbOpAccumulator,
     commit_hook: "CommitHook | None" = None,
+    stage_hook: Callable[[str], None] | None = None,
 ) -> TurnResult:
     """Fazele 2-4 pe un `TurnLoadSnapshot` deja citit: compute (fără conexiune) → commit →
     aftercare. Separată de `handle_turn` ca faza de load să se vadă ca fază, nu ca preambul."""
@@ -475,7 +487,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     # === FAZA 2 — COMPUTE (ZERO conexiune ținută) ==========================================
     # Stagiile primesc DOAR providerul: fiecare operație își ia conexiunea și o dă înapoi. Între
     # ele (triaj nano, agent mini, tool loop, embed) poolul e liber (NX-231).
-    deps = PipelineDeps(db=db, redis=redis, llm=llm, media=media)
+    deps = PipelineDeps(db=db, redis=redis, llm=llm, media=media, stage_hook=stage_hook)
     await run_pipeline(ctx, deps, stages)
     await persist_events(db, business.id, conversation_id, contact.id, ctx.events)
     # Evenimentele emise de aici încolo (metrici DB, conflict de stare, reply_split) apar DUPĂ

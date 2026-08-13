@@ -21,12 +21,15 @@ orice proxy/CDN. Montat condiționat în `webhook/app.py` (doar dacă `web_enabl
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from datetime import UTC, datetime, timedelta
+from time import monotonic
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from redis.exceptions import RedisError
 
@@ -38,9 +41,11 @@ from src.db.connection import admin_conn, get_pool
 from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
-from src.db.queries.web_turns import WebTurnRow, get_turn
+from src.db.queries.web_turns import WebTurnRow, get_turn, get_turn_by_id
 from src.models import Event
+from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
+from src.web.contracts_v2 import WebTurnRequestV2, parse_turn_request
 from src.web.identity import verify_identity_token
 from src.web.security import (
     check_origin,
@@ -58,6 +63,14 @@ from src.web.session import (
     issue_visitor,
     verify_web_session_any,
 )
+from src.web.turn_events import (
+    get_phase,
+    result_event,
+    status_event,
+    status_payload,
+    terminal_view,
+)
+from src.web.turn_executor import wake_executor
 from src.web.turn_service import (
     TERMINAL_LEDGER_STATUSES,
     Accepted,
@@ -73,8 +86,10 @@ from src.web.turn_service import (
     complete_web_turn_on_conn,
     error_view,
     fail_web_turn,
+    get_turn_for_session,
     project_wire_status,
     request_fingerprint,
+    session_ref_hash,
 )
 from src.webhook.body_limit import enforce_body_cap
 from src.worker.admission import get_admission, tenant_bucket
@@ -736,6 +751,303 @@ async def web_stream(
                 yield _sse(json.loads(msg["data"]))
         finally:
             await pubsub.unsubscribe(out_channel(token, visitor_id))
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── NX-233: rutele v2 — accept durabil, status/result și SSE (flag WEB_TURN_V2_ENABLED) ─────
+# Requestul HTTP DOAR acceptă/notifică: pipeline-ul, LLM-ul și tool-urile rulează în executorul
+# separat (src/web/turn_executor.py), iar GET/SSE sunt PROIECȚII ale ledgerului (autoritatea).
+# Auth: aceleași (token, visitor_id, sig) ca /web/stream, în query — EventSource nu poate seta
+# headere, iar POST-ul rămâne simetric; corpul e EXACT `WebTurnRequestV2` (NX-228, extra=forbid).
+
+
+def _v2_error(status_code: int, code: str, message: str, **extra) -> JSONResponse:
+    """Eroare TERMINALĂ STRUCTURATĂ (înainte de accept: auth/schema/admission). `code` e stabil
+    și low-cardinality; `message` e al nostru — niciodată ecoul inputului sau al excepției."""
+    return JSONResponse(
+        status_code=status_code, content={"error": {"code": code, "message": message}, **extra}
+    )
+
+
+async def _v2_gate(request: Request, token: str, visitor_id: str, sig: str) -> WebSession:
+    """Poarta comună a rutelor v2: flag → demo access → origin → sesiune → legare de origin.
+    404 cu flag OFF (ruta nu există încă), nu 403 — nu confirmăm existența feature-ului."""
+    if not get_settings().web_turn_v2_enabled:
+        raise HTTPException(status_code=404, detail="not found")
+    _enforce_demo_access(request)
+    origin = _enforce_origin(request)
+    session = await _verify(token, visitor_id, sig)
+    if session is None:
+        raise HTTPException(status_code=403, detail="invalid session")
+    _enforce_session_origin(session, origin)
+    return session
+
+
+def _v2_status_response(row: WebTurnRow, *, phase: str | None = None) -> JSONResponse:
+    s = get_settings()
+    return JSONResponse(
+        status_code=202,
+        content=status_payload(
+            row,
+            phase=phase,
+            poll_after_ms=s.web_turn_poll_after_ms,
+            sse_enabled=s.web_turn_sse_enabled,
+        ),
+    )
+
+
+async def _v2_business(db, business_id: str):
+    async with db("load_business") as conn:
+        business = await load_business(conn, business_id)
+    if business is None:
+        raise HTTPException(status_code=503, detail="business unavailable")
+    return business
+
+
+@router.post("/v2/turns")
+async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig: str):
+    """Acceptul DURABIL al unui turn (NX-233): validează, scrie rândul de ledger + inputul SAFE
+    în același checkout, trezește executorii (best-effort, DUPĂ commit) și răspunde imediat.
+    NICIODATĂ pipeline/LLM/tool aici — recovery-ul (refresh, alt tab, worker mort) e din DB."""
+    s = get_settings()
+    raw = await enforce_body_cap(request, s.web_max_body_bytes)
+    session = await _v2_gate(request, token, visitor_id, sig)
+    redis = await get_redis()
+    ip = request.client.host if request.client else "unknown"
+    # Acceptul pune LLM la coadă → aceleași gărzi fail-CLOSED ca /web/chat (NX-120).
+    if await web_rate_limited(redis, token, ip, visitor_id, fail_closed=True):
+        raise HTTPException(status_code=429, detail="rate limited")
+    # Schema (eroare terminală STRUCTURATĂ, înainte de accept — singurele permise: auth/schema/
+    # admission). Mesajul e al nostru: nu ecoul body-ului, nu excepția Pydantic (poate conține
+    # inputul clientului — el l-a trimis, dar logurile/răspunsurile nu-l repetă).
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _v2_error(400, "invalid_json", "corpul nu este JSON valid")
+    try:
+        turn_req: WebTurnRequestV2 = parse_turn_request(payload)
+    except (ValueError, TypeError):
+        return _v2_error(422, "schema_invalid", "corpul nu respectă contractul web-turn.v2")
+    if turn_req.input.type == "action":
+        # Tokenurile opace semnate sunt NX-236 — până atunci, refuz onest, nu interpretare.
+        return _v2_error(422, "action_not_supported", "acțiunile opace nu sunt încă acceptate")
+
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        channel = await resolve_channel(conn, "webchat", token)
+    if channel is None:
+        raise HTTPException(status_code=403, detail="unknown channel")
+    db = tenant_db(session.business_id)
+    business = await _v2_business(db, session.business_id)
+    # Gard de cost ÎNAINTE de accept (NX-120, fail-CLOSED): nu punem la coadă muncă pe care
+    # bugetul tenantului/vizitatorului n-o mai acoperă.
+    cap = business.daily_cost_cap_usd or s.daily_cost_cap_usd
+    try:
+        over_budget = await cost_over_budget(
+            redis, session.business_id, cap
+        ) or await web_cost_over_visitor_cap(
+            redis, session.business_id, visitor_id, s.web_cost_cap_per_visitor_usd
+        )
+    except (RedisError, OSError):
+        over_budget = True
+    if over_budget:
+        raise HTTPException(status_code=429, detail="budget exceeded")
+
+    text = turn_req.input.text.strip()
+    # NX-129: identitate verificată opțională (JWT host-signed) — contactul se rezolvă pe ea.
+    verified_ref: str | None = None
+    if s.web_identity_enabled and turn_req.id_token and session.identity_secret:
+        verified_ref, _reject = verify_identity_token(
+            turn_req.id_token, session.identity_secret, leeway_s=s.web_identity_leeway_s
+        )
+    # NX-230 — frontiera de privacy LA ACCEPT: doar forma SAFE atinge discul. Executorul
+    # rulează pipeline-ul pe aceeași formă persistată → recovery determinist (același input,
+    # indiferent cine și când reia turul).
+    _raw_inbound, safe_inbound = apply_boundary(text)
+    if safe_inbound.degraded:
+        log.warning("privacy_guard_failed stage=web_v2_accept reason=degraded")
+    fingerprint = request_fingerprint(
+        s.web_turn_fingerprint_secret,
+        business_id=session.business_id,
+        channel_token=token,
+        text=text,
+    )
+    outcome = await accept_web_turn(
+        db,
+        business_id=session.business_id,
+        channel_id=channel["channel_id"],
+        channel_kind="webchat",
+        channel_token=token,
+        sender_external_id=verified_ref or visitor_id,
+        client_turn_id=str(turn_req.client_turn_id),
+        fingerprint=fingerprint,
+        verified=bool(verified_ref),
+        locale=business.default_locale,
+        deadline_at=datetime.now(UTC) + timedelta(seconds=s.web_turn_deadline_s),
+        # Autorizarea GET/SSE e pe SESIUNEA de browser (token+visitor), nu pe identitatea
+        # comercială: exact sesiunea care a pornit turnul îl poate citi.
+        session_ref=session_ref_hash(token, visitor_id),
+        persist_inbound=True,
+        safe_body=safe_inbound.text,
+    )
+    lang = business.default_locale or "ro"
+    if isinstance(outcome, IdempotencyConflict):
+        await _ledger_emit(
+            db,
+            outcome.row,
+            Event("web_turn_idempotency_conflict", {"web_turn_id": outcome.row.id}),
+        )
+        return _v2_error(409, "idempotency_conflict", "același ID cu alt conținut")
+    if isinstance(outcome, ActiveTurnConflict):
+        extra = {}
+        if outcome.active is not None:
+            extra["active_turn"] = status_payload(
+                outcome.active,
+                poll_after_ms=s.web_turn_poll_after_ms,
+                sse_enabled=s.web_turn_sse_enabled,
+            )
+        return _v2_error(
+            409,
+            "conversation_turn_in_progress",
+            "conversația are deja un turn activ",
+            **extra,
+        )
+    if isinstance(outcome, ExistingCompleted):
+        await _ledger_emit(
+            db,
+            outcome.row,
+            Event(
+                "web_turn_replayed",
+                {"status": outcome.row.status, "web_turn_id": outcome.row.id},
+            ),
+        )
+        return JSONResponse(status_code=200, content=terminal_view(outcome.row, lang))
+    if isinstance(outcome, ExistingInProgress):
+        await _ledger_emit(
+            db,
+            outcome.row,
+            Event("web_turn_accepted", {"mode": "existing", "web_turn_id": outcome.row.id}),
+        )
+        phase = await get_phase(redis, session.business_id, outcome.row.id)
+        return _v2_status_response(outcome.row, phase=phase)
+    assert isinstance(outcome, Accepted)
+    # Wake DUPĂ ce acceptul e comis (checkout-ul s-a închis) — niciodată înainte. Best-effort:
+    # pierderea lui e acoperită de scanul executorului + sweeper (DB = autoritatea).
+    await wake_executor(redis, session.business_id, outcome.row.id)
+    await _ledger_emit(
+        db, outcome.row, Event("web_turn_accepted", {"mode": "new", "web_turn_id": outcome.row.id})
+    )
+    return _v2_status_response(outcome.row)
+
+
+def _v2_turn_or_404(turn_id: str) -> str:
+    """Ruta cere un UUID real; orice altceva e indistinct de „nu există"."""
+    try:
+        UUID(turn_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="not found") from None
+    return turn_id
+
+
+@router.get("/v2/turns/{turn_id}")
+async def web_turn_status_v2(turn_id: str, token: str, visitor_id: str, sig: str, request: Request):
+    """Statusul sau EXACT rezultatul terminal persistat (proiecția `web-view.v2` a aceluiași
+    rând, determinist — replay byte-identic). Reautorizează tenant + sesiune la FIECARE citire;
+    alt tenant/vizitator → 404 indistinct de inexistent."""
+    session = await _v2_gate(request, token, visitor_id, sig)
+    _v2_turn_or_404(turn_id)
+    db = tenant_db(session.business_id)
+    row = await get_turn_for_session(
+        db,
+        business_id=session.business_id,
+        turn_id=turn_id,
+        channel_token=token,
+        visitor_id=visitor_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if row.status in TERMINAL_LEDGER_STATUSES:
+        business = await _v2_business(db, session.business_id)
+        return JSONResponse(
+            status_code=200, content=terminal_view(row, business.default_locale or "ro")
+        )
+    redis = await get_redis()
+    return _v2_status_response(row, phase=await get_phase(redis, session.business_id, row.id))
+
+
+@router.get("/v2/turns/{turn_id}/events")
+async def web_turn_events_v2(
+    turn_id: str,
+    token: str,
+    visitor_id: str,
+    sig: str,
+    request: Request,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+) -> StreamingResponse:
+    """SSE opțional (flag separat): PROIECȚIE a ledgerului — doar schimbări REALE de status,
+    heartbeat tehnic rar și rezultatul terminal deja comis. Fără tokeni LLM, fără draft, fără
+    chain-of-thought (nu există sursă pentru ele aici). `Last-Event-ID` reia strict crescător;
+    GET rămâne fallback-ul autoritativ. Zero conexiune DB ținută: fiecare poll e checkout scurt."""
+    s = get_settings()
+    if not s.web_turn_sse_enabled:
+        raise HTTPException(status_code=404, detail="not found")
+    session = await _v2_gate(request, token, visitor_id, sig)
+    _v2_turn_or_404(turn_id)
+    db = tenant_db(session.business_id)
+    first = await get_turn_for_session(
+        db,
+        business_id=session.business_id,
+        turn_id=turn_id,
+        channel_token=token,
+        visitor_id=visitor_id,
+    )
+    if first is None:
+        raise HTTPException(status_code=404, detail="not found")
+    business = await _v2_business(db, session.business_id)
+    lang = business.default_locale or "ro"
+    redis = await get_redis()
+    try:
+        last_sent = int(last_event_id) if last_event_id else -1
+    except ValueError:
+        last_sent = -1
+
+    async def gen():
+        sent = last_sent
+        row = first
+        started = monotonic()
+        last_emit = monotonic()
+        while True:
+            if row.status in TERMINAL_LEDGER_STATUSES:
+                # Rezultatul deja comis, O dată: un client care l-a primit (Last-Event-ID=3)
+                # nu-l primește dublu la reconectare — GET rămâne calea de re-citire.
+                ordinal, frame = result_event(row, lang)
+                if ordinal > sent:
+                    yield frame
+                return
+            phase = await get_phase(redis, session.business_id, row.id)
+            ordinal, frame = status_event(row, phase)
+            if ordinal > sent:
+                yield frame
+                sent = ordinal
+                last_emit = monotonic()
+            elif monotonic() - last_emit >= s.web_sse_heartbeat_s:
+                yield ": keepalive\n\n"
+                last_emit = monotonic()
+            if await request.is_disconnected():
+                return
+            if monotonic() - started >= s.web_turn_sse_max_s:
+                return  # sesiune bounded; clientul reconectează cu Last-Event-ID / face GET
+            await asyncio.sleep(s.web_turn_sse_poll_ms / 1000.0)
+            async with db("web_turn_get") as conn:
+                fresh = await get_turn_by_id(conn, session.business_id, row.id)
+            if fresh is None:
+                return  # șters (retenție/GDPR) — GET-ul va spune 404; nu inventăm status
+            row = fresh
 
     return StreamingResponse(
         gen(),

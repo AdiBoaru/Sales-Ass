@@ -209,10 +209,14 @@ def _wire_accept_seams(monkeypatch, *, insert_result, existing=None):
     async def fake_get(conn, business_id, conversation_id, client_turn_id):
         return existing
 
+    async def fake_get_active(conn, business_id, conversation_id):
+        return None  # NX-233: referința la turnul activ (aici nu testăm îmbogățirea)
+
     monkeypatch.setattr(ts, "get_or_create_contact", fake_contact)
     monkeypatch.setattr(ts, "get_or_create_conversation", fake_conv)
     monkeypatch.setattr(ts, "insert_turn", fake_insert)
     monkeypatch.setattr(ts, "get_turn", fake_get)
+    monkeypatch.setattr(ts, "get_active_turn", fake_get_active)
 
 
 _ACCEPT_KW = dict(

@@ -169,6 +169,24 @@ docker compose --profile proactive up -d proactive   # motor proactiv când e ne
 docker compose down               # oprește DOAR stack-ul nativx (nu atinge restul VPS-ului)
 ```
 
+### Executorul web async + recovery (NX-233)
+
+Executorul turelor v2 și sweeperul de recovery rulează **în procesul `worker`** (task-uri
+asyncio), fără serviciu nou de compose. Flags în `.env` (vezi `.env.prod.example`, secțiunea
+NX-232/233, cu ordinea de rollout): `WEB_TURN_EXECUTOR_ENABLED`, `WEB_TURN_RECOVERY_ENABLED`,
+apoi `WEB_TURN_V2_ENABLED` / `WEB_TURN_SSE_ENABLED`. Operare:
+
+```bash
+docker compose logs -f worker | grep web_turn    # claim/reclaim/fenced/sweeper (fără PII)
+docker compose restart worker                    # safe: turul curent rămâne `running` cu lease,
+                                                 # alt worker (sau același, după boot) îl reclamă
+```
+
+Semnale de urmărit în loguri: `web_turn executor … pornit`, `sweeper web_turns: scanned=…`,
+`fenced` (un zombie a fost respins — normal la restart, alarmant dacă e susținut). Rollback:
+stinge `WEB_TURN_V2_ENABLED` (acceptul nou), dar **lasă executorul + recovery aprinse** până se
+drenează turele deja acceptate; nu șterge rânduri și nu reseta epochuri.
+
 ## Auto-deploy (CI/CD)
 
 Push pe `main` → `.github/workflows/deploy.yml` construiește imaginea pe runnerele

@@ -80,13 +80,19 @@ async def load_turn(
     identity_external_id: str,
     verified_customer_ref: str | None,
     load_facts: bool,
+    preinserted_msg_id: str | None = None,
 ) -> TurnLoadSnapshot:
     """Faza 1: UN checkout scurt, zero await extern înăuntru.
 
     Ordinea e cea de dinainte de NX-231, deliberat: claim de dedupe ÎNAINTE de orice scriere
     (un duplicat nu produce mesaj și nici outbox), apoi contact → conversație → mesaj inbound →
     `last_inbound_at`, apoi citirile de context. `get_recent_messages` rămâne DUPĂ insert (istoricul
-    include mesajul curent, ca înainte)."""
+    include mesajul curent, ca înainte).
+
+    `preinserted_msg_id` (NX-233): mesajul inbound a fost DEJA persistat la acceptul durabil
+    (același checkout cu rândul `web_turns`) → nu-l inserăm a doua oară și nu re-atingem
+    `last_inbound_at` (acceptul a făcut-o). Claim-ul de dedupe RĂMÂNE: el e single-execution
+    per attempt (aliniat cu lease-ul de ledger, CLAIM_TTL_S)."""
     provider_msg_id = event.get("provider_msg_id")
     async with db("turn_load") as conn:
         # Dedupe layer 2 (durabil): retry de provider care a scăpat de Redis (FLUSHALL/restart).
@@ -109,21 +115,24 @@ async def load_turn(
             channel_id,
             locale=business.default_locale,
         )
-        inbound_msg_id = await insert_message(
-            conn,
-            business.id,
-            conv["id"],
-            contact.id,
-            Direction.INBOUND,
-            Author.CONTACT,
-            body=safe_body,
-            content_type=event.get("content_type", "text"),
-            provider_msg_id=provider_msg_id,
-            media_ref=event.get("media_id"),
-            # NX-146: turn_id în payload → Turn Replay citește EXACT mesajele turului.
-            payload={"turn_id": turn_id, "fragment_index": 0},
-        )
-        await touch_last_inbound(conn, business.id, conv["id"])
+        if preinserted_msg_id is not None:
+            inbound_msg_id = preinserted_msg_id
+        else:
+            inbound_msg_id = await insert_message(
+                conn,
+                business.id,
+                conv["id"],
+                contact.id,
+                Direction.INBOUND,
+                Author.CONTACT,
+                body=safe_body,
+                content_type=event.get("content_type", "text"),
+                provider_msg_id=provider_msg_id,
+                media_ref=event.get("media_id"),
+                # NX-146: turn_id în payload → Turn Replay citește EXACT mesajele turului.
+                payload={"turn_id": turn_id, "fragment_index": 0},
+            )
+            await touch_last_inbound(conn, business.id, conv["id"])
         history = await get_recent_messages(conn, business.id, conv["id"])
         summary = await get_summary_for_context(conn, business.id, conv["id"])
         # NX-148: memoria structurată. BEST-EFFORT (ca summary/cache): un fail de citire NU
