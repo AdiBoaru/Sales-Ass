@@ -211,8 +211,14 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   Fără fereastră 24h, fără template-uri. Handoff dezactivat by default (fără operator). Identitate:
   anonim by default; login passthrough JWT în spatele `WEB_IDENTITY_ENABLED` (NX-128/129/130).
   Audit conversațional pe calea reală: `scripts/sim/web_audit.py`.
-  > **Contract v2 (NX-228), INERT — nicio rută nu îl servește încă.** Contractul de mai sus e
-  > **v1 și rămâne activ, neatins, până la cutoverul NX-249**. În paralel există `web-view.v2`
+  > **Contract v2 (NX-228→NX-233): rutele există, flags OFF.** Contractul de mai sus e
+  > **v1 și rămâne activ, neatins, până la cutoverul NX-249**. În paralel: NX-232 = ledgerul
+  > durabil `web_turns` (idempotency + replay pe `/web/chat`, flag `WEB_TURN_LEDGER_ENABLED`);
+  > NX-233 = calea ASYNC v2 — `POST/GET /web/v2/turns` (+SSE) în `src/web/app.py`, executor cu
+  > lease/fencing (`src/web/turn_executor.py`), sweeper de recovery (`src/web/turn_recovery.py`),
+  > proiecția v1→`web-view.v2` (`src/web/turn_events.py`) — totul în spatele flag-urilor
+  > `WEB_TURN_V2_ENABLED` / `WEB_TURN_EXECUTOR_ENABLED` / `WEB_TURN_RECOVERY_ENABLED` /
+  > `WEB_TURN_SSE_ENABLED` (default OFF). Există și `web-view.v2`
   > ([`src/web/contracts_v2.py`](src/web/contracts_v2.py)), în care backendul livrează un
   > ViewModel **display-ready**: prețul e `"89,00 lei"`, nu `89.0`; reducerea vine calculată;
   > tot copy-ul (chrome, composer, anunțuri a11y) e server-owned. Frontendul devine renderer

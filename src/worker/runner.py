@@ -50,6 +50,10 @@ class PipelineDeps:
     llm: LLMClient | None = None
     media: MediaFetcherRegistry | None = None
     db: DbProvider | None = None
+    # NX-233: hook PUR de observabilitate — runner-ul îl cheamă cu numele stagiului la START.
+    # Stagiile nu știu de el (P10); marginea (executorul web) îl mapează pe faza de sârmă
+    # (working/validating). Sincron și best-effort: nu are voie să blocheze sau să ridice.
+    stage_hook: Callable[[str], None] | None = None
 
     def __post_init__(self) -> None:
         # Puntea de compat: `PipelineDeps(conn=...)` capătă un provider static → `deps.db()`
@@ -84,6 +88,11 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     try:
         for stage in stages:
             name = getattr(stage, "__name__", "stage")
+            if deps.stage_hook is not None:
+                try:
+                    deps.stage_hook(name)  # NX-233: fază de sârmă, derivată — nu blochează
+                except Exception:  # noqa: BLE001 — observabilitatea nu rupe turul (P6)
+                    log.warning("stage_hook a eșuat pe %s — ignorat", name)
             before = acc.snapshot()
             started = perf_counter()
             await stage(ctx, deps)

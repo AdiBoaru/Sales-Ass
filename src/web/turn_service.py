@@ -29,20 +29,26 @@ import hmac
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from src.db.provider import DbProvider
 from src.db.queries.contacts import get_or_create_contact
-from src.db.queries.conversations import get_or_create_conversation
+from src.db.queries.conversations import get_or_create_conversation, touch_last_inbound
+from src.db.queries.messages import insert_message
 from src.db.queries.web_turns import (
     ClaimResult,
     WebTurnRow,
+    cancel_turn,
     claim_turn,
     complete_turn,
     fail_turn,
+    get_active_turn,
     get_turn,
+    get_turn_by_id,
     insert_turn,
 )
+from src.models import Author, Direction
 
 log = logging.getLogger(__name__)
 
@@ -136,9 +142,11 @@ def session_ref_hash(token: str, sender_ref: str) -> str:
 # ── Rezultatele acceptului (contract intern, tipizat) ───────────────────────────────────────
 @dataclass(frozen=True)
 class Accepted:
-    """Rând NOU: turul e al nostru de revendicat și rulat."""
+    """Rând NOU: turul e al nostru de revendicat și rulat. `inbound_msg_id` (NX-233) = mesajul
+    inbound persistat în același checkout, când acceptul e pe calea async (`persist_inbound`)."""
 
     row: WebTurnRow
+    inbound_msg_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -167,10 +175,13 @@ class IdempotencyConflict:
 
 @dataclass(frozen=True)
 class ActiveTurnConflict:
-    """ALT turn e activ pe conversație (single-flight). Policy explicit: respingem, nu
-    punem la coadă (executorul async e NX-233; frontendul NX-243 ține composer-ul inactiv)."""
+    """ALT turn e activ pe conversație (single-flight). Policy explicit: respingem, nu punem
+    la coadă. `active` (NX-233) = rândul turnului activ, ca 409-ul `conversation_turn_in_progress`
+    să poată indica AUTORIZAT ce așteaptă clientul (referință, nu pornire); None pe drumurile
+    vechi care nu-l re-citesc."""
 
     active_client_turn_id: str | None = None
+    active: WebTurnRow | None = None
 
 
 AcceptOutcome = (
@@ -204,16 +215,22 @@ _ERROR_TEXTS: dict[str, dict[str, str]] = {
         "empty_result": "Nu am reușit să pregătesc un răspuns acum. Te rog să încerci din nou.",
         "processing_error": "A apărut o problemă la procesare. Te rog să încerci din nou.",
         "cancelled": "Cererea a fost anulată.",
+        "deadline_exceeded": "Pregătirea răspunsului a durat prea mult. Te rog să încerci din nou.",
+        "attempts_exhausted": "Nu am reușit să procesez cererea. Te rog să încerci din nou.",
     },
     "en": {
         "empty_result": "I could not prepare a reply right now. Please try again.",
         "processing_error": "Something went wrong while processing. Please try again.",
         "cancelled": "The request was cancelled.",
+        "deadline_exceeded": "Preparing the reply took too long. Please try again.",
+        "attempts_exhausted": "I could not process the request. Please try again.",
     },
     "hu": {
         "empty_result": "Most nem sikerült választ készítenem. Kérlek, próbáld újra.",
         "processing_error": "Hiba történt a feldolgozás során. Kérlek, próbáld újra.",
         "cancelled": "A kérés meg lett szakítva.",
+        "deadline_exceeded": "A válasz elkészítése túl sokáig tartott. Kérlek, próbáld újra.",
+        "attempts_exhausted": "Nem sikerült feldolgoznom a kérést. Kérlek, próbáld újra.",
     },
 }
 
@@ -240,6 +257,11 @@ async def accept_web_turn(
     verified: bool = False,
     display_name: str | None = None,
     locale: str | None = None,
+    deadline_at: datetime | None = None,
+    session_ref: str | None = None,
+    persist_inbound: bool = False,
+    safe_body: str | None = None,
+    content_type: str = "text",
 ) -> AcceptOutcome:
     """Acceptul durabil al unui turn: UN checkout scurt care rezolvă contact + conversație
     (get_or_create, idempotent — aceleași rânduri pe care le va găsi și `load_turn`) și
@@ -247,7 +269,14 @@ async def accept_web_turn(
 
     INSERT eșuat pe unique ⇒ un rând comis există DEJA: re-citim și decidem —
     fingerprint diferit → conflict; terminal → replay; altfel → in-progress. Dacă rândul
-    cu ID-ul nostru NU există, unique-ul lovit a fost single-flight-ul → alt turn activ."""
+    cu ID-ul nostru NU există, unique-ul lovit a fost single-flight-ul → alt turn activ
+    (cu referința AUTORIZATĂ la turnul activ al ACESTEI conversații — NX-233).
+
+    NX-233 (`persist_inbound=True`, calea async): mesajul inbound SAFE (deja trecut prin
+    frontiera de privacy NX-230) se scrie ÎN ACELAȘI checkout cu rândul de ledger — recovery-ul
+    după wake pierdut / restart / Redis mort re-construiește turul EXCLUSIV din DB. Executorul
+    îl citește prin `load_execution_refs`; `load_turn` primește id-ul și NU îl mai inserează.
+    `deadline_at` se fixează AICI și nu se prelungește niciodată la reclaim."""
     async with db("web_turn_accept") as conn:
         contact = await get_or_create_contact(
             conn,
@@ -267,15 +296,35 @@ async def accept_web_turn(
             contact.id,
             client_turn_id,
             fingerprint,
-            session_ref_hash=session_ref_hash(channel_token, sender_external_id),
+            session_ref_hash=session_ref or session_ref_hash(channel_token, sender_external_id),
             conversation_revision=conv["state_version"],
             pipeline_version=RESPONSE_CONTRACT_SYNC_V1,
+            deadline_at=deadline_at,
         )
         if row is not None:
-            return Accepted(row)
+            inbound_msg_id = None
+            if persist_inbound:
+                inbound_msg_id = await insert_message(
+                    conn,
+                    business_id,
+                    conv["id"],
+                    contact.id,
+                    Direction.INBOUND,
+                    Author.CONTACT,
+                    body=safe_body,
+                    content_type=content_type,
+                    provider_msg_id=client_turn_id,
+                    payload={"turn_id": row.id, "fragment_index": 0, "web_turn_id": row.id},
+                )
+                await touch_last_inbound(conn, business_id, conv["id"])
+            return Accepted(row, inbound_msg_id=inbound_msg_id)
         existing = await get_turn(conn, business_id, conv["id"], client_turn_id)
-    if existing is None:
-        return ActiveTurnConflict()
+        if existing is None:
+            active = await get_active_turn(conn, business_id, conv["id"])
+            return ActiveTurnConflict(
+                active_client_turn_id=active.client_turn_id if active else None,
+                active=active,
+            )
     return inspect_existing(existing, fingerprint)
 
 
@@ -363,6 +412,51 @@ async def get_turn_authorized(
     if row is None or row.contact_id != contact.id:
         return None
     return row
+
+
+async def get_turn_for_session(
+    db: DbProvider,
+    *,
+    business_id: str,
+    turn_id: str,
+    channel_token: str,
+    visitor_id: str,
+) -> WebTurnRow | None:
+    """Rândul unui turn după `turn_id` (id-ul de server), DOAR pentru sesiunea care l-a creat.
+
+    Autorizarea (NX-233, GET/SSE): tenant din sesiunea verificată (server-owned, P7) +
+    `session_ref_hash` — acceptul v2 îl calculează din (token, visitor_id), deci EXACT sesiunea
+    de browser care a pornit turnul îl poate citi. Alt tenant, alt vizitator sau un id inexistent
+    → None, indistinct (fără existence leak). Niciun PII nu intră în comparație: hash-ul e
+    ne-inversabil, calculat pe loc din aceleași intrări."""
+    async with db("web_turn_get") as conn:
+        row = await get_turn_by_id(conn, business_id, turn_id)
+    if row is None or row.session_ref_hash != session_ref_hash(channel_token, visitor_id):
+        return None
+    return row
+
+
+async def cancel_web_turn(
+    db: DbProvider,
+    business_id: str,
+    turn_id: str,
+    *,
+    code: str,
+    language: str,
+    lease_epoch: int | None = None,
+) -> bool:
+    """`accepted|running → cancelled` cu error-view RANDABIL (P6: și cancelled se afișează).
+    Folosit de sweeper pe `accepted` peste deadline (fără lease → fără epoch). False = rândul
+    nu mai era anulabil (alt drum l-a terminat/revendicat — DB-ul e autoritatea)."""
+    async with db("web_turn_cancel") as conn:
+        return await cancel_turn(
+            conn,
+            business_id,
+            turn_id,
+            error_view=error_view(code, language),
+            safe_error_code=code,
+            lease_epoch=lease_epoch,
+        )
 
 
 def attempt_bucket(attempt: int) -> str:

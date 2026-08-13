@@ -1336,9 +1336,12 @@ worker
 GET /bootstrap
 GET /r/{business_id}/{ref_code}
 GET /stream
+GET /v2/turns/{turn_id}
+GET /v2/turns/{turn_id}/events
 GET /webhook
 POST /chat
 POST /messages
+POST /v2/turns
 POST /webhook
 POST /webhook/orders/{business_id}
 ```
@@ -1449,8 +1452,12 @@ web_identity_enabled = false
 web_session_origin_binding = false
 web_session_v2_enabled = false
 web_session_v2_required = false
+web_turn_executor_enabled = false
 web_turn_ledger_enabled = false
 web_turn_lock_enabled = true
+web_turn_recovery_enabled = false
+web_turn_sse_enabled = false
+web_turn_v2_enabled = false
 welcome_enabled = true
 ```
 

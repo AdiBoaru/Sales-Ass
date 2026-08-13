@@ -382,6 +382,7 @@ async def _main() -> None:
     # ca să nu cuplăm src→scripts la încărcarea modulului (și calea e sensibilă la sys.path).
     from scripts.migrate import assert_migrations_current
 
+    settings = get_settings()
     pool = await get_pool()  # admin (control plane: resolve_channel)
     # NX-123 (P6): poartă de boot — workerul NU pornește tăcut peste o schemă incompletă.
     # Migrare pending = boot refuzat cu eroare explicită (regresia 010/012 care crăpa primul
@@ -400,11 +401,36 @@ async def _main() -> None:
     consumer_name = f"worker-{socket.gethostname()}"
     # NX-90: client httpx + registru de sender-e pentru typing instant (reutilizăm build_registry
     # din dispatcher). Canalele fără credențiale nu se înregistrează → typing-ul lor e skip tăcut.
+    # NX-233: executorul async al turelor web + sweeperul de recovery, ca task-uri în ACELAȘI
+    # proces worker (flags separate; OFF = zero schimbare). Executorul revendică din DB
+    # (autoritatea), wake-ul Redis doar îl trezește mai repede.
+    executor = None
+    side_tasks: list[asyncio.Task] = []
+    if settings.web_turn_executor_enabled:
+        from src.web.turn_executor import WebTurnExecutor
+
+        executor = WebTurnExecutor(redis)
+        side_tasks.append(asyncio.create_task(executor.run(), name="web-turn-executor"))
+    if settings.web_turn_recovery_enabled:
+        from src.web.turn_recovery import run_recovery_loop
+
+        side_tasks.append(asyncio.create_task(run_recovery_loop(redis), name="web-turn-recovery"))
     async with httpx.AsyncClient(timeout=15.0) as http:
         registry = build_registry(http, get_settings())
         try:
             await run_consumer(pool, redis, consumer_name, registry)
         finally:
+            # Shutdown ORDONAT (NX-233): fără claims noi → așteptare bounded → cancel. Un tur
+            # anulat rămâne `running` cu lease → alt worker îl reclamă; nimic fals `completed`.
+            if executor is not None:
+                executor.request_stop()
+            if side_tasks:
+                _done, pending = await asyncio.wait(
+                    side_tasks, timeout=settings.web_turn_shutdown_grace_s
+                )
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
             await close_media()  # închide httpx-ul de download media (NX-76)
             await close_redis()
             await close_pool()

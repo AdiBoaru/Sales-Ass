@@ -7,7 +7,7 @@ direct prin cod — totul prin `settings`.
 
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # NX-121: cap dur de lungime pe corpul inbound (text/caption/titlu interactiv), aliniat cu
@@ -841,6 +841,64 @@ class Settings(BaseSettings):
     admission_web_wait_ms: int = Field(default=1500, validation_alias="ADMISSION_WEB_WAIT_MS")
     # Poarta de admission pe ruta web sincronă. OFF → comportamentul de dinainte (web fără frână).
     web_admission_enabled: bool = Field(default=True, validation_alias="WEB_ADMISSION_ENABLED")
+
+    # --- NX-233: executorul web asincron (accept 202 + executor + SSE) -------
+    # Flags SEPARATE (rollout gradat): accept/GET v2, executorul din worker, sweeperul de
+    # recovery și SSE se aprind independent; toate OFF = zero schimbare de comportament.
+    # V1 (/web/chat sincron) rămâne neatins până la cutoverul NX-249.
+    web_turn_v2_enabled: bool = Field(default=False, validation_alias="WEB_TURN_V2_ENABLED")
+    web_turn_executor_enabled: bool = Field(
+        default=False, validation_alias="WEB_TURN_EXECUTOR_ENABLED"
+    )
+    web_turn_recovery_enabled: bool = Field(
+        default=False, validation_alias="WEB_TURN_RECOVERY_ENABLED"
+    )
+    web_turn_sse_enabled: bool = Field(default=False, validation_alias="WEB_TURN_SSE_ENABLED")
+    # Bugetul TOTAL al unui turn, fixat la accept (`deadline_at`). NU se prelungește la reclaim;
+    # NX-241 îl strânge pe măsurători. Peste el → terminal onest `deadline_exceeded` (P6).
+    web_turn_deadline_s: int = Field(default=120, validation_alias="WEB_TURN_DEADLINE_S")
+    # Heartbeat-ul lease-ului (renew CAS pe owner+epoch). Trebuie să încapă de cel puțin 2 ori
+    # în lease (validare mai jos): un tick ratat nu pierde lease-ul.
+    web_turn_heartbeat_s: float = Field(default=60.0, validation_alias="WEB_TURN_HEARTBEAT_S")
+    # Plafonul de claim-uri (attempt-uri) per turn: peste el, sweeperul/executorul terminalizează
+    # cu error-view (`attempts_exhausted`) în loc să reia la nesfârșit un tur care crapă.
+    web_turn_max_attempts: int = Field(default=3, validation_alias="WEB_TURN_MAX_ATTEMPTS")
+    # Cadența sweeperului de recovery (bounded; advisory lock → unul singur mătură per flotă).
+    web_turn_sweep_interval_s: float = Field(
+        default=30.0, validation_alias="WEB_TURN_SWEEP_INTERVAL_S"
+    )
+    # Câte ture ia executorul dintr-un scan (fair, cele mai vechi primele).
+    web_turn_claim_batch: int = Field(default=8, validation_alias="WEB_TURN_CLAIM_BATCH")
+    # Cât doarme executorul între scanuri când nu vine niciun wake (Redis BRPOP timeout).
+    web_turn_executor_poll_s: float = Field(
+        default=2.0, validation_alias="WEB_TURN_EXECUTOR_POLL_S"
+    )
+    # Hint-ul server-owned de polling pentru client (202) + cadența pollului SSE intern.
+    web_turn_poll_after_ms: int = Field(default=1000, validation_alias="WEB_TURN_POLL_AFTER_MS")
+    web_turn_sse_poll_ms: int = Field(default=1000, validation_alias="WEB_TURN_SSE_POLL_MS")
+    # Durata maximă a unei sesiuni SSE (bounded; clientul reconectează cu Last-Event-ID).
+    web_turn_sse_max_s: float = Field(default=600.0, validation_alias="WEB_TURN_SSE_MAX_S")
+    # Grația de shutdown a executorului: cât așteptăm turul curent înainte de cancel.
+    web_turn_shutdown_grace_s: float = Field(
+        default=10.0, validation_alias="WEB_TURN_SHUTDOWN_GRACE_S"
+    )
+
+    @model_validator(mode="after")
+    def _web_turn_relations(self) -> "Settings":
+        """NX-233: relațiile dintre parametrii executorului se VALIDEAZĂ la boot, nu se
+        descoperă sub incident. Config imposibilă → proces care refuză să pornească (ca poarta
+        de migrări), nu un lease care expiră între două heartbeat-uri."""
+        if self.web_turn_heartbeat_s * 2 > self.web_turn_lease_ttl_s:
+            raise ValueError(
+                f"WEB_TURN_HEARTBEAT_S ({self.web_turn_heartbeat_s}s) trebuie să încapă de cel "
+                f"puțin 2 ori în WEB_TURN_LEASE_TTL_S ({self.web_turn_lease_ttl_s}s) — altfel "
+                "un singur tick ratat pierde lease-ul"
+            )
+        if self.web_turn_deadline_s <= 0 or self.web_turn_max_attempts < 1:
+            raise ValueError("WEB_TURN_DEADLINE_S și WEB_TURN_MAX_ATTEMPTS trebuie să fie >= 1")
+        if self.web_turn_executor_poll_s <= 0 or self.web_turn_sweep_interval_s <= 0:
+            raise ValueError("WEB_TURN_EXECUTOR_POLL_S / WEB_TURN_SWEEP_INTERVAL_S: > 0")
+        return self
 
     @property
     def is_prod(self) -> bool:

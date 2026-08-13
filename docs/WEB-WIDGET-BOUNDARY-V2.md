@@ -148,6 +148,33 @@ Trei consecințe care schimbă ce trebuie să facă frontendul:
 Detaliile — scenarii de atac, procedura de rotație a cheii și ce **nu** apără marginea — sunt în
 [`WEB-EDGE-THREAT-MODEL.md`](WEB-EDGE-THREAT-MODEL.md).
 
+## 4ter. Ciclul de viață al unui turn v2 (NX-233) — accept durabil, executor, recovery
+
+Requestul HTTP **nu mai rulează pipeline-ul**. `POST /web/v2/turns` doar acceptă durabil
+(ledgerul NX-232 + inputul SAFE, într-un singur checkout) și răspunde `202`; un **executor
+separat** (în procesul worker) revendică turnul cu lease + epoch fencing, rulează pipeline-ul și
+comite terminalul atomic (rezultat + mesaj + stare). `GET /web/v2/turns/{id}` întoarce statusul
+sau **exact** ViewModelul terminal (proiecția deterministă a payload-ului persistat); SSE
+(`…/events`) e opțional și transportă doar schimbări reale de status + rezultatul deja comis —
+niciodată tokeni LLM, draft sau chain-of-thought. Pollingul rămâne fallback-ul autoritativ.
+
+| Aspect | Regula |
+|---|---|
+| stări DB (NX-232, neschimbate) | `accepted → running → completed\|failed\|cancelled` |
+| stări de sârmă | `accepted → working → validating → terminal` (`running` nu iese; `working/validating` = proiecții din `running`) |
+| single-flight | un turn activ per conversație (partial unique); al doilea ID → `409 conversation_turn_in_progress` cu referința turnului activ |
+| lease / heartbeat | `WEB_TURN_LEASE_TTL_S=300` (aliniat CLAIM_TTL_S) / `WEB_TURN_HEARTBEAT_S=60`; renew CAS pe owner+epoch |
+| deadline | `deadline_at` fixat la accept (`WEB_TURN_DEADLINE_S`); **nu** se prelungește la reclaim |
+| attempts | `WEB_TURN_MAX_ATTEMPTS=3`; peste → terminal onest `attempts_exhausted` |
+| wake | listă Redis best-effort, DUPĂ commit; pierderea lui e acoperită de scanul executorului + sweeper (**DB = autoritatea**) |
+| recovery | sweeper bounded (advisory lock): re-wake `accepted`, reclaim lease expirat, terminalizează peste deadline/attempts cu error-view randabil (P6) |
+| autorizare GET/SSE | tenant din sesiune + `session_ref_hash(token, visitor)` — exact sesiunea care a creat turnul; altcineva → 404 indistinct |
+| composer | `enabled=false` pe orice status ne-terminal e UX (NX-243), nu mutex: single-flight-ul real e în DB |
+
+Frontendul (NX-243) generează `client_turn_id`, trimite `WebTurnRequestV2`, păstrează `turn_id`
+și afișează ce primește. Nu alege workerul, nu calculează retry semantic, nu schimbă ID-ul la
+refresh, nu inventează progres și nu decide dacă un error e sigur de retrimis.
+
 ## 5. URL-uri
 
 Permis: `https://` absolut, sau rută relativă care începe cu `/`.
@@ -189,8 +216,8 @@ CTA-ul. Nu are voie să pretindă că a adăugat ceva printr-un bridge ascuns c�
 
 | Etapă | V1 | V2 |
 |---|---|---|
-| NX-228 (acum) | activ, neatins | contract inert, fără rută |
-| NX-232 → NX-241 | activ | activat progresiv în spatele flagurilor |
+| NX-228 | activ, neatins | contract inert, fără rută |
+| NX-232 → NX-241 (acum: NX-233 livrat) | activ | rute + executor + SSE în spatele flagurilor (`WEB_TURN_V2_ENABLED` etc., toate OFF) |
 | NX-249 canary | reactivabil fără pierderea turelor acceptate | trafic canary |
 | După cutover NX-249 | eliminat | singurul contract |
 
