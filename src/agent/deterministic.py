@@ -27,12 +27,15 @@ from src.agent.fallbacks import (
     _view_label,
 )
 from src.agent.reference_resolver import (
+    ReferenceRequest,
     normalize_for_match,
     page_anchor_from_snapshot,
     resolve_from_displayed,
     resolve_product_reference,
+    resolve_reference,
 )
 from src.config import get_settings
+from src.conversation.state_reducer import StateUpdateProposal
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
 from src.models import Offer, ProductRef, RetrievalResult, Route, TurnContext
 from src.safety.policy import SafetyPolicy
@@ -154,27 +157,64 @@ def _resolve_review_product(query: str, refs: list[ProductRef]) -> ProductRef | 
 
 
 def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
-    """Rezolvarea COMPLETĂ a acestui card: `named` > `ordinal` > `page` > `single`.
+    """Rezolvarea referinței, prin precedența UNICĂ din `reference_resolver`.
+
+    NX-234 (flag stins): `ordinal` > `named` > `page` > `single`, cu pagina ca fallback
+    necondiționat. NX-235 (`reference_precedence_v2_enabled`): precedența completă —
+    `action` > `named` > `ordinal` > `page(deictic)` > `selected` > `single`, iar o ancoră stale
+    sau un ordinal imposibil se întorc ca `ambiguous`, nu ca alt produs.
 
     Fără snapshot/ancoră (orice canal non-web, flag stins, pagină fără produs) cade exact pe
     `_resolve_review_product` — comportamentul de dinainte, bit cu bit."""
     refs = list(ctx.state.displayed_products)
     page = _page_anchor_ref(ctx)
-    if page is None:
+    v2 = get_settings().reference_precedence_v2_enabled
+    if page is None and not v2:
         return _resolve_review_product(query, refs)
-    resolution = resolve_product_reference(
-        query,
-        refs,
-        page=page_anchor_from_snapshot(ctx.snapshot),
-    )
+    if v2:
+        state_v2 = getattr(ctx, "state_v2", None)
+        references = getattr(state_v2, "references", None)
+        resolution = resolve_reference(
+            ReferenceRequest(
+                query=query,
+                refs=tuple(refs),
+                page=page_anchor_from_snapshot(ctx.snapshot),
+                selected_product=getattr(references, "selected_product", None),
+                displayed_revision=getattr(references, "displayed_revision", 0),
+            )
+        )
+    else:
+        resolution = resolve_product_reference(
+            query,
+            refs,
+            page=page_anchor_from_snapshot(ctx.snapshot),
+        )
     ctx.emit(
         "web_reference_resolved",
         source=resolution.source,
         outcome=resolution.outcome,
+        reason=resolution.reason,
     )
+    if v2 and resolution.resolved:
+        # NX-235: o referință rezolvată E o selecție explicită. Fără s-o memorăm, „cât costă?" de
+        # la turul următor ar redeveni ambiguu, deși clientul tocmai a arătat despre ce vorbește.
+        ctx.state_proposals.append(
+            StateUpdateProposal(
+                "set_references",
+                source="user_explicit",
+                turn_id=ctx.turn_id,
+                payload={"selected_product": resolution.product_id},
+            )
+        )
     if resolution.index is not None:
         return refs[resolution.index]
-    return page if resolution.source == "page" else None
+    if resolution.product_id is None:
+        return None
+    if page is not None and resolution.product_id == page.product_id:
+        return page
+    # Rezolvat pe un id pe care NU-l putem hidrata aici (produs selectat într-un tur anterior, ieșit
+    # din setul afișat): apelantul întreabă. Nu inventăm un `ProductRef` fără nume/preț canonice.
+    return next((r for r in refs if r.product_id == resolution.product_id), None)
 
 
 def _review_copy(language: str) -> dict[str, str]:

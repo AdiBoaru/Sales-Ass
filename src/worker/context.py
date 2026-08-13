@@ -101,7 +101,13 @@ def facts_block(ctx: TurnContext, *, max_facts: int = 6, max_chars: int = 400) -
     `ctx.facts` (gol când memoria e OFF → bloc gol, degradare).
 
     NX-160: `ctx.facts` conține DOAR facts `visibility='inject'` (PII/medical filtrate la sursă +
-    la citire), formatate cu etichete prezentabile (nu snake_case brut). Fără PII (P12)."""
+    la citire), formatate cu etichete prezentabile (nu snake_case brut). Fără PII (P12).
+
+    NX-235: un fapt pe o cheie REVOCATĂ nu se mai injectează. Memoria structurată e o sursă
+    paralelă, alimentată post-tur din conversații mai vechi: fără poarta asta, „bugetul nu mai
+    contează" ar dispărea din stare, dar s-ar întoarce a doua zi prin `facts_block` — exact bucla
+    pe care cardul o închide, doar pe alt drum."""
+    revoked = _revoked_keys(ctx)
     parts: list[str] = []
     for f in (ctx.facts or [])[:max_facts]:
         value = f.get("fact_value")
@@ -109,12 +115,67 @@ def facts_block(ctx: TurnContext, *, max_facts: int = 6, max_chars: int = 400) -
             f.get("canonical_key") or f.get("raw_key") or f.get("fact_type")
         ):
             continue
+        if revoked and _need_key_of(f) in revoked:
+            continue
         if isinstance(value, list):
             value = ", ".join(str(v) for v in value[:4])
         parts.append(f"{_fact_label(f)}: {value}")
     if not parts:
         return ""
     return ("Ce știu despre client: " + "; ".join(parts))[:max_chars]
+
+
+def _revoked_keys(ctx: TurnContext) -> frozenset[str]:
+    """Cheile retrase explicit, în vocabularul NEVOILOR. Gol când v2 e stins (fără schimbare)."""
+    from src.conversation.needs import norm_key
+    from src.conversation.state_v2 import ConversationStateV2
+
+    state_v2 = getattr(ctx, "state_v2", None)
+    if not isinstance(state_v2, ConversationStateV2):
+        return frozenset()
+    return frozenset(norm_key(k) for k in state_v2.revoked_keys())
+
+
+def _need_key_of(fact: dict) -> str:
+    """Cheia unui fact, tradusă în vocabularul nevoilor (`budget_band` → `budget_max`), ca poarta
+    de revocare să prindă și sinonimele — altfel ar fi o poartă cu numele scris greșit."""
+    from src.conversation.needs import KEY_ALIASES, norm_key
+
+    key = norm_key(fact.get("canonical_key") or fact.get("raw_key") or fact.get("fact_type") or "")
+    return KEY_ALIASES.get(key, key)
+
+
+def memory_block(ctx: TurnContext, *, max_needs: int = 8, max_chars: int = 500) -> str:
+    """NX-235 — proiecția SIGURĂ a stării curente: ce știm, cât de tare, și ce s-a retras.
+
+    Nu e istoricul deciziilor și nu e transcript: e SNAPSHOTUL. Modelul primește tăria fiecărei
+    nevoi ca informație structurală (o limită nu se negociază), dar enforcement-ul rămâne al
+    reducerului și al validatorului — un prompt nu e o poartă.
+
+    Revocările apar EXPLICIT. O absență e ambiguă („n-a spus" vs „a retras"), iar ambiguitatea e
+    exact ce permite unui rezumat să reintroducă faptul retras. Gol când v2 e stins."""
+    from src.conversation.state_v2 import ConversationStateV2
+
+    state_v2 = getattr(ctx, "state_v2", None)
+    if not isinstance(state_v2, ConversationStateV2):
+        return ""
+    lines: list[str] = []
+    needs = state_v2.active_needs()[:max_needs]
+    if needs:
+        rendered = "; ".join(
+            f"{n.key} {n.operator} {n.normalized_value}"
+            + (" (obligatoriu)" if n.strength == "hard" else "")
+            for n in needs
+        )
+        lines.append("Nevoi active (obligatoriile nu se pot relaxa): " + rendered)
+    revoked = sorted(state_v2.revoked_keys())
+    if revoked:
+        lines.append(
+            "Retrase de client (NU le reintroduce, nici din rezumat): " + ", ".join(revoked[:6])
+        )
+    if state_v2.topic.category_key:
+        lines.append(f"Subiect curent: {state_v2.topic.category_key}")
+    return "\n".join(lines)[:max_chars]
 
 
 def state_block(state: ConversationState, *, max_products: int = 3, max_chars: int = 600) -> str:
@@ -205,6 +266,9 @@ def context_blocks(ctx: TurnContext) -> str:
         customer_profile_block(ctx.contact),
         facts_block(ctx),  # NX-148: memorie structurată (după profil, înainte de state)
         state_block(ctx.state),
+        # NX-235: snapshotul redus (nevoi active + revocări) DUPĂ state_block — ce e aici e
+        # canonic și bate ce s-ar putea deduce din blocurile de mai sus. Gol când v2 e stins.
+        memory_block(ctx),
         # NX-234: ULTIMUL, fiindcă e cel mai recent context — unde se află clientul ACUM, după
         # tot ce s-a întâmplat înainte. Gol pe orice canal fără context de pagină.
         page_context_block(ctx),

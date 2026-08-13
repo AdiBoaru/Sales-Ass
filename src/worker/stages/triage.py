@@ -24,12 +24,15 @@ from pydantic import BaseModel, ValidationError
 from src.agent.fallbacks import _is_short_ack
 from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.config import get_settings
+from src.conversation.state_reducer import StateUpdateProposal
+from src.conversation.state_v2 import active_needs
 from src.db.queries.catalog import list_category_slugs, sibling_categories
 from src.domain.normalize import normalize
 from src.models import Route, RouteDecision, TurnContext
 from src.safety.policy import SafetyPolicy
 from src.worker.canonicalize import canonicalize_clarify_field
 from src.worker.context import context_blocks, conversation_transcript
+from src.worker.stages.clarify import clarification_gate
 
 if TYPE_CHECKING:
     from src.domain.pack import DomainPack
@@ -64,7 +67,10 @@ def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:
         return
     try:
         spec = build_query_spec(
-            ctx.message.body or "", ctx.business.domain_pack, locale=ctx.language
+            ctx.message.body or "",
+            ctx.business.domain_pack,
+            locale=ctx.language,
+            needs=active_needs(ctx),
         )
         # Vocabular CONTROLAT (fațete din cod + concern-uri din pack + locale-urile
         # businessului): fără el proiecția Safe e goală (fail-closed); cu el telemetria rămâne,
@@ -411,6 +417,21 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         else:
             ctx.set_reply(out.reply)
     elif route == Route.CLARIFY:
+        # NX-235: întrebăm doar dacă răspunsul schimbă ceva. Triajul rulează ÎNAINTE de retrieval,
+        # deci câștigul informațional nu se poate estima (`total_candidates=None`) — se aplică doar
+        # porțile de buclă/cunoaștere: o cheie deja întrebată de destule ori sau al cărei răspuns e
+        # deja în memorie nu se mai cere a doua oară. Refuzul NU e tăcere: rutăm pe SALES, adică
+        # cel mai bun răspuns grounded cu ce știm (P6).
+        field = missing_field or "intent"
+        if not clarification_gate(ctx, field, reason="missing_required").ask:
+            ctx.route = RouteDecision(
+                route=Route.SALES,
+                category_key=category_key,
+                filters=filters,
+                purchase_intent=purchase_intent,
+            )
+            ctx.emit("clarify_skipped", field=field)
+            return
         # NX-130: persistă slotul cerut → turul următor îl reia determinist (clarify_resume_stage).
         # NX-116: dacă nano n-a compus o întrebare (low-confidence forțat din sales/order), folosim
         # una generică per-locale.
@@ -418,7 +439,18 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         sugg = [s.strip() for s in out.suggestions if isinstance(s, str) and s.strip()][:4]
         ctx.set_clarify(
             text,
-            field=missing_field or "intent",
+            field=field,
             resume_route=Route.SALES.value,
             suggestions=sugg,
+        )
+        ctx.state_proposals.append(
+            StateUpdateProposal(
+                "set_pending_question",
+                key=field,
+                source="policy",
+                turn_id=ctx.turn_id,
+                reason="missing_required",
+                resume_route=Route.SALES.value,
+                options_refs=tuple(sugg),
+            )
         )

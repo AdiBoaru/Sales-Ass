@@ -1,0 +1,36 @@
+{
+  "name": "ro — contextul de siguranta nu cade nici la topic switch, nici la cererea modelului",
+  "locale": "ro",
+  "initial_state": {
+    "schema_version": 2,
+    "revision": 1,
+    "topic": {"category_key": "skincare"},
+    "needs": [
+      {"key": "restriction", "operator": "not_contains", "normalized_value": "retinol",
+       "strength": "hard", "status": "active", "source": "policy", "sensitive_class": "health"}
+    ]
+  },
+  "turns": [
+    {
+      "utterance": "(modelul incearca sa scoata restrictia)",
+      "proposals": [
+        {"op": "revoke", "key": "restriction", "source": "model_inferred"}
+      ],
+      "expect": {"active": {"restriction": "retinol"}, "rejected": ["safety_immutable"]}
+    },
+    {
+      "utterance": "de fapt caut un laptop",
+      "proposals": [
+        {"op": "set_topic", "category_key": "laptopuri", "source": "catalog"}
+      ],
+      "expect": {"active": {"restriction": "retinol"}, "topic": "laptopuri"}
+    },
+    {
+      "utterance": "nu mai sunt insarcinata",
+      "proposals": [
+        {"op": "revoke", "key": "restriction", "source": "user_explicit", "reason_code": "user_explicit"}
+      ],
+      "expect": {"absent": ["restriction"], "revoked": ["restriction"]}
+    }
+  ]
+}

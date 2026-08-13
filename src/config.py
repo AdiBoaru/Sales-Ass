@@ -909,6 +909,53 @@ class Settings(BaseSettings):
         default="web-chat.v1", validation_alias="WEB_CONTEXT_PIPELINE_VERSION"
     )
 
+    # --- NX-235: ConversationStateV2 (nevoi, revocări, clarificare cu information gain) ------
+    # Rollout în trei trepte, ca la NX-234 — fiecare treaptă e o proprietate a obiectului, nu un
+    # `if` împrăștiat prin stagii:
+    #   • `conversation_state_v2_enabled` — SHADOW: starea v1 se hidratează în paralel ca v2,
+    #     propunerile stagiilor se reduc determinist, se emite diff-ul pe valori canonice. `v1`
+    #     rămâne autoritatea la scriere. Zero schimbare de comportament.
+    #   • `conversation_state_v2_write_enabled` — abia el face v2 formatul PERSISTAT. Se scrie UN
+    #     SINGUR format; cititorii v1 primesc o PROIECȚIE calculată la citire (`project_v1`), deci
+    #     rollback-ul e sigur și nu există două copii care pot diverge.
+    #   • `clarification_policy_v2_enabled` / `reference_precedence_v2_enabled` — independente de
+    #     formatul persistat (lucrează pe starea hidratată, indiferent de versiune).
+    conversation_state_v2_enabled: bool = Field(
+        default=False, validation_alias="CONVERSATION_STATE_V2_ENABLED"
+    )
+    conversation_state_v2_write_enabled: bool = Field(
+        default=False, validation_alias="CONVERSATION_STATE_V2_WRITE_ENABLED"
+    )
+    clarification_policy_v2_enabled: bool = Field(
+        default=False, validation_alias="CLARIFICATION_POLICY_V2_ENABLED"
+    )
+    reference_precedence_v2_enabled: bool = Field(
+        default=False, validation_alias="REFERENCE_PRECEDENCE_V2_ENABLED"
+    )
+    # Pragul de information gain sub care NU întrebăm (răspundem cu ce avem + declarăm ce nu
+    # știm). Siguranța și conflictele hard trec peste el — sunt corectitudine, nu UX.
+    clarification_min_information_gain: float = Field(
+        default=0.30, validation_alias="CLARIFICATION_MIN_INFORMATION_GAIN"
+    )
+    # Fapte sensibile în memorie (NX-230): fără consimțământ/politică nu se PERSISTĂ nimic
+    # sensibil — turul le poate folosi request-scoped, starea nu le primește.
+    conversation_sensitive_memory_enabled: bool = Field(
+        default=False, validation_alias="CONVERSATION_SENSITIVE_MEMORY_ENABLED"
+    )
+
+    @model_validator(mode="after")
+    def _conversation_state_relations(self) -> "Settings":
+        """NX-235: a scrie v2 fără a-l hidrata/reduce ar însemna un format persistat pe care
+        nimic nu l-a produs. Poarta e AND, validată la boot (ca la NX-233/234)."""
+        if self.conversation_state_v2_write_enabled and not self.conversation_state_v2_enabled:
+            raise ValueError(
+                "CONVERSATION_STATE_V2_WRITE_ENABLED cere CONVERSATION_STATE_V2_ENABLED "
+                "(fără reducer nu există document v2 de scris)"
+            )
+        if not 0.0 <= self.clarification_min_information_gain <= 1.0:
+            raise ValueError("CLARIFICATION_MIN_INFORMATION_GAIN trebuie să fie în [0, 1]")
+        return self
+
     @model_validator(mode="after")
     def _web_turn_relations(self) -> "Settings":
         """NX-233: relațiile dintre parametrii executorului se VALIDEAZĂ la boot, nu se

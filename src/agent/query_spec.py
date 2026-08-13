@@ -67,6 +67,51 @@ class Constraint(BaseModel):
     source: str = "current_turn"
 
 
+# NX-235: maparea NEVOIE → FAȚETĂ de căutare. Cheile de nevoie sunt canonice per business
+# (`conversation.needs`), fațetele sunt canonice per retrieval (`query_rewrite`) — traducerea stă
+# aici, într-un singur loc, ca nevoia și constrângerea derivată din ea să nu se desincronizeze.
+NEED_TO_FACET: Mapping[str, str] = {
+    "budget_max": "price",
+    "budget_min": "price",
+    "concerns": "concern",
+    "restriction": "fragrance_free",
+}
+
+
+def constraints_from_needs(needs: Collection[object]) -> tuple[Constraint, ...]:
+    """Nevoile ACTIVE ale conversației → constrângeri de căutare, cu tăria păstrată.
+
+    Trei reguli, toate cerute de card:
+      • `UNKNOWN != MISMATCH` — o nevoie fără valoare canonică (`status='unknown'`) NU produce
+        constrângere. A o traduce în „valoare goală" ar filtra produse pe baza a ceva ce nu știm;
+      • o nevoie revocată/superseded nu ajunge aici (ele nu sunt `active`);
+      • `source='state'` — moștenită din conversație, nu extrasă din turul curent. Telemetria de
+        dezacord (NX-185) are nevoie să distingă cele două, altfel „de ce a filtrat așa?" n-are
+        răspuns.
+
+    O cheie fără fațetă corespondentă e SĂRITĂ, nu inventată: o fațetă necunoscută ar fi oricum
+    dropată de `to_safe`, dar mai important, ar filtra pe o coloană care nu există."""
+    out: list[Constraint] = []
+    for need in needs:
+        status = getattr(need, "status", None)
+        value = getattr(need, "normalized_value", None)
+        if status != "active" or value is None:
+            continue
+        facet = NEED_TO_FACET.get(str(getattr(need, "key", "")))
+        if facet is None:
+            continue
+        out.append(
+            Constraint(
+                facet=facet,
+                op=str(getattr(need, "operator", "eq")),
+                value=value,
+                strength=str(getattr(need, "strength", "soft")),
+                source="state",
+            )
+        )
+    return tuple(out)
+
+
 @dataclass(frozen=True, slots=True)
 class SafeVocabulary:
     """Vocabularul CONTROLAT contra căruia se validează proiecția Safe — singurul lucru care poate

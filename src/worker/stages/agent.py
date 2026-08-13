@@ -61,6 +61,9 @@ from src.agent.validator import (
     validate_prose,  # noqa: F401 — re-export (consumatori/teste)
 )
 from src.config import get_settings
+from src.conversation.needs import NeedVocabulary
+from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
+from src.conversation.state_v2 import ConversationStateV2, project_v1
 from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
@@ -165,6 +168,81 @@ def merge_constraints(
     if cat:
         merged["category_key"] = cat
     return merged, reset
+
+
+# NX-235: aceeași stivă, exprimată ca PROPUNERI. Diferența față de `merge_constraints` nu e de
+# formă, e de putere: aici fiecare fapt are tărie, sursă și status, iar reducerul refuză ce n-are
+# voie să se întâmple (un `hard` rescris de model, o cheie revocată reînviată din rezumat).
+_V2_SCALAR_KEYS = ("budget_max", "suitable_for", "brand")
+
+
+def _filter_proposals(ctx: TurnContext, route: RouteDecision) -> list[StateUpdateProposal]:
+    """`RouteDecision.filters` (sloturi extrase de triaj) → propuneri typed.
+
+    `source=user_explicit`, deliberat: clientul A DECLARAT „sub 150" — nano doar a transcris
+    declarația într-un slot validat de cod (`_normalize_slots`). `model_inferred` rămâne pentru ce
+    modelul PRESUPUNE fără ca cineva să fi spus (un rezumat care „deduce" o preferință) — și doar
+    acolo interdicția de a promova la `hard` are un sens real (D7)."""
+    filters = route.filters if isinstance(route.filters, dict) else {}
+    proposals: list[StateUpdateProposal] = []
+    if route.category_key:
+        # PRIMUL: nevoile propuse mai jos se leagă de categoria curentă (`scope`), iar o schimbare
+        # ulterioară de subiect știe exact ce are voie să retragă.
+        proposals.append(
+            StateUpdateProposal(
+                "set_topic",
+                category_key=route.category_key,
+                source="catalog",
+                turn_id=ctx.turn_id,
+            )
+        )
+    for key in _V2_SCALAR_KEYS:
+        value = filters.get(key)
+        if value not in (None, ""):
+            proposals.append(
+                StateUpdateProposal(
+                    "set_need", key=key, value=value, source="user_explicit", turn_id=ctx.turn_id
+                )
+            )
+    for concern in (filters.get("concerns") or [])[:_MAX_CONCERNS]:
+        proposals.append(
+            StateUpdateProposal(
+                "set_need",
+                key="concerns",
+                value=concern,
+                source="user_explicit",
+                turn_id=ctx.turn_id,
+            )
+        )
+    return proposals
+
+
+def _v2_constraints(ctx: TurnContext, route: RouteDecision) -> dict[str, Any] | None:
+    """Stiva MERGED derivată prin reducer, sau `None` când v2 e stins.
+
+    E o PREVIZUALIZARE pură: reduce propunerile turului peste starea hidratată și proiectează
+    rezultatul în forma v1, ca `_filters_hint` și cititorii de state să nu simtă schimbarea de
+    format. Ce se persistă se re-derivă la commit, din starea PROASPĂTĂ, cu ACELEAȘI propuneri —
+    deci previzualizarea nu poate diverge de adevăr, e aceeași funcție rulată mai devreme."""
+    state_v2 = ctx.state_v2
+    if not get_settings().conversation_state_v2_enabled or not isinstance(
+        state_v2, ConversationStateV2
+    ):
+        return None
+    proposals = _filter_proposals(ctx, route)
+    ctx.state_proposals.extend(proposals)
+    policy = ReducerPolicy(
+        vocabulary=NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None)),
+        sensitive_consent=get_settings().conversation_sensitive_memory_enabled,
+        max_clarification_attempts=get_settings().clarify_max_attempts,
+    )
+    reduced = reduce_all(state_v2, proposals, policy)
+    for rejected in reduced.rejected:
+        ctx.emit("need_update_rejected", reason=rejected.reason, operation=rejected.op)
+    merged = project_v1(reduced.state)["search_constraints"]
+    # `_filters_hint` așteaptă `concerns` ca listă; proiecția o dă deja ca listă pentru operatorul
+    # `contains`. Restul cheilor sunt scalari, ca în stiva v1.
+    return merged
 
 
 def _filters_hint(filters: dict[str, Any]) -> str:
@@ -324,6 +402,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         merged_constraints, cons_reset = merge_constraints(
             ctx.state.search_constraints, route.filters, route.category_key
         )
+        # NX-235: cu v2 aprins, stiva NU mai e un merge liber de dicționare — e rezultatul
+        # reducerului, cu tărie/sursă/status per nevoie. Forma rămâne identică pentru consumatori
+        # (`_filters_hint`, `state_block`), ca schimbarea de mecanism să nu fie și una de contract.
+        from_v2 = _v2_constraints(ctx, route)
+        if from_v2 is not None:
+            merged_constraints = from_v2
         ctx.state.search_constraints = merged_constraints
         current = route.filters or {}
         carried = sum(1 for k in merged_constraints if k != "category_key" and k not in current)
@@ -332,6 +416,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             keys=sorted(merged_constraints),
             reset=cons_reset,
             carried=carried,
+            source="reducer" if from_v2 is not None else "legacy",
         )
     filters_hint = _filters_hint(merged_constraints)  # NX-116/133: seed structurat (stiva merged)
     # A2 (Val1): semnal de CUMPĂRARE → onorează intenția (checkout_link + confirmă stocul), nu

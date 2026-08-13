@@ -86,3 +86,27 @@ single-flight per conversație (partial unique pe `accepted|running`), lease + `
 `src/gdpr/erase.py`). State machine-ul complet e în antetul migrării și în
 `src/web/turn_service.py`. Rollback OPERAȚIONAL = flag `WEB_TURN_LEDGER_ENABLED=false` (tabelul și
 rezultatele rămân; turele acceptate nu se șterg și nu se reprocesează).
+
+## NX-235 — `ConversationStateV2`: migrare LAZY, fără SQL
+
+Cardul nu adaugă nicio migrare. `conversations.state` e JSONB, deci schimbarea de format e o
+schimbare de CONȚINUT, nu de structură — n-are nevoie de DDL, iar numerotarea rămâne liberă
+(următorul număr liber e în continuare cel din registrul `tasks/stage1/README.md`).
+
+**Cum se propagă:**
+
+- *citire* — `hydrate_state_v2` detectează `schema_version >= 2`; un rând vechi trece prin
+  `adapt_v1`, conservator (numai ce se normalizează curat devine fapt activ; restul `unknown`,
+  niciodată `hard`, fără revocări retroactive inventate);
+- *scriere* — cu `CONVERSATION_STATE_V2_WRITE_ENABLED`, rândul se rescrie în v2 la **primul
+  commit al conversației**. Fără bulk rewrite în deploy: conversațiile inactive nu se ating
+  niciodată, iar cele vii migrează singure la primul mesaj;
+- *back-compat* — `ConversationState.from_jsonb` proiectează un document v2 înapoi în forma v1.
+  Se persistă **un singur format**; forma v1 e derivată la citire, deci nu există două copii care
+  pot diverge. Asta face rollback-ul sigur: stingi flagul de scriere, rândurile deja v2 rămân
+  citibile, iar revocările nu se pierd.
+
+**Bugetul rămâne al DB-ului:** CHECK-ul de 8KB pe `conversations.state` (migrarea 003) e neatins.
+`state_v2.serialize()` verifică dimensiunea ÎNAINTE de commit și degradează controlat (referințe
+→ întrebări → tombstone-uri → nevoi `soft`, niciodată `hard`/sensibile) — altfel am pierde
+răspunsul turului din cauza memoriei. Contractul complet: `docs/CONVERSATION-STATE-V2.md`.

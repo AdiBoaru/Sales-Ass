@@ -23,7 +23,7 @@ Dispatcher-ul (separat) citește outbox, trimite la canal și leagă provider_ms
 
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 from uuid import uuid4
 
@@ -33,6 +33,18 @@ from src.agent.llm import get_llm
 from src.channels.base import IDENTIFIED_CHANNELS
 from src.channels.media import get_media_registry
 from src.config import get_settings
+from src.conversation.needs import NeedVocabulary
+from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
+from src.conversation.state_v2 import (
+    PASSTHROUGH_KEYS,
+    STATE_SCHEMA_VERSION,
+    hydrate_state_v2,
+    is_v2,
+    project_v1,
+    serialize,
+    size_bucket,
+    state_diff,
+)
 from src.db import op_metrics
 from src.db.connection import bot_pool_stats
 from src.db.pool_metrics import take_acquire_stats
@@ -205,6 +217,149 @@ def _displayed_product_refs(products: list[dict] | None) -> list[dict]:
     return refs
 
 
+def _attach_state_v2(ctx: TurnContext, raw_state: dict | None) -> None:
+    """Hidratează `ctx.state_v2` din `conversations.state` (orice versiune). NX-235.
+
+    Migrarea e LAZY prin contract: un rând v1 se citește ca v2 în memorie și se rescrie în format
+    nou abia la următorul commit, dacă flagul de scriere e aprins. Fără bulk rewrite în deploy —
+    conversațiile moarte nu se ating niciodată, iar cele vii migrează singure la primul mesaj."""
+    if not get_settings().conversation_state_v2_enabled:
+        return
+    legacy = not is_v2(raw_state)
+    ctx.state_v2 = hydrate_state_v2(raw_state, _need_vocabulary(ctx))
+    ctx.emit(
+        "conversation_state_loaded",
+        schema=1 if legacy else STATE_SCHEMA_VERSION,
+        outcome="adapted" if legacy else "native",
+    )
+    if legacy and get_settings().conversation_state_v2_write_enabled:
+        ctx.emit("conversation_state_lazy_upgraded", **{"from": 1, "to": STATE_SCHEMA_VERSION})
+
+
+def _need_vocabulary(ctx: TurnContext) -> "NeedVocabulary":
+    """Vocabularul de nevoi al businessului (nucleu universal + DomainPack). Construit din
+    `ctx.business.domain_pack` — P9: ce poate memora conversația e configurație, nu cod."""
+    return NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None))
+
+
+def _reducer_policy(ctx: TurnContext) -> ReducerPolicy:
+    s = get_settings()
+    return ReducerPolicy(
+        vocabulary=_need_vocabulary(ctx),
+        sensitive_consent=s.conversation_sensitive_memory_enabled,
+        max_clarification_attempts=s.clarify_max_attempts,
+    )
+
+
+def _turn_proposals(
+    ctx: TurnContext, *, is_rich: bool, has_products: bool
+) -> list[StateUpdateProposal]:
+    """Deltele turului, ca PROPUNERI typed — aceleași delte pe care `_build_new_state` le scrie
+    în v1, doar exprimate în vocabularul reducerului.
+
+    Subiectul (`set_topic`) și nevoile din filtrele turului sunt propuse de stagiul AGENT — el
+    știe ruta și e cel care azi rulează `merge_constraints` (NX-133: doar pe SALES). Aici rămân
+    deltele deținute de Sender: setul afișat, sesiunea de căutare, prune-ul de siguranță."""
+    proposals: list[StateUpdateProposal] = list(ctx.state_proposals)
+
+    if (is_rich or has_products) and ctx.reply is not None and ctx.reply.products:
+        proposals.append(
+            StateUpdateProposal(
+                "set_references",
+                source="catalog",
+                turn_id=ctx.turn_id,
+                payload={"displayed_products": _displayed_product_refs(ctx.reply.products)},
+            )
+        )
+    # NX-119b: sesiunea de căutare — patch-ul tool-ului are întâietate; altfel un reply care nu e
+    # o căutare o închide (fără sesiuni zombi).
+    if "active_search" in ctx.state_patch:
+        proposals.append(
+            StateUpdateProposal(
+                "set_active_search", source="catalog", payload=ctx.state_patch["active_search"]
+            )
+        )
+    elif not (is_rich or has_products):
+        proposals.append(StateUpdateProposal("set_active_search", source="catalog", payload=None))
+    if "displayed_products" in ctx.state_patch:
+        # NX-173: prune-ul de siguranță scoate produse din setul afișat — trece prin aceeași
+        # operație, ca lista și revizia ei să rămână consistente. Ultimul, ca în v1: `state_patch`
+        # are întâietate peste merge-ul canonic (parity, nu preferință).
+        proposals.append(
+            StateUpdateProposal(
+                "set_references",
+                source="policy",
+                turn_id=ctx.turn_id,
+                payload={"displayed_products": ctx.state_patch["displayed_products"]},
+            )
+        )
+    return proposals
+
+
+# Cheile de `state_patch` pe care traducerea de mai sus le acoperă. Ce nu e aici e o cale NOUĂ,
+# scrisă după cardul ăsta — și nu are voie să dispară în tăcere doar fiindcă reducerul n-o știe.
+_MAPPED_PATCH_KEYS = frozenset({"active_search", "displayed_products", *PASSTHROUGH_KEYS})
+
+
+def _build_state_v2(base_state: dict, ctx: TurnContext, *, is_rich: bool, has_products: bool):
+    """Starea v2 de persistat: hidratează BAZA (proaspătă la retry), reduce deltele turului.
+
+    Funcția e la fel de pură ca `_build_new_state` și din același motiv: la conflict optimistic se
+    re-aplică ACELEAȘI propuneri pe starea proaspăt citită. Reducerul fiind determinist, rezultatul
+    e re-derivat — fără să rerulăm modelul și fără să repetăm un efect deja produs (P6)."""
+    vocab = _need_vocabulary(ctx)
+    hydrated = hydrate_state_v2(base_state, vocab)
+    reduced = reduce_all(
+        hydrated,
+        _turn_proposals(ctx, is_rich=is_rich, has_products=has_products),
+        _reducer_policy(ctx),
+    )
+    state = reduced.state
+    # `cart` (NX-237) și `safety` (NX-173) NU sunt modelate de v2 — au proprietarii lor. Le CĂRĂM
+    # neatinse din starea de bază + `state_patch`, ca migrarea de format să nu devină o rescriere
+    # de date pe care cardul ăsta nu le deține (P3).
+    passthrough = dict(state.passthrough)
+    for key in PASSTHROUGH_KEYS:
+        if key in ctx.state_patch:
+            passthrough[key] = ctx.state_patch[key]
+        elif isinstance(base_state, dict) and key in base_state and key not in passthrough:
+            passthrough[key] = base_state[key]
+    # O cheie de `state_patch` pe care traducerea n-o cunoaște (cale adăugată după cardul ăsta) e
+    # cărată VERBATIM și semnalată. Alternativa — s-o ignorăm — ar face ca aprinderea flagului de
+    # scriere să piardă tăcut date scrise de altcineva; un card viitor n-ar avea cum să observe.
+    for key in sorted(set(ctx.state_patch) - _MAPPED_PATCH_KEYS):
+        passthrough[key] = ctx.state_patch[key]
+        ctx.emit("state_patch_unmapped", key=key)
+    return replace(state, passthrough=passthrough), reduced
+
+
+def _emit_state_v2_events(ctx: TurnContext, reduced, doc: dict, size: int, degraded: bool) -> None:
+    """Observabilitate low-cardinality (P10/P12): CE s-a aplicat și DE CE s-a respins, niciodată
+    cheia sau valoarea brută în labels."""
+    for record in reduced.applied:
+        if record.op in ("set_need", "supersede", "confirm"):
+            ctx.emit(
+                "need_update",
+                operation=record.op,
+                strength=record.strength,
+                source=record.source,
+                outcome=record.outcome,
+            )
+        elif record.op == "revoke":
+            ctx.emit("constraint_revoked", reason=record.source)
+        elif record.op == "set_topic" and record.outcome == "reset":
+            ctx.emit("topic_reset", scope="category")
+    for rejected in reduced.rejected:
+        ctx.emit("need_update_rejected", reason=rejected.reason, operation=rejected.op)
+    ctx.emit(
+        "conversation_state_serialized",
+        schema=STATE_SCHEMA_VERSION,
+        state_size_bytes_bucket=size_bucket(size),
+        degraded=degraded,
+        needs=len(doc.get("needs") or []),
+    )
+
+
 def _build_new_state(
     base_state: dict, ctx: TurnContext, *, is_rich: bool, has_products: bool
 ) -> dict:
@@ -212,7 +367,25 @@ def _build_new_state(
 
     Extras ca funcție PURĂ (NX-221) ca retry-ul de `StateConflict` să poată re-aplica
     ACELEAȘI delte pe starea PROASPĂTĂ re-citită (last-writer-wins per cheie), nu pe
-    snapshot-ul stale de la începutul turului."""
+    snapshot-ul stale de la începutul turului.
+
+    NX-235: cu `conversation_state_v2_enabled`, aceleași delte trec și prin reducer. SHADOW cât
+    timp `..._write_enabled` e stins — v2 se calculează, se compară pe valori canonice și se
+    măsoară, dar autoritatea la scriere rămâne v1. Cu flagul de scriere aprins se persistă DOAR
+    documentul v2; cititorii v1 primesc proiecția (`ConversationState.from_jsonb`), deci nu există
+    două formate care pot diverge."""
+    s = get_settings()
+    if s.conversation_state_v2_enabled:
+        state_v2, reduced = _build_state_v2(
+            base_state, ctx, is_rich=is_rich, has_products=has_products
+        )
+        doc, size, degraded = serialize(state_v2)
+        _emit_state_v2_events(ctx, reduced, doc, size, degraded)
+        if s.conversation_state_v2_write_enabled:
+            return doc
+        diff = state_diff(base_state, project_v1(state_v2))
+        ctx.emit("conversation_state_shadow_diff", fields=sorted(diff), differs=bool(diff))
+
     new_state = base_state
     if (is_rich or has_products) and ctx.reply.products:
         # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
@@ -495,6 +668,10 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         handoff_until=snap.handoff_until,
         verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
+
+    # NX-235 — starea REDUSĂ, hidratată din același jsonb, ÎNAINTE de pipeline (stagiile o
+    # propun, nu o descoperă). Owner UNIC: processor (P3). Flag OFF → `None` peste tot.
+    _attach_state_v2(ctx, snap.state)
 
     # NX-234 — `TurnSnapshot`, construit ÎNTRE load și pipeline. Aici, nu mai devreme (are nevoie
     # de contact/conversație/state) și nu mai târziu (stagiile trebuie să-l găsească gata). Un

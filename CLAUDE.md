@@ -256,7 +256,10 @@ class TurnContext:
     contact: Contact                    # citit din contacts (+ channel_identities)
     message: InboundMessage             # body, content_type, provider_msg_id
     history: list[Message]              # max 8, cel mai recent ultimul
-    state: ConversationState            # conversations.state jsonb, max 8KB
+    state: ConversationState            # conversations.state jsonb, max 8KB (v1)
+    state_v2: Any                       # NX-235: starea REDUSĂ (nevoi/revocări/referințe);
+                                        # owner processor, None cu flagul stins
+    state_proposals: list               # NX-235: propuneri typed ale stagiilor (ca `events`)
     language: str                       # 'ro' | 'hu' | 'en' (setat în Gates; DB: locale)
     route: RouteDecision | None         # scris DOAR de stagiul Triaj
     retrieval: RetrievalResult | None   # scris DOAR de stagiul Retrieval
@@ -314,6 +317,12 @@ conversations     — id, business_id, contact_id, channel_id, status,
                     (optimistic lock), risk_flags[], shadow_mode
                     • in_24h_window(conv) = funcție SQL (derivat, nu flag stocat)
                     • state = ref-uri (displayed_products: {id,name,price}), NU obiecte
+                    • NX-235: `state` are DOUĂ forme. v1 = azi; v2 (`schema_version: 2`) =
+                      stare REDUSĂ (needs cu strength/status/source + revocations + references),
+                      scrisă doar sub `CONVERSATION_STATE_V2_WRITE_ENABLED`. Se persistă UN
+                      singur format; cititorii v1 primesc o proiecție la citire
+                      (`ConversationState.from_jsonb`). Migrare LAZY, fără SQL.
+                      Contract: docs/CONVERSATION-STATE-V2.md
 conversation_summaries — id, business_id, conversation_id, upto_message_at, summary
 messages [PARTIȚIONAT] — id, business_id, conversation_id, contact_id,
                     direction(inbound|outbound|internal), author(contact|bot|
@@ -543,6 +552,7 @@ nativx-assistant/
 │   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
 │   ├── WEB-WIDGET-BOUNDARY-V2.md← NX-228: matricea de ownership + regula „frontend pasiv"
 │   ├── WEB-CONTEXT-DATA-READINESS.md ← NX-234: field → sursă → SLA → UNKNOWN + coverage măsurat
+│   ├── CONVERSATION-STATE-V2.md  ← NX-235: inventar state v1 + contract v2 + rollout/migrare lazy
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
 ├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); db_check.py,
@@ -587,9 +597,15 @@ nativx-assistant/
 │   │   Facts/Evidence/Provenance/DerivedSignals + obligatorii per categorie)
 │   ├── catalog/                 ← NX-234: regulile canonice de catalog (SQL-ul rămâne în db/queries)
 │   │   └── context_resolver.py  ← rehidratare batch a contextului de pagină + relații + freshness
+│   ├── conversation/            ← NX-235: memoria conversației ca STARE REDUSĂ (totul PUR)
+│   │   ├── state_v2.py          ← schema `ConversationStateV2` + caps + adapter v1↔v2 + serialize
+│   │   ├── needs.py             ← vocabularul de nevoi din DomainPack (P9) + normalizare canonică
+│   │   ├── state_reducer.py     ← SINGURUL scriitor de stare: propuneri typed → aplicat/respins
+│   │   └── clarification_policy.py ← information gain + anti-buclă (max o întrebare/tur)
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
-│   │   ├── reference_resolver.py← NX-234: „acesta"/„prima" → produs (named>ordinal>page>single)
+│   │   ├── reference_resolver.py← NX-234/235: „acesta"/„prima" → produs; precedență UNICĂ
+│   │   │                          (action>named>ordinal>page>selected>single), stale = refuz
 │   │   └── tool_definitions.py  ← OpenAI tool schemas
 │   ├── proactive/
 │   │   ├── scheduler.py         ← proactive_jobs → outbox (motor NX-70; calea template LIVE, PR #142)
