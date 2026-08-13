@@ -1203,7 +1203,8 @@ care îl scrie. Când două vor să scrie același câmp, arhitectura e greșit�
 | Câmp | Proprietar unic | Notă |
 | --- | --- | --- |
 | `language` | `language_stage` | Cheie în TOATE lookup-urile (faqs / semantic_cache / wa_templates) |
-| `route` | `triage_stage` | Excepții documentate: `alias_stage` setează ruta fără reply; `handoff_stage` o rescrie în SALES pe canale fără operator; `clarify_resume` o restaurează |
+| `route` | `triage_stage` | Excepții documentate: `alias_stage` setează ruta fără reply; `handoff_stage` o rescrie în SALES pe canale fără operator; `clarify_resume` o restaurează; `action_kernel_stage` o fixează pentru o acțiune opacă (NX-236) |
+| `action` | `processor` | Comanda deja autorizată la marginea web; kernelul o CITEȘTE, nu o produce |
 | `retrieval` | `planner.build_plan` | Singurul scriitor — de aceea gate-ul de siguranță final stă tot acolo |
 | `reply` | orice stagiu (early exit) | Un singur punct de IEȘIRE (Sender), dar multe puncte de decizie |
 | `halt` | `gates_stage` | Tăcere INTENȚIONATĂ, fără reply — distinctă de „n-am produs nimic" |
@@ -1298,6 +1299,7 @@ o muchie greșită între ele — pentru muchii rămân `arch_explorer/verify.py
 ```claim:stages
 gates_stage
 language_stage
+action_kernel_stage
 clarify_resume_stage
 greeting_stage
 alias_stage
@@ -1450,6 +1452,7 @@ validator_bare_numbers_enabled = true
 validator_claims_enabled = true
 validator_stock_claims_enabled = false
 vision_enabled = true
+web_actions_enabled = false
 web_admission_enabled = true
 web_context_enabled = false
 web_context_prompt_enabled = false

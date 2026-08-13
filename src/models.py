@@ -348,10 +348,18 @@ class RichItem:
 
 @dataclass
 class Chip:
-    """Sugestie de follow-up tappabilă (Telegram reply-keyboard → trimite `label` ca mesaj nou)."""
+    """Sugestie de follow-up tappabilă (Telegram reply-keyboard → trimite `label` ca mesaj nou).
+
+    NX-236 — de ce NU migrează `payload` în v2. În practică `payload` a ajuns egal cu `label`
+    (`compose._suggestion_chips`), deci „tokenul rutat" din contract e azi tot o etichetă: o
+    semantică pe care ar trebui s-o RECONSTRUIM parsând text, adică exact ce interzice boundary-ul
+    v2. Pe calea v2 sensul unui buton nu se mai deduce din ce scrie pe el — vine din planul TYPED
+    al turului (`web.action_models.plan_actions`), sigilat într-un token opac. `Chip` rămâne ce a
+    fost dintotdeauna, o etichetă pentru canalele v1 (web v1, Telegram/WhatsApp), și dispare
+    odată cu ele la cutoverul NX-249."""
 
     label: str
-    payload: str  # token rutat: "chip:cheaper" | "chip:nofrag" | "chip:cmp:<idA>:<idB>"
+    payload: str  # v1: egal cu `label` în practică — vezi nota de mai sus, NU e un token semantic
 
 
 @dataclass
@@ -563,6 +571,12 @@ class TurnContext:
     # `events` — nimeni nu scrie direct în `state_v2`. Reducerul (pur) le aplică la commit, deci
     # ordinea aici e ordinea în care s-au întâmplat în tur. Owner la aplicare: processor.
     state_proposals: list[Any] = field(default_factory=list)
+    # NX-236: acțiunea OPACĂ pe care a apăsat-o clientul (`web.action_models.ActionCommand`), deja
+    # deschisă, autorizată și consumată la marginea web. Owner UNIC: processor (din payload-ul
+    # DURABIL al mesajului inbound, nu din requestul HTTP — un turn reluat după restart trebuie să
+    # execute EXACT aceeași comandă). `None` = turn de text obișnuit, pe orice canal. `Any` ca să
+    # nu importăm `src.web` în models; accesul tipizat trece prin `action_models.action_command`.
+    action: Any = None
     events: list[Event] = field(default_factory=list)
     # NX-103: consumul LLM al turului (tokeni/cost/defalcări). Owner: runner-ul (post-pipeline);
     # processor-ul îl atașează pe mesajul outbound. None până rulează pipeline-ul / fără apel LLM.

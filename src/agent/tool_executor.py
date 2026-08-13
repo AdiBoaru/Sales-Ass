@@ -117,6 +117,13 @@ class ToolRun:
         ]
 
     async def execute(self, name: str, args: dict[str, Any]) -> str:
+        """Callback-ul buclei LLM. `name` vine EXCLUSIV de la model, dintre schemele pe care i le-am
+        dat (`tool_schemas`).
+
+        NX-236: acțiunile opace ale clientului NU intră niciodată pe aici. Ele au registrul lor
+        (`src/web/action_models.KIND_REGISTRY`, disjunct de `TOOL_NAMES` — verificat la import) și
+        dispatch-ul lor typed (`src/agent/action_kernel.dispatch`), care primește un `ActionSpec`
+        deja rezolvat, nu un nume. Un token nu poate deci numi un tool, oricât ar fi de valid."""
         async with self._execution_lock:
             return await self._execute_serialized(name, args)
 

@@ -83,6 +83,15 @@ face un buton din eticheta lui. În v1 `Chip.payload` se pierdea la
 [`render.py:178`](../src/channels/web/render.py) și rămânea doar textul — adică semantica se
 recupera ghicind. În v2 eticheta e pentru ochi, tokenul e pentru mașină.
 
+**Livrat în NX-236** (flag `WEB_ACTIONS_ENABLED`, default OFF). Ce adaugă concret la tabelul de mai
+sus: tokenul e **sigilat** (AES-SIV determinist, nu semnat-și-lizibil), legat de tenant + sesiune +
+conversație + turul-sursă + expirare, **one-shot** (consumul e chiar rândul de ledger al turului
+care îl folosește) și **re-derivabil** din planul persistat în tranzacția terminală — deci un token
+care nu apare în ViewModel-ul sursei nu a fost emis, oricât ar fi de valid criptografic.
+Registrul de kind-uri e finit și **disjunct de numele tool-urilor** (verificat la import): un token
+nu poate numi niciodată un tool. Comerțul rămâne refuzat onest până la receipt-ul NX-237.
+Detalii, threat model și runbook de rotație: [`WEB-ACTIONS-V2.md`](WEB-ACTIONS-V2.md).
+
 ### 3.3 Chrome, composer, a11y — server-owned, obligatoriu
 
 | Câmp v2 | Owner | Validator | Renderer FE |

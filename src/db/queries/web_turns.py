@@ -146,6 +146,33 @@ async def get_turn_by_id(
     return _to_row(rec)
 
 
+async def find_turn_by_fingerprint(
+    conn: asyncpg.Connection,
+    business_id: str,
+    conversation_id: str,
+    request_fingerprint: str,
+) -> WebTurnRow | None:
+    """NX-236 — turul care ține deja o cheie de request (consumul one-shot al unei acțiuni).
+
+    Fingerprint-ul unui turn de tip ACȚIUNE e HMAC peste `action_id` (`web.action_service`), deci
+    „a mai consumat cineva butonul ăsta?" e o simplă căutare pe rândurile conversației. Ledgerul
+    e AUTORITATEA: nu există un registru paralel în Redis și nu s-a adăugat nicio coloană — cheia
+    de consum e chiar rândul turului care a folosit acțiunea.
+
+    Cel mai VECHI câștigă: dacă două ture ar purta aceeași cheie (nu se poate azi — indexul parțial
+    de single-flight le serializează), primul consumator rămâne autoritatea, determinist.
+    `business_id = $1` + conversație (P7); scanul e mărginit de indexul pe conversație."""
+    rec = await conn.fetchrow(
+        f"select {_ROW_COLS} from web_turns "
+        "where business_id = $1 and conversation_id = $2 and request_fingerprint = $3 "
+        "order by accepted_at limit 1",
+        business_id,
+        conversation_id,
+        request_fingerprint,
+    )
+    return _to_row(rec)
+
+
 @dataclass(frozen=True)
 class ClaimResult:
     """Rezultatul unui claim reușit. `reclaimed=True` = lease-ul anterior era expirat (un
@@ -389,7 +416,11 @@ class ExecutionRefs:
 
     NX-234: `page_context` = contextul de pagină NORMALIZAT, persistat la accept pe payload-ul
     mesajului inbound (suprafață + ID-uri opace, zero fapte). Se citește de AICI, nu din requestul
-    HTTP — un turn reluat după restart trebuie să aibă EXACT aceeași ancoră."""
+    HTTP — un turn reluat după restart trebuie să aibă EXACT aceeași ancoră.
+
+    NX-236: `action` = comanda typed deja AUTORIZATĂ la accept (kind + argumente canonice + turul
+    sursă). Tokenul nu se persistă nicăieri — ce contează pentru execuție e verdictul, iar el e
+    definitiv: consumul s-a înregistrat în ledger în clipa acceptului."""
 
     channel_id: str
     channel_kind: str
@@ -399,6 +430,7 @@ class ExecutionRefs:
     safe_body: str | None
     content_type: str
     page_context: dict[str, Any] | None = None
+    action: dict[str, Any] | None = None
 
 
 async def load_execution_refs(
@@ -453,6 +485,7 @@ async def load_execution_refs(
         except (ValueError, TypeError):
             payload = None
     page_context = payload.get("context") if isinstance(payload, dict) else None
+    action = payload.get("action") if isinstance(payload, dict) else None
     return ExecutionRefs(
         channel_id=str(rec["channel_id"]),
         channel_kind=rec["channel_kind"],
@@ -462,6 +495,7 @@ async def load_execution_refs(
         safe_body=rec["safe_body"],
         content_type=rec["content_type"] or "text",
         page_context=page_context if isinstance(page_context, dict) else None,
+        action=action if isinstance(action, dict) else None,
     )
 
 

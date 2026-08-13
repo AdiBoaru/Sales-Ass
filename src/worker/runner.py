@@ -247,6 +247,7 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 # statice repetate fără LLM; FAQ (NX-74) răspunde la întrebări de cunoștințe din `faqs` (un
 # embed, fără generare). Triaj setează reply pt simple/clarify; agentul răspunde pt sales.
 # Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
+from src.agent.action_kernel import action_kernel_stage  # noqa: E402
 from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.alias import alias_stage  # noqa: E402
 from src.worker.stages.cache import cache_stage  # noqa: E402
@@ -264,9 +265,15 @@ from src.worker.stages.triage import triage_stage  # noqa: E402
 # alias (NX-73) e IMEDIAT ÎNAINTE de cache: match exact pe index, mai ieftin și mai sigur decât
 # embed-ul semantic din cache. Un hit FAQ early-exit-ează; un hit route/category setează ctx.route,
 # iar cache/FAQ/triaj îl respectă (skip dacă ctx.route e setat) → agentul servește.
+# action_kernel (NX-236) rulează IMEDIAT după `language` și înaintea tuturor straturilor care
+# interpretează TEXT: o acțiune opacă e o decizie deja luată, nu o intenție de ghicit, iar mesajul
+# ei e gol prin construcție (eticheta butonului nu e input). Un `Handled` iese cu reply; un
+# `Continue` setează `ctx.route`, pe care alias/cache/FAQ/triaj îl respectă (skip). Fără acțiune pe
+# tur, stagiul e un no-op — pipeline-ul de text rămâne byte-identic.
 DEFAULT_STAGES: list[Stage] = [
     gates_stage,
     language_stage,
+    action_kernel_stage,
     clarify_resume_stage,
     greeting_stage,
     alias_stage,

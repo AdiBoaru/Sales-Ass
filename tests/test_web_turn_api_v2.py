@@ -539,3 +539,186 @@ def test_config_rejects_heartbeat_that_cannot_fit_in_lease():
             WEB_TURN_HEARTBEAT_S="200",
             WEB_TURN_LEASE_TTL_S="300",
         )
+
+
+# ── NX-236: ingressul acțiunilor opace (flag WEB_ACTIONS_ENABLED) ─────────────
+
+
+def _action_ring():
+    """Inel de test (32B ASCII). Valorile nu au voie să ajungă în repo pentru prod — aici sunt
+    material de test, generat determinist ca să nu depindem de random."""
+    from src.web.action_crypto import parse_key_ring
+
+    return parse_key_ring("k1:bngyMzYtdGVzdC1rZXktb25lLS0tLS0tLS0tLS0tLS0=")
+
+
+def _action_source(**over) -> WebTurnRow:
+    """Un turn terminal cu PLANUL persistat — dovada de emitere, exact ca în tranzacția reală."""
+    from src.web.action_models import ActionArgs, ActionPlan
+    from src.web.action_service import merge_actions_into_view
+
+    plans = (ActionPlan("request_details", ActionArgs(product_ref="p-1")),)
+    view = merge_actions_into_view(
+        {"content": "ok", "products": [{"product_id": "p-1"}], "suggestions": []}, plans
+    )
+    # `completed_at` REAL, nu `NOW`: expirarea unui token e ancorată în el, iar un terminal
+    # datat în trecut ar produce tokenuri deja expirate (exact ce trebuie să se întâmple în
+    # producție, dar aici ar masca testul).
+    return _row(status="completed", response_json=view, completed_at=datetime.now(UTC), **over)
+
+
+def _wire_actions(monkeypatch, source: WebTurnRow, consumer: WebTurnRow | None = None):
+    from src.web import action_service as svc
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_actions_enabled", True)
+    monkeypatch.setattr(settings, "web_action_ttl_s", 1800)
+    monkeypatch.setattr(
+        settings, "web_action_keys", "k1:bngyMzYtdGVzdC1rZXktb25lLS0tLS0tLS0tLS0tLS0="
+    )
+
+    async def fake_get_turn_by_id(conn, business_id, turn_id):
+        return source if (source and turn_id == source.id and business_id == "b1") else None
+
+    async def fake_find(conn, business_id, conversation_id, fingerprint):
+        return consumer
+
+    monkeypatch.setattr(svc, "get_turn_by_id", fake_get_turn_by_id)
+    monkeypatch.setattr(svc, "find_turn_by_fingerprint", fake_find)
+    issued = svc.issue_actions(source, svc.plans_from_row(source), ring=_action_ring(), ttl_s=1800)
+    return issued[0]
+
+
+def _action_body(client_turn_id, token: str) -> bytes:
+    return json.dumps(
+        {
+            "schema_version": "web-turn.v2",
+            "client_turn_id": str(client_turn_id),
+            "input": {"type": "action", "action_token": token},
+        }
+    ).encode()
+
+
+async def test_action_accept_persists_the_typed_command_not_the_token(monkeypatch):
+    source = _action_source()
+    captured = {}
+    accepted = _row()
+
+    async def fake_accept(db, **kw):
+        captured.update(kw)
+        return ts.Accepted(accepted, inbound_msg_id="m1")
+
+    events, _ = _wire_v2(monkeypatch, accept=fake_accept)
+    issued = _wire_actions(monkeypatch, source)
+    res = await wa.web_turn_accept_v2(
+        _Req(_action_body(accepted.client_turn_id, issued.token)),
+        token="tok",
+        visitor_id="web_1",
+        sig="s",
+    )
+    assert res.status_code == 202
+    # Comanda TYPED se persistă; tokenul NU atinge discul (P12).
+    assert captured["action_payload"]["kind"] == "request_details"
+    assert captured["content_type"] == "action"
+    assert captured["safe_body"] == ""  # eticheta butonului nu devine mesaj de client
+    assert issued.token not in json.dumps(captured["action_payload"])
+    assert {e.type for e in events} >= {"web_action_verified", "web_action_key_age"}
+
+
+async def test_action_with_a_tampered_token_is_rejected_before_accept(monkeypatch):
+    source = _action_source()
+
+    async def fake_accept(db, **kw):
+        raise AssertionError("un token stricat NU are voie să ajungă la accept")
+
+    _wire_v2(monkeypatch, accept=fake_accept)
+    issued = _wire_actions(monkeypatch, source)
+    tampered = issued.token[:-2] + ("AB" if not issued.token.endswith("AB") else "CD")
+    res = await wa.web_turn_accept_v2(
+        _Req(_action_body(uuid4(), tampered)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 400
+    assert json.loads(res.body)["error"]["code"] == "action_invalid"
+
+
+async def test_action_from_another_visitor_is_404_without_existence_leak(monkeypatch):
+    source = _action_source()
+
+    async def fake_accept(db, **kw):
+        raise AssertionError("un token al altei sesiuni NU ajunge la accept")
+
+    _wire_v2(monkeypatch, accept=fake_accept)
+    issued = _wire_actions(monkeypatch, source)
+    res = await wa.web_turn_accept_v2(
+        _Req(_action_body(uuid4(), issued.token)), token="tok", visitor_id="web_ALTUL", sig="s"
+    )
+    assert res.status_code == 404
+    body = json.loads(res.body)
+    assert body["error"]["code"] == "action_not_found"
+    # Motivul fin (session_mismatch) rămâne în log, nu pe sârmă.
+    assert "session" not in body["error"]["message"].lower()
+
+
+async def test_action_already_consumed_by_another_turn_is_409(monkeypatch):
+    source = _action_source()
+
+    async def fake_accept(db, **kw):
+        raise AssertionError("un buton deja consumat NU ajunge la accept")
+
+    _wire_v2(monkeypatch, accept=fake_accept)
+    consumer = _row(client_turn_id=str(uuid4()))
+    issued = _wire_actions(monkeypatch, source, consumer=consumer)
+    res = await wa.web_turn_accept_v2(
+        _Req(_action_body(uuid4(), issued.token)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 409
+    assert json.loads(res.body)["error"]["code"] == "action_already_consumed"
+
+
+async def test_action_is_refused_when_the_kill_switch_is_off(monkeypatch):
+    source = _action_source()
+    _wire_v2(monkeypatch)
+    issued = _wire_actions(monkeypatch, source)
+    monkeypatch.setattr(get_settings(), "web_actions_enabled", False)
+    res = await wa.web_turn_accept_v2(
+        _Req(_action_body(uuid4(), issued.token)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 422
+    assert json.loads(res.body)["error"]["code"] == "action_not_supported"
+
+
+def test_projection_emits_submit_actions_only_with_the_flag_on(monkeypatch):
+    source = _action_source()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_actions_enabled", False)
+    tev._ring.cache_clear()
+    off = tev.terminal_view(source, "ro")
+    parse_view(off)
+    assert "submit" not in json.dumps(off)
+
+    monkeypatch.setattr(settings, "web_actions_enabled", True)
+    monkeypatch.setattr(
+        settings, "web_action_keys", "k1:bngyMzYtdGVzdC1rZXktb25lLS0tLS0tLS0tLS0tLS0="
+    )
+    monkeypatch.setattr(settings, "web_action_ttl_s", 1800)
+    tev._ring.cache_clear()
+    on = tev.terminal_view(source, "ro")
+    parse_view(on)
+    dumped = json.dumps(on)
+    assert '"type": "submit"' in dumped
+    # Tokenul e opac: nici kind-ul, nici id-ul de catalog nu se citesc din el.
+    assert "request_details" not in dumped and "p-1" not in dumped
+
+
+def test_projection_of_actions_is_byte_deterministic(monkeypatch):
+    source = _action_source()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_actions_enabled", True)
+    monkeypatch.setattr(
+        settings, "web_action_keys", "k1:bngyMzYtdGVzdC1rZXktb25lLS0tLS0tLS0tLS0tLS0="
+    )
+    monkeypatch.setattr(settings, "web_action_ttl_s", 1800)
+    tev._ring.cache_clear()
+    a = json.dumps(tev.terminal_view(source, "ro"), sort_keys=True)
+    b = json.dumps(tev.terminal_view(source, "ro"), sort_keys=True)
+    assert a == b

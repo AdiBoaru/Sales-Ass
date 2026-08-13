@@ -224,7 +224,20 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   > `TurnSnapshot` IMUABIL (`src/worker/turn_snapshot.py`) — un câmp comercial în `context` e 422,
   > o variantă de la alt produs invalidează tot contextul, iar `UNKNOWN` nu devine `0`. Ancora
   > „produsul acesta" de pe PDP: `src/agent/reference_resolver.py`. Flags `WEB_CONTEXT_ENABLED` /
-  > `WEB_CONTEXT_PROMPT_ENABLED` (default OFF; al doilea îl cere pe primul). Există și `web-view.v2`
+  > `WEB_CONTEXT_PROMPT_ENABLED` (default OFF; al doilea îl cere pe primul).
+  > NX-236 = **acțiuni opace semnate**: un buton nu mai e o etichetă retrimisă ca mesaj, ci un
+  > token SIGILAT (AES-SIV determinist, `src/web/action_crypto.py`) cu registry FINIT + argumente
+  > canonice (`src/web/action_models.py`), legat de tenant/sesiune/conversație/turul-sursă și
+  > **one-shot** (`src/web/action_service.py`): dovada de emitere se re-derivă din
+  > `response_json["actions"]` (scris în tranzacția terminală), iar consumul E chiar rândul de
+  > ledger al turului care folosește acțiunea — ZERO migrare, zero registru paralel în Redis.
+  > Execuția e `src/agent/action_kernel.py`, stagiu ÎNAINTEA triajului (o acțiune e o decizie, nu
+  > o intenție de ghicit). Numele de acțiuni și cele de tool-uri sunt registre DISJUNCTE (verificat
+  > la import). Comerțul (`cart_*`, `checkout`) e refuzat ONEST până la receipt-ul NX-237. Flag
+  > `WEB_ACTIONS_ENABLED` (default OFF; cere `WEB_TURN_V2_ENABLED` + `WEB_ACTION_KEYS`); contract
+  > + threat model + runbook de rotație: [`docs/WEB-ACTIONS-V2.md`](docs/WEB-ACTIONS-V2.md);
+  > probă reproductibilă: `python scripts/action_drive.py`.
+  > Există și `web-view.v2`
   > ([`src/web/contracts_v2.py`](src/web/contracts_v2.py)), în care backendul livrează un
   > ViewModel **display-ready**: prețul e `"89,00 lei"`, nu `89.0`; reducerea vine calculată;
   > tot copy-ul (chrome, composer, anunțuri a11y) e server-owned. Frontendul devine renderer

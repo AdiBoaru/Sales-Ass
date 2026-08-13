@@ -48,6 +48,8 @@ from src.db.queries.web_turns import (
     renew_lease,
 )
 from src.models import Event
+from src.web.action_models import TurnFacts, plan_actions
+from src.web.action_service import merge_actions_into_view
 from src.web.turn_events import set_phase
 from src.web.turn_service import (
     EmptyTerminalResult,
@@ -329,11 +331,28 @@ class WebTurnExecutor:
             # NX-234: contextul de pagină vine din DB (persistat la accept), nu din requestul
             # HTTP care de mult s-a închis. Un reclaim după restart rulează cu ACEEAȘI ancoră.
             **({"page_context": refs.page_context} if refs.page_context else {}),
+            # NX-236: comanda de acțiune, tot din DB — un turn reluat execută EXACT ce a apăsat
+            # clientul, chiar dacă tokenul a expirat sau cheia s-a rotit între timp.
+            **({"action": refs.action} if refs.action else {}),
         }
         persisted: dict = {}
 
-        async def _commit(conn, reply, language):
+        async def _commit(conn, reply, language, facts=None):
             view = render_web(reply, language or lang)
+            # NX-236: planul de acțiuni intră în ACEEAȘI tranzacție cu rezultatul — el e dovada de
+            # emitere. Aditiv și doar pe calea v2: `render_web` (v1) rămâne byte-identic.
+            if get_settings().web_actions_enabled:
+                view = merge_actions_into_view(
+                    view,
+                    plan_actions(
+                        view,
+                        TurnFacts(
+                            pending_field=getattr(facts, "pending_field", None),
+                            pending_attempts=getattr(facts, "pending_attempts", 1),
+                            active_search_ref=getattr(facts, "active_search_ref", None),
+                        ),
+                    ),
+                )
             await complete_web_turn_on_conn(
                 conn,
                 ref.business_id,

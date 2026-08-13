@@ -39,6 +39,13 @@ jobs:
       - name: Documentația de arhitectură e la zi
         run: python scripts/verify_architecture_doc.py
 
+      # NX-236: proba manuală a acțiunilor opace, rulată ca gate. Emite un ViewModel real și trece
+      # FIECARE token prin failure matrix (tamper, altă sesiune, alt tenant, expirat, sursă ștearsă,
+      # acțiune neemisă, cheie rotită, consum dublu). Fără DB, fără Redis, fără OpenAI: ~0.5s, cost
+      # zero. Iese ≠ 0 dacă vreun scenariu nu produce codul așteptat.
+      - name: Acțiunile opace refuză ce trebuie (NX-236)
+        run: python scripts/action_drive.py
+
   test:
     name: Test (pytest)
     runs-on: ubuntu-latest

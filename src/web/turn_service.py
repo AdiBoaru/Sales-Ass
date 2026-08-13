@@ -113,6 +113,7 @@ def request_fingerprint(
     text: str,
     content_type: str = "text",
     context: dict[str, Any] | None = None,
+    action: str | None = None,
 ) -> str:
     """HMAC-SHA256 peste inputul CANONIC + ID-urile de context relevante.
 
@@ -126,7 +127,12 @@ def request_fingerprint(
     turului: „ce părere ai despre acesta?" pe două pagini diferite sunt două requesturi diferite,
     iar refolosirea aceluiași `client_turn_id` după navigare TREBUIE să fie 409, nu un turn vechi
     cu context nou lipit pe el. Absent/gol → cheia nu apare deloc în forma canonică, deci
-    fingerprint-urile de dinainte de card rămân BYTE-IDENTICE."""
+    fingerprint-urile de dinainte de card rămân BYTE-IDENTICE.
+
+    NX-236: `action` = `action_id`-ul unei acțiuni opace. Când e prezent, fingerprint-ul devine
+    CHEIA DE CONSUM one-shot: același buton apăsat de două ori produce aceeași cheie, iar ledgerul
+    arbitrează (`find_turn_by_fingerprint`). De aceea, pe drumul de acțiune, apelantul NU trimite
+    nici text, nici context — „același buton, altă pagină" trebuie să rămână ACELAȘI consum."""
     payload: dict[str, Any] = {
         "v": FINGERPRINT_VERSION,
         "business_id": business_id,
@@ -136,6 +142,8 @@ def request_fingerprint(
     }
     if context:
         payload["ctx"] = context
+    if action:
+        payload["act"] = action
     canonical = json.dumps(
         payload,
         sort_keys=True,
@@ -274,6 +282,7 @@ async def accept_web_turn(
     safe_body: str | None = None,
     content_type: str = "text",
     page_context: dict[str, Any] | None = None,
+    action_payload: dict[str, Any] | None = None,
 ) -> AcceptOutcome:
     """Acceptul durabil al unui turn: UN checkout scurt care rezolvă contact + conversație
     (get_or_create, idempotent — aceleași rânduri pe care le va găsi și `load_turn`) și
@@ -294,7 +303,12 @@ async def accept_web_turn(
     se persistă pe ACELAȘI rând de mesaj inbound. Nu e o comoditate, e cerința de recovery: un
     context care ar trăi doar în requestul HTTP ar dispărea la restart, iar executorul ar rula
     ACELAȘI turn cu altă ancoră. Ledgerul nu capătă coloană nouă (zero migrare) — inputul turului
-    e mesajul, iar contextul e parte din input."""
+    e mesajul, iar contextul e parte din input.
+
+    NX-236 (`action_payload`): comanda TYPED deja autorizată (kind + argumente canonice + turul
+    sursă), pe același rând de mesaj. Nu se re-verifică tokenul la execuție — el a fost consumat
+    la accept, iar re-verificarea după o rotație de chei ar putea eșua pe un turn deja acceptat.
+    Ce se persistă e VERDICTUL, nu tokenul (P12: niciun token pe disc)."""
     async with db("web_turn_accept") as conn:
         contact = await get_or_create_contact(
             conn,
@@ -337,6 +351,7 @@ async def accept_web_turn(
                         "fragment_index": 0,
                         "web_turn_id": row.id,
                         **({"context": page_context} if page_context else {}),
+                        **({"action": action_payload} if action_payload else {}),
                     },
                 )
                 await touch_last_inbound(conn, business_id, conv["id"])

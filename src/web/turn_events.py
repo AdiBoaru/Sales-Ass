@@ -30,10 +30,20 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
+from src.config import get_settings
 from src.db.queries.web_turns import WebTurnRow
-from src.web.contracts_v2 import VIEW_SCHEMA_VERSION, parse_view
+from src.web.action_crypto import KeyRing, KeyRingError, parse_key_ring
+from src.web.action_models import MAX_ACTIONS_PER_TURN, action_label
+from src.web.action_service import IssuedAction, issue_actions, plans_from_row
+from src.web.contracts_v2 import (
+    MAX_ACTIONS_PER_ITEM,
+    MAX_ACTIONS_PER_ROW,
+    VIEW_SCHEMA_VERSION,
+    parse_view,
+)
 from src.web.turn_service import (
     TERMINAL_LEDGER_STATUSES,
     VALIDATING_PHASE,
@@ -279,7 +289,72 @@ def _safe_url(raw: Any) -> str | None:
     return None
 
 
-def _product_item(card: dict[str, Any], turn_id: str, index: int, language: str) -> dict[str, Any]:
+# ── NX-236: acțiuni opace (emise DIN planul persistat, la fiecare proiecție) ────────────────
+@lru_cache(maxsize=4)
+def _ring(spec: str) -> KeyRing:
+    """Inelul de chei, cache-uit pe VALOAREA configurației: derivarea HKDF nu are ce căuta pe
+    fiecare GET. O schimbare de config produce altă cheie de cache, deci alt inel."""
+    return parse_key_ring(spec)
+
+
+def issued_actions(row: WebTurnRow) -> tuple[IssuedAction, ...]:
+    """Acțiunile sigilate ale unui turn terminal, re-derivate DETERMINIST din planul persistat.
+
+    Kill-switch stins, inel invalid sau rând fără plan ⇒ `()`, adică exact ViewModel-ul de
+    dinainte de card (butoanele lipsesc, restul e byte-identic). Un inel stricat NU rupe proiecția:
+    P6 — mai bine un răspuns fără butoane decât niciun răspuns."""
+    s = get_settings()
+    if not s.web_actions_enabled:
+        return ()
+    try:
+        ring = _ring(s.web_action_keys)
+    except KeyRingError:
+        log.warning("web_action: key ring invalid — proiecția livrează fără acțiuni")
+        return ()
+    return issue_actions(row, plans_from_row(row), ring=ring, ttl_s=s.web_action_ttl_s)
+
+
+def _action_view(issued: IssuedAction, language: str, *, appearance: str) -> dict[str, Any] | None:
+    """`IssuedAction` → `ActionView` (NX-228): etichetă + aspect + tokenul opac. Fără kind, fără
+    argumente, fără id de produs — ce înseamnă butonul rămâne exclusiv pe server."""
+    label = action_label(issued.plan.kind, language)
+    if not label:
+        return None
+    return {
+        "id": issued.action_id,
+        "label": label[:40],
+        "appearance": appearance,
+        "activation": {"type": "submit", "token": issued.token},
+    }
+
+
+def _option_action_view(
+    issued: IssuedAction, options: list[str], *, appearance: str = "chip"
+) -> dict[str, Any] | None:
+    """Acțiunea unei opțiuni de clarificare: eticheta e OPȚIUNEA persistată de noi, pe poziția
+    din token. Frontendul o afișează; dacă o schimbă, se schimbă doar ce scrie pe buton — ordinalul
+    din token rămâne cel care decide."""
+    index = issued.plan.args.option_ref
+    if index is None or index >= len(options):
+        return None
+    label = " ".join(str(options[index]).split()).strip()
+    if not label:
+        return None
+    return {
+        "id": issued.action_id,
+        "label": label[:40],
+        "appearance": appearance,
+        "activation": {"type": "submit", "token": issued.token},
+    }
+
+
+def _product_item(
+    card: dict[str, Any],
+    turn_id: str,
+    index: int,
+    language: str,
+    actions: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     copy = _copy(language)
     item: dict[str, Any] = {
         "view_id": f"{turn_id}:p{index}",
@@ -309,16 +384,22 @@ def _product_item(card: dict[str, Any], turn_id: str, index: int, language: str)
             badges.append({"label": label, "tone": tone})
     if badges:
         item["badges"] = badges[:3]
+    row_actions: list[dict[str, Any]] = []
     url = _safe_url(card.get("url"))
     if url:
-        item["actions"] = [
+        # `navigate` NU devine niciodată token: e un link deja validat de backend (https/relativ),
+        # deci nu are ce comandă să poarte. Semnarea unui URL ar fi semnătură fără semantică.
+        row_actions.append(
             {
                 "id": f"{turn_id}:p{index}:view",
                 "label": copy["view_product"][:40],
                 "appearance": "secondary",
                 "activation": {"type": "navigate", "href": url, "target": "_blank"},
             }
-        ]
+        )
+    row_actions.extend(actions or [])
+    if row_actions:
+        item["actions"] = row_actions[:MAX_ACTIONS_PER_ITEM]
     return item
 
 
@@ -345,8 +426,34 @@ def _comparison_block(cmp: dict[str, Any], turn_id: str) -> dict[str, Any] | Non
 # ── Envelope-ul terminal `web-view.v2` ──────────────────────────────────────────────────────
 def _blocks_from_payload(payload: dict[str, Any], row: WebTurnRow, language: str) -> list[dict]:
     """Payload-ul persistat `web-chat.v1` → blocurile v2, în ordinea de citire: text →
-    comparație → carduri. Notice-ul de eșec se adaugă de apelant (are nevoie de status)."""
+    comparație → carduri → rândul de acțiuni. Notice-ul de eșec se adaugă de apelant (are nevoie
+    de status).
+
+    NX-236: butoanele SEMANTICE se atașează aici, din acțiunile re-derivate. Un card primește
+    acțiunile care îl NUMESC (`product_ref`), restul intră într-un `action_row` — legătura se face
+    pe id-ul de catalog, care rămâne server-side (`ProductItemView` nu îl expune)."""
     blocks: list[dict[str, Any]] = []
+    issued = issued_actions(row)
+    per_product: dict[str, list[dict[str, Any]]] = {}
+    row_actions: list[dict[str, Any]] = []
+    option_actions: list[dict[str, Any]] = []
+    options = [s for s in (payload.get("suggestions") or []) if isinstance(s, str)]
+    for action in issued[:MAX_ACTIONS_PER_TURN]:
+        if action.plan.kind == "answer_clarification":
+            view = _option_action_view(action, options)
+            if view:
+                option_actions.append(view)
+            continue
+        ref = action.plan.args.product_ref
+        if ref:
+            view = _action_view(action, language, appearance="secondary")
+            if view:
+                per_product.setdefault(ref, []).append(view)
+            continue
+        view = _action_view(action, language, appearance="chip")
+        if view:
+            row_actions.append(view)
+
     content = _clip(payload.get("content"), 2000)
     if content and row.status == "completed":
         blocks.append({"id": f"{row.id}:t0", "type": "text", "variant": "body", "text": content})
@@ -361,9 +468,19 @@ def _blocks_from_payload(payload: dict[str, Any], row: WebTurnRow, language: str
             {
                 "id": f"{row.id}:pl",
                 "type": "product_list",
-                "items": [_product_item(p, row.id, i, language) for i, p in enumerate(products)],
+                "items": [
+                    _product_item(
+                        p, row.id, i, language, per_product.get(str(p.get("product_id") or ""))
+                    )
+                    for i, p in enumerate(products)
+                ],
             }
         )
+    # Opțiunile de clarificare primele: sunt răspunsul la ce tocmai am întrebat, deci pasul pe care
+    # clientul chiar îl caută. Restul (compară, arată mai multe) vin după, în limita rândului.
+    trailing = (option_actions + row_actions)[:MAX_ACTIONS_PER_ROW]
+    if trailing:
+        blocks.append({"id": f"{row.id}:ar", "type": "action_row", "actions": trailing})
     return blocks
 
 
