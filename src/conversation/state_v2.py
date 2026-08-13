@@ -622,6 +622,9 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
             )[:MAX_DISPLAYED],
         ),
         active_search=bounded_map(raw.get("active_search")),
+        # NX-237: ref-ul coșului canonic e MODELAT în v2 — dacă ar cădea în passthrough, ar fi
+        # exclus la serializare (passthrough filtrează cheile modelate) și s-ar pierde tăcut.
+        cart_ref=bounded_map(raw.get("cart_ref")),
         passthrough={k: raw[k] for k in PASSTHROUGH_KEYS if k in raw},
     )
 
@@ -726,6 +729,8 @@ def project_v1(state: ConversationStateV2) -> dict[str, Any]:
         "asked_intents": [q.key for q in state.asked_questions],
         "constraints": constraints,
         "search_constraints": search_constraints,
+        # NX-237: cititorii v1 văd ref-ul coșului canonic exact ca într-un rând v1.
+        "cart_ref": dict(state.cart_ref) if state.cart_ref else None,
     }
     for key, value in state.passthrough.items():
         if key not in _MODELLED_KEYS:

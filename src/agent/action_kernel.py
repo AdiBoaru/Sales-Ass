@@ -19,16 +19,22 @@ un mesaj gol (o acțiune NU are text de client), într-o presupunere fără dove
     de client; singurul text care intră e OPȚIUNEA pe care serverul însuși a scris-o și a
     persistat-o în turul-sursă, aleasă printr-un ordinal opac.
 
-**Ce se refuză, cu reply randabil (P6, niciodată tăcere):** kind fără handler sigur (comerțul, până
-la receipt-ul NX-237), o sesiune de căutare care nu mai există, o clarificare la care se răspunde
-după ce întrebarea s-a schimbat. Un refuz e un mesaj, nu un ecran gol.
+**Ce se refuză, cu reply randabil (P6, niciodată tăcere):** kind fără handler sigur, o sesiune de
+căutare care nu mai există, o clarificare la care se răspunde după ce întrebarea s-a schimbat. Un
+refuz e un mesaj, nu un ecran gol.
+
+**Comerțul (NX-237):** kind-urile mutante (`cart_*`, `checkout`) au acum handler REAL — aceeași
+comandă typed (`CartCommand`) și același `CartService` ca tool-urile LLM, cu receipt idempotent pe
+`action_id` (double-click sau race pe one-shot ⇒ O singură creștere, același rezultat). Refuzate
+onest cât timp `CONVERSATION_CART_ENABLED` e stins. Confirmarea e DETERMINISTĂ, din snapshot
+(server-owned), și numește coșul ca al conversației — nu pretinde coșul global al magazinului.
 """
 
 from __future__ import annotations
 
 import logging
 from time import perf_counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.agent.deterministic import serve_comparison, serve_details, serve_reviews
 from src.agent.tool_definitions import TOOL_NAMES
@@ -64,6 +70,12 @@ _COPY: dict[str, dict[str, str]] = {
         "unde să meargă. Spune-mi ce cauți și continuăm.",
         "compare_failed": "Nu pot compara acum produsele alese. Îți pot arăta detaliile "
         "fiecăruia, dacă vrei.",
+        "cart_failed": "Nu am putut actualiza coșul pentru produsul ales. Îți pot arăta "
+        "alternative, dacă vrei.",
+        "cart_stale": "Coșul s-a schimbat între timp. Aruncă o privire la varianta curentă "
+        "și mai încearcă o dată.",
+        "cart_empty": "Coșul e gol deocamdată. Alege întâi un produs.",
+        "checkout_failed": "Nu pot pregăti plata acum. Coșul rămâne neschimbat.",
     },
     "en": {
         "unavailable": "I can't do that from chat yet. I can show you the product or its "
@@ -74,6 +86,12 @@ _COPY: dict[str, dict[str, str]] = {
         "what you need and we'll continue.",
         "compare_failed": "I can't compare those products right now. I can show you the "
         "details of each one instead.",
+        "cart_failed": "I couldn't update the cart for that product. I can show you "
+        "alternatives if you like.",
+        "cart_stale": "The cart changed in the meantime. Take a look at the current version "
+        "and try again.",
+        "cart_empty": "Your cart is empty for now. Pick a product first.",
+        "checkout_failed": "I can't prepare the payment right now. Your cart is unchanged.",
     },
     "hu": {
         "unavailable": "Ezt még nem tudom megcsinálni a chatből. Megmutathatom a terméket vagy "
@@ -84,6 +102,35 @@ _COPY: dict[str, dict[str, str]] = {
         "mennie. Mondd el, mire van szükséged, és folytatjuk.",
         "compare_failed": "Most nem tudom összehasonlítani a kiválasztott termékeket. "
         "Megmutathatom külön-külön a részleteiket.",
+        "cart_failed": "Nem tudtam frissíteni a kosarat ezzel a termékkel. Mutathatok "
+        "alternatívákat, ha szeretnéd.",
+        "cart_stale": "A kosár időközben megváltozott. Nézd meg a jelenlegi állapotát, és "
+        "próbáld újra.",
+        "cart_empty": "A kosár egyelőre üres. Válassz először egy terméket.",
+        "checkout_failed": "Most nem tudom előkészíteni a fizetést. A kosár változatlan.",
+    },
+}
+
+# Confirmările de coș — DETERMINISTE, server-owned, din snapshot. Numărul de produse și totalul
+# vin calculate de serviciu (display strings), nu compuse de vreun model.
+_CART_CONFIRM_COPY: dict[str, dict[str, str]] = {
+    "ro": {
+        "updated": "Am actualizat coșul conversației: {n} produse.",
+        "updated_total": "Am actualizat coșul conversației: {n} produse, total {total}.",
+        "cleared": "Am golit coșul.",
+        "checkout": "Ți-am pregătit linkul de plată: {url}",
+    },
+    "en": {
+        "updated": "I updated this conversation's cart: {n} items.",
+        "updated_total": "I updated this conversation's cart: {n} items, total {total}.",
+        "cleared": "I emptied the cart.",
+        "checkout": "Here is your payment link: {url}",
+    },
+    "hu": {
+        "updated": "Frissítettem a beszélgetés kosarát: {n} termék.",
+        "updated_total": "Frissítettem a beszélgetés kosarát: {n} termék, összesen {total}.",
+        "cleared": "Kiürítettem a kosarat.",
+        "checkout": "Itt a fizetési linked: {url}",
     },
 }
 
@@ -213,14 +260,99 @@ def _handle_answer_clarification(ctx: TurnContext, command: ActionCommand) -> Ac
     return Continue(command.kind, "clarification_answer")
 
 
+_COMMERCE_OPS: dict[str, str] = {
+    "cart_add_line": "add",
+    "cart_set_quantity": "set_quantity",
+    "cart_remove": "remove",
+    "cart_clear": "clear",
+}
+
+
+def _cart_confirm(ctx: TurnContext, snapshot: Any, *, cleared: bool = False) -> None:
+    """Confirmarea DETERMINISTĂ a coșului, din snapshot (server-owned). Totalul apare DOAR când e
+    cunoscut (`totals.status == 'known'`) — un total incert nu se afirmă (D8)."""
+    table = _CART_CONFIRM_COPY.get((ctx.language or "ro")[:2]) or _CART_CONFIRM_COPY["ro"]
+    if cleared or not snapshot.lines:
+        ctx.set_reply(table["cleared"], cacheable=False)
+        return
+    totals = snapshot.totals
+    if totals.status == "known" and totals.display:
+        text = table["updated_total"].format(n=len(snapshot.lines), total=totals.display)
+    else:
+        text = table["updated"].format(n=len(snapshot.lines))
+    ctx.set_reply(text, cacheable=False)
+
+
+async def _handle_commerce(
+    ctx: TurnContext, deps: PipelineDeps, command: ActionCommand
+) -> ActionOutcome:
+    """NX-237: mutațiile de coș din click — ACEEAȘI comandă typed + ACELAȘI serviciu ca tool-urile
+    LLM. Idempotency pe `action_id`: două tururi care ar apuca să consume aceeași acțiune cad
+    pe același receipt (o singură creștere). Confirmarea/refuzul: copy server-owned, determinist."""
+    from src.commerce.cart_models import CartCommand  # noqa: PLC0415 — evită ciclul de import
+    from src.commerce.cart_service import (  # noqa: PLC0415
+        CartService,
+        action_idempotency_key,
+    )
+
+    if not get_settings().conversation_cart_enabled:
+        # Rollback ÎNTRE emitere și consum: refuz onest (autorizarea refuză și ea, poarta e dublă).
+        return _refuse(ctx, "action_unavailable", "unavailable", command.kind)
+    service = CartService.for_turn(ctx, deps)
+    key = action_idempotency_key(command.action_id)
+    if command.kind == "checkout":
+        from src.tools.commerce_tools import _checkout_base  # noqa: PLC0415 — aceeași sursă de URL
+
+        base = _checkout_base(ctx)
+        if not base:
+            return _refuse(ctx, "action_unavailable", "checkout_failed", command.kind)
+        out = await service.create_checkout(
+            ctx.conversation_id,
+            idempotency_key=key,
+            turn_id=ctx.turn_id,
+            base_url=base,
+            action_id=command.action_id,
+        )
+        if out.ok and out.receipt is not None and out.receipt.url:
+            table = _CART_CONFIRM_COPY.get((ctx.language or "ro")[:2]) or _CART_CONFIRM_COPY["ro"]
+            ctx.set_reply(table["checkout"].format(url=out.receipt.url), cacheable=False)
+            return Handled(command.kind)
+        if out.error == "cart_empty":
+            return _refuse(ctx, "action_stale", "cart_empty", command.kind)
+        return _refuse(ctx, "action_unavailable", "checkout_failed", command.kind)
+    cart_command = CartCommand.parse(
+        _COMMERCE_OPS[command.kind],
+        {"product_id": command.args.product_ref, "quantity": command.args.quantity},
+    )
+    if cart_command is None:
+        return _refuse(ctx, "action_invalid", "cart_failed", command.kind)
+    out = await service.mutate(
+        ctx.conversation_id,
+        cart_command,
+        idempotency_key=key,
+        turn_id=ctx.turn_id,
+        action_id=command.action_id,
+    )
+    if out.conflict:
+        return _refuse(ctx, "action_stale", "cart_stale", command.kind)
+    if not out.ok:
+        return _refuse(ctx, "action_unavailable", "cart_failed", command.kind)
+    ctx.state_patch["cart_ref"] = out.snapshot.to_state_ref()
+    _cart_confirm(ctx, out.snapshot, cleared=(command.kind == "cart_clear"))
+    return Handled(command.kind)
+
+
 async def dispatch(ctx: TurnContext, deps: PipelineDeps, command: ActionCommand) -> ActionOutcome:
     """Dispatch EXHAUSTIV pe registry. Fără `else` care improvizează: un kind fără handler e un
     refuz onest, nu o încercare de a-i ghici sensul."""
     spec = spec_for(command.kind)
-    if spec is None or not spec.available or spec.mutating:
+    if spec is None or not spec.available:
         # Nu ar trebui să ajungă aici (`authorize_action` refuză înainte), dar un kernel care se
         # bazează pe apelant pentru poarta de mutație e un kernel cu o singură poartă.
         return _refuse(ctx, "action_unavailable", "unavailable", command.kind)
+    if spec.mutating:
+        # NX-237: comerțul — poarta de runtime (flag + serviciu) e în handler, tot dublată.
+        return await _handle_commerce(ctx, deps, command)
     if command.kind in ("select_product", "request_details", "request_reviews"):
         return await _handle_product_action(ctx, deps, command)
     if command.kind == "compare_selection":

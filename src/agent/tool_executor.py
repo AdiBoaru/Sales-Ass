@@ -94,6 +94,9 @@ class ToolRun:
     search_relevance: Any = None  # izi-parity: relevanța ultimului search_products (off-category)
     failed_commerce: set[str] = field(default_factory=set)  # NX-137: cart/checkout eșuate
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
+    # NX-237: ultimul snapshot al coșului CANONIC (CartService, sub flag). Plannerul citește de
+    # aici (checkout fallback / cross-sell exclude), nu din `state.cart` — o singură autoritate.
+    cart_snapshot: Any = None
     # NX-211: server-owned IDs for mutations that returned ok=True.
     successful_action_ids: set[str] = field(default_factory=set)
     # Shared asyncpg connections only support one active operation at a time. The LLM adapter may
@@ -153,6 +156,10 @@ class ToolRun:
         self.grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
             ctx.state_patch.update(result.state_patch)
+        # NX-237: coșul canonic al turului (sub flag). `getattr` — testele duck-type-uiesc
+        # ToolResult cu SimpleNamespace, iar câmpul e nou.
+        if getattr(result, "cart_snapshot", None) is not None:
+            self.cart_snapshot = result.cart_snapshot
         if name == "cart_add" and result.ok and products:
             self.added_product = products[0]  # #7b: ancora pentru cross-sell
         # NX-137: un eșec de comerț în ACEST tur → compunerea nu are voie să sugereze chips-ul

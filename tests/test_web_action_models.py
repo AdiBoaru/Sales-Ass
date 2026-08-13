@@ -51,11 +51,14 @@ def test_every_kind_declares_a_policy_and_handler_status():
         assert isinstance(spec.available, bool)
 
 
-def test_mutating_kinds_are_never_emittable_before_receipts():
-    """Comerțul nu se emite până la NX-237: un buton fără receipt ar putea confirma o minciună."""
+def test_mutating_kinds_have_handler_but_are_not_emittable():
+    """NX-237: comerțul ARE handler (CartService + receipt idempotent) → `available=True`, dar
+    EMITEREA CTA-urilor de coș rămâne a lui NX-240 — mutantele nu intră în EMITTABLE_KINDS,
+    deci niciun token de comerț nu poate exista încă în sălbăticie."""
     for spec in KIND_REGISTRY.values():
         if spec.mutating:
-            assert not spec.available, f"{spec.kind} e mutant DAR emisibil (cere receipt NX-237)"
+            assert spec.available, f"{spec.kind} e mutant fără handler (NX-237 i-a dat receipt)"
+            assert spec.kind not in EMITTABLE_KINDS, f"{spec.kind} emis înainte de NX-240"
 
 
 def test_emittable_kinds_are_the_stage1_set():

@@ -102,3 +102,26 @@ terminal EXACT (replay fără al doilea apel LLM); CHECK în DB: terminal ⇒ `r
 (P6). PII: `request_fingerprint` = HMAC (body-ul nu se stochează), `session_ref_hash` = sha256 —
 zero body/token/visitor_id în clar. Scriitori: marginea web (accept/claim) + tranzacția
 `TurnCommit` (complete, prin seam-ul `on_commit`); DELETE doar pe control plane (retenție + GDPR).
+
+## `conversation_carts` / `conversation_cart_items` / `commerce_action_receipts` — coșul canonic (NX-237, migrarea 041)
+
+Tabele noi (nu existau în schema_v2): coșul conversației devine UN sistem canonic server-side,
+mutat exclusiv prin `CartService` (`src/commerce/cart_service.py`); `conversations.state` păstrează
+doar `cart_ref` `{id, version, lines}` — liniile cu preț copiat din `state.cart` (NX-79) sunt
+LEGACY sub `CONVERSATION_CART_ENABLED` (OFF = byte-identic, nimic nu se atinge).
+
+- `conversation_carts`: un singur coș ACTIV per conversație (partial unique pe
+  `(business_id, conversation_id) where status='active'`), `version` monotonă (optimistic
+  concurrency pentru acțiunile NX-240), `status ∈ active|checked_out|expired`. Checkout-ul care
+  acoperă integral coșul îl închide; următorul add deschide altul.
+- `conversation_cart_items`: REFS + cantități, NU cache de name/price (prețul se rehidratează la
+  fiecare citire/mutație). FK COMPUS `(business_id, product_id) → products(business_id, id)` —
+  produsul altui tenant nu intră structural. `UNIQUE NULLS NOT DISTINCT
+  (business_id, cart_id, product_id, variant_id)` — două linii „fără variantă" = aceeași linie.
+  CHECK `quantity between 1 and 10` (plasa peste politica din cod).
+- `commerce_action_receipts`: dovada idempotentă a fiecărei mutații — `UNIQUE (business_id,
+  idempotency_key)` (`t:<turn>:<op>:<fp>` pe calea LLM, `a:<action_id>` pe calea de acțiuni),
+  `status ∈ pending|succeeded|failed|unknown_reconcile`, before/after version, `result_code` din
+  vocabular închis. Fără DELETE pentru `bot_runtime` (receipts = dovezi; retenția e job admin).
+  Zero PII pe toate trei; RLS `bot_runtime_tenant` ca la 040. Contract + politici de date:
+  `docs/CART-DATA-READINESS.md`.

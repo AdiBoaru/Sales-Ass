@@ -957,6 +957,20 @@ class Settings(BaseSettings):
     # Toleranța de ceas între emitent și verificator (procese diferite, VPS-uri diferite).
     web_action_clock_skew_s: int = Field(default=60, validation_alias="WEB_ACTION_CLOCK_SKEW_S")
 
+    # --- NX-237: coșul canonic al conversației (CartService + mutation receipts) --
+    # OFF (default) → byte-identic: coșul rămâne în `conversations.state.cart` (NX-79), tool-urile
+    # merg pe calea legacy. ON → toate mutațiile de coș (tool LLM + acțiuni NX-236) trec prin
+    # `CartService`: rehidratare + revalidare la fiecare mutație, receipt idempotent, versiune
+    # monotonă; starea păstrează DOAR `cart_ref` (id + versiune), nu linii cu preț copiat.
+    # Fără dual-write: cu flagul ON, `state.cart` legacy nu se mai scrie și nu se mai citește
+    # ca autoritate (liniile vechi NU se importă cu preț stale — se pornește curat, documentat).
+    conversation_cart_enabled: bool = Field(
+        default=False, validation_alias="CONVERSATION_CART_ENABLED"
+    )
+    # Pragul de prospețime al faptelor comerciale (preț/stoc) — peste el, snapshotul se declară
+    # `stale` (disclosure, nu blocaj — aceeași filozofie ca WEB_CONTEXT_FRESHNESS_SLA_S).
+    commerce_facts_sla_s: int = Field(default=86400, validation_alias="COMMERCE_FACTS_SLA_S")
+
     @model_validator(mode="after")
     def _web_action_relations(self) -> "Settings":
         """NX-236: configurația imposibilă oprește procesul la BOOT, ca la NX-233/234.

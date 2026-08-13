@@ -53,6 +53,25 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+async def _current_cart_lines(
+    ctx: TurnContext, deps: PipelineDeps, run: ToolRun, *, fetch: bool
+) -> list[dict[str, Any]]:
+    """NX-237: liniile coșului, dintr-o SINGURĂ autoritate.
+
+    Flag OFF → merge-ul legacy (`state_patch['cart']` are întâietate peste `state.cart`).
+    Flag ON → snapshotul canonic al turului (`run.cart_snapshot`, dacă un tool de coș a rulat),
+    altfel — DOAR când `fetch=True` — o citire scurtă prin serviciu. `state.cart` legacy nu mai
+    e autoritate cu flagul ON (liniile vechi nu se importă cu preț stale, decizia cardului)."""
+    if not get_settings().conversation_cart_enabled:
+        return list(ctx.state_patch.get("cart") or ctx.state.cart or [])
+    snap = run.cart_snapshot
+    if snap is None and fetch:
+        from src.commerce.cart_service import CartService  # noqa: PLC0415 — evită ciclul
+
+        snap = await CartService.for_turn(ctx, deps).get_snapshot(ctx.conversation_id)
+    return snap.command_lines() if snap is not None else []
+
+
 def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: str) -> None:
     """NX-187: MatchSet în SHADOW post-retrieval (kill-switch `match_gate_shadow_enabled`, default
     OFF). Construiește constrângerile din query (contractul NX-208) + registrul tipizat (NX-186),
@@ -213,8 +232,9 @@ async def build_plan(
         and "checkout_link" in tool_names
         and get_settings().checkout_intent_fallback_enabled
     ):
-        # state_patch["cart"] = coșul COMPLET merged de cart_add în acest tur; altfel cel din state.
-        cart_lines = list(ctx.state_patch.get("cart") or ctx.state.cart or [])
+        # state_patch["cart"] = coșul COMPLET merged de cart_add în acest tur; altfel cel din
+        # state. NX-237 (sub flag): snapshotul canonic al serviciului, nu starea (o autoritate).
+        cart_lines = await _current_cart_lines(ctx, deps, run, fetch=True)
         items = [
             {
                 "product_id": str(line["product_id"]),
@@ -241,7 +261,12 @@ async def build_plan(
         and not run.generated_links  # checkout link creat în acest tur → linkul, nu cross-sell
         and get_settings().cross_sell_enabled
     ):
-        cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
+        # NX-237 (sub flag): excluderile vin din snapshotul canonic (cart_add tocmai a rulat →
+        # `run.cart_snapshot` e setat; nu facem o citire DOAR pentru exclude).
+        if get_settings().conversation_cart_enabled:
+            cart_lines = await _current_cart_lines(ctx, deps, run, fetch=False)
+        else:
+            cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
         exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
         async with deps.db("cross_sell_complementary") as conn:
             complementary = await get_complementary_products(

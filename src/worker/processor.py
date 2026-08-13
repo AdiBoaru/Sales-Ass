@@ -317,7 +317,9 @@ def _turn_proposals(
 
 # Cheile de `state_patch` pe care traducerea de mai sus le acoperă. Ce nu e aici e o cale NOUĂ,
 # scrisă după cardul ăsta — și nu are voie să dispară în tăcere doar fiindcă reducerul n-o știe.
-_MAPPED_PATCH_KEYS = frozenset({"active_search", "displayed_products", *PASSTHROUGH_KEYS})
+_MAPPED_PATCH_KEYS = frozenset(
+    {"active_search", "displayed_products", "cart_ref", *PASSTHROUGH_KEYS}
+)
 
 
 def _build_state_v2(base_state: dict, ctx: TurnContext, *, is_rich: bool, has_products: bool):
@@ -349,7 +351,13 @@ def _build_state_v2(base_state: dict, ctx: TurnContext, *, is_rich: bool, has_pr
     for key in sorted(set(ctx.state_patch) - _MAPPED_PATCH_KEYS):
         passthrough[key] = ctx.state_patch[key]
         ctx.emit("state_patch_unmapped", key=key)
-    return replace(state, passthrough=passthrough), reduced
+    state = replace(state, passthrough=passthrough)
+    # NX-237: `cart_ref` E modelat în v2 — dacă l-am lăsa să cadă în passthrough, serializarea
+    # l-ar exclude (passthrough filtrează cheile modelate) și ref-ul s-ar pierde tăcut.
+    if "cart_ref" in ctx.state_patch:
+        raw_ref = ctx.state_patch["cart_ref"]
+        state = replace(state, cart_ref=raw_ref if isinstance(raw_ref, dict) else None)
+    return state, reduced
 
 
 def _emit_state_v2_events(ctx: TurnContext, reduced, doc: dict, size: int, degraded: bool) -> None:

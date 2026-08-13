@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.analytics.demand import clean_ids
+from src.commerce.cart_models import CART_MAX_LINE_QUANTITY, CartCommand, MutationOutcome
+from src.commerce.cart_service import CartService, tool_idempotency_key
 from src.config import get_settings
 from src.db.provider import db_tx
 from src.db.queries.catalog import get_products_by_ids
@@ -42,6 +44,50 @@ _SAFETY_REFUSED_VIEW = (
 if TYPE_CHECKING:
     from src.models import TurnContext
     from src.worker.runner import PipelineDeps
+
+
+# NX-237: ce vede MODELUL pentru fiecare cod de refuz al CartService (vocabular închis).
+# Instructiv, nu doar descriptiv (lecția NX-137): spunem ce funcționează în continuare.
+_CART_CODE_VIEWS: dict[str, str] = {
+    "product_not_found": "Produsul nu mai e în catalog.",
+    "variant_not_found": "Varianta cerută nu există; spune-mi ce mărime/nuanță dorești.",
+    "safety_excluded": _SAFETY_REFUSED_VIEW,
+    "out_of_stock": (
+        "Produsul nu e pe stoc acum — NU-l adăuga în coș; oferă-te să anunți clientul "
+        "când revine (subscribe_back_in_stock)."
+    ),
+    "availability_unknown": (
+        "Nu pot confirma stocul produsului acum, deci nu îl adaug în coș. NU promite că e "
+        "disponibil."
+    ),
+    "insufficient_stock": "Stocul e mai mic decât cantitatea cerută; propune o cantitate mai mică.",
+    "quantity_invalid": (
+        f"Cantitatea maximă per produs în coș e {CART_MAX_LINE_QUANTITY}; propune o cantitate "
+        "mai mică."
+    ),
+    "cart_full": "Coșul a atins numărul maxim de produse; finalizează sau scoate ceva întâi.",
+    "price_unknown": (
+        "Produsul nu are un preț confirmat, deci nu poate intra în coș. NU inventa un preț."
+    ),
+    "currency_mismatch": "Produsele au monede diferite; nu pot fi în același coș/checkout.",
+    "line_not_found": "Produsul nu e în coșul curent.",
+    "cart_empty": "Coșul e gol — adaugă întâi un produs cu cart_add.",
+    "cart_not_active": "Coșul a fost deja finalizat; un nou add pornește un coș nou.",
+    "receipt_pending": "Operațiunea anterioară încă se procesează; nu o repeta.",
+    "internal_error": "Unealta a eșuat.",
+}
+
+
+def _cart_view(code: str | None) -> str:
+    return _CART_CODE_VIEWS.get(code or "internal_error", "Unealta a eșuat.")
+
+
+def _cart_fail_result(ctx: TurnContext, tool: str, out: MutationOutcome) -> ToolResult:
+    """Refuzul serviciului → `ToolResult` de paritate cu calea legacy (aceleași event-uri)."""
+    code = out.error or "internal_error"
+    if code == "variant_not_found":
+        ctx.emit("variant_rejected", tool=tool, product_id=None)
+    return ToolResult(ok=False, error=code, llm_view=_cart_view(code))
 
 
 # --- argumente (validare strictă a inputului de la model) --------------------
@@ -77,8 +123,13 @@ def _variant_known(p: dict[str, Any], variant_id: str | None) -> bool:
 async def checkout_link_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
 ) -> ToolResult:
-    """Creează un link de cumpărare atribuibil (`?ref=`) pentru coșul cerut."""
+    """Creează un link de cumpărare atribuibil (`?ref=`) pentru coșul cerut.
+
+    NX-237 (`CONVERSATION_CART_ENABLED`): validarea + scrierea trec prin `CartService`
+    (receipt idempotent, fapte rehidratate); OFF (default) → calea legacy, byte-identic."""
     a = CheckoutArgs(**args)
+    if get_settings().conversation_cart_enabled:
+        return await _checkout_v2(ctx, deps, a)
 
     base = _checkout_base(ctx)
     if not base:
@@ -196,8 +247,14 @@ _CART_MAX_LINES = 10  # cap dur (aliniat cu CheckoutArgs.max_length)
 async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]) -> ToolResult:
     """Adaugă un produs în coșul conversației (persistat în `state.cart` prin `state_patch`).
     Validează produsul contra catalogului (scoped pe business); merge pe (product_id, variant_id)
-    → re-apel crește cantitatea, nu duplică linia. Întoarce totalul grounded (validator, P8)."""
+    → re-apel crește cantitatea, nu duplică linia. Întoarce totalul grounded (validator, P8).
+
+    NX-237 (`CONVERSATION_CART_ENABLED`): mutația trece prin `CartService` — coșul canonic din
+    `conversation_carts`, cu receipt idempotent per (tur, op, args); starea primește DOAR
+    `cart_ref`, nu linii cu preț copiat. OFF (default) → calea legacy de mai jos, byte-identic."""
     a = CartAddArgs(**args)
+    if get_settings().conversation_cart_enabled:
+        return await _cart_add_v2(ctx, deps, a)
     async with deps.db("cart_add_product") as conn:
         products = await get_products_by_ids(conn, ctx.business.id, [a.product_id], limit=1)
     p = products[0] if products else None
@@ -254,6 +311,113 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
         prices=[total],  # totalul coșului grounded (P8) → validator
         state_patch={"cart": cart},  # ref-uri compacte → persistate de processor
         llm_view=f"Coș actualizat ({len(cart)} produse): {summary} | total {total:.2f} lei",
+    )
+
+
+async def _cart_add_v2(ctx: TurnContext, deps: PipelineDeps, a: CartAddArgs) -> ToolResult:
+    """NX-237: `cart_add` prin serviciul canonic. Aceeași comandă typed ca un click de acțiune;
+    prețul/numele/stocul se rehidratează în serviciu — modelul nu poate afirma un preț stale."""
+    command = CartCommand.parse(
+        "add",
+        {"product_id": a.product_id, "variant_id": a.variant_id, "quantity": a.quantity},
+    )
+    if command is None:
+        # Peste capul canonic (CartAddArgs acceptă ≤99 pt schema legacy) sau ref malformat.
+        code = "quantity_invalid" if a.quantity > CART_MAX_LINE_QUANTITY else "product_not_found"
+        return ToolResult(ok=False, error=code, llm_view=_cart_view(code))
+    service = CartService.for_turn(ctx, deps)
+    out = await service.mutate(
+        ctx.conversation_id,
+        command,
+        idempotency_key=tool_idempotency_key(ctx.turn_id, command),
+        turn_id=ctx.turn_id,
+    )
+    if not out.ok:
+        return _cart_fail_result(ctx, "cart_add", out)
+    snap = out.snapshot
+    # NX-163: aceleași semnale ca pe calea legacy (raportul de cerere nu vede migrarea).
+    ctx.emit(
+        "cart_updated",
+        lines=len(snap.lines),
+        value=snap.totals.value,
+        product_ids=clean_ids(ln.product_id for ln in snap.lines),
+    )
+    summary = ", ".join(f"{ln.name} ×{ln.quantity}" for ln in snap.lines)
+    total_view = (
+        f" | total {snap.totals.display}"
+        if snap.totals.status == "known"
+        else " | total de confirmat (un preț lipsește)"
+    )
+    return ToolResult(
+        ok=True,
+        products=[dict(p) for p in out.products],  # complet → ctx.retrieval + validator
+        prices=([snap.totals.value] if snap.totals.value is not None else []),
+        state_patch={"cart_ref": snap.to_state_ref()},  # ref, NU linii (P8)
+        cart_snapshot=snap,
+        llm_view=f"Coș actualizat ({len(snap.lines)} produse): {summary}{total_view}",
+    )
+
+
+async def _checkout_v2(ctx: TurnContext, deps: PipelineDeps, a: CheckoutArgs) -> ToolResult:
+    """NX-237: checkout prin serviciul canonic — aceleași validări ca un click, receipt
+    idempotent (`ref_code = turn_id`, ca înainte), coșul canonic închis DOAR dacă e acoperit."""
+    base = _checkout_base(ctx)
+    if not base:
+        return ToolResult(
+            ok=False,
+            error="no_checkout_url",
+            llm_view=(
+                "Linkul de plată nu e configurat pentru acest magazin — NU promite și NU inventa "
+                "un link. Coșul FUNCȚIONEAZĂ separat: adaugă produsul cu cart_add și spune-i "
+                "clientului că finalizarea se face pe site."
+            ),
+        )
+    lines: list[dict[str, Any]] = []
+    for it in a.cart_items:
+        if it.quantity > CART_MAX_LINE_QUANTITY:
+            return ToolResult(
+                ok=False, error="quantity_invalid", llm_view=_cart_view("quantity_invalid")
+            )
+        lines.append(
+            {"product_id": it.product_id, "variant_id": it.variant_id, "quantity": it.quantity}
+        )
+    service = CartService.for_turn(ctx, deps)
+    fingerprint_cmd = CartCommand.parse("checkout") or CartCommand(operation="checkout")
+    out = await service.create_checkout(
+        ctx.conversation_id,
+        idempotency_key=tool_idempotency_key(ctx.turn_id, fingerprint_cmd),
+        turn_id=ctx.turn_id,
+        base_url=base,
+        lines=lines,
+    )
+    if not out.ok:
+        code = out.error or "internal_error"
+        if code == "product_not_found":
+            # Paritate legacy: „niciun produs valid" are propriul mesaj.
+            return ToolResult(
+                ok=False,
+                error="no_valid_products",
+                llm_view="Produsele cerute nu mai sunt în catalog.",
+            )
+        return _cart_fail_result(ctx, "checkout_link", out)
+    url = out.receipt.url if out.receipt else None
+    total = round(sum(float(ln["price"]) * int(ln["quantity"]) for ln in out.lines), 2)
+    ctx.emit(
+        "checkout_link_created",
+        items=len(out.lines),
+        value=total,
+        product_ids=clean_ids(str(ln["product_id"]) for ln in out.lines),
+    )
+    lines_view = ", ".join(
+        f"{ln['name']} ×{ln['quantity']} ({float(ln['price']):.2f} lei)" for ln in out.lines
+    )
+    return ToolResult(
+        ok=True,
+        products=[dict(p) for p in out.products],
+        links=[url] if url else [],
+        prices=[total],
+        cart_snapshot=out.snapshot,
+        llm_view=f"Link de checkout creat: {url}\nCoș: {lines_view} | total {total:.2f} lei",
     )
 
 
