@@ -1345,6 +1345,7 @@ POST /webhook/orders/{business_id}
 
 ```claim:jobs
 cleanup_dedupe
+cleanup_web_turns
 embed_products
 lifecycle
 partition_maintenance
@@ -1448,6 +1449,7 @@ web_identity_enabled = false
 web_session_origin_binding = false
 web_session_v2_enabled = false
 web_session_v2_required = false
+web_turn_ledger_enabled = false
 web_turn_lock_enabled = true
 welcome_enabled = true
 ```
@@ -1488,6 +1490,7 @@ welcome_enabled = true
 037_partition_maintenance.sql
 038_demand_daily.sql
 039_public_read_categories.sql
+040_web_turns.sql
 ```
 
 

@@ -150,6 +150,12 @@ class Settings(BaseSettings):
         default=168, validation_alias="WEB_TURNS_RETENTION_HOURS"
     )
     web_turns_stale_days: int = Field(default=7, validation_alias="WEB_TURNS_STALE_DAYS")
+    # Retenția NU e gated pe `web_turn_ledger_enabled`: dacă flagul se stinge după ce s-au
+    # acumulat rânduri, conținutul de conversație ar rămâne pe disc pentru totdeauna. Jobul e
+    # no-op pe o DB fără migrarea 040 (guard `to_regclass`), deci pornirea lui e sigură oriunde.
+    scheduler_web_turns_interval_seconds: int = Field(
+        default=21600, validation_alias="SCHEDULER_WEB_TURNS_INTERVAL_SECONDS"
+    )
     # NX-229 — sesiune v2: claims semnate cu expirare + key id + rotație dual-key + origin binding.
     # Emiterea e în spatele flagului; VERIFICAREA acceptă mereu ambele versiuni în overlap, ca o
     # întoarcere pe v1 să nu invalideze sesiunile v2 deja emise (cerința de rollback din card).

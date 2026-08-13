@@ -354,7 +354,12 @@ async def cleanup_web_turns(
     """Retenție BOUNDED (admin, cross-tenant, ca `cleanup_inbound_dedupe`): șterge
     (1) terminalele mai vechi decât fereastra de replay și (2) orfanii ne-terminali
     abandonați (accept fără follow-through / crash nerecuperat). `batch_size` limitează
-    o rulare — jobul zilnic repetă până la 0, fără să țină un DELETE gigant."""
+    o rulare — jobul zilnic repetă până la 0, fără să țină un DELETE gigant.
+
+    Jobul e înregistrat în scheduler NEcondiționat de flagul ledgerului, deci poate rula pe un
+    deployment fără migrarea 040: acolo e no-op tăcut, nu o eroare la fiecare interval."""
+    if not await conn.fetchval("select to_regclass('public.web_turns') is not null"):
+        return 0
     result = await conn.execute(
         """
         delete from web_turns

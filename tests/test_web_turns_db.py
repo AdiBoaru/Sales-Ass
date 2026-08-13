@@ -253,6 +253,28 @@ async def test_commit_transaction_is_atomic(shop):
         assert fresh.status == "running" and fresh.response_json is None  # rollback complet
 
 
+async def test_retention_is_noop_when_table_is_missing(shop, monkeypatch):
+    """Jobul e înregistrat în scheduler NEcondiționat de flag → poate rula pe un deployment
+    fără migrarea 040. Acolo trebuie să fie no-op TĂCUT (0), nu o eroare la fiecare interval."""
+    bid, _ = shop
+    pool = await get_pool()
+
+    class _NoTable:
+        """Conn care raportează tabelul absent; orice DELETE ar fi o eroare de test."""
+
+        async def fetchval(self, sql, *a):
+            return False
+
+        async def execute(self, sql, *a):
+            raise AssertionError("cleanup nu are voie să atingă tabelul dacă lipsește")
+
+    assert await wt.cleanup_web_turns(_NoTable()) == 0
+    # iar pe DB-ul REAL (tabel prezent) rămâne funcțional, nu blocat de guard
+    async with admin_conn(pool) as conn:
+        assert await wt.cleanup_web_turns(conn, batch_size=1) >= 0
+        assert bid  # tenantul throwaway există; guard-ul nu depinde de el
+
+
 # ── Izolare tenant + RLS ──────────────────────────────────────────────────────
 
 
