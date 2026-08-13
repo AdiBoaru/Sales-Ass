@@ -191,12 +191,19 @@ async def commit_turn(
     commit: TurnCommit,
     *,
     rebuild_state: Callable[[dict[str, Any]], dict[str, Any]],
+    on_commit: Callable[[Any], Any] | None = None,
 ) -> CommitResult:
     """Faza 3: UN checkout, O tranzacție, zero await extern.
 
     Atomicitatea e contractul: mesajele outbound, rândurile de outbox, patch-ul de stare și
     `mark_inbound_completed` ori intră toate, ori niciunul. Un crash înainte de COMMIT lasă
     `completed_at` NULL → mesajul e recuperabil; după COMMIT e finalizat și nu se reprocesează.
+
+    `on_commit` (NX-232) = seam-ul prin care MARGINEA atașează o scriere suplimentară la
+    ACEEAȘI tranzacție (ex. finalizarea rândului din ledgerul web: rezultat + mesaj + stare se
+    văd împreună sau deloc). Primește conexiunea tranzacției; dacă ridică, TOT commit-ul face
+    rollback — exact ce cere fencing-ul (un rezultat respins nu lasă mesajul lui în urmă).
+    Pipeline-ul rămâne agnostic de canal: seam-ul e generic, conținutul îl decide marginea.
 
     Singura excepție de la „totul sau nimic" e conflictul de versiune de stare (NX-221): acolo
     pierdem patch-ul de stare, NU răspunsul (P6) — vezi `_patch_state`."""
@@ -234,6 +241,9 @@ async def commit_turn(
             # NX-86: claim finalizat ÎN aceeași TX cu outbox → atomic.
             if commit.provider_msg_id:
                 await mark_inbound_completed(conn, commit.business_id, commit.provider_msg_id)
+            # NX-232: scrierea marginii (ex. ledgerul web) intră în ACEEAȘI tranzacție.
+            if on_commit is not None:
+                await on_commit(conn)
     return result
 
 

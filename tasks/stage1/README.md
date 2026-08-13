@@ -220,7 +220,7 @@ un `039_public_read_categories.sql` local/necomis. Prin urmare **niciun card nu 
 
 | Card | Migrare logică | Număr |
 |---|---|---|
-| NX-232 | `web_turns` / result ledger / indexes / RLS | alocat la start după fetch, minimum 040 dacă 039 intră în main |
+| NX-232 | `web_turns` / result ledger / indexes / RLS | **040** (alocat 2026-08-11; 039 = `public_read_categories`, deja în main) |
 | NX-235 | state schema/version helpers, numai dacă DDL e necesar | următorul liber după NX-232 |
 | NX-237 | cart/action receipts, dacă adaptorul Postgres este ales | următorul liber după NX-235 |
 | NX-246 | feedback/telemetry tables, numai dacă tabelele existente nu ajung | următorul liber după NX-237 |

@@ -22,7 +22,9 @@ Dispatcher-ul (separat) citește outbox, trimite la canal și leagă provider_ms
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
+from typing import Any
 from uuid import uuid4
 
 from redis.asyncio import Redis
@@ -68,6 +70,10 @@ from src.worker.turn_uow import (
 )
 
 log = logging.getLogger(__name__)
+
+# NX-232: hook-ul de commit al MARGINII — `(conn tranzacție, reply, language)`. Rulează în
+# tranzacția `TurnCommit`; dacă ridică, tot commit-ul face rollback (vezi handle_turn).
+CommitHook = Callable[[Any, "Reply | None", str], Awaitable[None]]
 
 
 @dataclass
@@ -254,6 +260,7 @@ async def handle_turn(
     stages: list[Stage] | None = None,
     deliver: bool = True,
     defer_aftercare: bool = False,
+    commit_hook: "CommitHook | None" = None,
 ) -> TurnResult:
     """Procesează un mesaj inbound cu un provider tenant-scoped pe `business.id`.
 
@@ -270,6 +277,12 @@ async def handle_turn(
     `sent`, un singur fragment) + state, dar NU punem în outbox (n-ar avea cine-l livra) și
     întoarcem `ctx.reply` în `TurnResult` ca apelantul să-l mapeze în răspuns. Restul (dedupe,
     history, analytics, cache, profil) e identic — sincronul nu pierde nimic din pipeline.
+
+    `commit_hook` (NX-232) = scrierea marginii atașată la tranzacția de commit a turului
+    (`turn_uow.commit_turn(on_commit=...)`): primește `(conn, reply, language)` și, dacă
+    ridică, TOT commit-ul (mesaj + stare + outbox) face rollback. Folosit de ledgerul web ca
+    rezultatul terminal, mesajul asistentului și patch-ul de stare să se vadă împreună sau
+    deloc. Pipeline-ul nu știe CE scrie hook-ul (cuplajul de canal rămâne la margine).
     """
     stages = stages or DEFAULT_STAGES
     turn_id = str(uuid4())
@@ -336,6 +349,7 @@ async def handle_turn(
             deliver=deliver,
             defer_aftercare=defer_aftercare,
             db_acc=db_acc,
+            commit_hook=commit_hook,
         )
     finally:
         op_metrics.pop(db_token)
@@ -381,6 +395,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     deliver: bool,
     defer_aftercare: bool,
     db_acc: op_metrics.DbOpAccumulator,
+    commit_hook: "CommitHook | None" = None,
 ) -> TurnResult:
     """Fazele 2-4 pe un `TurnLoadSnapshot` deja citit: compute (fără conexiune) → commit →
     aftercare. Separată de `handle_turn` ca faza de load să se vadă ca fază, nu ca preambul."""
@@ -535,6 +550,10 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         rebuild_state=lambda fresh: _build_new_state(
             fresh, ctx, is_rich=is_rich, has_products=has_products
         ),
+        # NX-232: ledgerul web (sau orice scriere de margine) intră în ACEEAȘI tranzacție.
+        on_commit=(lambda conn: commit_hook(conn, ctx.reply, ctx.language))
+        if commit_hook is not None
+        else None,
     )
     outbox_id = commit_result.first_outbox_id
     if commit_result.state_conflict == "retried":

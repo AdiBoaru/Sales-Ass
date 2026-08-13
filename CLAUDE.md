@@ -588,6 +588,7 @@ nativx-assistant/
 │   │   └── golden.py            ← checker pur (evaluate_reply) + run_case (pipeline real, LLM scriptat) + load_cases
 │   └── jobs/
 │       ├── cleanup_dedupe.py    ← purjă inbound_dedupe >48h (admin_conn, zilnic)
+│       ├── cleanup_web_turns.py ← NX-232: retenție ledger web_turns (admin_conn, bounded)
 │       ├── partition_maintenance.py ← NX-218: creează partițiile lunare (analytics_events/messages)
 │       │                              luna curentă + următoarea; warning dacă DEFAULT are rânduri
 │       ├── lifecycle.py         ← Val3: scrie contacts.lifecycle nocturn (new/engaged/customer/repeat/churn_risk)

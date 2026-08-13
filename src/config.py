@@ -131,6 +131,25 @@ class Settings(BaseSettings):
     web_turn_lock_enabled: bool = Field(default=True, validation_alias="WEB_TURN_LOCK_ENABLED")
     turn_lock_ttl_ms: int = Field(default=15000, validation_alias="TURN_LOCK_TTL_MS")
     turn_lock_wait_max_ms: int = Field(default=10000, validation_alias="TURN_LOCK_WAIT_MAX_MS")
+    # NX-232 — ledgerul durabil al turelor web (`web_turns`): idempotency pe
+    # (tenant, conversație, client_turn_id) + replay exact al rezultatului terminal. Cutover pe
+    # demo prin flag; OFF = calea veche byte-identică (dedupe → blank rămâne pe v1). Lockul NX-221
+    # rămâne optimizare deasupra; ledgerul e garanția de corectitudine.
+    web_turn_ledger_enabled: bool = Field(default=False, validation_alias="WEB_TURN_LEDGER_ENABLED")
+    # Lease-ul de claim, ALINIAT deliberat cu CLAIM_TTL_S al inbound_dedupe (300s): un reclaim
+    # de ledger înaintea expirării claim-ului durabil ar găsi turul „deduped" și n-ar putea rula.
+    web_turn_lease_ttl_s: int = Field(default=300, validation_alias="WEB_TURN_LEASE_TTL_S")
+    # Cheia HMAC a fingerprint-ului de request. Gol = HMAC cu cheie goală — tot ne-inversabil,
+    # dar un DB scurs permite CONFIRMAREA unei ghiciri pe mesaje scurte; producția o setează.
+    web_turn_fingerprint_secret: str = Field(
+        default="", validation_alias="WEB_TURN_FINGERPRINT_SECRET"
+    )
+    # Retenția ledgerului: terminalele după fereastra de replay (ore); ne-terminalele abandonate
+    # (accept fără follow-through / crash nerecuperat) după N zile. Purjate de cleanup_web_turns.
+    web_turns_retention_hours: int = Field(
+        default=168, validation_alias="WEB_TURNS_RETENTION_HOURS"
+    )
+    web_turns_stale_days: int = Field(default=7, validation_alias="WEB_TURNS_STALE_DAYS")
     # NX-229 — sesiune v2: claims semnate cu expirare + key id + rotație dual-key + origin binding.
     # Emiterea e în spatele flagului; VERIFICAREA acceptă mereu ambele versiuni în overlap, ca o
     # întoarcere pe v1 să nu invalideze sesiunile v2 deja emise (cerința de rollback din card).

@@ -76,3 +76,13 @@ crăpa primul mesaj al fiecărui client nou — acum prinsă la boot/CI, nu în 
 
 **Checksum platform-independent:** se normalizează CRLF→LF înainte de sha256, ca Windows (dev) și Linux
 (CI) să dea aceeași amprentă. Rândurile `legacy` (backfill istoric) sunt scutite de verificarea de drift.
+
+## 040 — `web_turns` (NX-232)
+
+Ledgerul durabil al turelor web: idempotency pe `(business_id, conversation_id, client_turn_id)`,
+single-flight per conversație (partial unique pe `accepted|running`), lease + `lease_epoch`
+(fencing) și `response_json` (ViewModel-ul terminal, replay exact). RLS `bot_runtime`
+(select/insert/update; DELETE doar admin — retenție `src/jobs/cleanup_web_turns.py` + GDPR în
+`src/gdpr/erase.py`). State machine-ul complet e în antetul migrării și în
+`src/web/turn_service.py`. Rollback OPERAȚIONAL = flag `WEB_TURN_LEDGER_ENABLED=false` (tabelul și
+rezultatele rămân; turele acceptate nu se șterg și nu se reprocesează).

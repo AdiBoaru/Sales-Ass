@@ -33,6 +33,7 @@ from src.db.queries.gdpr import (
     mark_processing,
     write_audit,
 )
+from src.db.queries.web_turns import delete_turns_for_contact
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +51,9 @@ async def _erase_on_conn(conn, business_id: str, contact_id: str, *, requested_b
             return req_id
         async with conn.transaction():
             await conn.execute("select gdpr_erase_contact($1::uuid)", contact_id)
+            # NX-232: ledgerul web al contactului conține `response_json` (conținut de
+            # conversație) → se șterge în ACEEAȘI tranzacție cu erase-ul, fără result-body leaks.
+            await delete_turns_for_contact(conn, business_id, contact_id)
             # audit suplimentar cu business_id + req_id (funcția scrie unul fără ele)
             await write_audit(
                 conn,
