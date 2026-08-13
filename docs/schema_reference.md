@@ -90,3 +90,15 @@ schimbare de schemă. Chei convenite (citite defensiv — lipsă → default):
 - **`settings["currency"]`** (NX-114): moneda afișată (ex. `"RON"`, `"EUR"`). Fallback `"RON"`.
   `prompt_builder` o folosește în loc de „lei" hardcodat.
 - **`settings["welcome"]`**: config de welcome (enabled, bot_name, suggestions) — vezi `greeting.py`.
+
+## `web_turns` — ledgerul turelor web (NX-232, migrarea 040)
+
+Tabel nou (nu exista în schema_v2): un rând per turn web acceptat, cheia de idempotency
+`(business_id, conversation_id, client_turn_id)` + partial unique „un singur `accepted|running`
+per conversație". Statusuri INTERNE `accepted|running|completed|failed|cancelled` — distincte de
+statusul de contract NX-228 (`working`/`validating` sunt proiecții, `running` nu iese pe sârmă;
+mapping-ul e `src/web/turn_service.py:project_wire_status`). `response_json` = ViewModel-ul
+terminal EXACT (replay fără al doilea apel LLM); CHECK în DB: terminal ⇒ `response_json` NE-NULL
+(P6). PII: `request_fingerprint` = HMAC (body-ul nu se stochează), `session_ref_hash` = sha256 —
+zero body/token/visitor_id în clar. Scriitori: marginea web (accept/claim) + tranzacția
+`TurnCommit` (complete, prin seam-ul `on_commit`); DELETE doar pe control plane (retenție + GDPR).

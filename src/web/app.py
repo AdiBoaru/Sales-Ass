@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -38,6 +38,8 @@ from src.db.connection import admin_conn, get_pool
 from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
+from src.db.queries.web_turns import WebTurnRow, get_turn
+from src.models import Event
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.identity import verify_identity_token
 from src.web.security import (
@@ -56,9 +58,27 @@ from src.web.session import (
     issue_visitor,
     verify_web_session_any,
 )
+from src.web.turn_service import (
+    TERMINAL_LEDGER_STATUSES,
+    Accepted,
+    ActiveTurnConflict,
+    EmptyTerminalResult,
+    ExistingCompleted,
+    ExistingInProgress,
+    FencedTurnCompletion,
+    IdempotencyConflict,
+    accept_web_turn,
+    attempt_bucket,
+    claim_web_turn,
+    complete_web_turn_on_conn,
+    error_view,
+    fail_web_turn,
+    project_wire_status,
+    request_fingerprint,
+)
 from src.webhook.body_limit import enforce_body_cap
 from src.worker.admission import get_admission, tenant_bucket
-from src.worker.aftercare import run_aftercare
+from src.worker.aftercare import persist_events, run_aftercare
 from src.worker.limits import (
     cost_over_budget,
     incr_window,
@@ -309,6 +329,74 @@ async def web_message(req: WebMessageIn, request: Request) -> dict:
     return {"accepted": True, "msg_id": event.provider_msg_id}
 
 
+# ── NX-232: ledgerul durabil al turelor web (flag WEB_TURN_LEDGER_ENABLED) ─────────────────
+# Idempotency + replay pe calea SINCRONĂ. Fluxul: accept (insert-or-inspect) → claim (lease +
+# epoch) → pipeline → finalizare ÎN tranzacția TurnCommit (rezultat + mesaj + stare împreună
+# sau deloc). Duplicatul NU mai produce content gol: terminal → replay EXACT; activ → status +
+# turn ID; același ID cu alt input → 409. Endpointurile dedicate 202/GET sunt NX-233.
+
+
+def _valid_turn_uuid(value: str | None) -> bool:
+    """Ledgerul cere un `client_turn_id` UUID real (coloană uuid; frontendul îl generează și
+    îl persistă). Fără el nu există cheie de replay → calea veche, nu o eroare."""
+    if not value:
+        return False
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _in_progress_response(row: WebTurnRow) -> dict:
+    """Duplicat cu procesare ACTIVĂ (alt tab / crash nerecuperat încă): statusul canonic +
+    turn ID — clientul știe CE așteaptă, nu primește un blank mut. Ne-terminal, deci P6 nu
+    cere conținut comercial; `running` NU iese pe sârmă (proiecția e singurul owner)."""
+    return {
+        "content": "",
+        "products": [],
+        "suggestions": [],
+        "turn": {
+            "id": row.id,
+            "client_turn_id": row.client_turn_id,
+            "status": project_wire_status(row.status),
+        },
+    }
+
+
+async def _ledger_emit(db, row: WebTurnRow, *events: Event) -> None:
+    """Evenimentele ledgerului pe traiectoria conversației (best-effort, ca persist_events).
+    P12: doar id-uri + etichete low-cardinality, zero body/token/visitor."""
+    await persist_events(
+        db,
+        row.business_id,
+        row.conversation_id,
+        row.contact_id,
+        list(events),
+        operation="web_turn_events",
+    )
+
+
+async def _ledger_refresh(db, row: WebTurnRow) -> WebTurnRow | None:
+    """Re-citește rândul turului (după fenced/race/deduped) — autoritatea e DB-ul."""
+    async with db("web_turn_get") as conn:
+        return await get_turn(conn, row.business_id, row.conversation_id, row.client_turn_id)
+
+
+async def _replay_or_status(db, row: WebTurnRow) -> dict:
+    """Rezultatul canonic pentru un turn pe care NU noi l-am finalizat: terminal → replay
+    exact (`response_json` persistat); altfel → status + turn ID."""
+    refreshed = await _ledger_refresh(db, row) or row
+    if refreshed.status in TERMINAL_LEDGER_STATUSES and refreshed.response_json is not None:
+        await _ledger_emit(
+            db,
+            refreshed,
+            Event("web_turn_replayed", {"status": refreshed.status, "web_turn_id": refreshed.id}),
+        )
+        return refreshed.response_json
+    return _in_progress_response(refreshed)
+
+
 def _build_chat_response(result: TurnResult) -> dict:
     """`TurnResult` (calea SINCRONĂ `/web/chat`) → contractul widget-ului, prin randorul UNIC
     `render_web` (NX-127). Aceeași sursă de adevăr ca ruta async SSE (`WebSender.send_rich`) →
@@ -378,11 +466,76 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
     db = tenant_db(session.business_id)
     admission = get_admission(redis) if s.web_admission_enabled else None
     slot = None
+    ledger_row: WebTurnRow | None = None
+    ledger_epoch: int | None = None
+    persisted: dict = {}  # umplut de commit hook cu view-ul EXACT persistat (replay identic)
     try:
         async with db("load_business") as conn:
             business = await load_business(conn, session.business_id)
         if business is None:
             raise HTTPException(status_code=503, detail="business unavailable")
+        # NX-232 — acceptul durabil, ÎNAINTE de cost guard/admission: un duplicat terminal se
+        # REJOACĂ din ledger (zero LLM, zero slot de admission); un conflict e 409 imediat.
+        if s.web_turn_ledger_enabled and _valid_turn_uuid(req.client_msg_id):
+            fingerprint = request_fingerprint(
+                s.web_turn_fingerprint_secret,
+                business_id=session.business_id,
+                channel_token=req.token,
+                text=event_obj.body,
+            )
+            outcome = await accept_web_turn(
+                db,
+                business_id=session.business_id,
+                channel_id=channel["channel_id"],
+                channel_kind="webchat",
+                channel_token=req.token,
+                sender_external_id=event_obj.verified_customer_ref or req.visitor_id,
+                client_turn_id=req.client_msg_id,
+                fingerprint=fingerprint,
+                verified=bool(event_obj.verified_customer_ref),
+                locale=business.default_locale,
+            )
+            if isinstance(outcome, IdempotencyConflict):
+                await _ledger_emit(
+                    db,
+                    outcome.row,
+                    Event("web_turn_idempotency_conflict", {"web_turn_id": outcome.row.id}),
+                )
+                raise HTTPException(status_code=409, detail="idempotency_conflict")
+            if isinstance(outcome, ActiveTurnConflict):
+                # Policy explicit single-flight: alt turn e activ pe conversație → respingem
+                # onest (frontendul ține oricum inputul inactiv până la terminal, NX-243/245).
+                raise HTTPException(status_code=409, detail="active_turn")
+            if isinstance(outcome, ExistingCompleted | ExistingInProgress):
+                await _ledger_emit(
+                    db,
+                    outcome.row,
+                    Event("web_turn_accepted", {"mode": "existing", "web_turn_id": outcome.row.id}),
+                )
+                return await _replay_or_status(db, outcome.row)
+            assert isinstance(outcome, Accepted)
+            ledger_row = outcome.row
+            claim = await claim_web_turn(
+                db,
+                session.business_id,
+                ledger_row.id,
+                owner=str(uuid4()),
+                lease_ttl_s=s.web_turn_lease_ttl_s,
+            )
+            if claim is None:
+                # Race îngust: alt proces a revendicat între insert și claim → el e autoritatea.
+                return await _replay_or_status(db, ledger_row)
+            ledger_epoch = claim.lease_epoch
+            claim_events = [
+                Event("web_turn_accepted", {"mode": "new", "web_turn_id": ledger_row.id}),
+                Event(
+                    "web_turn_claimed",
+                    {"attempt_bucket": attempt_bucket(claim.attempt), "web_turn_id": ledger_row.id},
+                ),
+            ]
+            if claim.reclaimed:
+                claim_events.append(Event("web_turn_reclaimed", {"web_turn_id": ledger_row.id}))
+            await _ledger_emit(db, ledger_row, *claim_events)
         # NX-120: gard de admitere de cost ÎNAINTE de pipeline — nu cheltui LLM dacă bugetul
         # tenantului SAU al vizitatorului e atins. Redis căzut → fail-CLOSED (429), consecvent
         # cu rate-limit-ul. (Precizia per-tur + cap per-contact pe canalele async = NX-125.)
@@ -419,15 +572,55 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
                 event["admission_wait_ms"] = round(slot.wait_ms, 1)
             if slot.degraded:
                 event["admission_degraded"] = True
-        result = await handle_turn(
-            db,
-            business,
-            channel["channel_id"],
-            event,
-            redis=redis,
-            deliver=False,
-            defer_aftercare=True,
-        )
+
+        async def _ledger_commit(conn, reply, language):
+            """NX-232: finalizarea rândului din ledger, ÎN tranzacția TurnCommit. View-ul
+            persistat e reținut și SERVIT ca răspuns — replay-ul de mai târziu e identic."""
+            view = render_web(reply, language or "ro")
+            await complete_web_turn_on_conn(
+                conn,
+                session.business_id,
+                ledger_row.id,
+                lease_epoch=ledger_epoch,
+                view=view,
+            )
+            persisted["view"] = view
+
+        try:
+            result = await handle_turn(
+                db,
+                business,
+                channel["channel_id"],
+                event,
+                redis=redis,
+                deliver=False,
+                defer_aftercare=True,
+                # kwarg-ul apare DOAR cu ledger activ — seam-urile vechi (fake handle_turn din
+                # teste) rămân compatibile byte-identic pe calea fără flag.
+                **({"commit_hook": _ledger_commit} if ledger_epoch is not None else {}),
+            )
+        except FencedTurnCompletion:
+            # Alt owner a reclamat lease-ul cât timp calculam: rezultatul NOSTRU a fost aruncat
+            # (rollback complet — mesaj + stare + rezultat), al LUI e autoritatea.
+            await _ledger_emit(
+                db,
+                ledger_row,
+                Event("web_turn_fenced_completion_rejected", {"web_turn_id": ledger_row.id}),
+            )
+            return await _replay_or_status(db, ledger_row)
+        except EmptyTerminalResult:
+            # P6: terminal fără conținut randabil → NU se comite drept succes; persistăm un
+            # error-view SAFE și îl servim — niciodată blank pe o cale terminală.
+            lang = business.default_locale or "ro"
+            await fail_web_turn(
+                db,
+                session.business_id,
+                ledger_row.id,
+                lease_epoch=ledger_epoch,
+                code="empty_result",
+                language=lang,
+            )
+            return error_view("empty_result", lang)
     finally:
         if admission is not None and slot is not None:
             await admission.release(slot)
@@ -454,6 +647,32 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
         )
     except Exception:  # noqa: BLE001 - the reply is more important than telemetry
         log.warning("web_cost_add_visitor failed after the reply was built")
+    if ledger_epoch is not None:
+        if "view" in persisted:
+            # Exact ce s-a persistat în tranzacția de commit — replay-ul va fi byte-identic.
+            return persisted["view"]
+        if result.deduped:
+            # Claimul durabil (inbound_dedupe) e încă ținut de un tur crăpat recent — fereastra
+            # CLAIM_TTL_S. Ledgerul răspunde cu statusul canonic, NU cu blank (fix-ul NX-232);
+            # retry-ul de după expirare reclamă ambele și rulează. Recovery activ = NX-233.
+            return await _replay_or_status(db, ledger_row)
+        if result.reply is not None:
+            # Plasă (nu ar trebui atinsă): reply comis fără view persistat — servim reply-ul;
+            # rândul rămâne `running` și expiră în lease, vizibil în metrici, nu tăcut.
+            log.warning("web_turn %s: reply fără view persistat în ledger", ledger_row.id)
+            return _build_chat_response(result)
+        # Tur fără reply (halt/no-reply): pe calea sincronă cu ledger, terminalul e ONEST —
+        # un error-view safe persistat, nu tăcere (P6).
+        lang = result.language or business.default_locale or "ro"
+        await fail_web_turn(
+            db,
+            session.business_id,
+            ledger_row.id,
+            lease_epoch=ledger_epoch,
+            code="empty_result",
+            language=lang,
+        )
+        return error_view("empty_result", lang)
     return _build_chat_response(result)
 
 

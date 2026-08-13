@@ -31,6 +31,7 @@ def _settings(
         embed_job_enabled=embed,
         scheduler_rollup_hour_utc=0,
         scheduler_dedupe_interval_seconds=21600,
+        scheduler_web_turns_interval_seconds=21600,
         scheduler_embed_interval_seconds=3600,
         proactive_enabled=proactive,
         proactive_initiators_enabled=initiators,
@@ -100,6 +101,7 @@ def test_build_jobs_includes_embed_with_key(monkeypatch):
     assert [j.name for j in _build_jobs()] == [
         "rollup_usage",
         "cleanup_dedupe",
+        "cleanup_web_turns",
         "partition_maintenance",
         "rollup_demand",
         "embed_products",
@@ -116,11 +118,21 @@ def test_build_jobs_excludes_embed_without_key(monkeypatch):
     assert names == [
         "rollup_usage",
         "cleanup_dedupe",
+        "cleanup_web_turns",
         "partition_maintenance",
         "rollup_demand",
         "proactive_initiators",
         "lifecycle",
     ]
+
+
+def test_build_jobs_always_includes_web_turns_retention(monkeypatch):
+    """NX-232: retenția ledgerului NU e gated pe `web_turn_ledger_enabled` — rândurile
+    acumulate cât flagul a fost pornit trebuie purjate și după ce se stinge (altfel conținut
+    de conversație rămâne pe disc pentru totdeauna). `_settings` nici măcar nu expune flagul,
+    ceea ce dovedește că `_build_jobs` nu îl consultă."""
+    monkeypatch.setattr(sch, "get_settings", lambda: _settings(embed=False, lifecycle=False))
+    assert "cleanup_web_turns" in [j.name for j in _build_jobs()]
 
 
 def test_build_jobs_excludes_embed_when_disabled(monkeypatch):

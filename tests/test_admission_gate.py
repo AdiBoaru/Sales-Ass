@@ -107,6 +107,7 @@ def _web_settings(admission_on: bool):
         web_session_v2_required=False,
         web_identity_enabled=False,
         web_turn_lock_enabled=False,
+        web_turn_ledger_enabled=False,  # NX-232: ledgerul are testele lui; aici testăm poarta
         web_admission_enabled=admission_on,
         admission_web_wait_ms=50,
         daily_cost_cap_usd=0.0,

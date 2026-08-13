@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.config import get_settings
 from src.db.connection import close_pool
-from src.jobs import cleanup_dedupe, partition_maintenance
+from src.jobs import cleanup_dedupe, cleanup_web_turns, partition_maintenance
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +142,14 @@ def _build_jobs() -> list[Job]:
             "cleanup_dedupe",
             cleanup_dedupe.run,
             interval_seconds=s.scheduler_dedupe_interval_seconds,
+        ),
+        # NX-232: retenția ledgerului web. NEcondiționată de `web_turn_ledger_enabled` —
+        # rândurile acumulate cât flagul a fost pornit trebuie purjate și după ce se stinge.
+        # No-op pe o DB fără migrarea 040 (guard în query), deci sigură pe orice deployment.
+        Job(
+            "cleanup_web_turns",
+            cleanup_web_turns.run,
+            interval_seconds=s.scheduler_web_turns_interval_seconds,
         ),
     ]
     if s.partition_job_enabled:  # NX-218: partițiile lunii viitoare, create ÎNAINTE de scrieri
