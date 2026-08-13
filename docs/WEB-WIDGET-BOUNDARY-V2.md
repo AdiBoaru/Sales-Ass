@@ -175,6 +175,46 @@ Frontendul (NX-243) generează `client_turn_id`, trimite `WebTurnRequestV2`, pă
 și afișează ce primește. Nu alege workerul, nu calculează retry semantic, nu schimbă ID-ul la
 refresh, nu inventează progres și nu decide dacă un error e sigur de retrimis.
 
+## 4quater. Contextul de pagină (NX-234) — ID-uri de la browser, fapte de la server
+
+Frontendul REAL are deja starea paginii și un coș local. Are, adică, tot ce-i trebuie ca să
+trimită „produsul curent" cu nume, preț și stoc — și fix aici moare boundary-ul, fiindcă în clipa
+în care backendul crede acele câmpuri, browserul devine al doilea motor comercial: fără validator,
+fără test, fără tenant. `PageContextClaim` se numește *claim* din motivul ăsta.
+
+Ce trece frontiera: **tipul suprafeței și identificatori opaci**. Atât.
+
+| Câmp | Cine îl afirmă | Ce face serverul | Ce devine |
+|---|---|---|---|
+| `surface` | browser | enum finit; suprafață necunoscută → `other` | decide CE ID-uri au sens |
+| `product_id` | browser | lookup tenant-scoped pe `products.id` (UUID) **sau** `products.external_id` (cheia platformei) | `ProductEvidence` cu `source` + `freshness`, sau nimic |
+| `variant_id` | browser | trebuie să fie varianta ACESTUI produs | `VariantEvidence`, sau context `invalid` |
+| `category_id` | browser | `categories.id` sau `slug`; compatibilă cu produsul (materialized path) | `CategoryEvidence`, sau ignorată |
+| `cart_ref` | browser | **nicio sursă canonică până la NX-237** | `unavailable` cu motiv (niciodată `ConversationState.cart`) |
+| `locale` | browser | intersecție cu `businesses.supported_locales` | limba negociată SERVER-side, cu reason code |
+| `business_id` | — | **nu apare în request și nu se adaugă niciodată** (P7) | derivat din sesiune |
+
+Reguli care nu depind de disciplină:
+
+- **Un câmp comercial în `context` = `422 context_commercial_field`**, înainte de accept, deci
+  înainte de fingerprint și de orice muncă. `extra="forbid"` e mecanismul; codul dedicat e ca
+  „browserul încearcă să dicteze prețul" să se vadă în metrici, nu ca `schema_invalid` generic.
+- **Suprafața decide ce ID are sens.** Un `product_id` afirmat pe `home` se ignoră cu reason code:
+  o ancoră pe care nimeni n-a navigat e exact mecanismul prin care s-ar putea ancora conversația
+  pe orice produs.
+- **Un ID de la alt tenant e indistinct de unul inexistent** (și de unul nepublicat). Aceeași
+  semantică externă, deliberat — altfel statusul devine un oracol de existență.
+- **Contextul intră în fingerprint-ul de idempotency.** Aceeași întrebare de pe două pagini nu e
+  același turn: refolosirea `client_turn_id` după navigare e `409`, nu un turn vechi cu context nou.
+- **Nimic din context nu e „adevăr" în request.** Faptele apar abia din catalog, o singură dată
+  per turn, într-un `TurnSnapshot` imuabil — promptul, tool-urile și projectorul citesc din el, nu
+  fac fiecare lookupul lui (altfel două prețuri diferite în același răspuns).
+- **Frontendul nu repară un context stale** și nu face fallback la propriile date comerciale.
+  Un context invalid se rezolvă server-side sau nu se rezolvă deloc.
+
+Acoperirea și prospețimea faptelor (ce e `UNKNOWN` și de ce):
+[`WEB-CONTEXT-DATA-READINESS.md`](WEB-CONTEXT-DATA-READINESS.md).
+
 ## 5. URL-uri
 
 Permis: `https://` absolut, sau rută relativă care începe cu `/`.

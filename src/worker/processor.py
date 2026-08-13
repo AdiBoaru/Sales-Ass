@@ -45,7 +45,8 @@ from src.models import (
     TurnContext,
     TurnUsage,
 )
-from src.privacy import apply_boundary
+from src.privacy import RawInbound, RawText, SafeInbound, apply_boundary
+from src.web.context import from_payload as page_context_from_payload
 from src.worker.admission import tenant_bucket
 from src.worker.aftercare import AftercareWork, persist_events, run_aftercare
 from src.worker.compose import ensure_disclaimer
@@ -60,6 +61,7 @@ from src.worker.limits import (
 )
 from src.worker.reply_split import split_reply
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
+from src.worker.turn_snapshot import build_turn_snapshot, snapshot_events, without_evidence
 from src.worker.turn_uow import (
     OutboundFragment,
     TurnCommit,
@@ -350,6 +352,7 @@ async def handle_turn(
             turn_id=turn_id,
             raw_body=raw_inbound.body.value,
             safe_body=safe_inbound.text,
+            channel_id=channel_id,
             channel_kind=channel_kind,
             sender_external_id=sender_external_id,
             provider_msg_id=provider_msg_id,
@@ -364,6 +367,58 @@ async def handle_turn(
         )
     finally:
         op_metrics.pop(db_token)
+
+
+async def _attach_snapshot(
+    db: DbProvider,
+    ctx: TurnContext,
+    business: BusinessConfig,
+    event: dict,
+    snap: TurnLoadSnapshot,
+    *,
+    channel_id: str,
+    raw_body: str,
+    safe_body: str | None,
+) -> None:
+    """NX-234: construiește `TurnSnapshot` și îl atașează la `ctx` (owner UNIC: processor, P3).
+
+    Poarta e în DOUĂ trepte, ca rollout-ul cerut de card:
+      • `web_context_enabled` OFF → nu se construiește nimic. `ctx.snapshot` rămâne None și
+        fiecare consumator cade pe comportamentul de dinainte. Zero query, zero eveniment.
+      • `web_context_prompt_enabled` OFF (cu primul ON) → SHADOW: rehidratarea rulează și se
+        măsoară, dar faptele sunt scoase din snapshot (`without_evidence`) înainte ca cineva
+        să le poată citi. Nu e un `if` la fiecare consumator, e o proprietate a obiectului.
+
+    Best-effort prin contract: un eșec de construcție NU oprește turul (P6) — pierdem contextul
+    de pagină, nu răspunsul."""
+    s = get_settings()
+    if not s.web_context_enabled:
+        return
+    try:
+        snapshot = await build_turn_snapshot(
+            db,
+            turn_id=ctx.turn_id,
+            business=business,
+            contact_id=ctx.contact.id,
+            conversation_id=ctx.conversation_id,
+            conversation_revision=snap.state_version,
+            state=ctx.state,
+            raw_inbound=RawInbound(RawText(raw_body), event.get("content_type", "text")),
+            safe_inbound=SafeInbound(text=safe_body or ""),
+            context=page_context_from_payload(event.get("page_context")),
+            channel_id=channel_id,
+            channel_kind=ctx.message.channel_kind,
+            channel_account_id=ctx.message.channel_account_id,
+            verified=bool(ctx.verified_customer_ref),
+            content_type=ctx.message.content_type,
+        )
+    except Exception:  # noqa: BLE001 — contextul de pagină e opțional; turul răspunde oricum
+        log.exception("web_context: construcția snapshotului a eșuat (turul continuă)")
+        ctx.emit("web_context_validated", surface="unknown", outcome="unavailable", reason="build")
+        return
+    for event_type, props in snapshot_events(snapshot).items:
+        ctx.emit(event_type, **props)
+    ctx.snapshot = snapshot if s.web_context_prompt_enabled else without_evidence(snapshot)
 
 
 def _emit_db_metrics(ctx: TurnContext, db_acc: op_metrics.DbOpAccumulator) -> None:
@@ -397,6 +452,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     turn_id: str,
     raw_body: str,
     safe_body: str | None,
+    channel_id: str,
     channel_kind: str,
     sender_external_id: str,
     provider_msg_id: str | None,
@@ -438,6 +494,21 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         bot_active=snap.bot_active,
         handoff_until=snap.handoff_until,
         verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
+    )
+
+    # NX-234 — `TurnSnapshot`, construit ÎNTRE load și pipeline. Aici, nu mai devreme (are nevoie
+    # de contact/conversație/state) și nu mai târziu (stagiile trebuie să-l găsească gata). Un
+    # checkout SCURT propriu pentru rehidratarea de catalog, închis înainte de compute — un
+    # snapshot nu ține niciodată o conexiune (NX-231).
+    await _attach_snapshot(
+        db,
+        ctx,
+        business,
+        event,
+        snap,
+        channel_id=channel_id,
+        raw_body=raw_body,
+        safe_body=safe_body,
     )
 
     # NX-148: acoperirea memoriei (chei/contoare, nu valori — P12).

@@ -326,6 +326,9 @@ class WebTurnExecutor:
             "provider_msg_id": row.client_turn_id,
             "content_type": refs.content_type,
             "body": refs.safe_body or "",
+            # NX-234: contextul de pagină vine din DB (persistat la accept), nu din requestul
+            # HTTP care de mult s-a închis. Un reclaim după restart rulează cu ACEEAȘI ancoră.
+            **({"page_context": refs.page_context} if refs.page_context else {}),
         }
         persisted: dict = {}
 

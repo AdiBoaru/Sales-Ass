@@ -17,7 +17,6 @@ follow-up de preț («mai ieftin») NU e link/compare/paginare, ci re-căutare (
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import TYPE_CHECKING
 
 from src.agent.fallbacks import (
@@ -26,6 +25,12 @@ from src.agent.fallbacks import (
     _link_lead,
     _no_link_msg,
     _view_label,
+)
+from src.agent.reference_resolver import (
+    normalize_for_match,
+    page_anchor_from_snapshot,
+    resolve_from_displayed,
+    resolve_product_reference,
 )
 from src.config import get_settings
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
@@ -105,59 +110,71 @@ _DETAIL_RE = re.compile(
     re.IGNORECASE,
 )
 
-_ORDINALS: tuple[tuple[int, re.Pattern[str]], ...] = (
-    (0, re.compile(r"(?<![a-z0-9])(?:prima|primul|intai|first|elso)(?![a-z0-9])")),
-    (
-        1,
-        re.compile(r"(?<![a-z0-9])(?:a[ ]+doua|al[ ]+doilea|second|masodik)(?![a-z0-9])"),
-    ),
-    (
-        2,
-        re.compile(r"(?<![a-z0-9])(?:a[ ]+treia|al[ ]+treilea|third|harmadik)(?![a-z0-9])"),
-    ),
-)
-_NUMERIC_ORDINALS: tuple[tuple[int, re.Pattern[str]], ...] = tuple(
-    (
-        index - 1,
-        re.compile(rf"(?:recenzi|parer|opini|review|velemen)[a-z]*[ :#.-]*{index}(?:[^0-9]|$)"),
-    )
-    for index in range(1, 5)
-)
 
-
+# NX-234: ordinalele + potrivirea pe nume s-au mutat în `src/agent/reference_resolver.py`
+# (API comun, ca ancora paginii să folosească EXACT aceleași reguli ca setul afișat).
 def _norm_followup(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    return normalize_for_match(text)
+
+
+def _page_anchor_ref(ctx: TurnContext) -> ProductRef | None:
+    """NX-234 — ancora paginii ca `ProductRef`, sau None.
+
+    Numele și prețul vin din snapshotul REHIDRATAT server-side, nu din browser: `ProductRef` e
+    tipul pe care îl consumă deja handlerele deterministe, deci ancora intră pe același drum ca
+    un produs afișat, fără o a doua cale de rezolvare (P3)."""
+    anchor = page_anchor_from_snapshot(getattr(ctx, "snapshot", None))
+    if anchor is None:
+        return None
+    return ProductRef(
+        product_id=anchor.product_id,
+        name=anchor.name or "",
+        price=float(anchor.price) if anchor.price is not None else 0.0,
+    )
+
+
+def _anchor_refs(ctx: TurnContext) -> list[ProductRef]:
+    """Setul de produse pe care un follow-up îl poate ancora: cele AFIȘATE + produsul PAGINII
+    (dacă nu e deja acolo). Ordinea contează — deixis-ul ordinal („a doua") se referă la lista
+    afișată, deci ancora paginii se adaugă la coadă, nu în față."""
+    refs = list(ctx.state.displayed_products)
+    page = _page_anchor_ref(ctx)
+    if page is not None and all(r.product_id != page.product_id for r in refs):
+        refs.append(page)
+    return refs
 
 
 def _resolve_review_product(query: str, refs: list[ProductRef]) -> ProductRef | None:
-    """Rezolvă deixis-ul fără LLM: produs unic, ordinal, nume complet sau tokeni unici."""
-    if not refs:
-        return None
-    if len(refs) == 1:
-        return refs[0]
-    normalized = _norm_followup(query)
-    for index, pattern in (*_ORDINALS, *_NUMERIC_ORDINALS):
-        if index < len(refs) and pattern.search(normalized):
-            return refs[index]
+    """Rezolvă deixis-ul fără LLM: produs unic, ordinal, nume complet sau tokeni unici.
 
-    normalized_names = [_norm_followup(ref.name).strip() for ref in refs]
-    exact = [ref for ref, name in zip(refs, normalized_names, strict=True) if name in normalized]
-    if len(exact) == 1:
-        return exact[0]
+    NX-234: logica trăiește acum în `src/agent/reference_resolver.py` (API comun, ca ancora
+    paginii să folosească EXACT aceleași reguli). Semantica rămâne neschimbată."""
+    resolution = resolve_from_displayed(query, refs)
+    return refs[resolution.index] if resolution.index is not None else None
 
-    # Numele din chip poate fi scurtat. Alegem numai un scor unic, ca un termen comun precum
-    # „cremă” să nu selecteze arbitrar unul dintre mai multe produse.
-    query_tokens = set(re.findall(r"[a-z0-9]+", normalized))
-    scores: list[int] = []
-    for name in normalized_names:
-        tokens = {token for token in re.findall(r"[a-z0-9]+", name) if len(token) >= 3}
-        scores.append(sum(1 for token in tokens if token in query_tokens))
-    best = max(scores, default=0)
-    winners = [index for index, score in enumerate(scores) if score == best]
-    if best >= 1 and len(winners) == 1:
-        return refs[winners[0]]
-    return None
+
+def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
+    """Rezolvarea COMPLETĂ a acestui card: `named` > `ordinal` > `page` > `single`.
+
+    Fără snapshot/ancoră (orice canal non-web, flag stins, pagină fără produs) cade exact pe
+    `_resolve_review_product` — comportamentul de dinainte, bit cu bit."""
+    refs = list(ctx.state.displayed_products)
+    page = _page_anchor_ref(ctx)
+    if page is None:
+        return _resolve_review_product(query, refs)
+    resolution = resolve_product_reference(
+        query,
+        refs,
+        page=page_anchor_from_snapshot(ctx.snapshot),
+    )
+    ctx.emit(
+        "web_reference_resolved",
+        source=resolution.source,
+        outcome=resolution.outcome,
+    )
+    if resolution.index is not None:
+        return refs[resolution.index]
+    return page if resolution.source == "page" else None
 
 
 def _review_copy(language: str) -> dict[str, str]:
@@ -241,8 +258,8 @@ def _review_next_steps(language: str) -> list[str]:
 
 async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
     """Răspunde din recenziile produsului afișat; nu lasă modelul să aleagă ancora."""
-    refs = ctx.state.displayed_products
-    selected = _resolve_review_product(query, refs)
+    refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
+    selected = _resolve_anchor(ctx, query)
     if selected is None:
         ctx.set_clarify(
             _review_copy(ctx.language)["which"],
@@ -345,8 +362,8 @@ def _detail_answer(product: dict, ctx: TurnContext) -> str:
 
 
 async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
-    refs = ctx.state.displayed_products
-    selected = _resolve_review_product(query, refs)
+    refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
+    selected = _resolve_anchor(ctx, query)
     if selected is None:
         ctx.set_clarify(
             _detail_copy(ctx.language)["which"],
@@ -379,8 +396,12 @@ async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Servește o cerere de LINK pe produsele DEJA arătate, FĂRĂ bucla LLM (NX-131) — ca
     show_more/cheaper. State ține doar ref-uri (P8) → fetch `product_url` PROASPĂT din catalog
     (sursa de adevăr). Link real → Offer(open_url) + card(uri); `product_url` NULL (gaură de date
-    demo) → mesaj ONEST, NU link inventat (PP-F4). Mereu setează un reply (P6, niciodată tăcere)."""
-    ids = [p.product_id for p in ctx.state.displayed_products]
+    demo) → mesaj ONEST, NU link inventat (PP-F4). Mereu setează un reply (P6, niciodată tăcere).
+
+    NX-234: „unde-l cumpăr?" pe o pagină de produs, fără nimic afișat înainte, avea zero ancore —
+    ancora paginii intră în set, cu URL-ul luat tot din catalog (`product_url`), niciodată din
+    browser (un URL afirmat de host ar fi exact linkul pe care nu-l putem valida)."""
+    ids = [p.product_id for p in _anchor_refs(ctx)]
     async with deps.db("link_intent_products") as conn:
         products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
     # NX-173 (P0): `displayed_products` e STATE VECHI — poate conține produse afișate ÎNAINTE ca
@@ -484,7 +505,10 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
 
     # Un follow-up de recenzii se referă la setul deja afișat chiar dacă triajul a propagat filtre
     # istorice. Cu mai multe produse, handlerul cere ancora în loc să aleagă primul card.
+    # NX-234: `anchorable` include și produsul PAGINII — pe un PDP, „ce părere ai despre acesta?"
+    # e ancorabil chiar cu zero produse afișate (exact cazul pe care cardul îl repară).
     displayed = ctx.state.displayed_products
+    anchorable = _anchor_refs(ctx)
     raw_pending = getattr(ctx.state, "pending_question", None)
     pending = raw_pending if isinstance(raw_pending, dict) else {}
     explicit_review = _REVIEW_RE.search(_norm_followup(query)) is not None
@@ -494,7 +518,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     )
     review_intent = (
         getattr(get_settings(), "review_intent_enabled", True)
-        and bool(displayed)
+        and bool(anchorable)
         and (explicit_review or resolves_pending_review)
     )
     if review_intent:
@@ -508,7 +532,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     )
     detail_intent = (
         getattr(get_settings(), "detail_intent_enabled", True)
-        and bool(displayed)
+        and bool(anchorable)
         and (explicit_detail or resolves_pending_detail)
     )
     if detail_intent:
@@ -520,7 +544,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     # coaching repetat. O servim direct din state → product_url proaspăt → Offer(open_url) + card.
     link_intent = (
         get_settings().link_intent_enabled
-        and bool(ctx.state.displayed_products)
+        and bool(anchorable)
         and not route.filters
         and _LINK_RE.search(query) is not None
         and _CHEAPER_RE.search(query) is None

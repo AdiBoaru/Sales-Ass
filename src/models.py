@@ -510,6 +510,13 @@ class TurnContext:
     # stabilit la marginea de canal și rezolvat de processor în contact verificat. None = anonim.
     # Owner: processor. Citit de order_gate (poarta de comandă) și de check_order (NX-130: lookup).
     verified_customer_ref: str | None = None
+    # NX-234: `TurnSnapshot` — contextul IMUABIL al turului (tenant/actor/conversație/input +
+    # suprafața paginii rehidratată canonic + memoria). Owner UNIC: processor, ÎNAINTE de
+    # pipeline; niciun stagiu nu îl rescrie (ar însemna două surse de adevăr în același tur).
+    # `None` = flag OFF / canal fără context de pagină → comportamentul de dinainte de card.
+    # `Any` ca să nu importăm `src.worker` în models (ciclu), la fel ca `match_set`/`answer_plan`;
+    # accesul tipizat trece prin `src/agent/reference_resolver.page_anchor_from_snapshot`.
+    snapshot: Any = None
     route: RouteDecision | None = None  # owner: Triaj
     retrieval: RetrievalResult | None = None  # owner: Retrieval
     # NX-187: MatchSet-ul shadow (verdicte MATCH/MISMATCH/UNKNOWN per produs×constrângere + clase

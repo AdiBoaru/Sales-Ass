@@ -211,14 +211,20 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   Fără fereastră 24h, fără template-uri. Handoff dezactivat by default (fără operator). Identitate:
   anonim by default; login passthrough JWT în spatele `WEB_IDENTITY_ENABLED` (NX-128/129/130).
   Audit conversațional pe calea reală: `scripts/sim/web_audit.py`.
-  > **Contract v2 (NX-228→NX-233): rutele există, flags OFF.** Contractul de mai sus e
+  > **Contract v2 (NX-228→NX-234): rutele există, flags OFF.** Contractul de mai sus e
   > **v1 și rămâne activ, neatins, până la cutoverul NX-249**. În paralel: NX-232 = ledgerul
   > durabil `web_turns` (idempotency + replay pe `/web/chat`, flag `WEB_TURN_LEDGER_ENABLED`);
   > NX-233 = calea ASYNC v2 — `POST/GET /web/v2/turns` (+SSE) în `src/web/app.py`, executor cu
   > lease/fencing (`src/web/turn_executor.py`), sweeper de recovery (`src/web/turn_recovery.py`),
   > proiecția v1→`web-view.v2` (`src/web/turn_events.py`) — totul în spatele flag-urilor
   > `WEB_TURN_V2_ENABLED` / `WEB_TURN_EXECUTOR_ENABLED` / `WEB_TURN_RECOVERY_ENABLED` /
-  > `WEB_TURN_SSE_ENABLED` (default OFF). Există și `web-view.v2`
+  > `WEB_TURN_SSE_ENABLED` (default OFF). NX-234 = **contextul de pagină ID-only**: browserul
+  > trimite suprafața + identificatori opaci (`src/web/context.py`), serverul rehidratează canonic
+  > și tenant-scoped (`src/catalog/context_resolver.py`, UN query), iar turul primește un
+  > `TurnSnapshot` IMUABIL (`src/worker/turn_snapshot.py`) — un câmp comercial în `context` e 422,
+  > o variantă de la alt produs invalidează tot contextul, iar `UNKNOWN` nu devine `0`. Ancora
+  > „produsul acesta" de pe PDP: `src/agent/reference_resolver.py`. Flags `WEB_CONTEXT_ENABLED` /
+  > `WEB_CONTEXT_PROMPT_ENABLED` (default OFF; al doilea îl cere pe primul). Există și `web-view.v2`
   > ([`src/web/contracts_v2.py`](src/web/contracts_v2.py)), în care backendul livrează un
   > ViewModel **display-ready**: prețul e `"89,00 lei"`, nu `89.0`; reducerea vine calculată;
   > tot copy-ul (chrome, composer, anunțuri a11y) e server-owned. Frontendul devine renderer
@@ -536,6 +542,7 @@ nativx-assistant/
 │   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web v1 (carduri+comparison) pt randarea FE (paritate iZi)
 │   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
 │   ├── WEB-WIDGET-BOUNDARY-V2.md← NX-228: matricea de ownership + regula „frontend pasiv"
+│   ├── WEB-CONTEXT-DATA-READINESS.md ← NX-234: field → sursă → SLA → UNKNOWN + coverage măsurat
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
 ├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); db_check.py,
@@ -562,6 +569,7 @@ nativx-assistant/
 │   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK) + entrypoint __main__
 │   │   ├── processor.py         ← handle_turn: load → compute (fără conn) → commit → aftercare
 │   │   ├── turn_uow.py          ← NX-231: TurnLoadSnapshot (imutabil) + TurnCommit (o tranzacție)
+│   │   ├── turn_snapshot.py     ← NX-234: TurnSnapshot IMUABIL (tenant/actor/conv/input/suprafață)
 │   │   ├── admission.py         ← frâna de concurență: lease-uri Redis, plafon global + per-tenant
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
 │   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (Meta/Telegram), retry idempotent
@@ -577,8 +585,11 @@ nativx-assistant/
 │   │   ├── pack.py + loader.py + normalize.py + defaults/*.json (ecommerce/beauty_salon/...)
 │   │   facets.py (NX-186: fațete tipizate) · contracts.py (NX-205: contractul de adevăr —
 │   │   Facts/Evidence/Provenance/DerivedSignals + obligatorii per categorie)
+│   ├── catalog/                 ← NX-234: regulile canonice de catalog (SQL-ul rămâne în db/queries)
+│   │   └── context_resolver.py  ← rehidratare batch a contextului de pagină + relații + freshness
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
+│   │   ├── reference_resolver.py← NX-234: „acesta"/„prima" → produs (named>ordinal>page>single)
 │   │   └── tool_definitions.py  ← OpenAI tool schemas
 │   ├── proactive/
 │   │   ├── scheduler.py         ← proactive_jobs → outbox (motor NX-70; calea template LIVE, PR #142)
