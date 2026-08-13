@@ -143,6 +143,46 @@ def state_block(state: ConversationState, *, max_products: int = 3, max_chars: i
     return "\n".join(lines)[:max_chars]
 
 
+def page_context_block(ctx: TurnContext, *, max_chars: int = 300) -> str:
+    """NX-234 — unde se află clientul ACUM, din `TurnSnapshot` (rehidratat server-side).
+
+    Fără el, un „ce părere ai despre acesta?" de pe o pagină de produs n-are ancoră: modelul fie
+    ghicește din istoric, fie cere o clarificare pe care clientul o consideră absurdă (se uită la
+    produs). Cu el, ancora e un ID canonic pe care tool-urile îl pot rezolva.
+
+    **Ce NU intră aici, deliberat: CIFRE.** Prețul din snapshot e canonic, dar grounding-ul
+    validatorului (stagiul 8) e `ctx.retrieval`, scris de stagiul de Retrieval (P3). Un preț
+    injectat în prompt fără să existe în retrieval ar fi rostit de model și respins de validator —
+    adică un retry garantat pe fiecare tur cu context. Blocul dă ANCORA (id + nume + categorie);
+    faptele se iau prin tool-uri, unde sunt și verificate. Ce se marchează totuși e ce NU știm:
+    un `UNKNOWN` explicit e mai util decât o absență tăcută, pe care modelul o poate umple.
+
+    Gol când: flagul de prompt e stins (`without_evidence` a golit faptele), canalul n-are context
+    de pagină, sau contextul n-a rezolvat nimic — degradare la comportamentul de dinainte."""
+    surface = getattr(ctx.snapshot, "surface", None)
+    product = getattr(surface, "product", None)
+    if product is None:
+        return ""
+    parts = [f"Clientul se află pe pagina produsului [{product.product_id}] {product.name}"]
+    if getattr(product, "category_name", None):
+        parts.append(f"categorie: {product.category_name}")
+    variant = getattr(surface, "variant", None)
+    if variant is not None and getattr(variant, "label", None):
+        parts.append(f"varianta selectată: {variant.label}")
+    freshness = getattr(product, "freshness", None)
+    if freshness is not None and freshness.stale:
+        parts.append("date de catalog vechi — confirmă prin tool înainte să afirmi")
+    unknown = sorted(getattr(product, "unknown", ()) or ())
+    if unknown:
+        parts.append("necunoscut: " + ", ".join(unknown[:4]))
+    text = (
+        "Context pagină: "
+        + "; ".join(parts)
+        + ". Folosește id-ul din [] pentru detalii/comparație; nu inventa prețuri sau stoc."
+    )
+    return text[:max_chars]
+
+
 def summary_block(ctx: TurnContext, *, max_chars: int | None = None) -> str:
     """Bloc de rezumat al conversației anterioare (felia 2), din `ctx.summary` (seedat de
     processor — fără I/O aici). Acoperă mesajele de dinaintea ultimelor 8 (care rămân în
@@ -165,6 +205,9 @@ def context_blocks(ctx: TurnContext) -> str:
         customer_profile_block(ctx.contact),
         facts_block(ctx),  # NX-148: memorie structurată (după profil, înainte de state)
         state_block(ctx.state),
+        # NX-234: ULTIMUL, fiindcă e cel mai recent context — unde se află clientul ACUM, după
+        # tot ce s-a întâmplat înainte. Gol pe orice canal fără context de pagină.
+        page_context_block(ctx),
     ]
     return "\n".join(b for b in blocks if b)
 

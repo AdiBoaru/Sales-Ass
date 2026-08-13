@@ -898,6 +898,190 @@ async def list_routing_aliases(
     return [(r["phrase_norm"], r["target"]) for r in rows]
 
 
+# ── NX-234: rehidratarea contextului de pagină (UN round-trip, tenant-scoped) ───────────────
+# De ce un query separat și nu `get_products_by_ids`: contextul aduce entități de TIPURI diferite
+# (produse + o variantă + o categorie) și referințe care pot fi UUID-ul nostru SAU cheia proprie a
+# platformei magazinului (`external_id` / `sku` / `slug` — singurele pe care pagina gazdă le
+# cunoaște). Un lookup per entitate ar fi N+1 exact pe calea sincronă a unui turn; aici e un
+# UNION ALL: 1 round-trip pentru 1 ref sau pentru 10.
+#
+# `data` e jsonb ca să încapă trei forme în aceeași coloană. Costul (serializare) e plătit o
+# singură dată per turn și cumpără proprietatea care contează: numărul de query-uri nu depinde de
+# numărul de referințe.
+
+_CONTEXT_PRODUCT_JSON = f"""
+    jsonb_build_object(
+        'id', p.id::text,
+        'external_id', p.external_id,
+        'name', p.name,
+        'brand', b.name,
+        'url', p.product_url,
+        'image', img.url,
+        'currency', p.currency,
+        'price', {_EFFECTIVE_PRICE}::float8,
+        'list_price', (case when {_SALE_ACTIVE} then p.price end)::float8,
+        'price_source', (case when vp.price is not null then 'variant_min' else 'product' end),
+        'availability', p.availability,
+        'stock_total', p.stock_total,
+        'rating', p.rating::float8,
+        'review_count', p.review_count,
+        'review_summary', prs.summary,
+        'category_id', p.primary_category_id::text,
+        'category_name', c.name,
+        'category_slug', c.slug,
+        'category_path', c.path,
+        'delivery_class', p.delivery_class,
+        'restock_date', p.restock_date,
+        'content_status', p.content_status,
+        'updated_at', p.updated_at,
+        'synced_at', p.synced_at,
+        'verified_at', p.verified_at
+    )
+"""
+
+_CONTEXT_VARIANT_JSON = f"""
+    jsonb_build_object(
+        'id', v.id::text,
+        'product_id', v.product_id::text,
+        'external_id', v.external_id,
+        'label', v.label,
+        'sku', v.sku,
+        'price', (case when {_VARIANT_SALE_ON} then v.sale_price else v.price end)::float8,
+        'list_price', (case when {_VARIANT_SALE_ON} then v.price end)::float8,
+        'stock', v.stock,
+        'updated_at', v.updated_at
+    )
+"""
+
+_CONTEXT_CATEGORY_JSON = """
+    jsonb_build_object(
+        'id', c.id::text,
+        'name', c.name,
+        'slug', c.slug,
+        'path', c.path,
+        'parent_id', c.parent_id::text,
+        'updated_at', c.updated_at
+    )
+"""
+
+
+async def load_context_entities(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    product_uuids: list[str] | None = None,
+    product_keys: list[str] | None = None,
+    variant_uuids: list[str] | None = None,
+    variant_keys: list[str] | None = None,
+    category_uuids: list[str] | None = None,
+    category_keys: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Rehidratează contextul de pagină într-UN singur round-trip. `business_id = $1` pe FIECARE
+    ramură (P7) — un id existent la ALT tenant nu se întoarce, deci e indistinct de inexistent.
+
+    Referințele vin în două forme, pentru că pagina gazdă cunoaște cheia platformei ei, nu UUID-ul
+    nostru: `*_uuids` = `id`-ul canonic; `*_keys` = cheia proprie a tenantului (`products
+    .external_id`, `product_variants.external_id`/`sku`, `categories.slug`) — toate unice pe
+    business în schema reală. `ref` (coloana întoarsă) e cheia PE CARE S-A CERUT, ca apelantul să
+    poată mapa înapoi fără al doilea query.
+
+    Produsele trec prin ACELEAȘI porți ca discovery-ul (`status='active'` + quality gate
+    per-tenant): un produs nepublicat nu devine „evidence" doar fiindcă browserul a afirmat că
+    e pe ecran. Variantele/categoriile nu au poartă proprie — validarea lor de relație (varianta
+    aparține produsului) se face în `src/catalog/context_resolver.py`, cu datele de aici."""
+    branches: list[str] = []
+    params: list[Any] = [business_id]
+
+    def placeholder(value: Any) -> str:
+        params.append(value)
+        return f"${len(params)}"
+
+    cs = _content_status_pred()
+    product_gate = " and p.status = 'active'" + (f" and {cs}" if cs else "")
+    # `vp` = minimul pe variante, cu fereastra de promoție a PRODUSULUI (varianta o moștenește —
+    # vezi `_VARIANT_SALE_ON`); `img` = prima poză. Aceleași laterale ca `_SELECT`, ca prețul de
+    # context să fie EXACT prețul pe care îl vede validatorul pe orice altă cale.
+    product_from = (
+        " from products p"
+        " left join brands b on b.id = p.brand_id"
+        " left join categories c on c.id = p.primary_category_id"
+        " left join product_review_summaries prs on prs.product_id = p.id"
+        " left join lateral (select min(case when "
+        + _SALE_WINDOW_OK
+        + " and v.sale_price is not null and v.sale_price < v.price"
+        " then v.sale_price else v.price end) as price from product_variants v"
+        " where v.product_id = p.id and v.business_id = p.business_id) vp on true"
+        " left join lateral (select pi.url from product_images pi where pi.product_id = p.id"
+        " order by pi.position asc nulls last limit 1) img on true"
+    )
+    # Varianta se citește cu produsul ei alături (`p`), fiindcă fereastra de promoție e a
+    # produsului; join-ul e scopat pe AMBELE capete (P7), nu doar pe `v.business_id`.
+    variant_from = (
+        " from product_variants v"
+        " join products p on p.id = v.product_id and p.business_id = v.business_id"
+    )
+    if product_uuids:
+        branches.append(
+            f"select 'product' as kind, p.id::text as ref, {_CONTEXT_PRODUCT_JSON} as data"
+            + product_from
+            + f" where p.business_id = $1 and p.id = any({placeholder(product_uuids)}::uuid[])"
+            + product_gate
+        )
+    if product_keys:
+        branches.append(
+            f"select 'product' as kind, p.external_id as ref, {_CONTEXT_PRODUCT_JSON} as data"
+            + product_from
+            + " where p.business_id = $1 and p.external_id = any("
+            + placeholder(product_keys)
+            + "::text[])"
+            + product_gate
+        )
+    if variant_uuids:
+        branches.append(
+            f"select 'variant' as kind, v.id::text as ref, {_CONTEXT_VARIANT_JSON} as data"
+            + variant_from
+            + f" where v.business_id = $1 and v.id = any({placeholder(variant_uuids)}::uuid[])"
+        )
+    if variant_keys:
+        vk = placeholder(variant_keys)
+        branches.append(
+            # `ref` = cheia PE CARE S-A CERUT, nu prima coloană ne-nulă: o variantă cu
+            # `external_id` diferit de `sku` s-ar întoarce sub o cheie pe care apelantul n-a
+            # cerut-o, deci ar arăta ca „negăsită".
+            f"select 'variant' as kind,"
+            f" (case when v.external_id = any({vk}::text[]) then v.external_id else v.sku end)"
+            f" as ref, {_CONTEXT_VARIANT_JSON} as data"
+            + variant_from
+            + f" where v.business_id = $1 and (v.external_id = any({vk}::text[])"
+            f" or v.sku = any({vk}::text[]))"
+        )
+    if category_uuids:
+        branches.append(
+            f"select 'category' as kind, c.id::text as ref, {_CONTEXT_CATEGORY_JSON} as data"
+            " from categories c"
+            f" where c.business_id = $1 and c.id = any({placeholder(category_uuids)}::uuid[])"
+        )
+    if category_keys:
+        branches.append(
+            f"select 'category' as kind, c.slug as ref, {_CONTEXT_CATEGORY_JSON} as data"
+            " from categories c"
+            f" where c.business_id = $1 and c.slug = any({placeholder(category_keys)}::text[])"
+        )
+    if not branches:
+        return []
+    rows = await conn.fetch(" union all ".join(branches), *params)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        data = r["data"]
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (ValueError, TypeError):
+                continue
+        out.append({"kind": r["kind"], "ref": r["ref"], "data": data or {}})
+    return out
+
+
 async def search_products_semantic(
     conn: asyncpg.Connection,
     business_id: str,

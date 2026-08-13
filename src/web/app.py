@@ -45,6 +45,14 @@ from src.db.queries.web_turns import WebTurnRow, get_turn, get_turn_by_id
 from src.models import Event
 from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
+from src.web.context import (
+    CommercialFieldRejected,
+    fingerprint_context,
+    missing_anchor,
+    normalize_context,
+    reject_commercial_fields,
+    to_payload,
+)
 from src.web.contracts_v2 import WebTurnRequestV2, parse_turn_request
 from src.web.identity import verify_identity_token
 from src.web.security import (
@@ -829,6 +837,18 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return _v2_error(400, "invalid_json", "corpul nu este JSON valid")
+    # NX-234: câmpurile comerciale se resping ÎNAINTE de parse, cu un cod PROPRIU. `extra="forbid"`
+    # le-ar prinde oricum, dar ca `schema_invalid` generic — iar diferența dintre „un câmp în plus"
+    # și „browserul încearcă să dicteze prețul" e exact ce trebuie să se vadă în metrici.
+    try:
+        reject_commercial_fields(
+            payload.get("context") if isinstance(payload, dict) else None,
+        )
+    except CommercialFieldRejected as e:
+        log.warning("web_context_rejected reason=commercial_field field=%s", e.field_name)
+        return _v2_error(
+            422, "context_commercial_field", "contextul acceptă doar identificatori, nu fapte"
+        )
     try:
         turn_req: WebTurnRequestV2 = parse_turn_request(payload)
     except (ValueError, TypeError):
@@ -871,11 +891,22 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
     _raw_inbound, safe_inbound = apply_boundary(text)
     if safe_inbound.degraded:
         log.warning("privacy_guard_failed stage=web_v2_accept reason=degraded")
+    # NX-234 — contextul de pagină: normalizare STRUCTURALĂ aici (pur, fără lookup), rehidratarea
+    # canonică abia la execuție. Marginea nu vede fapte de catalog și nu decide dacă produsul
+    # există; treaba ei e să transforme o afirmație de browser într-o referință bounded, să o lege
+    # de identitatea requestului (fingerprint) și să o facă DURABILĂ (payload-ul mesajului).
+    normalized_context = (
+        normalize_context(turn_req.context) if s.web_context_enabled else normalize_context(None)
+    )
+    context_canonical = fingerprint_context(normalized_context) if s.web_context_enabled else None
     fingerprint = request_fingerprint(
         s.web_turn_fingerprint_secret,
         business_id=session.business_id,
         channel_token=token,
         text=text,
+        # Doar ancorele reale intră în identitatea requestului: un context gol (`surface=other`,
+        # zero ID-uri) ar schimba fingerprint-ul tuturor turelor fără să însemne nimic.
+        context=None if normalized_context.is_empty else context_canonical,
     )
     outcome = await accept_web_turn(
         db,
@@ -894,6 +925,7 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         session_ref=session_ref_hash(token, visitor_id),
         persist_inbound=True,
         safe_body=safe_inbound.text,
+        page_context=to_payload(normalized_context) if s.web_context_enabled else None,
     )
     lang = business.default_locale or "ro"
     if isinstance(outcome, IdempotencyConflict):
@@ -939,9 +971,24 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
     # Wake DUPĂ ce acceptul e comis (checkout-ul s-a închis) — niciodată înainte. Best-effort:
     # pierderea lui e acoperită de scanul executorului + sweeper (DB = autoritatea).
     await wake_executor(redis, session.business_id, outcome.row.id)
-    await _ledger_emit(
-        db, outcome.row, Event("web_turn_accepted", {"mode": "new", "web_turn_id": outcome.row.id})
-    )
+    events = [Event("web_turn_accepted", {"mode": "new", "web_turn_id": outcome.row.id})]
+    if s.web_context_enabled:
+        # Ce a fost ACCEPTAT ca formă, nu ce s-a rezolvat: rezolvarea (și `web_context_validated`
+        # cu outcome-ul ei) se întâmplă la execuție, unde se atinge catalogul. P12: doar suprafață
+        # + motive low-cardinality, niciun ID extern ca label.
+        events.append(
+            Event(
+                "web_context_accepted",
+                {
+                    "surface": normalized_context.surface,
+                    "has_anchor": not normalized_context.is_empty,
+                    "missing_anchor": missing_anchor(normalized_context),
+                    "rejected": [field for field, _ in normalized_context.rejected],
+                    "web_turn_id": outcome.row.id,
+                },
+            )
+        )
+    await _ledger_emit(db, outcome.row, *events)
     return _v2_status_response(outcome.row)
 
 

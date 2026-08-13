@@ -385,7 +385,11 @@ class ExecutionRefs:
     """Referințele de care are nevoie executorul ca să RULEZE un turn revendicat, citite din
     DB (autoritatea de recovery): canalul conversației + identitatea de canal a contactului +
     inputul SAFE persistat la accept. Fără token de sesiune, fără body brut (P12: `safe_body`
-    e forma deja trecută prin frontiera de privacy NX-230, singura care atinge discul)."""
+    e forma deja trecută prin frontiera de privacy NX-230, singura care atinge discul).
+
+    NX-234: `page_context` = contextul de pagină NORMALIZAT, persistat la accept pe payload-ul
+    mesajului inbound (suprafață + ID-uri opace, zero fapte). Se citește de AICI, nu din requestul
+    HTTP — un turn reluat după restart trebuie să aibă EXACT aceeași ancoră."""
 
     channel_id: str
     channel_kind: str
@@ -394,6 +398,7 @@ class ExecutionRefs:
     inbound_msg_id: str | None
     safe_body: str | None
     content_type: str
+    page_context: dict[str, Any] | None = None
 
 
 async def load_execution_refs(
@@ -426,7 +431,7 @@ async def load_execution_refs(
                  limit 1
                ) ci on true
           left join lateral (
-                select id, body, content_type from messages
+                select id, body, content_type, payload from messages
                  where business_id = w.business_id
                    and conversation_id = w.conversation_id
                    and provider_msg_id = w.client_turn_id::text
@@ -441,6 +446,13 @@ async def load_execution_refs(
     )
     if rec is None:
         return None
+    payload = rec["payload"] if "payload" in rec else None
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = None
+    page_context = payload.get("context") if isinstance(payload, dict) else None
     return ExecutionRefs(
         channel_id=str(rec["channel_id"]),
         channel_kind=rec["channel_kind"],
@@ -449,6 +461,7 @@ async def load_execution_refs(
         inbound_msg_id=str(rec["inbound_msg_id"]) if rec["inbound_msg_id"] else None,
         safe_body=rec["safe_body"],
         content_type=rec["content_type"] or "text",
+        page_context=page_context if isinstance(page_context, dict) else None,
     )
 
 

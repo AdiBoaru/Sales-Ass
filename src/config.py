@@ -883,6 +883,32 @@ class Settings(BaseSettings):
         default=10.0, validation_alias="WEB_TURN_SHUTDOWN_GRACE_S"
     )
 
+    # --- NX-234: contextul de pagină ID-only + TurnSnapshot ------------------
+    # DOUĂ flaguri, deliberat separate (rollout: shadow → enforcement → prompt):
+    #   • `web_context_enabled` — validare + rehidratare + evenimente. Contextul EXISTĂ în
+    #     snapshot, dar nu ajunge în prompt. Aici se măsoară cross-tenant/mismatch/freshness.
+    #   • `web_context_prompt_enabled` — abia el lasă faptele rehidratate să atingă promptul și
+    #     ancora deterministă. Fără primul, al doilea nu face nimic (poarta e AND).
+    # Ambele OFF = zero schimbare de comportament, pe orice canal.
+    web_context_enabled: bool = Field(default=False, validation_alias="WEB_CONTEXT_ENABLED")
+    web_context_prompt_enabled: bool = Field(
+        default=False, validation_alias="WEB_CONTEXT_PROMPT_ENABLED"
+    )
+    # Deadline BOUNDED al rehidratării de catalog. Un catalog lent nu are voie să țină turul:
+    # peste el → `unavailable` (terminal onest downstream), nu o așteptare nelimitată.
+    web_context_hydration_timeout_ms: int = Field(
+        default=1500, validation_alias="WEB_CONTEXT_HYDRATION_TIMEOUT_MS"
+    )
+    # Peste ce vechime un fapt de catalog e marcat `stale`. NU îl aruncă: îl obligă să se
+    # declare (disclosure/refresh e politica consumatorului, dar are nevoie de semnal).
+    web_context_freshness_sla_s: int = Field(
+        default=86400, validation_alias="WEB_CONTEXT_FRESHNESS_SLA_S"
+    )
+    # Contractul de pipeline scris în snapshot (legat de `web_turns.pipeline_version`).
+    web_context_pipeline_version: str = Field(
+        default="web-chat.v1", validation_alias="WEB_CONTEXT_PIPELINE_VERSION"
+    )
+
     @model_validator(mode="after")
     def _web_turn_relations(self) -> "Settings":
         """NX-233: relațiile dintre parametrii executorului se VALIDEAZĂ la boot, nu se
@@ -898,6 +924,15 @@ class Settings(BaseSettings):
             raise ValueError("WEB_TURN_DEADLINE_S și WEB_TURN_MAX_ATTEMPTS trebuie să fie >= 1")
         if self.web_turn_executor_poll_s <= 0 or self.web_turn_sweep_interval_s <= 0:
             raise ValueError("WEB_TURN_EXECUTOR_POLL_S / WEB_TURN_SWEEP_INTERVAL_S: > 0")
+        # NX-234: expunerea în prompt fără validare/rehidratare ar însemna fapte necontrolate în
+        # prompt — poarta e AND, deci configurația care sugerează altceva refuză să pornească.
+        if self.web_context_prompt_enabled and not self.web_context_enabled:
+            raise ValueError(
+                "WEB_CONTEXT_PROMPT_ENABLED cere WEB_CONTEXT_ENABLED (fără rehidratare validată "
+                "nu există fapte de expus în prompt)"
+            )
+        if self.web_context_hydration_timeout_ms <= 0 or self.web_context_freshness_sla_s <= 0:
+            raise ValueError("WEB_CONTEXT_HYDRATION_TIMEOUT_MS / _FRESHNESS_SLA_S: > 0")
         return self
 
     @property

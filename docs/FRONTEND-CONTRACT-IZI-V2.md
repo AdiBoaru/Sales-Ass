@@ -63,6 +63,31 @@ recovery la refresh. Generează-l tu, o dată per tur, și păstrează-l până 
 constraints, stare de conversație. Contextul cară ID-uri opace, nu fapte — serverul rehidratează
 tot (NX-234). Un câmp în plus respinge requestul.
 
+### 1bis. `context` — ce se acceptă, ce se refuză și de ce (NX-234)
+
+| Câmp | Verdict | Formă acceptată | Motiv |
+|---|---|---|---|
+| `surface` | **acceptat** | `home\|category\|product\|cart\|checkout\|order\|other` | singurul mod în care serverul știe ce ID are sens; o suprafață necunoscută devine `other` |
+| `product_id` | **acceptat** | UUID-ul nostru **sau** cheia platformei tale (`external_id`), ≤128 car., `[A-Za-z0-9_.:-]` | amândouă sunt unice pe tenant în catalog; pagina ta cunoaște a doua |
+| `variant_id` | **acceptat**, doar cu `product_id` | UUID sau `external_id`/`sku` | fără produs n-ar exista relația „varianta e a acestui produs" de verificat |
+| `category_id` | **acceptat** | UUID sau `slug` de categorie | e cheia ta stabilă pentru o categorie |
+| `cart_ref` | **acceptat**, dar **inert** | referință opacă | nu există încă un coș canonic (NX-237); backendul răspunde `unavailable`, nu ghicește |
+| `locale` | **acceptat** | tag BCP-47 (`ro`, `ro-RO`) | e o CERERE; limba efectivă o negociază serverul cu ce suportă tenantul |
+| slug de produs, URL-ul paginii, breadcrumbs, titlu de pagină | **refuzat** | — | un URL nu e un identificator, e o cale de scraping DOM; acceptarea lui ar face din breadcrumb un input de ranking |
+| `price`, `list_price`, `stock`, `availability`, `rating`, `badges`, `title`, `image` | **refuzat — `422`** | — | sunt FAPTE. Codul de eroare e `context_commercial_field`, nu `schema_invalid`: e cazul care trebuie să se vadă în metrici |
+| `cart_items`, `cart_total`, `criteria`, `constraints` | **refuzat — `422`** | — | ar fi o a doua memorie de conversație și un al doilea coș |
+| `context_revision` | **neintrodus** | — | hostul nostru nu are o revizie stabilă de pagină; contractul rămâne EXACT forma NX-228, fără drift de schema hash |
+| orice alt câmp | **refuzat** | — | `extra="forbid"` respinge întreg payloadul, nu doar câmpul |
+
+**ID-urile sunt opace pentru tine și pentru noi.** Nu le construi, nu le parsa, nu le compune din
+bucăți de URL: forwardează exact ce îți dă pagina gazdă. Dacă un ID nu se rezolvă (produs șters,
+nepublicat, alt tenant), backendul continuă turul **fără ancoră** — nu întoarce eroare și **nu**
+e treaba frontendului să repare, să reîncerce cu alt ID sau să completeze din datele lui.
+
+**Nu concatena context în textul utilizatorului.** „despre produsul X" scris de widget înseamnă că
+browserul a compus întrebarea. Trimite `context.product_id` și textul exact al clientului;
+„produsul acesta" se rezolvă server-side, pe ancora canonică.
+
 ---
 
 ## 2. Response — `web-view.v2`

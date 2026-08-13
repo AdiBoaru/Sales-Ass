@@ -112,21 +112,32 @@ def request_fingerprint(
     channel_token: str,
     text: str,
     content_type: str = "text",
+    context: dict[str, Any] | None = None,
 ) -> str:
     """HMAC-SHA256 peste inputul CANONIC + ID-urile de context relevante.
 
     Body-ul intră în HMAC dar nu se stochează nicăieri — un DB scurs nu îl poate inversa,
     iar cu `secret` setat (WEB_TURN_FINGERPRINT_SECRET) nu poate nici confirma ghiciri pe
     mesaje scurte. `id_token`/semnăturile NU intră: rotația unui token nu transformă
-    ACELAȘI turn logic într-un conflict fals."""
+    ACELAȘI turn logic într-un conflict fals.
+
+    NX-234: `context` = forma canonică SAFE a contextului de pagină (`web.context
+    .fingerprint_context` — doar suprafață + ID-uri opace). Intră fiindcă SCHIMBĂ înțelesul
+    turului: „ce părere ai despre acesta?" pe două pagini diferite sunt două requesturi diferite,
+    iar refolosirea aceluiași `client_turn_id` după navigare TREBUIE să fie 409, nu un turn vechi
+    cu context nou lipit pe el. Absent/gol → cheia nu apare deloc în forma canonică, deci
+    fingerprint-urile de dinainte de card rămân BYTE-IDENTICE."""
+    payload: dict[str, Any] = {
+        "v": FINGERPRINT_VERSION,
+        "business_id": business_id,
+        "channel_token": channel_token,
+        "content_type": content_type,
+        "text": text,
+    }
+    if context:
+        payload["ctx"] = context
     canonical = json.dumps(
-        {
-            "v": FINGERPRINT_VERSION,
-            "business_id": business_id,
-            "channel_token": channel_token,
-            "content_type": content_type,
-            "text": text,
-        },
+        payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -262,6 +273,7 @@ async def accept_web_turn(
     persist_inbound: bool = False,
     safe_body: str | None = None,
     content_type: str = "text",
+    page_context: dict[str, Any] | None = None,
 ) -> AcceptOutcome:
     """Acceptul durabil al unui turn: UN checkout scurt care rezolvă contact + conversație
     (get_or_create, idempotent — aceleași rânduri pe care le va găsi și `load_turn`) și
@@ -276,7 +288,13 @@ async def accept_web_turn(
     frontiera de privacy NX-230) se scrie ÎN ACELAȘI checkout cu rândul de ledger — recovery-ul
     după wake pierdut / restart / Redis mort re-construiește turul EXCLUSIV din DB. Executorul
     îl citește prin `load_execution_refs`; `load_turn` primește id-ul și NU îl mai inserează.
-    `deadline_at` se fixează AICI și nu se prelungește niciodată la reclaim."""
+    `deadline_at` se fixează AICI și nu se prelungește niciodată la reclaim.
+
+    NX-234 (`page_context`): contextul de pagină NORMALIZAT (suprafață + ID-uri opace, zero fapte)
+    se persistă pe ACELAȘI rând de mesaj inbound. Nu e o comoditate, e cerința de recovery: un
+    context care ar trăi doar în requestul HTTP ar dispărea la restart, iar executorul ar rula
+    ACELAȘI turn cu altă ancoră. Ledgerul nu capătă coloană nouă (zero migrare) — inputul turului
+    e mesajul, iar contextul e parte din input."""
     async with db("web_turn_accept") as conn:
         contact = await get_or_create_contact(
             conn,
@@ -314,7 +332,12 @@ async def accept_web_turn(
                     body=safe_body,
                     content_type=content_type,
                     provider_msg_id=client_turn_id,
-                    payload={"turn_id": row.id, "fragment_index": 0, "web_turn_id": row.id},
+                    payload={
+                        "turn_id": row.id,
+                        "fragment_index": 0,
+                        "web_turn_id": row.id,
+                        **({"context": page_context} if page_context else {}),
+                    },
                 )
                 await touch_last_inbound(conn, business_id, conv["id"])
             return Accepted(row, inbound_msg_id=inbound_msg_id)
