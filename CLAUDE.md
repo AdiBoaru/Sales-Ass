@@ -233,10 +233,28 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   > ledger al turului care folosește acțiunea — ZERO migrare, zero registru paralel în Redis.
   > Execuția e `src/agent/action_kernel.py`, stagiu ÎNAINTEA triajului (o acțiune e o decizie, nu
   > o intenție de ghicit). Numele de acțiuni și cele de tool-uri sunt registre DISJUNCTE (verificat
-  > la import). Comerțul (`cart_*`, `checkout`) e refuzat ONEST până la receipt-ul NX-237. Flag
-  > `WEB_ACTIONS_ENABLED` (default OFF; cere `WEB_TURN_V2_ENABLED` + `WEB_ACTION_KEYS`); contract
-  > + threat model + runbook de rotație: [`docs/WEB-ACTIONS-V2.md`](docs/WEB-ACTIONS-V2.md);
+  > la import). Flag `WEB_ACTIONS_ENABLED` (default OFF; cere `WEB_TURN_V2_ENABLED` +
+  > `WEB_ACTION_KEYS`); contract + threat model + runbook de rotație:
+  > [`docs/WEB-ACTIONS-V2.md`](docs/WEB-ACTIONS-V2.md);
   > probă reproductibilă: `python scripts/action_drive.py`.
+  > NX-237 = **coșul canonic al conversației + mutation receipts idempotente**: UN singur
+  > `CartService` (`src/commerce/cart_service.py`) pentru AMBELE căi (tool LLM + click de
+  > acțiune) — comandă typed cu refs (niciodată preț/nume de la apelant), rehidratare +
+  > revalidare (produs/variantă/preț/stoc/safety NX-173) ÎNAINTE de fiecare mutație
+  > (`src/commerce/facts_provider.py`, batch anti-N+1, UNKNOWN ≠ 0), receipt idempotent per
+  > (tur/acțiune) și `CartSnapshot` versionat cu totaluri display-ready calculate server-side.
+  > Retry/response loss nu dublează nimic (replay pe cheie); `expected_version` stale = conflict
+  > + snapshot fresh. Tabele: migrarea 041 (`conversation_carts`/`_items`/
+  > `commerce_action_receipts`, RLS + FK compus pe tenant). Starea ține DOAR `cart_ref`
+  > `{id, version, lines}`; `state.cart` legacy îngheață sub flag (nu se importă cu preț stale).
+  > Fără storefront API (decizie explicită): coșul e AL CONVERSAȚIEI, numit onest; portul de
+  > adaptor extern (`src/commerce/adapters/base.py`) are contract exact-once (pending →
+  > unknown_reconcile → reconcile prin lookup, niciodată retry orb), testat pe fake. Comerțul
+  > din acțiuni (`cart_*`, `checkout`) se EXECUTĂ acum prin același serviciu; emiterea
+  > CTA-urilor de coș rămâne a NX-240. Flag `CONVERSATION_CART_ENABLED` (default OFF =
+  > byte-identic). Matrice de date + politici + runbook:
+  > [`docs/CART-DATA-READINESS.md`](docs/CART-DATA-READINESS.md);
+  > probă reproductibilă: `python scripts/sim/cart_receipt_recovery.py`.
   > Există și `web-view.v2`
   > ([`src/web/contracts_v2.py`](src/web/contracts_v2.py)), în care backendul livrează un
   > ViewModel **display-ready**: prețul e `"89,00 lei"`, nu `89.0`; reducerea vine calculată;
@@ -556,8 +574,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→035), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 036)
+│   ├── 0NN_*.sql                ← migrări delta (003→041), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 042)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)

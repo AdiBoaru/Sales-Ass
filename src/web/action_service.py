@@ -38,6 +38,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from src.config import get_settings
 from src.db.provider import DbProvider
 from src.db.queries.web_turns import WebTurnRow, find_turn_by_fingerprint, get_turn_by_id
 from src.web.action_crypto import (
@@ -50,6 +51,7 @@ from src.web.action_crypto import (
     seal,
 )
 from src.web.action_models import (
+    EMITTABLE_KINDS,
     MAX_ACTIONS_PER_TURN,
     ActionCommand,
     ActionEnvelope,
@@ -135,8 +137,10 @@ def issue_actions(
     out: list[IssuedAction] = []
     for plan in plans[:MAX_ACTIONS_PER_TURN]:
         spec = spec_for(plan.kind)
-        if spec is None or not spec.available:
-            continue  # ce n-are handler sigur nu se emite (pasul 1 din card)
+        if spec is None or plan.kind not in EMITTABLE_KINDS:
+            # Ce nu e în vocabularul de emitere nu se sigilează (pasul 1 din card). NX-237:
+            # mutantele au handler la CONSUM, dar emiterea CTA-urilor de coș rămâne a NX-240.
+            continue
         args = plan.args.to_canonical()
         action_id = derive_action_id(key, source_turn_id=row.id, kind=plan.kind, args=args)
         envelope = ActionEnvelope(
@@ -270,8 +274,9 @@ async def authorize_action(
     if plan is None or plan.kind != envelope.kind:
         # Sigiliu valid, dar acțiunea nu apare în ViewModel-ul terminal al sursei.
         return ActionRejected("action_not_found", "not_emitted", envelope.kind)
-    if not spec.available or spec.mutating:
-        # Comerțul (și orice kind rezervat) rămâne refuzat ONEST până are receipt (NX-237).
+    if not spec.available or (spec.mutating and not get_settings().conversation_cart_enabled):
+        # NX-237: comerțul are handler (CartService + receipt), dar rămâne refuzat ONEST cât timp
+        # serviciul e stins — refuzul e ÎNAINTE de consum, ca one-shot-ul să nu ardă degeaba.
         return ActionRejected("action_unavailable", "no_handler", envelope.kind)
     conflict = consumption_conflict(consumer, client_turn_id)
     if conflict is not None:

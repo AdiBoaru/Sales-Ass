@@ -135,30 +135,34 @@ KIND_REGISTRY: Mapping[str, ActionSpec] = {
     "refine_search": ActionSpec(
         "refine_search", available=False, required=("filter",), stale_sensitive=True
     ),
-    # Comerț: MUTANT. Rămâne indisponibil până când NX-237 poate produce un receipt — un buton
-    # care confirmă „am adăugat în coș" fără dovadă e o minciună cu UI frumos.
+    # Comerț: MUTANT. NX-237 le-a dat handler REAL — `CartService` cu receipt idempotent per
+    # `action_id` (o singură creștere chiar și la double-click / race pe one-shot). `available`
+    # e proprietatea STRUCTURALĂ „există handler sigur"; poarta de RUNTIME rămâne dublă:
+    # autorizarea și kernelul refuză onest când `CONVERSATION_CART_ENABLED` e stins. Nimic nu le
+    # EMITE încă (plan_actions nu produce planuri de comerț — CTA-urile de coș sunt NX-240).
     "cart_add_line": ActionSpec(
         "cart_add_line",
         mutating=True,
-        available=False,
         required=("product_ref",),
         optional=("quantity",),
     ),
     "cart_set_quantity": ActionSpec(
         "cart_set_quantity",
         mutating=True,
-        available=False,
         required=("product_ref", "quantity"),
     ),
-    "cart_remove": ActionSpec(
-        "cart_remove", mutating=True, available=False, required=("product_ref",)
-    ),
-    "cart_clear": ActionSpec("cart_clear", mutating=True, available=False),
-    "checkout": ActionSpec("checkout", mutating=True, available=False),
+    "cart_remove": ActionSpec("cart_remove", mutating=True, required=("product_ref",)),
+    "cart_clear": ActionSpec("cart_clear", mutating=True),
+    "checkout": ActionSpec("checkout", mutating=True),
 }
 
 # Kind-urile pe care Stage 1 le poate EMITE. Derivat, nu a doua listă întreținută manual.
-EMITTABLE_KINDS: frozenset[str] = frozenset(k for k, s in KIND_REGISTRY.items() if s.available)
+# NX-237: comerțul are handler (available=True, consumul funcționează prin CartService), dar
+# EMITEREA CTA-urilor de coș e a lui NX-240 (cere proiecția `cart_summary` din snapshot) —
+# până atunci mutantele nu se emit, deci niciun token de comerț nu poate exista în sălbăticie.
+EMITTABLE_KINDS: frozenset[str] = frozenset(
+    k for k, s in KIND_REGISTRY.items() if s.available and not s.mutating
+)
 
 
 def spec_for(kind: object) -> ActionSpec | None:

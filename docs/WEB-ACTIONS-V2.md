@@ -51,7 +51,11 @@ dacă e mutantă, politica de consum, argumentele permise și dacă poate fi **e
 | `show_more` | nu | **da** | `session_ref` | paginare deterministă (NX-119b) |
 | `answer_clarification` | nu | **da** | `question_id`, `option_ref` | umple slotul + reia ruta |
 | `refine_search` | nu | **nu** | `filter` (enum) | REZERVAT — vezi mai jos |
-| `cart_add_line`, `cart_set_quantity`, `cart_remove`, `cart_clear`, `checkout` | **da** | **nu** | — | NX-237 (receipt) |
+| `cart_add_line` | **da** | **nu** (NX-240) | `product_ref` (+`quantity`) | `CartService.mutate` (NX-237, receipt) |
+| `cart_set_quantity` | **da** | **nu** (NX-240) | `product_ref`, `quantity` | idem |
+| `cart_remove` | **da** | **nu** (NX-240) | `product_ref` | idem |
+| `cart_clear` | **da** | **nu** (NX-240) | — | idem |
+| `checkout` | **da** | **nu** (NX-240) | — | `CartService.create_checkout` (link canonic) |
 
 **Două nume diferă de card, deliberat:** `compare_products` → `compare_selection` și `cart_add` →
 `cart_add_line`, fiindcă primele erau deja **nume de tool-uri ale modelului**. Registrele trebuie să
@@ -64,8 +68,14 @@ care să nu fie, de fapt, un prompt — „mai ieftin" trăiește azi în planne
 Cardul cere explicit „elimină/omite orice acțiune fără handler sigur". Numele rămâne în registry ca
 metrica să poată număra o încercare; nimic nu îl emite, deci nimeni nu poate purta un token cu el.
 
-**De ce comerțul e refuzat:** un buton care spune „am adăugat în coș" fără un receipt e o minciună
-cu UI frumos. Rămâne `action_unavailable`, cu copy onest, până la NX-237.
+**Comerțul (actualizat de NX-237):** kind-urile mutante au acum handler REAL — aceeași comandă
+typed (`CartCommand`) și același `CartService` ca tool-urile LLM, cu **receipt idempotent pe
+`action_id`** (`a:<action_id>` — un race pe one-shot sau un double-click cad pe același receipt:
+o singură creștere). Poarta de runtime e DUBLĂ: `authorize_action` și kernelul refuză onest
+(`action_unavailable`) cât timp `CONVERSATION_CART_ENABLED` e stins, iar refuzul e ÎNAINTE de
+consum (one-shot-ul nu arde degeaba). **Emiterea** CTA-urilor de coș rămâne a lui NX-240 —
+mutantele nu sunt în `EMITTABLE_KINDS`, deci niciun token de comerț nu există încă în sălbăticie.
+Contract + politici: [`CART-DATA-READINESS.md`](CART-DATA-READINESS.md).
 
 ---
 
@@ -155,7 +165,7 @@ compromiterea sesiunii — aia e treaba lui NX-229 (origin binding, expirare de 
 | `action_not_found` | 404 | nu | sursă lipsă / alt tenant / altă sesiune / neemisă |
 | `action_already_consumed` | 409 | nu | one-shot folosit de alt turn |
 | `action_stale` | 409 | **da** | sesiune/întrebare schimbată între emitere și click |
-| `action_unavailable` | 409 | nu | kind cunoscut, fără handler sigur (comerț → NX-237) |
+| `action_unavailable` | 409 | nu | kind cunoscut, indisponibil acum (ex. comerț cu `CONVERSATION_CART_ENABLED` stins) |
 
 Mesajul e **server-owned și localizat**; motivul fin (`tenant_mismatch`, `not_emitted`,
 `session_mismatch`, …) rămâne în log — pe sârmă ar fi un oracol.

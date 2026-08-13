@@ -42,6 +42,10 @@ class ToolResult:
     # relaxed/category_dropped/top_cosine). Agentul îl propagă pe `ctx.retrieval.relevance` →
     # compose suprimă „Recomandarea mea" pe rezultate off-category. None ⇒ potrivire exactă.
     relevance: Relevance | None = None
+    # NX-237: snapshotul coșului CANONIC după o mutație (CartService). Transport in-memory către
+    # planner (checkout fallback / cross-sell exclude citesc coșul de aici, nu din state.cart).
+    # `Any` ca să nu importăm src.commerce în tools.base (ciclu). None = tool fără coș.
+    cart_snapshot: Any = None
 
 
 ToolFn = Callable[["TurnContext", "PipelineDeps", dict[str, Any]], Awaitable[ToolResult]]

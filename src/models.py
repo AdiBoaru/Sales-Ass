@@ -193,7 +193,13 @@ class ConversationState:
     search_constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
     # owner la scriere: Sender (processor, din `ctx.state_patch`). Cap 10 linii (impus în cart_add).
+    # LEGACY sub CONVERSATION_CART_ENABLED (NX-237): cu flagul ON nu se mai scrie și nu mai e
+    # autoritate — coșul canonic e `conversation_carts`, iar starea ține doar `cart_ref`.
     cart: list[dict[str, Any]] = field(default_factory=list)
+    # NX-237: referința coșului CANONIC — {id, version, lines} și ATÂT (P8: ref, nu obiect;
+    # liniile/prețurile se rehidratează din DB la fiecare citire). Owner la scriere: Sender
+    # (processor, din `ctx.state_patch` produs de tool-urile de comerț). None = fără coș canonic.
+    cart_ref: dict[str, Any] | None = None
     # NX-173 (P0): contextul de SIGURANȚĂ declarat de client (sarcină/alăptare), PERSISTAT —
     # {contexts: [...], source, updated_at}. Istoricul (8 mesaje, P4) e prea scurt ca invariant:
     # o declarație de la turul 9 ar dispărea și retinoidul ar reintra. Owner la scriere: stagiul
@@ -251,6 +257,8 @@ class ConversationState:
                 else {}
             ),
             cart=cart,
+            # NX-237: ref-ul coșului canonic — defensiv, ca restul hidratării (non-dict → None).
+            cart_ref=(raw.get("cart_ref") if isinstance(raw.get("cart_ref"), dict) else None),
             # NX-173: state vechi fără cheie / corupt → {} (fără context persistat; detecția din
             # mesaj tot prinde turul curent). Defensiv ca restul hidratării.
             safety=(raw.get("safety") if isinstance(raw.get("safety"), dict) else {}),
