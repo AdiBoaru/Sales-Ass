@@ -240,6 +240,10 @@ class NavigateActivation(_Base):
         return self
 
 
+# NX-236 e PRODUCĂTORUL tokenului (envelope sigilat AES-SIV, `src/web/action_crypto.py`, emis din
+# planul persistat al turului-sursă). Aici rămâne DOAR forma: un string mărginit. Nota stă într-un
+# COMENTARIU, nu în docstring, fiindcă docstringul intră ca `description` în JSON Schema — iar
+# `schema_hash()` e moneda negocierii de capabilitate: nu se schimbă pentru o explicație.
 class SubmitActivation(_Base):
     """Creează un tur nou trimițând înapoi tokenul opac. Ce înseamnă acțiunea știe DOAR
     backendul: labelul e pentru ochi, tokenul e pentru mașină. În v1 chips-urile își pierdeau

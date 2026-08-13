@@ -27,6 +27,7 @@ from src.agent.fallbacks import (
     _view_label,
 )
 from src.agent.reference_resolver import (
+    ActionAnchor,
     ReferenceRequest,
     normalize_for_match,
     page_anchor_from_snapshot,
@@ -39,6 +40,7 @@ from src.conversation.state_reducer import StateUpdateProposal
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
 from src.models import Offer, ProductRef, RetrievalResult, Route, TurnContext
 from src.safety.policy import SafetyPolicy
+from src.web.action_models import action_command, action_kind
 from src.worker import compose
 from src.worker.text_scrub import has_medical_claim
 
@@ -156,6 +158,18 @@ def _resolve_review_product(query: str, refs: list[ProductRef]) -> ProductRef | 
     return refs[resolution.index] if resolution.index is not None else None
 
 
+def _signed_anchor(ctx: TurnContext) -> ActionAnchor | None:
+    """NX-236 — produsul purtat de acțiunea curentă, ca ancoră semnată.
+
+    `revision=0` (nu se compară cu revizia listei): o acțiune NUMEȘTE produsul explicit, deci o
+    reordonare a cardurilor între emitere și click nu o poate face să aleagă altceva. Ancorele care
+    chiar depind de listă (paginarea) își verifică prospețimea în kernel, pe `active_search.fp`."""
+    command = action_command(ctx)
+    if command is None or not command.args.product_ref:
+        return None
+    return ActionAnchor(product_id=command.args.product_ref, revision=0, valid=True)
+
+
 def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
     """Rezolvarea referinței, prin precedența UNICĂ din `reference_resolver`.
 
@@ -179,6 +193,9 @@ def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
                 query=query,
                 refs=tuple(refs),
                 page=page_anchor_from_snapshot(ctx.snapshot),
+                # NX-236: ancora SEMNATĂ bate tot (precedența 1). Clientul n-a descris produsul,
+                # l-a arătat cu degetul — iar tokenul dovedește pe care.
+                anchor=_signed_anchor(ctx),
                 selected_product=getattr(references, "selected_product", None),
                 displayed_revision=getattr(references, "displayed_revision", 0),
             )
@@ -296,6 +313,29 @@ def _review_next_steps(language: str) -> list[str]:
     return ["Spune-mi mai multe", "Vezi produsul", "Adaugă în coș"]
 
 
+async def serve_reviews(
+    ctx: TurnContext, deps: PipelineDeps, product_id: str, name: str = ""
+) -> None:
+    """Recenziile unui produs DEJA rezolvat. Extras ca API TYPED (NX-236): o acțiune opacă poartă
+    `product_ref`, deci nu are ce „rezolva" — sare peste deixis și intră direct aici, pe exact
+    aceleași porți (safety gate, evidence, carduri). Un al doilea drum ar fi un al doilea set de
+    reguli de siguranță."""
+    async with deps.db("review_intent_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="review_intent")[0]
+    if not products:
+        ctx.set_reply(_review_copy(ctx.language)["empty"].format(name=name), cacheable=False)
+        ctx.emit("review_intent", served=0, reason="unavailable")
+        return
+
+    product = products[0]
+    text, has_evidence = _review_answer(product, ctx.language)
+    ctx.retrieval = RetrievalResult(products=products, source="review_intent")
+    ctx.set_reply(text, products=_card_products(products, n=1), cacheable=False)
+    ctx.reply.suggestions = _review_next_steps(ctx.language)
+    ctx.emit("review_intent", served=1, has_evidence=has_evidence)
+
+
 async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
     """Răspunde din recenziile produsului afișat; nu lasă modelul să aleagă ancora."""
     refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
@@ -309,23 +349,7 @@ async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str
         )
         ctx.emit("review_intent", served=0, reason="ambiguous", candidates=len(refs))
         return
-
-    async with deps.db("review_intent_product") as conn:
-        products = await get_products_by_ids(conn, ctx.business.id, [selected.product_id], limit=1)
-    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="review_intent")[0]
-    if not products:
-        ctx.set_reply(
-            _review_copy(ctx.language)["empty"].format(name=selected.name), cacheable=False
-        )
-        ctx.emit("review_intent", served=0, reason="unavailable")
-        return
-
-    product = products[0]
-    text, has_evidence = _review_answer(product, ctx.language)
-    ctx.retrieval = RetrievalResult(products=products, source="review_intent")
-    ctx.set_reply(text, products=_card_products(products, n=1), cacheable=False)
-    ctx.reply.suggestions = _review_next_steps(ctx.language)
-    ctx.emit("review_intent", served=1, has_evidence=has_evidence)
+    await serve_reviews(ctx, deps, selected.product_id, selected.name)
 
 
 def _detail_copy(language: str) -> dict[str, str]:
@@ -401,21 +425,10 @@ def _detail_answer(product: dict, ctx: TurnContext) -> str:
     )
 
 
-async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
-    refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
-    selected = _resolve_anchor(ctx, query)
-    if selected is None:
-        ctx.set_clarify(
-            _detail_copy(ctx.language)["which"],
-            field="product_for_details",
-            resume_route=Route.SALES.value,
-            suggestions=_detail_choice_chips(refs, ctx.language),
-        )
-        ctx.emit("detail_intent", served=0, reason="ambiguous", candidates=len(refs))
-        return
-
+async def serve_details(ctx: TurnContext, deps: PipelineDeps, product_id: str) -> None:
+    """Detaliile unui produs DEJA rezolvat (vezi `serve_reviews` pentru de ce e extras)."""
     async with deps.db("detail_intent_product") as conn:
-        products = await get_products_by_ids(conn, ctx.business.id, [selected.product_id], limit=1)
+        products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
     products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
     if not products:
         ctx.set_reply(_detail_copy(ctx.language)["unavailable"], cacheable=False)
@@ -430,6 +443,21 @@ async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str
     )
     ctx.reply.suggestions = [copy["review_chip"], copy["link_chip"], copy["compare_chip"]]
     ctx.emit("detail_intent", served=1)
+
+
+async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
+    refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
+    selected = _resolve_anchor(ctx, query)
+    if selected is None:
+        ctx.set_clarify(
+            _detail_copy(ctx.language)["which"],
+            field="product_for_details",
+            resume_route=Route.SALES.value,
+            suggestions=_detail_choice_chips(refs, ctx.language),
+        )
+        ctx.emit("detail_intent", served=0, reason="ambiguous", candidates=len(refs))
+        return
+    await serve_details(ctx, deps, selected.product_id)
 
 
 async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -490,6 +518,16 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     corect). <2 valide → False → cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
     n = 4 if _FOUR_RE.search(query) else (3 if _THREE_RE.search(query) else 2)
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
+    return await serve_comparison(ctx, deps, ids)
+
+
+async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str]) -> bool:
+    """Tabelul de comparație pe ID-uri DEJA rezolvate (extras pentru NX-236, ca `serve_reviews`).
+
+    Aceleași porți ca pe calea text: safety gate, coerență de categorie, `build_comparison`. O
+    acțiune opacă poartă `product_refs` explicite, deci reordonarea listei afișate între emitere
+    și click NU poate schimba ce se compară — exact invariantul din failure matrix."""
+    n = max(2, len(ids))
     async with deps.db("compare_intent_products") as conn:
         products = await get_products_by_ids(conn, ctx.business.id, ids, limit=n)
     # NX-173 (P0): ca la link — set vechi din state, cale care ocolește tool loop-ul. Dacă
@@ -614,6 +652,11 @@ def is_show_more(ctx: TurnContext) -> bool:
     route = ctx.route
     if route is None or route.route != Route.SALES:
         return False
+    # NX-236: acțiunea `show_more` e paginare DECLARATĂ, nu dedusă din text — mesajul unui buton e
+    # gol prin construcție, deci regexul de mai jos n-ar avea ce prinde. Prospețimea sesiunii
+    # (`fp`) e deja verificată în kernel; aici rămâne doar existența ei.
+    if action_kind(ctx) == "show_more":
+        return bool(get_settings().search_sessions_enabled and ctx.state.active_search)
     query = (ctx.message.body or "").strip()
     return (
         get_settings().search_sessions_enabled

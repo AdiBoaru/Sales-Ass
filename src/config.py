@@ -943,6 +943,51 @@ class Settings(BaseSettings):
         default=False, validation_alias="CONVERSATION_SENSITIVE_MEMORY_ENABLED"
     )
 
+    # --- NX-236: acțiuni opace semnate (token sigilat + kernel determinist) --
+    # UN kill-switch: OFF → nicio acțiune emisă în ViewModel și `input.type=action` refuzat onest
+    # (exact comportamentul de dinainte de card). ON → butoanele v2 poartă tokenuri sigilate, iar
+    # semantica lor trăiește EXCLUSIV pe server.
+    web_actions_enabled: bool = Field(default=False, validation_alias="WEB_ACTIONS_ENABLED")
+    # Inelul de chei: `kid:base64master[,kid_vechi:base64master]`. Prima EMITE, toate VERIFICĂ —
+    # fereastra de rotație. SECRET: nu intră în repo, nu se loghează, nu apare în erori.
+    web_action_keys: str = Field(default="", validation_alias="WEB_ACTION_KEYS")
+    # Cât trăiește un buton. Ancorat în `completed_at`-ul turului-sursă (nu în ceasul cititorului),
+    # deci un token e valabil TTL secunde de la momentul în care răspunsul a fost comis.
+    web_action_ttl_s: int = Field(default=1800, validation_alias="WEB_ACTION_TTL_S")
+    # Toleranța de ceas între emitent și verificator (procese diferite, VPS-uri diferite).
+    web_action_clock_skew_s: int = Field(default=60, validation_alias="WEB_ACTION_CLOCK_SKEW_S")
+
+    @model_validator(mode="after")
+    def _web_action_relations(self) -> "Settings":
+        """NX-236: configurația imposibilă oprește procesul la BOOT, ca la NX-233/234.
+
+        Trei relații, fiecare cu o consecință concretă dacă e greșită:
+          • fără contractul v2 nu există unde livra acțiuni (v1 rămâne neatins până la NX-249) —
+            un flag aprins singur ar sugera o funcționalitate care nu poate ajunge la client;
+          • fără inel de chei valid nu se poate sigila nimic (fail-closed, nu „emite nesemnat");
+          • un TTL mai lung decât retenția ledgerului ar produce tokenuri care supraviețuiesc
+            dovezii lor de emitere ȘI evidenței de consum — adică butoane care redevin
+            re-consumabile după ce jobul de retenție trece peste rândul-sursă."""
+        if not self.web_actions_enabled:
+            return self
+        if not self.web_turn_v2_enabled:
+            raise ValueError(
+                "WEB_ACTIONS_ENABLED cere WEB_TURN_V2_ENABLED (acțiunile opace există doar pe "
+                "contractul web-view.v2; v1 rămâne neatins până la NX-249)"
+            )
+        from src.web.action_crypto import parse_key_ring  # noqa: PLC0415 — evită ciclul de import
+
+        parse_key_ring(self.web_action_keys)  # ridică KeyRingError (ValueError) cu motivul exact
+        if self.web_action_ttl_s <= 0 or self.web_action_clock_skew_s < 0:
+            raise ValueError("WEB_ACTION_TTL_S trebuie > 0, WEB_ACTION_CLOCK_SKEW_S >= 0")
+        if self.web_action_ttl_s >= self.web_turns_retention_hours * 3600:
+            raise ValueError(
+                f"WEB_ACTION_TTL_S ({self.web_action_ttl_s}s) trebuie să fie sub retenția "
+                f"ledgerului ({self.web_turns_retention_hours}h): un token care supraviețuiește "
+                "rândului-sursă își pierde dovada de emitere și evidența de consum"
+            )
+        return self
+
     @model_validator(mode="after")
     def _conversation_state_relations(self) -> "Settings":
         """NX-235: a scrie v2 fără a-l hidrata/reduce ar însemna un format persistat pe care

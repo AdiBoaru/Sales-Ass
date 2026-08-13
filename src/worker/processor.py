@@ -24,7 +24,6 @@ Dispatcher-ul (separat) citește outbox, trimite la canal și leagă provider_ms
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, replace
-from typing import Any
 from uuid import uuid4
 
 from redis.asyncio import Redis
@@ -58,6 +57,7 @@ from src.models import (
     TurnUsage,
 )
 from src.privacy import RawInbound, RawText, SafeInbound, apply_boundary
+from src.web.action_models import ActionCommand
 from src.web.context import from_payload as page_context_from_payload
 from src.worker.admission import tenant_bucket
 from src.worker.aftercare import AftercareWork, persist_events, run_aftercare
@@ -85,9 +85,28 @@ from src.worker.turn_uow import (
 
 log = logging.getLogger(__name__)
 
-# NX-232: hook-ul de commit al MARGINII — `(conn tranzacție, reply, language)`. Rulează în
+# NX-232: hook-ul de commit al MARGINII — `(conn tranzacție, reply, language, facts)`. Rulează în
 # tranzacția `TurnCommit`; dacă ridică, tot commit-ul face rollback (vezi handle_turn).
-CommitHook = Callable[[Any, "Reply | None", str], Awaitable[None]]
+# NX-236: al patrulea argument e OPȚIONAL (hook-urile vechi cu trei parametri rămân valide) și
+# poartă faptele pe care marginea nu le poate deduce din `Reply` — vezi `CommitFacts`.
+CommitHook = Callable[..., Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class CommitFacts:
+    """NX-236 — ce știe TURUL și marginea nu poate citi din `Reply`.
+
+    Marginea web planifică acțiunile opace din ViewModel-ul pe care tocmai l-a randat, dar două
+    dintre ele au nevoie de context: răspunsul la o clarificare trebuie legat de ÎNTREBAREA exactă
+    (slot + a câta oară), iar paginarea de amprenta sesiunii de căutare. Fără ele, un buton ar
+    putea răspunde la altă întrebare sau pagina altă listă — exact ce previne cardul.
+
+    Se transmite prin hook, nu prin `Reply`: `Reply` e contractul NEUTRU de canal, iar starea
+    turului n-are ce căuta în el."""
+
+    pending_field: str | None = None
+    pending_attempts: int = 1
+    active_search_ref: str | None = None
 
 
 @dataclass
@@ -594,6 +613,51 @@ async def _attach_snapshot(
     ctx.snapshot = snapshot if s.web_context_prompt_enabled else without_evidence(snapshot)
 
 
+def _attach_action(ctx: TurnContext, event: dict) -> None:
+    """NX-236 — atașează comanda de acțiune deja autorizată la marginea web. Owner UNIC: processor.
+
+    Se citește din envelope-ul turului (pus acolo din `messages.payload`, persistat la accept), nu
+    dintr-un token: verificarea criptografică s-a întâmplat O SINGURĂ dată, la consum. A re-verifica
+    aici ar însemna ca o rotație de chei între accept și execuție să omoare un turn deja acceptat —
+    adică o operație de securitate de rutină să producă pierdere de răspuns.
+
+    Un payload nerecunoscut (rând editat manual, format vechi) NU devine turn de text tăcut: e o
+    respingere vizibilă în metrici, iar turul continuă fără acțiune (P6).
+
+    Atașarea NU e gardată de kill-switch, deliberat. Flagul oprește ACCEPTUL, deci un payload de
+    acțiune poate exista doar pe un turn acceptat cât timp era aprins; dacă între accept și execuție
+    s-a făcut rollback, kernelul trebuie să VADĂ comanda ca să refuze onest — altfel ar rula un turn
+    de text cu mesaj gol, adică exact tăcerea pe care o interzice P6."""
+    raw = event.get("action")
+    if not raw:
+        return
+    command = ActionCommand.from_jsonb(raw, conversation_id=ctx.conversation_id or "")
+    if command is None:
+        log.warning("web_action: payload de acțiune nerecunoscut — turul continuă fără el")
+        ctx.emit("web_action_consumed", kind="unknown", outcome="action_invalid")
+        return
+    ctx.action = command
+
+
+def _commit_facts(ctx: TurnContext) -> CommitFacts:
+    """Faptele turului pentru hook-ul de commit (NX-236). Citite din `ctx.reply`/`ctx.state`, nu
+    din snapshotul de la începutul turului: întrebarea care contează e cea pe care o punem ACUM.
+
+    Sesiunea de căutare vine din `state_patch` dacă turul tocmai a creat una (tool-ul o scrie
+    acolo), altfel din starea curentă — altfel butonul de paginare al primei căutări ar lipsi
+    exact la turul care a produs lista."""
+    pending = getattr(ctx.reply, "pending_question", None) if ctx.reply is not None else None
+    pending = pending if isinstance(pending, dict) else None
+    session = ctx.state_patch.get("active_search")
+    if not isinstance(session, dict):
+        session = ctx.state.active_search if isinstance(ctx.state.active_search, dict) else None
+    return CommitFacts(
+        pending_field=str(pending.get("field")) if pending and pending.get("field") else None,
+        pending_attempts=int((pending or {}).get("attempts") or 1),
+        active_search_ref=str((session or {}).get("fp") or "") or None,
+    )
+
+
 def _emit_db_metrics(ctx: TurnContext, db_acc: op_metrics.DbOpAccumulator) -> None:
     """NX-231 (P10): cât a ținut fiecare OPERAȚIE o conexiune, plus ocuparea poolului.
 
@@ -672,6 +736,9 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     # NX-235 — starea REDUSĂ, hidratată din același jsonb, ÎNAINTE de pipeline (stagiile o
     # propun, nu o descoperă). Owner UNIC: processor (P3). Flag OFF → `None` peste tot.
     _attach_state_v2(ctx, snap.state)
+
+    # NX-236 — acțiunea opacă a turului, din payload-ul DURABIL al mesajului (nu din request).
+    _attach_action(ctx, event)
 
     # NX-234 — `TurnSnapshot`, construit ÎNTRE load și pipeline. Aici, nu mai devreme (are nevoie
     # de contact/conversație/state) și nu mai târziu (stagiile trebuie să-l găsească gata). Un
@@ -811,7 +878,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
             fresh, ctx, is_rich=is_rich, has_products=has_products
         ),
         # NX-232: ledgerul web (sau orice scriere de margine) intră în ACEEAȘI tranzacție.
-        on_commit=(lambda conn: commit_hook(conn, ctx.reply, ctx.language))
+        on_commit=(lambda conn: commit_hook(conn, ctx.reply, ctx.language, _commit_facts(ctx)))
         if commit_hook is not None
         else None,
     )

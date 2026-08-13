@@ -37,6 +37,7 @@ from src.conversation.needs import NeedVocabulary
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import ConversationStateV2
 from src.models import Route, RouteDecision, TurnContext
+from src.web.action_models import action_command
 from src.worker.canonicalize import canonicalize_clarify_field
 
 if TYPE_CHECKING:
@@ -97,6 +98,12 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     `ctx.route` pe `resume_route` (triajul devine no-op prin gardă pe `ctx.route`). NU setează
     reply — lasă agentul (sales) să răspundă cu slotul acum cunoscut. `pending_question` se
     curăță la writeback (reply non-clarify → slot None)."""
+    if action_command(ctx) is not None:
+        # NX-236: pe un turn de ACȚIUNE, reluarea aparține kernelului (rulează înaintea acestui
+        # stagiu). El leagă răspunsul de `question_id` — întrebarea EXACTĂ peste care s-a emis
+        # butonul — și închide clarificarea. Aici am avea doar textul opțiunii, fără dovada că e
+        # răspunsul la întrebarea curentă: exact ambiguitatea pe care cardul o elimină.
+        return
     pq = ctx.state.pending_question
     if not isinstance(pq, dict):
         return  # nimic în așteptare (sau state corupt) → mai departe în pipeline

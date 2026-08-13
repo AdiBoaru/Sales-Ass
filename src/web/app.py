@@ -45,6 +45,15 @@ from src.db.queries.web_turns import WebTurnRow, get_turn, get_turn_by_id
 from src.models import Event
 from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
+from src.web.action_crypto import KeyRingError, parse_key_ring
+from src.web.action_models import age_bucket
+from src.web.action_service import (
+    ActionRejected,
+    AuthorizedAction,
+    authorize_action,
+    consumption_conflict,
+    find_consumer,
+)
 from src.web.context import (
     CommercialFieldRejected,
     fingerprint_context,
@@ -596,9 +605,12 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
             if slot.degraded:
                 event["admission_degraded"] = True
 
-        async def _ledger_commit(conn, reply, language):
+        async def _ledger_commit(conn, reply, language, facts=None):
             """NX-232: finalizarea rândului din ledger, ÎN tranzacția TurnCommit. View-ul
-            persistat e reținut și SERVIT ca răspuns — replay-ul de mai târziu e identic."""
+            persistat e reținut și SERVIT ca răspuns — replay-ul de mai târziu e identic.
+
+            NX-236: `facts` e IGNORAT aici deliberat. Calea v1 nu emite acțiuni opace și nu scrie
+            planul în payload — contractul `web-chat.v1` rămâne byte-identic până la NX-249."""
             view = render_web(reply, language or "ro")
             await complete_web_turn_on_conn(
                 conn,
@@ -817,6 +829,103 @@ async def _v2_business(db, business_id: str):
     return business
 
 
+# ── NX-236: poarta acțiunilor opace (flag WEB_ACTIONS_ENABLED) ─────────────────────────────
+# Un token de acțiune se deschide, se verifică și se CONSUMĂ aici, înaintea oricărei scrieri.
+# Ce pleacă spre client e un cod stabil + copy server-owned; ce rămâne la noi e motivul fin.
+
+_ACTION_MESSAGES: dict[str, dict[str, str]] = {
+    "ro": {
+        "action_invalid": "Butonul acesta nu mai este valid. Scrie-mi ce vrei și continuăm.",
+        "action_expired": "Butonul a expirat. Cere-mi din nou ce te interesează și îți arăt.",
+        "action_not_found": "Butonul acesta nu mai este valid. Scrie-mi ce vrei și continuăm.",
+        "action_already_consumed": "Am rezolvat deja cererea aceasta. Spune-mi ce urmează.",
+        "action_stale": "Între timp s-a schimbat lista, așa că butonul nu mai are ce alege. "
+        "Spune-mi ce cauți și o luăm de la capăt.",
+        "action_unavailable": "Deocamdată nu pot face asta din chat.",
+    },
+    "en": {
+        "action_invalid": "That button is no longer valid. Tell me what you need and we'll go on.",
+        "action_expired": "That button expired. Ask me again and I'll show you.",
+        "action_not_found": "That button is no longer valid. Tell me what you need.",
+        "action_already_consumed": "I already handled that one. Tell me what's next.",
+        "action_stale": "The list changed in the meantime, so there's nothing left to pick. "
+        "Tell me what you're looking for and we'll start over.",
+        "action_unavailable": "I can't do that from chat yet.",
+    },
+    "hu": {
+        "action_invalid": "Ez a gomb már nem érvényes. Írd meg, mire van szükséged, és folytatjuk.",
+        "action_expired": "A gomb lejárt. Kérdezd meg újra, és megmutatom.",
+        "action_not_found": "Ez a gomb már nem érvényes. Írd meg, mire van szükséged.",
+        "action_already_consumed": "Ezt már elintéztem. Mondd, mi következik.",
+        "action_stale": "Közben megváltozott a lista, így nincs mit választani. Mondd el, mit "
+        "keresel, és elölről kezdjük.",
+        "action_unavailable": "Ezt még nem tudom megcsinálni a chatből.",
+    },
+}
+
+# Statusul HTTP per cod: separat de copy, ca semantica de protocol să nu se piardă în traduceri.
+# `action_not_found` e 404 DELIBERAT — un token valid pe alt tenant/sesiune nu are voie să se
+# distingă de unul inexistent (failure matrix: „zero existence leak").
+_ACTION_STATUS: dict[str, int] = {
+    "action_invalid": 400,
+    "action_expired": 410,
+    "action_not_found": 404,
+    "action_already_consumed": 409,
+    "action_stale": 409,
+    "action_unavailable": 409,
+}
+
+
+def _action_error(rejected: ActionRejected, language: str) -> JSONResponse:
+    """Respingerea, ca eroare terminală STRUCTURATĂ. `retryable` spune clientului dacă are rost
+    să ceară din nou — un token expirat da (cere o acțiune nouă), unul deja consumat nu."""
+    texts = _ACTION_MESSAGES.get((language or "ro")[:2]) or _ACTION_MESSAGES["ro"]
+    message = texts.get(rejected.code) or texts["action_invalid"]
+    # P12: motivul fin (tenant_mismatch/not_emitted/…) rămâne AICI, în log — nu pe sârmă.
+    log.warning(
+        "web_action_verified outcome=rejected code=%s reason=%s", rejected.code, rejected.reason
+    )
+    return JSONResponse(
+        status_code=_ACTION_STATUS.get(rejected.code, 400),
+        content={
+            "error": {
+                "code": rejected.code,
+                "message": message,
+                "retryable": rejected.code in ("action_expired", "action_stale"),
+            }
+        },
+    )
+
+
+async def _authorize_web_action(
+    db,
+    *,
+    token: str,
+    business_id: str,
+    channel_token: str,
+    visitor_id: str,
+    client_turn_id: str,
+) -> AuthorizedAction | ActionRejected:
+    """Deschide + autorizează tokenul. Inel de chei invalid ⇒ fail-CLOSED (nu „acceptă orice")."""
+    s = get_settings()
+    try:
+        ring = parse_key_ring(s.web_action_keys)
+    except KeyRingError:
+        log.error("web_action: key ring invalid — acțiunile sunt refuzate (fail-closed)")
+        return ActionRejected("action_invalid", "key_ring")
+    return await authorize_action(
+        db,
+        token=token,
+        business_id=business_id,
+        channel_token=channel_token,
+        visitor_id=visitor_id,
+        client_turn_id=client_turn_id,
+        ring=ring,
+        fingerprint_secret=s.web_turn_fingerprint_secret,
+        skew_s=s.web_action_clock_skew_s,
+    )
+
+
 @router.post("/v2/turns")
 async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig: str):
     """Acceptul DURABIL al unui turn (NX-233): validează, scrie rândul de ledger + inputul SAFE
@@ -853,8 +962,8 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         turn_req: WebTurnRequestV2 = parse_turn_request(payload)
     except (ValueError, TypeError):
         return _v2_error(422, "schema_invalid", "corpul nu respectă contractul web-turn.v2")
-    if turn_req.input.type == "action":
-        # Tokenurile opace semnate sunt NX-236 — până atunci, refuz onest, nu interpretare.
+    if turn_req.input.type == "action" and not s.web_actions_enabled:
+        # Kill-switch stins → refuz ONEST, nu interpretare (comportamentul de dinainte de card).
         return _v2_error(422, "action_not_supported", "acțiunile opace nu sunt încă acceptate")
 
     pool = await get_pool()
@@ -878,7 +987,25 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
     if over_budget:
         raise HTTPException(status_code=429, detail="budget exceeded")
 
-    text = turn_req.input.text.strip()
+    # NX-236 — dacă inputul e o ACȚIUNE, aici se decide totul: sigiliu, legături, dovadă de
+    # emitere, consum one-shot. Înainte de accept și înaintea oricărei scrieri; un refuz nu lasă
+    # nicio urmă în afară de metrici.
+    action: AuthorizedAction | None = None
+    if turn_req.input.type == "action":
+        verdict = await _authorize_web_action(
+            db,
+            token=turn_req.input.action_token,
+            business_id=session.business_id,
+            channel_token=token,
+            visitor_id=visitor_id,
+            client_turn_id=str(turn_req.client_turn_id),
+        )
+        if isinstance(verdict, ActionRejected):
+            return _action_error(verdict, business.default_locale or "ro")
+        action = verdict
+    # O acțiune NU are text de client: eticheta butonului rămâne display-only, iar inputul e
+    # comanda typed. Textul gol e inputul REAL al turului, nu un accident (P: labels ≠ mesaje).
+    text = "" if action is not None else turn_req.input.text.strip()
     # NX-129: identitate verificată opțională (JWT host-signed) — contactul se rezolvă pe ea.
     verified_ref: str | None = None
     if s.web_identity_enabled and turn_req.id_token and session.identity_secret:
@@ -899,15 +1026,20 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         normalize_context(turn_req.context) if s.web_context_enabled else normalize_context(None)
     )
     context_canonical = fingerprint_context(normalized_context) if s.web_context_enabled else None
-    fingerprint = request_fingerprint(
-        s.web_turn_fingerprint_secret,
-        business_id=session.business_id,
-        channel_token=token,
-        text=text,
-        # Doar ancorele reale intră în identitatea requestului: un context gol (`surface=other`,
-        # zero ID-uri) ar schimba fingerprint-ul tuturor turelor fără să însemne nimic.
-        context=None if normalized_context.is_empty else context_canonical,
-    )
+    if action is not None:
+        # Pe drumul de acțiune, fingerprint-ul E cheia de consum one-shot (`action_id`, fără text
+        # și fără context): același buton apăsat de pe două pagini rămâne ACELAȘI consum.
+        fingerprint = action.fingerprint
+    else:
+        fingerprint = request_fingerprint(
+            s.web_turn_fingerprint_secret,
+            business_id=session.business_id,
+            channel_token=token,
+            text=text,
+            # Doar ancorele reale intră în identitatea requestului: un context gol (`surface=other`,
+            # zero ID-uri) ar schimba fingerprint-ul tuturor turelor fără să însemne nimic.
+            context=None if normalized_context.is_empty else context_canonical,
+        )
     outcome = await accept_web_turn(
         db,
         business_id=session.business_id,
@@ -925,7 +1057,9 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         session_ref=session_ref_hash(token, visitor_id),
         persist_inbound=True,
         safe_body=safe_inbound.text,
+        content_type="action" if action is not None else "text",
         page_context=to_payload(normalized_context) if s.web_context_enabled else None,
+        action_payload=action.command.to_jsonb() if action is not None else None,
     )
     lang = business.default_locale or "ro"
     if isinstance(outcome, IdempotencyConflict):
@@ -936,6 +1070,21 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         )
         return _v2_error(409, "idempotency_conflict", "același ID cu alt conținut")
     if isinstance(outcome, ActiveTurnConflict):
+        if action is not None:
+            # Arbitrajul CONCURENȚEI pe același buton: indexul parțial „un singur turn activ per
+            # conversație" a lăsat să treacă o singură inserție. Dacă cea care a câștigat poartă
+            # cheia noastră de consum, pierzătorul primește outcome-ul CANONIC
+            # (`action_already_consumed`), nu unul generic de trafic — altfel două taburi ar
+            # raporta „mai încearcă" la o acțiune care s-a executat deja o dată.
+            consumer = await find_consumer(
+                db,
+                business_id=session.business_id,
+                conversation_id=action.source.conversation_id,
+                fingerprint=action.fingerprint,
+            )
+            conflict = consumption_conflict(consumer, str(turn_req.client_turn_id))
+            if conflict is not None:
+                return _action_error(conflict, lang)
         extra = {}
         if outcome.active is not None:
             extra["active_turn"] = status_payload(
@@ -950,14 +1099,25 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
             **extra,
         )
     if isinstance(outcome, ExistingCompleted):
-        await _ledger_emit(
-            db,
-            outcome.row,
+        replay_events = [
             Event(
                 "web_turn_replayed",
                 {"status": outcome.row.status, "web_turn_id": outcome.row.id},
-            ),
-        )
+            )
+        ]
+        if action is not None:
+            # Retry-ul ACELUIAȘI turn pe același buton: replay exact, ZERO a doua execuție.
+            replay_events.append(
+                Event(
+                    "web_action_replay",
+                    {
+                        "mode": "same_turn",
+                        "kind": action.command.kind,
+                        "web_turn_id": outcome.row.id,
+                    },
+                )
+            )
+        await _ledger_emit(db, outcome.row, *replay_events)
         return JSONResponse(status_code=200, content=terminal_view(outcome.row, lang))
     if isinstance(outcome, ExistingInProgress):
         await _ledger_emit(
@@ -972,6 +1132,26 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
     # pierderea lui e acoperită de scanul executorului + sweeper (DB = autoritatea).
     await wake_executor(redis, session.business_id, outcome.row.id)
     events = [Event("web_turn_accepted", {"mode": "new", "web_turn_id": outcome.row.id})]
+    if action is not None:
+        # Ce s-a VERIFICAT (nu ce s-a executat — aia e treaba kernelului, cu evenimentul lui).
+        # P10/P12: kind + bucket-uri, niciun `action_id`, niciun token, niciun argument.
+        events.append(
+            Event(
+                "web_action_verified",
+                {
+                    "outcome": "accepted",
+                    "reason": "ok",
+                    "kind": action.command.kind,
+                    "web_turn_id": outcome.row.id,
+                },
+            )
+        )
+        events.append(
+            Event(
+                "web_action_key_age",
+                {"bucket": age_bucket(action.age_s), "slot": action.key_slot},
+            )
+        )
     if s.web_context_enabled:
         # Ce a fost ACCEPTAT ca formă, nu ce s-a rezolvat: rezolvarea (și `web_context_validated`
         # cu outcome-ul ei) se întâmplă la execuție, unde se atinge catalogul. P12: doar suprafață

@@ -187,6 +187,28 @@ trimiți înapoi, iar pentru asta există tokenul acțiunii.
 
 **Nu deduce ce face un buton din eticheta lui.** Eticheta e pentru ochi, tokenul e pentru mașină.
 
+### Ce primești când un buton nu mai merge (NX-236)
+
+Un `submit` e **one-shot** și are **expirare**. Backendul îți răspunde cu aceeași formă de eroare
+ca oriunde (`{"error": {"code", "message", "retryable"}}`), cu `message` **deja localizat** —
+afișează-l ca atare, nu-l traduce și nu-l înlocui:
+
+| `code` | HTTP | Ce înseamnă pentru UI |
+|---|---|---|
+| `action_expired` | 410 | butonul a expirat (`retryable: true`) — arată mesajul, lasă clientul să ceară din nou |
+| `action_already_consumed` | 409 | s-a apăsat deja; nu reîncerca automat |
+| `action_stale` | 409 | lista/întrebarea s-a schimbat (`retryable: true`) |
+| `action_invalid` / `action_not_found` | 400 / 404 | token nevalid pentru sesiunea curentă |
+| `action_unavailable` | 409 | acțiune cunoscută, indisponibilă încă (coș → NX-237) |
+| `action_not_supported` | 422 | feature-ul e stins pe acest deployment |
+
+**Nu implementa retry automat pe `submit`.** Dacă retrimiți, folosește **același**
+`client_turn_id` — atunci primești replay-ul exact al rezultatului, nu o a doua execuție. Un
+`client_turn_id` nou pe același token înseamnă „a doua apăsare" și primește
+`action_already_consumed`.
+
+Contractul complet (threat model, rotație de chei, runbook): [`WEB-ACTIONS-V2.md`](WEB-ACTIONS-V2.md).
+
 ---
 
 ## 4. Tokenuri semantice

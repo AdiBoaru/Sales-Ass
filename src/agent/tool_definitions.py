@@ -345,6 +345,14 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+# NX-236 — registrul de TOOL-uri (ce poate chema MODELUL) e distinct de registrul de ACȚIUNI
+# (ce poate apăsa CLIENTUL, `src/web/action_models.py`). Cele două nu se ating: dispatch-ul de
+# acțiuni primește un `ActionSpec` deja rezolvat, nu un nume, deci nu există nicio cale prin care
+# un token opac să numească un tool. `TOOL_NAMES` există ca invariantul să fie VERIFICABIL
+# (`assert_registry_disjoint`), nu doar afirmat într-un comentariu.
+TOOL_NAMES: tuple[str, ...] = tuple(_SCHEMAS)
+
+
 def tool_schemas(names: list[str]) -> list[dict[str, Any]]:
     """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching)."""
     return [_SCHEMAS[n] for n in names if n in _SCHEMAS]
