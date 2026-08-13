@@ -1,0 +1,48 @@
+{
+  "name": "ro — rafinarea nu pierde ce s-a spus deja, corecția înlocuiește fără fantomă",
+  "locale": "ro",
+  "turns": [
+    {
+      "utterance": "vreau un ser cu vitamina C sub 150 lei",
+      "proposals": [
+        {"op": "set_topic", "category_key": "seruri", "source": "catalog"},
+        {"op": "set_need", "key": "budget_max", "value": 150, "source": "user_explicit"}
+      ],
+      "expect": {
+        "active": {"budget_max": 150.0},
+        "strength": {"budget_max": "hard"},
+        "topic": "seruri"
+      }
+    },
+    {
+      "utterance": "am tenul mixt",
+      "proposals": [
+        {"op": "set_need", "key": "concerns", "value": "ten mixt", "source": "user_explicit"}
+      ],
+      "expect": {
+        "active": {"budget_max": 150.0, "concerns": "ten mixt"},
+        "strength": {"concerns": "soft"}
+      }
+    },
+    {
+      "utterance": "de fapt pot merge pana la 250",
+      "proposals": [
+        {"op": "set_need", "key": "budget_max", "value": 250, "source": "user_explicit"}
+      ],
+      "expect": {
+        "active": {"budget_max": 250.0, "concerns": "ten mixt"},
+        "superseded": ["budget_max"]
+      }
+    },
+    {
+      "utterance": "(rezumatul incearca sa reintroduca bugetul vechi)",
+      "proposals": [
+        {"op": "set_need", "key": "budget_max", "value": 150, "source": "model_inferred"}
+      ],
+      "expect": {
+        "active": {"budget_max": 250.0},
+        "rejected": ["hard_downgrade"]
+      }
+    }
+  ]
+}

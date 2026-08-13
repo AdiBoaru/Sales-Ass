@@ -1,0 +1,42 @@
+{
+  "name": "hu — ugyanazt a kerdest nem tesszuk fel a vegtelensegig",
+  "locale": "hu",
+  "turns": [
+    {
+      "utterance": "keresek valamit",
+      "proposals": [
+        {"op": "set_pending_question", "key": "budget_max", "source": "policy"}
+      ],
+      "expect": {"pending": "budget_max"}
+    },
+    {
+      "utterance": "nem tudom",
+      "proposals": [
+        {"op": "resolve_question", "key": "budget_max", "source": "user_explicit"},
+        {"op": "set_need", "key": "budget_max", "value": "nem tudom", "source": "user_explicit"}
+      ],
+      "expect": {"pending": null, "absent": ["budget_max"], "asked": ["budget_max"]}
+    },
+    {
+      "utterance": "(a rendszer ujra kerdezne)",
+      "proposals": [
+        {"op": "set_pending_question", "key": "budget_max", "source": "policy"}
+      ],
+      "expect": {"pending": "budget_max"}
+    },
+    {
+      "utterance": "tenyleg nem tudom",
+      "proposals": [
+        {"op": "resolve_question", "key": "budget_max", "source": "user_explicit"}
+      ],
+      "expect": {"pending": null}
+    },
+    {
+      "utterance": "(harmadszor is kerdezne — nem szabad)",
+      "proposals": [
+        {"op": "set_pending_question", "key": "budget_max", "source": "policy"}
+      ],
+      "expect": {"pending": null, "rejected": ["already_asked"]}
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "en — an exclusion is a hard constraint the model cannot relax",
+  "locale": "en",
+  "turns": [
+    {
+      "utterance": "no fragrance please",
+      "proposals": [
+        {"op": "set_need", "key": "restriction", "value": "fragrance", "source": "user_explicit"}
+      ],
+      "expect": {
+        "active": {"restriction": "fragrance"},
+        "strength": {"restriction": "hard"},
+        "operator": {"restriction": "not_contains"}
+      }
+    },
+    {
+      "utterance": "(model tries to drop the exclusion to widen results)",
+      "proposals": [
+        {"op": "set_need", "key": "restriction", "value": "none", "source": "model_inferred"}
+      ],
+      "expect": {"active": {"restriction": "fragrance"}, "rejected": ["hard_downgrade"]}
+    },
+    {
+      "utterance": "(topic changes to hair care)",
+      "proposals": [
+        {"op": "set_topic", "category_key": "haircare", "source": "catalog"}
+      ],
+      "expect": {"active": {"restriction": "fragrance"}}
+    }
+  ]
+}

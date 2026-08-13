@@ -205,7 +205,16 @@ class ConversationState:
     def from_jsonb(cls, raw: dict[str, Any] | None) -> ConversationState:
         """Hidratează din `conversations.state` (jsonb). DEFENSIV: chei lipsă → default,
         produse fără id/name/price → sărite (nu crapă pe state vechi/parțial). `displayed_products`
-        e scris ca {product_id|id, name, price, ...} de Sender — luăm doar cele 3 ref-uri (P8)."""
+        e scris ca {product_id|id, name, price, ...} de Sender — luăm doar cele 3 ref-uri (P8).
+
+        NX-235: un rând scris în v2 (`schema_version >= 2`) e PROIECTAT înapoi în forma v1 înainte
+        de hidratare. Nu e o a doua copie persistată — e o derivare la citire dintr-o singură sursă
+        de adevăr, și e ce face rollback-ul sigur: codul care încă vorbește v1 vede exact ce se
+        aștepta să vadă, iar o cheie revocată pur și simplu nu apare."""
+        from src.conversation.state_v2 import ConversationStateV2, is_v2, project_v1
+
+        if is_v2(raw):
+            raw = project_v1(ConversationStateV2.from_jsonb(raw))
         raw = raw or {}
         products: list[ProductRef] = []
         for p in raw.get("displayed_products") or []:
@@ -545,6 +554,15 @@ class TurnContext:
     # stagiul Agent (acumulat din `ToolResult.state_patch` în `execute`); processor-ul îl
     # merge-uiește în `new_state` la scriere (P3 — nu se scrie din două locuri).
     state_patch: dict[str, Any] = field(default_factory=dict)
+    # NX-235: starea REDUSĂ (`ConversationStateV2`), hidratată din același jsonb. Owner UNIC:
+    # processor (înainte de pipeline) — niciun stagiu nu o rescrie. `None` = flag OFF →
+    # comportamentul de dinainte de card, pe orice canal. `Any` ca să nu importăm `src.conversation`
+    # în models la runtime (acces tipizat prin `src.conversation.state_v2`).
+    state_v2: Any = None
+    # NX-235: PROPUNERI typed de schimbare a stării (`StateUpdateProposal`), acumulate de stagii ca
+    # `events` — nimeni nu scrie direct în `state_v2`. Reducerul (pur) le aplică la commit, deci
+    # ordinea aici e ordinea în care s-au întâmplat în tur. Owner la aplicare: processor.
+    state_proposals: list[Any] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
     # NX-103: consumul LLM al turului (tokeni/cost/defalcări). Owner: runner-ul (post-pipeline);
     # processor-ul îl atașează pe mesajul outbound. None până rulează pipeline-ul / fără apel LLM.
@@ -647,7 +665,16 @@ class TurnContext:
         următor (`pending_question`). Reply NON-cacheabil (specific contextului). `attempts`
         crește dacă re-întrebăm ACELAȘI slot consecutiv (semnal anti-buclă). `suggestions` =
         chips opționale pe care clientul le poate apăsa (ex. idei de cadou). Owner al
-        scrierii în DB rămâne Sender (processor propagă `reply.pending_question` în state)."""
+        scrierii în DB rămâne Sender (processor propagă `reply.pending_question` în state).
+
+        NX-235 — MAXIMUM O CLARIFICARE PE TUR, invariant structural. Azi niciun drum nu ajunge să
+        întrebe de două ori (fiecare apelant setează reply și iese), deci garda e inertă; există
+        fiindcă a doua întrebare într-un tur nu trebuie să depindă de faptul că nimeni n-a scris
+        încă apelul care o produce. Prima câștigă — a doua ar fi cea pe care clientul o vede,
+        adică exact cea care a pierdut contextul primeia."""
+        if self.reply is not None and self.reply.pending_question:
+            self.emit("clarify_suppressed", field=field, reason="already_asked_this_turn")
+            return
         prev = (
             self.state.pending_question if isinstance(self.state.pending_question, dict) else None
         )

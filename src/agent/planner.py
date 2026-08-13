@@ -34,6 +34,7 @@ from src.agent.query_rewrite import build_query_spec
 from src.agent.validator import _valid
 from src.analytics.demand import clean_ids
 from src.config import get_settings
+from src.conversation.state_v2 import active_needs
 from src.db.queries.catalog import (
     get_complementary_products,
     get_products_by_ids,
@@ -64,7 +65,7 @@ def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: 
     if not facets:
         return
     try:
-        spec = build_query_spec(query or "", dp, locale=ctx.language)
+        spec = build_query_spec(query or "", dp, locale=ctx.language, needs=active_needs(ctx))
         ms = build_match_set(products, spec.constraints, facets)
         ctx.match_set = ms
         ctx.emit(

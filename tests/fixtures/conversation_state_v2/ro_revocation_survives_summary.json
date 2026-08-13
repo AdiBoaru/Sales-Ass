@@ -1,0 +1,34 @@
+{
+  "name": "ro — bugetul revocat nu revine din istoric/rezumat",
+  "locale": "ro",
+  "turns": [
+    {
+      "utterance": "ceva sub 100 lei",
+      "proposals": [
+        {"op": "set_need", "key": "budget_max", "value": 100, "source": "user_explicit"}
+      ],
+      "expect": {"active": {"budget_max": 100.0}}
+    },
+    {
+      "utterance": "bugetul nu mai conteaza",
+      "proposals": [
+        {"op": "revoke", "key": "budget_max", "source": "user_explicit", "reason_code": "user_explicit"}
+      ],
+      "expect": {"absent": ["budget_max"], "revoked": ["budget_max"]}
+    },
+    {
+      "utterance": "(rezumatul: clientul cauta sub 100 lei)",
+      "proposals": [
+        {"op": "set_need", "key": "budget_max", "value": 100, "source": "model_inferred"}
+      ],
+      "expect": {"absent": ["budget_max"], "revoked": ["budget_max"], "rejected": ["revoked_key"]}
+    },
+    {
+      "utterance": "totusi hai sa ramanem sub 200",
+      "proposals": [
+        {"op": "set_need", "key": "budget_max", "value": 200, "source": "user_explicit"}
+      ],
+      "expect": {"active": {"budget_max": 200.0}, "revoked": []}
+    }
+  ]
+}

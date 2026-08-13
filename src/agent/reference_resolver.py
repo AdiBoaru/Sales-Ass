@@ -1,24 +1,31 @@
-"""NX-234 — rezolvarea REFERINȚEI la produs: „acesta", „prima", „serul cu niacinamidă".
+"""NX-234/NX-235 — rezolvarea REFERINȚEI la produs: „acesta", „prima", „serul cu niacinamidă".
 
-Până acum deixis-ul se rezolva exclusiv din `ConversationState.displayed_products` (ce a arătat
-asistentul). Consecința era vizibilă pe cazul cel mai comun al unui widget de magazin: un client
-deschide o pagină de produs, scrie „ce părere ai despre acesta?" — și nu există nimic de ancorat,
-fiindcă asistentul n-a afișat încă nimic. Singura „soluție" la îndemână era ca frontendul să
-compună mesajul („despre produsul X"), adică exact ce interzice boundary-ul: browserul ar fi
+Până la NX-234 deixis-ul se rezolva exclusiv din `ConversationState.displayed_products` (ce a
+arătat asistentul). Consecința era vizibilă pe cazul cel mai comun al unui widget de magazin: un
+client deschide o pagină de produs, scrie „ce părere ai despre acesta?" — și nu există nimic de
+ancorat, fiindcă asistentul n-a afișat încă nimic. Singura „soluție" la îndemână era ca frontendul
+să compună mesajul („despre produsul X"), adică exact ce interzice boundary-ul: browserul ar fi
 scris conținutul întrebării și ar fi devenit din nou un motor de intenții.
 
-Aici e API-ul comun, cu ancora paginii ca sursă de sine stătătoare. PRECEDENȚA (parțială
-deliberat — algoritmul complet `action / named / page / selected / displayed` vine în NX-235):
+NX-235 închide precedența, o dată pentru toate căile (P3 — o singură ordine, nu una per apelant):
 
-    1. `named`    — clientul a numit produsul (nume complet sau tokeni unici din setul afișat);
-    2. `ordinal`  — „prima" / „a doua" / „review 3", raportat la lista afișată;
-    3. `page`     — ancora canonică a paginii curente (PDP), rehidratată server-side;
-    4. `single`   — un singur produs afișat, fără altă ancoră.
+    1. `action`   — referință SEMNATĂ din tokenul acțiunii curente (NX-236), legată de revizie;
+    2. `named`    — clientul a numit produsul, univoc, în mesajul curent;
+    3. `ordinal`  — „prima" / „a doua" / „review 3", peste lista EXACT afișată, cu revizia ei;
+    4. `page`     — ancora paginii, când expresia e deictică („acesta") sau nu există alt candidat;
+    5. `selected` — produsul confirmat explicit într-un tur anterior;
+    6. `single`   — singurul produs discutat recent, dacă e univoc;
+    7. altfel     → `ambiguous`. Niciodată „primul card", niciodată o ghicire tăcută.
 
-`named` și `ordinal` sunt AFIRMAȚII ale clientului; ancora paginii e un fapt despre unde se află.
-Când clientul spune explicit ce vrea, ce se vede pe ecran nu are cum să câștige — de aici ordinea.
+Ordinea nu e arbitrară: `named`/`ordinal` sunt AFIRMAȚII ale clientului, ancora paginii e un fapt
+despre unde se află. Când clientul spune explicit ce vrea, ce se vede pe ecran nu poate câștiga.
 Ancora bate însă „ultimul produs afișat": clientul se uită ACUM la pagină, iar setul afișat poate
 fi de acum trei tururi.
+
+**Ce se REFUZĂ explicit.** O ancoră de acțiune stale (emisă peste altă revizie a listei) sau
+invalidă nu cade pe pagina curentă și nu alege primul card: întoarce `stale`. Un ordinal exprimat
+clar dar în afara listei nu selectează nimic. Un răspuns greșit cu aer de siguranță e mai
+scump decât o întrebare.
 
 Modulul e PUR: primește referințe, întoarce o decizie tipizată. Nu citește DB, nu vede
 `TurnContext` și nu compune text — rehidratarea produsului rămâne a apelantului, cu
@@ -31,8 +38,25 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-ReferenceSource = Literal["named", "ordinal", "page", "single", "none"]
-ReferenceOutcome = Literal["resolved", "ambiguous", "none"]
+ReferenceSource = Literal["action", "named", "ordinal", "page", "selected", "single", "none"]
+ReferenceOutcome = Literal["resolved", "ambiguous", "stale", "none"]
+# Motive low-cardinality — intră în `reference_resolution{source,outcome,reason}` (P10).
+ReferenceReason = Literal[
+    "action_anchor",
+    "named_unique",
+    "ordinal_in_list",
+    "page_deictic",
+    "page_only_candidate",
+    "page_legacy",
+    "selected_previously",
+    "single_candidate",
+    "anchor_invalid",
+    "anchor_stale",
+    "ordinal_out_of_range",
+    "no_anchor",
+    "empty",
+    "",
+]
 
 # Ordinalele conversaționale, în RO/EN/HU. Rulează pe text normalizat FĂRĂ diacritice, ca aceeași
 # intenție să funcționeze și când clientul tastează „prima" fără să aibă diacritice pe tastatură.
@@ -70,19 +94,54 @@ class PageAnchor:
 
 
 @dataclass(frozen=True)
+class ActionAnchor:
+    """Referința purtată de tokenul acțiunii pe care clientul tocmai a apăsat-o.
+
+    `valid` e verdictul CRIPTOGRAFIC al lui NX-236 — aici nu se verifică semnături, se respectă
+    răspunsul. `revision` e revizia listei peste care a fost emisă: dacă între timp lista s-a
+    schimbat, ancora nu mai descrie ce vede clientul, iar „al doilea" de atunci nu e „al doilea"
+    de acum."""
+
+    product_id: str
+    revision: int = 0
+    valid: bool = True
+
+
+@dataclass(frozen=True)
 class ReferenceResolution:
-    """Decizia, cu PROVENIENȚĂ. `source` intră în `web_reference_resolved` (observabilitate):
-    fără el, „a rezolvat" și „a ghicit" arată la fel în metrici."""
+    """Decizia, cu PROVENIENȚĂ. `source`/`reason` intră în `web_reference_resolved`
+    (observabilitate): fără ele, „a rezolvat" și „a ghicit" arată la fel în metrici."""
 
     product_id: str | None
     source: ReferenceSource = "none"
     outcome: ReferenceOutcome = "none"
     name: str | None = None
     index: int | None = None  # poziția în lista afișată, când sursa e `ordinal`/`named`
+    reason: ReferenceReason = ""
 
     @property
     def resolved(self) -> bool:
         return self.product_id is not None
+
+    @property
+    def stale(self) -> bool:
+        return self.outcome == "stale"
+
+
+@dataclass(frozen=True)
+class ReferenceRequest:
+    """Tot ce poate ancora o referință, într-un singur obiect — ca precedența să fie o proprietate
+    a datelor, nu a ordinii în care apelantul se întâmplă să verifice lucrurile."""
+
+    query: str
+    refs: tuple[HasProductRef, ...] = ()
+    page: PageAnchor | None = None
+    anchor: ActionAnchor | None = None
+    selected_product: str | None = None
+    displayed_revision: int = 0
+    # NX-234 avea pagina ca fallback necondiționat. Modul legacy îl păstrează byte-identic până la
+    # cutoverul de contract; modul v2 cere deixis sau absența oricărui alt candidat.
+    legacy_page_fallback: bool = False
 
 
 def normalize_for_match(text: str) -> str:
@@ -155,26 +214,127 @@ def resolve_product_reference(
     *,
     page: PageAnchor | None = None,
 ) -> ReferenceResolution:
-    """Precedența completă a acestui card: `named` > `ordinal` > `page` > `single`.
+    """API-ul NX-234, păstrat byte-identic ca semantică: `ordinal` > `named` > `page` > `single`.
 
-    Ancora paginii intră DUPĂ semnalele explicite ale clientului și ÎNAINTE de „ultimul produs
-    afișat". Fără ancoră (orice canal non-web, sau web fără context de pagină) comportamentul e
-    exact cel de dinainte — `resolve_from_displayed`."""
+    Delegă în `resolve_reference` cu `legacy_page_fallback=True` — o singură implementare a
+    precedenței, două configurații, ca modul nou să nu fie o a doua copie care poate diverge.
+    Dispare la cutoverul de contract (NX-249), împreună cu restul căilor v1."""
     if page is None:
         return resolve_from_displayed(query, refs)
+    return resolve_reference(
+        ReferenceRequest(query=query, refs=tuple(refs), page=page, legacy_page_fallback=True)
+    )
 
+
+# Deixis: „acesta / asta / ăsta / acest produs" + echivalentele EN/HU. Rulează pe text normalizat
+# fără diacritice, ca și ordinalele. Deliberat NU conține pronume slabe („îl", „o"): ele apar în
+# fraze care nu se referă la pagină („mi-o recomanzi pe cea de ieri?"), iar o ancorare greșită e
+# mai scumpă decât una ratată.
+_DEICTIC_RE = re.compile(
+    r"(?<![a-z0-9])(?:"
+    r"acest|acesta|aceasta|aceste|acestea|acestia|acestui|acestei|"
+    r"asta|astea|astia|asa?ta|"
+    r"this|these|it|"
+    r"ez|ezt|ezek|ezeket|ezzel"
+    r")(?![a-z0-9])"
+)
+# Ordinalele EXPRIMATE, independent de lungimea listei. `match_ordinal` mărginește la `count`;
+# aici ne interesează dacă clientul A CERUT un ordinal, ca „a treia" pe o listă de două să nu cadă
+# tăcut pe altă sursă (ar selecta un produs pe care clientul nu l-a cerut).
+_ANY_ORDINAL_RE = tuple(pattern for _, pattern in (*ORDINALS, *NUMERIC_ORDINALS))
+
+
+def is_deictic(query: str) -> bool:
+    """`True` dacă expresia arată spre ceva prezent („acesta"), adică spre pagina curentă."""
+    return _DEICTIC_RE.search(normalize_for_match(query)) is not None
+
+
+def expresses_ordinal(query: str) -> bool:
+    """`True` dacă mesajul cere un ordinal, indiferent dacă lista îl poate onora."""
+    normalized = normalize_for_match(query)
+    return any(pattern.search(normalized) for pattern in _ANY_ORDINAL_RE)
+
+
+def resolve_reference(request: ReferenceRequest) -> ReferenceResolution:
+    """Precedența UNICĂ (vezi docstringul modulului). PURĂ și deterministă."""
+    refs = list(request.refs)
+    query = request.query or ""
+
+    # 1. Ancoră semnată. O ancoră respinsă OPREȘTE rezolvarea: a cădea pe pagină ar transforma un
+    #    token manipulat/expirat într-o selecție tăcută, exact ce trebuie să nu se întâmple.
+    anchor = request.anchor
+    if anchor is not None:
+        if not anchor.valid:
+            return ReferenceResolution(None, "action", "stale", reason="anchor_invalid")
+        if (
+            anchor.revision
+            and request.displayed_revision
+            and anchor.revision != request.displayed_revision
+        ):
+            return ReferenceResolution(None, "action", "stale", reason="anchor_stale")
+        name = next((r.name for r in refs if r.product_id == anchor.product_id), None)
+        return ReferenceResolution(
+            anchor.product_id, "action", "resolved", name, reason="action_anchor"
+        )
+
+    # 2. Numit explicit, univoc.
+    if refs:
+        index = match_name(query, [r.name for r in refs])
+        if index is not None:
+            return ReferenceResolution(
+                refs[index].product_id, "named", "resolved", refs[index].name, index, "named_unique"
+            )
+
+    # 3. Ordinal peste lista EXACT afișată.
     if refs:
         index = match_ordinal(query, len(refs))
         if index is not None:
             return ReferenceResolution(
-                refs[index].product_id, "ordinal", "resolved", refs[index].name, index
+                refs[index].product_id,
+                "ordinal",
+                "resolved",
+                refs[index].name,
+                index,
+                "ordinal_in_list",
             )
-        index = match_name(query, [r.name for r in refs])
-        if index is not None:
+    if not request.legacy_page_fallback and expresses_ordinal(query):
+        # Ordinal cerut dar imposibil (listă mai scurtă / reordonată): nu servim alt produs.
+        return ReferenceResolution(None, "ordinal", "ambiguous", reason="ordinal_out_of_range")
+
+    # 4. Ancora paginii — deictic, sau singurul candidat din lume.
+    page = request.page
+    if page is not None:
+        no_competitor = not refs and not request.selected_product
+        if request.legacy_page_fallback:
             return ReferenceResolution(
-                refs[index].product_id, "named", "resolved", refs[index].name, index
+                page.product_id, "page", "resolved", page.name or None, reason="page_legacy"
             )
-    return ReferenceResolution(page.product_id, "page", "resolved", page.name or None)
+        if is_deictic(query):
+            return ReferenceResolution(
+                page.product_id, "page", "resolved", page.name or None, reason="page_deictic"
+            )
+        if no_competitor:
+            return ReferenceResolution(
+                page.product_id, "page", "resolved", page.name or None, reason="page_only_candidate"
+            )
+
+    # 5. Produsul confirmat explicit anterior.
+    if request.selected_product:
+        name = next((r.name for r in refs if r.product_id == request.selected_product), None)
+        return ReferenceResolution(
+            request.selected_product, "selected", "resolved", name, reason="selected_previously"
+        )
+
+    # 6. Un singur produs discutat recent, univoc.
+    if len(refs) == 1:
+        return ReferenceResolution(
+            refs[0].product_id, "single", "resolved", refs[0].name, 0, "single_candidate"
+        )
+
+    # 7. Fără ancoră: ambiguu (sau „nimic", când n-a existat niciun candidat).
+    if not refs and page is None:
+        return ReferenceResolution(None, "none", "none", reason="empty")
+    return ReferenceResolution(None, "none", "ambiguous", reason="no_anchor")
 
 
 def page_anchor_from_snapshot(snapshot: object) -> PageAnchor | None:
@@ -197,12 +357,17 @@ def page_anchor_from_snapshot(snapshot: object) -> PageAnchor | None:
 __all__ = [
     "NUMERIC_ORDINALS",
     "ORDINALS",
+    "ActionAnchor",
     "PageAnchor",
+    "ReferenceRequest",
     "ReferenceResolution",
+    "expresses_ordinal",
+    "is_deictic",
     "match_name",
     "match_ordinal",
     "normalize_for_match",
     "page_anchor_from_snapshot",
     "resolve_from_displayed",
     "resolve_product_reference",
+    "resolve_reference",
 ]

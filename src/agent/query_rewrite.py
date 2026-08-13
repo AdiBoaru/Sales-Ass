@@ -21,7 +21,12 @@ import re
 from collections.abc import Collection
 from typing import TYPE_CHECKING
 
-from src.agent.query_spec import Constraint, RuntimeQuerySpec, SafeVocabulary
+from src.agent.query_spec import (
+    Constraint,
+    RuntimeQuerySpec,
+    SafeVocabulary,
+    constraints_from_needs,
+)
 from src.domain.normalize import normalize
 
 if TYPE_CHECKING:
@@ -133,11 +138,16 @@ def build_query_spec(
     domain_pack: DomainPack | None,
     *,
     locale: str = "ro",
+    needs: Collection[object] = (),
 ) -> RuntimeQuerySpec:
     """Text brut → `RuntimeQuerySpec` (raw + normalized + search_text expandat + constrângeri).
 
     DETERMINIST, fără LLM, fără scriere. DomainPack lipsă/gol → doar pattern-urile de limbă (preț,
-    referință, fără-parfum); zero expandare de vocabular (degradare grațioasă, P6)."""
+    referință, fără-parfum); zero expandare de vocabular (degradare grațioasă, P6).
+
+    NX-235: `needs` sunt nevoile ACTIVE ale conversației (`ConversationStateV2`). Intră ca
+    `source='state'`, cu tăria lor — un buget spus acum trei tururi rămâne o limită, nu se
+    evaporă fiindcă mesajul curent nu-l repetă. Gol → spec identic cu cel de dinainte."""
     norm = normalize(raw_query)
     scan = _scan_text(norm)
     constraints: list[Constraint] = []
@@ -192,8 +202,13 @@ def build_query_spec(
         if _word_hit(scan, phrase_norm):
             extra_terms.extend(terms)
 
+    # 6. NX-235: nevoile ACTIVE moștenite din conversație, DUPĂ cele derivate din turul curent —
+    # dedup-ul de mai jos le lasă pe cele curente să câștige când vorbesc despre aceeași fațetă.
+    constraints.extend(constraints_from_needs(needs))
+
     # Constrângeri concern deduplicate, ordine stabilă (determinist + telemetrie curată).
     seen_concern: set[str] = set()
+    seen_scalar: set[str] = set()
     deduped: list[Constraint] = []
     for c in constraints:
         key = f"{c.facet}:{c.value}"
@@ -201,6 +216,13 @@ def build_query_spec(
             if key in seen_concern:
                 continue
             seen_concern.add(key)
+        else:
+            # O fațetă scalară (preț, fără-parfum) suportă O constrângere: prima câștigă, adică
+            # cea derivată din mesajul CURENT. Un buget moștenit nu are voie să suprascrie
+            # bugetul pe care clientul tocmai l-a spus.
+            if f"{c.facet}:{c.op}" in seen_scalar:
+                continue
+            seen_scalar.add(f"{c.facet}:{c.op}")
         deduped.append(c)
 
     search_text = _compose(base, extra_terms)
