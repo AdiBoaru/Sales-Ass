@@ -1427,6 +1427,7 @@ relations_first_enabled = true
 replay_store_prompt_enabled = false
 response_style_enabled = true
 response_telemetry_enabled = true
+retrieval_candidate_enabled = false
 review_intent_enabled = true
 rich_facets_enabled = true
 rich_pick_deterministic_enabled = true
