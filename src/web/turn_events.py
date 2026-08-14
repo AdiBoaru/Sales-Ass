@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from src.agent.grounding_guard import GROUNDED_PAYLOAD_KEY, answer_from_jsonb
+from src.channels.web.render_v2 import TurnIdentity, project
 from src.config import get_settings
 from src.db.queries.web_turns import WebTurnRow
 from src.web.action_crypto import KeyRing, KeyRingError, parse_key_ring
@@ -507,6 +509,48 @@ def _envelope(row: WebTurnRow, language: str, blocks: list[dict]) -> dict[str, A
     return view
 
 
+def grounded_view(row: WebTurnRow, payload: dict[str, Any], language: str) -> dict[str, Any] | None:
+    """NX-240 — proiecția GROUNDED, când turul a înghețat un verdict (`grounded_v2`).
+
+    `None` = nu se aplică (flag stins, rând vechi, payload nerecunoscut, proiecție eșuată) →
+    apelantul cade pe proiecția din payload-ul v1. Degradarea e în ACEASTĂ direcție deliberat: un
+    răspuns randat cu regulile de ieri e mai bun decât o eroare, iar diferența e observabilă
+    (`web_view_projected{outcome}`), nu tăcută.
+
+    Proiecția e PURĂ: `answer` vine din rând, acțiunile se re-derivă determinist din același rând
+    (NX-236: `issued_at = completed_at`, sigiliu AES-SIV), iar ceasul e `as_of`-ul înghețat. Două
+    GET-uri produc aceiași bytes; un catalog schimbat între ele nu produce nimic."""
+    if not get_settings().web_view_v2_projector_enabled or row.status != "completed":
+        return None
+    raw = payload.get(GROUNDED_PAYLOAD_KEY)
+    if not raw:
+        return None
+    try:
+        answer = answer_from_jsonb(raw)
+        if answer is None:
+            return None
+        identity = TurnIdentity(
+            turn_id=row.id,
+            client_turn_id=row.client_turn_id,
+            conversation_id=row.conversation_id,
+            conversation_revision=max(0, row.conversation_revision_at_accept or 0),
+            status=project_wire_status(row.status),
+        )
+        view = project(
+            answer,
+            identity=identity,
+            locale=language,
+            issued_actions=issued_actions(row),
+            now=answer.as_of or row.completed_at,
+        )
+        return view.model_dump(mode="json", exclude_none=True)
+    except Exception:  # noqa: BLE001 — proiecția grounded nu are voie să scoată 500
+        log.exception(
+            "proiecția grounded (NX-240) a eșuat (web_turn %s) — cad pe payload-ul v1", row.id
+        )
+        return None
+
+
 def terminal_view(row: WebTurnRow, language: str) -> dict[str, Any]:
     """Envelope-ul `web-view.v2` al unui turn TERMINAL, derivat determinist din payload-ul
     persistat. Validat cu `parse_view` înainte de a fi servit — un envelope care nu trece
@@ -515,6 +559,9 @@ def terminal_view(row: WebTurnRow, language: str) -> dict[str, Any]:
         raise ValueError(f"terminal_view cere un status terminal, nu {row.status!r}")
     payload = row.response_json or {}
     language = (language or "ro")[:2]
+    grounded = grounded_view(row, payload, language)
+    if grounded is not None:
+        return grounded
     try:
         blocks = _blocks_from_payload(payload, row, language)
         code = _clip(row.safe_error_code or payload.get("error_code"), 60)

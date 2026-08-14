@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
@@ -40,13 +41,17 @@ from src.agent.answer_plan_runtime import (
 )
 from src.agent.brain_models import BrainInput
 from src.agent.conversation_quality import evaluate_reply
+from src.agent.evidence_bundle import EvidenceBundle, build_evidence_bundle
+from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
 from src.models import TurnContext
+from src.retrieval.port import query_count_bucket
 from src.retrieval.selector import build_port, select_provider
+from src.web.localization import DISPLAYABLE_NEEDS, format_need
 from src.worker.context import build_brain_input
 
 if TYPE_CHECKING:
@@ -268,6 +273,143 @@ def _emit_constraint_handling(
         ctx.emit("constraint_handling", strength="hard", outcome="kept")
     for _key in plan.relaxations:
         ctx.emit("constraint_handling", strength="soft", outcome="relaxed")
+
+
+def _retrieval_annotations(
+    bundles: list[Any],
+) -> tuple[dict[str, str], dict[str, tuple[Any, ...]]]:
+    """Verdictele providerului de retrieval, pe produs. Prima apariție câștigă: dacă două căutări
+    din același tur au judecat același produs, judecata care a produs lista pe care o vede
+    clientul e prima — a doua ar rescrie retroactiv un verdict deja afișat."""
+    classes: dict[str, str] = {}
+    constraints: dict[str, tuple[Any, ...]] = {}
+    for bundle in bundles:
+        for candidate in getattr(bundle, "candidates", ()) or ():
+            product_id = str(getattr(candidate, "product_id", "") or "")
+            if not product_id or product_id in classes:
+                continue
+            classes[product_id] = str(getattr(candidate, "match_class", "exact"))
+            constraints[product_id] = tuple(getattr(candidate, "constraint_results", ()) or ())
+    return classes, constraints
+
+
+def _memory_criteria(ctx: TurnContext, locale: str) -> tuple[str, ...]:
+    """Criteriile ACTIVE, ca text afișabil. Doar sloturile cu formă onestă (`DISPLAYABLE_NEEDS`):
+    un slug de vocabular („ten_gras") pe ecran ar fi memoria noastră internă scursă în UI."""
+    values = {need.key: need.normalized_value for need in active_needs(ctx)}
+    out: list[str] = []
+    for key in DISPLAYABLE_NEEDS:
+        value = values.get(key)
+        text = format_need(key, value, "RON", locale) if value is not None else None
+        if text:
+            out.append(text)
+    return tuple(out)
+
+
+def _bucket(count: int) -> str:
+    """Bandă low-cardinality pentru numărători (P10/P12: o metrică nu crește cu catalogul)."""
+    if count <= 0:
+        return "0"
+    if count == 1:
+        return "1"
+    if count <= 3:
+        return "2-3"
+    if count <= 6:
+        return "4-6"
+    return "7+"
+
+
+def _freshness_bucket(fact: Any) -> str:
+    """Banda de prospețime a unui fapt. `unverified` e o categorie proprie, nu „vechi": un fapt
+    fără `verified_at` nu e stale, e neverificat — două cauze diferite, două fixuri diferite."""
+    if fact.verified_at is None:
+        return "unverified"
+    age = fact.age_s or 0
+    if age < 3600:
+        return "<1h"
+    if age < 86400:
+        return "<1d"
+    if age < 7 * 86400:
+        return "<7d"
+    return "7d+"
+
+
+def _emit_grounding_telemetry(
+    ctx: TurnContext, bundle: EvidenceBundle, answer: GroundedAnswer
+) -> None:
+    """Observabilitatea cardului, low-cardinality. Fără id-uri de produs, fără text, fără sume —
+    numai câmpuri din vocabular ÎNCHIS și benzi."""
+    coverage = bundle.coverage()
+    total = max(1, len(bundle.products))
+    known_price = coverage["price"]["known"]
+    ctx.emit(
+        "evidence_bundle",
+        outcome="ok" if answer.ok else "rejected",
+        product_bucket=_bucket(len(bundle.products)),
+        source_coverage_bucket=(
+            "full" if known_price == total else ("partial" if known_price else "none")
+        ),
+    )
+    ctx.emit("evidence_query_count_bucket", bucket=query_count_bucket(bundle.query_count))
+    for product in bundle.products:
+        for name in ("price", "availability", "rating", "delivery_promise"):
+            fact = product.fact(name)
+            ctx.emit(
+                "commercial_fact",
+                field=name,
+                status=fact.status,
+                freshness_bucket=_freshness_bucket(fact),
+            )
+    for failure in answer.failures:
+        ctx.emit("grounding_claim", type="prose", outcome="rejected", reason=failure)
+    for omission in answer.omissions:
+        if omission.field == "commerce_cta":
+            ctx.emit("commerce_cta_omitted", reason=omission.reason)
+        else:
+            ctx.emit("view_field_omitted", field=omission.field, reason=omission.reason)
+
+
+def _attach_grounding(
+    ctx: TurnContext,
+    run: ToolRun,
+    plan: AnswerPlanV2,
+    execute: Any,
+    *,
+    ask_clarification: bool,
+) -> None:
+    """Îngheață faptele turului și trece planul prin `GroundingGuard`. DOAR sub flag; cu flagul
+    stins `ctx.grounded` rămâne None, deci marginea web persistă exact ce persista înainte.
+
+    Rulează după validarea planului și după validarea prozei: guardul e ultima poartă, nu prima —
+    ce respinge el a trecut deja de tot restul, deci un refuz aici e un semnal real, nu zgomot."""
+    settings = get_settings()
+    if not settings.web_view_v2_projector_enabled:
+        return
+    classes, constraints = _retrieval_annotations(getattr(execute, "bundles", []) or [])
+    bundle = build_evidence_bundle(
+        business_id=ctx.business.id,
+        locale=ctx.language,
+        rows=run.retrieved,
+        now=datetime.now(UTC),
+        sla_s=settings.commerce_facts_sla_s,
+        match_class_by_product=classes,
+        constraints_by_product=constraints,
+        cart=getattr(run, "cart_snapshot", None),
+        # Bugetul de query-uri al bundle-ului e ZERO prin construcție: se hidratează din rândurile
+        # deja retrievate. Contorul raportează câte căutări au alimentat faptele, nu câte a făcut
+        # builderul — altfel ar raporta mereu 0 și n-ar detecta nimic.
+        query_count=len(getattr(execute, "bundles", []) or []),
+    )
+    answer = ground_answer(
+        plan,
+        bundle,
+        locale=ctx.language,
+        ask_clarification=ask_clarification,
+        memory_criteria=_memory_criteria(ctx, ctx.language),
+        commerce_enabled=settings.conversation_cart_enabled,
+    )
+    _emit_grounding_telemetry(ctx, bundle, answer)
+    ctx.grounded = answer if answer.ok else None
 
 
 def _clarification_allowed(ctx: TurnContext, plan: AnswerPlanV2) -> bool:
@@ -521,9 +663,10 @@ async def run_main_brain(
             return
         plan = plan2
         ctx.answer_plan = plan
-        text = render_plan_text(
-            plan, ctx.language, ask_clarification=_clarification_allowed(ctx, plan)
-        )
+        # Poarta se re-evaluează pe planul NOU, o singură dată: `_clarification_allowed` emite
+        # `clarification_decision`, deci a o chema de două ori ar dubla evenimentul.
+        ask_clarification = _clarification_allowed(ctx, plan)
+        text = render_plan_text(plan, ctx.language, ask_clarification=ask_clarification)
         draft_validation = validate_revised_draft(
             text,
             products=run.retrieved,
@@ -542,6 +685,10 @@ async def run_main_brain(
     )
     for check in evaluate_reply(text, plan=plan, previous_bot_texts=previous):
         ctx.emit("conversation_quality", check=check.check, outcome=check.outcome)
+
+    # NX-240: faptele se îngheață AICI, după ce planul și proza au trecut toate porțile. Ce iese
+    # de aici e ce va proiecta `render_v2` — și nimic din catalog nu-l mai poate schimba.
+    _attach_grounding(ctx, run, plan, execute, ask_clarification=ask_clarification)
 
     ctx.emit("main_brain_call", phase="final", outcome="ok", **versions)
     # Reply-urile brain sunt specifice contextului (obligații/nevoi/istoric) → necacheabile în v1.

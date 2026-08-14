@@ -551,6 +551,11 @@ class TurnContext:
     # NX-211/NX-239: validated production AnswerPlan (V1 sau V2), in memory only. Owner: agent
     # stage (MainBrain sub single-brain). `Any` avoids a models -> agent import cycle.
     answer_plan: Any = None
+    # NX-240: verdictul de GROUNDING al turului (`grounding_guard.GroundedAnswer` + `as_of`),
+    # produs de MainBrain după validarea planului. Owner UNIC: stagiul Agent (MainBrain), DOAR sub
+    # `web_view_v2_projector_enabled`. Marginea web îl îngheață în rândul terminal, de unde
+    # `render_v2` îl proiectează; niciun stagiu nu îl rescrie. `Any` — ciclu models → agent.
+    grounded: Any = None
     # NX-239: decizia de fast-path a control plane-ului (`control_plane.FastPathDecision`).
     # Owner UNIC: control plane (chemat de runner, DOAR sub `single_brain_enabled`). None = flag
     # OFF / niciun early-exit gate-uit încă. `Any` ca să nu importăm src.agent în models (ciclu).

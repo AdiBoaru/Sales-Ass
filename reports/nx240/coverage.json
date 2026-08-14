@@ -1,0 +1,678 @@
+{
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "categories": {
+    "Anticearcăn": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Balsamuri de păr": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Bronzer": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Creioane și tușuri de ochi": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Creme BB și CC": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Creme de mâini": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Creme hidratante": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Creme pentru ochi": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Curățarea tenului": {
+      "delivery_promise": {
+        "unknown": 16
+      },
+      "promotion": {
+        "unknown": 16
+      },
+      "variant": {
+        "unknown": 16
+      },
+      "voucher": {
+        "unknown": 16
+      }
+    },
+    "Demachiante pentru ten": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Deodorante": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Exfoliante pentru ten": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Fard de obraz": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Farduri de ochi": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Fond de ten": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Geluri de duș": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Gloss de buze": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Iluminatoare": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Loțiuni de corp": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Loțiuni tonice": {
+      "delivery_promise": {
+        "unknown": 16
+      },
+      "promotion": {
+        "unknown": 16
+      },
+      "variant": {
+        "unknown": 16
+      },
+      "voucher": {
+        "unknown": 16
+      }
+    },
+    "Mascara": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Mist pentru ten": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Măști de păr": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Măști pentru ten": {
+      "delivery_promise": {
+        "unknown": 16
+      },
+      "promotion": {
+        "unknown": 16
+      },
+      "variant": {
+        "unknown": 16
+      },
+      "voucher": {
+        "unknown": 16
+      }
+    },
+    "Pensule și bureți de machiaj": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Primer pentru machiaj": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Protecție solară": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Pudre": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Rujuri": {
+      "delivery_promise": {
+        "unknown": 6
+      },
+      "promotion": {
+        "unknown": 6
+      },
+      "variant": {
+        "unknown": 6
+      },
+      "voucher": {
+        "unknown": 6
+      }
+    },
+    "Scrub de corp": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Seruri pentru ten": {
+      "delivery_promise": {
+        "unknown": 15
+      },
+      "promotion": {
+        "unknown": 15
+      },
+      "variant": {
+        "unknown": 15
+      },
+      "voucher": {
+        "unknown": 15
+      }
+    },
+    "Spray de fixare": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Tratament local": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Uleiuri pentru păr": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Îngrijire fără clătire": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Îngrijirea buzelor": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    },
+    "Șampoane": {
+      "delivery_promise": {
+        "unknown": 13
+      },
+      "promotion": {
+        "unknown": 13
+      },
+      "variant": {
+        "unknown": 13
+      },
+      "voucher": {
+        "unknown": 13
+      }
+    },
+    "Șampon uscat": {
+      "delivery_promise": {
+        "unknown": 7
+      },
+      "promotion": {
+        "unknown": 7
+      },
+      "variant": {
+        "unknown": 7
+      },
+      "voucher": {
+        "unknown": 7
+      }
+    }
+  },
+  "fields": {
+    "availability": {
+      "blocks_commerce_cta": true,
+      "known": 300,
+      "source": "products.availability",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "brand": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "brands.name",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "currency": {
+      "blocks_commerce_cta": true,
+      "known": 300,
+      "source": "products.currency",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "delivery_promise": {
+      "blocks_commerce_cta": false,
+      "known": 0,
+      "source": null,
+      "stale": 0,
+      "unknown": 300,
+      "verified": 0
+    },
+    "identity": {
+      "blocks_commerce_cta": true,
+      "known": 300,
+      "source": "products.id",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "image": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "product_images.url",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "list_price": {
+      "blocks_commerce_cta": false,
+      "known": 90,
+      "source": "products.price (fereastră de sale)",
+      "stale": 0,
+      "unknown": 210,
+      "verified": 0
+    },
+    "price": {
+      "blocks_commerce_cta": true,
+      "known": 300,
+      "source": "products.price/sale_price+variants",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "promotion": {
+      "blocks_commerce_cta": false,
+      "known": 0,
+      "source": null,
+      "stale": 0,
+      "unknown": 300,
+      "verified": 0
+    },
+    "rating": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "products.rating (cu review_count > 0)",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "review_count": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "products.review_count",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "review_summary": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "product_review_summaries.summary",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "stock": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "products.stock_total/variants.stock",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "title": {
+      "blocks_commerce_cta": true,
+      "known": 300,
+      "source": "products.name",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "url": {
+      "blocks_commerce_cta": false,
+      "known": 300,
+      "source": "products.product_url",
+      "stale": 0,
+      "unknown": 0,
+      "verified": 0
+    },
+    "variant": {
+      "blocks_commerce_cta": false,
+      "known": 0,
+      "source": "product_variants.label",
+      "stale": 0,
+      "unknown": 300,
+      "verified": 0
+    },
+    "voucher": {
+      "blocks_commerce_cta": false,
+      "known": 0,
+      "source": null,
+      "stale": 0,
+      "unknown": 300,
+      "verified": 0
+    }
+  },
+  "measured_at": "2026-08-14T09:47:23.610970+00:00",
+  "products": 300,
+  "sla_s": 86400
+}

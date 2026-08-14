@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from src.agent.grounding_guard import GROUNDED_PAYLOAD_KEY
 from src.channels.web.render import render_web
 from src.config import get_settings
 from src.db.connection import admin_conn, get_pool
@@ -350,9 +351,18 @@ class WebTurnExecutor:
                             pending_field=getattr(facts, "pending_field", None),
                             pending_attempts=getattr(facts, "pending_attempts", 1),
                             active_search_ref=getattr(facts, "active_search_ref", None),
+                            commerce_product_refs=getattr(facts, "commerce_product_refs", ()),
+                            cart_checkout_ready=getattr(facts, "cart_checkout_ready", False),
                         ),
                     ),
                 )
+            # NX-240: verdictul de grounding se ÎNGHEAȚĂ în aceeași tranzacție cu rezultatul. De
+            # aici încolo, ce vede clientul nu mai depinde de catalog: un preț schimbat peste zece
+            # minute nu poate rescrie răspunsul deja dat, fiindcă proiecția citește faptele astea,
+            # nu baza de date. Aditiv — un rând fără cheia asta se proiectează exact ca înainte.
+            grounded = getattr(facts, "grounded", None)
+            if grounded:
+                view[GROUNDED_PAYLOAD_KEY] = grounded
             await complete_web_turn_on_conn(
                 conn,
                 ref.business_id,

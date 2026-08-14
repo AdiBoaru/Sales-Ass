@@ -50,6 +50,8 @@ FIELDS = {
     "variants",  # NX-118 (per-variant hydration)
     "list_price",  # IZI-anchor: prețul de listă (tăiat pe card la reducere reală)
     "attributes",  # NX-169/170: faptele canonice v3 → proiecție + reason_codes + gate siguranță
+    "currency",  # NX-240: o sumă fără monedă nu e o sumă → preț UNKNOWN în grounding
+    "synced_at",  # NX-240: momentul VERIFICĂRII (≠ updated_at) → prospețime + poarta CTA comerț
 }
 
 

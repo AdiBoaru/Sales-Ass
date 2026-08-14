@@ -257,6 +257,12 @@ _SELECT = f"""
                                     as list_price,
         p.attributes->'concerns'    as concerns,
         p.attributes                as attributes,
+        -- NX-240: moneda + momentul VERIFICĂRII. `currency` fiindcă o sumă fără unitate nu e o
+        -- sumă (grounding-ul o marchează UNKNOWN); `synced_at` fiindcă `updated_at` spune doar
+        -- când s-a atins rândul, nu când s-a confruntat cu sursa — iar CTA-urile de comerț se
+        -- sprijină pe verificare, nu pe atingere.
+        p.currency                  as currency,
+        p.synced_at                 as synced_at,
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
@@ -516,6 +522,8 @@ _DETAIL_SELECT = f"""
         p.rating::float8            as rating,
         p.review_count              as review_count,
         p.attributes                as attributes,
+        p.currency                  as currency,
+        p.synced_at                 as synced_at,
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
         (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,

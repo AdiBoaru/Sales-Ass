@@ -31,11 +31,12 @@ Aici semantica e a serverului, o singură dată. Un control are DOUĂ fețe, sep
    valoare dintr-un enum. Niciodată preț, nume, URL, prompt liber sau text de client. Ce nu se
    normalizează curat nu intră: `ActionArgs.parse` întoarce `None`, iar apelantul respinge.
 
-3. **Ce n-are handler sigur NU se emite.** `refine_search` și comerțul (`cart_*`, `checkout`) sunt
-   în registry ca nume STABILE (metrica trebuie să poată număra o încercare), dar cu
-   `available=False`: nu le emite nimeni, iar consumarea lor e refuzată onest până când NX-237
-   poate produce un receipt. Un buton care pretinde că a mutat ceva fără dovadă e mai rău decât
-   un buton absent.
+3. **Ce n-are handler sigur NU se emite.** `refine_search` rămâne în registry ca nume STABIL
+   (metrica trebuie să poată număra o încercare) cu `available=False`: nu îl emite nimeni, iar
+   consumarea lui e refuzată onest. Comerțul a trecut prin ambele porți — NX-237 i-a dat handler
+   (`CartService` + receipt idempotent), NX-240 i-a dat condiția de emitere (fapte VERIFICATE de
+   stoc și preț, prin `TurnFacts.commerce_product_refs`). Un buton care pretinde că a mutat ceva
+   fără dovadă e mai rău decât un buton absent — de asta emiterea depinde de fapte, nu de flag.
 
 Modulul e PUR: fără DB, fără LLM, fără ceas, fără random. Sigilarea e în `action_crypto`,
 autorizarea în `action_service`, execuția în `src/agent/action_kernel.py`.
@@ -156,12 +157,22 @@ KIND_REGISTRY: Mapping[str, ActionSpec] = {
     "checkout": ActionSpec("checkout", mutating=True),
 }
 
+# Mutantele pe care NX-240 le EMITE, o dată ce faptele o permit. Lista e explicită (nu „toate
+# mutantele"): `cart_add_line` cere un produs dovedit vandabil, `checkout` cere un coș eligibil.
+# `cart_set_quantity`/`cart_remove`/`cart_clear` au handler la consum, dar nu au încă un loc în
+# ViewModel care să le dea sens (cere controale de linie în card — NX-244), deci rămân neemise.
+COMMERCE_EMITTABLE_KINDS: frozenset[str] = frozenset({"cart_add_line", "checkout"})
+
 # Kind-urile pe care Stage 1 le poate EMITE. Derivat, nu a doua listă întreținută manual.
-# NX-237: comerțul are handler (available=True, consumul funcționează prin CartService), dar
-# EMITEREA CTA-urilor de coș e a lui NX-240 (cere proiecția `cart_summary` din snapshot) —
-# până atunci mutantele nu se emit, deci niciun token de comerț nu poate exista în sălbăticie.
+# NX-240: comerțul intră aici, dar EMITEREA rămâne condiționată de fapte — `plan_actions` nu
+# planifică un `cart_add_line` decât pentru refs pe care guardul le-a declarat vandabile, iar
+# `commerce_product_refs` e gol cât timp `CONVERSATION_CART_ENABLED` e stins. Poarta e dublă:
+# fără plan persistat nu există token, iar `authorize_action` refuză oricum mutantele cu serviciul
+# stins (`action_unavailable`) — o rotire de flag nu poate reînvia butoane emise ieri.
 EMITTABLE_KINDS: frozenset[str] = frozenset(
-    k for k, s in KIND_REGISTRY.items() if s.available and not s.mutating
+    k
+    for k, s in KIND_REGISTRY.items()
+    if s.available and (not s.mutating or k in COMMERCE_EMITTABLE_KINDS)
 )
 
 
@@ -373,6 +384,12 @@ class TurnFacts:
     pending_field: str | None = None
     pending_attempts: int = 1
     active_search_ref: str | None = None
+    # NX-240: refs pe care GUARDUL le-a declarat vandabile (stoc + preț VERIFICATE, produs
+    # neblocat, serviciu de coș pornit). Nu e „ce s-a afișat": un card poate fi vizibil fără să
+    # merite un buton de cumpărare, iar diferența e exact ce ține o promisiune onestă.
+    commerce_product_refs: tuple[str, ...] = ()
+    #: Coșul canonic e eligibil de checkout (total cunoscut, nicio linie blocată).
+    cart_checkout_ready: bool = False
 
 
 def clarification_question_id(field: object, attempts: int) -> str | None:
@@ -408,6 +425,15 @@ def plan_actions(view: Mapping[str, Any], facts: TurnFacts) -> tuple[ActionPlan,
         plans.append(ActionPlan("request_reviews", ActionArgs(product_ref=ref)))
     if len(refs) >= 2:
         plans.append(ActionPlan("compare_selection", ActionArgs(product_refs=tuple(refs[:2]))))
+    # NX-240 — CTA-urile de comerț. Intersecția, nu reuniunea: un buton „adaugă în coș" apare
+    # numai pentru un produs care e ȘI afișat (deci clientul îl vede) ȘI dovedit vandabil (deci
+    # promisiunea se susține). Un ref vandabil care nu s-a afișat n-are buton de unde să pornească.
+    sellable = set(facts.commerce_product_refs)
+    for ref in refs:
+        if ref in sellable:
+            plans.append(ActionPlan("cart_add_line", ActionArgs(product_ref=ref)))
+    if facts.cart_checkout_ready:
+        plans.append(ActionPlan("checkout", ActionArgs()))
     if facts.active_search_ref:
         plans.append(ActionPlan("show_more", ActionArgs(session_ref=facts.active_search_ref)))
     question_id = clarification_question_id(facts.pending_field, facts.pending_attempts)
@@ -618,6 +644,8 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "request_reviews": "Vezi recenziile",
         "compare_selection": "Compară-le",
         "show_more": "Arată-mi mai multe",
+        "cart_add_line": "Adaugă în coș",
+        "checkout": "Finalizează comanda",
     },
     "en": {
         "select_product": "Choose this one",
@@ -625,6 +653,8 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "request_reviews": "See reviews",
         "compare_selection": "Compare them",
         "show_more": "Show me more",
+        "cart_add_line": "Add to cart",
+        "checkout": "Checkout",
     },
     "hu": {
         "select_product": "Ezt választom",
@@ -632,6 +662,8 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "request_reviews": "Vélemények",
         "compare_selection": "Hasonlítsd össze",
         "show_more": "Mutass többet",
+        "cart_add_line": "Kosárba",
+        "checkout": "Megrendelés",
     },
 }
 

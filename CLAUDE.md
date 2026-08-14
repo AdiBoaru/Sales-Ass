@@ -82,6 +82,24 @@ Verdictul măsurat pe `origin/main@3cffbf5`: **`NOT-READY`** — H3 are 0 cazuri
 qrels-ul are 18 familii din 100. Deblocarea e a NX-203 (corpus) + NX-202 (H3 sigilat), nu a
 codului. Detalii: [`docs/NX-238-DECISION.md`](docs/NX-238-DECISION.md) + `reports/nx238/README.md`.
 
+**NX-240 — grounding strict + projector PUR `web-view.v2` (DARK, flag OFF).**
+`WEB_VIEW_V2_PROJECTOR_ENABLED=false` (default) = rândul se persistă identic, iar proiecția v2
+rămâne cea derivată din payload-ul v1 (NX-233). ON (cere `WEB_TURN_V2_ENABLED` +
+`SINGLE_BRAIN_ENABLED`, validat la boot): turul ÎNGHEAȚĂ faptele (`src/agent/evidence_bundle.py` —
+`known | unknown(reason) | stale(age, sla)`, cu sursă; `updated_at` NU e verificare, doar
+`synced_at`), le trece prin `src/agent/grounding_guard.py` (fiecare cifră/procent/link/stoc din
+proză se confruntă cu faptele; livrarea/promoția/garanția n-au sursă ⇒ resping răspunsul;
+superlativul la fel), persistă VERDICTUL în `response_json["grounded_v2"]` (aditiv, zero migrare),
+iar `src/channels/web/render_v2.py` îl proiectează ca funcție **pură** — zero I/O, zero ceas, deci
+două citiri dau aceiași bytes și un catalog schimbat după commit nu poate rescrie un răspuns deja
+dat. Tot ce e afișabil e text localizat (`src/web/localization.py`, `Decimal`, plural CLDR,
+reducere rotunjită în JOS): **niciun număr pe sârmă** în afară de `conversation.revision`.
+CTA-urile de coș se emit acum (NX-237 le dăduse handler), dar DOAR pentru produse pe care guardul
+le declară vandabile — fără plan persistat nu există token. Detalii:
+[`docs/NX-240-GROUNDED-PROJECTOR.md`](docs/NX-240-GROUNDED-PROJECTOR.md); readiness măsurat:
+[`docs/WEB-VIEW-V2-DATA-READINESS.md`](docs/WEB-VIEW-V2-DATA-READINESS.md); probe reproductibile:
+`python scripts/nx240_projection_drive.py` + `python scripts/nx240_data_readiness.py`.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
@@ -610,6 +628,8 @@ nativx-assistant/
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
 │   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web v1 (carduri+comparison) pt randarea FE (paritate iZi)
 │   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
+│   ├── NX-240-GROUNDED-PROJECTOR.md ← NX-240: grounding + projector pur + regulile de adevăr
+│   ├── WEB-VIEW-V2-DATA-READINESS.md ← NX-240: matricea de câmpuri + coverage măsurat (300 prod.)
 │   ├── WEB-WIDGET-BOUNDARY-V2.md← NX-228: matricea de ownership + regula „frontend pasiv"
 │   ├── WEB-CONTEXT-DATA-READINESS.md ← NX-234: field → sursă → SLA → UNKNOWN + coverage măsurat
 │   ├── CONVERSATION-STATE-V2.md  ← NX-235: inventar state v1 + contract v2 + rollout/migrare lazy
@@ -647,6 +667,7 @@ nativx-assistant/
 │   │   └── stages/             ← triage.py (nano) ✅ + agent.py (mini, RAG+validator) ✅;
 │   │                             TODO: gates, free_layers; echo=fallback
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
+│   │   └── web/render_v2.py     ← NX-240: projectorul PUR `web-view.v2` (zero I/O, zero ceas)
 │   │   ├── base.py              ← ChannelSender Protocol + Capability matrix (NX-115) + registry
 │   │   └── telegram/            ← client.py (Bot API) + poller.py (long polling, TEST)
 │   ├── meta_client.py           ← MetaClient (WhatsApp Cloud API send); implementează ChannelSender
@@ -668,6 +689,8 @@ nativx-assistant/
 │   │   ├── search_entities.py   ← CANDIDATUL (enforce hard constraints); FĂRĂ `@register`, inert
 │   │   └── selector.py          ← poarta de promovare: GO semnat + amprentă + bucket stabil
 │   ├── agent/
+│   │   ├── evidence_bundle.py   ← NX-240: faptele turului (known/unknown/stale + sursă), înghețate
+│   │   ├── grounding_guard.py   ← NX-240: poarta de adevăr plan→fapte (respinge vs omite)
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
 │   │   ├── reference_resolver.py← NX-234/235: „acesta"/„prima" → produs; precedență UNICĂ
 │   │   │                          (action>named>ordinal>page>selected>single), stale = refuz

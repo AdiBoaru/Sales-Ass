@@ -24,6 +24,7 @@ Dispatcher-ul (separat) citește outbox, trimite la canal și leagă provider_ms
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, replace
+from typing import Any
 from uuid import uuid4
 
 from redis.asyncio import Redis
@@ -107,6 +108,12 @@ class CommitFacts:
     pending_field: str | None = None
     pending_attempts: int = 1
     active_search_ref: str | None = None
+    # NX-240 — verdictul de grounding al turului, gata serializat (`grounded_v2`), plus refs-urile
+    # pe care ghidul le-a declarat vandabile. Marginea le persistă; pipeline-ul nu știe ce face
+    # marginea cu ele (cuplajul de canal rămâne la margine). `None`/gol cu flagul stins.
+    grounded: dict[str, Any] | None = None
+    commerce_product_refs: tuple[str, ...] = ()
+    cart_checkout_ready: bool = False
 
 
 @dataclass
@@ -663,7 +670,30 @@ def _commit_facts(ctx: TurnContext) -> CommitFacts:
         pending_field=str(pending.get("field")) if pending and pending.get("field") else None,
         pending_attempts=int((pending or {}).get("attempts") or 1),
         active_search_ref=str((session or {}).get("fp") or "") or None,
+        **_grounded_facts(ctx),
     )
+
+
+def _grounded_facts(ctx: TurnContext) -> dict[str, Any]:
+    """NX-240 — verdictul de grounding, serializat pentru margine. `{}` fără verdict (flag stins
+    sau grounding respins) ⇒ marginea persistă exact ce persista înainte.
+
+    Serializarea se face AICI, o dată, în același loc cu restul faptelor de commit: marginea
+    primește date, nu obiecte de domeniu, iar `src/web` nu ajunge să importe `src/agent`."""
+    answer = getattr(ctx, "grounded", None)
+    if answer is None or not getattr(answer, "ok", False):
+        return {}
+    from src.agent.grounding_guard import answer_to_jsonb  # noqa: PLC0415 — evită cuplaj la import
+
+    return {
+        "grounded": answer_to_jsonb(answer),
+        "commerce_product_refs": tuple(
+            p.evidence.product_id for p in answer.products if p.commerce_allowed
+        ),
+        # Checkout se emite doar peste un coș pe care serviciul l-a declarat eligibil (total
+        # cunoscut, nicio linie blocată) — nu peste „are linii", care nu spune nimic despre plată.
+        "cart_checkout_ready": bool(getattr(answer.cart, "checkout_eligible", False)),
+    }
 
 
 def _emit_db_metrics(ctx: TurnContext, db_acc: op_metrics.DbOpAccumulator) -> None:

@@ -61,6 +61,18 @@ def has_unverifiable_claim(text: str | None) -> bool:
     return bool(_DIGIT.search(text)) or has_marketing_claim(text)
 
 
+def has_superlative_claim(text: str | None) -> bool:
+    """DOAR superlativul („cel mai bun", „best seller", „nr. 1"), fără lexemele cuantificabile.
+
+    NX-240 are nevoie de jumătatea asta separat: pe calea grounded, „reducere"/„recenzii" NU mai
+    sunt claim-uri neverificabile — procentul se recalculează din două prețuri, iar recenziile au
+    fapt cu sursă. Superlativul rămâne însă neverificabil prin natura lui (nu există fapt „cel mai
+    bun"), deci trebuie respins și acolo. `has_text_claim` rămâne neatins pentru calea de proză."""
+    if not text:
+        return False
+    return bool(_SUPER.search(text))
+
+
 def has_text_claim(text: str | None) -> bool:
     """Claim ne-numeric pentru calea de PROZĂ: superlativ / claim cuantificabil. FĂRĂ digit/pct
     (proza are deja `_prices_ok`/`_bare_numbers_ok` pe cifre). NX-118: stocul s-a MUTAT în
