@@ -1445,6 +1445,7 @@ search_sessions_enabled = true
 search_shadow_enabled = false
 search_sort_mode_enabled = true
 short_ack_guard_enabled = true
+single_brain_enabled = false
 spec_digits_grounded_enabled = true
 summary_enabled = true
 triage_factual_guard_enabled = true
