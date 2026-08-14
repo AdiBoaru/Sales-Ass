@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# NX-239: contractul de fast-path (citit de `control_plane`): răspunsul FAQ e conținut CANONIC
+# (authored în DB), dar acoperă O singură obligație de răspuns — pe un mesaj MIXT (FAQ +
+# recomandare) control plane-ul îl retrage în semnal pentru MainBrain, nu-l lasă „primul reply".
+FAST_PATH_COVERS: tuple[str, ...] = ("question_0",)
+
 # Întrebare CLARĂ de politică/logistică (livrare/plată/retur/garanție), chiar AMESTECATĂ cu interes
 # de produs („rituals suna bine, aveti livrare?"). Partea de produs „diluează" embedding-ul
 # → similaritatea la FAQ-ul de livrare cade sub faq_tau_high (măsurat ~0.56) și întrebarea NU se

@@ -16,6 +16,10 @@ principiul 9) — numele botului, dacă e activ, sugestiile și textul de întâ
 (`ask`) — cu fallback pe vertical/limbă.
 
 Câmpuri TurnContext scrise aici: `ctx.reply` (early-exit la Sender).
+
+NX-239: sub `single_brain_enabled`, stagiul e un FAST PATH EXACT — completitudinea e dovedită
+prin construcție (`is_greeting` = match EXACT pe tot mesajul, deci un salut servit aici nu putea
+purta altă obligație). Control plane-ul verifică oricum obligațiile; contractul e declarat mai jos.
 """
 
 from __future__ import annotations
@@ -127,6 +131,11 @@ _GENERIC_SUGGESTIONS: dict[str, list[str]] = {
     ],
     "hu": ["Egy konkrét terméket keresek", "Ajánlást szeretnék", "Kérdésem van egy rendelésről"],
 }
+
+
+# NX-239: contractul de fast-path (citit de `control_plane`): un reply de aici acoperă DOAR
+# obligația de salut, iar copy-ul e authored (șabloanele de mai sus), nu LLM.
+FAST_PATH_COVERS: tuple[str, ...] = ("greeting",)
 
 
 def _norm(text: str) -> str:

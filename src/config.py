@@ -468,6 +468,9 @@ class Settings(BaseSettings):
         validation_alias="ANSWER_PLAN_CRITIC_COVERAGE_THRESHOLD",
     )
     answer_plan_max_quality: bool = Field(default=False, validation_alias="ANSWER_PLAN_MAX_QUALITY")
+    # NX-239: MainBrain unic + control plane determinist. OFF (default) = pipeline-ul de azi,
+    # byte-identic. ON = dark/shadow DOAR — producția rămâne OFF până la GO-ul pairwise NX-246.
+    single_brain_enabled: bool = Field(default=False, validation_alias="SINGLE_BRAIN_ENABLED")
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e

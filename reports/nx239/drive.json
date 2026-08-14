@@ -1,0 +1,1516 @@
+[
+  {
+    "scenario": "greeting_plus_ask",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 2,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "2-3",
+            "covered": 2,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "mixed_faq_recommendation",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 2,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "2-3",
+            "covered": 2,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "budget_corrected",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      },
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "review_ask",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "comparison",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      },
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 0,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": []
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.2,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "comparison",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "ordinal_reference",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      },
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "safety_pregnancy",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 236,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 2,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.5,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "2-3",
+            "covered": 2,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "no_match",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "unknown_stock",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "provider_timeout",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 77,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 0,
+          "has_clarification": false,
+          "no_results": "dependency_unavailable",
+          "evidence_refs": []
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": false,
+            "args": {},
+            "n_results": 0,
+            "latency_ms": 0.1,
+            "error": "TimeoutError"
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "no_results",
+            "reason_class": "dependency_unavailable"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": null,
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "honest_no_results",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "cart_action",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 63,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 1,
+          "has_clarification": false,
+          "no_results": null,
+          "evidence_refs": [
+            "product:p1:identity"
+          ]
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": "recommendation",
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      },
+      {
+        "reply_set": true,
+        "reply_len": 77,
+        "plan": {
+          "schema_version": 2,
+          "n_obligations": 1,
+          "n_claims": 0,
+          "n_recommendations": 0,
+          "has_clarification": false,
+          "no_results": "dependency_unavailable",
+          "evidence_refs": []
+        },
+        "events": [
+          {
+            "type": "retrieval_gate",
+            "decision": "current_live.v1",
+            "reason": "kill_switch_off",
+            "blocking_code": "candidate_flag_off"
+          },
+          {
+            "type": "tool_call",
+            "name": "search_products",
+            "ok": true,
+            "args": {},
+            "n_results": 2,
+            "latency_ms": 0.1,
+            "error": null
+          },
+          {
+            "type": "main_brain_tool_rounds_bucket",
+            "bucket": "1"
+          },
+          {
+            "type": "answer_plan_validation",
+            "outcome": "ok",
+            "reason": null,
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "no_results",
+            "reason_class": "dependency_unavailable"
+          },
+          {
+            "type": "critic_triggered",
+            "reason": null,
+            "outcome": "skipped"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "direct_lead",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "repeated_opening",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "max_one_clarification",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "concrete_reasons",
+            "outcome": "pass"
+          },
+          {
+            "type": "conversation_quality",
+            "check": "honest_no_results",
+            "outcome": "pass"
+          },
+          {
+            "type": "main_brain_call",
+            "phase": "final",
+            "outcome": "ok",
+            "prompt_version": "main_brain.v1",
+            "prompt_hash": "633a4eedeec303bc",
+            "tool_schema_hash": "926ae10746e4df79",
+            "plan_schema": "answer_plan_v2",
+            "model": "model-de-test"
+          },
+          {
+            "type": "control_plane_decision",
+            "path": "agent_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  },
+  {
+    "scenario": "handoff",
+    "mode": "stub",
+    "turns": [
+      {
+        "reply_set": true,
+        "reply_len": 40,
+        "plan": null,
+        "events": [
+          {
+            "type": "control_plane_decision",
+            "path": "gates_stage",
+            "reason": "gate_or_terminal",
+            "complete": true
+          },
+          {
+            "type": "turn_obligations",
+            "count_bucket": "1",
+            "covered": 1,
+            "missing": 0
+          }
+        ],
+        "llm_calls": 0
+      }
+    ]
+  }
+]

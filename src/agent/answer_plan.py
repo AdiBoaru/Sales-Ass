@@ -17,6 +17,10 @@ Scalar = str | int | float | bool
 ClaimType = Literal["fact", "recommendation"]
 EvidenceKind = Literal["identity", "variant", "price", "stock", "url", "claim"]
 ConstraintVerdict = Literal["MATCH", "MISMATCH", "UNKNOWN"]
+# NX-239: obligațiile unui tur (vocabular ÎNCHIS — intră în telemetrie ca labels).
+ObligationKind = Literal["answer", "recommend", "compare", "explain", "action", "clarify", "safety"]
+# NX-239: taxonomia ONESTĂ de no-results (D7: „n-am găsit" ≠ „nu știu" ≠ „nu pot verifica acum").
+NoResultsClass = Literal["no_match", "insufficient_data", "dependency_unavailable"]
 ValidationCode = Literal[
     "action_not_successful",
     "ambiguous_product",
@@ -26,11 +30,16 @@ ValidationCode = Literal[
     "fact_evidence_kind_mismatch",
     "fact_value_mismatch",
     "hard_constraint_mismatch",
+    "hard_relaxation",
     "missing_claim_evidence",
+    "missing_direct_answer",
     "missing_product_evidence",
+    "obligation_uncovered",
     "pii_detected",
+    "revoked_need_used",
     "stale_evidence",
     "tenant_mismatch",
+    "unknown_action_intent",
     "unknown_evidence",
     "unknown_need",
     "unknown_product",
@@ -124,6 +133,190 @@ class AnswerPlan(BaseModel):
         if any(value and contains_pii(value) for value in text_values):
             raise ValueError("AnswerPlan contains PII")
         return self
+
+
+# ---------------------------------------------------------------------------
+# NX-239 — AnswerPlanV2: extinderea versionată a contractului NX-211.
+#
+# V2 NU e un al doilea planner: e ACELAȘI contract, cu obligațiile turului, răspunsul direct,
+# recomandările motivate pe evidence, clarificarea UNICĂ și taxonomia onestă de no-results.
+# Validarea REFOLOSEȘTE `validate_answer_plan` printr-o proiecție `to_v1()` — un singur validator
+# de evidence/tenant/fapte, nu două. Planul nu conține CoT, scoruri psihologice, payload brut de
+# tool sau instrucțiuni către frontend; toate câmpurile sunt REQUIRED (structured output strict).
+# ---------------------------------------------------------------------------
+
+
+class PlanObligation(BaseModel):
+    """O obligație pe care planul o recunoaște și o acoperă. `key` = slug scurt, nu text liber."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: ObligationKind
+    key: str = Field(max_length=48)
+
+
+class PlanRecommendation(BaseModel):
+    """O recomandare cu motiv CONCRET: legat de evidence și de nevoia clientului, nu generic."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    product_id: str
+    variant_id: str | None
+    reason: str = Field(max_length=280)
+    evidence_ids: tuple[str, ...] = Field(max_length=8)
+    need_ids: tuple[str, ...] = Field(max_length=6)
+
+
+class ComparisonCell(BaseModel):
+    """O celulă de comparație: fapt sourced (produs × axă → valoare + evidence), nu opinie."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    product_id: str
+    axis: str = Field(max_length=48)
+    value: Scalar
+    evidence_id: str
+
+
+class PlanComparison(BaseModel):
+    """Comparație pe refs + axe + celule sourced. FĂRĂ winner inventat — concluzia o trage
+    validatorul/randarea din celule, nu un câmp liber al modelului."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    product_ids: tuple[str, ...] = Field(min_length=2, max_length=4)
+    axes: tuple[str, ...] = Field(max_length=6)
+    cells: tuple[ComparisonCell, ...] = Field(max_length=24)
+
+
+class PlanClarification(BaseModel):
+    """Clarificarea UNICĂ a turului (structural: un singur câmp, nu o listă — max una per tur)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    question: str = Field(max_length=280)
+    target_need: str = Field(max_length=48)
+    reason: str = Field(max_length=120)  # information-gain reason, cod scurt/frază scurtă
+    options: tuple[str, ...] = Field(max_length=4)  # etichete de action intents, nu texte lungi
+
+
+class PlanNoResults(BaseModel):
+    """No-results ONEST: clasa închisă + criteriile care n-au fost satisfăcute + alternative safe.
+    `no_match` ≠ `insufficient_data` ≠ `dependency_unavailable` — a le confunda e exact minciuna
+    pe care D7 o interzice (UNKNOWN nu e MISMATCH)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reason_class: NoResultsClass
+    criteria: tuple[str, ...] = Field(max_length=6)
+    alternatives: tuple[str, ...] = Field(max_length=4)
+
+
+class NeedProposal(BaseModel):
+    """Propunere de state emisă de brain — reducerul NX-235 decide, planul doar propune."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    op: Literal["set_need", "revoke", "set_topic"]
+    key: str = Field(max_length=48)
+    value: Scalar | None
+
+
+class StyleSignals(BaseModel):
+    """Semnale de stil LIMITATE (ton/verbozitate). Fără CSS/layout/UI remote — randarea e a
+    backendului (NX-240), frontendul e pasiv."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tone: Literal["neutral", "warm", "concise"]
+    verbosity: Literal["short", "medium"]
+
+
+class AnswerPlanV2(BaseModel):
+    """Planul structurat FINAL al MainBrain (NX-239) — emis în aceeași buclă de tool-calling.
+
+    Superset compatibil al lui `AnswerPlan` v1: `selected_products`/`claims`/`facts`/
+    `confirmed_actions` au aceeași semantică, deci `to_v1()` e o proiecție fără pierdere pentru
+    validator. Toate câmpurile sunt required (structured output strict); absența se exprimă prin
+    null/tuple gol, nu prin câmp lipsă."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[2]
+    business_id: str
+    locale: str
+    intent_summary: str = Field(max_length=240)
+    obligations: tuple[PlanObligation, ...] = Field(max_length=8)
+    direct_answer: str = Field(max_length=900)
+    selected_products: tuple[SelectedProduct, ...] = Field(max_length=6)
+    claims: tuple[PlanClaim, ...] = Field(max_length=12)
+    facts: PlanFacts
+    recommendations: tuple[PlanRecommendation, ...] = Field(max_length=6)
+    comparison: PlanComparison | None
+    constraints_applied: tuple[str, ...] = Field(max_length=8)
+    unknowns: tuple[str, ...] = Field(max_length=8)
+    relaxations: tuple[str, ...] = Field(max_length=6)
+    clarification: PlanClarification | None
+    no_results: PlanNoResults | None
+    state_update_proposals: tuple[NeedProposal, ...] = Field(max_length=6)
+    action_intents: tuple[str, ...] = Field(max_length=4)
+    disclosures: tuple[str, ...] = Field(max_length=4)
+    handoff: bool
+    confirmed_actions: tuple[ConfirmedAction, ...] = Field(max_length=4)
+    style_signals: StyleSignals
+
+    @model_validator(mode="after")
+    def _contains_no_pii(self) -> AnswerPlanV2:
+        text_values: list[str] = [
+            self.business_id,
+            self.locale,
+            self.intent_summary,
+            self.direct_answer,
+            *(o.key for o in self.obligations),
+            *(claim.text for claim in self.claims),
+            *(rec.reason for rec in self.recommendations),
+            *self.constraints_applied,
+            *self.unknowns,
+            *self.relaxations,
+            *self.action_intents,
+            *self.disclosures,
+        ]
+        if self.clarification is not None:
+            clarification = self.clarification
+            text_values.extend(
+                [clarification.question, clarification.reason, *clarification.options]
+            )
+        if self.no_results is not None:
+            text_values.extend([*self.no_results.criteria, *self.no_results.alternatives])
+        if any(value and contains_pii(value) for value in text_values):
+            raise ValueError("AnswerPlanV2 contains PII")
+        return self
+
+    def to_v1(self) -> AnswerPlan:
+        """Proiecția pe contractul v1, pentru REFOLOSIREA validatorului (nu un al doilea validator).
+
+        Recomandările devin claims `recommendation` (motivul = textul claimului) → evidence/nevoi
+        se verifică pe exact aceleași reguli ca orice claim. `unknowns` → `uncertainties`."""
+        rec_claims = tuple(
+            PlanClaim(
+                claim_type="recommendation",
+                text=rec.reason,
+                evidence_ids=rec.evidence_ids,
+                need_ids=rec.need_ids,
+            )
+            for rec in self.recommendations
+        )
+        return AnswerPlan(
+            schema_version=1,
+            business_id=self.business_id,
+            locale=self.locale,
+            selected_products=self.selected_products,
+            claims=(*self.claims, *rec_claims),
+            facts=self.facts,
+            uncertainties=self.unknowns,
+            unmet_constraints=(),
+            confirmed_actions=self.confirmed_actions,
+        )
 
 
 class GroundedProduct(BaseModel):
@@ -295,6 +488,104 @@ def validate_answer_plan(plan: AnswerPlan, context: AnswerPlanContext) -> Answer
         ok=not failures,
         failures=tuple(dict.fromkeys(failures)),
     )
+
+
+# NX-239: ce secțiune a planului „acoperă" fiecare fel de obligație. Coverage-ul e verificat
+# DETERMINIST: modelul poate propune obligations, dar validatorul le confruntă cu semnalele
+# extrase din cod (control_plane) — o obligație cerută fără secțiune corespunzătoare = uncovered.
+def _obligation_covered(plan: AnswerPlanV2, kind: str) -> bool:
+    if kind == "answer" or kind == "explain":
+        return bool(plan.direct_answer.strip()) or plan.no_results is not None
+    if kind == "recommend":
+        return (
+            bool(plan.recommendations)
+            or plan.no_results is not None
+            or plan.clarification is not None
+        )
+    if kind == "compare":
+        return plan.comparison is not None or plan.no_results is not None
+    if kind == "action":
+        return (
+            bool(plan.confirmed_actions) or bool(plan.action_intents) or plan.no_results is not None
+        )
+    if kind == "clarify":
+        return plan.clarification is not None or bool(plan.direct_answer.strip())
+    if kind == "safety":
+        return bool(plan.disclosures) or bool(plan.direct_answer.strip())
+    return False
+
+
+def validate_answer_plan_v2(
+    plan: AnswerPlanV2,
+    context: AnswerPlanContext,
+    *,
+    required_obligations: tuple[tuple[str, str], ...] = (),
+    revoked_need_keys: tuple[str, ...] = (),
+    hard_constraint_keys: tuple[str, ...] = (),
+    allowed_action_intents: tuple[str, ...] = (),
+) -> AnswerPlanValidation:
+    """Validatorul V2 = validatorul V1 (prin `to_v1()`) + regulile NOI ale contractului V2.
+
+    `required_obligations` = (kind, key) extrase DETERMINIST din tur (control_plane) — nu ce a
+    declarat modelul. `revoked_need_keys`/`hard_constraint_keys` vin din starea NX-235: un plan
+    n-are voie să reînvie o nevoie revocată sau să relaxeze o constrângere hard. Clarificarea e
+    UNICĂ structural (un singur câmp); aici verificăm restul."""
+
+    base = validate_answer_plan(plan.to_v1(), context)
+    failures: list[ValidationCode] = list(base.failures)
+
+    # Obligații: fiecare cerință deterministă trebuie DECLARATĂ și ACOPERITĂ de o secțiune reală.
+    declared = {(o.kind, o.key) for o in plan.obligations}
+    declared_kinds = {o.kind for o in plan.obligations}
+    for kind, key in required_obligations:
+        if ((kind, key) not in declared and kind not in declared_kinds) or not _obligation_covered(
+            plan, kind
+        ):
+            failures.append("obligation_uncovered")
+
+    # Un răspuns fără NIMIC pentru client (nici direct answer, nici clarificare, nici no-results
+    # onest) nu e un plan — e tăcere structurată.
+    if not plan.direct_answer.strip() and plan.clarification is None and plan.no_results is None:
+        failures.append("missing_direct_answer")
+
+    # Hard constraints nu se relaxează de la sine (D7); doar soft-urile pot apărea în relaxations.
+    hard = set(hard_constraint_keys)
+    if any(key in hard for key in plan.relaxations):
+        failures.append("hard_relaxation")
+
+    # O nevoie revocată nu se reînvie: nici în motive/claims, nici printr-o propunere set_need.
+    revoked = set(revoked_need_keys)
+    if revoked:
+        used = {
+            *(nid for claim in plan.claims for nid in claim.need_ids),
+            *(nid for rec in plan.recommendations for nid in rec.need_ids),
+            *(p.key for p in plan.state_update_proposals if p.op == "set_need"),
+        }
+        if used & revoked:
+            failures.append("revoked_need_used")
+
+    # Acțiunile propuse trebuie să existe în registrul FINIT (NX-236): un intent inventat = reject.
+    allowed = set(allowed_action_intents)
+    if any(intent not in allowed for intent in plan.action_intents):
+        failures.append("unknown_action_intent")
+
+    # Comparația: refs grounded + celule cu evidence REAL (aceleași reguli de evidence ca V1 —
+    # buclă mică pe conținut V2-only, nu un al doilea validator).
+    if plan.comparison is not None:
+        products = {p.product_id for p in context.products}
+        evidence = {item.evidence_id: item for item in context.evidence}
+        if any(pid not in products for pid in plan.comparison.product_ids):
+            failures.append("unknown_product")
+        for cell in plan.comparison.cells:
+            item = evidence.get(cell.evidence_id)
+            if item is None or item.product_id != cell.product_id:
+                failures.append("unknown_evidence")
+            elif item.business_id != context.business_id:
+                failures.append("cross_tenant_evidence")
+            elif not item.current:
+                failures.append("stale_evidence")
+
+    return AnswerPlanValidation(ok=not failures, failures=tuple(dict.fromkeys(failures)))
 
 
 def evidence_coverage(plan: AnswerPlan) -> float:

@@ -287,6 +287,80 @@ class LLMClient:
         usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
 
+    async def run_tool_loop_structured(
+        self,
+        system: str,
+        user: str,
+        tools: list[dict[str, Any]],
+        execute: Callable[[str, dict[str, Any]], Awaitable[str]],
+        schema: dict[str, Any],
+        *,
+        max_steps: int = 3,
+        model: str | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        """NX-239 — aceeași buclă de tool-calling, dar răspunsul FINAL al ACELUIAȘI model este
+        un obiect STRUCTURAT (`response_format=json_schema`), nu proză: planul iese din bucla în
+        care s-au văzut tool results, fără un writer separat care să „rescrie" răspunsul.
+
+        `response_format` e setat pe TOATE apelurile: când modelul nu mai cere tool-uri, corpul
+        mesajului E planul. La cap atins, un ultim apel FĂRĂ tools forțează planul. Întoarce
+        `(dict-ul parsat, runde_de_tool)`. Ridică la JSON invalid / eroare API — caller-ul
+        (brain-ul) face UN repair bounded și apoi fallback determinist. Model-agnostic: `model`
+        vine din settings, nu e hardcodat aici."""
+        mdl = model or self.model_agent
+        response_format = {"type": "json_schema", "json_schema": schema}
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        rounds = 0
+        for _ in range(max_steps):
+            resp = await self._chat(
+                agent=True,
+                model=mdl,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                response_format=response_format,
+            )
+            usage.record_chat(resp, mdl)
+            msg = resp.choices[0].message
+            tool_calls = getattr(msg, "tool_calls", None)
+            if not tool_calls:
+                return json.loads(msg.content or "{}"), rounds
+            rounds += 1
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
+                }
+            )
+            contents = await asyncio.gather(
+                *(
+                    execute(tc.function.name, _parse_args(tc.function.arguments))
+                    for tc in tool_calls
+                )
+            )
+            for tc, content in zip(tool_calls, contents, strict=True):
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
+
+        resp = await self._chat(
+            agent=True, model=mdl, messages=messages, response_format=response_format
+        )
+        usage.record_chat(resp, mdl)
+        return json.loads(resp.choices[0].message.content or "{}"), rounds
+
     async def moderate(self, text: str, *, model: str | None = None) -> ModerationResult:
         """Clasifică un mesaj cu endpointul de moderation OpenAI (gratuit, NU generare —
         principiul 2, ca embed). Folosit de Gates (NX-15) ÎNAINTE de triaj. Ridică la

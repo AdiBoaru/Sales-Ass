@@ -102,6 +102,17 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             _record_stage_delta(by_stage, name, before, acc.snapshot(), latency_ms)
             # early-exit pe reply (răspuns) SAU halt (tăcere intenționată — Gates).
             if ctx.reply is not None or ctx.halt:
+                # NX-239 (DOAR sub `single_brain_enabled`, altfel byte-identic): un reply care NU
+                # e un fast path COMPLET (mesaj mixt, writer LLM concurent) nu încheie turul —
+                # control plane-ul îl retrage în semnal pentru MainBrain și pipeline-ul continuă.
+                # `halt` (tăcerea Gates) nu se gate-uiește: e decizia de autoritate, nu un răspuns.
+                if (
+                    ctx.reply is not None
+                    and not ctx.halt
+                    and getattr(get_settings(), "single_brain_enabled", False)
+                    and not control_plane.gate_early_exit(ctx, name).complete
+                ):
+                    continue
                 ctx.emit("pipeline_early_exit", stage=name)
                 if ctx.reply is not None:  # halt (tăcere) n-are reply de măsurat
                     safety_compose.enforce(ctx)  # NX-173: vezi mai jos
@@ -247,6 +258,7 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 # statice repetate fără LLM; FAQ (NX-74) răspunde la întrebări de cunoștințe din `faqs` (un
 # embed, fără generare). Triaj setează reply pt simple/clarify; agentul răspunde pt sales.
 # Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
+from src.agent import control_plane  # noqa: E402 — NX-239: poarta de fast-path (doar sub flag)
 from src.agent.action_kernel import action_kernel_stage  # noqa: E402
 from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.alias import alias_stage  # noqa: E402
