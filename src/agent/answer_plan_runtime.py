@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from src.agent.answer_plan import (
     AnswerPlan,
     AnswerPlanContext,
+    AnswerPlanV2,
     AnswerPlanValidation,
     EvidenceRecord,
     GroundedProduct,
@@ -63,6 +64,14 @@ ANSWER_PLAN_SCHEMA: dict[str, Any] = {
     "name": "answer_plan_v1",
     "strict": True,
     "schema": AnswerPlan.model_json_schema(by_alias=True),
+}
+
+# NX-239: schema STRUCTURATĂ a planului V2 — folosită de MainBrain ca răspuns FINAL al aceleiași
+# bucle de tool-calling (nu un post-writer). Un singur loc de definiție; brain-ul o importă.
+ANSWER_PLAN_V2_SCHEMA: dict[str, Any] = {
+    "name": "answer_plan_v2",
+    "strict": True,
+    "schema": AnswerPlanV2.model_json_schema(by_alias=True),
 }
 
 CRITIC_SCHEMA: dict[str, Any] = {

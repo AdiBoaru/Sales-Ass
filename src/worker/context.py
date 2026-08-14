@@ -276,6 +276,38 @@ def context_blocks(ctx: TurnContext) -> str:
     return "\n".join(b for b in blocks if b)
 
 
+def build_brain_input(ctx: TurnContext):
+    """NX-239 — `BrainInput` din snapshot/state SAFE: mesajul, obligațiile deterministe,
+    transcriptul BUGETAT, blocurile de context (deja PII-redactate) și proiecțiile de nevoi
+    (active/hard/revocate). FĂRĂ conexiune DB, FĂRĂ istoric nelimitat, FĂRĂ fapte de frontend
+    (contextul de pagină e deja rehidratat canonic în snapshot → `page_context_block`)."""
+    from src.agent.brain_models import BrainInput, obligations_from_ctx  # noqa: PLC0415 — ciclu
+    from src.conversation.state_v2 import ConversationStateV2  # noqa: PLC0415 — import ușor
+
+    state_v2 = ctx.state_v2
+    if isinstance(state_v2, ConversationStateV2):
+        actives = state_v2.active_needs()
+        active_keys = tuple(n.key for n in actives)
+        hard_keys = tuple(n.key for n in actives if n.strength == "hard")
+        revoked = tuple(state_v2.revoked_keys())
+    else:
+        active_keys, hard_keys, revoked = (), (), ()
+    route = ctx.route
+    return BrainInput(
+        business_id=ctx.business.id,
+        locale=ctx.language,
+        message=(ctx.message.body or "").strip(),
+        obligations=obligations_from_ctx(ctx),
+        history=conversation_transcript(ctx.history),
+        context=context_blocks(ctx),
+        signals=tuple(ctx.brain_signals),
+        category_hint=route.category_key if route else None,
+        active_need_keys=active_keys,
+        hard_need_keys=hard_keys,
+        revoked_need_keys=revoked,
+    )
+
+
 def search_query(history: list[Message], current: str, *, n: int = 2) -> str:
     """Textul pentru căutare = ultimele `n` mesaje ale CLIENTULUI (inclusiv cel
     curent), ca follow-up-urile scurte („ceva mai ieftin", „și pentru păr") să

@@ -41,6 +41,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# NX-239: contractul de fast-path (citit de `control_plane`): un hit de cache acoperă O singură
+# obligație de răspuns — cache-ul semantic NU early-exit-ează un mesaj mixt sub single-brain
+# (răspunsul cache-uit al altei fraze nu poate dovedi acoperirea obligațiilor de acum).
+FAST_PATH_COVERS: tuple[str, ...] = ("question_0",)
+
 # Toleranță de comparare a prețurilor: bani (2 zecimale) — un sub-cent nu regenerează.
 _PRICE_EPS = 0.005
 

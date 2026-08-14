@@ -1,0 +1,67 @@
+{
+  "_comment": "NX-239 — characterization fixtures: tip de turn -> obligatii deterministe asteptate + completitudinea fast-path-urilor. Folosite de test_mixed_intent_obligations si test_control_plane. Formulari proprii, catalog propriu (fara texte iZi/eMAG).",
+  "cases": [
+    {
+      "name": "pure_greeting",
+      "message": "Bună ziua!",
+      "expected_obligations": [["answer", "greeting"]],
+      "fast_path": {"greeting_stage": true, "triage_stage": false}
+    },
+    {
+      "name": "greeting_plus_product_question",
+      "message": "Salut! Aveți livrare în Cluj? Și recomandă-mi un șampon pentru păr vopsit",
+      "expected_kinds": ["answer", "answer", "recommend"],
+      "fast_path": {"faq_stage": false, "cache_stage": false, "triage_stage": false}
+    },
+    {
+      "name": "faq_exact",
+      "message": "Cât costă livrarea?",
+      "expected_obligations": [["answer", "question_0"]],
+      "fast_path": {"faq_stage": true, "cache_stage": true, "triage_stage": false}
+    },
+    {
+      "name": "faq_plus_recommendation",
+      "message": "Cât costă livrarea? Și vreau o cremă hidratantă sub 100 lei",
+      "expected_kinds": ["answer", "recommend"],
+      "fast_path": {"faq_stage": false, "cache_stage": false}
+    },
+    {
+      "name": "recommendation_simple",
+      "message": "Caut un ser cu vitamina C sub 150 lei",
+      "expected_kinds": ["recommend"],
+      "fast_path": {"faq_stage": true}
+    },
+    {
+      "name": "comparison",
+      "message": "Compară primele două produse",
+      "expected_obligations": [["compare", "compare"]],
+      "fast_path": {"faq_stage": true}
+    },
+    {
+      "name": "correction",
+      "message": "Nu 100, maxim 70 de lei",
+      "expected_kinds": ["answer"],
+      "fast_path": {"faq_stage": true}
+    },
+    {
+      "name": "commerce_action_text",
+      "message": "Adaugă prima în coș și zi-mi când ajunge",
+      "expected_kinds": ["action", "answer"],
+      "fast_path": {"faq_stage": false, "cache_stage": false}
+    },
+    {
+      "name": "safety_context",
+      "message": "Sunt însărcinată, ce cremă antirid pot folosi?",
+      "safety_active": true,
+      "expected_kinds_include": ["safety"],
+      "fast_path": {"faq_stage": false, "cache_stage": false}
+    },
+    {
+      "name": "opaque_action_turn",
+      "message": "",
+      "has_action": true,
+      "expected_obligations": [["action", "opaque_action"]],
+      "fast_path": {"action_kernel_stage": true}
+    }
+  ]
+}

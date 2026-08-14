@@ -22,6 +22,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# NX-239: contractul de fast-path (citit de `control_plane`): handoff-ul e GATE de corectitudine
+# (escaladarea + confirmarea sunt terminale prin natura lor) → finalizează întotdeauna.
+FAST_PATH_COVERS: tuple[str, ...] = ("handoff",)
+
 _HANDOFF_REPLY = "Te conectez cu un coleg din echipă — îți răspunde cineva în cel mai scurt timp 🙂"
 
 

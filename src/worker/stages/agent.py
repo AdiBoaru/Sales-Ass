@@ -350,7 +350,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if deps.llm is None:
         return
     route: RouteDecision | None = ctx.route
-    if route is None or route.route not in (Route.SALES, Route.ORDER):
+    # NX-239: sub single-brain, agentul (MainBrain) e writerul unic și pentru rutele pe care azi
+    # le scria nano (`simple`/`clarify` — reply-urile triajului sunt demote-uite de control plane
+    # în semnale). Cu flagul stins, mulțimea rămâne cea de azi — byte-identic.
+    allowed = (Route.SALES, Route.ORDER)
+    if getattr(get_settings(), "single_brain_enabled", False):
+        allowed = (Route.SALES, Route.ORDER, Route.SIMPLE, Route.CLARIFY)
+    if route is None or route.route not in allowed:
         return
     query = (ctx.message.body or "").strip()
     if not query:
@@ -452,6 +458,18 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             final = ""  # fără text de model — compose-ul rich phrasează din produse mai jos
         else:
             system = prompt_builder.build_agent_system(inp)
+            # NX-239: sub single-brain, bucla + planul structurat + validarea + render-ul sunt ale
+            # MainBrain (UN singur writer semantic; retrieval prin portul NX-238; un repair
+            # bounded; fallback determinist). agent_stage devine adapter subțire — legacy-ul de
+            # mai jos rămâne byte-identic cu flagul stins. ORDER rămâne pe calea existentă
+            # (order gate = fast path exact, cu zidul de login determinist).
+            if getattr(get_settings(), "single_brain_enabled", False) and not is_order:
+                from src.agent.brain import run_main_brain  # noqa: PLC0415 — evită ciclul
+
+                await run_main_brain(
+                    ctx, deps, run=run, inp=inp, tools=tools, system=system, user=user, query=query
+                )
+                return
             final = await deps.llm.run_tool_loop(system, user, tools, run.execute)
             retrieved = run.retrieved  # produsele acumulate de tool executor în această buclă
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback

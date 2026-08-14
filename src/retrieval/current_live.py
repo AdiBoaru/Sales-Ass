@@ -134,6 +134,11 @@ class CurrentLiveRetrievalAdapter:
     def __init__(self, ctx: Any, deps: Any) -> None:
         self._ctx = ctx
         self._deps = deps
+        # NX-239: ultimul ToolResult BRUT al tool-ului live. Bundle-ul e contract de referințe și
+        # pierde deliberat `llm_view`/`links`/`state_patch`; consumatorul care VREA paritate
+        # completă cu traseul de azi (MainBrain) le citește de aici. Candidatul (GO-only) nu are
+        # așa ceva — absența câmpului spune onest că vederea se derivă din bundle.
+        self.last_result: ToolResult | None = None
 
     async def retrieve(
         self,
@@ -149,6 +154,7 @@ class CurrentLiveRetrievalAdapter:
         result: ToolResult = await search_products_tool(
             self._ctx, self._deps, _search_args(runtime_query_spec, constraints)
         )
+        self.last_result = result
         if not result.ok:
             degradations.append(DEGRADATION_PROVIDER_FAILED)
 

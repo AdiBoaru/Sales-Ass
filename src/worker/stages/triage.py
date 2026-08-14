@@ -40,6 +40,12 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# NX-239: sub `single_brain_enabled`, triajul e CLASIFICATOR + extractor de semnale (route/
+# filters/purchase_intent), NU writer: reply-urile lui `simple`/`clarify` sunt compuse de un LLM
+# concurent, deci control plane-ul le retrage ÎNTOTDEAUNA în semnal pentru MainBrain (vezi
+# `_NEVER_COMPLETE`). Cu flagul stins, comportamentul de azi rămâne byte-identic.
+FAST_PATH_COVERS: tuple[str, ...] = ()
+
 # NX-116: întrebare generică de clarificare când nano rutează low-confidence FĂRĂ să compună una
 # (per-locale, ca șabloanele de welcome din greeting.py). Fallback pe 'ro'.
 _CLARIFY_FALLBACK = {

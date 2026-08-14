@@ -82,6 +82,18 @@ Verdictul măsurat pe `origin/main@3cffbf5`: **`NOT-READY`** — H3 are 0 cazuri
 qrels-ul are 18 familii din 100. Deblocarea e a NX-203 (corpus) + NX-202 (H3 sigilat), nu a
 codului. Detalii: [`docs/NX-238-DECISION.md`](docs/NX-238-DECISION.md) + `reports/nx238/README.md`.
 
+**NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
+`SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
+fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
+COMPLET (obligații extrase DETERMINIST din mesaj: `src/agent/brain_models.py`) devine SEMNAL, iar
+`src/agent/brain.py` (UN singur writer semantic) emite `AnswerPlanV2` structurat în ACEEAȘI buclă
+de tool-calling; validatorul V2 REFOLOSEȘTE validatorul NX-211 (`to_v1()`), hard constraints nu se
+relaxează, nevoile revocate nu reînvie, clarificarea e unică, no-results are taxonomie onestă.
+Retrieval EXCLUSIV prin selectorul NX-238 (NOT-READY → current live). UN repair bounded → fallback
+determinist (P6). Producția rămâne OFF până la GO-ul NX-246. Detalii:
+[`docs/NX-239-SINGLE-BRAIN.md`](docs/NX-239-SINGLE-BRAIN.md); drive:
+`python scripts/sim/single_brain_drive.py`.
+
 ---
 
 ## Arhitectura — pipeline liniar (9 stagii)
