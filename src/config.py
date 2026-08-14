@@ -971,6 +971,52 @@ class Settings(BaseSettings):
     # `stale` (disclosure, nu blocaj — aceeași filozofie ca WEB_CONTEXT_FRESHNESS_SLA_S).
     commerce_facts_sla_s: int = Field(default=86400, validation_alias="COMMERCE_FACTS_SLA_S")
 
+    # --- NX-238: promovarea măsurată a candidatului `search_entities` ------------
+    # OFF (default) → `selector.select_provider` întoarce ÎNTOTDEAUNA `current_live`, fără să
+    # atingă discul. ON singur NU e suficient: candidatul cere ȘI un artefact de decizie cu
+    # verdict GO, amprentă validă și semnătură verificabilă. Verdictul măsurat azi e NOT-READY
+    # (H3 are 0 cazuri sigilate din 50 cerute) — vezi reports/nx238/ și docs/NX-238-DECISION.md.
+    retrieval_candidate_enabled: bool = Field(
+        default=False, validation_alias="RETRIEVAL_CANDIDATE_ENABLED"
+    )
+    # Procentul de conversații care merg pe candidat, pe bucket STABIL din (business, conversație).
+    # 0 = shadow/dark chiar și cu GO semnat: codul e deployat, dar nicio conversație nu-l atinge.
+    retrieval_candidate_rollout_pct: int = Field(
+        default=0, validation_alias="RETRIEVAL_CANDIDATE_ROLLOUT_PCT", ge=0, le=100
+    )
+    # Unde stă verdictul. Un fișier, nu o valoare de env: decizia trebuie să fie un ARTEFACT
+    # citibil, cu amprentă și semnătură, nu un boolean pe care îl poate flipui un deploy.
+    retrieval_decision_path: str = Field(
+        default="reports/nx238/decision.json", validation_alias="RETRIEVAL_DECISION_PATH"
+    )
+    # Cheia cu care se verifică semnătura verdictului. SECRET de operare: nu intră în repo.
+    # Absentă → un GO nu poate fi verificat, deci nu e crezut (`decision_no_signing_key`).
+    retrieval_decision_key: str = Field(default="", validation_alias="RETRIEVAL_DECISION_KEY")
+    # Versiunea de pipeline capturată în selecție (anti-drift: nu comutăm providerul în mijlocul
+    # unei conversații, iar un bundle vechi nu se amestecă cu unul nou).
+    retrieval_pipeline_version: str = Field(
+        default="retrieval.v1", validation_alias="RETRIEVAL_PIPELINE_VERSION"
+    )
+    # Bugetul de timp al unui retrieval prin port. 0 = fără buget (kill-switch numeric).
+    retrieval_deadline_ms: int = Field(default=0, validation_alias="RETRIEVAL_DEADLINE_MS", ge=0)
+
+    @model_validator(mode="after")
+    def _retrieval_candidate_relations(self) -> "Settings":
+        """NX-238: un ramp fără cheie de verificare e o configurație imposibilă, oprită la BOOT.
+
+        Fără `RETRIEVAL_DECISION_KEY` niciun GO nu poate fi verificat — deci un
+        `RETRIEVAL_CANDIDATE_ROLLOUT_PCT > 0` ar promite un canary care nu poate porni niciodată.
+        Mai rău, ar arăta în config ca și cum candidatul rulează. Preferăm eroarea la boot
+        adevărului ascuns: poarta rămâne închisă oricum, dar acum se și vede."""
+        if not self.retrieval_candidate_enabled:
+            return self
+        if self.retrieval_candidate_rollout_pct > 0 and not self.retrieval_decision_key:
+            raise ValueError(
+                "RETRIEVAL_CANDIDATE_ROLLOUT_PCT > 0 cere RETRIEVAL_DECISION_KEY: fără cheie, "
+                "verdictul GO nu poate fi verificat, deci candidatul nu poate fi selectat"
+            )
+        return self
+
     @model_validator(mode="after")
     def _web_action_relations(self) -> "Settings":
         """NX-236: configurația imposibilă oprește procesul la BOOT, ca la NX-233/234.

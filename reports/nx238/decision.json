@@ -1,0 +1,112 @@
+{
+  "card": "NX-238",
+  "verdict": "NOT_READY",
+  "decided_at": "2026-08-13",
+  "decided_by": "",
+  "manifest": {
+    "commit": "3cffbf53a958ace3bdf352a7bdeb89bbbeaa62f7",
+    "retrieval_qrels_sha256": "sha256:0040591417e0b34a33bc86e31ff4d486546948ff4b0c7a5f455fc1897cb18648",
+    "quality_h3_sha256": "missing",
+    "policy_sha256": "missing",
+    "thresholds": {
+      "recall_at_20": 0.9,
+      "ndcg_at_6": 0.85,
+      "relevant_in_top6_rate": 0.9,
+      "max_hard_constraint_violations": 0,
+      "max_simple_fact_regressions": 0
+    }
+  },
+  "blocking_codes": [
+    "decision_policy_unavailable",
+    "nx209_retrieval_gate_blocked",
+    "quality_h3_hard_slice_too_small",
+    "quality_h3_sample_too_small",
+    "quality_h3_simple_fact_slice_too_small",
+    "quality_holdout_unavailable",
+    "retrieval_qrels_not_ready"
+  ],
+  "metrics": {
+    "retrieval_gates": {
+      "NX-207": {
+        "gate": "NX-207",
+        "split": "holdout_h1",
+        "query_count": 0,
+        "verified_family_count": 0,
+        "ready": false,
+        "blocking": [
+          "sunt 18 familii integral human-verified, sub ţinta de 100. (18 query-uri — dar parafrazele nu ridică rezoluţia: metrica agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)",
+          "bodycare: lipsește un query real_sanitized",
+          "haircare: lipsește un query real_sanitized",
+          "makeup: lipsește un query real_sanitized",
+          "holdout_h1: 0 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "holdout_h2: 3 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "holdout_h3: 4 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "sunt 0 query-uri, sub minimul cerut 20"
+        ],
+        "unavailable": []
+      },
+      "NX-209": {
+        "gate": "NX-209",
+        "split": "holdout_h2",
+        "query_count": 3,
+        "verified_family_count": 3,
+        "ready": false,
+        "blocking": [
+          "sunt 18 familii integral human-verified, sub ţinta de 100. (18 query-uri — dar parafrazele nu ridică rezoluţia: metrica agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)",
+          "bodycare: lipsește un query real_sanitized",
+          "haircare: lipsește un query real_sanitized",
+          "makeup: lipsește un query real_sanitized",
+          "holdout_h1: 0 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "holdout_h2: 3 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "holdout_h3: 4 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "sunt 3 query-uri, sub minimul cerut 20"
+        ],
+        "unavailable": []
+      },
+      "NX-210": {
+        "gate": "NX-210",
+        "split": "holdout_h3",
+        "query_count": 4,
+        "verified_family_count": 4,
+        "ready": false,
+        "blocking": [
+          "sunt 18 familii integral human-verified, sub ţinta de 100. (18 query-uri — dar parafrazele nu ridică rezoluţia: metrica agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)",
+          "bodycare: lipsește un query real_sanitized",
+          "haircare: lipsește un query real_sanitized",
+          "makeup: lipsește un query real_sanitized",
+          "holdout_h1: 0 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "holdout_h2: 3 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "holdout_h3: 4 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+          "sunt 4 query-uri, sub minimul cerut 20"
+        ],
+        "unavailable": []
+      }
+    },
+    "quality_h3": {
+      "gate": "NX-210",
+      "split": "quality_holdout_h3",
+      "inventory_count": 0,
+      "rewrite_count": 0,
+      "sealed_case_count": 0,
+      "hard_case_count": 0,
+      "simple_fact_case_count": 0,
+      "required_pairs": 50,
+      "required_hard_cases": 30,
+      "required_simple_fact_cases": 10,
+      "policy_fingerprint": null,
+      "blocking_codes": [
+        "quality_h3_sample_too_small",
+        "quality_h3_hard_slice_too_small",
+        "quality_h3_simple_fact_slice_too_small",
+        "nx209_retrieval_gate_blocked"
+      ],
+      "unavailable_codes": [
+        "quality_holdout_unavailable",
+        "decision_policy_unavailable"
+      ]
+    }
+  },
+  "note": "Software-ul nu poate emite GO. Promovarea cere dataset sigilat, rulare pereche blind pe H3, decizia semnată a lui Adi și semnarea amprentei cu RETRIEVAL_DECISION_KEY.",
+  "fingerprint": "sha256:4acd655358132b412a358399f5ef8bdcfca00292cc02823fbda79a176aeb02a0",
+  "signature": ""
+}

@@ -630,6 +630,48 @@ async def get_products_by_ids(
     return [_row_to_product(r) for r in rows]
 
 
+#: Plafonul bazinului de retrieval. NU e plafonul de context al agentului (acela e 6, în
+#: `get_products_by_ids`, și apără promptul). Un bazin de ranking are nevoie de mai mulți candidați
+#: decât intră în răspuns, altfel „rerank" înseamnă reordonarea celor șase deja aleși.
+MAX_POOL_HYDRATION = 100
+
+
+async def get_products_pool_by_ids(
+    conn: asyncpg.Connection,
+    business_id: str,
+    product_ids: list[str],
+    *,
+    pool: int = 30,
+    respect_content_status: bool = True,
+) -> list[dict[str, Any]]:
+    """Hidratează un BAZIN de candidați într-un SINGUR round trip, în ordinea cerută.
+
+    Există fiindcă `get_products_by_ids` are un cap DUR de 6 (bugetul de context al agentului):
+    hidratarea unui bazin de 30 prin el înseamnă 5 interogări secvențiale pe aceeași conexiune —
+    exact N+1-ul pe care NX-231 îl interzice pe drumul de tur. Aceeași izolare (`business_id = $1`),
+    același quality-gate (`published`), aceeași păstrare a ordinii; se schimbă doar plafonul, și
+    numai pentru calea de ranking, care nu trimite bazinul spre model.
+
+    `respect_content_status` e DEFAULT `True` aici (invers față de helperul de re-hidratare): un
+    bazin servește produse NEVĂZUTE, deci e discovery — iar discovery-ul filtrează pe `published`.
+    """
+    if not product_ids:
+        return []
+    pool = min(max(pool, 1), MAX_POOL_HYDRATION)
+    cs = _content_status_pred() if respect_content_status else None
+    rows = await conn.fetch(
+        _DETAIL_SELECT
+        + " where p.business_id = $1 and p.status = 'active' and p.id = any($2::uuid[])"
+        + (f" and {cs}" if cs else "")
+        + " order by array_position($2::uuid[], p.id)"
+        + " limit $3",
+        business_id,
+        product_ids[:pool],
+        pool,
+    )
+    return [_row_to_product(r) for r in rows]
+
+
 async def get_substitutes(
     conn: asyncpg.Connection,
     business_id: str,

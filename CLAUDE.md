@@ -65,6 +65,23 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
+**NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
+`src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
+(candidați = REFERINȚE + verdicte tri-state + evidence + degradări cu cod fix), cu două
+implementări. `CurrentLiveRetrievalAdapter` **apelează** `search_products_tool` — nu re-implementează
+căutarea, deci paritatea e adevărată prin construcție; el ADNOTEAZĂ verdictele fără să excludă
+nimic (`constraints_enforced=False`), fiindcă NX-188/189 sunt înghețate. `SearchEntitiesAdapter`
+(candidatul) execută hard constraints — masca de `rejected` ÎNAINTE și DUPĂ rerank — dar **nu are
+decorator `@register`**: un import nu-l activează.
+Promovarea trece EXCLUSIV prin `src/retrieval/selector.py`. `RETRIEVAL_CANDIDATE_ENABLED=true` **nu
+e suficient**: e nevoie de un artefact de decizie (`reports/nx238/decision.json`) cu verdict `GO`,
+`decided_by` completat, amprentă SHA-256 care corespunde conținutului și semnătură HMAC verificabilă
+cu `RETRIEVAL_DECISION_KEY`. Orice eșec (artefact șters/editat/nesemnat, cheie absentă, manifest
+driftat) are cod fix și duce în același loc: **traseul live curent**. Software-ul nu poate emite GO.
+Verdictul măsurat pe `origin/main@3cffbf5`: **`NOT-READY`** — H3 are 0 cazuri sigilate din 50 cerute,
+qrels-ul are 18 familii din 100. Deblocarea e a NX-203 (corpus) + NX-202 (H3 sigilat), nu a
+codului. Detalii: [`docs/NX-238-DECISION.md`](docs/NX-238-DECISION.md) + `reports/nx238/README.md`.
+
 ---
 
 ## Arhitectura — pipeline liniar (9 stagii)
@@ -633,6 +650,11 @@ nativx-assistant/
 │   │   ├── needs.py             ← vocabularul de nevoi din DomainPack (P9) + normalizare canonică
 │   │   ├── state_reducer.py     ← SINGURUL scriitor de stare: propuneri typed → aplicat/respins
 │   │   └── clarification_policy.py ← information gain + anti-buclă (max o întrebare/tur)
+│   ├── retrieval/               ← NX-238: portul de retrieval (contract stabil pt NX-239)
+│   │   ├── port.py              ← `RetrievalPort` + `RetrievalBundle` (refs + verdicte + evidence)
+│   │   ├── current_live.py      ← adapter peste `search_products_tool`: paritate prin construcție
+│   │   ├── search_entities.py   ← CANDIDATUL (enforce hard constraints); FĂRĂ `@register`, inert
+│   │   └── selector.py          ← poarta de promovare: GO semnat + amprentă + bucket stabil
 │   ├── agent/
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
 │   │   ├── reference_resolver.py← NX-234/235: „acesta"/„prima" → produs; precedență UNICĂ

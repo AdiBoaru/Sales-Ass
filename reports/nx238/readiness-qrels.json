@@ -1,0 +1,60 @@
+{
+  "qrels": "tests\\golden\\qrels_confirmed.json",
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "gates": [
+    {
+      "gate": "NX-207",
+      "split": "holdout_h1",
+      "query_count": 0,
+      "verified_family_count": 0,
+      "ready": false,
+      "blocking": [
+        "sunt 18 familii integral human-verified, sub ţinta de 100. (18 query-uri — dar parafrazele nu ridică rezoluţia: metrica agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)",
+        "bodycare: lipsește un query real_sanitized",
+        "haircare: lipsește un query real_sanitized",
+        "makeup: lipsește un query real_sanitized",
+        "holdout_h1: 0 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "holdout_h2: 3 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "holdout_h3: 4 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "sunt 0 query-uri, sub minimul cerut 20"
+      ],
+      "unavailable": []
+    },
+    {
+      "gate": "NX-209",
+      "split": "holdout_h2",
+      "query_count": 3,
+      "verified_family_count": 3,
+      "ready": false,
+      "blocking": [
+        "sunt 18 familii integral human-verified, sub ţinta de 100. (18 query-uri — dar parafrazele nu ridică rezoluţia: metrica agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)",
+        "bodycare: lipsește un query real_sanitized",
+        "haircare: lipsește un query real_sanitized",
+        "makeup: lipsește un query real_sanitized",
+        "holdout_h1: 0 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "holdout_h2: 3 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "holdout_h3: 4 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "sunt 3 query-uri, sub minimul cerut 20"
+      ],
+      "unavailable": []
+    },
+    {
+      "gate": "NX-210",
+      "split": "holdout_h3",
+      "query_count": 4,
+      "verified_family_count": 4,
+      "ready": false,
+      "blocking": [
+        "sunt 18 familii integral human-verified, sub ţinta de 100. (18 query-uri — dar parafrazele nu ridică rezoluţia: metrica agregă pe familie, deci deficitul se acoperă cu intenţii NOI, nu cu variante.)",
+        "bodycare: lipsește un query real_sanitized",
+        "haircare: lipsește un query real_sanitized",
+        "makeup: lipsește un query real_sanitized",
+        "holdout_h1: 0 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "holdout_h2: 3 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "holdout_h3: 4 query-uri, sub pragul de 20 — felia e prea mică pentru a măsura ceva",
+        "sunt 4 query-uri, sub minimul cerut 20"
+      ],
+      "unavailable": []
+    }
+  ]
+}
