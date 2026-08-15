@@ -356,11 +356,19 @@ def _check_price_view(
                 failures.append(f"{prefix}: `discount` {discount!r} nu e un procent")
             else:
                 claimed = abs(int(match.group(0).replace("%", "").strip()))
-                actual = round((previous - current) / previous * 100)
-                if abs(claimed - actual) > 1:
+                actual = (previous - current) / previous * 100
+                # NX-240: rotunjirea e în JOS, deliberat (`localization.format_discount`), deci
+                # regula nu e „aproximativ egal", ci ASIMETRICĂ — o reducere afișată nu are voie
+                # să fie mai mare decât cea reală. Sub adevăr e o alegere; peste e o minciună.
+                if claimed > actual:
                     failures.append(
-                        f"{prefix}: discount afișat {claimed}% != {actual}% calculat din "
-                        f"{previous} -> {current}"
+                        f"{prefix}: discount afișat {claimed}% peste cel real {actual:.1f}% "
+                        f"({previous} -> {current}) — o ofertă nu se rotunjește în sus"
+                    )
+                elif actual - claimed >= 2:
+                    failures.append(
+                        f"{prefix}: discount afișat {claimed}% mult sub cel real {actual:.1f}% "
+                        f"({previous} -> {current}) — probabil o pereche greșită de prețuri"
                     )
     return seen
 
@@ -443,7 +451,12 @@ def validate_web_view_v2(
                     shown_prices |= _check_price_view(
                         line.get("price"),
                         allowed=source_prices,
-                        have_source=have_source,
+                        # O linie de coș afișează `unit × cantitate`, nu un preț de catalog — la
+                        # 2 bucăți a 89 lei nicio coloană din `products` nu conține 178. Rămân
+                        # verificate consistența internă (previous > current, discount corect) și
+                        # boundary-ul pasiv; suma o garantează `CartService` (NX-237), unde există
+                        # cantitatea. A o „verifica" aici ar cere ghicitul cantității din text.
+                        have_source=False,
                         failures=failures,
                         prefix=f"{prefix}.lines[{li}]",
                     )
@@ -498,4 +511,30 @@ def validate_web_view_v2(
         if renderable == 0:
             failures.append(f"status terminal {status!r} fara niciun bloc randabil (P6)")
 
+    failures.extend(passive_boundary_failures(view))
     return WebResponseCheck(passed=not failures, failures=failures)
+
+
+# Singurul număr care are ce căuta pe sârmă: revizia conversației. E o VERSIUNE (client-ul o
+# compară, nu o calculează), nu o valoare comercială.
+_ALLOWED_NUMERIC_PATHS: frozenset[str] = frozenset({"$.conversation.revision"})
+
+
+def passive_boundary_failures(node: Any, path: str = "$") -> list[str]:
+    """NX-240 — boundary-ul „frontend pasiv", verificat pe payload, nu pe intenție.
+
+    Un frontend nu poate calcula ce nu are. Dacă în ViewModel apare un `float` sau un `int` acolo
+    unde ar trebui text display-ready, cineva va scădea două prețuri în browser mai devreme sau
+    mai târziu — nu pentru că e neglijent, ci pentru că datele îl invită. Verificarea e
+    structurală tocmai ca să nu depindă de disciplină."""
+    if isinstance(node, dict):
+        return [f for k, v in node.items() for f in passive_boundary_failures(v, f"{path}.{k}")]
+    if isinstance(node, list):
+        return [f for i, v in enumerate(node) for f in passive_boundary_failures(v, f"{path}[{i}]")]
+    if isinstance(node, (int, float)) and not isinstance(node, bool):
+        if path not in _ALLOWED_NUMERIC_PATHS:
+            return [
+                f"{path}: valoare numerică {node!r} pe sârmă — ViewModel-ul v2 livrează text "
+                "display-ready, altfel calculul se întoarce în browser"
+            ]
+    return []

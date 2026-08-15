@@ -974,6 +974,16 @@ class Settings(BaseSettings):
     # `stale` (disclosure, nu blocaj — aceeași filozofie ca WEB_CONTEXT_FRESHNESS_SLA_S).
     commerce_facts_sla_s: int = Field(default=86400, validation_alias="COMMERCE_FACTS_SLA_S")
 
+    # --- NX-240: grounding strict + projector pur `web-view.v2` ------------------
+    # OFF (default) → byte-identic: turul persistă exact ce persista și înainte, iar proiecția v2
+    # rămâne cea derivată din payload-ul v1 (NX-233). ON → la commit se îngheață verdictul de
+    # grounding (`grounded_v2`), iar `terminal_view` îl proiectează cu `render_v2` — pur, zero I/O,
+    # fapte care nu se mai pot schimba după commit. Cere `WEB_TURN_V2_ENABLED` (fără contractul v2
+    # n-are unde livra) și `SINGLE_BRAIN_ENABLED` (fără `AnswerPlanV2` n-are ce proiecta).
+    web_view_v2_projector_enabled: bool = Field(
+        default=False, validation_alias="WEB_VIEW_V2_PROJECTOR_ENABLED"
+    )
+
     # --- NX-238: promovarea măsurată a candidatului `search_entities` ------------
     # OFF (default) → `selector.select_provider` întoarce ÎNTOTDEAUNA `current_live`, fără să
     # atingă discul. ON singur NU e suficient: candidatul cere ȘI un artefact de decizie cu
@@ -1088,6 +1098,24 @@ class Settings(BaseSettings):
             )
         if self.web_context_hydration_timeout_ms <= 0 or self.web_context_freshness_sla_s <= 0:
             raise ValueError("WEB_CONTEXT_HYDRATION_TIMEOUT_MS / _FRESHNESS_SLA_S: > 0")
+        # NX-240: projectorul grounded consumă `AnswerPlanV2` (produs DOAR de MainBrain) și
+        # livrează pe contractul v2. Aprins singur ar fi un flag care nu poate face nimic — și,
+        # mai rău, ar sugera că răspunsurile sunt grounded când de fapt sunt tot proiecția v1.
+        if self.web_view_v2_projector_enabled:
+            missing = [
+                name
+                for name, on in (
+                    ("WEB_TURN_V2_ENABLED", self.web_turn_v2_enabled),
+                    ("SINGLE_BRAIN_ENABLED", self.single_brain_enabled),
+                )
+                if not on
+            ]
+            if missing:
+                raise ValueError(
+                    f"WEB_VIEW_V2_PROJECTOR_ENABLED cere {' + '.join(missing)} (projectorul "
+                    "proiectează AnswerPlanV2 pe contractul web-view.v2; fără ele n-are nici "
+                    "sursă, nici destinație)"
+                )
         return self
 
     @property

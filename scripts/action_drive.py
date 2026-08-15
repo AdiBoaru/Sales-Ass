@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -30,13 +31,20 @@ from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Drive-ul PROMITE că rulează fără DB/Redis/OpenAI — dar `authorize_action` citește `Settings` pe
+# ramura de comerț (NX-237: mutantele sunt refuzate onest cu serviciul stins), iar `Settings` cere
+# `SUPABASE_DB_URL`. Punem o valoare evident falsă, ÎNAINTE de import: nimeni nu se conectează la
+# ea (nu există checkout în drive), dar CI-ul nu mai are nevoie de secrete ca să ruleze proba.
+# `setdefault`, nu atribuire: un mediu real (local, cu `.env`) rămâne neatins.
+os.environ.setdefault("SUPABASE_DB_URL", "postgresql://drive:drive@127.0.0.1:5432/drive")
+
 if sys.platform == "win32":  # consola Windows e cp1252 by default (ca în scripts/db_check.py)
     sys.stdout.reconfigure(encoding="utf-8")
 
 from src.db.queries.web_turns import WebTurnRow  # noqa: E402
 from src.web import action_service as svc  # noqa: E402
 from src.web.action_crypto import parse_key_ring  # noqa: E402
-from src.web.action_models import ActionArgs, ActionPlan, TurnFacts, plan_actions  # noqa: E402
+from src.web.action_models import TurnFacts, plan_actions, spec_for  # noqa: E402
 from src.web.turn_service import session_ref_hash  # noqa: E402
 
 BIZ = "biz-drive"
@@ -124,7 +132,12 @@ def _row(**over) -> WebTurnRow:
 
 def _source() -> WebTurnRow:
     """Turul-sursă: două produse (⇒ detalii, recenzii, comparație), o sesiune de căutare activă
-    (⇒ paginare) și o clarificare cu opțiuni (⇒ răspunsuri). Plus un cart action DEZACTIVAT."""
+    (⇒ paginare), o clarificare cu opțiuni (⇒ răspunsuri) și un CTA de comerț.
+
+    NX-240: `cart_add_line` se planifică acum, dar DOAR pentru refs pe care groundingul le-a
+    declarat vandabile (`commerce_product_refs`). Aici îl cerem explicit pentru PID_A ca drive-ul
+    să demonstreze ce se întâmplă la CONSUM cu serviciul de coș stins: refuz onest
+    (`action_unavailable`), înainte de a arde one-shot-ul."""
     view = {
         "content": "Uite două seruri potrivite. Ce buget ai?",
         "products": [
@@ -136,11 +149,14 @@ def _source() -> WebTurnRow:
     plans = list(
         plan_actions(
             view,
-            TurnFacts(pending_field="budget_max", pending_attempts=1, active_search_ref="fp-drive"),
+            TurnFacts(
+                pending_field="budget_max",
+                pending_attempts=1,
+                active_search_ref="fp-drive",
+                commerce_product_refs=(PID_A,),
+            ),
         )
     )
-    # Cerința cardului: ViewModelul conține și un cart action — ca să se vadă că NU se emite.
-    plans.append(ActionPlan("cart_add_line", ActionArgs(product_ref=PID_A)))
     return _row(response_json=svc.merge_actions_into_view(view, tuple(plans)))
 
 
@@ -206,7 +222,10 @@ async def main() -> int:
     emitted_kinds = sorted({a.plan.kind for a in issued})
     print(f"kind-uri emise     : {emitted_kinds}")
     cart = any(a.plan.kind.startswith("cart") for a in issued)
-    print(f"cart emis?         : {'DA (BUG)' if cart else 'nu'}")
+    # NX-240: CTA-ul de coș se EMITE (are handler NX-237 + condiție de fapte), dar consumul lui
+    # rămâne refuzat onest cât timp `CONVERSATION_CART_ENABLED` e stins — vezi scenariile de mai
+    # jos. Emiterea fără flag nu e un bug: e un buton care spune „nu acum", nu unul care minte.
+    print(f"cart emis?         : {'da (refuzat la consum)' if cart else 'nu'}")
     print(f"lungime token (max): {max(len(a.token) for a in issued)} caractere")
     print()
 
@@ -264,6 +283,18 @@ async def main() -> int:
             "same_turn_retry": "authorized",
             "second_turn": "action_already_consumed",
         }
+        if spec_for(kind) is not None and spec_for(kind).mutating:
+            # Comerțul are handler (NX-237) și emitere condiționată (NX-240), dar runtime-ul e
+            # stins în drive: refuzul e ÎNAINTE de consum, deci one-shot-ul nu se arde. Toate
+            # scenariile care ar fi ajuns la handler devin `action_unavailable`; cele care cad
+            # mai devreme (crypto, tenant, sesiune, expirare) rămân neschimbate — ordinea
+            # verificărilor e exact ce demonstrează drive-ul.
+            expected |= {
+                "valid": "action_unavailable",
+                "key_rotated_overlap": "action_unavailable",
+                "same_turn_retry": "action_unavailable",
+                "second_turn": "action_unavailable",
+            }
         for name, got in results.items():
             ok = got == expected[name]
             failures += 0 if ok else 1

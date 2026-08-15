@@ -1471,6 +1471,7 @@ web_turn_lock_enabled = true
 web_turn_recovery_enabled = false
 web_turn_sse_enabled = false
 web_turn_v2_enabled = false
+web_view_v2_projector_enabled = false
 welcome_enabled = true
 ```
 

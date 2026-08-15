@@ -156,8 +156,25 @@ def test_non_terminal_rows_emit_nothing():
 
 
 def test_unavailable_kinds_are_never_issued():
-    row = _source_with_actions((ActionPlan("cart_add_line", ActionArgs(product_ref=PID_A)),))
+    """`refine_search` are `available=False` (nu există rafinare deterministă server-side): un
+    plan care îl conține nu produce niciun token, oricât de valid ar fi restul rândului."""
+    row = _source_with_actions((ActionPlan("refine_search", ActionArgs(filter="cheaper")),))
     assert _issue(row) == ()
+
+
+def test_mutating_kinds_outside_the_nx240_set_are_never_issued():
+    """NX-240 a deschis emiterea DOAR pentru `cart_add_line`/`checkout`. `cart_remove` are handler
+    la consum, dar niciun loc în ViewModel din care să pornească — deci nu poate fi sigilat."""
+    row = _source_with_actions((ActionPlan("cart_remove", ActionArgs(product_ref=PID_A)),))
+    assert _issue(row) == ()
+
+
+def test_commerce_cta_is_issued_once_planned():
+    """Simetric: dacă planul persistat conține un `cart_add_line` (deci faptele au permis-o la
+    commit), tokenul EXISTĂ — altfel butonul emis de projector n-ar avea ce purta."""
+    row = _source_with_actions((ActionPlan("cart_add_line", ActionArgs(product_ref=PID_A)),))
+    issued = _issue(row)
+    assert [a.plan.kind for a in issued] == ["cart_add_line"]
 
 
 def test_rows_without_a_plan_emit_nothing():

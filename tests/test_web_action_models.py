@@ -10,6 +10,7 @@ import pytest
 
 from src.agent.tool_definitions import TOOL_NAMES
 from src.web.action_models import (
+    COMMERCE_EMITTABLE_KINDS,
     EMITTABLE_KINDS,
     KIND_REGISTRY,
     MAX_ACTIONS_PER_TURN,
@@ -51,14 +52,15 @@ def test_every_kind_declares_a_policy_and_handler_status():
         assert isinstance(spec.available, bool)
 
 
-def test_mutating_kinds_have_handler_but_are_not_emittable():
-    """NX-237: comerțul ARE handler (CartService + receipt idempotent) → `available=True`, dar
-    EMITEREA CTA-urilor de coș rămâne a lui NX-240 — mutantele nu intră în EMITTABLE_KINDS,
-    deci niciun token de comerț nu poate exista încă în sălbăticie."""
+def test_mutating_kinds_have_handler_and_only_two_are_emittable():
+    """NX-237 le-a dat handler (CartService + receipt idempotent) → `available=True`. NX-240 le-a
+    dat condiție de EMITERE, dar doar la două: `cart_add_line` (are un card peste care să apară) și
+    `checkout` (are un `cart_summary`). Restul au handler la consum și niciun loc în ViewModel din
+    care să pornească — deci rămân neemise, ca să nu existe token fără sens vizual."""
     for spec in KIND_REGISTRY.values():
         if spec.mutating:
             assert spec.available, f"{spec.kind} e mutant fără handler (NX-237 i-a dat receipt)"
-            assert spec.kind not in EMITTABLE_KINDS, f"{spec.kind} emis înainte de NX-240"
+            assert (spec.kind in EMITTABLE_KINDS) == (spec.kind in COMMERCE_EMITTABLE_KINDS)
 
 
 def test_emittable_kinds_are_the_stage1_set():
@@ -69,7 +71,22 @@ def test_emittable_kinds_are_the_stage1_set():
         "compare_selection",
         "show_more",
         "answer_clarification",
+        # NX-240 — comerț, emis DOAR peste fapte verificate (`TurnFacts.commerce_product_refs` /
+        # `cart_checkout_ready`); vezi `tests/test_web_render_v2.py` pentru poarta de planificare.
+        "cart_add_line",
+        "checkout",
     }
+
+
+def test_commerce_cta_needs_verified_facts_not_just_a_card():
+    """Poarta reală nu e registry-ul, e planificarea: un card afișat fără refs vandabile NU
+    produce niciun plan de comerț. Fără plan persistat nu există token — deci flagul singur nu
+    poate reînvia butoane."""
+    view = {"products": [{"product_id": PID_A}]}
+    kinds = {p.kind for p in plan_actions(view, TurnFacts())}
+    assert "cart_add_line" not in kinds and "checkout" not in kinds
+    kinds = {p.kind for p in plan_actions(view, TurnFacts(commerce_product_refs=(PID_A,)))}
+    assert "cart_add_line" in kinds
 
 
 def test_unknown_kind_has_no_spec():

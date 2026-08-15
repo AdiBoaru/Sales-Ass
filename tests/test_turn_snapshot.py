@@ -510,6 +510,21 @@ class _PipelineConn:
         return self.rows
 
 
+def _fresh(row: dict) -> dict:
+    """Un rând cu prospețimea ancorată în ceasul REAL.
+
+    `_build` primește `now=NOW` (fix), deci acolo fixture-ul poate fi datat relativ la `NOW`. Dar
+    `_run_turn` merge prin `handle_turn`, care folosește ceasul de sistem — un `synced_at` derivat
+    dintr-un `NOW` hardcodat devine „stale" de la sine la 24h după ce s-a scris testul. Ancorăm
+    doar pe calea aceea, ca testele cu ceas injectat să rămână deterministe."""
+    real_now = datetime.now(UTC)
+    return {
+        **row,
+        "synced_at": (real_now - timedelta(hours=2)).isoformat(),
+        "updated_at": (real_now - timedelta(hours=2)).isoformat(),
+    }
+
+
 async def _run_turn(
     monkeypatch, *, page_context, rows=(), prompt_enabled=True, context_enabled=True
 ):
@@ -588,7 +603,7 @@ async def test_processor_attaches_the_snapshot_before_the_pipeline(monkeypatch):
     seen, conn = await _run_turn(
         monkeypatch,
         page_context={"v": 1, "surface": "product", "product": {"id": PID, "kind": "uuid"}},
-        rows=_rows(("product", PID, _product_row())),
+        rows=_rows(("product", PID, _fresh(_product_row()))),
     )
     snap = seen["snapshot"]
     assert snap is not None
@@ -603,7 +618,7 @@ async def test_prompt_flag_off_keeps_the_measurement_and_drops_the_facts(monkeyp
     seen, _ = await _run_turn(
         monkeypatch,
         page_context={"v": 1, "surface": "product", "product": {"id": PID, "kind": "uuid"}},
-        rows=_rows(("product", PID, _product_row())),
+        rows=_rows(("product", PID, _fresh(_product_row()))),
         prompt_enabled=False,
     )
     snap = seen["snapshot"]
@@ -617,7 +632,7 @@ async def test_one_context_query_per_turn_not_one_per_consumer(monkeypatch):
     _seen, conn = await _run_turn(
         monkeypatch,
         page_context={"v": 1, "surface": "product", "product": {"id": PID, "kind": "uuid"}},
-        rows=_rows(("product", PID, _product_row())),
+        rows=_rows(("product", PID, _fresh(_product_row()))),
     )
     assert conn.fetches == 1
 
@@ -628,7 +643,7 @@ async def test_context_flag_off_means_no_snapshot_and_no_query(monkeypatch):
     seen, conn = await _run_turn(
         monkeypatch,
         page_context={"v": 1, "surface": "product", "product": {"id": PID, "kind": "uuid"}},
-        rows=_rows(("product", PID, _product_row())),
+        rows=_rows(("product", PID, _fresh(_product_row()))),
         context_enabled=False,
     )
     assert seen["snapshot"] is None
