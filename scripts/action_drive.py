@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -29,6 +30,13 @@ from pathlib import Path
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# Drive-ul PROMITE că rulează fără DB/Redis/OpenAI — dar `authorize_action` citește `Settings` pe
+# ramura de comerț (NX-237: mutantele sunt refuzate onest cu serviciul stins), iar `Settings` cere
+# `SUPABASE_DB_URL`. Punem o valoare evident falsă, ÎNAINTE de import: nimeni nu se conectează la
+# ea (nu există checkout în drive), dar CI-ul nu mai are nevoie de secrete ca să ruleze proba.
+# `setdefault`, nu atribuire: un mediu real (local, cu `.env`) rămâne neatins.
+os.environ.setdefault("SUPABASE_DB_URL", "postgresql://drive:drive@127.0.0.1:5432/drive")
 
 if sys.platform == "win32":  # consola Windows e cp1252 by default (ca în scripts/db_check.py)
     sys.stdout.reconfigure(encoding="utf-8")
