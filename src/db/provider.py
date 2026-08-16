@@ -71,7 +71,17 @@ def tenant_db(business_id: str) -> DbProvider:
                         queries=getattr(handle, "queries", 0),
                     )
 
+    _cm.shared_connection = False  # NX-241: checkout REAL per operație → operații concurente OK
     return _cm
+
+
+def is_shared_connection(db: DbProvider | None) -> bool:
+    """NX-241: providerul yield-uiește ACEEAȘI conexiune tuturor apelanților?
+
+    Un `static_db` (teste, sim, punte de compat) dă un singur `asyncpg.Connection`, care nu suportă
+    două operații simultane — deci pe el paralelismul de citiri rămâne 1, oricât ar spune flagul.
+    Necunoscut (provider din afara `src/db/provider.py`) = tratat ca partajat: conservator."""
+    return bool(getattr(db, "shared_connection", True))
 
 
 def static_db(conn: object) -> DbProvider:
@@ -87,6 +97,7 @@ def static_db(conn: object) -> DbProvider:
     async def _cm(operation: str = op_metrics.UNLABELED) -> AsyncIterator[Any]:  # noqa: ARG001
         yield conn
 
+    _cm.shared_connection = True  # NX-241: o singură conexiune pentru toți → fără paralelism
     return _cm
 
 

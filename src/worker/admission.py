@@ -20,8 +20,9 @@ Ce adaugă NX-231 peste 0C:
     marcăm `degraded=True` și numărăm respingerile.
 
 Contract: `acquire()` întoarce un `AdmissionSlot`. `admitted=False` are mereu un `reason`
-low-cardinality (`tenant_cap` | `queue_timeout` | `store_unavailable` | `local_full`), potrivit
-ca etichetă de metrică. Eliberarea se face cu `release(slot)` — idempotentă.
+low-cardinality (`tenant_cap` | `queue_timeout` | `store_unavailable` | `local_full` |
+`deadline_exceeded`), potrivit ca etichetă de metrică. Eliberarea se face cu `release(slot)` —
+idempotentă.
 
 P12: nicio valoare de client nu intră în chei sau metrici. `business_id` e UUID de tenant;
 eticheta de metrică e `tenant_bucket` (hash scurt), ca la `origin_bucket`/`visitor_bucket`.
@@ -37,6 +38,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from src.config import get_settings
+from src.runtime import deadline
 
 log = logging.getLogger(__name__)
 
@@ -145,10 +147,24 @@ class Admission:
     # --- API public -------------------------------------------------------
 
     async def acquire(self, business_id: str, timeout_s: float) -> AdmissionSlot:
-        """Ia un slot, așteptând cel mult `timeout_s`. Contractul e în docstring-ul modulului."""
+        """Ia un slot, așteptând cel mult `timeout_s`. Contractul e în docstring-ul modulului.
+
+        NX-241: dacă turul are un deadline activ, așteptarea în coadă CONSUMĂ același buget —
+        `timeout_s` se strânge la cât a mai rămas. Peste el respingem cu `deadline_exceeded`:
+        a mai aștepta un slot pentru un tur pe care oricum nu-l mai putem termina înseamnă să ținem
+        capacitatea ocupată degeaba, exact când sistemul e sub presiune."""
         if not self.enabled:
             return AdmissionSlot(admitted=True, backend="off", business_id=business_id)
         t0 = perf_counter()
+        d = deadline.current()
+        if d is not None and not d.unbounded:
+            remaining_s = d.remaining_ms() / 1000.0
+            if remaining_s <= 0:
+                self.stats.reject("deadline_exceeded")
+                return AdmissionSlot(
+                    admitted=False, reason="deadline_exceeded", business_id=business_id
+                )
+            timeout_s = min(timeout_s, remaining_s)
         if self._redis is not None:
             try:
                 slot = await self._acquire_redis(business_id, timeout_s, t0)

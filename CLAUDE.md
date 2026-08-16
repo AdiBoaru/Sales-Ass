@@ -100,6 +100,27 @@ le declară vandabile — fără plan persistat nu există token. Detalii:
 [`docs/WEB-VIEW-V2-DATA-READINESS.md`](docs/WEB-VIEW-V2-DATA-READINESS.md); probe reproductibile:
 `python scripts/nx240_projection_drive.py` + `python scripts/nx240_data_readiness.py`.
 
+**NX-241 — UN deadline total de tur + bugete de execuție versionate (DARK, flag OFF).**
+Înainte, fiecare strat avea ceasul lui (`llm_timeout_s` 30s × `llm_retry_max` 2 = până la 90s PE
+APEL, `embed_timeout_ms`, `retrieval_deadline_ms`, `web_turn_deadline_s` 120s) și nimeni nu întreba
+„cât mai am" — timeouturile se ÎNMULȚEAU. Acum turul are UN singur buget MONOTON
+(`src/runtime/deadline.py`), născut o dată din `web_turns.deadline_at` și **neprelungit la
+reclaim**; coada îl consumă; fiecare operație primește `min(capul ei, rămas − rezerva terminală)`,
+iar rezerva (validator + fallback + commit) e fix diferența dintre „timeout onest" și tăcere.
+Peste el stau plafoanele EXPLICITE pe clase de tur (`src/runtime/turn_budget.py`, manifest
+VERSIONAT `nx241.2026-08-16`: exact 3s / recomandare 6s / complex 10s / mutație 8s, plafon dur 15s;
+runde de model, tool calls, mutații, repair ≤1, tokeni, cost, octeți) — rezervate ATOMIC, deci un
+„tool storm" nu poate trece de ultimul slot, iar modelul **nu poate cere mai mult buget prin
+output** (P7). Tool-urile sunt CLASIFICATE (`src/agent/tool_budget.py`, registru complet verificat
+la import): citirile independente pot rula în paralel până la plafon, mutațiile sunt EXCLUSIVE și
+seriale. Retry-ul respectă `Retry-After` doar dacă ÎNCAPE. Aftercare-ul rămâne strict post-terminal,
+dar bounded. Totul e măsurat într-UN event per tur (`turn_latency`, `src/observability/`), cu
+vocabular ÎNCHIS de faze. Flags: `TURN_LATENCY_SPANS_ENABLED` (ON, doar măsoară) →
+`TURN_DEADLINE_ENABLED` → `TURN_BUDGET_ENFORCED` → `TURN_PARALLEL_READS_ENABLED` (toate OFF =
+byte-identic; poarta de boot refuză combinațiile imposibile). Pragurile finale + GO sunt ale
+NX-246/247. Detalii: [`docs/NX-241-TURN-DEADLINE.md`](docs/NX-241-TURN-DEADLINE.md); probă:
+`python scripts/sim/web_latency_probe.py`.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
@@ -628,6 +649,7 @@ nativx-assistant/
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
 │   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web v1 (carduri+comparison) pt randarea FE (paritate iZi)
 │   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
+│   ├── NX-241-TURN-DEADLINE.md  ← NX-241: deadline unic, manifest de bugete, SLO + runbook
 │   ├── NX-240-GROUNDED-PROJECTOR.md ← NX-240: grounding + projector pur + regulile de adevăr
 │   ├── WEB-VIEW-V2-DATA-READINESS.md ← NX-240: matricea de câmpuri + coverage măsurat (300 prod.)
 │   ├── WEB-WIDGET-BOUNDARY-V2.md← NX-228: matricea de ownership + regula „frontend pasiv"
@@ -683,6 +705,11 @@ nativx-assistant/
 │   │   ├── needs.py             ← vocabularul de nevoi din DomainPack (P9) + normalizare canonică
 │   │   ├── state_reducer.py     ← SINGURUL scriitor de stare: propuneri typed → aplicat/respins
 │   │   └── clarification_policy.py ← information gain + anti-buclă (max o întrebare/tur)
+│   ├── runtime/                 ← NX-241: contractele de RUNTIME ale turului (timp + buget)
+│   │   ├── deadline.py          ← `TurnDeadline`: UN buget monoton, rezervă terminală, cancel
+│   │   └── turn_budget.py       ← manifest VERSIONAT pe clase de tur + ledger atomic
+│   ├── observability/
+│   │   └── turn_latency.py      ← NX-241: spans pe FAZE (vocabular închis) → un event/tur
 │   ├── retrieval/               ← NX-238: portul de retrieval (contract stabil pt NX-239)
 │   │   ├── port.py              ← `RetrievalPort` + `RetrievalBundle` (refs + verdicte + evidence)
 │   │   ├── current_live.py      ← adapter peste `search_products_tool`: paritate prin construcție

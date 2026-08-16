@@ -34,6 +34,29 @@ _THIN_PATH_CHIPS: dict[str, list[str]] = {
 }
 
 
+# NX-241 — ce spunem când bugetul de timp al turului s-a terminat înainte de răspuns. Două
+# variante, fiindcă „nu am apucat" e altceva decât „nu am găsit": dacă avem deja produse validate
+# (retrievate, deci fapte reale), le ARĂTĂM — e mai onest și mai util decât un mesaj de eroare.
+# Textele nu conțin cifre/nume → nu pot pica validatorul și nu pot inventa nimic.
+_DEADLINE_EMPTY: dict[str, str] = {
+    "ro": "Nu am apucat să verific tot la timp. Vrei să încerc din nou?",
+    "en": "I didn't manage to check everything in time. Want me to try again?",
+    "hu": "Nem sikerült időben mindent ellenőriznem. Megpróbáljam újra?",
+}
+_DEADLINE_PARTIAL: dict[str, str] = {
+    "ro": "Uite ce am găsit până acum. Spune-mi dacă vrei să caut mai departe.",
+    "en": "Here's what I found so far. Tell me if you want me to keep looking.",
+    "hu": "Ezt találtam eddig. Szólj, ha keressek tovább.",
+}
+
+
+def _deadline_msg(language: str | None, *, partial: bool) -> str:
+    """Mesajul determinist de epuizare a bugetului de timp (P6: niciodată tăcere, niciodată draft
+    nevalidat). `partial=True` când avem deja produse validate de arătat."""
+    table = _DEADLINE_PARTIAL if partial else _DEADLINE_EMPTY
+    return table.get(language or "ro") or table["ro"]
+
+
 def _thin_path_chips(language: str | None) -> list[str]:
     """Chips deterministe de continuare (căi concrete) pentru un răspuns de cale subțire."""
     return list(_THIN_PATH_CHIPS.get(language or "ro") or _THIN_PATH_CHIPS["ro"])
