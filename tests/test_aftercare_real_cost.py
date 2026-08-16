@@ -64,4 +64,6 @@ async def test_run_aftercare_records_real_accumulated_cost_once(monkeypatch):
 
     assert cost_usd > 0
     assert captured == [(redis, "business-1", cost_usd)]
-    assert [event.type for event in ctx.events] == ["llm_usage"]
+    # NX-241 adaugă `aftercare_lag_ms` (cât a durat munca de fundal + outcome). `llm_usage` rămâne
+    # ULTIMUL: aftercare persistă `events[-1]`, deci ordinea e parte din contract, nu o coincidență.
+    assert [event.type for event in ctx.events] == ["aftercare_lag_ms", "llm_usage"]

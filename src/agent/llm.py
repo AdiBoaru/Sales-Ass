@@ -20,13 +20,21 @@ from typing import Any
 import openai
 from openai import AsyncOpenAI
 
-from src.agent import usage
+from src.agent import tool_budget, usage
 from src.config import get_settings
+from src.observability import turn_latency
+from src.runtime import deadline, turn_budget
+from src.runtime.deadline import REASON_NO_ROOM, DeadlineExhausted
 
 log = logging.getLogger(__name__)
 
 # Erori TRANZITORII fără status HTTP (timeout / conexiune) — retry-abile.
 _TRANSIENT_ERRORS = (openai.APITimeoutError, openai.APIConnectionError)
+
+# NX-241 — plafonul de timp al apelurilor care NU sunt generare (clasificare/extracție). Sunt
+# rapide prin natura lor: un moderation care durează 8s nu mai are pentru cine să modereze, iar
+# gate-ul degradează fail-open oricum. Efectiv rămâne `min(cap, buget rămas − rezervă)`.
+MODERATION_CAP_MS = 2_000
 
 
 def _retry_after_seconds(exc: Exception) -> float | None:
@@ -42,16 +50,39 @@ def _retry_after_seconds(exc: Exception) -> float | None:
         return None
 
 
-async def _with_retry(factory: Callable[[], Awaitable[Any]], *, max_retries: int) -> Any:
+async def _with_retry(
+    factory: Callable[[], Awaitable[Any]], *, max_retries: int, cap_ms: int | None = None
+) -> Any:
     """NX-126: retry bounded pe erori TRANZITORII (429 / 5xx / timeout / connection). Respectă
     `Retry-After` când există, altfel backoff exponențial cu jitter. 4xx terminale (400/401/403/404)
     ridică imediat (caller-ul degradează — P6). La epuizare loghează `llm_api_failure` și ridică.
-    Trăiește DOAR în adaptor (cuplajul OpenAI stă la margine)."""
+    Trăiește DOAR în adaptor (cuplajul OpenAI stă la margine).
+
+    NX-241 — cât timp există un `TurnDeadline` activ (flag ON), retry-ul nu mai e o buclă cu ceas
+    propriu, ci un consumator al ACELUIAȘI buget:
+
+      • fiecare încercare primește `min(cap_ms, remaining - rezervă terminală)`, deci un apel nu
+        poate mânca timpul rezervat validatorului + commitului;
+      • `Retry-After` se respectă DOAR dacă somnul + un minim util mai încap; altfel nu dormim
+        degeaba, ridicăm și lăsăm apelantul să degradeze onest;
+      • dacă nu mai e timp nici pentru prima încercare, nu pornim apelul deloc (`DeadlineExhausted`)
+        — un apel pe care oricum îl anulăm costă bani și latență fără nicio șansă de rezultat.
+
+    Fără deadline activ (default), comportamentul e byte-identic cu NX-126.
+    """
+    d = deadline.current()
+    min_useful = getattr(get_settings(), "llm_retry_min_budget_ms", 600)
     delay = 0.5
     last: Exception | None = None
     for attempt in range(max_retries + 1):
+        timeout_s = None if d is None else d.timeout_for(cap_ms)
+        if timeout_s is not None and timeout_s <= 0:
+            raise DeadlineExhausted("model", REASON_NO_ROOM)
         try:
-            return await factory()
+            if timeout_s is None:
+                return await factory()
+            async with asyncio.timeout(timeout_s):
+                return await factory()
         except openai.APIStatusError as e:
             # 429 (RateLimitError) + 5xx = tranzitoriu; restul 4xx = terminal → ridică.
             if e.status_code < 500 and not isinstance(e, openai.RateLimitError):
@@ -59,9 +90,25 @@ async def _with_retry(factory: Callable[[], Awaitable[Any]], *, max_retries: int
             last, wait = e, _retry_after_seconds(e)
         except _TRANSIENT_ERRORS as e:
             last, wait = e, None
+        except TimeoutError as e:
+            # Apel tăiat de PROPRIUL nostru deadline (`asyncio.timeout`). Fără deadline activ nu
+            # există calea asta → ridicăm neatins, ca înainte.
+            if d is None:
+                raise
+            last, wait = e, None
         if attempt >= max_retries:
             break
         sleep_s = (wait if wait is not None else delay) + random.uniform(0.0, 0.25)
+        if d is not None and not d.fits(sleep_s * 1000.0, minimum_ms=min_useful):
+            # 429 cu `Retry-After` peste ce a mai rămas: NU așteptăm. Degradăm terminal (P6).
+            log.warning(
+                "llm_api_failure: %s — retry abandonat, %0.2fs nu încap în bugetul rămas (%dms)",
+                type(last).__name__,
+                sleep_s,
+                d.remaining_ms(),
+            )
+            turn_latency.degrade("llm_retry_no_budget")
+            break
         log.warning(
             "llm_api_failure: %s tranzitoriu — retry %d/%d în %.2fs",
             type(last).__name__,
@@ -69,12 +116,74 @@ async def _with_retry(factory: Callable[[], Awaitable[Any]], *, max_retries: int
             max_retries,
             sleep_s,
         )
+        turn_latency.degrade("llm_retry")
         await asyncio.sleep(sleep_s)
         delay *= 2
     log.warning(
         "llm_api_failure: %s — epuizat după %d reîncercări", type(last).__name__, max_retries
     )
     raise last
+
+
+async def _run_tool_calls(
+    execute: Callable[[str, dict[str, Any]], Awaitable[str]], tool_calls: list[Any]
+) -> list[str]:
+    """Rulează tool-urile cerute într-o rundă și întoarce rezultatele ÎN ORDINEA CERUTĂ.
+
+    Fără buget/deadline activ: `asyncio.gather` peste tot, exact ca înainte (byte-identic).
+
+    Cu ele active (NX-241), runda se sparge în DOUĂ: întâi citirile independente, concurent (poarta
+    din `ToolRun` le plafonează), apoi MUTAȚIILE, una câte una. Motivul e concret: o mutație
+    lansată în același `gather` cu citirile ar putea scrie în timp ce încă citim starea pe care se
+    bazează, iar două mutații în paralel sunt exact felul în care se dublează un coș. Ordinea
+    rezultatelor rămâne cea a apelurilor — modelul primește un răspuns determinist, nu ordinea în
+    care s-a întâmplat să se termine tool-urile.
+    """
+    calls = [(tc.function.name, _parse_args(tc.function.arguments)) for tc in tool_calls]
+    if deadline.current() is None and turn_budget.current() is None:
+        return list(await asyncio.gather(*(execute(name, args) for name, args in calls)))
+
+    results: list[str] = [""] * len(calls)
+    reads = [i for i, (name, _) in enumerate(calls) if not tool_budget.spec_for(name).is_mutation]
+    read_set = set(reads)
+    mutations = [i for i in range(len(calls)) if i not in read_set]
+    if reads:
+        done = await asyncio.gather(*(execute(*calls[i]) for i in reads))
+        for i, content in zip(reads, done, strict=True):
+            results[i] = content
+    for i in mutations:  # seriale, în ordinea cerută de model
+        results[i] = await execute(*calls[i])
+    return results
+
+
+def _usage_snapshot() -> tuple[int, int, int, int, float] | None:
+    """Fotografia acumulatorului de usage (sau None în afara unui tur) — NX-241 o diff-uiește ca să
+    scadă tokenii/costul RUNDEI din bugetul turului, la sursă, nu la sfârșit."""
+    acc = usage.current()
+    return None if acc is None else acc.snapshot()
+
+
+def _charge_usage(before: tuple[int, int, int, int, float] | None) -> None:
+    """Scade din buget ce a costat runda. Post-factum prin natura lucrurilor (tokenii se știu abia
+    din răspuns): NUMĂRĂ, nu refuză — refuzul e la runda următoare, care vede plafonul atins."""
+    acc = usage.current()
+    if acc is None or before is None:
+        return
+    after = acc.snapshot()
+    turn_budget.consume("tokens", (after[1] - before[1]) + (after[2] - before[2]))
+    turn_budget.consume("cost_usd", after[4] - before[4])
+
+
+def _round_admitted() -> bool:
+    """Mai am voie la o rundă de model? Fără ledger (flag stins) → mereu DA."""
+    if not turn_budget.reserve("model_rounds"):
+        log.info("llm: rundă de model refuzată de buget — forțez răspunsul final")
+        return False
+    ledger = turn_budget.current()
+    if ledger is not None and ledger.enforced and ledger.exhausted("cost_usd"):
+        log.warning("llm: plafon de cost atins — forțez răspunsul final")
+        return False
+    return True
 
 
 def _parse_args(raw: str | None) -> dict[str, Any]:
@@ -158,11 +267,16 @@ class LLMClient:
         return out
 
     async def _chat(self, *, agent: bool, **kwargs: Any):
-        """Wrapper unic pe chat.completions.create: retry bounded (NX-126) + sampling params."""
+        """Wrapper unic pe chat.completions.create: retry bounded (NX-126) + sampling params.
+
+        NX-241: plafonul de timp al UNUI apel (`llm_call_cap_ms`) intră aici, nu în fiecare
+        apelant — timeoutul efectiv rămâne `min(cap, buget rămas − rezervă)`."""
         kwargs.update(self._sampling(agent=agent))
+        s = get_settings()
         return await _with_retry(
             lambda: self._client.chat.completions.create(**kwargs),
-            max_retries=get_settings().llm_retry_max,
+            max_retries=s.llm_retry_max,
+            cap_ms=getattr(s, "llm_call_cap_ms", 8_000),
         )
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
@@ -248,10 +362,15 @@ class LLMClient:
             {"role": "user", "content": user},
         ]
         for _ in range(max_steps):
-            resp = await self._chat(
-                agent=True, model=mdl, messages=messages, tools=tools, tool_choice="auto"
-            )
+            if not _round_admitted():
+                break  # buget de runde/cost atins → ieșim la apelul final FĂRĂ tools (text forțat)
+            before = _usage_snapshot()
+            with turn_latency.span("model"):
+                resp = await self._chat(
+                    agent=True, model=mdl, messages=messages, tools=tools, tool_choice="auto"
+                )
             usage.record_chat(resp, mdl)
+            _charge_usage(before)
             msg = resp.choices[0].message
             tool_calls = getattr(msg, "tool_calls", None)
             if not tool_calls:
@@ -273,18 +392,16 @@ class LLMClient:
                     ],
                 }
             )
-            contents = await asyncio.gather(
-                *(
-                    execute(tc.function.name, _parse_args(tc.function.arguments))
-                    for tc in tool_calls
-                )
-            )
+            contents = await _run_tool_calls(execute, tool_calls)
             for tc, content in zip(tool_calls, contents, strict=True):
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
 
         # cap atins → un ultim apel FĂRĂ tools (text forțat, nu o a 4-a rundă de tool calls).
-        resp = await self._chat(agent=True, model=mdl, messages=messages)
+        before = _usage_snapshot()
+        with turn_latency.span("model"):
+            resp = await self._chat(agent=True, model=mdl, messages=messages)
         usage.record_chat(resp, mdl)
+        _charge_usage(before)
         return (resp.choices[0].message.content or "").strip()
 
     async def run_tool_loop_structured(
@@ -315,15 +432,20 @@ class LLMClient:
         ]
         rounds = 0
         for _ in range(max_steps):
-            resp = await self._chat(
-                agent=True,
-                model=mdl,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                response_format=response_format,
-            )
+            if not _round_admitted():
+                break  # NX-241: plafonul de runde/cost e al CODULUI, nu al modelului
+            before = _usage_snapshot()
+            with turn_latency.span("model"):
+                resp = await self._chat(
+                    agent=True,
+                    model=mdl,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    response_format=response_format,
+                )
             usage.record_chat(resp, mdl)
+            _charge_usage(before)
             msg = resp.choices[0].message
             tool_calls = getattr(msg, "tool_calls", None)
             if not tool_calls:
@@ -346,19 +468,17 @@ class LLMClient:
                     ],
                 }
             )
-            contents = await asyncio.gather(
-                *(
-                    execute(tc.function.name, _parse_args(tc.function.arguments))
-                    for tc in tool_calls
-                )
-            )
+            contents = await _run_tool_calls(execute, tool_calls)
             for tc, content in zip(tool_calls, contents, strict=True):
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
 
-        resp = await self._chat(
-            agent=True, model=mdl, messages=messages, response_format=response_format
-        )
+        before = _usage_snapshot()
+        with turn_latency.span("model"):
+            resp = await self._chat(
+                agent=True, model=mdl, messages=messages, response_format=response_format
+            )
         usage.record_chat(resp, mdl)
+        _charge_usage(before)
         return json.loads(resp.choices[0].message.content or "{}"), rounds
 
     async def moderate(self, text: str, *, model: str | None = None) -> ModerationResult:
@@ -370,6 +490,7 @@ class LLMClient:
                 model=model or self.model_moderation, input=text
             ),
             max_retries=get_settings().llm_retry_max,
+            cap_ms=MODERATION_CAP_MS,
         )
         r = resp.results[0]
         data = r.categories.model_dump()
@@ -410,6 +531,7 @@ class LLMClient:
                 max_completion_tokens=256,
             ),
             max_retries=get_settings().llm_retry_max,
+            cap_ms=getattr(get_settings(), "llm_call_cap_ms", 8_000),
         )
         usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
@@ -419,9 +541,13 @@ class LLMClient:
         la text-embedding-3-small). Folosit de jobul `embed_products` + (viitor)
         cache semantic / search semantic."""
         mdl = model or self.model_embed
+        s = get_settings()
         resp = await _with_retry(
             lambda: self._client.embeddings.create(model=mdl, input=texts),
-            max_retries=get_settings().llm_retry_max,
+            max_retries=s.llm_retry_max,
+            # `embed_timeout_ms` (NX-225) rămâne plafonul embedului; deadline-ul turului îl poate
+            # doar STRÂNGE, niciodată lărgi. 0 = fără plafon propriu → doar bugetul turului.
+            cap_ms=s.embed_timeout_ms or None,
         )
         usage.record_embeddings(resp, mdl)
         return [d.embedding for d in resp.data]

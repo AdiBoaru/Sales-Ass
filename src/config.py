@@ -1013,6 +1013,96 @@ class Settings(BaseSettings):
     # Bugetul de timp al unui retrieval prin port. 0 = fără buget (kill-switch numeric).
     retrieval_deadline_ms: int = Field(default=0, validation_alias="RETRIEVAL_DEADLINE_MS", ge=0)
 
+    # --- NX-241: deadline TOTAL de tur + bugete de execuție ----------------------
+    # Trei flag-uri, în ordinea rollout-ului din card. Niciunul nu schimbă răspunsul: primul doar
+    # MĂSOARĂ, al doilea impune TIMPUL, al treilea impune NUMĂRUL de apeluri.
+    #
+    # 1) spans: defalcarea pe faze (queue/load/retrieval/model/tools/validation/projection/commit)
+    #    într-un singur event `turn_latency` per tur. Observe-only, ca `db_ops` (NX-231): fără ea
+    #    nu există baseline, deci nici dreptul de a strânge pragurile.
+    turn_latency_spans_enabled: bool = Field(
+        default=True, validation_alias="TURN_LATENCY_SPANS_ENABLED"
+    )
+    # 2) deadline: UN singur buget monoton propagat tuturor operațiilor (LLM/embed/tool/retrieval).
+    #    OFF (default) → fiecare strat își păstrează timeoutul de azi, byte-identic.
+    turn_deadline_enabled: bool = Field(default=False, validation_alias="TURN_DEADLINE_ENABLED")
+    # 3) budgets: plafoanele de apeluri (runde de model, tool calls, mutații, repair) IMPUSE.
+    #    OFF → contoarele se numără și se raportează, dar nu refuză nimic (observe-only).
+    turn_budget_enforced: bool = Field(default=False, validation_alias="TURN_BUDGET_ENFORCED")
+    # Paralelismul citirilor independente în bucla de tool-calling. OFF → plafon 1 = serializarea
+    # de azi. ON cere conn-per-op REAL (`tenant_db`): pe un provider static (teste/sim) rămâne 1,
+    # fiindcă o conexiune asyncpg partajată nu suportă două operații simultane.
+    turn_parallel_reads_enabled: bool = Field(
+        default=False, validation_alias="TURN_PARALLEL_READS_ENABLED"
+    )
+    # Plafonul DUR de execuție al unui tur, indiferent ce spune `deadline_at` (ceas sărit, config
+    # veche). Peste el → terminal onest. Stage 1 provizoriu: 15s (ADR).
+    turn_hard_deadline_ms: int = Field(
+        default=15_000, validation_alias="TURN_HARD_DEADLINE_MS", ge=1_000
+    )
+    # Totalul per clasă de tur (SLO Stage 1). Restul rapoartelor din manifest se scalează
+    # proporțional — nu poți seta un total fără rezervă terminală (vezi `build_manifest`).
+    turn_budget_exact_ms: int = Field(default=3_000, validation_alias="TURN_BUDGET_EXACT_MS", ge=1)
+    turn_budget_recommendation_ms: int = Field(
+        default=6_000, validation_alias="TURN_BUDGET_RECOMMENDATION_MS", ge=1
+    )
+    turn_budget_complex_ms: int = Field(
+        default=10_000, validation_alias="TURN_BUDGET_COMPLEX_MS", ge=1
+    )
+    turn_budget_mutation_ms: int = Field(
+        default=8_000, validation_alias="TURN_BUDGET_MUTATION_MS", ge=1
+    )
+    # Plafonul de timp al UNUI apel de model. Sub `llm_timeout_s` (30s): un singur apel n-are voie
+    # să mănânce tot bugetul unui tur de 6s. Efectiv rămâne `min(cap, remaining − rezervă)`.
+    llm_call_cap_ms: int = Field(default=8_000, validation_alias="LLM_CALL_CAP_MS", ge=100)
+    # Minimul util pentru a mai PORNI un retry: sub el, un apel pe care oricum îl vom anula costă
+    # bani și latență fără nicio șansă de rezultat.
+    llm_retry_min_budget_ms: int = Field(
+        default=600, validation_alias="LLM_RETRY_MIN_BUDGET_MS", ge=0
+    )
+    # Aftercare-ul rulează STRICT după terminal, dar tot bounded: un backlog nu are voie să țină
+    # workerul (și deci următorul tur). Peste el → abandon + `aftercare_lag_ms{outcome=timeout}`.
+    aftercare_deadline_ms: int = Field(
+        default=20_000, validation_alias="AFTERCARE_DEADLINE_MS", ge=0
+    )
+
+    @model_validator(mode="after")
+    def _turn_budget_relations(self) -> "Settings":
+        """NX-241: manifestul de bugete se VALIDEAZĂ la boot (poartă fail-fast).
+
+        Alternativa la crash e „nelimitat în tăcere" — adică exact starea de dinainte de card, dar
+        cu un flag aprins care sugerează contrariul. `build_manifest` ridică `ValueError` cu motivul
+        exact (rezervă terminală lipsă, raport de fază peste total, repair > 1)."""
+        from src.runtime.turn_budget import TurnClass, build_manifest  # noqa: PLC0415 — ciclu
+
+        build_manifest(
+            totals_ms={
+                TurnClass.EXACT: self.turn_budget_exact_ms,
+                TurnClass.RECOMMENDATION: self.turn_budget_recommendation_ms,
+                TurnClass.COMPLEX: self.turn_budget_complex_ms,
+                TurnClass.MUTATION: self.turn_budget_mutation_ms,
+            },
+            hard_cap_ms=self.turn_hard_deadline_ms,
+            cost_ceiling_usd=self.turn_cost_budget_usd,
+        )
+        if self.turn_budget_enforced and not self.turn_deadline_enabled:
+            raise ValueError(
+                "TURN_BUDGET_ENFORCED cere TURN_DEADLINE_ENABLED: plafoanele de apeluri fără un "
+                "deadline propagat opresc apelurile, dar nu și așteptarea pe ele"
+            )
+        if self.turn_parallel_reads_enabled and not self.turn_deadline_enabled:
+            raise ValueError(
+                "TURN_PARALLEL_READS_ENABLED cere TURN_DEADLINE_ENABLED: paralelismul fără "
+                "deadline "
+                "partajat înmulțește apelurile în zbor la depășire, nu le taie"
+            )
+        if self.llm_call_cap_ms > self.turn_hard_deadline_ms:
+            raise ValueError(
+                f"LLM_CALL_CAP_MS ({self.llm_call_cap_ms}ms) nu poate depăși TURN_HARD_DEADLINE_MS "
+                f"({self.turn_hard_deadline_ms}ms) — un singur apel ar consuma tot turul"
+            )
+        return self
+
     @model_validator(mode="after")
     def _retrieval_candidate_relations(self) -> "Settings":
         """NX-238: un ramp fără cheie de verificare e o configurație imposibilă, oprită la BOOT.

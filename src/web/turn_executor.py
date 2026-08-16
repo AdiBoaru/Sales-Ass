@@ -49,6 +49,9 @@ from src.db.queries.web_turns import (
     renew_lease,
 )
 from src.models import Event
+from src.runtime import deadline, turn_budget
+from src.runtime.deadline import TurnDeadline
+from src.runtime.turn_budget import TurnClass
 from src.web.action_models import TurnFacts, plan_actions
 from src.web.action_service import merge_actions_into_view
 from src.web.turn_events import set_phase
@@ -172,6 +175,46 @@ class LeaseGuard:
                 self.lost.set()
                 return
             self.renewals += 1
+
+
+def _legacy_deadline_left_s(row, now: datetime, s) -> float:
+    """Cât mai are turul, în semantica NX-233 (fără rezervă, fără plafon dur). Ăsta rămâne
+    comportamentul EXACT cu flagul NX-241 stins — `deadline_at` continuă să oprească pipeline-ul."""
+    if row.deadline_at is not None:
+        return (row.deadline_at - now).total_seconds()
+    return float(s.web_turn_deadline_s)
+
+
+def _build_turn_deadline(row, now: datetime, s) -> TurnDeadline | None:
+    """`web_turns.deadline_at` → buget MONOTON, o singură dată, la claim. `None` cu flagul stins.
+
+    `None` NU înseamnă „fără deadline": executorul cade pe `_legacy_deadline_left_s` (NX-233), deci
+    turul e oprit exact ca înainte. Înseamnă că nimic din interior (LLM, tools, retrieval) nu vede
+    un `TurnDeadline` în ContextVar — adică zero schimbare de comportament pe calea fierbinte. Un
+    deadline „nelimitat" împins în context ar fi fost mai rău decât nimic: ar fi ACTIVAT căile noi
+    (admission de tool, poartă, split read/mutation) fără să impună nimic.
+
+    Cu flagul aprins se adaugă cele două lucruri pe care NX-233 nu le avea:
+      • rezerva terminală (validator + fallback + commit au timp GARANTAT);
+      • plafonul dur (`turn_hard_deadline_ms`), care taie orice `deadline_at` absurd (ceas sărit,
+        config veche) — un tur de o oră nu e un tur, e o scurgere.
+    `deadline_at` lipsă (ledger OFF) → `web_turn_deadline_s`, dar SCĂZÂND așteptarea în coadă:
+    altfel un turn care a stat 4s în coadă ar primi bugetul întreg, iar clientul ar aștepta suma.
+    """
+    if not getattr(s, "turn_deadline_enabled", False):
+        return None
+    reserve_ms = turn_budget.budget_for(TurnClass.RECOMMENDATION, s).terminal_reserve_ms
+    queue_wait_ms = max(0, int((now - row.accepted_at).total_seconds() * 1000.0))
+    return TurnDeadline.from_deadline_at(
+        row.deadline_at,
+        now,
+        fallback_total_ms=int(s.web_turn_deadline_s * 1000),
+        hard_cap_ms=getattr(s, "turn_hard_deadline_ms", 15_000),
+        terminal_reserve_ms=reserve_ms,
+        # `deadline_at` e ABSOLUT → așteptarea în coadă e deja scăzută de scăderea de timestamp-uri.
+        # Doar pe calea de fallback trebuie să o scădem noi.
+        elapsed_ms=0 if row.deadline_at is not None else queue_wait_ms,
+    )
 
 
 class WebTurnExecutor:
@@ -398,8 +441,17 @@ class WebTurnExecutor:
         )
         guard.start()
         started = perf_counter()
-        deadline_left = (
-            (row.deadline_at - now).total_seconds() if row.deadline_at else s.web_turn_deadline_s
+        # NX-241: UN singur deadline, născut din `deadline_at` (fixat la accept) și NEPRELUNGIT la
+        # reclaim. De aici încolo îl citește tot ce rulează în tur (LLM, tools, retrieval) prin
+        # ContextVar — task-ul pipeline-ului e creat DUPĂ `push`, deci moștenește contextul.
+        # Rezerva terminală rămâne a NOASTRĂ: la expirare mai avem timp să scriem un ViewModel
+        # terminal randabil, în loc să tăiem clientul fără nimic (P6).
+        turn_deadline = _build_turn_deadline(row, now, s)
+        deadline_token = deadline.push(turn_deadline) if turn_deadline is not None else None
+        wait_s = (
+            turn_deadline.remaining_ms() / 1000.0
+            if turn_deadline is not None
+            else _legacy_deadline_left_s(row, now, s)
         )
         pipeline = asyncio.create_task(
             handle_turn(
@@ -421,7 +473,11 @@ class WebTurnExecutor:
             try:
                 done, _ = await asyncio.wait(
                     {pipeline, lost},
-                    timeout=max(0.1, deadline_left),
+                    # Cu rezerva terminală SCĂZUTĂ (când NX-241 e aprins): dacă tăiem exact la
+                    # deadline, `_fail` n-ar mai avea timp să comită error-view-ul, iar clientul ar
+                    # rămâne cu un turn `running` până la sweeper. Rezerva e fix diferența dintre
+                    # „timeout onest" și „tăcere".
+                    timeout=max(0.1, wait_s),
                     return_when=asyncio.FIRST_COMPLETED,
                 )
             except asyncio.CancelledError:
@@ -444,6 +500,20 @@ class WebTurnExecutor:
                         ),
                     )
                     return TerminalCommit(row.id, "fenced")
+                if turn_deadline is not None:
+                    await self._emit(
+                        db,
+                        row,
+                        Event(
+                            "turn_deadline_exhausted",
+                            {
+                                "phase": "commit",
+                                "reason": "expired",
+                                "web_turn_id": row.id,
+                                **turn_deadline.as_event_props(),
+                            },
+                        ),
+                    )
                 return await _fail("deadline_exceeded")
             try:
                 result = pipeline.result()
@@ -466,6 +536,8 @@ class WebTurnExecutor:
         finally:
             lost.cancel()
             await guard.stop()
+            if deadline_token is not None:
+                deadline.pop(deadline_token)
 
         execution_ms = round((perf_counter() - started) * 1000.0)
         if "view" in persisted:

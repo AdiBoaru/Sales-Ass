@@ -77,6 +77,12 @@ def pop(token: contextvars.Token) -> None:
     _current.reset(token)
 
 
+def current() -> "UsageAccumulator | None":
+    """Acumulatorul turului curent, sau `None` (în afara unui tur). NX-241 îl diff-uiește în jurul
+    unei runde de model ca să scadă tokenii/costul din bugetul turului, la sursă."""
+    return _current.get()
+
+
 def _cached_from(usage: Any) -> int:
     """`prompt_tokens_details.cached_tokens` — tolerează obiect SDK SAU dict SAU lipsă."""
     details = getattr(usage, "prompt_tokens_details", None)

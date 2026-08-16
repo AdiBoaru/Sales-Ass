@@ -12,8 +12,10 @@ REGULA 1 (Codex #207/F1): niciun helper nu ține `async with db()` peste un apel
 mereu `read scurt → (LLM fără conn) → write scurt`. Altfel „deferred" ar fi doar pe hârtie.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
+from time import perf_counter
 
 from redis.asyncio import Redis
 
@@ -37,6 +39,7 @@ from src.db.queries.semantic_cache import upsert_entry
 from src.db.queries.summaries import get_latest_summary, insert_conversation_summary
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Event, TurnContext
+from src.runtime import deadline
 from src.safety.policy import SafetyPolicy
 from src.worker.canonicalize import canonical_keys_for
 from src.worker.limits import cost_add_and_total
@@ -463,27 +466,53 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
     într-un acumulator de usage propriu (al doilea `llm_usage`, phase=post_turn, ca fundalul să NU
     scape rollup-ului). `db` = PROVIDER: inline (static_db) = vechi; deferred (tenant_db) = conn
     eliberat pe durata LLM. Un eșec într-un helper e prins de el (best-effort) — nu afectează
-    reply/outbox/`mark_inbound_completed` (deja commise)."""
+    reply/outbox/`mark_inbound_completed` (deja commise).
+
+    NX-241 — aftercare-ul rulează STRICT după terminal, dar tot BOUNDED (`aftercare_deadline_ms`):
+    un summarizer care atârnă 3 minute nu atinge răspunsul deja livrat, dar ține workerul (adică
+    următorul tur al altcuiva). La depășire abandonăm și raportăm `aftercare_lag_ms{outcome}` —
+    munca de fundal e best-effort prin contract, deci a o abandona e o degradare, nu o pierdere.
+    Deadline-ul TURULUI nu se propagă aici: el e deja epuizat prin definiție (suntem după commit).
+    """
     post_acc, post_token = usage.push()
+    started = perf_counter()
+    outcome = "ok"
+    # ContextVar-ul de deadline al turului nu are ce căuta în aftercare: `push(None)` îl detașează,
+    # altfel primul apel LLM de fundal ar vedea „0ms rămase" și ar refuza să pornească.
+    deadline_token = deadline.push(None)
     try:
-        await _cache_writeback(
-            db, work.llm, work.business.id, work.language, work.ctx.message.body, work.ctx
-        )
-        await _summarize_if_needed(
-            db, redis, work.business.id, work.conversation_id, work.ctx, work.llm
-        )
-        await _extract_profile_and_score(
-            db,
-            redis,
-            work.ctx,
-            work.llm,
-            shadow_mode=work.shadow_mode,
-            source_message_id=work.inbound_msg_id,
-        )
+        # `getattr`: testele injectează settings-uri parțiale (SimpleNamespace) — un câmp nou nu are
+        # voie să transforme o suită verde într-un aftercare „eșuat".
+        budget_ms = getattr(get_settings(), "aftercare_deadline_ms", 20_000)
+        async with asyncio.timeout(budget_ms / 1000.0 if budget_ms > 0 else None):
+            await _cache_writeback(
+                db, work.llm, work.business.id, work.language, work.ctx.message.body, work.ctx
+            )
+            await _summarize_if_needed(
+                db, redis, work.business.id, work.conversation_id, work.ctx, work.llm
+            )
+            await _extract_profile_and_score(
+                db,
+                redis,
+                work.ctx,
+                work.llm,
+                shadow_mode=work.shadow_mode,
+                source_message_id=work.inbound_msg_id,
+            )
+    except TimeoutError:
+        outcome = "timeout"
+        log.warning("aftercare abandonat la deadline (rezultatul turului e deja livrat)")
     except Exception:  # noqa: BLE001 — backstop: helperele prind deja, dar aftercare NU are voie
+        outcome = "error"
         log.exception("aftercare a eșuat (turul continuă)")  # să propage (reply e deja commis)
     finally:
+        deadline.pop(deadline_token)
         usage.pop(post_token)
+        work.ctx.emit(
+            "aftercare_lag_ms",
+            elapsed_ms=round((perf_counter() - started) * 1000.0),
+            outcome=outcome,
+        )
     post_cost_usd = round(post_acc.cost_usd, 6)
     if post_acc.calls:
         await _record_aftercare_cost(redis, work, post_cost_usd)

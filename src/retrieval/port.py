@@ -72,6 +72,22 @@ class RetrievalDeadline:
         return not self.unbounded and self.elapsed_ms() >= self.budget_ms
 
 
+def deadline_from_turn(cap_ms: int = 0) -> RetrievalDeadline:
+    """NX-241 — bugetul retrievalului = `min(capul lui, ce a mai rămas din TURUL curent)`.
+
+    Fără un `TurnDeadline` activ (flag stins, job, script) rămâne exact capul lui de dinainte —
+    inclusiv `0` = fără buget. Un retrieval nu are voie să-și „lărgească" bugetul peste ce a mai
+    rămas din tur: ăsta e exact felul în care timeouturile ajungeau să se înmulțească.
+    """
+    from src.runtime import deadline as turn_deadline  # noqa: PLC0415 — evită ciclul la import
+
+    d = turn_deadline.current()
+    if d is None or d.unbounded:
+        return RetrievalDeadline(budget_ms=max(0, cap_ms))
+    remaining = d.remaining_ms()
+    return RetrievalDeadline(budget_ms=min(cap_ms, remaining) if cap_ms > 0 else remaining)
+
+
 def query_count_bucket(count: int) -> str:
     """Numărul de query-uri DB → bandă low-cardinality (o metrică nu are voie să explodeze)."""
     if count <= 0:

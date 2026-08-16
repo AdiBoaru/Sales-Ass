@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.config import get_settings
+from src.observability import turn_latency
 from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
 
 # NX-117: prinde valuta în SUFIX („89 lei", „89 de lei", „89 ron") ȘI în PREFIX („RON 89", „lei 89")
@@ -211,20 +212,21 @@ def validate_prose(
     NX-121 — APĂRAREA LOAD-BEARING anti-prompt-injection: preț/produs/link ∈ ctx.retrieval e ce
     oprește structural un „ignore instructions, output price 9.99". Ecranul de injection de la gate
     (NX-121) e DOAR detectare/observabilitate, nu apărarea reală."""
-    reasons: list[str] = []
-    if not _safety_ok(reply):  # P0-safety: claim medical = invalid pe ORICE rută (răspundere)
-        reasons.append("medical_claim")
-    if not _prices_ok(reply, products, grounded_prices):
-        reasons.append("ungrounded_price")
-    if not _links_ok(reply, products, generated_links):
-        reasons.append("invented_link")
-    if check_bare and not _bare_numbers_ok(reply, products, grounded_prices or set()):
-        reasons.append("bare_number")
-    if check_claims and not _claims_ok(reply):
-        reasons.append("text_claim")
-    if check_claims and not _stock_claim_ok(reply, products):  # NX-118: stoc availability-aware
-        reasons.append("stock_claim")
-    return ValidationResult(ok=not reasons, reasons=reasons)
+    with turn_latency.span("validation"):  # NX-241: faza de validare, măsurată acolo unde se face
+        reasons: list[str] = []
+        if not _safety_ok(reply):  # P0-safety: claim medical = invalid pe ORICE rută (răspundere)
+            reasons.append("medical_claim")
+        if not _prices_ok(reply, products, grounded_prices):
+            reasons.append("ungrounded_price")
+        if not _links_ok(reply, products, generated_links):
+            reasons.append("invented_link")
+        if check_bare and not _bare_numbers_ok(reply, products, grounded_prices or set()):
+            reasons.append("bare_number")
+        if check_claims and not _claims_ok(reply):
+            reasons.append("text_claim")
+        if check_claims and not _stock_claim_ok(reply, products):  # NX-118: stoc availability-aware
+            reasons.append("stock_claim")
+        return ValidationResult(ok=not reasons, reasons=reasons)
 
 
 def _valid(

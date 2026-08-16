@@ -37,6 +37,7 @@ from src.agent.grounding_guard import GROUNDED_PAYLOAD_KEY, answer_from_jsonb
 from src.channels.web.render_v2 import TurnIdentity, project
 from src.config import get_settings
 from src.db.queries.web_turns import WebTurnRow
+from src.observability import turn_latency
 from src.web.action_crypto import KeyRing, KeyRingError, parse_key_ring
 from src.web.action_models import MAX_ACTIONS_PER_TURN, action_label
 from src.web.action_service import IssuedAction, issue_actions, plans_from_row
@@ -536,13 +537,17 @@ def grounded_view(row: WebTurnRow, payload: dict[str, Any], language: str) -> di
             conversation_revision=max(0, row.conversation_revision_at_accept or 0),
             status=project_wire_status(row.status),
         )
-        view = project(
-            answer,
-            identity=identity,
-            locale=language,
-            issued_actions=issued_actions(row),
-            now=answer.as_of or row.completed_at,
-        )
+        # NX-241: proiecția se MĂSOARĂ din afară, niciodată dinăuntru — projectorul rămâne pur
+        # (zero ceas, zero I/O: `test_projector_source_contains_no_clock_or_io_call`). Un span pus
+        # în `render_v2` ar fi introdus exact ceasul pe care NX-240 l-a interzis.
+        with turn_latency.span("projection"):
+            view = project(
+                answer,
+                identity=identity,
+                locale=language,
+                issued_actions=issued_actions(row),
+                now=answer.as_of or row.completed_at,
+            )
         return view.model_dump(mode="json", exclude_none=True)
     except Exception:  # noqa: BLE001 — proiecția grounded nu are voie să scoată 500
         log.exception(

@@ -43,6 +43,7 @@ from src.db.queries.messages import get_recent_messages, insert_message
 from src.db.queries.outbox import enqueue_outbox
 from src.db.queries.summaries import get_summary_for_context
 from src.models import Author, BusinessConfig, Contact, Direction, Message
+from src.observability import turn_latency
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +95,36 @@ async def load_turn(
     `last_inbound_at` (acceptul a făcut-o). Claim-ul de dedupe RĂMÂNE: el e single-execution
     per attempt (aliniat cu lease-ul de ledger, CLAIM_TTL_S)."""
     provider_msg_id = event.get("provider_msg_id")
+    with turn_latency.span("load"):  # NX-241: faza `load` = ACEST checkout, măsurat unde se face
+        return await _load_turn(
+            db,
+            business,
+            channel_id,
+            event,
+            turn_id=turn_id,
+            safe_body=safe_body,
+            identity_external_id=identity_external_id,
+            verified_customer_ref=verified_customer_ref,
+            load_facts=load_facts,
+            preinserted_msg_id=preinserted_msg_id,
+            provider_msg_id=provider_msg_id,
+        )
+
+
+async def _load_turn(
+    db: DbProvider,
+    business: BusinessConfig,
+    channel_id: str,
+    event: dict,
+    *,
+    turn_id: str,
+    safe_body: str | None,
+    identity_external_id: str,
+    verified_customer_ref: str | None,
+    load_facts: bool,
+    preinserted_msg_id: str | None,
+    provider_msg_id: str | None,
+) -> TurnLoadSnapshot:
     async with db("turn_load") as conn:
         # Dedupe layer 2 (durabil): retry de provider care a scăpat de Redis (FLUSHALL/restart).
         # NX-86 claim-or-resume: un crash lasă `completed_at` NULL → orfanul e reclamat după TTL.

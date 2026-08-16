@@ -12,19 +12,24 @@ context → agent → validator → sender) se adaugă în ordine în G3+.
 
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 
 import asyncpg
 from redis.asyncio import Redis
 
-from src.agent import response_quality, usage
+from src.agent import fallbacks, response_quality, usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
 from src.config import get_settings
+from src.db import op_metrics
 from src.db.provider import DbProvider, static_db
 from src.models import TurnContext, TurnUsage
+from src.observability import turn_latency
+from src.runtime import deadline, turn_budget
+from src.runtime.deadline import TurnDeadline
+from src.runtime.turn_budget import BudgetLedger, TurnClass
 from src.safety import compose as safety_compose
 
 log = logging.getLogger(__name__)
@@ -82,12 +87,15 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     stagiile nu știu că sunt măsurate (principiul 10); adaptorul raportează, runner-ul
     agregă. `ctx.usage` (TurnUsage) e pus la dispoziția processor-ului (cost/mesaj)."""
     acc, token = usage.push()
+    runtime = _open_runtime(ctx)  # NX-241: deadline + buget + spans (no-op cu flagurile stinse)
     turn_started = perf_counter()
     by_stage: dict[str, dict] = {}
     stage_latencies: dict[str, float] = {}  # P0-budget: latența TUTUROR stagiilor (și non-LLM)
     try:
         for stage in stages:
             name = getattr(stage, "__name__", "stage")
+            if _deadline_stop(ctx, runtime, name):
+                break
             if deps.stage_hook is not None:
                 try:
                     deps.stage_hook(name)  # NX-233: fază de sârmă, derivată — nu blochează
@@ -97,6 +105,10 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             started = perf_counter()
             await stage(ctx, deps)
             latency_ms = round((perf_counter() - started) * 1000, 1)
+            _record_phase(name, latency_ms)
+            if name == "gates_stage":
+                runtime.gates_done = True  # de aici încolo știm dacă botul are voie să vorbească
+            _rebind_turn_class(ctx, runtime, name)
             ctx.emit("stage_completed", stage=name, latency_ms=latency_ms)
             stage_latencies[name] = stage_latencies.get(name, 0.0) + latency_ms
             _record_stage_delta(by_stage, name, before, acc.snapshot(), latency_ms)
@@ -130,6 +142,8 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     finally:
         usage.pop(token)
         latency_ms = round((perf_counter() - turn_started) * 1000, 1)
+        _emit_turn_latency(ctx, runtime, latency_ms)
+        _close_runtime(runtime)
         savings = (
             sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
             if acc.calls
@@ -157,6 +171,195 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
         # P0-budget: alertă per-tur (latență end-to-end SAU cost LLM peste buget) — pt ORICE tur
         # (inclusiv cache/free-layer), nu doar cele cu LLM. Observabilitate, nu schimbă turul (P6).
         _emit_turn_budget(ctx, latency_ms, acc.cost_usd, stage_latencies)
+
+
+# ── NX-241: deadline + buget + faze ────────────────────────────────────────────────────────
+# Un stagiu NU e o fază. `agent_stage` conține model + tools + validare + projection, deci ar
+# ascunde exact defalcarea de care avem nevoie; el se măsoară pe DINĂUNTRU (spans în `llm.py`,
+# `tool_executor.py`, `validator.py`, `turn_events.py`). Aici mapăm doar stagiile care SUNT o
+# singură fază — altfel am dubla timpul (o dată ca stagiu, o dată ca fază internă).
+_PHASE_BY_STAGE: dict[str, str] = {
+    "gates_stage": "gates",
+    "language_stage": "gates",
+    "action_kernel_stage": "gates",
+    "clarify_resume_stage": "gates",
+    "greeting_stage": "gates",
+    "alias_stage": "gates",
+    "cache_stage": "gates",
+    "faq_stage": "gates",
+    "handoff_stage": "gates",
+    "triage_stage": "model",
+}
+
+
+@dataclass
+class TurnRuntime:
+    """Ce a deschis runner-ul pentru turul ăsta (și trebuie să închidă la final)."""
+
+    deadline: TurnDeadline | None = None
+    ledger: BudgetLedger | None = None
+    latency: turn_latency.TurnLatencyAccumulator | None = None
+    _tokens: list[tuple[str, object]] = field(default_factory=list)
+    owns_deadline: bool = False
+    #: A rulat poarta de AUTORITATE (`gates_stage`)? Cât timp nu a rulat, nu știm dacă botul are
+    #: voie să vorbească (bot_active / handoff activ) — deci fallback-ul de deadline TACE.
+    gates_done: bool = False
+
+
+def _open_runtime(ctx: TurnContext) -> TurnRuntime:
+    """Deschide deadline-ul, bugetul și acumulatorul de faze. Cu flagurile stinse, tot ce rămâne
+    e (cel mult) măsurarea — comportamentul turului e byte-identic.
+
+    Deadline-ul poate fi DEJA în context: executorul web (NX-233) îl împinge din `deadline_at`, ca
+    așteptarea în coadă să consume același buget. Runner-ul nu îl suprascrie niciodată — ar
+    însemna un al doilea proprietar al aceluiași câmp (P3)."""
+    # `getattr` peste tot pe câmpurile NOI: suita injectează settings parțiale (SimpleNamespace)
+    # în ~zeci de teste de stagiu, iar un câmp nou nu are voie să transforme asta în AttributeError.
+    s = get_settings()
+    rt = TurnRuntime()
+    if getattr(s, "turn_latency_spans_enabled", True):
+        rt.latency, tok = turn_latency.push()
+        rt._tokens.append(("latency", tok))
+    if not getattr(s, "turn_deadline_enabled", False):
+        return rt
+    rt.deadline = deadline.current()
+    if rt.deadline is None:
+        # Cale fără executor (worker de canal, sim): tot vrem un plafon TOTAL sigur, nu nelimitat.
+        budget = turn_budget.budget_for(TurnClass.RECOMMENDATION, s)
+        rt.deadline = TurnDeadline(
+            total_ms=min(budget.total_ms, getattr(s, "turn_hard_deadline_ms", 15_000)),
+            terminal_reserve_ms=budget.terminal_reserve_ms,
+        )
+        rt._tokens.append(("deadline", deadline.push(rt.deadline)))
+        rt.owns_deadline = True
+    rt.ledger = turn_budget.current()
+    if rt.ledger is None:
+        rt.ledger = BudgetLedger(
+            turn_budget.budget_for(TurnClass.RECOMMENDATION, s),
+            enforced=getattr(s, "turn_budget_enforced", False),
+        )
+        rt._tokens.append(("budget", turn_budget.push(rt.ledger)))
+    if rt.latency is not None:
+        rt.latency.turn_class = rt.ledger.budget.turn_class.value
+    return rt
+
+
+def _close_runtime(rt: TurnRuntime) -> None:
+    for kind, tok in reversed(rt._tokens):
+        if kind == "latency":
+            turn_latency.pop(tok)
+        elif kind == "deadline":
+            deadline.pop(tok)
+        else:
+            turn_budget.pop(tok)
+    rt._tokens.clear()
+
+
+def _record_phase(stage_name: str, latency_ms: float) -> None:
+    phase = _PHASE_BY_STAGE.get(stage_name)
+    if phase is not None:
+        turn_latency.record(phase, latency_ms)
+
+
+def _rebind_turn_class(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> None:
+    """Clasa de tur se știe abia după ce ruta e decisă (triaj / kernel de acțiune). Re-legăm o
+    dată, PĂSTRÂND contoarele consumate — un tur nu-și șterge istoria fiindcă s-a reclasificat."""
+    if rt.ledger is None or stage_name not in ("triage_stage", "action_kernel_stage"):
+        return
+    route = ctx.route.route.value if ctx.route and ctx.route.route else None
+    turn_class = turn_budget.classify(
+        route,
+        # `ctx.action` e comanda opacă a clientului (NX-236) — un tur care EXECUTĂ ceva e mutație,
+        # oricât de simplu ar arăta textul.
+        has_action=getattr(ctx, "action", None) is not None,
+        purchase_intent=bool(ctx.route.purchase_intent) if ctx.route else False,
+    )
+    if turn_class is rt.ledger.budget.turn_class:
+        return
+    rt.ledger.rebind(turn_budget.budget_for(turn_class, get_settings()))
+    if rt.latency is not None:
+        rt.latency.turn_class = turn_class.value
+    ctx.emit("turn_class_bound", turn_class=turn_class.value, stage=stage_name)
+
+
+def _deadline_stop(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> bool:
+    """Mai are turul timp pentru stagiul următor? `True` = oprim pipeline-ul ACUM.
+
+    Oprirea nu e tăcere: dacă nu există deja un reply, punem unul determinist — produsele deja
+    validate dacă le avem (fapte reale, nu draft de model), altfel un mesaj onest (P6). Rezerva
+    terminală există exact ca pasul ăsta + commitul să aibă timp garantat."""
+    d = rt.deadline
+    if d is None or d.unbounded:
+        return False
+    phase = _PHASE_BY_STAGE.get(stage_name, "model")
+    cp = d.has_room_for(phase, minimum_ms=0)
+    if not cp.exhausted:
+        return False
+    reason = cp.reason or "expired"
+    turn_latency.mark_exhausted(phase, reason)
+    ctx.emit(
+        "turn_deadline_exhausted",
+        phase=phase,
+        reason=reason,
+        stage=stage_name,
+        elapsed_ms=d.elapsed_ms(),
+        budget_ms=d.total_ms,
+    )
+    log.warning(
+        "tur oprit de deadline în %s (%s): %dms din %dms",
+        stage_name,
+        reason,
+        d.elapsed_ms(),
+        d.total_ms,
+    )
+    # Tăcerea rămâne a Gates, nu a deadline-ului. Două situații în care NU punem niciun reply:
+    #   • `ctx.halt` — Gates a decis tăcere intenționată (bot oprit / om a preluat conversația);
+    #   • gates n-a apucat să ruleze — nu ȘTIM încă dacă botul are voie să vorbească, iar un mesaj
+    #     de „n-am apucat" într-o conversație preluată de un operator ar fi mai rău decât nimic.
+    # În ambele cazuri turul iese fără reply, iar marginea web îl terminalizează onest cu
+    # error-view randabil (`empty_result`/`deadline_exceeded`) — P6 e respectat acolo, nu aici.
+    if ctx.reply is None and rt.gates_done and not ctx.halt:
+        products = list(ctx.retrieval.products) if ctx.retrieval else []
+        ctx.set_reply(
+            fallbacks._deadline_msg(ctx.language, partial=bool(products)),
+            products=products[:4] or None,
+            cacheable=False,  # un răspuns de epuizare nu are ce căuta în cache (otrăvire)
+        )
+        _emit_response_shape(ctx, stage_name)  # paritate de telemetrie cu early-exit-ul normal
+    return True
+
+
+def _emit_turn_latency(ctx: TurnContext, rt: TurnRuntime, latency_ms: float) -> None:
+    """UN event per tur (ca `llm_usage` / `db_ops`): defalcarea pe faze + ce a consumat din buget.
+    Pur observabilitate — o excepție aici nu are voie să atingă răspunsul (P6)."""
+    if rt.latency is None:
+        return
+    try:
+        props: dict = {
+            "e2e_ms": round(latency_ms),
+            "e2e_bucket": turn_latency.ms_bucket(latency_ms),
+            **rt.latency.as_event_props(),
+        }
+        # Query-urile se NUMĂRĂ din contabilitatea NX-231 (checkout-uri per operație), nu dintr-un
+        # contor paralel: două surse de adevăr pentru „câte query-uri a făcut turul" ar diverge.
+        db_acc = op_metrics.current()
+        if db_acc is not None:
+            props["query_count_bucket"] = turn_budget.count_bucket(db_acc.checkouts)
+            if rt.ledger is not None:
+                rt.ledger.consume("query_calls", db_acc.checkouts)
+        if rt.ledger is not None:
+            props.update(rt.ledger.as_event_props())
+            props["model_calls_bucket"] = turn_budget.count_bucket(
+                int(rt.ledger.spent.get("model_rounds", 0))
+            )
+            props["tool_calls_bucket"] = turn_budget.count_bucket(
+                int(rt.ledger.spent.get("tool_calls", 0))
+            )
+        if rt.deadline is not None:
+            props.update(rt.deadline.as_event_props())
+        ctx.emit("turn_latency", **props)
+    except Exception as e:  # noqa: BLE001 — telemetria nu blochează livrarea
+        log.warning("runner: turn_latency a eșuat (%s)", type(e).__name__)
 
 
 def _record_stage_delta(

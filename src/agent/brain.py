@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
+from src.agent import tool_budget
 from src.agent.answer_plan import (
     AnswerPlanContext,
     AnswerPlanV2,
@@ -49,8 +50,11 @@ from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
 from src.models import TurnContext
-from src.retrieval.port import query_count_bucket
+from src.observability import turn_latency
+from src.retrieval.port import deadline_from_turn, query_count_bucket
 from src.retrieval.selector import build_port, select_provider
+from src.runtime import deadline as turn_deadline
+from src.runtime import turn_budget
 from src.web.localization import DISPLAYABLE_NEEDS, format_need
 from src.worker.context import build_brain_input
 
@@ -400,14 +404,16 @@ def _attach_grounding(
         # builderul — altfel ar raporta mereu 0 și n-ar detecta nimic.
         query_count=len(getattr(execute, "bundles", []) or []),
     )
-    answer = ground_answer(
-        plan,
-        bundle,
-        locale=ctx.language,
-        ask_clarification=ask_clarification,
-        memory_criteria=_memory_criteria(ctx, ctx.language),
-        commerce_enabled=settings.conversation_cart_enabled,
-    )
+    # NX-241: grounding-ul e o FAZĂ (validare), măsurată din afară ca guardul să rămână determinist.
+    with turn_latency.span("validation"):
+        answer = ground_answer(
+            plan,
+            bundle,
+            locale=ctx.language,
+            ask_clarification=ask_clarification,
+            memory_criteria=_memory_criteria(ctx, ctx.language),
+            commerce_enabled=settings.conversation_cart_enabled,
+        )
     _emit_grounding_telemetry(ctx, bundle, answer)
     ctx.grounded = answer if answer.ok else None
 
@@ -450,15 +456,44 @@ class _PortedExecute:
     async def __call__(self, name: str, args: dict[str, Any]) -> str:
         if name != "search_products":
             return await self.run.execute(name, args)
-        async with self.run._execution_lock:  # noqa: SLF001 — aceeași serializare ca ToolRun
-            return await self._search(name, args)
+        # NX-241: căutarea prin port trece prin ACELEAȘI porți ca orice tool — admission (plafon de
+        # apeluri + timp rămas) și poarta read/mutation. Altfel `search_products` ar fi singurul
+        # tool nebugetat, adică fix cel pe care modelul îl cheamă în buclă.
+        ledger, d = turn_budget.current(), turn_deadline.current()
+        if ledger is None and d is None:
+            async with self.run._execution_lock:  # noqa: SLF001 — aceeași serializare ca ToolRun
+                return await self._search(name, args)
+        seq = self.run._take_ticket()  # noqa: SLF001 — aceeași ordonare ca ToolRun (NX-241)
+        try:
+            admission = tool_budget.admit(name, ledger=ledger, deadline=d)
+            if not admission:
+                self.ctx.emit(
+                    "tool_budget",
+                    name=name,
+                    outcome="rejected",
+                    reason=admission.reason or "unknown",
+                )
+                return admission.refusal or tool_budget.REFUSAL_BUDGET
+            async with self.run._tool_gate().hold(name):  # noqa: SLF001 — poarta lui ToolRun
+                return await self._search(name, args, seq=seq)
+        finally:
+            if seq is not None:
+                await self.run._finish_ticket(seq)  # noqa: SLF001
 
-    async def _search(self, name: str, args: dict[str, Any]) -> str:
+    async def _search(self, name: str, args: dict[str, Any], *, seq: int | None = None) -> str:
         ctx, run = self.ctx, self.run
         started = perf_counter()
         spec = _spec_from_args(ctx, args)
+        budget = turn_budget.current()
+        cap_ms = budget.budget.retrieval_ms if budget else get_settings().retrieval_deadline_ms
         try:
-            bundle = await self.port.retrieve(ctx.snapshot, spec, active_needs(ctx))
+            with turn_latency.span("retrieval"):
+                bundle = await self.port.retrieve(
+                    ctx.snapshot,
+                    spec,
+                    active_needs(ctx),
+                    deadline=deadline_from_turn(cap_ms),
+                )
         except Exception as e:  # noqa: BLE001 — degradare VIZIBILĂ modelului, nu tăcere
             ctx.emit(
                 "tool_call",
@@ -470,6 +505,11 @@ class _PortedExecute:
                 error=type(e).__name__,
             )
             return "Căutarea nu e disponibilă momentan (dependency_unavailable)."
+        if seq is not None:
+            # Acumularea (bundles + `retrieved`) se aplică în ordinea APELURILOR, nu în ordinea în
+            # care a răspuns providerul — altfel aceleași două căutări ar da carduri în ordini
+            # diferite de la o rulare la alta.
+            await run._await_ticket(seq)  # noqa: SLF001
         self.bundles.append(bundle)
         products = run._safe_products(list(bundle.products))  # noqa: SLF001 — backstop NX-173
         run.retrieved.extend(products)
