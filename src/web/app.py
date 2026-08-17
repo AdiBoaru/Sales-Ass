@@ -80,6 +80,7 @@ from src.web.session import (
     issue_visitor,
     verify_web_session_any,
 )
+from src.web.shell_copy import BOOTSTRAP_COPY_KEY, shell_copy
 from src.web.turn_events import (
     get_phase,
     result_event,
@@ -329,7 +330,14 @@ async def web_bootstrap(token: str, request: Request) -> dict:
         )
     else:
         visitor_id, sig = issue_visitor(token, resolved["session_secret"])
-    return {"token": token, "visitor_id": visitor_id, "sig": sig, "sse_url": "/web/stream"}
+    body = {"token": token, "visitor_id": visitor_id, "sig": sig, "sse_url": "/web/stream"}
+    # NX-244: copy-ul ramei, disponibil ÎNAINTE de primul tur. Fără el, widgetul v2 n-are de unde
+    # lua eticheta launcherului sau placeholderul composerului la prima încărcare și ar fi nevoit
+    # să le inventeze — ceea ce boundary-ul „frontend pasiv" interzice. Strict aditiv și gated pe
+    # flagul v2: cu ruta v2 stinsă, calea v1 primește exact aceiași bytes ca înainte.
+    if s.web_turn_v2_enabled:
+        body[BOOTSTRAP_COPY_KEY] = shell_copy(resolved.get("default_locale"))
+    return body
 
 
 @router.post("/messages")

@@ -105,6 +105,32 @@ Detalii, threat model și runbook de rotație: [`WEB-ACTIONS-V2.md`](WEB-ACTIONS
 Un label lipsă sau gol **nu** e „FE pune ceva implicit" — e contract invalid. Altfel microcopy-ul
 comercial se întoarce în browser pe ușa din dos.
 
+**Înainte de primul tur (NX-244).** Copy-ul de mai sus călătorește într-un `web-view.v2`, iar un
+view există abia după ce un tur s-a încheiat. Între încărcarea paginii și primul răspuns widgetul
+n-avea de unde lua eticheta launcherului sau placeholderul composerului — și exact acolo v1 își
+punea `BRAND.assistant` și „Întreabă orice despre produse…". De aceea `GET /web/bootstrap` întoarce
+un câmp aditiv `view_copy`:
+
+```jsonc
+{ "token": "…", "visitor_id": "…", "sig": "…", "sse_url": "/web/stream",
+  "view_copy": { "composer": {…}, "chrome": {…}, "a11y": {…} } }   // NX-244
+```
+
+Trei reguli care fac câmpul sigur:
+
+1. **Aceleași tabele de copy** (`src/web/localization.py`), doar expuse mai devreme — nu un al
+   doilea vocabular care poate diverge de `chrome`-ul unui view. Un test compară cele două.
+2. **Validat prin modelele NX-228** (`ComposerView`/`ChromeView`/`A11yView`) înainte de a ieși pe
+   sârmă: un label gol pică la boot, nu în browserul clientului.
+3. **Gated pe `WEB_TURN_V2_ENABLED`**: cu ruta v2 stinsă, `/web/bootstrap` răspunde byte-identic
+   ca înainte, deci calea v1 nu vede nimic nou.
+
+Precedența la FE e una singură: `view.chrome ?? bootstrap.view_copy.chrome`. View-ul curent câștigă
+— e copy-ul turului real, în locale-ul lui. Nu există a treia sursă.
+
+`view_copy` **nu** e un ViewModel: n-are `messages`, `turn` sau `conversation` și nu se randează ca
+un răspuns. E strict rama, disponibilă înainte să existe conținut.
+
 ### 3.4 Ce rămâne al frontendului
 
 Layout, grilă, spațiere, tipografie, temă, paletă, breakpointuri, animații; `role`/`focus`/

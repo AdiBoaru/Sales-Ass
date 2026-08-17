@@ -166,6 +166,7 @@ async def test_resolve_web_session_returns_secret():
             "session_secret_prev": None,
             "identity_secret": "idk",
             "allowed_origins": None,
+            "default_locale": "ro",
         }
     )
     out = await channels_q.resolve_web_session(conn, "pub_abc")
@@ -175,6 +176,8 @@ async def test_resolve_web_session_returns_secret():
         "session_secret_prev": None,
         "identity_secret": "idk",
         "allowed_origins": None,
+        # NX-244: limba tenantului, pentru copy-ul de shell servit la bootstrap (D3).
+        "default_locale": "ro",
     }
     assert conn.captured == ("pub_abc",)  # public_token = $1 (P7: derivă tenantul)
 
@@ -191,6 +194,7 @@ async def test_resolve_web_session_carries_rotation_and_origins():
             "session_secret_prev": "old",
             "identity_secret": None,
             "allowed_origins": "https://demo.nativextech.com",
+            "default_locale": "ro",
         }
     )
     out = await channels_q.resolve_web_session(conn, "pub_abc")
@@ -208,6 +212,7 @@ async def test_resolve_web_session_identity_secret_optional():
             "session_secret_prev": None,
             "identity_secret": None,
             "allowed_origins": None,
+            "default_locale": "ro",
         }
     )
     out = await channels_q.resolve_web_session(conn, "pub_abc")

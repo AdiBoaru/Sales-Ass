@@ -18,24 +18,32 @@ import asyncpg
 async def resolve_web_session(
     conn: asyncpg.Connection, public_token: str
 ) -> dict[str, str | None] | None:
-    """`public_token → {business_id, session_secret, identity_secret}` pt un canal `webchat` ACTIV.
+    """`public_token → {business_id, session_secret, identity_secret, default_locale}` pt un canal
+    `webchat` ACTIV.
 
     Control plane (`admin_conn`): derivă tenantul ÎNAINTE de a-l ști, ca `resolve_channel`.
     `session_secret` (NX-20) semnează `visitor_id`-ul anonim; `identity_secret` (NX-129, opțional)
     verifică JWT-ul de login passthrough — DOUĂ chei separate. None dacă tokenul nu mapează la un
     canal activ SAU canalul n-are `session_secret` (seed incomplet); `identity_secret` lipsă =
-    login passthrough inactiv pe acel tenant (nu invalidează sesiunea anonimă)."""
+    login passthrough inactiv pe acel tenant (nu invalidează sesiunea anonimă).
+
+    NX-244: `default_locale` vine din `businesses`, nu din `channels` — limba e a tenantului, iar
+    copy-ul de shell servit la bootstrap trebuie să fie în ea (D3: locale-aware, nu română
+    hardcodată). JOIN, nu al doilea query: rezultatul e oricum cache-uit de `SessionSecretCache`,
+    deci costul e o coloană în plus la un miss, nu un round-trip per request."""
     row = await conn.fetchrow(
         """
-        select business_id::text as business_id,
-               settings->>'session_secret' as session_secret,
-               settings->>'session_secret_prev' as session_secret_prev,
-               settings->>'identity_secret' as identity_secret,
-               settings->>'allowed_origins' as allowed_origins
-        from channels
-        where kind = 'webchat'
-          and provider_account_id = $1
-          and status = 'active'
+        select c.business_id::text as business_id,
+               c.settings->>'session_secret' as session_secret,
+               c.settings->>'session_secret_prev' as session_secret_prev,
+               c.settings->>'identity_secret' as identity_secret,
+               c.settings->>'allowed_origins' as allowed_origins,
+               b.default_locale as default_locale
+        from channels c
+        join businesses b on b.id = c.business_id
+        where c.kind = 'webchat'
+          and c.provider_account_id = $1
+          and c.status = 'active'
         """,
         public_token,
     )
@@ -52,6 +60,9 @@ async def resolve_web_session(
         # NX-229: allowlist de origini PER CANAL (CSV). Absent → se folosește cel global din
         # settings. Un tenant nu trebuie să poată vedea sau moșteni originile altuia.
         "allowed_origins": row["allowed_origins"],
+        # NX-244: limba tenantului, pentru copy-ul de shell servit la bootstrap. `normalize_locale`
+        # decide fallbackul la consumator — aici întoarcem exact ce e în DB, inclusiv `None`.
+        "default_locale": row["default_locale"],
     }
 
 

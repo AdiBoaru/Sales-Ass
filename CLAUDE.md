@@ -121,6 +121,24 @@ byte-identic; poarta de boot refuză combinațiile imposibile). Pragurile finale
 NX-246/247. Detalii: [`docs/NX-241-TURN-DEADLINE.md`](docs/NX-241-TURN-DEADLINE.md); probă:
 `python scripts/sim/web_latency_probe.py`.
 
+**NX-244 — renderer WebWidget PASIV (repo FE) + `view_copy` la bootstrap (backend, aditiv).**
+Implementarea trăiește în repo-ul frontend (`Sales MVP Frontend Final`, branch
+`feat/NX-244-passive-block-renderer`): un registry FINIT `block.type → componentă` peste toate cele
+**11** tipuri din schemă (schița din card omitea `divider`; sursa de adevăr e schema), acțiuni care
+retrimit tokenul opac NESCHIMBAT, și eliminarea din calea v2 a tot ce era creier al doilea în
+browser — `Intl`/`Math.round` pe preț, `inferBadgeTone` (ton dedus cu regex din etichetă), thinking
+simulat cu timere, `CartView`/`SavedDrawer` pe `localStorage`, acumulatorul `criteria`, greetingul
+și cele 4 sugestii hardcodate, `?preview=1` + `chatDemo.js`. Boundary-ul e EXECUTABIL (ESLint pe
+`src/chat/**` + `test/passive-renderer-boundary.test.js`, care rezolvă căile în loc să le
+potrivească textual). Selecția v1/v2 e la BUILD (`VITE_CHAT_PROTOCOL_V2` comparat literal ⇒ Rollup
+elimină ramura moartă): buildul v2 nu conține v1 — verificat prin scan pe `dist/`.
+**În backend, singura schimbare** (`src/web/shell_copy.py`, aditivă și gated pe
+`WEB_TURN_V2_ENABLED`): `GET /web/bootstrap` întoarce `view_copy` = `{composer, chrome, a11y}` din
+ACELEAȘI tabele `src/web/localization.py`, fiindcă `chrome` călătorea doar în interiorul unui view,
+iar înainte de primul tur widgetul rămânea fără nume și și-l inventa. `resolve_web_session` aduce
+`default_locale` printr-un JOIN pe `businesses` (D3: limba e a tenantului, nu constantă). Detalii:
+[`docs/WEB-WIDGET-BOUNDARY-V2.md`](docs/WEB-WIDGET-BOUNDARY-V2.md) §3.3.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
