@@ -11,6 +11,7 @@ Două straturi:
 
 import pytest
 
+import src.db.connection as conn_mod
 from src.db.connection import (
     _assert_bot_role,
     _vector_decode,
@@ -177,3 +178,41 @@ async def test_two_consecutive_checkouts_isolated(_pools):
         other = await conn.fetchval("select count(*) from products")
     assert demo > 0  # NX-177: invariant, nu numărul din seed (vezi test_tenant_sees_own_products)
     assert other == 0  # ăsta e assertul care demonstrează izolarea
+
+
+# ── NX-247: excepția de loopback pentru SSL (harnessul E2E pe Postgres efemer) ────────────────
+# Contextul: `_connect_kwargs` forțează SSL pe Windows fiindcă pooler-ul Supabase îl cere. Un
+# Postgres local, fără certificat, REFUZĂ upgrade-ul — deci fără această excepție harnessul Stage 1
+# (docker-compose.stage1-e2e.yml) n-ar putea rula pe dev, iar runbookul ar fi copy/paste doar pe
+# hârtie. Poarta e pe HOST, nu pe un flag: testele de mai jos există ca nimeni să nu o lărgească
+# într-un „dacă SSL pică, mergem fără" — care ar coborî silențios securitatea pe un DSN remote.
+
+
+def test_loopback_dsn_connects_without_ssl(monkeypatch):
+    monkeypatch.setattr(conn_mod.sys, "platform", "win32")
+    kwargs = conn_mod._connect_kwargs("postgresql://u:p@127.0.0.1:55432/db")
+    assert kwargs["ssl"] is False
+    assert kwargs["host"] == "127.0.0.1"
+    assert kwargs["port"] == 55432
+    assert kwargs["database"] == "db"
+
+
+def test_remote_dsn_keeps_ssl(monkeypatch):
+    """Singura garanție care contează: un host remote nu pierde SSL-ul din greșeală."""
+    monkeypatch.setattr(conn_mod.sys, "platform", "win32")
+    monkeypatch.setattr(
+        conn_mod.socket,
+        "getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("203.0.113.10", 5432))],
+    )
+    kwargs = conn_mod._connect_kwargs("postgresql://u:p@db.example.com:5432/db")
+    assert kwargs["ssl"] is not False
+    assert kwargs["host"] == "203.0.113.10"
+
+
+def test_migrate_runner_applies_the_same_loopback_rule():
+    """Runnerul de migrări are propriul `_connect_kwargs`. Dacă cele două ar divergea, ori
+    migrările n-ar rula local, ori una dintre căi ar pierde SSL-ul pe remote."""
+    from scripts.migrate import _connect_kwargs as migrate_kwargs
+
+    assert migrate_kwargs("postgresql://u:p@localhost:5432/db")["ssl"] is False

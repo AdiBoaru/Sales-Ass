@@ -49,6 +49,13 @@ _bot_pool: asyncpg.Pool | None = None
 _bot_login_mode: bool = False
 
 
+# Hosturi pentru care TLS nu are ce proteja (traficul nu părăsește mașina). Contează pe Windows,
+# unde ocolim resolverul asyncpg și construim noi kwargs-urile: un Postgres local — cel efemer din
+# `docker-compose.stage1-e2e.yml` (NX-247) — nu are certificat și refuză corect upgrade-ul SSL.
+# Poarta e pe HOST, nu pe un flag: un DSN remote nu poate pierde SSL-ul din greșeală.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
 def _connect_kwargs(dsn: str) -> dict:
     """Pe Windows, resolverul async al asyncpg (getaddrinfo) e flaky, iar
     conexiunea directă Supabase nu se rezolvă pe IPv4. Rezolvăm host-ul în IPv4
@@ -59,6 +66,15 @@ def _connect_kwargs(dsn: str) -> dict:
         return {"dsn": dsn}
 
     p = urlparse(dsn)
+    if p.hostname in _LOOPBACK_HOSTS:
+        return {
+            "host": p.hostname,
+            "port": p.port or 5432,
+            "user": unquote(p.username),
+            "password": unquote(p.password),
+            "database": (p.path or "/postgres").lstrip("/"),
+            "ssl": False,
+        }
     ipv4 = socket.getaddrinfo(p.hostname, p.port or 5432, socket.AF_INET, socket.SOCK_STREAM)[0][4][
         0
     ]
