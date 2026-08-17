@@ -9,6 +9,8 @@ Două straturi:
     Necesită SUPABASE_DB_URL (+ opțional DATABASE_URL_BOT) în .env, 003+004 aplicate.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 import src.db.connection as conn_mod
@@ -198,16 +200,28 @@ def test_loopback_dsn_connects_without_ssl(monkeypatch):
 
 
 def test_remote_dsn_keeps_ssl(monkeypatch):
-    """Singura garanție care contează: un host remote nu pierde SSL-ul din greșeală."""
+    """Singura garanție care contează: un host remote nu pierde SSL-ul din greșeală.
+
+    `ssl.create_default_context` e STUBAT, nu doar `sys.platform`. Prima versiune patch-uia
+    numai platforma, iar pe Linux `create_default_context()` intra pe ramura Windows a modulului
+    `ssl` și crăpa cu `NameError: enum_certificates` — funcția există doar pe Windows. Un patch de
+    platformă are efecte mult dincolo de codul testat: a trecut local (Windows) și a picat în CI.
+    Stubul îl ține pe subiect — ce kwargs se construiesc, nu cum arată un context TLS real.
+    """
+    # `SimpleNamespace`, nu `object()`: codul setează `check_hostname`/`verify_mode` pe context.
+    sentinel = SimpleNamespace()
     monkeypatch.setattr(conn_mod.sys, "platform", "win32")
+    monkeypatch.setattr(conn_mod.ssl, "create_default_context", lambda *a, **k: sentinel)
     monkeypatch.setattr(
         conn_mod.socket,
         "getaddrinfo",
         lambda *a, **k: [(2, 1, 6, "", ("203.0.113.10", 5432))],
     )
     kwargs = conn_mod._connect_kwargs("postgresql://u:p@db.example.com:5432/db")
-    assert kwargs["ssl"] is not False
+    assert kwargs["ssl"] is sentinel, "hostul remote trebuie să primească un context SSL"
     assert kwargs["host"] == "203.0.113.10"
+    # Și verificarea de hostname rămâne dezactivată DELIBERAT (pooler-ul Supabase), nu accidental.
+    assert sentinel.check_hostname is False
 
 
 def test_migrate_runner_applies_the_same_loopback_rule():
