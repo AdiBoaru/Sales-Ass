@@ -172,6 +172,17 @@ def tool_call(name: str):
         metrics.record_histogram("web_tool_latency_seconds", elapsed, tool_name=name)
 
 
+def on_feedback(rating: str, reason_code: str | None, *, outcome: str, release_track: str) -> None:
+    """Un vot one-tap. `reason_code` absent devine `none` — o etichetă lipsă ar colapsa seria."""
+    metrics.record_counter(
+        "web_feedback_submissions_total",
+        rating=rating,
+        reason_code=reason_code or "none",
+        outcome=outcome,
+        release_track=release_track,
+    )
+
+
 def on_retrieval(mode: str, outcome: str) -> None:
     metrics.record_counter("web_retrieval_outcomes_total", mode=mode, outcome=outcome)
 

@@ -1112,6 +1112,16 @@ class Settings(BaseSettings):
     observability_trace_secret: str = Field(
         default="", validation_alias="OBSERVABILITY_TRACE_SECRET"
     )
+    # NX-246 felia 2 — feedback one-tap. OFF = niciun prompt emis ⇒ niciun token ⇒ endpointul
+    # n-are ce autoriza (poarta e dublă, ca la comerțul NX-237: și emiterea, și consumul).
+    # Cere `WEB_TURN_V2_ENABLED` + `WEB_ACTIONS_ENABLED`: promptul e o acțiune opacă semnată, deci
+    # fără mecanismul de acțiuni n-ar avea cum să existe (validat la boot).
+    web_feedback_enabled: bool = Field(default=False, validation_alias="WEB_FEEDBACK_ENABLED")
+    # Secretul din care se derivă `feedback_prompt_id` (HMAC peste turn_id). Gol = derivare tot
+    # deterministă, dar ghicibilă de cine cunoaște `turn_id` — acceptabil în dev, nu în prod.
+    web_feedback_prompt_secret: str = Field(
+        default="", validation_alias="WEB_FEEDBACK_PROMPT_SECRET"
+    )
     service_name: str = Field(default="nativx-assistant", validation_alias="SERVICE_NAME")
     release_sha: str = Field(default="", validation_alias="RELEASE_SHA")
     release_track: str = Field(default="champion", validation_alias="RELEASE_TRACK")
@@ -1132,6 +1142,23 @@ class Settings(BaseSettings):
             from_settings(self)
         except ObservabilityConfigError as e:
             raise ValueError(str(e)) from e
+        # NX-246 felia 2: promptul de feedback E o acțiune opacă semnată. Fără mecanismul de
+        # acțiuni n-ar exista nici token de emis, nici ce autoriza la consum — deci un flag aprins
+        # singur ar sugera că se strâng voturi când, de fapt, nu se strânge nimic.
+        if self.web_feedback_enabled:
+            missing = [
+                name
+                for name, on in (
+                    ("WEB_TURN_V2_ENABLED", self.web_turn_v2_enabled),
+                    ("WEB_ACTIONS_ENABLED", self.web_actions_enabled),
+                )
+                if not on
+            ]
+            if missing:
+                raise ValueError(
+                    f"WEB_FEEDBACK_ENABLED cere {' + '.join(missing)} (promptul de feedback e o "
+                    "acțiune opacă semnată; fără ele nu există nici emitere, nici consum)"
+                )
         return self
 
     @model_validator(mode="after")

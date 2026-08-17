@@ -116,6 +116,12 @@ LEDGER_STATUSES: frozenset[str] = frozenset(
 ATTEMPT_BUCKETS: frozenset[str] = frozenset({"1", "2", "3+"})
 RELEASE_TRACKS: frozenset[str] = frozenset({"champion", "candidate", "canary", "unknown"})
 CACHE_RESULTS: frozenset[str] = frozenset({"hit", "miss", "bypass", "skip"})
+#: NX-246 felia 2 — ce s-a întâmplat cu un vot. `updated` (corecție) e SEPARAT de `recorded`
+#: fiindcă altfel o răzgândire ar arăta în agregate ca încă un vot, iar `positive_feedback_rate`
+#: ar număra același om de două ori.
+FEEDBACK_OUTCOMES: frozenset[str] = frozenset(
+    {"recorded", "updated", "unchanged", "rejected", "error"}
+)
 MODEL_ROLES: frozenset[str] = frozenset(
     {"triage", "agent", "brain", "vision", "moderation", "embed"}
 )
@@ -380,6 +386,19 @@ METRICS: dict[str, MetricSpec] = {
             "1",
             (LabelSpec("check", max_distinct=16), _OUTCOME),
             description="Validator/critic/fallback — pe tipul verificării, nu pe conținut.",
+        ),
+        MetricSpec(
+            "web_feedback_submissions_total",
+            "counter",
+            "1",
+            (
+                LabelSpec("rating", frozenset({"positive", "negative", UNKNOWN})),
+                LabelSpec("reason_code", max_distinct=16),
+                LabelSpec("outcome", FEEDBACK_OUTCOMES),
+                _RELEASE_TRACK,
+            ),
+            description="Voturi one-tap. `outcome` distinge un vot NOU de o corecție — altfel "
+            "o răzgândire ar arăta ca încă un vot în agregate.",
         ),
         MetricSpec(
             "web_observability_dropped_total",

@@ -418,6 +418,11 @@ class WebTurnExecutor:
                             active_search_ref=getattr(facts, "active_search_ref", None),
                             commerce_product_refs=getattr(facts, "commerce_product_refs", ()),
                             cart_checkout_ready=getattr(facts, "cart_checkout_ready", False),
+                            # NX-246: promptul de feedback se decide AICI, unde se știe flagul,
+                            # nu în `plan_actions` (care rămâne pură). Doar pe calea de succes:
+                            # `_commit` rulează exclusiv când turul chiar a produs un răspuns, deci
+                            # nu putem cere părerea despre un mesaj de eroare scris de noi.
+                            feedback_prompt=get_settings().web_feedback_enabled,
                         ),
                     ),
                 )

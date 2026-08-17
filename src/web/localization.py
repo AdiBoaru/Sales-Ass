@@ -228,6 +228,9 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "checkout": "Finalizează comanda",
             "yes": "Da",
             "no": "Nu",
+            # NX-246: confirmarea unui vot. Server-owned — frontendul nu inventează „Mulțumim!".
+            "feedback_thanks_positive": "Mă bucur că te-am ajutat.",
+            "feedback_thanks_negative": "Mulțumesc, țin cont.",
         },
         # Criteriile active, ca text. DOAR sloturile care au o formă afișabilă onestă: un buget e
         # o sumă, un brand e un nume propriu. `concerns`/`suitable_for` sunt slug-uri de vocabular
@@ -321,6 +324,8 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "checkout": "Checkout",
             "yes": "Yes",
             "no": "No",
+            "feedback_thanks_positive": "Glad I could help.",
+            "feedback_thanks_negative": "Thanks, I will keep that in mind.",
         },
         "needs": {"budget_max": "Budget: up to {value}", "brand": "Brand: {value}"},
         "rating": "{rating} out of 5",
@@ -395,6 +400,8 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "checkout": "Megrendelés",
             "yes": "Igen",
             "no": "Nem",
+            "feedback_thanks_positive": "Örülök, hogy segíthettem.",
+            "feedback_thanks_negative": "Köszönöm, figyelembe veszem.",
         },
         "needs": {"budget_max": "Keret: legfeljebb {value}", "brand": "Márka: {value}"},
         "rating": "{rating} / 5",

@@ -159,8 +159,28 @@ calculează denominatorii din ledgerul `web_turns`, tenant-scoped, cu agregarea 
 (`response_json` nu iese din DB): lipsa datelor, eșantionul mic, setul trunchiat și pragul
 neratificat dau `UNKNOWN`/`INSUFFICIENT`, **niciodată `PASS`**. Latența e RAPORTATĂ, nu judecată,
 până când pragurile NX-241 se ratifică pe o fereastră reală de baseline. Felia 1 nu adaugă DDL
-(următorul număr liber rămâne 042, pentru feedback). Detalii:
+(042 a fost luat de felia 2, feedback). Detalii:
 [`docs/WEB-OBSERVABILITY-SLO.md`](docs/WEB-OBSERVABILITY-SLO.md).
+
+**NX-246 felia 2/3 — feedback one-tap server-owned (DARK, flag OFF, migrarea 042).**
+`WEB_FEEDBACK_ENABLED=false` (default) = niciun prompt emis ⇒ niciun token ⇒ endpointul n-are ce
+autoriza (poartă DUBLĂ, ca la comerțul NX-237). Nu există „endpoint care primește un rating":
+**ratingul e în KIND, iar kind-ul e SIGILAT** — feedbackul e două `ActionSpec` noi
+(`feedback_up`/`feedback_down`), deci browserul poate doar retrimite un token emis de server, nu
+poate rosti „positive". `reason` e vocabular ÎNCHIS (`FEEDBACK_REASONS`, taxonomie VERSIONATĂ): un
+motiv necunoscut e respingere, nu `other` tăcut. Ruta e SEPARATĂ (`POST /web/v2/feedback`) fiindcă
+un „👍" nu e un tur — separarea e structurală prin `ActionSpec.sink` (`turn`|`feedback`), nu un `if`.
+Verificările NU se dublează: secvența NX-236 a fost spartă în două funcții PURE
+(`verify_envelope`/`verify_source`) folosite de ambele rute — modelul de amenințare are un singur
+loc. `feedback_prompt_id` e DERIVAT (HMAC peste `turn_id`), nu random: un id random ar rupe
+determinismul pe care se sprijină NX-236/NX-240, iar „un vot per prompt" ar deveni „un vot per
+reîncărcare de pagină". Idempotența e în SCHEMĂ, nu în cod: `upsert_feedback` e UN statement cu
+`ON CONFLICT` (retry identic = același receipt, `revision` neatins; corecție = `revision+1`; plafon
+5). Rândul nu are coloană de text liber, IP, token sau identitate — verificat pe dataclass ȘI pe
+`information_schema`. Raportul publică `positive_feedback_rate` cu `n` și interval **Wilson** (nu
+Wald, care la 10/10 dă „între 100% și 100%"), cu prag propriu per cohort; sub 30 de voturi verdictul
+e `insufficient_sample`, iar cuvântul „CSAT" nu apare nicăieri (testat pe artefact). Detalii:
+[`docs/WEB-FEEDBACK.md`](docs/WEB-FEEDBACK.md); raport: `python scripts/feedback_report.py`.
 
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
@@ -683,8 +703,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→041), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 042)
+│   ├── 0NN_*.sql                ← migrări delta (003→042), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 043)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)

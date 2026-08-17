@@ -53,6 +53,7 @@ from src.web.action_crypto import (
 from src.web.action_models import (
     EMITTABLE_KINDS,
     MAX_ACTIONS_PER_TURN,
+    SINK_TURN,
     ActionCommand,
     ActionEnvelope,
     ActionPlan,
@@ -205,6 +206,104 @@ def action_fingerprint(secret: str, *, business_id: str, channel_token: str, act
     )
 
 
+# ── Verificare (PURĂ, partajată de toate rutele care consumă tokenuri) ──────────────────────
+#
+# NX-246 a adus a doua rută care consumă tokenuri (feedback). A copia secvența de verificări ar
+# fi însemnat două locuri care trebuie să rămână sincronizate la fiecare schimbare de model de
+# amenințare — exact patologia pe care NX-230 a consolidat-o (cinci regexuri de telefon, unul
+# singur primea fixul). De aceea verificarea e SPARTĂ în două funcții pure, iar fiecare rută își
+# face singură partea de DB (deci niciun checkout în plus pe calea fierbinte):
+#
+#   verify_envelope  — crypto, audiență/expirare, tenant, sesiune, SINK. Fără DB.
+#   verify_source    — rândul-sursă: terminal, deținut, aceeași conversație, DOVADA de emitere.
+
+
+@dataclass(frozen=True)
+class VerifiedEnvelope:
+    """Tokenul deschis și legat de requestul curent, ÎNAINTE de orice atingere de DB."""
+
+    envelope: ActionEnvelope
+    key: ActionKey
+    slot: str
+    spec: Any  # ActionSpec (import ciclic evitat: `action_models` nu importă serviciul)
+    session_hash: str
+    age_s: float
+
+
+def verify_envelope(
+    token: str,
+    *,
+    business_id: str,
+    channel_token: str,
+    visitor_id: str,
+    ring: KeyRing,
+    sink: str,
+    now: datetime | None = None,
+    skew_s: int = 0,
+) -> VerifiedEnvelope | ActionRejected:
+    """Pașii care NU ating DB-ul, în ordinea în care e ieftin să eșueze.
+
+    `sink` e poarta STRUCTURALĂ: un token de feedback prezentat la `/web/v2/turns` (sau invers)
+    e respins aici, nu într-un `if` uitat pe undeva mai jos. Fără ea, un click de „👍" ar porni un
+    tur conversațional și ar arde slotul de single-flight al conversației.
+    """
+    moment = now or datetime.now(UTC)
+    opened = open_token(token, ring, now=int(moment.timestamp()), skew_s=skew_s)
+    if not isinstance(opened, OpenedToken):
+        code = "action_expired" if opened.reason == "expired" else "action_invalid"
+        return ActionRejected(code, opened.reason)
+
+    envelope = opened.envelope
+    key = opened.key
+    spec = spec_for(envelope.kind)
+    if spec is None:
+        return ActionRejected("action_invalid", "unknown_kind")
+    if spec.sink != sink:
+        # Cod GENERIC: diferența dintre „nu există" și „e pentru altă rută" n-are voie să se vadă.
+        return ActionRejected("action_not_found", "wrong_sink", envelope.kind)
+
+    # Legăturile care nu ating DB-ul: tenant + sesiune. Se recalculează din valorile CURENTE ale
+    # requestului — un token mutat pe alt tenant/vizitator nu se potrivește, fără niciun lookup.
+    session_hash = session_ref_hash(channel_token, visitor_id)
+    if envelope.tenant_ref != pseudonym(key, SCOPE_TENANT, business_id):
+        return ActionRejected("action_not_found", "tenant_mismatch", envelope.kind)
+    if envelope.session_ref != pseudonym(key, SCOPE_SESSION, session_hash):
+        return ActionRejected("action_not_found", "session_mismatch", envelope.kind)
+    return VerifiedEnvelope(
+        envelope=envelope,
+        key=key,
+        slot=opened.slot,
+        spec=spec,
+        session_hash=session_hash,
+        age_s=max(0.0, moment.timestamp() - envelope.issued_at),
+    )
+
+
+def verify_source(verified: VerifiedEnvelope, source: WebTurnRow | None) -> ActionRejected | None:
+    """Pașii care cer rândul-sursă (deja citit de apelant). `None` = totul e în regulă.
+
+    Ultimul pas e DOVADA de emitere: un sigiliu valid al cărui `action_id` nu se re-derivă din
+    planul persistat înseamnă că acțiunea n-a fost niciodată oferită — oricât de corectă ar fi
+    criptografia.
+    """
+    envelope, key = verified.envelope, verified.key
+    if source is None:
+        # Sursa a dispărut (retenție, GDPR erase) sau n-a existat niciodată pe tenantul ăsta.
+        return ActionRejected("action_not_found", "source_missing", envelope.kind)
+    if source.status not in TERMINAL_LEDGER_STATUSES:
+        return ActionRejected("action_not_found", "source_not_terminal", envelope.kind)
+    if source.session_ref_hash != verified.session_hash:
+        # Defense-in-depth peste pseudonimul de sesiune: rândul însuși trebuie să fie al sesiunii.
+        return ActionRejected("action_not_found", "source_not_owned", envelope.kind)
+    if envelope.conversation_ref != pseudonym(key, SCOPE_CONVERSATION, source.conversation_id):
+        return ActionRejected("action_not_found", "conversation_mismatch", envelope.kind)
+    plan = emitted_ids(source, key).get(envelope.action_id)
+    if plan is None or plan.kind != envelope.kind:
+        # Sigiliu valid, dar acțiunea nu apare în ViewModel-ul terminal al sursei.
+        return ActionRejected("action_not_found", "not_emitted", envelope.kind)
+    return None
+
+
 # ── Autorizare ──────────────────────────────────────────────────────────────────────────────
 async def authorize_action(
     db: DbProvider,
@@ -225,25 +324,19 @@ async def authorize_action(
     către client (`action_invalid` / `action_not_found`) și un `reason` fin doar pentru metrici:
     diferența dintre „tokenul e stricat" și „tokenul e al altui tenant" nu are voie să se vadă din
     afară (failure matrix: „zero existence leak")."""
-    moment = now or datetime.now(UTC)
-    opened = open_token(token, ring, now=int(moment.timestamp()), skew_s=skew_s)
-    if not isinstance(opened, OpenedToken):
-        code = "action_expired" if opened.reason == "expired" else "action_invalid"
-        return ActionRejected(code, opened.reason)
-
-    envelope = opened.envelope
-    key = opened.key
-    spec = spec_for(envelope.kind)
-    if spec is None:
-        return ActionRejected("action_invalid", "unknown_kind")
-
-    # Legăturile care nu ating DB-ul: tenant + sesiune. Se recalculează din valorile CURENTE ale
-    # requestului — un token mutat pe alt tenant/vizitator nu se potrivește, fără niciun lookup.
-    session_hash = session_ref_hash(channel_token, visitor_id)
-    if envelope.tenant_ref != pseudonym(key, SCOPE_TENANT, business_id):
-        return ActionRejected("action_not_found", "tenant_mismatch", envelope.kind)
-    if envelope.session_ref != pseudonym(key, SCOPE_SESSION, session_hash):
-        return ActionRejected("action_not_found", "session_mismatch", envelope.kind)
+    verified = verify_envelope(
+        token,
+        business_id=business_id,
+        channel_token=channel_token,
+        visitor_id=visitor_id,
+        ring=ring,
+        sink=SINK_TURN,
+        now=now,
+        skew_s=skew_s,
+    )
+    if isinstance(verified, ActionRejected):
+        return verified
+    envelope, spec = verified.envelope, verified.spec
 
     async with db("web_action_authorize") as conn:
         source = await get_turn_by_id(conn, business_id, envelope.source_turn_id)
@@ -259,21 +352,10 @@ async def authorize_action(
                 conn, business_id, source.conversation_id, fingerprint
             )
 
-    if source is None:
-        # Sursa a dispărut (retenție, GDPR erase) sau n-a existat niciodată pe tenantul ăsta.
-        return ActionRejected("action_not_found", "source_missing", envelope.kind)
-    if source.status not in TERMINAL_LEDGER_STATUSES:
-        return ActionRejected("action_not_found", "source_not_terminal", envelope.kind)
-    if source.session_ref_hash != session_hash:
-        # Defense-in-depth peste pseudonimul de sesiune: rândul însuși trebuie să fie al sesiunii.
-        return ActionRejected("action_not_found", "source_not_owned", envelope.kind)
-    if envelope.conversation_ref != pseudonym(key, SCOPE_CONVERSATION, source.conversation_id):
-        return ActionRejected("action_not_found", "conversation_mismatch", envelope.kind)
-
-    plan = emitted_ids(source, key).get(envelope.action_id)
-    if plan is None or plan.kind != envelope.kind:
-        # Sigiliu valid, dar acțiunea nu apare în ViewModel-ul terminal al sursei.
-        return ActionRejected("action_not_found", "not_emitted", envelope.kind)
+    rejected = verify_source(verified, source)
+    if rejected is not None:
+        return rejected
+    assert source is not None  # `verify_source` a exclus None
     if not spec.available or (spec.mutating and not get_settings().conversation_cart_enabled):
         # NX-237: comerțul are handler (CartService + receipt), dar rămâne refuzat ONEST cât timp
         # serviciul e stins — refuzul e ÎNAINTE de consum, ca one-shot-ul să nu ardă degeaba.
@@ -298,8 +380,8 @@ async def authorize_action(
         command=command,
         source=source,
         fingerprint=fingerprint,
-        key_slot=opened.slot,
-        age_s=max(0.0, moment.timestamp() - envelope.issued_at),
+        key_slot=verified.slot,
+        age_s=verified.age_s,
     )
 
 
