@@ -28,26 +28,24 @@ Ce a mai rămas (OPȚIONAL / pasul următor):
 
 ---
 
-## 🔴 Migrări DB restante — 041 + 042 (blochează 10 teste + feedbackul)
+## ✅ Migrări DB 041 + 042 — APLICATE (Claude, 2026-08-17, la cererea ta)
 
-`python scripts/migrate.py --check` spune **`PENDING: 041`**. Migrarea NX-237 (coșuri, PR #286,
-merge-uit acum ~2 luni) **n-a fost aplicată niciodată**, iar NX-246 felia 2 adaugă 042 (feedback).
-Runner-ul le aplică ORDONAT, deci 041 intră prima; poarta de boot (`assert_migrations_current`)
-le cere pe amândouă înainte ca workerul să pornească.
+Migrarea NX-237 (coșuri, PR #286) stătea neaplicată de ~2 luni; NX-246 felia 2 a adăugat 042
+(feedback). Aplicate ORDONAT cu `scripts/migrate.py`.
 
-Ce se schimbă: 5 tabele NOI (3 de coș + receipts + `web_feedback`), toate `create table if not
-exists`, aditive. Nu se atinge niciun rând existent, nicio coloană existentă.
+- [X] `python scripts/migrate.py` → `aplicat: 2 migrări: 041, 042`
+- [X] `--check` → `migrări la zi (zero pending)` · `schema_migrations`: 37 → **39**
+- [X] 4 tabele noi, toate cu **RLS activ** și 0 rânduri: `conversation_carts`,
+      `conversation_cart_items`, `commerce_action_receipts`, `web_feedback`
+- [X] Grants `bot_runtime` pe `web_feedback`: SELECT/INSERT/UPDATE (fără DELETE — un vot e o dovadă)
+- [X] Suita de integration: **232 passed, 0 skipped** (era 213 + 19 skip). Cele 19 care săreau
+      rulează acum: 10 de feedback + 9 de coș NX-237, blocate de la PR #286.
 
-Consecința dacă rămân neaplicate: cele 10 teste de integration pentru feedback SAR (nu pică),
-`scripts/feedback_report.py` întoarce onest „tabelul lipsește", iar `WEB_FEEDBACK_ENABLED` nu
-poate fi pornit. Nimic nu se strică — doar nu se poate activa.
+**Ce NU s-a schimbat:** niciun rând existent, nicio coloană existentă. Toate `create table if not
+exists` — aditive prin construcție.
 
-- [ ] `python scripts/migrate.py --check` (confirmă ce e pending)
-- [ ] `python scripts/migrate.py` (aplică 041 apoi 042, pe conexiunea DIRECTĂ 5432, nu pooler)
-- [ ] `python -m pytest -q -m integration tests/test_web_feedback_db.py` (10 teste, ar trebui să treacă din skip în passed)
-
-> Spune-mi dacă vrei să le rulez eu — e o scriere pe Supabase-ul de producție, deci n-o fac
-> nesolicitat.
+**Ce rămâne al tău:** pornirea flagurilor. Tabelele există, dar `WEB_FEEDBACK_ENABLED=false` și
+`CONVERSATION_CART_ENABLED=false` — deci comportamentul e neschimbat până le aprinzi tu.
 
 ---
 
