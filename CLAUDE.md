@@ -182,6 +182,25 @@ Wald, care la 10/10 dă „între 100% și 100%"), cu prag propriu per cohort; s
 e `insufficient_sample`, iar cuvântul „CSAT" nu apare nicăieri (testat pe artefact). Detalii:
 [`docs/WEB-FEEDBACK.md`](docs/WEB-FEEDBACK.md); raport: `python scripts/feedback_report.py`.
 
+**NX-246 felia 3/3 — gate de calitate „personal shopper" (harness complet, verdict `NOT-READY`).**
+Un golden test verifică un RĂSPUNS; produsul vinde o CONVERSAȚIE — de aici stratul de *journey*
+(2-6 ture, context de pagină/coș, corecții, referințe ordinale) peste harnessul NX-210, care rămâne
+sursa pentru grounding/pairwise și NU s-a rescris. Ordinea e întregul design: **sigiliu+acoperire →
+determinist → stil**. `deterministic.passed=False` ⇒ `FAIL` indiferent de rubrici, fiindcă altfel un
+text fluent care inventează un preț bate unul onest care spune „nu știu". Patru verdicte, nu două:
+`NOT-READY` (n-am măsurat) e DISTINCT de `FAIL` (am măsurat și a picat) — ca la NX-238. Familiile
+sunt vocabular ÎNCHIS (10), iar eticheta trebuie să descrie conținutul, altfel acoperirea minte;
+duplicatele se resping pe `journey_id` **și** pe amprenta de CONȚINUT (care exclude id-ul —
+copiat-lipit cu alt id e același caz de test). Holdoutul NU intră în repo: doar manifest cu SHA-256
+peste amprente ordonate, verificat înainte de rulare, fail-closed pe toate ramurile (manifest
+absent, hash diferit, conținut indisponibil). Pairwise-ul folosește o PROPORȚIE (`win + 0,5×tie ≥
+55%`, limita bootstrap ≥ 50%), nu delta de medii ca NX-210 — se poate câștiga la medii pierzând
+majoritatea journey-urilor. Order bias și dezacordul între evaluatori BLOCHEAZĂ, iar o pereche fără
+adjudecare nu intră în scor. Pragurile sunt preînregistrate și amprentate (`GatePolicy`). Verdict
+măsurat azi: **`NOT-READY`** — 10/60 dev, holdout nesigilat. Deblocarea e a NX-203 (corpus), nu a
+codului. Detalii: [`docs/WEB-QUALITY-EVAL.md`](docs/WEB-QUALITY-EVAL.md); probă:
+`python scripts/web_quality_eval.py gate --suite tests/golden/web_journeys`.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path

@@ -4,7 +4,7 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-07-17_
+_Ultima actualizare: 2026-08-17_
 
 ---
 
@@ -25,6 +25,29 @@ e dovedit pe infrastructură reală.
 Ce a mai rămas (OPȚIONAL / pasul următor):
 - **Deploy VPS** (secțiunea de mai jos) — ca botul să ruleze CONTINUU, nu doar cât e laptopul pornit.
 - **T017 spend limit** — înainte de G3 (botul „inteligent", nu doar echo).
+
+---
+
+## 🔴 Migrări DB restante — 041 + 042 (blochează 10 teste + feedbackul)
+
+`python scripts/migrate.py --check` spune **`PENDING: 041`**. Migrarea NX-237 (coșuri, PR #286,
+merge-uit acum ~2 luni) **n-a fost aplicată niciodată**, iar NX-246 felia 2 adaugă 042 (feedback).
+Runner-ul le aplică ORDONAT, deci 041 intră prima; poarta de boot (`assert_migrations_current`)
+le cere pe amândouă înainte ca workerul să pornească.
+
+Ce se schimbă: 5 tabele NOI (3 de coș + receipts + `web_feedback`), toate `create table if not
+exists`, aditive. Nu se atinge niciun rând existent, nicio coloană existentă.
+
+Consecința dacă rămân neaplicate: cele 10 teste de integration pentru feedback SAR (nu pică),
+`scripts/feedback_report.py` întoarce onest „tabelul lipsește", iar `WEB_FEEDBACK_ENABLED` nu
+poate fi pornit. Nimic nu se strică — doar nu se poate activa.
+
+- [ ] `python scripts/migrate.py --check` (confirmă ce e pending)
+- [ ] `python scripts/migrate.py` (aplică 041 apoi 042, pe conexiunea DIRECTĂ 5432, nu pooler)
+- [ ] `python -m pytest -q -m integration tests/test_web_feedback_db.py` (10 teste, ar trebui să treacă din skip în passed)
+
+> Spune-mi dacă vrei să le rulez eu — e o scriere pe Supabase-ul de producție, deci n-o fac
+> nesolicitat.
 
 ---
 

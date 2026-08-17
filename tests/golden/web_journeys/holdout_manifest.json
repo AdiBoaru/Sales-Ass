@@ -1,0 +1,10 @@
+{
+  "suite_id": "nx246-holdout-ro-v1",
+  "schema_version": "web-journey.v1",
+  "journey_count": 0,
+  "adversarial_count": 0,
+  "by_family": {},
+  "catalog_snapshot": "",
+  "content_sha256": "",
+  "location": "NEALOCAT — holdoutul nu a fost construit (vezi docs/WEB-QUALITY-EVAL.md §5)"
+}

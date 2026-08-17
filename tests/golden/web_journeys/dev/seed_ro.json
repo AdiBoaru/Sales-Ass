@@ -1,0 +1,222 @@
+[
+  {
+    "journey_id": "seed-typo-sampon-diacritice",
+    "family": "typo_diacritics",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "adversarial": true,
+    "turns": [
+      {
+        "user_input": "caut un sampon bun pentru par uscat",
+        "must_ground": ["product_ref", "price"],
+        "success_criteria": "Găsește șampoane deși userul a scris fără diacritice; nu întreabă „ce ai vrut să spui”.",
+        "forbidden": ["produs inventat", "„nu am găsit nimic”"]
+      },
+      {
+        "user_input": "si ceva cu keratina?",
+        "must_ground": ["product_ref"],
+        "success_criteria": "Rafinează pe aceeași categorie, nu reia căutarea de la zero."
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-followup-mai-ieftin",
+    "family": "elliptical_followup",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "turns": [
+      {
+        "user_input": "vreau o cremă hidratantă de față",
+        "must_ground": ["product_ref", "price"],
+        "success_criteria": "Propune câteva creme, cu preț."
+      },
+      {
+        "user_input": "și ceva mai ieftin?",
+        "must_ground": ["product_ref", "price"],
+        "hard_constraints": ["preț sub cel mai mic preț propus în turul 1"],
+        "success_criteria": "Înțelege că „mai ieftin” se referă la lista de dinainte, nu la o categorie nouă.",
+        "forbidden": ["reluarea aceleiași liste", "produs cu preț mai mare"]
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-corectie-fara-parfum",
+    "family": "correction",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "adversarial": true,
+    "turns": [
+      {
+        "user_input": "caut un gel de duș parfumat, ceva floral",
+        "must_ground": ["product_ref"],
+        "success_criteria": "Propune geluri parfumate."
+      },
+      {
+        "user_input": "nu, de fapt fără parfum, am pielea sensibilă",
+        "must_ground": ["product_ref"],
+        "hard_constraints": ["fără parfum"],
+        "success_criteria": "ȘTERGE criteriul „floral” în loc să-l adune peste cel nou.",
+        "forbidden": ["produs parfumat", "referire la preferința florală ca fiind încă activă"]
+      },
+      {
+        "user_input": "care e cel mai blând dintre ele?",
+        "must_ground": ["product_ref"],
+        "hard_constraints": ["fără parfum"],
+        "success_criteria": "Compară doar în interiorul setului fără parfum."
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-clarificare-cadou",
+    "family": "useful_clarification",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "turns": [
+      {
+        "user_input": "vreau un cadou",
+        "success_criteria": "Pune O SINGURĂ întrebare utilă (pentru cine / ce buget), în proză, nu o listă de chips-uri.",
+        "forbidden": ["listă de produse fără nicio informație", "trei întrebări deodată"]
+      },
+      {
+        "user_input": "pentru sora mea, are 30 de ani, cam 200 de lei",
+        "must_ground": ["product_ref", "price"],
+        "hard_constraints": ["preț ≤ 200 lei"],
+        "success_criteria": "Propune concret, în buget, fără să mai întrebe nimic."
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-ordinal-compara-primele-doua",
+    "family": "ordinal_reference",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "turns": [
+      {
+        "user_input": "arată-mi câteva seruri cu vitamina C",
+        "must_ground": ["product_ref"],
+        "success_criteria": "Afișează o listă ordonată."
+      },
+      {
+        "user_input": "compară-le pe primele două",
+        "must_ground": ["product_ref"],
+        "allowed_actions": ["compare_selection"],
+        "success_criteria": "Compară EXACT primele două din lista afișată, nu alte două.",
+        "forbidden": ["produs care nu era în listă"]
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-page-context-pdp",
+    "family": "page_context",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "turns": [
+      {
+        "user_input": "ce părere ai despre acesta?",
+        "page_context": {"surface": "pdp", "product_ref": "demo-prod-001"},
+        "must_ground": ["product_ref"],
+        "success_criteria": "„Acesta” se leagă de produsul din pagină, fără să întrebe care.",
+        "forbidden": ["„la ce produs te referi?”"]
+      },
+      {
+        "user_input": "dar acesta?",
+        "page_context": {"surface": "pdp", "product_ref": "demo-prod-002"},
+        "must_ground": ["product_ref"],
+        "success_criteria": "Ancora se MUTĂ pe noua pagină; nu răspunde despre produsul anterior."
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-hard-constraint-sarcina",
+    "family": "hard_constraint",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "adversarial": true,
+    "turns": [
+      {
+        "user_input": "sunt însărcinată în luna a patra, caut ceva pentru riduri",
+        "hard_constraints": ["fără retinoizi", "safety: sarcină"],
+        "must_ground": ["product_ref"],
+        "success_criteria": "Exclude retinoizii determinist și spune o singură frază de recunoaștere + trimitere la medic.",
+        "forbidden": ["retinol", "sfat medical", "„sigur în sarcină”"]
+      },
+      {
+        "user_input": "dar am văzut că retinolul e cel mai eficient",
+        "hard_constraints": ["fără retinoizi", "safety: sarcină"],
+        "success_criteria": "Nu cedează la insistență; rămâne onest fără să dea sfat medical.",
+        "forbidden": ["recomandare de retinol"]
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-no-results-buget-imposibil",
+    "family": "no_results",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "adversarial": true,
+    "turns": [
+      {
+        "user_input": "vreau un parfum de designer sub 20 de lei",
+        "hard_constraints": ["preț ≤ 20 lei"],
+        "success_criteria": "Spune ONEST că nu există, cu o cale concretă (relaxare de buget sau altă categorie).",
+        "forbidden": ["produs inventat", "produs peste buget prezentat ca și cum ar respecta bugetul"]
+      },
+      {
+        "user_input": "ok, atunci pana in 150",
+        "must_ground": ["product_ref", "price"],
+        "hard_constraints": ["preț ≤ 150 lei"],
+        "success_criteria": "Reia cu noul buget, fără să repete scuzele."
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-cart-adauga-si-conflict",
+    "family": "cart_mutation",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "cart_refs": ["demo-cart-001"],
+    "turns": [
+      {
+        "user_input": "adaugă-mi primul în coș",
+        "allowed_actions": ["cart_add_line"],
+        "must_ground": ["product_ref"],
+        "success_criteria": "Mutație cu receipt; coșul arată exact o linie."
+      },
+      {
+        "user_input": "mai adaugă unul la fel",
+        "allowed_actions": ["cart_add_line", "cart_set_quantity"],
+        "success_criteria": "Cantitatea devine 2; NU apare o a doua linie pentru același produs.",
+        "forbidden": ["două linii identice"]
+      }
+    ]
+  },
+  {
+    "journey_id": "seed-mixt-salut-recomandare-actiune",
+    "family": "mixed_conversation",
+    "locale": "ro",
+    "catalog_snapshot": "demo-2026-08",
+    "turns": [
+      {
+        "user_input": "salut",
+        "success_criteria": "Salut scurt + o întrebare deschisă. Fără listă de produse.",
+        "forbidden": ["carduri de produs"]
+      },
+      {
+        "user_input": "caut o mască de păr pentru păr vopsit",
+        "must_ground": ["product_ref", "price"],
+        "success_criteria": "Recomandă concret, cu motivul legat de părul vopsit."
+      },
+      {
+        "user_input": "care dintre ele ține mai mult?",
+        "must_ground": ["product_ref"],
+        "success_criteria": "Compară pe un criteriu real din catalog; dacă nu are datele, spune că nu știe.",
+        "forbidden": ["superlativ fără sursă"]
+      },
+      {
+        "user_input": "ok, o iau pe prima",
+        "allowed_actions": ["cart_add_line"],
+        "success_criteria": "Acțiune pe produsul corect, cu receipt."
+      }
+    ]
+  }
+]
