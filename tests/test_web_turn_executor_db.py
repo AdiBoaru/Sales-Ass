@@ -72,7 +72,18 @@ async def shop():
         await close_pool()
 
 
-async def _accept_async(conn, bid, channel_id, token, *, visitor=None, text="vreau un ser bun"):
+async def _accept_async(
+    conn,
+    bid,
+    channel_id,
+    token,
+    *,
+    visitor=None,
+    text="vreau un ser bun",
+    page_context=None,
+    action_payload=None,
+    content_type="text",
+):
     """Acceptul de pe calea v2 (persist_inbound + deadline + session_ref), pe conn real."""
     visitor = visitor or f"web_{uuid4().hex[:10]}"
     fp = ts.request_fingerprint("sek", business_id=bid, channel_token=token, text=text)
@@ -89,6 +100,9 @@ async def _accept_async(conn, bid, channel_id, token, *, visitor=None, text="vre
         session_ref=ts.session_ref_hash(token, visitor),
         persist_inbound=True,
         safe_body=text,
+        content_type=content_type,
+        page_context=page_context,
+        action_payload=action_payload,
     )
     return outcome, visitor
 
@@ -120,6 +134,40 @@ async def test_async_accept_persists_ledger_and_safe_input_atomically(shop):
             assert needle not in flat
         # izolare: alt tenant nu vede refs
         assert await wt.load_execution_refs(conn, str(uuid4()), row.id) is None
+
+
+async def test_execution_refs_return_page_context_and_action(shop):
+    """REGRESIE (defect găsit de gate-ul E2E NX-247): `load_execution_refs` citea `payload` din
+    Record, dar proiecția EXTERIOARĂ a query-ului nu-l selecta — coloana exista doar în subqueryul
+    lateral. Rezultat: `page_context` și `action` ieșeau MEREU None, deci ancora de pagină (NX-234)
+    nu ajungea niciodată la execuție, iar un tur de acțiune reluat își pierdea comanda (NX-236).
+
+    Persistarea era corectă tot timpul — de asta niciun test de accept nu a prins-o. Testul de mai
+    sus (`..._persists_ledger_and_safe_input_atomically`) asertează `safe_body`, dar nu cele două
+    câmpuri care veneau din `payload`. Aici se închide exact acea gaură.
+    """
+    bid = shop
+    pool = await get_pool()
+    page_context = {"v": 1, "surface": "product", "product": {"id": "ext-42", "kind": "external"}}
+    action = {"kind": "cart_add", "args": {"product_ref": "ext-42"}}
+    async with admin_conn(pool) as conn:
+        channel_id, token = await _make_channel(conn, bid)
+        outcome, _visitor = await _accept_async(
+            conn,
+            bid,
+            channel_id,
+            token,
+            page_context=page_context,
+            action_payload=action,
+            content_type="action",
+            text="",
+        )
+        assert isinstance(outcome, ts.Accepted)
+        refs = await wt.load_execution_refs(conn, bid, outcome.row.id)
+        assert refs is not None
+        assert refs.page_context == page_context, "contextul de pagină nu ajunge la execuție"
+        assert refs.action == action, "comanda de acțiune nu se rehidratează"
+        assert refs.content_type == "action"
 
 
 async def test_claimable_scan_sees_only_claimable_ordered(shop):
