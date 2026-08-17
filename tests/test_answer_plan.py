@@ -180,7 +180,14 @@ def test_property_price_outside_evidence_never_passes(value):
     assert "fact_value_mismatch" in report.failures
 
 
-@given(st.from_regex(r"https://invalid\.test/[a-z]{1,12}", fullmatch=True))
+# Segmentul generat e ÎNCADRAT (`nx…nx`), nu liber. Motivul e un flake REAL, prins de rulările
+# NX-248: `[a-z]{1,12}` produce uneori exact `ap` sau `str`, iar `_ADDRESS_RE` (NX-230) le tratează
+# — corect — ca abrevieri de adresă („ap.", „str."). Planul era atunci respins de poarta de PII din
+# `AnswerPlan`, ÎNAINTE ca testul să ajungă la aserțiunea lui, deci suita pica aleatoriu, cu un
+# mesaj despre PII într-un test care nu e despre PII. Încadrarea scoate granițele de cuvânt, deci
+# niciun token generat nu mai poate coincide cu o abreviere, iar proprietatea testată („un URL din
+# afara evidenței nu trece niciodată") rămâne exact aceeași.
+@given(st.from_regex(r"https://invalid\.test/nx[a-z]{1,12}nx", fullmatch=True))
 def test_property_url_outside_evidence_never_passes(url):
     raw = _raw_plan()
     raw["facts"]["urls"][0]["value"] = url
@@ -189,6 +196,17 @@ def test_property_url_outside_evidence_never_passes(url):
 
     assert report.ok is False
     assert "fact_value_mismatch" in report.failures
+
+
+def test_planul_cu_pii_e_respins_la_validare():
+    """Poarta de PII din `AnswerPlan` n-avea test propriu — era exercitată doar din greșeală, de
+    flake-ul de mai sus. Aici e verificată intenționat: un fapt care poartă o adresă nu devine
+    plan."""
+    raw = _raw_plan()
+    raw["facts"]["urls"][0]["value"] = "https://shop.test/livrare/str-mihai-viteazu-nr-12"
+
+    with pytest.raises(ValidationError, match="PII"):
+        _plan(raw)
 
 
 def test_cross_tenant_product_and_evidence_are_rejected():

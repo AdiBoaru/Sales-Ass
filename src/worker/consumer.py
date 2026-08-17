@@ -16,8 +16,10 @@ Hardening livrat peste schelet:
 import asyncio
 import json
 import logging
+import os
 import socket
 import time
+from collections.abc import Callable
 from uuid import uuid4
 
 import httpx
@@ -348,9 +350,14 @@ async def run_consumer(
     registry: ChannelSenderRegistry | None = None,
     *,
     reap_interval_s: float = REAP_INTERVAL_S,
+    on_cycle: Callable[[], None] | None = None,
 ) -> None:
     """Bucla principală a worker-ului (rulează până la anulare). `registry` (NX-90) = sender-ele
-    de canal pt typing instant; None → fără typing. Rulează periodic reaper-ul PEL (NX-86)."""
+    de canal pt typing instant; None → fără typing. Rulează periodic reaper-ul PEL (NX-86).
+
+    `on_cycle` (NX-248) e chemat după FIECARE ciclu încheiat — acolo se scrie heartbeat-ul.
+    Poziția contează: la sfârșitul ciclului, nu la început, ca un ciclu care se blochează la
+    jumătate să NU lase în urmă un heartbeat care spune „am terminat cu bine"."""
     await ensure_group(redis)
 
     async def _handle(event: dict) -> None:
@@ -370,6 +377,8 @@ async def run_consumer(
         if now - last_reap >= reap_interval_s:
             last_reap = now
             await reap_pending(pool, redis, consumer_name, debouncer)
+        if on_cycle is not None:
+            on_cycle()
 
 
 async def _main() -> None:
@@ -419,10 +428,35 @@ async def _main() -> None:
         from src.web.turn_recovery import run_recovery_loop
 
         side_tasks.append(asyncio.create_task(run_recovery_loop(redis), name="web-turn-recovery"))
+    # NX-248: heartbeat structurat, scris la finalul fiecărui ciclu. `lease_loop_alive` e o
+    # OBSERVAȚIE despre taskul executorului (rulează / a murit), nu un experiment: o sondă care ar
+    # face un claim real ca să testeze claim-ul ar rula turul unui client ca să afle dacă poate
+    # rula turul unui client. `schema_compatible=True` e adevărat prin construcție aici — poarta
+    # de boot de mai sus a refuzat pornirea altfel.
+    from src.ops import worker_health
+    from src.ops.build_info import cached_build_info
+
+    build = cached_build_info(worker_health.ROLE_WORKER)
+
+    def _heartbeat() -> None:
+        alive = None if executor is None else not side_tasks[0].done()
+        worker_health.write(
+            worker_health.Heartbeat(
+                role=worker_health.ROLE_WORKER,
+                pid=os.getpid(),
+                boot_id=worker_health.BOOT_ID,
+                release_sha=build.release_sha,
+                last_success=time.time(),
+                lease_loop_alive=alive,
+                schema_compatible=True,
+            ),
+            worker_health.heartbeat_path(worker_health.ROLE_WORKER),
+        )
+
     async with httpx.AsyncClient(timeout=15.0) as http:
         registry = build_registry(http, get_settings())
         try:
-            await run_consumer(pool, redis, consumer_name, registry)
+            await run_consumer(pool, redis, consumer_name, registry, on_cycle=_heartbeat)
         finally:
             # Shutdown ORDONAT (NX-233): fără claims noi → așteptare bounded → cancel. Un tur
             # anulat rămâne `running` cu lease → alt worker îl reclamă; nimic fals `completed`.
