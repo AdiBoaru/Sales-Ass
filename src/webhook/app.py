@@ -7,6 +7,7 @@ POST /webhook → mesaje inbound: verifică semnătura, deduplică (Redis layer 
 """
 
 import json
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import PlainTextResponse
@@ -14,13 +15,35 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from src.config import get_settings
+from src.observability import bootstrap as observability_bootstrap
 from src.redis_bus import enqueue_inbound, get_redis, seen_before
 from src.webhook.body_limit import enforce_body_cap
 from src.webhook.meta import parse_statuses, parse_webhook
 from src.webhook.redirect import router as redirect_router
 from src.webhook.signature import verify_meta_signature, verify_orders_signature
 
-app = FastAPI(title="Nativx Assistant — webhook")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """NX-246: observabilitatea se montează O SINGURĂ dată, la pornirea aplicației.
+
+    În `lifespan`, nu la import: bucla de export e un task asyncio, iar la momentul importului nu
+    există încă event loop — un `setup()` la import ar instala exporterul și n-ar porni niciodată
+    consumatorul, adică o coadă care se umple în tăcere. Config invalidă a picat deja în
+    `Settings` (poarta de boot); aici doar instalăm providerul.
+
+    Cu `OBSERVABILITY_ENABLED=false` (default) totul rămâne no-op: `NullSink`, zero coadă, zero
+    span — calea fierbinte byte-identică.
+    """
+    observability_bootstrap.setup(get_settings())
+    try:
+        yield
+    finally:
+        # Flush final MĂRGINIT: telemetria nu are voie să țină procesul (vezi `bootstrap.shutdown`).
+        await observability_bootstrap.shutdown()
+
+
+app = FastAPI(title="Nativx Assistant — webhook", lifespan=_lifespan)
 
 # NX-162: redirect de atribuire click (/r/{business_id}/{ref_code}) — montat necondiționat
 # (funnel-ul de checkout e valabil pe orice canal, nu doar web). Face DB sincron (nu e margine

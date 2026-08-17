@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "JourneyTurn": {
+      "additionalProperties": false,
+      "description": "Un tur: ce spune userul, ce vede, și ce trebuie să fie adevărat în răspuns.",
+      "properties": {
+        "user_input": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "User Input",
+          "type": "string"
+        },
+        "page_context": {
+          "additionalProperties": true,
+          "title": "Page Context",
+          "type": "object"
+        },
+        "must_ground": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Must Ground",
+          "type": "array"
+        },
+        "hard_constraints": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Hard Constraints",
+          "type": "array"
+        },
+        "allowed_actions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Actions",
+          "type": "array"
+        },
+        "success_criteria": {
+          "default": "",
+          "maxLength": 400,
+          "title": "Success Criteria",
+          "type": "string"
+        },
+        "forbidden": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Forbidden",
+          "type": "array"
+        }
+      },
+      "required": [
+        "user_input"
+      ],
+      "title": "JourneyTurn",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Un journey complet: 2-6 ture, familie, snapshot de catalog, locale, stare inițială.",
+  "properties": {
+    "journey_id": {
+      "maxLength": 64,
+      "minLength": 3,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "title": "Journey Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "web-journey.v1",
+      "default": "web-journey.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "family": {
+      "enum": [
+        "typo_diacritics",
+        "elliptical_followup",
+        "correction",
+        "useful_clarification",
+        "ordinal_reference",
+        "page_context",
+        "hard_constraint",
+        "no_results",
+        "cart_mutation",
+        "mixed_conversation"
+      ],
+      "title": "Family",
+      "type": "string"
+    },
+    "locale": {
+      "default": "ro",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "catalog_snapshot": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Catalog Snapshot",
+      "type": "string"
+    },
+    "adversarial": {
+      "default": false,
+      "title": "Adversarial",
+      "type": "boolean"
+    },
+    "initial_state": {
+      "additionalProperties": true,
+      "title": "Initial State",
+      "type": "object"
+    },
+    "cart_refs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Cart Refs",
+      "type": "array"
+    },
+    "turns": {
+      "items": {
+        "$ref": "#/$defs/JourneyTurn"
+      },
+      "title": "Turns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "journey_id",
+    "family",
+    "catalog_snapshot",
+    "turns"
+  ],
+  "title": "NX-246 web journey (web-journey.v1)",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

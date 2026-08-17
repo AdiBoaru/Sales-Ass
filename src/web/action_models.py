@@ -99,6 +99,15 @@ ACTION_ERROR_CODES: frozenset[str] = frozenset(
 )
 
 
+#: Unde se CONSUMĂ o acțiune. Structural, nu un `if` special-case: un token de feedback prezentat
+#: la `/web/v2/turns` ar porni un tur conversațional (și ar arde slotul de single-flight) pentru un
+#: click de „👍". Ruta compară `spec.sink` cu propriul ei sink și refuză restul — deci o acțiune
+#: nouă nu poate ajunge din greșeală pe drumul greșit, iar testul o prinde la adăugare.
+SINK_TURN = "turn"
+SINK_FEEDBACK = "feedback"
+ACTION_SINKS: frozenset[str] = frozenset({SINK_TURN, SINK_FEEDBACK})
+
+
 @dataclass(frozen=True)
 class ActionSpec:
     """O intrare din registry. `available=False` = nume cunoscut, dar niciodată emis și refuzat
@@ -110,6 +119,8 @@ class ActionSpec:
     available: bool = True
     required: tuple[str, ...] = ()
     optional: tuple[str, ...] = ()
+    #: Ruta care are voie să o consume (vezi `SINK_*`).
+    sink: str = SINK_TURN
     # Depinde de STAREA listei/sesiunii, nu doar de id-uri explicite: o acțiune care poartă
     # `product_ref` nu poate selecta produsul greșit după o reordonare, dar una care spune „încă
     # 6 din căutarea curentă" da — de aceea doar a doua se verifică pe revizie.
@@ -155,7 +166,42 @@ KIND_REGISTRY: Mapping[str, ActionSpec] = {
     "cart_remove": ActionSpec("cart_remove", mutating=True, required=("product_ref",)),
     "cart_clear": ActionSpec("cart_clear", mutating=True),
     "checkout": ActionSpec("checkout", mutating=True),
+    # NX-246 felia 2 — feedback. RATINGUL E ÎN KIND, deliberat: astfel el vine din tokenul
+    # SIGILAT de server, iar browserul nu are cum să-l rostească (cardul: „ratingul/reasonul vin
+    # exclusiv din tokenul serverului"). `reason` e opțional și dintr-o taxonomie ÎNCHISĂ,
+    # versionată — al doilea pas, oferit doar după un vot negativ.
+    #
+    # `repeatable`, nu `one_shot`: one-shot-ul NX-236 e o proprietate a LEDGERULUI (cheia de
+    # consum e rândul turului care folosește acțiunea), iar feedbackul nu creează tur. Unicitatea
+    # lui trăiește în `web_feedback` (un singur rând activ per prompt) — vezi `src/web/feedback.py`.
+    "feedback_up": ActionSpec("feedback_up", policy="repeatable", sink=SINK_FEEDBACK),
+    "feedback_down": ActionSpec(
+        "feedback_down", policy="repeatable", optional=("reason",), sink=SINK_FEEDBACK
+    ),
 }
+
+#: Taxonomia de motive, VERSIONATĂ. Se schimbă doar cu versiune nouă: un `reason_code` reinterpretat
+#: în tăcere ar face ca două ferestre de raport să nu mai fie comparabile, exact în momentul în care
+#: cineva compară champion cu candidate.
+FEEDBACK_TAXONOMY_VERSION = "feedback.v1"
+FEEDBACK_REASONS: frozenset[str] = frozenset(
+    {
+        "not_relevant",  # nu e ce căutam        → familia „retrieval"
+        "wrong_facts",  # informația e greșită   → familia „grounding"
+        "missing_info",  # lipsește ceva         → familia „clarification"
+        "too_long",  # prea mult text            → familia „overtalk"
+        "tone",  # nu sună a om                  → familia „tone"
+        "other",
+    }
+)
+
+#: Kind-urile de feedback, derivate din registry (nu a doua listă întreținută manual).
+FEEDBACK_KINDS: frozenset[str] = frozenset(
+    k for k, s in KIND_REGISTRY.items() if s.sink == SINK_FEEDBACK
+)
+
+#: `kind → rating` persistat. Vocabular închis, ca eticheta de metrică.
+RATING_BY_KIND: Mapping[str, str] = {"feedback_up": "positive", "feedback_down": "negative"}
 
 # Mutantele pe care NX-240 le EMITE, o dată ce faptele o permit. Lista e explicită (nu „toate
 # mutantele"): `cart_add_line` cere un produs dovedit vandabil, `checkout` cere un coș eligibil.
@@ -232,6 +278,9 @@ class ActionArgs:
     session_ref: str | None = None
     filter: str | None = None
     quantity: int | None = None
+    #: NX-246: motivul unui vot negativ, din `FEEDBACK_REASONS`. Absent ⇒ cheia nu apare în forma
+    #: canonică, deci `action_id`-urile emise ÎNAINTE de card rămân byte-identice.
+    reason: str | None = None
 
     def to_canonical(self) -> dict[str, Any]:
         """Doar cheile SETATE, sortate la serializare. Un `None` scris explicit ar schimba
@@ -251,6 +300,8 @@ class ActionArgs:
             out["filter"] = self.filter
         if self.quantity is not None:
             out["quantity"] = self.quantity
+        if self.reason:
+            out["reason"] = self.reason
         return out
 
     @property
@@ -306,6 +357,14 @@ class ActionArgs:
             quantity = _int_in(raw.get("quantity"), 1, MAX_QUANTITY)
             if quantity is None:
                 return None
+        reason = None
+        if "reason" in raw:
+            reason = raw.get("reason")
+            # Vocabular ÎNCHIS, ca `filter`: un motiv necunoscut e respingere, nu „other" tăcut.
+            # Altfel taxonomia ar crește din date de client, iar raportul ar număra categorii pe
+            # care nimeni nu le-a definit.
+            if reason not in FEEDBACK_REASONS:
+                return None
         args = cls(
             product_ref=product_ref,
             product_refs=refs,
@@ -314,6 +373,7 @@ class ActionArgs:
             session_ref=session_ref,
             filter=filter_value,
             quantity=quantity,
+            reason=reason,
         )
         if not set(spec.required) <= args.present:
             return None
@@ -390,6 +450,10 @@ class TurnFacts:
     commerce_product_refs: tuple[str, ...] = ()
     #: Coșul canonic e eligibil de checkout (total cunoscut, nicio linie blocată).
     cart_checkout_ready: bool = False
+    #: NX-246: turul are voie să ceară feedback. Un FAPT, nu o citire de settings — `plan_actions`
+    #: rămâne pură (P10), iar cohortul/flagul se decid la margine, unde se știe contextul. Fals ⇒
+    #: niciun plan de feedback ⇒ niciun token ⇒ endpointul n-are ce autoriza.
+    feedback_prompt: bool = False
 
 
 def clarification_question_id(field: object, attempts: int) -> str | None:
@@ -446,6 +510,20 @@ def plan_actions(view: Mapping[str, Any], facts: TurnFacts) -> tuple[ActionPlan,
                     ActionArgs(question_id=question_id, option_ref=index),
                 )
             )
+    # NX-246 — feedback, ULTIMUL și în exact două exemplare. Ratingul e în KIND, deci vine din
+    # tokenul sigilat: browserul nu poate spune „positive".
+    #
+    # De ce NU emitem și un buton per motiv: cele 6 motive ar consuma 6 din cele 16 acțiuni ale
+    # unui ViewModel și ar împinge afară exact acțiunile conversaționale (un card cu 6 produse
+    # planifică deja 13). `reason` rămâne modelat, validat și persistabil — pasul doi (chips de
+    # motiv după un vot negativ) e o decizie de UX care aparține NX-244, nu o jumătate de flux
+    # strecurată aici. Cardul cere „două/mai multe" tokenuri; astea sunt cele două.
+    #
+    # Ultimul în listă, deliberat: cap-ul taie de la coadă, iar dacă un tur are atât de multe
+    # acțiuni conversaționale încât nu mai încape feedbackul, atunci feedbackul e cel care cedează.
+    if facts.feedback_prompt:
+        plans.append(ActionPlan("feedback_up", ActionArgs()))
+        plans.append(ActionPlan("feedback_down", ActionArgs()))
     return tuple(plans[:MAX_ACTIONS_PER_TURN])
 
 
@@ -646,6 +724,8 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "show_more": "Arată-mi mai multe",
         "cart_add_line": "Adaugă în coș",
         "checkout": "Finalizează comanda",
+        "feedback_up": "Mi-a fost de folos",
+        "feedback_down": "Nu m-a ajutat",
     },
     "en": {
         "select_product": "Choose this one",
@@ -655,6 +735,8 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "show_more": "Show me more",
         "cart_add_line": "Add to cart",
         "checkout": "Checkout",
+        "feedback_up": "This helped",
+        "feedback_down": "This did not help",
     },
     "hu": {
         "select_product": "Ezt választom",
@@ -664,6 +746,8 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "show_more": "Mutass többet",
         "cart_add_line": "Kosárba",
         "checkout": "Megrendelés",
+        "feedback_up": "Ez segített",
+        "feedback_down": "Ez nem segített",
     },
 }
 
@@ -727,8 +811,15 @@ __all__ = [
     "ACTION_ENVELOPE_VERSION",
     "ACTION_ERROR_CODES",
     "ACTION_LABELS",
+    "ACTION_SINKS",
     "EMITTABLE_KINDS",
+    "FEEDBACK_KINDS",
+    "FEEDBACK_REASONS",
+    "FEEDBACK_TAXONOMY_VERSION",
     "KIND_REGISTRY",
+    "RATING_BY_KIND",
+    "SINK_FEEDBACK",
+    "SINK_TURN",
     "MAX_ACTIONS_PER_TURN",
     "MAX_ENVELOPE_BYTES",
     "MAX_OPTION_REF",

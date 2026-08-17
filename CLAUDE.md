@@ -139,6 +139,68 @@ iar înainte de primul tur widgetul rămânea fără nume și și-l inventa. `re
 `default_locale` printr-un JOIN pe `businesses` (D3: limba e a tenantului, nu constantă). Detalii:
 [`docs/WEB-WIDGET-BOUNDARY-V2.md`](docs/WEB-WIDGET-BOUNDARY-V2.md) §3.3.
 
+**NX-246 felia 1/3 — observabilitate (traces + metrici) + `slo_policy.v1` (DARK, flag OFF).**
+`OBSERVABILITY_ENABLED=false` (default) e ABSORBANT: zero span, zero contor, calea fierbinte
+byte-identică. Aprins, un turn = UN trace care supraviețuiește restartului **fără nicio migrare**:
+`web_turns.id` e UUID = exact 128 de biți = un trace-id W3C, deci `trace_id` se DERIVĂ determinist
+(HMAC server-owned) din `turn_id`, iar `attempt` intră în span-id — reclaim-ul e alt span în același
+trace, prin construcție. `traceparent`-ul din browser se REFUZĂ (nu devine părinte al nimănui) și se
+numără. Eșantionarea e pe COADĂ: iese tot traceul dacă a fost eșantionat SAU dacă vreun span a
+eșuat — plătești pentru traficul sănătos, dar ai traceul întreg exact acolo unde te uiți.
+Cardinalitatea e mărginită prin registru (`src/observability/contract.py`): metrică declarată,
+etichete declarate, valori din set închis SAU sub buget de valori distincte; `business_id`/`turn_id`
+sunt interzise ca etichete (`turn_id` rămâne atribut de TRACE). Privacy: `sanitize.py` DELEAGĂ la
+NX-230 și adaugă doar forma tehnică (excepții = lanț de TIPURI, URL fără query, headere = prezență,
+argumente de tool = tip, nu valoare) — poarta e pe cheie **și** pe valoare, fiindcă un `tool_name`
+otrăvit sau o cheie `sk-...` au formă perfectă de identificator. Exportul e mărginit și
+non-blocant (coadă plină ⇒ drop al celui mai NOU, numărat); OTLP e import LENEȘ, singurul modul care
+știe de OpenTelemetry. `slo_policy.v1` (`src/observability/slo.py` + `scripts/slo_report.py`)
+calculează denominatorii din ledgerul `web_turns`, tenant-scoped, cu agregarea `renderable` ÎN SQL
+(`response_json` nu iese din DB): lipsa datelor, eșantionul mic, setul trunchiat și pragul
+neratificat dau `UNKNOWN`/`INSUFFICIENT`, **niciodată `PASS`**. Latența e RAPORTATĂ, nu judecată,
+până când pragurile NX-241 se ratifică pe o fereastră reală de baseline. Felia 1 nu adaugă DDL
+(042 a fost luat de felia 2, feedback). Detalii:
+[`docs/WEB-OBSERVABILITY-SLO.md`](docs/WEB-OBSERVABILITY-SLO.md).
+
+**NX-246 felia 2/3 — feedback one-tap server-owned (DARK, flag OFF, migrarea 042).**
+`WEB_FEEDBACK_ENABLED=false` (default) = niciun prompt emis ⇒ niciun token ⇒ endpointul n-are ce
+autoriza (poartă DUBLĂ, ca la comerțul NX-237). Nu există „endpoint care primește un rating":
+**ratingul e în KIND, iar kind-ul e SIGILAT** — feedbackul e două `ActionSpec` noi
+(`feedback_up`/`feedback_down`), deci browserul poate doar retrimite un token emis de server, nu
+poate rosti „positive". `reason` e vocabular ÎNCHIS (`FEEDBACK_REASONS`, taxonomie VERSIONATĂ): un
+motiv necunoscut e respingere, nu `other` tăcut. Ruta e SEPARATĂ (`POST /web/v2/feedback`) fiindcă
+un „👍" nu e un tur — separarea e structurală prin `ActionSpec.sink` (`turn`|`feedback`), nu un `if`.
+Verificările NU se dublează: secvența NX-236 a fost spartă în două funcții PURE
+(`verify_envelope`/`verify_source`) folosite de ambele rute — modelul de amenințare are un singur
+loc. `feedback_prompt_id` e DERIVAT (HMAC peste `turn_id`), nu random: un id random ar rupe
+determinismul pe care se sprijină NX-236/NX-240, iar „un vot per prompt" ar deveni „un vot per
+reîncărcare de pagină". Idempotența e în SCHEMĂ, nu în cod: `upsert_feedback` e UN statement cu
+`ON CONFLICT` (retry identic = același receipt, `revision` neatins; corecție = `revision+1`; plafon
+5). Rândul nu are coloană de text liber, IP, token sau identitate — verificat pe dataclass ȘI pe
+`information_schema`. Raportul publică `positive_feedback_rate` cu `n` și interval **Wilson** (nu
+Wald, care la 10/10 dă „între 100% și 100%"), cu prag propriu per cohort; sub 30 de voturi verdictul
+e `insufficient_sample`, iar cuvântul „CSAT" nu apare nicăieri (testat pe artefact). Detalii:
+[`docs/WEB-FEEDBACK.md`](docs/WEB-FEEDBACK.md); raport: `python scripts/feedback_report.py`.
+
+**NX-246 felia 3/3 — gate de calitate „personal shopper" (harness complet, verdict `NOT-READY`).**
+Un golden test verifică un RĂSPUNS; produsul vinde o CONVERSAȚIE — de aici stratul de *journey*
+(2-6 ture, context de pagină/coș, corecții, referințe ordinale) peste harnessul NX-210, care rămâne
+sursa pentru grounding/pairwise și NU s-a rescris. Ordinea e întregul design: **sigiliu+acoperire →
+determinist → stil**. `deterministic.passed=False` ⇒ `FAIL` indiferent de rubrici, fiindcă altfel un
+text fluent care inventează un preț bate unul onest care spune „nu știu". Patru verdicte, nu două:
+`NOT-READY` (n-am măsurat) e DISTINCT de `FAIL` (am măsurat și a picat) — ca la NX-238. Familiile
+sunt vocabular ÎNCHIS (10), iar eticheta trebuie să descrie conținutul, altfel acoperirea minte;
+duplicatele se resping pe `journey_id` **și** pe amprenta de CONȚINUT (care exclude id-ul —
+copiat-lipit cu alt id e același caz de test). Holdoutul NU intră în repo: doar manifest cu SHA-256
+peste amprente ordonate, verificat înainte de rulare, fail-closed pe toate ramurile (manifest
+absent, hash diferit, conținut indisponibil). Pairwise-ul folosește o PROPORȚIE (`win + 0,5×tie ≥
+55%`, limita bootstrap ≥ 50%), nu delta de medii ca NX-210 — se poate câștiga la medii pierzând
+majoritatea journey-urilor. Order bias și dezacordul între evaluatori BLOCHEAZĂ, iar o pereche fără
+adjudecare nu intră în scor. Pragurile sunt preînregistrate și amprentate (`GatePolicy`). Verdict
+măsurat azi: **`NOT-READY`** — 10/60 dev, holdout nesigilat. Deblocarea e a NX-203 (corpus), nu a
+codului. Detalii: [`docs/WEB-QUALITY-EVAL.md`](docs/WEB-QUALITY-EVAL.md); probă:
+`python scripts/web_quality_eval.py gate --suite tests/golden/web_journeys`.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
@@ -660,8 +722,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→041), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 042)
+│   ├── 0NN_*.sql                ← migrări delta (003→042), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 043)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
@@ -726,8 +788,16 @@ nativx-assistant/
 │   ├── runtime/                 ← NX-241: contractele de RUNTIME ale turului (timp + buget)
 │   │   ├── deadline.py          ← `TurnDeadline`: UN buget monoton, rezervă terminală, cancel
 │   │   └── turn_budget.py       ← manifest VERSIONAT pe clase de tur + ledger atomic
-│   ├── observability/
-│   │   └── turn_latency.py      ← NX-241: spans pe FAZE (vocabular închis) → un event/tur
+│   ├── observability/           ← NX-246: contractul de telemetrie (nimic din `src/` nu vede OTel)
+│   │   ├── turn_latency.py      ← NX-241: spans pe FAZE (vocabular închis) → un event/tur
+│   │   ├── contract.py          ← NX-246: vocabularul ÎNCHIS (spans/atribute/metrici/bucket-uri)
+│   │   ├── sanitize.py          ← NX-246: ce are voie să iasă (deleagă PII la NX-230)
+│   │   ├── tracing.py           ← NX-246: trace derivat din `turn_id` + eșantionare pe coadă
+│   │   ├── metrics.py           ← NX-246: registru + gardă de cardinalitate + drop-uri numărate
+│   │   ├── export.py            ← NX-246: coadă MĂRGINITĂ, non-blocantă + sink de captură
+│   │   ├── hooks.py             ← NX-246: hook-urile NEUTRE chemate din runner/adaptoare
+│   │   ├── slo.py               ← NX-246: `slo_policy.v1` — denominatori, verdicte, burn-rate
+│   │   └── otel_sink.py         ← NX-246: SINGURUL modul care importă OpenTelemetry (lazy)
 │   ├── retrieval/               ← NX-238: portul de retrieval (contract stabil pt NX-239)
 │   │   ├── port.py              ← `RetrievalPort` + `RetrievalBundle` (refs + verdicte + evidence)
 │   │   ├── current_live.py      ← adapter peste `search_products_tool`: paritate prin construcție

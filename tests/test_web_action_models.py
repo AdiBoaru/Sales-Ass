@@ -75,6 +75,10 @@ def test_emittable_kinds_are_the_stage1_set():
         # `cart_checkout_ready`); vezi `tests/test_web_render_v2.py` pentru poarta de planificare.
         "cart_add_line",
         "checkout",
+        # NX-246 felia 2 — feedback. Emis doar sub `TurnFacts.feedback_prompt` (flag server-side)
+        # și consumat pe ALTĂ rută (`sink="feedback"`), nu pe cea de tur.
+        "feedback_up",
+        "feedback_down",
     }
 
 

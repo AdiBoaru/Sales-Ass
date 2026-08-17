@@ -1066,6 +1066,101 @@ class Settings(BaseSettings):
         default=20_000, validation_alias="AFTERCARE_DEADLINE_MS", ge=0
     )
 
+    # --- NX-246: observabilitate (traces + metrici) + markeri de release ---------
+    # `observability_enabled` e master switch-ul și e ABSORBANT: stins, `record_*`/`span()` se
+    # întorc după un singur bool, deci calea fierbinte e byte-identică cu cea de dinainte de card.
+    # Traces și metrici au kill-switch-uri INDEPENDENTE, iar exportul de rețea e al treilea: în
+    # incident vrei „taie exportul, păstrează măsurarea locală", nu un singur buton care le stinge
+    # pe toate (ai pierde exact datele care explică incidentul).
+    observability_enabled: bool = Field(default=False, validation_alias="OBSERVABILITY_ENABLED")
+    observability_traces_enabled: bool = Field(
+        default=True, validation_alias="OBSERVABILITY_TRACES_ENABLED"
+    )
+    observability_metrics_enabled: bool = Field(
+        default=True, validation_alias="OBSERVABILITY_METRICS_ENABLED"
+    )
+    # `none` (default) = nimic nu iese din proces · `capture` = memorie (teste/drive local) ·
+    # `otlp` = rețea, și cere endpoint valid + master switch pornit (validat mai jos).
+    observability_exporter: str = Field(default="", validation_alias="OBSERVABILITY_EXPORTER")
+    observability_otlp_endpoint: str = Field(
+        default="", validation_alias="OBSERVABILITY_OTLP_ENDPOINT"
+    )
+    observability_otlp_headers: str = Field(
+        default="", validation_alias="OBSERVABILITY_OTLP_HEADERS"
+    )
+    observability_otlp_timeout_ms: int = Field(
+        default=2000, validation_alias="OBSERVABILITY_OTLP_TIMEOUT_MS", ge=100
+    )
+    # Fracțiune de ture de SUCCES păstrate. Erorile/deadline-urile ies ÎNTOTDEAUNA (eșantionare pe
+    # coadă, `tracing._flush_trace`) — altfel exact evenimentele rare pe care le investighezi ar fi
+    # cele mai probabil aruncate.
+    observability_sample_ratio: float = Field(
+        default=0.05, validation_alias="OBSERVABILITY_SAMPLE_RATIO", ge=0.0, le=1.0
+    )
+    observability_queue_max: int = Field(
+        default=2048, validation_alias="OBSERVABILITY_QUEUE_MAX", ge=1
+    )
+    observability_export_batch: int = Field(
+        default=256, validation_alias="OBSERVABILITY_EXPORT_BATCH", ge=1
+    )
+    observability_flush_timeout_ms: int = Field(
+        default=2000, validation_alias="OBSERVABILITY_FLUSH_TIMEOUT_MS", ge=1
+    )
+    # Secretul din care se derivă trace-id-ul unui tur (HMAC peste `web_turns.id`). Gol = derivare
+    # tot deterministă, dar reproductibilă de oricine cunoaște `turn_id` (care e public). Nu e o
+    # problemă de izolare — un trace-id nu dă acces la nimic — ci de confidențialitate a corelării.
+    observability_trace_secret: str = Field(
+        default="", validation_alias="OBSERVABILITY_TRACE_SECRET"
+    )
+    # NX-246 felia 2 — feedback one-tap. OFF = niciun prompt emis ⇒ niciun token ⇒ endpointul
+    # n-are ce autoriza (poarta e dublă, ca la comerțul NX-237: și emiterea, și consumul).
+    # Cere `WEB_TURN_V2_ENABLED` + `WEB_ACTIONS_ENABLED`: promptul e o acțiune opacă semnată, deci
+    # fără mecanismul de acțiuni n-ar avea cum să existe (validat la boot).
+    web_feedback_enabled: bool = Field(default=False, validation_alias="WEB_FEEDBACK_ENABLED")
+    # Secretul din care se derivă `feedback_prompt_id` (HMAC peste turn_id). Gol = derivare tot
+    # deterministă, dar ghicibilă de cine cunoaște `turn_id` — acceptabil în dev, nu în prod.
+    web_feedback_prompt_secret: str = Field(
+        default="", validation_alias="WEB_FEEDBACK_PROMPT_SECRET"
+    )
+    service_name: str = Field(default="nativx-assistant", validation_alias="SERVICE_NAME")
+    release_sha: str = Field(default="", validation_alias="RELEASE_SHA")
+    release_track: str = Field(default="champion", validation_alias="RELEASE_TRACK")
+
+    @model_validator(mode="after")
+    def _observability_relations(self) -> "Settings":
+        """NX-246: config de observabilitate imposibilă = proces care nu pornește.
+
+        Poarta e aceeași ca la NX-233/241, din același motiv: un endpoint scris greșit care
+        eșuează tăcut la fiecare export produce EXACT patologia pe care cardul o numește — un
+        dashboard verde peste un sistem care nu raportează. Validarea trăiește în
+        `src/observability/config.py` (unde e și restul contractului); aici o chemăm ca să crape
+        la boot, nu la primul span.
+        """
+        from src.observability.config import ObservabilityConfigError, from_settings
+
+        try:
+            from_settings(self)
+        except ObservabilityConfigError as e:
+            raise ValueError(str(e)) from e
+        # NX-246 felia 2: promptul de feedback E o acțiune opacă semnată. Fără mecanismul de
+        # acțiuni n-ar exista nici token de emis, nici ce autoriza la consum — deci un flag aprins
+        # singur ar sugera că se strâng voturi când, de fapt, nu se strânge nimic.
+        if self.web_feedback_enabled:
+            missing = [
+                name
+                for name, on in (
+                    ("WEB_TURN_V2_ENABLED", self.web_turn_v2_enabled),
+                    ("WEB_ACTIONS_ENABLED", self.web_actions_enabled),
+                )
+                if not on
+            ]
+            if missing:
+                raise ValueError(
+                    f"WEB_FEEDBACK_ENABLED cere {' + '.join(missing)} (promptul de feedback e o "
+                    "acțiune opacă semnată; fără ele nu există nici emitere, nici consum)"
+                )
+        return self
+
     @model_validator(mode="after")
     def _turn_budget_relations(self) -> "Settings":
         """NX-241: manifestul de bugete se VALIDEAZĂ la boot (poartă fail-fast).

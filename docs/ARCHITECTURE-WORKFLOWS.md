@@ -1343,6 +1343,7 @@ GET /v2/turns/{turn_id}/events
 GET /webhook
 POST /chat
 POST /messages
+POST /v2/feedback
 POST /v2/turns
 POST /webhook
 POST /webhook/orders/{business_id}
@@ -1415,6 +1416,9 @@ memory_safe_injection_enabled = true
 memory_v2_enabled = true
 moderation_enabled = true
 no_result_alternatives_enabled = true
+observability_enabled = false
+observability_metrics_enabled = true
+observability_traces_enabled = true
 partition_job_enabled = true
 pool_metrics_enabled = true
 proactive_enabled = true
@@ -1465,6 +1469,7 @@ web_context_enabled = false
 web_context_prompt_enabled = false
 web_demo_access_enabled = false
 web_enabled = false
+web_feedback_enabled = false
 web_identity_enabled = false
 web_session_origin_binding = false
 web_session_v2_enabled = false
@@ -1517,6 +1522,7 @@ welcome_enabled = true
 039_public_read_categories.sql
 040_web_turns.sql
 041_conversation_carts.sql
+042_web_feedback.sql
 ```
 
 

@@ -4,7 +4,7 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-07-17_
+_Ultima actualizare: 2026-08-17_
 
 ---
 
@@ -25,6 +25,27 @@ e dovedit pe infrastructură reală.
 Ce a mai rămas (OPȚIONAL / pasul următor):
 - **Deploy VPS** (secțiunea de mai jos) — ca botul să ruleze CONTINUU, nu doar cât e laptopul pornit.
 - **T017 spend limit** — înainte de G3 (botul „inteligent", nu doar echo).
+
+---
+
+## ✅ Migrări DB 041 + 042 — APLICATE (Claude, 2026-08-17, la cererea ta)
+
+Migrarea NX-237 (coșuri, PR #286) stătea neaplicată de ~2 luni; NX-246 felia 2 a adăugat 042
+(feedback). Aplicate ORDONAT cu `scripts/migrate.py`.
+
+- [X] `python scripts/migrate.py` → `aplicat: 2 migrări: 041, 042`
+- [X] `--check` → `migrări la zi (zero pending)` · `schema_migrations`: 37 → **39**
+- [X] 4 tabele noi, toate cu **RLS activ** și 0 rânduri: `conversation_carts`,
+      `conversation_cart_items`, `commerce_action_receipts`, `web_feedback`
+- [X] Grants `bot_runtime` pe `web_feedback`: SELECT/INSERT/UPDATE (fără DELETE — un vot e o dovadă)
+- [X] Suita de integration: **232 passed, 0 skipped** (era 213 + 19 skip). Cele 19 care săreau
+      rulează acum: 10 de feedback + 9 de coș NX-237, blocate de la PR #286.
+
+**Ce NU s-a schimbat:** niciun rând existent, nicio coloană existentă. Toate `create table if not
+exists` — aditive prin construcție.
+
+**Ce rămâne al tău:** pornirea flagurilor. Tabelele există, dar `WEB_FEEDBACK_ENABLED=false` și
+`CONVERSATION_CART_ENABLED=false` — deci comportamentul e neschimbat până le aprinzi tu.
 
 ---
 

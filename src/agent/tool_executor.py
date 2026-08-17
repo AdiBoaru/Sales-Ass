@@ -23,7 +23,7 @@ from src.agent import tool_budget
 from src.config import get_settings
 from src.db.provider import is_shared_connection
 from src.models import TurnContext
-from src.observability import turn_latency
+from src.observability import hooks, turn_latency
 from src.runtime import deadline, turn_budget
 from src.safety.policy import SafetyPolicy
 from src.tools.base import run_tool
@@ -218,7 +218,10 @@ class ToolRun:
                         "tool_budget", name=name, outcome="rejected", reason="deadline_at_gate"
                     )
                     return tool_budget.REFUSAL_DEADLINE
-                with turn_latency.span("tools"):
+                # NX-246: `hooks.tool_call` e un hook NEUTRU (contor + latență per tool), pus
+                # exact unde e deja măsurată faza — executorul e proprietarul instrumentării,
+                # tool-urile nu știu că sunt măsurate (P10).
+                with turn_latency.span("tools"), hooks.tool_call(name):
                     return await self._execute_serialized(name, args, seq=seq)
         finally:
             if seq is not None:

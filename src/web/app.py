@@ -25,12 +25,12 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from time import monotonic
+from time import monotonic, perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from redis.exceptions import RedisError
 
 from src.channels.base import InboundEvent
@@ -43,6 +43,7 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.web_turns import WebTurnRow, get_turn, get_turn_by_id
 from src.models import Event
+from src.observability import hooks, tracing
 from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.action_crypto import KeyRingError, parse_key_ring
@@ -63,6 +64,7 @@ from src.web.context import (
     to_payload,
 )
 from src.web.contracts_v2 import WebTurnRequestV2, parse_turn_request
+from src.web.feedback import FeedbackRejected, submit_feedback
 from src.web.identity import verify_identity_token
 from src.web.security import (
     check_origin,
@@ -934,8 +936,158 @@ async def _authorize_web_action(
     )
 
 
+# ── NX-246 felia 2: feedback one-tap (flag WEB_FEEDBACK_ENABLED) ───────────────────────────
+# Rută SEPARATĂ de `/v2/turns`, deliberat: un „👍" nu e un tur. Pe calea de tur ar consuma slotul
+# de single-flight al conversației, ar porni pipeline-ul și ar produce un răspuns conversațional
+# pentru un click care nu cere niciunul. Separarea e impusă structural de `spec.sink`, nu de un
+# `if` pe rută (vezi `action_models.SINK_*`).
+
+_FEEDBACK_MESSAGES: dict[str, dict[str, str]] = {
+    "ro": {
+        "feedback_invalid": "Butonul acesta nu mai este valid.",
+        "feedback_expired": "Butonul a expirat.",
+        "feedback_not_found": "Butonul acesta nu mai este valid.",
+        "feedback_locked": "Am înregistrat deja părerea ta pentru acest răspuns.",
+        "feedback_unavailable": "Nu am putut salva părerea ta acum. Conversația continuă normal.",
+        "feedback_disabled": "Nu am putut salva părerea ta acum. Conversația continuă normal.",
+    },
+    "en": {
+        "feedback_invalid": "That button is no longer valid.",
+        "feedback_expired": "That button expired.",
+        "feedback_not_found": "That button is no longer valid.",
+        "feedback_locked": "I already recorded your feedback for this reply.",
+        "feedback_unavailable": "I couldn't save your feedback. The chat continues normally.",
+        "feedback_disabled": "I couldn't save your feedback. The chat continues normally.",
+    },
+    "hu": {
+        "feedback_invalid": "Ez a gomb már nem érvényes.",
+        "feedback_expired": "A gomb lejárt.",
+        "feedback_not_found": "Ez a gomb már nem érvényes.",
+        "feedback_locked": "Ehhez a válaszhoz már rögzítettem a véleményedet.",
+        "feedback_unavailable": "Most nem tudtam elmenteni a véleményedet. "
+        "A beszélgetés folytatódik.",
+        "feedback_disabled": "Most nem tudtam elmenteni a véleményedet. A beszélgetés folytatódik.",
+    },
+}
+
+# `feedback_not_found` e 404 din ACELAȘI motiv ca la acțiuni: un token valid pe alt tenant/sesiune
+# nu are voie să se distingă de unul inexistent.
+_FEEDBACK_STATUS: dict[str, int] = {
+    "feedback_invalid": 400,
+    "feedback_expired": 410,
+    "feedback_not_found": 404,
+    "feedback_locked": 409,
+    "feedback_unavailable": 503,
+    "feedback_disabled": 404,
+}
+
+
+class WebFeedbackIn(BaseModel):
+    """Corpul rutei. DOUĂ câmpuri, și niciunul semantic — tot înțelesul e în token.
+
+    Nu există `rating`, `reason`, `comment` sau `turn_id`: ratingul vine din KIND-ul sigilat, iar
+    turul din legăturile plicului. Un câmp în plus e respins (`extra="forbid"`), fiindcă un client
+    care încearcă să trimită `{"rating": "positive"}` trebuie să afle că nu așa merge — nu să fie
+    ignorat tăcut și să creadă că a votat.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    action_token: str = Field(min_length=8, max_length=4096)
+    #: Identificator tehnic de request (corelare + retry). NU e cheia de idempotență — aceea e
+    #: promptul derivat; altfel un client ar putea vota de N ori schimbând acest câmp.
+    client_request_id: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/v2/feedback")
+async def web_feedback_v2(
+    req: WebFeedbackIn, request: Request, token: str, visitor_id: str, sig: str
+):
+    """Un vot one-tap. Nu creează tur, nu atinge conversația, nu schimbă niciun răspuns."""
+    s = get_settings()
+    session = await _v2_gate(request, token, visitor_id, sig)
+    if not s.web_feedback_enabled:
+        # 404 ca la orice feature stins: nu confirmăm existența rutei.
+        raise HTTPException(status_code=404, detail="not found")
+    redis = await get_redis()
+    ip = request.client.host if request.client else "unknown"
+    # Aceleași gărzi ca acceptul: un vot e ieftin, dar o rafală de voturi tot scriere e.
+    if await web_rate_limited(redis, token, ip, visitor_id, fail_closed=True):
+        raise HTTPException(status_code=429, detail="rate limited")
+    db = tenant_db(session.business_id)
+    business = await _v2_business(db, session.business_id)
+    lang = business.default_locale or "ro"
+    try:
+        ring = parse_key_ring(s.web_action_keys)
+    except KeyRingError:
+        log.error("web_feedback: key ring invalid — voturile sunt refuzate (fail-closed)")
+        return _feedback_error(FeedbackRejected("feedback_invalid", "key_ring"), lang)
+
+    outcome = await submit_feedback(
+        db,
+        token=req.action_token,
+        business_id=session.business_id,
+        channel_token=token,
+        visitor_id=visitor_id,
+        ring=ring,
+        prompt_secret=s.web_feedback_prompt_secret,
+        locale=lang,
+        release_sha=s.release_sha or None,
+        release_track=s.release_track,
+        skew_s=s.web_action_clock_skew_s,
+    )
+    if isinstance(outcome, FeedbackRejected):
+        return _feedback_error(outcome, lang)
+    return JSONResponse(status_code=200, content=outcome.as_view())
+
+
+def _feedback_error(rejected: FeedbackRejected, language: str) -> JSONResponse:
+    """Refuzul, ca eroare STRUCTURATĂ. Motivul fin rămâne în log (P12): pe sârmă ar fi un oracol."""
+    texts = _FEEDBACK_MESSAGES.get((language or "ro")[:2]) or _FEEDBACK_MESSAGES["ro"]
+    log.warning("web_feedback outcome=rejected code=%s reason=%s", rejected.code, rejected.reason)
+    return JSONResponse(
+        status_code=_FEEDBACK_STATUS.get(rejected.code, 400),
+        content={
+            "error": {
+                "code": rejected.code,
+                "message": texts.get(rejected.code) or texts["feedback_invalid"],
+                "retryable": rejected.code == "feedback_unavailable",
+            }
+        },
+    )
+
+
 @router.post("/v2/turns")
 async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig: str):
+    """Marginea de accept + SINGURUL loc unde se numără disponibilitatea acceptului (NX-246).
+
+    Verdictul se derivă din statusul HTTP, nu dintr-un flag pasat pe fiecare cale de retur: ruta
+    are ~15 ieșiri (schemă, rate limit, buget, acțiune, conflict, replay, accept), iar o
+    instrumentare pusă la fiecare `return` ar rata exact ieșirea adăugată mâine. Un request
+    RESPINS nu creează rând de ledger — deci ăsta e singurul loc din sistem care îl poate număra,
+    și de aceea „accept availability" e singurul SLI cu sursă `metrics`, nu `ledger`.
+    """
+    started = perf_counter()
+    # Contextul de trace din browser NU devine părinte (vezi `tracing.reject_inbound_traceparent`):
+    # oricine ar putea altfel să lipească spans în traceul altui tenant. Îl numărăm, atât.
+    tracing.reject_inbound_traceparent(request.headers.get("traceparent"))
+    status = 500
+    try:
+        response = await _accept_turn_v2(request, token, visitor_id, sig)
+        status = getattr(response, "status_code", 200)
+        return response
+    except HTTPException as e:
+        status = e.status_code
+        raise
+    finally:
+        hooks.on_turn_request(
+            hooks.accept_outcome(status),
+            release_track=get_settings().release_track,
+            duration_s=perf_counter() - started,
+        )
+
+
+async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: str):
     """Acceptul DURABIL al unui turn (NX-233): validează, scrie rândul de ledger + inputul SAFE
     în același checkout, trezește executorii (best-effort, DUPĂ commit) și răspunde imediat.
     NICIODATĂ pipeline/LLM/tool aici — recovery-ul (refresh, alt tab, worker mort) e din DB."""
@@ -1076,6 +1228,7 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
             outcome.row,
             Event("web_turn_idempotency_conflict", {"web_turn_id": outcome.row.id}),
         )
+        hooks.on_idempotency_conflict()
         return _v2_error(409, "idempotency_conflict", "același ID cu alt conținut")
     if isinstance(outcome, ActiveTurnConflict):
         if action is not None:
@@ -1126,6 +1279,7 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
                 )
             )
         await _ledger_emit(db, outcome.row, *replay_events)
+        hooks.on_replay(outcome.row.status)
         return JSONResponse(status_code=200, content=terminal_view(outcome.row, lang))
     if isinstance(outcome, ExistingInProgress):
         await _ledger_emit(

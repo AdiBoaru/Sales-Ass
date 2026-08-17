@@ -26,7 +26,7 @@ from src.config import get_settings
 from src.db import op_metrics
 from src.db.provider import DbProvider, static_db
 from src.models import TurnContext, TurnUsage
-from src.observability import turn_latency
+from src.observability import hooks, turn_latency
 from src.runtime import deadline, turn_budget
 from src.runtime.deadline import TurnDeadline
 from src.runtime.turn_budget import BudgetLedger, TurnClass
@@ -297,6 +297,7 @@ def _deadline_stop(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> bool:
         return False
     reason = cp.reason or "expired"
     turn_latency.mark_exhausted(phase, reason)
+    hooks.on_deadline(phase, reason)  # NX-246: contor operațional; vocabularul e deja închis
     ctx.emit(
         "turn_deadline_exhausted",
         phase=phase,

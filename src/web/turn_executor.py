@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
@@ -49,6 +50,7 @@ from src.db.queries.web_turns import (
     renew_lease,
 )
 from src.models import Event
+from src.observability import hooks, tracing
 from src.runtime import deadline, turn_budget
 from src.runtime.deadline import TurnDeadline
 from src.runtime.turn_budget import TurnClass
@@ -330,6 +332,20 @@ class WebTurnExecutor:
             events.append(Event("web_turn_reclaimed", {"web_turn_id": row.id}))
         await self._emit(db, row, *events)
 
+        # NX-246: metricile operaționale ale turului. `attempt_bucket`/`outcome`/`safe_error_code`
+        # sunt vocabular ÎNCHIS; `turn_id` rămâne atribut de TRACE, niciodată etichetă de metrică.
+        track = get_settings().release_track
+        hooks.on_queue_wait(
+            max(0.0, (datetime.now(UTC) - row.accepted_at).total_seconds()),
+            attempt_bucket=attempt_bucket(claim.attempt),
+        )
+        if claim.reclaimed:
+            hooks.on_reclaim(attempt_bucket(claim.attempt))
+
+        def _e2e_s() -> float:
+            """Accept → ACUM: timpul pe care îl simte clientul, nu doar execuția noastră."""
+            return max(0.0, (datetime.now(UTC) - row.accepted_at).total_seconds())
+
         async def _fail(code: str) -> TerminalCommit:
             ok = await fail_web_turn(
                 db,
@@ -347,6 +363,12 @@ class WebTurnExecutor:
                     "web_turn_executed", {"outcome": outcome, "code": code, "web_turn_id": row.id}
                 ),
             )
+            if ok:
+                hooks.on_terminal(
+                    "failed", safe_error_code_=code, release_track=track, end_to_end_s=_e2e_s()
+                )
+            else:
+                hooks.on_fenced("terminal")
             return TerminalCommit(row.id, outcome, code)
 
         now = datetime.now(UTC)
@@ -396,6 +418,11 @@ class WebTurnExecutor:
                             active_search_ref=getattr(facts, "active_search_ref", None),
                             commerce_product_refs=getattr(facts, "commerce_product_refs", ()),
                             cart_checkout_ready=getattr(facts, "cart_checkout_ready", False),
+                            # NX-246: promptul de feedback se decide AICI, unde se știe flagul,
+                            # nu în `plan_actions` (care rămâne pură). Doar pe calea de succes:
+                            # `_commit` rulează exclusiv când turul chiar a produs un răspuns, deci
+                            # nu putem cere părerea despre un mesaj de eroare scris de noi.
+                            feedback_prompt=get_settings().web_feedback_enabled,
                         ),
                     ),
                 )
@@ -453,6 +480,25 @@ class WebTurnExecutor:
             if turn_deadline is not None
             else _legacy_deadline_left_s(row, now, s)
         )
+        # NX-246: rădăcina traceului. Trace-id-ul e DERIVAT din `turn_id` (HMAC), deci un reclaim
+        # după restart continuă ACELAȘI trace fără să fi persistat vreun `traceparent` — zero
+        # migrare, zero context de propagat, imposibil să divergă. `attempt` intră în span-id, deci
+        # fiecare încercare e un span propriu, frate cu celelalte, sub același trace.
+        # Task-ul pipeline-ului se creează ÎNĂUNTRU: `create_task` copiază ContextVar-urile, deci
+        # tot ce măsoară `turn_latency` în interior se atașează aici (ca la deadline/budget).
+        # Închis în ACELAȘI `finally` cu `deadline_token` de mai sus — aceeași formă, același
+        # motiv: ce se împinge în ContextVar înainte de `create_task` se scoate după ce task-ul
+        # s-a terminat, nu mai devreme.
+        trace_stack = ExitStack()
+        trace_stack.enter_context(
+            tracing.turn_trace(
+                row.id,
+                attempt=claim.attempt,
+                attempt_bucket=attempt_bucket(claim.attempt),
+                pipeline_version=row.pipeline_version,
+                schema_major=row.schema_version,
+            )
+        )
         pipeline = asyncio.create_task(
             handle_turn(
                 db,
@@ -499,6 +545,7 @@ class WebTurnExecutor:
                             {"phase": "pipeline", "web_turn_id": row.id},
                         ),
                     )
+                    hooks.on_fenced("pipeline")
                     return TerminalCommit(row.id, "fenced")
                 if turn_deadline is not None:
                     await self._emit(
@@ -514,6 +561,7 @@ class WebTurnExecutor:
                             },
                         ),
                     )
+                    hooks.on_deadline("commit", "expired")
                 return await _fail("deadline_exceeded")
             try:
                 result = pipeline.result()
@@ -527,6 +575,7 @@ class WebTurnExecutor:
                         {"phase": "commit", "web_turn_id": row.id},
                     ),
                 )
+                hooks.on_fenced("commit")
                 return TerminalCommit(row.id, "fenced")
             except EmptyTerminalResult:
                 return await _fail("empty_result")
@@ -538,6 +587,7 @@ class WebTurnExecutor:
             await guard.stop()
             if deadline_token is not None:
                 deadline.pop(deadline_token)
+            trace_stack.close()
 
         execution_ms = round((perf_counter() - started) * 1000.0)
         if "view" in persisted:
@@ -548,6 +598,10 @@ class WebTurnExecutor:
                     "web_turn_executed",
                     {"outcome": "completed", "web_turn_id": row.id, "execution_ms": execution_ms},
                 ),
+            )
+            hooks.on_execution(execution_ms / 1000.0, outcome="completed")
+            hooks.on_terminal(
+                "completed", safe_error_code_=None, release_track=track, end_to_end_s=_e2e_s()
             )
             # Aftercare STRICT post-terminal: rezultatul e deja comis; un eșec aici nu-l atinge.
             if result.aftercare is not None:

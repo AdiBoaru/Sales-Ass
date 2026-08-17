@@ -125,3 +125,26 @@ LEGACY sub `CONVERSATION_CART_ENABLED` (OFF = byte-identic, nimic nu se atinge).
   vocabular închis. Fără DELETE pentru `bot_runtime` (receipts = dovezi; retenția e job admin).
   Zero PII pe toate trei; RLS `bot_runtime_tenant` ca la 040. Contract + politici de date:
   `docs/CART-DATA-READINESS.md`.
+
+## `web_feedback` — voturile one-tap (NX-246 felia 2, migrarea 042)
+
+Tabel nou (nu exista în schema_v2). NU s-a folosit `analytics_events`, deliberat: acolo scrierile
+sunt append-only și fără unicitate, deci nu pot impune „un singur feedback ACTIV per prompt" și nu
+pot exprima o corecție. Un retry de rețea ar produce două rânduri, iar `positive_feedback_rate` ar
+număra același vot de două ori — exact semnalul pe care rollout-ul îl folosește ca să decidă.
+
+- `UNIQUE (business_id, feedback_prompt_id)` = invariantul central ȘI ținta lui `ON CONFLICT` din
+  `upsert_feedback`: idempotența e o proprietate a SCHEMEI, nu o secvență de apeluri.
+- `feedback_prompt_id` e DERIVAT (HMAC peste `turn_id` + versiune de schemă), nu random — vezi
+  `docs/WEB-FEEDBACK.md` §2: proiecția v2 e pură, iar un id random ar face ca „un vot per prompt"
+  să devină „un vot per reîncărcare de pagină".
+- `last_action_id` + `revision`: retry IDENTIC nu atinge rândul (clauza `where` din `do update`);
+  o corecție autorizată incrementează `revision`, plafonat la 5 în cod (`MAX_FEEDBACK_REVISIONS`).
+- `rating ∈ positive|negative` (vine din KIND-ul sigilat, nu de la client), `reason_code` din
+  taxonomia VERSIONATĂ `taxonomy_version` (`feedback.v1`).
+- ZERO text liber: nicio coloană de comentariu/IP/user-agent/token/identitate. Verificat de un test
+  pe `information_schema.columns`, nu doar pe intenție.
+- `turn_id` fără FK către `web_turns`: ledgerul are retenție proprie (168h), iar un vot nu are de ce
+  să dispară odată cu fereastra de replay. Legătura cu persoana e prin conversație (cascade).
+- Fără DELETE pentru `bot_runtime` — un vot e o dovadă; se corectează prin `revision`. RLS
+  `bot_runtime_tenant` + `member read`, ca la 040/041. Contract: `docs/WEB-FEEDBACK.md`.
