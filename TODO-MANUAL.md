@@ -248,6 +248,68 @@ Expune localhost:8000 spre Meta prin HTTPS public, fără deploy.
 
 ---
 
+## 🚀 NX-248 — ce blochează promovarea în producție (adăugat 2026-08-17)
+
+Codul de release e livrat și verificat local. Verdictul de release e **`NOT_READY`** fiindcă 7 din
+10 elemente critice de evidență cer accesuri pe care doar tu le ai. Rulează
+`python scripts/release/evidence.py` oricând ca să vezi ce mai lipsește.
+
+### A. GitHub (blochează primul release prin `release.yml`)
+
+- [ ] **Environments `staging` și `production`:** Settings → Environments → New.
+      Pe `production` bifează **Required reviewers** (tu) — acolo trăiește aprobarea umană care
+      înlocuiește „merge = deploy".
+- [ ] **Secrete pe `production`:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`,
+      **`VPS_HOST_KEY`** (nou), `PROD_DATABASE_URL_MIGRATION` (nou), `PROD_BASE_URL`,
+      `PROD_SMOKE_TOKEN`.
+- [ ] **`VPS_HOST_KEY` = cheia PUBLICĂ a hostului**, luată din consola Hostinger (out-of-band),
+      NU cu `ssh-keyscan`. Pe VPS: `cat /etc/ssh/ssh_host_ed25519_key.pub` →
+      pune în secret linia `<host> ssh-ed25519 AAAA…` (format `known_hosts`).
+      *De ce:* vechiul deploy folosea `StrictHostKeyChecking=no` — accepta orice host care
+      răspundea la IP, deci un MITM primea cheia de deploy și codul.
+- [ ] **Cont de deploy non-root pe VPS** (nu `root`), cu drepturi doar în
+      `/opt/nativextech/nativx` + `docker compose`. Azi `VPS_USER=root`.
+- [ ] **Pachetul GHCR public** (ca acum) SAU credentiale de pull pe VPS.
+- [ ] *(opțional)* `RELEASE_MANIFEST_KEY` — semnează manifestul de deploy pe lângă imagine.
+
+### B. VPS (înainte de primul deploy prin digest)
+
+- [ ] **`.env.migrate`** cu `DATABASE_URL_MIGRATION=…` (rol cu drept de DDL), `chmod 400`,
+      owner = contul de deploy. **NU** în `.env` — acolo l-ar primi toate procesele.
+- [ ] **`IMAGE_DIGEST=`** în `.env` (îl scrie deployul; gol la prima rulare e ok, dar
+      `docker compose up` va refuza până există unul).
+- [ ] `OPS_HEALTH_TOKEN=` (generează: `python -c "import secrets;print(secrets.token_urlsafe(32))"`).
+- [ ] Verifică după primul deploy: `curl -s localhost:8000/health/ready` întoarce 200 și
+      `release`/`config` coincid cu manifestul (`scripts/release/verify_manifest.py`).
+
+### C. Staging (blochează `staging_smoke` + `rollback_drill`)
+
+- [ ] Un host/namespace de staging (poate fi același VPS, alt proiect compose + alt subdomeniu).
+- [ ] Secretele `STAGING_*` pe environmentul `staging`.
+- [ ] Un **tenant de test dedicat** pentru smoke (nu clientul demo): token public propriu →
+      `STAGING_SMOKE_TOKEN`. Smoke-ul chiar creează o conversație.
+
+### D. Supabase / DR (blochează `dr_restore`, deci și NX-249)
+
+- [ ] **Confirmă planul, regiunea și PITR/backup/retention** (screenshot/notă în card).
+      Fără ele, RPO ≤5 min / RTO ≤60 min rămân `UNVERIFIED` — și `UNVERIFIED` blochează NX-249.
+- [ ] **Un restore izolat** (proiect NOU, niciodată peste producție) + rulează:
+      `DR_VERIFY_DSN=… python scripts/dr/restore_verify.py --business-id … --backup-timestamp …`
+      → salvează `reports/nx248/evidence/dr.json`.
+- [ ] Decide și notează: fereastra de mentenanță, cine e on-call, cui se comunică incidentele.
+
+### E. Datorii descoperite de drill-uri (nu blochează releaseul, dar merită programate)
+
+- [ ] **`005_bot_runtime_login.sql` nu se poate aplica de runner** (are parametru psql). Orice
+      instalare NOUĂ / restore în alt proiect îl lovește. Detalii + propuneri:
+      `docs/PRODUCTION-READINESS.md` §6 (D1).
+- [ ] **`.env` root-readable pe VPS** → migrare la secrete prin fișier (suportul `_FILE` e gata,
+      `docs/SECRETS-ROTATION.md` §2). D2.
+- [ ] **Scan de secrete pe istoricul git** (`.git` nu mai intră în imagine, dar istoricul rămâne).
+      Ce se găsește → rotit. D5.
+
+---
+
 ## ⚙️ GitHub (config repo — rapid, în browser)
 
 - [ ] **Branch protection finalizare:** Settings → Branches → regula `main` → adaugă required checks `Lint (ruff)` + `Test (pytest)` (apar în search după ce au rulat o dată)

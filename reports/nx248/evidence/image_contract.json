@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "measured_at": "2026-08-17T15:13:53+00:00",
+  "imagine": "nativx-stage1:test",
+  "verdict": "CONTRACT DE IMAGINE: PASS (non-root, conținut complet, zero secrete)",
+  "poarta_chiar_poate_pica": {
+    "imagine_stricata": "nativx-broken:test (root, fara safety_rules.json, cu secret in ENV)",
+    "exit": 1,
+    "gasit": [
+      "imaginea rulează ca UID '0' (așteptat: non-root)",
+      "lipsește din imagine: /app/db/seed/safety_rules.json",
+      "tipar de secret (sk-[A-Za-z0-9_-]{16,}…) prezent în imagine",
+      "variabilă de mediu neașteptată coaptă în imagine: OPENAI_API_KEY"
+    ]
+  },
+  "hardening_verificat_direct": [
+    "uid=10001(app) — non-root",
+    "read_only + cap-drop ALL + no-new-privileges: aplicatia porneste, heartbeat scrie pe tmpfs",
+    "scriere in /app REFUZATA (Read-only file system)",
+    "sentry_sdk / fastapi_cli absente din runtime"
+  ]
+}

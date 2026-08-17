@@ -1,5 +1,19 @@
 # Deploy Nativx pe VPS partajat (Hostinger + Traefik)
 
+> ## ⚠️ Runbook-ul canonic de RELEASE e altul (NX-248)
+>
+> Din NX-248, deployul se face prin **promovarea unui digest semnat**, cu aprobare umană — nu prin
+> `git pull && docker compose pull && up -d`. Pentru orice deploy, rollback sau migrare:
+>
+> - **[docs/RELEASE-RUNBOOK.md](docs/RELEASE-RUNBOOK.md)** — comenzi exacte, coduri de ieșire, rollback
+> - **[docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** — ce s-a măsurat, ce lipsește
+> - **[docs/DISASTER-RECOVERY.md](docs/DISASTER-RECOVERY.md)** — surse de adevăr, restore, RPO/RTO
+> - **[docs/SECRETS-ROTATION.md](docs/SECRETS-ROTATION.md)** — inventar, livrare prin fișier, rotație
+>
+> Fișierul ăsta rămâne pentru **topologia** VPS-ului (coabitare, Traefik, DNS, profile de canal) și
+> pentru istoricul deciziilor. Unde cele două se contrazic, **runbook-ul de release câștigă**;
+> secțiunile depășite sunt marcate ca atare mai jos.
+
 Runbook pentru a rula Nativx **alături** de stack-ul existent al VPS-ului, fără
 să-l atingem. DB = Supabase remote (nu se atinge Postgres-ul local). Canale:
 **WhatsApp** (Meta Cloud API, număr separat) + **Telegram** (long polling).
@@ -164,9 +178,17 @@ cd /opt/nativextech/nativx
 docker compose ps                 # stare
 docker compose logs -f worker     # loguri (fără PII — redaction în logger)
 docker compose restart worker     # restart un serviciu
-git pull && docker compose pull && docker compose up -d   # update cod (imagine din ghcr, NU build pe VPS)
 docker compose --profile proactive up -d proactive   # motor proactiv când e nevoie
 docker compose down               # oprește DOAR stack-ul nativx (nu atinge restul VPS-ului)
+
+# ⚠️ DEPĂȘIT (NX-248): `git pull && docker compose pull && up -d` NU mai e calea de update.
+# Hostul nu mai decide ce configurație rulează, iar imaginea e un DIGEST, nu `latest`.
+# Update = promovare prin release.yml → docs/RELEASE-RUNBOOK.md §1.
+# Migrarea e un job separat, cu credentialul de DDL:
+docker compose --profile migrate run --rm migrate
+# Ce rulează acum, cu adevărat:
+curl -s localhost:8000/health/ready | python -m json.tool
+python scripts/release/verify_manifest.py --manifest manifest.json --base-url http://localhost:8000
 ```
 
 ### Executorul web async + recovery (NX-233)
@@ -187,20 +209,23 @@ Semnale de urmărit în loguri: `web_turn executor … pornit`, `sweeper web_tur
 stinge `WEB_TURN_V2_ENABLED` (acceptul nou), dar **lasă executorul + recovery aprinse** până se
 drenează turele deja acceptate; nu șterge rânduri și nu reseta epochuri.
 
-## Auto-deploy (CI/CD)
+## Auto-deploy (CI/CD) — ÎNLOCUIT de NX-248
 
-Push pe `main` → `.github/workflows/deploy.yml` construiește imaginea pe runnerele
-GitHub (NU pe VPS — 1 vCPU), o urcă în `ghcr.io/adiboaru/sales-ass`, apoi intră prin
-SSH pe VPS și face `git pull && docker compose pull && up -d`. Zero build pe VPS.
+**Nu mai există auto-deploy la push pe `main`.** Un merge nu e o aprobare de deploy: producția se
+promovează manual, cu un digest semnat, prin `Actions → Release → Run workflow`. Fluxul complet și
+motivele: [docs/RELEASE-RUNBOOK.md](docs/RELEASE-RUNBOOK.md).
 
-Setup o singură dată:
-- **VPS:** cheia publică de deploy în `~/.ssh/authorized_keys` (perechea privată e în
-  secretul `VPS_SSH_KEY` al repo-ului).
-- **Secrete repo:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`.
-- **Pachet ghcr PUBLIC:** după primul run, fă pachetul `sales-ass` public (repo-ul e
-  oricum public; secretele vin din `.env`, nu din imagine) ca VPS-ul să tragă fără login.
+`.github/workflows/deploy.yml` a rămas fără trigger automat, ca fallback documentat, până la primul
+release complet prin `release.yml`. Rularea lui cere o confirmare scrisă explicit.
 
-Deploy manual: tab-ul **Actions → Deploy to VPS → Run workflow**.
+Setup (o singură dată), pe lângă cel de mai jos:
+- **GitHub Environments** `staging` + `production`, cu approvals și secrete separate.
+- **`VPS_HOST_KEY`** = cheia publică a HOSTULUI, obținută out-of-band (consola providerului) și
+  aprobată de un om. Înlocuiește `ssh-keyscan` + `StrictHostKeyChecking=no`.
+- **`.env.migrate`** pe VPS (mod 0400) cu `DATABASE_URL_MIGRATION` — credentialul de DDL, montat
+  DOAR în jobul de migrare.
+- **`IMAGE_DIGEST`** în `.env` — pus de deploy din manifest. Fără el, `docker compose` refuză să
+  pornească (intenționat).
 
 ## Future
 

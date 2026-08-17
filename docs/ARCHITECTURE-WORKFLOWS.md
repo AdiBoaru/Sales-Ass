@@ -1288,6 +1288,41 @@ invalid → retry → fallback. Pe calea bogată: scrub → DROP. Răspundere ju
 
 ---
 
+## Lentila 7 · OPERARE — ce rulează, e gata, și cum a ajuns acolo (NX-248)
+
+Primele șase lentile privesc un TUR. Asta privește INSTANȚA: aceleași întrebări, dar despre
+procesul care execută turele.
+
+**Ce rulează.** `src/ops/build_info.py` — release SHA, revizie de config, interval de schemă
+tolerat. Un container NU-și poate citi propriul digest (ar fi o recursie: digestul e amprenta
+manifestului care conține stratul în care ar trebui scris), deci `image_digest_claimed` vine din
+mediu, iar adevărul se stabilește din afară: `docker inspect` vs manifest
+(`scripts/release/verify_manifest.py`). Container care se auto-declară = afirmație; host care
+compară = dovadă.
+
+**E gata?** Trei întrebări cu trei consecințe (`src/ops/health.py`): `live` → orchestratorul
+REPORNEȘTE (deci zero I/O: un Postgres jos nu are voie să repornească flota); `startup` → proxy-ul
+nu bagă instanța în rotație (latch: un startup care oscilează e mai rău decât ambele stări);
+`ready` → proxy-ul o scoate din rotație. `required` vs `optional` se citește din COD, nu din
+obișnuință — cu Redis jos, `api` iese (rate-limitul de accept e `fail_closed`) și `worker` rămâne
+`degraded` (Postgres e autoritatea, NX-233). Procesele fără HTTP au health propriu
+(`src/ops/worker_health.py`): freshness + PID viu + `boot_id`, fiindcă un fișier scris de un proces
+mort arată proaspăt exact cât e fereastra.
+
+**Cum a ajuns acolo.** Un commit → UN artefact (digest + SBOM + provenance + semnătură + scan
+fail-closed) → staging cu ACELAȘI digest → smoke v2 (accept → terminal → replay byte-identic) →
+aprobare umană → producție cu ACELAȘI digest. Fără rebuild, fără `git pull` pe host. Rollbackul are
+țintă (`previous_digest`) și o poartă: dacă schema aplicată a depășit ce tolerează imaginea
+precedentă, releaseul se blochează ÎNAINTE de deploy — vezi
+[PRODUCTION-READINESS.md](PRODUCTION-READINESS.md) și [RELEASE-RUNBOOK.md](RELEASE-RUNBOOK.md).
+
+**Unde poate ieși tăcere (completare la Lentila 3).** Un healthcheck pe socket: portul răspunde și
+cu DSN greșit, schemă veche și pool tenant mort. De-asta sonda e semantică, iar CI verifică
+CONȚINUTUL imaginii (`scripts/release/image_contract.py`), nu doar că buildul a trecut — bugul
+găsit așa: registrul de siguranță NX-173 lipsea din imagine, iar workerul refuza să pornească.
+
+---
+
 # Contract verificat
 
 Blocurile de mai jos sunt comparate cu codul de `scripts/verify_architecture_doc.py`, rulat în CI.
@@ -1336,7 +1371,11 @@ worker
 
 ```claim:routes
 GET /bootstrap
+GET /detail
+GET /live
 GET /r/{business_id}/{ref_code}
+GET /ready
+GET /startup
 GET /stream
 GET /v2/turns/{turn_id}
 GET /v2/turns/{turn_id}/events

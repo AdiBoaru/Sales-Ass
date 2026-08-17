@@ -1,0 +1,95 @@
+{
+  "elements": {
+    "approvals": {
+      "critical": false,
+      "description": "cine a aprobat staging și producție",
+      "present": false,
+      "source": "approvals.json"
+    },
+    "dr_restore": {
+      "critical": true,
+      "description": "restore izolat + RPO/RTO MĂSURAT",
+      "present": false,
+      "source": "dr.json"
+    },
+    "image_contract": {
+      "critical": true,
+      "description": "non-root, conținut complet, zero secrete",
+      "ok": true,
+      "present": true,
+      "source": "image_contract.json",
+      "verdict": "CONTRACT DE IMAGINE: PASS (non-root, conținut complet, zero secrete)"
+    },
+    "manifest": {
+      "critical": true,
+      "description": "digest, release, config, interval de schemă",
+      "present": false,
+      "source": "manifest.json"
+    },
+    "migrations": {
+      "critical": true,
+      "description": "fresh→latest, concurență, expand/contract",
+      "ok": true,
+      "present": true,
+      "source": "migrations.json",
+      "verdict": null
+    },
+    "readiness": {
+      "critical": true,
+      "description": "live/startup/ready cu dependențe reale",
+      "ok": true,
+      "present": true,
+      "source": "readiness.json",
+      "verdict": null
+    },
+    "rollback_drill": {
+      "critical": true,
+      "description": "revenire la digestul precedent, cronometrată",
+      "present": false,
+      "source": "rollback.json"
+    },
+    "sbom": {
+      "critical": true,
+      "description": "SBOM SPDX/CycloneDX atașat imaginii",
+      "present": false,
+      "source": "sbom.json"
+    },
+    "scan": {
+      "critical": true,
+      "description": "vulnerabilități OS+Python, fail-closed pe critical/high",
+      "present": false,
+      "source": "trivy.json"
+    },
+    "secret_scan": {
+      "critical": false,
+      "description": "canary absent din imagine/loguri/artefacte",
+      "present": false,
+      "source": "secret_scan.json"
+    },
+    "signature": {
+      "critical": true,
+      "description": "cosign verify pe repo + workflow identity",
+      "present": false,
+      "source": "signature.json"
+    },
+    "staging_smoke": {
+      "critical": true,
+      "description": "bootstrap→accept→terminal→replay pe staging",
+      "present": false,
+      "source": "smoke.json"
+    }
+  },
+  "failed_critical": [],
+  "gate": "NX-249 poate începe DOAR cu verdict READY. `NOT_READY` = lipsesc măsurători; `BLOCKED` = măsurătorile există și au picat.",
+  "missing_critical": [
+    "dr_restore",
+    "manifest",
+    "rollback_drill",
+    "sbom",
+    "scan",
+    "signature",
+    "staging_smoke"
+  ],
+  "schema_version": "release-evidence.v1",
+  "verdict": "NOT_READY"
+}

@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "measured_at": "2026-08-17T15:13:02+00:00",
+  "mediu": "imaginea nativx-stage1:test + pgvector/pgvector:pg16 + redis:7-alpine, retea docker izolata",
+  "scenarii": {
+    "toate_sus": {
+      "api": "ready=true (postgres_control, postgres_tenant/role_ok, ledger/can_insert, redis, schema 042 in 042..043)",
+      "worker": "ready=true (+ executor 0/24)",
+      "startup_api": "ok=true (schema, safety_registry, action_keys=disabled)"
+    },
+    "redis_jos": {
+      "api": "ready=FALSE — redis e REQUIRED (rate limit fail-closed la accept)",
+      "worker": "ready=TRUE, degraded=[redis] — Postgres e autoritatea (NX-233)",
+      "concluzie": "clasificarea optional/required se comporta diferit, cum cere cardul"
+    },
+    "schema_prea_noua": {
+      "api": "ready=FALSE, schema=failed/schema_too_new",
+      "worker": "ready=FALSE, schema=failed/schema_too_new",
+      "concluzie": "un rollback orb peste o schema necunoscuta e oprit de readiness, nu de noroc"
+    },
+    "postgres_jos": {
+      "live": "200 {status: ok} — procesul NU se repornește pentru o pana de DB",
+      "ready": "503, corp minimal (fara nume de dependenta, fara reason code, fara DSN)"
+    }
+  },
+  "nemasurat_local": [
+    "pool_exhausted (cere sarcina reala)",
+    "OTLP down (cere colector)"
+  ]
+}
