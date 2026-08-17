@@ -1,0 +1,276 @@
+# NX-248 — Release: build O SINGURĂ DATĂ, promovează prin DIGEST.
+#
+# Fluxul vechi (`deploy.yml`) construia la fiecare push pe `main`, publica `latest` și intra prin
+# SSH cu `git pull && docker compose pull && up -d`. Trei probleme, fiecare fatală separat:
+#
+#   • `latest` e mutabil: între `pull` și `up` conținutul se poate schimba, iar „rollback la
+#     latest" nu e o operație, ci o speranță;
+#   • `git pull` pe VPS înseamnă că host-ul decide ce configurație rulează, nu releaseul;
+#   • un push pe `main` DEVENEA un deploy în producție, fără aprobare umană.
+#
+# Aici: un commit produce UN artefact, cu digest, SBOM, provenance, semnătură și raport de scan.
+# Același digest merge în staging, e verificat prin smoke, apoi — și numai după o aprobare umană
+# pe environmentul `production` — e promovat. Nu se reconstruiește nimic la promovare: „ce am
+# testat" și „ce rulează" sunt același șir de 64 de caractere.
+#
+# Ce NU face acest workflow: nu alege cohorta de canary și nu execută cutoverul v1→v2 (NX-249).
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: "Digestul (sha256:…) de promovat în producție. Gol = doar build + staging."
+        required: false
+        type: string
+      rollback:
+        description: "Promovare de ROLLBACK (digest anterior). Sare peste build."
+        required: false
+        default: false
+        type: boolean
+
+# Un singur release în zbor. `cancel-in-progress: false` — un deploy întrerupt la jumătate e mai
+# rău decât un deploy care așteaptă.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/adiboaru/sales-ass
+
+jobs:
+  # ── 1. BUILD: o singură dată, cu artefactele care îl fac verificabil ───────────────────────
+  build:
+    name: Build + atestări
+    if: ${{ !inputs.rollback }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # OIDC pentru semnătura keyless cosign
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      release_sha: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Timestamp de build (o singură sursă pentru toate etichetele)
+        id: meta
+        run: echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push (SBOM + provenance atașate)
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: true
+          # Tagurile sunt POINTERI PENTRU OAMENI. Deployul folosește exclusiv digestul de mai jos.
+          # `latest` rămâne ca să nu rupem uneltele care îl caută, dar nimic din release nu-l citește.
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            RELEASE_SHA=${{ github.sha }}
+            BUILT_AT=${{ steps.meta.outputs.built_at }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Semnează imaginea (keyless, identitate = acest workflow)
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      # Scanul e FAIL-CLOSED pe critical/high. Excepțiile trăiesc în `.trivyignore` cu CVE, motiv,
+      # owner și dată de expirare — `continue-on-error` ar transforma poarta într-o notificare.
+      - name: Scan vulnerabilități (OS + Python)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+
+      - name: Contractul de imagine (non-root, conținut, zero secrete)
+        run: |
+          docker pull "${IMAGE}@${DIGEST}"
+          python scripts/release/image_contract.py "${IMAGE}@${DIGEST}" --canary "${CANARY}"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          # Canary injectat DOAR în mediul jobului: dacă apare în imagine, ceva scurge env-ul de CI.
+          CANARY: nx248-canary-${{ github.run_id }}
+
+      - name: Manifest de deploy (release, digest, config, interval de schemă)
+        run: |
+          python scripts/release/build_manifest.py \
+            --image "${IMAGE}" \
+            --digest "${DIGEST}" \
+            --release-sha "${{ github.sha }}" \
+            --built-at "${{ steps.meta.outputs.built_at }}" \
+            --run-id "${{ github.run_id }}" \
+            --out manifest.json
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-${{ github.run_id }}
+          path: |
+            manifest.json
+            trivy.sarif
+          if-no-files-found: error
+          retention-days: 90
+
+  # ── 2. STAGING: același digest, verificat semantic ────────────────────────────────────────
+  staging:
+    name: Staging (același digest)
+    needs: build
+    if: ${{ !inputs.rollback }}
+    runs-on: ubuntu-latest
+    environment: staging # secrete + aprobări separate de producție
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      # Verificarea se face ÎNAINTE de a atinge hostul: o semnătură validată după deploy răspunde
+      # la întrebarea greșită.
+      - name: Verifică semnătura (repo + workflow, nu doar „e semnată")
+        run: |
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity-regexp "^https://github.com/adiboaru/sales-ass/\.github/workflows/release\.yml@refs/heads/main$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+
+      # Preflight: migrări, compatibilitate de schemă, config. Read-only pe DB-ul de staging.
+      - name: Preflight (schemă + compatibilitate + config)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ENV: staging
+        run: python scripts/release/preflight.py --manifest-digest "${{ needs.build.outputs.digest }}"
+
+      # Migrarea rulează ca JOB SEPARAT, cu credentialul de DDL, înainte de a porni serviciile.
+      - name: Migrare (job dedicat, lock, expand/contract)
+        env:
+          DATABASE_URL_MIGRATION: ${{ secrets.STAGING_DATABASE_URL_MIGRATION }}
+          ENV: staging
+        run: python scripts/migrate.py --json
+
+      - name: Deploy staging (digest, fără git pull, fără build)
+        env:
+          DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_USER }}
+          DEPLOY_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.STAGING_HOST_KEY }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+        run: ./scripts/release/deploy.sh staging
+
+      - name: Smoke WebWidget v2 (bootstrap → accept → terminal → replay)
+        env:
+          SMOKE_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          SMOKE_PUBLIC_TOKEN: ${{ secrets.STAGING_SMOKE_TOKEN }}
+        run: python scripts/release/smoke_web_v2.py --json --out smoke.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: staging-smoke-${{ github.run_id }}
+          path: smoke.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # ── 3. PRODUCȚIE: aprobare umană, același digest, zero build ──────────────────────────────
+  # Nu depinde de `push`: se declanșează DOAR prin `workflow_dispatch` cu un digest explicit.
+  # Un merge în `main` nu mai este o aprobare de deploy.
+  production:
+    name: Producție (promovare prin digest)
+    if: ${{ inputs.digest != '' }}
+    runs-on: ubuntu-latest
+    environment: production # ← aprobarea umană trăiește aici, în GitHub Environments
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Verifică semnătura digestului de promovat
+        run: |
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity-regexp "^https://github.com/adiboaru/sales-ass/\.github/workflows/release\.yml@refs/heads/main$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ inputs.digest }}
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+
+      # Poarta care face rollbackul posibil: dacă imaginea PRECEDENTĂ nu mai tolerează schema
+      # curentă, releaseul se oprește ACUM, nu în incident.
+      - name: Preflight producție (inclusiv fezabilitatea rollbackului)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ENV: prod
+        run: python scripts/release/preflight.py --manifest-digest "${{ inputs.digest }}" --require-rollback-possible
+
+      - name: Migrare (job dedicat, credential de DDL)
+        if: ${{ !inputs.rollback }}
+        env:
+          DATABASE_URL_MIGRATION: ${{ secrets.PROD_DATABASE_URL_MIGRATION }}
+          ENV: prod
+        run: python scripts/migrate.py --json
+
+      - name: Deploy producție (digest, fără git pull, fără build)
+        env:
+          DEPLOY_HOST: ${{ secrets.VPS_HOST }}
+          DEPLOY_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_KEY: ${{ secrets.VPS_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+          IMAGE_DIGEST: ${{ inputs.digest }}
+        run: ./scripts/release/deploy.sh production
+
+      - name: Smoke producție (tenant de test dedicat)
+        env:
+          SMOKE_BASE_URL: ${{ secrets.PROD_BASE_URL }}
+          SMOKE_PUBLIC_TOKEN: ${{ secrets.PROD_SMOKE_TOKEN }}
+        run: python scripts/release/smoke_web_v2.py --json --out smoke-prod.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: production-evidence-${{ github.run_id }}
+          path: smoke-prod.json
+          if-no-files-found: error
+          retention-days: 365

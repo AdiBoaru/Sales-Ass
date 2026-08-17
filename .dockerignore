@@ -1,3 +1,7 @@
+# NX-248: context de build MINIM. Regula e „neagă tot, permite explicit" pentru directoarele
+# care conțin și date sensibile, și fișiere necesare — altfel o excludere largă scoate din
+# imagine exact fișierul de care depinde poarta de boot (s-a întâmplat cu db/seed, vezi Dockerfile).
+
 # Virtualenv / build artefacte
 .venv
 venv
@@ -5,9 +9,12 @@ venv
 dist
 build
 
-# Git
+# Git — NU intră în context: `.git` poartă ISTORICUL, deci și orice secret comis vreodată și
+# șters ulterior. Un `COPY . .` cu `.git` prezent a fost, în multe incidente publice, singurul
+# motiv pentru care un credential revocat era încă în imagine.
 .git
 .gitignore
+.github
 
 # Teste și cache
 tests
@@ -21,15 +28,37 @@ htmlcov
 # Secrete și config local
 .env
 .env.*
+*.pem
+*.key
+secrets
+.secrets
 
 # Node (seed scripts — nu intră în imaginea Python)
 node_modules
 package.json
 package-lock.json
-db/seed
+
+# `db/` conține seed-uri mari și scripturi de populare; imaginea are nevoie DOAR de registrul de
+# contraindicații (NX-173), pe care poarta de boot îl cere.
+db/*
+!db/seed
+db/seed/*
+!db/seed/safety_rules.json
+
+# `scripts/` are unelte de dezvoltare (sim, audituri, enrich). Imaginea are nevoie doar de
+# runner-ul de migrări; Dockerfile-ul îl copiază explicit, deci excludem restul din CONTEXT ca
+# să nu ajungă nici măcar în straturile intermediare sau în cache-ul de build.
+scripts/*
+!scripts/migrate.py
+
+# Rapoarte, artefacte de măsurare, documente de lucru
+reports
+tasks
+arch_explorer
+*.xlsx
+*.pdf
+*.drawio
 
 # IDE / harness
 .vscode
 .claude
-.github
-tasks
