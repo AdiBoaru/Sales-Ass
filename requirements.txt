@@ -16,7 +16,7 @@ asyncpg==0.31.0
 
 # Validare
 pydantic==2.13.4
-pydantic-settings==2.14.1
+pydantic-settings==2.14.2
 jsonschema==4.25.1  # validare structurală catalog v2/v3 (audit_catalog_v2._validate_schema, NX-168d)
 
 # Cache / coadă
@@ -50,4 +50,4 @@ opentelemetry-exporter-otlp-proto-http==1.37.0
 # pinned: cardul interzice explicit criptografie scrisă de noi. `src/web/action_crypto.py` e
 # singurul consumator; fără ea, `src/web/app.py` nu importă (gateway-ul refuză să pornească —
 # fail-closed deliberat, nu „merge fără semnături").
-cryptography==48.0.1
+cryptography==50.0.0

@@ -219,7 +219,12 @@ jobs:
           IMAGE_DIGEST: sha256:0000000000000000000000000000000000000000000000000000000000000000
           WEBHOOK_HOST: ci.example.com
           REDIS_PASSWORD: ci
-        run: docker compose -f docker-compose.prod.yml config --quiet
+        run: |
+          # `env_file:` cere fișierele să EXISTE, iar `.env`/`.env.migrate` sunt gitignored (țin
+          # secrete). Goale e suficient: validăm structura compose-ului, nu conținutul secretelor.
+          touch .env .env.migrate
+          docker compose -f docker-compose.prod.yml config --quiet
+          rm -f .env .env.migrate
 
   isolation-concurrent:
     name: Izolare concurentă (NX-53)

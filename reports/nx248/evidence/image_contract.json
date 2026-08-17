@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "measured_at": "2026-08-17T15:13:53+00:00",
+  "measured_at": "2026-08-17T15:47:34+00:00",
   "imagine": "nativx-stage1:test",
   "verdict": "CONTRACT DE IMAGINE: PASS (non-root, conținut complet, zero secrete)",
   "poarta_chiar_poate_pica": {
@@ -18,5 +18,13 @@
     "read_only + cap-drop ALL + no-new-privileges: aplicatia porneste, heartbeat scrie pe tmpfs",
     "scriere in /app REFUZATA (Read-only file system)",
     "sentry_sdk / fastapi_cli absente din runtime"
-  ]
+  ],
+  "dependente": {
+    "audit": "pip-audit pe requirements.lock: No known vulnerabilities found",
+    "bump_impus_de_gate": [
+      "cryptography 48.0.1 -> 50.0.0 (PYSEC-2026-3552/3553/3554)",
+      "pydantic-settings 2.14.1 -> 2.14.2 (GHSA-4xgf-cpjx-pc3j)"
+    ],
+    "suita_pe_versiunile_noi": "3839 passed (Linux, in container)"
+  }
 }
