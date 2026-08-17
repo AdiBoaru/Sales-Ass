@@ -25,7 +25,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from time import monotonic
+from time import monotonic, perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -43,6 +43,7 @@ from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.web_turns import WebTurnRow, get_turn, get_turn_by_id
 from src.models import Event
+from src.observability import hooks, tracing
 from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
 from src.web.action_crypto import KeyRingError, parse_key_ring
@@ -936,6 +937,35 @@ async def _authorize_web_action(
 
 @router.post("/v2/turns")
 async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig: str):
+    """Marginea de accept + SINGURUL loc unde se numără disponibilitatea acceptului (NX-246).
+
+    Verdictul se derivă din statusul HTTP, nu dintr-un flag pasat pe fiecare cale de retur: ruta
+    are ~15 ieșiri (schemă, rate limit, buget, acțiune, conflict, replay, accept), iar o
+    instrumentare pusă la fiecare `return` ar rata exact ieșirea adăugată mâine. Un request
+    RESPINS nu creează rând de ledger — deci ăsta e singurul loc din sistem care îl poate număra,
+    și de aceea „accept availability" e singurul SLI cu sursă `metrics`, nu `ledger`.
+    """
+    started = perf_counter()
+    # Contextul de trace din browser NU devine părinte (vezi `tracing.reject_inbound_traceparent`):
+    # oricine ar putea altfel să lipească spans în traceul altui tenant. Îl numărăm, atât.
+    tracing.reject_inbound_traceparent(request.headers.get("traceparent"))
+    status = 500
+    try:
+        response = await _accept_turn_v2(request, token, visitor_id, sig)
+        status = getattr(response, "status_code", 200)
+        return response
+    except HTTPException as e:
+        status = e.status_code
+        raise
+    finally:
+        hooks.on_turn_request(
+            hooks.accept_outcome(status),
+            release_track=get_settings().release_track,
+            duration_s=perf_counter() - started,
+        )
+
+
+async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: str):
     """Acceptul DURABIL al unui turn (NX-233): validează, scrie rândul de ledger + inputul SAFE
     în același checkout, trezește executorii (best-effort, DUPĂ commit) și răspunde imediat.
     NICIODATĂ pipeline/LLM/tool aici — recovery-ul (refresh, alt tab, worker mort) e din DB."""
@@ -1076,6 +1106,7 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
             outcome.row,
             Event("web_turn_idempotency_conflict", {"web_turn_id": outcome.row.id}),
         )
+        hooks.on_idempotency_conflict()
         return _v2_error(409, "idempotency_conflict", "același ID cu alt conținut")
     if isinstance(outcome, ActiveTurnConflict):
         if action is not None:
@@ -1126,6 +1157,7 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
                 )
             )
         await _ledger_emit(db, outcome.row, *replay_events)
+        hooks.on_replay(outcome.row.status)
         return JSONResponse(status_code=200, content=terminal_view(outcome.row, lang))
     if isinstance(outcome, ExistingInProgress):
         await _ledger_emit(

@@ -14,7 +14,7 @@ volumul de analytics fix pe calea fierbinte pe care încercăm să o facem mai r
 from __future__ import annotations
 
 import contextvars
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any
@@ -153,6 +153,26 @@ class _Span:
         self.outcome = OUTCOME_OK
 
 
+#: NX-246 — fazele care au un nume de span în taxonomia din `contract.SPAN_NAMES`.
+#:
+#: Puntea trăiește AICI, nu în apelanți, dintr-un motiv de arhitectură: `turn_latency.span()` e
+#: deja seam-ul comun prin care trec model, tools, validare și proiecție (`llm.py`,
+#: `tool_executor.py`, `validator.py`, `brain.py`). Bridge-ul de aici le acoperă pe toate cu ZERO
+#: import nou în codul de business — exact ce cere cardul („stagiile nu importă exporterul").
+#:
+#: Fazele fără corespondent nu se mapează: `gates`/`queue`/`load` sunt măsurate de runner/executor
+#: la nivelul lor, iar `retrieval` e o singură fază peste trei spans distincte
+#: (`lexical`/`embedding`/`fusion`) — a o publica sub unul dintre ele ar fi o etichetă falsă.
+_SPAN_BY_PHASE: dict[str, str] = {
+    "model": "web.agent.call",
+    "tools": "web.tool.call",
+    "validation": "web.validate",
+    "projection": "web.view_project",
+    "commit": "web.result.commit",
+    "aftercare": "web.aftercare.schedule",
+}
+
+
 @contextmanager
 def span(phase: str, *, outcome: str = OUTCOME_OK):
     """Măsoară o fază. O excepție marchează `error` și se propagă NEATINSĂ — observabilitatea nu
@@ -161,14 +181,31 @@ def span(phase: str, *, outcome: str = OUTCOME_OK):
         with span("retrieval") as s:
             ...
             s.outcome = OUTCOME_TIMEOUT
+
+    NX-246: dacă faza are un nume de span în taxonomie ȘI există un trace de tur activ, se deschide
+    și un span. Fără trace activ (flag stins, job, script) e strict același cod ca înainte.
     """
     handle = _Span()
     handle.outcome = outcome
     started = perf_counter()
-    try:
-        yield handle
-    except BaseException:
-        record(phase, (perf_counter() - started) * 1000.0, OUTCOME_ERROR)
-        raise
-    else:
-        record(phase, (perf_counter() - started) * 1000.0, handle.outcome)
+    span_name = _SPAN_BY_PHASE.get(phase)
+    with ExitStack() as stack:
+        if span_name is not None:
+            stack.enter_context(_obs_span(span_name, stage=phase))
+        try:
+            yield handle
+        except BaseException:
+            record(phase, (perf_counter() - started) * 1000.0, OUTCOME_ERROR)
+            raise
+        else:
+            record(phase, (perf_counter() - started) * 1000.0, handle.outcome)
+
+
+@contextmanager
+def _obs_span(name: str, *, stage: str):
+    """Import LOCAL, deliberat: `tracing` cheamă `metrics`, iar `metrics` are o poartă de contract
+    la import. Un import de modul aici ar face ca simpla încărcare a NX-241 să depindă de NX-246."""
+    from src.observability import tracing
+
+    with tracing.span(name, stage=stage):
+        yield

@@ -28,6 +28,15 @@ numpy==2.4.6
 # NX-209 exact/fuzzy product identifier resolution (shadow)
 rapidfuzz==3.14.3
 
+# NX-246 — observabilitate. API+SDK sunt pure-Python și mici; exporterul HTTP aduce `requests`.
+# NU sunt pe calea fierbinte: `src/observability/otel_sink.py` e SINGURUL modul care le importă,
+# iar el se încarcă LENEȘ, doar când `OBSERVABILITY_EXPORTER=otlp`. Cu flagul stins (default),
+# graful de import al workerului nu le atinge deloc. Pinned exact: o schimbare de versiune de OTel
+# schimbă formatul de pe sârmă, adică datele pe care se iau deciziile de release.
+opentelemetry-api==1.37.0
+opentelemetry-sdk==1.37.0
+opentelemetry-exporter-otlp-proto-http==1.37.0
+
 # NX-236 — sigiliul acțiunilor web (AES-SIV determinist + HKDF). Bibliotecă AUDITATĂ (pyca),
 # pinned: cardul interzice explicit criptografie scrisă de noi. `src/web/action_crypto.py` e
 # singurul consumator; fără ea, `src/web/app.py` nu importă (gateway-ul refuză să pornească —

@@ -109,11 +109,59 @@ def record_chat(resp: Any, model: str) -> None:
     usage = getattr(resp, "usage", None)
     if usage is None:
         return
-    acc.add(
+    tokens_in = _field(usage, "prompt_tokens")
+    tokens_out = _field(usage, "completion_tokens")
+    cached = _cached_from(usage)
+    acc.add(model, tokens_in, tokens_out, cached)
+    # NX-246: același punct unic de contabilizare alimentează și metricile operaționale. Hook
+    # NEUTRU (`src/observability/hooks.py`) — adaptorul nu știe de exporter, nu decide sampling
+    # și nu importă niciun vendor. Rolul se DERIVĂ din model (vezi `model_role`), ca să nu
+    # schimbăm semnătura pe toate căile de apel pentru o etichetă.
+    _record_model_metrics(model, tokens_in, tokens_out, cached)
+
+
+def model_role(model: str) -> str:
+    """`model_id` → rol (`triage|agent|embed|vision|moderation`), din settings.
+
+    Derivat, nu pasat: rolul e o proprietate a CONFIGURAȚIEI, iar a-l căra prin toate semnăturile
+    de apel doar ca să-l punem pe o etichetă ar fi cuplaj plătit degeaba. Necunoscut → `agent`
+    (calea implicită), nu o valoare nouă care ar deschide cardinalitate.
+    """
+    from src.config import get_settings
+
+    try:
+        s = get_settings()
+    except Exception:  # noqa: BLE001 — fără settings (script/test parțial) nu ghicim
+        return "agent"
+    for role, attr in (
+        ("triage", "model_triage"),
+        ("embed", "model_embed"),
+        ("vision", "model_vision"),
+        ("moderation", "model_moderation"),
+    ):
+        if model and model == getattr(s, attr, None):
+            return role
+    return "agent"
+
+
+def _record_model_metrics(model: str, tokens_in: int, tokens_out: int, cached: int) -> None:
+    # Import local: `hooks` → `metrics` are o poartă de contract la import, iar `usage` e importat
+    # de tot lanțul de agent. Legarea se face la primul apel real, nu la încărcarea modulului.
+    from src.observability import hooks
+
+    try:
+        # ACEEAȘI formulă ca `UsageAccumulator.add` (ordinea argumentelor contează: prompt, cached,
+        # completion). Două formule de cost care diverg ar face ca metrica și `usage_daily` să
+        # spună lucruri diferite despre aceeași factură.
+        cost = cost_for(model, tokens_in, cached, tokens_out)
+    except Exception:  # noqa: BLE001 — un model fără tarif nu are voie să rupă contabilizarea
+        cost = 0.0
+    hooks.on_model_call(
         model,
-        _field(usage, "prompt_tokens"),
-        _field(usage, "completion_tokens"),
-        _cached_from(usage),
+        model_role=model_role(model),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_usd=cost,
     )
 
 

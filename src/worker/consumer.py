@@ -32,6 +32,7 @@ from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
 from src.db.queries.message_status import record_status_event
+from src.observability import bootstrap as observability_bootstrap
 from src.redis_bus import (
     STREAM_INBOUND,
     acquire_conv_lock,
@@ -383,6 +384,9 @@ async def _main() -> None:
     from scripts.migrate import assert_migrations_current
 
     settings = get_settings()
+    # NX-246: observabilitatea se montează ÎNAINTE de orice poartă de boot — dacă boot-ul e refuzat
+    # (migrare pending, registru de siguranță stricat), vrem ca refuzul să fie deja instrumentat.
+    observability_bootstrap.setup(settings)
     pool = await get_pool()  # admin (control plane: resolve_channel)
     # NX-123 (P6): poartă de boot — workerul NU pornește tăcut peste o schemă incompletă.
     # Migrare pending = boot refuzat cu eroare explicită (regresia 010/012 care crăpa primul
@@ -434,6 +438,9 @@ async def _main() -> None:
             await close_media()  # închide httpx-ul de download media (NX-76)
             await close_redis()
             await close_pool()
+            # NX-246: flush final MĂRGINIT, ULTIMUL — ca să prindă și spans-urile shutdown-ului,
+            # dar fără să poată întârzia oprirea (plafon în `bootstrap.shutdown`).
+            await observability_bootstrap.shutdown()
 
 
 if __name__ == "__main__":
