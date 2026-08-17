@@ -219,6 +219,9 @@ def _settings_with_origins(origins, **over):
         web_bootstrap_rate_limit_max=10,
         web_session_v2_enabled=False,
         web_session_v2_required=False,
+        # NX-244: bootstrapul citește flagul ca să decidă dacă atașează copy-ul de shell. OFF aici
+        # (valoarea de producție), ca testele de origin să măsoare originul, nu copy-ul.
+        web_turn_v2_enabled=False,
         web_session_ttl_s=43200,
         web_session_origin_binding=False,
         web_max_body_bytes=16384,

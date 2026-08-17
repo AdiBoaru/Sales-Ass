@@ -200,6 +200,90 @@ async def test_bootstrap_unknown_token_403(monkeypatch):
     assert ei.value.status_code == 403
 
 
+# --- NX-244: copy-ul de shell la bootstrap -----------------------------------
+# Widgetul v2 are nevoie de eticheta launcherului și de placeholderul composerului ÎNAINTE să
+# existe vreun view. Fără ele le-ar inventa în browser, iar boundary-ul „frontend pasiv" cade.
+
+
+async def _bootstrap(monkeypatch, *, locale="ro", v2=True):
+    async def fake_resolve(token):
+        return {"business_id": "b", "session_secret": "sek", "default_locale": locale}
+
+    monkeypatch.setattr(wa, "_resolve_token", fake_resolve)
+    monkeypatch.setattr(wa, "get_redis", lambda: _coro(_BootRedis()))
+    monkeypatch.setattr(wa.get_settings(), "web_turn_v2_enabled", v2)
+    return await wa.web_bootstrap("tok", _Req())
+
+
+async def test_bootstrap_without_v2_is_byte_identic(monkeypatch):
+    """Flagul stins ⇒ exact aceleași chei ca înainte. Calea v1 nu vede nimic nou."""
+    res = await _bootstrap(monkeypatch, v2=False)
+    assert set(res) == {"token", "visitor_id", "sig", "sse_url"}
+
+
+async def test_bootstrap_serves_shell_copy_for_v2(monkeypatch):
+    res = await _bootstrap(monkeypatch)
+    copy = res["view_copy"]
+    assert set(copy) == {"composer", "chrome", "a11y"}
+    # Composerul e activ: la bootstrap nu există turn în lucru care să blocheze inputul.
+    assert copy["composer"]["enabled"] is True
+    # Fiecare nume accesibil e prezent ȘI non-blank — un label gol e la fel de rău ca unul lipsă,
+    # fiindcă FE-ul ar „umple golul" exact cum interzice cardul.
+    for key in (
+        "launcher_label",
+        "dialog_title",
+        "dialog_description",
+        "close_label",
+        "new_chat_label",
+    ):
+        assert copy["chrome"][key].strip()
+    for key in ("label", "placeholder", "send_label"):
+        assert copy["composer"][key].strip()
+    # Un anunț pentru FIECARE status de sârmă: un status fără anunț e tăcere pentru cine nu vede
+    # ecranul (live region-ul NX-245 le citește direct).
+    assert set(copy["a11y"]["announcements"]) == {
+        "accepted",
+        "working",
+        "validating",
+        "completed",
+        "failed",
+        "cancelled",
+    }
+
+
+async def test_bootstrap_shell_copy_is_locale_aware(monkeypatch):
+    """D3/P11: limba e configurație, nu constantă. Un tenant `en` primește copy `en`."""
+    ro = (await _bootstrap(monkeypatch, locale="ro"))["view_copy"]
+    en = (await _bootstrap(monkeypatch, locale="en"))["view_copy"]
+    assert ro["chrome"]["dialog_title"] != en["chrome"]["dialog_title"]
+    # Locale absent/necunoscut nu e o eroare: cade pe pilot, nu pe un shell fără nume.
+    for missing in (None, "kl-KL"):
+        fallback = (await _bootstrap(monkeypatch, locale=missing))["view_copy"]
+        assert fallback["chrome"]["dialog_title"] == ro["chrome"]["dialog_title"]
+
+
+async def test_bootstrap_shell_copy_matches_view_envelope(monkeypatch):
+    """UN singur vocabular. Dacă `view_copy` și `chrome`-ul unui view ar putea diverge, frontendul
+    ar arăta un titlu la deschidere și altul după primul răspuns."""
+    from src.channels.web.render_v2 import TurnIdentity, _envelope
+
+    res = await _bootstrap(monkeypatch, locale="ro")
+    view = _envelope(
+        TurnIdentity(
+            conversation_id="c",
+            conversation_revision=1,
+            turn_id="t",
+            client_turn_id="3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+            status="completed",
+        ),
+        "ro",
+        [{"id": "b1", "type": "text", "text": "ok"}],
+    )
+    assert res["view_copy"]["chrome"] == view["chrome"]
+    assert res["view_copy"]["composer"] == view["composer"]
+    assert res["view_copy"]["a11y"] == view["a11y"]
+
+
 # --- WebSender (Pub/Sub + backlog) -------------------------------------------
 
 
