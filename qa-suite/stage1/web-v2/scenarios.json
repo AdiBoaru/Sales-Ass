@@ -1,0 +1,644 @@
+{
+  "_note": "NX-247 — manifestul de scenarii și invarianți al gate-ului Stage 1. Conține IDs și AȘTEPTĂRI, niciodată ViewModelul: dacă ar conține payloadul, testul ar compara serverul cu o copie a serverului. `invariants` sunt vocabular ÎNCHIS (tests/e2e/stage1_scenarios.py::INVARIANTS); un id nedeclarat sau un invariant fără checker rupe suita. `backend_coverage` spune ce se EXECUTĂ efectiv la backend: `covered` trebuie să corespundă exact suitei care rulează (test_declared_backend_coverage_matches_what_runs), iar `blocked` cere motiv — altfel acoperirea ar putea minți prin omisiune.",
+  "manifest_version": "stage1.web-v2.1",
+  "contract": {
+    "schema_version": "web-view.v2",
+    "turn_schema_version": "web-turn.v2",
+    "hashes_live_in": "qa-suite/stage1/web-v2/manifest.json"
+  },
+  "thresholds": "qa-suite/stage1/web-v2/gate-thresholds.json",
+  "tenants": [
+    {
+      "id": "alpha",
+      "why": "Tenantul principal al scenariilor canonice. Catalog sintetic propriu, locale ro.",
+      "locale": "ro"
+    },
+    {
+      "id": "beta",
+      "why": "Există EXCLUSIV ca să dovedească izolarea. UUID-ul diferă de al lui alpha doar în ultimul nibble, ca un bug de filtrare pe prefix să nu poată trece neobservat. Locale en, ca o scurgere să se vadă și în limbă.",
+      "locale": "en"
+    }
+  ],
+  "invariants": {
+    "_note": "owner=backend ⇒ are checker executabil în tests/e2e/stage1_scenarios.py::INVARIANT_CHECKS. owner=frontend ⇒ se dovedește comportamental în browser (PR B), iar `frontend_spec` este ținta obligatorie.",
+    "terminal_view_renderable": {
+      "owner": "backend",
+      "why": "P6: nicio cale terminală nu produce payload gol sau tăcere."
+    },
+    "single_ledger_row": {
+      "owner": "backend",
+      "why": "Un turn logic = un rând în web_turns, oricâte requesturi HTTP l-au cerut."
+    },
+    "single_execution": {
+      "owner": "backend",
+      "why": "Contorul fake-modelului: retry, refresh sau al doilea tab nu cumpără a doua execuție."
+    },
+    "no_product_block": {
+      "owner": "backend",
+      "why": "Un răspuns textual nu are voie să atașeze carduri pe care nimeni nu le-a cerut."
+    },
+    "min_three_product_cards": {
+      "owner": "backend",
+      "why": "Recomandarea reală are minimum 3 carduri display-ready, altfel scenariul nu exersează cardul."
+    },
+    "comparison_block_present": {
+      "owner": "backend",
+      "why": "Comparația se emite ca bloc structurat, nu ca proză cu tabel improvizat."
+    },
+    "action_chips_opaque": {
+      "owner": "backend",
+      "why": "Fiecare acțiune emisă are token sigilat; eticheta nu este payload (NX-236)."
+    },
+    "no_results_notice_honest": {
+      "owner": "backend",
+      "why": "Zero rezultate = notice onest și ZERO produse inventate ca umplutură."
+    },
+    "routine_steps_ordered": {
+      "owner": "backend",
+      "why": "Rutina are pași ordonați server-side; ordinea nu se recalculează în client."
+    },
+    "revoked_need_absent": {
+      "owner": "backend",
+      "why": "NX-235: corecția ÎNLOCUIEȘTE criteriul revocat în starea persistată, nu îl adaugă."
+    },
+    "context_resolved_server_side": {
+      "owner": "backend",
+      "why": "NX-234: „acesta\" se rezolvă din contextul rehidratat, nu din numele trimis de browser."
+    },
+    "one_receipt_per_action": {
+      "owner": "backend",
+      "why": "NX-237: receipt idempotent per (tur, acțiune) — probă în DB, nu în UI."
+    },
+    "cart_summary_server_owned": {
+      "owner": "backend",
+      "why": "Totalurile coșului sunt string-uri display-ready calculate server-side."
+    },
+    "no_false_commerce_success": {
+      "owner": "backend",
+      "why": "Preț/stoc stale ⇒ revalidare și vedere terminală onestă, ZERO succes fals."
+    },
+    "deadline_fallback_persisted": {
+      "owner": "backend",
+      "why": "NX-241: la deadline se persistă un terminal randabil în bugetul rămas, nu tăcere."
+    },
+    "one_feedback_row": {
+      "owner": "backend",
+      "why": "NX-246 felia 2: un vot per prompt, idempotent în SCHEMĂ, nu în cod."
+    },
+    "display_strings_only": {
+      "owner": "backend",
+      "why": "NX-240: niciun număr pe sârmă în afară de conversation.revision."
+    },
+    "prices_match_catalog_snapshot": {
+      "owner": "backend",
+      "why": "Fiecare preț afișat egalează snapshotul canonic pe care a lucrat projectorul."
+    },
+    "no_chain_of_thought": {
+      "owner": "backend",
+      "why": "Nu există sursă de CoT în contract; un test o verifică oricum, fiindcă absența unei surse nu e o garanție."
+    },
+    "product_ids_from_own_tenant": {
+      "owner": "backend",
+      "why": "Fiecare id afișat aparține catalogului tenantului corect."
+    },
+    "only_known_block_types": {
+      "owner": "backend",
+      "why": "NX-228: serverul emite exclusiv din unionul finit de blocuri."
+    },
+    "bootstrap_copy_server_owned": {
+      "owner": "backend",
+      "why": "NX-244: view_copy ajunge la widget ÎNAINTE de primul tur, ca să nu-și invente numele."
+    },
+    "dom_order_equals_backend_order": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/passive-renderer.spec.js"
+    },
+    "no_local_greeting": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/happy-path.spec.js"
+    },
+    "no_localstorage_mutation": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/passive-renderer.spec.js"
+    },
+    "action_token_byte_identical": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/actions.spec.js"
+    },
+    "no_client_derived_price": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/passive-renderer.spec.js"
+    },
+    "transcript_from_server_after_refresh": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    "technical_unavailable_on_malformed": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    "input_disabled_until_terminal": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/concurrency.spec.js"
+    },
+    "axe_zero_serious_critical": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/accessibility.spec.js"
+    },
+    "responsive_semantics_preserved": {
+      "owner": "frontend",
+      "frontend_spec": "e2e/chat/responsive.spec.js"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "welcome",
+      "title": "Bootstrap server-owned, zero greeting local",
+      "tenant": "alpha",
+      "turns": [],
+      "invariants": [
+        "bootstrap_copy_server_owned",
+        "no_local_greeting"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "text_answer",
+      "title": "Răspuns textual, fără produse",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "program de livrare"
+        }
+      ],
+      "invariants": [
+        "terminal_view_renderable",
+        "no_product_block",
+        "only_known_block_types",
+        "no_chain_of_thought",
+        "dom_order_equals_backend_order"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "recommendation",
+      "title": "Recomandare cu minimum 3 carduri display-ready",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser cu vitamina C pentru ten uscat"
+        }
+      ],
+      "invariants": [
+        "terminal_view_renderable",
+        "min_three_product_cards",
+        "display_strings_only",
+        "prices_match_catalog_snapshot",
+        "product_ids_from_own_tenant",
+        "no_client_derived_price",
+        "dom_order_equals_backend_order",
+        "single_ledger_row",
+        "single_execution"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "comparison",
+      "title": "Comparație: header/celule/ordine + semantică responsive",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser cu vitamina C pentru ten uscat"
+        },
+        {
+          "input": "text",
+          "intent": "compară primele două"
+        }
+      ],
+      "invariants": [
+        "comparison_block_present",
+        "display_strings_only",
+        "dom_order_equals_backend_order",
+        "responsive_semantics_preserved"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "clarification",
+      "title": "Clarificare cu chips opace",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "vreau un cadou"
+        }
+      ],
+      "invariants": [
+        "terminal_view_renderable",
+        "action_chips_opaque",
+        "action_token_byte_identical"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "no_results",
+      "title": "Zero rezultate, notice onest",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser cu ingredient inexistent"
+        }
+      ],
+      "invariants": [
+        "terminal_view_renderable",
+        "no_results_notice_honest",
+        "no_product_block"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "routine",
+      "title": "Rutină cu pași ordonați",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ce rutină de seară îmi recomanzi"
+        }
+      ],
+      "invariants": [
+        "terminal_view_renderable",
+        "routine_steps_ordered",
+        "only_known_block_types"
+      ],
+      "backend_coverage": "blocked",
+      "backend_coverage_blocked_because": "Niciun modul din `src/` nu emite blocul `routine`: tipul există în contract (NX-228) și are componentă în FE (NX-244), dar nu are încă PRODUCĂTOR. Nu e un eșec de test, e o funcționalitate neimplementată — de acoperit când apare."
+    },
+    {
+      "id": "memory_correction",
+      "title": "Corecția înlocuiește criteriul revocat, nu îl adaugă",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser pentru ten uscat"
+        },
+        {
+          "input": "text",
+          "intent": "de fapt am ten gras"
+        }
+      ],
+      "invariants": [
+        "revoked_need_absent",
+        "terminal_view_renderable"
+      ],
+      "backend_coverage": "blocked",
+      "backend_coverage_blocked_because": "Revocările trăiesc în starea v2, iar formatul PERSISTAT cere `CONVERSATION_STATE_V2_WRITE_ENABLED`, care nu e în profilul certificat. Aprins aici, gate-ul ar certifica o configurație pe care NX-235 n-a promovat."
+    },
+    {
+      "id": "product_context",
+      "title": "„acesta\" rezolvat din contextul de pagină rehidratat",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "cât costă acesta",
+          "surface": "pdp"
+        }
+      ],
+      "invariants": [
+        "context_resolved_server_side",
+        "prices_match_catalog_snapshot",
+        "product_ids_from_own_tenant"
+      ],
+      "backend_coverage": "blocked",
+      "backend_coverage_blocked_because": "Blocat de defectul găsit de gate: `load_execution_refs` nu proiectează `m.payload`, deci contextul rehidratat e mereu None (owner NX-234/236)."
+    },
+    {
+      "id": "commerce_success",
+      "title": "Token de acțiune → un receipt → sumar de coș server-owned",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser cu vitamina C pentru ten uscat"
+        },
+        {
+          "input": "action",
+          "kind": "cart_add"
+        }
+      ],
+      "invariants": [
+        "one_receipt_per_action",
+        "cart_summary_server_owned",
+        "display_strings_only",
+        "no_localstorage_mutation"
+      ],
+      "backend_coverage": "blocked",
+      "backend_coverage_blocked_because": "Blocat de defectul găsit de gate: `messages.content_type = 'action'` e respins de CHECK-ul schemei, deci acceptul acțiunii crapă (owner NX-236/237)."
+    },
+    {
+      "id": "commerce_stale",
+      "title": "Preț/stoc stale → revalidare, zero succes fals",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser cu vitamina C pentru ten uscat"
+        },
+        {
+          "input": "action",
+          "kind": "cart_add",
+          "fault": "price_changed_after_emit"
+        }
+      ],
+      "invariants": [
+        "no_false_commerce_success",
+        "terminal_view_renderable"
+      ],
+      "backend_coverage": "blocked",
+      "backend_coverage_blocked_because": "Blocat de acelasi defect ca `commerce_success`: `messages.content_type = 'action'` e respins de CHECK-ul schemei, deci turul de acțiune nu poate fi acceptat, iar calea de revalidare pe date stale nu se poate atinge deloc (owner NX-236/237)."
+    },
+    {
+      "id": "terminal_failure",
+      "title": "Eșec terminal cu minimum un bloc randabil",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "orice",
+          "fault": "pipeline_error"
+        }
+      ],
+      "invariants": [
+        "terminal_view_renderable",
+        "only_known_block_types"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "deadline_degraded",
+      "title": "Fallback valid în buget la deadline",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "orice",
+          "fault": "model_timeout"
+        }
+      ],
+      "invariants": [
+        "deadline_fallback_persisted",
+        "terminal_view_renderable"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "feedback",
+      "title": "Acțiune de feedback ajunge la backend exact o dată",
+      "tenant": "alpha",
+      "turns": [
+        {
+          "input": "text",
+          "intent": "ser cu vitamina C pentru ten uscat"
+        },
+        {
+          "input": "action",
+          "kind": "feedback_up",
+          "sink": "feedback"
+        }
+      ],
+      "invariants": [
+        "one_feedback_row",
+        "action_token_byte_identical"
+      ],
+      "backend_coverage": "covered"
+    },
+    {
+      "id": "unknown_optional_block",
+      "title": "Bloc opțional necunoscut: politica NX-228/242 de tolerare",
+      "tenant": "alpha",
+      "turns": [],
+      "invariants": [
+        "only_known_block_types",
+        "technical_unavailable_on_malformed"
+      ],
+      "backend_coverage": "frontend_only"
+    },
+    {
+      "id": "unsupported_major",
+      "title": "Major neacceptat: refuz explicit, fără auto-v1",
+      "tenant": "alpha",
+      "turns": [],
+      "invariants": [
+        "technical_unavailable_on_malformed"
+      ],
+      "backend_coverage": "frontend_only"
+    }
+  ],
+  "failure_matrix": [
+    {
+      "id": "R1",
+      "severity": "P0",
+      "injection": "double click / Enter+click pe același client_turn_id",
+      "expect_backend": "un rând de ledger, o execuție",
+      "expect_frontend": "un POST logic, busy imediat",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r1_double_submit_executes_once",
+      "frontend_spec": "e2e/chat/concurrency.spec.js"
+    },
+    {
+      "id": "R2",
+      "severity": "P0",
+      "injection": "două taburi trimit simultan, client_turn_id diferite",
+      "expect_backend": "un singur turn activ serial; al doilea primește reject tipizat",
+      "expect_frontend": "ambele converg la același snapshot",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r2_two_tabs_one_active_turn",
+      "frontend_spec": "e2e/chat/concurrency.spec.js"
+    },
+    {
+      "id": "R3",
+      "severity": "P0",
+      "injection": "răspunsul 202 se pierde după accept",
+      "expect_backend": "rezultatul rămâne durabil; același client ID îl regăsește",
+      "expect_frontend": "lookup pe același client ID, zero turn nou",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r3_lost_accept_response_replays",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    {
+      "id": "R4",
+      "severity": "P0",
+      "injection": "refresh în starea working",
+      "expect_backend": "turul continuă; statusul se citește din ledger",
+      "expect_frontend": "bootstrap/recovery, input dezactivat",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r4_status_during_working",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    {
+      "id": "R5",
+      "severity": "P0",
+      "injection": "worker omorât după claim",
+      "expect_backend": "lease/fencing/reaper recuperează; exact un terminal",
+      "expect_frontend": "wait/recovery, apoi un singur terminal",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r5_worker_killed_after_claim_is_reclaimed",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    {
+      "id": "R6",
+      "severity": "P0",
+      "injection": "workerul vechi revine după expirarea lease-ului",
+      "expect_backend": "commitul fenced e respins (0 rânduri)",
+      "expect_frontend": "nu vede rezultat stale",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r6_stale_epoch_commit_is_fenced",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    {
+      "id": "R7",
+      "severity": "P0",
+      "injection": "SSE disconnect / duplicat / gap",
+      "expect_backend": "backlog și status coerent, ordinale strict crescătoare",
+      "expect_frontend": "dedupe/refetch, revision monotonic",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r7_sse_resumes_without_duplicates",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    {
+      "id": "R8",
+      "severity": "P0",
+      "injection": "Redis restart / indisponibil",
+      "expect_backend": "ledgerul din DB rămâne adevărul; turul se recuperează",
+      "expect_frontend": "poll/recover; niciun ecran gol",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r8_redis_dead_recovery_from_ledger",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    {
+      "id": "R9",
+      "severity": "P0",
+      "injection": "eroare DB tranzitorie la commit",
+      "expect_backend": "retry bounded / terminal safe, niciodată completed fals",
+      "expect_frontend": "nu afișează succes înainte de persistare",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r9_db_transient_at_commit_is_terminal_safe",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    {
+      "id": "R10",
+      "severity": "P0",
+      "injection": "403 / expirarea sesiunii, apoi reînnoire",
+      "expect_backend": "reînnoirea păstrează legarea de turn/conversație",
+      "expect_frontend": "lookup pe același turn/conversație",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r10_session_renewal_keeps_binding",
+      "frontend_spec": "e2e/chat/security-boundary.spec.js"
+    },
+    {
+      "id": "R11",
+      "severity": "P0",
+      "injection": "accept nou cât timp există turn activ",
+      "expect_backend": "409 cu referință la turnul activ",
+      "expect_frontend": "attach la turnul activ, nu turn nou",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r11_conflict_references_active_turn",
+      "frontend_spec": "e2e/chat/concurrency.spec.js"
+    },
+    {
+      "id": "R12",
+      "severity": "P0",
+      "injection": "429 rate limit / plafon de cost",
+      "expect_backend": "zero apel de executor/model",
+      "expect_frontend": "ViewModel/eroare tehnică randabilă",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r12_rate_limit_never_reaches_model",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    {
+      "id": "R13",
+      "severity": "P0",
+      "injection": "413 corp prea mare / 422 schemă invalidă",
+      "expect_backend": "zero storage, zero pipeline",
+      "expect_frontend": "input/retry conform contractului de eroare",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r13_rejected_bodies_write_nothing",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    {
+      "id": "R14",
+      "severity": "P0",
+      "injection": "timeout de model/tool",
+      "expect_backend": "fallback la deadline + terminal persistat",
+      "expect_frontend": "rezultat atomic, nu streaming de tokeni",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r14_model_timeout_persists_terminal",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    {
+      "id": "R15",
+      "severity": "P0",
+      "injection": "payload malformat interceptat între server și browser",
+      "expect_backend": "N/A — serverul nu poate emite payloadul acesta; injecția e în proxy-ul de test",
+      "expect_frontend": "decoder fail-closed, zero UI de business",
+      "backend_test": null,
+      "backend_test_absent_because": "Scenariul cere ca payloadul să fie STRICAT după ce a părăsit serverul. Un test backend care ar construi payloadul rupt ar dovedi doar că fixture-ul e rupt, nu că decoderul se apără. Proprietatea backend echivalentă (serverul nu emite blocuri necunoscute) e acoperită de invariantul only_known_block_types.",
+      "frontend_spec": "e2e/chat/failures.spec.js"
+    },
+    {
+      "id": "R16",
+      "severity": "P0",
+      "injection": "drift de major/hash de schemă",
+      "expect_backend": "eroare de contract în CI/runtime, nu degradare tăcută",
+      "expect_frontend": "fără auto-v1, fără best-effort",
+      "backend_test": "tests/e2e/test_stage1_contract_manifest.py::test_r16_any_artifact_edit_breaks_the_gate",
+      "frontend_spec": "scripts/check-cross-repo-chat-contract.mjs"
+    },
+    {
+      "id": "R17",
+      "severity": "P0",
+      "injection": "acțiune stale / tampered",
+      "expect_backend": "zero mutație, eroare terminală tipizată",
+      "expect_frontend": "tokenul rămâne neschimbat, fără toast fals",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r17_tampered_action_mutates_nothing",
+      "frontend_spec": "e2e/chat/actions.spec.js"
+    },
+    {
+      "id": "R18",
+      "severity": "P0",
+      "injection": "acțiune din alt tenant/conversație",
+      "expect_backend": "403/404/409 tipizat, zero leak de existență",
+      "expect_frontend": "nu afișează datele celuilalt tenant",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r18_action_from_other_tenant_is_not_found",
+      "frontend_spec": "e2e/chat/security-boundary.spec.js"
+    },
+    {
+      "id": "R19",
+      "severity": "P0",
+      "injection": "retry pe aceeași acțiune de comerț",
+      "expect_backend": "același receipt, o singură mutație",
+      "expect_frontend": "un singur succes, server-owned",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r19_commerce_retry_yields_one_receipt",
+      "frontend_spec": "e2e/chat/actions.spec.js"
+    },
+    {
+      "id": "R20",
+      "severity": "P0",
+      "injection": "„New chat\" cât timp turul e working",
+      "expect_backend": "resetul e respins; rezultatul nu se reatașează greșit",
+      "expect_frontend": "controlul e inactiv",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r20_reset_during_working_is_refused",
+      "frontend_spec": "e2e/chat/concurrency.spec.js"
+    },
+    {
+      "id": "R21",
+      "severity": "P1",
+      "injection": "offline 30s, apoi online",
+      "expect_backend": "turul/rezultatul rămân retenționate și lookup-abile",
+      "expect_frontend": "recovery fără transcript local",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r21_result_retained_across_offline_window",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    },
+    {
+      "id": "R22",
+      "severity": "P1",
+      "injection": "progres out-of-order",
+      "expect_backend": "secvența/revizia sunt detectabile, niciodată regresive",
+      "expect_frontend": "nu regresează statusul/vederea",
+      "backend_test": "tests/e2e/test_stage1_failure_matrix.py::test_r22_progress_never_regresses",
+      "frontend_spec": "e2e/chat/recovery.spec.js"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "_note": "NX-247 — UN singur artefact de praguri, validat în ambele repo-uri. NX-247 nu inventează praguri: fiecare valoare are `source` care spune de unde vine. Nu duplica valorile în Python, JS sau YAML — citește-le de aici.",
+  "policy_version": "stage1_gate.v1",
+  "sources": {
+    "latency": {
+      "owner": "NX-241",
+      "manifest": "nx241.2026-08-16",
+      "ratified": false,
+      "why": "src/observability/slo.py::RATIFIED este False. Pragurile de latență NX-241 sunt PROPUSE, nu ratificate pe o fereastră reală de baseline. Un prag ales după ce s-au văzut datele nu este un prag, deci gate-ul RAPORTEAZĂ latența și nu o judecă. Când NX-241/246 ratifică, se schimbă `ratified` aici — într-un singur loc."
+    },
+    "correctness": {
+      "owner": "NX-247",
+      "ratified": true,
+      "why": "Zerourile de mai jos nu sunt praguri de performanță, sunt invarianți: nu au nevoie de baseline ca să fie corecți. Un singur receipt dublu sau un singur leak cross-tenant este un defect indiferent de distribuție."
+    },
+    "sample_size": {
+      "owner": "NX-246",
+      "value": 30,
+      "why": "src/observability/slo.py::MIN_SAMPLES. Sub atâtea eșantioane verdictul este INSUFFICIENT, niciodată PASS."
+    }
+  },
+  "gate": {
+    "must_be_zero": {
+      "_note": "Orice valoare > 0 = NO-GO automat, fără waiver informal. `metric` este cheia raportată de harness/Playwright.",
+      "duplicate_execution_count": 0,
+      "duplicate_receipt_count": 0,
+      "empty_terminal_view_count": 0,
+      "contract_decode_error_count": 0,
+      "contract_hash_error_count": 0,
+      "grounding_violation_count": 0,
+      "hard_constraint_violation_count": 0,
+      "cross_tenant_leak_count": 0,
+      "axe_serious_or_critical_count": 0,
+      "frontend_business_boundary_violation_count": 0,
+      "db_connection_held_over_external_wait_count": 0,
+      "outbound_provider_network_attempt_count": 0,
+      "artifact_secret_sentinel_hit_count": 0,
+      "trace_pii_finding_count": 0
+    },
+    "must_be_complete": {
+      "_note": "Acoperire, nu performanță: un gate care rulează pe jumătate din scenarii raportează verde pe ce n-a măsurat. Raporturile de mai jos se măsoară față de ce e DECLARAT acoperit în scenarios.json (`backend_coverage` / `frontend_spec`), iar un test verifică declarația față de suita care rulează efectiv — altfel 1.0 ar însemna doar „am numărat ce am rulat\".",
+      "declared_backend_coverage_matches_execution_ratio": 1.0,
+      "declared_backend_scenarios_passing_ratio": 1.0,
+      "failure_matrix_p0_covered_ratio": 1.0,
+      "traces_complete_for_covered_scenarios_ratio": 1.0
+    },
+    "known_gaps": {
+      "_note": "Ce NU e acoperit, numărat explicit. Prezența acestor numere în artefact e deliberată: un gate care ascunde propriile goluri e mai periculos decât unul care le publică. Fiecare scenariu `blocked` are motiv scris în scenarios.json, iar un test refuză motivele vagi. Se aduc la zero înainte de NX-249.",
+      "scenarios_total": 16,
+      "scenarios_backend_covered": 9,
+      "scenarios_blocked": 5,
+      "scenarios_frontend_only": 2,
+      "backend_invariants_total": 22,
+      "backend_invariants_executed_on_real_data": 16,
+      "blocked_by_defects_found_by_this_gate": 3,
+      "blocked_by_unpromoted_flag": 1,
+      "blocked_by_missing_producer": 1
+    },
+    "must_be_at_least": {
+      "recovery_success_rate": 1.0
+    },
+    "reported_not_judged": {
+      "_note": "Se măsoară, se publică în raport, NU pot da FAIL până la ratificare (vezi sources.latency). Valorile de referință sunt plafoanele NX-241 pe clase de tur, ca raportul să fie citibil, nu ca să judece.",
+      "submit_to_accepted_ms": { "reference_p95": null, "ratified": false },
+      "accepted_to_terminal_ms": {
+        "reference_by_turn_class": {
+          "exact": 3000,
+          "recommendation": 6000,
+          "complex": 10000,
+          "mutation": 8000
+        },
+        "reference_hard_cap_ms": 15000,
+        "percentiles": ["p50", "p90", "p95"],
+        "ratified": false
+      },
+      "recovery_duration_ms": { "reference_p95": null, "ratified": false }
+    }
+  },
+  "flake_policy": {
+    "_note": "Politica de flake este parte din prag: un test P0 cu retry nu mai măsoară idempotența, ci norocul.",
+    "p0_retries": 0,
+    "p0_quarantine_allowed": false,
+    "p0_skip_allowed": false,
+    "engine_specific_retry_requires_documented_finding": true
+  },
+  "browser_matrix": {
+    "per_pull_request": ["chromium"],
+    "main_and_nightly": ["chromium", "firefox", "webkit"],
+    "required_before_nx249_release": ["chromium", "firefox", "webkit"],
+    "viewports": [320, 360, 390, 452, 1280]
+  }
+}
