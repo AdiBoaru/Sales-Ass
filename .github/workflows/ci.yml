@@ -100,15 +100,25 @@ jobs:
       # `requirements.lock` trebuie să fie DERIVAT din `requirements.txt`, nu editat de mână.
       # Regenerăm și comparăm: un lock scris manual (sau uitat nesincronizat după un bump de
       # versiune) e exact felul în care hash-urile devin decorative.
+      #
+      # Regenerarea rulează ÎN ACELAȘI container pin-uit pe digest ca buildul, nu pe Pythonul
+      # runnerului. Motivul l-a dat chiar prima rulare a acestui job: `pip-tools==7.4.1` crapă pe
+      # pip-ul (mai nou al) runnerului cu `ImportError: stdlib_pkgs`. Un lock a cărui verificare
+      # depinde de versiunea de pip a mașinii nu e reproductibil — adică nu e lock. Containerul
+      # fixează rezolvitorul, deci „sincronizat" înseamnă același lucru local, în CI și în build.
       - name: Lock-ul e sincronizat cu requirements.txt
+        env:
+          BASE_DIGEST: sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a
         run: |
-          pip install --no-cache-dir pip-tools==7.4.1
-          pip-compile --generate-hashes --no-header --strip-extras \
-            --output-file=/tmp/requirements.lock.check requirements.txt
-          if ! diff -u requirements.lock /tmp/requirements.lock.check; then
+          docker run --rm -v "$PWD:/w" -w /w "python@${BASE_DIGEST}" sh -c "
+            pip install --no-cache-dir --quiet --root-user-action=ignore pip-tools==7.4.1 &&
+            pip-compile --generate-hashes --no-header --strip-extras \
+              --output-file=/w/requirements.lock.check requirements.txt"
+          if ! diff -u requirements.lock requirements.lock.check; then
             echo "::error::requirements.lock e desincronizat. Regenerează-l (vezi Dockerfile)."
             exit 1
           fi
+          rm -f requirements.lock.check
 
       # Instalarea cu `--require-hashes` e chiar testul: dacă un wheel de pe index nu se
       # potrivește bit cu bit, pip refuză. Rulează în venv separat, nu peste toolchain-ul CI.
@@ -132,7 +142,11 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+        # `pgvector/pgvector:pg16`, nu `postgres:16`: schema de bază creează `extension vector`
+        # (product_embeddings). Pe imaginea standard, drill-ul pică cu „extension vector is not
+        # available" — ceea ce e chiar dovada că merită rulat pe o schemă COMPLETĂ, nu pe una
+        # ciuntită ca să treacă testul.
+        image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: nativx_ci
@@ -144,8 +158,10 @@ jobs:
         ports:
           - 5432:5432
     env:
-      DATABASE_URL_MIGRATION: postgresql://postgres:postgres@localhost:5432/nativx_ci
-      SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/nativx_ci
+      # `sslmode=disable`: Postgresul de serviciu n-are TLS. Runner-ul de migrări îl respectă
+      # (NX-248) tocmai ca să poată fi exersat în afara producției — vezi scripts/migrate.py.
+      DATABASE_URL_MIGRATION: postgresql://postgres:postgres@localhost:5432/nativx_ci?sslmode=disable
+      SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/nativx_ci?sslmode=disable
       ENV: test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
