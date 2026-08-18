@@ -106,16 +106,27 @@ jobs:
       # pip-ul (mai nou al) runnerului cu `ImportError: stdlib_pkgs`. Un lock a cărui verificare
       # depinde de versiunea de pip a mașinii nu e reproductibil — adică nu e lock. Containerul
       # fixează rezolvitorul, deci „sincronizat" înseamnă același lucru local, în CI și în build.
+      #
+      # SEED-ul e la fel de important ca digestul, și din același motiv. Containerul fixează
+      # REZOLVITORUL, dar nu fixează INDEXUL: compilând într-un fișier care nu există, pip-compile
+      # n-are niciun pin de respectat și rezolvă tot la ultima versiune de pe PyPI. Consecința
+      # măsurată: `idna` a publicat 3.19 peste noapte și poarta a picat pe un PR care schimba
+      # migrări și documentație — „lock desincronizat" era fals, lumea se mișcase. Un gate care
+      # devine roșu fără ca cineva să fi comis ceva îi învață pe oameni să-l ignore.
+      # Pornind de la lock-ul EXISTENT, pip-compile îi păstrează pinurile și schimbă doar ce cere
+      # `requirements.txt` — adică exact ce vrem să detectăm. Upgrade-urile rămân o decizie
+      # explicită (`pip-compile --upgrade`), nu un efect secundar al orei la care rulează CI.
       - name: Lock-ul e sincronizat cu requirements.txt
         env:
           BASE_DIGEST: sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a
         run: |
+          cp requirements.lock requirements.lock.check
           docker run --rm -v "$PWD:/w" -w /w "python@${BASE_DIGEST}" sh -c "
             pip install --no-cache-dir --quiet --root-user-action=ignore pip-tools==7.4.1 &&
             pip-compile --generate-hashes --no-header --strip-extras \
               --output-file=/w/requirements.lock.check requirements.txt"
           if ! diff -u requirements.lock requirements.lock.check; then
-            echo "::error::requirements.lock e desincronizat. Regenerează-l (vezi Dockerfile)."
+            echo "::error::requirements.lock e desincronizat cu requirements.txt. Regenerează-l cu pip-compile --generate-hashes --no-header --strip-extras --output-file=requirements.lock requirements.txt (vezi Dockerfile). Pentru un upgrade DELIBERAT de versiuni, adaugă --upgrade."
             exit 1
           fi
           rm -f requirements.lock.check

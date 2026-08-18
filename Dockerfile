@@ -18,6 +18,13 @@
 #   docker run --rm -v "$PWD:/w" -w /w python@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a \
 #     sh -c "pip install -q pip-tools==7.4.1 && pip-compile --generate-hashes --no-header \
 #            --strip-extras --output-file=/w/requirements.lock requirements.txt"
+#
+# Comanda scrie PESTE lock-ul existent, iar asta e deliberat: pip-compile îi păstrează pinurile și
+# schimbă doar ce cere `requirements.txt`. Un upgrade de versiuni e o decizie SEPARATĂ — adaugă
+# `--upgrade` (sau `-P <pachet>` pentru unul singur) și pune-l în commitul lui, ca să se vadă la
+# review ce s-a mișcat. Poarta din CI face exact aceeași operație, pornind de la același lock;
+# dacă ar compila de la zero, ar rezolva la ultima versiune de pe PyPI și ar deveni roșie ori de
+# câte ori publică cineva un release, pe PR-uri care n-au atins dependențele.
 
 ARG BASE_DIGEST=sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a
 
