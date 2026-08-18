@@ -4,25 +4,57 @@
 #   • imagine baked (COPY src/ în Dockerfile) — FĂRĂ bind-mount, FĂRĂ --reload
 #   • restart: unless-stopped pe tot
 #   • mem_limit pe fiecare serviciu → raza de explozie la OOM e închisă la propriul
-#     container (nu poate ucide procesele altui client de pe VPS). Plasa principală
-#     cât timp NU avem swap (vezi DEPLOY.md §Future).
+#     container (nu poate ucide procesele altui client de pe VPS).
 #   • ZERO porturi publicate pe host — doar `webhook` atinge rețeaua `shared_network`
 #     (a ta, externă) ca să fie rutat de Traefik-ul existent. Restul pe rețea privată.
 #
-# Rulare:  docker compose -p nativx -f docker-compose.prod.yml up -d --build
-# Vezi DEPLOY.md pentru runbook complet.
+# NX-248 — patru schimbări structurale față de varianta precedentă:
+#
+#   1. **Imaginea e un DIGEST, nu `latest`.** `${IMAGE_DIGEST}` vine din manifestul de release.
+#      Fără el, `docker compose config` eșuează — deliberat: un deploy care nu știe ce artefact
+#      pornește nu trebuie să pornească nimic. `latest` putea fi mutat între `pull` și `up`, iar
+#      rollbackul „la latest" nu era o operație, ci o speranță.
+#   2. **Filesystem read-only + zero capabilități.** Aplicația scrie DOAR în tmpfs-ul declarat.
+#      Un RCE într-o dependență nu mai poate lăsa nimic pe disc și nu poate escalada.
+#   3. **Healthcheck SEMANTIC.** Înainte: „portul 8000 acceptă un socket" — adevărat și cu DSN
+#      greșit, schemă veche și pool tenant mort. Acum: `/health/startup` (o dată, cu start_period
+#      lung) și `/health/ready` (continuu). Procesele fără HTTP au comanda lor de health.
+#   4. **Migrarea e un JOB separat, sub profil**, cu SINGURUL credential de DDL din sistem.
+#      Serviciile de runtime nu-l primesc: nu pot face DDL nici din greșeală, nici compromise.
+#
+# Rulare (după ce .env are IMAGE_DIGEST din manifest):
+#   docker compose --profile migrate run --rm migrate     # o dată, înainte de deploy
+#   docker compose up -d
+# Runbook complet: docs/RELEASE-RUNBOOK.md
 
 name: nativx
 
-# Config comun pentru serviciile Python (toate aceeași imagine).
-# Imaginea vine din ghcr (build în CI, NU pe VPS — vezi .github/workflows/deploy.yml).
-# Deploy pe VPS = `docker compose pull && up -d` (fără --build). Pentru build local
-# ad-hoc pe VPS poți încă rula: `docker compose build` (context-ul e în repo).
+# Config comun pentru serviciile Python (toate aceeași imagine, ACELAȘI digest).
+# Imaginea vine din ghcr (build o singură dată în CI — vezi .github/workflows/release.yml).
 x-app: &app
-  image: ghcr.io/adiboaru/sales-ass:latest
+  image: ghcr.io/adiboaru/sales-ass@${IMAGE_DIGEST:?IMAGE_DIGEST lipsește — deployul cere un digest din manifest, nu un tag}
   env_file: .env
   restart: unless-stopped
   networks: [internal]
+  # `read_only` + `tmpfs` + `cap_drop` + `no-new-privileges` = aceeași postură pe TOATE serviciile.
+  # Ancora le ține împreună: o excepție trebuie scrisă explicit pe serviciu, deci se vede în diff.
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+  tmpfs:
+    # `noexec` + `nosuid`: singurul loc scriibil din container nu poate deveni loc de execuție.
+    - /tmp:rw,noexec,nosuid,size=32m
+  environment:
+    # Unele biblioteci scriu în `$HOME/.cache`; cu rootfs read-only, HOME trebuie să fie tmpfs.
+    HOME: /tmp
+  logging:
+    # Fără rotație, un container vorbăreț umple discul VPS-ului partajat — adică al altcuiva.
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
   depends_on:
     redis:
       condition: service_healthy
@@ -31,7 +63,9 @@ services:
   # Backbone-ul (Redis Streams). DEDICAT — separat de redis-ul altui client.
   # Fără `ports:` → invizibil în afara rețelei interne nativx.
   redis:
-    image: redis:7-alpine
+    # Digest pin-uit ca și baza aplicației: `7-alpine` se mută, iar backbone-ul cozii nu are voie
+    # să se schimbe sub tine la un `docker compose pull` de rutină.
+    image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD}
@@ -44,21 +78,46 @@ services:
       - redis-data:/data
     restart: unless-stopped
     mem_limit: 96m
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     networks: [internal]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 
+  # JOB DE MIGRARE (NX-248) — one-shot, sub profil, NEPORNIT de `up -d`.
+  # Singurul loc din sistem cu credential de DDL: `.env.migrate` (gitignored, mod 0400, montat
+  # doar aici). Serviciile de mai jos citesc DOAR `.env`, deci nu-l pot vedea.
+  # `restart: "no"` fiindcă o migrare care eșuează trebuie să rămână eșuată și să fie investigată,
+  # nu reîncercată în buclă peste o schemă pe jumătate aplicată.
+  migrate:
+    <<: *app
+    profiles: ["migrate"]
+    env_file:
+      - .env
+      - .env.migrate
+    command: python scripts/migrate.py
+    restart: "no"
+    mem_limit: 256m
+    depends_on: {}
+
   # Singurul serviciu expus. Pe `internal` (vede redis) + `shared_network` (îl vede Traefik).
   # Rutează ȘI gateway-ul web (/web/*): /web/chat (sincron) rulează pipeline-ul IN-PROCES aici
-  # (DB + OpenAI), nu doar ingestie → mem_limit mai mare decât scheletul subțire. Are nevoie de
-  # OPENAI_API_KEY + DATABASE_URL_BOT (din env_file); bot_pool se deschide lazy la primul /web/chat.
+  # (DB + OpenAI), nu doar ingestie → mem_limit mai mare decât scheletul subțire.
   webhook:
     <<: *app
     command: uvicorn src.webhook.app:app --host 0.0.0.0 --port 8000 --workers 1
     mem_limit: 384m
+    cpus: 0.8
     networks: [internal, shared_network]
     labels:
       # Confirmat din recon Traefik (2026-06-18), aliniat la șablonul `evolution`:
@@ -71,47 +130,75 @@ services:
       - "traefik.http.routers.nativx.entrypoints=websecure"
       - "traefik.http.routers.nativx.tls.certresolver=letsencrypt"
       - "traefik.http.services.nativx.loadbalancer.server.port=8000"
+      # NX-248: Traefik trimite trafic DOAR după ce instanța se declară gata. Fără asta, un
+      # container pornit dar nepregătit primește requesturi reale în fereastra de boot.
+      - "traefik.http.services.nativx.loadbalancer.healthcheck.path=/health/ready"
+      - "traefik.http.services.nativx.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.nativx.loadbalancer.healthcheck.timeout=3s"
+      # Cap de corp la margine (defense-in-depth, NX-120 — gardul de app rămâne sursa de adevăr).
+      - "traefik.http.middlewares.nativx-body.buffering.maxRequestBodyBytes=262144"
+      - "traefik.http.middlewares.nativx-body.buffering.memRequestBodyBytes=262144"
+      - "traefik.http.routers.nativx.middlewares=nativx-body"
     healthcheck:
-      # Slim image n-are curl: verificăm cu socket că uvicorn ascultă pe 8000.
-      test: ["CMD-SHELL", "python -c \"import socket,sys; socket.create_connection(('localhost',8000),3).close()\""]
-      interval: 30s
+      # Slim image n-are curl → urllib. Verificăm READINESS (semantic), nu socketul: un socket
+      # deschis era „healthy" și cu schema veche cu două migrări.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready',timeout=3).status==200 else 1)",
+        ]
+      interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      # `start_period` acoperă startup-ul (schemă, registre, chei) — eșecurile din fereastra asta
+      # nu contează ca `unhealthy`, deci o migrare care rulează în paralel nu omoară containerul.
+      start_period: 60s
 
   # Consumer-ul Redis → pipeline → outbox. Cel mai gras (asyncpg + OpenAI + pipeline).
   worker:
     <<: *app
     command: python -m src.worker.consumer
     mem_limit: 320m
+    cpus: 0.8
+    healthcheck:
+      # Fără HTTP: heartbeat structurat (freshness + PID viu + bucla de lease), vezi
+      # src/ops/worker_health.py. Un fișier scris de un proces mort NU trece.
+      test: ["CMD", "python", "-m", "src.ops.worker_health", "--role", "worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
 
   # Outbox → ChannelSender (Meta/Telegram), retry idempotent.
   dispatcher:
     <<: *app
     command: python -m src.worker.dispatcher
     mem_limit: 192m
+    cpus: 0.3
 
   # Canal de TEST: long polling Telegram. ÎNGHEȚAT (NX-179) — focusul e 100% pe WEB WIDGET.
   # OFF by default, ca `proactive`: pornește-l cu `--profile telegram` dacă se reia canalul.
-  # Codul rămâne intact (abstracția de canal NX-60 e arhitectura, nu o dependență de Telegram).
   telegram-poller:
     <<: *app
     command: python -m src.channels.telegram.poller
     mem_limit: 192m
+    cpus: 0.2
     profiles: ["telegram"]
 
   # Joburi de mentenanță (NX-83): rollup nocturn, purjă dedupe, embed incremental.
-  # Folosește DOAR DB (admin_conn). Healthcheck pe heartbeat file.
   scheduler:
     <<: *app
     command: python -m src.jobs.scheduler
     mem_limit: 192m
+    cpus: 0.2
     healthcheck:
-      test: ["CMD", "python", "-c", "import time,sys; sys.exit(0 if time.time()-float(open('/tmp/scheduler_alive').read())<360 else 1)"]
+      test: ["CMD", "python", "-m", "src.ops.worker_health", "--role", "scheduler", "--max-age", "420"]
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
   # Motor proactiv (NX-70): AWB / back-in-stock / coș abandonat → outbox.
   # OFF la primul deploy: pornește-l doar cu `--profile proactive` când e nevoie.
@@ -119,6 +206,7 @@ services:
     <<: *app
     command: python -m src.proactive.scheduler
     mem_limit: 192m
+    cpus: 0.2
     profiles: ["proactive"]
 
 networks:

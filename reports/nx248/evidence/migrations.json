@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "drills": {
+    "fresh": {
+      "exit": 0,
+      "out": [
+        "fresh: aplicat 38/38, stare={'applied': 42, 'bundled': 42, 'pending': [], 'drift': [], 'ok': True}"
+      ]
+    },
+    "idempotent": {
+      "exit": 0,
+      "out": [
+        "idempotent: a doua rulare a aplicat 0 migrări (aștept 0)"
+      ]
+    },
+    "concurrent": {
+      "exit": 0,
+      "out": [
+        "concurrent: o singură migrare pending (042); pornesc două procese",
+        "concurrent: coduri de ieșire [0, 3] (aștept [0, 3])"
+      ]
+    }
+  },
+  "postgres": "pgvector/pgvector:pg16 (efemer, local)",
+  "measured_at": "2026-08-17T15:11:10+00:00",
+  "note": "fresh = schema_v2_production.sql + 38 delte, cu shim de platforma (auth + roluri Supabase); 005 e parametrizat psql si nu se aplica de runner"
+}

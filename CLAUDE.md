@@ -257,6 +257,36 @@ din Record cu proiecția EXTERIOARĂ (`test_load_execution_refs_projects_every_c
 ținită pe acest query, fiindcă o gardă generală ar cere parsare de SQL, iar varianta ieftină nu
 prinde defectul (`payload` APĂREA, doar în locul greșit).
 
+**NX-248 — deploy imutabil, secrete, readiness, supply chain, DR (verdict `NOT_READY`).**
+Înainte, un push pe `main` construia imaginea, publica `latest` și intra prin SSH cu
+`git pull && docker compose pull && up -d` — deci „ce am testat" nu era neapărat „ce rulează",
+rollbackul nu era o operație declarată, iar un merge ERA un deploy. Acum un commit produce UN
+artefact (`image@sha256:…` + SBOM + provenance + semnătură cosign + scan fail-closed), iar
+promovarea e o decizie umană pe GitHub Environments, cu ACELAȘI digest — zero rebuild, zero
+`git pull` pe host, host key PIN-uit dintr-un secret (nu `ssh-keyscan`). Rollbackul are țintă:
+`previous_digest` din manifest, iar `rollback_possible()` compară intervalul de schemă al imaginii
+precedente cu schema APLICATĂ — dacă a fost depășit, releaseul se BLOCHEAZĂ înainte de deploy, în
+loc să descoperi asta în incident. Healthcheckul nu mai e un socket: `live` (zero I/O — un Postgres
+jos nu repornește flota), `startup` (schemă/registre/chei, latch), `ready` (sonde MĂRGINITE, în
+paralel), plus health de proces pentru worker/scheduler (freshness + PID viu + boot id, fiindcă un
+fișier scris de un proces mort arată proaspăt). `required` vs `optional` se citește din COD, nu din
+obișnuință: cu Redis jos, `api` iese din rotație (rate-limitul de accept e `fail_closed`) și
+`worker` rămâne `degraded` (Postgres e autoritatea, NX-233) — măsurat, nu presupus. Migrarea e job
+one-shot cu advisory lock VERIFICAT în `pg_locks` (un lock de sesiune printr-un pooler tranzacțional
+e o iluzie) și cu singurul credential de DDL din sistem, în `.env.migrate` — runtime-ul nu mai
+poate face DDL. Dependențele sunt hash-locked (`requirements.lock`, `--require-hashes`), acțiunile
+CI pin-uite pe SHA, baza pe digest; `fastapi[standard]` a fost tăiat (aducea un CLI, un CLI de cloud
+și `sentry-sdk` în runtime): **73 → 54 pachete**. Containerul e non-root/read-only/cap-drop/
+no-new-privileges, verificat pe imaginea reală. **Bug găsit și reparat:** `.dockerignore` excludea
+`db/seed`, deci registrul de contraindicații NX-173 lipsea din imagine și poarta de boot refuza să
+pornească workerul. Măsurat local: migrări (fresh 38/38, idempotent, concurent `[0,3]`), readiness
+(4 scenarii) și contractul de imagine — TREC. Verdict de release: **`NOT_READY`** (7/10 elemente
+critice cer CI + staging + provider); RPO/RTO rămân `UNVERIFIED` și blochează NX-249. Detalii:
+[`docs/PRODUCTION-READINESS.md`](docs/PRODUCTION-READINESS.md) +
+[`docs/RELEASE-RUNBOOK.md`](docs/RELEASE-RUNBOOK.md) +
+[`docs/DISASTER-RECOVERY.md`](docs/DISASTER-RECOVERY.md) +
+[`docs/SECRETS-ROTATION.md`](docs/SECRETS-ROTATION.md); probă: `python scripts/release/evidence.py`.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
@@ -794,8 +824,13 @@ nativx-assistant/
 │   ├── CONVERSATION-STATE-V2.md  ← NX-235: inventar state v1 + contract v2 + rollout/migrare lazy
 │   └── *audit*                  ← audit CTO (pdf), plan v2 (xlsx), diagramă v4 (drawio)
 ├── tasks/                       ← cardurile de task (TXXX.md, NX-XX.md) + backlog compact
-├── scripts/                     ← migrate.py (runner ordonat + poartă boot, NX-123); db_check.py,
-│                                  spot_check.py; archive/ = apply_0NN.py istorice (înlocuite de migrate.py)
+├── scripts/                     ← migrate.py (runner ordonat + poartă boot NX-123; one-shot + advisory
+│   │                              lock + credential de DDL separat, NX-248); db_check.py, spot_check.py;
+│   │                              archive/ = apply_0NN.py istorice (înlocuite de migrate.py)
+│   ├── release/                 ← NX-248: build_manifest · preflight · verify_manifest · rollback
+│   │                              (dry-run implicit) · smoke_web_v2 · migration_drill · image_contract
+│   │                              · evidence · deploy.sh (digest + host key pin-uit)
+│   └── dr/restore_verify.py     ← NX-248: verifică un restore IZOLAT (read-only, refuză producția)
 ├── db/
 │   └── seed/                    ← seed.ts + embed.ts (Supabase JS client, tsx)
 ├── src/
@@ -845,6 +880,11 @@ nativx-assistant/
 │   ├── runtime/                 ← NX-241: contractele de RUNTIME ale turului (timp + buget)
 │   │   ├── deadline.py          ← `TurnDeadline`: UN buget monoton, rezervă terminală, cancel
 │   │   └── turn_budget.py       ← manifest VERSIONAT pe clase de tur + ledger atomic
+│   ├── ops/                     ← NX-248: contractele de OPERARE (identitate, health, heartbeat)
+│   │   ├── build_info.py        ← ce artefact rulează + interval de schemă tolerat + config revision
+│   │   ├── health.py            ← live/startup/ready: sonde mărginite, required vs optional per ROL
+│   │   ├── worker_health.py     ← health pt procesele fără HTTP (freshness + PID + boot id)
+│   │   └── manifest.py          ← manifestul de deploy: amprentă canonică + fezabilitatea rollbackului
 │   ├── observability/           ← NX-246: contractul de telemetrie (nimic din `src/` nu vede OTel)
 │   │   ├── turn_latency.py      ← NX-241: spans pe FAZE (vocabular închis) → un event/tur
 │   │   ├── contract.py          ← NX-246: vocabularul ÎNCHIS (spans/atribute/metrici/bucket-uri)

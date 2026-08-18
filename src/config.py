@@ -5,15 +5,78 @@ Sursa unică de configurare. Orice variabilă nouă din cod se adaugă AICI și 
 direct prin cod — totul prin `settings`.
 """
 
+import os
 from functools import lru_cache
+from pathlib import Path
+from typing import Any
 
 from pydantic import AliasChoices, Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 # NX-121: cap dur de lungime pe corpul inbound (text/caption/titlu interactiv), aliniat cu
 # validarea web (`src/web/app.py` max_length=2000). Constantă structurală (paritate canale), nu
 # setare per-tenant. Folosit la margine (webhook/meta.py) + ca plasă în gate (Vision-derived body).
 INBOUND_BODY_MAX = 2000
+
+
+class FileSecretsSource(PydanticBaseSettingsSource):
+    """NX-248 — livrarea secretelor prin FIȘIER: `OPENAI_API_KEY_FILE=/run/secrets/openai`.
+
+    Un `.env` cu secrete are trei scurgeri pe care nimeni nu le închide complet: e vizibil în
+    `docker inspect` (env-ul containerului), e vizibil în `/proc/<pid>/environ` pentru orice
+    proces din același container, și ajunge în orice dump de mediu pe care îl face o bibliotecă
+    de erori. Un fișier montat read-only cu mod 0400 n-are niciuna dintre ele: nu e în env, nu e
+    în `inspect`, iar procesul îl citește o dată la boot.
+
+    **Ambiguitatea e eroare, nu preferință.** Dacă sunt setate ȘI `X`, ȘI `X_FILE`, procesul
+    refuză să pornească. Alternativa („fișierul câștigă") pare prietenoasă până când cineva
+    rotește secretul în fișier, uită env-ul vechi în `.env`, și jumătate din flotă rulează cu
+    credentialul revocat — tăcut, fiindcă ambele „funcționează".
+    """
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Nefolosit: livrăm tot dicționarul în `__call__` (avem nevoie de aliasuri, nu de nume).
+        raise NotImplementedError
+
+    def __call__(self) -> dict[str, Any]:
+        # Cheile sunt ALIASURI de mediu (`OPENAI_API_KEY`), nu nume de câmp: exact ca
+        # `EnvSettingsSource`. Pe câmpurile cu `validation_alias`, un dicționar cheiat pe numele
+        # câmpului e ignorat TĂCUT de validator — adică un secret livrat corect prin fișier ar
+        # cădea pe default, iar procesul ar porni „fără cheie" fără nicio eroare.
+        values: dict[str, Any] = {}
+        for name, field in self.settings_cls.model_fields.items():
+            for alias in _env_aliases(name, field):
+                raw = os.environ.get(f"{alias}_FILE")
+                if not raw:
+                    continue
+                if os.environ.get(alias):
+                    raise ValueError(
+                        f"{alias} și {alias}_FILE sunt AMBELE setate — livrarea secretului e "
+                        "ambiguă. Șterge-l pe cel vechi (vezi docs/SECRETS-ROTATION.md)."
+                    )
+                path = Path(raw)
+                try:
+                    # `strip()`: un `echo secret > file` lasă un `\n` care ar strica o cheie API
+                    # într-un mod care se vede abia la primul apel, ca 401 fără explicație.
+                    values[alias] = path.read_text(encoding="utf-8").strip()
+                except OSError as e:
+                    raise ValueError(
+                        f"{alias}_FILE={raw} nu poate fi citit ({type(e).__name__}) — secretul nu "
+                        "e livrat, deci procesul nu pornește (fail-closed)"
+                    ) from e
+                break
+        return values
+
+
+def _env_aliases(name: str, field: FieldInfo) -> tuple[str, ...]:
+    """Numele de mediu sub care poate veni un câmp (`validation_alias` sau MAJUSCULE)."""
+    alias = field.validation_alias
+    if isinstance(alias, str):
+        return (alias,)
+    if isinstance(alias, AliasChoices):
+        return tuple(a for a in alias.choices if isinstance(a, str))
+    return (name.upper(),)
 
 
 class Settings(BaseSettings):
@@ -22,6 +85,29 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",  # .env are și variabile pt seed-ul node (SUPABASE_URL etc.)
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """NX-248: `*_FILE` intră ÎNAINTEA env-ului și a `.env`.
+
+        Ordinea contează doar teoretic — coliziunea `X` + `X_FILE` e deja eroare de boot (vezi
+        `FileSecretsSource`) — dar o punem prima ca intenția să fie citibilă: pe VPS, sursa
+        canonică de secrete e fișierul montat, iar `.env` e tranziția documentată, nu ținta.
+        """
+        return (
+            init_settings,
+            FileSecretsSource(settings_cls),
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     # --- Postgres / Supabase ---
     # admin_pool (control plane + joburi): rol privilegiat. Acceptă și numele
@@ -1125,6 +1211,24 @@ class Settings(BaseSettings):
     service_name: str = Field(default="nativx-assistant", validation_alias="SERVICE_NAME")
     release_sha: str = Field(default="", validation_alias="RELEASE_SHA")
     release_track: str = Field(default="champion", validation_alias="RELEASE_TRACK")
+
+    # --- NX-248: operare (health, deploy, credential de migrare) ---
+    # Tokenul pentru `/health/detail` (vederea de operator: sonde + reason codes). GOL = endpointul
+    # răspunde 404, nu 401: un 401 confirmă că ruta există și invită la ghicit. Nu e un secret de
+    # produs — e un secret de recon, deci se rotește separat (docs/SECRETS-ROTATION.md).
+    ops_health_token: str = Field(default="", validation_alias="OPS_HEALTH_TOKEN")
+    # Fereastra de freshness a heartbeat-ului proceselor non-HTTP (worker/scheduler). Peste ea,
+    # healthcheckul din compose declară procesul nesănătos. Vezi `src/ops/worker_health.py`:
+    # freshness e DOAR primul dintre cele trei teste (PID viu + boot id fac restul).
+    ops_heartbeat_max_age_s: float = Field(
+        default=90.0, validation_alias="OPS_HEARTBEAT_MAX_AGE_S", gt=0
+    )
+    # DSN-ul cu drept de DDL. Există EXCLUSIV în jobul de migrare (un serviciu compose separat,
+    # sub profil), niciodată în `env_file`-ul serviciilor de runtime — vezi
+    # `tests/test_ops_deploy_manifest.py::test_credentialul_de_migrare_nu_ajunge_in_runtime`,
+    # care citește docker-compose.prod.yml și pică dacă cineva îl mută în ancora comună.
+    # Gol în runtime = corect: `scripts/migrate.py --check` are nevoie doar de SELECT.
+    database_url_migration: str = Field(default="", validation_alias="DATABASE_URL_MIGRATION")
 
     @model_validator(mode="after")
     def _observability_relations(self) -> "Settings":

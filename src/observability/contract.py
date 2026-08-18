@@ -140,6 +140,46 @@ DROP_REASONS: frozenset[str] = frozenset(
     }
 )
 
+#: NX-248 — vocabularul de HEALTH. Spre deosebire de `LEDGER_STATUSES` (reprodus deliberat),
+#: astea se IMPORTĂ de `src/ops/health.py`, nu se copiază. Motivul e diferit fiindcă și riscul e
+#: diferit: la ledger, o redenumire tăcută ar strica dashboardul; aici, un cod de motiv adăugat în
+#: `health.py` și uitat aici ar fi normalizat tăcut la `other`, adică exact motivul pentru care
+#: te uiți la metrică ar deveni invizibil. O singură definiție face abaterea imposibilă.
+HEALTH_ROLES: frozenset[str] = frozenset({"api", "worker", "scheduler"})
+HEALTH_STATES: frozenset[str] = frozenset({"ok", "degraded", "failed", "skipped"})
+HEALTH_COMPONENTS: frozenset[str] = frozenset(
+    {
+        "postgres_control",
+        "postgres_tenant",
+        "schema",
+        "ledger",
+        "redis",
+        "executor",
+        "safety_registry",
+        "action_keys",
+    }
+)
+HEALTH_REASONS: frozenset[str] = frozenset(
+    {
+        "ok",
+        "timeout",
+        "unreachable",
+        "auth_failed",
+        "schema_too_old",
+        "schema_too_new",
+        "schema_unknown",
+        "privilege_missing",
+        "ledger_missing",
+        "pool_exhausted",
+        "stale_heartbeat",
+        "not_configured",
+        "disabled",
+        "probe_error",
+        "keys_missing",
+        "registry_invalid",
+    }
+)
+
 #: Fazele de deadline (NX-241) reproduse ca valori de etichetă — `web_turn_deadline_total{stage}`.
 DEADLINE_STAGES: frozenset[str] = frozenset(
     {
@@ -399,6 +439,37 @@ METRICS: dict[str, MetricSpec] = {
             ),
             description="Voturi one-tap. `outcome` distinge un vot NOU de o corecție — altfel "
             "o răzgândire ar arăta ca încă un vot în agregate.",
+        ),
+        # ── NX-248: operare. Nu sunt metrici de tur — sunt metrici despre INSTANȚĂ. Trăiesc în
+        # același registru fiindcă poarta de cardinalitate e aceeași, dar au prefix `ops_` ca să
+        # nu se amestece în panelurile de produs: „de câte ori am ieșit din rotație" și „câte
+        # ture au eșuat" sunt întrebări diferite, iar un dashboard care le adună răspunde greșit
+        # la amândouă.
+        MetricSpec(
+            "ops_readiness_transitions_total",
+            "counter",
+            "1",
+            (LabelSpec("role", HEALTH_ROLES), LabelSpec("state", frozenset({"ok", "unavailable"}))),
+            description="TRANZIȚII de readiness (nu stări): o pană de o oră e 1, nu 3600.",
+        ),
+        MetricSpec(
+            "ops_dependency_probe_total",
+            "counter",
+            "1",
+            (
+                LabelSpec("component", HEALTH_COMPONENTS),
+                LabelSpec("state", HEALTH_STATES),
+                LabelSpec("reason_code", HEALTH_REASONS),
+            ),
+            description="Rezultatul fiecărei sonde, pe componentă și cod de motiv stabil.",
+        ),
+        MetricSpec(
+            "ops_dependency_probe_seconds",
+            "histogram",
+            "s",
+            (LabelSpec("component", HEALTH_COMPONENTS),),
+            ACCEPT_BUCKETS,
+            "Durata sondelor. O sondă lentă e un semnal cu o tură înaintea unei sonde eșuate.",
         ),
         MetricSpec(
             "web_observability_dropped_total",

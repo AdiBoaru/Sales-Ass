@@ -15,6 +15,13 @@ build/
 .env.production
 .env.staging
 .env.bak*
+# NX-248: credentialul de DDL trăiește DOAR aici, pe VPS, montat exclusiv în jobul de migrare.
+# Nu are pereche `.example` cu valoare — vezi docs/SECRETS-ROTATION.md.
+.env.migrate
+# Secrete livrate prin fișier (`<NUME>_FILE=...`), dacă sunt ținute în repo dir pe VPS.
+secrets/
+*.key
+*.pem
 *.env.bak
 # .env.example se commitează — arată ce variabile sunt necesare
 

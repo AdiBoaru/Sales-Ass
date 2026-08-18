@@ -7,6 +7,11 @@ name: Stage 1 — Web E2E (NX-247)
 # Jumătatea de BROWSER (Playwright, contract cross-repo, Axe) e a PR-ului B, în repo-ul frontend:
 # el checkout-uiește backendul la SHA-ul declarat și pornește ACEST harness. Aici se dovedește ce
 # nu are nevoie de browser — și, important, se emite CERTIFICATUL de pereche pe care NX-249 îl cere.
+#
+# Acțiunile sunt pin-uite pe COMMIT SHA, nu pe tag (NX-248, `test_toate_actiunile_sunt_pinuite_pe_sha`
+# păzește regula pe TOATE workflow-urile). Un tag e mutabil: `@v4` de mâine poate fi alt cod decât
+# `@v4` de azi, iar acel cod rulează cu accesul workflow-ului. Comentariul de după `#` păstrează
+# versiunea lizibilă — updateul se face conștient, cu diff.
 
 on:
   push:
@@ -71,9 +76,9 @@ jobs:
       DAILY_COST_CAP_USD: "5"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
@@ -137,7 +142,7 @@ jobs:
       # video sau body de request de urcat.
       - name: Publică certificatul
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: stage1-certificate-${{ github.sha }}
           path: reports/stage1/certificate.json

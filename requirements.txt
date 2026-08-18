@@ -1,5 +1,14 @@
 # Web
-fastapi[standard]==0.136.3
+# NX-248: `fastapi` FĂRĂ extra-ul `[standard]`. `standard` aducea în imaginea de RUNTIME un CLI
+# (`fastapi-cli`, `typer`, `rich`, `shellingham`), un CLI de cloud (`fastapi-cloud-cli`, `rignore`,
+# `fastar`) și `sentry-sdk` — adică un SDK de telemetrie către un terț, într-un proces care trece
+# tot ce iese prin sanitizarea NX-230/246. Nimic din `src/` sau `tests/` nu folosește nici
+# `UploadFile`/`Form`/`EmailStr`, nici `fastapi run` (compose pornește `uvicorn` direct), deci
+# extra-ul era suprafață de atac fără consumator. Verificat prin build real: vezi
+# docs/PRODUCTION-READINESS.md §Dependențe.
+fastapi==0.136.3
+# `uvicorn[standard]` RĂMÂNE: uvloop + httptools sunt componente de performanță ale serverului,
+# nu unelte de linie de comandă.
 uvicorn[standard]==0.49.0
 
 # DB
@@ -7,7 +16,7 @@ asyncpg==0.31.0
 
 # Validare
 pydantic==2.13.4
-pydantic-settings==2.14.1
+pydantic-settings==2.14.2
 jsonschema==4.25.1  # validare structurală catalog v2/v3 (audit_catalog_v2._validate_schema, NX-168d)
 
 # Cache / coadă
@@ -41,4 +50,4 @@ opentelemetry-exporter-otlp-proto-http==1.37.0
 # pinned: cardul interzice explicit criptografie scrisă de noi. `src/web/action_crypto.py` e
 # singurul consumator; fără ea, `src/web/app.py` nu importă (gateway-ul refuză să pornească —
 # fail-closed deliberat, nu „merge fără semnături").
-cryptography==48.0.1
+cryptography==50.0.0

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -198,6 +199,29 @@ def _build_jobs() -> list[Job]:
 
 
 def _touch_heartbeat() -> None:
+    """NX-248: heartbeat STRUCTURAT (rol, PID, boot id, release), scris atomic.
+
+    Fișierul vechi conținea un singur timestamp, deci sonda putea verifica doar prospețimea — iar
+    un fișier proaspăt scris de un proces care a murit imediat după arată identic cu unul scris de
+    un proces viu. Acum sonda are și PID-ul și boot-id-ul, deci poate distinge cele două cazuri
+    (vezi `src/ops/worker_health.py`).
+    """
+    from src.ops import worker_health  # noqa: PLC0415 — import leneș (evită ciclul la boot)
+    from src.ops.build_info import cached_build_info  # noqa: PLC0415
+
+    build = cached_build_info(worker_health.ROLE_SCHEDULER)
+    worker_health.write(
+        worker_health.Heartbeat(
+            role=worker_health.ROLE_SCHEDULER,
+            pid=os.getpid(),
+            boot_id=worker_health.BOOT_ID,
+            release_sha=build.release_sha,
+            last_success=time.time(),
+        ),
+        worker_health.heartbeat_path(worker_health.ROLE_SCHEDULER),
+    )
+    # Compat: fișierul vechi rămâne scris cât timp există un compose care încă îl verifică. Se
+    # șterge când toate mediile rulează healthcheckul nou (vezi docs/RELEASE-RUNBOOK.md).
     try:
         with open(HEARTBEAT, "w") as f:
             f.write(str(int(time.time())))
