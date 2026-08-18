@@ -334,7 +334,15 @@ class WebTurnExecutor:
 
         # NX-246: metricile operaționale ale turului. `attempt_bucket`/`outcome`/`safe_error_code`
         # sunt vocabular ÎNCHIS; `turn_id` rămâne atribut de TRACE, niciodată etichetă de metrică.
-        track = get_settings().release_track
+        #
+        # NX-249: trackul vine de pe RÂND, nu din config. Diferența nu e cosmetică — e chiar
+        # invariantul cerut de failure matrix („retry/reclaim după deploy: același pipeline"):
+        # un proces repornit cu alt `RELEASE_TRACK` ar fi etichetat retroactiv turele altcuiva,
+        # iar comparația candidate-vs-control ar deveni o comparație cu ea însăși.
+        # Fără captură (controller stins, sau rând acceptat pe calea sincronă v1) rămâne trackul
+        # PROCESULUI — semantica NX-246, deci OFF e byte-identic. Raportul nu se sprijină pe
+        # fallbackul ăsta: el citește coloana, iar un rând fără ea intră în cohortul `unknown`.
+        track = row.release_track or get_settings().release_track
         hooks.on_queue_wait(
             max(0.0, (datetime.now(UTC) - row.accepted_at).total_seconds()),
             attempt_bucket=attempt_bucket(claim.attempt),

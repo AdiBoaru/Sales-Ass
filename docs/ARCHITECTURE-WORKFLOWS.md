@@ -1467,6 +1467,7 @@ query_spec_shadow_enabled = false
 rate_limit_enabled = true
 reference_precedence_v2_enabled = false
 relations_first_enabled = true
+release_controller_enabled = false
 replay_store_prompt_enabled = false
 response_style_enabled = true
 response_telemetry_enabled = true
@@ -1563,6 +1564,7 @@ welcome_enabled = true
 041_conversation_carts.sql
 042_web_feedback.sql
 043_messages_content_type_action.sql
+044_release_policy_and_turn_capture.sql
 ```
 
 

@@ -183,6 +183,31 @@ def on_feedback(rating: str, reason_code: str | None, *, outcome: str, release_t
     )
 
 
+# ── NX-249: controllerul de release ─────────────────────────────────────────────────────────
+
+
+def on_release_assignment(decision: str, *, reason: str, mode: str) -> None:
+    """O decizie de asignare. Se emite la FIECARE accept, nu doar la cele candidate.
+
+    Motivul e denominatorul: „câte conversații au primit candidate" e o cifră fără înțeles fără
+    „din câte eligibile". Cu doar numărătorul, un canary care nu mai asignează nimic (policy
+    expirat, store căzut) arată identic cu unul care n-a avut trafic.
+    """
+    metrics.record_counter("release_assignment_total", decision=decision, reason=reason, mode=mode)
+
+
+def on_policy_refresh(outcome: str, *, age_bucket: str) -> None:
+    metrics.record_counter("release_policy_refresh_total", outcome=outcome, age_bucket=age_bucket)
+
+
+def on_release_override(mode: str, *, reason_code: str) -> None:
+    metrics.record_counter("release_override_total", mode=mode, reason_code=reason_code)
+
+
+def on_release_gate(gate: str, verdict: str) -> None:
+    metrics.record_counter("release_gate_total", gate=gate, verdict=verdict)
+
+
 def on_retrieval(mode: str, outcome: str) -> None:
     metrics.record_counter("web_retrieval_outcomes_total", mode=mode, outcome=outcome)
 

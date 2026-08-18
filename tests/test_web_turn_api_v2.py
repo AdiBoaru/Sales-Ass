@@ -722,3 +722,195 @@ def test_projection_of_actions_is_byte_deterministic(monkeypatch):
     a = json.dumps(tev.terminal_view(source, "ro"), sort_keys=True)
     b = json.dumps(tev.terminal_view(source, "ro"), sort_keys=True)
     assert a == b
+
+
+# ── NX-249: asignarea de release la marginea de accept ────────────────────────
+
+
+def _release_policy(*, mode="canary", percent=100, stage=6, rollback_compatible=False):
+    from src.release.models import ReleasePolicy
+
+    return ReleasePolicy(
+        policy_id="nx249-api",
+        revision=2,
+        environment="test",
+        created_at="2026-08-13T09:00:00+00:00",
+        not_before="2026-08-13T10:00:00+00:00",
+        expires_at="2026-09-13T10:00:00+00:00",
+        control_release_sha="c0ntr0l1234567",
+        control_pipeline_version="web-chat.v1",
+        candidate_release_sha="cand1date7654321",
+        candidate_pipeline_version="web-view.v2",
+        mode=mode,
+        percent=percent,
+        stage=stage,
+        eligible_business_ids=("b1",),
+        stable_salt_id="salt-api",
+        quality_packet_hash="sha256:q",
+        e2e_packet_hash="sha256:e",
+        deploy_manifest_hash="sha256:d",
+        slo_policy_version="slo_policy.v1",
+        quality_policy_version="nx246-gate-v1",
+        rollback_compatible=rollback_compatible,
+        approved_by="adi",
+        approved_at="2026-08-13T09:30:00+00:00",
+        change_ticket="NX-249",
+    )
+
+
+def _wire_release(monkeypatch, *, enabled=True, policy=None, available=True, code="ok"):
+    """Storeul de policy, fără DB. `policy=None` + `available=False` = store căzut."""
+    from src.release.policy_store import PolicyView
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "release_controller_enabled", enabled)
+    monkeypatch.setattr(settings, "release_assignment_salt", "salt-de-test")
+
+    async def fake_current(conn, environment, **kw):
+        return PolicyView(
+            policy=policy, revision=2 if policy else None, code=code, available=available
+        )
+
+    monkeypatch.setattr(wa.policy_store, "current", fake_current)
+
+
+async def test_controllerul_stins_nu_trimite_context_de_release(monkeypatch):
+    """OFF = byte-identic: `accept_web_turn` primește `release=None`, deci nu capturează nimic."""
+    row = _row()
+    captured = {}
+
+    async def fake_accept(db, **kw):
+        captured.update(kw)
+        return ts.Accepted(row)
+
+    _wire_v2(monkeypatch, accept=fake_accept)
+    _wire_release(monkeypatch, enabled=False)
+    res = await wa.web_turn_accept_v2(
+        _Req(_body(row.client_turn_id)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 202
+    assert captured["release"] is None
+
+
+async def test_asignarea_ajunge_la_accept_si_se_emite_evenimentul(monkeypatch):
+    """Contextul se construiește la MARGINE (unde se poate deschide control plane) și se
+    consumă în checkout-ul de accept (unde nu se mai poate — NX-231)."""
+    row = _row(release_track="candidate", release_policy_id="nx249-api", release_policy_revision=2)
+    captured = {}
+
+    async def fake_accept(db, **kw):
+        captured.update(kw)
+        assignment = kw["release"].decide("b1", "c1", None)
+        return ts.Accepted(row, assignment=assignment)
+
+    events, woken = _wire_v2(monkeypatch, accept=fake_accept)
+    _wire_release(monkeypatch, policy=_release_policy())
+    res = await wa.web_turn_accept_v2(
+        _Req(_body(row.client_turn_id)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 202
+    assert captured["release"] is not None
+    assert captured["release"].mode == "canary"
+    assigned = next(e for e in events if e.type == "release_assigned")
+    assert assigned.properties["decision"] == "candidate"
+    assert assigned.properties["policy_revision"] == 2
+    # P12: `policy_id` nu e etichetă de metrică, dar nici ID-uri de tenant/conversație în event.
+    assert "business_id" not in assigned.properties
+    assert woken == [row.id]
+
+
+async def test_conversatia_drenata_primeste_503_si_nu_creeaza_rand(monkeypatch):
+    """Kill-switch fără compatibilitate dovedită: nu acceptăm, nu convertim, nu abandonăm."""
+    from src.release.models import DECISION_DRAIN, Assignment
+
+    row = _row()
+
+    async def fake_accept(db, **kw):
+        return ts.ReleaseDrained(
+            Assignment(
+                decision=DECISION_DRAIN,
+                reason="rollback_incompatible",
+                track=None,
+                policy_id="nx249-api",
+                policy_revision=2,
+            )
+        )
+
+    events, woken = _wire_v2(monkeypatch, accept=fake_accept)
+    _wire_release(monkeypatch, policy=_release_policy(mode="force_control", stage=6))
+    res = await wa.web_turn_accept_v2(
+        _Req(_body(row.client_turn_id)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 503
+    payload = json.loads(res.body)
+    assert payload["error"]["code"] == "release_draining"
+    assert woken == [], "un turn drenat nu trezește niciun executor"
+    assert not any(e.type == "web_turn_accepted" for e in events)
+
+
+async def test_storeul_cazut_nu_rupe_acceptul_ci_da_control(monkeypatch):
+    """Fail-closed: un control plane jos nu are voie să oprească traficul, doar canaryul."""
+    row = _row()
+    captured = {}
+
+    async def fake_accept(db, **kw):
+        captured["assignment"] = kw["release"].decide("b1", "c1", None)
+        return ts.Accepted(row, assignment=captured["assignment"])
+
+    _wire_v2(monkeypatch, accept=fake_accept)
+    _wire_release(monkeypatch, policy=None, available=False, code="store_down")
+    res = await wa.web_turn_accept_v2(
+        _Req(_body(row.client_turn_id)), token="tok", visitor_id="web_1", sig="s"
+    )
+    assert res.status_code == 202
+    assert captured["assignment"].decision == "control"
+    assert captured["assignment"].reason == "store_unavailable"
+
+
+RELEASE_VOCABULARY = (
+    "release_track",
+    "release_policy",
+    "policy_id",
+    "candidate",
+    "champion",
+    "canary",
+    "bucket",
+    "percent",
+    "force_control",
+    "stable_salt",
+)
+
+
+async def test_frontendul_nu_afla_nimic_despre_canary(monkeypatch):
+    """Boundary NENEGOCIABIL: frontendul nu știe procentul, bucketul, champion/candidate,
+    kill-switchul sau motivul de rollback. El bootstrap-uiește contractul pe care backendul l-a
+    ASIGNAT, trimite inputul și afișează ViewModelul.
+
+    Testul scanează TEXTUL răspunsurilor (accept 202 + terminal), nu o listă de chei cunoscute: o
+    gardă pe chei ar trece pe lângă un câmp nou adăugat mâine într-un sub-obiect.
+    """
+    row = _row(release_track="candidate", release_policy_id="nx249-api", release_policy_revision=2)
+
+    async def fake_accept(db, **kw):
+        return ts.Accepted(row, assignment=kw["release"].decide("b1", "c1", None))
+
+    _wire_v2(monkeypatch, accept=fake_accept)
+    _wire_release(monkeypatch, policy=_release_policy())
+    accepted = await wa.web_turn_accept_v2(
+        _Req(_body(row.client_turn_id)), token="tok", visitor_id="web_1", sig="s"
+    )
+    terminal = tev.terminal_view(
+        _row(
+            status="completed",
+            response_json=COMPLETED_PAYLOAD,
+            completed_at=NOW,
+            release_track="candidate",
+            release_policy_id="nx249-api",
+            release_policy_revision=2,
+        ),
+        "ro",
+    )
+    for payload in (accepted.body.decode(), json.dumps(terminal)):
+        lowered = payload.lower()
+        for word in RELEASE_VOCABULARY:
+            assert word not in lowered, f"vocabular de release pe sârmă: {word!r}"
