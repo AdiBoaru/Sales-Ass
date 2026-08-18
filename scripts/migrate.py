@@ -10,6 +10,9 @@
   • `--dry-run`: listează pending fără a aplica;
   • `--baseline`: ADOPTARE pe o DB de PROD existentă (003–013 deja aplicate manual) —
     marchează tot ce e pe disc ca aplicat ('legacy') FĂRĂ a rula SQL-ul;
+  • `--mark-applied 005[,NNN]`: marchează PUNCTUAL, cu checksumul real, migrările care nu pot
+    trece prin `conn.execute` (variabile psql) — aplicate în afara runnerului, dar înregistrate
+    de el, deci `--check` continuă să vadă drift;
   • `--json`: starea ca artefact (preflight-ul de release o consumă, vezi scripts/release/).
 
 ## NX-248 — două credentiale, un singur migrator
@@ -188,6 +191,41 @@ async def baseline(conn: asyncpg.Connection, docs_dir: Path = DOCS_DIR) -> list[
     return marked
 
 
+async def mark_applied(
+    conn: asyncpg.Connection, versions: list[str], docs_dir: Path = DOCS_DIR
+) -> list[str]:
+    """Marchează migrări PUNCTUALE ca aplicate, cu checksumul REAL, fără a le rula.
+
+    Există pentru o singură clasă de fișiere: cele care nu pot trece prin `conn.execute` fiindcă
+    folosesc variabile psql. `005_bot_runtime_login.sql` conține `:'bot_password'` — parola nu se
+    comite, deci pe DB-ul real a fost aplicată cu `apply_005.py`. Pe un Postgres EFEMER (NX-247)
+    o aplică `psql -v bot_password=…`, iar apoi runnerul trebuie să afle că e făcută.
+
+    Diferența față de `--baseline`: acolo se marchează TOT ca `'legacy'`, ceea ce pe o DB goală ar
+    sări peste toate migrările și ar lăsa o schemă incompletă declarată completă. Aici se
+    marchează exact ce s-a cerut, cu checksumul de pe disc — deci `--check` continuă să detecteze
+    dacă fișierul e editat ulterior.
+    """
+    await conn.execute(_BOOTSTRAP_DDL)
+    by_version = {m.version: m for m in discover_migrations(docs_dir)}
+    unknown = sorted(set(versions) - set(by_version))
+    if unknown:
+        raise RuntimeError(f"versiuni inexistente în docs/: {', '.join(unknown)}")
+    marked: list[str] = []
+    for version in versions:
+        m = by_version[version]
+        res = await conn.execute(
+            "insert into schema_migrations(version, filename, checksum) "
+            "values ($1, $2, $3) on conflict (version) do nothing",
+            m.version,
+            m.filename,
+            m.checksum,
+        )
+        if res.split()[-1] == "1":
+            marked.append(m.version)
+    return marked
+
+
 class MigrationLockUnsafe(RuntimeError):
     """Lock-ul a fost „luat" dar nu se vede pe backend-ul curent ⇒ sesiune multiplexată."""
 
@@ -318,34 +356,47 @@ def _dsn(*, write: bool) -> str:
     return dsn
 
 
+#: Hosturi pentru care TLS nu are ce proteja: traficul nu părăsește mașina. NX-247 are nevoie de
+#: asta ca migrările să poată rula pe Postgres-ul EFEMER din `docker-compose.stage1-e2e.yml`
+#: (fără certificat) — altfel runnerul canonic, singurul permis, n-ar putea aplica schema local, iar
+#: runbookul ar fi copy/paste doar pe hârtie. Poarta e pe HOST, deci se aplică singură: un DSN
+#: remote nu pierde SSL-ul din greșeală. Cealaltă cale (`sslmode=disable`, NX-248) e pentru
+#: restore-ul izolat, care nu e pe loopback — dar acolo dezactivarea e SCRISĂ, nu dedusă.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
 def _connect_kwargs(dsn: str) -> dict:
     """IPv4 + SSL fără verificare de hostname pentru pooler-ul Supabase (cf. apply_012).
 
-    NX-248: `sslmode=disable` din DSN e RESPECTAT. Înainte, SSL-ul era necondiționat, ceea ce
-    făcea runner-ul inutilizabil exact acolo unde avem cel mai mult nevoie de el: un Postgres
-    efemer în CI și un RESTORE izolat (niciunul nu are TLS). Un instrument de migrare care merge
-    doar pe producție nu poate fi exersat înainte de producție.
+    Două excepții de la SSL, amândouă pentru medii unde TLS n-are ce proteja:
+      • host de LOOPBACK — traficul nu părăsește mașina, iar Postgres-ul efemer din
+        `docker-compose.stage1-e2e.yml` (NX-247) n-are certificat;
+      • `sslmode=disable` EXPLICIT în DSN (NX-248) — restore-ul IZOLAT din DR, care rulează pe alt
+        host decât producția și tot n-are TLS.
 
-    Default-ul rămâne SSL: absența parametrului înseamnă „mediu real", nu „fără criptare".
+    Înainte, SSL-ul era necondiționat, ceea ce făcea runnerul inutilizabil exact acolo unde avem cel
+    mai mult nevoie de el: un instrument de migrare care merge doar pe producție nu poate fi
+    exersat înainte de producție. Default-ul rămâne SSL: absența ambelor semnale înseamnă „mediu
+    real", nu „fără criptare" — un DSN remote nu pierde SSL-ul din greșeală, ci doar dacă cineva
+    scrie `sslmode=disable` cu mâna lui.
     """
     p = urlparse(dsn)
-    ip = socket.getaddrinfo(p.hostname, p.port or 5432, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
-    sslmode = parse_qs(p.query).get("sslmode", [""])[0].lower()
-    if sslmode == "disable":
-        ssl_arg: object = False
-    else:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        ssl_arg = ctx
-    return {
-        "host": ip,
+    base = {
         "port": p.port or 5432,
         "user": unquote(p.username),
         "password": unquote(p.password),
         "database": (p.path or "/postgres").lstrip("/"),
-        "ssl": ssl_arg,
     }
+    # Loopback ÎNAINTE de rezolvare: `::1` n-are răspuns în AF_INET, deci `getaddrinfo` ar crăpa.
+    if p.hostname in _LOOPBACK_HOSTS:
+        return {**base, "host": p.hostname, "ssl": False}
+    ip = socket.getaddrinfo(p.hostname, p.port or 5432, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    if parse_qs(p.query).get("sslmode", [""])[0].lower() == "disable":
+        return {**base, "host": ip, "ssl": False}
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return {**base, "host": ip, "ssl": ctx}
 
 
 async def _connect(*, write: bool) -> asyncpg.Connection:
@@ -395,6 +446,14 @@ async def _amain(args: argparse.Namespace) -> int:
                     f"baseline: {len(marked)} migrări marcate aplicate: {', '.join(marked) or '—'}"
                 )
                 return EXIT_OK
+            # Scrie în `schema_migrations`, exact tabelul pe care îl scrie și `apply_pending` →
+            # sub ACELAȘI lock: altfel un job care marchează 005 și unul care aplică 006+ ar putea
+            # decide în paralel ce e „aplicat".
+            if args.mark_applied:
+                versions = [v.strip() for v in args.mark_applied.split(",") if v.strip()]
+                marked = await mark_applied(conn, versions)
+                print(f"marcate aplicate: {', '.join(marked) or '— (erau deja)'}")
+                return EXIT_OK
             started = time.monotonic()
             done = await apply_pending(conn)
             elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -430,6 +489,12 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="listează pending fără a aplica")
     ap.add_argument(
         "--baseline", action="store_true", help="marchează tot ca aplicat (adoptare DB existentă)"
+    )
+    ap.add_argument(
+        "--mark-applied",
+        metavar="VERSIUNI",
+        help="marchează versiuni punctuale ca aplicate, cu checksum real (ex. 005) — pentru "
+        "migrările psql-only, aplicate în afara runnerului",
     )
     ap.add_argument("--json", action="store_true", help="starea schemei ca JSON (preflight/CI)")
     args = ap.parse_args()
