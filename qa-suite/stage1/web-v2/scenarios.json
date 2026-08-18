@@ -316,7 +316,7 @@
         "product_ids_from_own_tenant"
       ],
       "backend_coverage": "blocked",
-      "backend_coverage_blocked_because": "Blocat de defectul găsit de gate: `load_execution_refs` nu proiectează `m.payload`, deci contextul rehidratat e mereu None (owner NX-234/236)."
+      "backend_coverage_blocked_because": "Defectul de rehidratare e REPARAT (#295) si contextul ajunge acum la executie — verificat. Ramane blocat din alt motiv: invariantul `context_resolved_server_side` citeste `state.references.resolved`, care exista doar in forma v2 PERSISTATA a starii (`CONVERSATION_STATE_V2_WRITE_ENABLED`, nepromovat de NX-235). Masurat pe profilul certificat: `schema_version: null`, deci starea e v1 si campul nu are de unde sa apara. Nu relaxez invariantul ca sa treaca — asta ar fi mutarea tintei."
     },
     {
       "id": "commerce_success",
@@ -339,7 +339,7 @@
         "no_localstorage_mutation"
       ],
       "backend_coverage": "blocked",
-      "backend_coverage_blocked_because": "Blocat de defectul găsit de gate: `messages.content_type = 'action'` e respins de CHECK-ul schemei, deci acceptul acțiunii crapă (owner NX-236/237)."
+      "backend_coverage_blocked_because": "CTA-urile de cos se emit din `ctx.grounded` (`processor.py`: `commerce_product_refs` = produsele pe care guardul NX-240 le declara vandabile), deci exista DOAR pe profilul cu creier unic + projector v2 — necertificabil cat timp NX-238 e `NOT-READY`. Masurat pe profilul certificat: se emit doar kind-uri ne-mutante (show_more, compare_selection, request_details, request_reviews, feedback_up/down), niciun `cart_*`. Deci nu e un test lipsa, ci o functionalitate care nu ajunge in configuratia pe care o certificam."
     },
     {
       "id": "commerce_stale",
@@ -361,7 +361,7 @@
         "terminal_view_renderable"
       ],
       "backend_coverage": "blocked",
-      "backend_coverage_blocked_because": "Blocat de acelasi defect ca `commerce_success`: `messages.content_type = 'action'` e respins de CHECK-ul schemei, deci turul de acțiune nu poate fi acceptat, iar calea de revalidare pe date stale nu se poate atinge deloc (owner NX-236/237)."
+      "backend_coverage_blocked_because": "Acelasi blocaj ca `commerce_success`: fara CTA de cos emis pe profilul certificat nu exista token de retrimis, deci calea de revalidare pe date stale nu se poate atinge. Se deblocheaza odata cu profilul de creier unic (NX-238 GO)."
     },
     {
       "id": "terminal_failure",

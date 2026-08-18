@@ -45,23 +45,27 @@
       "traces_complete_for_covered_scenarios_ratio": 1.0
     },
     "known_gaps": {
-      "_note": "Ce NU e acoperit, numărat explicit. Prezența acestor numere în artefact e deliberată: un gate care ascunde propriile goluri e mai periculos decât unul care le publică. Fiecare scenariu `blocked` are motiv scris în scenarios.json, iar un test refuză motivele vagi. Se aduc la zero înainte de NX-249.",
+      "_note": "Ce NU e acoperit, numarat explicit. Prezenta acestor numere in artefact e deliberata: un gate care isi ascunde propriile goluri e mai periculos decat unul care le publica. Fiecare scenariu `blocked` are motiv scris in scenarios.json, iar un test refuza motivele vagi si cere ca sub-categoriile sa insumeze `scenarios_blocked`. Se aduc la zero inainte de NX-249.",
       "scenarios_total": 16,
       "scenarios_backend_covered": 9,
       "scenarios_blocked": 5,
       "scenarios_frontend_only": 2,
       "backend_invariants_total": 22,
       "backend_invariants_executed_on_real_data": 16,
-      "blocked_by_defects_found_by_this_gate": 3,
-      "blocked_by_unpromoted_flag": 1,
-      "blocked_by_missing_producer": 1
+      "blocked_by_defects_found_by_this_gate": 0,
+      "blocked_by_unpromoted_flag": 2,
+      "blocked_by_missing_producer": 1,
+      "blocked_by_uncertified_profile": 2
     },
     "must_be_at_least": {
       "recovery_success_rate": 1.0
     },
     "reported_not_judged": {
       "_note": "Se măsoară, se publică în raport, NU pot da FAIL până la ratificare (vezi sources.latency). Valorile de referință sunt plafoanele NX-241 pe clase de tur, ca raportul să fie citibil, nu ca să judece.",
-      "submit_to_accepted_ms": { "reference_p95": null, "ratified": false },
+      "submit_to_accepted_ms": {
+        "reference_p95": null,
+        "ratified": false
+      },
       "accepted_to_terminal_ms": {
         "reference_by_turn_class": {
           "exact": 3000,
@@ -70,10 +74,17 @@
           "mutation": 8000
         },
         "reference_hard_cap_ms": 15000,
-        "percentiles": ["p50", "p90", "p95"],
+        "percentiles": [
+          "p50",
+          "p90",
+          "p95"
+        ],
         "ratified": false
       },
-      "recovery_duration_ms": { "reference_p95": null, "ratified": false }
+      "recovery_duration_ms": {
+        "reference_p95": null,
+        "ratified": false
+      }
     }
   },
   "flake_policy": {
@@ -84,9 +95,25 @@
     "engine_specific_retry_requires_documented_finding": true
   },
   "browser_matrix": {
-    "per_pull_request": ["chromium"],
-    "main_and_nightly": ["chromium", "firefox", "webkit"],
-    "required_before_nx249_release": ["chromium", "firefox", "webkit"],
-    "viewports": [320, 360, 390, 452, 1280]
+    "per_pull_request": [
+      "chromium"
+    ],
+    "main_and_nightly": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ],
+    "required_before_nx249_release": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ],
+    "viewports": [
+      320,
+      360,
+      390,
+      452,
+      1280
+    ]
   }
 }

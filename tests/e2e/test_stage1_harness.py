@@ -1022,3 +1022,20 @@ def test_thresholds_do_not_claim_coverage_of_blocked_scenarios() -> None:
         "cheia veche promitea acoperirea TUTUROR scenariilor canonice; backendul acoperă 9/16"
     )
     assert complete["declared_backend_coverage_matches_execution_ratio"] == 1.0
+
+
+def test_blocked_subcategories_sum_to_the_blocked_total() -> None:
+    """Sub-categoriile de blocaj trebuie să acopere EXACT scenariile blocate.
+
+    Fără asta, un scenariu putea rămâne blocat fără să apară în nicio categorie — adică un gol
+    nenumărat într-un artefact al cărui rost e tocmai să numere golurile. Categoriile sunt cauze
+    distincte, iar la NX-249 fiecare se închide altfel: un defect se repară, un flag se promovează,
+    un profil se certifică, o funcționalitate se implementează.
+    """
+    gaps = sc.thresholds()["gate"]["known_gaps"]
+    buckets = {k: v for k, v in gaps.items() if k.startswith("blocked_by_")}
+    assert buckets, "nicio sub-categorie de blocaj declarată"
+    assert sum(buckets.values()) == gaps["scenarios_blocked"], (
+        f"sub-categoriile însumează {sum(buckets.values())}, dar sunt "
+        f"{gaps['scenarios_blocked']} scenarii blocate: {buckets}"
+    )

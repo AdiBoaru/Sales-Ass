@@ -816,22 +816,6 @@ async def test_r18_action_from_other_tenant_is_not_found(env: Stage1Env) -> None
         assert product.name not in blob, "răspunsul de refuz scurge date din alt tenant"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT REAL, găsit de acest gate, OWNER NX-236/237 — nu se repară aici (Out of Scope). "
-        "`src/web/app.py:1220` scrie `messages.content_type = 'action'` (prin `accept_web_turn` cu "
-        "`persist_inbound`), dar CHECK-ul din `docs/schema_v2_production.sql:185` permite doar "
-        "(text, image, audio, video, document, interactive, template, location, sticker). "
-        "Consecință cu `WEB_ACTIONS_ENABLED=true`: acceptul ORICĂRUI turn pornit dintr-un buton "
-        "crapă cu CheckViolationError, adică acțiunile opace nu funcționează deloc. Invizibil până "
-        "acum fiindcă flagul e OFF în producție și nicio suită nu atingea calea pe DB real. "
-        'NB: `action_service.py:204` folosește `content_type="action"` ca INTRARE de HMAC, nu ca '
-        "scriere în DB — nu e afectat. Reparat prin migrare (extinde CHECK-ul) în cardul "
-        "owner; apoi `strict=True` transformă "
-        "trecerea în XPASS-eroare și forțează ștergerea acestui marker."
-    ),
-)
 async def test_r19_commerce_retry_yields_one_receipt(env: Stage1Env) -> None:
     """Retry pe aceeași acțiune de comerț: același receipt, o singură mutație. Verificat în DB."""
     session, _turn_id, view = await _turn(env, env.alpha, "recommend")
@@ -991,22 +975,6 @@ async def test_deadline_at_is_not_extended_on_reclaim(env: Stage1Env) -> None:
     assert before == after, "deadline-ul s-a prelungit la reclaim"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT REAL, găsit de acest gate, OWNER NX-234/236 — nu se repară aici (Out of Scope). "
-        "`load_execution_refs` (src/db/queries/web_turns.py) citește `payload` din `rec`, dar "
-        "proiecția EXTERIOARĂ a query-ului listează doar `m.id, m.body, m.content_type`: coloana "
-        "`payload` există în subqueryul lateral și se pierde în select. Deci `payload` nu e "
-        "niciodată printre cheile Recordului, iar `page_context` și `action` ies MEREU None. "
-        "Consecințe: contextul de pagină persistat la accept (NX-234) nu ajunge niciodată la "
-        "execuție, deci recovery-ul cu aceeași ancoră nu se întâmplă; iar comanda de acțiune "
-        "(NX-236) nu se rehidratează, deci un turn de acțiune reluat după restart își pierde "
-        "comanda. Persistarea E corectă — verificat pe DB: payload-ul mesajului conține ancora. "
-        "Fix: adaugă `m.payload` în selectul exterior. Apoi `strict=True` transformă trecerea în "
-        "XPASS-eroare și forțează ștergerea markerului."
-    ),
-)
 async def test_accepted_turn_is_fully_recoverable_from_the_database(env: Stage1Env) -> None:
     """Recovery integral din DB: inputul safe, contextul și identitatea sunt persistate la accept.
     Un proces care repornește nu are nevoie de nimic din requestul HTTP original."""

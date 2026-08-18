@@ -308,7 +308,7 @@ Cele două `xfail` sunt **defecte reale ale sistemului**, nu ale harnessului —
 eroare (XPASS) și forțează ștergerea markerului. Un `xfail` care supraviețuiește fixului e un gate
 care minte.
 
-### 6.1 Ce a găsit gate-ul la prima rulare
+### 6.1 Ce a găsit gate-ul la prima rulare (ambele REPARATE în #295)
 
 Ambele defecte trăiesc pe căi active doar cu flag-urile v2 aprinse, și de aceea nicio suită
 existentă nu le atingea: producția rulează cu flag-urile stinse, iar testele de până acum foloseau
@@ -331,8 +331,28 @@ subqueryul lateral și se pierde în select, deci `payload` nu e niciodată prin
 aceeași ancoră" (NX-234) nu se întâmplă niciodată, iar un turn de acțiune reluat după restart își
 pierde comanda (NX-236). Fixul e o coloană în selectul exterior.
 
-Cardul interzice explicit repararea în acest PR: *„repararea defectelor găsite în același PR dacă
-aparțin cardurilor owner. Se deschide PR în repo/cardul corect, apoi gate-ul se rerulează."*
+Cardul interzice repararea în acest PR: *„repararea defectelor găsite în același PR dacă aparțin
+cardurilor owner. Se deschide PR în repo/cardul corect, apoi gate-ul se rerulează."* Așa s-a și
+făcut: fixurile au plecat în **#295** (migrarea 043 + `m.payload` în selectul exterior), gate-ul s-a
+rerulat pe codul reparat și trece **37/37, zero xfail**. Cei doi markeri `xfail(strict=True)` au fost
+ȘTERȘI — `strict` a făcut pasul obligatoriu, nu opțional.
+
+**Ce NU au deblocat fixurile — măsurat, nu presupus.** Anticipasem că cele trei scenarii blocate de
+aceste defecte urcă la `covered` (12/16). **Greșit**, și merită scris de ce, fiindcă e diferența
+dintre un gate care raportează și unul care speră:
+
+- `product_context` — contextul ajunge acum la execuție (defectul e reparat, verificat), dar
+  invariantul `context_resolved_server_side` citește `state.references.resolved`, care există doar în
+  forma **v2 persistată** a stării (`CONVERSATION_STATE_V2_WRITE_ENABLED`, nepromovat de NX-235).
+  Măsurat pe profilul certificat: `schema_version: null`. N-am relaxat invariantul ca să treacă —
+  ar fi fost mutarea țintei.
+- `commerce_success` / `commerce_stale` — CTA-urile de coș se emit din `ctx.grounded`
+  (`processor.py`: `commerce_product_refs` = produsele pe care guardul NX-240 le declară vandabile),
+  deci **doar** pe profilul cu creier unic + projector v2, necertificabil cât timp NX-238 e
+  `NOT-READY`. Măsurat: pe profilul certificat se emit doar kind-uri ne-mutante (`show_more`,
+  `compare_selection`, `request_details`, `request_reviews`, `feedback_up/down`) — niciun `cart_*`.
+
+Acoperirea rămâne deci **9/16 scenarii, 16/22 invarianți**; s-au schimbat CAUZELE, nu cifrele.
 
 ---
 
@@ -354,11 +374,15 @@ lucruri au reparat-o:
 3. **acoperire în plus, obținută prin repararea harnessului**, nu prin relaxarea pragului — vezi
    §6.3.
 
-| Blocat de | Scenarii | Invarianți inerți |
-|---|---|---|
-| Defectele găsite de gate (§6.1) | `product_context`, `commerce_success`, `commerce_stale` | `context_resolved_server_side`, `one_receipt_per_action`, `cart_summary_server_owned`, `no_false_commerce_success` |
-| Flag nepromovat (`CONVERSATION_STATE_V2_WRITE_ENABLED`, NX-235) | `memory_correction` | `revoked_need_absent` |
-| Fără PRODUCĂTOR în `src/` | `routine` | `routine_steps_ordered` |
+| Blocat de | Scenarii | Invarianți inerți | Se închide când |
+|---|---|---|---|
+| Flag nepromovat (`CONVERSATION_STATE_V2_WRITE_ENABLED`, NX-235) | `memory_correction`, `product_context` | `revoked_need_absent`, `context_resolved_server_side` | NX-235 promovează scrierea stării v2 |
+| Profil necertificabil (creier unic + projector v2) | `commerce_success`, `commerce_stale` | `one_receipt_per_action`, `cart_summary_server_owned`, `no_false_commerce_success` | NX-238 dă `GO` |
+| Fără PRODUCĂTOR în `src/` | `routine` | `routine_steps_ordered` | cineva emite blocul `routine` |
+
+Categoriile sunt cauze DISTINCTE, iar un test cere ca ele să însumeze exact numărul de scenarii
+blocate (`test_blocked_subcategories_sum_to_the_blocked_total`) — altfel un gol ar putea rămâne
+nenumărat chiar în artefactul al cărui rost e să numere golurile.
 
 Al treilea rând merită subliniat: tipul `routine` există în contract (NX-228) și are componentă în FE
 (NX-244), dar **nimic din `src/` nu emite un bloc `routine`**. Nu e un eșec de test — e o
@@ -422,11 +446,11 @@ pragurile de aici să se actualizeze, suita pică.
 
 ## 9. Verdict și ce mai lipsește
 
-**NO-GO pentru NX-249**, din patru motive care nu se rezolvă în acest PR:
+**NO-GO pentru NX-249**, din trei motive rămase:
 
-0. **Două defecte reale, găsite la prima rulare** (§6.1): acțiunile opace nu pot fi acceptate
-   (CHECK pe `messages.content_type`), iar contextul/comanda nu se rehidratează la execuție (coloană
-   lipsă în select). Ambele blochează exact funcționalitatea pe care NX-249 ar face canary.
+0. ~~Două defecte reale, găsite la prima rulare~~ — **REPARATE** în #295 (§6.1). Gate-ul rulat pe
+   codul reparat trece 37/37, zero xfail. Nu au deblocat însă niciun scenariu suplimentar: cauzele
+   erau cumulative, vezi §6.1.
 
 1. **PR B nu există.** Jumătatea de browser (renderer pasiv dovedit comportamental, Axe, contract
    cross-repo, responsive, dedupe de SSE, zero mutație de `localStorage`) e ~jumătate din matrice.
@@ -442,9 +466,8 @@ automat.
 
 ### Pași următori, în ordine
 
-0. **Cele două defecte din §6.1**, în cardurile owner (NX-236/237 și NX-234/236). Sunt condiție
-   pentru orice canary: fără ele, butoanele nu funcționează și contextul nu supraviețuiește unui
-   restart. După fix, gate-ul se rerulează și cele două `xfail(strict)` trebuie ȘTERSE.
+0. ~~Cele două defecte din §6.1~~ — **făcut** (#295, migrarea 043 + `m.payload`). Markerii
+   `xfail(strict)` au fost șterși.
 1. **PR B** (repo `Sales MVP Frontend Final`, branch `test/NX-247-stage1-web-e2e-frontend`):
    Playwright + Axe, `scripts/check-cross-repo-chat-contract.mjs` care checkout-uiește backendul la
    SHA-ul din certificat și recalculează `manifest.json`, cele 10 spec-uri din card.

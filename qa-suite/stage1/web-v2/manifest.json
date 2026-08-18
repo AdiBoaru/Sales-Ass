@@ -22,6 +22,6 @@
     "tests/fixtures/web_v2_golden/terminal_failed.json": "4e8a0885b1ec306bf3e546f7e56e1b586e1cb3540afd0efce925d14cd00a35d1"
   },
   "backend_commit": null,
-  "scenarios_sha256": "8f029f6d491be54ff3616ab82d15f60701bebd125ddb2e85473576df6dc8620b",
-  "thresholds_sha256": "c7e2746292ea754d92b2ab77e84e406cdd8fed7907b1367be3983343eb4e61c5"
+  "scenarios_sha256": "668887ffe3d983df75d5cf4722b6507e6dd0d4da2b33eecdf3971cbc3474d3ee",
+  "thresholds_sha256": "afb16657ad7f2974a77585ce4588a1d225b766baed5cca0c45d9f0d4a3893fb2"
 }

@@ -202,6 +202,10 @@ codului. Detalii: [`docs/WEB-QUALITY-EVAL.md`](docs/WEB-QUALITY-EVAL.md); probă
 `python scripts/web_quality_eval.py gate --suite tests/golden/web_journeys`.
 
 **NX-247 PR A/2 — gate E2E Stage 1 pe infrastructură REALĂ; a găsit 2 defecte (verdict NO-GO).**
+Cele două defecte pe care le-a descoperit sunt REPARATE (#295, vezi nota „Fix NX-236/234" mai jos);
+gate-ul rulat pe codul reparat trece **37/37, zero xfail**. Nu au deblocat scenarii suplimentare:
+cauzele erau cumulative (flag de stare v2 nepromovat + profil de creier unic necertificabil), deci
+acoperirea rămâne 9/16 scenarii — s-au schimbat CAUZELE, nu cifrele.
 Harnessul (`tests/e2e/`) nu construiește o aplicație paralelă: ia EXACT obiectul FastAPI din
 `src.webhook.app` (middleware de body cap, lifespan de observabilitate, montare condiționată — toate
 reale), pe Postgres + Redis REALE, cu model/embedder FALȘI. Poarta e STRUCTURALĂ, nu un flag: nu
