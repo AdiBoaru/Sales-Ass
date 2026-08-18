@@ -361,8 +361,10 @@ politică** — altfel un FAQ de consultanță ar „salva" pe un mesaj mixt și
 
 ## Stagiul 8 — `triage_stage` (nano clasifică ruta)
 
-**0. 📍 Unde:** [triage.py:212](../src/worker/stages/triage.py#L212). Primul touchpoint LLM. **Scrie:**
-`ctx.route` (+ reply pentru simple/clarify). Nodurile `TRI`/`TVAL`/`ROUTE` din 4a.
+**0. 📍 Unde:** [triage.py:293](../src/worker/stages/triage.py#L293). Primul touchpoint LLM. **Scrie:**
+`ctx.route` (+ reply pentru simple/clarify). Nodurile `TRI`/`TPARSE`/`TCAT`/`ROUTE` din 4a
+(`TVAL` a fost SPART în două de NX-250: schema invalidă cade în plasa finală, dar o categorie
+inventată doar se aruncă tăcut și ruta continuă — vezi `architecture/04-EVIDENCE.md` §3 · D1).
 *(Deep-dive complet: cap. 8.8 din [MASTERCLASS-RO.md](MASTERCLASS-RO.md). Rezumat aici.)*
 
 **1. 🎭 Analogie:** recepționera care ascultă ce vrei și te trimite la ghișeul potrivit: vânzări,
@@ -434,8 +436,9 @@ Mai bine botul asistă singur decât să promită un om care nu vine.
 
 ## Stagiul 10 — `agent_stage` (mini + tool loop + validator)
 
-**0. 📍 Unde:** [agent.py:957](../src/worker/stages/agent.py#L957). 1411 linii. **Scrie:** `ctx.reply`,
-`ctx.retrieval`, `ctx.state_patch`. Diagrama 4b + 4c.
+**0. 📍 Unde:** [agent.py:347](../src/worker/stages/agent.py#L347). 528 linii — monolitul de 1411 a
+fost spart în 19 module `src/agent/*` (NX-142/143/144), iar `agent_stage` a rămas doar regia.
+**Scrie:** `ctx.reply`, `ctx.retrieval`, `ctx.state_patch`. Diagrama 4b + 4c.
 
 *(Deep-dive COMPLET livrat în chat — Modulul 3, 7 unități: gărzi · intenții PRE-loop · merge_constraints
 · prompt+tool loop · compunere POST-loop · arborele de finalize · VALIDATORUL. Se consolidează aici la

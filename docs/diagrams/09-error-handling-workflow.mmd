@@ -16,7 +16,7 @@ flowchart TD
     L5["fallback_stage: clarify question<br/>NEVER silence — runner.py:169"]:::ok
   end
 
-  subgraph ValErr["Validator failures — agent/validator.py:195"]
+  subgraph ValErr["Validator failures — agent/validator.py:196"]
     V1{"reply valid? prices/links/claims"}:::dec
     V2["1 retry with allowed prices<br/>finalize.py:94-148"]:::deg
     V3{"valid now?"}:::dec

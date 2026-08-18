@@ -1,8 +1,13 @@
 # Epicul „Tool-uri Agent" — Arhitectură + Analiză de producție (2026)
 
 _Document de design. Decide CUM convertim agentul din RAG (retrieve-then-generate) într-un
-agent cu tool-calling determinist (max 3 apeluri/tur), CE tool-uri construim și în ce ordine,
+agent cu tool-calling determinist, CE tool-uri construim și în ce ordine,
 și CE mai lipsește pentru producție reală în 2026. Sursă pentru cardurile epicului._
+
+> **HISTORICAL pe un punct (NX-250, 2026-08-18):** formularea „max 3 apeluri/tur" din acest
+> document e **infirmată de implementare**. Capul dur (`max_steps=3`, `src/agent/llm.py:364`) e pe
+> **runde de model**; o rundă poate emite N tool calls și toate se execută. Măsurat: 3 runde × 3
+> apeluri ⇒ 9 execuții. Vezi [`architecture/04-EVIDENCE.md`](architecture/04-EVIDENCE.md) §3 · D2.
 
 ---
 
