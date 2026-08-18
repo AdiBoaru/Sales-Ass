@@ -201,6 +201,42 @@ măsurat azi: **`NOT-READY`** — 10/60 dev, holdout nesigilat. Deblocarea e a N
 codului. Detalii: [`docs/WEB-QUALITY-EVAL.md`](docs/WEB-QUALITY-EVAL.md); probă:
 `python scripts/web_quality_eval.py gate --suite tests/golden/web_journeys`.
 
+**NX-247 PR A/2 — gate E2E Stage 1 pe infrastructură REALĂ; a găsit 2 defecte (verdict NO-GO).**
+Cele două defecte pe care le-a descoperit sunt REPARATE (#295, vezi nota „Fix NX-236/234" mai jos);
+gate-ul rulat pe codul reparat trece **37/37, zero xfail**. Nu au deblocat scenarii suplimentare:
+cauzele erau cumulative (flag de stare v2 nepromovat + profil de creier unic necertificabil), deci
+acoperirea rămâne 9/16 scenarii — s-au schimbat CAUZELE, nu cifrele.
+Harnessul (`tests/e2e/`) nu construiește o aplicație paralelă: ia EXACT obiectul FastAPI din
+`src.webhook.app` (middleware de body cap, lifespan de observabilitate, montare condiționată — toate
+reale), pe Postgres + Redis REALE, cu model/embedder FALȘI. Poarta e STRUCTURALĂ, nu un flag: nu
+există `FAKE_LLM=true` nicăieri — `build_stage1_app` refuză să pornească dacă `ENV != test`, dacă
+hostul nu e loopback, dacă secretul de control (per proces) e slab sau dacă `/web/v2/turns` nu e
+montat pe aplicația reală; `tests/` nu intră în imaginea de producție (verificat pe Dockerfile).
+Embedderul fals e un spațiu vectorial REAL (token → direcție unitară din sha256), deci
+`search_products_semantic` rankează pe semnal, nu pe hazard — un stub de zerouri ar face orice produs
+egal de aproape și retrievalul n-ar fi exersat. Modelul fals **compune răspunsul din ce au întors
+tool-urile REALE**, deci validatorul (stagiul 8) și grounding guardul pot să respingă. Doi tenanți cu
+`business_id` care diferă DOAR în ultimul nibble (un bug de izolare pe prefix nu are unde să se
+ascundă). Matricea R1–R22 e automatizată la nivel de backend (**35 passed, 2 xfailed, 0 skipped**); R15 e N/A
+cu justificare (payloadul trebuie stricat DUPĂ ce a părăsit serverul). Acoperirea e DECLARATĂ pe
+scenariu (`backend_coverage`) și legată de execuție prin test: **9/16 scenarii, 16/22 invarianți pe
+date reale**; golurile sunt publicate în `gate.known_gaps` cu cauză (3 blocate de defectele de mai
+jos, 1 de un flag nepromovat, 1 fără producător în `src/`) — un gate care își ascunde golurile e mai
+periculos decât unul care le arată.
+Contractul e un artefact canonic consumat de ambele repo-uri (`qa-suite/stage1/web-v2/`): fără
+timestamp (determinismul e condiția ca driftul să însemne ceva), `backend_commit` doar în certificatul
+de rulare, hash-uri pe bytes normalizați CRLF→LF; `--check` rulează pe FIECARE PR în `ci.yml`.
+Pragurile sunt un singur artefact: zerourile de corectitudine sunt ratificate, latența e RAPORTATĂ
+(`slo.RATIFIED is False` — un test cere ca artefactul și codul să nu divergă).
+**Cele 2 defecte găsite, owner alte carduri, NEreparate aici (Out of Scope), marcate `xfail(strict)`:**
+(1) `messages.content_type = 'action'` (NX-236/237) e respins de CHECK-ul schemei ⇒ cu
+`WEB_ACTIONS_ENABLED=true` acceptul oricărui turn pornit dintr-un buton crapă; (2)
+`load_execution_refs` nu proiectează `m.payload` în selectul exterior ⇒ `page_context` și `action` ies
+MEREU `None` (NX-234/236) — persistarea e corectă, citirea e ruptă. Verdict: **NO-GO pentru NX-249**
+(lipsesc PR B/browser, cele 2 fixuri, ratificarea pragurilor; NX-238 rămâne `NOT-READY`, deci
+profilul certificat e `v2_transport`, nu creierul unic). Detalii + runbook copy/paste:
+[`docs/STAGE1-WEB-E2E.md`](docs/STAGE1-WEB-E2E.md).
+
 **Fix NX-236/234 — două defecte care făceau acțiunile opace și contextul de pagină INERTE.**
 Găsite de gate-ul E2E NX-247 la prima rulare pe Postgres real; ambele invizibile până atunci fiindcă
 flag-urile sunt OFF în producție, iar suitele existente foloseau monkeypatch în loc de DB.
@@ -749,6 +785,7 @@ nativx-assistant/
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
 │   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web v1 (carduri+comparison) pt randarea FE (paritate iZi)
 │   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
+│   ├── STAGE1-WEB-E2E.md        ← NX-247: gate E2E (harness real, matricea R1–R22, runbook, verdict)
 │   ├── NX-241-TURN-DEADLINE.md  ← NX-241: deadline unic, manifest de bugete, SLO + runbook
 │   ├── NX-240-GROUNDED-PROJECTOR.md ← NX-240: grounding + projector pur + regulile de adevăr
 │   ├── WEB-VIEW-V2-DATA-READINESS.md ← NX-240: matricea de câmpuri + coverage măsurat (300 prod.)
@@ -856,6 +893,11 @@ nativx-assistant/
 ├── tests/
 │   ├── golden/                  ← cazuri golden (cases.json) + fixture-uri de conversație
 │   ├── test_golden.py           ← G8-1: gate CI (ScriptedLLM + stub-uri DB, zero OpenAI/DB real)
+│   ├── e2e/                     ← NX-247: harnessul E2E Stage 1 (TEST-ONLY, nu intră în imagine)
+│   │   ├── stage1_app.py        ← app factory peste aplicația REALĂ + gărzi + garda de rețea
+│   │   ├── stage1_scenarios.py  ← tenanți sintetici, embedder determinist, model fals, invarianți
+│   │   ├── stage1_probes.py     ← probe READ-ONLY tenant-scoped (registru de SQL, verificat mecanic)
+│   │   └── test_stage1_*.py     ← self-teste, manifest de contract, matricea R1–R22
 │   ├── test_pipeline.py
 │   ├── test_tools.py
 │   ├── test_validator.py

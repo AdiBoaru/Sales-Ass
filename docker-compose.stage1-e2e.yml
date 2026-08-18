@@ -1,0 +1,106 @@
+# NX-247 — stack EFEMER pentru gate-ul E2E Stage 1. Separat de `docker-compose.yml` deliberat:
+# acela vorbește cu Supabase remote și cu Redis-ul de dev; aici vrem un Postgres LOCAL, aruncabil,
+# pe care migrările pot rula de la zero și pe care un test poate face `flushdb` fără să distrugă
+# nimic. Niciun secret real, niciun volum persistent, niciun port de producție.
+#
+#   docker compose -f docker-compose.stage1-e2e.yml up -d postgres redis
+#   docker compose -f docker-compose.stage1-e2e.yml run --rm bootstrap
+#   # apoi, din host:
+#   SUPABASE_DB_URL=postgresql://stage1:stage1@127.0.0.1:55432/stage1 python scripts/migrate.py
+#
+# Curățare COMPLETĂ (fără reziduu, cerință de manual drive):
+#   docker compose -f docker-compose.stage1-e2e.yml down -v
+#
+# `tmpfs` pe datele Postgres: stackul e efemer prin CONSTRUCȚIE, nu prin disciplină — nu există
+# volum din care să reînvie starea unei rulări anterioare și să contamineze numărătorile.
+
+name: nativx-stage1-e2e
+
+services:
+  postgres:
+    # pgvector, nu postgres simplu: `product_embeddings.embedding` e `vector(1536)`, iar un harness
+    # care sare peste embeddings ar testa calea lexicală și ar raporta verde pe alt drum decât cel
+    # de producție.
+    image: pgvector/pgvector:pg16
+    environment:
+      # `postgres` ca superuser, nu `stage1`: migrarea 003 dă GRANT-uri explicit rolului `postgres`
+      # (mediul Supabase îl are întotdeauna). Cu alt nume de superuser, migrarea pică pe „role
+      # postgres does not exist" — adică local n-am putea dovedi că migrările pornesc de la zero.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: stage1
+      POSTGRES_DB: stage1
+      # Fsync off: date efemere. Nu copia setarea nicăieri altundeva.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: >
+      postgres
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c max_connections=100
+    ports:
+      - "127.0.0.1:55432:5432" # DOAR loopback: stackul nu are ce căuta în rețea
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stage1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    # Fără `--requirepass`: e un Redis efemer, pe loopback, fără date. Un secret aici ar fi teatru,
+    # iar `.env`-ul de test ar trebui să-l poarte degeaba.
+    command: redis-server --save "" --appendonly no --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Aplică schema de bază pe DB-ul gol. Migrările delta (003→042) NU se aplică aici: ele trec prin
+  # `scripts/migrate.py`, care e singurul runner permis (NX-123) și care înregistrează fiecare
+  # migrare în `schema_migrations`. Dublarea lor aici ar crea un al doilea drum de schemă.
+  bootstrap:
+    image: pgvector/pgvector:pg16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./docs:/schema:ro
+    environment:
+      PGPASSWORD: stage1
+    # Ce lipsește pe un Postgres simplu față de Supabase, și de ce contează:
+    #  • `auth.uid()` — politicile RLS din schema_v2 o REFERĂ, iar Postgres validează funcția la
+    #    crearea politicii. Stubul întoarce NULL: politicile de dashboard devin fals-pentru-oricine,
+    #    exact ce vrem — harnessul rulează pe `bot_runtime` + `app.business_id`, nu pe identitatea
+    #    de dashboard.
+    #  • rolurile `anon` / `authenticated` / `service_role` — migrările 003/009/011/039 le dau
+    #    GRANT-uri. Le creăm NOLOGIN: există ca țintă de grant, dar nimeni nu se poate conecta cu
+    #    ele. Fără ele, „migrările pornesc pe DB goală" ar fi o afirmație netestată.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -h postgres -U postgres -d stage1 -v ON_ERROR_STOP=1 \
+          -c 'create schema if not exists auth' \
+          -c "create or replace function auth.uid() returns uuid language sql stable as \$\$ select null::uuid \$\$" \
+          -c "do \$\$ begin
+                if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+                if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+                if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
+              end \$\$"
+        psql -h postgres -U postgres -d stage1 -v ON_ERROR_STOP=1 -f /schema/schema_v2_production.sql
+        # 003 + 005 se aplică AICI, prin psql, nu prin runner:
+        #  • 003 creează rolul `bot_runtime` (de care 005 are nevoie);
+        #  • 005 folosește variabila psql `:'bot_password'` — parola nu se comite, deci pe DB-ul
+        #    real a fost aplicată cu apply_005.py. `conn.execute` din runner ar da syntax error.
+        # Runnerul află că sunt făcute prin `--mark-applied 003,005` (checksum REAL, deci `--check`
+        # continuă să prindă o editare ulterioară a fișierelor).
+        psql -h postgres -U postgres -d stage1 -v ON_ERROR_STOP=1 -f /schema/003_bot_runtime_role.sql
+        psql -h postgres -U postgres -d stage1 -v ON_ERROR_STOP=1 \
+          -v bot_password="'stage1-ephemeral'" -f /schema/005_bot_runtime_login.sql
+        echo "schema de bază + 003/005 aplicate; rulează acum, din host:"
+        echo "  python scripts/migrate.py --mark-applied 003,005 && python scripts/migrate.py"

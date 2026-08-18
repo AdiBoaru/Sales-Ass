@@ -1,0 +1,145 @@
+name: Stage 1 — Web E2E (NX-247)
+
+# Gate-ul de release al WebWidgetului v2. Rulează pe `main`, nightly și manual înainte de release;
+# NU pe fiecare PR (aduce Postgres + Redis și aplică schema de la zero). Partea rapidă — driftul de
+# contract și self-testele harnessului — trăiește în `ci.yml` și rulează pe fiecare PR.
+#
+# Jumătatea de BROWSER (Playwright, contract cross-repo, Axe) e a PR-ului B, în repo-ul frontend:
+# el checkout-uiește backendul la SHA-ul declarat și pornește ACEST harness. Aici se dovedește ce
+# nu are nevoie de browser — și, important, se emite CERTIFICATUL de pereche pe care NX-249 îl cere.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 3 * * *" # nightly, după CI-ul de la 03:00
+  workflow_dispatch:
+    inputs:
+      frontend_sha:
+        description: "SHA-ul frontendului de certificat împreună cu acest backend"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage1-web-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-gate:
+    name: Harness + matrice de defecte (Postgres + Redis reale)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: stage1
+          POSTGRES_DB: stage1
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stage1"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+    env:
+      ENV: test
+      LOG_LEVEL: WARNING
+      SUPABASE_DB_URL: postgresql://postgres:stage1@127.0.0.1:5432/stage1
+      REDIS_URL: redis://127.0.0.1:6379/0
+      # Secrete SINTETICE, generate în job. Niciun secret de repo: gate-ul nu are nevoie de niciunul,
+      # iar un job care cere secrete nu poate rula pe un fork.
+      OPENAI_API_KEY: stage1-e2e-no-network
+      META_ACCESS_TOKEN: test-token
+      META_APP_SECRET: test-secret
+      META_VERIFY_TOKEN: test-verify
+      META_PHONE_NUMBER_ID: "000000000"
+      DAILY_COST_CAP_USD: "5"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements-dev.txt
+
+      # Ce are Supabase din oficiu și un Postgres simplu nu (identic cu bootstrapul din
+      # docker-compose.stage1-e2e.yml — aceleași comenzi, ca runbookul local și CI-ul să nu divergă):
+      # stubul `auth.uid()` (politicile RLS îl REFERĂ, iar Postgres validează funcția la creare) și
+      # rolurile țintă de GRANT din migrările 003/009/011/039.
+      - name: Schema de bază pe DB gol
+        run: |
+          set -euo pipefail
+          export PGPASSWORD=stage1
+          psql -h 127.0.0.1 -U postgres -d stage1 -v ON_ERROR_STOP=1 \
+            -c 'create schema if not exists auth' \
+            -c "create or replace function auth.uid() returns uuid language sql stable as \$\$ select null::uuid \$\$" \
+            -c "do \$\$ begin
+                  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+                  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+                  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
+                end \$\$"
+          psql -h 127.0.0.1 -U postgres -d stage1 -v ON_ERROR_STOP=1 -f docs/schema_v2_production.sql
+          # 003 + 005 prin psql: 005 folosește variabila psql `:'bot_password'` (parola nu se comite),
+          # deci runnerul nu o poate executa. 003 vine cu ea — creează rolul de care 005 are nevoie.
+          psql -h 127.0.0.1 -U postgres -d stage1 -v ON_ERROR_STOP=1 -f docs/003_bot_runtime_role.sql
+          psql -h 127.0.0.1 -U postgres -d stage1 -v ON_ERROR_STOP=1 \
+            -v bot_password="'stage1-ephemeral'" -f docs/005_bot_runtime_login.sql
+
+      # Migrările NUMAI prin runnerul canonic (NX-123). „Pornesc pe DB goală" e o cerință de
+      # self-test: dacă o migrare nu se poate aplica de la zero, o știm aici, nu la primul client.
+      - name: Migrări de la zero
+        run: |
+          python scripts/migrate.py --mark-applied 003,005
+          python scripts/migrate.py
+          python scripts/migrate.py --check
+
+      - name: Contractul e la zi (drift ⇒ pică înainte de orice test)
+        run: python scripts/stage1_contract_manifest.py --check
+
+      - name: Self-testele harnessului
+        run: pytest -q tests/e2e/test_stage1_harness.py tests/e2e/test_stage1_contract_manifest.py
+
+      # `-rs` deliberat: un skip trebuie să se VADĂ în log. Politica de flake interzice skip pe P0 în
+      # branchul de release, iar un skip tăcut arată în raport exact ca o trecere.
+      # Zero rețea e dovedit din INTERIORUL procesului (`deny_outbound_network` + contoarele
+      # modelului fals); jobul nu are nevoie de un firewall pe runner, iar `OPENAI_API_KEY` e o
+      # valoare sintetică, deci nici măcar un apel scăpat n-ar putea costa.
+      - name: Matricea de defecte + scenariile canonice
+        run: pytest -q -rs -m "integration and stage1_web"
+
+      - name: Certificatul perechii (SHA backend + SHA frontend)
+        if: always()
+        run: |
+          python scripts/stage1_contract_manifest.py \
+            --certificate reports/stage1/certificate.json \
+            ${{ inputs.frontend_sha && format('--frontend-sha {0}', inputs.frontend_sha) || '' }}
+
+      # Artefactul e mic și fără PII: hash-uri, versiuni și două SHA-uri. Politica de redaction
+      # (`E2E_SECRET_SENTINEL`) se aplică artefactelor de BROWSER, în PR B — aici nu există trace,
+      # video sau body de request de urcat.
+      - name: Publică certificatul
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-certificate-${{ github.sha }}
+          path: reports/stage1/certificate.json
+          retention-days: 14
+          if-no-files-found: warn
