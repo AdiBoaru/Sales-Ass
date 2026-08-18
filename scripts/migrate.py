@@ -160,6 +160,41 @@ async def baseline(conn: asyncpg.Connection, docs_dir: Path = DOCS_DIR) -> list[
     return marked
 
 
+async def mark_applied(
+    conn: asyncpg.Connection, versions: list[str], docs_dir: Path = DOCS_DIR
+) -> list[str]:
+    """Marchează migrări PUNCTUALE ca aplicate, cu checksumul REAL, fără a le rula.
+
+    Există pentru o singură clasă de fișiere: cele care nu pot trece prin `conn.execute` fiindcă
+    folosesc variabile psql. `005_bot_runtime_login.sql` conține `:'bot_password'` — parola nu se
+    comite, deci pe DB-ul real a fost aplicată cu `apply_005.py`. Pe un Postgres EFEMER (NX-247)
+    o aplică `psql -v bot_password=…`, iar apoi runnerul trebuie să afle că e făcută.
+
+    Diferența față de `--baseline`: acolo se marchează TOT ca `'legacy'`, ceea ce pe o DB goală ar
+    sări peste toate migrările și ar lăsa o schemă incompletă declarată completă. Aici se
+    marchează exact ce s-a cerut, cu checksumul de pe disc — deci `--check` continuă să detecteze
+    dacă fișierul e editat ulterior.
+    """
+    await conn.execute(_BOOTSTRAP_DDL)
+    by_version = {m.version: m for m in discover_migrations(docs_dir)}
+    unknown = sorted(set(versions) - set(by_version))
+    if unknown:
+        raise RuntimeError(f"versiuni inexistente în docs/: {', '.join(unknown)}")
+    marked: list[str] = []
+    for version in versions:
+        m = by_version[version]
+        res = await conn.execute(
+            "insert into schema_migrations(version, filename, checksum) "
+            "values ($1, $2, $3) on conflict (version) do nothing",
+            m.version,
+            m.filename,
+            m.checksum,
+        )
+        if res.split()[-1] == "1":
+            marked.append(m.version)
+    return marked
+
+
 async def assert_migrations_current(pool: asyncpg.Pool, docs_dir: Path = DOCS_DIR) -> None:
     """Poarta de boot (P6): refuză pornirea workerului dacă există migrări neaplicate.
     Workerul NU pornește tăcut peste o schemă incompletă (regresia 010/012 care crăpa
@@ -186,21 +221,31 @@ def _dsn() -> str:
     return dsn
 
 
+#: Hosturi pentru care TLS nu are ce proteja: traficul nu părăsește mașina. NX-247 are nevoie de
+#: asta ca migrările să poată rula pe Postgres-ul EFEMER din `docker-compose.stage1-e2e.yml`
+#: (fără certificat) — altfel runnerul canonic, singurul permis, n-ar putea aplica schema local, iar
+#: runbookul ar fi copy/paste doar pe hârtie. Poarta e pe host, nu pe un flag: un DSN remote nu
+#: pierde niciodată SSL-ul din greșeală.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
 def _connect_kwargs(dsn: str) -> dict:
-    """IPv4 + SSL fără verificare de hostname pentru pooler-ul Supabase (cf. apply_012)."""
+    """IPv4 + SSL fără verificare de hostname pentru pooler-ul Supabase (cf. apply_012).
+    Excepție STRICT pe loopback: fără SSL (un Postgres local îl refuză, și pe bună dreptate)."""
     p = urlparse(dsn)
-    ip = socket.getaddrinfo(p.hostname, p.port or 5432, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return {
-        "host": ip,
+    base = {
         "port": p.port or 5432,
         "user": unquote(p.username),
         "password": unquote(p.password),
         "database": (p.path or "/postgres").lstrip("/"),
-        "ssl": ctx,
     }
+    if p.hostname in _LOOPBACK_HOSTS:
+        return {**base, "host": p.hostname, "ssl": False}
+    ip = socket.getaddrinfo(p.hostname, p.port or 5432, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return {**base, "host": ip, "ssl": ctx}
 
 
 async def _connect() -> asyncpg.Connection:
@@ -213,6 +258,11 @@ async def _amain(args: argparse.Namespace) -> int:
         if args.baseline:
             marked = await baseline(conn)
             print(f"baseline: {len(marked)} migrări marcate aplicate: {', '.join(marked) or '—'}")
+            return 0
+        if args.mark_applied:
+            versions = [v.strip() for v in args.mark_applied.split(",") if v.strip()]
+            marked = await mark_applied(conn, versions)
+            print(f"marcate aplicate: {', '.join(marked) or '— (erau deja)'}")
             return 0
         if args.check:
             pend = await pending_migrations(conn)
@@ -249,6 +299,12 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="listează pending fără a aplica")
     ap.add_argument(
         "--baseline", action="store_true", help="marchează tot ca aplicat (adoptare DB existentă)"
+    )
+    ap.add_argument(
+        "--mark-applied",
+        metavar="VERSIUNI",
+        help="marchează versiuni punctuale ca aplicate, cu checksum real (ex. 005) — pentru "
+        "migrările psql-only, aplicate în afara runnerului",
     )
     args = ap.parse_args()
     raise SystemExit(asyncio.run(_amain(args)))

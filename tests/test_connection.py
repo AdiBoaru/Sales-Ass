@@ -9,8 +9,11 @@ Două straturi:
     Necesită SUPABASE_DB_URL (+ opțional DATABASE_URL_BOT) în .env, 003+004 aplicate.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
+import src.db.connection as conn_mod
 from src.db.connection import (
     _assert_bot_role,
     _vector_decode,
@@ -177,3 +180,53 @@ async def test_two_consecutive_checkouts_isolated(_pools):
         other = await conn.fetchval("select count(*) from products")
     assert demo > 0  # NX-177: invariant, nu numărul din seed (vezi test_tenant_sees_own_products)
     assert other == 0  # ăsta e assertul care demonstrează izolarea
+
+
+# ── NX-247: excepția de loopback pentru SSL (harnessul E2E pe Postgres efemer) ────────────────
+# Contextul: `_connect_kwargs` forțează SSL pe Windows fiindcă pooler-ul Supabase îl cere. Un
+# Postgres local, fără certificat, REFUZĂ upgrade-ul — deci fără această excepție harnessul Stage 1
+# (docker-compose.stage1-e2e.yml) n-ar putea rula pe dev, iar runbookul ar fi copy/paste doar pe
+# hârtie. Poarta e pe HOST, nu pe un flag: testele de mai jos există ca nimeni să nu o lărgească
+# într-un „dacă SSL pică, mergem fără" — care ar coborî silențios securitatea pe un DSN remote.
+
+
+def test_loopback_dsn_connects_without_ssl(monkeypatch):
+    monkeypatch.setattr(conn_mod.sys, "platform", "win32")
+    kwargs = conn_mod._connect_kwargs("postgresql://u:p@127.0.0.1:55432/db")
+    assert kwargs["ssl"] is False
+    assert kwargs["host"] == "127.0.0.1"
+    assert kwargs["port"] == 55432
+    assert kwargs["database"] == "db"
+
+
+def test_remote_dsn_keeps_ssl(monkeypatch):
+    """Singura garanție care contează: un host remote nu pierde SSL-ul din greșeală.
+
+    `ssl.create_default_context` e STUBAT, nu doar `sys.platform`. Prima versiune patch-uia
+    numai platforma, iar pe Linux `create_default_context()` intra pe ramura Windows a modulului
+    `ssl` și crăpa cu `NameError: enum_certificates` — funcția există doar pe Windows. Un patch de
+    platformă are efecte mult dincolo de codul testat: a trecut local (Windows) și a picat în CI.
+    Stubul îl ține pe subiect — ce kwargs se construiesc, nu cum arată un context TLS real.
+    """
+    # `SimpleNamespace`, nu `object()`: codul setează `check_hostname`/`verify_mode` pe context.
+    sentinel = SimpleNamespace()
+    monkeypatch.setattr(conn_mod.sys, "platform", "win32")
+    monkeypatch.setattr(conn_mod.ssl, "create_default_context", lambda *a, **k: sentinel)
+    monkeypatch.setattr(
+        conn_mod.socket,
+        "getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("203.0.113.10", 5432))],
+    )
+    kwargs = conn_mod._connect_kwargs("postgresql://u:p@db.example.com:5432/db")
+    assert kwargs["ssl"] is sentinel, "hostul remote trebuie să primească un context SSL"
+    assert kwargs["host"] == "203.0.113.10"
+    # Și verificarea de hostname rămâne dezactivată DELIBERAT (pooler-ul Supabase), nu accidental.
+    assert sentinel.check_hostname is False
+
+
+def test_migrate_runner_applies_the_same_loopback_rule():
+    """Runnerul de migrări are propriul `_connect_kwargs`. Dacă cele două ar divergea, ori
+    migrările n-ar rula local, ori una dintre căi ar pierde SSL-ul pe remote."""
+    from scripts.migrate import _connect_kwargs as migrate_kwargs
+
+    assert migrate_kwargs("postgresql://u:p@localhost:5432/db")["ssl"] is False
