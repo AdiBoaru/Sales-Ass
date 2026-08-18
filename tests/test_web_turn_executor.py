@@ -400,3 +400,47 @@ def test_executor_types_carry_no_raw_body_or_token():
     for cls in (te.AcceptedTurn, te.TurnClaim, te.TerminalCommit):
         fields = set(cls.__dataclass_fields__)
         assert not fields & {"body", "text", "token", "sig", "conn", "connection"}
+
+
+# ── Garda de proiecție pentru `load_execution_refs` (regresie NX-234/236) ─────────────────────
+# Defectul: query-ul selecta `payload` în subqueryul LATERAL, dar nu în proiecția EXTERIOARĂ, iar
+# codul citea `rec["payload"]`. Rezultat: `page_context`/`action` mereu None — persistarea corectă,
+# citirea ruptă. Un test comportamental (DB real) e dovada; testul de mai jos e plasa IEFTINĂ care
+# rulează pe fiecare PR.
+#
+# De ce e ȚINTIT pe această funcție și nu o gardă generală peste `src/db/queries/`: o gardă generală
+# ar trebui să distingă proiecția exterioară de subqueries, adică să parseze SQL. Am încercat
+# varianta ieftină („cuvântul apare în SQL") — nu prinde defectul, fiindcă `payload` APĂREA, doar
+# în locul greșit. O gardă care nu poate eșua pe bug-ul care a motivat-o e mai rea decât niciuna.
+
+
+def _outer_select_list(sql: str) -> str:
+    """Lista de coloane a proiecției EXTERIOARE: între primul `select` și `from web_turns`."""
+    lowered = sql.lower()
+    start = lowered.index("select") + len("select")
+    end = lowered.index("from web_turns")
+    return sql[start:end]
+
+
+def test_load_execution_refs_projects_every_column_it_reads() -> None:
+    import inspect
+    import re
+
+    from src.db.queries import web_turns as wt
+
+    source = inspect.getsource(wt.load_execution_refs)
+    # Blocul triple-quoted care conține query-ul — NU primul (acela e docstringul funcției).
+    blocks = [b for b in source.split('"""') if "from web_turns" in b.lower()]
+    assert len(blocks) == 1, f"am găsit {len(blocks)} blocuri SQL; testul așteaptă exact unul"
+    projected = _outer_select_list(blocks[0]).lower()
+
+    # Cheile citite din Record de către funcție, exact cum le scrie codul.
+    read_keys = set(re.findall(r'rec\[\s*"([a-z_]+)"\s*\]', source))
+    read_keys |= set(re.findall(r'"([a-z_]+)"\s+in\s+rec', source))
+    assert read_keys, "nu am găsit nicio citire din Record — testul și-a pierdut ținta"
+
+    missing = sorted(k for k in read_keys if not re.search(rf"\b{k}\b", projected))
+    assert not missing, (
+        f"`load_execution_refs` citește {missing} din Record, dar nu le selectează în proiecția "
+        "EXTERIOARĂ (o coloană prezentă doar în subqueryul lateral NU ajunge în Record)"
+    )

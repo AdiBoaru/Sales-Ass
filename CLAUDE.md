@@ -233,6 +233,26 @@ MEREU `None` (NX-234/236) — persistarea e corectă, citirea e ruptă. Verdict:
 profilul certificat e `v2_transport`, nu creierul unic). Detalii + runbook copy/paste:
 [`docs/STAGE1-WEB-E2E.md`](docs/STAGE1-WEB-E2E.md).
 
+**Fix NX-236/234 — două defecte care făceau acțiunile opace și contextul de pagină INERTE.**
+Găsite de gate-ul E2E NX-247 la prima rulare pe Postgres real; ambele invizibile până atunci fiindcă
+flag-urile sunt OFF în producție, iar suitele existente foloseau monkeypatch în loc de DB.
+(1) `messages.content_type = 'action'` (scris de `src/web/app.py` la accept) era respins de CHECK-ul
+schemei ⇒ cu `WEB_ACTIONS_ENABLED=true` acceptul ORICĂRUI turn pornit dintr-un buton crăpa cu
+`CheckViolationError`. Migrarea **043** extinde vocabularul (nu schimbă valoarea scrisă: `body` e gol
+pentru o acțiune, deci `text` ar fi o minciună în ledger, iar `interactive` e termen Meta pentru
+mesaje de PROVIDER — l-am împrumuta pentru un concept web-only și analytics-ul n-ar mai putea
+distinge „a scris" de „a apăsat"). (2) `load_execution_refs` citea `payload` din Record, dar
+proiecția EXTERIOARĂ a query-ului nu-l selecta — coloana exista doar în subqueryul lateral, deci
+`page_context` și `action` ieșeau MEREU `None`: ancora de pagină (NX-234) nu ajungea niciodată la
+execuție, iar un tur de acțiune reluat își pierdea comanda (NX-236). Persistarea era corectă tot
+timpul; doar citirea era ruptă. Cele două se COMPUN: fixul singur al primului ar fi produs ture de
+acțiune acceptate care rulează cu `body=""` și fără comandă — un buton care „merge" și răspunde cu o
+clarificare, adică un eșec care trece un canary. Regresii: una comportamentală pe DB real
+(`test_execution_refs_return_page_context_and_action`) + o gardă ieftină care compară cheile citite
+din Record cu proiecția EXTERIOARĂ (`test_load_execution_refs_projects_every_column_it_reads`) —
+ținită pe acest query, fiindcă o gardă generală ar cere parsare de SQL, iar varianta ieftină nu
+prinde defectul (`payload` APĂREA, doar în locul greșit).
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
@@ -754,8 +774,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→042), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 043)
+│   ├── 0NN_*.sql                ← migrări delta (003→043), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 044)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)

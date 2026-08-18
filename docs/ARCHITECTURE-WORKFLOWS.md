@@ -1523,6 +1523,7 @@ welcome_enabled = true
 040_web_turns.sql
 041_conversation_carts.sql
 042_web_feedback.sql
+043_messages_content_type_action.sql
 ```
 
 

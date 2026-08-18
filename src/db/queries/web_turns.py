@@ -448,7 +448,13 @@ async def load_execution_refs(
                ci.external_id as sender_external_id,
                m.id as inbound_msg_id,
                m.body as safe_body,
-               m.content_type
+               m.content_type,
+               -- FIX (găsit de gate-ul E2E NX-247): `m.payload` lipsea din proiecția EXTERIOARĂ.
+               -- Subqueryul lateral îl selecta, dar coloana se pierdea aici, deci cheia nu ajungea
+               -- în Record, iar `page_context`/`action` ieșeau MEREU None. Persistarea era corectă;
+               -- doar drumul de întoarcere era rupt — adică NX-234 (ancora de pagină la execuție)
+               -- era inert, iar un tur de acțiune reluat își pierdea comanda (NX-236).
+               m.payload
           from web_turns w
           join conversations c
             on c.business_id = w.business_id and c.id = w.conversation_id
