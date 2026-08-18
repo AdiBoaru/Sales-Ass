@@ -56,6 +56,13 @@ jobs:
       - name: Acțiunile opace refuză ce trebuie (NX-236)
         run: python scripts/action_drive.py
 
+      # NX-247: driftul de contract `web-view.v2` se prinde pe FIECARE PR, nu în nightly. Costul e
+      # ~1s și fără infrastructură, iar consecința driftului e că frontendul validează altceva decât
+      # livrează serverul — exact clasa de bug care se descoperă în canary. Matricea de defecte, care
+      # cere Postgres + Redis, rămâne în `stage1-web-e2e.yml`.
+      - name: Contractul Stage 1 e la zi (NX-247)
+        run: python scripts/stage1_contract_manifest.py --check
+
   test:
     name: Test (pytest)
     runs-on: ubuntu-latest

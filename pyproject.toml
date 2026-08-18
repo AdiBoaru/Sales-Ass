@@ -14,4 +14,8 @@ testpaths = ["tests"]
 markers = [
     "integration: teste care ating servicii reale (excluse din CI)",
     "slow: teste lente (ex. concurență NX-53); rulează în jobul nightly, nu pe PR-uri",
+    # NX-247: gate-ul E2E Stage 1. Marker SEPARAT de `integration` fiindcă are nevoie de altă
+    # infrastructură (Postgres + Redis + migrări aplicate) și de alt buget de timp: jobul lui
+    # rulează pe `main`/nightly și înainte de release, nu pe fiecare PR.
+    "stage1_web: gate E2E Stage 1 (Postgres + Redis reale, model fake, zero rețea)",
 ]

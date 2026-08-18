@@ -73,3 +73,12 @@ worktrees/
 
 # Artefacte de rulare sim (dump-uri de debug, regenerabile)
 scripts/sim/runs/
+
+# NX-247 — harnessul E2E Stage 1.
+# Handshake-ul conține secretul de control al procesului și tokenurile publice ale tenanților
+# sintetici: efemer, scris la pornire, șters la oprire. Un commit accidental ar publica o cheie
+# de control (chiar dacă loopback-only) și ar deveni un tipar de copiat.
+.stage1-e2e/
+# Certificatul de pereche (SHA backend + SHA frontend) e artefact de CI, nu sursă: îl produce
+# rularea, îl consumă NX-249. Un fișier comis ar fi provenance care nu corespunde niciunei rulări.
+reports/stage1/
