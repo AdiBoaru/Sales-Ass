@@ -1,0 +1,31 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 15 — Stage 1 · 04c · Frontend pasiv, single-flight [UNVERIFIED]
+flowchart TD
+  classDef ext fill:#d6dbdf,stroke:#5d6d7e,color:#000
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef unv fill:#fdebd0,stroke:#af601a,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  BOOT["[OFF] GET /web/bootstrap → view_copy<br/>{composer, chrome, a11y} + default_locale<br/>al TENANTULUI (web/shell_copy.py)"]:::off
+  CTRL["[UNVERIF] Controller singleton — client_turn_id<br/>stabil ÎNAINTE de orice I/O"]:::unv
+  POST["[EXT] POST accept — text BRUT sau token OPAC,<br/>retrimis NESCHIMBAT"]:::ext
+  W202{"[OFF] 202 + status: turul e în lucru"}:::dec
+  SSEC["[OFF*] SSE dacă e disponibil"]:::off
+  POLL["[OFF] Poll / GET recovery — sursa de adevăr<br/>când SSE tace"]:::off
+  DEC{"[UNVERIF] Decoder STRICT: ViewModel valid?"}:::unv
+  ERRV["[OFF] Contract mismatch ⇒ error view server-owned,<br/>NU text inventat în browser"]:::out
+  REG["[UNVERIF] Registry FINIT block.type → componentă<br/>(11 tipuri, sursa de adevăr e schema)"]:::unv
+  APPLY["[UNVERIF] Apply terminal ÎNAINTE de unlock —<br/>controalele rămân blocate în stările neterminale"]:::unv
+  NAV["[EXT] href valid → navigare"]:::ext
+
+  BOOT --> CTRL --> POST --> W202
+  W202 --> SSEC
+  W202 --> POLL
+  SSEC -. "event pierdut / două taburi" .-> POLL
+  SSEC --> DEC
+  POLL --> DEC
+  DEC -- "invalid" --> ERRV
+  DEC -- "valid" --> REG --> APPLY --> NAV

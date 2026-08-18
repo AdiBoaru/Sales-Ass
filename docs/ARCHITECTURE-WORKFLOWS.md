@@ -730,6 +730,328 @@ Cine o folosește: `_finalize_rich` (agent/finalize.py:266-311, recomandare + cr
 
 ---
 
+# Stage 1 · WebWidget v2 — 04a / 04b1 / 04b2 / 04b3 / 04c
+
+> ## ⚠️ CITEȘTE ÎNTÂI: aceste cinci diagrame NU descriu ce rulează
+>
+> **Diagramele 1–10 de mai sus = calea care servește clienți.** Cele cinci de aici = topologia
+> Stage 1 (NX-232→249), **construită și merged, dar dormantă prin flag ȘI absentă din artefactul
+> deployat**. Măsurat 2026-08-18 pe `ba1e44f`: producția întoarce 404 pe `POST /web/v2/turns` și pe
+> `/health/*` (montat NEcondiționat), în timp ce `POST /web/chat` întoarce 422 ca local.
+>
+> NX-250 cerea aceste diagrame ca **as-built după cutover**. Cutoverul nu a avut loc, deci ele sunt
+> livrate ca **topologie ȚINTĂ evidențiată**, nu ca as-built: fiecare element are simbol real în cod
+> la SHA, dar statusul de runtime al fiecăruia este `OPTIONAL/OFF`, nu `LIVE_V2`. Cardul cere
+> explicit acest tratament pentru muchii dormante („`OPTIONAL/OFF` cu config evidence, nu `LIVE`").
+>
+> **Inversiunea față de card:** cardul presupunea „v1 = LEGACY, v2 = live" și cerea o secțiune mică
+> pentru v1. Realitatea e inversă — v1 e **LIVE**, v2 e dormant — deci raportul e inversat, nu
+> cosmetizat. Registrul complet node/edge/invariant + verdictul:
+> [`architecture/04-EVIDENCE.md`](architecture/04-EVIDENCE.md).
+
+**Legenda de status**, folosită în toate cele cinci (statusul e scris și în TEXT, nu doar în
+culoare — o diagramă nu are voie să depindă exclusiv de culoare):
+
+| Marcaj | Înseamnă |
+|---|---|
+| `[OFF]` | cod real, poartă de flag stinsă în default; **și** absent din imaginea deployată |
+| `[OFF*]` | ca `[OFF]`, dar flagul cere alt flag pornit înainte (poartă compusă, validată la boot) |
+| `[LIVE]` | rulează azi în producție (apare doar unde v2 refolosește o piesă v1) |
+| `[EXT]` | sistem extern (browser, provider) — nu e cod al nostru |
+| `[UNVERIF]` | nu a putut fi verificat la acest SHA (vezi 04c: repo FE inaccesibil) |
+
+---
+
+## Diagram 11 — Stage 1 · 04a · Web ingress, durabilitate, serializare, recovery [DORMANT]
+
+Traseul unui tur v2 de la browser până la rezultatul terminal, **cu Postgres ca AUTORITATE** și
+Redis ca simplă trezire. Ce trebuie citit din diagramă: acceptul e idempotent prin cheie de ledger,
+execuția e at-least-once cu fencing pe lease, iar SSE **nu** e autoritate — dacă un event se pierde,
+`GET` reconstruiește același rezultat din ledger.
+
+```mermaid
+flowchart TD
+  classDef ext fill:#d6dbdf,stroke:#5d6d7e,color:#000
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  BROWSER["[EXT] Browser — POST cu client_turn_id<br/>stabil ÎNAINTE de orice I/O"]:::ext
+  CAP["[LIVE] Plafon de corp pe middleware<br/>(webhook/app.py:59)"]:::live
+  GATE{"[OFF] Poarta v2: flag → demo access →<br/>origin → sesiune → legare de origin<br/>(web/app.py:810-821)"}:::off
+  R404["[OFF] 404 — nu confirmăm<br/>existența feature-ului (web/app.py:813)"]:::out
+  PRIV["[LIVE] Frontiera de privacy: apply_boundary<br/>ÎNAINTE de prima scriere durabilă<br/>(worker/processor.py:525)"]:::live
+  ADM["[LIVE] Admission — lease-uri Redis,<br/>plafon global + per tenant<br/>(worker/admission.py:149)"]:::live
+  ACC["[OFF] accept_web_turn — insert-or-inspect<br/>(web/turn_service.py:291)"]:::off
+  LEDGER[("[OFF] web_turns — AUTORITATEA<br/>insert_turn (db/queries/web_turns.py:89)")]:::auth
+  DUP{"[OFF] Cheia există deja?"}:::dec
+  R202["[OFF] 202 + status<br/>(turn_events.py:209)"]:::out
+  R409["[OFF] 409 idempotency_conflict —<br/>aceeași cheie, alt corp (web/app.py:549)"]:::out
+  REPLAY["[OFF] Replay EXACT al aceluiași<br/>ViewModel din ledger (web/app.py:431)"]:::out
+  WAKE["[OFF] Trezire Redis — best-effort,<br/>NU autoritate (turn_executor.py:80)"]:::off
+  SWEEP["[OFF] Sweeper DB — plasa care nu depinde<br/>de Redis (turn_recovery.py:108)"]:::off
+  CLAIM{"[OFF] claim_turn — lease + fencing<br/>pe epoch (web_turns.py:204)"}:::dec
+  EXEC["[OFF] Executor — rulează pipeline-ul<br/>sub deadline (04b1 → 04b3)"]:::off
+  COMMIT["[OFF] complete_turn — commit terminal<br/>ATOMIC (web_turns.py:282)"]:::auth
+  FAILT["[OFF] fail_turn / terminalizare cu cod<br/>(web_turns.py:310 · turn_recovery.py:66)"]:::out
+  GETR["[OFF] GET /v2/turns/id — proiecție din ledger<br/>(web/app.py:1402)"]:::out
+  SSE["[OFF*] SSE — livrare repetabilă,<br/>NU sursă de adevăr (web/app.py:1428)"]:::off
+
+  BROWSER --> CAP --> GATE
+  GATE -- "flag OFF / sesiune invalidă" --> R404
+  GATE -- ok --> PRIV --> ADM --> ACC --> LEDGER
+  LEDGER --> DUP
+  DUP -- "cheie nouă" --> WAKE
+  DUP -- "aceeași cheie, alt corp" --> R409
+  DUP -- "duplicat, tur terminal" --> REPLAY
+  DUP -- "duplicat, tur activ" --> R202
+  WAKE --> CLAIM
+  SWEEP -. "trezire pierdută / worker mort" .-> CLAIM
+  CLAIM -- "lease obținut" --> EXEC
+  CLAIM -- "alt owner deține lease-ul" --> R202
+  EXEC -- "rezultat" --> COMMIT
+  EXEC -- "deadline / eroare / reclaim epuizat" --> FAILT
+  COMMIT --> GETR
+  FAILT --> GETR
+  COMMIT -. "notificare best-effort" .-> SSE
+  SSE -. "event pierdut → clientul reia" .-> GETR
+```
+
+**Invarianții pe care îi susține 04a** (fiecare cu rândul lui în registru):
+
+| Invariant | Cum e susținut | Ce NU promite |
+|---|---|---|
+| accept idempotent | cheie de ledger + `insert-or-inspect`; duplicat terminal ⇒ replay identic | că browserul trimite o singură dată |
+| maximum un owner care execută | `claim_turn` cu lease + fencing pe epoch | că pipeline-ul rulează o singură dată |
+| Postgres e autoritatea | `GET` reconstruiește rezultatul fără Redis; sweeper-ul nu depinde de trezire | că Redis livrează eventul |
+| commit terminal atomic | rândurile din aceeași tranzacție, all-or-nothing | atomicitate peste API extern |
+| niciun drum fără ieșire (P6) | orice ramură ajunge în `COMMIT` sau `FAILT`, ambele proiectate de `GET` | tăcere pe deadline (v. Gates) |
+
+---
+
+## Diagram 12 — Stage 1 · 04b1 · TurnSnapshot, stare/referinta, alegerea caii [DORMANT]
+
+De la contextul ID-only trimis de browser până la decizia „cine răspunde": kernel de acțiune,
+fast path determinist, sau agentul principal. **Frontendul nu furnizează fapte comerciale și nu
+furnizează tenantul** — un câmp comercial în `context` e respins cu 422.
+
+```mermaid
+flowchart TD
+  classDef ext fill:#d6dbdf,stroke:#5d6d7e,color:#000
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+
+  CTXIN["[EXT] Browser: suprafață + identificatori OPACI<br/>fără preț, fără stoc, fără total"]:::ext
+  NORM{"[OFF] Normalizare: câmp comercial în context?<br/>(web/context.py:129)"}:::dec
+  R422["[OFF] 422 — un fapt comercial de la client<br/>nu e input, e o minciună posibilă"]:::out
+  HYDR["[OFF] Rehidratare canonică, tenant-scoped,<br/>UN query (catalog/context_resolver.py:210)"]:::off
+  FRESH["[OFF] Freshness: known / unknown / stale —<br/>UNKNOWN nu devine 0 (context_resolver.py:84)"]:::off
+  TENANT["[LIVE] business_id injectat SERVER-SIDE,<br/>niciodată din client sau din model"]:::auth
+  SNAP["[OFF] TurnSnapshot IMUABIL<br/>(worker/turn_snapshot.py:53-81)"]:::off
+  STATE["[OFF] ConversationStateV2 — nevoi, revocări,<br/>referințe; UN singur scriitor<br/>(conversation/state_reducer.py:179)"]:::off
+  REF["[OFF] Precedență UNICĂ de referință:<br/>action > named > ordinal > page ><br/>selected > single (reference_resolver.py:258)"]:::off
+  STALE["[OFF] Referință stale ⇒ REFUZ explicit,<br/>nu ghicit"]:::out
+  ACT{"[OFF] Turul a pornit dintr-un token de acțiune?"}:::dec
+  KERN["[OFF] Action kernel — o acțiune e o DECIZIE,<br/>nu o intenție de ghicit; rulează ÎNAINTEA<br/>triajului (agent/action_kernel.py)"]:::off
+  FAST{"[OFF] Fast path: obligațiile mesajului sunt<br/>acoperite COMPLET și sigur?<br/>(agent/control_plane.py:88)"}:::dec
+  FASTOUT["[OFF] Răspuns determinist — zero model<br/>(control_plane.py:135)"]:::out
+  BRAIN["[OFF*] MainBrain — UN singur scriitor semantic,<br/>vede mesajul BRUT + istoric + profil<br/>(agent/brain.py:222) → 04b2"]:::off
+
+  CTXIN --> NORM
+  NORM -- "da" --> R422
+  NORM -- "nu" --> HYDR --> FRESH --> TENANT --> SNAP
+  SNAP --> STATE --> REF
+  REF -- "referință expirată" --> STALE
+  REF -- ok --> ACT
+  ACT -- da --> KERN
+  KERN -- "Handled — iese cu reply" --> FASTOUT
+  KERN -- "Continue — setează ruta" --> FAST
+  ACT -- nu --> FAST
+  FAST -- "acoperire completă + sigură" --> FASTOUT
+  FAST -- "orice dubiu" --> BRAIN
+```
+
+**De ce fast path-ul e o poartă de COD, nu o optimizare de model:** poate încheia turul singur DOAR
+pentru clasa „factual exact și sigur". Orice obligație neacoperită ⇒ agentul. `UNKNOWN ≠ MISMATCH`:
+o valoare necunoscută nu se rotunjește la zero și nu devine un „nu se potrivește".
+
+---
+
+## Diagram 13 — Stage 1 · 04b2 · Query/tools, EvidenceBundle, AnswerPlan [DORMANT]
+
+Aici trăiesc **cele trei bugete separate** pe care le confunda documentația veche. Diagrama le
+arată distinct, cu simbolul care le impune.
+
+```mermaid
+flowchart TD
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+
+  DL["[OFF] UN deadline total de tur, monoton,<br/>NEprelungit la reclaim (runtime/deadline.py:85)"]:::auth
+  BUD["[OFF] Manifest VERSIONAT de bugete pe clasă de tur:<br/>runde de model · tool calls · mutații ·<br/>repair ≤ 1 (runtime/turn_budget.py:73-77)"]:::auth
+  ROUND{"[OFF] Mai am o RUNDĂ de model?"}:::dec
+  MODEL["[OFF*] Rundă de model (structurată)<br/>(agent/brain.py:222)"]:::off
+  TCALL{"[OFF] Mai am buget de TOOL CALLS?<br/>rezervat ATOMIC — un tool storm<br/>nu poate trece de ultimul slot"}:::dec
+  CLS["[OFF] Tool-uri CLASIFICATE: citirile independente<br/>în paralel, mutațiile EXCLUSIVE și seriale<br/>(agent/tool_budget.py)"]:::off
+  PORT["[OFF] RetrievalPort — candidații sunt REFERINȚE<br/>+ verdicte tri-state (retrieval/port.py)"]:::off
+  SEL{"[OFF] Selector de promovare: artefact de decizie<br/>GO semnat HMAC? (retrieval/selector.py)"}:::dec
+  CUR["[LIVE] CurrentLiveRetrievalAdapter — apelează<br/>search_products_tool, paritate prin construcție"]:::live
+  CAND["[OFF] SearchEntitiesAdapter — enforce hard<br/>constraints; INERT (fără @register)"]:::off
+  EV["[OFF*] EvidenceBundle — faptele turului ÎNGHEȚATE:<br/>known / unknown(reason) / stale(age, sla)<br/>+ sursă (agent/evidence_bundle.py:568)"]:::auth
+  PLAN["[OFF*] AnswerPlanV2 — evidence ÎNAINTEA textului<br/>(agent/brain_models.py) → 04b3"]:::off
+  EXH["[OFF] Buget/deadline epuizat → ieșire onestă,<br/>nu tăcere (P6)"]:::out
+
+  DL --> BUD --> ROUND
+  ROUND -- "da" --> MODEL --> TCALL
+  ROUND -- "nu" --> PLAN
+  TCALL -- "da" --> CLS --> PORT --> SEL
+  TCALL -- "nu" --> EXH
+  SEL -- "GO verificat" --> CAND
+  SEL -- "NOT-READY / artefact absent / semnătură invalidă" --> CUR
+  CUR --> EV
+  CAND --> EV
+  EV --> ROUND
+  EV --> PLAN
+  DL -. "expirat oricând" .-> EXH
+```
+
+**Cele trei bugete, explicit** (motivul pentru care „max 3 searches" era o formulare falsă):
+
+| Buget | v2 (dormant) | v1 (live azi) |
+|---|---|---|
+| runde de model | `max_model_rounds`, per clasă de tur (1/2/3/2) | 3, cap dur (`llm.py:364`) |
+| tool calls | `max_tool_calls`, per clasă (2/4/6/4), rezervat atomic | **NEplafonat** |
+| mutații | `max_mutations` (0/0/0/2), EXCLUSIVE și seriale | neclasificate |
+| repair | `max_repair_calls` ≤ 1, validat la construcție | 1 retry de validator |
+
+---
+
+## Diagram 14 — Stage 1 · 04b3 · Validare, proiectie, rezultat atomic [DORMANT]
+
+Poarta de adevăr și commit-ul. Punctul cheie: **grounding-ul respinge, nu doar omite** — o cifră
+fără sursă în fapte invalidează răspunsul, nu se șterge tăcut din el.
+
+```mermaid
+flowchart TD
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+
+  PLAN["[OFF*] AnswerPlanV2 + EvidenceBundle înghețat"]:::off
+  GRND{"[OFF*] Grounding guard: fiecare cifră, procent,<br/>link și stoc din proză se confruntă cu FAPTELE<br/>(agent/grounding_guard.py:264)"}:::dec
+  NOSRC["[OFF*] Livrare / promoție / garanție / superlativ<br/>fără sursă ⇒ RESPINGE răspunsul"]:::out
+  VAL{"[OFF] Validator determinist — REFOLOSEȘTE<br/>validatorul NX-211 prin to_v1()"}:::dec
+  REP{"[OFF] Repair bounded — exact UNUL"}:::dec
+  FBK["[OFF] Fallback determinist, fără cifre (P6)"]:::out
+  SAFE["[LIVE] Gate P0 de contraindicații — un filtru de<br/>REZULTAT nu poate anula un rând scris,<br/>deci mutațiile cer policy.allows() ÎNAINTE"]:::auth
+  CART["[OFF] CartService — UN serviciu pentru AMBELE căi<br/>(tool LLM + click); receipt idempotent<br/>per tur/acțiune (commerce/cart_service.py:69)"]:::off
+  PROJ["[OFF*] Projector PUR web-view.v2 — zero I/O,<br/>zero ceas ⇒ două citiri, aceiași bytes<br/>(channels/web/render_v2.py)"]:::off
+  LOC["[OFF*] Tot ce e afișabil e text LOCALIZAT —<br/>niciun număr pe sârmă în afară de revision"]:::off
+  CTA{"[OFF] CTA de coș doar pentru produse pe care<br/>guardul le declară vandabile"}:::dec
+  COMMIT["[OFF] TurnCommit — O tranzacție: stare +<br/>mesaje + receipts + rezultat<br/>(worker/turn_uow.py:208)"]:::auth
+  AFTER["[OFF] Aftercare — STRICT post-terminal,<br/>bounded; nu prelungește turul"]:::out
+
+  PLAN --> GRND
+  GRND -- "afirmație fără sursă" --> NOSRC --> FBK
+  GRND -- "fapte acoperite" --> VAL
+  VAL -- "invalid" --> REP
+  REP -- "reparat" --> VAL
+  REP -- "tot invalid" --> FBK
+  VAL -- "ok" --> SAFE
+  SAFE -- "mutație cerută" --> CART --> PROJ
+  SAFE -- "doar citire" --> PROJ
+  PROJ --> LOC --> CTA
+  CTA -- "vandabil" --> COMMIT
+  CTA -- "nevandabil ⇒ fără token" --> COMMIT
+  FBK --> COMMIT
+  COMMIT --> AFTER
+```
+
+**Convergența cerută de card:** recomandare, comparație, no-result, order și acțiune ajung TOATE în
+`COMMIT`, dar **nu prin același validator** — comparația și order-ul au gate propriu și pe calea v1
+(vezi discrepanțele 10 de mai jos). Diagrama arată gate-ul comun de grounding, nu pretinde un
+validator unic acolo unde codul are trei.
+
+---
+
+## Diagram 15 — Stage 1 · 04c · Frontend pasiv, single-flight [UNVERIFIED]
+
+> **`[UNVERIF]` — limita onestă a acestei diagrame.** Implementarea trăiește în repo-ul FE separat
+> (`Sales MVP Frontend Final`), care **nu e accesibil din acest repo**, iar DoR-ul NX-250 „frontend
+> SHA disponibil read-only" e neîndeplinit. Ce urmează e **contractul văzut dinspre backend** —
+> ce acceptă și ce emite serverul — nu o verificare a codului FE. Nicio afirmație despre interiorul
+> browserului nu are aici dovadă de cod.
+
+```mermaid
+flowchart TD
+  classDef ext fill:#d6dbdf,stroke:#5d6d7e,color:#000
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef unv fill:#fdebd0,stroke:#af601a,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  BOOT["[OFF] GET /web/bootstrap → view_copy<br/>{composer, chrome, a11y} + default_locale<br/>al TENANTULUI (web/shell_copy.py)"]:::off
+  CTRL["[UNVERIF] Controller singleton — client_turn_id<br/>stabil ÎNAINTE de orice I/O"]:::unv
+  POST["[EXT] POST accept — text BRUT sau token OPAC,<br/>retrimis NESCHIMBAT"]:::ext
+  W202{"[OFF] 202 + status: turul e în lucru"}:::dec
+  SSEC["[OFF*] SSE dacă e disponibil"]:::off
+  POLL["[OFF] Poll / GET recovery — sursa de adevăr<br/>când SSE tace"]:::off
+  DEC{"[UNVERIF] Decoder STRICT: ViewModel valid?"}:::unv
+  ERRV["[OFF] Contract mismatch ⇒ error view server-owned,<br/>NU text inventat în browser"]:::out
+  REG["[UNVERIF] Registry FINIT block.type → componentă<br/>(11 tipuri, sursa de adevăr e schema)"]:::unv
+  APPLY["[UNVERIF] Apply terminal ÎNAINTE de unlock —<br/>controalele rămân blocate în stările neterminale"]:::unv
+  NAV["[EXT] href valid → navigare"]:::ext
+
+  BOOT --> CTRL --> POST --> W202
+  W202 --> SSEC
+  W202 --> POLL
+  SSEC -. "event pierdut / două taburi" .-> POLL
+  SSEC --> DEC
+  POLL --> DEC
+  DEC -- "invalid" --> ERRV
+  DEC -- "valid" --> REG --> APPLY --> NAV
+```
+
+**Boundary-ul, ca listă de interdicții** (ce NU are voie să existe în 04c): intent, routing,
+retrieval, ranking, merge de memorie, preț/stoc/reducere/total calculate în browser, mutație de coș,
+parsare semantică de chip, greeting/disclaimer/fallback/progres inventat, asignare de release.
+NX-244 a scos din calea v2 exact clasa asta de logică (`Intl`/`Math.round` pe preț, ton dedus cu
+regex, thinking simulat cu timere, coș pe `localStorage`, sugestii hardcodate). **Verificarea acelei
+eliminări s-a făcut în repo-ul FE, nu aici** — de aceea nodurile de mai sus rămân `[UNVERIF]` până
+când un SHA de frontend intră în evidence.
+
+---
+
+## v1 — statusul REAL (nu „legacy")
+
+Cardul cerea o secțiune mică pentru v1 ca `LEGACY/DISABLED`. Măsurătoarea spune altceva, deci
+raportăm altceva:
+
+| Fapt | Stare măsurată |
+|---|---|
+| `POST /web/chat` | **LIVE** — 422 pe corp gol, în producție și local |
+| calea de randare v1 | **LIVE** — `channels/web/render.py`, contractul din `FRONTEND-CONTRACT-IZI.md` |
+| rutele `/web/v2/*` | **absente din producție** (404, nu 422) |
+| `/health/*` (NX-248) | **absente din producție** (404, deși montate necondiționat) |
+| fereastră de rollback | **N/A** — nu există release manifest, deci nici `previous_digest` |
+| v1 „disabled dar păstrat pentru rollback" | **fals** — v1 nu e disabled; e singurul care servește |
+
+**Nicio muchie v1↔v2 în frontend.** Selecția e la BUILD (`VITE_CHAT_PROTOCOL_V2` comparat literal ⇒
+Rollup elimină ramura moartă), deci buildul v2 nu conține v1 — verificat prin scan pe `dist/`, în
+repo-ul FE.
+
+---
+
 ## Diagram 5 — Product Search Workflow
 
 Calea LIVE a lui `search_products` ([catalog_tools.py:646](../src/tools/catalog_tools.py)).
