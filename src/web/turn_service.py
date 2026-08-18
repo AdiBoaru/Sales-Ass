@@ -36,6 +36,7 @@ from src.db.provider import DbProvider
 from src.db.queries.contacts import get_or_create_contact
 from src.db.queries.conversations import get_or_create_conversation, touch_last_inbound
 from src.db.queries.messages import insert_message
+from src.db.queries.release import latest_capture
 from src.db.queries.web_turns import (
     ClaimResult,
     WebTurnRow,
@@ -166,6 +167,9 @@ class Accepted:
 
     row: WebTurnRow
     inbound_msg_id: str | None = None
+    #: NX-249 — asignarea care tocmai a fost capturată pe rând. Marginea o folosește DOAR ca să
+    #: emită metrica/evenimentul: autoritatea rămâne coloana din ledger, nu obiectul ăsta.
+    assignment: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +197,19 @@ class IdempotencyConflict:
 
 
 @dataclass(frozen=True)
+class ReleaseDrained:
+    """NX-249: conversația e DRENATĂ — a fost servită de candidate, kill-switchul e activ, iar
+    compatibilitatea de rollback nu e dovedită.
+
+    Nu acceptăm turul: a-l muta pe control i-ar schimba înțelesul (starea, referințele ordinale și
+    acțiunile ei vin din candidate), iar a-l rula pe candidate ar încălca chiar kill-switchul.
+    Singurul răspuns onest e un error-view care spune că e temporar. Turele deja acceptate nu sunt
+    atinse de nimic din toate astea: ele se drenează normal, pe versiunea capturată."""
+
+    assignment: Any
+
+
+@dataclass(frozen=True)
 class ActiveTurnConflict:
     """ALT turn e activ pe conversație (single-flight). Policy explicit: respingem, nu punem
     la coadă. `active` (NX-233) = rândul turnului activ, ca 409-ul `conversation_turn_in_progress`
@@ -204,7 +221,12 @@ class ActiveTurnConflict:
 
 
 AcceptOutcome = (
-    Accepted | ExistingInProgress | ExistingCompleted | IdempotencyConflict | ActiveTurnConflict
+    Accepted
+    | ExistingInProgress
+    | ExistingCompleted
+    | IdempotencyConflict
+    | ActiveTurnConflict
+    | ReleaseDrained
 )
 
 
@@ -236,6 +258,7 @@ _ERROR_TEXTS: dict[str, dict[str, str]] = {
         "cancelled": "Cererea a fost anulată.",
         "deadline_exceeded": "Pregătirea răspunsului a durat prea mult. Te rog să încerci din nou.",
         "attempts_exhausted": "Nu am reușit să procesez cererea. Te rog să încerci din nou.",
+        "release_draining": "Facem o actualizare chiar acum. Revino în câteva minute, te rog.",
     },
     "en": {
         "empty_result": "I could not prepare a reply right now. Please try again.",
@@ -243,6 +266,7 @@ _ERROR_TEXTS: dict[str, dict[str, str]] = {
         "cancelled": "The request was cancelled.",
         "deadline_exceeded": "Preparing the reply took too long. Please try again.",
         "attempts_exhausted": "I could not process the request. Please try again.",
+        "release_draining": "We are updating right now. Please come back in a few minutes.",
     },
     "hu": {
         "empty_result": "Most nem sikerült választ készítenem. Kérlek, próbáld újra.",
@@ -250,6 +274,7 @@ _ERROR_TEXTS: dict[str, dict[str, str]] = {
         "cancelled": "A kérés meg lett szakítva.",
         "deadline_exceeded": "A válasz elkészítése túl sokáig tartott. Kérlek, próbáld újra.",
         "attempts_exhausted": "Nem sikerült feldolgoznom a kérést. Kérlek, próbáld újra.",
+        "release_draining": "Éppen frissítünk. Kérlek, térj vissza néhány perc múlva.",
     },
 }
 
@@ -283,6 +308,7 @@ async def accept_web_turn(
     content_type: str = "text",
     page_context: dict[str, Any] | None = None,
     action_payload: dict[str, Any] | None = None,
+    release: Any | None = None,
 ) -> AcceptOutcome:
     """Acceptul durabil al unui turn: UN checkout scurt care rezolvă contact + conversație
     (get_or_create, idempotent — aceleași rânduri pe care le va găsi și `load_turn`) și
@@ -308,7 +334,13 @@ async def accept_web_turn(
     NX-236 (`action_payload`): comanda TYPED deja autorizată (kind + argumente canonice + turul
     sursă), pe același rând de mesaj. Nu se re-verifică tokenul la execuție — el a fost consumat
     la accept, iar re-verificarea după o rotație de chei ar putea eșua pe un turn deja acceptat.
-    Ce se persistă e VERDICTUL, nu tokenul (P12: niciun token pe disc)."""
+    Ce se persistă e VERDICTUL, nu tokenul (P12: niciun token pe disc).
+
+    NX-249 (`release`): un `ReleaseContext` (sau `None` = controller stins → byte-identic).
+    Asignarea se rezolvă AICI, nu la margine, dintr-un motiv structural: bucketul are nevoie de
+    `conversation_id`, iar conversația se rezolvă în ACEST checkout. Sticky-ul (`latest_capture`)
+    se citește pe aceeași conexiune, deci decizia și captura ei sunt în aceeași tranzacție cu
+    rândul de ledger — nu există fereastră în care un turn să existe fără asignare."""
     async with db("web_turn_accept") as conn:
         contact = await get_or_create_contact(
             conn,
@@ -321,6 +353,14 @@ async def accept_web_turn(
         conv = await get_or_create_conversation(
             conn, business_id, contact.id, channel_id, locale=locale
         )
+        assignment = None
+        if release is not None:
+            prior = await latest_capture(conn, business_id, conv["id"])
+            assignment = release.decide(business_id, conv["id"], prior)
+            if assignment.is_drain:
+                # ÎNAINTE de orice scriere: un turn drenat nu lasă rând de ledger, deci nu poate
+                # fi confundat mai târziu cu un accept care „s-a pierdut".
+                return ReleaseDrained(assignment)
         row = await insert_turn(
             conn,
             business_id,
@@ -332,6 +372,9 @@ async def accept_web_turn(
             conversation_revision=conv["state_version"],
             pipeline_version=RESPONSE_CONTRACT_SYNC_V1,
             deadline_at=deadline_at,
+            release_track=assignment.track if assignment else None,
+            release_policy_id=(assignment.policy_id or None) if assignment else None,
+            release_policy_revision=assignment.policy_revision if assignment else None,
         )
         if row is not None:
             inbound_msg_id = None
@@ -355,7 +398,7 @@ async def accept_web_turn(
                     },
                 )
                 await touch_last_inbound(conn, business_id, conv["id"])
-            return Accepted(row, inbound_msg_id=inbound_msg_id)
+            return Accepted(row, inbound_msg_id=inbound_msg_id, assignment=assignment)
         existing = await get_turn(conn, business_id, conv["id"], client_turn_id)
         if existing is None:
             active = await get_active_turn(conn, business_id, conv["id"])

@@ -1210,7 +1210,31 @@ class Settings(BaseSettings):
     )
     service_name: str = Field(default="nativx-assistant", validation_alias="SERVICE_NAME")
     release_sha: str = Field(default="", validation_alias="RELEASE_SHA")
+    #: Trackul PROCESULUI (NX-246): ce build rulează instanța asta. NU e trackul unui turn — de la
+    #: NX-249 încolo, trackul unui turn e capturat pe rândul lui de ledger, fiindcă un proces poate
+    #: servi ambele cohorturi. Rămâne util pentru metricile de instanță.
     release_track: str = Field(default="champion", validation_alias="RELEASE_TRACK")
+
+    # --- NX-249: controllerul de release (canary + cutover) -------------------
+    # OFF (default) = zero schimbare: niciun policy nu se citește, nicio coloană de captură nu se
+    # scrie, iar `release_track` rămâne ce era. Aprins, fiecare accept v2 primește o asignare
+    # SERVER-OWNED, capturată durabil înainte de orice claim.
+    release_controller_enabled: bool = Field(
+        default=False, validation_alias="RELEASE_CONTROLLER_ENABLED"
+    )
+    # Mediul căruia îi aparțin policy-urile. Gol → `env`. Explicit fiindcă „staging" și „prod" pot
+    # rula pe același `env=prod` din perspectiva codului, iar un policy de staging aplicat în
+    # producție ar promova trafic real pe baza unei aprobări date pentru altceva.
+    release_environment: str = Field(default="", validation_alias="RELEASE_ENVIRONMENT")
+    # Saltul de bucketing. NU intră niciodată în policy, în DB sau în loguri (policy-ul poartă doar
+    # `stable_salt_id`). Gol = bucketing determinist dar PUBLIC calculabil: acceptabil în dev,
+    # refuzat la boot în prod (vezi `_release_relations`).
+    release_assignment_salt: str = Field(default="", validation_alias="RELEASE_ASSIGNMENT_SALT")
+    # TTL-ul cache-ului de policy. E și fereastra maximă dintre „am apăsat kill-switch" și „ultimul
+    # proces a aflat" — deci ținta de ≤5 minute a cardului îi pune un plafon dur (validat la boot).
+    release_policy_refresh_s: float = Field(
+        default=15.0, validation_alias="RELEASE_POLICY_REFRESH_S", gt=0
+    )
 
     # --- NX-248: operare (health, deploy, credential de migrare) ---
     # Tokenul pentru `/health/detail` (vederea de operator: sonde + reason codes). GOL = endpointul
@@ -1406,6 +1430,43 @@ class Settings(BaseSettings):
                     "sursă, nici destinație)"
                 )
         return self
+
+    @model_validator(mode="after")
+    def _release_relations(self) -> "Settings":
+        """NX-249: un controller de release configurat imposibil nu pornește.
+
+        Trei relații, fiecare cu o consecință care s-ar descoperi altfel în incident:
+          • candidate ÎNSEAMNĂ contractul v2 — fără el, controllerul ar asigna conversații către
+            un pipeline care nu are cum să livreze;
+          • fără salt în producție, bucketul e calculabil de oricine cunoaște `conversation_id`,
+            deci un client își poate căuta o conversație care intră în canary. În dev e acceptabil
+            (și util: face testele reproductibile fără secrete);
+          • un TTL de refresh mai mare decât ținta operațională ar face kill-switchul mai lent
+            decât promisiunea din runbook — iar promisiunea e ce se măsoară în drill.
+        """
+        if not self.release_controller_enabled:
+            return self
+        if not self.web_turn_v2_enabled:
+            raise ValueError(
+                "RELEASE_CONTROLLER_ENABLED cere WEB_TURN_V2_ENABLED (candidate = contractul "
+                "web-view.v2; fără el n-ar exista unde livra cohortul candidate)"
+            )
+        if self.is_prod and not self.release_assignment_salt.strip():
+            raise ValueError(
+                "RELEASE_ASSIGNMENT_SALT e obligatoriu în prod: fără salt, bucketul de canary e "
+                "calculabil de oricine cunoaște conversation_id"
+            )
+        if self.release_policy_refresh_s > 300:
+            raise ValueError(
+                f"RELEASE_POLICY_REFRESH_S ({self.release_policy_refresh_s}s) depășește ținta de "
+                "5 minute pentru oprirea accepturilor candidate (docs/STAGE1-CANARY-RUNBOOK.md)"
+            )
+        return self
+
+    @property
+    def release_env(self) -> str:
+        """Mediul de release efectiv. `RELEASE_ENVIRONMENT` explicit, altfel `env`."""
+        return (self.release_environment or self.env).strip()
 
     @property
     def is_prod(self) -> bool:

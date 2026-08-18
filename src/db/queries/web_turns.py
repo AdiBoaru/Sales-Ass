@@ -33,6 +33,7 @@ _ROW_COLS = """
     id, business_id, conversation_id, contact_id, session_ref_hash, client_turn_id,
     request_fingerprint, schema_version, status, attempt, lease_owner, lease_epoch,
     lease_expires_at, deadline_at, conversation_revision_at_accept, pipeline_version,
+    release_track, release_policy_id, release_policy_revision,
     response_json, safe_error_code, accepted_at, updated_at, completed_at
 """
 
@@ -62,6 +63,16 @@ class WebTurnRow:
     accepted_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    # NX-249 — asignarea de release, CAPTURATĂ la accept și niciodată rescrisă. Un reclaim citește
+    # rândul; nu recalculează. `None` = rând de dinainte de migrarea 044 SAU accept cu controllerul
+    # stins — raportat ca `unknown`, niciodată promovat tăcut la `champion`.
+    #
+    # La FINAL și cu default, ca și coloanele din migrare: adăugate în mijloc, ar fi rupt fiecare
+    # construcție pozițională a rândului (111 teste au dovedit-o). Ordinea din `_ROW_COLS` nu
+    # trebuie să o urmeze — `_to_row` construiește pe nume.
+    release_track: str | None = None
+    release_policy_id: str | None = None
+    release_policy_revision: int | None = None
 
 
 def _to_row(rec: asyncpg.Record | None) -> WebTurnRow | None:
@@ -87,6 +98,9 @@ async def insert_turn(
     conversation_revision: int | None = None,
     pipeline_version: str | None = None,
     deadline_at: datetime | None = None,
+    release_track: str | None = None,
+    release_policy_id: str | None = None,
+    release_policy_revision: int | None = None,
 ) -> WebTurnRow | None:
     """Acceptul atomic: INSERT sau None, fără fereastră de race.
 
@@ -98,9 +112,10 @@ async def insert_turn(
             f"""
             insert into web_turns (
                 business_id, conversation_id, contact_id, client_turn_id, request_fingerprint,
-                session_ref_hash, conversation_revision_at_accept, pipeline_version, deadline_at
+                session_ref_hash, conversation_revision_at_accept, pipeline_version, deadline_at,
+                release_track, release_policy_id, release_policy_revision
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             returning {_ROW_COLS}
             """,
             business_id,
@@ -112,6 +127,9 @@ async def insert_turn(
             conversation_revision,
             pipeline_version,
             deadline_at,
+            release_track,
+            release_policy_id,
+            release_policy_revision,
         )
     except asyncpg.UniqueViolationError:
         return None

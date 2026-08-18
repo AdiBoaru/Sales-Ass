@@ -46,6 +46,8 @@ from src.models import Event
 from src.observability import hooks, tracing
 from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
+from src.release import policy_store
+from src.release.assignment import ReleaseContext
 from src.web.action_crypto import KeyRingError, parse_key_ring
 from src.web.action_models import age_bucket
 from src.web.action_service import (
@@ -100,6 +102,7 @@ from src.web.turn_service import (
     ExistingInProgress,
     FencedTurnCompletion,
     IdempotencyConflict,
+    ReleaseDrained,
     accept_web_turn,
     attempt_bucket,
     claim_web_turn,
@@ -1087,6 +1090,27 @@ async def web_turn_accept_v2(request: Request, token: str, visitor_id: str, sig:
         )
 
 
+async def _release_context(conn) -> ReleaseContext | None:
+    """Contextul de release al requestului, sau `None` cu controllerul stins (byte-identic).
+
+    Citirea NU poate ridica: `policy_store.current` întoarce un `PolicyView` pentru orice eșec, iar
+    un store căzut devine `available=False` — adică fail-closed la control, cu motiv propriu în
+    metrici. Ceasul se capturează o dată, aici, ca decizia să nu depindă de două citiri diferite.
+    """
+    s = get_settings()
+    if not s.release_controller_enabled:
+        return None
+    view = await policy_store.current(conn, s.release_env, ttl_s=s.release_policy_refresh_s)
+    hooks.on_policy_refresh(view.code, age_bucket=policy_store.age_bucket(view.age_s))
+    return ReleaseContext(
+        policy=view.policy,
+        available=view.available,
+        salt=s.release_assignment_salt,
+        now=datetime.now(UTC),
+        enabled=True,
+    )
+
+
 async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: str):
     """Acceptul DURABIL al unui turn (NX-233): validează, scrie rândul de ledger + inputul SAFE
     în același checkout, trezește executorii (best-effort, DUPĂ commit) și răspunde imediat.
@@ -1129,6 +1153,11 @@ async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: st
     pool = await get_pool()
     async with admin_conn(pool) as conn:
         channel = await resolve_channel(conn, "webchat", token)
+        # NX-249 — policy-ul de release se citește pe ACEEAȘI conexiune de control plane care
+        # rezolvă canalul: e a doua (și ultima) operație de dinaintea tenantului, iar rândul
+        # poartă allowlistul, deci n-are ce căuta pe o conexiune tenant-scoped. Cache bounded în
+        # proces (TTL din config), deci nu e un query per accept.
+        release_ctx = await _release_context(conn)
     if channel is None:
         raise HTTPException(status_code=403, detail="unknown channel")
     db = tenant_db(session.business_id)
@@ -1220,8 +1249,20 @@ async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: st
         content_type="action" if action is not None else "text",
         page_context=to_payload(normalized_context) if s.web_context_enabled else None,
         action_payload=action.command.to_jsonb() if action is not None else None,
+        release=release_ctx,
     )
     lang = business.default_locale or "ro"
+    if isinstance(outcome, ReleaseDrained):
+        # 503, nu 409: nu e un conflict al clientului, e indisponibilitate deliberată. Și da,
+        # intră în denominatorul de availability (`accept_outcome` îl citește ca `error`) — exact
+        # cum trebuie: în timpul unui kill-switch, disponibilitatea CHIAR scade pentru conversațiile
+        # drenate, iar un SLI care ascunde asta ar fi decorativ.
+        hooks.on_release_assignment(
+            outcome.assignment.decision,
+            reason=outcome.assignment.reason,
+            mode=release_ctx.mode if release_ctx else "observe",
+        )
+        return _v2_error(503, "release_draining", "conversația se drenează pe versiunea curentă")
     if isinstance(outcome, IdempotencyConflict):
         await _ledger_emit(
             db,
@@ -1294,6 +1335,21 @@ async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: st
     # pierderea lui e acoperită de scanul executorului + sweeper (DB = autoritatea).
     await wake_executor(redis, session.business_id, outcome.row.id)
     events = [Event("web_turn_accepted", {"mode": "new", "web_turn_id": outcome.row.id})]
+    if outcome.assignment is not None:
+        # Ce s-a CAPTURAT pe rând (autoritatea rămâne coloana). P12: vocabular închis, zero
+        # `policy_id` ca etichetă de metrică — el trăiește în eveniment și în evidence packet,
+        # unde e mărginit de fereastra raportului, nu de istoria releaseurilor.
+        hooks.on_release_assignment(
+            outcome.assignment.decision,
+            reason=outcome.assignment.reason,
+            mode=release_ctx.mode if release_ctx else "observe",
+        )
+        events.append(
+            Event(
+                "release_assigned",
+                {**outcome.assignment.as_props(), "web_turn_id": outcome.row.id},
+            )
+        )
     if action is not None:
         # Ce s-a VERIFICAT (nu ce s-a executat — aia e treaba kernelului, cu evenimentul lui).
         # P10/P12: kind + bucket-uri, niciun `action_id`, niciun token, niciun argument.

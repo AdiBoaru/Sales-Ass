@@ -145,6 +145,42 @@ DROP_REASONS: frozenset[str] = frozenset(
 #: diferit: la ledger, o redenumire tăcută ar strica dashboardul; aici, un cod de motiv adăugat în
 #: `health.py` și uitat aici ar fi normalizat tăcut la `other`, adică exact motivul pentru care
 #: te uiți la metrică ar deveni invizibil. O singură definiție face abaterea imposibilă.
+#: NX-249 — vocabularul controllerului de release. REPRODUS aici, ca `LEDGER_STATUSES`, ca să nu
+#: legăm registrul de metrici de un import de business (contract.py n-are nicio dependență din
+#: `src/`, și asta e o proprietate, nu un accident). Drift-ul nu e lăsat pe seama atenției:
+#: `tests/test_release_gates.py::test_vocabularul_de_release_e_sincron_cu_contractul` compară
+#: mulțimile de aici cu cele din `src/release/models.py` și pică dacă diverg.
+RELEASE_DECISIONS: frozenset[str] = frozenset({"control", "candidate", "drain"})
+RELEASE_MODES: frozenset[str] = frozenset(
+    {"observe", "internal", "canary", "force_control", "closed"}
+)
+RELEASE_ASSIGNMENT_REASONS: frozenset[str] = frozenset(
+    {
+        "sticky_epoch",
+        "bucket_in_rollout",
+        "bucket_out_of_rollout",
+        "internal_allowlist",
+        "v1_closed",
+        "mode_observe",
+        "force_control",
+        "tenant_not_eligible",
+        "policy_missing",
+        "policy_invalid",
+        "policy_expired",
+        "store_unavailable",
+        "controller_disabled",
+        "outside_admission_window",
+        "rollback_incompatible",
+    }
+)
+RELEASE_POLICY_OUTCOMES: frozenset[str] = frozenset(
+    {"ok", "absent", "store_down", "invalid", "env_mismatch"}
+)
+RELEASE_POLICY_AGE_BUCKETS: frozenset[str] = frozenset({"fresh", "recent", "stale", "very_stale"})
+#: Verdictele porților de release. `INSUFFICIENT` și `UNKNOWN` sunt DISTINCTE de `FAIL`
+#: (NX-238/246): „n-am măsurat" și „am măsurat și a picat" cer acțiuni diferite.
+RELEASE_GATE_VERDICTS: frozenset[str] = frozenset({"PASS", "FAIL", "INSUFFICIENT", "UNKNOWN"})
+
 HEALTH_ROLES: frozenset[str] = frozenset({"api", "worker", "scheduler"})
 HEALTH_STATES: frozenset[str] = frozenset({"ok", "degraded", "failed", "skipped"})
 HEALTH_COMPONENTS: frozenset[str] = frozenset(
@@ -470,6 +506,50 @@ METRICS: dict[str, MetricSpec] = {
             (LabelSpec("component", HEALTH_COMPONENTS),),
             ACCEPT_BUCKETS,
             "Durata sondelor. O sondă lentă e un semnal cu o tură înaintea unei sonde eșuate.",
+        ),
+        # ── NX-249: controllerul de release. Ce s-a asignat, cât de proaspăt e policy-ul, cine a
+        # apăsat kill-switchul și cum au ieșit porțile. `policy_id` NU e etichetă: un release nou
+        # aduce un id nou, deci seria ar crește nemărginit — el rămâne atribut de trace și câmp în
+        # evidence packet (cardul permite explicit exact distincția asta).
+        MetricSpec(
+            "release_assignment_total",
+            "counter",
+            "1",
+            (
+                LabelSpec("decision", RELEASE_DECISIONS),
+                LabelSpec("reason", RELEASE_ASSIGNMENT_REASONS),
+                LabelSpec("mode", RELEASE_MODES),
+            ),
+            description="Asignări de release. `drain` e o valoare de sine stătătoare: o "
+            "conversație drenată nu e nici control, nici candidate.",
+        ),
+        MetricSpec(
+            "release_policy_refresh_total",
+            "counter",
+            "1",
+            (
+                LabelSpec("outcome", RELEASE_POLICY_OUTCOMES),
+                LabelSpec("age_bucket", RELEASE_POLICY_AGE_BUCKETS),
+            ),
+            description="Citiri de policy, pe rezultat și vechimea cache-ului. Un `store_down` "
+            "care nu se vede aici ar arăta identic cu un canary oprit deliberat.",
+        ),
+        MetricSpec(
+            "release_override_total",
+            "counter",
+            "1",
+            (LabelSpec("mode", RELEASE_MODES), LabelSpec("reason_code", max_distinct=16)),
+            description="Aplicări de policy care schimbă modul (inclusiv kill-switch).",
+        ),
+        MetricSpec(
+            "release_gate_total",
+            "counter",
+            "1",
+            (
+                LabelSpec("gate", max_distinct=32),
+                LabelSpec("verdict", RELEASE_GATE_VERDICTS),
+            ),
+            description="Verdictul fiecărei porți de promovare, la fiecare evaluare.",
         ),
         MetricSpec(
             "web_observability_dropped_total",

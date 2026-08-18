@@ -287,6 +287,36 @@ critice cer CI + staging + provider); RPO/RTO rămân `UNVERIFIED` și blocheaz�
 [`docs/DISASTER-RECOVERY.md`](docs/DISASTER-RECOVERY.md) +
 [`docs/SECRETS-ROTATION.md`](docs/SECRETS-ROTATION.md); probă: `python scripts/release/evidence.py`.
 
+**NX-249 — controller de release: asignare stabilă, porți de promovare, cutover (DARK, flag OFF).**
+Înainte, „cine primește v2" era un env global (`WEB_TURN_V2_ENABLED`, `SINGLE_BRAIN_ENABLED`,
+`RELEASE_TRACK`) citit **în timpul turului** — deci un reclaim după deploy rula alt cod pe același
+turn, iar raportul candidate-vs-control nu se putea calcula (ledgerul n-avea cohort; `slo.py`
+declara deja `per_row_release_sha` LIPSĂ). Acum asignarea e SERVER-OWNED, deterministă (HMAC cu salt
+versionat — nu sha256 public ca la NX-238: aici bucketul alege ce versiune de PRODUS primește un
+client, deci nu trebuie să fie calculabil de oricine cunoaște `conversation_id`) și **capturată pe
+rândul de ledger la accept**, înainte de orice claim (migrarea **044**, expand-only). Executorul
+citește trackul de pe RÂND, nu din config. Epochul e sticky prin ledger, nu prin Redis/cookie: 5→20
+nu mută o conversație existentă, iar un FLUSHALL nu reasignează pe nimeni. Etapa e **declarată** în
+policy, nu dedusă din cifre — etapele 2 („demo", 100%) și 6 („default", 100%) sunt indistinctibile
+din (mod, procent), iar o deducere ar fi cerut 24h/100 de ture acolo unde cardul cere 14 zile/2.000.
+`force_control` e o revizie de policy ca oricare alta (același CAS, același audit): oprește
+accepturile NOI, dar o conversație deja candidate se **drenează** (`503 release_draining`), nu se
+convertește tăcut — starea și referințele ei vin din candidate. Policy-ul trăiește în
+`release_policies` (append-only, CAS în SCHEMĂ pe `unique (environment, revision)`, **fără grant
+pentru `bot_runtime`**: rândul poartă allowlistul), citit pe `admin_conn` cu cache bounded. Porțile
+(`src/release/gates.py`) au patru verdicte — `INSUFFICIENT` („mai lasă-l") ≠ `UNKNOWN` („repară
+instrumentul") ≠ `FAIL` — cu timp ȘI eșantion, non-inferioritate pe interval **Wilson**, cohort
+separat pentru acțiuni (o regresie doar pe coș nu se pierde în medie) și hard stops cu toleranță
+zero peste orice scor pozitiv. **`PASS` nu promovează**: `gates.py` n-are acces la store, iar `apply`
+cere evidence packet cu amprentă RECALCULATĂ + `--expected-revision` + actor + motiv + `--confirm`.
+Verdict de azi: **BLOCAT** — NX-248 `NOT_READY`, NX-247 `NO-GO`, NX-246 felia 3 `NOT-READY`,
+NX-238 `NOT-READY`. `RELEASE_CONTROLLER_ENABLED=false` (default) = byte-identic. Detalii:
+[`docs/STAGE1-RELEASE-DECISIONS.md`](docs/STAGE1-RELEASE-DECISIONS.md) +
+[`docs/STAGE1-CANARY-RUNBOOK.md`](docs/STAGE1-CANARY-RUNBOOK.md) +
+[`docs/STAGE1-CUTOVER.md`](docs/STAGE1-CUTOVER.md) +
+[`docs/STAGE1-QUALITY-RITUAL.md`](docs/STAGE1-QUALITY-RITUAL.md); probă:
+`python scripts/release_control.py plan --policy <fișier> --ids 10000`.
+
 **NX-239 — MainBrain unic + control plane determinist + `AnswerPlanV2` (DARK, flag OFF).**
 `SINGLE_BRAIN_ENABLED=false` (default) = pipeline-ul de azi byte-identic. ON (dark/shadow):
 fiecare early-exit trece prin `src/agent/control_plane.py` — un reply care nu e fast path
@@ -753,10 +783,14 @@ greșit în „zero rezultate", nu „datele altui client". `bot_runtime` NU are
 bypassrls. Control plane-ul (`admin_conn`) rulează pe un pool privilegiat separat.
 Detalii: `docs/db_connections.md`.
 
-**Excepție unică, documentată — `admin_conn` (control plane):** lookup-ul
-`phone_number_id → business_id` (db/queries/channels.py) rulează ÎNAINTE ca
-tenantul să fie cunoscut — e operația care îl derivă. Suprafața e limitată la
-maparea canal→business + mentenanță non-PII (cleanup inbound_dedupe). Orice
+**Excepții documentate — `admin_conn` (control plane), exact DOUĂ:**
+(1) lookup-ul `phone_number_id → business_id` (db/queries/channels.py) rulează
+ÎNAINTE ca tenantul să fie cunoscut — e operația care îl derivă;
+(2) NX-249: `release_policies` (db/queries/release.py) — policy-ul de release e un
+obiect de MEDIU, nu de tenant, iar rândul poartă allowlistul de tenanți eligibili;
+citit de pe o conexiune tenant-scoped, ar scurge cine altcineva e în canary.
+Migrarea 044 nici nu dă grant lui `bot_runtime` — nu e convenție, e imposibilitate.
+Restul suprafeței rămâne mentenanță non-PII (cleanup inbound_dedupe). Orice
 alt query pe admin_conn = bug de izolare.
 
 **Conexiunea aparține OPERAȚIEI, nu turului (NX-231).** Stagiile și tool-urile nu
@@ -808,14 +842,18 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→043), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 044)
+│   ├── 0NN_*.sql                ← migrări delta (003→044), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 045)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
 │   ├── FRONTEND-CONTRACT-IZI.md ← contractul JSON web v1 (carduri+comparison) pt randarea FE (paritate iZi)
 │   ├── FRONTEND-CONTRACT-IZI-V2.md ← NX-228: contractul v2 pt FE (inert pana la NX-232/233)
 │   ├── STAGE1-WEB-E2E.md        ← NX-247: gate E2E (harness real, matricea R1–R22, runbook, verdict)
+│   ├── STAGE1-RELEASE-DECISIONS.md ← NX-249: inventarul care a cerut migrarea 044 + deciziile
+│   ├── STAGE1-CANARY-RUNBOOK.md ← NX-249: etape, evidence packet, kill-switch, rollback
+│   ├── STAGE1-CUTOVER.md        ← NX-249: închiderea rutei v1 (criteriu structural pt „v1 in-flight")
+│   ├── STAGE1-QUALITY-RITUAL.md ← NX-249: zilnic/săptămânal/lunar → regresii, nu tuning online
 │   ├── NX-241-TURN-DEADLINE.md  ← NX-241: deadline unic, manifest de bugete, SLO + runbook
 │   ├── NX-240-GROUNDED-PROJECTOR.md ← NX-240: grounding + projector pur + regulile de adevăr
 │   ├── WEB-VIEW-V2-DATA-READINESS.md ← NX-240: matricea de câmpuri + coverage măsurat (300 prod.)
@@ -880,6 +918,12 @@ nativx-assistant/
 │   ├── runtime/                 ← NX-241: contractele de RUNTIME ale turului (timp + buget)
 │   │   ├── deadline.py          ← `TurnDeadline`: UN buget monoton, rezervă terminală, cancel
 │   │   └── turn_budget.py       ← manifest VERSIONAT pe clase de tur + ledger atomic
+│   ├── release/                 ← NX-249: controllerul de release (cine primește v2, cu ce dovezi)
+│   │   ├── models.py            ← ReleasePolicy (frozen, amprentat) + Assignment + STAGES 0-7
+│   │   ├── assignment.py        ← bucketing HMAC + epoch sticky din ledger + fail-closed
+│   │   ├── policy_store.py      ← citire validată + cache bounded + CAS auditat + kill-switch
+│   │   ├── gates.py             ← hard stops, timp ȘI eșantion, non-inferioritate Wilson
+│   │   └── report.py            ← evidence packet imutabil, agregat, fără identificatori
 │   ├── ops/                     ← NX-248: contractele de OPERARE (identitate, health, heartbeat)
 │   │   ├── build_info.py        ← ce artefact rulează + interval de schemă tolerat + config revision
 │   │   ├── health.py            ← live/startup/ready: sonde mărginite, required vs optional per ROL
