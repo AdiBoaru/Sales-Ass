@@ -6,7 +6,10 @@
 > `scripts/verify_architecture_doc.py`); (2) „WhatsApp (canal primar de producție)" — canalul de
 > lucru e **web widget**, exclusiv (NX-179); WhatsApp n-a fost niciodată conectat; (3) „max 3
 > apeluri" tool-calling — capul dur e pe **runde de model**, nu pe apeluri (NX-250, măsurat: 9
-> execuții sub „max 3"). Starea curentă:
+> execuții sub „max 3"). În plus, diagramele Mermaid din acest fișier **nu trec** verificatorul
+> (146 de probleme: noduri nedeclarate, `subgraph`/`end` dezechilibrat) — nu au fost niciodată sub
+> poartă, fiindcă `scripts/verify_architecture_doc.py` rulează doar pe documentul normativ.
+> Nu se repară aici: un document istoric se marchează și se leagă, nu se rescrie. Starea curentă:
 > [`ARCHITECTURE-WORKFLOWS.md`](ARCHITECTURE-WORKFLOWS.md) +
 > [`architecture/04-EVIDENCE.md`](architecture/04-EVIDENCE.md).
 

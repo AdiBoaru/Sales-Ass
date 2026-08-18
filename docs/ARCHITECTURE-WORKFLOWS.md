@@ -520,7 +520,7 @@ regia**: A→B→C→D → `build_plan` → `render`.
 
 | Fază | Unde trăiește | Ce decide |
 | --- | --- | --- |
-| **A · Regie + siguranță** | `stages/agent.py:347` · `_persist_safety_context:217` | Porți de intrare (fără LLM / rută ≠ sales,order / mesaj gol → no-op). Persistă contextul de siguranță ÎNAINTE de orice cale care servește produse |
+| **A · Regie + siguranță** | `stages/agent.py:347` · `_persist_safety_context:296` | Porți de intrare (fără LLM / rută ≠ sales,order / mesaj gol → no-op). Persistă contextul de siguranță ÎNAINTE de orice cale care servește produse |
 | **B · Intenții pre-loop** | `deterministic.py:573` (`try_pre_intents`) | Link / comparație / detaliu / recenzii pe setul deja afișat → răspuns determinist, **$0 inferență** |
 | **C · Compunerea promptului** | `prompt_builder` · `merge_constraints:126` · `context.py` | System GENERAT din DB (P9); stiva de constrângeri multi-tur; hint-uri per-tur (filtre, cumpărare, lead score) |
 | **D · Bucla de tool-uri** | `llm.py:341` (`run_tool_loop`) · `tool_executor.py` (`ToolRun`) | Modelul alege tool-urile. Capul dur e pe **runde de model** (`max_steps=3`), NU pe numărul de apeluri — o rundă poate emite N tool calls și toate se execută (`_run_tool_calls`, `llm.py:128`). Vezi „Bugetul real” mai jos. `show_more` ocolește complet bucla → paginare deterministă |
@@ -583,20 +583,20 @@ flowchart TD
   classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
 
-  P1{"1 · Întreabă de comanda lui,<br/>dar nu e logat pe site? (:187)"}:::dec
+  P1{"1 · Întreabă de comanda lui,<br/>dar nu e logat pe site? (planner.py:177)"}:::dec
   O1["Îi cerem să se logheze — fără cont<br/>nu-i putem căuta comanda"]:::out
-  P2{"2 · Vrea să CUMPERE, dar AI-ul a uitat<br/>să-i facă linkul de plată? (:206-214)"}:::dec
-  S2["Codul creează el linkul de plată,<br/>pe același drum contabilizat (:227)"]:::step
-  P3{"3 · Tocmai a pus ceva în coș<br/>(și nu are link de plată)? (:236-242)"}:::dec
-  S3["Îi arătăm produse care MERG ÎMPREUNĂ<br/>cu ce a luat, filtrate de siguranță (:251)<br/>a mers → gata; n-a mers → continuăm"]:::safe
-  P4{"4 · Întreabă «care dintre ELE e cea mai...»?<br/>— superlativ pe ce i-am arătat (:282-288)"}:::dec
-  S4["Recitim din catalog produsele deja arătate,<br/>ca să răspundem pe FAPTE, nu din memorie (:294)"]:::safe
-  P5{"5 · Cere «ceva mai ieftin»? (:304-311)"}:::dec
-  S5["Căutăm STRICT mai ieftin decât ce a văzut (:317)<br/>nu există → îi spunem cinstit + notăm golul<br/>de preț pentru comerciant (:331) → gata"]:::safe
-  P6{"6 · AI-ul n-a adus produse, dar clientul<br/>vorbește despre cele deja arătate? (:352-359)"}:::dec
-  S6["Le recitim din catalog — plasa care evită<br/>un «n-am găsit» absurd (:363)"]:::safe
-  GATE["FILTRUL FINAL de siguranță: orice produs<br/>contraindicat (ex. sarcină) e scos AICI,<br/>orice ar fi adus căile de mai sus (:372)"]:::safe
-  RETR["Setul final = SINGURA sursă pentru<br/>răspuns, carduri și memoria discuției (:373)"]:::step
+  P2{"2 · Vrea să CUMPERE, dar AI-ul a uitat<br/>să-i facă linkul de plată? (planner.py:226-234)"}:::dec
+  S2["Codul creează el linkul de plată,<br/>pe același drum contabilizat (planner.py:248)"]:::step
+  P3{"3 · Tocmai a pus ceva în coș<br/>(și nu are link de plată)? (planner.py:258-262)"}:::dec
+  S3["Îi arătăm produse care MERG ÎMPREUNĂ<br/>cu ce a luat, filtrate de siguranță (planner.py:278)<br/>a mers → gata; n-a mers → continuăm"]:::safe
+  P4{"4 · Întreabă «care dintre ELE e cea mai...»?<br/>— superlativ pe ce i-am arătat (planner.py:304-312)"}:::dec
+  S4["Recitim din catalog produsele deja arătate,<br/>ca să răspundem pe FAPTE, nu din memorie (planner.py:322)"]:::safe
+  P5{"5 · Cere «ceva mai ieftin»? (planner.py:332-338)"}:::dec
+  S5["Căutăm STRICT mai ieftin decât ce a văzut (planner.py:346)<br/>nu există → îi spunem cinstit + notăm golul<br/>de preț pentru comerciant (planner.py:362) → gata"]:::safe
+  P6{"6 · AI-ul n-a adus produse, dar clientul<br/>vorbește despre cele deja arătate? (planner.py:380-390)"}:::dec
+  S6["Le recitim din catalog — plasa care evită<br/>un «n-am găsit» absurd (planner.py:393)"]:::safe
+  GATE["FILTRUL FINAL de siguranță: orice produs<br/>contraindicat (ex. sarcină) e scos AICI,<br/>orice ar fi adus căile de mai sus (planner.py:402)"]:::safe
+  RETR["Setul final = SINGURA sursă pentru<br/>răspuns, carduri și memoria discuției (planner.py:403)"]:::step
 
   P1 -- da --> O1
   P1 -- nu --> P2
@@ -622,7 +622,7 @@ flowchart TD
   classDef free fill:#a3e4d7,stroke:#148f77,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
-  classDef dorm fill:#e5e7e9,stroke:#7f8c8d,color:#000,stroke-dasharray: 5 3
+  classDef dorm fill:#e5e7e9,stroke:#7f8c8d,color:#000
 
   APLAN{"Modul strict «answer plan» e pornit?<br/>answer_plan_enabled = false<br/>(stages/agent.py:501)"}:::dec
   AGUARD["DORMANT — nu rulează în producție.<br/>Verificare suplimentară cu AI<br/>(answer_plan_guard.py:20)"]:::dorm
@@ -666,11 +666,11 @@ flowchart TD
 
 **Cele patru căi care ocolesc `ToolRun`** (cross-sell, superlativ, „mai ieftin", rehidratare) aduc
 produse direct din DB. Fiecare are `policy.gate` propriu, iar `retrieval_final`
-([planner.py:372](../src/agent/planner.py)) e plasa de siguranță: idempotent pe un set deja filtrat,
+([planner.py:402](../src/agent/planner.py)) e plasa de siguranță: idempotent pe un set deja filtrat,
 dar prinde orice cale VIITOARE care uită gate-ul. Fără el, un `cart_add` perfect sigur putea trage
 un complement contraindicat.
 
-**`unmet_query` cu `reason="price_gap"`** ([planner.py:331](../src/agent/planner.py)) e marcat exact
+**`unmet_query` cu `reason="price_gap"`** ([planner.py:362](../src/agent/planner.py)) e marcat exact
 unde se știe că turul a fost o intenție de preț. Din rollup n-ai cum să distingi post-hoc „n-am găsit
 nimic" de „n-am găsit nimic mai ieftin" — de aceea faptul se scrie la sursă, nu se inferă.
 

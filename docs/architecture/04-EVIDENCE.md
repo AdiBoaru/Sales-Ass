@@ -315,7 +315,13 @@ Cardul cere contoare docs, nu metrici runtime. Raportate onest, pe ce s-a audita
 | noduri/muchii cu evidence 100% | **N/A** — registrul complet cere diagramele |
 | Mermaid parse errors | **0** (`scripts/verify_architecture_doc.py`) |
 | citări `fișier.py:linie` rupte | **0** în documentele atinse (aceeași poartă, rulată și pe acest fișier) |
-| citări corectate (linia se mutase) | 14 (`triage_stage`, `agent_stage`, `build_plan`, `try_pre_intents`, `validate_prose`, `agent.py:957` → 528 linii) |
+| citări corectate (linia se mutase) | **~32** — `triage_stage` 212→293, `agent_stage` 267→347, `_persist_safety_context` 217→296, `build_plan` 162→182, `try_pre_intents` 469→573, `validate_prose` 195→196, o citare spre linia 957 a lui `agent.py` (fișier de 528 linii), plus **întregul bloc de 16 citări al fazei E**, care era sistematic cu 26-30 de linii în urmă (`planner.py`: login-wall 187→177, checkout 227→248, cross-sell 251→278, superlativ 294→322, cheaper 317→346, `price_gap` 331→362, `retrieval_final` 372→402) |
+
+> **De ce n-au fost prinse de CI:** `check_citations` e **lenient by design** — raportează doar
+> linii peste sfârșitul fișierului (drift dovedit), fiindcă „linia mai conține ce spune citarea"
+> nu poate ști un script. `planner.py` are 400+ linii, deci o citare la `:331` care ar fi trebuit
+> să fie `:362` trece poarta fără zgomot. Se prind doar re-derivând simbolul — de aceea identitatea
+> e simbolul, iar linia e doar ajutor.
 | findings P0 / P1 deschise | 1 / 2 |
 
 ### Gate-ul de repository (docs-only, dar SHA-ul trebuie să rămână verde)
