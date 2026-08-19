@@ -40,7 +40,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 **Sursa de adevăr a inițiativei: [`docs/QUALITY-OVERHAUL-2026.md`](docs/QUALITY-OVERHAUL-2026.md)**
 (ADR APPROVED, deciziile D1-D15 + matricea de dispoziție a cardurilor + 13 faze cu gate-uri).
 
-Arhitectura descrisă mai jos (pipeline liniar în 9 stagii) e **starea CURENTĂ, validă până la
+Arhitectura descrisă mai jos (pipeline liniar în 12 stagii) e **starea CURENTĂ, validă până la
 gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 - **Creier unic (D1):** un singur agent principal (frontier) vede mesajul **BRUT** + istoric +
@@ -331,7 +331,7 @@ determinist (P6). Producția rămâne OFF până la GO-ul NX-246. Detalii:
 
 ---
 
-## Arhitectura — pipeline liniar (9 stagii)
+## Arhitectura — pipeline liniar (12 stagii)
 
 Fiecare mesaj inbound parcurge stagiile în ordine fixă.
 Un singur obiect `TurnContext` curge prin toate stagiile.
@@ -398,7 +398,9 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • system prompt GENERAT din categories (+ intent_aliases pt rutare), nu hardcodat
     • buying stages framework: browsing → narrowing → comparing → ready_to_buy
     • AGENT decide mutarea de vânzare (NU routerul)
-    • MAX 3 tool calls per tur (limită dură în cod)
+    • MAX 3 RUNDE de model per tur (limită dură: llm.py:364). NU e un plafon de tool calls:
+      o rundă poate emite N apeluri și toate se execută. Plafoanele separate pe apeluri/mutații
+      există în src/runtime/turn_budget.py (NX-241), dar sunt OFF (turn_budget_enforced=false)
     • tool results: max 6 produse × 8 câmpuri (nu obiecte complete)
     • P0-safety CONTRAINDICAȚII (NX-173, src/safety/) — UN SINGUR punct de decizie:
       `SafetyPolicy.for_turn(ctx).evaluate(products, purpose)` → `Decision` tipizat. Context
@@ -714,7 +716,7 @@ Retenție: partiții vechi messages/analytics_events → drop partition (job pg_
 
 ```python
 # toate tool-urile au semnătura: async def tool(ctx: TurnContext, **params) -> ToolResult
-# MAX 3 apeluri per tur — limitat în agent runner
+# MAX 3 RUNDE de model per tur (nu 3 apeluri — vezi stagiul 7 și docs/architecture/04-EVIDENCE.md)
 
 search_products(category, filters, budget_max, concerns, suitable_for, limit=6)
   # filtre SQL dure (categories + attributes) + ranking semantic (product_embeddings) + reranker

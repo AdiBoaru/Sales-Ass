@@ -1,0 +1,51 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 11 — Stage 1 · 04a · Web ingress, durabilitate, serializare, recovery [DORMANT]
+flowchart TD
+  classDef ext fill:#d6dbdf,stroke:#5d6d7e,color:#000
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+
+  BROWSER["[EXT] Browser — POST cu client_turn_id<br/>stabil ÎNAINTE de orice I/O"]:::ext
+  CAP["[LIVE] Plafon de corp pe middleware<br/>(webhook/app.py:59)"]:::live
+  GATE{"[OFF] Poarta v2: flag → demo access →<br/>origin → sesiune → legare de origin<br/>(web/app.py:810-821)"}:::off
+  R404["[OFF] 404 — nu confirmăm<br/>existența feature-ului (web/app.py:813)"]:::out
+  PRIV["[LIVE] Frontiera de privacy: apply_boundary<br/>ÎNAINTE de prima scriere durabilă<br/>(worker/processor.py:525)"]:::live
+  ADM["[LIVE] Admission — lease-uri Redis,<br/>plafon global + per tenant<br/>(worker/admission.py:149)"]:::live
+  ACC["[OFF] accept_web_turn — insert-or-inspect<br/>(web/turn_service.py:291)"]:::off
+  LEDGER[("[OFF] web_turns — AUTORITATEA<br/>insert_turn (db/queries/web_turns.py:89)")]:::auth
+  DUP{"[OFF] Cheia există deja?"}:::dec
+  R202["[OFF] 202 + status<br/>(turn_events.py:209)"]:::out
+  R409["[OFF] 409 idempotency_conflict —<br/>aceeași cheie, alt corp (web/app.py:549)"]:::out
+  REPLAY["[OFF] Replay EXACT al aceluiași<br/>ViewModel din ledger (web/app.py:431)"]:::out
+  WAKE["[OFF] Trezire Redis — best-effort,<br/>NU autoritate (turn_executor.py:80)"]:::off
+  SWEEP["[OFF] Sweeper DB — plasa care nu depinde<br/>de Redis (turn_recovery.py:108)"]:::off
+  CLAIM{"[OFF] claim_turn — lease + fencing<br/>pe epoch (web_turns.py:204)"}:::dec
+  EXEC["[OFF] Executor — rulează pipeline-ul<br/>sub deadline (04b1 → 04b3)"]:::off
+  COMMIT["[OFF] complete_turn — commit terminal<br/>ATOMIC (web_turns.py:282)"]:::auth
+  FAILT["[OFF] fail_turn / terminalizare cu cod<br/>(web_turns.py:310 · turn_recovery.py:66)"]:::out
+  GETR["[OFF] GET /v2/turns/id — proiecție din ledger<br/>(web/app.py:1402)"]:::out
+  SSE["[OFF*] SSE — livrare repetabilă,<br/>NU sursă de adevăr (web/app.py:1428)"]:::off
+
+  BROWSER --> CAP --> GATE
+  GATE -- "flag OFF / sesiune invalidă" --> R404
+  GATE -- ok --> PRIV --> ADM --> ACC --> LEDGER
+  LEDGER --> DUP
+  DUP -- "cheie nouă" --> WAKE
+  DUP -- "aceeași cheie, alt corp" --> R409
+  DUP -- "duplicat, tur terminal" --> REPLAY
+  DUP -- "duplicat, tur activ" --> R202
+  WAKE --> CLAIM
+  SWEEP -. "trezire pierdută / worker mort" .-> CLAIM
+  CLAIM -- "lease obținut" --> EXEC
+  CLAIM -- "alt owner deține lease-ul" --> R202
+  EXEC -- "rezultat" --> COMMIT
+  EXEC -- "deadline / eroare / reclaim epuizat" --> FAILT
+  COMMIT --> GETR
+  FAILT --> GETR
+  COMMIT -. "notificare best-effort" .-> SSE
+  SSE -. "event pierdut → clientul reia" .-> GETR

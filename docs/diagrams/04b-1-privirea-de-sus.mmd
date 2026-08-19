@@ -9,11 +9,11 @@ flowchart LR
   classDef safe fill:#f5b7b1,stroke:#922b21,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
 
-  A["A · Pregătire + siguranță:<br/>ce restricții a declarat clientul<br/>(sarcină...) se rețin ACUM<br/>(agent.py:267-295)"]:::safe
-  B["B · Scurtături fără AI:<br/>«dă-mi linkul», «compară-le»,<br/>«detalii», «ce zic recenziile»<br/>(deterministic.py:469)"]:::free
+  A["A · Pregătire + siguranță:<br/>ce restricții a declarat clientul<br/>(sarcină...) se rețin ACUM<br/>(agent.py:347-375)"]:::safe
+  B["B · Scurtături fără AI:<br/>«dă-mi linkul», «compară-le»,<br/>«detalii», «ce zic recenziile»<br/>(deterministic.py:573)"]:::free
   C["C · Construim instrucțiunile<br/>pentru AI din datele magazinului<br/>+ tot ce știm din discuție<br/>(agent.py:299-350)"]:::step
-  D["D · AI-ul MARE caută în catalog<br/>cu unelte controlate<br/>(maxim 3 căutări) (llm.py:227)"]:::llm
-  E["E · CODUL decide ce arătăm<br/>de fapt (planner.py:162)"]:::step
+  D["D · AI-ul MARE caută în catalog<br/>cu unelte controlate — maxim 3 RUNDE<br/>de model, nu 3 apeluri (llm.py:364)"]:::llm
+  E["E · CODUL decide ce arătăm<br/>de fapt (planner.py:182)"]:::step
   F["F · Compunem răspunsul + verificăm<br/>fiecare preț și link<br/>(finalize.py:325)"]:::llm
   X1["Răspuns imediat —<br/>zero cost AI"]:::out
   X2["«mai arată-mi» → pagina următoare<br/>din ce am găsit deja"]:::free

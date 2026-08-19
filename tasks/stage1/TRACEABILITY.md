@@ -136,7 +136,7 @@ sample/interval; și lipsa regresiei în canary.
 | F-35 | backup/restore/Redis-loss RPO/RTO nu sunt demonstrate | deploy/runbooks actuale | NX-248 | NX-249 blocked dacă UNVERIFIED |
 | F-36 | nu există stable canary/controller/drain/decision packet pentru v1→v2 | flags/routes curente | NX-249 | NX-246/247/248 gates |
 | F-37 | nu există un singur gate cross-repo pentru contract, recovery, renderer și failures | repo-uri/teste separate | NX-247 | consumat de NX-249 |
-| F-38 | diagramele 4a/4b/4c descriu pipelineul legacy și conțin drifturi TVAL/budgets/specs/grounding | `docs/ARCHITECTURE-WORKFLOWS.md` | NX-250 | 100% node/edge/invariant evidence după cutover |
+| F-38 | diagramele 4a/4b/4c descriu pipelineul legacy și conțin drifturi TVAL/budgets/specs/grounding | `docs/ARCHITECTURE-WORKFLOWS.md` | NX-250 | **PARȚIAL (2026-08-18).** Cele 9 drifturi sunt urmărite în cod și dispuse în `docs/architecture/04-EVIDENCE.md`; TVAL/budgets/AGUARD/CTAB/GRND/spec_numbers corectate în doc. Cele cinci diagrame livrate ca topologie ȚINTĂ (`Diagram 11-15`), registru 65/72 noduri cu evidence, 0 elemente marcate `LIVE_V2`. Cuvântul **as-built** rămâne BLOCAT: cutoverul n-a avut loc și producția rulează un artefact anterior NX-233/248 (măsurat). Findingul P0 deschis ca **NX-251** |
 
 ## Matricea cardurilor: ownership și dovada de ieșire
 

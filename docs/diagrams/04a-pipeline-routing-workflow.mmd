@@ -1,7 +1,7 @@
 %% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
 %% Regenerare: python scripts/export_diagrams.py
 %% Editare vizuală: https://mermaid.live (paste tot fișierul)
-%% Diagram 4a — Pipeline Routing Workflow (cele 11 stagii)
+%% Diagram 4a — Pipeline Routing Workflow (cele 12 stagii)
 flowchart TD
   classDef stage fill:#a9dfbf,stroke:#1e8449,color:#000
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
@@ -49,8 +49,9 @@ flowchart TD
   FAQ{"7 · Se potrivește cu o întrebare<br/>frecventă? (prag + rerank) (faq.py:45-101)"}:::dec
   FHIT["Servim răspunsul din FAQ"]:::free
 
-  TRI["8 · AI-ul MIC clasifică mesajul:<br/>vânzare / comandă / simplu / neclar<br/>(triage.py:212)"]:::llm
-  TVAL{"Clasificarea e validă? Categoria<br/>chiar există la noi? (:247-255)"}:::dec
+  TRI["8 · AI-ul MIC clasifică mesajul:<br/>vânzare / comandă / simplu / neclar<br/>(triage.py:293)"]:::llm
+  TPARSE{"JSON-ul de la nano trece de schemă?<br/>(triage.py:329-336)"}:::dec
+  TCAT["Categoria INVENTATĂ se aruncă tăcut<br/>(category_key=None) — ruta CONTINUĂ,<br/>NU cade în plasa finală (triage.py:339)"]:::step
   TGUARD{"Întrebare cu cifre/fapte deghizată<br/>în «simplu»? (:261)"}:::dec
   TCONF{"AI-ul e nesigur pe clasificare? (:272)"}:::dec
   ROUTE{"Încotro merge mesajul?"}:::dec
@@ -61,7 +62,7 @@ flowchart TD
   HESC["Anunțăm operatorul + îi confirmăm<br/>clientului (:44-49)"]:::out
   HSUP["Pe site nu e operator → tratăm<br/>ca vânzare (:40-42)"]:::stage
 
-  AGENT["10 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:267)"]:::llm
+  AGENT["10 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:347)"]:::llm
   FB["11 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
   SEND["Răspunsul pleacă spre client<br/>(un singur punct de ieșire)"]:::out
 
@@ -91,9 +92,9 @@ flowchart TD
   CACHE -- da --> CHIT
   CACHE -- nu --> FAQ
   FAQ -- da --> FHIT
-  FAQ -- nu --> TRI --> TVAL
-  TVAL -- "invalid → fără rută" --> FB
-  TVAL -- ok --> TGUARD
+  FAQ -- nu --> TRI --> TPARSE
+  TPARSE -- "schemă invalidă / apel eșuat → return, ctx.route rămâne None" --> FB
+  TPARSE -- ok --> TCAT --> TGUARD
   TGUARD -- "da → vânzare" --> ROUTE
   TGUARD -- nu --> TCONF
   TCONF -- "da → clarificare" --> ROUTE

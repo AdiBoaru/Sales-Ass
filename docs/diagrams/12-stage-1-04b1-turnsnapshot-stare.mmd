@@ -1,0 +1,40 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 12 — Stage 1 · 04b1 · TurnSnapshot, stare/referinta, alegerea caii [DORMANT]
+flowchart TD
+  classDef ext fill:#d6dbdf,stroke:#5d6d7e,color:#000
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+
+  CTXIN["[EXT] Browser: suprafață + identificatori OPACI<br/>fără preț, fără stoc, fără total"]:::ext
+  NORM{"[OFF] Normalizare: câmp comercial în context?<br/>(web/context.py:129)"}:::dec
+  R422["[OFF] 422 — un fapt comercial de la client<br/>nu e input, e o minciună posibilă"]:::out
+  HYDR["[OFF] Rehidratare canonică, tenant-scoped,<br/>UN query (catalog/context_resolver.py:210)"]:::off
+  FRESH["[OFF] Freshness: known / unknown / stale —<br/>UNKNOWN nu devine 0 (context_resolver.py:84)"]:::off
+  TENANT["[LIVE] business_id injectat SERVER-SIDE,<br/>niciodată din client sau din model"]:::auth
+  SNAP["[OFF] TurnSnapshot IMUABIL<br/>(worker/turn_snapshot.py:53-81)"]:::off
+  STATE["[OFF] ConversationStateV2 — nevoi, revocări,<br/>referințe; UN singur scriitor<br/>(conversation/state_reducer.py:179)"]:::off
+  REF["[OFF] Precedență UNICĂ de referință:<br/>action > named > ordinal > page ><br/>selected > single (reference_resolver.py:258)"]:::off
+  STALE["[OFF] Referință stale ⇒ REFUZ explicit,<br/>nu ghicit"]:::out
+  ACT{"[OFF] Turul a pornit dintr-un token de acțiune?"}:::dec
+  KERN["[OFF] Action kernel — o acțiune e o DECIZIE,<br/>nu o intenție de ghicit; rulează ÎNAINTEA<br/>triajului (agent/action_kernel.py)"]:::off
+  FAST{"[OFF] Fast path: obligațiile mesajului sunt<br/>acoperite COMPLET și sigur?<br/>(agent/control_plane.py:88)"}:::dec
+  FASTOUT["[OFF] Răspuns determinist — zero model<br/>(control_plane.py:135)"]:::out
+  BRAIN["[OFF*] MainBrain — UN singur scriitor semantic,<br/>vede mesajul BRUT + istoric + profil<br/>(agent/brain.py:222) → 04b2"]:::off
+
+  CTXIN --> NORM
+  NORM -- "da" --> R422
+  NORM -- "nu" --> HYDR --> FRESH --> TENANT --> SNAP
+  SNAP --> STATE --> REF
+  REF -- "referință expirată" --> STALE
+  REF -- ok --> ACT
+  ACT -- da --> KERN
+  KERN -- "Handled — iese cu reply" --> FASTOUT
+  KERN -- "Continue — setează ruta" --> FAST
+  ACT -- nu --> FAST
+  FAST -- "acoperire completă + sigură" --> FASTOUT
+  FAST -- "orice dubiu" --> BRAIN

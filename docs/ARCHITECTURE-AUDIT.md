@@ -1,5 +1,18 @@
 # Nativx Assistant — Audit de Arhitectură (standard 2026)
 
+> **HISTORICAL — superseded.** Document de audit datat; se păstrează ca provenance, nu ca
+> descriere a sistemului de azi. Trei afirmații din el au fost DEPĂȘITE sau infirmate de atunci:
+> (1) „pipeline liniar de 9 stagii" — sunt **12** (`DEFAULT_STAGES`, verificat mecanic de
+> `scripts/verify_architecture_doc.py`); (2) „WhatsApp (canal primar de producție)" — canalul de
+> lucru e **web widget**, exclusiv (NX-179); WhatsApp n-a fost niciodată conectat; (3) „max 3
+> apeluri" tool-calling — capul dur e pe **runde de model**, nu pe apeluri (NX-250, măsurat: 9
+> execuții sub „max 3"). În plus, diagramele Mermaid din acest fișier **nu trec** verificatorul
+> (146 de probleme: noduri nedeclarate, `subgraph`/`end` dezechilibrat) — nu au fost niciodată sub
+> poartă, fiindcă `scripts/verify_architecture_doc.py` rulează doar pe documentul normativ.
+> Nu se repară aici: un document istoric se marchează și se leagă, nu se rescrie. Starea curentă:
+> [`ARCHITECTURE-WORKFLOWS.md`](ARCHITECTURE-WORKFLOWS.md) +
+> [`architecture/04-EVIDENCE.md`](architecture/04-EVIDENCE.md).
+
 ## 0. Executive Summary
 
 **Ce este sistemul.** Nativx Assistant este o platformă SaaS multi-tenant de *conversational commerce* pe WhatsApp (canal primar de producție) și Telegram (canal de test), destinată retailerilor din România (beauty, HVAC, auto, salon). Tehnic, este un pipeline liniar de 9 stagii care procesează fiecare mesaj inbound printr-un singur obiect imutabil de stare (`TurnContext`), cu LLM invocat în exact două puncte decizionale — triaj (`gpt-5.4-nano`) și agent de vânzare (`gpt-5.4-mini`) — restul fiind cod determinist [CLAUDE.md:46-184, `src/worker/runner.py:80-87`]. Stack: Python 3.12 / asyncio, FastAPI (webhook), Redis Streams (coadă + dedupe), Postgres 16 / Supabase (schemă unică `public`, izolare pe `business_id` + RLS), OpenAI (LLM + embeddings).

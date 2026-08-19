@@ -8,23 +8,24 @@ flowchart TD
   classDef free fill:#a3e4d7,stroke:#148f77,color:#000
   classDef out fill:#aed6f1,stroke:#2874a6,color:#000
   classDef step fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dorm fill:#e5e7e9,stroke:#7f8c8d,color:#000
 
-  APLAN{"Modul strict «answer plan» e pornit?<br/>(azi: OPRIT) (agent.py:396)"}:::dec
-  AGUARD["Verificare suplimentară cu AI<br/>(answer_plan_guard.py:20)"]:::llm
+  APLAN{"Modul strict «answer plan» e pornit?<br/>answer_plan_enabled = false<br/>(stages/agent.py:501)"}:::dec
+  AGUARD["DORMANT — nu rulează în producție.<br/>Verificare suplimentară cu AI<br/>(answer_plan_guard.py:20)"]:::dorm
   CMPD{"A cerut o COMPARAȚIE?"}:::dec
-  CTAB["Tabel comparativ făcut de COD —<br/>AI-ul nu scrie nicio cifră în celule"]:::free
+  CTAB["TERMINAL: tabel comparativ făcut de COD,<br/>zero proză de model în celule → iese cu<br/>«return None», NU trece prin validatorul de<br/>proză (finalize.py:347-357)"]:::free
   PRD{"Avem produse de arătat?"}:::dec
   RICHC["AI-ul compune recomandarea<br/>structurată (carduri) (:266)"]:::llm
   ROK{"A ieșit ceva valid?"}:::dec
   RICHOUT["Trimitem cardurile + butonul de plată<br/>+ notăm ce am recomandat"]:::out
   DOWN["Cădem pe text simplu —<br/>motivul se înregistrează (:396)"]:::step
-  VALID{"Verificăm textul: fiecare preț, link,<br/>cifră, afirmație de stoc sau sănătate<br/>(validator.py:195)"}:::dec
+  VALID{"Verificăm textul: fiecare preț, link,<br/>cifră, afirmație de stoc sau sănătate<br/>(validator.py:196)"}:::dec
   RETRY["O reîncercare, cu explicația greșelii"]:::llm
   V2{"Acum e valid?"}:::dec
   DETR["Formulare scrisă de cod, fără cifre"]:::free
   PROSE["Text + carduri către client"]:::out
   ORD{"Era despre o comandă?"}:::dec
-  GRND["Răspuns legat STRICT de datele<br/>comenzii lui (:149)"]:::llm
+  GRND["Răspuns pe datele comenzii lui:<br/>validează linkuri + sume, dar NU cifre bare<br/>și NU claims (date/AWB/cantități sunt<br/>numere legitime din DB) (finalize.py:148)"]:::llm
   TXTOK{"Text sigur, fără produse?<br/>(o clarificare, de pildă)"}:::dec
   NORES["«Nu am găsit» sigur + butoane de<br/>continuare — NU se salvează în cache (:211)"]:::out
 

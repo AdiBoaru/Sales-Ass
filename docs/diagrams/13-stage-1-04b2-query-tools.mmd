@@ -1,0 +1,37 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 13 — Stage 1 · 04b2 · Query/tools, EvidenceBundle, AnswerPlan [DORMANT]
+flowchart TD
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+
+  DL["[OFF] UN deadline total de tur, monoton,<br/>NEprelungit la reclaim (runtime/deadline.py:85)"]:::auth
+  BUD["[OFF] Manifest VERSIONAT de bugete pe clasă de tur:<br/>runde de model · tool calls · mutații ·<br/>repair ≤ 1 (runtime/turn_budget.py:73-77)"]:::auth
+  ROUND{"[OFF] Mai am o RUNDĂ de model?"}:::dec
+  MODEL["[OFF*] Rundă de model (structurată)<br/>(agent/brain.py:222)"]:::off
+  TCALL{"[OFF] Mai am buget de TOOL CALLS?<br/>rezervat ATOMIC — un tool storm<br/>nu poate trece de ultimul slot"}:::dec
+  CLS["[OFF] Tool-uri CLASIFICATE: citirile independente<br/>în paralel, mutațiile EXCLUSIVE și seriale<br/>(agent/tool_budget.py)"]:::off
+  PORT["[OFF] RetrievalPort — candidații sunt REFERINȚE<br/>+ verdicte tri-state (retrieval/port.py)"]:::off
+  SEL{"[OFF] Selector de promovare: artefact de decizie<br/>GO semnat HMAC? (retrieval/selector.py)"}:::dec
+  CUR["[LIVE] CurrentLiveRetrievalAdapter — apelează<br/>search_products_tool, paritate prin construcție"]:::live
+  CAND["[OFF] SearchEntitiesAdapter — enforce hard<br/>constraints; INERT (fără @register)"]:::off
+  EV["[OFF*] EvidenceBundle — faptele turului ÎNGHEȚATE:<br/>known / unknown(reason) / stale(age, sla)<br/>+ sursă (agent/evidence_bundle.py:568)"]:::auth
+  PLAN["[OFF*] AnswerPlanV2 — evidence ÎNAINTEA textului<br/>(agent/brain_models.py) → 04b3"]:::off
+  EXH["[OFF] Buget/deadline epuizat → ieșire onestă,<br/>nu tăcere (P6)"]:::out
+
+  DL --> BUD --> ROUND
+  ROUND -- "da" --> MODEL --> TCALL
+  ROUND -- "nu" --> PLAN
+  TCALL -- "da" --> CLS --> PORT --> SEL
+  TCALL -- "nu" --> EXH
+  SEL -- "GO verificat" --> CAND
+  SEL -- "NOT-READY / artefact absent / semnătură invalidă" --> CUR
+  CUR --> EV
+  CAND --> EV
+  EV --> ROUND
+  EV --> PLAN
+  DL -. "expirat oricând" .-> EXH

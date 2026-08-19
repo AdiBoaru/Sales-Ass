@@ -1,0 +1,39 @@
+%% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
+%% Regenerare: python scripts/export_diagrams.py
+%% Editare vizuală: https://mermaid.live (paste tot fișierul)
+%% Diagram 14 — Stage 1 · 04b3 · Validare, proiectie, rezultat atomic [DORMANT]
+flowchart TD
+  classDef off fill:#e5e7e9,stroke:#7f8c8d,color:#000
+  classDef live fill:#a9dfbf,stroke:#1e8449,color:#000
+  classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
+  classDef out fill:#aed6f1,stroke:#2874a6,color:#000
+  classDef auth fill:#f5b7b1,stroke:#922b21,color:#000
+
+  PLAN["[OFF*] AnswerPlanV2 + EvidenceBundle înghețat"]:::off
+  GRND{"[OFF*] Grounding guard: fiecare cifră, procent,<br/>link și stoc din proză se confruntă cu FAPTELE<br/>(agent/grounding_guard.py:264)"}:::dec
+  NOSRC["[OFF*] Livrare / promoție / garanție / superlativ<br/>fără sursă ⇒ RESPINGE răspunsul"]:::out
+  VAL{"[OFF] Validator determinist — REFOLOSEȘTE<br/>validatorul NX-211 prin to_v1()"}:::dec
+  REP{"[OFF] Repair bounded — exact UNUL"}:::dec
+  FBK["[OFF] Fallback determinist, fără cifre (P6)"]:::out
+  SAFE["[LIVE] Gate P0 de contraindicații — un filtru de<br/>REZULTAT nu poate anula un rând scris,<br/>deci mutațiile cer policy.allows() ÎNAINTE"]:::auth
+  CART["[OFF] CartService — UN serviciu pentru AMBELE căi<br/>(tool LLM + click); receipt idempotent<br/>per tur/acțiune (commerce/cart_service.py:69)"]:::off
+  PROJ["[OFF*] Projector PUR web-view.v2 — zero I/O,<br/>zero ceas ⇒ două citiri, aceiași bytes<br/>(channels/web/render_v2.py)"]:::off
+  LOC["[OFF*] Tot ce e afișabil e text LOCALIZAT —<br/>niciun număr pe sârmă în afară de revision"]:::off
+  CTA{"[OFF] CTA de coș doar pentru produse pe care<br/>guardul le declară vandabile"}:::dec
+  COMMIT["[OFF] TurnCommit — O tranzacție: stare +<br/>mesaje + receipts + rezultat<br/>(worker/turn_uow.py:208)"]:::auth
+  AFTER["[OFF] Aftercare — STRICT post-terminal,<br/>bounded; nu prelungește turul"]:::out
+
+  PLAN --> GRND
+  GRND -- "afirmație fără sursă" --> NOSRC --> FBK
+  GRND -- "fapte acoperite" --> VAL
+  VAL -- "invalid" --> REP
+  REP -- "reparat" --> VAL
+  REP -- "tot invalid" --> FBK
+  VAL -- "ok" --> SAFE
+  SAFE -- "mutație cerută" --> CART --> PROJ
+  SAFE -- "doar citire" --> PROJ
+  PROJ --> LOC --> CTA
+  CTA -- "vandabil" --> COMMIT
+  CTA -- "nevandabil ⇒ fără token" --> COMMIT
+  FBK --> COMMIT
+  COMMIT --> AFTER
