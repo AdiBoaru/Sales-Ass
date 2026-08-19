@@ -162,6 +162,26 @@ def assert_harness_allowed(*, bind_host: str, control_secret: str) -> None:
             f"harnessul se leagă DOAR la loopback (cerut: {bind_host!r}); "
             "un harness accesibil din rețea e o rută de control publică"
         )
+    # Singurul lucru în care harnessul SCRIE era singurul pe care nu-l verifica.
+    #
+    # Măsurat pe 2026-08-19: baza de producție avea patru tenanți sintetici `NX-247 alpha/beta`,
+    # cu canale `webchat` ACTIVE, din două rulări diferite. Gărzile de mai sus îi cer să nu se
+    # lege la rețea și să pornească doar cu `ENV=test` — dar `deny_outbound_network()` permite
+    # explicit hostul de DB citit din configurație, iar `ENV` e independent de DSN. Rulezi suita
+    # cu `.env`-ul de producție (exact ce faci ca să meargă testele într-un worktree fresh, unde
+    # `.env` e gitignored) și seedarea intră în Supabase.
+    #
+    # Nu e o breșă — tokenurile sunt `uuid4()` — dar e scriere în producție dintr-un test, adică
+    # fix clasa de accident pe care restul porții o exclude. Postgresul de test trăiește pe
+    # `127.0.0.1:55432` (`docker-compose.stage1-e2e.yml`), deci regula „loopback" se aplică
+    # neschimbată aici. Fără scăpare prin variabilă de mediu: un opt-out ar fi exact ce s-ar seta
+    # din reflex când testul „nu merge".
+    db_host = (urllib.parse.urlparse(settings.supabase_db_url).hostname or "").lower()
+    if db_host not in LOOPBACK_HOSTS:
+        raise HarnessRefused(
+            f"harnessul scrie DOAR într-o bază de pe loopback (SUPABASE_DB_URL → {db_host!r}). "
+            "Pornește Postgresul efemer: docker compose -f docker-compose.stage1-e2e.yml up -d"
+        )
     if len(control_secret or "") < MIN_CONTROL_SECRET_LEN:
         raise HarnessRefused(
             f"secretul de control trebuie să aibă ≥{MIN_CONTROL_SECRET_LEN} caractere "

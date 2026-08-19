@@ -106,6 +106,14 @@ docker compose -f docker-compose.stage1-e2e.yml run --rm bootstrap
    nu se comite — pe DB-ul real a fost aplicată cu `apply_005.py`), deci `conn.execute` din runner ar
    da syntax error. 003 vine cu ea fiindcă 005 are nevoie de rolul pe care 003 îl creează.
 
+> ⚠️ **`SUPABASE_DB_URL` trebuie să fie pe loopback — harnessul refuză orice altceva.**
+> Într-un worktree fresh, `.env` e gitignored și testele nu pornesc; reflexul e să copiezi `.env`-ul
+> din repo-ul principal, care are DSN-ul de PRODUCȚIE. Gărzile vechi cereau `ENV=test` și bind pe
+> loopback, dar niciuna nu se uita la baza în care harnessul SCRIE — iar `deny_outbound_network()`
+> permite explicit hostul de DB din configurație. Rezultatul, măsurat pe 2026-08-19: patru tenanți
+> sintetici `NX-247 alpha/beta`, cu canale `webchat` active, în Supabase-ul de producție, din două
+> rulări diferite. Acum pornirea e refuzată cu un mesaj care spune ce să faci.
+
 ### 4.2 Migrările — numai prin runnerul canonic
 
 ```powershell

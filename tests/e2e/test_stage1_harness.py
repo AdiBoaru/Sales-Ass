@@ -35,7 +35,9 @@ ROOT = Path(__file__).resolve().parents[2]
 E2E_DIR = ROOT / "tests" / "e2e"
 
 BASE_ENV = {
-    "SUPABASE_DB_URL": "postgresql://u:p@db.internal:5432/db",
+    # Loopback, ca in `docker-compose.stage1-e2e.yml`: poarta de pornire refuza acum orice
+    # baza care nu e pe loopback, iar BASE_ENV trebuie sa reprezinte ce ruleaza cu adevarat.
+    "SUPABASE_DB_URL": "postgresql://stage1:stage1@127.0.0.1:55432/stage1",
     "REDIS_URL": "redis://cache.internal:6379/0",
     "OPENAI_API_KEY": "sk-test",
     "META_VERIFY_TOKEN": "verify-123",
@@ -346,7 +348,17 @@ def test_network_guard_denies_provider_hosts_and_counts(monkeypatch: pytest.Monk
 def test_network_guard_allows_loopback_and_configured_backends(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_settings(monkeypatch, _settings(monkeypatch, ha.CERTIFIED_PROFILE))
+    # DSN remote ANUME: aici se verifică allowlistul de rețea, care trebuie să deducă hostul de DB
+    # din configurație. Cu un DSN de loopback assertul ar trece trivial și n-ar mai dovedi nimic.
+    # Poarta de pornire (care cere loopback) nu e chemată în acest test.
+    _patch_settings(
+        monkeypatch,
+        _settings(
+            monkeypatch,
+            ha.CERTIFIED_PROFILE,
+            SUPABASE_DB_URL="postgresql://u:p@db.internal:5432/db",
+        ),
+    )
     guard = ha.deny_outbound_network()
     try:
         assert guard._allowed("127.0.0.1")
@@ -1039,3 +1051,40 @@ def test_blocked_subcategories_sum_to_the_blocked_total() -> None:
         f"sub-categoriile însumează {sum(buckets.values())}, dar sunt "
         f"{gaps['scenarios_blocked']} scenarii blocate: {buckets}"
     )
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "postgresql://u:p@db.example.supabase.co:5432/postgres",
+        "postgresql://u:p@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
+        "postgresql://u:p@10.0.0.5:5432/db",
+    ],
+)
+def test_refuses_non_loopback_database(monkeypatch: pytest.MonkeyPatch, dsn: str) -> None:
+    """Singurul lucru în care harnessul SCRIE era singurul pe care nu-l verifica.
+
+    Regresie măsurată (2026-08-19): baza de PRODUCȚIE avea patru tenanți sintetici
+    `NX-247 alpha/beta`, cu canale `webchat` ACTIVE, din două rulări diferite. Gărzile existente
+    cer loopback pentru hostul de BIND și `ENV=test` — dar `deny_outbound_network()` permite
+    explicit hostul de DB citit din configurație, iar `ENV` e independent de DSN. Rulezi suita cu
+    `.env`-ul de producție (exact ce faci ca să meargă testele într-un worktree fresh, unde `.env`
+    e gitignored) și seedarea intră în Supabase.
+    """
+    _patch_settings(monkeypatch, _settings(monkeypatch, ha.CERTIFIED_PROFILE, SUPABASE_DB_URL=dsn))
+    with pytest.raises(ha.HarnessRefused, match="loopback"):
+        ha.assert_harness_allowed(bind_host="127.0.0.1", control_secret=CONTROL_SECRET)
+
+
+def test_accepts_the_ephemeral_loopback_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reversul: DSN-ul din `docker-compose.stage1-e2e.yml` trebuie să treacă neschimbat — altfel
+    garda ar fi o interdicție, nu o poartă."""
+    _patch_settings(
+        monkeypatch,
+        _settings(
+            monkeypatch,
+            ha.CERTIFIED_PROFILE,
+            SUPABASE_DB_URL="postgresql://stage1:stage1@127.0.0.1:55432/stage1",
+        ),
+    )
+    ha.assert_harness_allowed(bind_host="127.0.0.1", control_secret=CONTROL_SECRET)
