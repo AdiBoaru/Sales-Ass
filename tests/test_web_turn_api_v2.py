@@ -625,7 +625,9 @@ async def test_action_accept_persists_the_typed_command_not_the_token(monkeypatc
     assert {e.type for e in events} >= {"web_action_verified", "web_action_key_age"}
 
 
-async def test_action_with_a_tampered_token_is_rejected_before_accept(monkeypatch):
+async def test_action_with_a_tampered_token_is_rejected_before_accept(
+    monkeypatch, tamper_action_token
+):
     source = _action_source()
 
     async def fake_accept(db, **kw):
@@ -633,7 +635,7 @@ async def test_action_with_a_tampered_token_is_rejected_before_accept(monkeypatc
 
     _wire_v2(monkeypatch, accept=fake_accept)
     issued = _wire_actions(monkeypatch, source)
-    tampered = issued.token[:-2] + ("AB" if not issued.token.endswith("AB") else "CD")
+    tampered = tamper_action_token(issued.token)
     res = await wa.web_turn_accept_v2(
         _Req(_action_body(uuid4(), tampered)), token="tok", visitor_id="web_1", sig="s"
     )

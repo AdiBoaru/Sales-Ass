@@ -251,6 +251,21 @@ jobs:
       contents: read
     # NU pe PR-uri (atinge DB real) — doar pe main + nightly. Obligatoriu pe main.
     if: github.event_name != 'pull_request'
+    # Un singur job de-ăsta pe tot repo-ul, oricâte rulări ar fi în zbor.
+    #
+    # DB-ul real e în spatele poolerului Supabase în SESSION MODE, plafonat la 15 clienți pentru
+    # userul ăsta. Un singur job poate cere până la 20 de sesiuni în vârf (admin_pool max_size=10 +
+    # bot_pool max_size=10, `src/db/connection.py`), iar bugetul e împărțit cu PRODUCȚIA, care ține
+    # sesiuni permanent. Două rulări simultane îl depășesc garantat: pe 2026-08-19 două pushuri la
+    # 9 secunde distanță (runs 32246740062 + 32246751827) au pornit două joburi în paralel.
+    #
+    # Simptomul era `(EMAXCONNSESSION) max clients reached in session mode`, raportat ca eșec al
+    # testului de IZOLARE — adică gate-ul de securitate arăta roșu din motive de capacitate.
+    # `cancel-in-progress: false`: rulările se așteaptă, nu se anulează — pe main fiecare commit
+    # trebuie chiar verificat.
+    concurrency:
+      group: isolation-db
+      cancel-in-progress: false
     env:
       # SUPABASE_DB_URL = secret repo (URL pooler, rezolvabil pe IPv4 din Actions).
       # Compat mode (fără DATABASE_URL_BOT) → SET ROLE bot_runtime în init.

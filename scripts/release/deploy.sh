@@ -83,8 +83,26 @@ docker compose up -d --remove-orphans
 
 # Așteaptă READINESS, nu „containerul există". Bounded: un deploy care nu devine gata trebuie să
 # eșueze zgomotos, ca rollbackul să înceapă imediat.
+#
+# Starea se citește cu `docker inspect`, nu prin `docker compose ps --format json | python3`:
+#
+#   • formatul lui `ps --format json` s-a SCHIMBAT în Compose v2 (un array JSON înainte de 2.21,
+#     NDJSON — un obiect pe linie — după). Parserul de linii returna `unknown` tăcut pe formatul
+#     vechi, deci bucla se scurgea toate cele 30 de încercări și deployul pica după 150 de secunde
+#     pe un container perfect sănătos. Versiunea de Compose de pe host devenea parte din contractul
+#     de release, fără s-o declare nimeni;
+#   • depindea de `python3` PE HOST — o dependență nedeclarată pentru un pas care decide dacă
+#     releaseul trece sau se dă înapoi.
+#
+# `docker inspect -f` cu `if .State.Health` acoperă și serviciile fără healthcheck (întoarce
+# `running`), deci aceeași buclă merge dacă webhook-ul ar rămâne vreodată fără sondă.
 for i in $(seq 1 30); do
-  state="$(docker compose ps --format json webhook | python3 -c 'import sys,json;d=[json.loads(l) for l in sys.stdin if l.strip()];print(d[0].get("Health") or d[0].get("State") if d else "missing")' 2>/dev/null || echo unknown)"
+  cid="$(docker compose ps -q webhook 2>/dev/null || true)"
+  if [ -n "$cid" ]; then
+    state="$(docker inspect -f '{{ if .State.Health }}{{ .State.Health.Status }}{{ else }}{{ .State.Status }}{{ end }}' "$cid" 2>/dev/null || echo unknown)"
+  else
+    state="missing"
+  fi
   if [ "$state" = "healthy" ]; then
     echo "✓ webhook healthy după ${i} încercări"
     break

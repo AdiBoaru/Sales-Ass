@@ -323,11 +323,11 @@ async def test_expired_token_reports_a_distinct_code(monkeypatch):
     assert verdict.code == "action_expired"
 
 
-async def test_tampered_token_is_generically_invalid(monkeypatch):
+async def test_tampered_token_is_generically_invalid(monkeypatch, tamper_action_token):
     source = _source_with_actions()
     issued = _issue(source)[0]
     db = _provider(source, monkeypatch=monkeypatch)
-    tampered = issued.token[:-2] + ("AB" if not issued.token.endswith("AB") else "CD")
+    tampered = tamper_action_token(issued.token)
     verdict = await _authorize(db, tampered)
     assert isinstance(verdict, svc.ActionRejected)
     assert verdict.code == "action_invalid"
