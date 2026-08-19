@@ -350,3 +350,52 @@ def test_build_manifest_nu_are_nevoie_de_dependente_instalate():
     assert out.stdout.strip() == "False", (
         "build_manifest.py trage pydantic în proces — jobul de build n-are dependențe instalate"
     )
+
+
+# ── Preflight: primul release nu poate fi un impas ──────────────────────────────────────────
+
+
+def _preflight():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "preflight", ROOT / "scripts" / "release" / "preflight.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["preflight"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_primul_release_e_o_stare_nu_un_esec():
+    """`--require-rollback-possible` cere un predecesor; la PRIMUL release nu există niciunul.
+
+    Poarta era imposibil de trecut prin construcție — bootstrap blocat. Ieșit la iveală
+    2026-08-19, la prima promovare care a ajuns până acolo. Acceptarea e DECLARATĂ
+    (`--allow-no-previous-digest`), nu dedusă: din manifest, „primul release" și „manifestul
+    precedent n-a putut fi citit" arată identic — `build_manifest.py` lasă `previous_digest` gol
+    în ambele cazuri, iar a doua e exact situația în care vrei să te oprești.
+    """
+    m = _manifest(previous_digest="", previous_schema_tolerates=-1)
+    possible, why = m.rollback_possible(applied_schema=44)
+    assert possible is False
+    assert "primul release" in why
+
+
+def test_acceptarea_nu_relaxeaza_si_schema_depasita():
+    """Steagul acoperă DOAR absența unei ținte. O schemă care depășește ce tolerează imaginea
+    precedentă rămâne blocantă — acolo rollbackul chiar ar rula cod orb peste coloane noi."""
+    m = _manifest(previous_digest="sha256:" + "b" * 64, previous_schema_tolerates=43)
+    possible, why = m.rollback_possible(applied_schema=44)
+    assert possible is False
+    assert "depășește" in why
+    assert m.previous_digest, "cazul ăsta NU e primul release, deci steagul nu se aplică"
+
+
+def test_preflight_expune_steagul_de_prim_release():
+    """Contract de CLI: numele steagului e citat în runbook și în workflow. Dacă se redenumește,
+    promovarea pică în CI cu „unrecognized arguments", nu aici — de aceea îl fixăm în test."""
+    mod = _preflight()
+    parser_args = mod.main.__doc__ or ""
+    src = (ROOT / "scripts" / "release" / "preflight.py").read_text(encoding="utf-8")
+    assert '"--allow-no-previous-digest"' in src, parser_args
