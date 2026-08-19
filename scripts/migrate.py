@@ -365,6 +365,28 @@ def _dsn(*, write: bool) -> str:
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
+def _redact_dsn(dsn: str) -> str:
+    """DSN-ul ajunge în mesaje de eroare și de acolo în loguri de CI — parola, niciodată.
+
+    Redactăm ÎNAINTE de a ști dacă DSN-ul e valid: un șir care nu parsează ca URL poate conține
+    oricum o parolă reală — de exemplu una cu `@` needodat, care e chiar motivul cel mai frecvent
+    pentru care parsarea eșuează.
+
+    Tăiem la ULTIMUL `@`, nu la primul: pentru `…//u:pa@ss@host/db`, o expresie regulată care se
+    oprește la primul `@` ar lăsa `ss` afară, adică jumătate din parolă exact în cazul pe care
+    funcția asta există să-l acopere. Userul rămâne vizibil — la diagnostic contează „cu ce cont
+    m-am conectat", iar el nu e secret.
+    """
+    head, at, tail = dsn.rpartition("@")
+    if not at:
+        return dsn  # fără credențiale în șir — nimic de ascuns
+    scheme, sep, creds = head.partition("://")
+    if not sep:
+        return f"***@{tail}"
+    user = creds.split(":", 1)[0]
+    return f"{scheme}://{user}:***@{tail}" if ":" in creds else f"{scheme}://{user}@{tail}"
+
+
 def _connect_kwargs(dsn: str) -> dict:
     """IPv4 + SSL fără verificare de hostname pentru pooler-ul Supabase (cf. apply_012).
 
@@ -381,10 +403,27 @@ def _connect_kwargs(dsn: str) -> dict:
     scrie `sslmode=disable` cu mâna lui.
     """
     p = urlparse(dsn)
+    # Un DSN stricat trebuie să spună CE e stricat, în cuvinte.
+    #
+    # Măsurat în producție (2026-08-19): un `.env.migrate` creat cu placeholderul din runbook
+    # necompletat ajungea nevalidat până la `unquote(p.username)` și ieșea cu
+    # `TypeError: argument of type 'NoneType' is not iterable`, dintr-un cadru de stivă în
+    # `urllib/parse.py`. Nimeni nu deduce din asta „fișierul de credential nu e completat" — iar
+    # ăsta e un instrument de operare, citit sub presiune, adesea în mijlocul unui incident.
+    # Diagnosticul e partea lui de treabă, nu un bonus.
+    if p.scheme not in ("postgres", "postgresql") or not p.hostname or not p.username:
+        raise RuntimeError(
+            f"DSN invalid: {_redact_dsn(dsn)}. Aștept "
+            "postgresql://<user>:<parolă>@<host>:<port>/<db> — parola PERCENT-ENCODED "
+            "(`@`→`%40`, `#`→`%23`). Verifică DATABASE_URL_MIGRATION din `.env.migrate`: "
+            "cel mai des e placeholderul necompletat sau o parolă needodată."
+        )
     base = {
         "port": p.port or 5432,
         "user": unquote(p.username),
-        "password": unquote(p.password),
+        # Parola poate lipsi legitim (loopback cu `trust` — Postgresul efemer din NX-247), dar
+        # `unquote(None)` ar crăpa la fel de opac ca mai sus.
+        "password": unquote(p.password) if p.password is not None else None,
         "database": (p.path or "/postgres").lstrip("/"),
     }
     # Loopback ÎNAINTE de rezolvare: `::1` n-are răspuns în AF_INET, deci `getaddrinfo` ar crăpa.
