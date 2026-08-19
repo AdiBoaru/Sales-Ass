@@ -66,6 +66,25 @@ services:
     # Digest pin-uit ca și baza aplicației: `7-alpine` se mută, iar backbone-ul cozii nu are voie
     # să se schimbe sub tine la un `docker compose pull` de rutină.
     image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    # Pornim DIRECT ca uid-ul care deține datele, nu ca root.
+    #
+    # Entrypoint-ul oficial de Redis, când vede `id -u` = 0, rulează
+    # `find . \! -user redis -exec chown redis '{}' +` peste `/data` și abia apoi coboară la
+    # userul `redis`. Cu `cap_drop: [ALL]` (mai jos), root-ul din container NU mai are
+    # `CAP_DAC_OVERRIDE`/`CAP_DAC_READ_SEARCH`, deci nici măcar nu poate traversa `appendonlydir`,
+    # care aparține uid-ului 999 — `find: ./appendonlydir: Permission denied`, entrypoint mort,
+    # container în restart loop. Cele două cerințe (postură minimă de capabilități + un entrypoint
+    # care se așteaptă să fie root) sunt incompatibile; renunțăm la a doua, nu la prima.
+    #
+    # Numeric, nu `redis`: proprietarul datelor de pe volum e un UID, nu un nume. Dacă imaginea ar
+    # schimba vreodată uid-ul userului `redis`, forma numerică rămâne aliniată la ce e pe disc —
+    # aceeași logică pentru care imaginea e un digest, nu un tag.
+    #
+    # A stat latent până la NX-248: containerul care rula fusese creat înainte ca `appendonlydir`
+    # să ajungă la ownership-ul actual, deci `find` n-a avut niciodată nevoie să coboare în el.
+    # Prima recreare l-a expus, în producție. `docker-compose.yml` (DEV) n-are `cap_drop`, deci
+    # nu poate reproduce clasa asta de defect — smoke-ul pe staging din `release.yml` o prinde.
+    user: "999:999"
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD}
