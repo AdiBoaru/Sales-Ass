@@ -8,10 +8,17 @@ Verifică, în ordine (fiecare eșec are cod propriu, fiindcă cere altă acțiu
 
   1. manifestul se citește, amprenta corespunde conținutului, semnătura (dacă e cerută) se verifică;
   2. imaginea rulată de fiecare serviciu = digestul din manifest — nu tagul, nu ce zice `.env`;
-  3. `/health/ready` răspunde 200 și raportează ACELAȘI release/config ca manifestul.
+  3. `/health/ready` răspunde 200 și raportează ACELAȘI `release` ca manifestul;
+  4. toate serviciile raportează ACEEAȘI amprentă de config.
 
-Punctul 3 e cel care prinde deployul parțial: containere pornite cu imaginea nouă și o configurație
-veche arată perfect la `docker ps` și răspund cu alt `config_revision`.
+Punctul 4 prinde deployul parțial: containere pornite cu imaginea nouă și o configurație veche
+arată perfect la `docker compose ps`. Configurația e citită la CREAREA containerului, deci un
+`.env` editat urmat de repornirea unui singur serviciu produce chiar divergență între ele.
+
+Se compară serviciile ÎNTRE ELE, nu cu o valoare din manifest: amprenta de config e o proprietate
+a DEPLOYULUI (vine din `.env`-ul hostului), iar un manifest construit în CI nu o poate cunoaște.
+Versiunea v1 o scria oricum acolo — amprenta default-urilor din cod — deci punctul 3 raporta
+„deploy parțial" la fiecare deploy corect. Vezi nota din `src/ops/manifest.py`.
 
 Uz: python scripts/release/verify_manifest.py --manifest manifest.json [--base-url https://…]
 """
@@ -39,6 +46,43 @@ EXIT_ERROR = 2
 #: Serviciile care TREBUIE să ruleze digestul promovat. `migrate` lipsește deliberat: e un job
 #: one-shot, deja terminat când verificăm.
 SERVICES = ("webhook", "worker", "dispatcher", "scheduler")
+
+
+#: Amprenta se calculează ÎN container, cu aceeași funcție care alimentează `/health/ready` — nu
+#: reimplementată aici. O a doua implementare a aceleiași reguli ar putea diverge tăcut, iar atunci
+#: verificarea ar compara două lucruri care doar par la fel.
+_CONFIG_REVISION_SNIPPET = (
+    "from src.config import Settings; "
+    "from src.ops.build_info import config_revision; "
+    "print(config_revision(Settings()))"
+)
+
+
+def _config_revision(service: str, compose_file: str) -> str | None:
+    """Amprenta de config a containerului care rulează ACUM serviciul.
+
+    Contează că se citește din container, nu din `.env`-ul de pe disc: configurația e capturată la
+    CREAREA containerului, deci un `.env` editat după aceea nu se vede în procesele deja pornite —
+    și exact asta e divergența pe care o căutăm.
+    """
+    out = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "exec",
+            "-T",
+            service,
+            "python",
+            "-c",
+            _CONFIG_REVISION_SNIPPET,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return out.stdout.strip() or None
 
 
 def _running_digest(service: str, compose_file: str) -> str | None:
@@ -80,10 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_ERROR
 
     problems: list[str] = []
-    print(
-        f"manifest: {manifest.digest} (release {manifest.release_sha}, "
-        f"config {manifest.config_revision})"
-    )
+    print(f"manifest: {manifest.digest} (release {manifest.release_sha})")
 
     if not args.skip_containers:
         for service in SERVICES:
@@ -116,14 +157,28 @@ def main(argv: list[str] | None = None) -> int:
                     f"release raportat {payload.get('release')!r} ≠ manifest "
                     f"{manifest.release_sha!r}"
                 )
-            if payload.get("config") != manifest.config_revision:
-                # Deployul parțial: imagine nouă, configurație veche. Arată perfect la `docker ps`.
-                problems.append(
-                    f"config raportat {payload.get('config')!r} ≠ manifest "
-                    f"{manifest.config_revision!r} (deploy parțial?)"
-                )
             if not problems:
-                print("✓ /health/ready: release + config coincid cu manifestul")
+                print("✓ /health/ready: release coincide cu manifestul")
+
+    # Punctul 4: serviciile trebuie să fie de acord ÎNTRE ELE asupra configurației.
+    if not args.skip_containers:
+        revisions = {svc: _config_revision(svc, args.compose_file) for svc in SERVICES}
+        seen = {rev for rev in revisions.values() if rev}
+        if not seen:
+            # Nu tăcem: „n-am putut măsura" nu e „e în regulă". Aceeași disciplină ca verdictele
+            # UNKNOWN din NX-238/NX-246 — absența măsurătorii e o stare distinctă de trecere.
+            problems.append("amprenta de config nu s-a putut citi din niciun serviciu")
+        elif len(seen) > 1:
+            detaliu = ", ".join(
+                f"{svc}={rev or 'necitit'}" for svc, rev in sorted(revisions.items())
+            )
+            problems.append(f"servicii cu configurații DIFERITE (deploy parțial?): {detaliu}")
+        else:
+            lipsa = [svc for svc, rev in revisions.items() if not rev]
+            if lipsa:
+                problems.append(f"amprenta de config nu s-a putut citi din: {', '.join(lipsa)}")
+            else:
+                print(f"✓ toate serviciile pe aceeași configurație ({seen.pop()})")
 
     for problem in problems:
         print(f"::error::{problem}", file=sys.stderr)

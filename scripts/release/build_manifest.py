@@ -22,12 +22,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from src.config import Settings  # noqa: E402
-from src.ops.build_info import (  # noqa: E402
-    SCHEMA_FORWARD_TOLERANCE,
-    bundled_schema_version,
-    config_revision,
-)
+# NU importăm `src.config`: `Settings()` ar cere `.env`-ul unei mașini, iar aici rulăm pe un
+# runner de CI care nu are (și nu trebuie să aibă) configurația de producție. Vezi nota din
+# `src/ops/manifest.py` despre de ce `config_revision` a ieșit din manifest în v2. Efect practic:
+# scriptul ăsta merge cu stdlib + `src/ops/*`, fără nicio dependență instalată în CI.
+from src.ops.build_info import SCHEMA_FORWARD_TOLERANCE, bundled_schema_version  # noqa: E402
 from src.ops.manifest import MANIFEST_VERSION, DeployManifest, ManifestError, load  # noqa: E402
 
 
@@ -65,7 +64,6 @@ def main(argv: list[str] | None = None) -> int:
         digest=args.digest,
         release_sha=args.release_sha,
         built_at=args.built_at,
-        config_revision=config_revision(Settings()),
         schema_requires=requires,
         schema_tolerates=requires + SCHEMA_FORWARD_TOLERANCE,
         previous_digest=previous_digest,
@@ -78,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"manifest scris în {args.out}: digest={manifest.digest[:19]}… "
         f"schema={manifest.schema_requires:03d}..{manifest.schema_tolerates:03d} "
-        f"config={manifest.config_revision} fingerprint={manifest.fingerprint()[:12]}"
+        f"fingerprint={manifest.fingerprint()[:12]}"
     )
     return 0
 

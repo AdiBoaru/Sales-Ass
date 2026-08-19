@@ -37,7 +37,21 @@ promovezi.
 
 Ieșirea care contează: **digestul**. Îl iei din rezumatul rulării.
 
-### 1.2 Staging (automat, același digest)
+### 1.2 Staging (automat, același digest) — DEZACTIVAT până există un mediu
+
+Jobul rulează doar cu variabila de repo **`STAGING_ENABLED=true`**; altfel se sare (`skipped`).
+Azi nu există un mediu de staging: zero GitHub Environments, zero secrete `STAGING_*`, un singur
+VPS — cel de producție. Un job care nu poate reuși prin nicio acțiune a noastră ar înroșji fiecare
+release, exact ca poarta de scan de la §1.5, și cu același efect: nu te mai uiți la pipeline.
+
+Ca să-l pornești: adaugă cele 7 secrete `STAGING_*` în environmentul `staging`, apoi setează
+variabila. Comutatorul e separat de secrete deliberat — pornirea staging-ului e o decizie, nu un
+efect secundar al adăugării unui secret.
+
+Cât timp e stins, **nimic nu verifică digestul înainte de producție**. Promovarea rămâne posibilă,
+dar smoke-ul rulează abia pe producție, adică prea târziu ca să te mai protejeze.
+
+
 
 Ordinea nu e negociabilă — semnătura se verifică ÎNAINTE de a atinge hostul:
 

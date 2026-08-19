@@ -188,10 +188,22 @@ jobs:
           retention-days: 90
 
   # ── 2. STAGING: același digest, verificat semantic ────────────────────────────────────────
+  # Poarta `vars.STAGING_ENABLED`: fără ea, jobul ăsta pică la primul pas care are nevoie de un
+  # secret `STAGING_*` — și niciunul nu există, fiindcă nu există un mediu de staging. Un pas care
+  # nu poate reuși prin nicio acțiune a noastră nu filtrează nimic; înroșește releaseul la fiecare
+  # rulare și te învață să nu te mai uiți la el. Exact greșeala reparată la pasul de scan, cu altă
+  # față. Preferăm `skipped` — care se citește ca „nu se aplică" — în locul unui `failure` care
+  # minte.
+  #
+  # `vars`, nu `secrets`: contextul `secrets` nu e disponibil în `if` la nivel de job, deci
+  # „există secretele?" nu se poate întreba aici. Ca să pornești staging: adaugă cele 7 secrete
+  # `STAGING_*` în environmentul `staging` și setează variabila de repo `STAGING_ENABLED=true`.
+  # Comutatorul e explicit și separat de secrete tocmai ca pornirea să fie o decizie, nu un efect
+  # secundar al adăugării unui secret.
   staging:
     name: Staging (același digest)
     needs: build
-    if: ${{ !inputs.rollback }}
+    if: ${{ !inputs.rollback && vars.STAGING_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     environment: staging # secrete + aprobări separate de producție
     permissions:
