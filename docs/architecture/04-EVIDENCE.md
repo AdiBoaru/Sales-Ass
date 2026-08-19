@@ -20,8 +20,8 @@
 | Frontend SHA | **UNKNOWN** — repo separat, nu e accesibil din acest repo (DoR neîndeplinit) |
 | Image digest producție | **UNKNOWN** — nu există release manifest (vezi §2.2) |
 | Release policy / config revision | **N/A** — `release_controller_enabled = false` |
-| Data verificării | 2026-08-18 |
-| Metodă | extragere din cod la SHA + rulare de teste + sonde HTTP read-only pe producție |
+| Data verificării | 2026-08-18 (audit de cod + sonde) · 2026-08-19 (istoric CI/CD, §2.3b) |
+| Metodă | extragere din cod la SHA + rulare de teste (inclusiv gate E2E pe infra reală) + sonde HTTP read-only pe producție + istoricul rulărilor de workflow |
 
 ---
 
@@ -113,6 +113,79 @@ Din `claim:flags` (extras mecanic din `src/config.py`, verificat de CI):
 | `observability_enabled` | `false` | NX-246 traces/metrici |
 | `web_feedback_enabled` | `false` | NX-246 feedback |
 | `release_controller_enabled` | `false` | NX-249 controller de release |
+
+### 2.3b De ce producția e în urmă: „construit" ≠ „pornit" ≠ „livrat"
+
+Întrebarea firească e „dar cardurile au fost construite, de ce apar ca dormante?". Fiindcă între
+„merged" și „servește un client" sunt **trei porți independente**, iar Stage 1 a trecut doar prima:
+
+| Poartă | Stare | De ce |
+|---|---|---|
+| 1 · cod în `main` | ✅ **DA** — NX-232→249 toate merged | — |
+| 2 · flag pornit | ❌ **NU** | **prin design**, nu din omisiune: fiecare card a fost livrat DARK (`flag OFF = byte-identic`). Pornirea cere porțile de promovare, toate deschise: NX-238 `NOT-READY`, NX-246 felia 3 `NOT-READY`, NX-247 `NO-GO`, NX-248 `NOT_READY`, NX-249 `BLOCAT`. Rădăcina comună a primelor două e NX-203 (corpusul de evaluare), nu codul. |
+| 3 · deployat | ❌ **NU** | **pipeline-ul de livrare e MORT de ~6 săptămâni** — vezi mai jos |
+
+Poarta 2 e o decizie asumată. Poarta 3 **nu e**: e o pană nedetectată.
+
+#### Pipeline-ul de livrare: 85 de rulări, zero reușite
+
+`gh run list --workflow=deploy.yml --limit 100`, măsurat 2026-08-19:
+
+```
+85 rulări examinate (2026-07-10 → 2026-08-18) · reușite: 0
+```
+
+Cauza, din logul rulării `32109866661` (2026-08-18T07:06), la pasul „Deploy pe VPS":
+
+```
+Permission denied, please try again.
+```
+
+**Cheia SSH de deploy e respinsă de VPS.** Fiecare push pe `main` a pornit un deploy care a eșuat la
+autentificare, iar rezultatul n-a fost urmărit de nimeni — deci producția a rămas pe imaginea de
+dinainte de 2026-07-10, în timp ce `main` a înaintat cu ~18 carduri.
+
+Asta explică **exact** măsurătorile din §2.1: `/health/*` și `/web/v2/turns` lipsesc din imaginea
+deployată fiindcă acea imagine e anterioară cardurilor care le-au adăugat (NX-248, NX-233).
+
+#### Calea nouă (NX-248) e blocată de propriul scan fail-closed
+
+`release.yml` (care a înlocuit `deploy.yml`) construiește la fiecare push, dar **eșuează la pasul
+„Scan vulnerabilități (OS + Python)"** — verificat pe rulările de la NX-248 (`32117735510`) și NX-249
+(`32142143781`). Trivy rulează cu `severity: CRITICAL,HIGH` și `exit-code: 1`, găsește cel puțin o
+vulnerabilitate, și jobul de build cade. Jobul de promovare rămâne `skipped`.
+
+Deci: **niciun artefact publicat ⇒ niciun digest ⇒ nimic de promovat.** Asta e cauza concretă pentru
+care `scripts/release/evidence.py` raportează `scan` ȘI `manifest` în `missing_critical` (§2.2) —
+nu „măsurătoarea n-a fost făcută", ci „măsurătoarea rulează și cade".
+
+Fail-closed e comportamentul CORECT al unui scan (NX-248 l-a proiectat așa deliberat). Ce lipsește e
+tratarea findings-urilor: `.trivyignore` există, cu convenție de CVE + owner + dată de expirare, dar
+nimeni nu s-a uitat la ce raportează scanul. Cardul de deblocare: **NX-252**.
+
+#### Bonus: CI-ul nocturn e roșu pe un test flaky
+
+`CI / Migrări (Postgres 16 efemer)`, rularea programată de 2026-08-19T03:34, pasul „Două migrări
+concurente": `coduri de ieșire [0, 0] (aștept [0, 3])`, cu mesajul
+`::error::concurența pe migrare NU e rezolvată de lock`.
+
+**Mesajul e fals.** Reprodus local pe stackul efemer: `[0,3]` de 14 ori și `[0,0]` de 2 ori, pe
+ACELAȘI cod și aceeași DB — diferența fiind încărcarea mașinii. Când cele două procese chiar se
+suprapun, lock-ul funcționează impecabil; capturat direct:
+
+```
+[A] exit=0   out: aplicat: 1 migrări în 47ms: 044
+[B] exit=3   err: alt job de migrare ține lock-ul — ies fără să scriu nimic (NX-248)
+```
+
+`[0,0]` apare când NU se suprapun: `migrate.py` ia lock-ul necondiționat înainte de a scrie
+(`scripts/migrate.py:432`), deci procesul al doilea care pornește după ce primul a eliberat lock-ul îl
+obține, găsește **zero** migrări pending și iese legitim cu 0. Fereastra de contenție e cât durează
+migrarea — **47-63 ms măsurat** — mult sub jitterul de pornire a două procese Python pe un runner
+încărcat.
+
+Deci lock-ul nu e spart; drill-ul nu poate distinge „al doilea a intrat peste primul" de „al doilea
+n-a avut ce face". Cardul de reparat: **NX-253**.
 
 ### 2.4 Porțile upstream, la data auditului
 
@@ -436,7 +509,9 @@ doar în carduri (`tasks/`), unde e folosit ca INTERDICȚIE, niciodată ca promi
 | ID | Sev | Finding | Owner propus |
 |---|---|---|---|
 | **P0-1** | P0 | PII brut traversează frontiera externă de moderation înainte de mascare (D5). Sinkurile durabile sunt curate (NX-230), deci impactul e limitat la providerul de moderation — dar cardul cere blocarea închiderii Stage 1 până la ratificare explicită de owner sau reordonare. NX-250 e docs-only și **nu** repară. | NX-230 follow-up |
-| **P1-1** | P1 | Producția rulează un artefact anterior NX-233/NX-248 (§2.1), fără manifest care să spună CARE (§2.2). Până la un deploy cu digest declarat, nicio documentație nu poate fi numită „as-built". | NX-248 |
+| **P0-2** | P0 | **Pipeline-ul de livrare e mort de ~6 săptămâni: 0 reușite din 85 de rulări** (2026-07-10 → 2026-08-18). Cauza veche: cheia SSH respinsă de VPS (`Permission denied`). Cauza nouă: `release.yml` cade la scanul fail-closed de vulnerabilități, deci nu publică artefact. Nimic nu urmărește rezultatul acestor workflow-uri — de-asta a durat șase săptămâni. Card: **NX-252**. | NX-248 |
+| **P1-1** | P1 | Producția rulează un artefact anterior NX-233/NX-248 (§2.1), fără manifest care să spună CARE (§2.2). **Consecință a lui P0-2, nu cauză independentă.** | NX-248 |
+| **P2-1** | P2 | Nightly roșu pe `migration_drill.py concurrent`: test flaky (14× pass / 2× fail local, pe același cod) care acuză GREȘIT advisory lock-ul. Lock-ul funcționează; fereastra de contenție e 47-63 ms. Card: **NX-253**. | NX-248 |
 | **P1-2** | P1 | „MAX 3 tool calls per tur (limită dură în cod)" a fost fals în `CLAUDE.md` și în diagrama 4b (D2). Corectat aici; merită un test care să LEGE plafonul de documentație când NX-241 se aprinde. | NX-241 |
 
 ---
@@ -486,14 +561,18 @@ Cardul cere contoare docs, nu metrici runtime. Raportate onest, pe ce s-a audita
 
 În ordine, toate în afara controlului acestui card:
 
-1. **NX-248 → `READY`** — manifest + semnătură + scan + staging smoke + drill de rollback + DR.
+1. **NX-252 → reparat** — pipeline-ul de livrare. **Ăsta e primul domino, nu NX-248:** cât timp
+   `release.yml` cade la scan și cheia SSH e respinsă de VPS, nu se publică niciun artefact — deci
+   NX-248 nu POATE ajunge `READY` (`manifest` și `scan` sunt în `missing_critical` fiindcă
+   măsurătoarea *cade*, nu fiindcă n-a fost făcută).
+2. **NX-248 → `READY`** — manifest + semnătură + scan + staging smoke + drill de rollback + DR.
    Fără manifest nu există digest de comparat cu `main`.
-2. **Un deploy real** al unui digest declarat, cu `/health/*` care răspunde.
-3. **NX-247 → GO** — gate E2E pe buildurile finale (azi `NO-GO`, acoperire 9/16 scenarii).
-4. **NX-238 → GO** și **NX-246 felia 3 → PASS** — ambele `NOT-READY`, deblocate de NX-203 (corpus),
+3. **Un deploy real** al unui digest declarat, cu `/health/*` care răspunde 200.
+4. **NX-247 → GO** — gate E2E pe buildurile finale (azi `NO-GO`, acoperire 9/16 scenarii).
+5. **NX-238 → GO** și **NX-246 felia 3 → PASS** — ambele `NOT-READY`, deblocate de NX-203 (corpus),
    nu de cod.
-5. **NX-249 → promovare** — abia atunci există un cohort v2 cu trafic real, adică un „as-built".
-6. **P0-1 ratificat sau reparat.**
+6. **NX-249 → promovare** — abia atunci există un cohort v2 cu trafic real, adică un „as-built".
+7. **P0-1 (NX-251) ratificat sau reparat.**
 
-Când toate șase sunt îndeplinite, NX-250 se reia pe noul SHA și scrie diagramele. Până atunci,
+Când toate șapte sunt îndeplinite, NX-250 se reia pe noul SHA și scrie diagramele. Până atunci,
 `docs/ARCHITECTURE-WORKFLOWS.md` descrie calea v1 — corect, cu drifturile de mai sus reparate.
