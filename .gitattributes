@@ -1,0 +1,16 @@
+# Sfârșit de linie pentru fișierele EXECUTATE de un shell.
+#
+# Nu `* text=auto`: ar renormaliza tot repo-ul într-un commit uriaș, fără să repare nimic. Regula
+# de aici e îngustă și are un motiv exact.
+#
+# `scripts/release/deploy.sh` rulează pe runnerul Linux, prin `./scripts/release/deploy.sh`. Dacă
+# ajunge vreodată comis cu CRLF, shebangul devine `#!/usr/bin/env bash\r`, kernelul caută un
+# interpretor numit `bash\r`, nu-l găsește, iar promovarea moare cu „bad interpreter" — adică
+# EXACT simptomul (exit 126) care a ținut pipeline-ul blocat pe 2026-08-19, când cauza fusese
+# bitul de execuție lipsă. Două cauze diferite, același mesaj: merită să fie imposibilă una.
+#
+# Azi fișierul e curat (0 octeți CR, verificat pe blobul din `origin/main`), fiindcă toți cei care
+# l-au atins aveau `core.autocrlf=true`. Asta e o proprietate a configului LOCAL al fiecăruia, nu a
+# repo-ului: un singur clone cu `autocrlf=false` sau un editor care salvează CRLF ar fi de ajuns.
+# `eol=lf` mută garanția din obiceiuri în repo.
+*.sh text eol=lf

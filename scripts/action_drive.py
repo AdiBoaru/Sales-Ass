@@ -63,6 +63,25 @@ ROTATED_OVERLAP = parse_key_ring(f"k2:{KEY_TWO},k1:{KEY_ONE}")
 NOW = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
 
 
+def _tampered(token: str) -> str:
+    """Strică SIGILIUL, nu textul care îl transportă.
+
+    Scenariul se numește `byte_flip`, dar varianta evidentă — `token[:-2] + "AB"` — schimba
+    CARACTERE base64, iar acolo coada are biți nesemnificativi: corpul sigilat are 475 de
+    caractere (475 % 4 == 3), deci ultimul caracter poartă doar 4 biți utili din 6. Când octeții
+    afectați erau deja zero, tokenul „stricat" decoda la ACEIAȘI bytes și trecea de AES-SIV —
+    proba raporta un refuz pe care nu-l provocase. Măsurat: 34 la 40.000 de emiteri (0,085%).
+
+    Flipul e pe primul octet, care e din tagul SIV: respingerea e garantată, nu probabilă.
+    (Aceeași corecție, cu aceeași motivație, în `tests/conftest.py::tamper_token`. Duplicat
+    deliberat: un script din `scripts/` nu importă schelărie de teste.)
+    """
+    version, key_id, body = token.split(".", 2)
+    raw = bytearray(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    raw[0] ^= 0x01
+    return f"{version}.{key_id}.{base64.urlsafe_b64encode(bytes(raw)).decode('ascii').rstrip('=')}"
+
+
 @dataclass
 class Counters:
     """Ce s-a ATINS. Un refuz corect are toate contoarele pe zero — asta e proba."""
@@ -245,11 +264,7 @@ async def main() -> int:
         )
         cases: list[tuple[str, Fake, dict]] = [
             ("valid", Fake(source), {}),
-            (
-                "byte_flip",
-                Fake(source),
-                {"token": token[:-2] + ("AB" if not token.endswith("AB") else "CD")},
-            ),
+            ("byte_flip", Fake(source), {"token": _tampered(token)}),
             ("other_session", Fake(source), {"visitor": "visitor-altul"}),
             ("other_tenant", Fake(source), {"biz": "biz-altul"}),
             ("expired", Fake(source), {"now": NOW + timedelta(hours=2)}),

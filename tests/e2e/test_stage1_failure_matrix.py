@@ -784,14 +784,17 @@ async def _first_action_token(view: dict) -> str | None:
     return None
 
 
-async def test_r17_tampered_action_mutates_nothing(env: Stage1Env) -> None:
-    """Un token modificat cu un singur caracter e respins de sigiliu (AES-SIV), fără mutație și
-    fără rând de ledger. Codul e stabil și nu spune de ce."""
+async def test_r17_tampered_action_mutates_nothing(env: Stage1Env, tamper_action_token) -> None:
+    """Un token cu un bit schimbat e respins de sigiliu (AES-SIV), fără mutație și fără rând de
+    ledger. Codul e stabil și nu spune de ce."""
     session, turn_id, view = await _turn(env, env.alpha, "clarify")
     token = await _first_action_token(view)
     if token is None:
         pytest.skip("scenariul nu a emis nicio acțiune submit (plan de acțiuni gol)")
-    flipped = token[:-1] + ("a" if token[-1] != "a" else "b")
+    # Flip pe BYTES, nu pe ultimul caracter base64: acolo biții de jos sunt nesemnificativi, deci
+    # `token[:-1] + "a"` putea decoda la ACEIAȘI bytes și „tamperul" trecea de sigiliu. Vezi
+    # `tests/conftest.py::tamper_token` pentru măsurătoare.
+    flipped = tamper_action_token(token)
     env.llm.counters.reset()
     rejected = await _accept(env, env.alpha, session, action_token=flipped)
     assert rejected.status_code in (400, 404, 409, 410), rejected.text

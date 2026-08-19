@@ -366,6 +366,14 @@ jobs:
           IMAGE_DIGEST: ${{ inputs.digest }}
         run: ./scripts/release/deploy.sh production
 
+      # `SMOKE_BASE_URL` e API-ul (`WEBHOOK_HOST`, ex. https://bot.…), NU vitrina care încarcă
+      # widgetul (https://demo.…). Vitrina e un SPA cu catch-all: răspunde 200 + HTML la ORICE
+      # cale, deci `/health/ready` ar întoarce o pagină, iar smoke-ul ar muri cu `JSONDecodeError`
+      # — o eroare care nu spune nimic despre cauza reală.
+      #
+      # Profilul (v1/v2) se detectează din ce servește instanța și ajunge în raport. La cutoverul
+      # NX-249, adaugă `SMOKE_EXPECT_PROFILE: v2` aici: din acel moment, o cădere tăcută înapoi pe
+      # v1 (flag stins din greșeală) devine eșec în loc de smoke verde pe alt contract.
       - name: Smoke producție (tenant de test dedicat)
         env:
           SMOKE_BASE_URL: ${{ secrets.PROD_BASE_URL }}

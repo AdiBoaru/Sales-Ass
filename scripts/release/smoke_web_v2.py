@@ -1,18 +1,34 @@
-"""NX-248 — smoke WebWidget v2: bootstrap → accept → terminal → REPLAY exact.
+"""NX-248 — smoke WebWidget: verifică CONTRACTUL PE CARE ÎL SERVEȘTE INSTANȚA, nu unul dorit.
 
-Un smoke care verifică „200 OK" nu verifică produsul. Ce trebuie să fie adevărat după un deploy e
-lanțul din NX-232/233: un tur acceptat DURABIL ajunge la un rezultat terminal, iar recitirea lui
-dă ACEIAȘI bytes (proiecție pură — NX-240). Ultima parte e cea care prinde regresiile scumpe:
-dacă a doua citire diferă, „refresh-ul paginii" schimbă răspunsul deja dat clientului.
+Un smoke care verifică „200 OK" nu verifică produsul. Dar un smoke care cere un contract STINS e
+și mai rău: pică după ce deployul a schimbat deja imaginea, deci raportează „release picat" pentru
+un release care a reușit — iar operatorul dă un rollback de care nu era nevoie.
+
+Exact asta s-ar fi întâmplat aici. Scriptul cerea `POST /web/v2/turns` → 202, dar v2 e în spatele
+lui `WEB_TURN_V2_ENABLED`, stins în producție prin decizie ratificată (NX-249 e BLOCAT, NX-247
+NO-GO, NX-238 NOT-READY). Măsurat pe producție 2026-08-19: ruta răspunde 404 cu parametri și 422
+fără ei — adică ruta EXISTĂ, flagul e stins. Un gate pe care nimeni nu-l poate trece nu filtrează
+nimic; e aceeași greșeală reparată la poarta de scan din `release.yml`, cu altă față.
+
+Deci profilul se DETECTEAZĂ, nu se presupune, și ajunge în raport:
+
+  * `v2` — calea asincronă (NX-232/233) e pornită: accept durabil → terminal → replay byte-identic
+    → idempotență. Replay-ul e cel care prinde regresiile scumpe: dacă a doua citire diferă,
+    „refresh-ul paginii" schimbă răspunsul deja dat clientului.
+  * `v1` — calea sincronă (`POST /web/chat`), cea pe care o folosesc clienții ACUM. Un tur real,
+    dus până la răspuns. Replay/idempotență nu se verifică: sunt garanții pe care v1 nu le promite,
+    iar un smoke nu are voie să inventeze contracte.
+
+Trecerea de la v1 la v2 se face singură la cutover, fără să atingă nimeni fișierul ăsta. Ca să nu
+poată REGRESA tăcut înapoi pe v1 după cutover, `--expect-profile v2` (sau `SMOKE_EXPECT_PROFILE`)
+transformă căderea pe v1 în eșec.
 
 Verifică, în ordine:
 
   1. `/health/ready` — 200 (altfel nu are rost să trimitem trafic);
   2. `/web/bootstrap` — sesiune emisă;
-  3. `POST /web/v2/turns` — accept durabil (202) cu `turn_id`;
-  4. poll pe `GET /web/v2/turns/{id}` până la terminal, MĂRGINIT de un deadline;
-  5. **replay** — a doua citire e byte-identică cu prima;
-  6. **idempotență** — re-trimiterea aceluiași `client_turn_id` NU creează un tur nou.
+  3. detectarea profilului (un singur accept, nu două cereri);
+  4. lanțul profilului detectat, până la un răspuns REAL.
 
 ## Ce NU ajunge în artefact
 
@@ -77,11 +93,15 @@ def _digest(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def run_smoke(base: str, token: str, *, deadline_s: float = 60.0) -> dict:
+def run_smoke(
+    base: str, token: str, *, deadline_s: float = 60.0, expect_profile: str = "auto"
+) -> dict:
     """Rulează lanțul și întoarce raportul. Nu ridică: un smoke picat trebuie să lase în urmă
     exact pașii care AU trecut — altfel „a picat" nu spune unde, iar diagnosticul reîncepe de la
     zero pe un mediu pe care poate nu-l mai poți reproduce."""
-    report: dict = {"steps": [], "ok": False}
+    # `profile` pornește necunoscut și rămâne așa dacă lanțul moare înainte de detectare. Un raport
+    # verde fără profil ar fi de necitit: „a trecut" — dar CE a trecut?
+    report: dict = {"steps": [], "ok": False, "profile": "unknown"}
 
     def step(name: str, ok: bool, **extra) -> None:
         report["steps"].append({"step": name, "ok": ok, **extra})
@@ -90,7 +110,7 @@ def run_smoke(base: str, token: str, *, deadline_s: float = 60.0) -> dict:
 
     started = time.monotonic()
     try:
-        _run_steps(base, token, step, started, deadline_s)
+        _run_steps(base, token, step, started, deadline_s, expect_profile, report)
     except SmokeError as e:
         report["failed_step"] = str(e)
         return report
@@ -102,7 +122,15 @@ def run_smoke(base: str, token: str, *, deadline_s: float = 60.0) -> dict:
     return report
 
 
-def _run_steps(base: str, token: str, step, started: float, deadline_s: float) -> None:
+def _run_steps(
+    base: str,
+    token: str,
+    step,
+    started: float,
+    deadline_s: float,
+    expect_profile: str,
+    report: dict,
+) -> None:
     # 1. Readiness
     status, payload, _ = _request(f"{base}/health/ready")
     step("health_ready", status == 200, status=status, release=payload.get("release", "unknown"))
@@ -116,7 +144,10 @@ def _run_steps(base: str, token: str, step, started: float, deadline_s: float) -
     )
     client_turn_id = str(uuid.uuid4())
 
-    # 3. Accept durabil
+    # 3. Accept durabil — și, în același request, DETECTAREA profilului.
+    #
+    # Nu se face o cerere separată de „probing": ar fi două tururi pornite pe tenantul de test la
+    # fiecare deploy, dintre care unul aruncat. Acceptul E sonda.
     status, accepted, _ = _request(
         f"{base}/web/v2/turns?{auth}",
         method="POST",
@@ -126,6 +157,26 @@ def _run_steps(base: str, token: str, step, started: float, deadline_s: float) -
             "input": {"type": "text", "text": SMOKE_MESSAGE},
         },
     )
+
+    # 404 aici nu e ambiguu: `_v2_gate` verifică flagul ÎNAINTEA sesiunii, deci un 404 pe o cerere
+    # cu sesiune validă înseamnă „feature stins", nu „ruta lipsește" (ruta lipsă ar da 404 și fără
+    # parametri, unde FastAPI răspunde 422 fiindcă validează query-ul înaintea handlerului).
+    if status == 404:
+        report["profile"] = "v1"
+        step(
+            "profil_detectat",
+            expect_profile != "v2",
+            profile="v1",
+            expected=expect_profile,
+            # Mesajul e pentru cine citește artefactul peste trei luni, nu pentru acum.
+            note="v2 stins (WEB_TURN_V2_ENABLED); verific v1 sincron, calea servită clienților",
+        )
+        _run_v1_chain(base, token, session, step)
+        return
+
+    report["profile"] = "v2"
+    step("profil_detectat", True, profile="v2", expected=expect_profile)
+
     turn_id = (accepted.get("turn") or {}).get("id") or accepted.get("turn_id")
     step("accept", status == 202 and bool(turn_id), status=status)
 
@@ -174,6 +225,44 @@ def _run_steps(base: str, token: str, step, started: float, deadline_s: float) -
     step("idempotenta", status in (200, 202) and same_turn, status=status)
 
 
+def _run_v1_chain(base: str, token: str, session: dict, step) -> None:
+    """Calea SINCRONĂ (`POST /web/chat`) — contractul pe care îl folosesc clienții azi.
+
+    Aici răspunsul HTTP E transportul: un singur request duce turul prin tot pipeline-ul (gates,
+    straturi gratuite, triaj, agent, validator) și întoarce `{content, products, suggestions}`.
+    Deci „am primit `content` nevid" nu e o formalitate — e dovada că lanțul întreg trăiește:
+    sesiune → tenant → DB tenant-scoped → model → validator → randare.
+
+    Ce NU se verifică aici, deliberat: replay byte-identic și idempotența pe `client_msg_id`. Sunt
+    garanții pe care le introduce ledgerul din v2 (NX-232); v1 nu le promite. Un smoke care le-ar
+    cere oricum ar raporta ca defect exact comportamentul specificat.
+    """
+    status, payload, raw = _request(
+        f"{base}/web/chat",
+        method="POST",
+        body={
+            "token": token,
+            "visitor_id": session["visitor_id"],
+            "sig": session["sig"],
+            "message": SMOKE_MESSAGE,
+            "client_msg_id": str(uuid.uuid4()),
+        },
+        # Turul sincron rulează pipeline-ul IN-PROCES (DB + model), deci e mai lent decât un accept.
+        timeout=45.0,
+    )
+    step("chat_v1", status == 200, status=status)
+    content = payload.get("content") or ""
+    # Lungimea și amprenta, nu textul: raportul se păstrează 365 de zile ca artefact de CI, iar
+    # răspunsul e conversație de tenant. P6 spune „niciodată tăcere" — un `content` gol e un bug.
+    step(
+        "raspuns_v1_nu_e_gol",
+        len(content.strip()) > 0,
+        content_chars=len(content),
+        products=len(payload.get("products") or []),
+        digest=_digest(raw),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Smoke WebWidget v2 (NX-248)")
     ap.add_argument("--base-url", default=os.environ.get("SMOKE_BASE_URL", ""))
@@ -181,13 +270,26 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--deadline", type=float, default=60.0)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out", default="")
+    # `auto` = verifică ce servește instanța. După cutoverul NX-249, pune `v2` în workflow: atunci
+    # o cădere înapoi pe v1 (flag stins din greșeală la un rollback de config) devine EȘEC, nu un
+    # smoke verde care verifică tăcut alt contract decât cel promovat.
+    ap.add_argument(
+        "--expect-profile",
+        choices=("auto", "v1", "v2"),
+        default=os.environ.get("SMOKE_EXPECT_PROFILE", "auto"),
+    )
     args = ap.parse_args(argv)
 
     if not args.base_url or not args.token:
         print("SMOKE_BASE_URL și SMOKE_PUBLIC_TOKEN sunt obligatorii", file=sys.stderr)
         return EXIT_ERROR
 
-    report = run_smoke(args.base_url.rstrip("/"), args.token, deadline_s=args.deadline)
+    report = run_smoke(
+        args.base_url.rstrip("/"),
+        args.token,
+        deadline_s=args.deadline,
+        expect_profile=args.expect_profile,
+    )
     code = EXIT_OK if report.get("ok") else (EXIT_ERROR if report.get("error") else EXIT_FAIL)
 
     text = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False)
@@ -196,7 +298,10 @@ def main(argv: list[str] | None = None) -> int:
             f.write(text + "\n")
     if args.json or not args.out:
         print(text)
-    print("SMOKE: " + ("PASS" if report.get("ok") else "FAIL"), file=sys.stderr)
+    # Profilul intră în linia de rezumat: în logul rulării se vede din prima CE contract a trecut,
+    # fără să deschidă nimeni artefactul.
+    verdict = "PASS" if report.get("ok") else "FAIL"
+    print(f"SMOKE: {verdict} (profil={report.get('profile', 'unknown')})", file=sys.stderr)
     return code
 
 
