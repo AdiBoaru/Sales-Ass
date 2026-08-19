@@ -94,3 +94,23 @@ def test_redact_dsn_never_leaks_password(dsn, secret):
 
 def test_redact_dsn_keeps_user_for_diagnosis():
     assert _redact_dsn("postgresql://bot_runtime:x@h/db").startswith("postgresql://bot_runtime:")
+
+
+def test_definitia_productiei_e_aceeasi_in_config_si_migrate():
+    """„Producție" trebuie să însemne același lucru în tot sistemul.
+
+    Regresie reală (găsită 2026-08-19, pe un host cu `ENV=development`): `scripts/migrate.py`
+    accepta `("prod", "production")`, iar `config.is_prod` testa `env == "prod"` exact. Cu
+    `ENV=production`, runnerul de migrări refuza credentialul de runtime pentru DDL — corect — dar
+    aplicația nu se considera în producție, deci `RELEASE_ASSIGNMENT_SALT` redevenea opțional, adică
+    bucketul de canary devenea calculabil de oricine cunoaște `conversation_id`. Două definiții ale
+    aceluiași cuvânt, care se contraziceau exact pe protecții.
+
+    `migrate.py` nu importă din `src/` — independența lui e ce-l face utilizabil ca poartă de boot
+    ȘI ca job one-shot — deci constanta e duplicată intenționat. Testul ăsta e prețul plătit ca
+    duplicarea să nu poată diverge din nou.
+    """
+    from scripts.migrate import _PROD_ENVS as migrate_envs
+    from src.config import _PROD_ENVS as config_envs
+
+    assert config_envs == migrate_envs
