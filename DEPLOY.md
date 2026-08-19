@@ -191,6 +191,25 @@ curl -s localhost:8000/health/ready | python -m json.tool
 python scripts/release/verify_manifest.py --manifest manifest.json --base-url http://localhost:8000
 ```
 
+### Redis în restart loop după recrearea containerului
+
+Simptom: `nativx-redis-1 … Restarting (1)`, iar restul stack-ului rămâne blocat pe
+`dependency failed to start: container nativx-redis-1 is unhealthy`. În log:
+
+```
+redis-1  | find: ./appendonlydir: Permission denied
+```
+
+Cauza: entrypoint-ul oficial de Redis, pornit ca root, face `chown` pe `/data` înainte de a coborî
+la userul `redis` — dar `cap_drop: [ALL]` îi ia root-ului `CAP_DAC_OVERRIDE`, deci nu poate nici
+măcar traversa `appendonlydir` (uid 999). Rezolvat prin `user: "999:999"` pe serviciul `redis` în
+`docker-compose.prod.yml`: procesul pornește direct ca proprietarul datelor, iar ramura cu `chown`
+din entrypoint nu se mai execută.
+
+Dacă hostul are un container Redis mai vechi decât fixul, `docker compose up -d` îl recreează
+corect. **Nu** rezolva prin re-adăugarea capabilităților și **nu** șterge volumul `redis-data` —
+conține coada `inbound` și lease-urile de admission.
+
 ### Executorul web async + recovery (NX-233)
 
 Executorul turelor v2 și sweeperul de recovery rulează **în procesul `worker`** (task-uri
