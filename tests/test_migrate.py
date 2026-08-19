@@ -6,7 +6,9 @@ calculul de checksum. Logica de aplicare/tracking pe DB e acoperită de
 
 import hashlib
 
-from scripts.migrate import discover_migrations
+import pytest
+
+from scripts.migrate import _connect_kwargs, _redact_dsn, discover_migrations
 
 
 def _write(tmp_path, name, content="-- noop\nselect 1;\n"):
@@ -45,3 +47,50 @@ def test_checksum_changes_when_file_edited(tmp_path):
     p.write_text("select 2;\n", encoding="utf-8")  # editat după „aplicare"
     c2 = discover_migrations(tmp_path)[0].checksum
     assert c1 != c2  # drift detectabil
+
+
+# --- DSN: diagnostic, nu traceback din urllib (regresie 2026-08-19) ---------------------------
+#
+# Un `.env.migrate` creat cu placeholderul din runbook necompletat ajungea nevalidat până la
+# `unquote(None)` și ieșea cu `TypeError: argument of type 'NoneType' is not iterable`, dintr-un
+# cadru de stivă în `urllib/parse.py`. Runnerul de migrări e citit sub presiune — mesajul e parte
+# din funcția lui, nu un lux.
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "<url-ul cu parola percent-encoded>",  # exact ce a ajuns în producție
+        "",
+        "postgresql://host/db",  # fără user
+        "not-a-url",
+        "mysql://u:p@h/db",  # altă schemă
+    ],
+)
+def test_invalid_dsn_raises_runtime_error_not_typeerror(dsn):
+    with pytest.raises(RuntimeError, match="DSN invalid"):
+        _connect_kwargs(dsn)
+
+
+def test_password_is_optional():
+    """Loopback cu `trust` (Postgresul efemer NX-247) n-are parolă — și nu e o eroare."""
+    assert _connect_kwargs("postgresql://u@127.0.0.1:5432/db")["password"] is None
+
+
+@pytest.mark.parametrize(
+    "dsn,secret",
+    [
+        ("postgresql://user:s3cr3t@h:5432/db", "s3cr3t"),
+        # Parola cu `@` needodat e chiar cauza cea mai frecventă de DSN invalid, deci exact
+        # cazul în care redactarea nu are voie să cedeze: o regex care se oprește la PRIMUL `@`
+        # lasă `ss` afară.
+        ("postgresql://user:pa@ss@h:5432/db", "pa@ss"),
+        ("user:secret@host/db", "secret"),  # fără schemă
+    ],
+)
+def test_redact_dsn_never_leaks_password(dsn, secret):
+    assert secret not in _redact_dsn(dsn)
+
+
+def test_redact_dsn_keeps_user_for_diagnosis():
+    assert _redact_dsn("postgresql://bot_runtime:x@h/db").startswith("postgresql://bot_runtime:")
