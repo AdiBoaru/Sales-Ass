@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -35,7 +38,6 @@ def _manifest(**kw) -> DeployManifest:
         "digest": "sha256:" + "a" * 64,
         "release_sha": "f8ce9c4",
         "built_at": "2026-08-17T10:00:00Z",
-        "config_revision": "abcdef123456",
         "schema_requires": 42,
         "schema_tolerates": 43,
     }
@@ -303,3 +305,48 @@ def test_contextul_de_build_exclude_istoricul_git_si_secretele():
     assert ".env" in entries and ".env.*" in entries
     # Registrul NX-173 trebuie să RĂMÂNĂ: excluderea lui a fost chiar bugul (poarta de boot cade).
     assert "!db/seed/safety_rules.json" in entries
+
+
+def test_manifestul_nu_poarta_amprenta_de_config():
+    """v2 a scos `config_revision` — și trebuie să RĂMÂNĂ scos.
+
+    Era o amprentă a configurației, calculată la BUILD, în CI, unde `.env`-ul hostului nu există:
+    ieșea amprenta default-urilor din cod. `verify_manifest` o compara cu ce raportează
+    `/health/ready` de pe VPS, unde `.env` are cel puțin `ENV=development` față de `dev` în cod —
+    deci nu puteau coincide niciodată, iar verificarea striga „deploy parțial" la fiecare deploy
+    corect. Testul e aici ca nimeni să n-o pună la loc dintr-un reflex de „lipsește un câmp".
+    """
+    assert "config_revision" not in {f.name for f in fields(DeployManifest)}
+    assert "config_revision" not in _manifest().to_json()
+
+
+def test_versiunea_de_manifest_e_v2():
+    """Schimbarea de formă e VIZIBILĂ: un manifest v1 de pe un host vechi trebuie respins la
+    citire, nu interpretat pe jumătate."""
+    assert MANIFEST_VERSION == "deploy-manifest.v2"
+    with pytest.raises(ManifestError, match="versiune de manifest necunoscută"):
+        load(_manifest().to_json().replace(MANIFEST_VERSION, "deploy-manifest.v1"))
+
+
+def test_build_manifest_nu_are_nevoie_de_dependente_instalate():
+    """`build_manifest.py` rulează în jobul de BUILD, care nu instalează `requirements*.txt`.
+
+    Regresie măsurată (2026-08-19): scriptul importa `src.config` pentru `Settings()`, iar pasul
+    cădea cu `ModuleNotFoundError: No module named 'pydantic'` — la ultimul pas din cinci, deci
+    fără manifest, fără staging, fără nimic de promovat. Defectul stătuse ascuns fiindcă jobul
+    murea mai devreme, la scan.
+
+    Verificăm în SUBPROCES, cu importurile izolate: în sesiunea de pytest `pydantic` e deja
+    încărcat de alte module, deci un assert pe `sys.modules` din interior n-ar dovedi nimic.
+    """
+    code = (
+        "import sys, importlib;"
+        "sys.path.insert(0, r'%s');"
+        "importlib.import_module('scripts.release.build_manifest');"
+        "print('pydantic' in sys.modules)"
+    ) % str(ROOT)
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "False", (
+        "build_manifest.py trage pydantic în proces — jobul de build n-are dependențe instalate"
+    )

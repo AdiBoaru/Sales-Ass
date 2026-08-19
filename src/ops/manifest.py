@@ -30,19 +30,32 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-MANIFEST_VERSION = "deploy-manifest.v1"
+MANIFEST_VERSION = "deploy-manifest.v2"
 
 
 @dataclass(frozen=True, slots=True)
 class DeployManifest:
-    """Ce se promovează, peste ce, și cu ce dovezi."""
+    """Ce se promovează, peste ce, și cu ce dovezi.
+
+    **v2 a scos `config_revision`** (măsurat 2026-08-19, la primul build care a ajuns până aici).
+    Amprenta de config e o proprietate a DEPLOYULUI, nu a artefactului: se calculează din
+    `Settings()`, adică din `.env`-ul mașinii pe care rulează. În CI nu există `.env`-ul hostului,
+    deci valoarea scrisă în manifest era amprenta DEFAULT-urilor din cod — iar `verify_manifest`
+    o compara cu ce raportează `/health/ready` de pe VPS, unde `.env` are cel puțin
+    `ENV=development` față de `dev` în cod. Cele două nu puteau coincide niciodată: verificarea ar
+    fi raportat „deploy parțial" la fiecare deploy corect. O alarmă care sună mereu se oprește.
+
+    Ce prinde acum deployul parțial: `verify_manifest` cere ca TOATE serviciile să raporteze
+    ACEEAȘI amprentă de config, calculată în interiorul fiecărui container. Configurația e citită
+    la CREAREA containerului, deci un `.env` editat urmat de repornirea unui singur serviciu chiar
+    produce divergență — și asta se vede fără să fie nevoie de o valoare de referință din CI.
+    """
 
     version: str
     image: str
     digest: str
     release_sha: str
     built_at: str
-    config_revision: str
     schema_requires: int
     schema_tolerates: int
     previous_digest: str = ""
