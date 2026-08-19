@@ -66,9 +66,22 @@ idempotență`. Un „200 OK" nu e un smoke.
 
 ```
 Actions → Release → Run workflow
-  digest:   sha256:…   ← din rularea de build, copiat, nu retastat
-  rollback: false
+  digest:        sha256:…   ← din rularea de build, copiat, nu retastat
+  build_run_id:  32254699091   ← ID-ul ACELEIAȘI rulări (e în URL). De acolo vine manifestul.
+  rollback:      false
+  first_release: false   ← true DOAR la prima promovare (vezi mai jos)
 ```
+
+`build_run_id` nu e redundant: manifestul e artefact al rulării care a CONSTRUIT digestul, iar
+promovarea nu reconstruiește nimic. Cele două se verifică reciproc — dacă manifestul din rularea
+indicată are alt digest decât cel cerut, preflight refuză. Un ID greșit e respins, nu folosit tăcut.
+
+`first_release` există pentru un impas de bootstrap: `--require-rollback-possible` cere o țintă de
+rollback, dar la primul release nu există niciuna, deci poarta nu putea fi trecută niciodată.
+Acceptarea e DECLARATĂ, nu dedusă — din manifest, „primul release" și „manifestul precedent n-a
+putut fi citit" arată identic (`previous_digest` gol în ambele), iar a doua e exact situația în care
+vrei să te oprești. Steagul acoperă DOAR absența unei ținte: o schemă care depășește ce tolerează
+imaginea precedentă blochează în continuare.
 
 Environmentul `production` cere aprobarea umană. Pașii rulează în ordinea:
 

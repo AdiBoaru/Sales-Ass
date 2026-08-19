@@ -63,6 +63,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="blochează releaseul dacă imaginea precedentă nu mai tolerează schema curentă",
     )
+    ap.add_argument(
+        "--allow-no-previous-digest",
+        action="store_true",
+        help=(
+            "acceptă absența unei ținte de rollback (PRIMUL release). Nu relaxează celelalte "
+            "motive: o schemă care depășește ce tolerează imaginea precedentă blochează în "
+            "continuare."
+        ),
+    )
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
@@ -126,7 +135,24 @@ def main(argv: list[str] | None = None) -> int:
         possible, why = manifest.rollback_possible(applied)
         report["checks"]["rollback"] = {"possible": possible, "reason": why}
         if args.require_rollback_possible and not possible:
-            problems.append(f"rollback imposibil: {why}")
+            # Primul release e o STARE, nu un eșec: nu există versiune precedentă fiindcă nu a
+            # existat niciodată una, iar o poartă care cere un predecesor nu poate fi trecută la
+            # primul release — bootstrap imposibil prin construcție. A ieșit la iveală abia acum
+            # (2026-08-19), la prima promovare care a ajuns până aici.
+            #
+            # Se acceptă doar DECLARAT, nu dedus. Motivul: din manifest, „primul release" și
+            # „manifestul precedent n-a putut fi citit" arată identic — `build_manifest.py` lasă
+            # `previous_digest` gol în ambele cazuri. A doua situație e exact aceea în care vrei să
+            # te oprești. Un om spune care dintre ele e; codul nu are cum să știe.
+            if not manifest.previous_digest and args.allow_no_previous_digest:
+                report["checks"]["rollback"]["accepted_as_first_release"] = True
+                print(
+                    "ATENȚIE: promovare FĂRĂ țintă de rollback, acceptată explicit "
+                    "(--allow-no-previous-digest). Notează digestul care rulează acum: "
+                    "e singura cale de întoarcere până la releaseul următor."
+                )
+            else:
+                problems.append(f"rollback imposibil: {why}")
     elif args.require_rollback_possible:
         problems.append("--require-rollback-possible cere --manifest (altfel nu există țintă)")
 
