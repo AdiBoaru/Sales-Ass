@@ -30,7 +30,7 @@ promovezi.
 
 1. build o singură dată, cu SBOM + provenance;
 2. `cosign sign` (keyless, identitatea = workflow-ul);
-3. Trivy CRITICAL/HIGH, **fail-closed** (excepțiile expiră — `.trivyignore`);
+3. Trivy CRITICAL/HIGH **cu fix disponibil**, fail-closed (vezi §1.5);
 4. `image_contract.py` (non-root, conținut, zero secrete, canary injectat de CI);
 5. `build_manifest.py` → `manifest.json` (digest, release, config, interval de schemă, digestul
    PRECEDENT).
@@ -75,6 +75,43 @@ python scripts/release/verify_manifest.py --manifest manifest.json --base-url ht
 Verifică trei lucruri: manifestul e neatins (amprentă), fiecare container rulează exact digestul,
 iar `/health/ready` raportează ACELAȘI `release` + `config`. Ultimul prinde **deployul parțial**:
 imagine nouă cu configurație veche arată perfect la `docker compose ps`.
+
+### 1.5 Politica de scan (ce blochează și ce nu)
+
+Poarta blochează pe **CRITICAL/HIGH care au fix publicat**. Atât.
+
+Nu e o relaxare, e condiția ca poarta să fie o poartă. Măsurat pe imaginea reală (2026-08-19,
+digestul din producție): din 26 de finding-uri HIGH/CRITICAL, **17 nu aveau niciun patch în lume**
+— `affected` sau `fix_deferred`, toate în pachete de bază Debian pe care aplicația nu le folosește
+(cele 4 CRITICAL, toate în `perl-base`, într-un serviciu Python care nu invocă perl). O poartă care
+cere zero din ele nu poate fi trecută prin nicio acțiune a noastră. Consecința nu e „suntem mai în
+siguranță", ci: **85 de rulări roșii la rând, zero deployuri promovate, și o producție actualizată
+manual prin SSH — fără scan, fără staging, fără smoke.** Un control pe care nimeni nu-l poate
+satisface e ocolit, iar ocolirea ia cu ea și controalele care funcționau.
+
+Cele fără fix nu dispar din vedere:
+
+| Unde | Ce vezi | Blochează? |
+|---|---|---|
+| artefactul `trivy-scan-<run_id>` | raportul SARIF complet, **și când poarta e roșie** | nu |
+| `security-rescan.yml` (săptămânal) | inventar complet + verdict pe ce a devenit reparabil | da, când apare un patch |
+| `.trivyignore.yaml` | excepții pentru fix-uri disponibile pe care le amânăm conștient | expiră |
+
+Trei detalii care par mărunte și nu sunt:
+
+- **`limit-severities-for-sarif: true`** e obligatoriu. Fără el, `entrypoint.sh` al acțiunii face
+  `unset TRIVY_SEVERITY` când formatul e `sarif` — deci `severity: CRITICAL,HIGH` devine
+  decorativ, iar poarta impune în realitate „zero vulnerabilități de orice severitate, inclusiv
+  LOW". Dacă vezi „Building SARIF report with all severities" în log, opțiunea lipsește.
+- **Artefactul de scan se încarcă cu `if: always()`**, fiindcă pasul iese cu 1 și sare tot ce
+  urmează. Fără asta, raportul se pierde exact când e necesar.
+- **`.trivyignore.yaml`, nu `.trivyignore`.** Doar formatul YAML are `expired_at`. În formatul
+  simplu, o „dată de expirare" e un comentariu, iar regula nu se aplică.
+
+Patch-urile de OS intră la build: stagiul `runtime` din `Dockerfile` rulează `apt-get upgrade`.
+Baza pinuită pe digest fixează punctul de plecare, dar `python:3.12-slim` se republică rar, iar
+Debian publică în `trixie-security` între timp — fără upgrade, imaginea rămâne în urmă cu
+vulnerabilități care AU fix.
 
 ---
 

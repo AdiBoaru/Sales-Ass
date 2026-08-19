@@ -1,0 +1,36 @@
+# NX-248 — excepții de scan. Fiecare intrare are CVE, motiv, owner și DATĂ DE EXPIRARE.
+#
+# De ce YAML și nu formatul simplu: antetul vechiului `.trivyignore` cerea „fără intrare fără dată
+# de expirare" și promitea că „o excepție expirată face buildul roșu" — dar formatul simplu NU are
+# câmp de expirare. Data era un comentariu, deci regula era neexecutabilă: o excepție scrisă „până
+# pe 1 septembrie" ar fi tăcut la nesfârșit. `.trivyignore.yaml` are `expired_at`, pe care Trivy îl
+# aplică efectiv. Regula scrisă și regula impusă sunt acum același lucru.
+#
+# Format (câmpurile sunt cele din schema Trivy):
+#
+#   vulnerabilities:
+#     - id: CVE-XXXX-YYYYY
+#       statement: motiv concret · owner · de ce nu ne atinge
+#       expired_at: YYYY-MM-DD
+#
+# Reguli:
+#   • fără intrare fără `expired_at`;
+#   • „nu ne afectează" nu e motiv: scrie DE CE (calea de cod nu e atinsă / pachetul nu e în
+#     runtime / fixul e în versiunea X programată la data Y);
+#   • `continue-on-error` pe pasul de scan ar fi aceeași renunțare, doar mai rapidă — de aceea nu
+#     există în release.yml.
+#
+# CE NU SE PUNE AICI: vulnerabilitățile fără fix publicat. Ele nu mai ajung la poartă deloc —
+# `ignore-unfixed: true` le filtrează structural, fiindcă o poartă care pică pe ceva ce nimeni nu
+# poate repara nu e o poartă, e un blocaj (măsurat: 17 din 26, toate în pachete Debian pe care
+# aplicația nu le folosește). Rămân vizibile în raportul de scan și sunt urmărite de
+# `.github/workflows/security-rescan.yml`, care le re-evaluează săptămânal contra bazei de date
+# actualizate și anunță când apare un fix.
+#
+# Aici intră DOAR excepții pentru vulnerabilități care AU fix disponibil și pe care alegem
+# conștient să nu-l aplicăm încă — adică exact cazurile care merită un termen și un owner.
+#
+# Starea la 2026-08-19: GOALĂ. După `apt-get upgrade` în stagiul runtime, imaginea nu mai are
+# nicio vulnerabilitate HIGH/CRITICAL cu fix disponibil (verificat: 26 → 17 finding-uri, zero cu
+# `FixedVersion`). Nu există nimic de excepta.
+vulnerabilities: []
