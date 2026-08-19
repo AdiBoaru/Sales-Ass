@@ -96,8 +96,35 @@ jobs:
           IMAGE: ${{ env.IMAGE }}
           DIGEST: ${{ steps.build.outputs.digest }}
 
-      # Scanul e FAIL-CLOSED pe critical/high. Excepțiile trăiesc în `.trivyignore` cu CVE, motiv,
-      # owner și dată de expirare — `continue-on-error` ar transforma poarta într-o notificare.
+      # Scanul e FAIL-CLOSED pe critical/high CU FIX DISPONIBIL. Excepțiile trăiesc în
+      # `.trivyignore.yaml` cu CVE, motiv, owner și `expired_at` — `continue-on-error` ar
+      # transforma poarta într-o notificare.
+      #
+      # Cele trei opțiuni de mai jos au fost fiecare un defect măsurat pe 2026-08-19, care
+      # împreună au ținut pipeline-ul roșu de la prima rulare (zero deployuri promovate):
+      #
+      # `ignore-unfixed: true` — era `false`, adică poarta pica și pe vulnerabilități pentru care
+      #   NU EXISTĂ patch publicat. Măsurat pe imaginea reală: 17 din 26 de finding-uri erau
+      #   `affected`/`fix_deferred`, toate în pachete Debian de bază pe care aplicația nu le
+      #   folosește (4 CRITICAL, toate în `perl-base`, într-un serviciu Python care nu invocă
+      #   niciodată perl). Nicio acțiune a noastră nu le putea închide. O poartă pe care nimeni
+      #   nu o poate trece nu filtrează nimic — se ocolește, și exact asta s-a întâmplat:
+      #   producția a fost actualizată manual, prin SSH, fără scan, fără staging și fără smoke.
+      #   Cele fără fix rămân VIZIBILE (raportul se încarcă mai jos, inclusiv când poarta e roșie)
+      #   și sunt re-evaluate săptămânal de `security-rescan.yml`, care anunță când apare un fix.
+      #
+      # `limit-severities-for-sarif: true` — fără el, `severity` de mai jos era DECORATIV.
+      #   `entrypoint.sh` al acțiunii face `unset TRIVY_SEVERITY` când formatul e `sarif` și
+      #   opțiunea asta lipsește („Building SARIF report with all severities" — linia apare chiar
+      #   în logul rulărilor picate). Adică poarta declara CRITICAL,HIGH și impunea „zero
+      #   vulnerabilități de ORICE severitate", inclusiv LOW. Măsurat: încă 5 finding-uri
+      #   MEDIUM/LOW în `pip` ar fi ținut buildul roșu după ce celelalte două erau reparate.
+      #   Regula declarată și regula impusă sunt acum același lucru.
+      #
+      # `trivyignores: .trivyignore.yaml` — formatul simplu nu are câmp de expirare, deci
+      #   `# expiră 2026-09-01` era un comentariu, iar regula din antetul fișierului („o excepție
+      #   expirată face buildul roșu") era neexecutabilă. YAML-ul are `expired_at`, pe care Trivy
+      #   îl aplică.
       - name: Scan vulnerabilități (OS + Python)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -105,9 +132,28 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
           exit-code: "1"
-          ignore-unfixed: false
-          trivyignores: .trivyignore
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+
+      # `if: always()` fiindcă pasul de scan iese cu 1 când găsește ceva, iar pașii următori se
+      # sar — inclusiv artefactul de evidență de la finalul jobului. Adică exact când raportul e
+      # cel mai necesar, el se pierdea: lista de CVE-uri care a ținut pipeline-ul blocat a trebuit
+      # reprodusă rulând Trivy local pe digestul din producție, fiindcă în CI nu rămăsese nimic.
+      #
+      # Artefact, nu GitHub Code Scanning: încărcarea SARIF-ului de la Trivy în Code Scanning e
+      # cunoscut fragilă în jurul versiunii pe care o rulăm (0.70.0) — `artifactLocation.uri` gol
+      # și căi de fișier inexistente sunt respinse la upload. Un artefact nu poate eșua din motive
+      # de format.
+      - name: Raportul de scan (păstrat inclusiv când poarta e roșie)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trivy-scan-${{ github.run_id }}
+          path: trivy.sarif
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Contractul de imagine (non-root, conținut, zero secrete)
         run: |

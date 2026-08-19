@@ -1,0 +1,130 @@
+# Re-scan programat al imaginii publicate.
+#
+# De ce există: poarta din `release.yml` e o afirmație despre un MOMENT — ziua buildului. CVE-urile
+# nu apar în timpul buildului, apar după. O imagine construită verde acum trei săptămâni și care
+# rulează neschimbată în producție poate avea azi patru vulnerabilități cu fix publicat, iar
+# nimeni n-ar afla: nu se mai construiește nimic, deci nu se mai scanează nimic. Scanarea la build
+# și scanarea a ceea ce RULEAZĂ sunt două întrebări diferite.
+#
+# Ce face diferit față de poarta de build: jobul pică EXACT când există ceva de făcut — adică
+# atunci când o vulnerabilitate HIGH/CRITICAL are fix disponibil. Restul (cele fără patch) intră
+# în raport, nu în verdict. Un job programat care trece mereu nu e monitorizare, e zgomot; unul
+# care pică pe lucruri nereparabile e ignorat în două săptămâni. Roșu aici înseamnă: „a apărut un
+# patch, releaseul următor îl ia".
+name: Security rescan
+
+on:
+  schedule:
+    # Luni, 06:00 UTC. Săptămânal, nu zilnic: fereastra de remediere pentru HIGH/CRITICAL e oricum
+    # de zile, iar un job zilnic care raportează aceleași 17 finding-uri nereparabile ar antrena
+    # exact reflexul pe care încercăm să-l evităm — să nu te mai uiți.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: "Referință de imagine (digest sau tag). Gol = `latest` din ghcr."
+        required: false
+        type: string
+
+concurrency:
+  group: security-rescan
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/adiboaru/sales-ass
+
+jobs:
+  rescan:
+    name: Re-scan imagine publicată
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Rezolvăm tagul la un DIGEST și îl scriem în rezumat: „am scanat `latest`" nu e o afirmație
+      # verificabilă peste trei luni, „am scanat sha256:…" este.
+      - name: Rezolvă referința la digest
+        id: ref
+        run: |
+          # `$INPUT_REF` vine prin `env:`, nu interpolat în șirul de shell: o expresie de workflow
+          # cu conținut controlat de utilizator, pusă direct în `run:`, e injecție de comandă.
+          REF="$INPUT_REF"
+          [ -z "$REF" ] && REF="${IMAGE}:latest"
+          case "$REF" in
+            *@sha256:*) RESOLVED="$REF" ;;
+            *) RESOLVED="${IMAGE}@$(docker buildx imagetools inspect "$REF" --format '{{.Manifest.Digest}}')" ;;
+          esac
+          echo "resolved=$RESOLVED" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Imagine scanată"
+            echo ""
+            echo '```'
+            echo "$RESOLVED"
+            echo '```'
+            echo ""
+            echo "> Sursa e cea mai recentă imagine PUBLICATĂ, nu neapărat cea care rulează în"
+            echo "> producție — repo-ul nu ține evidența digestului deployat. Când diferă, rulează"
+            echo "> workflow-ul manual cu digestul din \`.env\` de pe host."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          INPUT_REF: ${{ inputs.image_ref }}
+
+      # 1. Inventarul COMPLET, fără verdict: toate severitățile, inclusiv ce n-are fix. Ăsta e
+      #    documentul pe care îl citești când vrei să știi ce ai în imagine, nu ce te blochează.
+      - name: Raport complet (toate severitățile, fără poartă)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.resolved }}
+          format: json
+          output: rescan-full.json
+          scanners: vuln
+          exit-code: "0"
+          ignore-unfixed: false
+
+      - name: Publică raportul
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: security-rescan-${{ github.run_id }}
+          path: rescan-full.json
+          if-no-files-found: warn
+          retention-days: 180
+
+      # 2. Verdictul, pe exact aceeași politică ca poarta de build: HIGH/CRITICAL, doar ce are fix.
+      #    Dacă apare ceva aici, patch-ul EXISTĂ și noi suntem în urmă — asta e acționabil.
+      - name: Verdict — există ceva reparabil?
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.resolved }}
+          format: table
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+
+      - name: Ce înseamnă roșu aici
+        if: failure()
+        run: |
+          {
+            echo "## Există vulnerabilități HIGH/CRITICAL cu fix disponibil"
+            echo ""
+            echo "Imaginea publicată e în urma patch-urilor. Nu e un incident: e un termen."
+            echo ""
+            echo "1. Un build nou ia patch-urile de OS automat (\`apt-get upgrade\` în stagiul"
+            echo "   runtime al Dockerfile-ului). Pentru pachete Python, actualizează"
+            echo "   \`requirements.lock\`."
+            echo "2. Promovează digestul rezultat — vezi docs/RELEASE-RUNBOOK.md §1."
+            echo "3. Dacă fixul nu se poate aplica acum, intrarea merge în \`.trivyignore.yaml\`"
+            echo "   cu motiv, owner și \`expired_at\` — nu se lasă tăcut."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -43,6 +43,26 @@ RUN pip install --no-cache-dir --require-hashes --no-deps --prefix=/install -r r
 # --- Stage 2: runtime — imagine mică, non-root, doar ce trebuie ---
 FROM python@${BASE_DIGEST} AS runtime
 
+# Patch-urile de securitate publicate DUPĂ ce a fost coaptă imaginea de bază.
+#
+# Baza e pinuită pe digest, ceea ce fixează punctul de plecare — dar `python:3.12-slim` se
+# republică rar, iar Debian publică în `trixie-security` între timp. Măsurat pe pinul curent
+# (2026-08-19): `util-linux` și cele 8 pachete binare surori aveau `2.41-5` instalat, cu
+# `2.41.5-0+deb13u1` disponibil în `trixie-security` — CVE-2026-53615, singura vulnerabilitate
+# HIGH/CRITICAL din imagine care AVEA fix. Fără linia asta, poarta de scan e roșie la infinit
+# pentru ceva ce se repară cu o comandă.
+#
+# NU face imaginea nedeterministă în sensul care contează aici: contractul NX-248 e „un commit
+# produce UN artefact, identificat prin digest, care se promovează neschimbat" — nu „două builduri
+# separate în timp dau aceiași bytes". Ce se promovează în producție e digestul construit o
+# singură dată, nu Dockerfile-ul reconstruit la fiecare pas.
+#
+# Doar în `runtime`: stagiul `builder` nu ajunge în imaginea finală, deci pachetele lui de OS nu
+# sunt niciodată expuse.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Metadate OCI: leagă imaginea de commit-ul din care a ieșit, fără să pună nimic secret în ea.
 # `docker inspect` pe VPS răspunde „ce rulează aici?" chiar și fără acces la CI.
 ARG RELEASE_SHA=unknown
