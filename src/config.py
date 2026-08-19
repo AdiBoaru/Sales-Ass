@@ -79,6 +79,11 @@ def _env_aliases(name: str, field: FieldInfo) -> tuple[str, ...]:
     return (name.upper(),)
 
 
+#: Valorile lui `ENV` care înseamnă „producție". Duplicat controlat în `scripts/migrate.py`
+#: (care nu importă nimic din `src/`); egalitatea lor e verificată de un test.
+_PROD_ENVS = frozenset({"prod", "production"})
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -1470,7 +1475,21 @@ class Settings(BaseSettings):
 
     @property
     def is_prod(self) -> bool:
-        return self.env == "prod"
+        """Producția are UN singur înțeles în tot sistemul.
+
+        Înainte, aici era `self.env == "prod"` — potrivire exactă — în timp ce
+        `scripts/migrate.py` accepta `("prod", "production")`. Cu `ENV=production`, runnerul
+        de migrări te trata ca în producție (refuza credentialul de runtime pentru DDL), iar
+        restul aplicației nu: `RELEASE_ASSIGNMENT_SALT` redevenea opțional, adică bucketul de
+        canary devenea calculabil de oricine cunoaște `conversation_id`. Două definiții ale
+        aceluiași cuvânt, în același repo, care se contraziceau exact pe protecții.
+
+        Rezolvarea nu e simetrică: acceptăm AMBELE forme, în loc să restrângem `migrate.py`.
+        Un mediu în plus tratat ca producție înseamnă reguli mai STRICTE aplicate poate unde
+        nu trebuiau; invers, un `ENV` scris altfel decât se aștepta cineva ar stinge tăcut
+        protecții. Când un default se poate greși, se greșește în direcția care nu doare.
+        """
+        return self.env.strip().lower() in _PROD_ENVS
 
 
 @lru_cache

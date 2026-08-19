@@ -70,6 +70,13 @@ EXIT_UNSAFE = 4  # sesiune prin pooler tranzacțional, sau credential greșit pe
 # se mai exclud reciproc — exact bugul pe care lock-ul trebuie să-l prevină).
 _LOCK_KEY = 0x4E58323438  # "NX248" în hex, pe 40 de biți
 
+#: Valorile lui `ENV` care înseamnă „producție". DUPLICAT deliberat cu `src/config.py`:
+#: runnerul ăsta nu importă nimic din `src/` — e și poarta de boot, și jobul one-shot de
+#: migrare, iar independența lui e o proprietate, nu o întâmplare. Divergența e prinsă
+#: mecanic de un test, fiindcă cele două AU divergat deja o dată: aici erau ambele forme,
+#: în `config.is_prod` doar `"prod"` — deci `ENV=production` stingea tăcut protecții.
+_PROD_ENVS = frozenset({"prod", "production"})
+
 # DDL canonic = docs/014_schema_migrations.sql. Bootstrap-ul de aici (IF NOT EXISTS) doar
 # garantează că putem INTEROGA starea pe prima rulare, înainte ca 014 să fie aplicat.
 _BOOTSTRAP_DDL = """
@@ -339,7 +346,7 @@ def _dsn(*, write: bool) -> str:
         migration = _env_or_file("DATABASE_URL_MIGRATION")
         if migration:
             return migration
-        if (os.environ.get("ENV") or "").lower() in ("prod", "production"):
+        if (os.environ.get("ENV") or "").strip().lower() in _PROD_ENVS:
             raise RuntimeError(
                 "DATABASE_URL_MIGRATION lipsește. În prod, aplicarea migrărilor rulează EXCLUSIV "
                 "în jobul dedicat, cu credentialul de DDL — serviciile de runtime nu îl au "
