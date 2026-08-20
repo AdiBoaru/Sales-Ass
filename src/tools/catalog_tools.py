@@ -748,6 +748,30 @@ async def search_products_tool(
     (paritate „arată altele", P8). Degradare grațioasă la lexical-only fără LLM/embeddings sau
     dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2)."""
     a = SearchArgs(**args)
+    # IZI-anti-drift: rafinare ÎN sesiune activă, fără categorie/nevoi NOI → moștenește-le pe ale
+    # sesiunii (ține „raftul" curent). Bug „mai ieftin → mască/ser/toner": user scrie „mai ifetin"
+    # (typo) → `cheaper_intent` (regex) ratează → modelul re-caută `price_asc` fără categorie →
+    # drift pe alt raft. Moștenirea repară fără wordlist (model+context); DOAR când câmpul NU e
+    # re-specificat (schimbare de subiect = modelul setează explicit category → fără moștenire).
+    # Observabil prin `search_filter_inherited`.
+    #
+    # Rulează ÎNAINTEA rezoluției, deliberat: altfel termenii moșteniți ar sări peste confruntarea
+    # cu catalogul și ar ajunge în `WHERE` neverificați — exact drumul pe care îl închidem.
+    sessions_on = (
+        get_settings().search_sessions_enabled
+    )  # kill-switch (OFF → fiecare căutare fresh)
+    sess_filters = (ctx.state.active_search or {}).get("filters") or {}
+    if sessions_on and sess_filters:
+        inherited: list[str] = []
+        if a.category is None and sess_filters.get("category"):
+            a.category = sess_filters["category"]
+            inherited.append("category")
+        if not a.concerns and sess_filters.get("concerns"):
+            a.concerns = [str(x) for x in sess_filters["concerns"]]
+            inherited.append("concerns")
+        if inherited:
+            ctx.emit("search_filter_inherited", fields=inherited)
+
     # === REZOLVARE ÎNAINTE DE CONSTRÂNGERE =====================================================
     # Un filtru SQL nu e o comparație, e o execuție: `WHERE slug = 'ten'` nu întreabă dacă «ten»
     # există, ci întoarce 0 rânduri — același rezultat ca pentru un raft real, dar gol. Din
@@ -783,26 +807,6 @@ async def search_products_tool(
         norm_features = [
             normalize(f) for f in a.features if isinstance(f, str) and f.strip()
         ] or None
-    sessions_on = (
-        get_settings().search_sessions_enabled
-    )  # kill-switch (OFF → fiecare căutare fresh)
-    # IZI-anti-drift: rafinare ÎN sesiune activă, fără categorie/concerns NOI → moștenește-le pe ale
-    # sesiunii (ține „raftul" curent). Bug „mai ieftin → mască/ser/toner": user scrie „mai ifetin"
-    # (typo) → `cheaper_intent` (regex) ratează → modelul re-caută `price_asc` fără categorie →
-    # drift pe alt raft. Moștenirea repară fără wordlist (model+context); DOAR când câmpul NU e
-    # re-specificat (schimbare de subiect = modelul setează explicit category → fără moștenire).
-    # Observabil prin `search_filter_inherited`.
-    sess_filters = (ctx.state.active_search or {}).get("filters") or {}
-    if sessions_on and sess_filters:
-        inherited: list[str] = []
-        if a.category is None and sess_filters.get("category"):
-            a.category = sess_filters["category"]
-            inherited.append("category")
-        if concern_keys is None and sess_filters.get("concerns"):
-            concern_keys = [str(x) for x in sess_filters["concerns"]] or None
-            inherited.append("concerns")
-        if inherited:
-            ctx.emit("search_filter_inherited", fields=inherited)
     seen = _displayed_ids(ctx)
     filters = _session_filters(a, concern_keys, norm_features)
     fp = _fp(filters)
@@ -1110,6 +1114,15 @@ async def search_products_tool(
             f"(nevoile «{termeni}» nu sunt filtre cunoscute în catalog — rezultatele NU sunt "
             f"filtrate pe ele; nu afirma potrivirea pe aceste nevoi, poți cere o clarificare)"
         )
+    # Aceeași onestitate pentru categoria care n-a putut fi confruntată cu catalogul. NU suprimăm
+    # (vezi `category_dropped` mai jos): filtrul n-a existat, deci rezultatele nu sunt „de pe alt
+    # raft", sunt doar nefiltrate. Ce nu are voie modelul e să le prezinte drept categoria cerută.
+    if a.category and not category_keys:
+        notes.append(
+            f"(«{a.category}» nu e o categorie din catalog — rezultatele NU sunt filtrate pe ea; "
+            f"nu afirma că sunt din categoria asta, propune o categorie reală sau cere o "
+            f"clarificare)"
+        )
     # Relaxare cu disclosure: search a renunțat la o constrângere SOFT (nevoie/categorie) ca să iasă
     # ceva → agentul trebuie să fie sincer că nu e potrivire exactă pe ce a cerut (P6, nu tăcere).
     if relaxed:
@@ -1134,7 +1147,13 @@ async def search_products_tool(
     # off-category). `category_dropped` = filtrul de categorie cerut a fost renunțat ca să iasă ceva
     # (categorie inexistentă). `top_cosine` = cât de departe e cel mai apropiat vector (prinde
     # free-text fără categorie). Determinist, fără LLM. Fail-open la consumator (None ⇒ exact).
-    category_dropped = bool(a.category) and (
+    # Condiția e pe categoria REZOLVATĂ, nu pe cuvântul cerut, și distincția contează: „a fost
+    # relaxată" (categorie reală, dar prea îngustă → rezultatele vin de pe alt raft, deci nu le
+    # prezenta ca fiind ce s-a cerut) NU e același lucru cu „n-am putut-o verifica" (vocabular
+    # indisponibil sau termen necunoscut → filtrul n-a existat niciodată). Confundându-le, o
+    # degradare a catalogului s-ar transforma în suprimarea TUTUROR rezultatelor — adică fix
+    # tăcerea pe care încercăm s-o eliminăm. Pentru al doilea caz punem o notă, mai jos.
+    category_dropped = bool(category_keys) and (
         winning_step is not None and winning_step.get("category") is None
     )
     # NX-167 (B): cerere CLARĂ de categorie, dar potrivirea a picat pe ALTĂ ramură (categoria cerută

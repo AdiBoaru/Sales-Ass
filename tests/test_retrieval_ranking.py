@@ -73,32 +73,51 @@ def test_order_clause_semantic_price_asc_ignores_cosine(flag_on):
 
 
 def test_relax_ladder_pins_price_when_flag_on(flag_on):
-    steps = _relax_ladder(price_max=80.0, concerns=["oily"], category="parfum", in_stock_only=False)
+    # `category` e o listă de chei REZOLVATE contra catalogului, iar nevoile sunt fațete
+    # descoperite — dar politica de relaxare a rămas aceeași.
+    steps = _relax_ladder(
+        price_max=80.0,
+        facet_filters={"concerns": ["oily"]},
+        category=["parfum"],
+        in_stock_only=False,
+    )
     assert all(s["price_max"] == 80.0 for s in steps)  # prețul NU se relaxează niciodată
-    assert any(s["concerns"] is None for s in steps)  # softul (concerns) se relaxează
-    assert all(s["category"] == "parfum" for s in steps)  # categoria explicită rămâne hard
+    assert any(s["facet_filters"] is None for s in steps)  # softul (fațetele) se relaxează
+    assert all(s["category"] == ["parfum"] for s in steps)  # categoria explicită rămâne hard
 
 
 def test_relax_ladder_legacy_drops_price_first(flag_off):
-    steps = _relax_ladder(price_max=80.0, concerns=None, category=None, in_stock_only=False)
+    steps = _relax_ladder(price_max=80.0, facet_filters=None, category=None, in_stock_only=False)
     assert any(s["price_max"] is None for s in steps)  # comportamentul vechi (price relaxat)
 
 
 def test_relax_ladder_features_relax_last(flag_on):
-    # Feature („cu niacinamidă") se relaxează după concerns; categoria rămâne hard (NX-220).
+    # Feature („cu niacinamidă") se relaxează după fațete; categoria rămâne hard (NX-220).
     steps = _relax_ladder(
         price_max=None,
-        concerns=["oily"],
-        category="creme",
+        facet_filters={"concerns": ["oily"]},
+        category=["creme"],
         in_stock_only=False,
         features=["niacinamida"],
     )
     assert steps[0]["features"] == ["niacinamida"]  # prima treaptă = strict
     assert steps[-1]["features"] is None  # feature relaxat la final
     feat_idx = next(i for i, s in enumerate(steps) if s["features"] is None)
-    concern_idx = next(i for i, s in enumerate(steps) if s["concerns"] is None)
-    assert feat_idx > concern_idx
-    assert all(s["category"] == "creme" for s in steps)
+    facet_idx = next(i for i, s in enumerate(steps) if s["facet_filters"] is None)
+    assert feat_idx > facet_idx
+    assert all(s["category"] == ["creme"] for s in steps)
+
+
+def test_relax_ladder_never_receives_unresolved_tokens(flag_on):
+    """Regresie pentru cauza incidentului: în ladder intră DOAR chei rezolvate.
+
+    Înainte, `category` era cuvântul brut al modelului („ten"), iar dacă nu exista ca raft servabil
+    scara nu avea ce salva — categoria e dură. Acum apelantul trece prin rezoluție, iar un termen
+    nerezolvat ajunge aici ca `None` (fără constrângere), niciodată ca token mort.
+    """
+    steps = _relax_ladder(price_max=None, facet_filters=None, category=None, in_stock_only=False)
+    assert steps[0]["category"] is None
+    assert steps[0]["facet_filters"] is None
 
 
 # --- matcher intenție „mai ieftin" -------------------------------------------

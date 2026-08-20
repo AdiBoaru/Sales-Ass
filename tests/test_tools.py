@@ -7,6 +7,9 @@ import asyncio
 import inspect
 import time
 
+import pytest
+
+from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.config import get_settings
 from src.db.queries.catalog import search_products_lexical, search_products_semantic
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
@@ -97,6 +100,37 @@ def _ctx() -> TurnContext:
         message=InboundMessage(provider_msg_id="m", body="x"),
         conversation_id="conv",
     )
+
+
+@pytest.fixture(autouse=True)
+def _stub_vocabulary(monkeypatch):
+    """Vocabular scriptat pentru toate testele din fișier.
+
+    Fără el, `get_vocabulary` ar cădea pe conexiunea stub și ar întoarce un vocabular gol — corect
+    ca degradare în producție, dar aici ar ascunde exact ce vrem să testăm: că un termen REZOLVAT
+    devine filtru, iar unul nerezolvabil nu.
+    """
+    vocab = CatalogVocabulary(
+        business_id="b",
+        dimensions={
+            "category": (
+                VocabEntry(key="creme-fata", label="Creme fata", count=12),
+                VocabEntry(key="creme-hidratante", label="Creme hidratante", count=7),
+                VocabEntry(key="skincare", label="Skincare", count=30),
+            ),
+            "concerns": (
+                VocabEntry(key="oily", label="oily", count=23),
+                VocabEntry(key="sensitive", label="sensitive", count=44),
+                VocabEntry(key="acne", label="acne", count=15),
+                VocabEntry(key="dry", label="dry", count=83),
+            ),
+        },
+    )
+
+    async def fake_vocab(deps, business_id):
+        return vocab
+
+    monkeypatch.setattr(ct, "get_vocabulary", fake_vocab)
 
 
 def _ctx_beauty() -> TurnContext:
@@ -663,10 +697,11 @@ async def test_search_maps_concerns_and_passes_filters_semantic(monkeypatch):
         {"query": "cremă", "concerns": ["ten gras"], "category": "creme-fata"},
     )
     assert res.ok and len(res.products) == 2
-    assert sem_calls[0]["concerns"] == ["oily"]  # „ten gras" → „oily"
-    assert sem_calls[0]["category"] == "creme-fata"
-    assert lex_calls[0]["concerns"] == ["oily"]  # același mapping pe lexical (paritate filtre)
-    assert lex_calls[0]["category"] == "creme-fata"
+    assert sem_calls[0]["facet_filters"] == {"concerns": ["oily"]}  # „ten gras" → „oily"
+    assert sem_calls[0]["category"] == ["creme-fata"]
+    # același mapping pe lexical (paritate de filtre între retrievere)
+    assert lex_calls[0]["facet_filters"] == {"concerns": ["oily"]}
+    assert lex_calls[0]["category"] == ["creme-fata"]
     ev = _search_event(ctx)
     assert ev.properties["n_concerns"] == 1
     assert ev.properties["had_category"] is True and ev.properties["relaxed"] is False
@@ -691,7 +726,8 @@ async def test_search_sql_only_gets_mapped_concerns_and_brand(monkeypatch):
         {"query": "x", "concerns": ["piele sensibilă"], "brand": "BrandA"},
     )
     assert res.ok and len(res.products) == 2
-    assert calls[0]["concerns"] == ["sensitive"] and calls[0]["brand"] == "BrandA"
+    assert calls[0]["facet_filters"] == {"concerns": ["sensitive"]}
+    assert calls[0]["brand"] == "BrandA"
     assert _search_event(ctx).properties["had_brand"] is True
 
 
@@ -710,7 +746,7 @@ async def test_search_unknown_concern_no_false_filter(monkeypatch):
         ctx, _deps(_LLM()), "search_products", {"query": "x", "concerns": ["frigider"]}
     )
     assert res.ok and len(res.products) == 2
-    assert calls[0]["concerns"] is None  # necunoscut → niciun filtru
+    assert calls[0]["facet_filters"] is None  # necunoscut → niciun filtru
     assert _search_event(ctx).properties["n_concerns"] == 0
 
 
@@ -721,8 +757,8 @@ async def test_search_progressive_relaxation(monkeypatch):
 
     async def fake_sql(conn, business_id, **k):
         calls.append(k)
-        # Întoarce produse DOAR când nu mai e niciun filtru de concern (după relaxare).
-        return PRODUCTS if not k.get("concerns") else []
+        # Întoarce produse DOAR când nu mai e niciun filtru de fațete (după relaxare).
+        return PRODUCTS if not k.get("facet_filters") else []
 
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
@@ -735,7 +771,7 @@ async def test_search_progressive_relaxation(monkeypatch):
     )
     assert res.ok and len(res.products) == 2
     # ladder NOU: {price+concern} → {price, fără concern}; prețul (50) rămâne fixat.
-    assert calls[-1]["concerns"] is None and calls[-1]["price_max"] == 50
+    assert calls[-1]["facet_filters"] is None and calls[-1]["price_max"] == 50
     assert _search_event(ctx).properties["relaxed"] is True
 
 
@@ -1054,7 +1090,7 @@ async def _search_with_concerns(monkeypatch, ctx, concerns: list[str], **extra):
     captured: dict = {}
 
     async def fake_lex(conn, business_id, **k):
-        captured["concerns"] = k.get("concerns")
+        captured["concerns"] = k.get("facet_filters")
         return list(PRODUCTS)
 
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
@@ -1069,7 +1105,7 @@ async def test_unmapped_concern_emits_and_discloses(monkeypatch):
     ctx = _ctx_beauty()
     res, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras", "ten reactiv-x"])
 
-    assert captured["concerns"] == ["oily"]  # politica de filtrare NEschimbată
+    assert captured["concerns"] == {"concerns": ["oily"]}  # politica de filtrare NEschimbată
     ev = _events(ctx, "concern_unmapped")[0]
     assert ev.properties["terms"] == ["ten reactiv-x"]
     assert ev.properties["locale"] == ctx.language  # P11: „ten reactiv" pe ro ≠ pe hu
@@ -1083,7 +1119,7 @@ async def test_all_concerns_mapped_stays_silent(monkeypatch):
     ctx = _ctx_beauty()
     res, captured = await _search_with_concerns(monkeypatch, ctx, ["ten gras", "acnee"])
 
-    assert captured["concerns"] == ["acne", "oily"]
+    assert captured["concerns"] == {"concerns": ["acne", "oily"]}
     assert _events(ctx, "concern_unmapped") == []
     assert "nu sunt filtre cunoscute" not in res.llm_view
 
