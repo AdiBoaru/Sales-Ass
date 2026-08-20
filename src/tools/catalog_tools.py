@@ -13,11 +13,21 @@ import hashlib
 import json
 import re
 import unicodedata
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
+from src.catalog.vocabulary import (
+    CATEGORY_DIMENSION,
+    CatalogVocabulary,
+    Resolution,
+    resolve,
+    resolve_any,
+)
+from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
 from src.config import get_settings
 from src.db.queries.catalog import (
@@ -34,7 +44,6 @@ from src.safety.compose import model_hint as safety_model_hint
 from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
 from src.tools.reason_codes import annotate as annotate_reasons
-from src.tools.taxonomy import split_concerns
 
 # Candidați per retriever înainte de fuziune (P4: pool intern mare, dar tool result rămâne 6×8
 # spre model). ~50 = standardul de product-RAG; recall bun fără să umfle latența.
@@ -403,8 +412,8 @@ def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str 
 def _relax_ladder(
     *,
     price_max: float | None,
-    concerns: list[str] | None,
-    category: str | None,
+    facet_filters: dict[str, list[str]] | None,
+    category: Sequence[str] | None,
     in_stock_only: bool,
     features: list[str] | None = None,
 ) -> list[dict[str, Any]]:
@@ -412,33 +421,99 @@ def _relax_ladder(
     (P6). Brand-ul NU se relaxează niciodată.
 
     Cu `SEARCH_SORT_MODE_ENABLED` (ARCH-product-retrieval): prețul + disponibilitatea sunt
-    constrângeri DURE, NU se relaxează — relaxăm doar SOFTUL (concerns → category). Altfel un
+    constrângeri DURE, NU se relaxează — relaxăm doar SOFTUL (fațete → category). Altfel un
     „sub 80" supra-constrâns ar scoate bound-ul de preț și ar întoarce un 149.99 (bug-ul de preț).
-    Fără flag (kill-switch OFF): comportamentul vechi (price → concerns → category)."""
+    Fără flag (kill-switch OFF): comportamentul vechi (price → fațete → category).
+
+    `category` e acum o LISTĂ de chei REZOLVATE, nu un cuvânt venit de la model. Diferența e toată
+    povestea: un token neverificat făcea din relaxare singura scăpare (și una imposibilă, fiindcă
+    `category` e dură), în timp ce o listă rezolvată are produse în spate prin construcție — deci
+    treapta zero nu mai poate ieși goală din vina vocabularului."""
     base = {
         "price_max": price_max,
-        "concerns": concerns,
-        "category": category,
+        "facet_filters": facet_filters or None,
+        "category": list(category) if category else None,
         "in_stock_only": in_stock_only,
         "features": features,  # Tier 2b p2: relaxat ULTIMUL (hard requirement „cu niacinamidă")
     }
     steps: list[dict[str, Any]] = [base]
     if get_settings().search_sort_mode_enabled:
         # prețul + stocul rămân fixate; relaxăm softul
-        if concerns:
-            steps.append({**steps[-1], "concerns": None})
+        if facet_filters:
+            steps.append({**steps[-1], "facet_filters": None})
         if category and not getattr(get_settings(), "search_category_hard_enabled", True):
             steps.append({**steps[-1], "category": None})
     else:
         if price_max is not None:
             steps.append({**steps[-1], "price_max": None})
-        if concerns:
-            steps.append({**steps[-1], "concerns": None})
+        if facet_filters:
+            steps.append({**steps[-1], "facet_filters": None})
         if category and not getattr(get_settings(), "search_category_hard_enabled", True):
             steps.append({**steps[-1], "category": None})
     if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
         steps.append({**steps[-1], "features": None})
     return steps
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedTerms:
+    """Ce a rămas dintr-o cerere după ce fiecare cuvânt a fost confruntat cu catalogul."""
+
+    category_keys: tuple[str, ...]
+    facet_filters: dict[str, list[str]]
+    flat_facet_keys: list[str]
+    unresolved: list[str]
+    emitted: list[Resolution]
+
+
+def _resolve_search_terms(
+    ctx: TurnContext, a: SearchArgs, vocab: CatalogVocabulary
+) -> _ResolvedTerms:
+    """Termenii ceruți de model → chei REALE de catalog, cu verdict și dovadă.
+
+    Nimic din ce urmează nu numește o dimensiune: nevoile clientului se rezolvă peste fațetele
+    DESCOPERITE (`vocab.facet_names`), iar dimensiunea câștigătoare o alege catalogul. Un magazin
+    unde „mat" e o valoare de `finish` filtrează pe `finish`; unul unde e `tip_suprafata`
+    filtrează pe aia. Codul nu trebuie să știe care, și tocmai de-asta ține pe orice client.
+
+    Harta de sinonime a tenantului e tratată ca overlay de LIMBĂ, deci se încearcă pe toate
+    fațetele — validarea contra vocabularului decide unde se potrivește, iar o țintă moartă iese
+    ca `UNKNOWN(overlay_target_dead)`, nu ca filtru.
+    """
+    pack = getattr(ctx.business, "domain_pack", None)
+    lang_overlay = dict(getattr(pack, "concern_map", None) or {})
+    overlays = {name: lang_overlay for name in vocab.facet_names} if lang_overlay else None
+
+    emitted: list[Resolution] = []
+
+    category_keys: tuple[str, ...] = ()
+    if a.category:
+        r = resolve(vocab, a.category, CATEGORY_DIMENSION)
+        emitted.append(r)
+        category_keys = r.constraint_keys
+
+    facet_filters: dict[str, list[str]] = {}
+    unresolved: list[str] = []
+    for term in a.concerns or []:
+        if not isinstance(term, str) or not term.strip():
+            continue
+        r = resolve_any(vocab, term, overlays=overlays, dimensions=vocab.facet_names)
+        emitted.append(r)
+        if keys := r.constraint_keys:
+            facet_filters.setdefault(r.dimension, []).extend(keys)
+        else:
+            unresolved.append(normalize(term))
+
+    for dim in facet_filters:
+        facet_filters[dim] = sorted(dict.fromkeys(facet_filters[dim]))
+    flat = sorted({v for values in facet_filters.values() for v in values})
+    return _ResolvedTerms(
+        category_keys=category_keys,
+        facet_filters=facet_filters,
+        flat_facet_keys=flat,
+        unresolved=sorted(dict.fromkeys(unresolved)),
+        emitted=emitted,
+    )
 
 
 def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
@@ -673,13 +748,33 @@ async def search_products_tool(
     (paritate „arată altele", P8). Degradare grațioasă la lexical-only fără LLM/embeddings sau
     dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2)."""
     a = SearchArgs(**args)
-    # Termenii liberi ai clientului („ten gras") → cheile reale din attributes->'concerns' („oily").
-    # NX-124: maparea vine din DomainPack (config DB per-vertical), nu hardcodat beauty → generic.
-    # Determinist (P2); necunoscutele/pack lipsă → fără filtru fals care golește (P6).
-    # NX-227: ce NU s-a mapat se păstrează — se raportează (gol de vocabular DomainPack) și i se
-    # spune modelului că filtrul n-a rulat. Politica de filtrare rămâne identică.
-    concern_keys, unmapped_concerns = split_concerns(ctx.business.domain_pack, a.concerns)
-    concern_keys = concern_keys or None
+    # === REZOLVARE ÎNAINTE DE CONSTRÂNGERE =====================================================
+    # Un filtru SQL nu e o comparație, e o execuție: `WHERE slug = 'ten'` nu întreabă dacă «ten»
+    # există, ci întoarce 0 rânduri — același rezultat ca pentru un raft real, dar gol. Din
+    # momentul ăla informația s-a pierdut și niciun strat de deasupra n-o mai poate recupera, așa
+    # că „n-am găsit" devine singura interpretare disponibilă. De aceea fiecare termen venit de la
+    # model trece întâi prin vocabularul DERIVAT din catalog și primește un verdict cu dovadă:
+    # `KNOWN` (constrânge pe cheia reală), `AMBIGUOUS` (constrânge pe uniune — «cremă» rămâne o
+    # cerere de cremă, deci măștile cu textură cremoasă nu mai câștigă pe text), `UNKNOWN` (nu
+    # ajunge NICIODATĂ în WHERE; se raportează și i se spune modelului că filtrul n-a rulat).
+    vocab = await get_vocabulary(deps, ctx.business.id)
+    resolutions = _resolve_search_terms(ctx, a, vocab)
+    category_keys = resolutions.category_keys
+    facet_filters = resolutions.facet_filters
+    unmapped_concerns = resolutions.unresolved
+    for r in resolutions.emitted:
+        ctx.emit(
+            "vocabulary_resolved",
+            dimension=r.dimension,
+            status=r.status.value,
+            matched_by=r.matched_by,
+            reason=r.reason,
+            n_keys=len(r.constraint_keys),
+            evidence=r.evidence,  # câte produse susțin rezoluția — 0 doar la UNKNOWN
+        )
+    # Compatibilitate cu straturile care mai vorbesc despre „concerns" ca listă plată (rerank,
+    # sesiune, telemetrie): cheile rezolvate, indiferent de dimensiunea din care provin.
+    concern_keys = resolutions.flat_facet_keys or None
     # Tier 2b p2: features („cu niacinamidă") → filtru pe searchable_facets, NORMALIZAT (lower+strip
     # diacritice, ca SQL) → „niacinamida"/„niacinamidă" se potrivesc. Fără searchable_facets → None.
     searchable_facets = _searchable_facets(ctx)
@@ -733,8 +828,8 @@ async def search_products_tool(
         )
     ladder = _relax_ladder(
         price_max=a.price_max,
-        concerns=concern_keys,
-        category=a.category,
+        facet_filters=facet_filters,
+        category=category_keys,
         in_stock_only=a.in_stock_only,
         features=norm_features,
     )
@@ -796,7 +891,7 @@ async def search_products_tool(
                 ctx.business.id,
                 query_text=a.query,
                 price_max=f["price_max"],
-                concerns=f["concerns"],
+                facet_filters=f["facet_filters"],
                 features=f["features"],
                 searchable_facets=searchable_facets,
                 variant_label=a.variant_label,  # NX-135: filtru DUR (nu se relaxează), ca brand
@@ -814,7 +909,7 @@ async def search_products_tool(
                         ctx.business.id,
                         query_vec,
                         price_max=f["price_max"],
-                        concerns=f["concerns"],
+                        facet_filters=f["facet_filters"],
                         features=f["features"],
                         searchable_facets=searchable_facets,
                         variant_label=a.variant_label,  # NX-135: filtru DUR pe variantă

@@ -37,7 +37,7 @@ Totul e pur (fără I/O) în afară de `load_vocabulary`. Tenant-scoped peste to
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -56,6 +56,7 @@ __all__ = [
     "load_vocabulary",
     "resolve",
     "resolve_any",
+    "servable_count_sql",
 ]
 
 # Numele REZERVAT al dimensiunii structurale. Categoriile nu vin din `attributes`, ci din tabelul
@@ -228,25 +229,40 @@ class Resolution:
 # fix desincronizarea pe care modulul o previne.
 _SERVABLE = "p.status = 'active'"
 
-# Categoriile: singura dimensiune cu arbore, deci singura care se numără pe SUBARBORE (o cerere pe
-# «Îngrijirea tenului» trebuie să vadă produsele din «Creme hidratante»).
+
+def servable_count_sql(alias: str = "c") -> str:
+    """Sub-interogare scalară: câte produse SERVABILE are categoria `alias` în SUBARBORE.
+
+    Exportată intenționat. Orice loc care întreabă „ce categorii pot fi oferite?" — promptul
+    agentului, lista dată triajului, vocabularul de aici — trebuie să folosească ACEEAȘI definiție:
+    dacă promptul ar anunța după o regulă, iar căutarea ar servi după alta, am reconstrui exact
+    desincronizarea pe care modulul o previne, doar cu un pas mai la dreapta.
+
+    Subarborele contează: o cerere pe «Îngrijirea tenului» trebuie să vadă produsele din
+    «Creme hidratante». `alias` e identificator de COD (validat), niciodată intrare de utilizator.
+    """
+    if not alias.isidentifier():
+        raise ValueError(f"alias SQL invalid: {alias!r}")
+    return (
+        f"(select count(*) from products p"
+        f" where p.business_id = {alias}.business_id"
+        f"   and {_SERVABLE}"
+        f"   and exists (select 1 from categories sub"
+        f"                where sub.business_id = {alias}.business_id"
+        f"                  and (sub.id = {alias}.id or sub.path like {alias}.path || '/%')"
+        f"                  and (sub.id = p.primary_category_id"
+        f"                       or exists (select 1 from product_category_map m"
+        f"                                   where m.product_id = p.id"
+        f"                                     and m.category_id = sub.id))))"
+    )
+
+
+# Categoriile: singura dimensiune cu arbore, deci singura numărată pe subarbore.
 _CATEGORY_SQL = f"""
 select c.slug,
        c.name,
        c.path,
-       (select count(*)
-          from products p
-         where p.business_id = c.business_id
-           and {_SERVABLE}
-           and exists (select 1
-                         from categories sub
-                        where sub.business_id = c.business_id
-                          and (sub.id = c.id or sub.path like c.path || '/%')
-                          and (sub.id = p.primary_category_id
-                               or exists (select 1
-                                            from product_category_map m
-                                           where m.product_id = p.id
-                                             and m.category_id = sub.id)))) as n
+       {servable_count_sql("c")} as n
   from categories c
  where c.business_id = $1
  order by c.path
@@ -458,6 +474,7 @@ def resolve_any(
     term: str,
     *,
     overlays: Mapping[str, Mapping[str, str]] | None = None,
+    dimensions: Sequence[str] | None = None,
 ) -> Resolution:
     """Ca `resolve`, dar CAUTĂ DIMENSIUNEA. Apelantul nu trebuie să știe dinainte că „ten uscat" e
     o nevoie și „Creme hidratante" o categorie — catalogul știe, iar asta e tot ce contează.
@@ -476,8 +493,19 @@ def resolve_any(
     def _key(r: Resolution) -> tuple[int, int, int, str]:
         return (order[r.status], reason_rank.get(r.reason, 2), -r.evidence, r.dimension)
 
+    # `dimensions` restrânge căutarea când apelantul ȘTIE ceva despre termen fără să știe ce
+    # dimensiune e: o nevoie exprimată de client e o fațetă, nu o categorie, chiar dacă nu putem
+    # spune care fațetă. Implicit se caută peste tot.
+    search_in = (
+        tuple(dimensions)
+        if dimensions is not None
+        else (
+            CATEGORY_DIMENSION,
+            *vocab.facet_names,
+        )
+    )
     best: Resolution | None = None
-    for name in (CATEGORY_DIMENSION, *vocab.facet_names):
+    for name in search_in:
         r = resolve(vocab, term, name, overlay=(overlays or {}).get(name))
         if best is None or _key(r) < _key(best):
             best = r

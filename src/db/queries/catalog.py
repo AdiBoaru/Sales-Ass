@@ -9,10 +9,12 @@ există product_embeddings (job de embed). Vezi schema_reference.md.
 """
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import asyncpg
 
+from src.catalog.vocabulary import servable_count_sql
 from src.config import get_settings
 
 # NX-191 — FEREASTRA promoției. `sale_price` fără verificarea ferestrei = minciună comercială:
@@ -303,6 +305,38 @@ def _feature_clause(facet_keys: tuple[str, ...], values: list[str], placeholder:
     )
 
 
+def _facet_filter_clause(filters: Mapping[str, Sequence[str]], placeholder: Any) -> str:
+    """Filtru GENERIC pe fațete, pentru dimensiuni DESCOPERITE din catalog — nu pentru o listă de
+    chei știute de cod.
+
+    Contează pentru că altfel fiecare vertical nou ar cere o coloană nouă în semnătură: `concerns`
+    pentru cosmetice, `agent_frigorific` pentru HVAC, `compatibil_cu` pentru auto. Aici cheia e un
+    parametru ca oricare altul, deci un tenant care are în `attributes` ceva ce noi n-am văzut
+    niciodată se filtrează corect fără nicio linie de cod.
+
+    Dimensiunile se leagă cu AND (nevoi diferite se cumulează), valorile aceleiași dimensiuni cu OR
+    (sunt alternative). Se acceptă atât fațete-listă cât și fațete-scalar, fiindcă descoperirea le
+    admite pe amândouă. Cheia e PARAMETRIZATĂ (`attributes->$n`), niciodată interpolată în SQL —
+    aceeași regulă ca `_feature_clause`.
+
+    Valorile vin EXCLUSIV din rezoluția contra vocabularului (`src/catalog/vocabulary.py`), deci
+    fiecare are produse în spate prin construcție: filtrul poate îngusta, dar nu poate goli din
+    cauza unui cuvânt inexistent."""
+    parts: list[str] = []
+    for key in sorted(filters):
+        values = [v for v in filters[key] if v]
+        if not values:
+            continue
+        kp = placeholder(key)
+        vp = placeholder(list(values))
+        parts.append(
+            f"(case when jsonb_typeof(p.attributes->{kp}) = 'array' "
+            f"then (p.attributes->{kp}) ?| {vp}::text[] "
+            f"else (p.attributes->>{kp}) = any({vp}::text[]) end)"
+        )
+    return " and ".join(parts)
+
+
 def _variant_label_clause(label: str, placeholder: Any) -> str:
     """NX-135: produsul are o VARIANTĂ cu eticheta cerută (nuanță/mărime) — filtru DUR pentru
     fallback-ul gradat („alte game care CHIAR au Warm Beige"). Match NORMALIZAT (lower + strip
@@ -316,7 +350,7 @@ def _variant_label_clause(label: str, placeholder: Any) -> str:
     )
 
 
-def _category_clause(category: str, placeholder: Any) -> str:
+def _category_clause(category: str | Sequence[str], placeholder: Any) -> str:
     """NX-167 (A): predicatul de categorie, ca UN SINGUR `exists(...)` INLINE (se adaugă la `conds`
     ca orice altă condiție — fără CTE, fără restructurarea query-urilor).
 
@@ -326,19 +360,34 @@ def _category_clause(category: str, placeholder: Any) -> str:
     (fond-de-ten)". `reqc`/`sub`/`m` NU se leagă de aliasurile din SELECT (`c`/`p`) → fără
     coliziune; corelat pe `p.business_id`/`p.primary_category_id`/`p.id` (scope P7).
 
-    Fără flag (OFF): match exact pe slug/nume al `primary_category_id` — BYTE-IDENTIC cu vechiul cod
-    (două placeholder-e, ca înainte). `category` = slug SAU nume."""
+    Fără flag (OFF): match exact pe slug/nume al `primary_category_id`. `category` = slug SAU nume.
+
+    Acceptă și o LISTĂ de categorii, ca „oricare dintre". E nevoie pentru rezoluțiile ambigue
+    (`src/catalog/vocabulary.py`): «cremă» nu identifică o familie anume, dar rămâne o cerere de
+    cremă — constrângerea pe uniunea familiilor de creme păstrează sensul cererii și ține măștile
+    afară, în timp ce renunțarea la constrângere le-ar lăsa să câștige pe text.
+
+    O listă GOALĂ e eroare de programare, nu „fără filtru": un predicat care nu se potrivește cu
+    nimic ar readuce exact zero-ul tăcut pe care rezoluția îl elimină. Apelantul care n-are chei
+    nu trebuie să cheme funcția."""
+    keys = [category] if isinstance(category, str) else list(category)
+    lowered = [k.lower() for k in keys if k and k.strip()]
+    if not lowered:
+        raise ValueError(
+            "_category_clause fără nicio categorie: un filtru gol ar goli rezultatul tăcut. "
+            "Apelantul trebuie să sară peste predicat când rezoluția n-a produs chei."
+        )
     if not get_settings().search_category_tree_enabled:
-        slug_ph = placeholder(category)
-        name_ph = placeholder(category)
-        return f"(lower(c.slug) = lower({slug_ph}) or lower(c.name) = lower({name_ph}))"
-    cat_ph = placeholder(category)  # un singur placeholder, reutilizat de 2 ori (aceeași valoare)
+        ph = placeholder(lowered)
+        return f"(lower(c.slug) = any({ph}::text[]) or lower(c.name) = any({ph}::text[]))"
+    cat_ph = placeholder(lowered)  # un singur placeholder, reutilizat de 2 ori (aceeași valoare)
     return (
         "exists (select 1 from categories reqc "
         "join categories sub on sub.business_id = reqc.business_id "
         "and (sub.id = reqc.id or sub.path like reqc.path || '/%') "
         "where reqc.business_id = p.business_id "
-        f"and (lower(reqc.slug) = lower({cat_ph}) or lower(reqc.name) = lower({cat_ph})) "
+        f"and (lower(reqc.slug) = any({cat_ph}::text[]) "
+        f"or lower(reqc.name) = any({cat_ph}::text[])) "
         "and (sub.id = p.primary_category_id or exists (select 1 from product_category_map m "
         "where m.product_id = p.id and m.category_id = sub.id)))"
     )
@@ -348,9 +397,10 @@ async def search_products(
     conn: asyncpg.Connection,
     business_id: str,
     *,
-    category: str | None = None,
+    category: str | Sequence[str] | None = None,
     brand: str | None = None,
     concerns: list[str] | None = None,
+    facet_filters: Mapping[str, Sequence[str]] | None = None,
     features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
     price_max: float | None = None,
@@ -387,6 +437,8 @@ async def search_products(
         conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if facet_filters and (fc := _facet_filter_clause(facet_filters, placeholder)):
+        conds.append(fc)
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
     if price_max is not None:
@@ -415,9 +467,10 @@ async def search_products_lexical(
     business_id: str,
     query_text: str,
     *,
-    category: str | None = None,
+    category: str | Sequence[str] | None = None,
     brand: str | None = None,
     concerns: list[str] | None = None,
+    facet_filters: Mapping[str, Sequence[str]] | None = None,
     features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
     variant_label: str | None = None,
@@ -459,6 +512,8 @@ async def search_products_lexical(
         conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if facet_filters and (fc := _facet_filter_clause(facet_filters, placeholder)):
+        conds.append(fc)
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
     if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)
@@ -882,13 +937,21 @@ async def _complementary_heuristic(
 
 
 async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
-    """Slug-urile categoriilor active ale tenantului — pentru groundarea triajului.
+    """Slug-urile categoriilor SERVABILE ale tenantului — pentru groundarea triajului.
 
     Triaj-ul (nano) primește lista asta și alege `category_key` din ea; orice
     valoare inventată în afara listei e respinsă în cod (→ category_key None /
-    CLARIFY). `conn` trebuie să fie deja tenant-scoped (tenant_conn)."""
+    CLARIFY). `conn` trebuie să fie deja tenant-scoped (tenant_conn).
+
+    „Servabil" = are cel puțin un produs în subarbore, prin `servable_count_sql` (aceeași definiție
+    ca vocabularul, deliberat — vezi `src/catalog/vocabulary.py`). Înainte, validarea verifica doar
+    că rândul EXISTĂ în `categories`, ceea ce lăsa să treacă rafturi goale: pe demo, 60 din 102
+    categorii n-aveau niciun produs, iar un `category_key` ales dintre ele producea garantat zero
+    rezultate — indistinct, pentru straturile de deasupra, de „catalogul chiar n-are asta"."""
     rows = await conn.fetch(
-        "select slug from categories where business_id = $1 order by slug",
+        f"select c.slug from categories c"
+        f" where c.business_id = $1 and {servable_count_sql('c')} > 0"
+        f" order by c.slug",
         business_id,
     )
     return [r["slug"] for r in rows]
@@ -921,11 +984,24 @@ async def sibling_categories(
 
 
 async def list_category_names(conn: asyncpg.Connection, business_id: str) -> list[str]:
-    """Numele categoriilor TOP-LEVEL ale tenantului — pentru groundarea promptului agentului
+    """Numele categoriilor SERVABILE ale tenantului — pentru groundarea promptului agentului
     (NX-78, principiul 9). `order by name` → ordine deterministă (prefix de cache stabil).
-    `conn` trebuie să fie deja tenant-scoped (tenant_conn)."""
+    `conn` trebuie să fie deja tenant-scoped (tenant_conn).
+
+    Două schimbări față de varianta inițială, ambele din același incident măsurat:
+
+    1. **Doar ce e servabil.** Promptul lista tot tabelul, deci îi spunea modelului „vinzi din
+       categoria Ten" când «Ten» n-avea niciun produs. Modelul alegea cuminte raftul gol pe care
+       i-l arătasem noi, iar filtrul dur pe categorie transforma asta în zero rezultate și într-un
+       „n-am găsit" fals. Nu anunța ce nu poți servi.
+    2. **Toate nivelurile, nu doar rădăcinile.** Cu doar 15 rădăcini, o cerere de cremă de față
+       trebuia ghicită ca părinte; cu frunzele disponibile, modelul poate numi «Creme hidratante»
+       direct, iar o cerere de cremă nu mai poate ateriza pe măști. Costul e câteva sute de tokeni
+       într-un prefix oricum cache-uit."""
     rows = await conn.fetch(
-        "select name from categories where business_id = $1 and parent_id is null order by name",
+        f"select c.name from categories c"
+        f" where c.business_id = $1 and {servable_count_sql('c')} > 0"
+        f" order by c.name",
         business_id,
     )
     return [r["name"] for r in rows]
@@ -1139,10 +1215,11 @@ async def search_products_semantic(
     *,
     price_max: float | None = None,
     concerns: list[str] | None = None,
+    facet_filters: Mapping[str, Sequence[str]] | None = None,
     features: list[str] | None = None,
     searchable_facets: tuple[str, ...] = (),
     variant_label: str | None = None,
-    category: str | None = None,
+    category: str | Sequence[str] | None = None,
     brand: str | None = None,
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
@@ -1185,6 +1262,8 @@ async def search_products_semantic(
         conds.append(f"ro_unaccent(b.name) like ro_unaccent({placeholder(f'%{brand}%')})")
     if concerns:
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
+    if facet_filters and (fc := _facet_filter_clause(facet_filters, placeholder)):
+        conds.append(fc)
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
     if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)
