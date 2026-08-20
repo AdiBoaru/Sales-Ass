@@ -267,12 +267,22 @@ def _rebind_turn_class(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> No
     if rt.ledger is None or stage_name not in ("triage_stage", "action_kernel_stage"):
         return
     route = ctx.route.route.value if ctx.route and ctx.route.route else None
+    compare = False
+    if route is None and getattr(get_settings(), "triage_sync_shadow_enabled", False):
+        # NX-251: fără triaj sincron nu există rută în punctul ăsta, iar `classify(None)` ar da
+        # mereu clasa implicită — adică o comparație ar primi bugetul unei recomandări. Semnalul
+        # vine din ACELEAȘI obligații deterministe pe care le citește control plane-ul: o
+        # comparație rămâne comparație și fără un clasificator care s-o numească.
+        from src.agent.brain_models import obligations_from_ctx  # noqa: PLC0415 — evită ciclu
+
+        compare = any(o.kind == "compare" for o in obligations_from_ctx(ctx))
     turn_class = turn_budget.classify(
         route,
         # `ctx.action` e comanda opacă a clientului (NX-236) — un tur care EXECUTĂ ceva e mutație,
         # oricât de simplu ar arăta textul.
         has_action=getattr(ctx, "action", None) is not None,
         purchase_intent=bool(ctx.route.purchase_intent) if ctx.route else False,
+        compare=compare,
     )
     if turn_class is rt.ledger.budget.turn_class:
         return

@@ -562,6 +562,18 @@ class Settings(BaseSettings):
     # NX-239: MainBrain unic + control plane determinist. OFF (default) = pipeline-ul de azi,
     # byte-identic. ON = dark/shadow DOAR — producția rămâne OFF până la GO-ul pairwise NX-246.
     single_brain_enabled: bool = Field(default=False, validation_alias="SINGLE_BRAIN_ENABLED")
+    # NX-251: triajul nano IESE de pe drumul sincron. Sub single-brain el nu mai era writer
+    # (control plane-ul îi demota reply-ul), dar APELUL rămânea: fiecare tur plătea o clasificare
+    # nano care primea contextul complet, după care ACELEAȘI blocuri plecau încă o dată la brain —
+    # exact cascada „un model mic clasifică înaintea creierului" pe care D1 o interzice.
+    # ON = clasificarea se mută POST-tur (măsurătoare), nu mai stă între client și răspuns.
+    triage_sync_shadow_enabled: bool = Field(
+        default=False, validation_alias="TRIAGE_SYNC_SHADOW_ENABLED"
+    )
+    # Kill-switch al MĂSURĂTORII, nu al comportamentului: cât timp comparăm ce a făcut brain-ul cu
+    # ce ar fi rutat triajul, plătim un apel nano post-tur. Se stinge separat când shadow-ul și-a
+    # spus cuvântul, fără schimbare de cod și fără să readucă triajul pe calea sincronă.
+    triage_shadow_enabled: bool = Field(default=True, validation_alias="TRIAGE_SHADOW_ENABLED")
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
@@ -1434,6 +1446,14 @@ class Settings(BaseSettings):
                     "proiectează AnswerPlanV2 pe contractul web-view.v2; fără ele n-are nici "
                     "sursă, nici destinație)"
                 )
+        # NX-251: fără MainBrain, a scoate triajul de pe calea sincronă lasă turul FĂRĂ writer —
+        # nimeni n-ar mai seta ruta, iar `agent_stage` ar ieși imediat, deci fiecare mesaj ar cădea
+        # în fallback-ul generic. Combinația e imposibilă, nu „degradată": refuzăm la boot.
+        if self.triage_sync_shadow_enabled and not self.single_brain_enabled:
+            raise ValueError(
+                "TRIAGE_SYNC_SHADOW_ENABLED cere SINGLE_BRAIN_ENABLED (fără creierul unic nimeni "
+                "nu mai decide ruta, iar turul ar răspunde doar cu fallback)"
+            )
         return self
 
     @model_validator(mode="after")

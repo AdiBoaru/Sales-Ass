@@ -88,6 +88,7 @@ REJECT_REASONS: frozenset[str] = frozenset(
         "invalid_payload",
         "hard_downgrade",
         "revoked_key",
+        "unsupported_revoke",
         "safety_immutable",
         "sensitive_no_consent",
         "already_pending",
@@ -437,6 +438,19 @@ def _handle_revoke(
     ):
         # Siguranța nu expiră accidental și nu cade la un topic switch (NX-173).
         return RejectedUpdate("revoke", "safety_immutable", key, proposal.source)
+
+    # Simetria cu `set_need`: acolo, o inferență de model nu poate RESCRIE un fapt al clientului
+    # (`hard_downgrade`); aici nu-l poate nici ȘTERGE. Fără poarta asta, exact relaxarea interzisă
+    # de D7 rămânea posibilă pe ușa din spate — nu prin `relaxations` (pe care validatorul le
+    # verifică), ci printr-o propunere de revocare, pe care nu le verifica nimeni.
+    #
+    # Ce NU blochează: nevoile pe care modelul le-a creat el însuși rămân `soft` +
+    # `model_inferred` (D7 le coboară la naștere), deci „nu vreau Sony" → „de fapt accept Sony"
+    # trece neatins. Se apără doar ce a AFIRMAT clientul.
+    if proposal.source not in REVIVE_CAPABLE_SOURCES and any(
+        n.source in REVIVE_CAPABLE_SOURCES or n.strength == HARD for n in targets
+    ):
+        return RejectedUpdate("revoke", "unsupported_revoke", key, proposal.source)
 
     prior = targets[0].normalized_value if targets else proposal.value
     needs = tuple(

@@ -356,6 +356,16 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     allowed = (Route.SALES, Route.ORDER)
     if getattr(get_settings(), "single_brain_enabled", False):
         allowed = (Route.SALES, Route.ORDER, Route.SIMPLE, Route.CLARIFY)
+    # NX-251: fără triaj sincron nu există rută când ajungem aici. Absența ei nu înseamnă „nimic
+    # de făcut", ci „tot ce n-au oprit straturile gratuite" — brain-ul e writerul acelui rest.
+    # Sub flag, proprietarul lui `ctx.route` devine stagiul ăsta (triajul nu mai scrie nimic), deci
+    # P3 se păstrează: un singur writer, doar că altul. `clarify_resume` rămâne întâietate — dacă
+    # el a setat deja ruta, nu o atingem.
+    unrouted = route is None and getattr(get_settings(), "triage_sync_shadow_enabled", False)
+    if unrouted:
+        route = RouteDecision(route=Route.SALES)
+        ctx.route = route
+        ctx.emit("route_defaulted", reason="no_triage")
     if route is None or route.route not in allowed:
         return
     query = (ctx.message.body or "").strip()
@@ -387,6 +397,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     show_more = is_show_more(ctx)
 
     tool_names = enabled_tools(ctx.business, route.route.value)
+    if unrouted:
+        # Ruta implicită e SALES, dar fără triaj nimeni n-a stabilit că turul CHIAR e o vânzare:
+        # „unde e comanda mea?" ar primi un toolset fără `check_order` și, în lipsa uneltei, o
+        # recomandare de produs. Brain-ul primește reuniunea și alege el. `check_order` are zidul
+        # lui de login (NX-128/129), deci a-l oferi nu deschide nimic.
+        tool_names = list(dict.fromkeys(tool_names + enabled_tools(ctx.business, "order")))
     tools = tool_schemas(tool_names)
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
@@ -394,7 +410,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     history = conversation_transcript(ctx.history)
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
-    context = context_blocks(ctx)
+    context = context_blocks(ctx, consumer="agent")
     context_block = f"{context}\n\n" if context else ""
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.

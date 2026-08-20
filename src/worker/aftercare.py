@@ -447,6 +447,75 @@ async def _extract_profile_and_score(
         log.exception("extractor profil a eșuat (turul continuă)")
 
 
+#: Ce a FĂCUT turul → cu ce rută a triajului e de acord. Strict, deliberat: o hartă indulgentă
+#: („clarify e ok și dacă a răspuns") ar coborî rata de dezacord exact acolo unde vrem s-o vedem.
+_SHADOW_AGREEMENT: dict[str, str] = {
+    "sales": "answered",
+    "simple": "answered",
+    "clarify": "clarify",
+    "order": "order",
+    "handoff": "handoff",
+}
+
+
+def _brain_outcome(ctx: TurnContext) -> str:
+    """Ce a făcut turul, citit din artefactele deja produse (plan, reply, tool calls).
+
+    Vocabular ÎNCHIS — intră ca label. Nu re-interpretăm textul: ne uităm la deciziile structurale,
+    singurele care se pot compara cu o rută."""
+    plan = getattr(ctx, "answer_plan", None)
+    if plan is not None and getattr(plan, "handoff", False):
+        return "handoff"
+    if ctx.reply is not None and ctx.reply.pending_question:
+        return "clarify"
+    if any(
+        event.type == "tool_call" and (event.properties or {}).get("name") == "check_order"
+        for event in ctx.events
+    ):
+        return "order"
+    if plan is not None:
+        return "answered"
+    return "other"
+
+
+async def _triage_shadow(db: DbProvider, ctx: TurnContext, llm) -> None:
+    """NX-251 — clasificarea triajului, POST-tur, ca MĂSURĂTOARE a deciziei brain-ului.
+
+    Triajul a ieșit de pe drumul sincron (D1). Ce rămâne de aflat înainte de a-l scoate cu totul e
+    dacă brain-ul chiar acoperă ce ruta el — și asta nu se decide din intuiție (D15). Comparăm
+    VERDICTELE structurale, nu textele: ruta pe care ar fi ales-o nano vs. ce a făcut efectiv turul.
+
+    Rulează în bugetul aftercare-ului, după munca utilă, și nu atinge nimic din răspunsul deja
+    livrat. `ctx.route is None` = turul s-a încheiat într-un strat gratuit, înainte de locul unde
+    ar fi rulat triajul: acolo n-a existat clasificare nici înainte, deci n-avem ce compara."""
+    settings = get_settings()
+    if not (settings.triage_sync_shadow_enabled and settings.triage_shadow_enabled):
+        return
+    if llm is None or ctx.route is None:
+        return
+    try:
+        from src.worker.runner import PipelineDeps  # noqa: PLC0415 — evită ciclu la import
+        from src.worker.stages.triage import classify_message  # noqa: PLC0415
+
+        classified = await classify_message(
+            ctx, PipelineDeps(db=db, llm=llm), consumer="triage_shadow"
+        )
+        if classified is None:
+            ctx.emit("triage_shadow", shadow_route=None, outcome="unavailable", agrees=False)
+            return
+        out, _ = classified
+        outcome = _brain_outcome(ctx)
+        ctx.emit(
+            "triage_shadow",
+            shadow_route=out.route.value,
+            outcome=outcome,
+            agrees=_SHADOW_AGREEMENT.get(out.route.value) == outcome,
+            confidence=out.confidence,
+        )
+    except Exception:  # noqa: BLE001 — o măsurătoare nu are voie să atingă un tur deja livrat
+        log.exception("triage shadow a eșuat (turul continuă)")
+
+
 async def _record_aftercare_cost(redis: Redis | None, work: AftercareWork, cost_usd: float) -> None:
     """Record the real post-turn LLM cost exactly once."""
     settings = get_settings()
@@ -499,6 +568,9 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
                 shadow_mode=work.shadow_mode,
                 source_message_id=work.inbound_msg_id,
             )
+            # ULTIMUL: e o măsurătoare, nu muncă utilă. Dacă bugetul se termină, se pierde
+            # comparația, nu rezumatul sau profilul.
+            await _triage_shadow(db, work.ctx, work.llm)
     except TimeoutError:
         outcome = "timeout"
         log.warning("aftercare abandonat la deadline (rezultatul turului e deja livrat)")
