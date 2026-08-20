@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import pathlib
 import re
 import sys
 from collections import Counter, defaultdict
@@ -79,6 +80,11 @@ class Candidate:
     purity: float
     lift: float
     margin: float
+    # Alternativa clasată a doua. E câmpul care face artefactul REVIZUIBIL: acolo unde datele nu
+    # pot distinge sinonimul de corelat („pe ten gras" prezice și `oily`, și `matte`), omul care
+    # ratifică trebuie să vadă ce s-a respins, nu doar ce a câștigat.
+    runner_up: str = ""
+    runner_up_lift: float = 0.0
 
 
 def _ngrams(text: str, max_n: int = MAX_NGRAM) -> set[str]:
@@ -157,6 +163,7 @@ def derive(rows: list, vocab: CatalogVocabulary) -> list[Candidate]:
         scored.sort(reverse=True)
         lift, purity, (dim, key) = scored[0]
         runner_up = scored[1][0] if len(scored) > 1 else 0.0
+        runner_up_label = f"{scored[1][2][0]}={scored[1][2][1]}" if len(scored) > 1 else ""
         margin = (lift / runner_up) if runner_up else float("inf")
         if purity < MIN_PURITY or lift < MIN_LIFT or margin < MIN_MARGIN:
             continue
@@ -172,6 +179,8 @@ def derive(rows: list, vocab: CatalogVocabulary) -> list[Candidate]:
                 purity=purity,
                 lift=lift,
                 margin=margin,
+                runner_up=runner_up_label,
+                runner_up_lift=runner_up,
             )
         )
     out.sort(key=lambda c: (-c.support, c.phrase))
@@ -211,6 +220,38 @@ async def main() -> int:
                 print(f"\nEROARE: ținte inexistente în catalog: {dead}", file=sys.stderr)
                 return 2
             print(f"\ntoate cele {len(set(overlay.values()))} ținte există în catalog ✓")
+
+            if args.out:
+                pathlib.Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+                pathlib.Path(args.out).write_text(
+                    json.dumps(
+                        [
+                            {
+                                "phrase": c.phrase,
+                                "dimension": c.dimension,
+                                "key": c.key,
+                                "support": c.support,
+                                "purity": round(c.purity, 3),
+                                "lift": round(c.lift, 2),
+                                "margin": (
+                                    None if c.margin == float("inf") else round(c.margin, 2)
+                                ),
+                                "runner_up": c.runner_up or None,
+                                "runner_up_lift": round(c.runner_up_lift, 2) or None,
+                                # Câștigătoarea abia bate alternativa ⇒ datele NU pot decide
+                                # singure. Aici e nevoie de un om, nu de încă un prag.
+                                "needs_review": c.margin < 2.0,
+                            }
+                            for c in candidates
+                        ],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                n_review = sum(1 for c in candidates if c.margin < 2.0)
+                print(f"\ncandidați scriși: {args.out}")
+                print(f"  din care cer decizie umană: {n_review}")
 
             if not args.apply:
                 print("\n(dry-run — rulează cu --apply ca să scrii)")
