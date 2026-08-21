@@ -342,6 +342,66 @@ def _bool_token(value: object) -> bool | None:
     return None
 
 
+#: Sub atâtea caractere un token trebuie să se potrivească EXACT; peste, acceptăm potrivirea pe
+#: prefix. Româna flexionează substantivele („ten" → „tenul"), deci o egalitate strictă ar rata
+#: exact cazul normal; un prefix de două litere ar potrivi orice.
+_MIN_PREFIX_CHARS = 3
+
+
+def _message_numbers(message: str) -> set[float]:
+    """Numerele dintr-un mesaj, în ambele lecturi ale separatorului. „1.500" e o mie cinci sute în
+    scriere românească și unu virgulă cinci în scriere zecimală — nu putem ști care, deci le
+    acceptăm pe amândouă: coroborarea confirmă că numărul a fost ROSTIT, nu care e valoarea lui."""
+    out: set[float] = set()
+    for match in _NUMBER_RE.finditer(message):
+        raw = match.group(0)
+        for candidate in (raw.replace(",", "."), raw.replace(",", "").replace(".", "")):
+            try:
+                out.add(float(candidate))
+            except ValueError:
+                continue
+    return out
+
+
+def _prefix_match(token: str, word: str) -> bool:
+    """Un token canonic și un cuvânt din mesaj sunt aceeași noțiune? Prefixul e permis în ambele
+    sensuri (clientul poate scrie forma articulată sau cea scurtă), dar NUMAI peste pragul de
+    lungime — altfel un „g" din mesaj ar corobora „gras"."""
+    if word.startswith(token):
+        return True
+    return len(word) >= _MIN_PREFIX_CHARS and token.startswith(word)
+
+
+def corroborated_by(message: object, value: object) -> bool:
+    """Mesajul BRUT al turului susține valoarea asta? PURĂ, deterministă, agnostică de limbă.
+
+    Asta e poarta prin care o valoare propusă de model devine afirmație a CLIENTULUI. Modelul
+    transcrie, codul confirmă: dacă „200" sau „ten gras" chiar apar în ce a scris clientul acum,
+    faptul e al lui și poate deveni `hard` (D7); dacă nu apar, rămâne o inferență și rămâne `soft`.
+    Fără poarta asta, singura alternativă la „modelul își declară singur sursa" ar fi să nu mai
+    existe deloc constrângeri hard în momentul în care extracția de sloturi nu mai vine din triaj.
+
+    Conservatoare prin construcție: orice dubiu întoarce `False`, iar consecința unui `False` e o
+    nevoie mai slabă, niciodată una mai tare."""
+    text = norm_text(message)
+    if not text or value is None or isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return any(abs(number - float(value)) <= 0.005 for number in _message_numbers(text))
+
+    wanted = norm_text(str(value).replace("_", " ").replace("-", " "))
+    if not wanted:
+        return False
+    words = text.replace("-", " ").split()
+    for token in wanted.split():
+        if len(token) < _MIN_PREFIX_CHARS:
+            if token not in words:
+                return False
+        elif not any(_prefix_match(token, word) for word in words):
+            return False
+    return True
+
+
 def value_fingerprint(value: object) -> str:
     """Amprenta STABILĂ a unei valori revocate — ce se păstrează în tombstone.
 
@@ -373,6 +433,7 @@ __all__ = [
     "NeedSpec",
     "NeedVocabulary",
     "NormalizedNeed",
+    "corroborated_by",
     "norm_key",
     "norm_text",
     "normalize_need",

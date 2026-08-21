@@ -156,6 +156,41 @@ def test_revoking_something_never_stored_still_leaves_a_tombstone():
     assert "budget_max" in state.revoked_keys()
 
 
+# ── NX-251: ce poate ȘTERGE modelul (simetria cu `hard_downgrade`) ───────────
+
+
+def test_the_model_cannot_delete_a_fact_the_client_stated():
+    """Gaura pe care o închide NX-251: `set_need` apăra faptele clientului de rescriere, dar
+    `revoke` le lăsa să fie ȘTERSE de o inferență — adică exact relaxarea interzisă de D7, doar
+    pe altă operație. Fără poarta asta, „modelul deduce că bugetul nu mai contează" era suficient
+    ca să dispară un plafon pe care clientul îl ceruse."""
+    base = _state(user("set_need", key="budget_max", value=200))
+    assert base.need_for("budget_max").strength == "hard"
+
+    result = reduce(base, P("revoke", key="budget_max", source="model_inferred"), POLICY)
+    assert isinstance(result, RejectedUpdate) and result.reason == "unsupported_revoke"
+    assert base.need_for("budget_max").normalized_value == 200.0
+
+
+def test_the_model_can_still_retract_what_the_model_itself_inferred():
+    """Contra-testul care ține poarta ONESTĂ: nevoile create de model sunt `soft` +
+    `model_inferred` (D7 le coboară la naștere), deci „nu vreau Sony" → „de fapt accept Sony"
+    trece neatins. Se apără ce a AFIRMAT clientul, nu memoria în general."""
+    base = _state(P("set_need", key="brand", value="sony", source="model_inferred"))
+    assert base.need_for("brand").strength == "soft"
+
+    state = _state(P("revoke", key="brand", source="model_inferred"), base=base)
+    assert state.need_for("brand") is None
+    assert "brand" in state.revoked_keys()
+
+
+def test_the_client_can_always_revoke_their_own_hard_fact():
+    base = _state(user("set_need", key="budget_max", value=200))
+    state = _state(user("revoke", key="budget_max"), base=base)
+    assert state.need_for("budget_max") is None
+    assert "budget_max" in state.revoked_keys()
+
+
 # ── Siguranță (NX-173) ───────────────────────────────────────────────────────
 
 

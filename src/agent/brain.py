@@ -47,9 +47,10 @@ from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.config import get_settings
+from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
-from src.models import TurnContext
+from src.models import Route, TurnContext
 from src.observability import turn_latency
 from src.retrieval.port import deadline_from_turn, query_count_bucket
 from src.retrieval.selector import build_port, select_provider
@@ -69,6 +70,10 @@ BRAIN_PROMPT_VERSION = "main_brain.v1"
 
 #: Bugetul de repair: UN singur repair bounded al aceluiași brain, apoi fallback determinist.
 MAX_REPAIRS = 1
+
+#: Câte rânduri de evidence intră în promptul de repair. Bugetul stă în cod (P4): un digest care
+#: crește cu catalogul ar transforma reparația într-un al doilea apel scump.
+MAX_REPAIR_EVIDENCE = 24
 
 #: Instrucțiunile V2, versionate (BRAIN_PROMPT_VERSION). Se ADAUGĂ system-ului generat din DB
 #: (P9) — nu îl înlocuiesc. Fără nume de provider de retrieval, fără model hardcodat.
@@ -228,6 +233,31 @@ async def _generate_plan(
         return None, 0
 
 
+def _evidence_digest(context: AnswerPlanContext, limit: int = MAX_REPAIR_EVIDENCE) -> str:
+    """Evidence-ul deja colectat al turului, ca text scurt pentru repair.
+
+    Repair-ul rulează pe `complete_schema`, adică în AFARA conversației în care s-au văzut
+    rezultatele tool-urilor. Fără digestul ăsta i se cerea să citeze `evidence_ids` pe care nu le
+    mai avea în față: singurele planuri reparabile erau cele care nu depindeau de evidence, adică
+    aproape niciunul după o rundă de căutare — deci reparația era decorativă exact acolo unde
+    conta. Îi dăm înapoi strict ce a validat deja serverul (id + tip + produs + valoare), nu
+    payload brut de tool.
+
+    Trunchierea se DECLARĂ: un digest tăiat în tăcere l-ar face să creadă că restul nu există și
+    ar produce un al doilea plan invalid, din alt motiv."""
+    usable = [item for item in context.evidence if item.current]
+    rows = [
+        f"{item.evidence_id} | {item.kind} | {item.product_id} | {item.value}"
+        for item in usable[:limit]
+    ]
+    if not rows:
+        return ""
+    hidden = len(usable) - len(rows)
+    tail = f"\n(+{hidden} nelistate — folosește doar id-urile de mai sus)" if hidden else ""
+    header = "\nEVIDENCE DISPONIBIL (evidence_id | tip | product_id | valoare):\n"
+    return header + "\n".join(rows) + tail
+
+
 async def _repair_plan(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -235,9 +265,14 @@ async def _repair_plan(
     system: str,
     user: str,
     failures: tuple[str, ...],
+    context: AnswerPlanContext,
 ) -> dict[str, Any] | None:
-    """UN repair bounded al ACELUIAȘI brain: aceleași instrucțiuni + codurile de validare."""
-    feedback = f"\nPLANUL ANTERIOR A FOST INVALID. Corectează DOAR: {', '.join(failures)}"
+    """UN repair bounded al ACELUIAȘI brain: aceleași instrucțiuni + codurile de validare +
+    evidence-ul turului (fără el, un plan care depinde de tool results nu poate fi reparat)."""
+    feedback = (
+        f"\nPLANUL ANTERIOR A FOST INVALID. Corectează DOAR: {', '.join(failures)}"
+        f"{_evidence_digest(context)}"
+    )
     try:
         return await deps.llm.complete_schema(system, user + feedback, ANSWER_PLAN_V2_SCHEMA)
     except Exception as e:  # noqa: BLE001 — repair eșuat → fallback determinist
@@ -418,6 +453,65 @@ def _attach_grounding(
     ctx.grounded = answer if answer.ok else None
 
 
+def _plan_source(ctx: TurnContext, vocab: NeedVocabulary, proposal: Any) -> str:
+    """Cine AFIRMĂ faptul propus de plan: clientul sau modelul?
+
+    Modelul nu-și poate alege sursa (ar fi D7 pe cuvântul lui). O propune codul, dintr-o singură
+    întrebare verificabilă: valoarea asta chiar apare în ce a scris clientul ACUM? Dacă da, e
+    afirmația lui și poate deveni `hard`; dacă nu, e o inferență și rămâne `soft`.
+
+    Poarta contează cel mai mult când triajul nu mai rulează sincron: extracția de sloturi
+    `user_explicit` venea de la nano (`stages/agent._filter_proposals`), iar fără un înlocuitor
+    TOATE nevoile ar coborî la `soft` și noțiunea de constrângere inviolabilă ar dispărea tăcut.
+
+    Limita ei, explicit: coroborarea confirmă că valoarea a fost ROSTITĂ, nu că modelul a
+    interpretat-o corect — un „200ml" citit ca buget rămâne o eroare a modelului, exact ca la
+    extracția din triaj. Ce garantează e că nimic ne-rostit nu devine fapt al clientului."""
+    if proposal.op == "set_need":
+        normalized = normalize_need(proposal.key, proposal.value, vocab)
+        value = normalized.value if normalized is not None else None
+    elif proposal.op == "revoke":
+        # Revocarea se coroborează pe valoarea DIN MEMORIE, nu pe una propusă: „de fapt accept
+        # Sony" conține exact faptul care se retrage. Un „bugetul nu mai contează" nu conține
+        # „200", deci nu se coroborează — și tocmai de asta nu poate șterge un plafon declarat de
+        # client (reducerul îl respinge cu `unsupported_revoke`, vizibil în metrici).
+        key = norm_key(proposal.key)
+        need = next((n for n in active_needs(ctx) if n.key == key), None)
+        value = need.normalized_value if need is not None else None
+    else:
+        return "model_inferred"
+    return "user_explicit" if corroborated_by(ctx.message.body or "", value) else "model_inferred"
+
+
+def _state_proposals_from_plan(ctx: TurnContext, plan: AnswerPlanV2) -> list[StateUpdateProposal]:
+    """Propunerile planului → propuneri typed pentru reducer, cu sursa stabilită de COD."""
+    vocab = NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None))
+    out: list[StateUpdateProposal] = []
+    for proposal in plan.state_update_proposals:
+        if proposal.op == "set_topic":
+            out.append(
+                StateUpdateProposal(
+                    "set_topic",
+                    category_key=proposal.key,
+                    source="model_inferred",
+                    turn_id=ctx.turn_id,
+                )
+            )
+            continue
+        source = _plan_source(ctx, vocab, proposal)
+        ctx.emit("state_proposal_source", op=proposal.op, source=source)
+        out.append(
+            StateUpdateProposal(
+                proposal.op,
+                key=proposal.key,
+                value=proposal.value,
+                source=source,
+                turn_id=ctx.turn_id,
+            )
+        )
+    return out
+
+
 def _clarification_allowed(ctx: TurnContext, plan: AnswerPlanV2) -> bool:
     """Poarta DETERMINISTĂ peste clarificarea propusă de brain (NX-235: anti-buclă + gain).
     Refuzul nu e tăcere: rămâne direct answer-ul best-effort din plan."""
@@ -438,6 +532,45 @@ def _clarification_allowed(ctx: TurnContext, plan: AnswerPlanV2) -> bool:
         source="main_brain",
     )
     return decision.ask
+
+
+def _persist_clarification(ctx: TurnContext, plan: AnswerPlanV2) -> None:
+    """O întrebare PUSĂ trebuie să poată fi reluată la turul următor și numărată împotriva buclei.
+
+    Calea de triaj face asta de mult (`set_clarify` → `pending_question` → `clarify_resume_stage`).
+    Brain-ul doar concatena întrebarea în text: răspunsul scurt care urma („sub 200") repornea de
+    la zero, fiindcă nimic nu ținea minte CE s-a întrebat, iar `asked_questions` nu creștea
+    niciodată — deci anti-bucla NX-235 număra 0 la infinit și aceeași întrebare se putea repeta
+    tur după tur. Cu poarta de gain stinsă (defaultul), nimic nu o oprea.
+
+    Scriem în AMBELE reprezentări fiindcă ambele au cititori: `reply.pending_question` (v1,
+    persistat de processor, citit de `clarify_resume_stage` și de marginea web pentru tokenul de
+    acțiune NX-236) și propunerea typed (v2, unde trăiesc `question_id` și `attempts`)."""
+    clarification = plan.clarification
+    if clarification is None or ctx.reply is None:
+        return
+    field = norm_key(clarification.target_need) or "intent"
+    previous = ctx.state.pending_question if isinstance(ctx.state.pending_question, dict) else None
+    same_slot = bool(previous) and previous.get("field") == field
+    attempts = int(previous.get("attempts") or 0) + 1 if same_slot else 1
+    ctx.reply.pending_question = {
+        "field": field,
+        "resume_route": Route.SALES.value,
+        "asked_at": datetime.now(UTC).isoformat(),
+        "attempts": attempts,
+    }
+    ctx.state_proposals.append(
+        StateUpdateProposal(
+            "set_pending_question",
+            key=field,
+            source="policy",
+            turn_id=ctx.turn_id,
+            reason="missing_required",
+            resume_route=Route.SALES.value,
+            options_refs=tuple(o for o in clarification.options if o)[:6],
+        )
+    )
+    ctx.emit("clarify_asked", field=field, attempts=attempts, source="main_brain")
 
 
 class _PortedExecute:
@@ -608,6 +741,7 @@ async def run_main_brain(
             system=brain_system,
             user=brain_user,
             failures=failures or ("unknown_evidence",),
+            context=context,
         )
         plan, failures = _validate(brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan is not None and not failures else "exhausted")
@@ -629,28 +763,9 @@ async def run_main_brain(
         ctx.emit("no_results", reason_class=plan.no_results.reason_class)
     _emit_constraint_handling(ctx, brain_input, plan)
 
-    # Propunerile de state ale brain-ului → reducerul NX-235 decide (sursă model_inferred: un
-    # `hard` propus de model nu poate rescrie un hard al clientului — reducerul refuză).
-    for proposal in plan.state_update_proposals:
-        if proposal.op == "set_topic":
-            ctx.state_proposals.append(
-                StateUpdateProposal(
-                    "set_topic",
-                    category_key=proposal.key,
-                    source="model_inferred",
-                    turn_id=ctx.turn_id,
-                )
-            )
-        else:
-            ctx.state_proposals.append(
-                StateUpdateProposal(
-                    proposal.op,
-                    key=proposal.key,
-                    value=proposal.value,
-                    source="model_inferred",
-                    turn_id=ctx.turn_id,
-                )
-            )
+    # Propunerile de state ale brain-ului → reducerul NX-235 decide. Sursa NU e a modelului: o
+    # declară codul, după ce confruntă valoarea cu mesajul BRUT al clientului (vezi `_plan_source`).
+    ctx.state_proposals.extend(_state_proposals_from_plan(ctx, plan))
 
     ask_clarification = _clarification_allowed(ctx, plan)
     text = render_plan_text(plan, ctx.language, ask_clarification=ask_clarification)
@@ -694,7 +809,12 @@ async def run_main_brain(
             return
         repairs += 1
         repaired = await _repair_plan(
-            ctx, deps, system=brain_system, user=brain_user, failures=critic.failures
+            ctx,
+            deps,
+            system=brain_system,
+            user=brain_user,
+            failures=critic.failures,
+            context=context,
         )
         plan2, failures2 = _validate(brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan2 is not None and not failures2 else "exhausted")
@@ -733,6 +853,8 @@ async def run_main_brain(
     ctx.emit("main_brain_call", phase="final", outcome="ok", **versions)
     # Reply-urile brain sunt specifice contextului (obligații/nevoi/istoric) → necacheabile în v1.
     ctx.set_reply(text, products=_plan_products(plan, run.retrieved) or None, cacheable=False)
+    if ask_clarification:
+        _persist_clarification(ctx, plan)
 
 
 __all__ = [

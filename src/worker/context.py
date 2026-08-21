@@ -178,13 +178,24 @@ def memory_block(ctx: TurnContext, *, max_needs: int = 8, max_chars: int = 500) 
     return "\n".join(lines)[:max_chars]
 
 
-def state_block(state: ConversationState, *, max_products: int = 3, max_chars: int = 600) -> str:
+def state_block(
+    state: ConversationState,
+    *,
+    max_products: int = 3,
+    max_chars: int = 600,
+    include_constraints: bool = True,
+) -> str:
     """Bloc de state references: produse arătate recent (id + nume + preț, ref-uri — principiul 8)
     + constrângeri știute (buget, tip de ten…). Memoria scurtă pt follow-up coerent. Gol → "".
 
     R3: expunem `product_id`-ul (UUID) ca agentul să poată chema get_product_details /
     compare_products / checkout_link pe produsele DEJA arătate, fără re-căutare. Fără id în
-    context, un follow-up de tip „care e cea mai bună?" pasa un id inventat → DataError pe cast."""
+    context, un follow-up de tip „care e cea mai bună?" pasa un id inventat → DataError pe cast.
+
+    NX-251 — `include_constraints=False` când starea v2 e activă: constrângerile de aici sunt
+    proiecția v1 a acelorași nevoi pe care `memory_block` le emite canonic (cu tărie și revocări).
+    Ambele blocuri în același prompt înseamnă aceleași fapte de două ori, iar copia mai săracă e
+    exact cea care poate contrazice: „buget: 200" fără „(obligatoriu)" invită la relaxare."""
     lines: list[str] = []
     if state.displayed_products:
         shown = "; ".join(
@@ -195,7 +206,7 @@ def state_block(state: ConversationState, *, max_products: int = 3, max_chars: i
             "Produse arătate recent (folosește id-ul din [] pt detalii/comparație/checkout): "
             + shown
         )
-    if state.constraints:
+    if include_constraints and state.constraints:
         cons = "; ".join(
             f"{k}: {v}" for k, v in state.constraints.items() if v not in (None, "", [], {})
         )
@@ -255,25 +266,50 @@ def summary_block(ctx: TurnContext, *, max_chars: int | None = None) -> str:
     return ("Rezumat conversație anterioară: " + text)[:cap]
 
 
-def context_blocks(ctx: TurnContext) -> str:
+def _emit_context_bytes(ctx: TurnContext, consumer: str, sections: list[tuple[str, str]]) -> None:
+    """UN event per consumator, cu octeții fiecărui bloc — ca `turn_latency`/`llm_usage`: o
+    defalcare, nu N evenimente. Numele blocurilor sunt vocabular ÎNCHIS, iar valorile sunt lungimi:
+    nimic din CONȚINUT nu ajunge în telemetrie (P12).
+
+    `consumer` spune cui i s-a trimis contextul. Cât timp triajul și agentul îl construiesc
+    amândoi, aceeași informație pleacă de două ori pe același tur — iar asta trebuie să se vadă
+    într-o cifră, nu doar într-un comentariu."""
+    props = {name: len(text.encode("utf-8")) for name, text in sections}
+    ctx.emit("context_bytes", consumer=consumer, total=sum(props.values()), **props)
+
+
+def context_blocks(ctx: TurnContext, *, consumer: str | None = None) -> str:
     """Unește blocurile ne-goale de context (rezumat + profil + state) pentru prompturile
     triaj/agent. Ordine CRONOLOGICĂ: rezumatul (fundalul vechi) ÎNAINTEA profilului/state-ului;
     transcriptul ultimelor 8 e concatenat downstream (în triage/agent), deci rezumat→…→recent.
     Stă în mesajul USER (dinamic), nu în system — promptul static rămâne byte-identic (prompt
-    caching neatins). Gol → "" (nimic de adăugat)."""
-    blocks = [
-        summary_block(ctx),
-        customer_profile_block(ctx.contact),
-        facts_block(ctx),  # NX-148: memorie structurată (după profil, înainte de state)
-        state_block(ctx.state),
+    caching neatins). Gol → "" (nimic de adăugat).
+
+    `consumer` (NX-251) e pur observabilitate: dat, emite `context_bytes`. Îl pasează DOAR
+    apelantul al cărui text ajunge efectiv la model — `build_brain_input` compune aceleași blocuri
+    pentru contractul `BrainInput`, dar promptul brain-ului e cel construit în `agent_stage`, deci
+    a le număra de acolo ar raporta un context trimis de două ori când el pleacă o dată."""
+    from src.conversation.state_v2 import ConversationStateV2  # noqa: PLC0415 — evită ciclu
+
+    # NX-251: cu v2 activ, constrângerile aparțin EXCLUSIV lui `memory_block` (canonice, cu tărie
+    # și revocări). `state_block` rămâne proprietarul produselor afișate. Fără poarta asta, același
+    # fapt apare de două ori, iar varianta fără tărie e cea care invită la relaxare.
+    v2 = isinstance(getattr(ctx, "state_v2", None), ConversationStateV2)
+    sections = [
+        ("summary", summary_block(ctx)),
+        ("profile", customer_profile_block(ctx.contact)),
+        ("facts", facts_block(ctx)),  # NX-148: memorie structurată (după profil, înainte de state)
+        ("state", state_block(ctx.state, include_constraints=not v2)),
         # NX-235: snapshotul redus (nevoi active + revocări) DUPĂ state_block — ce e aici e
         # canonic și bate ce s-ar putea deduce din blocurile de mai sus. Gol când v2 e stins.
-        memory_block(ctx),
+        ("memory", memory_block(ctx)),
         # NX-234: ULTIMUL, fiindcă e cel mai recent context — unde se află clientul ACUM, după
         # tot ce s-a întâmplat înainte. Gol pe orice canal fără context de pagină.
-        page_context_block(ctx),
+        ("page", page_context_block(ctx)),
     ]
-    return "\n".join(b for b in blocks if b)
+    if consumer is not None:
+        _emit_context_bytes(ctx, consumer, sections)
+    return "\n".join(text for _, text in sections if text)
 
 
 def build_brain_input(ctx: TurnContext):

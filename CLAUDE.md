@@ -329,6 +329,31 @@ determinist (P6). Producția rămâne OFF până la GO-ul NX-246. Detalii:
 [`docs/NX-239-SINGLE-BRAIN.md`](docs/NX-239-SINGLE-BRAIN.md); drive:
 `python scripts/sim/single_brain_drive.py`.
 
+**NX-251 — autoritatea faptelor + triajul iese de pe drumul sincron (DARK, flag OFF).**
+NX-239 rezolvase doar jumătatea de SCRIERE a lui D1: nano nu mai era writer, dar APELUL rămânea —
+fiecare tur plătea o clasificare care primea contextul complet, după care ACELEAȘI blocuri plecau
+încă o dată la brain. `TRIAGE_SYNC_SHADOW_ENABLED=false` (default, cere `SINGLE_BRAIN_ENABLED`,
+validat la boot) = neatins; ON = zero apeluri de model mic pe calea răspunsului, clasificarea se
+mută POST-tur ca MĂSURĂTOARE (`classify_message` e EXTRAS, nu duplicat — două prompturi întreținute
+separat ar diverge, și atunci ai compara copiile, nu arhitecturile). Proprietarul lui `ctx.route`
+devine `agent_stage`, clasa de tur vine din obligațiile deterministe, iar brain-ul primește
+REUNIUNEA sales+order (fără triaj nu știm dacă turul e vânzare sau comandă). Dependența care face
+mutarea posibilă: **sursa unui fapt o decide CODUL**, nu modelul — `corroborated_by`
+(`src/conversation/needs.py`, pur, agnostic de limbă, potrivire pe prefix pentru flexiunea
+românească) confirmă că valoarea a fost ROSTITĂ ⇒ `user_explicit`; altfel `model_inferred` ⇒ `soft`.
+Fără ea, scoaterea triajului ar fi șters tăcut noțiunea de constrângere `hard` (singurii producători
+de `user_explicit` erau triajul și `clarify_resume`). În plus, trei găuri închise: `revoke` din
+sursă necapabilă nu mai poate ȘTERGE un fapt al clientului (`unsupported_revoke` — simetric cu
+`hard_downgrade`; nevoile create de model rămân `soft`, deci „nu vreau Sony"→„de fapt accept Sony"
+trece neatins); clarificarea brain-ului se PERSISTĂ (altfel `clarify_resume` n-avea ce relua, iar
+`attempts` rămânea 0 ⇒ aceeași întrebare la infinit cu poarta de gain stinsă); repair-ul primește un
+digest de evidence cu trunchierea DECLARATĂ (rula în afara conversației cu tool results, deci nu
+putea repara exact planurile care depindeau de ele). Sub state v2, constrângerile nu mai pleacă de
+două ori în prompt (`memory_block` e proprietarul; `state_block` rămâne al produselor afișate), iar
+octeții se măsoară pe sursă (`context_bytes{consumer}`). Detalii:
+[`docs/NX-251-CONTEXT-ORCHESTRATION.md`](docs/NX-251-CONTEXT-ORCHESTRATION.md); probă:
+`pytest tests/test_context_journeys.py tests/test_context_orchestration.py -q`.
+
 ---
 
 ## Arhitectura — pipeline liniar (12 stagii)
@@ -856,6 +881,7 @@ nativx-assistant/
 │   ├── STAGE1-CANARY-RUNBOOK.md ← NX-249: etape, evidence packet, kill-switch, rollback
 │   ├── STAGE1-CUTOVER.md        ← NX-249: închiderea rutei v1 (criteriu structural pt „v1 in-flight")
 │   ├── STAGE1-QUALITY-RITUAL.md ← NX-249: zilnic/săptămânal/lunar → regresii, nu tuning online
+│   ├── NX-251-CONTEXT-ORCHESTRATION.md ← NX-251: cine AFIRMĂ un fapt + triajul scos de pe sincron
 │   ├── NX-241-TURN-DEADLINE.md  ← NX-241: deadline unic, manifest de bugete, SLO + runbook
 │   ├── NX-240-GROUNDED-PROJECTOR.md ← NX-240: grounding + projector pur + regulile de adevăr
 │   ├── WEB-VIEW-V2-DATA-READINESS.md ← NX-240: matricea de câmpuri + coverage măsurat (300 prod.)
