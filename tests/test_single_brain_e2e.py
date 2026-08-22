@@ -80,6 +80,11 @@ _faq_hit_stage.__name__ = "faq_stage"
 def _wire(monkeypatch, *, flag: bool, port: _FakePort | None = None) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "single_brain_enabled", flag, raising=False)
+    # Scenariul acestui fișier e cel al NX-239: nano ÎNCĂ rulează sincron, iar control plane-ul îi
+    # DEMOTEAZĂ reply-ul în semnal. Cu NX-251 aprins triajul nu mai rulează pe drumul sincron, deci
+    # nu mai există reply de demotat și `brain_signals` rămâne gol — corect, dar altă arhitectură.
+    # Pinuim explicit, ca testul să măsoare mecanismul pe care îl numește, nu `.env`-ul mașinii.
+    monkeypatch.setattr(settings, "triage_sync_shadow_enabled", False, raising=False)
 
     async def _no_categories(conn, business_id):
         return []
