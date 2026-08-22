@@ -34,12 +34,16 @@ def test_defaults(monkeypatch):
         "DAILY_COST_CAP_USD",
         "ENV",
         "LOG_LEVEL",
+        "LLM_REASONING_EFFORT_AGENT",
     ):
         monkeypatch.delenv(k, raising=False)
     s = _settings(monkeypatch)
-    assert s.model_agent == "gpt-5.4-mini"
+    assert s.model_agent == "gpt-5.6-luna"
+    # Escaladarea la modelul mare e OPRITĂ implicit: se aprinde cu o variabilă, nu din cod.
+    assert s.model_agent_complex == ""
     assert s.model_triage == "gpt-5.4-nano"
     assert s.model_embed == "text-embedding-3-small"
+    assert s.llm_reasoning_effort_agent == "high"
     assert s.redis_url == "redis://redis:6379/0"
     assert s.daily_cost_cap_usd == 5.0
     assert s.env == "dev"

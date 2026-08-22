@@ -106,6 +106,7 @@ async def test_agent_call_includes_sampling_params():
     c, comp = _llm_client([_Resp("raspuns")])
     await c.complete("sys", "usr")
     assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_agent
+    assert comp.last_kwargs["reasoning_effort"] == "high"
     # Plafonul de output = max_completion_tokens (NU max_tokens, deprecat → 400 pe gpt-5.4-*).
     assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
     assert "max_tokens" not in comp.last_kwargs
@@ -124,7 +125,10 @@ async def test_sampling_disabled_kill_switch(monkeypatch):
         llm,
         "get_settings",
         lambda: SimpleNamespace(
-            llm_sampling_enabled=False, llm_retry_max=2, llm_max_tokens_agent=800
+            llm_sampling_enabled=False,
+            llm_reasoning_effort_agent="",
+            llm_retry_max=2,
+            llm_max_tokens_agent=800,
         ),
     )
     c, comp = _llm_client([_Resp("x")])
