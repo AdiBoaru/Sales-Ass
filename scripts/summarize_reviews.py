@@ -39,7 +39,7 @@ if sys.platform == "win32":
 load_dotenv(".env")
 DSN = os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL")
 BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
-MODEL = os.environ.get("MODEL_AGENT", "gpt-5.4-mini")
+MODEL = os.environ.get("MODEL_AGENT", "gpt-5.6-terra")
 CONCURRENCY = 8
 
 _SYSTEM = (

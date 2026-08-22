@@ -129,7 +129,18 @@ class Settings(BaseSettings):
 
     # --- OpenAI ---
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
-    model_agent: str = Field(default="gpt-5.4-mini", validation_alias="MODEL_AGENT")
+    # Modelul agentului pentru turul OBIȘNUIT. Majoritatea turelor (un răspuns, o recomandare,
+    # o clarificare) nu au nevoie de vârful de gamă — plăteau însă ca și cum ar avea.
+    model_agent: str = Field(default="gpt-5.6-luna", validation_alias="MODEL_AGENT")
+    # Escaladarea pentru turele COMPLICATE (comparație, mesaj mixt, mutație).
+    # GOL IMPLICIT — decizie explicită: totul rulează pe `model_agent`. Mecanismul de selecție
+    # rămâne în cod și e testat, dar pornit ar plăti modelul scump pe o BĂNUIALĂ, iar D15 cere ca
+    # alegerea de model să vină din măsurători. În plus, fiecare clasă pe care am fi escaladat-o
+    # are deja un validator determinist în spate (`obligation_uncovered` pentru mesajul mixt,
+    # evidence obligatoriu pe celulele de comparație, `CartService` + `policy.allows()` pentru
+    # mutații), deci costul unei greșeli e un repair, nu un răspuns greșit livrat clientului.
+    # Se aprinde punând numele modelului aici — o variabilă, fără schimbare de cod.
+    model_agent_complex: str = Field(default="", validation_alias="MODEL_AGENT_COMPLEX")
     model_triage: str = Field(default="gpt-5.4-nano", validation_alias="MODEL_TRIAGE")
     model_embed: str = Field(default="text-embedding-3-small", validation_alias="MODEL_EMBED")
     model_moderation: str = Field(
@@ -137,7 +148,7 @@ class Settings(BaseSettings):
     )
     # Override de tarife LLM pentru observabilitatea de cost (NX-103). JSON parțial, merge peste
     # implicitul din src/agent/pricing.py — tunabil în prod fără redeploy. Gol → tarifele din cod.
-    # Ex: {"gpt-5.4-mini": {"input": 0.30, "cached_input": 0.03, "output": 2.40}}
+    # Ex: {"gpt-5.6-terra": {"input": 2.50, "cached_input": 0.25, "output": 15.00}}
     llm_pricing_json: str = Field(default="", validation_alias="LLM_PRICING_JSON")
 
     # --- Media routing: Vision poză→catalog (NX-76, stagiul 3) ---
@@ -146,7 +157,7 @@ class Settings(BaseSettings):
     # ctx.message.body → triaj rutează SALES → agentul cheamă search_products. Imagine→text→search.
     vision_enabled: bool = Field(default=True, validation_alias="VISION_ENABLED")
     # Modelul Vision: agentul (mini) are vedere; nano NU. Default = model_agent.
-    model_vision: str = Field(default="gpt-5.4-mini", validation_alias="MODEL_VISION")
+    model_vision: str = Field(default="gpt-5.6-terra", validation_alias="MODEL_VISION")
     # Cap dur de mărime al pozei descărcate (bytes) — peste = fail-soft (nu trimitem la Vision).
     vision_max_bytes: int = Field(default=5_000_000, validation_alias="VISION_MAX_BYTES")
     # Estimare cost/apel Vision (ca un apel de agent) pt contorul zilnic G2c (plasă, nu facturare).
@@ -820,6 +831,11 @@ class Settings(BaseSettings):
     # 0 = dezactivat (fără wait_for, comportamentul de dinainte) — kill-switch numeric, fără flag.
     embed_timeout_ms: int = Field(default=800, validation_alias="EMBED_TIMEOUT_MS")
     llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
+    # GPT-5.6 Terra: reasoning effort explicit pentru agent. Gol = omis (fallback complet la
+    # comportamentul endpointului/modelului). Triage ramane nano si nu primeste effort aici.
+    llm_reasoning_effort_agent: str = Field(
+        default="high", validation_alias="LLM_REASONING_EFFORT_AGENT"
+    )
     # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
     # triajul (clasificare) vrea determinism → mic; agentul (copy către client) vrea variație → mai
     # mare, ca răspunsurile să NU fie repetitive. Active doar când llm_sampling_enabled.

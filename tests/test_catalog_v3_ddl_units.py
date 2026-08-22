@@ -114,6 +114,23 @@ def test_violation_product_becomes_draft():
     assert others and set(others) == {"published"}
 
 
+def test_nx206_facts_contract_violation_becomes_draft():
+    """NX-206: backfill-ul published foloseste poarta extinsa, nu doar auditul v3."""
+    data = _catalog()
+    victim = data["products"][0]
+    victim_slug = victim["slug"]
+    attrs = victim.setdefault("attributes", {})
+    attrs["suitable_for"] = ["oily"]
+    attrs["not_recommended_for"] = [
+        {"value": "oily", "level": "soft", "reason": "test contradiction"}
+    ]
+
+    mapping = classify_content_status(data)
+
+    assert mapping[victim_slug] == "draft"
+    assert {status for slug, status in mapping.items() if slug != victim_slug} == {"published"}
+
+
 def test_global_blocker_fails_closed_all_draft():
     """FAIL-CLOSED (NX-171c, review Codex): un blocker GLOBAL (schemă invalidă / produs non-dict —
     violation FĂRĂ `product_slugs`, ne-mapabilă) → NICIUN produs 'published' (toate 'draft'). Prin

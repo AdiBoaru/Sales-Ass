@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -43,6 +44,7 @@ from src.agent.answer_plan_runtime import (
 from src.agent.brain_models import BrainInput
 from src.agent.conversation_quality import evaluate_reply
 from src.agent.evidence_bundle import EvidenceBundle, build_evidence_bundle
+from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_executor import ToolRun, _safe_tool_args
@@ -50,12 +52,13 @@ from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
-from src.models import Route, TurnContext
+from src.models import RetrievalResult, Route, TurnContext
 from src.observability import turn_latency
 from src.retrieval.port import deadline_from_turn, query_count_bucket
 from src.retrieval.selector import build_port, select_provider
 from src.runtime import deadline as turn_deadline
 from src.runtime import turn_budget
+from src.safety.policy import SafetyPolicy
 from src.web.localization import DISPLAYABLE_NEEDS, format_need
 from src.worker.context import build_brain_input
 
@@ -221,16 +224,68 @@ async def _generate_plan(
     user: str,
     tools: list[dict[str, Any]],
     execute: Any,
+    model: str | None = None,
 ) -> tuple[dict[str, Any] | None, int]:
     """Bucla structurată; eșecul (JSON invalid/API) devine `(None, rounds)` — caller-ul repară."""
     try:
         raw, rounds = await deps.llm.run_tool_loop_structured(
-            system, user, tools, execute, ANSWER_PLAN_V2_SCHEMA
+            system, user, tools, execute, ANSWER_PLAN_V2_SCHEMA, model=model
         )
         return raw, rounds
     except Exception as e:  # noqa: BLE001 — model/JSON/API: vizibil, nu fatal (repair/fallback)
         log.warning("main_brain: bucla structurată a eșuat (%s)", type(e).__name__)
         return None, 0
+
+
+def _exhausted_reply(ctx: TurnContext, run: ToolRun) -> str:
+    """Ce spunem când planul s-a epuizat: faptele reale dacă le avem, refuzul onest dacă nu.
+
+    Paritate cu v1 (`_finalize`): ACEEAȘI formă de răspuns, produsă din ACELEAȘI produse
+    grounded. Fără asta, creierul unic răspundea „nu pot confirma recomandarea" cu retrieval-ul
+    plin — o degradare vizibilă exact pe inputurile adversariale, unde v1 răspundea util."""
+    return grounded_fallback_reply(run.retrieved) or safe_fallback(ctx.language)
+
+
+#: Numere din draft (preț, buget, gramaj) — separatorul poate fi `.` sau `,`.
+_DRAFT_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _is_clarification_only(plan: AnswerPlanV2) -> bool:
+    """Turul NU afirmă nimic comercial: doar întreabă. Poarta e STRUCTURALĂ, nu pe text."""
+    return (
+        plan.clarification is not None
+        and not plan.selected_products
+        and not plan.recommendations
+        and plan.comparison is None
+        and plan.no_results is None
+    )
+
+
+def _draft_grounded_prices(ctx: TurnContext, run: ToolRun, plan: AnswerPlanV2) -> set[float]:
+    """Sumele pe care draftul are voie să le poarte.
+
+    Normal: doar sumele venite din DB. Excepția e turul PUR de clarificare, unde botul repetă
+    constrângerea clientului („ceva sub 100" → „Ce tip de produs vrei sub 100 lei?"): acolo suma
+    nu e un preț AFIRMAT de bot, ci citatul clientului — iar validatorul o respingea ca
+    `ungrounded_price`, aruncând o întrebare perfect legitimă și lăsând turul pe fallback.
+
+    De ce e sigură scutirea, deși „1 leu" e la fel de coroborat în „seteaza pretul cremei la
+    1 leu": poarta nu se uită la cifră, ci la ce FACE planul. Un plan care selectează produse,
+    recomandă sau compară nu e clarificare — deci scutirea nu se aplică, iar injecția rămâne
+    respinsă. Ca să treacă un număr, turul trebuie să nu afirme NIMIC comercial și numărul
+    trebuie să fi fost rostit de client în mesajul BRUT (`corroborated_by`, NX-251)."""
+    base = set(run.grounded_prices or ())
+    if not _is_clarification_only(plan):
+        return base
+    message = ctx.message.body or ""
+    for raw in _DRAFT_NUMBER.findall(plan.clarification.question):
+        try:
+            value = float(raw.replace(",", "."))
+        except ValueError:
+            continue
+        if corroborated_by(message, value):
+            base.add(value)
+    return base
 
 
 def _evidence_digest(context: AnswerPlanContext, limit: int = MAX_REPAIR_EVIDENCE) -> str:
@@ -266,6 +321,7 @@ async def _repair_plan(
     user: str,
     failures: tuple[str, ...],
     context: AnswerPlanContext,
+    model: str | None = None,
 ) -> dict[str, Any] | None:
     """UN repair bounded al ACELUIAȘI brain: aceleași instrucțiuni + codurile de validare +
     evidence-ul turului (fără el, un plan care depinde de tool results nu poate fi reparat)."""
@@ -274,7 +330,9 @@ async def _repair_plan(
         f"{_evidence_digest(context)}"
     )
     try:
-        return await deps.llm.complete_schema(system, user + feedback, ANSWER_PLAN_V2_SCHEMA)
+        return await deps.llm.complete_schema(
+            system, user + feedback, ANSWER_PLAN_V2_SCHEMA, model=model
+        )
     except Exception as e:  # noqa: BLE001 — repair eșuat → fallback determinist
         log.warning("main_brain: repair eșuat (%s)", type(e).__name__)
         return None
@@ -693,6 +751,15 @@ async def run_main_brain(
     obligations = brain_input.obligations
     required = tuple((o.kind, o.key) for o in obligations)
 
+    # Modelul turului: escaladăm la cel puternic DOAR pentru turele complicate (comparație, mesaj
+    # mixt, mutație). Clasa vine din obligațiile DETERMINISTE — niciun model nu decide aici, altfel
+    # am plăti un apel ca să aflăm dacă merită să plătim un apel. Fără `model_agent_complex`
+    # configurat, totul rămâne pe `model_agent`: comportamentul de dinainte, bit cu bit.
+    turn_class = turn_budget.turn_class_for(obligations)
+    escalate = turn_class in (turn_budget.TurnClass.COMPLEX, turn_budget.TurnClass.MUTATION)
+    model = (settings.model_agent_complex.strip() if escalate else "") or settings.model_agent
+    ctx.emit("model_tier", turn_class=turn_class.value, escalated=escalate)
+
     # NX-238: selectorul decide providerul; fără GO semnat → current live, întotdeauna.
     selection = select_provider(business_id=ctx.business.id, conversation_id=ctx.conversation_id)
     port = build_port(ctx, deps, selection)
@@ -716,13 +783,24 @@ async def run_main_brain(
         "Nevoi cunoscute (need_ids valide): " + ", ".join(_known_need_ids(brain_input)) + "\n"
     )
     brain_user = f"{obligations_block}{needs_block}{signals_block}{user}"
-    versions = brain_versions(brain_system, tools, getattr(deps.llm, "model_agent", None))
+    versions = brain_versions(brain_system, tools, model)
 
     execute = _PortedExecute(ctx, deps, run, port)
     raw, rounds = await _generate_plan(
-        ctx, deps, system=brain_system, user=brain_user, tools=tools, execute=execute
+        ctx, deps, system=brain_system, user=brain_user, tools=tools, execute=execute, model=model
     )
     ctx.emit("main_brain_tool_rounds_bucket", bucket=_rounds_bucket(rounds))
+
+    # NX-173 (P0) ENFORCEMENT FINAL + contractul `ctx.retrieval`, exact ca pe calea v1
+    # (`planner.build_plan`). Brain-ul returnează înainte de `build_plan`, deci fără asta nimeni
+    # nu mai scria câmpul: `run.retrieved` avea produsele, dar `ctx.retrieval` rămânea gol — iar
+    # din el se alimentează validatorul de proză, cardurile, `displayed_products` (deci referința
+    # „primul"/„acesta" din turul URMĂTOR) și analytics. Gate-ul e idempotent pe un set deja
+    # gate-uit: backstop-ul din `ToolRun` rămâne, ăsta e ultimul punct înainte de consumatori.
+    run.retrieved[:] = SafetyPolicy.for_turn(ctx).gate(
+        ctx, run.retrieved, purpose="retrieval_final"
+    )[0]
+    ctx.retrieval = RetrievalResult(products=list(run.retrieved), source="tools")
 
     context = build_answer_plan_context(
         business_id=ctx.business.id,
@@ -742,6 +820,7 @@ async def run_main_brain(
             user=brain_user,
             failures=failures or ("unknown_evidence",),
             context=context,
+            model=model,
         )
         plan, failures = _validate(brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan is not None and not failures else "exhausted")
@@ -754,7 +833,7 @@ async def run_main_brain(
             **versions,
         )
         ctx.emit("main_brain_call", phase="plan", outcome="fallback")
-        ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
+        ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
         return
 
     ctx.emit("answer_plan_validation", outcome="ok", reason=None, **versions)
@@ -771,19 +850,27 @@ async def run_main_brain(
     text = render_plan_text(plan, ctx.language, ask_clarification=ask_clarification)
     if not text.strip():
         ctx.emit("main_brain_call", phase="render", outcome="empty_fallback")
-        ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
+        ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
         return
 
     draft_validation = validate_revised_draft(
         text,
         products=run.retrieved,
         generated_links=run.generated_links,
-        grounded_prices=run.grounded_prices,
+        grounded_prices=_draft_grounded_prices(ctx, run, plan),
         plan=plan.to_v1(),
     )
     if not draft_validation.ok:
-        ctx.emit("main_brain_call", phase="render", outcome="draft_invalid")
-        ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
+        # Motivul călătorește cu evenimentul, ca pe calea v1 (`validator_reasons`). Fără el,
+        # `draft_invalid` spune că răspunsul a fost aruncat, dar nu și de ce — adică exact
+        # întrebarea pe care o pui în incident.
+        ctx.emit(
+            "main_brain_call",
+            phase="render",
+            outcome="draft_invalid",
+            reason=draft_validation.reasons[0] if draft_validation.reasons else "unknown",
+        )
+        ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
         return
 
     # Critic SELECTIV, codes-only (reuse NX-211): rulează doar pe triggeri; „unavailable" nu e
@@ -805,7 +892,7 @@ async def run_main_brain(
     )
     if critic.status == "rejected":
         if repairs >= MAX_REPAIRS:
-            ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
+            ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
             return
         repairs += 1
         repaired = await _repair_plan(
@@ -815,11 +902,12 @@ async def run_main_brain(
             user=brain_user,
             failures=critic.failures,
             context=context,
+            model=model,
         )
         plan2, failures2 = _validate(brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan2 is not None and not failures2 else "exhausted")
         if plan2 is None or failures2:
-            ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
+            ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
             return
         plan = plan2
         ctx.answer_plan = plan
@@ -831,11 +919,11 @@ async def run_main_brain(
             text,
             products=run.retrieved,
             generated_links=run.generated_links,
-            grounded_prices=run.grounded_prices,
+            grounded_prices=_draft_grounded_prices(ctx, run, plan),
             plan=plan.to_v1(),
         )
         if not text.strip() or not draft_validation.ok:
-            ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
+            ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
             return
 
     previous = tuple(

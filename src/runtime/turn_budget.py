@@ -25,9 +25,11 @@ că e o comparație complexă, primește plafoanele ei — contoarele consumate 
 from __future__ import annotations
 
 import contextvars
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
+from typing import Any
 
 #: Versiunea manifestului. SE SCHIMBĂ la orice modificare a tabelului de mai jos — e capturată în
 #: `turn_latency`/`turn_budget_exhausted` și în raportul probei, ca o cifră să fie atribuibilă.
@@ -41,6 +43,37 @@ class TurnClass(str, Enum):
     RECOMMENDATION = "recommendation"  # recomandare normală (un search + plan)
     COMPLEX = "complex"  # comparație / mixt (mai multe tool-uri, evidence bogat)
     MUTATION = "mutation"  # coș / checkout / abonare — are scrieri, deci seriale
+
+
+def turn_class_for(obligations: Iterable[Any]) -> TurnClass:
+    """Clasa turului, derivată DETERMINIST din obligațiile deja extrase de cod (NX-251).
+
+    Sursa e cea corectă din trei motive: obligațiile sunt extrase din mesajul BRUT de cod pur,
+    există înainte de orice apel de model, și sunt exact vocabularul pe care planul trebuie să-l
+    acopere. A întreba un model „cât de greu e turul ăsta?" ar readuce cascada pe care D1 o
+    interzice — și ar plăti un apel ca să afle dacă merită să plătească un apel.
+
+    Ordinea e de la cel mai scump la cel mai ieftin, iar necunoscutul urcă, nu coboară: o
+    obligație pe care n-o recunoaștem primește tratamentul bun, nu pe cel ieftin. Greșeala în
+    direcția asta costă bani; greșeala invers costă răspunsul clientului."""
+    items = [str(getattr(o, "kind", o) or "").strip().lower() for o in obligations]
+    items = [k for k in items if k]
+    kinds = set(items)
+    if not kinds:
+        # Fără obligații extrase nu știm ce cere turul. Nu e „simplu" — e necunoscut.
+        return TurnClass.RECOMMENDATION
+    if "action" in kinds:
+        return TurnClass.MUTATION
+    if "compare" in kinds or len(items) > 1:
+        # Mesaj mixt = mai multe lucruri de acoperit într-un singur răspuns: exact cazul în care
+        # un model mai slab lasă pe dinafară jumătate din întrebare.
+        # Numărăm OBLIGAȚIILE, nu tipurile lor: „ce preț are X și ai ceva pentru ten uscat?" are
+        # două obligații `answer`, deci un set de tipuri de dimensiune 1 — pe tipuri, mesajul ăsta
+        # ar fi coborât la „exact", adică fix cazul mixt ar fi primit modelul ieftin.
+        return TurnClass.COMPLEX
+    if kinds <= {"answer", "clarify", "explain", "safety"}:
+        return TurnClass.EXACT
+    return TurnClass.RECOMMENDATION
 
 
 #: Dimensiunile bugetate — vocabular ÎNCHIS (`turn_budget_exhausted{dimension}`).

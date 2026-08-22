@@ -246,7 +246,12 @@ async def test_invented_product_rejected_then_fallback(monkeypatch):
     ctx = _ctx()
     llm = _FakeLLM(plan=bad, repair=bad, search_args={"query": "ser"})
     await _run(ctx, llm, _FakePort(), monkeypatch)
-    assert ctx.reply.text == safe_fallback("ro")
+    # Produsul inventat e respins — dar respingerea NU e un motiv să ascundem catalogul real.
+    # Testul cerea înainte exact `safe_fallback`, adică fixa în piatră degradarea „nu pot
+    # confirma" cu produsul valid în retrieval; acum cerem paritatea cu v1: faptul real, servit.
+    assert "fantoma" not in ctx.reply.text
+    assert "LumaDerm" in ctx.reply.text
+    assert "89.00" in ctx.reply.text
 
 
 async def test_invented_action_intent_rejected(monkeypatch):

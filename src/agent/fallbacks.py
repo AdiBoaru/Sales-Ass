@@ -210,6 +210,21 @@ def _products_brief(products: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def grounded_fallback_reply(products: list[dict[str, Any]]) -> str | None:
+    """Fallback-ul care PREZINTĂ faptele, nu doar refuză — `None` dacă n-avem niciun fapt.
+
+    Calea v1 face asta de mult (`_finalize` → `_deterministic_reply`): când proza modelului pică
+    validatorul, clientul primește totuși produsele REALE cu prețurile REALE, fiindcă serverul le
+    are deja în mână. A răspunde „nu pot confirma" cu catalogul pe masă e o degradare pe care n-o
+    cere nimic — și e cu atât mai proastă cu cât apare exact pe inputurile adversariale, adică
+    acolo unde clientul vede diferența dintre un asistent și un zid.
+
+    `None` (fără produse cu nume ȘI preț) rămâne cazul lui `safe_fallback`: fără fapte, forma de
+    produs ar fi o promisiune goală."""
+    usable = [p for p in products if p.get("name") and p.get("price") is not None]
+    return _deterministic_reply(usable) if usable else None
+
+
 def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     lines = ["Îți recomand:"]
     for p in products[:3]:

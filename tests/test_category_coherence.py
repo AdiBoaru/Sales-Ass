@@ -6,6 +6,7 @@ un `exists(...)` pe arbore (primary SAU product_category_map; categoria cerută 
 când e ON. Filtrarea efectivă o face Postgres — aici garantăm doar contractul SQL.
 """
 
+from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.config import get_settings
 
 
@@ -36,16 +37,45 @@ def _placeholder():
 # --- _category_clause direct (contractul predicatului) --------------------------------------
 
 
-def test_category_clause_off_is_byte_identical(monkeypatch):
+def test_category_clause_off_matches_primary_only(monkeypatch):
     from src.db.queries.catalog import _category_clause
 
     monkeypatch.setattr(get_settings(), "search_category_tree_enabled", False)
     placeholder, params = _placeholder()
     sql = _category_clause("machiaj", placeholder)
 
-    # forma VECHE exactă: două placeholder-e, match pe slug/nume al primary_category_id (alias c)
-    assert sql == "(lower(c.slug) = lower($1) or lower(c.name) = lower($2))"
-    assert params == ["machiaj", "machiaj"]
+    # Match pe slug/nume al primary_category_id (alias c). Predicatul e acum „oricare din listă",
+    # ca o rezoluție ambiguă să rămână o constrângere (uniunea familiilor) în loc să fie aruncată.
+    assert sql == "(lower(c.slug) = any($1::text[]) or lower(c.name) = any($1::text[]))"
+    assert params == [["machiaj"]]
+
+
+def test_category_clause_accepts_multiple_resolved_keys(monkeypatch):
+    """«Cremă» nu identifică o familie anume, dar RĂMÂNE o cerere de cremă.
+
+    Constrângerea pe uniunea familiilor rezolvate ține măștile afară; renunțarea la constrângere
+    le-ar lăsa să câștige pe text, fiindcă o mască scrie «Textură cremă» în descriere.
+    """
+    from src.db.queries.catalog import _category_clause
+
+    monkeypatch.setattr(get_settings(), "search_category_tree_enabled", True)
+    placeholder, params = _placeholder()
+    sql = _category_clause(["creme-hidratante", "creme-de-ochi"], placeholder)
+
+    assert "any($1::text[])" in sql
+    assert params == [["creme-hidratante", "creme-de-ochi"]]
+
+
+def test_category_clause_refuses_empty_list():
+    """Zero chei nu e „fără filtru", e eroare de programare: un predicat care nu prinde nimic ar
+    readuce exact zero-ul tăcut pe care rezoluția îl elimină."""
+    import pytest
+
+    from src.db.queries.catalog import _category_clause
+
+    placeholder, _ = _placeholder()
+    with pytest.raises(ValueError, match="fără nicio categorie"):
+        _category_clause([], placeholder)
 
 
 def test_category_clause_on_matches_tree(monkeypatch):
@@ -60,7 +90,7 @@ def test_category_clause_on_matches_tree(monkeypatch):
     assert "sub.path like reqc.path || '/%'" in sql  # descendenți (materialized path)
     assert "sub.id = p.primary_category_id" in sql  # SAU pe primary
     assert "reqc.business_id = p.business_id" in sql  # corelat pe tenant (P7)
-    assert params == ["machiaj"]  # UN singur placeholder, reutilizat de 2 ori
+    assert params == [["machiaj"]]  # UN singur placeholder, reutilizat de 2 ori
     # ON folosește propriul alias `reqc` (nu `c` din SELECT) → sigur pe calea semantică
     assert "lower(reqc.slug)" in sql and "lower(reqc.name)" in sql
 
@@ -87,7 +117,7 @@ async def test_lexical_old_form_when_off(monkeypatch):
     conn = FakeConn()
     await search_products_lexical(conn, "biz-1", "fond de ten", category="machiaj")
 
-    assert "lower(c.slug) = lower(" in conn.sql  # forma veche
+    assert "lower(c.slug) = any(" in conn.sql  # forma fără arbore (doar primary)
     assert "product_category_map m" not in conn.sql  # arborele NU se activează
 
 
@@ -151,8 +181,8 @@ def _stub_dropping_search(monkeypatch):
         *,
         query_text,
         price_max,
-        concerns,
         category,
+        facet_filters=None,
         brand,
         sort_mode,
         in_stock_only,
@@ -169,8 +199,18 @@ def _stub_dropping_search(monkeypatch):
     monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
     monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
     monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
-    # NX-227: tool-ul cere `split_concerns` → (mapate, nemapate); identitate, fără DomainPack.
-    monkeypatch.setattr(ct, "split_concerns", lambda dp, c: ([str(x) for x in c] if c else [], []))
+
+    # «machiaj» E o categorie reală, cu produse — deci constrângerea EXISTĂ și abandonarea ei în
+    # relaxare e o informație despre rezultate („vin de pe alt raft"), care justifică garda.
+    # Distinct de cazul în care categoria nu se poate verifica deloc: acolo filtrul n-a existat
+    # niciodată, deci nu e nimic de suprimat, doar de declarat.
+    async def fake_vocab(deps, business_id):
+        return CatalogVocabulary(
+            business_id=business_id,
+            dimensions={"category": (VocabEntry(key="machiaj", label="Machiaj", count=101),)},
+        )
+
+    monkeypatch.setattr(ct, "get_vocabulary", fake_vocab)
 
 
 async def test_offcategory_guard_suppresses_when_category_dropped(monkeypatch):

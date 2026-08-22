@@ -23,7 +23,7 @@ load_dotenv()
 
 # Aceleași default-uri ca src/config.py (modelele pe care le folosește botul).
 MODEL_TRIAGE = os.environ.get("MODEL_TRIAGE", "gpt-5.4-nano")
-MODEL_AGENT = os.environ.get("MODEL_AGENT", "gpt-5.4-mini")
+MODEL_AGENT = os.environ.get("MODEL_AGENT", "gpt-5.6-luna")
 MODEL_EMBED = os.environ.get("MODEL_EMBED", "text-embedding-3-small")
 
 

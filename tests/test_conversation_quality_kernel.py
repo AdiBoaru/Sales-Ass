@@ -32,13 +32,13 @@ def test_category_is_never_dropped_when_hard_enabled(monkeypatch):
     )
     steps = ct._relax_ladder(
         price_max=100,
-        concerns=["cadou pentru iubita"],
-        category="machiaj",
+        facet_filters={"concerns": ["cadou pentru iubita"]},
+        category=["machiaj"],
         in_stock_only=False,
     )
     assert len(steps) == 2
-    assert all(step["category"] == "machiaj" for step in steps)
-    assert steps[-1]["concerns"] is None
+    assert all(step["category"] == ["machiaj"] for step in steps)
+    assert steps[-1]["facet_filters"] is None
 
 
 def test_category_drop_remains_available_as_kill_switch(monkeypatch):
@@ -49,8 +49,8 @@ def test_category_drop_remains_available_as_kill_switch(monkeypatch):
     )
     steps = ct._relax_ladder(
         price_max=None,
-        concerns=["gift"],
-        category="makeup",
+        facet_filters={"concerns": ["gift"]},
+        category=["makeup"],
         in_stock_only=False,
     )
     assert steps[-1]["category"] is None

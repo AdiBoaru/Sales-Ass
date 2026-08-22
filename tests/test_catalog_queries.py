@@ -21,7 +21,13 @@ class FakeConn:
         return self._rows
 
 
-async def test_list_category_names_top_level_scoped():
+async def test_list_category_names_only_servable():
+    """Promptul primește DOAR categorii cu produse — nu anunța ce nu poți servi.
+
+    Regresia pe care o ține: promptul lista tot tabelul `categories`, inclusiv rafturi goale, iar
+    modelul alegea cuminte unul dintre ele; filtrul dur pe categorie transforma asta în zero
+    rezultate și într-un „n-am găsit" fals despre un catalog care avea marfa.
+    """
     from src.db.queries.catalog import list_category_names
 
     conn = FakeConn([{"name": "Creme"}, {"name": "Parfumuri"}])
@@ -29,8 +35,23 @@ async def test_list_category_names_top_level_scoped():
 
     assert out == ["Creme", "Parfumuri"]  # maparea r["name"]
     assert "business_id = $1" in conn.sql  # izolare (P7)
-    assert "parent_id is null" in conn.sql  # DOAR categorii top-level
-    assert "order by name" in conn.sql  # determinist → prefix de cache stabil
+    assert "count(*)" in conn.sql and "> 0" in conn.sql  # doar categorii cu produse servabile
+    assert "p.status = 'active'" in conn.sql  # definiția lui „servabil", partajată cu vocabularul
+    assert "order by c.name" in conn.sql  # determinist → prefix de cache stabil
+    assert conn.params[0] == "biz-1"
+
+
+async def test_list_category_slugs_only_servable():
+    """Aceeași regulă pentru lista dată triajului: validarea contra `categories` accepta rânduri
+    care EXISTĂ, nu rânduri care au marfă — 60 din 102, pe catalogul demo."""
+    from src.db.queries.catalog import list_category_slugs
+
+    conn = FakeConn([{"slug": "creme-hidratante"}])
+    out = await list_category_slugs(conn, "biz-1")
+
+    assert out == ["creme-hidratante"]
+    assert "business_id = $1" in conn.sql
+    assert "count(*)" in conn.sql and "> 0" in conn.sql
     assert conn.params[0] == "biz-1"
 
 

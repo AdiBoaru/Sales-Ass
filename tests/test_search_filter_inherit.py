@@ -4,6 +4,7 @@ calea-model / typo (regex-ul cheaper ratează „mai ifetin"), FĂRĂ wordlist. 
 
 import pytest
 
+from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.models import (
     BusinessConfig,
     Contact,
@@ -61,7 +62,7 @@ def _capture_lexical(monkeypatch):
         *,
         query_text,
         price_max,
-        concerns,
+        facet_filters,
         category,
         brand,
         sort_mode,
@@ -70,7 +71,8 @@ def _capture_lexical(monkeypatch):
         **kwargs,  # Tier 2b p2: features / searchable_facets (tolerate noii parametri)
     ):
         seen["category"] = category
-        seen["concerns"] = concerns
+        seen["facet_filters"] = facet_filters
+        seen["concerns"] = sorted((facet_filters or {}).get("concerns") or []) or None
         return [{"id": "p-cheap", "name": "Crema ieftină", "price": 19.99}]
 
     async def no_embeddings(conn, business_id):
@@ -79,9 +81,23 @@ def _capture_lexical(monkeypatch):
     monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
     monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
     monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
-    # concerns mapate identitate (fără DomainPack în test): „dry" rămâne „dry".
-    # NX-227: tool-ul cere `split_concerns` → (mapate, nemapate).
-    monkeypatch.setattr(ct, "split_concerns", lambda dp, c: ([str(x) for x in c] if c else [], []))
+
+    # Vocabular scriptat: „dry" e o nevoie REALĂ a catalogului, cu produse în spate — deci se
+    # rezolvă la ea însăși, iar moștenirea din sesiune trece prin aceeași confruntare cu catalogul
+    # ca un termen nou (nu există scurtătură care să bage în WHERE ceva neverificat).
+    async def fake_vocab(deps, business_id):
+        return CatalogVocabulary(
+            business_id=business_id,
+            dimensions={
+                "category": (
+                    VocabEntry(key="creme-hidratante", label="Creme hidratante", count=7),
+                    VocabEntry(key="seruri", label="Seruri", count=15),
+                ),
+                "concerns": (VocabEntry(key="dry", label="dry", count=83),),
+            },
+        )
+
+    monkeypatch.setattr(ct, "get_vocabulary", fake_vocab)
     return seen
 
 
@@ -93,7 +109,7 @@ async def test_cheaper_inherits_category_and_concerns(_capture_lexical):
         PipelineDeps(conn=object(), redis=None, llm=_LLM()),
         {"query": "ceva mai ieftin", "sort_mode": "price_asc"},
     )
-    assert _capture_lexical["category"] == "creme-hidratante"  # NU drift pe alt raft
+    assert _capture_lexical["category"] == ["creme-hidratante"]  # NU drift pe alt raft
     assert _capture_lexical["concerns"] == ["dry"]
     ev = [e for e in ctx.events if e.type == "search_filter_inherited"]
     assert ev and set(ev[0].properties["fields"]) == {"category", "concerns"}
@@ -108,7 +124,7 @@ async def test_explicit_category_overrides_inheritance(_capture_lexical):
         PipelineDeps(conn=object(), redis=None, llm=_LLM()),
         {"query": "vreau un ser", "category": "seruri", "sort_mode": "relevance"},
     )
-    assert _capture_lexical["category"] == "seruri"  # categoria nouă NU e suprascrisă de moștenire
+    assert _capture_lexical["category"] == ["seruri"]  # categoria nouă NU e suprascrisă
     ev = [e for e in ctx.events if e.type == "search_filter_inherited"]
     assert ev and ev[0].properties["fields"] == ["concerns"]  # DOAR concern-ul moștenit
 
