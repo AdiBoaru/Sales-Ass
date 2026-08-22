@@ -290,15 +290,22 @@ class TriageOut(BaseModel):
     closure: bool = False
 
 
-async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Clasifică turul cu nano și scrie `ctx.route` (+ reply pentru simple/clarify)."""
-    if ctx.route is not None:
-        return  # NX-130: clarify_resume a setat deja ruta determinist → triajul e no-op (P3)
+async def classify_message(
+    ctx: TurnContext, deps: PipelineDeps, *, consumer: str = "triage"
+) -> tuple[TriageOut, list[str]] | None:
+    """Apelul de clasificare, izolat de DECIZIILE pe care le ia stagiul pe baza lui.
+
+    Extras (NX-251) ca shadow-ul post-tur să ruleze EXACT aceeași clasificare, nu o copie a ei:
+    două prompturi care ar trebui să fie identice, întreținute separat, divergează — iar atunci
+    comparația candidate-vs-control ar măsura diferența dintre copii, nu dintre arhitecturi.
+
+    Întoarce `(output validat, categoriile valide)` sau `None` la orice eșec (fără cheie, mesaj
+    gol, JSON invalid, API căzut) — apelantul degradează, nu primește excepții."""
     if deps.llm is None:
-        return  # fără cheie OpenAI → lăsăm echo fallback (degradare grațioasă)
+        return None  # fără cheie OpenAI → lăsăm echo fallback (degradare grațioasă)
     body = (ctx.message.body or "").strip()
     if not body:
-        return
+        return None
 
     # Checkout scurt DOAR pentru vocabularul de categorii; apelul nano de mai jos rulează cu
     # conexiunea eliberată (NX-231).
@@ -306,7 +313,7 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         categories = await list_category_slugs(conn, ctx.business.id)
     transcript = conversation_transcript(ctx.history)
     history_block = f"Conversație până acum:\n{transcript}\n\n" if transcript else ""
-    context = context_blocks(ctx)
+    context = context_blocks(ctx, consumer=consumer)
     context_block = f"{context}\n\n" if context else ""
     # NX-116: vocabularul valid de nevoi (slots.concerns) vine din DomainPack (P9), nu hardcodat.
     dp = ctx.business.domain_pack
@@ -327,13 +334,30 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     try:
         raw = await deps.llm.classify_json(_SYSTEM, user)
-        out = TriageOut(**raw)
+        return TriageOut(**raw), categories
     except (ValidationError, ValueError, KeyError) as e:
         log.warning("triaj: output invalid (%s) → fallback", type(e).__name__)
-        return
+        return None
     except Exception as e:  # noqa: BLE001 — eroare de API/rețea → nu blochează turul
         log.warning("triaj: apel LLM eșuat (%s) → fallback", type(e).__name__)
+        return None
+
+
+async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
+    """Clasifică turul cu nano și scrie `ctx.route` (+ reply pentru simple/clarify)."""
+    if ctx.route is not None:
+        return  # NX-130: clarify_resume a setat deja ruta determinist → triajul e no-op (P3)
+    if get_settings().triage_sync_shadow_enabled:
+        # NX-251 (D1): un model mic nu mai stă între client și răspuns. Clasificarea nu dispare —
+        # se mută în aftercare, ca MĂSURĂTOARE care se compară cu ce a decis brain-ul. Sub flag,
+        # proprietarul rutei devine `agent_stage` (P3: un singur writer, tot timpul).
+        ctx.emit("triage_deferred", reason="sync_shadow")
         return
+    classified = await classify_message(ctx, deps)
+    if classified is None:
+        return
+    out, categories = classified
+    body = (ctx.message.body or "").strip()
 
     # category_key inventat (în afara listei) → îl aruncăm (nu rutăm pe ghicit).
     category_key = out.category_key if out.category_key in categories else None
