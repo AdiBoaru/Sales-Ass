@@ -234,8 +234,9 @@ drenează turele deja acceptate; nu șterge rânduri și nu reseta epochuri.
 promovează manual, cu un digest semnat, prin `Actions → Release → Run workflow`. Fluxul complet și
 motivele: [docs/RELEASE-RUNBOOK.md](docs/RELEASE-RUNBOOK.md).
 
-`.github/workflows/deploy.yml` a rămas fără trigger automat, ca fallback documentat, până la primul
-release complet prin `release.yml`. Rularea lui cere o confirmare scrisă explicit.
+`.github/workflows/deploy.yml` (calea veche, cu `git pull` pe host) a fost **ȘTERS** pe 2026-08-23,
+după ce condiția din runbook s-a împlinit: primul deploy de producție promovat prin digest a reușit
+(rularea `32277763628`, 2026-08-19). Nu mai există cale de ocolire a `release.yml`.
 
 Setup (o singură dată), pe lângă cel de mai jos:
 - **GitHub Environments** `staging` + `production`, cu approvals și secrete separate.

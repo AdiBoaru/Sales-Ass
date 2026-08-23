@@ -127,6 +127,14 @@ Din `claim:flags` (extras mecanic din `src/config.py`, verificat de CI):
 
 Poarta 2 e o decizie asumată. Poarta 3 **nu e**: e o pană nedetectată.
 
+> **Addendum 2026-08-23 — poarta 3 e REPARATĂ.** Măsurătoarea de mai jos rămâne ca înregistrare a
+> ceea ce era adevărat pe 2026-08-19; nu se rescrie. Ce s-a schimbat de atunci: `release.yml` trece
+> (rulările `32561179664`, `32563131416`), prima promovare prin digest a reușit
+> (`32277763628`, jobul „Producție"), iar producția răspunde `200` pe `/health/live` și raportează
+> `release: 6ec0274e`. `deploy.yml` — subiectul măsurătorii de mai jos — a fost ȘTERS pe 2026-08-23,
+> conform §7 din [RELEASE-RUNBOOK.md](../RELEASE-RUNBOOK.md). Poarta 2 (flag pornit) rămâne
+> neschimbată: cauza e tot NX-203, nu livrarea.
+
 #### Pipeline-ul de livrare: 85 de rulări, zero reușite
 
 `gh run list --workflow=deploy.yml --limit 100`, măsurat 2026-08-19:

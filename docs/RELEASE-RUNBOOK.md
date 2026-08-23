@@ -260,20 +260,22 @@ Punctul 2 e verificat și mecanic, în CI:
 
 ---
 
-## 7. Excepții (calea deprecată)
+## 7. Excepții (calea deprecată) — RETRASĂ
 
-`deploy.yml` a rămas, fără trigger automat, ca fallback documentat până la primul release complet
-prin `release.yml`. Rularea cere confirmarea scrisă `OCOLESC-RELEASE-YML` + un motiv, ambele
-înregistrate în rezumatul rulării.
+`deploy.yml` **nu mai există**. A fost șters pe 2026-08-23, după ce condiția de retragere s-a
+împlinit: primul deploy de producție promovat prin digest a reușit (rularea `32277763628`,
+2026-08-19, jobul „Producție (promovare prin digest)"). Tabelul de excepții a rămas gol — calea
+deprecată n-a fost folosită niciodată după ce i s-a scos triggerul automat.
 
-Un deploy pe calea asta **nu are** digest verificat, semnătură verificată sau smoke pe staging.
-Notează-l aici, cu data și motivul:
+Nu mai există cale de ocolire a `release.yml`. Un deploy fără digest verificat, semnătură și smoke
+nu mai e o opțiune pe care o poate alege cineva din reflex — dacă `release.yml` e blocat, se repară
+`release.yml`.
 
-| Data | Cine | Motiv | Digest |
-|---|---|---|---|
-| — | — | — | — |
+### Ce a mai rămas din retragere
 
-### Retragerea fallbackului
-
-După primul deploy de producție promovat prin digest: șterge `.github/workflows/deploy.yml` și
-linia de compat pentru heartbeat-ul vechi din `src/jobs/scheduler.py` (`/tmp/scheduler_alive`).
+Heartbeat-ul vechi `/tmp/scheduler_alive` (`src/jobs/scheduler.py:32`) **încă e folosit**, deci nu
+s-a șters odată cu workflow-ul: `docker-compose.prod.yml` a trecut pe
+`python -m src.ops.worker_health` (NX-248), dar `docker-compose.yml` (dev local) îl citește în
+continuare la `healthcheck`. Ștergerea liniei fără să muți și healthcheck-ul local pe `worker_health`
+lasă devul cu un container `unhealthy`. E o schimbare de dev loop, nu de producție — se face
+separat, cu compose-ul local actualizat în același commit.
