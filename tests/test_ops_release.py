@@ -153,11 +153,26 @@ def _triggers(workflow: dict) -> dict:
     return workflow.get("on") or workflow.get(True) or {}
 
 
-def test_deployul_vechi_nu_mai_e_automat():
-    """Un merge în `main` nu mai este o aprobare de deploy în producție."""
-    triggers = _triggers(_workflows()["deploy.yml"])
-    assert "push" not in triggers, "calea deprecată nu are voie să pornească singură la push"
-    assert "workflow_dispatch" in triggers
+def test_calea_de_deploy_deprecata_nu_mai_exista():
+    """Un merge în `main` nu e o aprobare de deploy — acum prin ABSENȚĂ, nu prin lipsa triggerului.
+
+    `deploy.yml` (build la fiecare push, `latest` mutabil, `git pull` pe host, fără digest sau
+    semnătură verificate) a fost șters pe 2026-08-23, la retragerea fallbackului prevăzută în
+    RELEASE-RUNBOOK §7 — condiția era prima promovare reușită prin digest, împlinită pe 2026-08-19.
+
+    Testul nu verifică doar că fișierul a dispărut: ține poarta închisă. Orice workflow care atinge
+    hostul (`deploy.sh`) trebuie să fie `release.yml`, al cărui job de producție cere un digest
+    explicit (vezi testul următor). Readăugarea unei căi care deployează la push devine astfel o
+    decizie vizibilă, nu un fișier strecurat înapoi.
+    """
+    assert "deploy.yml" not in _workflows(), (
+        "deploy.yml a fost retras (RELEASE-RUNBOOK §7) — nu-l readăuga fără a reface poarta"
+    )
+    for name, wf in _workflows().items():
+        if "deploy.sh" not in json.dumps(wf.get("jobs", {})):
+            continue
+        assert name == "release.yml", f"{name}: atinge hostul în afara căii cu digest verificat"
+        assert "push" not in _triggers(wf).get("workflow_dispatch", {}), name
 
 
 def test_releaseul_nu_promoveaza_in_productie_la_push():
