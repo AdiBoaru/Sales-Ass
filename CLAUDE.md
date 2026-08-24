@@ -443,12 +443,17 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
 
 [7] AGENT (`gpt-5.6-luna`, vezi tabelul de stack)
     • system prompt GENERAT din categories (+ intent_aliases pt rutare), nu hardcodat
-    • CE PARAMETRI PLEACĂ E O PROPRIETATE A MODELULUI, nu o preferință: `gpt-5.6-*` REFUZĂ
-      `temperature` ≠ 1 cu 400, `gpt-5.4-*` o acceptă; `reasoning_effort` merge pe ambele.
-      `llm.supported_params()` e poarta, iar prefixul nedeclarat nu primește niciun opțional.
-      Fără ea, un default de model schimbat omoară TOATĂ calea de vânzare și numai pe ea:
-      4xx e terminal în `_with_retry`, `agent_stage` îl înghite, iar triajul (nano) rămâne
-      intact deasupra — deci sistemul pare sănătos. S-a întâmplat pe 2026-08-24 (bbb77b3)
+    • CE ACCEPTĂ O CERERE ATÂRNĂ DE UN SINGUR BIT: raționează sau nu. Cu raționamentul PORNIT
+      (`reasoning_effort` ≠ `none`, SAU parametrul absent pe un model care raționează implicit —
+      `gpt-5.6-*` da, `gpt-5.4-*` nu), furnizorul refuză cu 400 ȘI `temperature` ≠ 1, ȘI
+      function tools pe `chat.completions`. Deci bucla de vânzare FORȚEAZĂ `reasoning_effort=none`
+      (`llm._sampling`), iar `LLM_REASONING_EFFORT_AGENT` e INERT pe drumul cu tool-uri și activ
+      pe apelurile de text/schemă. Raționament + tool-uri ar cere `/v1/responses` — schimbare
+      mare, se decide pe măsurători (D15), nu ca să scăpăm de un 400. Divergența config↔sârmă se
+      numără (`llm_reasoning_disabled_for_tools`). Fără poarta asta, o schimbare de model sau de
+      effort omoară TOATĂ calea de vânzare și numai pe ea: 4xx e terminal în `_with_retry`,
+      `agent_stage` îl înghite, iar triajul (nano) rămâne intact deasupra — deci sistemul pare
+      sănătos. S-a întâmplat pe 2026-08-24 (bbb77b3, ambele schimbări deodată)
     • buying stages framework: browsing → narrowing → comparing → ready_to_buy
     • AGENT decide mutarea de vânzare (NU routerul)
     • MAX 3 RUNDE de model per tur (limită dură: llm.py:364). NU e un plafon de tool calls:

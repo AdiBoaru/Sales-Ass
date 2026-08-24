@@ -65,6 +65,14 @@ def _llm_client(behaviors, *, model_triage="gpt-5.4-nano", model_agent="gpt-5.4-
     return LLMClient(cl, model_triage=model_triage, model_agent=model_agent), cl._comp
 
 
+#: Un tool oarecare: contează DOAR că cererea poartă `tools`, nu ce e în ele.
+_TOOLS = [{"type": "function", "function": {"name": "search_products", "parameters": {}}}]
+
+
+async def _never_executed(name, args):  # pragma: no cover - modelul nu cere tool-uri în fake
+    raise AssertionError("fake-ul nu emite tool_calls, deci executorul nu are ce rula")
+
+
 @pytest.fixture(autouse=True)
 def _fast(monkeypatch):
     """Sleep no-op (retry rapid) + usage no-op (fără dependență de forma resp)."""
@@ -106,10 +114,15 @@ async def test_retry_exhausted_raises():
 
 
 async def test_agent_call_includes_sampling_params():
+    """Testul ăsta cerea, până pe 24 aug 2026, `temperature` ȘI `reasoning_effort="high"` pe
+    ACELAȘI apel — combinație pe care furnizorul o refuză cu `400` (măsurat pe `gpt-5.4-mini`:
+    „'temperature' does not support 0.7 with this model"). Trecea fiindcă `_Completions` e un fake
+    care nu validează nimic, deci suita confirma cu încredere un payload imposibil. Acum cere ce
+    pleacă REAL: cu effort configurat, raționamentul e pornit, deci temperatura rămâne acasă."""
     c, comp = _llm_client([_Resp("raspuns")])
     await c.complete("sys", "usr")
-    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_agent
     assert comp.last_kwargs["reasoning_effort"] == "high"
+    assert "temperature" not in comp.last_kwargs
     # Plafonul de output = max_completion_tokens (NU max_tokens, deprecat → 400 pe gpt-5.4-*).
     assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
     assert "max_tokens" not in comp.last_kwargs
@@ -142,43 +155,77 @@ async def test_sampling_disabled_kill_switch(monkeypatch):
     assert comp.last_kwargs["max_completion_tokens"] == 800
 
 
-# ── Poarta de capabilitate pe model ───────────────────────────────────────────────────────────
-# Regresie pentru incidentul din 24 aug: promovarea lui `bbb77b3` a mutat default-ul `model_agent`
-# de pe `gpt-5.4-mini` pe `gpt-5.6-luna`, iar `temperature=0.7` (trimisă necondiționat) a devenit
-# `400 unsupported_value`. Fiind 4xx, `_with_retry` o tratează terminal, `agent_stage` o înghite și
-# TOT creierul de vânzare a răspuns cu fallback-ul de runner, cu triajul (nano) intact deasupra.
+# ── Poarta de rationament ─────────────────────────────────────────────────────────────────────
+# Regresie pentru incidentul din 24 aug: `bbb77b3` a adus DOUA schimbari care, fiecare singura, ar
+# fi omorat calea de vanzare — default-ul `model_agent` `gpt-5.4-mini` → `gpt-5.6-luna`, si
+# `llm_reasoning_effort_agent="high"`. Masurat pe API-ul real, ambele 400-uri vin din acelasi bit:
+# cu rationamentul PORNIT, furnizorul refuza si `temperature` != 1, si function tools. Fiind 4xx,
+# `_with_retry` le trateaza terminal, `agent_stage` le inghite, si tot creierul de vanzare a
+# raspuns cu fallback-ul de runner, cu triajul (nano) intact deasupra.
 
 
-def test_supported_params_declara_ce_accepta_fiecare_familie():
-    # Măsurat pe API-ul real (2026-08-24), nu presupus.
-    assert "temperature" not in llm.supported_params("gpt-5.6-luna")
-    assert "temperature" not in llm.supported_params("gpt-5.6-terra")
-    assert "reasoning_effort" in llm.supported_params("gpt-5.6-luna")
+def test_profilul_declara_daca_familia_rationeaza_implicit():
+    # Masurat pe API-ul real (2026-08-24), nu presupus.
+    assert llm.model_profile("gpt-5.6-luna").reasons_by_default is True
+    assert llm.model_profile("gpt-5.6-terra").reasons_by_default is True
+    assert llm.model_profile("gpt-5.4-mini").reasons_by_default is False
+    assert llm.model_profile("gpt-5.4-nano").reasons_by_default is False
     assert llm.supported_params("gpt-5.4-mini") == {"temperature", "reasoning_effort"}
-    assert llm.supported_params("gpt-5.4-nano") == {"temperature", "reasoning_effort"}
 
 
 def test_model_necunoscut_nu_primeste_niciun_optional():
-    """Fail-safe: un prefix nedeclarat pierde variația de copy, nu turul."""
+    assert llm.model_profile("model-inventat-maine") is None
     assert llm.supported_params("model-inventat-maine") == frozenset()
 
 
-async def test_agent_pe_model_de_rationament_nu_trimite_temperature():
+async def test_bucla_cu_tooluri_forteaza_oprirea_rationamentului():
+    """Apelul REAL al agentului: cu tool-uri pe cerere, `reasoning_effort` trebuie sa fie `none`.
+    ABSENTA parametrului NU ajunge — pe un model care rationeaza implicit, tot 400 iese."""
+    c, comp = _llm_client([_Resp("gata")], model_agent="gpt-5.6-luna")
+    await c.run_tool_loop("sys", "usr", _TOOLS, _never_executed)
+    assert comp.calls[0]["reasoning_effort"] == "none"
+    # Cu rationamentul oprit, `temperature` REDEVINE valida — masurat, nu presupus.
+    assert comp.calls[0]["temperature"] == get_settings().llm_temperature_agent
+
+
+async def test_agent_fara_tooluri_pastreaza_effortul_configurat_si_pierde_temperature():
     c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
     await c.complete("sys", "usr")
-    assert "temperature" not in comp.last_kwargs  # exact parametrul care dădea 400
-    assert comp.last_kwargs["reasoning_effort"] == "high"  # ăsta E acceptat de Luna
+    assert comp.last_kwargs["reasoning_effort"] == "high"
+    assert "temperature" not in comp.last_kwargs  # rationament pornit ⇒ doar valoarea implicita
     assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
 
 
+async def test_modelul_clasic_fara_effort_pastreaza_temperature():
+    """`gpt-5.4-*` mergea nu fiindca ar fi „alta familie", ci fiindca implicit nu rationeaza."""
+    c, comp = _llm_client([_Resp("{}")], model_triage="gpt-5.4-nano")
+    await c.classify_json("sys", "usr")
+    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_triage
+    assert "reasoning_effort" not in comp.last_kwargs  # triajul nu primeste effort
+
+
 async def test_triajul_pe_model_de_rationament_nu_trimite_temperature():
-    """Poarta e pe MODEL, nu pe rol: dacă `MODEL_TRIAGE` ajunge vreodată pe 5.6, aceeași cădere."""
+    """Poarta e pe CERERE, nu pe rol: daca `MODEL_TRIAGE` ajunge vreodata pe 5.6, aceeasi cadere."""
     c, comp = _llm_client([_Resp("{}")], model_triage="gpt-5.6-luna")
     await c.classify_json("sys", "usr")
     assert "temperature" not in comp.last_kwargs
 
 
-async def test_optionalul_lasat_acasa_se_numara_ca_degradare():
+async def test_divergenta_fata_de_config_se_numara():
+    """`LLM_REASONING_EFFORT_AGENT=high` e INERT pe drumul cu tool-uri. Daca asta nu se numara,
+    configul si sarma diverg tacut."""
+    from src.observability import turn_latency
+
+    acc, token = turn_latency.push()
+    try:
+        c, _comp = _llm_client([_Resp("gata")], model_agent="gpt-5.6-luna")
+        await c.run_tool_loop("sys", "usr", _TOOLS, _never_executed)
+    finally:
+        turn_latency.pop(token)
+    assert acc.degradations.get("llm_reasoning_disabled_for_tools") == 1
+
+
+async def test_temperatura_lasata_acasa_se_numara():
     from src.observability import turn_latency
 
     acc, token = turn_latency.push()
@@ -188,6 +235,20 @@ async def test_optionalul_lasat_acasa_se_numara_ca_degradare():
     finally:
         turn_latency.pop(token)
     assert acc.degradations.get("llm_param_unsupported_temperature") == 1
+
+
+async def test_model_necunoscut_se_numara_si_nu_trimite_optionale():
+    from src.observability import turn_latency
+
+    acc, token = turn_latency.push()
+    try:
+        c, comp = _llm_client([_Resp("raspuns")], model_agent="model-inventat-maine")
+        await c.complete("sys", "usr")
+    finally:
+        turn_latency.pop(token)
+    assert "temperature" not in comp.last_kwargs
+    assert "reasoning_effort" not in comp.last_kwargs
+    assert acc.degradations.get("llm_model_profile_unknown") == 1
 
 
 async def test_completion_taiat_de_plafon_e_numarat():
