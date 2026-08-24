@@ -830,9 +830,19 @@ class Settings(BaseSettings):
     # (P6). 800ms lasă loc de jitter peste p99-ul normal al `text-embedding-3-small` (~sub 500ms).
     # 0 = dezactivat (fără wait_for, comportamentul de dinainte) — kill-switch numeric, fără flag.
     embed_timeout_ms: int = Field(default=800, validation_alias="EMBED_TIMEOUT_MS")
+    # `sampling_enabled` = kill-switch pentru `temperature`. NU mai e și plasa pentru modelele de
+    # raționament: compatibilitatea o decide acum `llm._sampling`, pe baza modului de raționament al
+    # CERERII (vezi `_MODEL_PROFILES`). Comentariul de aici spunea, din 2026-06, exact care e
+    # capcana („modele reasoning care resping temperature ne-default") — și tot am căzut în ea pe
+    # 24 aug, fiindcă cerea un OM care să-și amintească să stingă flagul când se schimbă modelul.
+    # De-aia decizia s-a mutat în cod. Stins, pierzi doar varietatea de copy.
     llm_sampling_enabled: bool = Field(default=True, validation_alias="LLM_SAMPLING_ENABLED")
-    # GPT-5.6 Terra: reasoning effort explicit pentru agent. Gol = omis (fallback complet la
-    # comportamentul endpointului/modelului). Triage ramane nano si nu primeste effort aici.
+    # Reasoning effort pentru apelurile de agent. Gol = omis (comportamentul implicit al modelului).
+    # ATENȚIE — e INERT pe drumul cu tool-uri: `chat.completions` refuză function tools cu
+    # raționamentul pornit, deci `llm._sampling` forțează `none` acolo (numărat ca
+    # `llm_reasoning_disabled_for_tools`). Adică valoarea de aici se aplică DOAR apelurilor de
+    # text/schemă fără tool-uri. Raționament + tool-uri ar cere `/v1/responses` — schimbare mare,
+    # se decide pe măsurători (D15). Triajul rămâne nano și nu primește effort aici.
     llm_reasoning_effort_agent: str = Field(
         default="high", validation_alias="LLM_REASONING_EFFORT_AGENT"
     )
