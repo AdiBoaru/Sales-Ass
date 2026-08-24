@@ -127,14 +127,24 @@ def _render_shown(refs: list[dict], *, age: int) -> str:
 
 
 def _trim_sentence(text: str, limit: int) -> str:
-    """Taie `text` la cel mult `limit` caractere, la ultima graniță de PROPOZIȚIE, altfel la
-    ultimul spațiu. Niciodată la mijlocul cuvântului — exact defectul pe care NX-255 îl repară."""
+    """Taie `text` la cel mult `limit` caractere, ELIPSA INCLUSĂ, la ultima graniță de PROPOZIȚIE,
+    altfel la ultimul spațiu.
+
+    Elipsa trebuie să încapă în buget: dacă o adaugi peste `text[:limit]`, funcția întoarce
+    `limit + 1` caractere, iar bucla de buget care se sprijină pe ea nu obține ce a cerut. Pe un
+    singur pas nu se vede, dar plafonul devine o sugestie, nu o limită.
+
+    Singurul caz în care tăietura cade în interiorul unui cuvânt e un token fără niciun spațiu
+    (URL, hash) mai lung decât plafonul: acolo ORICE tăietură e în mijlocul lui. Rămâne mărginit
+    și vizibil trunchiat prin elipsă, spre deosebire de defectul pe care cardul îl repară, unde
+    fragmentul apărea la ÎNCEPUT și arăta ca o propoziție întreagă."""
     if len(text) <= limit:
         return text
     head = text[:limit]
     cut = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
     if cut >= limit // 3:
         return head[: cut + 1]
+    head = text[: max(limit - 1, 1)]
     cut = head.rfind(" ")
     return (head[:cut] if cut >= limit // 3 else head).rstrip() + "…"
 
@@ -166,6 +176,7 @@ def _structured_transcript(
     s = get_settings()
     entries: list[_Entry] = []
     shown_turns = 0
+    client_trimmed = 0
     for i, m in enumerate(msgs):
         body = (m.body or "").strip()
         if m.direction == Direction.INBOUND:
@@ -173,7 +184,15 @@ def _structured_transcript(
                 continue
             # Plafon de SIGURANȚĂ, nu buget: la max observat 134 de caractere nu se atinge. Există
             # ca un input nelimitat să nu poată mânca tot contextul, și taie tot la propoziție.
-            safe = _trim_sentence(make_safe(body).text, s.history_client_max_chars)
+            #
+            # Dacă se atinge totuși, se NUMĂRĂ. Tăierea tăcută a mesajului clientului e exact clasa
+            # de defect pe care cardul o repară; una care se întâmplă fără să lase urmă ar fi
+            # aceeași greșeală, doar cu o limită mai mare. Contorul e cum aflăm că plafonul nu mai
+            # e teoretic, fără să citim conversații.
+            safe_text = make_safe(body).text
+            safe = _trim_sentence(safe_text, s.history_client_max_chars)
+            if safe != safe_text:
+                client_trimmed += 1
             entries.append(_Entry("client", f"Client: {safe}", False))
             continue
         if body:
@@ -223,6 +242,7 @@ def _structured_transcript(
             shown_chars=sum(len(e.text) for e in entries if e.role == "shown"),
             shown_turns=shown_turns,
             trimmed_prose=trimmed,
+            trimmed_client=client_trimmed,  # trebuie să rămână 0 în practică (p90 = 46 chars)
             dropped_entries=dropped,
             window_messages=total,
         )

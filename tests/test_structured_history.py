@@ -180,6 +180,39 @@ def test_bot_prose_gives_way_before_its_facts(structured, monkeypatch):
     assert kept.rstrip().endswith((".", "…"))  # dar la o graniță, nu la mijloc de cuvânt
 
 
+def test_trim_never_exceeds_its_limit(structured):
+    """Elipsa trebuie să încapă ÎN buget. Dacă se adaugă peste `text[:limit]`, funcția întoarce
+    `limit + 1` și plafonul devine o sugestie, nu o limită."""
+    from src.worker.context import _trim_sentence
+
+    for limit in (10, 40, 120, 121, 300):
+        for text in ("cuvinte multe " * 50, "unsingurtokenfoartelung" * 40, "A. B. C. " * 60):
+            assert len(_trim_sentence(text, limit)) <= limit, (limit, text[:20])
+
+
+def test_client_truncation_is_counted_not_silent(structured, monkeypatch):
+    """O tăiere tăcută a mesajului clientului ar fi aceeași greșeală ca defectul original, doar cu
+    o limită mai mare. Dacă plafonul de siguranță se atinge, trebuie să lase urmă."""
+    monkeypatch.setenv("HISTORY_CLIENT_MAX_CHARS", "50")
+    get_settings.cache_clear()
+    events: list[tuple[str, dict]] = []
+    conversation_transcript(
+        [_client("intrebare foarte lunga " * 20), _bot("r"), _client("acum")],
+        emit=lambda t, **p: events.append((t, p)),
+    )
+    assert events[0][1]["trimmed_client"] == 1
+
+
+def test_client_not_counted_as_trimmed_at_real_world_lengths(structured):
+    """Contra-proba: la lungimile reale (max observat 134) plafonul nu se atinge niciodată."""
+    events: list[tuple[str, dict]] = []
+    conversation_transcript(
+        [_client("x" * 134), _bot("r"), _client("acum")],
+        emit=lambda t, **p: events.append((t, p)),
+    )
+    assert events[0][1]["trimmed_client"] == 0
+
+
 # --- robustețe pe date vechi/stricate -------------------------------------------------------------
 
 
