@@ -32,6 +32,7 @@ from src.models import (
     RichItem,
     RichReply,
 )
+from src.web.localization import amount_text
 from src.worker.badges import BADGE_TONE, badge_label, derive_badge_kind
 from src.worker.text_scrub import (
     has_marketing_claim,
@@ -509,9 +510,9 @@ def flatten(rich: RichReply, language: str | None = None) -> str:
     if rich.intro:
         lines += [rich.intro, ""]
     for i, it in enumerate(rich.items, 1):
-        head = f"{i}. {it.name}, {it.price:.2f} lei"
+        head = f"{i}. {it.name}, {amount_text(it.price, language)} lei"
         if it.list_price and it.list_price > it.price:  # IZI-anchor: preț redus în floor
-            head += f" (de la {it.list_price:.2f})"
+            head += f" (de la {amount_text(it.list_price, language)})"
         if it.rating:
             head += f"  ⭐{it.rating:.1f}"
         if it.badge:
@@ -813,8 +814,8 @@ def build_comparison(
         eff = float(p["price"])
         lp = p.get("list_price")
         if lp is not None and float(lp) > eff:  # IZI-anchor: preț redus (de la X)
-            return f"{eff:.2f} lei (de la {float(lp):.2f})"
-        return f"{eff:.2f} lei"
+            return f"{amount_text(eff, language)} lei (de la {amount_text(lp, language)})"
+        return f"{amount_text(eff, language)} lei"
 
     # Tier 2: rânduri de DOMENIU (finish/acoperire/potrivit-pentru/..., din `attributes`), între
     # Rating și Disponibilitate. Generice (din DomainPack), deterministe; un rând TOT-gol e sărit.

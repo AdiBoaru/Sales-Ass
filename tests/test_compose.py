@@ -379,7 +379,7 @@ def test_flatten_renders_data_prices_and_disclaimer(monkeypatch) -> None:
         "pick": {"product_id": "A", "justification": "alegere bună"},
     }
     text = compose.flatten(compose.assemble(_ctx(), j, retrieved))
-    assert "34.99 lei" in text and "⭐4.7" in text
+    assert "34,99 lei" in text and "⭐4.7" in text  # preț în format ro, virgulă zecimală
     assert "Recomandarea mea: Crema A" in text  # cu flag ON, pick-ul apare în floor
     assert "Funcționez cu inteligență" in text
 

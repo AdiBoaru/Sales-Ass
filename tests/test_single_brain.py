@@ -251,7 +251,7 @@ async def test_invented_product_rejected_then_fallback(monkeypatch):
     # confirma" cu produsul valid în retrieval; acum cerem paritatea cu v1: faptul real, servit.
     assert "fantoma" not in ctx.reply.text
     assert "LumaDerm" in ctx.reply.text
-    assert "89.00" in ctx.reply.text
+    assert "89,00" in ctx.reply.text
 
 
 async def test_invented_action_intent_rejected(monkeypatch):

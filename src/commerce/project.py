@@ -18,6 +18,7 @@ from typing import Any
 
 from src.commerce.config import CommerceConfig, load_commerce_config
 from src.commerce.delivery import DeliveryPromise, free_shipping_gap, promise
+from src.web.localization import amount_text
 
 #: fusuri uzuale fără dependență externă (zoneinfo lipsește pe unele imagini slim). Necunoscut →
 #: UTC; promisiunea rămâne corectă ca ZI, ora-limită poate fi decalată cu o oră — acceptabil.
@@ -74,4 +75,4 @@ def free_shipping_hint(cart_total: float, business: Any) -> str | None:
     gap = free_shipping_gap(cart_total, cfg.shipping)
     if gap is None:
         return None
-    return f"mai adaugă {gap:.2f} lei și ai transportul gratuit"
+    return f"mai adaugă {amount_text(gap, 'ro')} lei și ai transportul gratuit"

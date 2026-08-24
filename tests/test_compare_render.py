@@ -64,7 +64,7 @@ def test_build_comparison_columns_and_rows():
     labels = {r.label for r in cmp.rows}
     assert {"Preț", "Rating", "Disponibilitate", "Avantaje", "Brand"} <= labels
     price_row = next(r for r in cmp.rows if r.label == "Preț")
-    assert price_row.values == ["58.99 lei", "88.99 lei"]  # fapte din date, nu proză
+    assert price_row.values == ["58,99 lei", "88,99 lei"]  # fapte din date, nu proză; format ro
     avail_row = next(r for r in cmp.rows if r.label == "Disponibilitate")
     assert avail_row.values == ["În stoc", "Stoc limitat"]
 
@@ -186,7 +186,7 @@ def test_flatten_comparison_floor_text():
     cmp = build_comparison(_products(), "ro")
     floor = flatten_comparison(cmp, "ro")
     assert "Crema A" in floor and "Crema B" in floor
-    assert "Preț: 58.99 lei · 88.99 lei" in floor
+    assert "Preț: 58,99 lei · 88,99 lei" in floor
     # celulă lipsă (p2 fără minusuri, p1 cu „tub mic") → randată „—" pe partea goală
     cons_row = next(r for r in cmp.rows if r.label == "De luat în calcul")
     assert cons_row.values == ["tub mic", None]

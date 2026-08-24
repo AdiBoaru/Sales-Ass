@@ -44,6 +44,7 @@ from src.safety.compose import model_hint as safety_model_hint
 from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
 from src.tools.reason_codes import annotate as annotate_reasons
+from src.web.localization import amount_text
 
 # Candidați per retriever înainte de fuziune (P4: pool intern mare, dar tool result rămâne 6×8
 # spre model). ~50 = standardul de product-RAG; recall bun fără să umfle latența.
@@ -225,12 +226,12 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
         avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
         # NX-135: produsul are varianta cerută (search pe variant_label) → fit grounded.
         vmatch = " | are varianta cerută" if p.get("variant_match") else ""
-        variants = _variant_view(p.get("variants"), limit=4)
+        variants = _variant_view(p.get("variants"), limit=4, locale=locale)
         vline = f" | variante: {variants}" if variants else ""
         summ = (p.get("ai_summary") or "")[:120]
         base = (
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
-            f"{float(p['price']):.2f} lei{rating}{avail}{vmatch}{vline}"
+            f"{amount_text(p['price'], locale)} lei{rating}{avail}{vmatch}{vline}"
         )
         if proj:
             a = _pattrs(p)
@@ -246,7 +247,7 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
     return "\n".join(lines)
 
 
-def _variant_view(raw_variants: Any, *, limit: int) -> str:
+def _variant_view(raw_variants: Any, *, limit: int, locale: str = "ro") -> str:
     """Compact variant labels for the model, including per-variant stock when present.
 
     NX-197: NU suprimăm varianta unică aici, deși pe cardul web selectorul cu o singură opțiune e
@@ -262,7 +263,7 @@ def _variant_view(raw_variants: Any, *, limit: int) -> str:
         if not lbl or not vid:
             continue
         pr = v.get("price")
-        price_str = f", {float(pr):.2f} lei" if pr is not None else ""
+        price_str = f", {amount_text(pr, locale)} lei" if pr is not None else ""
         stock = v.get("stock")
         stock_str = f", stoc {int(stock)}" if stock is not None else ""
         attrs = v.get("attributes") if isinstance(v.get("attributes"), dict) else {}
@@ -277,7 +278,7 @@ def _variant_view(raw_variants: Any, *, limit: int) -> str:
         nc_str = f", {float(ncv):g}{ncu}" if ncv and ncu else ""
         ppu = v.get("price_per_unit")
         base = {"ml": "ml", "l": "ml", "g": "g", "kg": "g"}.get(ncu or "")
-        ppu_str = f", {float(ppu):.2f} lei/100{base}" if ppu and base else ""
+        ppu_str = f", {amount_text(ppu, locale)} lei/100{base}" if ppu and base else ""
         labels.append(f"[{vid}] {lbl}{attrs_str}{nc_str}{price_str}{ppu_str}{stock_str}")
     return ", ".join(labels)
 
@@ -286,7 +287,8 @@ def _detail_view(
     p: dict[str, Any], pack: Any = None, locale: str = "ro", delivery: str | None = None
 ) -> str:
     parts = [
-        f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {float(p['price']):.2f} lei",
+        f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — "
+        f"{amount_text(p['price'], locale)} lei",
         f"stoc: {p.get('availability') or '-'}",
     ]
     if p.get("rating"):
@@ -372,7 +374,7 @@ def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str 
     # NX-169: comparație pe DIFERENȚE — o linie/produs cu identitatea + preț, apoi DOAR axele
     # (preț + fațete de domeniu) care DIFERĂ între produse. Diferențiere reală, nu tabel identic.
     heads = [
-        f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {float(p['price']):.2f} lei"
+        f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — {amount_text(p['price'], locale)} lei"
         + (f", {float(p['rating']):.1f}★" if p.get("rating") else "")
         for p in products
     ]
@@ -382,7 +384,10 @@ def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str 
     prices = [round(float(p.get("price") or 0), 2) for p in products]
     if len(set(prices)) > 1:
         diffs.append(
-            "preț: " + " vs ".join(f"{p['name']}={pr:.2f} lei" for p, pr in zip(products, prices))
+            "preț: "
+            + " vs ".join(
+                f"{p['name']}={amount_text(pr, locale)} lei" for p, pr in zip(products, prices)
+            )
         )
     # fațete de domeniu: afișează axa DOAR dacă valorile diferă între produse
     seen_keys: list[str] = []
@@ -1223,7 +1228,10 @@ async def get_product_details_tool(
             subs = await get_substitutes(conn, ctx.business.id, p["id"], limit=2)
         subs, _ = _safety_gate(ctx, subs, purpose="details")
         if subs:
-            alt = "; ".join(f"[{s['id']}] {s['name']} — {float(s['price']):.2f} lei" for s in subs)
+            alt = ", ".join(
+                f"[{s['id']}] {s['name']}, {amount_text(s['price'], ctx.language)} lei"
+                for s in subs
+            )
             view += f" | alternative pe stoc: {alt}"
             products = products + subs
     return ToolResult(ok=True, products=products, llm_view=view)

@@ -22,14 +22,14 @@ def test_variant_view_renders_net_content_and_price_per_unit():
         [_v(net_content_value=50, net_content_unit="ml", price_per_unit=50.0)], limit=4
     )
     assert "50ml" in s  # gramaj
-    assert "50.00 lei/100ml" in s  # preț/unitate (bază ml)
+    assert "50,00 lei/100ml" in s  # preț/unitate (bază ml), format ro
 
 
 def test_variant_view_price_per_unit_grams():
     s = _variant_view(
         [_v(net_content_value=200, net_content_unit="g", price_per_unit=12.5)], limit=4
     )
-    assert "200g" in s and "12.50 lei/100g" in s
+    assert "200g" in s and "12,50 lei/100g" in s
 
 
 def test_variant_view_without_net_content():

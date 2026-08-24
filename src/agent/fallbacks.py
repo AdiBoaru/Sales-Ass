@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.web.localization import amount_text
+
 # Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
 _CHEAPEST_ALREADY: dict[str, str] = {
     "ro": "Momentan asta e cea mai ieftină opțiune pe care o am pentru tine. "
@@ -192,7 +194,7 @@ def _view_label(language: str | None) -> str:
     return _VIEW_LABEL.get(language or "ro") or _VIEW_LABEL["ro"]
 
 
-def _products_brief(products: list[dict[str, Any]]) -> str:
+def _products_brief(products: list[dict[str, Any]], language: str | None = None) -> str:
     lines = []
     for p in products:
         summary = (p.get("ai_summary") or "")[:140]
@@ -205,7 +207,8 @@ def _products_brief(products: list[dict[str, Any]]) -> str:
                 extra += f" | clienții laudă: {laud}"
         lines.append(
             f"- {p['name']} | brand: {p.get('brand') or '-'} | "
-            f"preț: {float(p['price']):.2f} lei{extra} | url: {p.get('url') or '-'} | {summary}"
+            f"preț: {amount_text(p['price'], language)} lei{extra} | "
+            f"url: {p.get('url') or '-'} | {summary}"
         )
     return "\n".join(lines)
 
@@ -228,7 +231,7 @@ def grounded_fallback_reply(products: list[dict[str, Any]]) -> str | None:
 def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     lines = ["Îți recomand:"]
     for p in products[:3]:
-        lines.append(f"• {p['name']}, {float(p['price']):.2f} lei")
+        lines.append(f"• {p['name']}, {amount_text(p['price'], 'ro')} lei")
     lines.append("Vrei detalii sau linkul la vreunul?")
     return "\n".join(lines)
 

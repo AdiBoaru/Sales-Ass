@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from src.db.queries.commerce import get_orders_status
 from src.tools.base import ToolResult, register
+from src.web.localization import amount_text
 from src.worker.order_gate import login_required_for_ctx, no_orders_message, web_unidentified
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ def _orders_view(orders: list[dict[str, Any]]) -> str:
     for o in orders:
         parts = [f"Comanda {o['external_id']}", f"status: {o['status']}"]
         if o.get("total") is not None:
-            parts.append(f"total: {float(o['total']):.2f} {o.get('currency') or 'RON'}")
+            parts.append(f"total: {amount_text(o['total'], 'ro')} {o.get('currency') or 'RON'}")
         if o.get("awb"):
             carrier = o.get("carrier") or "curier"
             parts.append(f"AWB {o['awb']} ({carrier}, {o.get('shipment_status') or '-'})")
