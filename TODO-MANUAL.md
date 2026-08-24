@@ -62,6 +62,13 @@ părea sănătos. Detalii complete: PR #316. Fixul e în `main` (`6a74cf1`), CI 
       `llm_reasoning_disabled_for_tools` din `turn_latency`. Prima ar însemna că plafonul de 800
       de tokeni e prea mic; a doua e normală și doar confirmă că `LLM_REASONING_EFFORT_AGENT` e
       inert pe drumul cu tool-uri (raționament + tool-uri ar cere `/v1/responses`).
+- [ ] **Championul din 24 aug NU s-a înregistrat.** Promovarea lui `6a74cf1` a reușit (producția
+      rulează fixul, verificat cu un tur real), dar smoke-ul a picat pe `503` de la Traefik imediat
+      după deploy, iar pasul „Înregistrează championul" rulează DUPĂ smoke ⇒ sărit. Consecința:
+      `previous_digest` al buildului URMĂTOR arată încă spre `d61753a`, adică spre build-ul CU
+      bugul. Un rollback de la un release viitor ar ateriza înapoi în pană, sărind peste fix.
+      Se repară singur la prima promovare care trece smoke-ul (după #318) — dar până atunci, dacă
+      trebuie rollback, alege ținta manual, nu din manifest.
 - [ ] **Dacă schimbi vreodată `MODEL_AGENT` sau effortul:** pe VPS NU există niciun `MODEL_*` în
       `.env`, deci default-ul din cod E configul de producție. Orice model nou cere o linie în
       `_MODEL_PROFILES` (`src/agent/llm.py`) — altfel nu primește niciun parametru opțional.
