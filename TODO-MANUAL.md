@@ -4,7 +4,7 @@
 > în timp ce Claude scrie codul. Claude adaugă aici pe măsură ce taskurile de cod ating dependențe manuale.
 > Bifează pe măsură ce termini. Secretele merg în `.env` local, NICIODATĂ în repo.
 
-_Ultima actualizare: 2026-08-17_
+_Ultima actualizare: 2026-08-24_
 
 ---
 
@@ -25,6 +25,43 @@ e dovedit pe infrastructură reală.
 Ce a mai rămas (OPȚIONAL / pasul următor):
 - **Deploy VPS** (secțiunea de mai jos) — ca botul să ruleze CONTINUU, nu doar cât e laptopul pornit.
 - **T017 spend limit** — înainte de G3 (botul „inteligent", nu doar echo).
+
+---
+
+## 🔴 INCIDENT 2026-08-24 — creierul de vânzare tăcea în producție (fix merged, AȘTEAPTĂ PROMOVARE)
+
+Din ~08:00 UTC, **orice** cerere de produs pe web a primit plasa de siguranță a pipeline-ului
+(„Hmm, n-am înțeles exact 🙂"). Cauza: promovarea lui `bbb77b3` a adus două schimbări deodată
+(default `model_agent` `gpt-5.4-mini` → `gpt-5.6-luna` ȘI `llm_reasoning_effort_agent="high"`),
+iar cu raționamentul PORNIT furnizorul refuză cu 400 și `temperature` ≠ 1, și function tools.
+4xx e terminal, `agent_stage` îl înghite, triajul (nano) rămâne intact deasupra — deci sistemul
+părea sănătos. Detalii complete: PR #316. Fixul e în `main` (`6a74cf1`), CI verde.
+
+- [ ] **DEBLOCARE IMEDIATĂ, fără să aștepți deployul** (opțional dacă promovezi repede):
+      adaugă în `.env`-ul de pe VPS și repornește `api` + `worker`:
+      ```
+      LLM_REASONING_EFFORT_AGENT=none
+      ```
+      Verificat pe API cu exact configul de producție. **Atenție:** `LLM_SAMPLING_ENABLED=false`
+      NU ajunge (scoate temperatura, lasă `high` ⇒ tool-urile tot dau 400).
+- [ ] **Promovează `6a74cf1` în producție.** Buildul a rulat deja la merge și a trecut
+      (run `32722259041`, `schema_requires=44` ≤ schema aplicată, deci rollbackul are țintă):
+      ```
+      gh workflow run Release \
+        -f digest=sha256:d79bdfb89b04b9adf2f3251f38606938b525b2c893921cada5b462ea414ac440 \
+        -f build_run_id=32722259041
+      ```
+      Apoi **aprobă mediul `production` în UI** (poarta e a ta, nu poate fi trecută din CLI).
+      Digest de rollback, dacă e nevoie: `sha256:b9869c8c…` (`previous_digest` din manifest).
+- [ ] **După promovare, confirmă că vinde** (nu doar că e sus): trimite pe widget „caut un ser
+      pentru ten gras" și verifică că răspunsul NU e fallback-ul. Smoke-ul face asta acum automat.
+- [ ] **De urmărit o săptămână:** degradările `llm_output_truncated_empty` și
+      `llm_reasoning_disabled_for_tools` din `turn_latency`. Prima ar însemna că plafonul de 800
+      de tokeni e prea mic; a doua e normală și doar confirmă că `LLM_REASONING_EFFORT_AGENT` e
+      inert pe drumul cu tool-uri (raționament + tool-uri ar cere `/v1/responses`).
+- [ ] **Dacă schimbi vreodată `MODEL_AGENT` sau effortul:** pe VPS NU există niciun `MODEL_*` în
+      `.env`, deci default-ul din cod E configul de producție. Orice model nou cere o linie în
+      `_MODEL_PROFILES` (`src/agent/llm.py`) — altfel nu primește niciun parametru opțional.
 
 ---
 
