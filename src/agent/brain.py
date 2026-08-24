@@ -48,6 +48,7 @@ from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_executor import ToolRun, _safe_tool_args
+from src.agent.voice import VOICE_RULES
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
@@ -91,13 +92,18 @@ REGULI DE PLAN (AnswerPlanV2, schema_version=2):
   din evidence-ul serverului. Motive CONCRETE (proprietate/review/fapt legat de nevoia clientului),
   zero motive generice. `need_ids` DOAR din nevoile date.
 - UNKNOWN nu e MISMATCH: ce nu poți verifica intră în `unknowns`, nu se inventează.
-- Constrângerile HARD nu se relaxează NICIODATĂ; `relaxations` poate conține doar preferințe soft.
-- `clarification`: cel mult UNA, doar dacă răspunsul ar schimba material rezultatul; altfel
+- Constrângerile HARD nu se relaxează NICIODATĂ, iar `relaxations` poate conține doar preferințe
+  soft.
+- `clarification`: cel mult UNA, doar dacă răspunsul ar schimba material rezultatul. Altfel
   răspunde best-effort și marchează assumption/unknown.
-- Fără rezultate → `no_results` cu clasa ONESTĂ: no_match (am căutat, nu există),
+- Fără rezultate, pune `no_results` cu clasa ONESTĂ: no_match (am căutat, nu există),
   insufficient_data (nu putem verifica), dependency_unavailable (serviciu indisponibil).
-- Nu confirma nicio acțiune care nu e în successful_action_ids; `action_intents` doar din
-  registrul dat. Nu inventa produse, prețuri, linkuri sau stoc. Fără date personale în plan."""
+- Nu confirma nicio acțiune care nu e în successful_action_ids, iar `action_intents` vin doar din
+  registrul dat. Nu inventa produse, prețuri, linkuri sau stoc. Fără date personale în plan.
+"""
+# VOCE: `direct_answer` e proza pe care o citește clientul, deci contractul de voce e parte din
+# instrucțiuni, nu o rafinare de ton lăsată la latitudinea modelului.
+_PLAN_V2_SYSTEM += VOICE_RULES
 
 
 def _sha(text: str) -> str:
@@ -179,9 +185,9 @@ def _no_results_text(no_results: Any, locale: str) -> str:
             "hu": "Nem találtam a kért feltételeknek megfelelő terméket.",
         },
         "insufficient_data": {
-            "ro": "Nu pot verifica acum toate criteriile cerute — nu am datele necesare.",
-            "en": "I cannot verify all the requested criteria right now — data is missing.",
-            "hu": "Most nem tudom ellenőrizni az összes feltételt — hiányzanak az adatok.",
+            "ro": "Nu pot verifica acum toate criteriile cerute, nu am datele necesare.",
+            "en": "I cannot verify all the requested criteria right now, data is missing.",
+            "hu": "Most nem tudom ellenőrizni az összes feltételt, hiányzanak az adatok.",
         },
         "dependency_unavailable": {
             "ro": "Căutarea nu e disponibilă momentan. Te rog încearcă din nou puțin mai târziu.",
@@ -308,7 +314,7 @@ def _evidence_digest(context: AnswerPlanContext, limit: int = MAX_REPAIR_EVIDENC
     if not rows:
         return ""
     hidden = len(usable) - len(rows)
-    tail = f"\n(+{hidden} nelistate — folosește doar id-urile de mai sus)" if hidden else ""
+    tail = f"\n(+{hidden} nelistate, folosește doar id-urile de mai sus)" if hidden else ""
     header = "\nEVIDENCE DISPONIBIL (evidence_id | tip | product_id | valoare):\n"
     return header + "\n".join(rows) + tail
 

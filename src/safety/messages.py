@@ -57,17 +57,17 @@ _UNAVAILABLE: dict[str, str] = {
     "ro": (
         "Țin cont de situația ta, dar acum nu pot verifica dacă produsele sunt potrivite, "
         "așa că prefer să nu-ți recomand nimic pe orbește. Te rog întreabă medicul sau "
-        "farmacistul — sau revino puțin mai târziu."
+        "farmacistul, ori revino puțin mai târziu."
     ),
     "en": (
         "I've noted your situation, but I can't verify right now whether the products are "
         "suitable, so I'd rather not recommend anything blindly. Please ask your doctor or "
-        "pharmacist — or try again a bit later."
+        "pharmacist, or try again a bit later."
     ),
     "hu": (
         "Figyelembe veszem a helyzetedet, de most nem tudom ellenőrizni, hogy a termékek "
         "megfelelőek-e, ezért inkább nem ajánlok semmit vaktában. Kérdezd meg az orvosodat vagy "
-        "a gyógyszerészedet — vagy nézz vissza kicsit később."
+        "a gyógyszerészedet, vagy nézz vissza kicsit később."
     ),
 }
 

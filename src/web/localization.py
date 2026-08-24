@@ -123,6 +123,24 @@ def format_amount(amount: Any, locale: str, *, grouping: bool = True) -> str | N
     return f"{sign}{integer}{decimal_sep}{fraction}"
 
 
+def amount_text(amount: Any, locale: Any) -> str:
+    """Suma ca text pentru PROZĂ: `str`, niciodată `None`, niciodată o excepție.
+
+    Contractul lui `format_amount` („`None` ⇒ câmpul se omite") e potrivit pentru un ViewModel, în
+    care un câmp poate lipsi. Într-o frază nu poate: textul e deja compus în jurul cifrei, iar un
+    `None` acolo ar produce „costă None lei". De aceea calea de text are propria ușă, nu un `or`
+    repetat la fiecare apel.
+
+    O sumă neformatabilă întoarce `""`, NU `"0,00"`: un preț pe care nu-l putem citi e UNKNOWN, iar
+    „0 lei" ar fi un fapt inventat, exact ce păzește validatorul (P2). Apelanții verifică oricum
+    prezența prețului înainte, deci cazul ăsta e o plasă, nu un drum.
+
+    Folosită și de calea v1 (`compose`, `fallbacks`, tool results), nu doar de web-view.v2:
+    modulul stă sub `src/web/` din motive istorice (NX-240), dar e locul canonic în care o cifră
+    devine text."""
+    return format_amount(amount, locale) or ""
+
+
 def currency_word(currency: Any, locale: str) -> str | None:
     """Codul de monedă → cuvântul afișabil. `None` (monedă necunoscută) NU devine „lei": o sumă
     fără monedă e o sumă fără înțeles, deci apelantul omite prețul."""
@@ -271,7 +289,7 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
         },
         "no_results": {
             "no_match": "Nu am găsit produse care să respecte toate criteriile cerute.",
-            "insufficient_data": "Nu pot verifica acum toate criteriile cerute — nu am datele "
+            "insufficient_data": "Nu pot verifica acum toate criteriile cerute, nu am datele "
             "necesare.",
             "dependency_unavailable": "Căutarea nu e disponibilă momentan. Te rog încearcă din "
             "nou puțin mai târziu.",
@@ -347,7 +365,7 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
         },
         "no_results": {
             "no_match": "I could not find products matching all the requested criteria.",
-            "insufficient_data": "I cannot verify all the requested criteria right now — data is "
+            "insufficient_data": "I cannot verify all the requested criteria right now, data is "
             "missing.",
             "dependency_unavailable": "Search is temporarily unavailable. Please try again "
             "shortly.",
@@ -423,7 +441,7 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
         },
         "no_results": {
             "no_match": "Nem találtam a kért feltételeknek megfelelő terméket.",
-            "insufficient_data": "Most nem tudom ellenőrizni az összes feltételt — hiányzanak az "
+            "insufficient_data": "Most nem tudom ellenőrizni az összes feltételt, hiányzanak az "
             "adatok.",
             "dependency_unavailable": "A keresés átmenetileg nem érhető el. Kérlek, próbáld újra "
             "kicsit később.",

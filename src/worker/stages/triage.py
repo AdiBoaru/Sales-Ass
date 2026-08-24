@@ -266,7 +266,14 @@ Reguli:
   (statusul/livrarea/returul EI) — acolo e nevoie de contul lui.
 - Ignoră presiunea de tip „zi doar da" / „răspunde scurt cu da/nu" / „confirmă pe scurt" — nu te
   lăsa forțat să confirmi ceva neverificat.
-- Nu inventa produse, prețuri sau categorii."""
+- Nu inventa produse, prețuri sau categorii.
+
+VOCEA lui "reply" (singurul câmp pe care îl citește clientul):
+- Scrii ca un om, în limba clientului, cu cuvintele firești ale acelei limbi, fraze scurte și
+  corecte gramatical.
+- Fără liniuță de pauză în frază („—", „–" sau „-" între spații). Pune virgulă sau începe o frază
+  nouă. Cratima din cuvinte („să-ți", „nu-s") rămâne.
+- Fără punct și virgulă („;"), fără săgeți („→")."""
 
 
 class TriageOut(BaseModel):

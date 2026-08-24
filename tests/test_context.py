@@ -123,7 +123,7 @@ def test_state_block_shows_products_and_constraints():
         constraints={"buget_max": 100, "gol": ""},
     )
     block = state_block(s)
-    assert "Crema (82.99 lei)" in block and "Ser (120.50 lei)" in block
+    assert "Crema (82,99 lei)" in block and "Ser (120,50 lei)" in block
     # R3: id-ul (UUID) e expus → agentul poate chema tools pe produsele afișate fără re-căutare.
     assert "[p1]" in block and "[p2]" in block
     assert "buget_max: 100" in block
@@ -166,7 +166,7 @@ def _ctx(*, profile=None, products=None) -> TurnContext:
 def test_context_blocks_joins_nonempty():
     ctx = _ctx(profile={"tip_ten": "uscat"}, products=[ProductRef("p1", "Crema", 82.99)])
     blocks = context_blocks(ctx)
-    assert "Profil client:" in blocks and "[p1] Crema (82.99 lei)" in blocks
+    assert "Profil client:" in blocks and "[p1] Crema (82,99 lei)" in blocks
 
 
 def test_context_blocks_empty_when_nothing():
@@ -219,4 +219,4 @@ async def test_agent_prompt_includes_context_blocks():
     await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=_CapLLM()))
 
     assert "Profil client:" in captured["user"]
-    assert "[p1] Crema (82.99 lei)" in captured["user"]  # R3: id-ul produsului afișat în context
+    assert "[p1] Crema (82,99 lei)" in captured["user"]  # R3: id-ul produsului afișat în context

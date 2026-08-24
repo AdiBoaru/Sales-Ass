@@ -30,13 +30,23 @@ from src.config import get_settings
 from src.observability import turn_latency
 from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
 
+# Suma, cu SAU fără separator de mii. Ordinea alternativelor contează: variantele grupate stau
+# ÎNAINTEA celei simple, altfel „1.234,50" s-ar potrivi doar parțial („234,50") și un preț REAL ar
+# fi citit ca o sumă inventată. Formatul românesc („1.234,50") e cel pe care îl scriem noi și cel
+# pe care îl scrie modelul când răspunde firesc în română.
+_AMOUNT = (
+    r"\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?"  # 1.234 / 1.234,50 (grupare ro)
+    r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?"  # 1,234 / 1,234.50 (grupare en)
+    r"|\d{1,6}(?:[.,]\d{1,2})?"  # 89 / 89,00 / 89.00
+)
+
 # NX-117: prinde valuta în SUFIX („89 lei", „89 de lei", „89 ron") ȘI în PREFIX („RON 89", „lei 89")
 # → un preț real prefixat nu e tratat fals ca cifră bară, iar un preț prefixat negroundat e prins.
 # „leu" (singular, ex. „1 leu") ALĂTURI de „lei" (plural) — altfel un preț halucinat de exact 1
 # scapă structural de validator (nici preț cu valută, nici cifră bară pe o singură cifră).
 _PRICE_RE = re.compile(
-    r"\b(?:lei|leu|ron)\s*(\d{1,6}(?:[.,]\d{1,2})?)"  # prefix-valută
-    r"|(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:de\s+)?(?:lei|leu|ron)\b",  # sufix (+ „de lei")
+    rf"\b(?:lei|leu|ron)\s*({_AMOUNT})"  # prefix-valută
+    rf"|({_AMOUNT})\s*(?:de\s+)?(?:lei|leu|ron)\b",  # sufix (+ „de lei")
     re.IGNORECASE,
 )
 _BUDGET_RE = re.compile(
@@ -76,6 +86,29 @@ def _allowed_prices(products: list[dict[str, Any]]) -> list[float]:
     return out
 
 
+def parse_amount(token: str) -> float:
+    """Textul unei sume → valoare, indiferent de convenția de scriere („1.234,50" ro, „1,234.50"
+    en, „89.00", „89,00", „1.500"). Un `replace(",", ".")` naiv citea „1.234,50" ca 1234.50 doar
+    din noroc și „1.500" ca 1.5, adică un preț REAL de 1.500 lei devenea „inventat" (P2 respinge
+    răspunsul, retry, fallback). Determinist, fără localizare: forma decide.
+
+    Regula: cu AMBII separatori, ultimul e cel zecimal. Cu unul singur, e grupare de mii doar dacă
+    apare de mai multe ori SAU e urmat de EXACT 3 cifre cu cel mult 3 înainte („1.500" = 1500);
+    altfel e zecimal („1.5" = 1.5, „89,00" = 89.0). Nimeni nu scrie un preț cu 3 zecimale, deci
+    ambiguitatea „1.500" nu e reală."""
+    t = token.strip()
+    if "." in t and "," in t:
+        cut = max(t.rfind("."), t.rfind(","))
+        return float(re.sub(r"[.,]", "", t[:cut]) + "." + t[cut + 1 :])
+    for sep in (".", ","):
+        if sep in t:
+            parts = t.split(sep)
+            if len(parts) > 2 or (len(parts[-1]) == 3 and len(parts[0]) <= 3):
+                return float("".join(parts))  # grupare de mii
+            return float(f"{parts[0]}.{parts[1]}")  # separator zecimal
+    return float(t)
+
+
 def _prices_ok(
     reply: str, products: list[dict[str, Any]], allowed_prices: set[float] | None = None
 ) -> bool:
@@ -84,7 +117,7 @@ def _prices_ok(
     allowed = _allowed_prices(products) + sorted(allowed_prices or set())
     for m in _PRICE_RE.finditer(reply):
         tok = m.group(1) or m.group(2)  # prefix-valută (grup 1) sau sufix (grup 2)
-        value = float(tok.replace(",", "."))
+        value = parse_amount(tok)
         if not any(abs(value - a) <= 0.5 for a in allowed):
             return False
     return True
@@ -130,12 +163,12 @@ def _bad_bare_numbers(
         return []
     # NX-117: _PRICE_RE are 2 grupuri (prefix/sufix-valută) → finditer + group, nu findall (tuple).
     priced = {
-        float((m.group(1) or m.group(2)).replace(",", ".")) for m in _PRICE_RE.finditer(reply)
+        parse_amount(m.group(1) or m.group(2)) for m in _PRICE_RE.finditer(reply)
     }  # prețurile deja validate în _prices_ok
     allowed = _allowed_numbers(products, grounded_prices)
     bad: list[float] = []
     for token in _BARE_NUM_RE.findall(reply):
-        value = float(token.replace(",", "."))
+        value = parse_amount(token)
         if any(abs(value - p) <= 0.5 for p in priced):  # „89 lei" → numărul 89 e deja acoperit
             continue
         if value in _SAFE_BARE:

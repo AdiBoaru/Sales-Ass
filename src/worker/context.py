@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from src.config import get_settings
 from src.models import Direction, Message
 from src.privacy import make_safe
+from src.web.localization import amount_text
 
 if TYPE_CHECKING:
     from src.models import Contact, ConversationState, TurnContext
@@ -184,6 +185,7 @@ def state_block(
     max_products: int = 3,
     max_chars: int = 600,
     include_constraints: bool = True,
+    language: str | None = None,
 ) -> str:
     """Bloc de state references: produse arătate recent (id + nume + preț, ref-uri — principiul 8)
     + constrângeri știute (buget, tip de ten…). Memoria scurtă pt follow-up coerent. Gol → "".
@@ -199,7 +201,7 @@ def state_block(
     lines: list[str] = []
     if state.displayed_products:
         shown = "; ".join(
-            f"[{p.product_id}] {p.name} ({p.price:.2f} lei)"
+            f"[{p.product_id}] {p.name} ({amount_text(p.price, language)} lei)"
             for p in state.displayed_products[:max_products]
         )
         lines.append(
@@ -299,7 +301,7 @@ def context_blocks(ctx: TurnContext, *, consumer: str | None = None) -> str:
         ("summary", summary_block(ctx)),
         ("profile", customer_profile_block(ctx.contact)),
         ("facts", facts_block(ctx)),  # NX-148: memorie structurată (după profil, înainte de state)
-        ("state", state_block(ctx.state, include_constraints=not v2)),
+        ("state", state_block(ctx.state, include_constraints=not v2, language=ctx.language)),
         # NX-235: snapshotul redus (nevoi active + revocări) DUPĂ state_block — ce e aici e
         # canonic și bate ce s-ar putea deduce din blocurile de mai sus. Gol când v2 e stins.
         ("memory", memory_block(ctx)),

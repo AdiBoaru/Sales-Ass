@@ -87,7 +87,7 @@ def test_delivery_for_accepta_data_ca_string_sau_date():
 
 
 def test_prag_transport_gratuit_doar_cand_lipseste_ceva():
-    assert free_shipping_hint(176.0, _Biz()).startswith("mai adaugă 23.00 lei")
+    assert free_shipping_hint(176.0, _Biz()).startswith("mai adaugă 23,00 lei")
     assert free_shipping_hint(199.0, _Biz()) is None
     assert free_shipping_hint(250.0, _Biz()) is None
 

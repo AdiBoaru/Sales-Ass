@@ -39,11 +39,11 @@ def web_unidentified(ctx: TurnContext) -> bool:
 
 _LOGIN_REQUIRED: dict[str, str] = {
     "ro": "Ca să verific o comandă sau să încep un retur, intră în contul tău pe site și revino "
-    "aici — așa îți pot vedea comenzile în siguranță.",
+    "aici, așa îți pot vedea comenzile în siguranță.",
     "en": "To check an order or start a return, please sign in to your account on the site and "
-    "come back here — that lets me see your orders securely.",
+    "come back here, that lets me see your orders securely.",
     "hu": "Egy rendelés ellenőrzéséhez vagy visszaküldés indításához jelentkezz be a fiókodba az "
-    "oldalon, majd térj vissza ide — így biztonságosan látom a rendeléseidet.",
+    "oldalon, majd térj vissza ide, így biztonságosan látom a rendeléseidet.",
 }
 _HANDOFF_SUFFIX: dict[str, str] = {
     "ro": " Dacă preferi, te pot pune în legătură cu un coleg.",

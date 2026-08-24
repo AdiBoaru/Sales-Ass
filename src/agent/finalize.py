@@ -37,6 +37,7 @@ from src.agent.validator import (
 from src.analytics.demand import clean_ids, product_ids_from_dicts
 from src.config import get_settings
 from src.models import Offer, TurnContext
+from src.web.localization import amount_text
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
 
@@ -117,10 +118,10 @@ async def _finalize(
 
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     prices = _allowed_prices(products) + sorted(allowed_prices or set())
-    allowed = ", ".join(f"{p:.2f} lei" for p in prices)
+    allowed = ", ".join(f"{amount_text(p, language)} lei" for p in prices)
     user = (
         f"Limba clientului: {language}\n{history_block}"
-        f"Întrebare: {query}\nProduse:\n{_products_brief(products)}\n\n"
+        f"Întrebare: {query}\nProduse:\n{_products_brief(products, language)}\n\n"
         f"FOLOSEȘTE EXACT doar aceste prețuri: {allowed}. Niciun alt preț, niciun link inventat."
     )
     try:
@@ -165,7 +166,10 @@ async def _finalize_grounded(
     ):
         return text, ValidationResult(ok=True, reasons=[])
 
-    allowed = ", ".join(f"{p:.2f} lei" for p in sorted(allowed_prices)) or "(fără sume)"
+    allowed = (
+        ", ".join(f"{amount_text(p, language)} lei" for p in sorted(allowed_prices))
+        or "(fără sume)"
+    )
     user = (
         f"Limba clientului: {language}\nDate comandă:\n{facts}\n\n"
         f"FOLOSEȘTE EXACT doar aceste sume: {allowed}. Niciun alt număr, AWB sau link inventat."
@@ -195,7 +199,7 @@ async def _finalize_grounded(
         else ["empty_text"]
     )
     return (
-        "Ți-am verificat comanda 🙂 Îți confirm imediat detaliile exacte — revin la tine.",
+        "Ți-am verificat comanda 🙂 Îți confirm imediat detaliile exacte, revin la tine.",
         ValidationResult(ok=False, reasons=reasons),
     )
 
@@ -257,7 +261,7 @@ def _rich_bundle(
         fac = compose.facet_summary(p, facets, language) if facets else ""
         fac_str = f" | fațete: {fac}" if fac else ""
         lines.append(
-            f"[{p['id']}] {p['name']} | preț {float(p['price']):.2f} lei | "
+            f"[{p['id']}] {p['name']} | preț {amount_text(p['price'], language)} lei | "
             f"rating {rating} | avantaje: {pros_str}{cons_str}{desc_str}{fac_str}"
         )
     return "\n".join(lines)

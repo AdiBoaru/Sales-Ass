@@ -14,10 +14,12 @@ Niciun câmp nou pe TurnContext: harness-ul DOAR citește `ctx` după rulare
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from src.agent.validator import parse_amount
 from src.models import Author, Direction, InboundMessage, Message, ProductRef
 from src.safety import compose as safety_compose
 from src.worker.runner import run_pipeline
@@ -170,6 +172,26 @@ def _product_has_reason(p: dict[str, Any]) -> bool:
     return bool(p.get("best_for")) or bool(p.get("reason_codes"))
 
 
+# Un `must_include` care e o SUMĂ („82.99") descrie un FAPT, nu ortografia lui. De când proza
+# scrie prețul românește („82,99 lei"), o comparație de subșiruri ar raporta „fapt lipsă" pentru un
+# răspuns perfect corect, adică gate-ul ar măsura separatorul zecimal în loc de grounding.
+# NU e o relaxare: un răspuns fără valoarea cerută pică exact ca înainte. Restul token-urilor
+# (text) rămân comparate literal, ca până acum.
+_NUMERIC_FACT = re.compile(r"^\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?$")
+_NUMBER_IN_TEXT = re.compile(r"\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?")
+
+
+def _fact_present(fact: str, text: str) -> bool:
+    """`fact` apare în `text`, ca subșir sau (dacă e o sumă) ca VALOARE, indiferent de scriere."""
+    token = fact.strip()
+    if token.lower() in text.lower():
+        return True
+    if not _NUMERIC_FACT.match(token):
+        return False
+    want = parse_amount(token)
+    return any(abs(parse_amount(m.group()) - want) < 0.005 for m in _NUMBER_IN_TEXT.finditer(text))
+
+
 def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> GoldenResult:
     """Checker PUR peste un `ctx` deja rulat prin pipeline. Verifică, în ordine:
     rută (când e cerută), `expect_reply` (P6), `must_include` (toate prezente),
@@ -189,7 +211,7 @@ def evaluate_reply(ctx: TurnContext, expect: GoldenExpect, *, case_id: str) -> G
 
     haystack = (text or "").lower()
     for fact in expect.must_include:
-        if fact.lower() not in haystack:
+        if not _fact_present(fact, text or ""):
             failures.append(f"fapt lipsă: {fact!r}")
     for bad in expect.forbidden:
         if bad.lower() in haystack:

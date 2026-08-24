@@ -30,6 +30,7 @@ from src.db.queries.commerce import (
 )
 from src.safety.policy import SafetyPolicy
 from src.tools.base import ToolResult, register
+from src.web.localization import amount_text
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
 
 # NX-173 (P0): ce vede modelul când o MUTAȚIE e refuzată de policy. Refuzul se întâmplă ÎNAINTE de
@@ -218,8 +219,13 @@ async def checkout_link_tool(
         product_ids=clean_ids(c["product_id"] for c in cart),
     )
 
-    lines = ", ".join(f"{c['name']} ×{c['quantity']} ({c['price']:.2f} lei)" for c in cart)
-    llm_view = f"Link de checkout creat: {url}\nCoș: {lines} | total {total:.2f} lei"
+    lines = ", ".join(
+        f"{c['name']} ×{c['quantity']} ({amount_text(c['price'], ctx.language)} lei)" for c in cart
+    )
+    llm_view = (
+        f"Link de checkout creat: {url}\n"
+        f"Coș: {lines} | total {amount_text(total, ctx.language)} lei"
+    )
     # `products` (cart) → prețurile produselor sunt grounded; `links` → linkul permis;
     # `prices=[total]` → TOTALUL coșului e grounded (altfel validatorul l-ar respinge).
     return ToolResult(
@@ -310,7 +316,10 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
         products=[p],  # complet → ctx.retrieval + validator de preț
         prices=[total],  # totalul coșului grounded (P8) → validator
         state_patch={"cart": cart},  # ref-uri compacte → persistate de processor
-        llm_view=f"Coș actualizat ({len(cart)} produse): {summary} | total {total:.2f} lei",
+        llm_view=(
+            f"Coș actualizat ({len(cart)} produse): {summary} | "
+            f"total {amount_text(total, ctx.language)} lei"
+        ),
     )
 
 
@@ -409,7 +418,8 @@ async def _checkout_v2(ctx: TurnContext, deps: PipelineDeps, a: CheckoutArgs) ->
         product_ids=clean_ids(str(ln["product_id"]) for ln in out.lines),
     )
     lines_view = ", ".join(
-        f"{ln['name']} ×{ln['quantity']} ({float(ln['price']):.2f} lei)" for ln in out.lines
+        f"{ln['name']} ×{ln['quantity']} ({amount_text(ln['price'], ctx.language)} lei)"
+        for ln in out.lines
     )
     return ToolResult(
         ok=True,
@@ -417,7 +427,10 @@ async def _checkout_v2(ctx: TurnContext, deps: PipelineDeps, a: CheckoutArgs) ->
         links=[url] if url else [],
         prices=[total],
         cart_snapshot=out.snapshot,
-        llm_view=f"Link de checkout creat: {url}\nCoș: {lines_view} | total {total:.2f} lei",
+        llm_view=(
+            f"Link de checkout creat: {url}\n"
+            f"Coș: {lines_view} | total {amount_text(total, ctx.language)} lei"
+        ),
     )
 
 
@@ -492,7 +505,7 @@ async def subscribe_back_in_stock_tool(
         return ToolResult(
             ok=True,
             products=[p],
-            llm_view=f"{p['name']} este pe stoc acum — nu e nevoie de notificare.",
+            llm_view=f"{p['name']} este pe stoc acum, nu e nevoie de notificare.",
         )
     # NX-231: check-then-insert e o SINGURĂ operație atomică → un checkout scurt + o tranzacție
     # internă (`db_tx`), nu o conexiune ținută între apeluri de tool. Guard variant NULL: dacă

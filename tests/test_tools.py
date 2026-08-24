@@ -801,7 +801,7 @@ async def test_get_product_details_lists_variants(monkeypatch):
     monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
     res = await run_tool(_ctx(), _deps(), "get_product_details", {"product_id": "p1"})
     assert "variante:" in res.llm_view and "50ml" in res.llm_view and "100ml" in res.llm_view
-    assert "149.00 lei" in res.llm_view  # prețul per-variantă vizibil modelului
+    assert "149,00 lei" in res.llm_view  # prețul per-variantă vizibil modelului, format ro
     assert "stoc 0" in res.llm_view  # OOS per-variantă vizibil agentului
 
 
