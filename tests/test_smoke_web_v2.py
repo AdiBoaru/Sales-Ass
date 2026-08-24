@@ -22,6 +22,15 @@ HEALTH = (200, {"status": "ok", "release": "abc123"}, '{"status":"ok"}')
 BOOTSTRAP = (200, {"visitor_id": "web_1", "sig": "s"}, '{"visitor_id":"web_1"}')
 
 
+@pytest.fixture(autouse=True)
+def _fara_asteptare_reala(monkeypatch):
+    """Așteptarea de readiness e MĂRGINITĂ în producție, dar aici o vrem instantanee: testăm
+    politica (câte încercări, ce verdict), nu ceasul."""
+    monkeypatch.setattr(smoke, "READY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(smoke, "READY_POLL_S", 0.0)
+    monkeypatch.setattr(smoke.time, "sleep", lambda _s: None)
+
+
 def _wire(monkeypatch, routes):
     """`routes` = listă de (predicat_pe_url, metodă, răspuns). Prima potrivire câștigă."""
     seen: list[tuple[str, str]] = []
@@ -144,7 +153,10 @@ def test_unready_instance_stops_before_sending_traffic(monkeypatch, status):
     assert report["ok"] is False
     assert report["failed_step"] == "health_ready"
     assert report["profile"] == "unknown"
-    assert len(seen) == 1  # nimic după poarta de readiness
+    # Nu mai e „o singură cerere" (readiness se reîncearcă), dar invariantul care CONTA se
+    # păstrează: nu s-a trimis niciun tur — deci nici nu s-a plătit unul.
+    assert {url for _m, url in seen} == {f"{BASE}/health/ready"}
+    assert len(seen) > 1  # a insistat, nu a renunțat la primul 503
 
 
 # ── Poarta care lipsea: „a răspuns" vs „plasa de siguranță a răspuns" ─────────────────────────
@@ -217,3 +229,46 @@ def test_markerul_se_gaseste_si_cand_diacriticele_sunt_escapate():
     escaped = json.dumps({"content": "Hmm, n-am înțeles exact 🙂"}, ensure_ascii=True)
     assert "n-am înțeles" not in escaped  # chiar e escapat, testul verifică ce crede că verifică
     assert smoke._is_runner_fallback(escaped)
+
+
+def test_un_503_de_dupa_deploy_nu_mai_pica_releaseul(monkeypatch):
+    """Regresia din promovarea lui `6a74cf1` (2026-08-24): deployul a reușit, dar smoke-ul a lovit
+    `/health/ready` la 2s după el și a primit `503` de la Traefik, care încă nu re-înregistrase
+    backendul. Releaseul a ieșit roșu peste o promovare bună, iar „Înregistrează championul" a fost
+    sărit — deci ținta de rollback a buildului următor a rămas nescrisă.
+
+    `deploy.sh` așteaptă healthcheck-ul CONTAINERULUI; smoke-ul intră prin EDGE. Sunt două porți,
+    iar a doua n-o aștepta nimeni."""
+    raw = json.dumps(
+        {"content": "Pentru ten gras îți recomand serul X.", "products": [{"id": "p1"}]}
+    )
+    ready = iter([(503, {}, "{}"), (503, {}, "{}"), HEALTH])
+
+    def fake_request(url, *, method="GET", body=None, timeout=15.0):
+        if "/health/ready" in url:
+            return next(ready)
+        if "/web/bootstrap" in url:
+            return BOOTSTRAP
+        if "/web/v2/turns" in url:
+            return (404, {"detail": "not found"}, '{"detail":"not found"}')
+        return (200, json.loads(raw), raw)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    report = smoke.run_smoke(BASE, TOKEN)
+
+    assert report["ok"] is True
+    health = next(s for s in report["steps"] if s["step"] == "health_ready")
+    assert health["attempts"] == 3  # a insistat până a intrat în rotație
+    assert "waited_s" in health  # cât a durat încălzirea ajunge în artefact, nu se pierde
+
+
+def test_o_pana_reala_tot_pica_dupa_ce_expira_asteptarea(monkeypatch):
+    """Așteptarea e MĂRGINITĂ: o instanță care nu-și revine rămâne un eșec, nu o buclă."""
+    seen = _wire(monkeypatch, [("/health/ready", "GET", (503, {}, "{}"))])
+
+    report = smoke.run_smoke(BASE, TOKEN)
+
+    assert report["ok"] is False
+    assert report["failed_step"] == "health_ready"
+    assert {url for _m, url in seen} == {f"{BASE}/health/ready"}

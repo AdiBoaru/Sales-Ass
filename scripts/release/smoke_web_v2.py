@@ -86,6 +86,11 @@ SMOKE_MESSAGE = "caut un produs pentru ten gras, ce îmi recomanzi?"
 #: importă `src`), iar `tests/test_release_smoke.py` ține cele două șiruri sincronizate.
 RUNNER_FALLBACK_MARKER = "n-am înțeles exact"
 
+#: Cât așteptăm ca instanța să intre în rotație la edge după un deploy, și la ce interval. Mărginit
+#: prin construcție: dacă nu devine `ready` în fereastra asta, e o pană reală, nu o încălzire.
+READY_TIMEOUT_S = 60.0
+READY_POLL_S = 3.0
+
 
 class SmokeError(RuntimeError):
     pass
@@ -160,9 +165,41 @@ def _run_steps(
     expect_profile: str,
     report: dict,
 ) -> None:
-    # 1. Readiness
-    status, payload, _ = _request(f"{base}/health/ready")
-    step("health_ready", status == 200, status=status, release=payload.get("release", "unknown"))
+    # 1. Readiness — cu AȘTEPTARE MĂRGINITĂ, nu o singură încercare.
+    #
+    # După un deploy există DOUĂ porți de sănătate, iar `deploy.sh` o așteaptă doar pe prima:
+    # healthcheck-ul containerului (docker, pe `localhost:8000/health/ready`). Smoke-ul intră însă
+    # prin Traefik, care are propriul health check pe backend (`interval=10s`) — între containerul
+    # nou și re-înregistrarea lui la edge, routerul răspunde `503`, semnătura lui pentru „niciun
+    # backend sănătos". Adică `503` imediat după deploy nu înseamnă „aplicația e stricată", ci
+    # „încă nu te-am văzut".
+    #
+    # Măsurat pe promovarea lui `6a74cf1` (2026-08-24): deployul a reușit, aplicația era sus și
+    # răspundea corect câteva minute mai târziu, dar smoke-ul a picat pe PRIMUL pas cu `503` la
+    # 2s după deploy. Releaseul a ieșit roșu peste o promovare reușită, iar pasul „Înregistrează
+    # championul" a fost SĂRIT — deci ținta de rollback a buildului următor a rămas nescrisă. Un
+    # fals negativ aici costă mai mult decât o așteptare de un minut.
+    ready_started = time.monotonic()
+    attempts, status, payload = 0, 0, {}
+    while True:
+        attempts += 1
+        status, payload, _ = _request(f"{base}/health/ready")
+        if status == 200 or time.monotonic() - ready_started >= READY_TIMEOUT_S:
+            break
+        time.sleep(READY_POLL_S)
+    step(
+        "health_ready",
+        status == 200,
+        status=status,
+        release=payload.get("release", "unknown"),
+        attempts=attempts,
+        waited_s=round(time.monotonic() - ready_started, 1),
+    )
+    # Bugetul turului se numără de DUPĂ ce instanța e în rotație: `deadline_s` mărginește cât are
+    # voie să dureze un RĂSPUNS, nu cât durează încălzirea de după deploy. Altfel o pornire lentă
+    # ar consuma bugetul și ar transforma pasul următor într-un timeout care n-are nicio legătură
+    # cu latența produsului.
+    started = time.monotonic()
 
     # 2. Bootstrap
     status, session, _ = _request(f"{base}/web/bootstrap?token={urllib.parse.quote(token)}")
