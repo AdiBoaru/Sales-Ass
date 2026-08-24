@@ -53,6 +53,9 @@ părea sănătos. Detalii complete: PR #316. Fixul e în `main` (`6a74cf1`), CI 
       ```
       Apoi **aprobă mediul `production` în UI** (poarta e a ta, nu poate fi trecută din CLI).
       Digest de rollback, dacă e nevoie: `sha256:b9869c8c…` (`previous_digest` din manifest).
+      **Orice** build de Release din `6a74cf1` încoace conține fixul, deci dacă între timp au
+      mai intrat commituri în `main`, poți promova la fel de bine ultimul build reușit —
+      digestul de mai sus e doar cel mai vechi care repară producția.
 - [ ] **După promovare, confirmă că vinde** (nu doar că e sus): trimite pe widget „caut un ser
       pentru ten gras" și verifică că răspunsul NU e fallback-ul. Smoke-ul face asta acum automat.
 - [ ] **De urmărit o săptămână:** degradările `llm_output_truncated_empty` și
