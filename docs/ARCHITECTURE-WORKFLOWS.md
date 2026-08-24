@@ -1747,6 +1747,7 @@ POST /webhook/orders/{business_id}
 ```
 
 ```claim:jobs
+cleanup_conversation_traces
 cleanup_dedupe
 cleanup_web_turns
 embed_products
@@ -1785,6 +1786,7 @@ conversation_facts_enabled = true
 conversation_sensitive_memory_enabled = false
 conversation_state_v2_enabled = false
 conversation_state_v2_write_enabled = false
+conversation_trace_enabled = false
 cost_guard_enabled = true
 cross_sell_enabled = true
 db_op_metrics_enabled = true
@@ -1925,6 +1927,7 @@ welcome_enabled = true
 042_web_feedback.sql
 043_messages_content_type_action.sql
 044_release_policy_and_turn_capture.sql
+045_conversation_traces.sql
 ```
 
 
