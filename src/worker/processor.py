@@ -1141,6 +1141,17 @@ def _build_fragment(
         "turn_id": turn_id,
         "fragment_index": index,
     }
+    # NX-255: ce s-a ARĂTAT clientului, pe RÂNDUL DE MESAJ, nu doar în outbox. Înainte, produsele
+    # trăiau exclusiv în payload-ul de outbox (canale async) sau nicăieri (web sincron, care iese
+    # mai jos înainte de a-l construi) — deci istoricul reinjectat în promptul turului următor
+    # conținea proza botului fără niciun fapt: „al doilea pe care mi l-ai arătat" nu avea ancoră.
+    # Ref-uri, nu obiecte (P8), în ACEEAȘI formă canonică ca `state.displayed_products`, ca
+    # istoricul și starea să nu poată diverge ca formă. Doar pe primul fragment: split-ul (NX-90)
+    # e același reply, iar cardurile stau oricum pe fragmentul 0.
+    if index == 0 and get_settings().structured_history_enabled and ctx.reply.products:
+        shown = _displayed_product_refs(ctx.reply.products)
+        if shown:
+            message_payload["shown"] = shown[: get_settings().history_shown_max_products]
     # NX-103: cost/tokeni/latență/model pe PRIMUL fragment. Split-ul (frag 2) e același reply →
     # nu dublăm costul. `messages.cost_usd` devine real.
     usage_kwargs = _message_usage_kwargs(ctx.usage) if index == 0 else {}

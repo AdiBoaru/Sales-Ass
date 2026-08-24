@@ -462,6 +462,25 @@ class Settings(BaseSettings):
     # Buget de caractere al blocului de rezumat injectat în prompt (P4).
     summary_max_chars: int = Field(default=600, validation_alias="SUMMARY_MAX_CHARS")
 
+    # --- Istoric structurat (NX-255) ---
+    # OFF → `conversation_transcript` e byte-identic cu comportamentul de dinainte (tăiere oarbă
+    # `[-1200:]`). ON → buget PE ROL: mesajul clientului nu se taie niciodată, iar turul botului
+    # poartă proza integrală PLUS ref-urile produselor arătate atunci (`messages.payload.shown`).
+    structured_history_enabled: bool = Field(
+        default=False, validation_alias="STRUCTURED_HISTORY_ENABLED"
+    )
+    # Plafonul TOTAL al transcriptului (flag ON). Dimensionat din date reale (2026-08-24): o
+    # fereastră de 6 mesaje e ~3 × client (28 chars medie) + 3 × bot (750 medie) + blocurile de
+    # produse arătate. Cel vechi (1200) tăia peste jumătate din fiecare conversație cu 3 ture.
+    history_max_chars: int = Field(default=3500, validation_alias="HISTORY_MAX_CHARS")
+    # Plafon de SIGURANȚĂ per mesaj de client, nu buget: la p90 = 46 și max observat = 134 nu se
+    # atinge niciodată în practică. Există ca un input nelimitat să nu poată mânca tot contextul.
+    history_client_max_chars: int = Field(default=1000, validation_alias="HISTORY_CLIENT_MAX_CHARS")
+    # Câte ref-uri de produs se persistă pe un tur de bot și se reinjectează din istoric.
+    history_shown_max_products: int = Field(
+        default=6, validation_alias="HISTORY_SHOWN_MAX_PRODUCTS"
+    )
+
     # --- Mini-scheduler joburi de mentenanță (NX-83) ---
     # Orchestrează funcțiile run() existente la intervale fixe (rollup nocturn,
     # purjă dedupe, embed incremental). Embed gated suplimentar pe prezența cheii OpenAI.

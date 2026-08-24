@@ -11,6 +11,9 @@ post-tur async (vezi `src.worker.summarizer`).
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.config import get_settings
@@ -23,11 +26,15 @@ if TYPE_CHECKING:
 
 
 def conversation_transcript(
-    history: list[Message], *, max_turns: int = 6, max_chars: int = 1200
+    history: list[Message],
+    *,
+    max_turns: int = 6,
+    max_chars: int = 1200,
+    emit: Callable[..., None] | None = None,
 ) -> str:
     """Transcript compact „Client/Asistent" al mesajelor ANTERIOARE (fără cel curent
     — ultimul din `history` e mesajul în curs de procesare). Gol dacă nu există
-    context anterior. Bugetat: ultimele `max_turns` mesaje, tăiat la `max_chars`.
+    context anterior. Bugetat: ultimele `max_turns` mesaje.
 
     NX-230 — REDACTARE LA CITIRE. De aici încolo mesajele se scriu deja redactate (frontiera din
     `processor.handle_turn`), dar rândurile SCRISE ÎNAINTE de cardul ăsta sunt brute și nu dispar
@@ -36,17 +43,190 @@ def conversation_transcript(
 
     Redactarea la citire e ieftină și idempotentă — un text deja redactat trece neschimbat, deci
     nu plătim de două ori pentru rândurile noi. E și plasa care ține dacă vreun drum de scriere
-    scapă neconvertit: istoricul e ultimul loc de dinaintea promptului."""
+    scapă neconvertit: istoricul e ultimul loc de dinaintea promptului.
+
+    NX-255 — cu `structured_history_enabled` se schimbă DOUĂ lucruri (flag stins ⇒ byte-identic):
+
+    1. **Bugetul e pe ROL, nu un `[-max_chars:]` pe stringul unit.** Tăierea veche era oarbă: nu
+       știa de rol, de granițe de mesaj sau de cuvânt. Măsurat pe date reale, mesajul clientului
+       are ~28 de caractere, iar răspunsul botului ~750 — deci tăierea de coadă arunca exact
+       întrebările (ieftine, esențiale) ca să păstreze proza (scumpă, redundantă), și tăia la
+       mijlocul cuvântului: transcriptul putea începe cu „aza sistemul). Spune-mi te rog…".
+    2. **Turul botului poartă și ce a ARĂTAT** (`messages.payload.shown`, NX-255), cu vechimea în
+       ture. Proza rămâne INTEGRALĂ, deliberat: modelul care își recitește propriul răspuns bun
+       continuă la același nivel, iar asta întărește `VOICE_RULES` cu exemple reale în locul unei
+       reguli abstracte. Separarea rolurilor e regula care face păstrarea prozei sigură: proza
+       spune CUM vorbești, blocul de produse spune CE e adevărat.
+    """
     prior = history[:-1] if history else []
-    lines: list[str] = []
-    for m in prior[-max_turns:]:
-        body = (m.body or "").strip()
-        if not body:
+    if not get_settings().structured_history_enabled:
+        lines: list[str] = []
+        for m in prior[-max_turns:]:
+            body = (m.body or "").strip()
+            if not body:
+                continue
+            safe_body = make_safe(body).text
+            role = "Client" if m.direction == Direction.INBOUND else "Asistent"
+            lines.append(f"{role}: {safe_body}")
+        return "\n".join(lines)[-max_chars:]
+    return _structured_transcript(prior[-max_turns:], total=len(prior), emit=emit)
+
+
+# NX-255 — legenda blocurilor `[a aratat]`. Emisă O SINGURĂ dată și DOAR când există cel puțin un
+# bloc: o regulă despre date inexistente e zgomot care invită la invenție. Spune exact ce e demn
+# de încredere (id + nume, pentru referințe ordinale) și ce nu (cifrele, care sunt datate).
+#
+# Principiul 13: textul ăsta e PROMPT, deci se scrie în vocea pe care o cere. Fără liniuță de pauză
+# și fără punct și virgulă, fiindcă un exemplu cu semnul interzis îl învață pe model exact ce îi
+# interzicem în altă parte. Din același motiv eticheta e „a aratat", fără diacritice: apare și în
+# datele randate, iar potrivirea pe ea nu trebuie să depindă de normalizarea Unicode.
+_SHOWN_LEGEND = (
+    "(Produsele marcate „a aratat” sunt ce ai afișat deja clientului. Id-ul și numele sunt de "
+    "încredere pentru referințe de tipul „al doilea”. Prețurile sunt de atunci, deci reconfirmă-le "
+    "printr-un tool înainte să le rostești.)"
+)
+
+
+def _shown_refs(m: Message, cap: int) -> list[dict]:
+    """Ref-urile produselor afișate în turul `m`, din `messages.payload.shown` (NX-255).
+    Defensiv pe orice formă veche/parțială: un rând scris înainte de card n-are cheia, iar un
+    payload stricat nu trebuie să rupă promptul — degradează la „fără bloc", nu la excepție.
+
+    NX-230: numele trece prin `make_safe` ca și corpul mesajului. Un nume de produs nu e PII, dar
+    poarta de redactare nu se ocolește pe un drum nou doar fiindcă azi datele par curate: `payload`
+    e scris de cod, însă istoricul e ultimul loc dinaintea promptului, iar plasa de acolo trebuie
+    să acopere TOT ce pleacă, nu doar câmpurile despre care presupunem că sunt riscante."""
+    payload = m.payload or {}
+    raw = payload.get("shown")
+    if not isinstance(raw, list):
+        return []
+    refs: list[dict] = []
+    for p in raw[:cap]:
+        if not isinstance(p, dict):
             continue
-        safe_body = make_safe(body).text
-        role = "Client" if m.direction == Direction.INBOUND else "Asistent"
-        lines.append(f"{role}: {safe_body}")
-    return "\n".join(lines)[-max_chars:]
+        pid, name, price = p.get("product_id"), p.get("name"), p.get("price")
+        if pid is None or name is None or price is None:
+            continue
+        refs.append({"product_id": str(pid), "name": make_safe(str(name)).text, "price": price})
+    return refs
+
+
+def _render_shown(refs: list[dict], *, age: int) -> str:
+    """Blocul `[a aratat]` — JSON compact, cu vechimea în TURE. Vechimea e explicită fiindcă un
+    preț de acum patru ture nu e o minciună, e un fapt datat: diferența trebuie să stea în date,
+    nu în presupunerea modelului. Cheile sunt scurte (`id`/`n`/`p`) doar aici, la randare; forma
+    canonică persistată rămâne cea din `state.displayed_products`, ca să nu existe două
+    adevăruri."""
+    items = json.dumps(
+        [{"id": r["product_id"], "n": r["name"], "p": r["price"]} for r in refs],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    when = "în turul precedent" if age <= 1 else f"acum {age} ture"
+    return f"Asistent [a aratat, {when}]: {items}"
+
+
+def _trim_sentence(text: str, limit: int) -> str:
+    """Taie `text` la cel mult `limit` caractere, la ultima graniță de PROPOZIȚIE, altfel la
+    ultimul spațiu. Niciodată la mijlocul cuvântului — exact defectul pe care NX-255 îl repară."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    if cut >= limit // 3:
+        return head[: cut + 1]
+    cut = head.rfind(" ")
+    return (head[:cut] if cut >= limit // 3 else head).rstrip() + "…"
+
+
+@dataclass
+class _Entry:
+    """O linie de transcript, cu ce se poate sacrifica din ea. `role` decide politica: linia de
+    client e INTANGIBILĂ, proza botului e primul lucru care cedează, blocul de fapte al botului
+    supraviețuiește prozei (ancora contează mai mult decât retorica)."""
+
+    role: str  # "client" | "assistant" | "shown"
+    text: str
+    droppable: bool  # proza botului: se poate scurta/elimina păstrând restul turului
+
+
+def _structured_transcript(
+    msgs: list[Message], *, total: int, emit: Callable[..., None] | None
+) -> str:
+    """Transcriptul cu buget PE ROL (NX-255). Ordinea de degradare, deterministă:
+
+    1. se scurtează proza celor mai vechi ture de bot, la limită de propoziție, păstrându-le
+       blocul `[a arătat]` (faptele supraviețuiesc retoricii);
+    2. dacă tot nu încape, se ELIMINĂ intrări întregi, de la cea mai veche;
+    3. mesajul clientului nu se taie NICIODATĂ, și nimic nu se taie la mijlocul cuvântului.
+
+    Distincția „drop vs truncate" e deliberată: eliminarea unei intrări păstrează coerența, tăierea
+    la mijlocul cuvântului o distruge și produce exact fragmentul fără cap din findingul cardului.
+    """
+    s = get_settings()
+    entries: list[_Entry] = []
+    shown_turns = 0
+    for i, m in enumerate(msgs):
+        body = (m.body or "").strip()
+        if m.direction == Direction.INBOUND:
+            if not body:
+                continue
+            # Plafon de SIGURANȚĂ, nu buget: la max observat 134 de caractere nu se atinge. Există
+            # ca un input nelimitat să nu poată mânca tot contextul, și taie tot la propoziție.
+            safe = _trim_sentence(make_safe(body).text, s.history_client_max_chars)
+            entries.append(_Entry("client", f"Client: {safe}", False))
+            continue
+        if body:
+            entries.append(_Entry("assistant", f"Asistent: {make_safe(body).text}", True))
+        refs = _shown_refs(m, s.history_shown_max_products)
+        if refs:
+            shown_turns += 1
+            # Vechimea se numără în TURE de la mesajul curent (care nu e în `msgs`), nu în mesaje:
+            # „acum 3 ture" e ce înțelege un om și ce poate compara modelul cu `age_turns` din
+            # evidence bundle (NX-240). Un tur = o pereche client/asistent, deci jumătate din pași.
+            age = max(1, (len(msgs) - i + 1) // 2)
+            entries.append(_Entry("shown", _render_shown(refs, age=age), False))
+
+    if not entries:
+        return ""
+
+    legend = [_SHOWN_LEGEND] if shown_turns else []
+
+    def rendered(items: list[_Entry]) -> str:
+        return "\n".join(legend + [e.text for e in items])
+
+    budget = s.history_max_chars
+    trimmed = dropped = 0
+    # (1) scurtează proza botului, de la cea mai VECHE (cea mai recentă e cea mai relevantă).
+    for e in entries:
+        if len(rendered(entries)) <= budget:
+            break
+        if not e.droppable:
+            continue
+        over = len(rendered(entries)) - budget
+        keep = max(len(e.text) - over, 120)
+        if keep < len(e.text):
+            e.text = _trim_sentence(e.text, keep)
+            trimmed += 1
+    # (2) elimină intrări întregi, tot de la cea mai veche. Mesajul clientului poate DISPĂREA
+    # (fereastra e mărginită prin definiție), dar nu poate fi mutilat — vezi (3).
+    while len(rendered(entries)) > budget and len(entries) > 1:
+        entries.pop(0)
+        dropped += 1
+
+    if emit is not None:
+        client_chars = sum(len(e.text) for e in entries if e.role == "client")
+        emit(
+            "history_budget",
+            client_chars=client_chars,
+            assistant_chars=sum(len(e.text) for e in entries if e.role == "assistant"),
+            shown_chars=sum(len(e.text) for e in entries if e.role == "shown"),
+            shown_turns=shown_turns,
+            trimmed_prose=trimmed,
+            dropped_entries=dropped,
+            window_messages=total,
+        )
+    return rendered(entries)
 
 
 def customer_profile_block(contact: Contact, *, max_chars: int = 300) -> str:

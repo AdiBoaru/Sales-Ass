@@ -101,9 +101,9 @@ async def get_recent_messages(
     limit = min(limit, HISTORY_LIMIT)
     rows = await conn.fetch(
         """
-        select direction, author, body, content_type, created_at
+        select direction, author, body, content_type, created_at, payload
         from (
-            select direction, author, body, content_type, created_at
+            select direction, author, body, content_type, created_at, payload
             from messages
             where business_id = $1 and conversation_id = $2
             order by created_at desc
@@ -122,9 +122,24 @@ async def get_recent_messages(
             body=r["body"],
             content_type=r["content_type"],
             created_at=r["created_at"],
+            payload=_decode_payload(r["payload"]),
         )
         for r in rows
     ]
+
+
+def _decode_payload(raw: Any) -> dict[str, Any] | None:
+    """`messages.payload` (jsonb) → dict. Fără codec de tip pe pool, asyncpg întoarce jsonb ca
+    `str` — aceeași convenție defensivă ca `conversations.state`. Orice formă neașteptată
+    (json invalid, scalar, null) → `None`: istoricul degradează la proză, nu crapă turul."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return None
+    return raw if isinstance(raw, dict) else None
 
 
 async def get_turn_messages(

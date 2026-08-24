@@ -1054,7 +1054,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)
 
-    history = conversation_transcript(ctx.history)
+    history = conversation_transcript(ctx.history, emit=ctx.emit)
     context = context_blocks(ctx, consumer="agent")
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
