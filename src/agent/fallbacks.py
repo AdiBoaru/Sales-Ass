@@ -76,7 +76,7 @@ def _is_short_ack(text: str | None) -> bool:
 # alternativă). Generic pe vertical (formularea nu e specifică beauty).
 _CART_CONFIRM: dict[str, str] = {
     "ro": "Gata, am adăugat {name} în coș 🛒 Iată ce merge bine cu el:",
-    "en": "Done — I added {name} to your cart 🛒 Here's what pairs well with it:",
+    "en": "Done, I added {name} to your cart 🛒 Here's what pairs well with it:",
     "hu": "Kész, betettem a kosaradba: {name} 🛒 Íme, ami jól illik hozzá:",
 }
 _CROSS_SELL_QUERY: dict[str, str] = {
@@ -228,7 +228,7 @@ def grounded_fallback_reply(products: list[dict[str, Any]]) -> str | None:
 def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     lines = ["Îți recomand:"]
     for p in products[:3]:
-        lines.append(f"• {p['name']} — {float(p['price']):.2f} lei")
+        lines.append(f"• {p['name']}, {float(p['price']):.2f} lei")
     lines.append("Vrei detalii sau linkul la vreunul?")
     return "\n".join(lines)
 

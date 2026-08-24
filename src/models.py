@@ -635,12 +635,20 @@ class TurnContext:
         inclusiv modelul, dacă a preluat formularea din contextul primit. Un hit de mâine ar
         servi „mai ai 2 ore" la ora 20:00. Plasa stă AICI, în singurul punct prin care trec
         toate răspunsurile, nu la fiecare call-site.
+
+        VOCE: din același motiv, tot aici trece `naturalize` — liniuța de pauză și punctul-și-
+        virgula pe care modelul le pune oricât de clar i-ai cere să nu. Rulează DUPĂ validator
+        (care e în `finalize`), și schimbă doar punctuația, deci nu poate reintroduce o cifră sau
+        un link pe care validatorul tocmai le-a verificat.
         """
+        from src.agent.voice import naturalize  # noqa: PLC0415 — evită ciclul
         from src.commerce.delivery import has_time_sensitive_text  # noqa: PLC0415 — evită ciclul
 
         if cacheable and has_time_sensitive_text(text):
             cacheable = False
-        self.reply = Reply(text=text, kind=kind, products=products, cacheable=cacheable)
+        self.reply = Reply(
+            text=naturalize(text) or "", kind=kind, products=products, cacheable=cacheable
+        )
 
     def set_rich_reply(
         self,
@@ -653,9 +661,18 @@ class TurnContext:
         """Setează un reply BOGAT (model iZi) → early exit la Sender. `text` = aplatizarea
         deterministă a lui `rich` (floor pt canale fără rich + messages.body + log). `products`
         = cardurile compacte (pt cache signature). `cacheable=False` implicit: răspunsul bogat
-        se regenerează (cache-ul ar servi doar textul aplatizat). Owner: stagiul agent."""
+        se regenerează (cache-ul ar servi doar textul aplatizat). Owner: stagiul agent.
+
+        Câmpurile lui `rich` sunt deja trecute prin `naturalize` de scrub-urile din `compose`;
+        aici rămâne aplatizarea (plasă idempotentă, vezi `set_reply`)."""
+        from src.agent.voice import naturalize  # noqa: PLC0415 — evită ciclul
+
         self.reply = Reply(
-            text=text, kind="message", products=products, rich=rich, cacheable=cacheable
+            text=naturalize(text) or "",
+            kind="message",
+            products=products,
+            rich=rich,
+            cacheable=cacheable,
         )
 
     def set_comparison_reply(
@@ -672,8 +689,10 @@ class TurnContext:
         `displayed_products`, ca un follow-up „adaugă prima" să le regăsească). `chips` =
         follow-up-uri din partea clientului (voce de client → fără scrub). Non-cacheabil (relativ
         la setul afișat al ACESTUI client). Owner: stagiul agent."""
+        from src.agent.voice import naturalize  # noqa: PLC0415 — evită ciclul
+
         self.reply = Reply(
-            text=text,
+            text=naturalize(text) or "",
             kind="message",
             products=products,
             comparison=comparison,

@@ -271,7 +271,7 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
         },
         "no_results": {
             "no_match": "Nu am găsit produse care să respecte toate criteriile cerute.",
-            "insufficient_data": "Nu pot verifica acum toate criteriile cerute — nu am datele "
+            "insufficient_data": "Nu pot verifica acum toate criteriile cerute, nu am datele "
             "necesare.",
             "dependency_unavailable": "Căutarea nu e disponibilă momentan. Te rog încearcă din "
             "nou puțin mai târziu.",
@@ -347,7 +347,7 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
         },
         "no_results": {
             "no_match": "I could not find products matching all the requested criteria.",
-            "insufficient_data": "I cannot verify all the requested criteria right now — data is "
+            "insufficient_data": "I cannot verify all the requested criteria right now, data is "
             "missing.",
             "dependency_unavailable": "Search is temporarily unavailable. Please try again "
             "shortly.",
@@ -423,7 +423,7 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
         },
         "no_results": {
             "no_match": "Nem találtam a kért feltételeknek megfelelő terméket.",
-            "insufficient_data": "Most nem tudom ellenőrizni az összes feltételt — hiányzanak az "
+            "insufficient_data": "Most nem tudom ellenőrizni az összes feltételt, hiányzanak az "
             "adatok.",
             "dependency_unavailable": "A keresés átmenetileg nem érhető el. Kérlek, próbáld újra "
             "kicsit később.",

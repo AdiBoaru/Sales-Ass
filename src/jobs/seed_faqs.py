@@ -68,11 +68,11 @@ BASE_FAQS_RO: list[tuple[str, str]] = [
     (
         "Cum știu că s-a confirmat comanda?",
         "Primești imediat un e-mail de confirmare cu detaliile comenzii. Dacă nu îl găsești, "
-        "verifică și folderul spam; îți pot confirma și eu starea dacă îmi spui numărul comenzii.",
+        "verifică și folderul spam. Îți pot confirma și eu starea dacă îmi spui numărul comenzii.",
     ),
     (
         "Pot anula sau modifica o comandă?",
-        "Poți anula sau modifica comanda doar înainte să fie procesată și expediată; după "
+        "Poți anula sau modifica comanda doar înainte să fie procesată și expediată. După "
         "expediere, opțiunea rămâne returul. Scrie-ne cât mai repede ca să putem interveni.",
     ),
     (
@@ -95,7 +95,7 @@ BASE_FAQS_RO: list[tuple[str, str]] = [
     ),
     (
         "Pot plăti ramburs la livrare?",  # (OC)
-        "Da, accepți plata ramburs la curier — cash sau card în momentul livrării. La unele "
+        "Da, poți plăti ramburs la curier, cash sau card în momentul livrării. La unele "
         "comenzi se poate adăuga un comision de ramburs, afișat la finalizarea comenzii.",
     ),
     # --- retur ---
@@ -188,7 +188,7 @@ BASE_FAQS_RO: list[tuple[str, str]] = [
     (
         "Cum vă contactez? Pot vorbi cu un om?",
         "Mă poți întreba aici orice, iar dacă ai nevoie de un coleg din echipă te pot pune în "
-        "legătură cu un operator uman. Pentru o reclamație, scrie-ne întâi nouă; dacă nu găsim "
+        "legătură cu un operator uman. Pentru o reclamație, scrie-ne întâi nouă. Dacă nu găsim "
         "o soluție, te poți adresa ANPC (anpc.ro) ori platformei SOL a Comisiei Europene.",
     ),
 ]

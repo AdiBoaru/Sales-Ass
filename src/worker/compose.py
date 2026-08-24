@@ -20,6 +20,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from src.agent.fallbacks import _card_variants
+from src.agent.voice import naturalize
 from src.config import get_settings
 from src.models import (
     Chip,
@@ -73,17 +74,17 @@ def _pick_label(language: str | None) -> str:
 _OFF_CATEGORY_INTRO: dict[str, str] = {
     "ro": (
         "Ca să fiu sincer, nu am exact ce cauți în gama de acum. Ți-am pus totuși mai jos cele "
-        "mai apropiate opțiuni — s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în "
+        "mai apropiate opțiuni, s-ar putea să ți se potrivească. Spune-mi dacă vreuna merge în "
         "direcția bună sau caut cu totul altceva."
     ),
     "en": (
         "To be honest, I don't have exactly what you're looking for in the current range. Still, "
-        "here are the closest options I could find — they might suit you. Tell me if any of these "
+        "here are the closest options I could find, they might suit you. Tell me if any of these "
         "is heading in the right direction, or I'll look for something else entirely."
     ),
     "hu": (
         "Őszintén szólva, pontosan azt, amit keresel, most nincs a kínálatban. De összeszedtem a "
-        "legközelebbi lehetőségeket — lehet, hogy megfelelnek. Mondd meg, ha valamelyik jó irányba "
+        "legközelebbi lehetőségeket, lehet, hogy megfelelnek. Mondd meg, ha valamelyik jó irányba "
         "mutat, vagy keresek valami egészen mást."
     ),
 }
@@ -142,7 +143,7 @@ def scrub_prose(s: str | None) -> str | None:
         return None
     if _unsafe_medical(t):  # P0-safety: sfat medical/terapeutic → DROP câmpul
         return None
-    return t
+    return naturalize(t)  # VOCE: liniuța de pauză / „;" din proza modelului (doar punctuație)
 
 
 def _allowed_client_numbers(ctx: TurnContext) -> set[str]:
@@ -172,7 +173,7 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
     if unknown or has_marketing_claim(t) or _unsafe_medical(t):
         # NX-117: pct + claim + super (cifrele clientului permise). P0-safety: claim medical → DROP.
         return None
-    return t
+    return naturalize(t)  # VOCE: vezi `scrub_prose`
 
 
 def _safe_badge(label: str | None) -> str | None:
@@ -213,14 +214,17 @@ def _recommendation_anchor(p: dict[str, Any], index: int | None = None) -> str |
 def _join_reason(fit: str | None, anchor: str | None) -> str | None:
     """Motivul cardului = clauza de potrivire (LLM, scrubuită) — avantaj real (dată). Dedup:
     dacă clauza modelului și avantajul real sunt cvasi-identice (unul îl conține pe altul, după
-    lower+collapse), NU le lipi „X — X" (bug live: „…confortabilă și calmă — …confortabilă și
-    calmă") — păstrează clauza modelului (mai contextuală)."""
+    lower+collapse), NU le lipi „X, X" (bug live: „…confortabilă și calmă, …confortabilă și
+    calmă") — păstrează clauza modelului (mai contextuală).
+
+    VOCE: separatorul e virgulă, nu liniuță de pauză. Codul nu are voie să scrie pe cardul
+    clientului exact semnul pe care i-l interzicem modelului."""
     if fit and anchor:
         nf = " ".join(fit.lower().split())
         na = " ".join(anchor.lower().split())
         if na in nf or nf in na:  # cvasi-duplicat → o singură dată
             return fit
-        return f"{fit} — {anchor}"
+        return f"{fit.rstrip('.')}, {anchor}"
     return fit or anchor
 
 
@@ -505,7 +509,7 @@ def flatten(rich: RichReply, language: str | None = None) -> str:
     if rich.intro:
         lines += [rich.intro, ""]
     for i, it in enumerate(rich.items, 1):
-        head = f"{i}. {it.name} — {it.price:.2f} lei"
+        head = f"{i}. {it.name}, {it.price:.2f} lei"
         if it.list_price and it.list_price > it.price:  # IZI-anchor: preț redus în floor
             head += f" (de la {it.list_price:.2f})"
         if it.rating:
@@ -519,7 +523,7 @@ def flatten(rich: RichReply, language: str | None = None) -> str:
     # floor (WhatsApp/Telegram/cache), nu doar pe web (`flatten_framing`). Reactivabil din env.
     if rich.pick and get_settings().rich_pick_web_enabled:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
-        head = f"{_pick_label(language)}{name} — " if name else "👉 "
+        head = f"{_pick_label(language)}{name}, " if name else "👉 "
         lines += ["", head + rich.pick[1]]
     if rich.education:
         lines += ["", rich.education]
@@ -553,7 +557,7 @@ def flatten_framing(rich: RichReply, language: str | None = None) -> str:
     # cardul vorbește de la sine). Pe WhatsApp `flatten` îl pune oricum — vezi docstring.
     if get_settings().rich_pick_web_enabled and rich.pick and len(rich.items) > 1:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
-        head = f"{_pick_label(language)}{name} — " if name else "👉 "
+        head = f"{_pick_label(language)}{name}, " if name else "👉 "
         blocks.append(head + rich.pick[1])
     if rich.education:  # coaching de final (model iZi) — randat și pe widget acum
         blocks.append(rich.education)
@@ -574,7 +578,7 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "pros": "Avantaje",
         "cons": "De luat în calcul",
         "brand": "Brand",
-        "lead": "Iată diferențele principale — alege în funcție de ce contează pentru tine.",
+        "lead": "Iată diferențele principale, alege în funcție de ce contează pentru tine.",
         "cheapest": "Cea mai accesibilă: {name}.",
         "top_rated": "Cea mai bine cotată: {name}.",
     },
@@ -586,7 +590,7 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "pros": "Pros",
         "cons": "To consider",
         "brand": "Brand",
-        "lead": "Here are the main differences — pick based on what matters to you.",
+        "lead": "Here are the main differences, pick based on what matters to you.",
         "cheapest": "Most affordable: {name}.",
         "top_rated": "Top rated: {name}.",
     },
@@ -598,7 +602,7 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "pros": "Előnyök",
         "cons": "Megfontolandó",
         "brand": "Márka",
-        "lead": "Íme a fő különbségek — válassz aszerint, ami neked fontos.",
+        "lead": "Íme a fő különbségek, válassz aszerint, ami neked fontos.",
         "cheapest": "A legkedvezőbb: {name}.",
         "top_rated": "A legjobbra értékelt: {name}.",
     },
@@ -615,11 +619,15 @@ def _labels(language: str | None) -> dict[str, str]:
 
 
 def _join_list(raw: Any, n: int) -> str | None:
-    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—")."""
+    """Primele `n` elemente ne-goale ca text (avantaje/minusuri din recenzii). Gol → None („—").
+
+    Separatorul e „ · ", nu „; ": celula ajunge pe ecranul clientului, iar punctul-și-virgula e
+    unul dintre semnele care fac textul să sune a AI. Virgula n-ar merge (avantajele conțin ele
+    însele virgule, deci granița dintre elemente s-ar pierde), punctul median o păstrează."""
     if not isinstance(raw, (list, tuple)):
         return None
     items = [s.strip() for s in raw if isinstance(s, str) and s.strip()]
-    return "; ".join(items[:n]) or None
+    return " · ".join(items[:n]) or None
 
 
 def _comparison_lead(chosen: list[dict[str, Any]], language: str | None) -> str:

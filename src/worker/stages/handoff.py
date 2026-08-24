@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 # (escaladarea + confirmarea sunt terminale prin natura lor) → finalizează întotdeauna.
 FAST_PATH_COVERS: tuple[str, ...] = ("handoff",)
 
-_HANDOFF_REPLY = "Te conectez cu un coleg din echipă — îți răspunde cineva în cel mai scurt timp 🙂"
+_HANDOFF_REPLY = "Te conectez cu un coleg din echipă, îți răspunde cineva în cel mai scurt timp 🙂"
 
 
 async def handoff_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

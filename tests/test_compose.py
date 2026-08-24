@@ -90,7 +90,7 @@ def test_assemble_intro_keeps_budget_from_client_message() -> None:
 
 
 def test_join_reason_dedupes_quasi_duplicate() -> None:
-    # bug live: clauza modelului ≈ avantajul real → nu „X — X", doar clauza
+    # bug live: clauza modelului ≈ avantajul real → nu „X, X", doar clauza
     assert (
         compose._join_reason(
             "lasă pielea mai confortabilă și calmă, pentru pregătirea pielii",
@@ -98,10 +98,11 @@ def test_join_reason_dedupes_quasi_duplicate() -> None:
         )
         == "lasă pielea mai confortabilă și calmă, pentru pregătirea pielii"
     )
-    # distincte → se lipesc normal (comportament păstrat)
+    # distincte → se lipesc cu VIRGULĂ, nu cu liniuță de pauză (regula de voce: semnul pe care
+    # i-l interzicem modelului nu are voie să vină din cod pe cardul clientului)
     assert (
         compose._join_reason("pentru hidratare zilnică", "hidratează intens")
-        == "pentru hidratare zilnică — hidratează intens"
+        == "pentru hidratare zilnică, hidratează intens"
     )
     assert compose._join_reason("doar fit", None) == "doar fit"
     assert compose._join_reason(None, "doar anchor") == "doar anchor"
@@ -272,7 +273,7 @@ def test_assemble_review_anchor_kill_switch_restores_legacy_fallback(monkeypatch
         "suggestions": [],
     }
     rich = compose.assemble(_ctx(), j, retrieved)
-    assert rich.items[0].reason == "bun — primul"
+    assert rich.items[0].reason == "bun, primul"
 
 
 # --- ARCH-2026 P0: ordine de carduri + pick DETERMINISTE (model narează, cod clasează) ----------

@@ -855,6 +855,17 @@ poartă pe worker și pe `/web/chat`). Detalii: `docs/db_connections.md`.
 10. **Observabilitate din runner** — stagiile nu știu că sunt măsurate; runner-ul scrie event-ul
 11. **Limba e parte din cheie** — orice lookup în faqs / semantic_cache / wa_templates include locale. Un cache hit în limba greșită e un bug, nu un hit. **Pilotul e `ro-RO`, dar nucleul rămâne locale-aware (D3): nu hardcoda română** — limba activă e configurație, nu constantă
 12. **PII trăiește într-un loc** — `channel_identities` (telefon E.164 / id canal, + hash). Nicăieri altundeva. Logurile nu conțin telefoane (redaction în logger)
+13. **Vocea e cod, nu speranță** — un mesaj nu trebuie să „se vadă că e făcut cu AI". În textul
+    către client NU există liniuță de pauză („—", „–" sau „-" între spații) și nici punct și
+    virgulă. Cratima din cuvinte („să-ți", „nu-s") rămâne, e ortografie. Regula trăiește în
+    [`src/agent/voice.py`](src/agent/voice.py): `VOICE_RULES` intră în TOATE prompturile de
+    compunere (bucla de tool-calling, retry, rich, status comandă, triaj, MainBrain), iar
+    `naturalize()` e plasa DETERMINISTĂ din `TurnContext.set_reply` + scrub-urile din `compose`
+    (pură, idempotentă, atinge doar punctuația → nu poate invalida un text tocmai validat).
+    Două consecințe practice: (a) prompturile se scriu ÎN vocea pe care o cer, fiindcă un exemplu
+    cu liniuță în prompt îl învață pe model exact ce îi interzici (așa a picat prima încercare de
+    a impune regula doar prin memorie); (b) nici textele DETERMINISTE ale codului (fallback-uri,
+    lead-uri de comparație, copy localizat) n-au voie să folosească semnul interzis.
 
 ---
 
@@ -975,6 +986,8 @@ nativx-assistant/
 │   ├── agent/
 │   │   ├── evidence_bundle.py   ← NX-240: faptele turului (known/unknown/stale + sursă), înghețate
 │   │   ├── grounding_guard.py   ← NX-240: poarta de adevăr plan→fapte (respinge vs omite)
+│   │   ├── voice.py             ← vocea răspunsului: `VOICE_RULES` (în toate prompturile de
+│   │   │                          compunere) + `naturalize` (plasa deterministă, principiul 13)
 │   │   ├── prompt_builder.py    ← system prompt generat din categories
 │   │   ├── reference_resolver.py← NX-234/235: „acesta"/„prima" → produs; precedență UNICĂ
 │   │   │                          (action>named>ordinal>page>selected>single), stale = refuz
