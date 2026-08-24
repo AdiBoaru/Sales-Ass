@@ -203,6 +203,19 @@ def test_client_truncation_is_counted_not_silent(structured, monkeypatch):
     assert events[0][1]["trimmed_client"] == 1
 
 
+def test_consumer_distinguishes_triage_from_agent(structured):
+    """Sub calea live, triajul ȘI agentul construiesc transcriptul, deci evenimentul pleacă de
+    două ori pe același tur. Fără etichetă, orice agregare dublează tăcut octeții istoricului."""
+    seen: list[str] = []
+    for who in ("triage", "agent"):
+        conversation_transcript(
+            [_client("q"), _bot("r", REFS), _client("acum")],
+            emit=lambda t, **p: seen.append(p["consumer"]),
+            consumer=who,
+        )
+    assert seen == ["triage", "agent"]
+
+
 def test_client_not_counted_as_trimmed_at_real_world_lengths(structured):
     """Contra-proba: la lungimile reale (max observat 134) plafonul nu se atinge niciodată."""
     events: list[tuple[str, dict]] = []
@@ -337,6 +350,7 @@ def test_emit_reports_roles_without_content(structured):
     (name, props) = events[0]
     assert name == "history_budget"
     assert props["shown_turns"] == 1
+    assert props["consumer"] == "unknown"  # apelant fără etichetă → explicit, nu tăcut
     assert props["client_chars"] > 0 and props["assistant_chars"] > 0
     blob = json.dumps(props, ensure_ascii=False)
     assert "intrebarea mea" not in blob and "Ser hidratant" not in blob

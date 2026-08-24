@@ -31,6 +31,7 @@ def conversation_transcript(
     max_turns: int = 6,
     max_chars: int = 1200,
     emit: Callable[..., None] | None = None,
+    consumer: str | None = None,
 ) -> str:
     """Transcript compact „Client/Asistent" al mesajelor ANTERIOARE (fără cel curent
     — ultimul din `history` e mesajul în curs de procesare). Gol dacă nu există
@@ -69,7 +70,9 @@ def conversation_transcript(
             role = "Client" if m.direction == Direction.INBOUND else "Asistent"
             lines.append(f"{role}: {safe_body}")
         return "\n".join(lines)[-max_chars:]
-    return _structured_transcript(prior[-max_turns:], total=len(prior), emit=emit)
+    return _structured_transcript(
+        prior[-max_turns:], total=len(prior), emit=emit, consumer=consumer
+    )
 
 
 # NX-255 — legenda blocurilor `[a aratat]`. Emisă O SINGURĂ dată și DOAR când există cel puțin un
@@ -161,7 +164,11 @@ class _Entry:
 
 
 def _structured_transcript(
-    msgs: list[Message], *, total: int, emit: Callable[..., None] | None
+    msgs: list[Message],
+    *,
+    total: int,
+    emit: Callable[..., None] | None,
+    consumer: str | None = None,
 ) -> str:
     """Transcriptul cu buget PE ROL (NX-255). Ordinea de degradare, deterministă:
 
@@ -234,9 +241,14 @@ def _structured_transcript(
         dropped += 1
 
     if emit is not None:
+        # `consumer` din același motiv ca la `context_bytes` (NX-251): cât timp triajul și agentul
+        # construiesc amândoi transcriptul, evenimentul pleacă de DOUĂ ori pe același tur. Fără
+        # eticheta care spune cine l-a cerut, cele două sunt indistinctibile și orice agregare
+        # dublează tăcut octeții istoricului.
         client_chars = sum(len(e.text) for e in entries if e.role == "client")
         emit(
             "history_budget",
+            consumer=consumer or "unknown",
             client_chars=client_chars,
             assistant_chars=sum(len(e.text) for e in entries if e.role == "assistant"),
             shown_chars=sum(len(e.text) for e in entries if e.role == "shown"),
