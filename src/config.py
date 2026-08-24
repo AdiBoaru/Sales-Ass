@@ -252,6 +252,20 @@ class Settings(BaseSettings):
         default=168, validation_alias="WEB_TURNS_RETENTION_HOURS"
     )
     web_turns_stale_days: int = Field(default=7, validation_alias="WEB_TURNS_STALE_DAYS")
+    # NX-256 — captura FULL a turului (conversation_traces): client verbatim + Reply semantic
+    # complet + recomandări + diagnosticele intermediare (JSON-ul rich brut, id-urile picate la
+    # membership). Scrisă din aftercare, best-effort; OFF = zero rânduri, byte-identic. Unealtă
+    # de diagnoză/test (incidentul din 24 aug: știam CĂ rich-ul a picat, nu CE a emis modelul),
+    # NU sursă de adevăr — nimic de pe drumul turului nu citește de aici.
+    conversation_trace_enabled: bool = Field(
+        default=False, validation_alias="CONVERSATION_TRACE_ENABLED"
+    )
+    # Retenția capturii (zile) — purjată de cleanup_conversation_traces (job admin, bounded).
+    # Ca la web_turns, retenția NU e gated pe flag: rândurile acumulate nu rămân pe disc dacă
+    # flagul se stinge; jobul e no-op pe o DB fără migrarea 045 (guard `to_regclass`).
+    conversation_trace_retention_days: int = Field(
+        default=30, validation_alias="CONVERSATION_TRACE_RETENTION_DAYS"
+    )
     # Retenția NU e gated pe `web_turn_ledger_enabled`: dacă flagul se stinge după ce s-au
     # acumulat rânduri, conținutul de conversație ar rămâne pe disc pentru totdeauna. Jobul e
     # no-op pe o DB fără migrarea 040 (guard `to_regclass`), deci pornirea lui e sigură oriunde.

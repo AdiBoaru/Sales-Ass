@@ -361,14 +361,31 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     badge_rules = pack.badge_rules if pack else None
     currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
     # Modelul NAREAZĂ per-produs (fit_clause/pro_index), keyed pe product_id; CODUL decide ORDINEA.
-    # Membership (P1): id care nu e în retrieval → ignorat tăcut. Dedupe pe prima apariție.
+    # Membership (P1): id care nu e în retrieval → ignorat. Dedupe pe prima apariție.
     llm_items: dict[str, dict[str, Any]] = {}
     llm_order: list[str] = []
+    foreign_ids: list[str] = []
     for it in j.get("items") or []:
         pid = it.get("product_id")
-        if pid in facts and pid not in llm_items:
-            llm_items[pid] = it
-            llm_order.append(pid)
+        if pid in facts:
+            if pid not in llm_items:
+                llm_items[pid] = it
+                llm_order.append(pid)
+        elif pid is not None:
+            foreign_ids.append(str(pid))
+    # NX-256: dropul de membership nu mai e MUT. Incidentul din 24 aug (cutover de model): TOATE
+    # id-urile emise erau străine de retrieval, rich-ul a degradat pe proză, iar la anchetă nu
+    # exista nicio urmă despre CE emisese modelul — doar `rich_downgraded {reason}`. Evenimentul
+    # poartă id-urile respinse (ca `agent_recommended`, care emite deja product_ids — nu e PII și
+    # nu e text), iar `ctx.trace` le duce în captura full (`conversation_traces`), lângă JSON-ul
+    # brut pe care îl depune finalize. Dropul rămâne: diagnoza nu relaxează poarta.
+    if foreign_ids:
+        ctx.emit("rich_membership_dropped", n=len(foreign_ids), product_ids=foreign_ids[:8])
+        # `getattr`: ctx-urile fake din unit-teste (SimpleNamespace) nu au câmpul nou — un câmp
+        # de diagnoză nu are voie să transforme o suită verde într-una roșie (tiparul aftercare).
+        trace = getattr(ctx, "trace", None)
+        if trace is not None:
+            trace["rich_membership_dropped"] = foreign_ids
 
     # ARCH-2026 P0: ordinea cardurilor = RANKINGUL de retrieval (determinist), nu ordinea liberă a
     # modelului (position bias). Modelul CURATEAZĂ ce produse intră (setul lui de items), rankingul

@@ -18,13 +18,17 @@ def _ctx(
     history=None,
     constraints=None,
 ) -> SimpleNamespace:
-    return SimpleNamespace(
+    ns = SimpleNamespace(
         language=language,
         business=SimpleNamespace(vertical=vertical),
         message=SimpleNamespace(body=body),
         history=history or [],
         state=SimpleNamespace(constraints=constraints or {}),
+        events=[],
+        trace={},  # NX-256: assemble depune diagnosticele de membership aici
     )
+    ns.emit = lambda type_, **props: ns.events.append((type_, props))
+    return ns
 
 
 def test_scrub_drops_numbers_claims_superlatives() -> None:

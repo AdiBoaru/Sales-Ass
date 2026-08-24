@@ -43,6 +43,10 @@ class FakeConn:
         if self.fail_on_erase and "gdpr_erase_contact" in query:
             raise RuntimeError("erase boom")
 
+    async def fetchval(self, query, *args):
+        # NX-256: gărzile `to_regclass` (schema fără migrarea 045) — fake-ul are tabelul
+        return True
+
 
 def _patch_lifecycle(monkeypatch, *, owned=True):
     calls = {"create": [], "processing": [], "done": [], "failed": [], "audit": []}

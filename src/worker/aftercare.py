@@ -14,7 +14,7 @@ mereu `read scurt → (LLM fără conn) → write scurt`. Altfel „deferred" ar
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from time import perf_counter
 
 from redis.asyncio import Redis
@@ -37,6 +37,7 @@ from src.db.queries.facts import (
 from src.db.queries.messages import count_messages, get_messages_for_summary
 from src.db.queries.semantic_cache import upsert_entry
 from src.db.queries.summaries import get_latest_summary, insert_conversation_summary
+from src.db.queries.traces import insert_trace
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Event, TurnContext
 from src.runtime import deadline
@@ -70,6 +71,76 @@ class AftercareWork:
     shadow_mode: bool
     llm: LLMClient | None
     language: str
+
+
+def _recommended_refs(reply) -> list[dict] | None:
+    """Ref-urile compacte {product_id, name, price} ale RECOMANDĂRII turului (P8), pentru coloana
+    `recommended` — ca „ce a recomandat botul" să fie un SELECT, nu o despicare de `reply` jsonb.
+    Sursa urmează prioritatea de randare: rich (carduri) → comparison (coloane) → products (W1)."""
+    if reply is None:
+        return None
+    if reply.rich is not None and reply.rich.items:
+        return [
+            {"product_id": it.product_id, "name": it.name, "price": it.price}
+            for it in reply.rich.items
+        ]
+    if reply.comparison is not None and reply.comparison.columns:
+        return [
+            {"product_id": c.product_id, "name": c.name, "price": c.price}
+            for c in reply.comparison.columns
+        ]
+    if reply.products:
+        return [
+            {
+                "product_id": p.get("product_id") or p.get("id"),
+                "name": p.get("name"),
+                "price": p.get("price"),
+            }
+            for p in reply.products
+        ]
+    return None
+
+
+async def _persist_trace(db: DbProvider, work: AftercareWork) -> None:
+    """NX-256 — captura FULL a turului în `conversation_traces`, sub flag (default OFF).
+
+    Un rând per tur: clientul (forma SAFE — NX-230: `safe_body` e ce are voie să ajungă la orice
+    sink durabil; `body` brut rămâne doar în memoria turului), TOT reply-ul semantic serializat
+    (carduri cu reason/badge/variants, comparison, offer, chips), recomandările ca ref-uri și
+    `ctx.trace` — intermediarele care altfel mor în zbor (JSON-ul rich brut, id-urile picate la
+    membership). Best-effort prin contract: un eșec se loghează, reply-ul e deja livrat.
+
+    Turul FĂRĂ reply (halt intenționat) se capturează și el — „clientul a scris și botul a tăcut"
+    e exact genul de caz pe care îl cauți la diagnoză, nu unul de ascuns."""
+    if not getattr(get_settings(), "conversation_trace_enabled", False):
+        return
+    ctx = work.ctx
+    try:
+        reply_json = asdict(ctx.reply) if ctx.reply is not None else None
+        msg = ctx.message
+        diagnostics = dict(getattr(ctx, "trace", None) or {})
+        if ctx.halt:
+            diagnostics.setdefault("halt", True)
+        if ctx.from_cache:
+            diagnostics.setdefault("from_cache", True)
+        async with db("insert_trace") as conn:
+            await insert_trace(
+                conn,
+                work.business.id,
+                conversation_id=work.conversation_id,
+                contact_id=work.contact_id,
+                turn_id=ctx.turn_id,
+                channel_kind=msg.channel_kind,
+                language=work.language,
+                model_route=",".join(ctx.usage.models) if ctx.usage and ctx.usage.models else None,
+                client_text=msg.safe_body if msg.safe_body is not None else msg.body,
+                bot_text=ctx.reply.text if ctx.reply is not None else None,
+                reply=reply_json,
+                recommended=_recommended_refs(ctx.reply),
+                diagnostics=diagnostics or None,
+            )
+    except Exception:  # noqa: BLE001 — captura e unealtă de diagnoză, nu are voie să rupă turul
+        log.exception("persistarea conversation_traces a eșuat (turul continuă)")
 
 
 async def _persist_events(conn, business_id, conversation_id, contact_id, events) -> None:
@@ -554,6 +625,9 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
         # voie să transforme o suită verde într-un aftercare „eșuat".
         budget_ms = getattr(get_settings(), "aftercare_deadline_ms", 20_000)
         async with asyncio.timeout(budget_ms / 1000.0 if budget_ms > 0 else None):
+            # PRIMA: e persistare pură a ceea ce s-a întâmplat deja (zero LLM). Dacă bugetul
+            # se termină pe summarizer, captura de diagnoză nu trebuie să fie ce s-a pierdut.
+            await _persist_trace(db, work)
             await _cache_writeback(
                 db, work.llm, work.business.id, work.language, work.ctx.message.body, work.ctx
             )

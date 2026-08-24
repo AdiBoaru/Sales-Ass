@@ -598,6 +598,13 @@ class TurnContext:
     # nu importăm `src.web` în models; accesul tipizat trece prin `action_models.action_command`.
     action: Any = None
     events: list[Event] = field(default_factory=list)
+    # NX-256: diagnosticele INTERMEDIARE ale turului — ce se calculează și se aruncă înainte de
+    # reply (JSON-ul rich brut emis de model, id-urile picate la membership, motive de degradare).
+    # Acumulator ca `events` (mai mulți depun, nimeni nu suprascrie cheia altuia — fiecare scriitor
+    # are prefixul lui). NU pleacă în analytics (P12: acolo doar contoare); singurul consumator e
+    # aftercare-ul, care îl persistă în `conversation_traces` sub flag. Gol cu flagul stins? NU —
+    # se acumulează mereu (intrările sunt mici și deja calculate), dar nu se scrie nicăieri.
+    trace: dict[str, Any] = field(default_factory=dict)
     # NX-103: consumul LLM al turului (tokeni/cost/defalcări). Owner: runner-ul (post-pipeline);
     # processor-ul îl atașează pe mesajul outbound. None până rulează pipeline-ul / fără apel LLM.
     usage: TurnUsage | None = None
