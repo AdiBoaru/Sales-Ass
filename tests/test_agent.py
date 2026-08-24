@@ -562,7 +562,7 @@ async def test_invented_price_falls_back_to_deterministic(monkeypatch):
     )
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None
-    assert "82.99" in ctx.reply.text and "999" not in ctx.reply.text
+    assert "82,99" in ctx.reply.text and "999" not in ctx.reply.text  # preț real, format ro
     assert llm.complete_calls == 1  # exact 1 retry
 
 
