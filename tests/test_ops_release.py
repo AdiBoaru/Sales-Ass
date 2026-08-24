@@ -15,9 +15,12 @@ are teste unitare dacă nu i le scriem noi.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import fields
 from pathlib import Path
 
@@ -414,3 +417,108 @@ def test_preflight_expune_steagul_de_prim_release():
     parser_args = mod.main.__doc__ or ""
     src = (ROOT / "scripts" / "release" / "preflight.py").read_text(encoding="utf-8")
     assert '"--allow-no-previous-digest"' in src, parser_args
+
+
+def _job_steps(workflow_name: str, job: str) -> list[dict]:
+    return _workflows()[workflow_name]["jobs"][job]["steps"]
+
+
+def _argv_of(run: str, **env: str) -> list[str]:
+    """Rulează scriptul unui pas cu un `python` fals și întoarce argv-ul cu care ar fi fost chemat.
+
+    Singurul mod onest de a verifica „ce ajunge în linia de comandă": textul pasului minte, fiindcă
+    un argument poate apărea într-o atribuire fără să fie vreodată expandat în invocație.
+    Expresiile `${{ … }}` se înlocuiesc cu o constantă — aici ne interesează forma argumentelor, nu
+    valorile pe care le injectează GitHub.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover — CI rulează pe ubuntu
+        pytest.skip("bash indisponibil")
+
+    script = re.sub(r"\$\{\{[^}]*\}\}", "GH_EXPR", run)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        argv_out = tmpdir / "argv.txt"
+        stub = tmpdir / "python"
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGV_OUT"\n', encoding="utf-8")
+        stub.chmod(0o755)
+        (tmpdir / "step.sh").write_text(script, encoding="utf-8")
+
+        subprocess.run(  # noqa: S603
+            [bash, str(tmpdir / "step.sh")],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "PATH": f"{tmpdir}{os.pathsep}{os.environ['PATH']}",
+                "ARGV_OUT": str(argv_out),
+                **env,
+            },
+        )
+        assert argv_out.exists(), "pasul nu a chemat deloc `python`"
+        return argv_out.read_text(encoding="utf-8").split("\n")
+
+
+def test_buildul_paseaza_o_tinta_de_rollback_manifestului():
+    """Garda pentru defectul măsurat pe 2026-08-24: `build_manifest.py` accepta `--previous` de la
+    început, dar `release.yml` nu i-l pasa NICIODATĂ.
+
+    Consecința nu se vedea la build — manifestul se scria cu succes — ci două etape mai încolo:
+    `previous_digest` gol ⇒ `rollback_possible()` = „fără digest precedent (primul release)" ⇒
+    `--require-rollback-possible` bloca ORICE promovare ⇒ singura ieșire rămânea
+    `first_release: true`, fals de la a doua promovare încolo. Iar `rollback.py` își ia ținta
+    exclusiv din `previous_digest`, deci rollbackul din runbook nu avea pe ce rula.
+
+    Testul EXECUTĂ scriptul pasului cu un `python` fals și se uită la argv. Varianta ieftină —
+    „apare `--previous` în textul pasului?" — e OARBĂ: șirul apare și în linia care construiește
+    `prev_args`, deci trecea verde cu argumentul șters din invocație. Aceeași capcană ca la garda
+    din fixul NX-236/234, unde `payload` APĂREA, doar în locul greșit.
+    """
+    manifest_steps = [
+        s
+        for s in _job_steps("release.yml", "build")
+        if "build_manifest.py" in str(s.get("run", ""))
+    ]
+    assert manifest_steps, "buildul nu mai compune manifestul de deploy"
+
+    for step in manifest_steps:
+        with_target = _argv_of(step["run"], PREVIOUS="champion/manifest.json")
+        assert "--previous" in with_target, (
+            "manifestul se compune fără `--previous` ⇒ `previous_digest` gol ⇒ rollback fără țintă "
+            f"și promovare imposibilă fără `first_release: true` (argv: {with_target})"
+        )
+        assert "champion/manifest.json" in with_target, (
+            f"`--previous` se pasează fără calea championului (argv: {with_target})"
+        )
+
+        # Fără champion, argumentul NU trebuie inventat: `--previous ''` ar face
+        # `build_manifest.py` să citească un fișier inexistent și să degradeze la „rollback
+        # necunoscut" printr-un warning, în loc să spună curat că nu există țintă.
+        without = _argv_of(step["run"], PREVIOUS="")
+        assert "--previous" not in without, (
+            f"`--previous` pasat cu champion absent (argv: {without})"
+        )
+
+
+def test_promovarea_inregistreaza_championul():
+    """Perechea celuilalt test: cine SCRIE ținta pe care buildul următor o citește.
+
+    Fără pasul ăsta, `--previous` din build ar căuta un artefact care nu apare niciodată, iar
+    `previous_build_run_id` ar trebui tastat manual la fiecare release — adică exact genul de
+    poartă întreținută de disciplină umană pe care restul pipeline-ului o refuză.
+    """
+    steps = _job_steps("release.yml", "production")
+    uploads = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact")]
+    names = [s.get("with", {}).get("name") for s in uploads]
+    assert "champion-manifest" in names, (
+        f"promovarea nu înregistrează championul (artefacte încărcate: {names})"
+    )
+
+    # Ordinea contează: un digest care n-a trecut de smoke nu e champion, deci nu e nici țintă de
+    # rollback. Înregistrarea trebuie să vină DUPĂ pasul de smoke, nu înaintea lui.
+    idx_smoke = next(i for i, s in enumerate(steps) if "smoke_web_v2.py" in str(s.get("run", "")))
+    idx_champion = next(
+        i for i, s in enumerate(steps) if s.get("with", {}).get("name") == "champion-manifest"
+    )
+    assert idx_champion > idx_smoke, "championul se înregistrează înainte de smoke"
