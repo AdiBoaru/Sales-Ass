@@ -45,6 +45,13 @@ on:
         required: false
         default: false
         type: boolean
+      previous_build_run_id:
+        description: >-
+          BOOTSTRAP: ID-ul rulării care a construit imaginea care rulează ACUM în producție
+          (championul). Necesar o singură dată — prima promovare de după introducerea artefactului
+          `champion-manifest` nu are de unde să-l citească. După ea, championul se rezolvă singur.
+        required: false
+        type: string
 
 # Un singur release în zbor. `cancel-in-progress: false` — un deploy întrerupt la jumătate e mai
 # rău decât un deploy care așteaptă.
@@ -69,6 +76,7 @@ jobs:
       contents: read
       packages: write
       id-token: write # OIDC pentru semnătura keyless cosign
+      actions: read # citește artefactul `champion-manifest` din rularea precedentă
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       release_sha: ${{ github.sha }}
@@ -182,18 +190,74 @@ jobs:
           # Canary injectat DOAR în mediul jobului: dacă apare în imagine, ceva scurge env-ul de CI.
           CANARY: nx248-canary-${{ github.run_id }}
 
+      # Poarta de rollback are nevoie de o ȚINTĂ, iar ținta e `previous_digest` din manifest.
+      # `build_manifest.py` acceptă `--previous` de la început, dar nimeni nu i-l pasa: argumentul
+      # lipsea din pasul de mai jos. Efectul, măsurat pe 2026-08-24: `previous_digest` ieșea gol la
+      # ORICE build, `rollback_possible()` răspundea „fără digest precedent (primul release)", iar
+      # singura cale prin poartă rămânea `first_release: true` — o declarație care la a doua
+      # promovare e pur și simplu falsă. Nu era o scăpare formală: `scripts/release/rollback.py`
+      # își ia ținta EXCLUSIV din `previous_digest`, deci procedura de rollback din runbook n-avea
+      # pe ce rula. Aceeași clasă de defect ca poarta de scan din #301 — o poartă pe care nimeni nu
+      # o poate trece nu filtrează nimic, se ocolește.
+      #
+      # Championul se rezolvă în două trepte, în ordinea încrederii:
+      #   1. `previous_build_run_id`, DECLARAT de om — doar pentru bootstrap: prima promovare de
+      #      după acest fix nu are de unde să citească artefactul de la treapta 2.
+      #   2. artefactul `champion-manifest`, scris de FIECARE promovare reușită. De la a doua
+      #      promovare încolo treapta asta ajunge, și nu se mai cere nimic de la tastatură.
+      # Fără niciuna, `--previous` lipsește și `previous_digest` rămâne gol — adică poarta
+      # blochează. Ăsta e comportamentul CORECT pentru un release cu adevărat primul, și e
+      # explicit, nu tăcut.
+      #
+      # Limită cunoscută: `previous_digest` se fixează la BUILD. Dacă un build stă nepromovat cât
+      # timp altcineva promovează, ținta lui e championul de atunci, nu cel de acum. Mitigarea e în
+      # runbook (§1.3): promovezi buildul curent, nu unul vechi; altfel reconstruiești.
+      - name: Rezolvă championul (ținta de rollback)
+        id: champion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DECLARED_RUN: ${{ inputs.previous_build_run_id }}
+        run: |
+          set -eo pipefail
+          mkdir -p champion
+          if [ -n "${DECLARED_RUN}" ]; then
+            # Bootstrap: manifestul championului e artefactul de evidență al BUILDULUI lui.
+            run_id="${DECLARED_RUN}"
+            artifact="release-evidence-${run_id}"
+            echo "champion DECLARAT: run ${run_id}"
+          else
+            run_id="$(gh api "repos/${REPO}/actions/artifacts?name=champion-manifest&per_page=100" \
+              --jq '[.artifacts[] | select(.expired == false)]
+                    | sort_by(.created_at) | reverse | .[0].workflow_run.id // empty')"
+            artifact="champion-manifest"
+            if [ -n "${run_id}" ]; then
+              echo "champion din artefact: run ${run_id}"
+            else
+              echo "niciun champion înregistrat — manifestul va ieși fără țintă de rollback"
+              echo "previous=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          gh run download "${run_id}" -R "${REPO}" -n "${artifact}" -D champion
+          echo "previous=champion/manifest.json" >> "$GITHUB_OUTPUT"
+
       - name: Manifest de deploy (release, digest, config, interval de schemă)
         run: |
+          prev_args=()
+          [ -n "${PREVIOUS}" ] && prev_args=(--previous "${PREVIOUS}")
           python scripts/release/build_manifest.py \
             --image "${IMAGE}" \
             --digest "${DIGEST}" \
             --release-sha "${{ github.sha }}" \
             --built-at "${{ steps.meta.outputs.built_at }}" \
             --run-id "${{ github.run_id }}" \
+            "${prev_args[@]}" \
             --out manifest.json
         env:
           IMAGE: ${{ env.IMAGE }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          PREVIOUS: ${{ steps.champion.outputs.previous }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -302,6 +366,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read # descarcă manifestul buildului promovat (altă rulare)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -384,5 +449,20 @@ jobs:
         with:
           name: production-evidence-${{ github.run_id }}
           path: smoke-prod.json
+          if-no-files-found: error
+          retention-days: 365
+
+      # Ce rulează în producție devine ținta de rollback a buildurilor următoare. Se scrie ABIA
+      # aici, după smoke: un digest care n-a trecut de smoke nu e champion, deci nu e nici o țintă
+      # spre care ai vrea să te întorci.
+      #
+      # Numele e STABIL între rulări, tocmai ca buildul să poată cere „cel mai recent champion"
+      # fără să știe ID-uri. Retenția e maximă: dacă artefactul expiră, buildul rămâne fără țintă
+      # și poarta blochează — recuperabil cu `previous_build_run_id`, dar mai bine să nu se ajungă.
+      - name: Înregistrează championul (ținta de rollback pentru buildurile următoare)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: champion-manifest
+          path: manifest.json
           if-no-files-found: error
           retention-days: 365

@@ -104,6 +104,31 @@ putut fi citit" arată identic (`previous_digest` gol în ambele), iar a doua e 
 vrei să te oprești. Steagul acoperă DOAR absența unei ținte: o schemă care depășește ce tolerează
 imaginea precedentă blochează în continuare.
 
+#### De unde vine ținta de rollback
+
+`previous_digest` se scrie la BUILD, din manifestul championului — imaginea care rulează în acel
+moment în producție. Championul se rezolvă în două trepte:
+
+1. **`previous_build_run_id`** (input de bootstrap): ID-ul rulării care a construit imaginea aflată
+   acum în producție. Se dă o singură dată.
+2. **artefactul `champion-manifest`**, scris de fiecare promovare reușită, DUPĂ smoke. De la a doua
+   promovare încolo, treapta asta e suficientă și nu se mai tastează nimic.
+
+Fără niciuna, `previous_digest` rămâne gol și poarta blochează — comportamentul corect pentru un
+release cu adevărat primul.
+
+> **Bug reparat 2026-08-24.** `release.yml` nu pasa niciodată `--previous` lui `build_manifest.py`,
+> deși scriptul îl acceptă. Rezultatul: `previous_digest` gol la ORICE build, deci
+> `rollback_possible()` răspundea „primul release" la fiecare promovare, iar singura cale prin
+> poartă era `first_release: true` — fals de la a doua promovare încolo. Efectul real: `rollback.py`
+> își ia ținta exclusiv din `previous_digest`, deci §3 de mai jos nu avea pe ce rula. Garda e
+> `tests/test_ops_release.py::test_buildul_paseaza_o_tinta_de_rollback_manifestului`, care execută
+> scriptul pasului și se uită la argv — verificarea textuală trecea verde pe codul stricat.
+
+> **Limită cunoscută.** `previous_digest` e fixat la build. Un build care stă nepromovat cât timp
+> altcineva promovează are ca țintă championul de ATUNCI, nu pe cel de acum. Promovează buildul
+> curent; dacă a fost depășit, reconstruiește.
+
 Environmentul `production` cere aprobarea umană. Pașii rulează în ordinea:
 
 ```
