@@ -33,8 +33,8 @@ class _Msg:
 
 
 class _Resp:
-    def __init__(self, content):
-        self.choices = [SimpleNamespace(message=_Msg(content))]
+    def __init__(self, content, finish_reason="stop"):
+        self.choices = [SimpleNamespace(message=_Msg(content), finish_reason=finish_reason)]
 
 
 class _Completions:
@@ -57,9 +57,12 @@ def _client(behaviors):
     return SimpleNamespace(chat=SimpleNamespace(completions=comp), _comp=comp)
 
 
-def _llm_client(behaviors):
+def _llm_client(behaviors, *, model_triage="gpt-5.4-nano", model_agent="gpt-5.4-mini"):
+    """Numele de model sunt REALE, nu „nano"/„mini": de ele atârnă acum ce parametri pleacă pe
+    sârmă (`llm.supported_params`). Un fake fără prefix cunoscut ar fi tratat ca model necunoscut,
+    deci testele ar valida calea fail-safe crezând că o validează pe cea normală."""
     cl = _client(behaviors)
-    return LLMClient(cl, model_triage="nano", model_agent="mini"), cl._comp
+    return LLMClient(cl, model_triage=model_triage, model_agent=model_agent), cl._comp
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +140,69 @@ async def test_sampling_disabled_kill_switch(monkeypatch):
     # rămâne prin max_completion_tokens (NX-125) — un completion patologic tot e tăiat.
     assert "temperature" not in comp.last_kwargs and "max_tokens" not in comp.last_kwargs
     assert comp.last_kwargs["max_completion_tokens"] == 800
+
+
+# ── Poarta de capabilitate pe model ───────────────────────────────────────────────────────────
+# Regresie pentru incidentul din 24 aug: promovarea lui `bbb77b3` a mutat default-ul `model_agent`
+# de pe `gpt-5.4-mini` pe `gpt-5.6-luna`, iar `temperature=0.7` (trimisă necondiționat) a devenit
+# `400 unsupported_value`. Fiind 4xx, `_with_retry` o tratează terminal, `agent_stage` o înghite și
+# TOT creierul de vânzare a răspuns cu fallback-ul de runner, cu triajul (nano) intact deasupra.
+
+
+def test_supported_params_declara_ce_accepta_fiecare_familie():
+    # Măsurat pe API-ul real (2026-08-24), nu presupus.
+    assert "temperature" not in llm.supported_params("gpt-5.6-luna")
+    assert "temperature" not in llm.supported_params("gpt-5.6-terra")
+    assert "reasoning_effort" in llm.supported_params("gpt-5.6-luna")
+    assert llm.supported_params("gpt-5.4-mini") == {"temperature", "reasoning_effort"}
+    assert llm.supported_params("gpt-5.4-nano") == {"temperature", "reasoning_effort"}
+
+
+def test_model_necunoscut_nu_primeste_niciun_optional():
+    """Fail-safe: un prefix nedeclarat pierde variația de copy, nu turul."""
+    assert llm.supported_params("model-inventat-maine") == frozenset()
+
+
+async def test_agent_pe_model_de_rationament_nu_trimite_temperature():
+    c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
+    await c.complete("sys", "usr")
+    assert "temperature" not in comp.last_kwargs  # exact parametrul care dădea 400
+    assert comp.last_kwargs["reasoning_effort"] == "high"  # ăsta E acceptat de Luna
+    assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
+
+
+async def test_triajul_pe_model_de_rationament_nu_trimite_temperature():
+    """Poarta e pe MODEL, nu pe rol: dacă `MODEL_TRIAGE` ajunge vreodată pe 5.6, aceeași cădere."""
+    c, comp = _llm_client([_Resp("{}")], model_triage="gpt-5.6-luna")
+    await c.classify_json("sys", "usr")
+    assert "temperature" not in comp.last_kwargs
+
+
+async def test_optionalul_lasat_acasa_se_numara_ca_degradare():
+    from src.observability import turn_latency
+
+    acc, token = turn_latency.push()
+    try:
+        c, _comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
+        await c.complete("sys", "usr")
+    finally:
+        turn_latency.pop(token)
+    assert acc.degradations.get("llm_param_unsupported_temperature") == 1
+
+
+async def test_completion_taiat_de_plafon_e_numarat():
+    """Tokenii de raționament intră în ACELAȘI `max_completion_tokens` ca textul: un cap prea mic
+    întoarce 200 cu conținut GOL. Fără contorul ăsta, cauza nu apare nicăieri."""
+    from src.observability import turn_latency
+
+    acc, token = turn_latency.push()
+    try:
+        c, _comp = _llm_client([_Resp("", finish_reason="length")], model_agent="gpt-5.6-luna")
+        out = await c.complete("sys", "usr")
+    finally:
+        turn_latency.pop(token)
+    assert out == ""
+    assert acc.degradations.get("llm_output_truncated_empty") == 1
 
 
 def test_get_llm_builds_client_with_timeout_and_no_sdk_retry(monkeypatch):

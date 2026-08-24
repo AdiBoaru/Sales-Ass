@@ -19,7 +19,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | API | FastAPI (webhook + health) |
 | Coadă | Redis Streams (lock per conversație, debounce) |
 | DB | Postgres 16 — Supabase (**o singură schemă `public`**, multi-tenant pe `business_id`) |
-| LLM sales | OpenAI GPT-5.4-mini |
+| LLM sales | OpenAI **`gpt-5.6-luna`** (`MODEL_AGENT`; era `gpt-5.4-mini` până pe 2026-08-24). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit |
 | LLM triaj + simple | OpenAI GPT-5.4-nano |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
@@ -354,6 +354,28 @@ octeții se măsoară pe sursă (`context_bytes{consumer}`). Detalii:
 [`docs/NX-251-CONTEXT-ORCHESTRATION.md`](docs/NX-251-CONTEXT-ORCHESTRATION.md); probă:
 `pytest tests/test_context_journeys.py tests/test_context_orchestration.py -q`.
 
+**NX-255 — istoricul minte: întrebarea clientului se tăia, iar ce a arătat botul nu se persista
+(DARK, flag OFF).** `conversation_transcript` aplica `[-1200:]` pe stringul deja UNIT: tăiere oarbă,
+fără noțiune de rol, de graniță de mesaj sau de cuvânt. Măsurat pe `webchat` real (409 inbound / 408
+outbound, 2026-08-24): clientul scrie **28** de caractere în medie (p90 46, max 134), botul **750**
+(p50 814, p90 1391, max 1822) — o fereastră de 6 mesaje cere ~2334 de caractere, deci se arunca
+începutul, adică exact întrebările, iar transcriptul putea porni cu un fragment fără cap
+(`"aza sistemul). Spune-mi te rog…"`). A doua gaură, mai mare: ce a ARĂTAT botul nu exista nicăieri
+— payload-ul bogat mergea în `outbox` (canale async) sau nu se construia deloc (web sincron, care
+iese din `_build_fragment` înainte), `Message` n-avea câmp `payload`, iar `get_recent_messages` nu-l
+selecta. Toate rândurile reale aveau exact `{turn_id, fragment_index}`. Rămânea doar
+`state.displayed_products`, suprascris per tur și randat cu max 3 intrări — deci „al doilea pe care
+mi l-ai arătat" n-avea ancoră, botul re-recomanda ce arătase, iar recitirea propriei proze producea
+prețuri pe care validatorul le respinge ca inventate (retry + fallback fără cifre: nu o halucinație
+vizibilă, ci **degradare plătită la fiecare follow-up**). Cu `STRUCTURED_HISTORY_ENABLED`: clientul
+e **verbatim**, turul botului păstrează proza **integrală** (few-shot din propria voce) PLUS un bloc
+`[a aratat]` cu ref-uri `{id, nume, preț}` și vechimea în ture. Regula care face păstrarea prozei
+sigură: **proza spune CUM vorbești, blocul spune CE e adevărat** — cifrele se reconfirmă prin tool.
+Degradarea e deterministă: proza celor mai vechi ture cedează prima (la graniță de propoziție,
+păstrându-le faptele), apoi se elimină intrări întregi; un mesaj de client poate dispărea, dar nu
+poate fi mutilat. Card: [`tasks/stage1/NX-255.md`](tasks/stage1/NX-255.md); probă:
+`pytest tests/test_structured_history.py -q`.
+
 ---
 
 ## Arhitectura — pipeline liniar (12 stagii)
@@ -419,8 +441,14 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • summarizer conversații lungi (> 20 mesaje → conversation_summaries + ultimele 8)
     • prefix static byte-identic → prompt caching OpenAI (75-90% discount)
 
-[7] AGENT (GPT-5.4-mini)
+[7] AGENT (`gpt-5.6-luna`, vezi tabelul de stack)
     • system prompt GENERAT din categories (+ intent_aliases pt rutare), nu hardcodat
+    • CE PARAMETRI PLEACĂ E O PROPRIETATE A MODELULUI, nu o preferință: `gpt-5.6-*` REFUZĂ
+      `temperature` ≠ 1 cu 400, `gpt-5.4-*` o acceptă; `reasoning_effort` merge pe ambele.
+      `llm.supported_params()` e poarta, iar prefixul nedeclarat nu primește niciun opțional.
+      Fără ea, un default de model schimbat omoară TOATĂ calea de vânzare și numai pe ea:
+      4xx e terminal în `_with_retry`, `agent_stage` îl înghite, iar triajul (nano) rămâne
+      intact deasupra — deci sistemul pare sănătos. S-a întâmplat pe 2026-08-24 (bbb77b3)
     • buying stages framework: browsing → narrowing → comparing → ready_to_buy
     • AGENT decide mutarea de vânzare (NU routerul)
     • MAX 3 RUNDE de model per tur (limită dură: llm.py:364). NU e un plafon de tool calls:

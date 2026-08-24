@@ -225,6 +225,62 @@ _VISION_SYSTEM = (
 )
 
 
+# ── Ce acceptă un model NU e o preferință a noastră, e o proprietate a LUI ────────────────────
+# `temperature` și `reasoning_effort` sunt singurele opționale pe care le adăugăm noi peste
+# `chat.completions` (vezi `_sampling`). MĂSURAT pe API-ul real (2026-08-24, `gpt-5.6-luna` și
+# `gpt-5.6-terra`): familia `gpt-5.6-*` REFUZĂ orice `temperature` ≠ 1 cu
+# `400 unsupported_value: 'temperature' does not support 0.7 with this model`; `gpt-5.4-*` o
+# acceptă; `reasoning_effort` e acceptat de toate patru.
+#
+# De ce e o poartă și nu o notă în docs: opționalele astea pleacă DOAR pe apelurile care trec prin
+# `_chat`, iar `_with_retry` tratează 4xx non-429 ca TERMINAL. Un model prins pe picior greșit nu
+# degradează, ci omoară exact calea pe care e trimis — și numai pe aia, deci restul sistemului pare
+# sănătos. S-a întâmplat de două ori: `max_tokens` pe `gpt-5.4-*` (PR #133) și `temperature` pe
+# Luna, când `bbb77b3` a promovat default-ul `gpt-5.4-mini` → `gpt-5.6-luna` (24 aug) și fiecare
+# tur de vânzare a căzut pe fallback-ul de runner, cu triajul (nano) intact deasupra.
+#
+# Necunoscutul se tratează în direcția SIGURĂ: prefix nedeclarat ⇒ niciun opțional. Costul unei
+# omisiuni greșite e variație de copy pierdută (corectitudinea o ține validatorul stagiului 8);
+# costul unui parametru greșit e turul pierdut. Nu sunt comparabile, deci nu se echilibrează.
+_PARAM_SUPPORT: tuple[tuple[str, frozenset[str]], ...] = (
+    ("gpt-5.6-", frozenset({"reasoning_effort"})),
+    ("gpt-5.4-", frozenset({"reasoning_effort", "temperature"})),
+)
+
+
+def supported_params(model: str) -> frozenset[str]:
+    """Opționalele pe care le acceptă `model`. Prefix nedeclarat → niciunul (fail-safe)."""
+    for prefix, params in _PARAM_SUPPORT:
+        if model.startswith(prefix):
+            return params
+    return frozenset()
+
+
+def _note_truncation(resp: Any, *, cap: int | None) -> None:
+    """Numără apelurile oprite de plafonul de output (`finish_reason == "length"`).
+
+    Tokenii de RAȚIONAMENT se scad din același `max_completion_tokens` ca textul (măsurat: cu
+    `reasoning_effort=high` și cap 16, `gpt-5.4-mini` consumă tot capul pe raționament și întoarce
+    conținut GOL, cu `finish_reason="length"` și status 200). Un răspuns gol nu ridică nimic: iese
+    ca proză vidă și devine fallback determinist, deci cauza reală (plafon prea mic pentru effortul
+    cerut) nu apare nicăieri. E doar OBSERVABILITATE — nu schimbă turul (P6, P10) — dar transformă
+    un non-răspuns tăcut într-o degradare numărată."""
+    try:
+        choice = (getattr(resp, "choices", None) or [None])[0]
+        if choice is None or getattr(choice, "finish_reason", None) != "length":
+            return
+        empty = not (getattr(choice.message, "content", None) or "").strip()
+        turn_latency.degrade("llm_output_truncated_empty" if empty else "llm_output_truncated")
+        log.warning(
+            "llm: completion oprit de plafon (cap=%s, conținut gol=%s) — tokenii de raționament "
+            "intră în ACELAȘI buget ca textul",
+            cap,
+            empty,
+        )
+    except Exception:  # noqa: BLE001 — observabilitatea nu are voie să rupă un apel reușit (P6)
+        return
+
+
 class LLMClient:
     """Wrapper subțire peste AsyncOpenAI. Modelele vin din settings (nano/mini)."""
 
@@ -245,27 +301,42 @@ class LLMClient:
         self.model_moderation = model_moderation
         self.model_vision = model_vision
 
-    def _sampling(self, *, agent: bool) -> dict[str, Any]:
-        """Params trimiși la chat.completions, pe DOUĂ axe INDEPENDENTE:
+    def _sampling(self, *, agent: bool, model: str) -> dict[str, Any]:
+        """Params trimiși la chat.completions, pe TREI axe:
 
         • Plafon de output: `max_completion_tokens` pe TOATE apelurile de agent, MEREU (NX-125 — un
           completion patologic/buclă nu scapă de ceiling), independent de sampling. Folosim
           `max_completion_tokens`, NU `max_tokens` (deprecat → 400 pe modelele curente gpt-5.4-*).
-        • `temperature`: gated de `llm_sampling_enabled`. ON → variație controlată (agent: copy
-          ne-repetitiv `llm_temperature_agent`; triaj: clasificare deterministă
-          `llm_temperature_triage`). OFF → omis → default-ul modelului. Corectitudinea NU depinde de
-          temperatură (o asigură validatorul stagiului 8), deci `agent` poate fi urcat liber.
+          E acceptat de toate familiile, deci nu trece prin poarta de capabilitate.
+        • `temperature`: gated de `llm_sampling_enabled` ȘI de ce acceptă modelul. ON → variație
+          controlată (agent: copy ne-repetitiv `llm_temperature_agent`; triaj: clasificare
+          deterministă `llm_temperature_triage`). OFF → omis → default-ul modelului. Corectitudinea
+          NU depinde de temperatură (o asigură validatorul stagiului 8), deci `agent` poate fi urcat
+          liber — dar pe `gpt-5.6-*` valoarea nu pleacă deloc, fiindcă modelul o refuză cu 400.
+        • `reasoning_effort`: gated de `llm_reasoning_effort_agent` ȘI de ce acceptă modelul.
+
+        Axele NU sunt independente de model: `supported_params` decide ce are voie să plece, ca un
+        default de model schimbat să nu mai poată omorî o cale întreagă (vezi comentariul de la
+        `_PARAM_SUPPORT`). Un opțional lăsat acasă se numără ca degradare, ca să nu dispară tăcut
+        dintr-un tur pe care îl credem configurat.
 
         Triajul (agent=False) nu primește ceiling (JSON scurt). embed/moderate/vision nu trec
         pe aici."""
         s = get_settings()
+        supported = supported_params(model)
         out: dict[str, Any] = {}
         if agent:
             out["max_completion_tokens"] = s.llm_max_tokens_agent
             if effort := (getattr(s, "llm_reasoning_effort_agent", "") or "").strip():
-                out["reasoning_effort"] = effort
+                if "reasoning_effort" in supported:
+                    out["reasoning_effort"] = effort
+                else:
+                    turn_latency.degrade("llm_param_unsupported_reasoning_effort")
         if s.llm_sampling_enabled:
-            out["temperature"] = s.llm_temperature_agent if agent else s.llm_temperature_triage
+            if "temperature" in supported:
+                out["temperature"] = s.llm_temperature_agent if agent else s.llm_temperature_triage
+            else:
+                turn_latency.degrade("llm_param_unsupported_temperature")
         return out
 
     async def _chat(self, *, agent: bool, **kwargs: Any):
@@ -273,13 +344,15 @@ class LLMClient:
 
         NX-241: plafonul de timp al UNUI apel (`llm_call_cap_ms`) intră aici, nu în fiecare
         apelant — timeoutul efectiv rămâne `min(cap, buget rămas − rezervă)`."""
-        kwargs.update(self._sampling(agent=agent))
+        kwargs.update(self._sampling(agent=agent, model=kwargs["model"]))
         s = get_settings()
-        return await _with_retry(
+        resp = await _with_retry(
             lambda: self._client.chat.completions.create(**kwargs),
             max_retries=s.llm_retry_max,
             cap_ms=getattr(s, "llm_call_cap_ms", 8_000),
         )
+        _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
+        return resp
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
         """Apel chat cu răspuns JSON forțat (`response_format=json_object`).
