@@ -28,7 +28,12 @@ Verifică, în ordine:
   1. `/health/ready` — 200 (altfel nu are rost să trimitem trafic);
   2. `/web/bootstrap` — sesiune emisă;
   3. detectarea profilului (un singur accept, nu două cereri);
-  4. lanțul profilului detectat, până la un răspuns REAL.
+  4. lanțul profilului detectat, până la un răspuns REAL;
+  5. că răspunsul NU e fallback-ul de runner (vezi `RUNNER_FALLBACK_MARKER`).
+
+Pasul 5 e cel care face din 4 o verificare adevărată: pipeline-ul are o plasă care răspunde
+politicos când niciun stagiu n-a produs nimic, deci „200 cu text nevid" e compatibil cu un creier
+de vânzare complet mort. Pe 24 aug 2026 exact asta s-a întâmplat.
 
 ## Ce NU ajunge în artefact
 
@@ -62,9 +67,24 @@ EXIT_OK = 0
 EXIT_FAIL = 1
 EXIT_ERROR = 2
 
-#: Mesajul de smoke. Deliberat banal și fără date personale: ajunge în conversația tenantului de
-#: test și în logurile lui.
-SMOKE_MESSAGE = "salut"
+#: Mesajul de smoke. Fără date personale (ajunge în conversația tenantului de test și în logurile
+#: lui), dar DELIBERAT o cerere de produs, nu un salut.
+#:
+#: A fost „salut" până pe 24 aug 2026, și exact asta a lăsat să treacă verde promovarea lui
+#: `bbb77b3`: un salut iese pe `greeting_stage` (strat gratuit, determinist), deci smoke-ul nu
+#: atingea NICIUN model. În buildul promovat, fiecare tur de vânzare pica pe un `400` de la
+#: furnizor, iar poarta n-avea cum să vadă — dovedea că aplicația e sus, nu că vinde.
+#:
+#: O cerere de produs trece prin tot lanțul: alias → cache → FAQ (toate „miss" pe o cerere reală)
+#: → triaj → agent → tool-uri → validator → randare.
+SMOKE_MESSAGE = "caut un produs pentru ten gras, ce îmi recomanzi?"
+
+#: Fragment din fallback-ul de runner (`fallback_stage`, src/worker/runner.py) — plasa care se
+#: aprinde când NICIUN stagiu n-a produs reply. E un 200 cu text valid, deci nicio verificare de
+#: status sau de „nu e gol" nu-l poate distinge de un răspuns adevărat: singura diferență e CE
+#: scrie. Duplicarea textului aici e intenționată (smoke-ul rulează contra unui host remote și nu
+#: importă `src`), iar `tests/test_release_smoke.py` ține cele două șiruri sincronizate.
+RUNNER_FALLBACK_MARKER = "n-am înțeles exact"
 
 
 class SmokeError(RuntimeError):
@@ -91,6 +111,15 @@ def _request(url: str, *, method: str = "GET", body: dict | None = None, timeout
 def _digest(raw: str) -> str:
     """Amprentă a răspunsului, nu răspunsul: demonstrează egalitatea fără să publice conținutul."""
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _is_runner_fallback(raw: str) -> bool:
+    """`raw` conține fallback-ul de runner? Caută AMBELE forme, fiindcă nu putem presupune cum
+    serializează serverul diacriticele: Starlette scrie UTF-8 literal, dar un `ensure_ascii=True`
+    oriunde pe drum ar transforma marker-ul în `\\u0163`-uri și verificarea ar deveni tăcut
+    inutilă — exact tipul de gardă care raportează verde fiindcă nu mai potrivește nimic."""
+    escaped = json.dumps(RUNNER_FALLBACK_MARKER, ensure_ascii=True)[1:-1]  # fără ghilimele
+    return RUNNER_FALLBACK_MARKER in raw or escaped in raw
 
 
 def run_smoke(
@@ -200,6 +229,10 @@ def _run_steps(
         payload_bytes=len(terminal_raw or ""),
     )
     step("terminal_nu_e_gol", len(terminal_raw or "") > 2)
+    # „Nevid" nu e „a răspuns": fallback-ul de runner e tot text valid, într-un 200. Pe o cerere
+    # de produs, plasa aprinsă înseamnă că agentul a murit (model refuzat, tool loop căzut) și că
+    # restul sistemului pare sănătos exact fiindcă triajul de deasupra a mers.
+    step("raspuns_nu_e_fallback_de_runner", not _is_runner_fallback(terminal_raw or ""))
 
     # 5. Replay: a doua citire, aceiași bytes.
     _status, _payload, replay_raw = _request(f"{base}/web/v2/turns/{turn_id}?{auth}")
@@ -261,6 +294,8 @@ def _run_v1_chain(base: str, token: str, session: dict, step) -> None:
         products=len(payload.get("products") or []),
         digest=_digest(raw),
     )
+    # Vezi nota din lanțul v2: „nevid" nu distinge un răspuns de plasa de siguranță.
+    step("raspuns_v1_nu_e_fallback_de_runner", not _is_runner_fallback(content))
 
 
 def main(argv: list[str] | None = None) -> int:

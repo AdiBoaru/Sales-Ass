@@ -57,7 +57,11 @@ def test_v2_dark_falls_back_to_the_v1_contract_and_says_so(monkeypatch):
 
     assert report["ok"] is True
     assert report["profile"] == "v1"
-    assert [s["step"] for s in report["steps"]][-2:] == ["chat_v1", "raspuns_v1_nu_e_gol"]
+    assert [s["step"] for s in report["steps"]][-3:] == [
+        "chat_v1",
+        "raspuns_v1_nu_e_gol",
+        "raspuns_v1_nu_e_fallback_de_runner",
+    ]
     # Turul sincron a fost chiar exersat, nu doar declarat.
     assert ("POST", f"{BASE}/web/chat") in seen
 
@@ -141,3 +145,75 @@ def test_unready_instance_stops_before_sending_traffic(monkeypatch, status):
     assert report["failed_step"] == "health_ready"
     assert report["profile"] == "unknown"
     assert len(seen) == 1  # nimic după poarta de readiness
+
+
+# ── Poarta care lipsea: „a răspuns" vs „plasa de siguranță a răspuns" ─────────────────────────
+# Incidentul din 24 aug 2026: promovarea lui `bbb77b3` a trecut verde în timp ce FIECARE tur de
+# vânzare cădea pe `fallback_stage` (modelul agent refuza `temperature` cu 400). Smoke-ul n-avea
+# cum să vadă: trimitea „salut", care iese pe `greeting_stage` fără niciun apel de model.
+
+
+def test_mesajul_de_smoke_nu_e_un_salut():
+    """Un salut e servit de un strat gratuit, determinist — deci nu exersează niciun model.
+    Poarta trebuie să trimită o cerere care ajunge la agent, altfel măsoară doar că serverul e
+    sus."""
+    assert len(smoke.SMOKE_MESSAGE.split()) >= 4
+    assert smoke.SMOKE_MESSAGE.strip().lower() not in {"salut", "buna", "bună", "hei", "hello"}
+
+
+def test_markerul_de_fallback_e_chiar_textul_din_runner():
+    """Textul e duplicat în smoke (rulează contra unui host remote, nu importă `src`). Garda asta
+    e motivul pentru care duplicarea e acceptabilă: dacă cineva reformulează fallback-ul din
+    runner, testul pică AICI, nu peste trei luni într-o promovare care trece verde degeaba."""
+    from pathlib import Path
+
+    runner_src = Path(smoke.ROOT, "src", "worker", "runner.py").read_text(encoding="utf-8")
+    assert smoke.RUNNER_FALLBACK_MARKER in runner_src
+
+
+def test_fallbackul_de_runner_pica_smokeul_pe_v1(monkeypatch):
+    raw = json.dumps(
+        {
+            "content": "Hmm, n-am înțeles exact 🙂 Cauți un produs anume, ai o întrebare "
+            "despre o comandă, sau altceva?",
+            "products": [],
+        }
+    )
+    _wire(monkeypatch, _v1_routes((200, json.loads(raw), raw)))
+
+    report = smoke.run_smoke(BASE, TOKEN)
+
+    # 200, text nevid, politicos — și totuși produsul e mort. Exact ce trebuie prins.
+    assert report["ok"] is False
+    assert report["failed_step"] == "raspuns_v1_nu_e_fallback_de_runner"
+
+
+def test_fallbackul_de_runner_pica_smokeul_si_pe_v2(monkeypatch):
+    terminal = json.dumps(
+        {
+            "turn": {"id": "t-1", "status": "completed"},
+            "view": {"blocks": [{"type": "text", "text": "Hmm, n-am înțeles exact 🙂 Cauți..."}]},
+        }
+    )
+    _wire(
+        monkeypatch,
+        [
+            ("/health/ready", "GET", HEALTH),
+            ("/web/bootstrap", "GET", BOOTSTRAP),
+            ("/web/v2/turns?", "POST", (202, {"turn": {"id": "t-1"}}, "{}")),
+            ("/web/v2/turns/t-1", "GET", (200, json.loads(terminal), terminal)),
+        ],
+    )
+
+    report = smoke.run_smoke(BASE, TOKEN)
+
+    assert report["ok"] is False
+    assert report["failed_step"] == "raspuns_nu_e_fallback_de_runner"
+
+
+def test_markerul_se_gaseste_si_cand_diacriticele_sunt_escapate():
+    """Un `ensure_ascii=True` oriunde pe drum ar transforma diacriticele în escape-uri unicode.
+    O gardă care nu mai potrivește nimic raportează verde — cel mai prost mod de a eșua."""
+    escaped = json.dumps({"content": "Hmm, n-am înțeles exact 🙂"}, ensure_ascii=True)
+    assert "n-am înțeles" not in escaped  # chiar e escapat, testul verifică ce crede că verifică
+    assert smoke._is_runner_fallback(escaped)

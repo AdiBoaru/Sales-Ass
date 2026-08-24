@@ -67,6 +67,14 @@ iar profilul detectat ajunge în raport (`"profile"`) și în linia de rezumat a
 | `v2` | `WEB_TURN_V2_ENABLED=true` | `bootstrap → accept (202) → terminal → replay byte-identic → idempotență` |
 | `v1` | flagul stins (starea de AZI în producție) | `bootstrap → POST /web/chat → răspuns nevid` |
 
+Pe ambele profiluri, ultimul pas e `raspuns_nu_e_fallback_de_runner`, iar mesajul de smoke e o
+**cerere de produs**, nu un salut. Amândouă sunt reacția la incidentul din 2026-08-24: mesajul era
+`"salut"`, care iese pe `greeting_stage` (strat gratuit, determinist) fără NICIUN apel de model,
+iar pipeline-ul are o plasă (`fallback_stage`) care răspunde politicos când niciun stagiu n-a
+produs nimic. Deci „200 cu text nevid" era compatibil cu un creier de vânzare complet mort — și
+exact asta a promovat verde `bbb77b3`, în timp ce fiecare tur de vânzare din producție pica pe un
+`400` de la furnizor. Un smoke care nu atinge modelul nu poate prinde o pană de model.
+
 Detectarea nu e o presupunere: `_v2_gate` verifică flagul ÎNAINTEA sesiunii, deci un 404 pe o
 cerere cu sesiune validă înseamnă „feature stins" (ruta lipsă ar da 404 și fără parametri, unde
 FastAPI răspunde 422). Nu se trimite o cerere separată de probing — acceptul E sonda.
