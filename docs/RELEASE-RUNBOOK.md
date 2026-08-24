@@ -214,6 +214,32 @@ rollback s-a închis. În incident nu se face down-migration — vezi §4.
 
 ## 3. Rollback
 
+### 3.0 Automat, la promovare picată
+
+Dacă **deployul** sau **smoke-ul** pică, workflow-ul revine singur la `previous_digest` și rulează
+un al doilea smoke ca să verifice că versiunea revenită chiar servește. Nu trebuie să faci nimic —
+dar rularea rămâne **roșie**, deliberat: un rollback reușit nu e un release reușit.
+
+Ce să te aștepți să vezi în `production-evidence-<run_id>`: `smoke-prod.json` (eșecul care a
+declanșat) și `smoke-rollback.json` (starea după revenire).
+
+Trei situații în care **nu** se declanșează, fiecare intenționat:
+
+| situație | de ce |
+|---|---|
+| promovarea era ea însăși un rollback (`rollback: true`) | întoarcerea ei e chiar versiunea stricată de la care fugeai |
+| a picat preflight (înainte de deploy) | hostul n-a fost atins; un „rollback" ar reporni containerele degeaba |
+| `previous_digest` gol | nu există unde să revii — rularea se oprește cu `::error::` și ceri om |
+
+E sigur să revii peste o migrare care tocmai a rulat fiindcă `--require-rollback-possible` a
+verificat, **înainte** de deploy, că imaginea precedentă tolerează schema aplicată. Poarta aia e
+precondiția care face automat ce altfel ar fi fost o decizie de judecată în incident.
+
+Championul **nu** se înregistrează după un rollback: rămâne cel vechi, deci buildul următor își ia
+ținta dintr-o versiune despre care știm că servește.
+
+### 3.1 Manual, de pe host
+
 ```bash
 python scripts/release/rollback.py --manifest manifest.json          # DRY-RUN (implicit)
 python scripts/release/rollback.py --manifest manifest.json --apply  # execută
