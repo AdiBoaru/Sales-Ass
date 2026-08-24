@@ -24,7 +24,12 @@ from datetime import UTC, datetime, timedelta
 
 from src.config import get_settings
 from src.db.connection import close_pool
-from src.jobs import cleanup_dedupe, cleanup_web_turns, partition_maintenance
+from src.jobs import (
+    cleanup_conversation_traces,
+    cleanup_dedupe,
+    cleanup_web_turns,
+    partition_maintenance,
+)
 
 log = logging.getLogger(__name__)
 
@@ -151,6 +156,13 @@ def _build_jobs() -> list[Job]:
             "cleanup_web_turns",
             cleanup_web_turns.run,
             interval_seconds=s.scheduler_web_turns_interval_seconds,
+        ),
+        # NX-256: retenția capturii de diagnoză. Aceeași logică ca la web_turns: NEcondiționată
+        # de `conversation_trace_enabled`, no-op pe o DB fără migrarea 045 (guard în query).
+        Job(
+            "cleanup_conversation_traces",
+            cleanup_conversation_traces.run,
+            interval_seconds=86400,
         ),
     ]
     if s.partition_job_enabled:  # NX-218: partițiile lunii viitoare, create ÎNAINTE de scrieri

@@ -305,11 +305,20 @@ async def _finalize_rich(
         f"Nevoia clientului: {query}\n{axes_block}\nProduse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
+    trace = getattr(ctx, "trace", None)  # fake-urile din teste n-au câmpul nou (tiparul aftercare)
     try:
         j = await llm.complete_schema(rich_system, user, _RICH_SCHEMA)
     except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fallback pe proză
         log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
+        if trace is not None:
+            trace["rich_error"] = type(e).__name__  # NX-256: în captura de diagnoză
         return None
+    # NX-256: JSON-ul BRUT al modelului, înainte de membership/scrub — singurul loc unde există.
+    # Incidentul din 24 aug: rich-ul degradase pe „all-items-dropped-by-membership" și nu aveam
+    # cum să aflăm ce id-uri emisese modelul, fiindcă `j` murea aici, în memorie. Merge DOAR în
+    # `ctx.trace` (→ `conversation_traces`, sub flag), NU în analytics (P12: acolo contoare).
+    if trace is not None:
+        trace["rich_raw"] = j
     return compose.assemble(ctx, j, products)
 
 
@@ -398,6 +407,8 @@ async def render(
                 "all-items-dropped-by-membership" if rich is not None else "structured-call-failed"
             )
             ctx.emit("rich_downgraded", reason=reason)
+            if getattr(ctx, "trace", None) is not None:
+                ctx.trace["rich_downgraded"] = reason  # NX-256: lângă `rich_raw`, în captura full
         # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
         # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza validării.
         bare = _bad_bare_numbers(final, products, plan.grounded_prices) if final else []
