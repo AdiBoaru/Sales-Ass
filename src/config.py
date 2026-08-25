@@ -260,6 +260,12 @@ class Settings(BaseSettings):
     conversation_trace_enabled: bool = Field(
         default=False, validation_alias="CONVERSATION_TRACE_ENABLED"
     )
+    # NX-257 — poarta de POTRIVIRE: produsele ale căror date CONTRAZIC o constrângere rostită de
+    # client, pe o fațetă declarată `partitioning` și peste pragul ei de acoperire, ies din
+    # `ctx.retrieval`. UNKNOWN trece mereu (D7). OFF = byte-identic. Asta E enforcement-ul NX-188,
+    # deci rămâne DARK până la GO-ul NX-210 (care așteaptă corpusul NX-203) — dar mecanismul
+    # există, testat, ca aprinderea să fie un flag, nu un proiect.
+    relevance_mask_enabled: bool = Field(default=False, validation_alias="RELEVANCE_MASK_ENABLED")
     # Retenția capturii (zile) — purjată de cleanup_conversation_traces (job admin, bounded).
     # Ca la web_turns, retenția NU e gated pe flag: rândurile acumulate nu rămân pe disc dacă
     # flagul se stinge; jobul e no-op pe o DB fără migrarea 045 (guard `to_regclass`).

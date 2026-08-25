@@ -31,6 +31,7 @@ from src.agent.fallbacks import (
 from src.agent.finalize import _finalize_rich
 from src.agent.match_gate import build_match_set
 from src.agent.query_rewrite import build_query_spec
+from src.agent.relevance_gate import apply_mask
 from src.agent.validator import _valid
 from src.analytics.demand import clean_ids
 from src.config import get_settings
@@ -77,7 +78,10 @@ def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: 
     OFF). Construiește constrângerile din query (contractul NX-208) + registrul tipizat (NX-186),
     clasează candidații și emite telemetrie FĂRĂ PII (clase + numere + status per fațetă). NU atinge
     `reply` (shadow). Best-effort — orice eroare e înghițită (nu blochează turul, P6)."""
-    if not get_settings().match_gate_shadow_enabled:
+    s = get_settings()
+    # NX-257: masca de potrivire are nevoie de ACELEAȘI verdicte, deci calculul pornește și când
+    # doar ea e aprinsă. Shadow-ul rămâne ce era: observabilitate, fără efect asupra reply-ului.
+    if not (s.match_gate_shadow_enabled or s.relevance_mask_enabled):
         return
     dp = ctx.business.domain_pack
     facets = {f.key: f for f in (dp.facets if dp else ())}
@@ -87,6 +91,8 @@ def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: 
         spec = build_query_spec(query or "", dp, locale=ctx.language, needs=active_needs(ctx))
         ms = build_match_set(products, spec.constraints, facets)
         ctx.match_set = ms
+        if not s.match_gate_shadow_enabled:
+            return  # doar masca e aprinsă: verdictele există, telemetria de shadow nu se emite
         ctx.emit(
             "match_gate_shadow",
             n_candidates=len(products),
@@ -105,6 +111,43 @@ def _match_gate_shadow(ctx: TurnContext, products: list[dict[str, Any]], query: 
             )
     except Exception:  # noqa: BLE001 — shadow pur observabil; nu blochează niciodată turul
         log.warning("match_gate_shadow failed", exc_info=True)
+
+
+def _apply_relevance_mask(ctx: TurnContext, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """NX-257 — scoate produsele care CONTRAZIC ce a cerut clientul (kill-switch, default OFF).
+
+    Poarta lipsă: tot restul sistemului verifică dacă răspunsul e ADEVĂRAT, nimic nu verifica dacă
+    e POTRIVIT. Decizia e a `relevance_gate` (pură); aici doar o aplicăm și o raportăm.
+
+    Setul GOL după mască nu se repopulează: dacă toate produsele contrazic cererea, „n-am găsit
+    ceva potrivit" e răspunsul onest, iar căile de no-results există deja. A da înapoi produsele
+    respinse ar însemna să preferăm un răspuns plin și greșit unuia gol și corect — exact eroarea
+    pe care poarta o repară. Best-effort: orice excepție lasă setul neatins (P6)."""
+    if not get_settings().relevance_mask_enabled or ctx.match_set is None:
+        return products
+    dp = ctx.business.domain_pack
+    facets = {f.key: f for f in (dp.facets if dp else ())}
+    try:
+        outcome = apply_mask(products, ctx.match_set, facets)
+    except Exception:  # noqa: BLE001 — o poartă de calitate nu are voie să dărâme turul
+        log.warning("relevance_mask failed", exc_info=True)
+        return products
+    if outcome.skipped_low_coverage:
+        # Fațetă partiționantă căreia catalogul nu-i dă destule valori ca să distingem
+        # „contrazice" de „neetichetat". Se RAPORTEAZĂ: e un defect de date, nu unul de cod.
+        ctx.emit("relevance_mask_skipped", facets=list(outcome.skipped_low_coverage))
+    if not outcome.changed:
+        return products
+    ctx.emit(
+        "relevance_mask_applied",
+        n_before=len(products),
+        n_after=len(outcome.kept),
+        n_excluded=len(outcome.excluded_ids),
+        facets=list(outcome.enforced_facets),
+        emptied=not outcome.kept,
+    )
+    ctx.trace["relevance_mask_excluded"] = list(outcome.excluded_ids)
+    return list(outcome.kept)
 
 
 # MOD SUPERLATIV (IZI): întrebare despre setul AFIȘAT de tip „care dintre ele e cea mai X". ÎNALTĂ
@@ -400,8 +443,11 @@ async def build_plan(
     # care uită gate-ul), aici e ultimul punct înainte ca `ctx.retrieval` să alimenteze validatorul,
     # cardurile și `displayed_products`. Idempotent: pe un set deja gate-uit nu taie nimic.
     products = policy.gate(ctx, products, purpose="retrieval_final")[0]
+    # NX-187/NX-257: verdictele se calculează ÎNAINTE de `ctx.retrieval`, fiindcă masca de
+    # potrivire are voie să schimbe setul. Shadow-ul rămâne pur observabil (vezi funcția).
+    _match_gate_shadow(ctx, products, query)
+    products = _apply_relevance_mask(ctx, products)
     ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
-    _match_gate_shadow(ctx, products, query)  # NX-187: MatchSet shadow (OFF by default)
 
     return ResponsePlan(
         handled=False,

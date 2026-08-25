@@ -1828,6 +1828,7 @@ rate_limit_enabled = true
 reference_precedence_v2_enabled = false
 relations_first_enabled = true
 release_controller_enabled = false
+relevance_mask_enabled = false
 replay_store_prompt_enabled = false
 response_style_enabled = true
 response_telemetry_enabled = true
