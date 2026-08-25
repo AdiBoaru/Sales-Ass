@@ -21,12 +21,14 @@ import re
 from collections.abc import Collection
 from typing import TYPE_CHECKING
 
+from src.agent.match_gate import canonical_facet_key
 from src.agent.query_spec import (
     Constraint,
     RuntimeQuerySpec,
     SafeVocabulary,
     constraints_from_needs,
 )
+from src.agent.relevance_gate import BINDING_PARTITIONING
 from src.domain.normalize import normalize
 
 if TYPE_CHECKING:
@@ -133,6 +135,18 @@ def safe_vocabulary(
     )
 
 
+def _binding_for(domain_pack: DomainPack | None, facet_key: str) -> str:
+    """Binding-ul DECLARAT al fațetei (`partitioning` | `additive`), din registrul tipizat.
+
+    Fără pack, fără registru, sau fațetă nedeclarată ⇒ `additive`: o fațetă nu capătă putere de
+    excludere prin tăcere. Cheia se caută și prin aliasul singular↔plural (`concern`/`concerns`),
+    fiindcă QuerySpec vorbește la singular și catalogul la plural — aceeași fațetă, două nume."""
+    facets = getattr(domain_pack, "facets", ()) or ()
+    by_key = {f.key: f for f in facets}
+    facet = by_key.get(facet_key) or by_key.get(canonical_facet_key(by_key, facet_key))
+    return getattr(facet, "binding", "additive") if facet is not None else "additive"
+
+
 def build_query_spec(
     raw_query: str,
     domain_pack: DomainPack | None,
@@ -184,7 +198,20 @@ def build_query_spec(
             )
         )
 
-    # 4. Concern scan (soft) — mapare colocvial → cheie canonică din attributes->'concerns'.
+    # 4. Concern scan — mapare colocvial → cheie canonică din attributes->'concerns'.
+    #
+    # NX-257: tăria NU mai e hardcodată `soft`. Ea se compune din DOUĂ lucruri, niciunul dedus
+    # dintr-o frază: (a) fațeta declară dacă un MISMATCH pe ea e o CONTRADICȚIE (`partitioning`)
+    # sau o absență (`additive`) — vezi `domain.facets._BINDING_KINDS`; (b) sursa afirmației, iar
+    # aici suntem pe calea `derived`, adică valoarea a fost ROSTITĂ de client în turul curent
+    # (`_word_hit` pe mesajul lui) — echivalentul lui `user_explicit` din NX-251.
+    #
+    # Deci: rostit de client + fațetă partiționantă ⇒ `hard`. Orice altceva rămâne `soft`.
+    # Un `soft` nu exclude niciodată nimic, doar depunctează la ranking (match_gate), deci
+    # default-ul `additive` al registrului face schimbarea asta un no-op pe orice tenant care
+    # nu a declarat nimic — inclusiv azi, pe toți.
+    concern_binding = _binding_for(domain_pack, FACET_CONCERN)
+    concern_strength = "hard" if concern_binding == BINDING_PARTITIONING else "soft"
     for phrase_norm, canonical in concern_map.items():
         if _word_hit(scan, phrase_norm):
             constraints.append(
@@ -192,7 +219,7 @@ def build_query_spec(
                     facet=FACET_CONCERN,
                     op="contains",
                     value=canonical,
-                    strength="soft",
+                    strength=concern_strength,
                     source="derived",
                 )
             )

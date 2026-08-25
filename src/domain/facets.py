@@ -69,6 +69,18 @@ _MISSING_POLICIES: frozenset[str] = frozenset({"unknown", "false", "skip"})
 # de structură (preț/finish/spf) — self-evident, „verified" = „valid".
 _PROVENANCE_KINDS: frozenset[str] = frozenset({"structural", "claim"})
 
+# NX-257 — ce ÎNSEAMNĂ un MISMATCH pe fațeta asta. Singura declarație care decide dacă o valoare
+# afirmată de client poate EXCLUDE produse, și e o proprietate a fațetei, nu a frazei sau a limbii:
+#
+#   • "partitioning" — cumpărătorul are exact UNA dintre valori (tip de ten, mărime, tip de motor,
+#     sistem de operare, voltaj). Un produs cu altă valoare îl CONTRAZICE ⇒ excluderea e corectă.
+#   • "additive"     — valoarea e un obiectiv/beneficiu/utilizare (riduri, luminozitate, „bun de
+#     drum lung"). Un produs care n-o poartă nu contrazice nimic, doar nu o țintește ⇒ NICIODATĂ
+#     exclus, doar depunctat la ranking.
+#
+# Default `additive`: o fațetă care nu declară nimic nu capătă putere de excludere prin tăcere.
+_BINDING_KINDS: frozenset[str] = frozenset({"partitioning", "additive"})
+
 
 class FacetConfigError(ValueError):
     """Config de fațetă invalid — fail-closed (fațeta e respinsă, nu încărcată)."""
@@ -90,6 +102,8 @@ class TypedFacet:
     missing_value: str = "unknown"  # unknown | false | skip
     provenance: str = "structural"  # structural | claim
     min_coverage: float = 0.0  # prag minim de coverage pt enforcement (NX-188)
+    # NX-257: partitioning | additive — vezi `_BINDING_KINDS`. Doar `partitioning` poate exclude.
+    binding: str = "additive"
     labels: dict[str, str] = field(
         default_factory=dict
     )  # locale → etichetă display (absoarbe NX-182)
@@ -150,6 +164,9 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
     provenance = raw.get("provenance", "structural")
     if provenance not in _PROVENANCE_KINDS:
         raise FacetConfigError(f"provenance invalid pt {key!r}: {provenance!r}")
+    binding = raw.get("binding", "additive")
+    if binding not in _BINDING_KINDS:
+        raise FacetConfigError(f"binding invalid pt {key!r}: {binding!r}")
 
     try:
         min_cov = float(raw.get("min_coverage", 0.0))
@@ -194,6 +211,7 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
         missing_value=missing,
         provenance=provenance,
         min_coverage=min_cov,
+        binding=binding,
         labels=labels,
     )
 
