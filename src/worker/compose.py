@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
 from src.config import get_settings
+from src.domain.normalize import normalize
 from src.models import (
     Chip,
     Comparison,
@@ -310,6 +311,74 @@ def scrub_education(
     return " ".join(kept) or None
 
 
+#: Minimul de cuvinte dintr-un nume de produs care mai poate identifica UNIC produsul în proză.
+#: Sub 2 rămâne doar brandul („Petala"), iar catalogul are „Petala Nourish", „Petala Rich",
+#: „Petala Matte" — un match pe brand ar lega fraza de produsul greșit, adică fix defectul pe care
+#: îl reparăm, doar mai subtil.
+_MIN_NAME_WORDS = 2
+
+
+def _mention_index(prose: str, name: str) -> int | None:
+    """Poziția primei mențiuni a lui `name` în `prose`, sau None. Determinist, fără LLM.
+
+    Numele complet („Petala Nourish Cremă de mâini") apare rar integral în proză — modelul scrie
+    „Petala Nourish". Deci încercăm prefixe descrescătoare de cuvinte, oprindu-ne la
+    `_MIN_NAME_WORDS`, și luăm prima potrivire (cea mai SPECIFICĂ, fiindcă mergem de la lung la
+    scurt). Comparăm normalizat (lower + fără diacritice): catalogul are 52% nume cu diacritice,
+    iar modelul le poate scrie fără."""
+    words = normalize(name).split()
+    if len(words) < _MIN_NAME_WORDS:
+        return None
+    hay = normalize(prose)
+    for cut in range(len(words), _MIN_NAME_WORDS - 1, -1):
+        pos = hay.find(" ".join(words[:cut]))
+        if pos >= 0:
+            return pos
+    return None
+
+
+def _order_by_first_mention(
+    ordered_ids: list[str],
+    facts: dict[str, dict[str, Any]],
+    j: dict[str, Any],
+    ctx: TurnContext,
+) -> list[str]:
+    """Reordonează cardurile după ordinea în care `intro` NUMEȘTE produsele.
+
+    De ce e nevoie: rankingul (ARCH-2026 P0) ordonează cardurile, dar `intro` e proza modelului,
+    scrisă în ordinea LUI. Când cele două diferă, răspunsul se contrazice: textul trimite la al
+    doilea produs, cardul al doilea e altul. Măsurat pe trafic real, nu ipotetic.
+
+    Regula: cine e numit în `intro` vine primul, în ordinea mențiunii; restul păstrează ordinea de
+    ranking, după ei. Deci modelul NU câștigă control asupra setului (rankingul îl alege) și nici
+    asupra produselor pe care nu le narează — doar asupra celor pe care le-a numit oricum în fraza
+    citită PRIMA de client.
+
+    Pur: aceleași intrări → aceeași ieșire. `intro` gol / niciun nume recunoscut ⇒ ordinea neatinsă.
+    """
+    intro = j.get("intro")
+    if not isinstance(intro, str) or not intro.strip():
+        return ordered_ids
+    positions: dict[str, int] = {}
+    for pid in ordered_ids:
+        idx = _mention_index(intro, str(facts[pid].get("name") or ""))
+        if idx is not None:
+            positions[pid] = idx
+    if not positions:
+        return ordered_ids
+    rank = {pid: i for i, pid in enumerate(ordered_ids)}
+    # Numiții întâi (după poziția în frază), restul după, în ordinea de ranking. `rank` ca al
+    # doilea criteriu ține sortarea STABILĂ și pentru două nume la aceeași poziție (imposibil azi,
+    # dar o sortare care depinde de ordinea dict-ului e o bombă cu ceas).
+    reordered = sorted(
+        ordered_ids, key=lambda p: (p not in positions, positions.get(p, 0), rank[p])
+    )
+    if reordered != ordered_ids:
+        # Se NUMĂRĂ: dacă apare des, promptul trebuie reparat, nu plasa de siguranță întinsă.
+        ctx.emit("rich_order_realigned", n=len(positions))
+    return reordered
+
+
 def _select_pick(
     j: dict[str, Any],
     facts: dict[str, dict[str, Any]],
@@ -397,6 +466,14 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         if deterministic
         else llm_order
     )
+    # …dar rankingul reordona DOAR cardurile, iar `intro` rămânea proza modelului, scrisă în ordinea
+    # LUI. Rezultatul, văzut pe trafic real (2026-08-26): textul spunea „Nourish… Solora Repair…
+    # Velvet Root Pure", iar cardurile veneau Nourish, Pure, Repair. Clientul citește fraza „dacă
+    # sunt crăpate, Solora Repair", se uită la al doilea card și găsește altceva. Un răspuns care se
+    # contrazice pe sine e mai rău decât unul cu position bias — mai ales că bias-ul EXISTĂ oricum
+    # în proza citită PRIMA. Deci proza dictează ordinea; rankingul rămâne cel care alege SETUL și
+    # ordonează tot ce proza nu numește.
+    ordered_ids = _order_by_first_mention(ordered_ids, facts, j, ctx)
 
     def _build(pid: str) -> RichItem:
         p = facts[pid]

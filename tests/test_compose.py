@@ -687,3 +687,109 @@ def test_off_category_intro_localized() -> None:
     assert compose._off_category_intro("hu").startswith("Őszintén")
     assert compose._off_category_intro("ro").startswith("Ca să fiu sincer")
     assert compose._off_category_intro(None) == compose._off_category_intro("ro")
+
+
+# --- ordinea cardurilor urmează ordinea din proză (defect live 2026-08-26) ---
+
+
+def _hand_creams() -> list[dict]:
+    """Rankingul le întoarce în ordinea asta; modelul le narează în ALTA."""
+    return [
+        {"id": "N", "name": "Petala Nourish Cremă de mâini", "price": 18.99, "rating": 4.5},
+        {"id": "P", "name": "Velvet Root Pure Cremă de mâini", "price": 45.49, "rating": 4.9},
+        {
+            "id": "R",
+            "name": "Solora Repair Cremă de mâini intensivă",
+            "price": 28.99,
+            "rating": 4.8,
+        },
+    ]
+
+
+def _items(*ids: str) -> list[dict]:
+    return [{"product_id": i, "pro_index": 0, "fit_clause": "se potriveste"} for i in ids]
+
+
+def test_cardurile_urmeaza_ordinea_din_intro() -> None:
+    """Defectul RAPORTAT de client: proza zicea Nourish → Solora Repair → Velvet Root Pure, iar
+    cardurile veneau Nourish → Pure → Repair (ordinea de ranking). Cititorul urmărește fraza „dacă
+    sunt crăpate, Solora Repair", se uită la al doilea card și găsește altceva."""
+    ctx = _ctx()
+    j = {
+        "intro": (
+            "Pentru hidratare zilnică non-grasă, Petala Nourish este alegerea simplă. Dacă mâinile "
+            "sunt foarte uscate sau crăpate, Solora Repair oferă reparare intensă, iar Velvet Root "
+            "Pure se potrivește mai ales iarna."
+        ),
+        "items": _items("N", "P", "R"),
+        "education": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, _hand_creams())
+    assert [i.product_id for i in rich.items] == ["N", "R", "P"]  # ordinea MENȚIUNII
+    assert any(e[0] == "rich_order_realigned" for e in ctx.events)
+
+
+def test_ordinea_neatinsa_cand_proza_deja_corespunde() -> None:
+    """Cazul normal: nicio reordonare, niciun event — plasa de siguranță nu se declanșează."""
+    ctx = _ctx()
+    j = {
+        "intro": (
+            "Petala Nourish pentru zi cu zi, Velvet Root Pure iarna, Solora Repair la crăpături."
+        ),
+        "items": _items("N", "P", "R"),
+        "education": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, _hand_creams())
+    assert [i.product_id for i in rich.items] == ["N", "P", "R"]
+    assert not any(e[0] == "rich_order_realigned" for e in ctx.events)
+
+
+def test_produsele_nenumite_raman_in_ordinea_de_ranking() -> None:
+    """Modelul controlează doar ordinea produselor pe care le-a NUMIT oricum în fraza citită
+    prima. Restul rămân cum le-a clasat rankingul, după ele."""
+    ctx = _ctx()
+    j = {
+        "intro": "Solora Repair e alegerea pentru mâini crăpate.",
+        "items": _items("N", "P", "R"),
+        "education": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, _hand_creams())
+    assert [i.product_id for i in rich.items] == ["R", "N", "P"]
+
+
+def test_brandul_singur_nu_identifica_produsul() -> None:
+    """„Petala" e purtat de trei produse din catalog. Un match pe brand ar lega fraza de produsul
+    greșit — adică ACELAȘI defect, doar mai subtil. Sub două cuvinte nu potrivim nimic."""
+    ctx = _ctx()
+    retrieved = [
+        {"id": "A", "name": "Petala Rich Cremă hidratantă", "price": 49.99},
+        {"id": "B", "name": "Petala Matte Cremă hidratantă", "price": 47.99},
+    ]
+    j = {
+        "intro": "Gama Petala acoperă ambele tipuri de ten.",
+        "items": _items("A", "B"),
+        "education": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, retrieved)
+    assert [i.product_id for i in rich.items] == ["A", "B"]  # neatins
+    assert not any(e[0] == "rich_order_realigned" for e in ctx.events)
+
+
+def test_diacriticele_lipsa_din_proza_nu_rup_potrivirea() -> None:
+    """52% din numele active au diacritice, iar modelul le poate scrie fără."""
+    ctx = _ctx()
+    j = {
+        "intro": (
+            "Solora Repair Crema de maini intensiva rezolva crapaturile. "
+            "Petala Nourish e pentru zilnic."
+        ),
+        "items": _items("N", "P", "R"),
+        "education": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, _hand_creams())
+    assert [i.product_id for i in rich.items][:2] == ["R", "N"]
