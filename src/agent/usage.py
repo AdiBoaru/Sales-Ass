@@ -39,8 +39,17 @@ def _empty_model_row() -> dict[str, Any]:
 @dataclass
 class UsageAccumulator:
     """Totalurile unui tur. `tokens_in` = prompt (INCLUDE `cached_tokens`); `tokens_out` =
-    completion. `cost_usd` = sumă pe apeluri, cu tokenii cached la tarif redus. `by_model` =
-    defalcare per model (nano/mini/embeddings) pentru raportul de cost (NX-103)."""
+    completion (INCLUDE `reasoning_tokens`). `cost_usd` = sumă pe apeluri, cu tokenii cached la
+    tarif redus. `by_model` = defalcare per model (nano/mini/embeddings) pentru raportul de cost
+    (NX-103).
+
+    Ambele câmpuri „details" sunt SUBSETURI, nu suplimente: `cached_tokens ⊆ tokens_in`,
+    `reasoning_tokens ⊆ tokens_out`. Nu le aduna la totaluri și nu le factura separat — costul e
+    deja calculat pe prompt/completion. Regula stă aici fiindcă ăsta e obiectul pe care îl citește
+    oricine adaugă un raport; vezi `_reasoning_from` pentru de ce contează defalcarea.
+
+    `snapshot()` NU include raționamentul, deliberat: NX-241 îl diff-uiește ca să scadă consumul
+    rundei din bugetul turului, iar un subset adăugat acolo ar taxa de două ori aceiași tokeni."""
 
     calls: int = 0
     tokens_in: int = 0
