@@ -59,14 +59,27 @@ FROM python@${BASE_DIGEST} AS runtime
 #
 # Doar în `runtime`: stagiul `builder` nu ajunge în imaginea finală, deci pachetele lui de OS nu
 # sunt niciodată expuse.
-RUN apt-get update \
+# CACHE-BUST DELIBERAT. Fără linia asta, pasul de patch-uri se aplica O SINGURĂ DATĂ și apoi
+# îngheța: instrucțiunea nu se schimbă, layerul părinte nici el, deci BuildKit (`cache-from:
+# type=gha`) reutiliza rezultatul la infinit. Adică EXACT pasul pus ca să prindă CVE-urile
+# publicate după coacerea bazei nu mai prindea nimic — o protecție care arată activă în Dockerfile
+# și e moartă în practică.
+#
+# Prins pe 2026-08-26: CVE-2026-14456 (OpenSSL, HIGH) avea fix în `trixie-security`
+# (3.5.6 → 3.5.7), imaginea îl avea disponibil, iar buildul l-a ratat fiindcă `apt-get upgrade`
+# venea din cache. `BUILT_AT` se schimbă la fiecare build (e pasat ca build-arg din workflow), deci
+# referirea lui aici garantează că layerul se reconstruiește mereu. Costă ~30s de build; alternativa
+# e o poartă de scan care se roșește la fiecare CVE nou și se repară manual de fiecare dată.
+ARG BUILT_AT=unknown
+RUN echo "security-refresh ${BUILT_AT}" > /dev/null \
+    && apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Metadate OCI: leagă imaginea de commit-ul din care a ieșit, fără să pună nimic secret în ea.
 # `docker inspect` pe VPS răspunde „ce rulează aici?" chiar și fără acces la CI.
+# (`BUILT_AT` e deja în scope, declarat mai sus pentru cache-bust.)
 ARG RELEASE_SHA=unknown
-ARG BUILT_AT=unknown
 LABEL org.opencontainers.image.source="https://github.com/adiboaru/sales-ass" \
       org.opencontainers.image.revision="${RELEASE_SHA}" \
       org.opencontainers.image.created="${BUILT_AT}" \
