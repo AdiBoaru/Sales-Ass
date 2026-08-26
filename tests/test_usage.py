@@ -24,10 +24,16 @@ class _Details:
 
 
 @dataclass
+class _CompletionDetails:
+    reasoning_tokens: int
+
+
+@dataclass
 class _Usage:
     prompt_tokens: int
     completion_tokens: int
     prompt_tokens_details: _Details | None = None
+    completion_tokens_details: _CompletionDetails | None = None
 
 
 class _Msg:
@@ -177,6 +183,40 @@ def test_accumulator_by_model_breakdown():
     assert acc.by_model["gpt-5.4-nano"]["tokens_in"] == 300
     assert acc.by_model["gpt-5.4-mini"]["cached_tokens"] == 256
     assert acc.by_model["gpt-5.4-mini"]["cost_usd"] > 0
+
+
+def test_reasoning_tokens_sunt_subset_nu_supliment():
+    """`reasoning_tokens` se raportează SEPARAT, dar NU se adaugă la `tokens_out` și nu intră a doua
+    oară în cost: e o defalcare a completion-ului, nu tokeni în plus. Fără contorul ăsta nu poți
+    răspunde la „cât din `LLM_MAX_TOKENS_AGENT` a mâncat raționamentul" — adică la întrebarea care
+    decide dacă plafonul e dimensionat corect pentru effortul configurat."""
+    acc, token = usage.push()
+    try:
+        resp = _Resp(
+            _Usage(
+                prompt_tokens=1000,
+                completion_tokens=700,
+                completion_tokens_details=_CompletionDetails(reasoning_tokens=640),
+            )
+        )
+        usage.record_chat(resp, "gpt-5.4-mini")
+    finally:
+        usage.pop(token)
+    assert acc.tokens_out == 700  # NU 1340
+    assert acc.reasoning_tokens == 640
+    assert acc.by_model["gpt-5.4-mini"]["reasoning_tokens"] == 640
+    # Doar 60 de tokeni au rămas pentru textul efectiv — exact forma pe care o vânăm.
+    assert acc.tokens_out - acc.reasoning_tokens == 60
+
+
+def test_reasoning_tokens_lipsa_nu_rupe_nimic():
+    """Modelele care nu raționează nu trimit `completion_tokens_details` — 0, nu excepție."""
+    acc, token = usage.push()
+    try:
+        usage.record_chat(_Resp(_Usage(prompt_tokens=10, completion_tokens=5)), "gpt-5.4-nano")
+    finally:
+        usage.pop(token)
+    assert acc.reasoning_tokens == 0
 
 
 def test_record_chat_into_active_accumulator():

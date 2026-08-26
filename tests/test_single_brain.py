@@ -212,6 +212,30 @@ async def test_demoted_signals_reach_brain_prompt(monkeypatch):
     assert "[context faq_stage] Livrarea costă 20 lei." in llm.captured["user"]
 
 
+async def test_planul_ajunge_in_captura_de_diagnoza(monkeypatch):
+    """NX-256: planul e singurul lucru care decide CE randează frontendul (tip de bloc, variantă,
+    comparație, CTA) — prin `ground_answer` → `render_v2`. Pe calea creierului unic `finalize` nu
+    mai rulează, deci `rich_raw` nu se scrie niciodată: fără captura asta planul moare în memorie
+    și „de ce a ieșit cardul așa" rămâne fără răspuns."""
+    ctx = _ctx()
+    llm = _FakeLLM(plan=_plan_dict(), search_args={"query": "ser ten uscat"})
+    await _run(ctx, llm, _FakePort(), monkeypatch)
+    assert ctx.trace["brain_plan_raw"] == _plan_dict()  # brutul modelului, înainte de validare
+    assert ctx.trace["brain_plan"]["schema_version"] == 2  # planul VALIDAT, forma din schemă
+    assert "brain_plan_failures" not in ctx.trace  # planul a trecut din prima
+
+
+async def test_planul_respins_lasa_urma_cu_motivul(monkeypatch):
+    """Cazul care chiar se investighează: planul respins nu ajunge nici în `ctx.answer_plan`, nici
+    în reply. Dacă nu e în trace, nu există nicăieri."""
+    ctx = _ctx()
+    llm = _FakeLLM(loop_error=ValueError("json invalid"), repair=RuntimeError("tot invalid"))
+    await _run(ctx, llm, _FakePort(), monkeypatch)
+    assert ctx.trace["brain_plan_failures"] == ["unknown_evidence"]
+    assert ctx.trace["brain_plan_fallback"] == "unknown_evidence"
+    assert "brain_plan" not in ctx.trace  # niciun plan valid → nicio cheie de plan validat
+
+
 # --- repair + fallback ----------------------------------------------------------
 
 

@@ -26,7 +26,14 @@ from src.agent.pricing import cost_for
 
 
 def _empty_model_row() -> dict[str, Any]:
-    return {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cached_tokens": 0, "cost_usd": 0.0}
+    return {
+        "calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cached_tokens": 0,
+        "reasoning_tokens": 0,
+        "cost_usd": 0.0,
+    }
 
 
 @dataclass
@@ -39,21 +46,26 @@ class UsageAccumulator:
     tokens_in: int = 0
     tokens_out: int = 0
     cached_tokens: int = 0
+    reasoning_tokens: int = 0
     cost_usd: float = 0.0
     by_model: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def add(self, model: str, prompt: int, completion: int, cached: int) -> None:
+    def add(
+        self, model: str, prompt: int, completion: int, cached: int, *, reasoning: int = 0
+    ) -> None:
         cost = cost_for(model, prompt, cached, completion)
         self.calls += 1
         self.tokens_in += prompt
         self.tokens_out += completion
         self.cached_tokens += cached
+        self.reasoning_tokens += reasoning
         self.cost_usd += cost
         row = self.by_model.setdefault(model, _empty_model_row())
         row["calls"] += 1
         row["tokens_in"] += prompt
         row["tokens_out"] += completion
         row["cached_tokens"] += cached
+        row["reasoning_tokens"] += reasoning
         row["cost_usd"] += cost
 
     def snapshot(self) -> tuple[int, int, int, int, float]:
@@ -95,6 +107,24 @@ def _cached_from(usage: Any) -> int:
     return int(getattr(details, "cached_tokens", 0) or 0)
 
 
+def _reasoning_from(usage: Any) -> int:
+    """`completion_tokens_details.reasoning_tokens` — tolerează obiect SDK SAU dict SAU lipsă.
+
+    ATENȚIE, e un SUBSET al lui `completion_tokens`, nu un plus: tokenii de raționament se scad din
+    ACELAȘI `max_completion_tokens` ca textul (măsurat — vezi `llm._note_truncation`). Deci NU intră
+    în cost separat (ar dubla factura) și nu se adună la `tokens_out`. Îl ținem ca defalcare: fără
+    el nu poți răspunde la „cât din plafon a mâncat raționamentul", adică exact întrebarea care
+    decide dacă `LLM_MAX_TOKENS_AGENT` e dimensionat corect pentru effortul configurat."""
+    details = getattr(usage, "completion_tokens_details", None)
+    if details is None and isinstance(usage, dict):
+        details = usage.get("completion_tokens_details")
+    if details is None:
+        return 0
+    if isinstance(details, dict):
+        return int(details.get("reasoning_tokens") or 0)
+    return int(getattr(details, "reasoning_tokens", 0) or 0)
+
+
 def _field(usage: Any, name: str) -> int:
     val = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, 0)
     return int(val or 0)
@@ -112,7 +142,7 @@ def record_chat(resp: Any, model: str) -> None:
     tokens_in = _field(usage, "prompt_tokens")
     tokens_out = _field(usage, "completion_tokens")
     cached = _cached_from(usage)
-    acc.add(model, tokens_in, tokens_out, cached)
+    acc.add(model, tokens_in, tokens_out, cached, reasoning=_reasoning_from(usage))
     # NX-246: același punct unic de contabilizare alimentează și metricile operaționale. Hook
     # NEUTRU (`src/observability/hooks.py`) — adaptorul nu știe de exporter, nu decide sampling
     # și nu importă niciun vendor. Rolul se DERIVĂ din model (vezi `model_role`), ca să nu

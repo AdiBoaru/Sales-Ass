@@ -110,6 +110,22 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
+def _trace(ctx: TurnContext, key: str, value: Any) -> None:
+    """Depune un diagnostic în `ctx.trace` (NX-256), sub prefixul `brain_`.
+
+    De ce e nevoie: pe calea creierului unic, `agent_stage` iese la `run_main_brain` ÎNAINTE de
+    `finalize`, deci `rich_raw` nu se scrie niciodată. Planul e singurul lucru care decide ce
+    randează frontendul (tip de bloc, variantă de text, tabel de comparație, CTA-uri) — vezi
+    `_attach_grounding` → `ground_answer` → `channels/web/render_v2`. Fără captura asta, întrebarea
+    „de ce a ieșit cardul așa" n-are unde să primească răspuns: planul moare în memorie.
+
+    `getattr`: ctx-urile fake din unit-teste (SimpleNamespace) n-au câmpul — un câmp de diagnoză nu
+    are voie să transforme o suită verde într-una roșie (tiparul aftercare, ca în `compose`)."""
+    trace = getattr(ctx, "trace", None)
+    if trace is not None:
+        trace[key] = value
+
+
 def brain_versions(system: str, tools: list[dict[str, Any]], model: str | None) -> dict[str, Any]:
     """Amprentele versionate ale rulării (trace attrs, nu labels): prompt/tool-schema/model."""
     return {
@@ -796,6 +812,10 @@ async def run_main_brain(
         ctx, deps, system=brain_system, user=brain_user, tools=tools, execute=execute, model=model
     )
     ctx.emit("main_brain_tool_rounds_bucket", bucket=_rounds_bucket(rounds))
+    # NX-256: planul BRUT al modelului, înainte de validare — singurul loc unde există. Un plan
+    # respins la validare e exact cazul pe care vrei să-l citești, iar el nu ajunge nici în
+    # `ctx.answer_plan`, nici în reply.
+    _trace(ctx, "brain_plan_raw", raw)
 
     # NX-173 (P0) ENFORCEMENT FINAL + contractul `ctx.retrieval`, exact ca pe calea v1
     # (`planner.build_plan`). Brain-ul returnează înainte de `build_plan`, deci fără asta nimeni
@@ -818,6 +838,7 @@ async def run_main_brain(
     plan, failures = _validate(brain_input, raw, context, required)
     repairs = 0
     if plan is None or failures:
+        _trace(ctx, "brain_plan_failures", list(failures or ("unknown_evidence",)))
         repairs = 1
         repaired = await _repair_plan(
             ctx,
@@ -828,6 +849,7 @@ async def run_main_brain(
             context=context,
             model=model,
         )
+        _trace(ctx, "brain_repair_raw", repaired)
         plan, failures = _validate(brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan is not None and not failures else "exhausted")
 
@@ -839,11 +861,15 @@ async def run_main_brain(
             **versions,
         )
         ctx.emit("main_brain_call", phase="plan", outcome="fallback")
+        _trace(ctx, "brain_plan_fallback", failures[0] if failures else "unparseable")
         ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
         return
 
     ctx.emit("answer_plan_validation", outcome="ok", reason=None, **versions)
     ctx.answer_plan = plan
+    # Planul VALIDAT — cel din care se derivă grounding-ul și, prin el, blocurile pe care le
+    # randează frontendul. `by_alias`: exact forma din schemă, ca să se poată compara cu `raw`.
+    _trace(ctx, "brain_plan", plan.model_dump(mode="json", by_alias=True))
     if plan.no_results is not None:
         ctx.emit("no_results", reason_class=plan.no_results.reason_class)
     _emit_constraint_handling(ctx, brain_input, plan)
