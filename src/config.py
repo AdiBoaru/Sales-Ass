@@ -667,6 +667,15 @@ class Settings(BaseSettings):
     # heuristica same-brand/concern. ON → relations-first cu fallback la heuristică DOAR când ancora
     # n-are nicio relație. OFF (kill-switch) → mereu heuristica veche (byte-identic).
     relations_first_enabled: bool = Field(default=True, validation_alias="RELATIONS_FIRST_ENABLED")
+    # NX-262: traversarea grafului de relații dincolo de vecinii direcți (lanț de pași, substitut
+    # tranzitiv). OFF (default) = byte-identic: `DomainPack.relation_kinds` se încarcă și se
+    # validează, dar nicio cale de răspuns nu urmează vreo muchie la adâncime > 1. Flagul e o a DOUA
+    # poartă peste declarația din config: un pack care declară `chain/4` nu activează singur nimic,
+    # fiindcă adâncimea e o decizie de PRODUS (buget de tur, calitatea datelor), nu de configurare
+    # a vocabularului. Aprinderea cere măsurătoarea din `scripts/relations_graph_probe.py`.
+    relation_traversal_enabled: bool = Field(
+        default=False, validation_alias="RELATION_TRAVERSAL_ENABLED"
+    )
     # NX-171c: quality-gate `content_status` — DOAR produsele 'published' sunt servite clientului.
     # Kill-switch GLOBAL (feature disponibil); filtrarea EFECTIVĂ cere OPT-IN PER-TENANT
     # (businesses.settings->>'content_status_filter' = true), activat DOAR după ce backfill-ul a
