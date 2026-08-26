@@ -54,7 +54,7 @@ MAX_BLOCKS_PER_MESSAGE = 12
 MAX_PRODUCT_ITEMS = 6  # aceeași limită ca tool results (CLAUDE.md: max 6 produse)
 MAX_COMPARISON_COLUMNS = 3
 MAX_COMPARISON_ROWS = 12
-MAX_ACTIONS_PER_ROW = 4  # `_MAX_WEB_CHIPS` din render.py v1 — widgetul nu trebuie să pară încărcat
+MAX_ACTIONS_PER_ROW = 5  # `_MAX_WEB_CHIPS` din render.py v1 — widgetul nu trebuie să pară încărcat
 MAX_ACTIONS_PER_ITEM = 3
 MAX_KEY_VALUE_ROWS = 12
 MAX_STATUS_ITEMS = 8
@@ -66,7 +66,11 @@ MAX_BADGES = 3
 MAX_TEXT_LEN = 2000
 MAX_TITLE_LEN = 200
 MAX_LABEL_LEN = 60
-MAX_ACTION_LABEL_LEN = 40  # `_MAX_WEB_CHIP_LEN` v1: un chip e o etichetă, nu o propoziție
+# `models.MAX_CHIP_LEN` (v1 `_MAX_WEB_CHIP_LEN`): un chip e MESAJUL pe care l-ar scrie clientul,
+# nu o etichetă de două cuvinte. Valoarea e duplicată intenționat (modulul ăsta rămâne pur, fără
+# import din pipeline), dar trebuie să nu scadă sub cea din v1: aici un label prea lung nu se taie,
+# ci INVALIDEAZĂ tot ViewModel-ul (`extra="forbid"` + `_bounded`), deci ar fi un răspuns pierdut.
+MAX_ACTION_LABEL_LEN = 56
 MAX_VALUE_LEN = 200
 MAX_URL_LEN = 2048
 MAX_TOKEN_LEN = 4096  # token opac semnat (NX-236); FE nu îl citește, doar îl retransmite

@@ -24,6 +24,7 @@ from src.agent.voice import naturalize
 from src.config import get_settings
 from src.domain.normalize import normalize
 from src.models import (
+    MAX_CHIP_LEN,
     Chip,
     Comparison,
     ComparisonColumn,
@@ -254,15 +255,18 @@ def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
     """Chips = mesaje de follow-up DIN PARTEA CLIENTULUI, generate de model pe contextul lui
     (NU hardcodate). Apăsarea trimite `label` ca mesaj NOU → reintră în pipeline ca tur nou
     → e voce de client, nu afirmație a botului, deci FĂRĂ scrub. Doar normalizare: trim,
-    dedupe, scurtează (limita butonului), cap 4."""
+    dedupe, scurtează la capul de contract (`MAX_CHIP_LEN`), cap `_MAX_CHIPS`.
+
+    Scurtarea folosește ACELAȘI cap ca randorul web, altfel un chip contextual („Compară rujurile
+    Maybelline Superstay între ele") ar trece de aici întreg și ar fi dropat tăcut mai jos."""
     out: list[Chip] = []
     seen: set[str] = set()
     for s in suggestions:
         if not isinstance(s, str):
             continue
         label = " ".join(s.split()).strip(" .")
-        if len(label) > 48:
-            label = label[:47].rstrip() + "…"
+        if len(label) > MAX_CHIP_LEN:
+            label = label[: MAX_CHIP_LEN - 1].rstrip() + "…"
         key = label.lower()
         if not label or key in seen:
             continue

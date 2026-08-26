@@ -2,7 +2,7 @@
   "_note": "GENERAT de scripts/stage1_contract_manifest.py — nu edita manual. Fără timestamp: determinismul e condiția ca driftul să însemne ceva.",
   "schema_version": "web-view.v2",
   "turn_schema_version": "web-turn.v2",
-  "schema_sha256": "1ba3eb43d19de07f9ffe0489c9b90e8b9c0980d1583e559878da44728b11c172",
+  "schema_sha256": "0b0b2694c46a3c257bd34144a5b9cd1c9b2f5c9da9c2d13b6056b35c3cc77ede",
   "turn_schema_sha256": "29bc1e0114a31caa3ff0ffd58549a1e4301c0e87464a4a3b4e5aec78a306e772",
   "fixtures_sha256": "3c889cbc8e4e0ed46e930381444beea622961f4bb086ad4d8acb6667173f4f96",
   "fixtures": {

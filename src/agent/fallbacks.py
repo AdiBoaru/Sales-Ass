@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.models import MAX_CHIP_LEN
 from src.web.localization import amount_text
 
 # Mesaj determinist când NU există nimic mai ieftin (niciodată tăcere/padding, P6). Per-locale.
@@ -27,12 +28,26 @@ def _cheapest_already_msg(language: str | None) -> str:
 
 
 # NX-159 felia 2: chips deterministe de CONTINUARE pentru căile subțiri (no-result / cheapest-
-# already). Voce de client (reintră ca tur nou: „Schimbă bugetul" → cheaper/refine). Căi CONCRETE,
-# nu fundătură generică. Per-locale. GENERIC pe vertical (formularea nu e specifică beauty).
+# already). Voce de client (reintră ca tur nou: „Hai să schimbăm bugetul" → cheaper/refine). Căi
+# CONCRETE, nu fundătură generică. Per-locale. GENERIC pe vertical (formularea nu e specifică
+# beauty). Scrise ca MESAJE, nu ca etichete: pe o cale subțire clientul n-are context afișat de
+# care să se agațe, deci un „Schimbă bugetul" retrimis singur nu spune nimănui ce schimbă.
 _THIN_PATH_CHIPS: dict[str, list[str]] = {
-    "ro": ["Arată-mi ce e popular", "Schimbă bugetul", "Caut altă categorie"],
-    "en": ["Show me what's popular", "Change the budget", "Look in another category"],
-    "hu": ["Mutasd a népszerűeket", "Módosítsd a keretet", "Másik kategória"],
+    "ro": [
+        "Arată-mi ce se caută cel mai des la voi",
+        "Hai să schimbăm bugetul",
+        "Prefer să caut în altă categorie",
+    ],
+    "en": [
+        "Show me what people buy most from you",
+        "Let's change the budget",
+        "I'd rather look in another category",
+    ],
+    "hu": [
+        "Mutasd, mit vásárolnak nálatok a legtöbben",
+        "Változtassunk a kereten",
+        "Inkább másik kategóriában keresnék",
+    ],
 }
 
 
@@ -134,25 +149,47 @@ def _cross_sell_query(added: dict[str, Any], language: str | None) -> str:
 
 
 # IZI-compare: chips deterministe pe un tabel comparativ (voce de client → reintră ca tur nou:
-# „Adaugă X" → cart_add; „Ceva mai ieftin" → cheaper). Etichete per-locale (text UI, nu rutare).
-_ADD_LABEL: dict[str, str] = {"ro": "Adaugă", "en": "Add", "hu": "Hozzáad"}
-_CHEAPER_CHIP: dict[str, str] = {
-    "ro": "Ceva mai ieftin",
-    "en": "Something cheaper",
-    "hu": "Valami olcsóbb",
+# „Adaugă X în coș" → cart_add; „mai ieftin" → cheaper; „spune-mi mai multe" → detail_intent).
+# Formulările PĂSTREAZĂ cuvintele pe care le prind regexurile din `deterministic` (`_CHEAPER_RE`,
+# `_DETAIL_RE`): un chip mai natural care nu se mai rutează ar fi o regresie, nu o îmbunătățire.
+_COMPARE_FOLLOWUPS: dict[str, dict[str, str]] = {
+    "ro": {
+        "add": "Adaugă {name} în coș",
+        "detail": "Spune-mi mai multe despre {name}",
+        "cheaper": "Vreau ceva mai ieftin decât astea",
+    },
+    "en": {
+        "add": "Add {name} to my cart",
+        "detail": "Tell me more about {name}",
+        "cheaper": "I want something cheaper than these",
+    },
+    "hu": {
+        "add": "Tedd a kosárba: {name}",
+        "detail": "Mesélj még erről: {name}",
+        "cheaper": "Valami olcsóbbat szeretnék ezeknél",
+    },
 }
 
 
+def fit_chip(template: str, name: str) -> str:
+    """Umple `{name}` scurtând NUMELE, nu chip-ul. Tăierea la coadă („Adaugă Velora Soft…") ar
+    rupe fix partea care rutează (verbul e la început în hu: „Tedd a kosárba: …"), deci bugetul
+    se calculează din ce rămâne după șablon. Nume prea lung → elipsă pe nume, chip întreg."""
+    budget = MAX_CHIP_LEN - len(template.format(name=""))
+    trimmed = name if len(name) <= budget else name[: max(1, budget - 1)].rstrip() + "…"
+    return template.format(name=trimmed)
+
+
 def _compare_chips(columns: list[Any], language: str | None) -> list[str]:
-    """Follow-up-uri deterministe după o comparație: „Adaugă <produs>" pentru primele 2 + „mai
-    ieftin". Numele lungi se scurtează (butonul are limită). Voce de client (fără scrub)."""
+    """Follow-up-uri deterministe după o comparație, ca mesaje de client (fără scrub): „adaugă în
+    coș" pentru primele două, detalii pe prima, plus calea „mai ieftin". Patru chips, fiindcă după
+    un tabel clientul are deja produsele în față și pasul următor e o alegere, nu o rafinare."""
     lang = language or "ro"
-    add = _ADD_LABEL.get(lang) or _ADD_LABEL["ro"]
-    chips: list[str] = []
-    for c in columns[:2]:
-        name = c.name if len(c.name) <= 28 else c.name[:27].rstrip() + "…"
-        chips.append(f"{add} {name}")
-    chips.append(_CHEAPER_CHIP.get(lang) or _CHEAPER_CHIP["ro"])
+    copy = _COMPARE_FOLLOWUPS.get(lang) or _COMPARE_FOLLOWUPS["ro"]
+    chips = [fit_chip(copy["add"], c.name) for c in columns[:2]]
+    if columns:
+        chips.append(fit_chip(copy["detail"], columns[0].name))
+    chips.append(copy["cheaper"])
     return chips
 
 

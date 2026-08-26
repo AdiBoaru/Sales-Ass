@@ -10,11 +10,13 @@ capability (web = tabel; canale text = floor).
 import json
 from dataclasses import asdict
 
+from src.agent.deterministic import _CHEAPER_RE, _DETAIL_RE
+from src.agent.fallbacks import _compare_chips
 from src.channels.base import Capability
-from src.channels.web.render import render_web, reply_from_outbox
+from src.channels.web.render import _web_chips, render_web, reply_from_outbox
 from src.channels.web.sender import WebSender
 from src.domain.pack import FacetSpec
-from src.models import Reply
+from src.models import MAX_CHIP_LEN, Reply
 from src.worker.compose import (
     build_comparison,
     comparison_cards,
@@ -355,3 +357,41 @@ async def test_agent_stage_builds_comparison_not_recommendation(monkeypatch):
     assert ctx.reply.cacheable is False  # relativ la setul afișat
     assert any("Adaugă" in s for s in ctx.reply.suggestions)  # chips deterministe
     assert any(e.type == "agent_compared" for e in ctx.events)
+
+
+# --- Follow-up-urile de după tabel: mesaje de client, dar încă rutabile ------------------------
+
+
+def test_compare_chips_are_client_messages_that_still_route():
+    """Chips-urile de după o comparație au devenit mesaje complete („Adaugă Crema A în coș") în loc
+    de etichete („Adaugă Crema A"). Naturalețea nu are voie să coste rutarea: la tap textul se
+    întoarce în pipeline și trebuie să cadă tot pe intenția deterministă, altfel un buton care
+    „sună mai bine" ajunge la bucla LLM și răspunde altceva."""
+    cmp_ = build_comparison(_products(), "ro", ())
+    assert cmp_ is not None
+    chips = _compare_chips(cmp_.columns, "ro")
+
+    assert chips == [
+        "Adaugă Crema A în coș",
+        "Adaugă Crema B în coș",
+        "Spune-mi mai multe despre Crema A",
+        "Vreau ceva mai ieftin decât astea",
+    ]
+    assert _CHEAPER_RE.search(chips[-1])  # → cheaper_intent, nu bucla LLM
+    assert _DETAIL_RE.search(chips[2])  # → detail_intent pe primul produs
+    assert all(len(c) <= MAX_CHIP_LEN for c in chips)
+    assert _web_chips(chips) == chips  # niciunul nu e dropat de garda widgetului
+
+
+def test_compare_chips_shorten_the_name_not_the_verb():
+    """Un nume lung cedează primul: tăierea la coadă ar mânca fix „în coș" / „Tedd a kosárba",
+    adică partea care poartă intenția."""
+    products = _products()
+    products[0]["name"] = "Crema Hidratantă Foarte Foarte Lungă Pentru Ten Uscat Și Sensibil"
+    cmp_ = build_comparison(products, "ro", ())
+    assert cmp_ is not None
+    chips = _compare_chips(cmp_.columns, "ro")
+
+    assert chips[0].startswith("Adaugă ") and chips[0].endswith(" în coș")
+    assert "…" in chips[0]
+    assert all(len(c) <= MAX_CHIP_LEN for c in chips)

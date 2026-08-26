@@ -212,14 +212,26 @@ REGULI DURE:
   acel atribut (din „fațete"/„descriere") și de ce, `items` = DOAR produsele care se califică, în
   ordine (cel mai potrivit primul). Un răspuns la superlativ, nu o listă generică.
 
-- `suggestions` = PÂNĂ LA 4 chips SCURTE (2-4 cuvinte), voce de CLIENT, în limba lui, etichete
-  TAPPABILE ca butoane, NU fraze de conversație. Fiecare cu un ROL DIFERIT:
-  (1) rafinare pe ATRIBUT/nevoie („Fără parfum", „Pentru ten sensibil").
-  (2) rafinare pe BUGET („Mai ieftin", „Sub 80 lei").
-  (3) COMPARAȚIE („Compară primele două").
-  (4) DETALIU sau COMERȚ („Vezi recenzii", „Vreau linkul", „Adaugă în coș").
-  Scurt și scanabil bate specificul: numește un produs DOAR dacă rămâne scurt (brand + tip).
-  Genericele tappabile sunt OK. NU sugera o acțiune EȘUATĂ în acest tur („NB:" din mesaj).
+- `suggestions` = 3-5 MESAJE de follow-up scrise exact cum le-ar tasta CLIENTUL în chat, în limba
+  lui. NU sunt etichete de două cuvinte. La apăsare, textul pleacă spre tine ca MESAJ NOU, deci
+  fiecare sugestie trebuie să se înțeleagă SINGURĂ, citită fără restul conversației: „Mai
+  accesibil" nu spune ce anume și față de ce, „Vreau un ruj roșu mai ieftin decât astea" spune.
+  Maximum 56 de caractere, altfel se taie.
+  ANCOREAZĂ fiecare sugestie în TURUL ĂSTA: tipul de produs cerut, un atribut real din „fațete"
+  sau „descriere", brandul ori numele unui produs pe care tocmai l-ai afișat, bugetul pe care l-a
+  dat clientul. O sugestie care ar merge la fel de bine sub orice alt răspuns e o sugestie
+  irosită.
+  Alege 3-5 ROLURI DIFERITE, doar pe cele care chiar au sens aici:
+  (1) rafinare pe ATRIBUT sau nevoie: „Arată-mi doar rujuri mate, rezistente la transfer".
+  (2) rafinare pe BUGET sau preț: „Vreau ceva similar sub 100 de lei".
+  (3) COMPARAȚIE numită: „Compară primele două între ele".
+  (4) ÎNTREBARE despre produs, la care poți răspunde din fapte: „Cât ține pe buze?",
+      „Ce nuanțe mai sunt în gama asta?".
+  (5) PASUL de cumpărare, cu numele produsului: „Adaugă {produs} în coș", „Trimite-mi linkul".
+  În MOD DETALIU (deep-dive pe un singur produs) fă-le pe toate 3-4 întrebări despre ACEL produs,
+  fiecare pe altceva: durată, mod de folosire, variante disponibile, cu ce se combină.
+  Fără paranteze explicative în textul sugestiei, fără „ex:", fără voce de bot („Îmi poți spune
+  ce cauți?" e replica TA, nu a lui). NU sugera o acțiune EȘUATĂ în acest tur („NB:" din mesaj).
 
 - Folosește DOAR produsele din listă. Un id inventat e ignorat de sistem."""
 

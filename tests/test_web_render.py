@@ -102,18 +102,18 @@ def test_render_web_rich_shape():
     assert out["products"][0]["product_id"] == "p1" and out["products"][0]["image_url"] == "i1"
 
 
-def test_render_web_caps_suggestions_at_4():
-    # Web = UI premium: max 4 chips (butoane), chiar dacă modelul/canalul produc mai multe.
+def test_render_web_caps_suggestions_at_5():
+    # Web = UI premium: max 5 chips (butoane), chiar dacă modelul/canalul produc mai multe.
     rich = RichReply(
         intro="x",
         items=[RichItem(product_id="p1", name="A", price=10.0)],
         pick=None,
         education=None,
-        chips=[Chip(label=f"c{i}", payload=f"chip:{i}") for i in range(6)],
+        chips=[Chip(label=f"c{i}", payload=f"chip:{i}") for i in range(7)],
         disclaimer="",
     )
     out = render_web(Reply(text="f", rich=rich), "ro")
-    assert out["suggestions"] == ["c0", "c1", "c2", "c3"]  # primele 4, restul tăiate
+    assert out["suggestions"] == ["c0", "c1", "c2", "c3", "c4"]  # primele 5, restul tăiate
 
 
 def test_render_web_content_is_framing_not_list_or_prices():
@@ -469,24 +469,50 @@ async def test_render_path_silent_when_match(monkeypatch):
 # --- NX-179: gardă chips web (audit conversațional) --------------------------------------------
 
 
-def test_web_chips_drops_long_and_empty_non_rich():
-    """Calea clarify (non-rich): nano poate genera „chips" care sunt întrebări lungi cu paranteze
-    („Imi poti spune ce tip de produs cauti? (ex: …)") — nu-s butoane. Le dropăm; scurtele rămân."""
+def test_web_chips_drops_bot_voice_and_empty_non_rich():
+    """Calea clarify (non-rich): nano poate genera „chips" care sunt de fapt replica LUI, cu
+    explicații în paranteză („Imi poti spune ce tip de produs cauti? (ex: …)"). Filtrul e pe VOCE,
+    nu pe lungime: o cerere completă a clientului trece, o întrebare de bot cu paranteză cade."""
     reply = Reply(
         text="Ce anume cauți?",
         suggestions=[
-            "Șampon",  # etichetă bună
+            "Vreau un șampon pentru păr vopsit",  # mesaj de client, complet → rămâne
             "  ",  # goală → drop
-            "Imi poti spune ce tip de produs cauti? (ex: sampon, crema)",  # întrebare lungă → drop
-            "Cremă de față",  # bună
+            "Imi poti spune ce tip de produs cauti? (ex: sampon, crema)",  # voce de bot → drop
+            "Caut o cremă de față pentru ten uscat",  # rămâne
+            "x" * 80,  # peste capul de contract → drop
         ],
     )
     out = render_web(reply, "ro")
-    assert out["suggestions"] == ["Șampon", "Cremă de față"]
+    assert out["suggestions"] == [
+        "Vreau un șampon pentru păr vopsit",
+        "Caut o cremă de față pentru ten uscat",
+    ]
+
+
+def test_web_chips_keep_full_sentence_followups():
+    """Regresia care a motivat cardul: chips-urile bogate („Compară rujurile Maybelline Superstay
+    între ele") depășeau vechiul cap de 40 și dispăreau TĂCUT între compose și widget, așa că
+    modelul era instruit să scrie etichete de două cuvinte. Acum trec întregi."""
+    labels = [
+        "Arată-mi doar rujuri roșii mate",
+        "Vreau un ruj roșu rezistent la transfer",
+        "Ruj roșu mai ieftin decât acestea",
+        "Compară rujurile Maybelline Superstay între ele",
+    ]
+    rich = RichReply(
+        intro="x",
+        items=[RichItem(product_id="p1", name="A", price=10.0)],
+        pick=None,
+        education=None,
+        chips=[Chip(label=lbl, payload=lbl) for lbl in labels],
+        disclaimer="",
+    )
+    assert render_web(Reply(text="x", rich=rich), "ro")["suggestions"] == labels
 
 
 def test_web_chips_caps_count_rich():
-    """Calea rich: max 4 chips ca butoane, chiar dacă agentul propune mai multe."""
+    """Calea rich: max 5 chips ca butoane, chiar dacă agentul propune mai multe."""
     rich = RichReply(
         intro="x",
         items=[RichItem(product_id="p1", name="A", price=10.0)],
@@ -496,4 +522,4 @@ def test_web_chips_caps_count_rich():
         disclaimer="Funcționez cu inteligență artificială.",
     )
     out = render_web(Reply(text="x", rich=rich), "ro")
-    assert len(out["suggestions"]) == 4
+    assert len(out["suggestions"]) == 5

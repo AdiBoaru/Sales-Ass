@@ -9,7 +9,9 @@ from src.agent.fallbacks import _is_short_ack, _thin_path_chips
 from src.agent.finalize import render
 from src.agent.planner import ResponsePlan
 from src.agent.prompt_builder import PromptInputs
+from src.channels.web.render import _web_chips
 from src.models import (
+    MAX_CHIP_LEN,
     BusinessConfig,
     Contact,
     ConversationState,
@@ -83,6 +85,17 @@ def test_thin_path_chips_per_locale():
     assert len(_thin_path_chips("ro")) == 3
     assert _thin_path_chips("en") != _thin_path_chips("ro")
     assert _thin_path_chips("xx") == _thin_path_chips("ro")  # necunoscut → ro
+
+
+def test_thin_path_chips_are_client_messages_within_contract():
+    """Pe o cale subțire nu există nimic afișat de care chip-ul să se agațe, deci textul lui e
+    tot contextul pe care îl primim înapoi: trebuie să fie o cerere completă, nu o etichetă. Și
+    trebuie să încapă în capul de contract, altfel randorul web l-ar tăia tăcut."""
+    for lang in ("ro", "en", "hu"):
+        chips = _thin_path_chips(lang)
+        assert all(len(c) <= MAX_CHIP_LEN for c in chips)
+        assert all(len(c.split()) >= 3 for c in chips)  # frază, nu etichetă de două cuvinte
+        assert _web_chips(chips) == chips  # niciunul nu e dropat de gardă
 
 
 # --- _attach_no_result_alternatives (gating) ----------------------------------

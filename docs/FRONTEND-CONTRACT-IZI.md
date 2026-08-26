@@ -168,8 +168,27 @@ Pe WhatsApp/Telegram backendul trimite acelaşi conținut ca **text aplatizat** 
 
 ## 5. Chips (`suggestions[]`)
 
-Listă de string-uri. La tap, **trimite textul ca mesaj nou** (intră în pipeline ca tur nou — e
-voce de client). Ex. la o comparație: `["Adaugă Crema A", "Adaugă Crema B", "Ceva mai ieftin"]`.
+Listă de string-uri. La tap, **trimite textul ca mesaj nou** (intră în pipeline ca tur nou, e
+voce de client).
+
+**Nu sunt etichete, sunt mesajele pe care le-ar scrie clientul.** Exact fiindcă textul se întoarce
+în pipeline ca mesaj nou, fiecare chip trebuie să se înțeleagă singur, citit fără restul
+conversației: „Mai accesibil" își pierde subiectul pe drum, „Vreau un ruj roșu mai ieftin decât
+astea" nu. Ex. la o comparație:
+`["Adaugă Crema A în coș", "Adaugă Crema B în coș", "Spune-mi mai multe despre Crema A", "Vreau ceva mai ieftin decât astea"]`.
+
+| Limită | Valoare | Impusă în |
+|---|---|---|
+| Număr de chips | max **5** | `channels/web/render._MAX_WEB_CHIPS` |
+| Lungimea unui chip | max **56** caractere | `models.MAX_CHIP_LEN` |
+
+Backendul garantează amândouă, deci **frontendul nu taie și nu trunchiază**: randează textul
+integral. Pastilele se stivuiesc vertical, aliniate la stânga, și au voie să curgă pe două rânduri
+(`text-left`, `leading-snug`, fără `truncate`) — un chip tăiat cu „…" în browser ar trimite tot
+textul întreg la tap, deci ce vede clientul n-ar mai fi ce cere.
+
+Backendul dropează chips-urile cu **voce de bot** (paranteze explicative, „ex:") înainte de a le
+pune în contract, așa că lista primită e deja curată.
 
 ---
 

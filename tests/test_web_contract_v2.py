@@ -45,7 +45,12 @@ _FIXTURES = Path(__file__).parent / "fixtures" / "web_v2"
 # capabilitate din NX-228. Dacă acest test pică, contractul s-a schimbat — actualizarea
 # constantei e o decizie CONȘTIENTĂ care obligă la rollout cu schema negociat, nu un fix de
 # copiat orbește.
-EXPECTED_VIEW_SCHEMA_HASH = "1ba3eb43d19de07f9ffe0489c9b90e8b9c0980d1583e559878da44728b11c172"
+# Actualizat o dată, conștient: chips-urile au devenit mesaje de client, nu etichete de două
+# cuvinte, deci `MAX_ACTION_LABEL_LEN` 40 → 56 și `MAX_ACTIONS_PER_ROW` 4 → 5. Schimbarea e
+# LĂRGIRE pură (un payload valid înainte rămâne valid) și cade pe un contract care n-a servit
+# trafic încă (`WEB_TURN_V2_ENABLED` OFF, cutoverul e al NX-249) — deci nu există client căruia
+# să-i negociem schema. Când v2 va fi live, o schimbare aici cere negociere, nu un hash nou.
+EXPECTED_VIEW_SCHEMA_HASH = "0b0b2694c46a3c257bd34144a5b9cd1c9b2f5c9da9c2d13b6056b35c3cc77ede"
 
 
 def _load(name: str) -> dict:
