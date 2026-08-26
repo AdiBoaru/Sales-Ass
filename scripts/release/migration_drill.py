@@ -8,8 +8,10 @@ Trei întrebări la care „am rulat migrarea și a mers" nu răspunde:
 
   **concurrent** — două joburi pornite simultan (retry de deploy, două replici) produc UN singur
   migrator? Fără advisory lock, ambele ar aplica același DDL: al doilea ar pica la mijloc, lăsând
-  schema între două stări. Aici verificăm exact contractul: unul câștigă (cod 0), celălalt iese
-  cu `EXIT_LOCKED` (3) FĂRĂ să scrie nimic.
+  schema între două stări. Verificat în două probe DETERMINISTE: (A) ținem noi lock-ul dintr-o a
+  treia sesiune, deci contenția e garantată, iar `migrate.py` trebuie să iasă `EXIT_LOCKED` fără
+  să scrie; (B) doi migratori reali — exact UNUL raportează că a aplicat, un rând în ledger,
+  schema la zi. Vezi `_drill_concurrent` pentru de ce aserțiunea veche era dependentă de ceas.
 
   **idempotent** — a doua rulare e no-op? Dacă nu, orice reîncercare de deploy devine o migrare
   nouă.
@@ -35,6 +37,7 @@ import asyncpg  # noqa: E402
 from scripts.migrate import (  # noqa: E402
     EXIT_LOCKED,
     EXIT_OK,
+    acquire_migration_lock,
     apply_pending,
     discover_migrations,
     migration_state,
@@ -215,28 +218,152 @@ async def _stage_one_pending() -> str:
         await conn.close()
 
 
-def drill_concurrent() -> int:
-    """Două procese REALE de `migrate.py`, pornite împreună peste EXACT o migrare pending.
-
-    Procese, nu task-uri asyncio: lock-ul e de SESIUNE Postgres, iar două task-uri pe aceeași
-    conexiune l-ar obține amândouă — testul ar trece degeaba.
-    """
-    pending = asyncio.run(_stage_one_pending())
-    print(f"concurrent: o singură migrare pending ({pending}); pornesc două procese")
+def _run_migrate() -> subprocess.Popen:
+    """Un proces REAL de `migrate.py`. Procese, nu task-uri asyncio: lock-ul e de SESIUNE
+    Postgres, iar două task-uri pe aceeași conexiune l-ar obține amândouă."""
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
-    cmd = [sys.executable, str(ROOT / "scripts" / "migrate.py")]
-    first = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    second = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.Popen(
+        [sys.executable, str(ROOT / "scripts" / "migrate.py")],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def _out(proc: subprocess.Popen) -> tuple[str, str]:
+    return (
+        proc.stdout.read().decode("utf-8", "replace"),
+        proc.stderr.read().decode("utf-8", "replace"),
+    )
+
+
+async def _probe_lock_is_exclusive(pending: str) -> bool:
+    """A) Lock-ul ține — DETERMINIST, fără cursă.
+
+    Ținem NOI lock-ul dintr-o a treia sesiune, apoi pornim `migrate.py` peste o migrare pending
+    reală. Contenția e garantată de construcție, nu de noroc: procesul TREBUIE să iasă
+    `EXIT_LOCKED` și să nu aplice nimic. Dacă lock-ul n-ar funcționa, ar aplica și ar ieși 0 —
+    exact ce vrem să prindem.
+    """
+    holder = await _connect()
+    try:
+        if not await acquire_migration_lock(holder):
+            print("::error::nu am putut lua lock-ul pt probă (altcineva îl ține?)", file=sys.stderr)
+            return False
+        proc = _run_migrate()
+        code = proc.wait(timeout=300)
+        stdout, stderr = _out(proc)
+    finally:
+        await holder.close()  # închiderea sesiunii eliberează advisory lock-ul
+
+    if code != EXIT_LOCKED:
+        print(
+            f"::error::lock ținut de altă sesiune, dar migrate a ieșit {code} "
+            f"(aștept {EXIT_LOCKED})",
+            file=sys.stderr,
+        )
+        print(stdout[:2000] + stderr[:2000], file=sys.stderr)
+        return False
+
+    conn = await _connect()
+    try:
+        state = await migration_state(conn)
+    finally:
+        await conn.close()
+    if pending not in state["pending"]:
+        print(
+            f"::error::procesul blocat a scris totuși: {pending} nu mai e pending",
+            file=sys.stderr,
+        )
+        return False
+    print(f"lock: migrate a ieșit {EXIT_LOCKED} și n-a scris nimic ({pending} încă pending)")
+    return True
+
+
+async def _probe_no_double_apply(pending: str) -> bool:
+    """B) Doi migratori nu aplică de două ori — invariantul REAL.
+
+    Codurile acceptate sunt AMBELE rezultate corecte ale unui lock funcțional:
+      • `[OK, LOCKED]` — al doilea a găsit lock-ul ținut;
+      • `[OK, OK]`     — al doilea a ajuns la lock DUPĂ ce primul terminase, l-a luat curat și
+        n-a găsit nimic de aplicat.
+    A doua variantă nu e o scăpare de lock, e ordonare — și e exact ce a făcut CI-ul roșu pe 045:
+    migrarea era destul de mică încât câștigătorul să termine în fereastra de pornire a
+    celuilalt Python. A cere `[OK, LOCKED]` înseamnă a cere ca DDL-ul să fie lent, nu ca lock-ul
+    să fie corect.
+
+    Ce verificăm în schimb e ce contează: **exact UN proces raportează că a aplicat** migrarea,
+    rândul există o singură dată, iar schema iese la zi. Dacă lock-ul ar ceda, amândoi ar rula
+    același DDL — al doilea ar pica la mijloc, sau ar raporta și el aplicarea.
+    """
+    first, second = _run_migrate(), _run_migrate()
     codes = sorted((first.wait(timeout=300), second.wait(timeout=300)))
-    print(f"concurrent: coduri de ieșire {codes} (aștept [{EXIT_OK}, {EXIT_LOCKED}])")
-    # Exact un câștigător. `[0, 0]` NU mai e acceptat aici: cu o migrare pending garantată, doi de
-    # zero ar însemna că al doilea a intrat peste primul — adică lock-ul n-a făcut nimic.
-    if codes == [EXIT_OK, EXIT_LOCKED]:
-        return 0
-    print("::error::concurența pe migrare NU e rezolvată de lock", file=sys.stderr)
-    for proc in (first, second):
-        print(proc.stderr.read().decode("utf-8", "replace")[:2000], file=sys.stderr)
-    return 1
+    outs = [_out(first), _out(second)]
+    print(f"concurent: coduri de ieșire {codes}")
+
+    bad = [c for c in codes if c not in (EXIT_OK, EXIT_LOCKED)]
+    if bad or EXIT_OK not in codes:
+        print(
+            f"::error::coduri neașteptate {codes} (permise: {EXIT_OK}/{EXIT_LOCKED})",
+            file=sys.stderr,
+        )
+        for stdout, stderr in outs:
+            print(stdout[:1500] + stderr[:1500], file=sys.stderr)
+        return False
+
+    # „A aplicat" se citește din raportul procesului: `aplicat: N migrări în Xms: 045, …`.
+    appliers = [i for i, (stdout, _) in enumerate(outs) if pending in stdout.split("aplicat:")[-1]]
+    if len(appliers) != 1:
+        print(
+            f"::error::{len(appliers)} procese raportează că au aplicat {pending} (aștept exact 1)",
+            file=sys.stderr,
+        )
+        for stdout, stderr in outs:
+            print(stdout[:1500] + stderr[:1500], file=sys.stderr)
+        return False
+
+    conn = await _connect()
+    try:
+        rows = await conn.fetchval(
+            "select count(*) from schema_migrations where version = $1", pending
+        )
+        state = await migration_state(conn)
+    finally:
+        await conn.close()
+    if rows != 1 or not state["ok"]:
+        print(
+            f"::error::după cursă: {rows} rânduri pt {pending}, pending={state['pending']}, "
+            f"drift={state['drift']}",
+            file=sys.stderr,
+        )
+        return False
+    print(f"concurent: exact un proces a aplicat {pending}; un rând în ledger; schema la zi")
+    return True
+
+
+async def _drill_concurrent() -> int:
+    """Lock-ul de migrare, în două probe DETERMINISTE.
+
+    Versiunea veche cerea codurile `[OK, LOCKED]` de la două procese pornite simultan. Aserțiunea
+    depindea de CRONOMETRAJ: al doilea proces primește `LOCKED` doar dacă ajunge la
+    `pg_try_advisory_lock` cât timp primul încă îl ține — deci testul trecea fiindcă migrările de
+    până acum erau destul de lente, nu fiindcă lock-ul e corect. Migrarea 045 (un tabel mic) a
+    făcut main roșu fără ca nimic din lock să se fi stricat.
+
+    Acum contenția e garantată în proba A (o ținem noi), iar proba B verifică invariantul care
+    contează cu adevărat: nimeni nu aplică de două ori.
+    """
+    pending = await _stage_one_pending()
+    print(f"o singură migrare pending ({pending})")
+    if not await _probe_lock_is_exclusive(pending):
+        return 1
+    if not await _probe_no_double_apply(pending):
+        return 1
+    return 0
+
+
+def drill_concurrent() -> int:
+    return asyncio.run(_drill_concurrent())
 
 
 def main(argv: list[str] | None = None) -> int:
