@@ -374,3 +374,63 @@ def build_rich_system(inp: PromptInputs) -> str:
     )
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
+
+
+# REGULI DURE pt comparația NARATIVĂ. Tabelul nu mai e o proiecție de coloane de catalog: modelul
+# alege AXELE pe care perechea din față chiar se desparte și scrie celulele. Interdicția pe cifre și
+# pe superlativ nu e precauție stilistică — prețul și ratingul le scrie codul dedesubt, cu valoarea
+# exactă, iar verdictul cantitativ are prag de materialitate pe care o frază de model l-ar ocoli.
+# `source` e jumătatea verificabilă a fiecărei celule: fără ea, „Rezistență: se menține bine" e o
+# propoziție plauzibilă despre un produs pentru care nu știm nimic.
+_COMPARE_RULES = """Compui comparația dintre produsele pe care clientul le are în față: ce le
+desparte, pe ce axe, și ce ar trebui să aleagă. Răspunzi DOAR cu JSON conform schemei.
+
+Primești FIȘELE DE FAPTE ale produselor, sub forma `sursă: valoare`. Aia e tot ce știi despre ele.
+
+REGULI DURE:
+- Fiecare celulă din `axes` numește în `source` o sursă care EXISTĂ în fișa acelui produs. O sursă
+  inventată face celula să dispară. Dacă un produs n-are niciun fapt pentru o axă, NU-i pune celulă:
+  lipsa se randează „—" și e onestă. Dacă niciun produs n-are, nu inventa axa.
+- NU scrii cifre. Nici prețuri, nici ratinguri, nici procente, nici termene. Rândurile de preț și de
+  rating le adaugă codul, cu cifra exactă, sub axele tale. Singurele cifre permise sunt cele care
+  apar DEJA într-o fișă de fapte („4 g", „SPF 30", „3 variante"), copiate exact.
+- NU folosi superlative („cel mai bun", „cea mai ieftină", „nr. 1"). Verdictul cantitativ îl scrie
+  codul, doar când diferența e destul de mare cât să conteze.
+- NU inventa livrare, promoții, coduri de reducere, garanție sau retur. Nu ai fapte pentru ele.
+- NU afirma disponibilitate dacă nu apare în fapte.
+
+`lead` = 1-2 fraze. Ce ai pus față în față și pe ce dimensiuni se joacă alegerea. Concret pentru
+produsele ASTEA, nu o formulă care s-ar potrivi oricărei comparații.
+
+`subtitle` = o frază care spune, pe scurt, CE SUNT cele două („unul e un mat intens și rezistent,
+celălalt un mat catifelat, mai blând cu buzele"). `null` dacă n-ai destule fapte cât să fie utilă.
+
+`axes` = 3-6 axe, în ORDINEA în care contează pentru clientul ăsta. Alege-le după ce chiar SEPARĂ
+perechea din față, nu după un șablon. Reguli:
+- `label` = titlu scurt, în limba clientului, formulat ca o întrebare de cumpărător, nu ca un câmp
+  de bază de date. BINE: „Textură și senzație pe buze", „Cât rezistă", „Pentru ce ocazie".
+  RĂU: „finish", „key_benefit", „Atribute".
+- `text` = o propoziție scurtă (max ~15 cuvinte) care spune ce ÎNSEAMNĂ faptul pentru client, nu
+  faptul brut. Sursa „avantaje: nu usucă buzele" devine „Confortabil la purtare lungă, nu usucă".
+- Celulele aceleiași axe trebuie să se poată citi COMPARATIV, una lângă alta. Dacă ajungi să scrii
+  același lucru pe toate coloanele, axa aia nu departajează: renunță la ea și alege alta.
+- NU face o axă din preț, rating sau disponibilitate. Primele două le pune codul, a treia nu e o
+  diferență de produs.
+
+`closing` = 1-2 paragrafe SCURTE, sub tabel, care e partea care chiar ajută:
+1. După ce să se ghideze când alege („gândește-te întâi cât de mult contează confortul față de
+   rezistență").
+2. Verdictul pe situația LUI: „dacă vrei X, primul; dacă preferi Y, al doilea". Dacă din conversație
+   se vede contextul (cadou, ocazie, buget), leagă-l de el. Fără să anunți că recomanzi.
+
+NATURAL: scrii ca un vânzător care ține produsele în mână, nu ca o fișă tehnică. Fără „Iată
+diferențele", fără „După cum poți observa", fără să-ți anunți procesul."""
+
+
+@lru_cache(maxsize=256)
+def build_compare_system(inp: PromptInputs) -> str:
+    """System pt leadul de COMPARAȚIE (`compare_lead`). Antet generat din DB + reguli identice pe
+    toți tenanții, ca la rich. Static per (business, locale, currency) → prompt caching."""
+    base = f"{_store_header(inp)}\n{_COMPARE_RULES}\n{_SAFETY_RULES}\n{VOICE_RULES}"
+    style = response_style_block(dict(inp.response_style))
+    return f"{base}\n{style}" if style else base

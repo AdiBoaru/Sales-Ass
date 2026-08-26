@@ -22,7 +22,7 @@ from src.models import (
     RichItem,
     RichReply,
 )
-from src.worker.compose import ensure_disclaimer, flatten_framing
+from src.worker.compose import comparison_heading, ensure_disclaimer, flatten_framing
 
 if TYPE_CHECKING:
     pass
@@ -101,10 +101,14 @@ def _card(
     return card
 
 
-def _comparison_payload(cmp: Comparison) -> dict[str, Any]:
+def _comparison_payload(cmp: Comparison, language: str) -> dict[str, Any]:
     """Forma de CONTRACT FRONTEND a tabelului: coloane (un produs/coloană) + rânduri (o
     dimensiune/rând, `values` aliniat 1:1 cu coloanele; `null` = celulă lipsă → „—"). Cheile
-    opționale lipsesc dacă datele nu există. Vezi docs/FRONTEND-CONTRACT-IZI.md."""
+    opționale lipsesc dacă datele nu există. Vezi docs/FRONTEND-CONTRACT-IZI.md.
+
+    `heading` e copy SERVER-OWNED (localizat din `compose`), nu o constantă în frontend: un titlu
+    hardcodat în browser ar rămâne în română pentru un tenant HU, iar contractul v2 (NX-228) merge
+    oricum în direcția „tot ce e afișabil vine de la server"."""
     columns: list[dict[str, Any]] = []
     for c in cmp.columns:
         col: dict[str, Any] = {"product_id": c.product_id, "name": c.name, "price": c.price}
@@ -118,7 +122,16 @@ def _comparison_payload(cmp: Comparison) -> dict[str, Any]:
             col["rating"] = c.rating
         columns.append(col)
     rows = [{"label": r.label, "values": list(r.values)} for r in cmp.rows]
-    return {"columns": columns, "rows": rows}
+    out: dict[str, Any] = {
+        "columns": columns,
+        "rows": rows,
+        "heading": comparison_heading(language),
+    }
+    if cmp.subtitle:
+        out["subtitle"] = cmp.subtitle
+    if cmp.closing:
+        out["closing"] = list(cmp.closing)
+    return out
 
 
 def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
@@ -153,7 +166,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
             )
             for c in cmp.columns
         ]
-        extra["comparison"] = _comparison_payload(cmp)
+        extra["comparison"] = _comparison_payload(cmp, lang)
         content = ensure_disclaimer(cmp.intro or "", lang)
     elif reply.rich is not None:
         products = [
@@ -246,7 +259,13 @@ def reply_from_outbox(payload: dict[str, Any]) -> Reply:
             for r in (cd.get("rows") or [])
             if isinstance(r, dict)
         ]
-        comparison = Comparison(columns=cols, rows=rows, intro=cd.get("intro"))
+        comparison = Comparison(
+            columns=cols,
+            rows=rows,
+            intro=cd.get("intro"),
+            subtitle=cd.get("subtitle"),
+            closing=[c for c in (cd.get("closing") or []) if isinstance(c, str)],
+        )
     offer: Offer | None = None
     od = payload.get("offer")
     if isinstance(od, dict) and od.get("kind") and od.get("label"):

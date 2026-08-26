@@ -115,9 +115,26 @@ Apare când userul cere o comparație („compară primele două"). Înlocuieșt
 cu un **tabel structurat** (ca iZi). `content` = doar lead-ul; tabelul îl randezi din `comparison`.
 `products[]` conține și cardurile-header (poză + nume + preț) ale produselor comparate.
 
+> ### ⚠️ Comparația e acum NARATIVĂ (schimbare de conținut + 3 chei noi, toate aditive)
+>
+> **Ce s-a schimbat în `rows`.** Nu mai sunt coloane de catalog („Finisaj: mat", „Brand: Velora",
+> „Disponibilitate: În stoc"). Sunt **axe de decizie alese de agent pentru perechea din față** —
+> „Textură și senzație pe buze", „Cât rezistă", „Pentru ce ocazie" — cu celule scrise ca propoziții
+> comparative. Consecințe pentru renderer:
+> - **`label` e text liber și variabil.** Nu mai există un set fix de etichete. Nu comuta pe
+>   `label === "Preț"`, nu mapa etichete la iconițe, nu presupune ordinea.
+> - **Ordinea rândurilor e semnificativă** (agentul pune întâi ce contează). Nu re-sorta.
+> - **Prețul și ratingul vin ultimele și sunt scrise de backend**, cu cifra exactă. Ratingul
+>   lipsește când diferența e sub pragul de materialitate.
+> - **Numărul de rânduri e mic** (3-8). Un `null` într-o celulă înseamnă „nu știm", randează „—".
+>
+> **Trei chei noi în `comparison`:** `heading`, `subtitle`, `closing[]`. Vezi mai jos.
+>
+> **`content` nu mai e text stabil** (îl scrie agentul). Nu-l potrivi cu regex.
+
 ```jsonc
 "comparison": {
-  "columns": [                    // 2..3 — un produs / coloană (ordinea cerută de user, păstrată)
+  "columns": [                    // 2..4 — un produs / coloană (ordinea cerută de user, păstrată)
     {
       "product_id": "uuid",
       "name": "Crema A",
@@ -129,23 +146,43 @@ cu un **tabel structurat** (ca iZi). `content` = doar lead-ul; tabelul îl rande
     }
     // … încă 1-2 coloane
   ],
-  "rows": [                       // o dimensiune / rând; `values` aliniat 1:1 cu `columns`
-    { "label": "Preț",            "values": ["58.99 lei", "88.99 lei"] },
-    { "label": "Rating",          "values": ["4.8★", "4.6★"] },
-    { "label": "Disponibilitate", "values": ["În stoc", "Stoc limitat"] },
-    { "label": "Avantaje",        "values": ["hidratează intens; fără parfum", "bogată"] },
-    { "label": "De luat în calcul","values": ["tub mic", null] },  // null ⇒ randează „—"
-    { "label": "Brand",           "values": ["BrandX", "BrandY"] }
+  "heading": "Diferențe principale",   // NOU — titlul de deasupra tabelului, LOCALIZAT de backend.
+                                       //   Nu-l hardcoda în FE: un tenant HU primește „Fő különbségek".
+  "subtitle": "Unul e un mat intens…",  // NOU, opțional — a doua frază de deschidere, ton secundar
+                                        //   (în mockup: rândul colorat de sub titlul bold).
+  "rows": [                       // AXE de decizie alese de agent; `values` aliniat 1:1 cu `columns`
+    { "label": "Textură și senzație", "values": ["Ușoară, se absoarbe repede.", "Bogată, rămâne pe piele."] },
+    { "label": "Cât rezistă",         "values": ["Ține toată ziua.", null] },  // null ⇒ „—"
+    { "label": "Pentru ce ocazie",    "values": ["Zi de zi.", "Seară."] },
+    { "label": "Preț",                "values": ["58,99 lei", "88,99 lei"] },  // scris de backend
+    { "label": "Rating",              "values": ["4.8★", "4.2★"] }            // doar dacă diferă real
+  ],
+  "closing": [                    // NOU, opțional — 1-2 paragrafe SUB tabel. Partea care vinde:
+    "Când alegi între ele, uită-te întâi la cât de mult contează confortul față de rezistență.",
+    "Dacă vrei ceva comod pentru zi, ia-l pe primul. Pentru o ocazie, al doilea."
   ]
 }
 ```
 
 ### Reguli de randare
-- **Header tabel** = `columns` (poză + nume + preț, exact ca un card mic). Aplică și aici `list_price`.
+- **Header tabel** = `columns`. În layoutul ȚINTĂ e doar **imaginea** produsului, mică: numele și
+  prețul se repetă oricum în `products[]` (cardurile de deasupra) și în rândul de Preț, iar un card
+  complet pe fiecare coloană împinge tabelul sub linia de plutire. `list_price` rămâne disponibil
+  dacă alegi totuși un antet bogat.
 - **Corp tabel** = `rows`; fiecare `values[i]` aparține `columns[i]`. **`null` ⇒ „—"** (celulă lipsă,
   NU „0"/gol).
 - Etichetele (`label`) și textul celulelor vin **deja localizate** (ro/en/hu) — afișează-le ca atare.
-- Numărul de rânduri e variabil (un rând complet gol e omis de backend — ex. niciun produs cu minusuri).
+- Numărul de rânduri e variabil și poate fi MIC. Două produse aproape la fel pot da un tabel de
+  3 rânduri: **nu e o eroare de date**, e răspunsul („aproape nicio diferență"), iar `content` +
+  `closing` o spun. Nu compensa cu placeholdere și nu impune o înălțime fixă.
+- Ordinea rândurilor e decisă de backend (agentul pune întâi ce contează). **Nu o re-sorta** și nu
+  fixa un set de `label`-uri așteptate — sunt text liber, diferit de la o comparație la alta.
+- **Layout țintă** (vezi mockup): `label` = o legendă discretă pe rândul ei, valorile dedesubt,
+  bold, una lângă alta — nu label-stânga/valori-dreapta. La 3-4 coloane tabelul scrolează
+  ORIZONTAL: nu micșora fontul și nu trunchia textul celulei, sunt propoziții, nu valori scurte.
+- **Ordinea pe verticală:** `content` → `subtitle` (ton secundar) → `heading` → tabel →
+  `closing[]` (paragrafe normale) → `suggestions`. `heading` vine mereu; `subtitle` și `closing`
+  lipsesc când agentul n-a avut destule fapte cât să fie utile.
 - Mobile: dacă tabelul nu încape, comută pe layout vertical (per produs), nu trunchia.
 
 ### Fallback (canale fără tabel)

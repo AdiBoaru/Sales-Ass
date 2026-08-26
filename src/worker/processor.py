@@ -62,7 +62,7 @@ from src.web.action_models import ActionCommand
 from src.web.context import from_payload as page_context_from_payload
 from src.worker.admission import tenant_bucket
 from src.worker.aftercare import AftercareWork, persist_events, run_aftercare
-from src.worker.compose import ensure_disclaimer
+from src.worker.compose import comparison_wire, ensure_disclaimer
 from src.worker.limits import (
     CONTACT_COST_WINDOW_S,
     contact_scope_key,
@@ -1017,7 +1017,7 @@ def _build_fragment(
         # IZI-compare: tabelul structurat + cardurile produselor comparate. `type` rămâne 'text'
         # (floor = tabelul aplatizat pe canalele fără COMPARISON); web rutează pe send_rich după
         # payload['comparison']. reply_from_outbox îl reconstruiește.
-        payload["comparison"] = asdict(ctx.reply.comparison)
+        payload["comparison"] = comparison_wire(ctx.reply.comparison)
         if ctx.reply.products:
             payload["products"] = ctx.reply.products
     elif index == 0 and has_products:
