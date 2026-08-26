@@ -569,5 +569,35 @@
         "finish"
       ]
     }
+  },
+  "_relation_kinds_note": "NX-262: semantica muchiilor din product_relations. Valorile NU sunt alese, sunt MASURATE pe catalogul real cu scripts/relations_graph_probe.py (vezi reports/relations/graph_probe.json): routine_next e aciclic cu adancime 4; substitute are 38 de ancore ciclice, deci plafon 2 + garda de ciclu; complement e ciclic pe TOATE ancorele fiindca simetria e definitia relatiei, deci nu se inlantuie. Un tip nedeclarat ramane vecini-directi (fail-closed).",
+  "relation_kinds": {
+    "routine_next": {
+      "mode": "chain",
+      "max_depth": 4,
+      "ordered": true,
+      "purpose": "upsell",
+      "labels": {
+        "ro": "Pasi recomandati",
+        "en": "Recommended steps",
+        "hu": "Ajanlott lepesek"
+      }
+    },
+    "substitute": {
+      "mode": "bounded",
+      "max_depth": 2,
+      "purpose": "upsell",
+      "labels": {
+        "ro": "Alternative apropiate",
+        "en": "Close alternatives",
+        "hu": "Hasonlo termekek"
+      }
+    },
+    "complement": {
+      "mode": "neighbors"
+    },
+    "accessory": {
+      "mode": "neighbors"
+    }
   }
 }

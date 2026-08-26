@@ -53,6 +53,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "EMPTY_RELATION_KINDS",
     "MAX_TRAVERSAL_DEPTH",
     "RelationKindConfigError",
     "RelationKindRegistry",
@@ -255,3 +256,8 @@ def load_relation_kinds(raw: Any) -> RelationKindRegistry:
         except (RelationKindConfigError, TypeError, ValueError) as exc:
             log.warning("relation_kinds: `%s` respins (rămâne vecini-direcți): %s", kind, exc)
     return RelationKindRegistry(specs=specs)
+
+
+# Default-ul unui `DomainPack` fără config de relații. Partajabil fiindcă e imutabil, și e chiar
+# starea de azi: fiecare tip e vecini-direcți, nimic nu se înlănțuie.
+EMPTY_RELATION_KINDS = RelationKindRegistry()
