@@ -116,22 +116,55 @@ def _cached_from(usage: Any) -> int:
     return int(getattr(details, "cached_tokens", 0) or 0)
 
 
-def _reasoning_from(usage: Any) -> int:
-    """`completion_tokens_details.reasoning_tokens` — tolerează obiect SDK SAU dict SAU lipsă.
+def _reasoning_from(usage: Any) -> int | None:
+    """`completion_tokens_details.reasoning_tokens` — obiect SDK SAU dict. `None` = NERAPORTAT.
 
     ATENȚIE, e un SUBSET al lui `completion_tokens`, nu un plus: tokenii de raționament se scad din
     ACELAȘI `max_completion_tokens` ca textul (măsurat — vezi `llm._note_truncation`). Deci NU intră
     în cost separat (ar dubla factura) și nu se adună la `tokens_out`. Îl ținem ca defalcare: fără
     el nu poți răspunde la „cât din plafon a mâncat raționamentul", adică exact întrebarea care
-    decide dacă `LLM_MAX_TOKENS_AGENT` e dimensionat corect pentru effortul configurat."""
+    decide dacă `LLM_MAX_TOKENS_AGENT` e dimensionat corect pentru effortul configurat.
+
+    De ce `None` și nu `0`: ăsta e un INSTRUMENT DE MĂSURĂ, iar într-un instrument degradarea
+    grațioasă e o minciună. „Câmp absent" (nu știm) și „zero tokeni de gândire" (știm, și e zero)
+    sunt afirmații opuse, dar arată identic dacă le colapsezi în `0` — iar cea greșită e liniștitor
+    de plauzibilă: te-ai uita la un raport care spune „raționamentul nu costă nimic" și ai închide
+    ancheta. Distincția o folosește `record_chat`, care numără cazul nedeclarat."""
     details = getattr(usage, "completion_tokens_details", None)
     if details is None and isinstance(usage, dict):
         details = usage.get("completion_tokens_details")
     if details is None:
-        return 0
-    if isinstance(details, dict):
-        return int(details.get("reasoning_tokens") or 0)
-    return int(getattr(details, "reasoning_tokens", 0) or 0)
+        return None
+    raw = (
+        details.get("reasoning_tokens")
+        if isinstance(details, dict)
+        else getattr(details, "reasoning_tokens", None)
+    )
+    return None if raw is None else int(raw)
+
+
+def _note_unreported_reasoning(model: str) -> None:
+    """Numără apelurile pe un model care RAȚIONEAZĂ dar n-a raportat `reasoning_tokens`.
+
+    Poarta e pe familia modelului, nu pe toate apelurile: `gpt-5.4-nano` fără effort chiar nu are
+    ce raporta, deci a-l număra ar produce un contor mereu aprins, adică zgomot care se învață să
+    fie ignorat. Pe o familie care raționează implicit (`reasons_by_default`), absența câmpului
+    înseamnă ori că furnizorul l-a redenumit, ori că citim greșit — în ambele cazuri raportul de
+    mai sus arată `0` și pare o măsurătoare reușită. Contorul e singura diferență între un
+    instrument și o minciună liniștitoare.
+
+    Importuri locale: `llm` importă `usage`, deci la nivel de modul ar fi ciclu (tiparul din
+    `model_role`); `turn_latency` la fel ca `hooks` — legat la primul apel real, nu la încărcarea
+    modulului."""
+    from src.agent.llm import model_profile
+    from src.observability import turn_latency
+
+    try:
+        profile = model_profile(model)
+    except Exception:  # noqa: BLE001 — o măsurătoare nu are voie să rupă un apel reușit (P6)
+        return
+    if profile is not None and profile.reasons_by_default:
+        turn_latency.degrade("llm_reasoning_tokens_unreported")
 
 
 def _field(usage: Any, name: str) -> int:
@@ -151,7 +184,10 @@ def record_chat(resp: Any, model: str) -> None:
     tokens_in = _field(usage, "prompt_tokens")
     tokens_out = _field(usage, "completion_tokens")
     cached = _cached_from(usage)
-    acc.add(model, tokens_in, tokens_out, cached, reasoning=_reasoning_from(usage))
+    reasoning = _reasoning_from(usage)
+    if reasoning is None:
+        _note_unreported_reasoning(model)
+    acc.add(model, tokens_in, tokens_out, cached, reasoning=reasoning or 0)
     # NX-246: același punct unic de contabilizare alimentează și metricile operaționale. Hook
     # NEUTRU (`src/observability/hooks.py`) — adaptorul nu știe de exporter, nu decide sampling
     # și nu importă niciun vendor. Rolul se DERIVĂ din model (vezi `model_role`), ca să nu

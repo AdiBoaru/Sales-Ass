@@ -211,12 +211,60 @@ def test_reasoning_tokens_sunt_subset_nu_supliment():
 
 def test_reasoning_tokens_lipsa_nu_rupe_nimic():
     """Modelele care nu raționează nu trimit `completion_tokens_details` — 0, nu excepție."""
+    from src.observability import turn_latency
+
     acc, token = usage.push()
+    lat, lat_token = turn_latency.push()
     try:
         usage.record_chat(_Resp(_Usage(prompt_tokens=10, completion_tokens=5)), "gpt-5.4-nano")
     finally:
+        turn_latency.pop(lat_token)
         usage.pop(token)
     assert acc.reasoning_tokens == 0
+    # `gpt-5.4-*` nu raționează implicit ⇒ absența câmpului e NORMALĂ, nu se numără. Altfel
+    # contorul ar fi mereu aprins, adică zgomot care se învață să fie ignorat.
+    assert "llm_reasoning_tokens_unreported" not in lat.degradations
+
+
+def test_camp_neraportat_pe_model_care_rationeaza_se_numara():
+    """Instrumentul de măsură NU are voie să degradeze grațios.
+
+    „Câmp absent" și „zero tokeni de gândire" sunt afirmații opuse. Colapsate în `0`, raportul ar
+    spune „raționamentul nu costă nimic" — liniștitor, plauzibil și fals, exact tiparul care
+    închide o anchetă. Pe o familie care raționează implicit, absența se NUMĂRĂ."""
+    from src.observability import turn_latency
+
+    acc, token = usage.push()
+    lat, lat_token = turn_latency.push()
+    try:
+        usage.record_chat(_Resp(_Usage(prompt_tokens=10, completion_tokens=900)), "gpt-5.6-luna")
+    finally:
+        turn_latency.pop(lat_token)
+        usage.pop(token)
+    assert acc.reasoning_tokens == 0  # n-avem ce contabiliza
+    assert lat.degradations.get("llm_reasoning_tokens_unreported") == 1  # dar știm că nu știm
+
+
+def test_zero_raportat_explicit_nu_e_acelasi_lucru_cu_lipsa():
+    """Contrapartea: modelul CHIAR a raportat 0 ⇒ e o măsurătoare validă, nu un instrument rupt."""
+    from src.observability import turn_latency
+
+    acc, token = usage.push()
+    lat, lat_token = turn_latency.push()
+    try:
+        resp = _Resp(
+            _Usage(
+                prompt_tokens=10,
+                completion_tokens=40,
+                completion_tokens_details=_CompletionDetails(reasoning_tokens=0),
+            )
+        )
+        usage.record_chat(resp, "gpt-5.6-luna")
+    finally:
+        turn_latency.pop(lat_token)
+        usage.pop(token)
+    assert acc.reasoning_tokens == 0
+    assert "llm_reasoning_tokens_unreported" not in lat.degradations
 
 
 def test_record_chat_into_active_accumulator():
