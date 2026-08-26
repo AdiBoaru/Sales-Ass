@@ -90,7 +90,9 @@ _PERCENT_RE: Final[re.Pattern[str]] = re.compile(r"(\d{1,3})\s*(?:%|la sut[ăa])
 #: din familia asta e o promisiune pe care nu o putem susține — inclusiv „ajunge mâine".
 _DELIVERY_RE: Final[re.Pattern[str]] = re.compile(
     r"\bliv(?:rare|rat|ram)\w*\s+(?:in|în|pana|până|maxim|gratuit|rapid)"
-    r"|\bajunge\s+(?:maine|mâine|azi|astazi|astăzi|in|în)\b"
+    # Pluralul e la fel de promisiune ca singularul, iar o comparație vorbește din start despre
+    # DOUĂ produse („amândouă ajung mâine") — forma cea mai probabilă era exact cea neacoperită.
+    r"|\bajung(?:e|i|em)?\s+(?:maine|mâine|azi|astazi|astăzi|in|în)\b"
     r"|\bcurier\w*\s+(?:in|în|azi|maine|mâine)\b"
     r"|\bdelivered?\s+(?:in|by|tomorrow|today)\b|\bdelivery\s+(?:in|within|by)\b",
     re.IGNORECASE,
@@ -109,6 +111,24 @@ _WARRANTY_RE: Final[re.Pattern[str]] = re.compile(
     r"\bgaran[țt]\w*\b|\bwarrant\w*\b|\bdrept\s+de\s+retur\b",
     re.IGNORECASE,
 )
+
+
+def unsourced_claims(text: str) -> tuple[str, ...]:
+    """Codurile familiilor FĂRĂ SURSĂ pe care le atinge textul (livrare, promoție, garanție), în
+    ordine fixă. Gol = niciuna.
+
+    Public fiindcă întrebarea „are livrarea/promoția/garanția un fapt în spate?" nu e specifică
+    planului v2: orice proză comercială scrisă de model o pune. Un al doilea set de regexuri pe
+    calea de comparație ar diverge de ăsta exact în tăcere, adică fix cum arată o gaură de
+    grounding. Ordinea e parte din contract: codurile ajung în metrici cu vocabular ÎNCHIS."""
+    out: list[str] = []
+    if _DELIVERY_RE.search(text):
+        out.append("unsourced_delivery_claim")
+    if _PROMO_RE.search(text):
+        out.append("unsourced_promo_claim")
+    if _WARRANTY_RE.search(text):
+        out.append("unsourced_warranty_claim")
+    return tuple(out)
 
 
 # ── Rezultatul grounding-ului ───────────────────────────────────────────────────────────────
@@ -294,12 +314,7 @@ def prose_failures(text: str, bundle: EvidenceBundle) -> tuple[str, ...]:
         failures.append("unverifiable_superlative")
     if has_stock_claim(text) and not _stock_supported(bundle):
         failures.append("unsupported_stock_claim")
-    if _DELIVERY_RE.search(text):
-        failures.append("unsourced_delivery_claim")
-    if _PROMO_RE.search(text):
-        failures.append("unsourced_promo_claim")
-    if _WARRANTY_RE.search(text):
-        failures.append("unsourced_warranty_claim")
+    failures.extend(unsourced_claims(text))
     return tuple(dict.fromkeys(failures))
 
 
@@ -661,4 +676,5 @@ __all__ = [
     "ground_answer",
     "prose_failures",
     "omission_counts",
+    "unsourced_claims",
 ]

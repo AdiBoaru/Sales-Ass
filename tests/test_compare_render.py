@@ -20,6 +20,8 @@ from src.models import MAX_CHIP_LEN, Reply
 from src.worker.compose import (
     build_comparison,
     comparison_cards,
+    comparison_facts_block,
+    comparison_wire,
     facet_summary,
     flatten_comparison,
 )
@@ -27,7 +29,11 @@ from src.worker.dispatcher import _requested_render, choose_render
 
 
 def _products() -> list[dict]:
-    """Două produse ca din get_products_by_ids (ordine = cea cerută, păstrată de array_position)."""
+    """Două produse ca din get_products_by_ids (ordine = cea cerută, păstrată de array_position).
+
+    Ratingurile sunt deliberat DEPĂRTATE (4,8 față de 4,2): peste pragul de materialitate, deci
+    rândul de rating rămâne în tabel și fixtura exersează forma completă. Cazul apropiat (zgomot de
+    eșantion prezentat ca ierarhie) are testul lui, mai jos."""
     return [
         {
             "id": "p1",
@@ -49,7 +55,7 @@ def _products() -> list[dict]:
             "url": "https://shop/p2",
             "image": "https://cdn/p2.jpg",
             "availability": "low_stock",
-            "rating": 4.6,
+            "rating": 4.2,
             "top_pros": ["bogată", "pentru ten foarte uscat"],
             "top_cons": [],
         },
@@ -102,6 +108,136 @@ def test_build_comparison_list_price_anchor():
     assert col.price == 58.99 and col.list_price == 79.99
 
 
+# --- FOCUS: tabelul ține doar ce departajează, în ordinea greutății de decizie -------------------
+
+
+def _finish_facet() -> FacetSpec:
+    return FacetSpec(key="finish", labels={"ro": "Finisaj"})
+
+
+def test_identical_row_leaves_the_table_and_becomes_common_ground():
+    """Defectul raportat: „Finisaj: mat / mat" și „Disponibilitate: În stoc / În stoc" ocupau exact
+    locul în care clientul caută diferența. Un rând identic pe toate coloanele nu departajează, deci
+    iese din tabel și se spune o dată, în lead."""
+    prods = _products()
+    for p in prods:
+        p["availability"] = "in_stock"
+        p["attributes"] = {"finish": "mat"}
+    cmp = build_comparison(prods, "ro", [_finish_facet()])
+    labels = [r.label for r in cmp.rows]
+    assert "Finisaj" not in labels and "Disponibilitate" not in labels
+    assert {r.label for r in cmp.common} == {"Finisaj", "Disponibilitate"}
+    assert "La amândouă la fel: mat, În stoc." in (cmp.intro or "")
+
+
+def test_common_ground_is_generic_not_a_denylist_of_boring_rows():
+    """Disponibilitatea nu e tăiată pentru că e „plictisitoare" — rămâne exact când desparte."""
+    prods = _products()  # in_stock față de low_stock
+    cmp = build_comparison(prods, "ro")
+    assert any(r.label == "Disponibilitate" for r in cmp.rows)
+    assert all(r.label != "Disponibilitate" for r in cmp.common)
+
+
+def test_row_order_follows_decision_weight_not_construction_order():
+    prods = _products()
+    prods[0]["attributes"] = {"finish": "mat"}
+    prods[1]["attributes"] = {"finish": "satinat"}
+    cmp = build_comparison(prods, "ro", [_finish_facet()])
+    assert [r.label for r in cmp.rows] == [
+        "Preț",  # întrebarea de sub orice comparație
+        "Finisaj",  # substanța produsului
+        "Avantaje",  # vocea celorlalți clienți
+        "De luat în calcul",
+        "Disponibilitate",
+        "Rating",  # deja pe cardul din antet
+        "Brand",  # deja în numele produsului
+    ]
+
+
+def test_price_row_survives_even_when_the_two_prices_are_equal():
+    """«Costă la fel» e un răspuns, nu un rând gol: prețul e singura excepție de la regula
+    departajării."""
+    prods = _products()
+    prods[1]["price"] = prods[0]["price"]
+    cmp = build_comparison(prods, "ro")
+    assert cmp.rows[0].label == "Preț" and cmp.rows[0].values == ["58,99 lei", "58,99 lei"]
+    assert all("accesibil" not in n for n in cmp.notes)  # prețuri egale → niciun verdict
+
+
+def test_rating_gap_exactly_at_the_threshold_stays_in_the_table():
+    """Regresie: `4.6 - 4.3` dă 0,29999999999999982 în virgulă mobilă, deci diferența de la LIMITĂ
+    (cea mai frecventă într-un catalog unde totul e între 4,0 și 4,9) era declarată zgomot și
+    rândul dispărea. Prins de golden-ul nx172-conv-compare-diffs."""
+    prods = _products()
+    prods[0]["rating"], prods[1]["rating"] = 4.6, 4.3
+    cmp = build_comparison(prods, "ro")
+    assert any(r.label == "Rating" for r in cmp.rows)
+    assert "Cea mai bine cotată: Crema A." in cmp.notes
+
+
+def test_immaterial_rating_gap_drops_the_row_and_says_it_honestly():
+    """4,5 față de 4,6 nu e o ierarhie, e zgomot de eșantion. Rândul dispare, iar leadul spune că
+    sunt cotate la fel, în loc să sugereze un câștigător."""
+    prods = _products()
+    prods[0]["rating"], prods[1]["rating"] = 4.5, 4.6
+    cmp = build_comparison(prods, "ro")
+    assert all(r.label != "Rating" for r in cmp.rows)
+    assert "Sunt cotate la fel." in cmp.notes
+    assert all("bine cotată" not in n for n in cmp.notes)
+
+
+def test_immaterial_price_gap_reports_closeness_instead_of_a_verdict():
+    """Cazul din conversația reală: 42,99 față de 44,99. „Cea mai accesibilă" peste 2 lei sună a
+    recomandare și nu e una."""
+    prods = _products()
+    prods[0]["price"], prods[1]["price"] = 42.99, 44.99
+    cmp = build_comparison(prods, "ro")
+    assert "Diferența de preț e mică, 2,00 lei." in cmp.notes
+    assert all("Cea mai accesibilă" not in n for n in cmp.notes)
+
+
+def test_material_price_gap_still_names_the_cheaper_one():
+    cmp = build_comparison(_products(), "ro")  # 58,99 față de 88,99 → peste prag
+    assert "Cea mai accesibilă: Crema A." in cmp.notes
+
+
+def test_focus_kill_switch_restores_the_previous_table_and_lead(monkeypatch):
+    from src.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("COMPARISON_FOCUS_ENABLED", "false")
+    try:
+        prods = _products()
+        for p in prods:
+            p["availability"] = "in_stock"
+        prods[0]["rating"], prods[1]["rating"] = 4.5, 4.6
+        cmp = build_comparison(prods, "ro")
+        labels = [r.label for r in cmp.rows]
+        # rândul identic rămâne, rândul de rating rămâne, ordinea e cea de construcție
+        assert labels[:3] == ["Preț", "Rating", "Disponibilitate"]
+        assert cmp.common == [] and cmp.notes == []
+        # verdict la ORICE diferență, ca înainte de praguri
+        assert "Cea mai bine cotată: Crema B." in (cmp.intro or "")
+    finally:
+        get_settings.cache_clear()
+
+
+def test_comparison_facts_block_carries_differences_common_and_notes():
+    """Bundle-ul modelului = exact ce se randează sub textul lui. Un fapt care n-a intrat în tabel
+    n-are voie să legitimeze o frază din lead."""
+    prods = _products()
+    for p in prods:
+        p["attributes"] = {"finish": "mat"}
+    cmp = build_comparison(prods, "ro", [_finish_facet()])
+    block = comparison_facts_block(cmp, "ro")
+    assert "Produse comparate, în ordinea coloanelor: Crema A | Crema B" in block
+    assert "- Preț: 58,99 lei | 88,99 lei" in block
+    assert "La amândouă la fel: Finisaj: mat" in block
+    assert "Observații derivate din date: Cea mai accesibilă: Crema A." in block
+    # celula lipsă e declarată necunoscută, nu omisă tăcut (p2 n-are minusuri)
+    assert "| necunoscut" in block
+
+
 # --- Tier 2: fațete de DOMENIU în tabel (din products.attributes, generic DomainPack) ----------
 
 
@@ -121,9 +257,8 @@ def test_build_comparison_facet_row_from_attributes():
     row = next(r for r in cmp.rows if r.label == "Potrivit pentru")
     assert row.values == ["ten gras, ten uscat", "ten uscat"]  # listă → etichete unite, per-locale
     labels = [r.label for r in cmp.rows]
-    assert labels.index("Potrivit pentru") < labels.index(
-        "Disponibilitate"
-    )  # între Rating și Avail
+    # Substanța produsului (fațeta de domeniu) urcă imediat după preț, înaintea disponibilității.
+    assert labels.index("Potrivit pentru") < labels.index("Disponibilitate")
 
 
 def test_build_comparison_facet_raw_value_and_en_label():
@@ -249,13 +384,33 @@ def test_render_web_comparison_shape():
 
 
 def test_render_web_comparison_roundtrip_async():
-    # ruta async: asdict(comparison) → outbox → reply_from_outbox → render_web = shape ca sync
+    # ruta async: comparison_wire → outbox → reply_from_outbox → render_web = shape ca sync
     rep = _comparison_reply()
     sync = render_web(rep, "ro")
-    payload = {"comparison": asdict(rep.comparison), "products": rep.products, "text": rep.text}
+    payload = {
+        "comparison": comparison_wire(rep.comparison),
+        "products": rep.products,
+        "text": rep.text,
+    }
     rebuilt = render_web(reply_from_outbox(payload), "ro")
     assert rebuilt["comparison"] == sync["comparison"]
     assert rebuilt["products"] == sync["products"]
+
+
+def test_wire_payload_omits_the_prose_inputs_of_the_lead():
+    """`common` și `notes` alimentează leadul, nu randarea. Ruta sincronă nu le trimitea oricum
+    (`_comparison_payload` alege explicit câmpurile), dar ruta async serializează cu `asdict`, deci
+    ar fi plecat spre browser DOAR acolo. În plus, `notes` e deja în `intro`: un renderer care le-ar
+    afișa ar repeta verdictul de două ori."""
+    prods = _products()
+    for p in prods:
+        p["availability"] = "in_stock"
+    cmp = build_comparison(prods, "ro")
+    assert cmp.common and cmp.notes  # chiar avem ce scurge
+    wire = comparison_wire(cmp)
+    # `subtitle`/`closing` SUNT contract (frontendul le randează); `common`/`notes` nu.
+    assert set(wire) == {"columns", "rows", "intro", "subtitle", "closing"}
+    assert set(asdict(cmp)) - set(wire) == {"common", "notes"}  # prinde un câmp intern NOU
 
 
 async def test_send_rich_publishes_comparison_event():
@@ -264,7 +419,7 @@ async def test_send_rich_publishes_comparison_event():
     rep = _comparison_reply()
     payload = {
         "to": "v1",
-        "comparison": asdict(rep.comparison),
+        "comparison": comparison_wire(rep.comparison),
         "products": rep.products,
         "text": rep.text,
         "language": "ro",

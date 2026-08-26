@@ -713,6 +713,37 @@ class Settings(BaseSettings):
     comparison_facets_enabled: bool = Field(
         default=True, validation_alias="COMPARISON_FACETS_ENABLED"
     )
+    # Tabelul de comparație ține DOAR rândurile care departajează, ordonate după greutatea de
+    # decizie (preț → substanța produsului → vocea recenziilor → disponibilitate → rating → brand).
+    # Ce e identic pe toate coloanele („mat / mat", „În stoc / În stoc") iese din tabel și se spune
+    # o dată în lead: un rând care nu desparte nimic ocupă exact locul unde clientul caută
+    # diferența. Tot aici intră pragurile de materialitate — „cea mai accesibilă" nu se mai declară
+    # pentru 2 lei, iar „cea mai bine cotată" nu pentru 0,1★. OFF → tabelul de dinainte, cu toate
+    # rândurile și cu verdictul la orice diferență (byte-identic).
+    comparison_focus_enabled: bool = Field(
+        default=True, validation_alias="COMPARISON_FOCUS_ENABLED"
+    )
+    # Leadul de deasupra tabelului îl scrie AGENTUL, peste faptele înghețate ale tabelului
+    # (`compose.comparison_facts_block`), în loc de fraza-șablon deterministă. Un tabel răspunde la
+    # „ce valori au", clientul întreabă „care e diferența" — traducerea din fapte în consecință
+    # („Velora merge pe pigment, NudeLab pe confort") e singura parte care cere limbaj. Poarta de
+    # grounding (`agent.compare_lead`) respinge orice frază care afirmă în plus față de tabel;
+    # respins / apel eșuat → leadul determinist, deci degradarea e text mai sărac, nu tăcere (P6).
+    # Costă un apel structurat în plus pe turul de comparație. OFF → leadul determinist mereu.
+    comparison_lead_llm_enabled: bool = Field(
+        default=True, validation_alias="COMPARISON_LEAD_LLM_ENABLED"
+    )
+    # Comparația NARATIVĂ: agentul alege axele pe care perechea din față chiar se desparte
+    # („Textură și senzație", „Cât rezistă", „Pentru ce ocazie") și scrie celulele, în loc să
+    # proiectăm coloane de catalog („finish: mat", „Brand: Velora"). Peste tabel adaugă un subtitlu
+    # și, sub el, 1-2 paragrafe de îndrumare — partea care transformă un tabel într-o recomandare.
+    # Garanția nu mai e determinismul, ci trei porți mecanice: fiecare celulă își numește SURSA din
+    # fișa de fapte a produsului ei, cifrele rămân ale codului (preț/rating), iar sancțiunea e
+    # LOCALĂ (celulă → „—", axă goală → dispare, lead respins → tabelul determinist).
+    # OFF → tabelul determinist + leadul din `comparison_lead_llm_enabled`.
+    comparison_narrative_enabled: bool = Field(
+        default=True, validation_alias="COMPARISON_NARRATIVE_ENABLED"
+    )
     # IZI-parity (Tier 2b): fațetele de domeniu (aceleași DomainPack.comparison_facets) intră și în
     # BUNDLE-ul rich → modelul VEDE ingredientele/beneficiul/potrivirea reale și scrie fit_clause
     # grounded („cu acid hialuronic, pentru ten uscat"), nu tautologic. Generic pe vertical; date

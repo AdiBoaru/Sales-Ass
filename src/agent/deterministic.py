@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from src.agent.compare_narrative import compose_comparison
 from src.agent.fallbacks import (
     _card_products,
     _compare_chips,
@@ -513,11 +514,13 @@ def _comparison_facets(ctx: TurnContext) -> tuple:
 async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> bool:
     """Servește o COMPARAȚIE pe produsele DEJA afișate, FĂRĂ bucla LLM (G2, IZI-parity) — ca
     link/show_more/cheaper. State ține doar ref-uri (P8) → re-fetch detaliile proaspete (preț/
-    rating/avantaje/minusuri/disponibilitate/brand) → tabel structurat DETERMINIST (build_comparison
-    → zero proză LLM în celule). Implicit primele 2 (perechea = cazul dominant „compară primele
-    două"); un număr explicit poate extinde tabelul la 3 sau 4. `get_products_by_ids` păstrează
-    ORDINEA afișată (deixis ordinal
-    corect). <2 valide → False → cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
+    rating/avantaje/minusuri/disponibilitate/brand) → tabel structurat. „Fără bucla LLM" rămâne
+    adevărat pentru RETRIEVAL (nimic nu se re-caută), dar tabelul NU mai e integral determinist:
+    `build_comparison` produce plasa, iar `compare_narrative` compune peste ea axele de decizie și
+    îndrumarea, cu porți de grounding pe fiecare celulă. Implicit primele 2 (perechea = cazul
+    dominant „compară primele două"); un număr explicit poate extinde tabelul la 3 sau 4.
+    `get_products_by_ids` păstrează ORDINEA afișată (deixis ordinal corect). <2 valide → False →
+    cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
     n = 4 if _FOUR_RE.search(query) else (3 if _THREE_RE.search(query) else 2)
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
     return await serve_comparison(ctx, deps, ids)
@@ -558,10 +561,16 @@ async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str])
         if len(distinct) >= 2:
             ctx.emit("compare_incoherent_blocked", n=len(products), root_branches=len(distinct))
             return False
-    comparison = compose.build_comparison(products, ctx.language, _comparison_facets(ctx))
+    facets = _comparison_facets(ctx)
+    comparison = compose.build_comparison(products, ctx.language, facets)
     if comparison is None:
         return False
     ctx.retrieval = RetrievalResult(products=products, source="compare_intent")
+    # Tabelul determinist e plasa; peste el, agentul compune axele pe care perechea chiar se
+    # desparte + îndrumarea de sub tabel (respins/eșuat → exact tabelul de mai sus, P6).
+    comparison = await compose_comparison(
+        deps.llm, ctx, comparison, products, facets=facets, query=(ctx.message.body or "")
+    )
     ctx.set_comparison_reply(
         comparison,
         text=compose.flatten_comparison(comparison, ctx.language),

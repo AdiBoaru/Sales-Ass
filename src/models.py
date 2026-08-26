@@ -442,11 +442,31 @@ class Comparison:
     """Tabel comparativ structurat (2-4 produse), neutru de canal. Owner: stagiul Agent."""
 
     columns: list[ComparisonColumn]
+    # Rândurile care DEPARTAJEAZĂ, în ordinea greutății de decizie. Un rând identic pe toate
+    # coloanele nu răspunde la „care e diferența" — el trece în `common` și rămâne în afara
+    # tabelului (vezi `compose.build_comparison`).
     rows: list[ComparisonRow]
-    # Lead-ul conversațional (framing scurt + verdict derivat din date: cel mai ieftin / cel mai
-    # bine cotat). Determinist — fără proză LLM → randat ca text de lead pe web (tabelul îl fac
-    # `rows`); pe canalele text intră în `Reply.text` (floor) împreună cu tabelul aplatizat.
+    # Lead-ul conversațional. Sursa lui e agentul (`compare_lead.comparison_lead`) când poarta de
+    # grounding îl acceptă, altfel varianta deterministă din `compose`. Randat ca text de lead pe
+    # web (tabelul îl fac `rows`); pe canalele text intră în `Reply.text` (floor) cu tabelul
+    # aplatizat.
     intro: str | None = None
+    # A doua frază de deschidere: ce sunt, pe scurt, cele două produse („unul e mat și intens,
+    # celălalt catifelat"). Separată de `intro` fiindcă frontendul o randează secundar (ton mai
+    # ușor), iar separarea trebuie să fie în date, nu ghicită din text.
+    subtitle: str | None = None
+    # Îndrumarea de DUPĂ tabel: 1-2 paragrafe („dacă vrei X ia primul, dacă preferi Y al doilea").
+    # E partea care transformă un tabel într-o recomandare; trăiește separat de `intro` fiindcă
+    # apare sub tabel, nu deasupra.
+    closing: list[str] = field(default_factory=list)
+    # Terenul COMUN: rândurile în care toate coloanele spun același lucru. Nu se serializează spre
+    # frontend (nu e material de tabel) — e input pentru lead, ca „sunt amândouă mat" să fie spus
+    # o dată în proză în loc să ocupe un rând care pretinde că departajează.
+    common: list[ComparisonRow] = field(default_factory=list)
+    # Observații DERIVATE din date, gata localizate (diferență de preț nesemnificativă, ratinguri
+    # practic egale, verdictul de cel-mai-ieftin când e material). Deterministe: alimentează atât
+    # leadul de cod, cât și bundle-ul de fapte al modelului.
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass

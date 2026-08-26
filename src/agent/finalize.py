@@ -16,6 +16,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
+from src.agent.compare_narrative import compose_comparison
 from src.agent.deterministic import _comparison_facets
 from src.agent.fallbacks import (
     _card_products,
@@ -352,14 +353,21 @@ async def render(
     final = plan.final
 
     # IZI-compare: modelul a chemat compare_products → turul e o COMPARAȚIE, nu o recomandare.
-    # Tabel structurat DETERMINIST din setul comparat (ordinea cerută păstrată) — fapte din
-    # retrieval, lead determinist (cel mai ieftin / cel mai bine cotat), ZERO proză LLM în celule →
-    # zero halucinație. Web randează tabelul; canalele text primesc floor-ul aplatizat. Precede
-    # calea rich de recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele
-    # două" care doar re-lista produsele). Sare peste rich/proză pentru acest tur.
+    # `build_comparison` dă tabelul DETERMINIST din setul comparat (ordinea cerută păstrată, fapte
+    # din retrieval) — el rămâne plasa. Peste el, `compare_narrative` compune axele de decizie și
+    # îndrumarea, cu porți de grounding pe fiecare celulă; ce nu trece cade înapoi exact aici.
+    # Web randează tabelul; canalele text primesc floor-ul aplatizat. Precede calea rich de
+    # recomandare (altfel ar re-RECOMANDA în loc să compare — bug-ul „Compară primele două" care
+    # doar re-lista produsele). Sare peste rich/proză pentru acest tur.
     if plan.compared and not is_order:
-        comparison = compose.build_comparison(plan.compared, ctx.language, _comparison_facets(ctx))
+        facets = _comparison_facets(ctx)
+        comparison = compose.build_comparison(plan.compared, ctx.language, facets)
         if comparison is not None:
+            # Ca pe calea deterministă: tabelul determinist e plasa, narativul îl înlocuiește
+            # doar dacă trece porțile de grounding.
+            comparison = await compose_comparison(
+                deps.llm, ctx, comparison, plan.compared, facets=facets, query=plan.query
+            )
             ctx.set_comparison_reply(
                 comparison,
                 text=compose.flatten_comparison(comparison, ctx.language),

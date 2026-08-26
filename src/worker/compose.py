@@ -17,6 +17,7 @@ scrub dur. Garanția anti-halucinație:
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 from src.agent.fallbacks import _card_variants
@@ -680,6 +681,11 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "lead": "Iată diferențele principale, alege în funcție de ce contează pentru tine.",
         "cheapest": "Cea mai accesibilă: {name}.",
         "top_rated": "Cea mai bine cotată: {name}.",
+        "same_two": "La amândouă la fel: {items}.",
+        "same_many": "La toate la fel: {items}.",
+        "close_price": "Diferența de preț e mică, {gap} lei.",
+        "same_rating": "Sunt cotate la fel.",
+        "heading": "Diferențe principale",
     },
     "en": {
         "title": "Comparison",
@@ -692,6 +698,13 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "lead": "Here are the main differences, pick based on what matters to you.",
         "cheapest": "Most affordable: {name}.",
         "top_rated": "Top rated: {name}.",
+        "same_two": "Same on both: {items}.",
+        "same_many": "Same on all: {items}.",
+        # Moneda urmează convenția rândului de preț (`_price_cell`), care e „lei" pe toate locale-le
+        # până când DomainPack.currency ajunge și pe calea de comparație.
+        "close_price": "The price difference is small, {gap} lei.",
+        "same_rating": "They are rated the same.",
+        "heading": "Main differences",
     },
     "hu": {
         "title": "Összehasonlítás",
@@ -704,6 +717,11 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "lead": "Íme a fő különbségek, válassz aszerint, ami neked fontos.",
         "cheapest": "A legkedvezőbb: {name}.",
         "top_rated": "A legjobbra értékelt: {name}.",
+        "same_two": "Mindkettőnél ugyanaz: {items}.",
+        "same_many": "Mindegyiknél ugyanaz: {items}.",
+        "close_price": "Az árkülönbség kicsi, {gap} lei.",
+        "same_rating": "Ugyanolyan értékelésűek.",
+        "heading": "Fő különbségek",
     },
 }
 _AVAIL_LABELS: dict[str, dict[str, str]] = {
@@ -715,6 +733,12 @@ _AVAIL_LABELS: dict[str, dict[str, str]] = {
 
 def _labels(language: str | None) -> dict[str, str]:
     return _COMPARE_LABELS.get(language or "ro") or _COMPARE_LABELS["ro"]
+
+
+def comparison_heading(language: str | None) -> str:
+    """Titlul de deasupra tabelului („Diferențe principale"), localizat. Copy SERVER-OWNED: un
+    titlu hardcodat în frontend ar rămâne în română pentru un tenant HU (principiul 11)."""
+    return _labels(language)["heading"]
 
 
 def _join_list(raw: Any, n: int) -> str | None:
@@ -729,24 +753,175 @@ def _join_list(raw: Any, n: int) -> str | None:
     return " · ".join(items[:n]) or None
 
 
-def _comparison_lead(chosen: list[dict[str, Any]], language: str | None) -> str:
-    """Lead determinist: framing scurt + verdict DERIVAT din date (cel mai ieftin / cel mai bine
-    cotat, doar când departajează). Zero proză LLM → sigur prin construcție."""
+#: Sub acest raport față de prețul cel mai mic, diferența de preț e REALĂ, dar nu e un argument de
+#: vânzare. „Cea mai accesibilă" peste 2 lei dintr-un produs de 43 nu informează pe nimeni: sună a
+#: verdict, iar clientul îl citește ca pe unul. Verdictul se dă doar când există ce departaja.
+_MATERIAL_PRICE_RATIO = 0.10
+#: Ratingurile de catalog se înghesuie între 4,0 și 4,9, iar diferența dintre ele vine din zeci de
+#: recenzii, nu din mii. Sub 0,3★ „cel mai bine cotat" e zgomot de eșantion prezentat ca ierarhie.
+_MATERIAL_RATING_DELTA = 0.3
+#: Cât de lungă poate fi o valoare COMUNĂ ca să încapă în fraza de teren comun. Peste atât (proza
+#: unui `key_benefit`) nu se rezumă într-o enumerare, iar dacă e identică oricum nu departajează.
+_MAX_COMMON_ITEM_CHARS = 26
+#: Câte valori comune intră în frază. Terenul comun se spune, nu se inventariază.
+_MAX_COMMON_ITEMS = 3
+#: Greutatea de DECIZIE a rândurilor, de la ce cumpără clientul spre ce doar confirmă identitatea.
+#: Prețul deschide (e întrebarea de sub orice comparație), substanța produsului (fațetele de
+#: domeniu din DomainPack) urmează imediat, vocea celorlalți clienți după ea. Ratingul coboară
+#: fiindcă e deja pe cardul din antet, iar brandul e în numele produsului. Ordinea e stabilă:
+#: `sort` păstrează succesiunea fațetelor din DomainPack.
+_ROW_ORDER: tuple[str, ...] = ("price", "facet", "pros", "cons", "avail", "rating", "brand")
+
+
+def _norm_cell(value: str | None) -> str:
+    return " ".join((value or "").split()).casefold()
+
+
+def discriminates(values: list[str | None]) -> bool:
+    """Rândul răspunde la întrebarea „care e diferența"? Tot-gol nu (ca azi, e sărit). Parțial gol
+    DA: „cunoscut pe o coloană, necunoscut pe alta" e informație pe care clientul o poate cântări,
+    iar frontendul o randează „—", adică necunoscut, nu absent. Toate pline → doar dacă chiar
+    diferă.
+
+    Public fiindcă regula e aceeași și pentru axele COMPUSE de model (`compare_narrative`): un
+    prompt care cere „nu scrie același lucru pe ambele coloane" nu e o garanție, e o rugăminte."""
+    filled = [_norm_cell(v) for v in values if v]
+    if not filled:
+        return False
+    if len(filled) < len(values):
+        return True
+    return len(set(filled)) >= 2
+
+
+def _is_common(values: list[str | None]) -> bool:
+    """Toate coloanele spun exact același lucru → teren COMUN, nu material de tabel comparativ."""
+    filled = [_norm_cell(v) for v in values if v]
+    return len(filled) == len(values) and len(set(filled)) == 1
+
+
+def _rating_delta(chosen: list[dict[str, Any]]) -> float | None:
+    """Amplitudinea ratingurilor, sau `None` dacă vreunul lipsește (necunoscutul nu se compară).
+
+    ROTUNJIT deliberat: ratingurile sunt zecimale de o cifră, dar `4.6 - 4.3` dă în virgulă mobilă
+    0,29999999999999982, adică STRICT sub prag. Fără rotunjire, exact diferența de la limită (cea
+    mai frecventă într-un catalog unde totul e între 4,0 și 4,9) ar fi fost declarată zgomot, iar
+    rândul ar fi dispărut din tabel. Prins de golden-ul nx172-conv-compare-diffs."""
+    ratings = [p.get("rating") for p in chosen]
+    if any(r is None for r in ratings):
+        return None
+    values = [float(r) for r in ratings]  # type: ignore[arg-type]
+    return round(max(values) - min(values), 6)
+
+
+def _common_sentence(
+    common: list[ComparisonRow], n_columns: int, language: str | None
+) -> str | None:
+    """Terenul comun într-o singură frază („La amândouă la fel: mat, în stoc"). Valorile lungi se
+    lasă afară: o proză identică pe toate coloanele nu departajează, deci n-are ce căuta nici în
+    tabel, nici într-o enumerare."""
     L = _labels(language)
-    parts = [L["lead"]]
+    items: list[str] = []
+    for row in common:
+        value = next((v for v in row.values if v), None)
+        if value and len(value) <= _MAX_COMMON_ITEM_CHARS:
+            items.append(value)
+        if len(items) >= _MAX_COMMON_ITEMS:
+            break
+    if not items:
+        return None
+    key = "same_two" if n_columns == 2 else "same_many"
+    return L[key].format(items=", ".join(items))
+
+
+def _derived_notes(chosen: list[dict[str, Any]], language: str | None) -> list[str]:
+    """Observațiile pe care le poate SUSȚINE aritmetica, nu impresia: verdict de preț sau, dacă
+    diferența e nesemnificativă, faptul că e nesemnificativă. La fel pentru rating. Cele două
+    ramuri se exclud reciproc, deci clientul primește ori un criteriu de alegere, ori adevărul că
+    pe axa aia nu are ce alege."""
+    L = _labels(language)
+    notes: list[str] = []
     priced = [p for p in chosen if p.get("price") is not None]
     if len(priced) > 1:
         prices = [float(p["price"]) for p in priced]
-        if len(set(prices)) > 1:
+        low, high = min(prices), max(prices)
+        gap = high - low
+        if gap <= 0:
+            pass  # prețuri identice → rândul de preț o arată singur, fără comentariu
+        elif low > 0 and gap / low < _MATERIAL_PRICE_RATIO:
+            notes.append(L["close_price"].format(gap=amount_text(gap, language)))
+        else:
             cheapest = min(priced, key=lambda p: float(p["price"]))
-            parts.append(L["cheapest"].format(name=cheapest["name"]))
+            notes.append(L["cheapest"].format(name=cheapest["name"]))
+    delta = _rating_delta(chosen)
+    if delta is not None and len(chosen) > 1:
+        if delta < _MATERIAL_RATING_DELTA:
+            notes.append(L["same_rating"])
+        else:
+            top = max(chosen, key=lambda p: float(p["rating"]))
+            notes.append(L["top_rated"].format(name=top["name"]))
+    return notes
+
+
+def _legacy_notes(chosen: list[dict[str, Any]], language: str | None) -> list[str]:
+    """Observațiile de dinaintea pragurilor de materialitate: verdict la ORICE diferență, oricât de
+    mică. Păstrate ca să ținem `comparison_focus_enabled=false` byte-identic cu ce rulează azi."""
+    L = _labels(language)
+    notes: list[str] = []
+    priced = [p for p in chosen if p.get("price") is not None]
+    if len(priced) > 1 and len({float(p["price"]) for p in priced}) > 1:
+        cheapest = min(priced, key=lambda p: float(p["price"]))
+        notes.append(L["cheapest"].format(name=cheapest["name"]))
     rated = [p for p in chosen if p.get("rating") is not None]
-    if len(rated) > 1:
-        ratings = [float(p["rating"]) for p in rated]
-        if len(set(ratings)) > 1:
-            top = max(rated, key=lambda p: float(p["rating"]))
-            # nu repeta dacă „cel mai ieftin" == „cel mai bine cotat" (un singur câștigător clar)
-            parts.append(L["top_rated"].format(name=top["name"]))
+    if len(rated) > 1 and len({float(p["rating"]) for p in rated}) > 1:
+        top = max(rated, key=lambda p: float(p["rating"]))
+        notes.append(L["top_rated"].format(name=top["name"]))
+    return notes
+
+
+def _price_cell(p: dict[str, Any], language: str | None) -> str:
+    eff = float(p["price"])
+    lp = p.get("list_price")
+    if lp is not None and float(lp) > eff:  # IZI-anchor: preț redus (de la X)
+        return f"{amount_text(eff, language)} lei (de la {amount_text(lp, language)})"
+    return f"{amount_text(eff, language)} lei"
+
+
+def price_and_rating_rows(
+    products: list[dict[str, Any]], language: str | None
+) -> list[ComparisonRow]:
+    """Rândurile pe care le scrie CODUL, cu cifra exactă, oricine ar compune restul tabelului.
+
+    Sunt singurele două dimensiuni pe care un model nu are voie să le atingă: un preț și un rating
+    sunt fapte cu o singură valoare corectă, iar o aproximare („foarte ieftin, sub 10 lei") sună a
+    stil dar e un regres — noi avem cifra. Ratingul apare doar peste pragul de materialitate, la fel
+    ca în tabelul determinist: 4,5 față de 4,6 nu e o ierarhie."""
+    chosen = [p for p in products if p.get("price") is not None]
+    if len(chosen) < 2:
+        return []
+    L = _labels(language)
+    rows = [ComparisonRow(label=L["price"], values=[_price_cell(p, language) for p in chosen])]
+    delta = _rating_delta(chosen)
+    if delta is not None and delta >= _MATERIAL_RATING_DELTA:
+        rows.append(
+            ComparisonRow(label=L["rating"], values=[f"{float(p['rating']):.1f}★" for p in chosen])
+        )
+    return rows
+
+
+def _comparison_lead(
+    chosen: list[dict[str, Any]],
+    language: str | None,
+    common: list[ComparisonRow],
+    notes: list[str],
+) -> str:
+    """Lead DETERMINIST: framing scurt + terenul comun + observațiile derivate din date. Zero proză
+    LLM → sigur prin construcție. E leadul de bază ȘI plasa de siguranță: când poarta de grounding
+    respinge leadul modelului (`compare_lead`), clientul primește tot un răspuns, nu tăcere (P6)."""
+    parts = [_labels(language)["lead"]]
+    sentence = _common_sentence(common, len(chosen), language) if common else None
+    if sentence:
+        parts.append(sentence)
+    parts.extend(notes)
     return " ".join(parts)
 
 
@@ -874,6 +1049,13 @@ def build_comparison(
     pentru/material/...), randate ca rânduri din `products.attributes`. Generic (nimic hardcodat de
     vertical); un rând TOT-gol e sărit (date sărace → tabel ca azi). Gol → comportament neschimbat.
 
+    FOCUS (`comparison_focus_enabled`, default ON): `rows` ține DOAR rândurile care departajează,
+    ordonate după greutatea de decizie (`_ROW_ORDER`), nu după ordinea în care le construiește
+    codul. Ce e identic pe toate coloanele iese din tabel în `common`, iar aritmetica pe care o
+    putem susține (verdict de preț sau constatarea că diferența e nesemnificativă, la fel pentru
+    rating) intră în `notes`. Ambele alimentează leadul. OFF → tabelul și leadul de dinainte,
+    byte-identic.
+
     Anchor preț redus (PR2): dacă produsul are `list_price` > prețul efectiv, coloana ține prețul
     de listă + `sale_price` = efectivul (frontendul taie listul). Forward-compatible: fără
     `list_price` → fără anchor (prețul afișat e cel efectiv, ca azi)."""
@@ -908,15 +1090,8 @@ def build_comparison(
         # Rând sărit dacă TOATE celulele sunt goale (ex. niciun produs n-are minusuri).
         return ComparisonRow(label=label, values=values) if any(v for v in values) else None
 
-    def _price_cell(p: dict[str, Any]) -> str:
-        eff = float(p["price"])
-        lp = p.get("list_price")
-        if lp is not None and float(lp) > eff:  # IZI-anchor: preț redus (de la X)
-            return f"{amount_text(eff, language)} lei (de la {amount_text(lp, language)})"
-        return f"{amount_text(eff, language)} lei"
-
-    # Tier 2: rânduri de DOMENIU (finish/acoperire/potrivit-pentru/..., din `attributes`), între
-    # Rating și Disponibilitate. Generice (din DomainPack), deterministe; un rând TOT-gol e sărit.
+    # Tier 2: rânduri de DOMENIU (finish/acoperire/potrivit-pentru/..., din `attributes`).
+    # Generice (din DomainPack), deterministe; un rând TOT-gol e sărit.
     facet_rows = [
         _row(
             _facet_label(f, language),
@@ -924,20 +1099,176 @@ def build_comparison(
         )
         for f in facets
     ]
-    candidate_rows = [
-        ComparisonRow(label=L["price"], values=[_price_cell(p) for p in chosen]),
-        _row(
-            L["rating"],
-            [f"{float(p['rating']):.1f}★" if p.get("rating") is not None else None for p in chosen],
+    # Perechea (cheie de ORDINE, rând): cheia e stabilă și internă, eticheta e localizată. Fără ea,
+    # ordonarea ar depinde de textul afișat, adică s-ar schimba cu limba clientului.
+    candidates: list[tuple[str, ComparisonRow | None]] = [
+        (
+            "price",
+            ComparisonRow(label=L["price"], values=[_price_cell(p, language) for p in chosen]),
         ),
-        *facet_rows,
-        _row(L["avail"], [AV.get(p.get("availability") or "") or None for p in chosen]),
-        _row(L["pros"], [_join_list(p.get("top_pros"), 3) for p in chosen]),
-        _row(L["cons"], [_join_list(p.get("top_cons"), 2) for p in chosen]),
-        _row(L["brand"], [p.get("brand") for p in chosen]),
+        (
+            "rating",
+            _row(
+                L["rating"],
+                [
+                    f"{float(p['rating']):.1f}★" if p.get("rating") is not None else None
+                    for p in chosen
+                ],
+            ),
+        ),
+        *(("facet", r) for r in facet_rows),
+        ("avail", _row(L["avail"], [AV.get(p.get("availability") or "") or None for p in chosen])),
+        ("pros", _row(L["pros"], [_join_list(p.get("top_pros"), 3) for p in chosen])),
+        ("cons", _row(L["cons"], [_join_list(p.get("top_cons"), 2) for p in chosen])),
+        ("brand", _row(L["brand"], [p.get("brand") for p in chosen])),
     ]
-    rows = [r for r in candidate_rows if r is not None]
-    return Comparison(columns=columns, rows=rows, intro=_comparison_lead(chosen, language))
+    present = [(key, r) for key, r in candidates if r is not None]
+
+    if not get_settings().comparison_focus_enabled:
+        rows = [r for _, r in present]
+        return Comparison(
+            columns=columns,
+            rows=rows,
+            intro=_comparison_lead(chosen, language, [], _legacy_notes(chosen, language)),
+        )
+
+    # Un tabel de comparație are o singură treabă: să arate ce DEPARTAJEAZĂ. Un rând identic pe
+    # toate coloanele („mat / mat", „În stoc / În stoc") ocupă exact locul în care clientul caută
+    # diferența și îi cere să descopere singur că nu e niciuna. Trece în terenul comun, care se
+    # spune o dată, în proză. Regula e GENERICĂ: nu există nicăieri o listă de rânduri
+    # „plictisitoare", iar disponibilitatea rămâne în tabel exact când chiar desparte produsele.
+    delta = _rating_delta(chosen)
+    rows_keyed: list[tuple[str, ComparisonRow]] = []
+    common: list[ComparisonRow] = []
+    for key, row in present:
+        if key == "price":
+            # Prețul rămâne mereu, chiar identic: e întrebarea de sub orice comparație, iar „costă
+            # la fel" e un răspuns, nu un rând gol.
+            rows_keyed.append((key, row))
+        elif key == "rating" and delta is not None and delta < _MATERIAL_RATING_DELTA:
+            # Ratingul e deja pe cardul din antet. Un rând care spune 4,5 față de 4,6 nu adaugă un
+            # criteriu, adaugă o ierarhie falsă: nota din `notes` o spune onest.
+            continue
+        elif _is_common(row.values):
+            common.append(row)
+        elif discriminates(row.values):
+            rows_keyed.append((key, row))
+    rows_keyed.sort(key=lambda item: _ROW_ORDER.index(item[0]))  # stabil → fațetele își țin ordinea
+    notes = _derived_notes(chosen, language)
+    return Comparison(
+        columns=columns,
+        rows=[r for _, r in rows_keyed],
+        intro=_comparison_lead(chosen, language, common, notes),
+        common=common,
+        notes=notes,
+    )
+
+
+#: Sursele GENERICE de fapt, peste fațetele de domeniu. Cheile sunt vocabular ÎNCHIS: modelul
+#: numește sursa fiecărei celule pe care o scrie, iar codul verifică mecanic că sursa aia chiar are
+#: conținut pentru produsul ăla. Fără asta, o axă inventată („Rezistență") ar primi o propoziție
+#: inventată, iar poarta n-ar avea ce să confrunte — exact tiparul `pro_index` de la calea bogată.
+#: Prețul și ratingul lipsesc deliberat: rândurile lor le scrie CODUL, cu cifra exactă.
+GENERIC_FACT_SOURCES: tuple[str, ...] = (
+    "avantaje",
+    "de_luat_in_calcul",
+    "descriere",
+    "specificatii",
+)
+
+
+def product_fact_sheet(
+    product: dict[str, Any], facets: Sequence[FacetSpec] = (), language: str | None = None
+) -> dict[str, str]:
+    """Faptele CITABILE ale unui produs: `sursă → text`, sursele goale lipsind din dicționar.
+
+    Fațetele vin din DomainPack (generic pe vertical: finish/texture/material/fitment), restul sunt
+    generice. Un `source` care nu e cheie aici e o citare a ceva ce nu există, deci celula pică."""
+    sheet: dict[str, str] = {}
+    attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+    for facet in facets:
+        cell = _facet_cell(facet, attrs, language)
+        if cell:
+            sheet[facet.key] = cell
+    if pros := _join_list(product.get("top_pros"), 3):
+        sheet["avantaje"] = pros
+    if cons := _join_list(product.get("top_cons"), 2):
+        sheet["de_luat_in_calcul"] = cons
+    desc = " ".join((product.get("ai_summary") or "").split())
+    if desc:
+        sheet["descriere"] = desc[:240]
+    specs = attrs.get("specs") if isinstance(attrs, dict) else None
+    if isinstance(specs, dict):
+        pairs = [f"{k}: {v}" for k, v in specs.items() if k and v]
+        if pairs:
+            sheet["specificatii"] = "; ".join(pairs[:6])
+    return sheet
+
+
+def comparison_wire(comparison: Comparison) -> dict[str, Any]:
+    """`Comparison` → forma care are voie să părăsească procesul (outbox, SSE, reply_from_outbox).
+
+    `common` și `notes` sunt INPUT pentru lead, nu conținut de randat: pe ruta sincronă nu ajungeau
+    oricum la client (`render._comparison_payload` alege explicit columns/rows/intro), dar ruta
+    async serializează cu `asdict`, deci ar fi plecat spre browser doar acolo. Două payload-uri
+    diferite pentru același răspuns e exact felul de divergență care se descoperă târziu; în plus,
+    `notes` conține propoziții care sunt DEJA în `intro`, iar un renderer care le-ar afișa ar
+    repeta verdictul de două ori."""
+    return {
+        "columns": [asdict(c) for c in comparison.columns],
+        "rows": [asdict(r) for r in comparison.rows],
+        "intro": comparison.intro,
+        "subtitle": comparison.subtitle,
+        "closing": list(comparison.closing),
+    }
+
+
+def comparison_fact_sheets(
+    comparison: Comparison,
+    products: list[dict[str, Any]],
+    facets: Sequence[FacetSpec] = (),
+    language: str | None = None,
+) -> str:
+    """Fișele de fapte ale produselor comparate, cu SURSA fiecărui fapt etichetată.
+
+    E inputul din care modelul compune axele: nu poate scrie o celulă fără să numească sursa, iar
+    aici vede exact ce surse există și ce conțin. Ce nu apare în fișă nu se poate cita, deci nu se
+    poate afirma — un produs fără `finish` nu primește un rând de finisaj plauzibil."""
+    lines: list[str] = []
+    facts = {str(p.get("id")): p for p in products if p.get("id")}
+    for col in comparison.columns:
+        product = facts.get(col.product_id)
+        if product is None:
+            continue
+        lines.append(f"[{col.product_id}] {col.name}")
+        sheet = product_fact_sheet(product, facets, language)
+        for source, value in sheet.items():
+            lines.append(f"    {source}: {value}")
+        if not sheet:
+            lines.append("    (fără fapte citabile)")
+    return "\n".join(lines)
+
+
+def comparison_facts_block(comparison: Comparison, language: str | None) -> str:
+    """Faptele ÎNGHEȚATE ale tabelului, ca input pentru proza din jurul lui (`compare_narrative`).
+
+    E ACELAȘI conținut pe care îl vede clientul în tabel, nu rândurile brute de retrieval: modelul
+    explică exact ce se va randa sub textul lui. Diferența contează la un rând sărit — un fapt care
+    n-a intrat în tabel n-are voie să legitimeze o frază din lead."""
+    L = _labels(language)
+    names = " | ".join(c.name for c in comparison.columns)
+    lines = [f"Produse comparate, în ordinea coloanelor: {names}", "Ce le DESPARTE:"]
+    for row in comparison.rows:
+        lines.append(f"- {row.label}: " + " | ".join(v or "necunoscut" for v in row.values))
+    if comparison.common:
+        same = "; ".join(
+            f"{row.label}: {next(v for v in row.values if v)}" for row in comparison.common
+        )
+        key = "same_two" if len(comparison.columns) == 2 else "same_many"
+        lines.append(L[key].format(items=same))
+    if comparison.notes:
+        lines.append("Observații derivate din date: " + " ".join(comparison.notes))
+    return "\n".join(lines)
 
 
 def flatten_comparison(comparison: Comparison, language: str | None) -> str:
