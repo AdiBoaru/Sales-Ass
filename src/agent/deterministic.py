@@ -25,6 +25,7 @@ from src.agent.fallbacks import (
     _link_lead,
     _no_link_msg,
     _view_label,
+    fit_chip,
 )
 from src.agent.reference_resolver import (
     ActionAnchor,
@@ -243,7 +244,7 @@ def _review_copy(language: str) -> dict[str, str]:
             "cons": "Worth considering: {value}.",
             "rating": "Rating: {rating}/5 from {count} reviews.",
             "empty": "I don't have enough review data for {name} yet.",
-            "chip": "Reviews: {name}",
+            "chip": "Show me the reviews for {name}",
         }
     if language == "hu":
         return {
@@ -253,7 +254,7 @@ def _review_copy(language: str) -> dict[str, str]:
             "cons": "Amit érdemes mérlegelni: {value}.",
             "rating": "Értékelés: {rating}/5, {count} vélemény alapján.",
             "empty": "Még nincs elég véleményadat a(z) {name} termékről.",
-            "chip": "Vélemények: {name}",
+            "chip": "Mutasd a véleményeket: {name}",
         }
     return {
         "which": "Pentru care produs vrei să vezi recenziile?",
@@ -262,7 +263,7 @@ def _review_copy(language: str) -> dict[str, str]:
         "cons": "De luat în calcul: {value}.",
         "rating": "Rating: {rating}/5 din {count} recenzii.",
         "empty": "Nu am încă suficiente date din recenzii pentru {name}.",
-        "chip": "Recenzii: {name}",
+        "chip": "Arată-mi recenziile la {name}",
     }
 
 
@@ -298,19 +299,22 @@ def _review_answer(product: dict, language: str) -> tuple[str, bool]:
 
 
 def _review_choice_chips(refs: list[ProductRef], language: str) -> list[str]:
+    """Opțiunile de dezambiguizare („pentru care produs?"). Ordinalul rămâne în față: ancora din
+    `reference_resolver` se rezolvă pe el, deci e parte din rutare, nu decor."""
     template = _review_copy(language)["chip"]
     return [
-        template.format(name=f"{index}. {ref.name[:24].rstrip()}")[:40]
-        for index, ref in enumerate(refs[:4], start=1)
+        fit_chip(template, f"{index}. {ref.name}") for index, ref in enumerate(refs[:4], start=1)
     ]
 
 
 def _review_next_steps(language: str) -> list[str]:
+    """Pașii de după un răspuns din recenzii, ca mesaje de client. Cuvintele-cheie rămân cele pe
+    care le prind `_DETAIL_RE` / `_LINK_RE` — altfel chip-ul sună mai bine și rutează mai prost."""
     if language == "en":
-        return ["Tell me more", "View product", "Add to cart"]
+        return ["Tell me more about it", "Send me the product link", "Add it to my cart"]
     if language == "hu":
-        return ["További részletek", "Termék megtekintése", "Kosárba"]
-    return ["Spune-mi mai multe", "Vezi produsul", "Adaugă în coș"]
+        return ["Mesélj még róla", "Küldd el a termék linkjét", "Tedd a kosárba"]
+    return ["Spune-mi mai multe despre el", "Trimite-mi linkul la produs", "Adaugă-l în coș"]
 
 
 async def serve_reviews(
@@ -361,10 +365,10 @@ def _detail_copy(language: str) -> dict[str, str]:
             "reviews": "What customers say",
             "empty_features": "I don't have additional specifications for this product yet.",
             "unavailable": "That product is no longer available, so I can't show reliable details.",
-            "chip": "Details: {name}",
-            "review_chip": "View reviews",
-            "link_chip": "View product",
-            "compare_chip": "Compare with another",
+            "chip": "Tell me more about {name}",
+            "review_chip": "What do the reviews say about it?",
+            "link_chip": "Send me the product link",
+            "compare_chip": "Compare it with a similar product",
         }
     if language == "hu":
         return {
@@ -376,10 +380,10 @@ def _detail_copy(language: str) -> dict[str, str]:
             "unavailable": (
                 "Ez a termék már nem elérhető, ezért nem tudok megbízható részleteket mutatni."
             ),
-            "chip": "Részletek: {name}",
-            "review_chip": "Vélemények",
-            "link_chip": "Termék megtekintése",
-            "compare_chip": "Összehasonlítás",
+            "chip": "Mesélj még erről: {name}",
+            "review_chip": "Mit írnak róla a vélemények?",
+            "link_chip": "Küldd el a termék linkjét",
+            "compare_chip": "Hasonlítsd össze egy hasonlóval",
         }
     return {
         "which": "Pentru care produs vrei mai multe detalii?",
@@ -388,19 +392,17 @@ def _detail_copy(language: str) -> dict[str, str]:
         "reviews": "Ce spun clienții",
         "empty_features": "Nu am încă specificații suplimentare pentru acest produs.",
         "unavailable": "Produsul nu mai este disponibil, așa că nu îți pot arăta detalii sigure.",
-        "chip": "Detalii: {name}",
-        "review_chip": "Vezi recenzii",
-        "link_chip": "Vezi produsul",
-        "compare_chip": "Compară cu alt produs",
+        "chip": "Spune-mi mai multe despre {name}",
+        "review_chip": "Ce spun recenziile despre el?",
+        "link_chip": "Trimite-mi linkul la produs",
+        "compare_chip": "Compară-l cu un produs similar",
     }
 
 
 def _detail_choice_chips(refs: list[ProductRef], language: str) -> list[str]:
+    """Vezi `_review_choice_chips`: ordinalul e ancora, numele cedează primul la scurtare."""
     template = _detail_copy(language)["chip"]
-    return [
-        template.format(name=f"{i}. {ref.name[:22].rstrip()}")[:40]
-        for i, ref in enumerate(refs[:4], 1)
-    ]
+    return [fit_chip(template, f"{i}. {ref.name}") for i, ref in enumerate(refs[:4], 1)]
 
 
 def _detail_answer(product: dict, ctx: TurnContext) -> str:

@@ -127,10 +127,16 @@ def test_order_reco_is_vertical_neutral():
 # --- NX-132: gramatica iZi în prompturi --------------------------------------
 
 
-def test_rich_suggestions_short_tappable_roles():
-    # chips = etichete SCURTE tappabile (până la 4), roluri diferite; genericele scurte sunt OK.
+def test_rich_suggestions_are_client_messages_not_labels():
+    """Chips-urile sunt MESAJELE pe care le-ar scrie clientul (3-5, ancorate în turul curent), nu
+    etichete de două cuvinte: la tap textul se întoarce în pipeline ca mesaj nou, deci „Mai
+    accesibil" pierde subiectul pe drum. Promptul trebuie să ceară explicit ancorarea și
+    self-containment-ul, altfel modelul revine la eticheta generică."""
     r = build_rich_system(_inp())
-    assert "PÂNĂ LA 4 chips" in r and "TAPPABILE" in r and "ROL DIFERIT" in r
+    assert "3-5 MESAJE de follow-up" in r
+    assert "ANCOREAZĂ fiecare sugestie" in r
+    assert "ROLURI DIFERITE" in r
+    assert "TAPPABILE" not in r  # vechea formulare, cea care producea „Culoare intensă"
     for role in ("rafinare pe ATRIBUT", "rafinare pe BUGET", "COMPARAȚIE"):
         assert role in r
     assert "Compară primele două" in r  # acum e exemplu BUN (scurt/tappabil), nu de evitat

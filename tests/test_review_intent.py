@@ -5,6 +5,7 @@ import pytest
 from src.agent import deterministic as det
 from src.config import get_settings
 from src.models import (
+    MAX_CHIP_LEN,
     BusinessConfig,
     Contact,
     InboundMessage,
@@ -131,8 +132,11 @@ async def test_generic_reviews_with_multiple_products_clarifies_without_db(monke
     assert ctx.reply.pending_question["field"] == "product_for_reviews"
     assert ctx.reply.text == "Pentru care produs vrei să vezi recenziile?"
     assert len(ctx.reply.suggestions) == 3
-    assert all("Recenzii:" in suggestion for suggestion in ctx.reply.suggestions)
-    assert ctx.reply.suggestions[1].startswith("Recenzii: 2.")
+    # Opțiunile sunt mesaje de client, nu etichete („Recenzii: 2. …"), dar păstrează ordinalul —
+    # pe el se rezolvă ancora din `reference_resolver` — și cuvântul pe care îl prinde `_REVIEW_RE`.
+    assert all(s.startswith("Arată-mi recenziile la ") for s in ctx.reply.suggestions)
+    assert ctx.reply.suggestions[1].startswith("Arată-mi recenziile la 2.")
+    assert all(len(s) <= MAX_CHIP_LEN for s in ctx.reply.suggestions)
     assert any(
         event.type == "review_intent" and event.properties["reason"] == "ambiguous"
         for event in ctx.events

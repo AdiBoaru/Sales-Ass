@@ -370,6 +370,16 @@ class Chip:
     payload: str  # v1: egal cu `label` în practică — vezi nota de mai sus, NU e un token semantic
 
 
+# Cât de lung are voie să fie un chip. Nu e o preferință de UI, e ce face chip-ul UTILIZABIL: la
+# apăsare, `label` pleacă înapoi în pipeline ca MESAJ NOU al clientului, deci trebuie să se
+# înțeleagă singur, citit fără restul conversației. „Mai accesibil" nu spune ce anume și ce buget,
+# „Vreau un ruj roșu mai ieftin decât astea" spune. Capul lasă loc unei fraze self-contained cu
+# nume de produs în ea, dar taie întrebarea-paragraf pe care nano o mai produce pe calea clarify.
+# Toți producătorii de chips (compose, fallbacks, deterministic) și randorul web împart valoarea
+# asta: dacă randorul ar tăia mai jos, chips-urile lungi ar dispărea TĂCUT înainte de client.
+MAX_CHIP_LEN = 56
+
+
 @dataclass
 class RichReply:
     """Recomandarea structurată, NEUTRĂ de canal. Sender-ul o aplatizează în text
