@@ -20,8 +20,13 @@ from uuid import uuid4
 
 import pytest
 
+from src.catalog.relation_chain import walk_chain
 from src.db.connection import admin_conn, close_pool, get_pool
-from src.db.queries.catalog import _MAX_RELATION_DEPTH, traverse_relations
+from src.db.queries.catalog import (
+    _MAX_RELATION_DEPTH,
+    traverse_relation_chain,
+    traverse_relations,
+)
 
 pytestmark = [pytest.mark.integration]
 
@@ -246,3 +251,80 @@ async def test_order_is_stable_across_calls(shop):
         )
     assert first == second
     assert [h["position"] for h in first] == sorted(h["position"] for h in first)
+
+
+# --- NX-263: DRUMUL, nu frontiera ---------------------------------------------------------------
+
+
+async def test_chain_follows_the_path_not_the_best_of_each_depth(shop):
+    """Cazul care separă cele două funcții, pe SQL real.
+
+    A → B1 (poziția 0) și A → B2 (poziția 1). B1 → D (poziția 5), B2 → C (poziția 0).
+    Un „cel mai bun produs de la fiecare adâncime" ar alege B1 la pasul 1 (poziția 0) și apoi C la
+    pasul 2 (poziția 0) — dar C e succesorul lui B2, nu al lui B1. Ar fi o rutină cusută din două
+    ramuri: corectă pe cifre, falsă ca sfat. Lanțul real e B1 → D."""
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        a = await _make_product(conn, shop, name="A")
+        b1 = await _make_product(conn, shop, name="B1")
+        b2 = await _make_product(conn, shop, name="B2")
+        c = await _make_product(conn, shop, name="C")
+        d = await _make_product(conn, shop, name="D")
+        await _relate(conn, shop, a, b1, "routine_next", position=0)
+        await _relate(conn, shop, a, b2, "routine_next", position=1)
+        await _relate(conn, shop, b2, c, "routine_next", position=0)
+        await _relate(conn, shop, b1, d, "routine_next", position=5)
+
+        hops = await traverse_relation_chain(
+            conn, shop, anchor_id=a, kind="routine_next", max_depth=4
+        )
+        chain = walk_chain(hops, a, 4)
+
+    assert [h["id"] for h in chain] == [b1, d]
+    # fiecare pas e copilul celui dinainte — drumul e VERIFICABIL, nu presupus din adâncime
+    assert [h["parent"] for h in chain] == [a, b1]
+
+
+async def test_chain_is_bounded_by_the_spec_depth(shop):
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        ids = await _chain(conn, shop, 5)
+        hops = await traverse_relation_chain(
+            conn, shop, anchor_id=ids[0], kind="routine_next", max_depth=2
+        )
+        chain = walk_chain(hops, ids[0], 2)
+    assert [h["id"] for h in chain] == ids[1:3]
+
+
+async def test_chain_on_a_cyclic_kind_terminates_and_stays_a_path(shop):
+    """A → B → C → A pe un tip ciclic: interogarea termină, iar lanțul nu se întoarce la ancoră."""
+    pool = await get_pool()
+    async with admin_conn(pool) as conn:
+        a = await _make_product(conn, shop, name="A")
+        b = await _make_product(conn, shop, name="B")
+        c = await _make_product(conn, shop, name="C")
+        await _relate(conn, shop, a, b, "complement")
+        await _relate(conn, shop, b, c, "complement")
+        await _relate(conn, shop, c, a, "complement")
+        hops = await traverse_relation_chain(
+            conn, shop, anchor_id=a, kind="complement", max_depth=5
+        )
+        chain = walk_chain(hops, a, 5)
+    assert [h["id"] for h in chain] == [b, c]
+
+
+async def test_chain_is_tenant_scoped():
+    pool = await get_pool()
+    a_biz, b_biz = str(uuid4()), str(uuid4())
+    async with admin_conn(pool) as conn:
+        try:
+            await _make_business(conn, a_biz)
+            await _make_business(conn, b_biz)
+            a_ids = await _chain(conn, a_biz, 3)
+            leaked = await traverse_relation_chain(
+                conn, b_biz, anchor_id=a_ids[0], kind="routine_next", max_depth=4
+            )
+            assert leaked == []
+        finally:
+            await _cleanup(conn, a_biz, b_biz)
+    await close_pool()

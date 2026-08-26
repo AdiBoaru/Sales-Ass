@@ -94,6 +94,35 @@ _CROSS_SELL_QUERY: dict[str, str] = {
 }
 
 
+# NX-263: aceeași suprafață, dar produsele sunt PAȘII unei secvențe, nu un set de complemente.
+# Instrucțiunea trebuie să fie alta, altfel ordonarea nu înseamnă nimic: modelul ar descrie o
+# rutină ca pe o listă de sugestii, iar clientul n-ar afla că ordinea contează. Titlul secvenței
+# (`{sequence}`) vine din `RelationKindSpec.label(locale)`, deci din config-ul tenantului: la beauty
+# „Pași recomandați", la electrocasnice „Necesare la instalare". Nimic specific unui vertical aici.
+_RELATION_CHAIN_QUERY: dict[str, str] = {
+    "ro": "Clientul tocmai a adăugat în coș «{name}». Produsele de mai jos sunt PAȘII următori, "
+    "ÎN ORDINE ({sequence}), nu alternative și nu o listă de sugestii. Spune scurt la ce e "
+    "fiecare pas și păstrează ordinea în care ți-au fost date.",
+    "en": "The customer just added «{name}» to the cart. The products below are the next STEPS, "
+    "IN ORDER ({sequence}), not alternatives and not a list of suggestions. Briefly say what each "
+    "step is for, and keep the order you were given.",
+    "hu": "Az ügyfél most tette a kosárba: «{name}». Az alábbi termékek a következő LÉPÉSEK, "
+    "SORRENDBEN ({sequence}), nem alternatívák és nem javaslatlista. Mondd el röviden, mire való "
+    "az egyes lépések, és tartsd meg a kapott sorrendet.",
+}
+
+
+def _relation_chain_query(
+    added: dict[str, Any], language: str | None, sequence_label: str | None
+) -> str:
+    """Instrucțiunea către modelul rich pentru o SECVENȚĂ. `sequence_label` lipsă → cade pe
+    formularea de complement: mai bine un text corect fără titlu decât un titlu inventat (P11)."""
+    tmpl = _RELATION_CHAIN_QUERY.get(language or "ro") or _RELATION_CHAIN_QUERY["ro"]
+    if not sequence_label:
+        return _cross_sell_query(added, language)
+    return tmpl.format(name=added.get("name") or "produsul", sequence=sequence_label)
+
+
 def _cart_confirm_msg(added: dict[str, Any], language: str | None) -> str:
     tmpl = _CART_CONFIRM.get(language or "ro") or _CART_CONFIRM["ro"]
     return tmpl.format(name=added.get("name") or "produsul")
