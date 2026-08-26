@@ -24,8 +24,8 @@ from src.agent.deterministic import _CHEAPER_RE
 from src.agent.fallbacks import (
     _cart_confirm_msg,
     _cheapest_already_msg,
-    _cross_sell_query,
     _dedupe,
+    _relation_chain_query,
     _thin_path_chips,
 )
 from src.agent.finalize import _finalize_rich
@@ -34,12 +34,14 @@ from src.agent.query_rewrite import build_query_spec
 from src.agent.relevance_gate import apply_mask
 from src.agent.validator import _valid
 from src.analytics.demand import clean_ids
+from src.catalog.relation_chain import walk_chain
 from src.config import get_settings
 from src.conversation.state_v2 import active_needs
 from src.db.queries.catalog import (
     get_complementary_products,
     get_products_by_ids,
     search_cheaper_than,
+    traverse_relation_chain,
 )
 from src.models import RetrievalResult, TurnContext
 from src.safety.policy import SafetyPolicy
@@ -52,6 +54,65 @@ if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
+
+
+# NX-263: sub cât nu e o secvență. Un „lanț" de un pas e un vecin direct cu alt nume, iar a-l
+# anunța drept „pașii următori" ar fi o promisiune mai mare decât conținutul.
+_MIN_CHAIN_STEPS = 2
+
+
+async def _cart_followup_products(
+    ctx: TurnContext, deps: PipelineDeps, added_id: str, exclude_ids: list[str]
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Ce propunem după add-to-cart: PAȘII unei secvențe dacă tenantul o declară și ancora o are,
+    altfel complementarele de azi. Întoarce `(produse, eticheta secvenței)`; eticheta e `None`
+    pentru complemente, iar apelantul o folosește ca să știe ce fel de răspuns compune.
+
+    Declanșarea e DETERMINISTĂ (D2): decide codul, pe baza `DomainPack.relation_kinds` și a datelor,
+    nu modelul. Nu există tool nou și niciun nume de tip de muchie nu ajunge în prompt ca vocabular
+    de ales — modelul primește doar produsele, în ordine, și eticheta localizată.
+
+    Fail-safe în toate ramurile: flag stins, pack absent, niciun tip `ordered`, lanț prea scurt sau
+    pași necumpărabili ⇒ exact comportamentul de azi. UN singur checkout (NX-231): traversarea și
+    hidratarea sunt amândouă muncă de DB, fără niciun await extern între ele."""
+    pack = getattr(ctx.business, "domain_pack", None)
+    sequences = pack.relation_kinds.sequences() if pack is not None else ()
+    excluded = {str(pid) for pid in exclude_ids}
+    async with deps.db("cross_sell_complementary") as conn:
+        if get_settings().relation_traversal_enabled:
+            for spec in sequences:
+                hops = await traverse_relation_chain(
+                    conn,
+                    ctx.business.id,
+                    anchor_id=added_id,
+                    kind=spec.kind,
+                    max_depth=spec.max_depth,
+                )
+                steps = [h for h in walk_chain(hops, added_id, spec.max_depth)]
+                ids = [h["id"] for h in steps if h["id"] not in excluded]
+                if len(ids) < _MIN_CHAIN_STEPS:
+                    continue
+                # `get_products_by_ids` PĂSTREAZĂ ordinea cerută (`array_position`) → pașii rămân
+                # pași. `respect_content_status=True` fiindcă ăsta e un set NOU de descoperire, nu
+                # o rehidratare a ceva deja arătat.
+                found = await get_products_by_ids(
+                    conn, ctx.business.id, ids, limit=6, respect_content_status=True
+                )
+                # Un pas indisponibil LIPSEȘTE din prezentare, nu rupe structura (vezi contractul
+                # lui `traverse_relation_chain`). Filtrăm aici, nu în traversare.
+                buyable = [p for p in found if p.get("availability") in ("in_stock", "low_stock")]
+                if len(buyable) >= _MIN_CHAIN_STEPS:
+                    ctx.emit(
+                        "relation_chain",
+                        kind=spec.kind,
+                        steps=len(buyable),
+                        depth=spec.max_depth,
+                    )
+                    return buyable, spec.label(ctx.language or "ro")
+        complementary = await get_complementary_products(
+            conn, ctx.business.id, added_id, exclude_ids=exclude_ids, limit=4
+        )
+    return complementary, None
 
 
 async def _current_cart_lines(
@@ -311,20 +372,22 @@ async def build_plan(
         else:
             cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
         exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
-        async with deps.db("cross_sell_complementary") as conn:
-            complementary = await get_complementary_products(
-                conn, ctx.business.id, str(added["id"]), exclude_ids=exclude_ids, limit=4
-            )
+        complementary, sequence_label = await _cart_followup_products(
+            ctx, deps, str(added["id"]), exclude_ids
+        )
         # NX-173 (P0): cross-sell-ul e un set NOU, adus direct din DB, în afara `ToolRun` → nu-l
         # vede niciun backstop de tool. Un `cart_add` perfect sigur putea trage un complement
         # contraindicat (review Codex).
         complementary = policy.gate(ctx, complementary, purpose="cross_sell")[0]
         if complementary:
-            ctx.retrieval = RetrievalResult(products=complementary, source="cross_sell")
+            ctx.retrieval = RetrievalResult(
+                products=complementary,
+                source="relation_chain" if sequence_label else "cross_sell",
+            )
             rich = await _finalize_rich(
                 deps.llm,
                 prompt_builder.build_rich_system(inp),
-                _cross_sell_query(added, ctx.language),
+                _relation_chain_query(added, ctx.language, sequence_label),
                 complementary,
                 ctx,
                 history,
