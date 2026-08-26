@@ -345,10 +345,12 @@ class LLMClient:
         RAȚIONAMENT, fiindcă de el atârnă și `temperature`, și dreptul de a trimite tool-uri
         (vezi tabelul de la `_MODEL_PROFILES`).
 
-        • Plafon de output: `max_completion_tokens` pe TOATE apelurile de agent, MEREU (NX-125 — un
-          completion patologic/buclă nu scapă de ceiling), independent de sampling. Folosim
+        • Plafon de output: `max_completion_tokens` pe apelurile de agent (NX-125 — un completion
+          patologic/buclă nu scapă de ceiling), independent de sampling. Folosim
           `max_completion_tokens`, NU `max_tokens` (deprecat → 400 pe modelele curente).
-          E acceptat de toate familiile, deci nu trece prin poartă.
+          E acceptat de toate familiile, deci nu trece prin poartă. `LLM_MAX_TOKENS_AGENT=0` îl
+          OMITE deliberat (numărat ca `llm_output_cap_disabled`) — util cât timp măsori cât din
+          plafon mănâncă raționamentul, fiindcă tokenii de gândire ies din ACELAȘI buget.
         • `reasoning_effort`: `llm_reasoning_effort_agent` pe apelurile de agent FĂRĂ tool-uri;
           FORȚAT `none` când cererea poartă tool-uri (altfel 400, indiferent de model).
         • `temperature`: gated de `llm_sampling_enabled` ȘI de modul de raționament. Cu
@@ -364,8 +366,13 @@ class LLMClient:
         s = get_settings()
         profile = model_profile(model)
         out: dict[str, Any] = {}
-        if agent:
+        if agent and s.llm_max_tokens_agent > 0:
             out["max_completion_tokens"] = s.llm_max_tokens_agent
+        elif agent:
+            # 0 = plafonul e ridicat DELIBERAT (kill-switch numeric). Se numără, fiindcă un apel de
+            # agent fără ceiling e o abatere de la NX-125: vrem să se vadă în telemetrie, nu să
+            # fie o linie uitată în `.env`.
+            turn_latency.degrade("llm_output_cap_disabled")
         if profile is None:
             # Prefix nedeclarat: nu inventăm capabilități. Un 400 aici e zgomotos și reparabil
             # printr-o linie în `_MODEL_PROFILES`; un parametru ghicit e un tur pierdut tăcut.

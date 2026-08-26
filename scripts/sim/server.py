@@ -96,6 +96,9 @@ def _turn_usage(events: list[dict]) -> dict | None:
         "tokens_in": 0,
         "tokens_out": 0,
         "cached_tokens": 0,
+        # SUBSET al lui `tokens_out`: cât din completion a fost gândire. Se scade din ACELAȘI
+        # `LLM_MAX_TOKENS_AGENT` ca textul, deci e cifra din care se vede dacă plafonul e prea mic.
+        "reasoning_tokens": 0,
         "total_cost_usd": 0.0,
         "reply_cost_usd": 0.0,
         "savings_usd": 0.0,
@@ -107,6 +110,7 @@ def _turn_usage(events: list[dict]) -> dict | None:
         agg["tokens_in"] += int(p.get("tokens_in") or 0)
         agg["tokens_out"] += int(p.get("tokens_out") or 0)
         agg["cached_tokens"] += int(p.get("cached_tokens") or 0)
+        agg["reasoning_tokens"] += int(p.get("reasoning_tokens") or 0)
         agg["total_cost_usd"] += float(p.get("cost_usd") or 0.0)
         agg["savings_usd"] += float(p.get("savings_usd") or 0.0)
         agg["llm_calls"] += int(p.get("llm_calls") or 0)

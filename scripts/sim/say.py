@@ -42,9 +42,14 @@ def _cost_line(data: dict) -> str | None:
     # afișată separat ca „economie cache" (tokenii cached costă ~10% din input, nu 0).
     pct = f" = {round(100 * cached / tin)}% din input" if cached and tin else ""
     cache_part = f" (cached {cached:,}{pct})" if cached else ""
+    tout = int(u.get("tokens_out") or 0)
+    # Gândirea iese din ACELAȘI plafon ca textul (`LLM_MAX_TOKENS_AGENT`), deci ce contează nu e
+    # numărul brut, ci cât a mai rămas pentru răspuns. Afișăm ambele: `640 din 700` se citește
+    # instant ca „au rămas 60 de tokeni de text".
+    reasoning = int(u.get("reasoning_tokens") or 0)
     parts = [
         f"💸 in {tin:,}{cache_part}",
-        f"out {int(u.get('tokens_out') or 0):,}",
+        f"out {tout:,}" + (f" (gândire {reasoning:,} din {tout:,})" if reasoning else ""),
         f"{int(u.get('llm_calls') or 0)} apeluri",
         f"reply {_fmt_usd(float(u.get('reply_cost_usd') or 0.0))}",
         f"tur {_fmt_usd(float(u.get('total_cost_usd') or 0.0))}",

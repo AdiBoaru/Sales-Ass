@@ -187,6 +187,7 @@ def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
         "tokens_in": acc.tokens_in,
         "tokens_out": acc.tokens_out,
         "cached_tokens": acc.cached_tokens,
+        "reasoning_tokens": acc.reasoning_tokens,
         "cost_usd": round(acc.cost_usd, 6),
         "savings_usd": round(savings, 6),
         "llm_calls": acc.calls,

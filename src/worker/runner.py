@@ -156,6 +156,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             tokens_in=acc.tokens_in,
             tokens_out=acc.tokens_out,
             cached_tokens=acc.cached_tokens,
+            reasoning_tokens=acc.reasoning_tokens,
             cost_usd=acc.cost_usd,
             calls=acc.calls,
             savings_usd=savings,

@@ -237,6 +237,37 @@ async def test_temperatura_lasata_acasa_se_numara():
     assert acc.degradations.get("llm_param_unsupported_temperature") == 1
 
 
+async def test_plafon_zero_omite_parametrul_si_se_numara(monkeypatch):
+    """`LLM_MAX_TOKENS_AGENT=0` = kill-switch numeric: parametrul NU pleacă pe sârmă.
+
+    De ce e nevoie de el: cu un model care raționează, plafonul nu mai acoperă doar textul —
+    gândirea iese din același buget. Ca să poți MĂSURA cât cere raționamentul, trebuie să poți
+    ridica plafonul; ca să nu rămână ridicat din uitare, ridicarea se numără."""
+    from src.observability import turn_latency
+
+    monkeypatch.setattr(
+        llm,
+        "get_settings",
+        lambda: SimpleNamespace(
+            llm_sampling_enabled=True,
+            llm_reasoning_effort_agent="high",
+            llm_temperature_agent=0.7,
+            llm_retry_max=2,
+            llm_max_tokens_agent=0,
+        ),
+    )
+    acc, token = turn_latency.push()
+    try:
+        c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
+        await c.complete("sys", "usr")
+    finally:
+        turn_latency.pop(token)
+    assert "max_completion_tokens" not in comp.last_kwargs
+    assert acc.degradations.get("llm_output_cap_disabled") == 1
+    # Ridicarea plafonului nu atinge poarta de raționament — sunt decizii independente.
+    assert comp.last_kwargs["reasoning_effort"] == "high"
+
+
 async def test_model_necunoscut_se_numara_si_nu_trimite_optionale():
     from src.observability import turn_latency
 

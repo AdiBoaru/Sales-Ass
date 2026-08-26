@@ -490,6 +490,10 @@ class TurnUsage:
     tokens_in: int = 0
     tokens_out: int = 0
     cached_tokens: int = 0
+    # SUBSET al lui `tokens_out` (nu un plus): raționamentul se scade din același
+    # `max_completion_tokens` ca textul. Raportat separat ca să se poată răspunde la „cât din
+    # plafon a mâncat raționamentul" — vezi `usage._reasoning_from`.
+    reasoning_tokens: int = 0
     cost_usd: float = 0.0
     calls: int = 0
     savings_usd: float = 0.0  # bani economisiți de prompt caching (tarif plin − cached)
@@ -505,6 +509,7 @@ class TurnUsage:
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
             "cached_tokens": self.cached_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
             "cost_usd": round(self.cost_usd, 6),
             "savings_usd": round(self.savings_usd, 6),
             "llm_calls": self.calls,

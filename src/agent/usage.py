@@ -26,34 +26,55 @@ from src.agent.pricing import cost_for
 
 
 def _empty_model_row() -> dict[str, Any]:
-    return {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cached_tokens": 0, "cost_usd": 0.0}
+    return {
+        "calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cached_tokens": 0,
+        "reasoning_tokens": 0,
+        "cost_usd": 0.0,
+    }
 
 
 @dataclass
 class UsageAccumulator:
     """Totalurile unui tur. `tokens_in` = prompt (INCLUDE `cached_tokens`); `tokens_out` =
-    completion. `cost_usd` = sumă pe apeluri, cu tokenii cached la tarif redus. `by_model` =
-    defalcare per model (nano/mini/embeddings) pentru raportul de cost (NX-103)."""
+    completion (INCLUDE `reasoning_tokens`). `cost_usd` = sumă pe apeluri, cu tokenii cached la
+    tarif redus. `by_model` = defalcare per model (nano/mini/embeddings) pentru raportul de cost
+    (NX-103).
+
+    Ambele câmpuri „details" sunt SUBSETURI, nu suplimente: `cached_tokens ⊆ tokens_in`,
+    `reasoning_tokens ⊆ tokens_out`. Nu le aduna la totaluri și nu le factura separat — costul e
+    deja calculat pe prompt/completion. Regula stă aici fiindcă ăsta e obiectul pe care îl citește
+    oricine adaugă un raport; vezi `_reasoning_from` pentru de ce contează defalcarea.
+
+    `snapshot()` NU include raționamentul, deliberat: NX-241 îl diff-uiește ca să scadă consumul
+    rundei din bugetul turului, iar un subset adăugat acolo ar taxa de două ori aceiași tokeni."""
 
     calls: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
     cached_tokens: int = 0
+    reasoning_tokens: int = 0
     cost_usd: float = 0.0
     by_model: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def add(self, model: str, prompt: int, completion: int, cached: int) -> None:
+    def add(
+        self, model: str, prompt: int, completion: int, cached: int, *, reasoning: int = 0
+    ) -> None:
         cost = cost_for(model, prompt, cached, completion)
         self.calls += 1
         self.tokens_in += prompt
         self.tokens_out += completion
         self.cached_tokens += cached
+        self.reasoning_tokens += reasoning
         self.cost_usd += cost
         row = self.by_model.setdefault(model, _empty_model_row())
         row["calls"] += 1
         row["tokens_in"] += prompt
         row["tokens_out"] += completion
         row["cached_tokens"] += cached
+        row["reasoning_tokens"] += reasoning
         row["cost_usd"] += cost
 
     def snapshot(self) -> tuple[int, int, int, int, float]:
@@ -95,6 +116,57 @@ def _cached_from(usage: Any) -> int:
     return int(getattr(details, "cached_tokens", 0) or 0)
 
 
+def _reasoning_from(usage: Any) -> int | None:
+    """`completion_tokens_details.reasoning_tokens` — obiect SDK SAU dict. `None` = NERAPORTAT.
+
+    ATENȚIE, e un SUBSET al lui `completion_tokens`, nu un plus: tokenii de raționament se scad din
+    ACELAȘI `max_completion_tokens` ca textul (măsurat — vezi `llm._note_truncation`). Deci NU intră
+    în cost separat (ar dubla factura) și nu se adună la `tokens_out`. Îl ținem ca defalcare: fără
+    el nu poți răspunde la „cât din plafon a mâncat raționamentul", adică exact întrebarea care
+    decide dacă `LLM_MAX_TOKENS_AGENT` e dimensionat corect pentru effortul configurat.
+
+    De ce `None` și nu `0`: ăsta e un INSTRUMENT DE MĂSURĂ, iar într-un instrument degradarea
+    grațioasă e o minciună. „Câmp absent" (nu știm) și „zero tokeni de gândire" (știm, și e zero)
+    sunt afirmații opuse, dar arată identic dacă le colapsezi în `0` — iar cea greșită e liniștitor
+    de plauzibilă: te-ai uita la un raport care spune „raționamentul nu costă nimic" și ai închide
+    ancheta. Distincția o folosește `record_chat`, care numără cazul nedeclarat."""
+    details = getattr(usage, "completion_tokens_details", None)
+    if details is None and isinstance(usage, dict):
+        details = usage.get("completion_tokens_details")
+    if details is None:
+        return None
+    raw = (
+        details.get("reasoning_tokens")
+        if isinstance(details, dict)
+        else getattr(details, "reasoning_tokens", None)
+    )
+    return None if raw is None else int(raw)
+
+
+def _note_unreported_reasoning(model: str) -> None:
+    """Numără apelurile pe un model care RAȚIONEAZĂ dar n-a raportat `reasoning_tokens`.
+
+    Poarta e pe familia modelului, nu pe toate apelurile: `gpt-5.4-nano` fără effort chiar nu are
+    ce raporta, deci a-l număra ar produce un contor mereu aprins, adică zgomot care se învață să
+    fie ignorat. Pe o familie care raționează implicit (`reasons_by_default`), absența câmpului
+    înseamnă ori că furnizorul l-a redenumit, ori că citim greșit — în ambele cazuri raportul de
+    mai sus arată `0` și pare o măsurătoare reușită. Contorul e singura diferență între un
+    instrument și o minciună liniștitoare.
+
+    Importuri locale: `llm` importă `usage`, deci la nivel de modul ar fi ciclu (tiparul din
+    `model_role`); `turn_latency` la fel ca `hooks` — legat la primul apel real, nu la încărcarea
+    modulului."""
+    from src.agent.llm import model_profile
+    from src.observability import turn_latency
+
+    try:
+        profile = model_profile(model)
+    except Exception:  # noqa: BLE001 — o măsurătoare nu are voie să rupă un apel reușit (P6)
+        return
+    if profile is not None and profile.reasons_by_default:
+        turn_latency.degrade("llm_reasoning_tokens_unreported")
+
+
 def _field(usage: Any, name: str) -> int:
     val = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, 0)
     return int(val or 0)
@@ -112,7 +184,10 @@ def record_chat(resp: Any, model: str) -> None:
     tokens_in = _field(usage, "prompt_tokens")
     tokens_out = _field(usage, "completion_tokens")
     cached = _cached_from(usage)
-    acc.add(model, tokens_in, tokens_out, cached)
+    reasoning = _reasoning_from(usage)
+    if reasoning is None:
+        _note_unreported_reasoning(model)
+    acc.add(model, tokens_in, tokens_out, cached, reasoning=reasoning or 0)
     # NX-246: același punct unic de contabilizare alimentează și metricile operaționale. Hook
     # NEUTRU (`src/observability/hooks.py`) — adaptorul nu știe de exporter, nu decide sampling
     # și nu importă niciun vendor. Rolul se DERIVĂ din model (vezi `model_role`), ca să nu

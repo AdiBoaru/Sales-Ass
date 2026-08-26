@@ -871,7 +871,16 @@ class Settings(BaseSettings):
     # mare, ca răspunsurile să NU fie repetitive. Active doar când llm_sampling_enabled.
     llm_temperature_triage: float = Field(default=0.2, validation_alias="LLM_TEMPERATURE_TRIAGE")
     llm_temperature_agent: float = Field(default=0.7, validation_alias="LLM_TEMPERATURE_AGENT")
-    llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT")
+    # Plafonul de output al apelurilor de agent (NX-125: un completion patologic nu scapă de
+    # ceiling). ATENȚIE — de la trecerea pe modele care raționează, plafonul ăsta NU mai acoperă
+    # doar textul: tokenii de raționament se scad din ACELAȘI buget (măsurat, vezi
+    # `llm._note_truncation`). Cu `LLM_REASONING_EFFORT_AGENT=high`, 800 se împarte între gândire
+    # și JSON-ul structurat, iar epuizarea lui NU arată ca o eroare (200 + conținut gol → `{}`).
+    # 0 = OMITE parametrul (kill-switch numeric, ca `embed_timeout_ms`) → modelul e limitat doar de
+    # plafonul lui propriu. Nu e „nelimitat" în practică: cu un `TurnDeadline` activ, constrângerea
+    # care leagă devine `llm_call_cap_ms` (implicit 8s/încercare), deci un apel lung ajunge timeout
+    # + retry în loc de răspuns truncat. Cine îl pune pe 0 trebuie să ridice și capul de timp.
+    llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT", ge=0)
     # Dezvăluirea AI (art. 50 AI Act): OFF = NU o adăugăm la mesaje (decizie 2026-06-26 — clientul o
     # consideră repetitivă). Reversibilă: ON o repune (o singură dată, idempotent în Sender).
     ai_disclaimer_enabled: bool = Field(default=False, validation_alias="AI_DISCLAIMER_ENABLED")
