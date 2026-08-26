@@ -195,6 +195,15 @@ class RelationKindRegistry:
             sorted((s for s in self.specs.values() if s.traversable), key=lambda s: s.kind)
         )
 
+    def sequences(self) -> tuple[RelationKindSpec, ...]:
+        """Tipurile care produc o SECVENȚĂ de pași (`ordered`), ordonate stabil.
+
+        Astea sunt tipurile pe care o cale DETERMINISTĂ le poate propune ca „pașii următori": la
+        beauty rutina, la electrocasnice ce mai trebuie la instalare. Ordonarea pe nume nu e
+        cosmetică — dacă un tenant declară două secvențe, alegerea trebuie să fie aceeași la fiecare
+        tur, altfel același client primește alt răspuns la aceeași întrebare."""
+        return tuple(s for s in self.traversable() if s.ordered)
+
 
 # Ultima plasă: un `kind` care nu trece nici măcar de `_KIND_RE` (venit dintr-o coloană stricată sau
 # dintr-un import prost) nu poate produce un `RelationKindSpec` valid, dar apelantul tot are nevoie
