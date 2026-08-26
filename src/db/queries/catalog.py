@@ -936,6 +936,95 @@ async def _complementary_heuristic(
     return [_row_to_product(r) for r in rows]
 
 
+# --- traversarea grafului de relații (structură, nu prezentare) ---------------------------------
+#
+# Plasa de la marginea DB. Adâncimea e deja validată de `src/domain/relation_kinds.py`, dar query-ul
+# nu se sprijină pe apelant: același idiom ca `limit = min(limit, 6)` din restul modulului. Un
+# apelant care cere adâncime 50 primește 6, nu un query care cheltuie bugetul de tur (NX-241).
+_MAX_RELATION_DEPTH = 6
+# Plafon de rânduri. Cu grad de ieșire 3, adâncimea 4 poate atinge zeci de noduri; plafonul ține
+# rezultatul mărginit fără să presupună forma grafului unui tenant anume.
+_MAX_RELATION_HOPS = 60
+
+# `cycle id set is_cycle using path` (SQL standard, Postgres 14+) mută detecția de ciclu în MOTOR:
+# A→B→C→A devine un rând MARCAT, nu un query nemărginit. Schema 027 interzice self-relation, dar NU
+# interzice ciclurile, iar pe date reale ele EXISTĂ (`complement` e ciclic pe toate ancorele:
+# simetria e definiția relației, nu un defect de seed). Fără clauza asta, o buclă de date ar
+# transforma o recomandare într-un timeout de tur.
+#
+# `path` acumulează DOAR `related_id`, deci ancora nu e în el: A→B→A nu se marchează ca ciclu la
+# pasul 2. De aceea ancora se exclude EXPLICIT (`id <> $2`) — altfel produsul de la care am plecat
+# s-ar putea întoarce în propria listă de recomandări.
+_TRAVERSE_SQL = """
+    with recursive reach as (
+        select r.related_id  as id,
+               1             as depth,
+               r.position    as pos
+          from product_relations r
+         where r.business_id = $1 and r.product_id = $2::uuid and r.kind = $3
+        union all
+        select r.related_id,
+               x.depth + 1,
+               r.position
+          from reach x
+          join product_relations r
+            on r.business_id = $1
+           and r.product_id  = x.id
+           and r.kind        = $3
+         where x.depth < $4
+    ) cycle id set is_cycle using path
+    select id::text        as id,
+           min(depth)      as depth,
+           min(pos)        as position
+      from reach
+     where not is_cycle and id <> $2::uuid
+     group by id
+     order by min(depth), min(pos), id
+     limit $5
+"""
+
+
+async def traverse_relations(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    anchor_id: str,
+    kind: str,
+    max_depth: int,
+    limit: int = _MAX_RELATION_HOPS,
+) -> list[dict[str, Any]]:
+    """Produsele accesibile din `anchor_id` urmând muchii de tipul `kind`, cu adâncimea la care sunt
+    atinse prima oară. UN singur query (NX-231), tenant-scoped în AMBII pași ai recursiei.
+
+    Întoarce **REFERINȚE**, nu produse: `{id, depth, position}`. E deliberat, pe modelul portului de
+    retrieval NX-238 (candidații sunt referințe + verdicte, nu obiecte). Consecințele practice:
+
+      • **structura nu se amestecă cu prezentarea.** Filtrele de cumpărabilitate (`status`,
+        `availability`, `content_status`) se aplică de apelant, DUPĂ traversare, nu în recursie.
+        Altfel un pas temporar fără stoc ar RUPE lanțul în loc să lipsească din el — exact
+        distincția pe care `get_complementary_products` o face deja între „ancora are relații" și
+        „țintele sunt eligibile";
+      • **ordonarea e a specului, nu a query-ului.** Un tip `ordered` (o secvență de pași) alege un
+        produs per adâncime; unul neordonat le ia pe toate. Decizia are nevoie de
+        `RelationKindSpec`, care trăiește în domeniu, nu în SQL. Query-ul dă doar ordine STABILĂ
+        (adâncime, poziția muchiei, id), fiindcă determinismul e o cerință, nu o comoditate:
+        proiectorul NX-240 e pur și două citiri trebuie să dea aceiași bytes.
+
+    `max_depth` e plafonat la `_MAX_RELATION_DEPTH`; `max_depth <= 1` întoarce vecinii direcți (un
+    tip nedeclarat primește exact asta din registru, deci comportamentul de azi).
+    `business_id = $1` (izolare P7; RLS plasă). Hidratarea se face cu `get_products_by_ids`."""
+    depth = max(1, min(int(max_depth), _MAX_RELATION_DEPTH))
+    rows = await conn.fetch(
+        _TRAVERSE_SQL,
+        business_id,
+        anchor_id,
+        kind,
+        depth,
+        max(1, min(int(limit), _MAX_RELATION_HOPS)),
+    )
+    return [{"id": r["id"], "depth": int(r["depth"]), "position": int(r["position"])} for r in rows]
+
+
 async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> list[str]:
     """Slug-urile categoriilor SERVABILE ale tenantului — pentru groundarea triajului.
 

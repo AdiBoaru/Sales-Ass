@@ -1,0 +1,93 @@
+{
+  "business_id": "6098812a-50fc-44bd-a1ba-bc77e6399158",
+  "max_depth_probed": 6,
+  "active_products": 300,
+  "products_with_outgoing": 300,
+  "products_with_incoming": 227,
+  "kinds": [
+    {
+      "kind": "complement",
+      "edges": 897,
+      "anchors": 300,
+      "targets": 104,
+      "out_degree": {
+        "median": 3,
+        "p90": 3,
+        "max": 3
+      },
+      "chain_max_depth": 6,
+      "anchors_with_chain_ge2": 300,
+      "anchors_with_chain_ge3": 300,
+      "anchors_hitting_probe_cap": 20,
+      "cyclic_anchors": 300,
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 22
+      },
+      "reciprocated": 294,
+      "reciprocity_pct": 32.77591973244147,
+      "traversal": "neighbors-only",
+      "suggested_max_depth": 1,
+      "traversal_reason": "toate cele 300 ancore sunt ciclice ⇒ relație simetrică, nu secvență"
+    },
+    {
+      "kind": "substitute",
+      "edges": 676,
+      "anchors": 263,
+      "targets": 116,
+      "out_degree": {
+        "median": 3,
+        "p90": 3,
+        "max": 3
+      },
+      "chain_max_depth": 4,
+      "anchors_with_chain_ge2": 227,
+      "anchors_with_chain_ge3": 190,
+      "anchors_hitting_probe_cap": 0,
+      "cyclic_anchors": 38,
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 13
+      },
+      "reciprocated": 8,
+      "reciprocity_pct": 1.183431952662722,
+      "traversal": "bounded",
+      "suggested_max_depth": 2,
+      "traversal_reason": "38 ancore ciclice ⇒ gardă de ciclu + plafon mic"
+    },
+    {
+      "kind": "routine_next",
+      "edges": 576,
+      "anchors": 192,
+      "targets": 86,
+      "out_degree": {
+        "median": 3,
+        "p90": 3,
+        "max": 3
+      },
+      "chain_max_depth": 4,
+      "anchors_with_chain_ge2": 110,
+      "anchors_with_chain_ge3": 38,
+      "anchors_hitting_probe_cap": 0,
+      "cyclic_anchors": 0,
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 17
+      },
+      "reciprocated": 0,
+      "reciprocity_pct": 0.0,
+      "traversal": "chain",
+      "suggested_max_depth": 4,
+      "traversal_reason": "aciclic, adâncime măsurată 4, 38 ancore cu lanț ≥3"
+    }
+  ],
+  "verdict": "READY",
+  "verdict_reasons": [
+    "`complement` → neighbors-only: toate cele 300 ancore sunt ciclice ⇒ relație simetrică, nu secvență",
+    "`substitute` → bounded: 38 ancore ciclice ⇒ gardă de ciclu + plafon mic",
+    "`routine_next` → chain: aciclic, adâncime măsurată 4, 38 ancore cu lanț ≥3"
+  ]
+}
