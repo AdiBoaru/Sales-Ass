@@ -1,99 +1,101 @@
-# Măsurătoare: cât din plafonul de output mănâncă raționamentul
+# Cât din bugetul de output mănâncă raționamentul
 
-**De ce.** `MODEL_AGENT=gpt-5.6-luna` raționează implicit (`reasons_by_default=True` în
-`_MODEL_PROFILES`), iar `LLM_REASONING_EFFORT_AGENT=high` se aplică pe apelurile **fără tool-uri**
-— adică exact planul MainBrain (`complete_schema`) și repair-ul lui. Tokenii de raționament se scad
-din **același** `max_completion_tokens` ca textul (măsurat, vezi `llm._note_truncation`), deci cei
-800 impliciți se împart între gândire și JSON-ul structurat. Nimeni n-a calculat cât ia fiecare.
+> **Rezolvat pe 2026-08-26.** Măsurătoarea de mai jos a fost făcută, a găsit un defect activ în
+> producție, iar plafonul a fost SCOS (`LLM_MAX_TOKENS_AGENT` implicit **0**). Documentul rămâne
+> pentru cine repune vreodată un plafon, sau vrea să reproducă măsurătoarea pe alt model.
 
-Epuizarea plafonului **nu arată ca o eroare**: furnizorul întoarce 200 cu conținut gol,
-`complete_schema` îl transformă în `{}` (`content or "{}"`), iar turul degradează pe altă cauză
-decât cea reală.
+## Ce s-a măsurat și ce s-a găsit
 
-## De ce overrides pe comandă și nu în `.env`
+`MODEL_AGENT=gpt-5.6-luna` raționează implicit, iar `LLM_REASONING_EFFORT_AGENT=high` se aplică pe
+apelurile **fără tool-uri** — planul MainBrain, repair-ul lui, și calea rich din `finalize`. Tokenii
+de raționament se scad din **același** `max_completion_tokens` ca textul.
 
-`LLM_MAX_TOKENS_AGENT` e citit de suita de teste: `test_agent_call_includes_sampling_params` și
-`test_agent_fara_tooluri_pastreaza_effortul_configurat_si_pierde_temperature` asertează forma
-parametrilor pe settings-urile REALE. Un `0` pus în `.env` face imposibilă rularea testelor cât
-timp măsori. Variabilele de mediu bat `.env` în pydantic-settings, deci prefixul de mai jos e
-suficient.
+Producție, tenant demo, 2026-08-26:
 
-## Comanda
+| Mesaj | Gândire | Rezultat |
+|---|---|---|
+| „caut un produs pentru ten gras" | **512** | încape în 800 → rich OK (616 chars JSON) |
+| „pai daca fac dus mi se usuca pielea" | **1312** | depășește → conținut GOL → proză degradată |
 
-Cele patru valori se schimbă **împreună**. Scoțând plafonul de TOKENI, constrângerea care leagă
-devine plafonul de TIMP (`llm_call_cap_ms`, 8s pe încercare, activ fiindcă `TURN_DEADLINE_ENABLED`
-e pornit local) — deci fără ridicarea lui ai schimba doar un răspuns truncat pe un timeout.
+**2 din 4** apeluri rich au întors gol. Turul căzut a răspuns cu o cremă de **mâini** la o cerere de
+rutină de **față** — proza liberă pierduse constrângerea din primul mesaj.
+
+Eșecul nu arăta ca un eșec: 200 + conținut gol → `content or "{}"` → `{}` → niciun `except` →
+`rich_downgraded {all-items-dropped-by-membership}`, adică **altă cauză decât cea reală**.
+
+## De ce plafonul a fost scos, nu ridicat
+
+NX-125 îl pusese ca „un completion patologic să nu scape de ceiling". Premisa s-a rupt: un cap de
+tokeni nu previne o buclă — bucla e în **runde de model** (`run_tool_loop`), nu în lungimea unui
+răspuns. Deci plafonul plătea preț de calitate pentru o protecție pe care n-o oferea.
+
+Ce rămâne ceiling, în unitatea corectă:
+
+| Plafon | Stare |
+|---|---|
+| Cost ZILNIC per business (`DAILY_COST_CAP_USD`) | activ — pre-check în `processor`, taie LLM-ul |
+| Timeout per apel (`LLM_TIMEOUT_S`, 30s) | activ, pe clientul `AsyncOpenAI` |
+| `LLM_CALL_CAP_MS` (8s/încercare) | activ doar sub `TURN_DEADLINE_ENABLED` |
+
+## Cum reproduci măsurătoarea
+
+Nu mai e nevoie de overrides: `reasoning_tokens` se raportează la fiecare tur.
 
 ```bash
-# 1. Pornește driverul warm CU overrides (Git Bash).
-#    ATENȚIE (gotcha cunoscut): dacă rulează deja un server pe :8099, îl testezi pe ăla, cu
-#    settings-urile VECHI. Oprește-l întâi și verifică portul.
-netstat -ano | grep ":8099" || echo "portul e liber"
-
-LLM_MAX_TOKENS_AGENT=0 \
-LLM_CALL_CAP_MS=60000 \
-TURN_HARD_DEADLINE_MS=60000 \
-LLM_TIMEOUT_S=90 \
-CONVERSATION_TRACE_ENABLED=true \
-python scripts/sim/server.py
-```
-
-```bash
-# 2. În alt terminal: un tur real de vânzare.
+python scripts/sim/server.py            # alt terminal
 python scripts/sim/say.py --sender "sim:measure:plafon" --text "caut un ser pentru ten gras"
 ```
 
-Linia de consum arată acum defalcarea:
+Linia de consum arată perechea:
 
 ```
-💸 in 4.231 (cached 3.840 = 91% din input) · out 1.312 (gândire 1.180 din 1.312) · 3 apeluri · ...
+💸 in 4.231 (cached 3.840 = 91% din input) · out 1.312 (gândire 1.180 din 1.312) · 3 apeluri
 ```
 
-`gândire 1.180 din 1.312` ⇒ cu plafonul implicit de 800 apelul n-ar fi avut loc: raționamentul
-singur depășea bugetul, iar JSON-ul ar fi ieșit gol.
+Numărul brut nu spune nimic; ce contează e cât a rămas pentru text.
 
-**Rulează pe credite OpenAI reale.** Câteva tururi ajung — nu e nevoie de suită.
+Gotcha: dacă rulează deja un server pe `:8099`, îl testezi pe ăla, cu settings-urile vechi.
+`netstat -ano | grep ":8099"` înainte.
 
-## Ce compari
+## Semnale
 
-| Cifră | De unde | Ce înseamnă |
+| Semnal | Unde | Ce înseamnă |
 |---|---|---|
-| `reasoning_tokens` vs `tokens_out` | linia `say.py`, event `llm_usage` | cât a rămas pentru text |
-| `llm_output_truncated_empty` | `turn_latency` degradations | plafonul s-a atins ⇒ răspuns gol |
-| `llm_output_cap_disabled` | idem | confirmă că rulezi FĂRĂ plafon |
-| `llm_param_unsupported_temperature` | idem | confirmă că apelul de schemă chiar raționează |
+| `reasoning_tokens` vs `tokens_out` | event `llm_usage` | cât a rămas pentru text |
+| `llm_output_truncated_empty` | `turn_latency` | **cineva a repus un plafon și e prea mic** |
+| `llm_reasoning_tokens_unreported` | idem | furnizorul nu raportează gândirea ⇒ cifra de mai sus e falsă |
+| `llm_param_unsupported_temperature` | idem | confirmă că apelul chiar raționează |
+
+`reasoning_tokens` e **subset** al lui `tokens_out`, nu supliment. Nu-l aduna, nu-l factura separat.
+
+## Dacă repui un plafon
+
+Trebuie să acopere gândire **plus** text. Pe măsurătoarea de mai sus, turele conversaționale cereau
+peste 1300 doar pentru gândire — deci orice cifră sub ~3000 e un pariu. Urmărește
+`llm_output_truncated_empty`: dacă apare, plafonul taie răspunsuri, nu bucle.
 
 ## Planul care decide ce randează frontendul
 
-`CONVERSATION_TRACE_ENABLED=true` persistă în `conversation_traces.diagnostics`:
+Sub `SINGLE_BRAIN_ENABLED` + `CONVERSATION_TRACE_ENABLED`, `conversation_traces.diagnostics`
+primește:
 
 | Cheie | Ce e |
 |---|---|
 | `brain_plan_raw` | JSON-ul BRUT al modelului, înainte de validare |
-| `brain_plan` | planul VALIDAT (`AnswerPlanV2`) — sursa pentru `ground_answer` → `render_v2` |
+| `brain_plan` | planul VALIDAT — sursa pentru `ground_answer` → `render_v2` |
 | `brain_plan_failures` | codurile pe care a picat prima încercare |
 | `brain_repair_raw` | ce a întors repair-ul |
 | `brain_plan_fallback` | motivul pentru care s-a renunțat la plan |
 
-Lanțul complet: `AnswerPlanV2` → `_attach_grounding` → `ground_answer` →
-`src/channels/web/render_v2.py` → blocuri (`text` + `variant`, `comparison`, `action_row`, carduri
-cu `image`/`actions`). Adică planul chiar decide ce componentă randează widgetul.
-
-Înainte de asta, pe calea creierului unic planul nu se scria nicăieri: `agent_stage` iese la
-`run_main_brain` înainte de `finalize`, deci nici măcar `rich_raw` nu se producea.
+Fără single brain, calea v1 depune `rich_raw` în același loc — util la fel: un `rich_raw` gol
+înseamnă că modelul n-a emis nimic, indiferent ce spune eticheta de degradare.
 
 ```sql
-select turn_id,
-       diagnostics->'brain_plan'         as plan_validat,
-       diagnostics->'brain_plan_failures' as esecuri,
-       diagnostics->'brain_plan_fallback' as motiv_fallback
+select turn_id, client_text,
+       diagnostics->'brain_plan' as plan,
+       diagnostics->'rich_raw'   as rich,
+       diagnostics->>'rich_downgraded' as motiv
 from conversation_traces
 where business_id = '6098812a-50fc-44bd-a1ba-bc77e6399158'
-order by created_at desc
-limit 5;
+order by created_at desc limit 5;
 ```
-
-## După măsurătoare
-
-`LLM_MAX_TOKENS_AGENT` implicit rămâne **800** în cod. Schimbarea lui e o decizie separată, luată
-pe cifra de mai sus — nu un efect secundar al acestui experiment.

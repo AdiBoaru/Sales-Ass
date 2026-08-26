@@ -871,16 +871,31 @@ class Settings(BaseSettings):
     # mare, ca răspunsurile să NU fie repetitive. Active doar când llm_sampling_enabled.
     llm_temperature_triage: float = Field(default=0.2, validation_alias="LLM_TEMPERATURE_TRIAGE")
     llm_temperature_agent: float = Field(default=0.7, validation_alias="LLM_TEMPERATURE_AGENT")
-    # Plafonul de output al apelurilor de agent (NX-125: un completion patologic nu scapă de
-    # ceiling). ATENȚIE — de la trecerea pe modele care raționează, plafonul ăsta NU mai acoperă
-    # doar textul: tokenii de raționament se scad din ACELAȘI buget (măsurat, vezi
-    # `llm._note_truncation`). Cu `LLM_REASONING_EFFORT_AGENT=high`, 800 se împarte între gândire
-    # și JSON-ul structurat, iar epuizarea lui NU arată ca o eroare (200 + conținut gol → `{}`).
-    # 0 = OMITE parametrul (kill-switch numeric, ca `embed_timeout_ms`) → modelul e limitat doar de
-    # plafonul lui propriu. Nu e „nelimitat" în practică: cu un `TurnDeadline` activ, constrângerea
-    # care leagă devine `llm_call_cap_ms` (implicit 8s/încercare), deci un apel lung ajunge timeout
-    # + retry în loc de răspuns truncat. Cine îl pune pe 0 trebuie să ridice și capul de timp.
-    llm_max_tokens_agent: int = Field(default=800, validation_alias="LLM_MAX_TOKENS_AGENT", ge=0)
+    # Plafonul de output al apelurilor de agent. **0 = FĂRĂ plafon** (parametrul nu se trimite).
+    #
+    # A fost 800 din NX-125, ca un completion patologic să nu scape de ceiling. Premisa aia s-a
+    # rupt la trecerea pe modele care raționează: tokenii de gândire se scad din ACELAȘI buget ca
+    # textul, deci plafonul nu mai tăia bucle patologice, ci tăia răspunsuri normale la mijloc.
+    #
+    # MĂSURAT în producție (2026-08-26, tenant demo, `gpt-5.6-luna` + effort `high`):
+    #   • „caut un produs pentru ten gras"      → 512 tokeni de gândire → încape → rich OK
+    #   • „pai daca fac dus mi se usuca pielea"  → 1312 tokeni de gândire → DEPĂȘEȘTE 800
+    #     ⇒ 200 cu conținut gol ⇒ `{}` ⇒ `rich_downgraded` ⇒ proză liberă care a recomandat cremă
+    #     de MÂINI la o cerere de rutină de FAȚĂ.
+    # 2 din 4 apeluri rich au întors gol. Turele grele — exact cele unde ai nevoie de calitate —
+    # erau cele care picau.
+    #
+    # Ce rămâne ceiling după scoatere (intenția NX-125 e servită, doar în altă unitate):
+    #   • cost guard ZILNIC per business — `daily_cost_cap_usd`, pre-check în `processor`, taie
+    #     LLM-ul pentru restul zilei. Frână reală, unitatea corectă (bani, nu tokeni);
+    #   • timeout per apel — `llm_timeout_s` (30s) pe clientul `AsyncOpenAI`;
+    #   • `llm_call_cap_ms` (8s/încercare) cât timp `TURN_DEADLINE_ENABLED` e pornit.
+    # Un cap de tokeni nu previne o buclă (bucla e în RUNDE, nu în lungimea unui răspuns) — deci
+    # plătea preț de calitate pentru o protecție pe care n-o oferea.
+    #
+    # Valoare > 0 = plafon explicit, trimis ca `max_completion_tokens`. Cine îl repune trebuie să
+    # știe că bugetul e împărțit cu raționamentul: urmărește `llm_output_truncated_empty`.
+    llm_max_tokens_agent: int = Field(default=0, validation_alias="LLM_MAX_TOKENS_AGENT", ge=0)
     # Dezvăluirea AI (art. 50 AI Act): OFF = NU o adăugăm la mesaje (decizie 2026-06-26 — clientul o
     # consideră repetitivă). Reversibilă: ON o repune (o singură dată, idempotent în Sender).
     ai_disclaimer_enabled: bool = Field(default=False, validation_alias="AI_DISCLAIMER_ENABLED")
