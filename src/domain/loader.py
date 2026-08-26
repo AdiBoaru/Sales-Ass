@@ -23,6 +23,7 @@ from src.domain.contracts import build_category_requirements
 from src.domain.facets import build_facets
 from src.domain.normalize import normalize
 from src.domain.pack import DomainPack, FacetSpec
+from src.domain.relation_kinds import load_relation_kinds
 
 if TYPE_CHECKING:
     from src.models import BusinessConfig
@@ -209,6 +210,9 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
         # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
         required_attributes=build_category_requirements(merged.get("required_attributes")),
+        # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare
+        # respinsă rămâne vecini-direcți, deci pierde o capabilitate, nu lărgește nimic).
+        relation_kinds=load_relation_kinds(merged.get("relation_kinds")),
     )
 
 

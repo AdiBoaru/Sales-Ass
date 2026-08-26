@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 
 from src.domain.contracts import EMPTY_REQUIREMENTS, CategoryRequirements
 from src.domain.facets import TypedFacet
+from src.domain.relation_kinds import EMPTY_RELATION_KINDS, RelationKindRegistry
 
 
 @dataclass(frozen=True)
@@ -94,3 +95,9 @@ class DomainPack:
     # (`REQUIRED_V3_BY_SLUG`/`_BY_ROOT`); acum sunt config per-vertical (P9), iar auditul le CITEȘTE
     # de aici. Gol → nicio cerință (verticalele fără contract de conținut rămân ca azi).
     required_attributes: CategoryRequirements = EMPTY_REQUIREMENTS
+    # NX-262: ce ÎNSEAMNĂ fiecare tip de muchie din `product_relations` și cât adânc are voie
+    # cineva s-o urmeze. Verticalul își NUMEȘTE muchiile (`routine_next` la beauty, `requires` /
+    # `compatible_with` la electrocasnice); codul definește doar comportamentele posibile
+    # (`src/domain/relation_kinds.py`). Gol → fiecare tip e vecini-direcți, adică EXACT
+    # comportamentul de azi: tăcerea nu acordă traversare.
+    relation_kinds: RelationKindRegistry = EMPTY_RELATION_KINDS
