@@ -211,6 +211,14 @@ docker compose --profile migrate run --rm migrate
 | **3** | alt migrator ține lock-ul | **aștepți**. Nu e eroare — e concurență rezolvată |
 | 4 | sesiune prin pooler tranzacțional | reconectezi DIRECT (port 5432). Nu forța |
 
+> **Preflightul rulează ÎNAINTEA migrării, și trebuie să știe asta.** În `release.yml` ordinea e
+> `preflight → migrare → deploy`, dar preflightul cerea zero migrări pending („rulează jobul
+> întâi") — deci orice release care aducea o migrare nouă se bloca singur. Ieșit la iveală
+> 2026-08-26, la prima promovare care a purtat una (045). De aceea pasul dă `--before-migration`:
+> migrările ADUSE de imaginea promovată sunt așteptate, iar verificările de schemă și de rollback
+> se fac pe versiunea de DUPĂ migrare. O migrare pending pe care imaginea NU o conține rămâne
+> blocantă. Rulat manual, fără steag, preflightul păstrează comportamentul strict.
+
 Codul 4 merită explicat: prin pgbouncer în mod tranzacție, un advisory lock de SESIUNE e o iluzie
 (fiecare statement poate ajunge pe alt backend), deci două joburi ar crede amândouă că-l dețin.
 Runner-ul verifică lock-ul în `pg_locks` după acquire și refuză dacă nu-l vede.

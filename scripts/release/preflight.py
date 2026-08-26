@@ -4,9 +4,11 @@ Un deploy eșuat la jumătate costă mult mai mult decât un deploy refuzat la �
 răspunde, read-only, la întrebările care decid dacă mai are rost să continuăm:
 
   1. **Migrări** — există pending? drift de checksum? (`scripts/migrate.py --check`, DSN de citire)
-  2. **Compatibilitate de schemă** — imaginea care urmează tolerează schema APLICATĂ? Prea veche
-     ⇒ rulează întâi migrarea; prea nouă ⇒ promovezi imaginea greșită.
-  3. **Fezabilitatea ROLLBACKULUI** — imaginea precedentă mai tolerează schema curentă? Dacă nu,
+     Cu `--before-migration` (ordinea din `release.yml`), migrările ADUSE de imaginea promovată
+     sunt așteptate: pasul următor le aplică. Doar cele pe care imaginea NU le conține blochează.
+  2. **Compatibilitate de schemă** — imaginea care urmează tolerează schema EFECTIVĂ (cea care va
+     fi live la deploy)? Prea nouă ⇒ promovezi imaginea greșită.
+  3. **Fezabilitatea ROLLBACKULUI** — imaginea precedentă mai tolerează schema EFECTIVĂ? Dacă nu,
      `--require-rollback-possible` oprește releaseul ACUM. Cardul cere exact asta: „rollbackul este
      declarat imposibil înainte de deploy și releaseul se blochează".
   4. **Config** — `Settings` se construiește (poarta de boot a tuturor flagurilor imposibile) și
@@ -72,6 +74,16 @@ def main(argv: list[str] | None = None) -> int:
             "continuare."
         ),
     )
+    ap.add_argument(
+        "--before-migration",
+        action="store_true",
+        help=(
+            "Preflightul rulează ÎNAINTEA pasului de migrare (ordinea din release.yml). Migrările "
+            "pending care sunt ADUSE de imaginea promovată sunt așteptate, nu o problemă — pasul "
+            "următor le aplică. Verificările de schemă și de rollback se fac atunci pe versiunea "
+            "de DUPĂ migrare."
+        ),
+    )
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
@@ -96,13 +108,35 @@ def main(argv: list[str] | None = None) -> int:
         "requires": requires,
         "tolerates": tolerates,
     }
-    if state["pending"]:
+    # Ce schemă va fi LIVE în momentul deployului. Fără `--before-migration` e cea aplicată acum;
+    # cu el, migrările aduse de imagine sunt pe cale să ruleze, deci starea relevantă e `requires`.
+    #
+    # De ce contează (măsurat 2026-08-26, prima promovare care a purtat o migrare prin pipeline):
+    # `release.yml` rulează preflight ÎNAINTE de migrare, dar preflightul cerea zero pending și
+    # spunea „rulează jobul întâi" — deci orice release cu o migrare nouă se bloca singur, iar
+    # migrarea 045 nu avea cum să ajungă vreodată în producție. În plus, `rollback_possible` era
+    # evaluat pe schema VECHE: întrebarea „mai pot reveni la imaginea precedentă?" are sens doar
+    # pe schema care va fi live DUPĂ migrare, altfel poarta măsoară o stare care nu va mai exista.
+    effective = applied
+    if args.before_migration:
+        # Pending care NU vine cu imaginea = cineva a adăugat o migrare pe care artefactul promovat
+        # nu o conține. Pasul de migrare ar aplica-o oricum, dar codul care urmează n-o cunoaște.
+        foreign = [v for v in state["pending"] if int(v) > requires]
+        if foreign:
+            problems.append(
+                f"migrări pending care NU sunt în imaginea promovată: {', '.join(foreign)} "
+                f"(imaginea aduce până la {requires:03d})"
+            )
+        else:
+            effective = max(applied, requires)
+    elif state["pending"]:
         problems.append(f"migrări neaplicate: {', '.join(state['pending'])} (rulează jobul întâi)")
+    report["checks"]["schema"]["effective"] = effective
     if state["drift"]:
         problems.append(f"drift de checksum: {', '.join(state['drift'])}")
-    if applied > tolerates:
+    if effective > tolerates:
         problems.append(
-            f"schema aplicată ({applied:03d}) depășește ce tolerează imaginea ({tolerates:03d})"
+            f"schema ({effective:03d}) depășește ce tolerează imaginea ({tolerates:03d})"
         )
 
     # 4. Config: construibilă + coerentă cu manifestul.
@@ -131,8 +165,11 @@ def main(argv: list[str] | None = None) -> int:
         }
         if args.manifest_digest and manifest.digest != args.manifest_digest:
             problems.append("digestul din manifest diferă de cel cerut pentru promovare")
-        # 3. Fezabilitatea rollbackului.
-        possible, why = manifest.rollback_possible(applied)
+        # 3. Fezabilitatea rollbackului — pe schema care va fi LIVE (vezi `effective` mai sus).
+        # Cu `--before-migration` asta e versiunea de DUPĂ migrare, deci poarta prinde acum cazul
+        # pe care îl rata: o migrare care iese din intervalul tolerat de imaginea precedentă
+        # blochează releaseul ÎNAINTE de a fi aplicată, nu după.
+        possible, why = manifest.rollback_possible(effective)
         report["checks"]["rollback"] = {"possible": possible, "reason": why}
         if args.require_rollback_possible and not possible:
             # Primul release e o STARE, nu un eșec: nu există versiune precedentă fiindcă nu a
@@ -162,8 +199,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
     else:
         print(
-            f"preflight: schema aplicată={applied:03d} imagine={requires:03d}..{tolerates:03d} "
-            f"config={revision} pending={len(state['pending'])}"
+            f"preflight: schema aplicată={applied:03d} efectivă={effective:03d} "
+            f"imagine={requires:03d}..{tolerates:03d} config={revision} "
+            f"pending={len(state['pending'])}"
         )
         for problem in problems:
             print(f"::error::{problem}", file=sys.stderr)

@@ -522,3 +522,41 @@ def test_promovarea_inregistreaza_championul():
         i for i, s in enumerate(steps) if s.get("with", {}).get("name") == "champion-manifest"
     )
     assert idx_champion > idx_smoke, "championul se înregistrează înainte de smoke"
+
+
+# --- NX-248 fix: preflight rulează ÎNAINTE de migrare (2026-08-26) ---------------------------
+
+
+def test_preflight_expune_steagul_before_migration():
+    """Contract de CLI, ca la `--allow-no-previous-digest`: numele e citat în `release.yml`.
+    O redenumire ar pica în promovare cu „unrecognized arguments", adică în producție."""
+    src = (ROOT / "scripts" / "release" / "preflight.py").read_text(encoding="utf-8")
+    assert '"--before-migration"' in src
+
+
+def test_workflowul_de_productie_cere_before_migration():
+    """Ordinea din `release.yml` e preflight → migrare → deploy, dar preflightul cerea zero
+    pending („rulează jobul întâi"). Deci ORICE release care aducea o migrare nouă se bloca
+    singur — descoperit 2026-08-26, la prima promovare care a purtat una (045). Steagul e ce
+    împacă ordinea cu verificarea; fără el, bug-ul revine tăcut."""
+    steps = _job_steps("release.yml", "production")
+    names = [str(s.get("name", "")) for s in steps]
+    preflight = next(s for s in steps if "Preflight" in str(s.get("name", "")))
+    assert "--before-migration" in preflight["run"]
+    # …și chiar rulează înaintea migrării: altfel steagul ar descrie o ordine care nu există.
+    i_pre = next(i for i, n in enumerate(names) if "Preflight" in n)
+    i_mig = next(i for i, n in enumerate(names) if "Migrare" in n)
+    assert i_pre < i_mig, "preflight trebuie să rămână înaintea migrării"
+
+
+def test_rollbackul_se_judeca_pe_schema_de_dupa_migrare():
+    """Poarta măsura schema VECHE, deci rata exact cazul pentru care există.
+
+    Imaginea precedentă tolerează până la 45. Migrarea adusă acum urcă schema la 46: rollbackul
+    devine imposibil. Evaluat pe 44 (aplicat acum) poarta spune „se poate" și lasă releaseul să
+    treacă; evaluat pe 46 (ce va fi live) îl blochează ÎNAINTE ca migrarea să ruleze."""
+    m = _manifest(previous_digest="sha256:" + "c" * 64, previous_schema_tolerates=45)
+    assert m.rollback_possible(applied_schema=44)[0] is True  # ce vedea poarta înainte
+    possible, why = m.rollback_possible(applied_schema=46)  # ce va fi live după migrare
+    assert possible is False
+    assert "depășește" in why

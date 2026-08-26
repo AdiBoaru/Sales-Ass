@@ -413,7 +413,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           ENV: prod
         run: |
-          python scripts/release/preflight.py             --manifest manifest.json             --manifest-digest "${{ inputs.digest }}"             --require-rollback-possible             ${{ inputs.first_release && '--allow-no-previous-digest' || '' }}
+          python scripts/release/preflight.py             --manifest manifest.json             --manifest-digest "${{ inputs.digest }}"             --require-rollback-possible             --before-migration             ${{ inputs.first_release && '--allow-no-previous-digest' || '' }}
 
       - name: Migrare (job dedicat, credential de DDL)
         if: ${{ !inputs.rollback }}
