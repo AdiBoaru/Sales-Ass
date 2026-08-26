@@ -345,12 +345,13 @@ class LLMClient:
         RAȚIONAMENT, fiindcă de el atârnă și `temperature`, și dreptul de a trimite tool-uri
         (vezi tabelul de la `_MODEL_PROFILES`).
 
-        • Plafon de output: `max_completion_tokens` pe apelurile de agent (NX-125 — un completion
-          patologic/buclă nu scapă de ceiling), independent de sampling. Folosim
-          `max_completion_tokens`, NU `max_tokens` (deprecat → 400 pe modelele curente).
-          E acceptat de toate familiile, deci nu trece prin poartă. `LLM_MAX_TOKENS_AGENT=0` îl
-          OMITE deliberat (numărat ca `llm_output_cap_disabled`) — util cât timp măsori cât din
-          plafon mănâncă raționamentul, fiindcă tokenii de gândire ies din ACELAȘI buget.
+        • Plafon de output: `max_completion_tokens`, DOAR dacă `LLM_MAX_TOKENS_AGENT > 0`.
+          Implicit e 0 = fără plafon, fiindcă tokenii de raționament ies din ACELAȘI buget ca
+          textul: un cap dimensionat pentru text taie răspunsuri normale la mijloc fără să
+          oprească vreo buclă (bucla e în RUNDE — vezi `run_tool_loop`). Motivul complet +
+          măsurătoarea din producție: comentariul de la `llm_max_tokens_agent` în `config`.
+          Când e trimis, folosim `max_completion_tokens`, NU `max_tokens` (deprecat → 400 pe
+          modelele curente); e acceptat de toate familiile, deci nu trece prin poartă.
         • `reasoning_effort`: `llm_reasoning_effort_agent` pe apelurile de agent FĂRĂ tool-uri;
           FORȚAT `none` când cererea poartă tool-uri (altfel 400, indiferent de model).
         • `temperature`: gated de `llm_sampling_enabled` ȘI de modul de raționament. Cu
@@ -367,12 +368,11 @@ class LLMClient:
         profile = model_profile(model)
         out: dict[str, Any] = {}
         if agent and s.llm_max_tokens_agent > 0:
+            # 0 (implicit) = FĂRĂ plafon: parametrul nu se trimite. Nu se NUMĂRĂ — e starea
+            # normală, iar un contor care se aprinde la fiecare apel e zgomot care se învață să
+            # fie ignorat. Ce deployment rulează cu ce plafon se vede în `config_revision`
+            # (`ops/build_info`), iar un plafon prea mic se vede în `llm_output_truncated_empty`.
             out["max_completion_tokens"] = s.llm_max_tokens_agent
-        elif agent:
-            # 0 = plafonul e ridicat DELIBERAT (kill-switch numeric). Se numără, fiindcă un apel de
-            # agent fără ceiling e o abatere de la NX-125: vrem să se vadă în telemetrie, nu să
-            # fie o linie uitată în `.env`.
-            turn_latency.degrade("llm_output_cap_disabled")
         if profile is None:
             # Prefix nedeclarat: nu inventăm capabilități. Un 400 aici e zgomotos și reparabil
             # printr-o linie în `_MODEL_PROFILES`; un parametru ghicit e un tur pierdut tăcut.

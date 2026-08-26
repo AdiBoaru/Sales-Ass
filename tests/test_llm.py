@@ -123,8 +123,8 @@ async def test_agent_call_includes_sampling_params():
     await c.complete("sys", "usr")
     assert comp.last_kwargs["reasoning_effort"] == "high"
     assert "temperature" not in comp.last_kwargs
-    # Plafonul de output = max_completion_tokens (NU max_tokens, deprecat → 400 pe gpt-5.4-*).
-    assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
+    # `max_tokens` e deprecat (→ 400 pe modelele curente); dacă vreodată se trimite un plafon, el
+    # se numește `max_completion_tokens`. Implicit nu se trimite niciunul — vezi testul dedicat.
     assert "max_tokens" not in comp.last_kwargs
 
 
@@ -193,7 +193,6 @@ async def test_agent_fara_tooluri_pastreaza_effortul_configurat_si_pierde_temper
     await c.complete("sys", "usr")
     assert comp.last_kwargs["reasoning_effort"] == "high"
     assert "temperature" not in comp.last_kwargs  # rationament pornit ⇒ doar valoarea implicita
-    assert comp.last_kwargs["max_completion_tokens"] == get_settings().llm_max_tokens_agent
 
 
 async def test_modelul_clasic_fara_effort_pastreaza_temperature():
@@ -237,14 +236,45 @@ async def test_temperatura_lasata_acasa_se_numara():
     assert acc.degradations.get("llm_param_unsupported_temperature") == 1
 
 
-async def test_plafon_zero_omite_parametrul_si_se_numara(monkeypatch):
-    """`LLM_MAX_TOKENS_AGENT=0` = kill-switch numeric: parametrul NU pleacă pe sârmă.
+def test_implicit_nu_exista_plafon_de_output():
+    """Default-ul e 0 = FĂRĂ plafon. Pinuit, fiindcă a fost 800 și a rupt producția.
 
-    De ce e nevoie de el: cu un model care raționează, plafonul nu mai acoperă doar textul —
-    gândirea iese din același buget. Ca să poți MĂSURA cât cere raționamentul, trebuie să poți
-    ridica plafonul; ca să nu rămână ridicat din uitare, ridicarea se numără."""
-    from src.observability import turn_latency
+    NX-125 pusese 800 ca „un completion patologic să nu scape de ceiling". Premisa s-a rupt când
+    am trecut pe modele care raționează: tokenii de gândire ies din ACELAȘI buget ca textul, deci
+    plafonul nu mai tăia bucle — tăia răspunsuri normale la mijloc, și o făcea TĂCUT (200 cu
+    conținut gol ⇒ `{}` ⇒ degradare raportată cu altă cauză).
 
+    Măsurat pe trafic real (2026-08-26, `gpt-5.6-luna` + effort `high`): un tur simplu cerea 512
+    tokeni de gândire și trecea; unul conversațional cerea 1312 și pica. 2 din 4 apeluri rich au
+    întors gol. Un cap de tokeni oricum nu previne o buclă — bucla e în RUNDE de model — deci
+    plătea preț de calitate pentru o protecție inexistentă. Ceilingul real e cost guard-ul
+    ZILNIC."""
+    assert get_settings().llm_max_tokens_agent == 0
+
+
+async def test_plafon_explicit_pleaca_pe_sarma_daca_e_cerut(monkeypatch):
+    """Mecanismul rămâne: o valoare > 0 se trimite ca `max_completion_tokens`. Cine repune un
+    plafon o poate face — dar deliberat, nu moștenind un default care nu mai are motiv."""
+    monkeypatch.setattr(
+        llm,
+        "get_settings",
+        lambda: SimpleNamespace(
+            llm_sampling_enabled=True,
+            llm_reasoning_effort_agent="high",
+            llm_temperature_agent=0.7,
+            llm_retry_max=2,
+            llm_max_tokens_agent=1500,
+        ),
+    )
+    c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
+    await c.complete("sys", "usr")
+    assert comp.last_kwargs["max_completion_tokens"] == 1500
+    # Plafonul și poarta de raționament sunt decizii independente.
+    assert comp.last_kwargs["reasoning_effort"] == "high"
+
+
+async def test_fara_plafon_niciun_parametru_de_lungime(monkeypatch):
+    """Cu 0, NICIUN parametru de lungime nu pleacă — nici cel nou, nici cel deprecat."""
     monkeypatch.setattr(
         llm,
         "get_settings",
@@ -256,16 +286,10 @@ async def test_plafon_zero_omite_parametrul_si_se_numara(monkeypatch):
             llm_max_tokens_agent=0,
         ),
     )
-    acc, token = turn_latency.push()
-    try:
-        c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
-        await c.complete("sys", "usr")
-    finally:
-        turn_latency.pop(token)
+    c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
+    await c.complete("sys", "usr")
     assert "max_completion_tokens" not in comp.last_kwargs
-    assert acc.degradations.get("llm_output_cap_disabled") == 1
-    # Ridicarea plafonului nu atinge poarta de raționament — sunt decizii independente.
-    assert comp.last_kwargs["reasoning_effort"] == "high"
+    assert "max_tokens" not in comp.last_kwargs
 
 
 async def test_model_necunoscut_se_numara_si_nu_trimite_optionale():
