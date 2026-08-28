@@ -12,10 +12,13 @@ from __future__ import annotations
 import pytest
 
 from src.db.connection import admin_conn, close_pool, get_pool
+from tests.tenants import CATALOG_BIZ
 
 pytestmark = [pytest.mark.integration]
 
-DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
+
+# Tenantul cu catalog real: testul verifica paritatea diacriticelor pe produse ADEVARATE.
+DEMO_BIZ = CATALOG_BIZ
 
 #: exact condiția din `search_products_lexical` (match FTS SAU fuzzy pe nume), ambele normalizate
 _MATCH_SQL = (

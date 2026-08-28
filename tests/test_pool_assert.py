@@ -13,8 +13,9 @@ from src.config import get_settings
 from src.db import connection as conn_mod
 from src.db.connection import _check_isolation, _isolation_enabled, close_pool, tenant_conn
 from src.db.errors import IsolationError
+from tests.tenants import CATALOG_BIZ
 
-DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
+DEMO_BIZ = CATALOG_BIZ
 OTHER_BIZ = "00000000-0000-0000-0000-000000000000"
 
 

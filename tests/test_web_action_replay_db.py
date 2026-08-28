@@ -133,6 +133,15 @@ async def _consume(conn, bid, conv, contact, fingerprint, client_turn_id):
     )
 
 
+# `authorize_action` are `skew_s=0` ca default de BIBLIOTECĂ, dar niciun apelant real nu-l
+# folosește: ruta din `src/web/app.py` trimite `WEB_ACTION_CLOCK_SKEW_S` (60s). Aici contează,
+# fiindcă `issued_at` e `completed_at`-ul rândului — deci CEASUL BAZEI — iar verificarea folosește
+# ceasul procesului. Cu toleranță zero, testul măsoară de fapt diferența dintre cele două ceasuri
+# (baza noastră e cu ~0,5s înaintea mașinii locale ⇒ `not_yet_valid`), nu autorizarea pe care o
+# are de verificat.
+PROD_SKEW_S = 60
+
+
 def _fingerprint(bid: str, action_id: str) -> str:
     return svc.action_fingerprint(SECRET, business_id=bid, channel_token="tok", action_id=action_id)
 
@@ -166,6 +175,7 @@ async def test_authorize_finds_the_source_row_on_a_real_db(shop):
             client_turn_id=str(uuid4()),
             ring=_ring(),
             fingerprint_secret=SECRET,
+            skew_s=PROD_SKEW_S,
         )
     # Sesiunea reală (token+visitor) nu produce `sess-hash` → refuz, fără existence leak.
     assert isinstance(verdict, svc.ActionRejected)
@@ -189,6 +199,7 @@ async def test_authorize_succeeds_when_the_session_matches(shop):
             client_turn_id=str(uuid4()),
             ring=_ring(),
             fingerprint_secret=SECRET,
+            skew_s=PROD_SKEW_S,
         )
     assert isinstance(verdict, svc.AuthorizedAction)
     assert verdict.command.args.product_ref == PID_A
@@ -296,6 +307,7 @@ async def test_deleting_the_source_turn_kills_its_actions(shop):
             client_turn_id=str(uuid4()),
             ring=_ring(),
             fingerprint_secret=SECRET,
+            skew_s=PROD_SKEW_S,
         )
     assert isinstance(verdict, svc.ActionRejected)
     assert verdict.reason == "source_missing"
