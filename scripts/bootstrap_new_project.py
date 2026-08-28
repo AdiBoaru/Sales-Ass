@@ -122,6 +122,18 @@ async def ensure_roles(conn: asyncpg.Connection, bot_password: str) -> None:
     # asyncpg nu parametrizează DDL, deci parola se scapă ca literal SQL.
     escaped = bot_password.replace("'", "''")
     await conn.execute(f"alter role bot_runtime login password '{escaped}'")
+
+    # `SET` EXPLICIT pe apartenență, altfel `set role bot_runtime` e refuzat.
+    #
+    # Supabase creează singur o apartenență `postgres → bot_runtime` cu `admin_option`, dar cu
+    # `set_option = false`: pe PG16+ opțiunile apartenenței sunt separate, iar `WITH ADMIN` nu
+    # implică dreptul de a INTRA în rol. Un `grant bot_runtime to postgres` simplu se contopește
+    # cu rândul existent al aceluiași grantor și NU repară `set_option` — de asta trebuie scris
+    # explicit. Nu e cosmetic: calea de compat din `db/connection.py` (fără `DATABASE_URL_BOT`)
+    # coboară la rol exact așa, iar toate testele care verifică izolarea RLS fac `set role
+    # bot_runtime` pe conexiunea de admin. Fără el, cad cu `permission denied to set role`, adică
+    # exact plasa de izolare rămâne neverificată.
+    await conn.execute("grant bot_runtime to postgres with inherit true, set true")
     say(OK, "rolurile `bot_runtime` (LOGIN, fara bypassrls) si `gdpr_svc` exista")
 
 
