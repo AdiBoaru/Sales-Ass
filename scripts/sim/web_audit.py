@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -497,7 +498,12 @@ async def _purge_audit(conn, business_id: str) -> int:
 
 async def main() -> int:
     ap = argparse.ArgumentParser(description="Audit conversațional pe calea WEB reală")
-    ap.add_argument("--token", default=None, help="public token webchat (default: din DB, demo)")
+    ap.add_argument(
+        "--token", default=None, help="public token webchat (default: din DB, pe tenantul ales)"
+    )
+    ap.add_argument(
+        "--business", default=None, help="slug sau uuid; implicit SEED_BUSINESS_SLUG din .env"
+    )
     ap.add_argument("--only", default=None, help=f"un singur scenariu: {', '.join(SCENARIOS)}")
     args = ap.parse_args()
 
@@ -511,6 +517,10 @@ async def main() -> int:
     from src.db.queries.channels import resolve_web_session
 
     token = args.token
+    # Tenantul vine din `.env` (`SEED_BUSINESS_SLUG`), nu dintr-un UUID scris în cod: pe proiectul
+    # v3 catalogul e sub `sole-ro`, iar un audit rulat pe tenantul greșit ar raporta „zero produse"
+    # ca finding de calitate, când de fapt e o eroare de țintire.
+    biz_ref = args.business or os.environ.get("SEED_BUSINESS_SLUG") or DEMO_BIZ
     biz_id: str = DEMO_BIZ
     pool = await get_pool()
     async with admin_conn(pool) as conn:
@@ -520,14 +530,16 @@ async def main() -> int:
                 biz_id = resolved["business_id"]
         else:
             row = await conn.fetchrow(
-                "select provider_account_id, business_id::text as business_id "
-                "from channels where business_id=$1 and kind='webchat' limit 1",
-                DEMO_BIZ,
+                "select c.provider_account_id, c.business_id::text as business_id "
+                "from channels c join businesses b on b.id = c.business_id "
+                "where (b.slug = $1 or b.id::text = $1) and c.kind = 'webchat' "
+                "and c.status = 'active' limit 1",
+                biz_ref,
             )
             if row:
                 token, biz_id = row["provider_account_id"], row["business_id"]
     if not token:
-        print("Niciun canal webchat pe tenantul demo.")
+        print(f"Niciun canal webchat activ pe tenantul {biz_ref!r}.")
         return 1
     print(f"Canal webchat: {token[:16]}…  (audit pe calea /web/chat REALĂ)")
 
