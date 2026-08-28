@@ -594,12 +594,14 @@ python -m src.jobs.embed_products
 # 2. verificare rapida ca s-au scris
 python scripts/db_check.py            # sau: select count(*) from product_embeddings
 
-# 3. pe VPS (acolo exista Redis): un tur real end-to-end pe tokenul canalului
-curl -s -X POST https://bot.nativextech.com/web/chat \
-  -H 'content-type: application/json' \
-  -d '{"token":"pub_b738dd1aa2ff2e0535b491792cc789d9","visitor_id":"smoke-1",
-       "message":"caut un sampon pentru par uscat"}'
+# 3. audit conversational pe calea /web/chat REALA, LOCAL: `web_audit.py` injecteaza
+#    `fakeredis`, deci nu cere Docker. Cere OpenAI. Isi curata singur vizitatorii.
+PYTHONPATH=. python scripts/sim/web_audit.py --only discovery
+PYTHONPATH=. python scripts/sim/web_audit.py            # toate cele 9 scenarii
 ```
+
+Auditul își ia tenantul din `SEED_BUSINESS_SLUG` (sau `--business sole-ro`) și întoarce exit code
+non-zero la orice finding P0 — e gate de regresie, nu doar o privire.
 
 Pasul 3 e primul moment în care sistemul chiar VORBEȘTE pe catalogul SOLE. Până atunci, tot ce e
 verificat mai sus e infrastructură: că poate ajunge la date, nu că știe ce să spună despre ele.
