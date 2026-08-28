@@ -908,6 +908,7 @@ async def search_products_tool(
                 brand=a.brand,
                 sort_mode=a.sort_mode,
                 in_stock_only=f["in_stock_only"],
+                locale=ctx.language,  # 046: locala alege lista de cuvinte goale (P11)
                 pool=_FUSION_POOL,
             )
             vector: list[dict[str, Any]] = []
@@ -999,6 +1000,11 @@ async def search_products_tool(
         had_brand=a.brand is not None,
         n_concerns=len(concern_keys or []),
         relaxed=relaxed,
+        # 046: pe ce treaptă a potrivirii de TEXT s-a servit pagina. `relaxed`/`relax_depth` de mai
+        # sus descriu relaxarea FILTRELOR; asta e cealaltă axă, iar confundarea lor ar ascunde exact
+        # cazul periculos: cerere fără filtre, servită din plasa de typo. `strict` = cererea a
+        # potrivit cum a fost formulată.
+        lexical_step=next((p["lexical_step"] for p in products if p.get("lexical_step")), "strict"),
         fused=bool(lexical_pool_n) and bool(vector_pool_n),
         lexical_pool=lexical_pool_n,
         vector_pool=vector_pool_n,
@@ -1043,6 +1049,7 @@ async def search_products_tool(
                 category=a.category,
                 brand=a.brand,
                 searchable_facets=searchable_facets,
+                locale=ctx.language,  # 046: aceeași normalizare ca pe calea principală
                 pool=6,
             )
         ctx.emit(

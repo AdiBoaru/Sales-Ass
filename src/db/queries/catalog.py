@@ -14,6 +14,7 @@ from typing import Any
 
 import asyncpg
 
+from src.catalog.query_terms import content_terms, fold, relaxed_query, strict_query
 from src.catalog.vocabulary import servable_count_sql
 from src.config import get_settings
 
@@ -69,6 +70,56 @@ _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 # în fusion.py), nu o preferință de tenant.
 _LEX_W_FTS = 0.6  # fraza naturală = semnalul primar
 _LEX_W_TRGM = 0.4  # typo/SKU = plasă secundară; 0.4 ≠ 0, „sanpon" trebuie să găsească „șampon"
+
+
+# 046 — treptele potrivirii lexicale, în ordinea în care se încearcă. Ordinea E contractul:
+# precizie întâi, acoperire după, plasă de typo la urmă. O treaptă rulează DOAR dacă precedenta
+# n-a întors nimic, deci drumul obișnuit rămâne un singur query.
+#
+#   strict   toți termenii de conținut (ȘI) — cererea, așa cum a fost formulată
+#   relaxed  oricare dintre termeni (SAU), ordonat pe rang — „nu am tot, dar am ce contează"
+#   fuzzy    word_similarity pe nume — plasa de typo, singura care costă o scanare cu funcții
+#
+# De ce `<%` (word_similarity) și NU `%` (similarity), cum era până acum: `%` compară interogarea
+# cu numele ÎNTREG, iar numele din catalogul SOLE au 60-90 de caractere. Un typo de 6 litere are
+# similaritate ~0,05 cu un nume de 80 — sub orice prag. Măsurat pe catalogul real: `%` prinde
+# ZERO din typo-urile testate („sampoon", „vitmina c", „protectei solara", „hidratnata"), deci
+# brațul de typo nu funcționa deloc, dar plătea 220 ms pe FIECARE căutare, fiindcă evalua
+# `similarity` pe toate cele 2.758 de rânduri. `<%` compară cu cel mai bun CUVÂNT din nume și le
+# prinde („sampoon" → 75, „vitmina c" → 86). Mutat pe treapta 3, costul se plătește doar când
+# altfel am fi întors tăcere.
+_LEXICAL_STRICT = "strict"
+_LEXICAL_RELAXED = "relaxed"
+_LEXICAL_FUZZY = "fuzzy"
+_LEXICAL_STEPS = (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_FUZZY)
+
+# Pragul treptei de typo, scris EXPLICIT în cod și nu lăsat pe seama GUC-ului `pg_trgm`
+# (`word_similarity_threshold`, implicit tot 0,6, pe care îl folosește operatorul `<%`): un `SET`
+# făcut de altcineva pe aceeași sesiune ar muta tăcut pragul căutării. Cele două coincid azi, iar
+# predicatul explicit e autoritatea; `<%` rămâne pentru că e partea INDEXABILĂ.
+#
+# Calibrat pe typo-uri reale, măsurat pe catalogul SOLE: la 0,6 „sampoon" ajunge la șampoane (0,70),
+# „hidratnata" la produse de hidratare (0,73), „vitmina c" la produse cu vitamina C (0,62). La 0,75
+# toate trei dau ZERO — adică plasa nu prinde nimic. Numărul de candidați peste prag nu e o
+# problemă de precizie: `ORDER BY word_similarity DESC` + `LIMIT pool` lasă în pool doar cele mai
+# apropiate. „sanpon" rămâne neprins la orice prag rezonabil (n↔m distruge prea multe trigrame) —
+# o plasă de typo nu e un corector ortografic.
+_WORD_SIM_MIN = 0.6
+
+
+def _lexical_steps(v2: bool, terms: list[str]) -> tuple[str, ...]:
+    """Treptele pe care le are rost să le încerce ACEASTĂ interogare.
+
+    Cu kill-switch-ul stins sau fără niciun termen, rămâne clauza unică de dinainte.
+
+    Treapta relaxată se sare la UN singur termen, fiindcă `SAU` peste un termen e ACELAȘI tsquery
+    ca `ȘI` peste el: ar fi un query identic, executat a doua oară, pe drumul pe care oricum n-am
+    găsit nimic. Cu un singur cuvânt, singura degradare care mai spune ceva e plasa de typo."""
+    if not v2 or not terms:
+        return (_LEXICAL_STRICT,)
+    if len(terms) == 1:
+        return (_LEXICAL_STRICT, _LEXICAL_FUZZY)
+    return _LEXICAL_STEPS
 
 
 def _lexical_rank_expr(q_ph: str) -> str:
@@ -269,7 +320,11 @@ _SELECT = f"""
     from products p
     left join brands b on b.id = p.brand_id
     left join categories c on c.id = p.primary_category_id
-    left join product_review_summaries prs on prs.product_id = p.id
+    -- P7: `business_id` EXPLICIT și pe join, nu doar pe tabela condusă. `product_review_summaries`
+    -- are cheia primară pe `product_id` singur, deci join-ul „mergea" fără el — dar izolarea nu
+    -- trebuie să depindă de forma unei chei primare care se poate schimba.
+    left join product_review_summaries prs
+           on prs.product_id = p.id and prs.business_id = p.business_id
     left join lateral (
         select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
                          and v.sale_price < v.price then v.sale_price else v.price end) as price
@@ -477,16 +532,90 @@ async def search_products_lexical(
     price_max: float | None = None,
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
+    locale: str | None = None,
     pool: int = 50,
 ) -> list[dict[str, Any]]:
-    """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. Match pe FTS
-    (`websearch_to_tsquery('simple', $q)` pe `search_tsv`) SAU pe `pg_trgm` similarity pe nume
-    (typo / SKU / cod-piesă — esențial pe HVAC/auto, generic). ACELEAȘI filtre dure ca
-    `search_products` (paritate). Întoarce ~`pool` rânduri; pe `relevance` ordinea = rang lexical
-    (`_lexical_rank_expr`: suma brută, sau NX-226 normalizat+ponderat sub kill-switch), deci
-    POZIȚIA în listă = rangul pt RRF (NX-113b). Pe sort explicit
-    (price/rating) delegă `_order_clause`. Config `'simple'` = limbă-agnostic (P11). `conn`
-    tenant-scoped (P7: `business_id = $1`)."""
+    """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. ACELEAȘI filtre dure ca
+    `search_products` (paritate). Întoarce ~`pool` rânduri; pe `relevance` POZIȚIA în listă =
+    rangul pentru RRF (NX-113b). Pe sort explicit (price/rating) delegă `_order_clause`. `conn`
+    tenant-scoped (P7: `business_id = $1`).
+
+    046 — potrivirea nu mai e o singură condiție, ci o SCARĂ de trei trepte (vezi `_LEXICAL_STEPS`),
+    fiindcă varianta de dinainte întorcea ZERO pe majoritatea frazelor reale de client.
+
+    Cauza, măsurată pe catalogul SOLE: `websearch_to_tsquery` leagă toate cuvintele cu ȘI, iar
+    configurația `'simple'` nu elimină niciun cuvânt gol. „sampon pentru par gras" cerea ca
+    produsul să conțină literalmente și „pentru". Din 18 fraze scrise ca de client, **13 întorceau
+    zero rezultate** — nu rezultate slabe, ci tăcere, adică exact ce interzice P6. Cu termenii de
+    conținut extrași în cod (`src/catalog/query_terms.py`) și descrierea în index (046), aceleași
+    18 fraze întorc **0 zerouri**, cu latența medie la jumătate (289 ms → 136 ms): treapta strictă
+    le servește pe aproape toate, iar funcția scumpă de trigrame a ieșit de pe drumul obișnuit.
+
+    Kill-switch `lexical_query_v2_enabled` OFF → clauza unică de dinainte (FTS SAU `similarity` pe
+    nume), byte-identic. `locale` alege lista de cuvinte goale; `None` = nicio eliminare (P11:
+    limba e cheie, nu constantă).
+    """
+    v2 = get_settings().lexical_query_v2_enabled
+    terms = content_terms(query_text, locale) if v2 else []
+    steps = _lexical_steps(v2, terms)
+    for step in steps:
+        rows = await _lexical_fetch(
+            conn,
+            business_id,
+            query_text=query_text,
+            terms=terms,
+            step=step,
+            v2=v2,
+            category=category,
+            brand=brand,
+            concerns=concerns,
+            facet_filters=facet_filters,
+            features=features,
+            searchable_facets=searchable_facets,
+            variant_label=variant_label,
+            price_max=price_max,
+            sort_mode=sort_mode,
+            in_stock_only=in_stock_only,
+            pool=pool,
+        )
+        if rows:
+            # Degradarea trebuie să fie VIZIBILĂ. Un rezultat obținut prin relaxare sau prin plasa
+            # de typo nu e același lucru cu unul care a potrivit cererea așa cum a fost formulată:
+            # măsurat pe catalogul SOLE, singura interogare pe care relaxarea a servit-o din 18 a
+            # fost „parfum de dama" — un raft pe care SOLE nu îl are, iar rezultatul a fost un
+            # spray parfumat de păr. Marcăm treapta pe fiecare produs (ca `variant_match` la
+            # NX-135), ca apelantul să poată număra, dezvălui sau respinge. Fără marcaj, un „n-am
+            # asta, dar am ceva vag înrudit" ar arăta identic cu o potrivire bună.
+            if step != _LEXICAL_STRICT:
+                for r in rows:
+                    r["lexical_step"] = step
+            return rows
+    return []
+
+
+async def _lexical_fetch(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    query_text: str,
+    terms: list[str],
+    step: str,
+    v2: bool,
+    category: str | Sequence[str] | None,
+    brand: str | None,
+    concerns: list[str] | None,
+    facet_filters: Mapping[str, Sequence[str]] | None,
+    features: list[str] | None,
+    searchable_facets: tuple[str, ...],
+    variant_label: str | None,
+    price_max: float | None,
+    sort_mode: str,
+    in_stock_only: bool,
+    pool: int,
+) -> list[dict[str, Any]]:
+    """O treaptă a scării lexicale. Filtrele dure sunt IDENTICE pe toate treptele — se relaxează
+    potrivirea de TEXT, niciodată constrângerile (preț, brand, categorie, variantă, stoc). Scara
+    din `search_products_tool` face lucrul complementar: relaxează filtrele, cu textul fix."""
     conds = ["p.business_id = $1", "p.status = 'active'"]
     params: list[Any] = [business_id]
 
@@ -494,17 +623,37 @@ async def search_products_lexical(
         params.append(value)
         return f"${len(params)}"
 
-    q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
-    # Match lexical: FTS (frază naturală) SAU trgm (typo/SKU). Query gol/stopwords → tsquery gol
-    # (nu prinde nimic) → cade pe trgm; niciun SQL invalid.
-    # NX-178: AMBELE capete trec prin `ro_unaccent` (033). `search_tsv` e deja construit peste text
-    # normalizat, deci aici normalizăm doar interogarea; trgm-ul compară expresii normalizate, pe
-    # indexul dedicat. Fără asta, „sampon" nu găsea niciun „șampon" — zero rezultate, nu relevanță
-    # slabă.
-    conds.append(
-        f"(p.search_tsv @@ websearch_to_tsquery('simple', ro_unaccent({q_ph}))"
-        f" or ro_unaccent(p.name) % ro_unaccent({q_ph}))"
-    )
+    rank_expr: str
+    if not v2:
+        q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
+        # Comportamentul de dinainte de 046, păstrat sub kill-switch. NX-178: AMBELE capete trec
+        # prin `ro_unaccent` (033) — `search_tsv` e construit peste text normalizat, deci aici se
+        # normalizează doar interogarea.
+        conds.append(
+            f"(p.search_tsv @@ websearch_to_tsquery('simple', ro_unaccent({q_ph}))"
+            f" or ro_unaccent(p.name) % ro_unaccent({q_ph}))"
+        )
+        rank_expr = _lexical_rank_expr(q_ph)
+    elif step == _LEXICAL_FUZZY:
+        # Plasa de typo. `<%` e partea INDEXABILĂ (`idx_products_name_ro_trgm`), iar predicatul
+        # explicit e cel care STABILEȘTE pragul — vezi `_WORD_SIM_MIN` pentru de ce nu-l lăsăm pe
+        # seama GUC-ului.
+        q_ph = placeholder(fold(query_text))
+        conds.append(
+            f"(ro_unaccent({q_ph}) <% ro_unaccent(p.name)"
+            f" and word_similarity(ro_unaccent({q_ph}), ro_unaccent(p.name)) >= {_WORD_SIM_MIN})"
+        )
+        rank_expr = f"word_similarity(ro_unaccent({q_ph}), ro_unaccent(p.name))"
+    else:
+        # Treptele de text: aceeași expresie de rang, tsquery diferit. `ts_rank_cd` are sens abia
+        # după 046, care pune ponderi pe câmpuri (nume A / ai_summary B / descriere C) — înainte
+        # tot vectorul era pe greutatea D și rangul era practic plat.
+        phrase = strict_query(terms) if step == _LEXICAL_STRICT else relaxed_query(terms)
+        q_ph = placeholder(phrase)
+        tsq = f"websearch_to_tsquery('simple', ro_unaccent({q_ph}))"
+        conds.append(f"p.search_tsv @@ {tsq}")
+        rank_expr = f"ts_rank_cd(p.search_tsv, {tsq})"
+
     if category:
         conds.append(_category_clause(category, placeholder))  # NX-167 (A): match pe arbore
     if brand:
@@ -526,7 +675,7 @@ async def search_products_lexical(
         conds.append(cs)
 
     if sort_mode == "relevance":
-        order = f" order by ({_lexical_rank_expr(q_ph)}) desc, p.id"
+        order = f" order by ({rank_expr}) desc, p.id"
     else:
         order = _order_clause(sort_mode)  # price/rating explicit → sort pe subsetul lexical filtrat
 
@@ -598,7 +747,11 @@ _DETAIL_SELECT = f"""
         vr.variants                 as variants
     from products p
     left join brands b on b.id = p.brand_id
-    left join product_review_summaries prs on prs.product_id = p.id
+    -- P7: `business_id` EXPLICIT și pe join, nu doar pe tabela condusă. `product_review_summaries`
+    -- are cheia primară pe `product_id` singur, deci join-ul „mergea" fără el — dar izolarea nu
+    -- trebuie să depindă de forma unei chei primare care se poate schimba.
+    left join product_review_summaries prs
+           on prs.product_id = p.id and prs.business_id = p.business_id
     left join lateral (
         select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
                          and v.sale_price < v.price then v.sale_price else v.price end) as price

@@ -149,6 +149,11 @@ async def _lexical_sql(monkeypatch, *, v2: bool, **kwargs) -> str:
     from src.db.queries.catalog import search_products_lexical
 
     monkeypatch.setattr(get_settings(), "lexical_rank_v2_enabled", v2)
+    # NX-226 descrie rangul CLAUZEI UNICE (FTS `OR` similarity pe nume). 046 a înlocuit clauza aia
+    # cu o scară de trepte în care cele două semnale nu mai coexistă în același `ORDER BY`, deci
+    # formula normalizată n-are ce combina. Testele de mai jos fixează contractul vechi și rulează
+    # pe calea lui; inertitatea pe calea 046 e verificată separat, explicit.
+    monkeypatch.setattr(get_settings(), "lexical_query_v2_enabled", False)
     conn = FakeConn([])
     await search_products_lexical(conn, "biz-1", "crema hidratanta fata", **kwargs)
     return conn.sql

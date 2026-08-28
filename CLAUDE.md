@@ -1088,11 +1088,43 @@ secrete sunt connection stringurile). Cele 41 de migrări (003→045, cu 030/031
 `public_token=pub_b738dd1aa2ff2e0535b491792cc789d9` (`data-token` în widget). Recreabil idempotent
 cu `python scripts/seed_web_channel.py --business sole-ro`.
 
-**GOL azi, și fiecare gol are consecință:** `product_embeddings` = 0 (căutarea e DOAR lexicală:
-`search_products_lexical` merge, FTS + trgm prin `ro_unaccent`, dar RRF-ul n-are al doilea braț);
-`product_derived_signals` = 0 → `product_card_blurbs` = 0 (corect: codul refuză să cadă pe numele
-produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate); `intent_aliases` = 0;
-`businesses.settings` = `{}` → niciun `domain_pack` per tenant.
+**GOL azi, și fiecare gol are consecință:** `product_embeddings` = 0 (căutarea e DOAR lexicală, deci
+RRF-ul n-are al doilea braț); `product_derived_signals` = 0 → `product_card_blurbs` = 0 (corect:
+codul refuză să cadă pe numele produsului) și `attributes->'concerns'` = 0, deci filtrul de
+`concerns`, fațetele și boost-ul de concern din rerank n-au pe ce opera; `product_review_summaries`
+= 0 (183.003 recenzii reale, nerezumate → `top_pros` iese NULL pe orice card); `product_relations`
+= 0 (graful e inert: `traverse_relations` → 0 noduri, iar cele **391 de produse epuizate n-au
+niciun substitut**, deci „nu mai avem" e răspunsul final — situația pentru care s-a construit
+NX-195); `intent_aliases` = 0; `businesses.settings` = `{}` → niciun `domain_pack` per tenant.
+
+**Căutarea lexicală a fost REPARATĂ pe catalogul real (migrarea 046 + `src/catalog/query_terms.py`).**
+Măsurat pe 18 fraze scrise ca de client, **13 întorceau ZERO** — nu rezultate slabe, tăcere. Trei
+cauze: (a) `search_tsv` era `name || ai_summary`, iar `ai_summary` e NULL pe toate cele 2.758 de
+rânduri, deci vectorul de căutare era literalmente numele — `description` (2.758/2.758) nu era
+indexată nicăieri; (b) `websearch_to_tsquery` leagă TOATE cuvintele cu ȘI iar `'simple'` nu elimină
+niciun cuvânt gol, deci „sampon pentru par gras" cerea ca produsul să conțină literal și „pentru"
+(configurația `'romanian'` NU repară asta: lista ei de cuvinte goale are diacritice, iar noi indexăm
+text trecut prin `ro_unaccent`); (c) brațul de typo compara interogarea cu numele ÎNTREG, deci
+prindea zero typo-uri reale, dar costa ~220 ms pe FIECARE căutare. Acum: `search_tsv` = nume (A) +
+`ai_summary` (B) + descriere (C) cu `setweight`, termenii de conținut se extrag în cod cu listă de
+cuvinte goale pe **locale** (P11), iar potrivirea e o SCARĂ (strict ȘI → relaxat SAU → typo cu
+`word_similarity`), treptele 2-3 rulând doar pe ratare. Rezultat măsurat pe baza live: **13 zerouri
+→ 0**, iar timpul de execuție în Postgres pentru același set de rezultate **219 ms → 26 ms**.
+Kill-switch `LEXICAL_QUERY_V2_ENABLED=false` → comportamentul vechi, byte-identic. Un produs servit
+de pe o treaptă degradată poartă `lexical_step`, publicat în evenimentul `product_search` —
+degradarea e vizibilă, nu tăcută.
+
+**Migrarea 047** repară un defect vecin: `product_variants.stock` era `NOT NULL DEFAULT 0`, deci
+UNKNOWN nu era reprezentabil la nivel de variantă (deși e la produs, `stock_total`). Importul a scris
+0 pe toate cele 2.755 de variante, iar `facts_provider` tratează un stoc CUNOSCUT 0 drept epuizat —
+deci **2.364 din cele 2.367 de produse în stoc se prezentau ca epuizate** coșului (NX-237) și
+faptelor turului (NX-240). Codul aștepta deja NULL peste tot; doar schema forța minciuna.
+Detalii + planurile de execuție: [`docs/DB-V3-SOLE-IMPORT.md`](docs/DB-V3-SOLE-IMPORT.md) §12.
+
+> **Indexurile GIN sunt INERTE pe conexiunea de runtime, și nu e un index lipsă.** Cu RLS activ,
+> predicatele non-leakproof (`@@`, `%`, `<%`) nu pot fi evaluate înaintea predicatelor de securitate,
+> deci nu pot deveni condiții de index: `bot_runtime` face `Seq Scan` unde `postgres` face
+> `Bitmap Index Scan`. La 2.758 de produse e suportabil; crește liniar cu catalogul. Vezi §12.2.
 
 **FAQ, cu nuanța care contează:** `product_faqs` = **27.931**, `locale='ro'`, pe 2.750/2.758 de
 produse, și SUNT servite (6 per produs, la DETALIU, [`catalog.py`](src/db/queries/catalog.py) —

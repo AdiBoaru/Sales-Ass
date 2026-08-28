@@ -456,3 +456,28 @@ def test_proza_aura_nu_primeste_rol_de_evidence():
     aura = [ss.classify_section(k) for k in ss.SECTION_KEYS]
     assert all(c.evidence_role is None for c in aura if c and c.source == "aura")
     assert all(c.evidence_role is not None for c in aura if c and c.source == "merchant_pdp")
+
+
+def test_importul_scrie_stoc_UNKNOWN_pe_varianta_nu_zero():
+    """Regresie: `UNKNOWN nu e 0` trebuie respectat pe AMBELE niveluri, nu doar pe produs.
+
+    Insertul de variante scria literal `0` pe `stock`, deși sursa SOLE dă doar binar
+    (`in stoc` / `stoc epuizat`) și n-are cantitate. Consecința nu era cosmetică:
+    `facts_provider` tratează un stoc CUNOSCUT 0 pe variantă drept `out_of_stock` pentru acea
+    variantă — corect, ca fapt mai specific — deci **2.364 din cele 2.367 de produse `in_stock`
+    ajungeau la coș și la faptele turului ca epuizate**, iar modelul vedea „stoc 0" pe marfă care
+    exista. Defectul e invizibil în orice test care nu se uită chiar la SQL-ul scris.
+
+    Se verifică pe TEXTUL interogării fiindcă asta e unitatea care conține defectul: un test care
+    ar rula importul ar cere baza sursă (89 MB) și n-ar rula în CI.
+    """
+    from pathlib import Path
+
+    src = Path("scripts/import_sole.py").read_text(encoding="utf-8")
+    stmt = src[src.index("insert into product_variants") :]
+    stmt = stmt[: stmt.index('",')]
+
+    assert "null,$7" in stmt, "stocul variantei trebuie scris NULL (UNKNOWN), nu 0"
+    assert ",0," not in stmt, "nicio cantitate literală în insertul de variante"
+    # o re-rulare trebuie să REPARE rândurile deja scrise, altfel zeroul vechi rămâne pe veci
+    assert "stock=excluded.stock" in stmt
