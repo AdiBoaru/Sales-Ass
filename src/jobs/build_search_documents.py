@@ -6,6 +6,7 @@ Nu este invocat de worker/read-path. Se rulează explicit de un job de conținut
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -13,6 +14,17 @@ from typing import Any
 from src.domain.search_documents import SearchArtifacts, build_search_artifacts
 
 log = logging.getLogger(__name__)
+
+
+def _hash_chunk(chunk: Any) -> str:
+    """Amprenta unui `EvidenceChunk`, în aceeași formă canonică folosită de NX-207.
+
+    Aceeași rețetă ca `src/domain/search_documents._hash_payload`: JSON sortat, separatori
+    compacți, sha256. Deliberat identică, nu doar „un hash": dacă cele două ar diverge, două
+    reprezentări ale aceluiași fragment ar da amprente diferite și deduplicarea ar tăcea.
+    """
+    raw = json.dumps(chunk.model_dump(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _decode_jsonb(row: Any) -> dict[str, Any]:
@@ -209,7 +221,17 @@ async def upsert_artifacts(
                 chunk.source,
                 chunk.locale,
                 chunk.schema_version,
-                json.dumps(chunk.model_dump(), ensure_ascii=False, sort_keys=True),
+                # HASH, nu payloadul serializat. `content_hash` intră în constrângerea unică
+                # `(business_id, product_id, role, locale, content_hash)`, iar un index btree
+                # nu acceptă chei peste ~2.704 octeți. Cu payloadul brut acolo, orice produs cu
+                # descriere lungă rupe jobul:
+                #   „index row size 3072 exceeds btree version 4 maximum 2704".
+                #
+                # N-a explodat până acum fiindcă descrierile catalogului demo erau scurte. Prima
+                # rulare pe catalogul real (2.758 de produse, descriere medie 1.618 caractere) a
+                # picat pe produsul 1.648. Un sha256 are lungime fixă și aceeași semantică de
+                # deduplicare: două fragmente identice dau același hash.
+                _hash_chunk(chunk),
             )
     return True
 
