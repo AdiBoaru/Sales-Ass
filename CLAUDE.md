@@ -1091,10 +1091,18 @@ cu `python scripts/seed_web_channel.py --business sole-ro`.
 **GOL azi, și fiecare gol are consecință:** `product_embeddings` = 0 (căutarea e DOAR lexicală:
 `search_products_lexical` merge, FTS + trgm prin `ro_unaccent`, dar RRF-ul n-are al doilea braț);
 `product_derived_signals` = 0 → `product_card_blurbs` = 0 (corect: codul refuză să cadă pe numele
-produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate);
-`faqs` (nivel business) = 0 și `intent_aliases` = 0 → stratul gratuit (stagiul 4) nu poate servi
-nimic; `businesses.settings` = `{}` → niciun `domain_pack` per tenant.
-Găurile de conținut ale sursei (livrare, retur, garanție, plată, stoc cantitativ) sunt în §8 din doc.
+produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate); `intent_aliases` = 0;
+`businesses.settings` = `{}` → niciun `domain_pack` per tenant.
+
+**FAQ, cu nuanța care contează:** `product_faqs` = **27.931**, `locale='ro'`, pe 2.750/2.758 de
+produse, și SUNT servite (6 per produs, la DETALIU, [`catalog.py`](src/db/queries/catalog.py) —
+nu intră în căutare, vezi 032). `faqs` (nivel business) = **20**, luate de pe paginile REALE
+sole.ro, cu `source_url` per intrare în [`db/seed/faqs_sole_ro.json`](db/seed/faqs_sole_ro.json),
+dar toate cu `embedding` NULL ⇒ lookup-ul (`embedding is not null`) încă nu le servește.
+**Nu copia setul demo peste un client real:** cifrele lui sunt inventate pentru un magazin
+fictiv și diferă de SOLE aproape peste tot (200 vs 199/149 lei prag, 14 vs 30 zile retur), iar
+răspunsul demo REFUZĂ returul de cosmetice deschise pe care SOLE îl acceptă.
+Restul găurilor de conținut ale sursei (stoc cantitativ, istoricul prețului) sunt în §8 din doc.
 
 <details>
 <summary>Clientul demo VECHI (proiect `xfczucwqntefethxxien`, eu-west-1) — păstrat pentru context</summary>

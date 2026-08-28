@@ -446,16 +446,43 @@ Costul de generare pentru cele 2.767 de embedduri: **~$0,03**. Comanda se pregă
 
 Se semnalează acum, nu la demo:
 
-- **Livrare** — niciun câmp. `delivery_class` există (032) și n-are ce citi. La „în cât timp
-  ajunge?" botul n-are răspuns.
-- **Retur, plată, garanție** — idem. `grounding_guard` respinge din construcție orice afirmație
-  despre livrare/promoție/garanție fără sursă, deci botul va refuza onest, dar va refuza.
-- **FAQ de magazin** — `faqs` (nivel business) rămâne gol. Cele 27.931 sunt per produs.
+- **Livrare, retur, plată** — ~~niciun câmp~~ **REZOLVAT altfel, vezi §8.1.** Scraperul nu le are,
+  dar sole.ro le publică, iar `faqs` e casa lor corectă. `delivery_class` (032) rămâne fără sursă
+  structurată: răspunsul e text de politică, nu un câmp per produs.
+- **Garanție** — nu apare ca termen explicit pe paginile publice. `grounding_guard` respinge din
+  construcție orice afirmație despre garanție fără sursă, deci botul refuză onest.
 - **Stoc cantitativ** — doar binar. `stock_total` rămâne NULL peste tot.
 - **Politica de preț / istoricul prețului** — `sale_start`/`sale_end` rămân NULL.
 
-Primele trei se completează manual în `businesses.settings` + `faqs`, sunt puține și sunt exact ce
-întreabă clienții cel mai des.
+### 8.1 FAQ: ce e acoperit și ce nu
+
+**FAQ pe produs e complet și LIVE:** 27.931 de rânduri, `locale='ro'`, pe 2.750 din 2.758 de
+produse. `get_product_details` le servește (6 per produs, ordonate după `position`). Nu intră în
+căutare, deliberat (032) — sunt răspunsuri despre UN produs, nu semnal de potrivire.
+
+**FAQ de magazin: 20 de intrări, luate de pe paginile REALE sole.ro** (`db/seed/faqs_sole_ro.json`,
+cu `source_url` pe fiecare), scrise cu `embedding` NULL ⇒ lookup-ul încă nu le servește.
+
+Setul demo **nu se putea copia**, și e o capcană care merită numită: cifrele lui erau plauzibile,
+nu adevărate.
+
+| | demo | SOLE (verificat) |
+|---|---|---|
+| prag transport gratuit | 200 lei | **199 lei** client nou / **149 lei** recurent |
+| cost livrare | 19,99 lei | **19,9 până la 24,90 lei** |
+| curier | „curier rapid" | **Fan Courier, Sameday, Cargus** |
+| retur | 14 zile | **30 zile**, prin **service-return.com** |
+| cost retur | fără cifră | **49,9 lei**, reținuți din rambursare |
+| cosmetic deschis | **REFUZAT** (Art. 16 lit. e) | **acceptat** dacă n-are urme de utilizare |
+| plată | card + ramburs | + **PayPal** + **rate 0%** la 6 bănci |
+
+Penultimul rând e cel care contează: răspunsul demo REFUZĂ, citând legea, un retur pe care
+magazinul îl acceptă. Un client ar fi plecat convins că nu are ce face. Iar „200 lei" i-ar spune
+unuia cu coșul la 199,50 că mai are de adăugat.
+
+Ce n-are sursă verificată **nu e în set**: anularea comenzii, confirmarea prin e-mail, contul și
+parola, comisionul de ramburs, termenul exact de rambursare. Un răspuns plauzibil e mai periculos
+decât o lipsă: lipsa produce un refuz onest, plauzibilul produce o minciună cu formă de fapt.
 
 ---
 
@@ -565,9 +592,9 @@ făcute, iar ce nu s-a putut face aici e numit exact mai jos, nu presupus.
    scris pentru recenziile FICTIVE ale demoului: inventează rezumatul cu LLM și **variază ratingul**
    ca să nu fie toate 5★. Pe 183.003 recenzii adevărate, varierea ratingului ar fi falsificare.
    Cere un job nou, cu agregare determinist ancorată în rânduri.
-3. **`faqs` + `intent_aliases` la nivel de business.** Sursa nu le are (§8): livrare, retur,
-   garanție, plată. Sunt exact ce întreabă clienții cel mai des și sunt puține — se scriu de mână,
-   cu clientul, nu se generează.
+3. ~~**`faqs` la nivel de business.**~~ **FĂCUT** (§8.1): 20 de intrări de pe paginile reale
+   sole.ro, în așteptarea embeddingului. `intent_aliases` rămâne gol - se umple din shadow mode,
+   pe trafic real, nu prin seed.
 
 ### 11.1 Ce se schimbă în suita de teste
 
@@ -591,10 +618,14 @@ nu-l poate exercita. Un roșu permanent ar fi învățat pe toată lumea să ign
 # 1. embeddinguri pe cele 2.758 de produse (~$0,03) — bratul semantic al RRF
 python -m src.jobs.embed_products
 
-# 2. verificare rapida ca s-au scris
+# 2. embed pe cele 20 de FAQ de magazin (aceeasi rulare, cost neglijabil). FARA `--no-embed`,
+#    fiindca lookup-ul cere `embedding is not null` — pana atunci randurile exista si TAC.
+python -m src.jobs.seed_faqs --business sole-ro --source db/seed/faqs_sole_ro.json
+
+# 3. verificare rapida ca s-au scris
 python scripts/db_check.py            # sau: select count(*) from product_embeddings
 
-# 3. audit conversational pe calea /web/chat REALA, LOCAL: `web_audit.py` injecteaza
+# 4. audit conversational pe calea /web/chat REALA, LOCAL: `web_audit.py` injecteaza
 #    `fakeredis`, deci nu cere Docker. Cere OpenAI. Isi curata singur vizitatorii.
 PYTHONPATH=. python scripts/sim/web_audit.py --only discovery
 PYTHONPATH=. python scripts/sim/web_audit.py            # toate cele 9 scenarii
@@ -603,5 +634,5 @@ PYTHONPATH=. python scripts/sim/web_audit.py            # toate cele 9 scenarii
 Auditul își ia tenantul din `SEED_BUSINESS_SLUG` (sau `--business sole-ro`) și întoarce exit code
 non-zero la orice finding P0 — e gate de regresie, nu doar o privire.
 
-Pasul 3 e primul moment în care sistemul chiar VORBEȘTE pe catalogul SOLE. Până atunci, tot ce e
+Pasul 4 e primul moment în care sistemul chiar VORBEȘTE pe catalogul SOLE. Până atunci, tot ce e
 verificat mai sus e infrastructură: că poate ajunge la date, nu că știe ce să spună despre ele.
