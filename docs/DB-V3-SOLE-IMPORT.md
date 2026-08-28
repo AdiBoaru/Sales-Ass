@@ -531,6 +531,21 @@ făcute, iar ce nu s-a putut face aici e numit exact mai jos, nu presupus.
 > `search_products_lexical` (FTS + trgm, ambele prin `ro_unaccent`) plus brațul semantic, unite
 > prin RRF. O măsurătoare pe funcția greșită arată ca o regresie NX-178 care nu există.
 
+**Două lucruri găsite rulând suita de teste pe baza nouă** (n-ar fi ieșit altfel):
+
+1. **`set role bot_runtime` era REFUZAT.** Supabase creează singur apartenența
+   `postgres → bot_runtime`, dar cu `set_option = false`; pe PG16+ opțiunile apartenenței sunt
+   separate, iar `WITH ADMIN` nu dă dreptul de a INTRA în rol. Un `grant bot_runtime to postgres`
+   simplu se contopește cu rândul existent și nu repară nimic — trebuie
+   `with inherit true, set true`. Proiectul VECHI avea rândul corect (două rânduri, doi grantori);
+   diferența a ieșit doar comparându-le. Contează fiindcă exact testele care verifică izolarea RLS
+   coboară la rol așa, deci fără grant plasa de izolare rămâne NEVERIFICATĂ, iar eșecul seamănă cu
+   „testul e stricat".
+2. **Tenantul-fixtură al testelor lipsea.** ~80 de fișiere din `tests/` au UUID-ul demo scris în
+   clar și îl folosesc drept ancoră pentru rândurile pe care și le creează. Fără el cad pe
+   `channels_business_id_fkey`. `scripts/seed_test_tenant.py` îl creează explicit ca artefact de
+   test (`status='paused'`, fără catalog).
+
 **NU s-a putut face aici, cu motiv:**
 
 - **Un tur real end-to-end.** `/web/bootstrap` întoarce acum **429 `rate limited`**, nu 404: ruta e
@@ -553,3 +568,38 @@ făcute, iar ce nu s-a putut face aici e numit exact mai jos, nu presupus.
 3. **`faqs` + `intent_aliases` la nivel de business.** Sursa nu le are (§8): livrare, retur,
    garanție, plată. Sunt exact ce întreabă clienții cel mai des și sunt puține — se scriu de mână,
    cu clientul, nu se generează.
+
+### 11.1 Ce se schimbă în suita de teste
+
+Mutarea a spart o confuzie veche: UUID-ul demo era simultan **cuiul** de care testele își agață
+rândurile (canal throwaway, conversație, evenimente) și **tenantul cu catalog**. Pe baza nouă
+catalogul e sub `sole-ro`, iar rândul demo a rămas doar un cui. `tests/tenants.py` le separă
+(`CATALOG_BIZ` / `FIXTURE_BIZ`, ambele suprascriptibile din mediu).
+
+Măsurat pe suită, cu flagurile ca în CI (`--ignore=tests/e2e`): **21 → 0 eșecuri** legate de baza
+nouă. Cu flagurile locale APRINSE (`.env` are 16 `*_ENABLED=true`) numărul de roșii e alt ordin de
+mărime (208) — e diferența cunoscută dintre local și CI, nu o regresie; vezi nota din
+`docs/PROJECT_STATUS.md` despre stiva aprinsă local.
+
+Un test a devenit `skip`, deliberat: `test_price_is_min_variant_when_product_has_variants`.
+Contractul „prețul afișat = min-variantă" e intact, dar SOLE n-are variante (§5.9), deci catalogul
+nu-l poate exercita. Un roșu permanent ar fi învățat pe toată lumea să ignore fișierul.
+
+### 11.2 Ce rulează owner-ul, în ordine
+
+```bash
+# 1. embeddinguri pe cele 2.758 de produse (~$0,03) — bratul semantic al RRF
+python -m src.jobs.embed_products
+
+# 2. verificare rapida ca s-au scris
+python scripts/db_check.py            # sau: select count(*) from product_embeddings
+
+# 3. pe VPS (acolo exista Redis): un tur real end-to-end pe tokenul canalului
+curl -s -X POST https://bot.nativextech.com/web/chat \
+  -H 'content-type: application/json' \
+  -d '{"token":"pub_b738dd1aa2ff2e0535b491792cc789d9","visitor_id":"smoke-1",
+       "message":"caut un sampon pentru par uscat"}'
+```
+
+Pasul 3 e primul moment în care sistemul chiar VORBEȘTE pe catalogul SOLE. Până atunci, tot ce e
+verificat mai sus e infrastructură: că poate ajunge la date, nu că știe ce să spună despre ele.
