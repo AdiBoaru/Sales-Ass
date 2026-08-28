@@ -105,14 +105,24 @@ def has_stock_claim(text: str | None) -> bool:
 # --------------------------------------------------------------------------- #
 
 # AFECȚIUNI medicale (nu nevoi cosmetice). „verb terapeutic + afecțiune" = claim de tratament.
+#
+# `\b` LA ÎNCEPUTUL fiecărei alternative, peste tot: potrivirea rămâne pe PREFIX (flexiunea RO cere
+# „matreat" → mătreața/mătreții, „acne" → acneea), dar termenul trebuie să ÎNCEAPĂ un cuvânt. Fără
+# ancoră, un termen scurt se potrivea în interiorul altui cuvânt și cele două regexuri puteau fi
+# satisfăcute de ACELAȘI cuvânt — vezi `_TREAT_VERB`, unde `treat` se găsea în „ma·treat·a", deci
+# ORICE frază care conținea „mătreață" era declarată claim medical, inclusiv negația ei.
 _MED_CONDITION = re.compile(
-    r"acne|eczem|psoriaz|rozacee|rosacea|dermatit|micoz|fungic|ciuperc|negi|veruci|wart"
-    r"|herpes|melasma|vitiligo|alopeci|matreat|seboree|seborrh|celulit|vergetur|stretch mark"
-    r"|cicatric|infect|inflamat|inflammat|alergi|allerg|iritat|cupero|impetigo"
+    r"\bacne|\beczem|\bpsoriaz|\brozacee|\brosacea|\bdermatit|\bmicoz|\bfungic|\bciuperc|\bnegi"
+    r"|\bveruci|\bwart|\bherpes|\bmelasma|\bvitiligo|\balopeci|\bmatreat|\bdandruff|\bseboree"
+    r"|\bseborrh|\bcelulit|\bvergetur|\bstretch mark|\bcicatric|\binfect|\binflamat|\binflammat"
+    r"|\balergi|\ballerg|\biritat|\birritat|\bcupero|\bimpetigo"
 )
+# Verbele englezești care sunt PREFIX al unui cuvânt românesc uzual cer și ancoră la FINAL, altfel
+# ancora de început nu ajută: `cure` ⊂ „curea"/„curent", `heal` ⊂ „healthy". Cele românești rămân
+# pe prefix, fiindcă flexiunea e la coadă („trateaz" → tratează/tratezi).
 _TREAT_VERB = re.compile(
-    r"trateaz|tratament|vindec|cureaz|elimina|scapa de|combate"
-    r"|treat|cure|heal|clears up|gets rid of|fights"
+    r"\btrateaz|\btratament|\bvindec|\bcureaz|\belimina|\bscapa de|\bcombate"
+    r"|\btreat|\bcure[sd]?\b|\bheal(s|ed|ing)?\b|\bclears up|\bgets rid of|\bfights"
 )
 # Verdict de SIGURANȚĂ în sarcină/alăptare (ambele ordine). „recomandat" NU e cuvânt de siguranță:
 # ar prinde redirectarea SIGURĂ „îți recomand să consulți medicul în sarcină" (fals-pozitiv).
