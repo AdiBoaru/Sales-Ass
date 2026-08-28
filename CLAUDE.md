@@ -18,7 +18,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | Runtime | Python 3.12, asyncio |
 | API | FastAPI (webhook + health) |
 | Coadă | Redis Streams (lock per conversație, debounce) |
-| DB | Postgres 16 — Supabase (**o singură schemă `public`**, multi-tenant pe `business_id`) |
+| DB | Postgres **17.6** — Supabase, proiect `NativexSales` eu-west-2 (**o singură schemă `public`**, multi-tenant pe `business_id`). Proiectul vechi (eu-west-1, PG16) e abandonat din 2026-08-28 |
 | LLM sales | OpenAI **`gpt-5.6-luna`** (`MODEL_AGENT`; era `gpt-5.4-mini` până pe 2026-08-24). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit |
 | LLM triaj + simple | OpenAI GPT-5.4-nano |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
@@ -1068,7 +1068,36 @@ nativx-assistant/
 
 ---
 
-## Client demo activ
+## Client activ — proiect NOU din 2026-08-28
+
+**Proiect Supabase: `NativexSales`** (ref `pidqzxymjhzlmoesfsba`, **eu-west-2**, **Postgres 17.6**,
+plan free, **Data API STINS** → `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` nu se folosesc; singurele
+secrete sunt connection stringurile). Cele 41 de migrări (003→045, cu 030/031 arse) sunt înregistrate
+în `schema_migrations`, deci poarta de boot NX-123 nu cere re-rularea lor.
+
+**business_id**: `99fe1292-f9ed-469e-8183-f994ea5b59c0`
+**Slug**: `sole-ro` (name „SOLE") · **Vertical**: `ecommerce` · locale `ro`, `Europe/Bucharest`
+
+**Catalog REAL, importat complet (2026-08-28):** 2.758 produse (toate `active` + `published`),
+183.003 recenzii, 27.931 FAQ de produs, 43.761 secțiuni (18.424 `merchant_pdp` + 25.337 `aura`),
+21.182 evidence chunks, 2.758 documente de căutare, 15.487 rânduri de imagine (2.758 fișiere în
+**Supabase Storage**, bucket public `product-images`, prefix `sole`). Detalii + capcanele de adevăr:
+[`docs/DB-V3-SOLE-IMPORT.md`](docs/DB-V3-SOLE-IMPORT.md).
+
+**Canal webchat**: `channel_id=ae254f0f-c60b-4ab4-b281-dd8a8490e82b`,
+`public_token=pub_b738dd1aa2ff2e0535b491792cc789d9` (`data-token` în widget). Recreabil idempotent
+cu `python scripts/seed_web_channel.py --business sole-ro`.
+
+**GOL azi, și fiecare gol are consecință:** `product_embeddings` = 0 (căutarea e DOAR lexicală:
+`search_products_lexical` merge, FTS + trgm prin `ro_unaccent`, dar RRF-ul n-are al doilea braț);
+`product_derived_signals` = 0 → `product_card_blurbs` = 0 (corect: codul refuză să cadă pe numele
+produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate);
+`faqs` (nivel business) = 0 și `intent_aliases` = 0 → stratul gratuit (stagiul 4) nu poate servi
+nimic; `businesses.settings` = `{}` → niciun `domain_pack` per tenant.
+Găurile de conținut ale sursei (livrare, retur, garanție, plată, stoc cantitativ) sunt în §8 din doc.
+
+<details>
+<summary>Clientul demo VECHI (proiect `xfczucwqntefethxxien`, eu-west-1) — păstrat pentru context</summary>
 
 **business_id**: `6098812a-50fc-44bd-a1ba-bc77e6399158`
 **Slug**: `nativex-demo` (name „Sole Demo")
@@ -1091,7 +1120,10 @@ ultimul mesaj 2026-07-14) → SINGURUL pe care se lucrează. Telegram ÎNGHEȚAT
 din DB e `SIM-DRIVER`, harness-ul de test). Testele integration își creează channel throwaway
 (tranzacție rollback-uită).
 
-Folosește acest `business_id` pentru toate testele locale.
+</details>
+
+Folosește `business_id`-ul lui `sole-ro` pentru toate testele locale. `.env` arată spre proiectul
+nou din 2026-08-28; configul vechi e păstrat în `.env.bak.old-project` (gitignored).
 
 ---
 

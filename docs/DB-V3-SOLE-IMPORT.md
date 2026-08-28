@@ -1,6 +1,7 @@
 # Baza de date v3 — proiect Supabase nou, catalog SOLE complet
 
-**Statut:** proiectare + fundație implementată. Importerul propriu-zis așteaptă decizia din §9.
+**Statut:** import făcut și verificat; sistemul e LEGAT de baza nouă (vezi §11), dar nu a purtat
+încă niciun tur real pe ea.
 **Context:** se creează un proiect Supabase NOU. Din cel actual se păstrează **structura**
 (engine conversațional, multi-tenant, contractele NX-2xx), **zero date**. Catalogul devine
 importul complet din `D:\Work\SOLE SCRIPT\sole_data.db`, plus o imagine per produs.
@@ -495,3 +496,60 @@ Primele trei se completează manual în `businesses.settings` + `faqs`, sunt pu�
 6. `product_search_documents` + `product_card_blurbs` (derivate, versionate)
 7. Embeddings, o singură trecere
 8. Corpusul NX-203 din pool-ul de 10.237 de întrebări
+
+---
+
+## 11. Legarea sistemului de baza nouă (2026-08-28)
+
+Importul umpluse baza, dar nimic din cod nu arăta spre ea. Cinci lucruri lipseau; toate sunt acum
+făcute, iar ce nu s-a putut face aici e numit exact mai jos, nu presupus.
+
+**Făcut și verificat:**
+
+| pas | rezultat |
+|---|---|
+| `.env` mutat pe proiectul nou | `SUPABASE_DB_URL` (rol `postgres`) + `DATABASE_URL_BOT` (rol `bot_runtime`, fără `bypassrls`) + `DB_ISOLATION_ASSERT=strict`. Configul vechi rămâne în `.env.bak.old-project` (gitignored) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | COMENTATE, nu șterse: Data API e stins pe proiectul nou, iar valorile vechi refolosite din reflex ar scrie în bucketul ALTUI proiect |
+| `SEED_BUSINESS_SLUG` | `nativex-demo` → `sole-ro` |
+| `WEB_ENABLED=true` | lipsea din `.env`, deci routerul `/web/*` nu era montat deloc: `GET /web/bootstrap` întorcea **404**, nu „flag stins" |
+| canal `webchat` creat | `channel_id=ae254f0f-…`, `public_token=pub_b738dd1a…`. Fără el, `resolve_channel` întoarce `None` și nicio conversație nu se poate deschide |
+| partiții lunare | `messages_2026_08/09`, `analytics_events_2026_08/09` — `partition_maintenance` rulat pe baza nouă: `created=0` (existau), `default_rows=0` |
+
+**Retrieval, măsurat pe calea reală (`search_products_lexical`, conexiune `bot_runtime` + RLS):**
+
+| query | rezultate |
+|---|---|
+| `sampon` / `șampon` | 50 / 50 — identice, deci `ro_unaccent` ține în ambele capete |
+| `mască de față` | 50 |
+| `ser cu vitamina C` | 26 |
+| `crema hidratanta` | 8 |
+| `parfum barbati` | **0** — gol de CONȚINUT, nu de cod: catalogul SOLE n-are parfumerie |
+| același query, alt `business_id` pe conexiunea `sole-ro` | **0** (izolarea ține) |
+
+> **Atenție la funcția pe care o testezi.** `search_products` (numele evident) filtrează cu
+> `p.name ilike '%q%'` și dă **0** pe „șampon" — e calea veche. Calea reală a tool-ului e
+> `search_products_lexical` (FTS + trgm, ambele prin `ro_unaccent`) plus brațul semantic, unite
+> prin RRF. O măsurătoare pe funcția greșită arată ca o regresie NX-178 care nu există.
+
+**NU s-a putut face aici, cu motiv:**
+
+- **Un tur real end-to-end.** `/web/bootstrap` întoarce acum **429 `rate limited`**, nu 404: ruta e
+  montată și ajunge la limitator, dar limitatorul e `fail_closed` și Redis nu e accesibil de pe
+  mașina asta (`REDIS_URL` arată spre hostul `redis` din compose, iar Docker nu e instalat).
+  Turul cere Redis (admission + rate limit + dedupe) ȘI OpenAI. Se rulează pe VPS.
+- **Embeddinguri** (`python -m src.jobs.embed_products`, ~$0.03) — le rulează owner-ul.
+
+**Rămâne de CONSTRUIT (nu de rulat), fiindcă fiecare cere o decizie, nu o comandă:**
+
+1. **F2 → `product_derived_signals`.** Proza AURA e text liber, cu bullet-uri în română naturală.
+   Un extractor pe liste de cuvinte ar contrazice regula proiectului („model + context, nu
+   wordlists") și, mai grav, vocabularul de nevoi vine din `DomainPack` (P9), iar `sole-ro` are
+   `settings = {}`: nu există încă vocabularul în care s-ar scrie semnalele. Ordinea corectă e
+   domain pack întâi, extractor după.
+2. **`product_review_summaries` din recenzii REALE.** `scripts/summarize_reviews.py` există, dar e
+   scris pentru recenziile FICTIVE ale demoului: inventează rezumatul cu LLM și **variază ratingul**
+   ca să nu fie toate 5★. Pe 183.003 recenzii adevărate, varierea ratingului ar fi falsificare.
+   Cere un job nou, cu agregare determinist ancorată în rânduri.
+3. **`faqs` + `intent_aliases` la nivel de business.** Sursa nu le are (§8): livrare, retur,
+   garanție, plată. Sunt exact ce întreabă clienții cel mai des și sunt puține — se scriu de mână,
+   cu clientul, nu se generează.
