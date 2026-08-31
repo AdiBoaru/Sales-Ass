@@ -165,48 +165,113 @@ def test_cheapest_already_msg_locale():
 
 
 class _CaptureConn:
-    """Conn fals: captează SQL-ul + params (zero DB). search_products_lexical execută conn.fetch."""
+    """Conn fals: captează FIECARE SQL + params (zero DB). 046: `search_products_lexical` poate
+    emite până la trei query-uri (scara strict → relaxat → typo), deci reținem toate treptele, nu
+    doar ultima — altfel un test ar afirma despre „interogare" ceea ce e adevărat doar despre
+    treapta care a rulat ultima.
 
-    def __init__(self):
-        self.sql = ""
-        self.params: tuple = ()
+    `rows_per_step` spune ce întoarce fiecare treaptă: `[[], [], []]` = nimeni nu găsește nimic
+    (scara se parcurge întreagă), `[[{...}]]` = prima treaptă reușește și scara se oprește."""
+
+    def __init__(self, rows_per_step: list[list] | None = None):
+        self.sqls: list[str] = []
+        self.all_params: list[tuple] = []
+        self._rows = list(rows_per_step or [])
 
     async def fetch(self, sql, *params):
-        self.sql = sql
-        self.params = params
-        return []
+        self.sqls.append(sql)
+        self.all_params.append(params)
+        return self._rows.pop(0) if self._rows else []
+
+    @property
+    def sql(self) -> str:
+        """Prima treaptă — drumul obișnuit, cel care servește aproape tot traficul."""
+        return self.sqls[0]
+
+    @property
+    def params(self) -> tuple:
+        return self.all_params[0]
 
 
-async def test_lexical_uses_fts_and_trgm():
-    conn = _CaptureConn()
-    await catalog.search_products_lexical(conn, "biz-1", "cremă pentru ten gras", pool=50)
+async def test_lexical_strict_step_cere_toti_termenii_de_continut():
+    """Treapta 1: FTS pe termenii PURTĂTORI DE SENS. «pentru» dispare — el era motivul pentru care
+    fraza întorcea zero (046)."""
+    conn = _CaptureConn([[{"id": "p1"}]])
+    await catalog.search_products_lexical(
+        conn, "biz-1", "cremă pentru ten gras", locale="ro", pool=50
+    )
+    assert len(conn.sqls) == 1  # a găsit → scara se oprește, un singur query
     assert "websearch_to_tsquery('simple'" in conn.sql  # FTS real, nu ILIKE
-    assert "ts_rank_cd" in conn.sql  # rank lexical
-    # NX-178: trgm-ul compară acum expresii NORMALIZATE (fără diacritice), pe indexul dedicat —
-    # altfel „sampon" nu găsea niciun „șampon". Contractul rămâne același: FTS + fuzzy pe nume.
-    assert "ro_unaccent(p.name) %" in conn.sql
-    assert "similarity(ro_unaccent(p.name)" in conn.sql
+    assert "ts_rank_cd" in conn.sql  # rang lexical
     assert "p.business_id = $1" in conn.sql  # P7
-    assert conn.params[0] == "biz-1" and "cremă pentru ten gras" in conn.params
-    assert "ilike '%" not in conn.sql.lower()  # NU mai e substring ILIKE pe frază
+    assert "crema ten gras" in conn.params  # normalizat + fără cuvinte goale
+    assert "ilike '%" not in conn.sql.lower()  # NU substring ILIKE pe frază
+
+
+async def test_lexical_scara_coboara_doar_cand_treapta_de_deasupra_e_goala():
+    """Contractul scării: relaxarea și plasa de typo se plătesc DOAR pe ratare."""
+    conn = _CaptureConn([[], [], []])
+    await catalog.search_products_lexical(conn, "b", "cremă pentru ten gras", locale="ro", pool=10)
+
+    assert len(conn.sqls) == 3
+    assert "crema ten gras" in conn.all_params[0]  # strict: ȘI
+    assert "crema or ten or gras" in conn.all_params[1]  # relaxat: SAU
+    # typo: word_similarity pe cel mai bun CUVÂNT din nume, nu `similarity` pe numele întreg
+    assert "word_similarity(" in conn.sqls[2]
+    assert " <% " in conn.sqls[2]
+    assert "ro_unaccent(p.name) %" not in conn.sqls[2]
+
+
+async def test_lexical_nu_coboara_daca_prima_treapta_a_gasit():
+    conn = _CaptureConn([[{"id": "p1"}], [], []])
+    await catalog.search_products_lexical(conn, "b", "cremă pentru ten gras", locale="ro", pool=10)
+    assert len(conn.sqls) == 1
+
+
+async def test_lexical_filtrele_dure_sunt_identice_pe_toate_treptele():
+    """Se relaxează TEXTUL, niciodată constrângerile: un buget sau un brand nu se pierd fiindcă
+    prima formulare n-a găsit nimic."""
+    conn = _CaptureConn([[], [], []])
+    await catalog.search_products_lexical(
+        conn, "b", "cremă scumpă", locale="ro", brand="Nivea", price_max=80.0, in_stock_only=True
+    )
+    for sql in conn.sqls:
+        assert "ro_unaccent(b.name) like" in sql
+        assert "in ('in_stock', 'low_stock')" in sql
+        assert "p.business_id = $1" in sql
+    for params in conn.all_params:
+        assert "%Nivea%" in params and 80.0 in params
+
+
+async def test_lexical_kill_switch_reface_clauza_unica(monkeypatch):
+    """OFF → exact comportamentul de dinainte de 046: o singură clauză FTS `OR` similarity."""
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "lexical_query_v2_enabled", False)
+    conn = _CaptureConn([[], [], []])
+    await catalog.search_products_lexical(conn, "b", "cremă pentru ten gras", locale="ro", pool=10)
+
+    assert len(conn.sqls) == 1  # nicio scară
+    assert "ro_unaccent(p.name) %" in conn.sql
+    assert "cremă pentru ten gras" in conn.params  # textul BRUT, netăiat
 
 
 async def test_lexical_query_param_reused_single_placeholder():
-    conn = _CaptureConn()
-    await catalog.search_products_lexical(conn, "b", "abc", pool=10)
-    # query_text e UN singur placeholder ($2), reutilizat în match + rank (nu dublat în params)
+    conn = _CaptureConn([[{"id": "p1"}]])
+    await catalog.search_products_lexical(conn, "b", "abc", locale="ro", pool=10)
+    # fraza de căutare e UN singur placeholder, reutilizat în match + rank (nu dublat în params)
     assert conn.params.count("abc") == 1
 
 
 async def test_lexical_relevance_orders_by_rank(flag_on):
-    conn = _CaptureConn()
+    conn = _CaptureConn([[{"id": "p1"}]])
     await catalog.search_products_lexical(conn, "b", "q", sort_mode="relevance", pool=10)
     order = conn.sql.split("order by")[-1]  # [-1] = ORDER BY final (nu cel din lateral-ul img)
     assert "ts_rank_cd" in order and "desc" in order and "p.id" in order  # rang + tie-break
 
 
 async def test_lexical_explicit_sort_keeps_filter_but_sorts(flag_on):
-    conn = _CaptureConn()
+    conn = _CaptureConn([[{"id": "p1"}]])
     await catalog.search_products_lexical(conn, "b", "q", sort_mode="price_asc", pool=10)
     assert "websearch_to_tsquery" in conn.sql  # filtrul lexical păstrat
     assert "coalesce(vp.price" in conn.sql and "asc" in conn.sql  # ordonare pe preț
@@ -456,3 +521,14 @@ def test_rank_weights_dict_when_flag_on(monkeypatch):
     pack = DomainPack(vertical="beauty_salon", rank_weights={"sale": 0.5})
     ctx1 = SimpleNamespace(business=SimpleNamespace(domain_pack=pack))
     assert catalog_tools._rank_weights(ctx1) == {"sale": 0.5}
+
+
+async def test_lexical_un_singur_termen_sare_treapta_relaxata():
+    """`SAU` peste un termen e ACELAȘI tsquery ca `ȘI` peste el: a doua treaptă ar fi un query
+    identic, executat degeaba. Cu un cuvânt, singura degradare care mai spune ceva e typo-ul."""
+    conn = _CaptureConn([[], []])
+    await catalog.search_products_lexical(conn, "b", "sampon", locale="ro", pool=10)
+
+    assert len(conn.sqls) == 2
+    assert "sampon" in conn.all_params[0]
+    assert "word_similarity(" in conn.sqls[1]

@@ -1807,6 +1807,7 @@ faq_rerank_enabled = true
 injection_screen_enabled = false
 input_pii_mask_enabled = true
 lead_score_hint_enabled = true
+lexical_query_v2_enabled = true
 lexical_rank_v2_enabled = false
 lifecycle_job_enabled = true
 link_intent_enabled = true
@@ -1933,6 +1934,8 @@ welcome_enabled = true
 043_messages_content_type_action.sql
 044_release_policy_and_turn_capture.sql
 045_conversation_traces.sql
+046_search_tsv_description.sql
+047_variant_stock_unknown.sql
 ```
 
 

@@ -33,6 +33,20 @@ if TYPE_CHECKING:
 
 _POOL = 50  # același ca _FUSION_POOL din catalog_tools
 
+# 046 — locala tenantului, memoizată per business_id. Există pentru că `search_products_lexical`
+# alege lista de cuvinte goale după locale: dacă harness-ul n-o trimite, măsoară o căutare cu ALT
+# comportament decât producția, iar diferența e tăcută. Un instrument de măsură care diverge de
+# sistemul măsurat e mai rău decât niciun instrument. Un singur SELECT per tenant, nu per query.
+_LOCALE_CACHE: dict[str, str | None] = {}
+
+
+async def _tenant_locale(conn: asyncpg.Connection, business_id: str) -> str | None:
+    if business_id not in _LOCALE_CACHE:
+        _LOCALE_CACHE[business_id] = await conn.fetchval(
+            "select default_locale from businesses where id = $1", business_id
+        )
+    return _LOCALE_CACHE[business_id]
+
 
 def _pid(p: dict[str, Any]) -> str:
     return str(p.get("id") or p.get("product_id"))
@@ -71,6 +85,7 @@ async def retrieve_products(
         query_text=query,
         price_max=price_max,
         category=category,
+        locale=await _tenant_locale(conn, business_id),
         pool=_POOL,
     )
     vector: list[dict[str, Any]] = []
@@ -115,7 +130,11 @@ async def retrieve_products_rewritten(
     spec = build_query_spec(raw_query, domain_pack)
 
     lexical = await search_products_lexical(
-        conn, business_id, query_text=spec.search_text, pool=_POOL
+        conn,
+        business_id,
+        query_text=spec.search_text,
+        locale=await _tenant_locale(conn, business_id),
+        pool=_POOL,
     )
     vector: list[dict[str, Any]] = []
     if llm is not None and await has_embeddings(conn, business_id):

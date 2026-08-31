@@ -360,12 +360,25 @@ async def import_products(
     # Varianta IMPLICITĂ: sursa n-are variante, dar `net_content` și `price_per_unit`
     # (coloană generated) trăiesc pe variantă, iar 026 declară varianta sursa de adevăr
     # comercială. Fără ea am pierde prețul per unitate, pe care sursa îl are.
+    # `stock` = NULL, nu 0 — ACEEAȘI regulă ca `stock_total` la nivel de produs: sursa dă doar
+    # binar (`in stoc` / `stoc epuizat`), deci cantitatea e UNKNOWN, iar UNKNOWN nu e 0.
+    #
+    # Aici scria literal `0`, iar consecința era măsurabilă și tăcută: `facts_provider` tratează
+    # un stoc CUNOSCUT 0 pe variantă drept `out_of_stock` pentru acea variantă („faptul mai
+    # specific bate faptul produsului") — și pe bună dreptate. Cu 0 scris peste tot, **2.364 din
+    # cele 2.367 de produse `in_stock` erau raportate ca epuizate** către revalidarea de coș
+    # (NX-237) și către faptele turului (NX-240), iar modelul vedea „stoc 0" pe un produs pe care
+    # magazinul îl are. Regula fusese respectată la produs și încălcată la variantă.
+    #
+    # `stock` intră și în `do update`, ca o re-rulare să REPARE rândurile deja scrise: fără asta,
+    # importul idempotent ar lăsa la infinit zeroul vechi.
     await conn.executemany(
         "insert into product_variants (business_id, product_id, label, sku, price, sale_price, "
         "  stock, net_content_value, net_content_unit, gtin) "
-        "values ($1,$2,$3,$4,$5,$6,0,$7,$8,$9) "
+        "values ($1,$2,$3,$4,$5,$6,null,$7,$8,$9) "
         "on conflict (business_id, sku) do update set price=excluded.price, "
-        "  sale_price=excluded.sale_price, net_content_value=excluded.net_content_value, "
+        "  sale_price=excluded.sale_price, stock=excluded.stock, "
+        "  net_content_value=excluded.net_content_value, "
         "  net_content_unit=excluded.net_content_unit",
         [
             (biz, ids[ext], "Standard", sku, price, sale, vol, unit, ean if ean else None)

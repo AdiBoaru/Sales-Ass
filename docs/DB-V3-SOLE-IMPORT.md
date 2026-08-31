@@ -636,3 +636,168 @@ non-zero la orice finding P0 — e gate de regresie, nu doar o privire.
 
 Pasul 4 e primul moment în care sistemul chiar VORBEȘTE pe catalogul SOLE. Până atunci, tot ce e
 verificat mai sus e infrastructură: că poate ajunge la date, nu că știe ce să spună despre ele.
+
+---
+
+## 12. Auditul de retrieval pe catalogul real (2026-08-28)
+
+§11 a verificat că sistemul AJUNGE la date. Secțiunea asta verifică ce se întâmplă când chiar
+CAUTĂ în ele, cu fraze scrise ca de client, nu cu cuvinte-cheie. Toate cifrele sunt măsurate pe
+baza live, pe conexiunea `bot_runtime` — deci cu RLS activ, ca în producție.
+
+### 12.1 Defectul principal: căutarea întorcea tăcere pe majoritatea frazelor
+
+Din 18 formulări realiste, **13 întorceau ZERO rezultate**. Nu rezultate slabe: zero, adică exact
+ce interzice P6.
+
+| interogare | înainte | după |
+|---|---|---|
+| `produse pentru acnee` | **0** | 50 |
+| `ce imi recomanzi pentru riduri` | **0** | 42 |
+| `ceva pentru cearcane` | **0** | 18 |
+| `sampon pentru par gras` | **0** | 5 |
+| `fond de ten pentru ten gras` | **0** | 13 |
+| `crema hidratanta pentru ten uscat` | 1 | 21 |
+| `sampoon` (typo) | **0** | 50 |
+| **zerouri, total** | **13/18** | **0/18** |
+| **latență medie (wall, prin pooler)** | 289 ms | **186 ms** |
+| **timp de execuție în Postgres, același set** | 219 ms | **26 ms** |
+
+Trei cauze independente, toate reparate:
+
+1. **`search_tsv` conținea doar numele produsului.** Coloana generată (015, re-generată în 033) e
+   `name || ai_summary`, iar pe catalogul SOLE **`ai_summary` e NULL pe toate cele 2.758 de
+   rânduri**. `description` există pe 2.758/2.758 și nu era indexată nicăieri. Numele unui produs
+   de cosmetice nu conține „acnee" sau „riduri" — descrierea da. Reparat de
+   [`046_search_tsv_description.sql`](046_search_tsv_description.sql), care adaugă descrierea și
+   pune **ponderi pe câmp** (nume A / `ai_summary` B / descriere C), ca o mențiune în descriere să
+   nu rangueze la fel cu numele produsului.
+2. **`websearch_to_tsquery` leagă toate cuvintele cu ȘI**, iar configurația `'simple'` nu elimină
+   niciun cuvânt gol: „sampon pentru par gras" cerea ca produsul să conțină literal și „pentru".
+   Configurația `'romanian'` NU repară asta — lista ei de cuvinte goale e scrisă CU diacritice, iar
+   noi indexăm text trecut prin `ro_unaccent` (verificat cu `ts_debug`: „pentru", „si", „ceva" trec
+   neatinse prin ea). Reparat în read-path:
+   [`src/catalog/query_terms.py`](../src/catalog/query_terms.py), pur, cu lista indexată pe
+   **locale** (P11), plus o scară strict → relaxat → typo în `search_products_lexical`.
+3. **Brațul de typo nu funcționa și era cel mai scump lucru din căutare.** `similarity()` compara
+   interogarea cu numele ÎNTREG, iar numele SOLE au 60-90 de caractere: un typo de 6 litere are
+   similaritate ~0,05 cu un nume de 80. Măsurat, `%` prindea **zero** din typo-urile testate, dar
+   costa ~220 ms pe FIECARE căutare (evaluat pe toate cele 2.758 de rânduri). Înlocuit cu
+   `word_similarity` (`<%`, compară cu cel mai bun CUVÂNT), mutat pe treapta 3 — se plătește doar
+   când altfel am fi întors tăcere. De aici vine câștigul de viteză: **219 ms → 26 ms** timp de
+   execuție în Postgres pentru ACELAȘI set de 21 de rezultate. Diferența dintre asta și cifra
+   wall-clock de mai sus e latența de rețea către eu-west-2, care nu ține de query.
+
+### 12.2 Indexurile GIN sunt INERTE pe conexiunea de runtime
+
+Același query, aceeași bază, două roluri:
+
+| rol | plan | timp |
+|---|---|---|
+| `postgres` (fără RLS) | `Bitmap Index Scan on idx_products_name_ro_trgm` | 109 ms |
+| `bot_runtime` (cu RLS) | **`Seq Scan`, `Rows Removed by Filter: 2758`** | 186 ms |
+
+Cauza e o regulă de Postgres, nu un index lipsă: cu RLS activ, predicatele **non-leakproof** ale
+interogării (`@@` pentru FTS, `%`/`<%` pentru trigrame) nu pot fi evaluate înaintea predicatelor de
+securitate, deci **nu pot deveni condiții de index**. Rămân filtre pe rând.
+
+E o proprietate STRUCTURALĂ a alegerii „RLS ca plasă", nu un defect de scriere. La 2.758 de produse
+costul e suportabil — și e exact motivul pentru care 046 câștigă atât de mult prin simpla SCOATERE
+a funcției scumpe de pe drumul obișnuit. Consecința de urmărit: costul crește liniar cu numărul de
+produse, deci un tenant cu 20.000 de produse va simți asta. Cele două ieșiri —
+`ALTER FUNCTION ... LEAKPROOF` pe operatorii de căutare (decizie de SECURITATE, globală pe bază) sau
+un drum de citire fără RLS — sunt amândouă decizii de arhitectură, nu ajustări. **Nu se iau aici.**
+
+### 12.3 Ce e GOL și ce consecință are, măsurat
+
+Fiecare gol dezactivează TĂCUT o capacitate:
+
+| tabel / coloană | rânduri | ce nu funcționează din cauza asta |
+|---|---|---|
+| `product_embeddings` | **0** | brațul semantic al RRF; `has_embeddings` → fals, deci fuziunea rulează cu un singur braț |
+| `products.ai_summary` | **0/2.758** | greutatea B din `search_tsv`; textul scurt de card |
+| `products.attributes->'concerns'` | **0** | filtrul `concerns`, `_facet_filter_clause`, `_feature_clause` și boost-ul de concern din rerank — toate au 0 valori pe care să opereze. `attributes` are doar 6 chei, toate tehnice: `sku`, `mpn`, `compliance`, `volume_raw`, `routine_time`, `price_per_unit_source` |
+| `product_derived_signals` | **0** | sursa din care s-ar scrie fațetele de mai sus (F2 → semnale, §11) |
+| `product_review_summaries` | **0** | `top_pros` / `review_pro` ies NULL pe orice card, deși există **183.003** recenzii reale |
+| `product_card_blurbs` | **0** | textul scurt derivat; codul refuză corect să cadă pe numele produsului |
+| `product_relations` | **0** | `traverse_relations` → 0 noduri. **Cele 391 de produse `out_of_stock` n-au niciun substitut**, deci „nu mai avem" e răspunsul final pentru toate — exact situația pentru care s-a construit NX-195 |
+| `product_category_map` | **0** | a doua ramură din `_category_clause` (arborele). Prima ramură (`primary_category_id` + descendenți pe `path`) funcționează: 45 de categorii, `path` completat pe toate |
+| `faqs` | 20, **0 cu embedding** | lookup-ul cere `embedding is not null`, deci rândurile există și TAC până la rularea de embed |
+| `intent_aliases` | **0** | ruta gratuită pe alias (stagiul 4) |
+
+Ce FUNCȚIONEAZĂ pe date reale, verificat: cross-sell-ul (`get_complementary_products` cade pe
+euristica same-brand și întoarce 4 produse coerente ale aceluiași brand, din categorii diferite),
+arborele de categorii, izolarea pe tenant, și agregarea recenziilor per produs (bitmap index,
+0,24 ms pe un produs cu 309 recenzii).
+
+### 12.4 Un risc de PRECIZIE introdus deliberat, cu marcaj
+
+Treapta de relaxare (ȘI → SAU) transformă tăcerea în „cel mai apropiat lucru". Pe cele 18
+interogări măsurate, singura pe care a servit-o a fost `parfum de dama` — un raft pe care SOLE nu
+îl are — iar rezultatul a fost un spray parfumat de păr. Înainte, răspunsul ar fi fost onest
+(„n-am găsit"); acum e un produs vag înrudit.
+
+De aceea fiecare produs servit de pe o treaptă degradată poartă `lexical_step`
+(`relaxed` | `fuzzy`), iar evenimentul `product_search` îl publică. Marcajul e SEPARAT de `relaxed`
+/ `relax_depth`, care descriu relaxarea FILTRELOR: confundarea celor două ar ascunde exact cazul
+periculos — o cerere fără niciun filtru, servită din plasa de typo.
+
+Poarta care ar respinge un rezultat off-target nu există încă:
+`search_offcategory_guard_enabled` se declanșează doar când scara a renunțat la o CATEGORIE cerută
+explicit, iar NX-257 a livrat porți de adevăr, nu de potrivire. **Deci semnalul se măsoară acum și
+se decide pe măsurători** (D15), nu se presupune.
+
+### 12.5 Al doilea defect găsit: `UNKNOWN nu e 0` respectat la produs, încălcat la variantă
+
+`import_sole.py` scria literal `0` în `product_variants.stock`, deși la nivel de produs scria
+corect `NULL` cu comentariul „sursa da doar binar. UNKNOWN nu e 0". Măsurat pe baza live:
+
+| coloană | valoare | rânduri |
+|---|---|---|
+| `products.stock_total` | `NULL` (corect) | 2.758 / 2.758 |
+| `product_variants.stock` | **`0`** | 2.755 / 2.755 |
+
+Consecința nu e cosmetică. `src/commerce/facts_provider.py` tratează un stoc **cunoscut** 0 pe
+variantă drept `out_of_stock` pentru acea variantă — „faptul mai specific bate faptul produsului",
+ceea ce e regula corectă. Cu zero scris peste tot, **2.364 din cele 2.367 de produse `in_stock` se
+prezentau ca epuizate** revalidării de coș (NX-237) și faptelor turului (NX-240), iar modelul
+primea `stoc 0` pe marfă care există. Cu `CONVERSATION_CART_ENABLED` aprins, fiecare adăugare în coș
+ar fi fost respinsă ca „fără stoc" — pe aproape tot catalogul.
+
+De ce n-a ieșit la niciun test: toate suitele care ating stocul folosesc fixture-uri, iar
+importatorul n-avea niciun test pe SQL-ul pe care îl scrie. Verificările de import (§ „capcanele de
+adevăr") au controlat `products.stock_total` și au trecut — nivelul variantei n-a fost întrebat.
+
+Reparat: importatorul scrie `null` și include `stock` în `do update` (o re-rulare REPARĂ rândurile
+vechi, altfel importul idempotent ar păstra zeroul la infinit), plus un `UPDATE` unic pe rândurile
+deja scrise. Regresie: `test_importul_scrie_stoc_UNKNOWN_pe_varianta_nu_zero`.
+
+**Al treilea gol, de alt fel: datele EXISTĂ, dar calea de citire le filtrează pe toate.**
+`ingredients_db` (ce vede modelul despre compoziție) se hidratează dintr-un lateral cu
+`where pi.is_key`, iar importul a scris `is_key = false` pe **toate cele 93.887** de legături. Deci
+ingredientele ies goale pe orice produs, deși există 5.818 ingrediente normalizate cu `inci_name`
+completat 5.818/5.818. La „conține alcool?" sau „are parfum?" nu există fapt structurat de citit.
+
+Filtrul NU e greșit: „key ingredients" înseamnă ingredientele-erou, nu lista INCI completă (35 de
+rânduri per produs în vederea modelului ar fi zgomot, nu informație). Ce lipsește e legătura.
+Sursa o are — secțiunea `Ingrediente-cheie` (familia F1) e importată și conține exact asta
+(„Ulei de argan 100% pur / Acizi grasi omega / Vitamina E"). Dar potrivirea ei cu rândurile din
+`ingredients` cere o decizie, nu un `UPDATE`: textul e comercial („Ulei de argan"), iar `inci_name`
+e chimic („Argania Spinosa Kernel Oil"). De aceea rămâne aici ca finding, nu ca reparație:
+`is_key` pus pe `true` fără potrivire ar umple vederea modelului cu lista INCI întreagă, ceea ce e
+mai rău decât gol.
+
+### 12.6 Ordinea în care se închid golurile
+
+Ordonată după cât cumpără fiecare pas, nu după cât e de ușor:
+
+1. **`python -m src.jobs.embed_products`** (~$0,03, îl rulează owner-ul) — al doilea braț al RRF.
+   Singurul pas care e o comandă, nu o construcție.
+2. **`domain_pack` pentru `sole-ro`** (`businesses.settings` e `{}`) — fără vocabularul de nevoi
+   nu există chei canonice în care să se scrie semnalele, deci extractorul F2 n-are unde scrie.
+3. **F2 → `product_derived_signals`** → de aici se umplu `concerns` și fațetele, care deblochează
+   filtrarea, boost-ul de rerank și `product_card_blurbs`.
+4. **`product_review_summaries`** din cele 183.003 recenzii, cu agregare DETERMINISTĂ (§11 explică
+   de ce scriptul existent nu se poate refolosi: variază ratingul).
+5. **`product_relations`** — substitute pentru cele 391 de produse epuizate, apoi complement/rutină.
+6. **`intent_aliases`** — ruta gratuită, după ce traficul real arată ce se cere des.

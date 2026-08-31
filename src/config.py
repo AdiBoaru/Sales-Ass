@@ -644,6 +644,15 @@ class Settings(BaseSettings):
     # `ts_rank_cd + similarity`, byte-identic cu main. Se aprinde DUPĂ diff-ul produs de
     # `scripts/lexical_rank_compare.py` (D15: nicio schimbare de ranking pe speranță).
     lexical_rank_v2_enabled: bool = Field(default=False, validation_alias="LEXICAL_RANK_V2_ENABLED")
+    # 046: potrivirea lexicală ca SCARĂ (strict ȘI → relaxat SAU → typo), peste termenii de
+    # conținut extrași în cod, în locul unei singure clauze `websearch ... OR similarity(name)`.
+    # ON implicit, spre deosebire de restul kill-switch-urilor de ranking, fiindcă nu schimbă o
+    # PREFERINȚĂ de ordine, ci repară TĂCEREA: măsurat pe catalogul SOLE, 11 din 16 fraze scrise
+    # ca de client întorceau zero rezultate, iar cu scara aprinsă întorc toate rezultate corecte.
+    # OFF → clauza unică de dinainte, byte-identic (`docs/046_search_tsv_description.sql`).
+    lexical_query_v2_enabled: bool = Field(
+        default=True, validation_alias="LEXICAL_QUERY_V2_ENABLED"
+    )
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).
