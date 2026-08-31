@@ -153,12 +153,65 @@ def _allowed_numbers(products: list[dict[str, Any]], grounded_prices: set[float]
     return allowed
 
 
+def _collapse(text: Any) -> str:
+    """Casefold + orice rulare de non-alfanumerice devine UN spațiu.
+
+    Se aplică identic numelui și ferestrei din răspuns, altfel comparația ar depinde de
+    punctuație: numele de nuanță al unui BB cream („… PA+++, 27, 50 ml") are virgule pe care
+    răspunsul nu le reproduce neapărat, iar potrivirea ar rata exact cazurile pentru care
+    există."""
+    return " ".join(re.sub(r"\W+", " ", str(text or "").casefold()).split())
+
+
+def _grounded_names(products: list[dict[str, Any]]) -> list[str]:
+    """Faptele TEXT pe care botul are voie să le citeze: numele produselor retrievate + etichetele
+    variantelor lor. Sunt fapte ca oricare altele — doar că nu sunt numerice."""
+    names: list[str] = []
+    for p in products:
+        names.append(_collapse(p.get("name")))
+        for var in p.get("variants") or []:
+            names.append(_collapse(var.get("label")))
+    return [n for n in names if n]
+
+
+def _neighbour(reply: str, index: int, *, before: bool) -> str:
+    """Cuvântul alipit numărului, în formă colapsată. Gol dacă nu există."""
+    parts = _collapse(reply[:index] if before else reply[index:]).split()
+    if not parts:
+        return ""
+    return parts[-1] if before else parts[0]
+
+
+def _quotes_a_name(reply: str, match: re.Match[str], names: list[str]) -> bool:
+    """Numărul e o bucată dintr-un NUME citat, nu o afirmație proprie?
+
+    Se cere ca numărul ÎMPREUNĂ cu un cuvânt vecin din răspuns să apară ca atare într-un nume
+    fondat: „peach 77" ⊂ „anua peach 77 niacin enriched cream", „50 ml" ⊂ „… 50 ml". Vecinul e
+    esențial — fără el am valida numărul GOL, iar atunci „costă 77 lei" ar deveni legitim doar
+    fiindcă există un produs numit „Peach 77". Aici nu se permite o VALOARE, se recunoaște un
+    CITAT: același 77, în altă frază, rămâne respins.
+
+    Sumele cu valută nu trec pe drumul ăsta: ele sunt judecate separat de `_prices_ok`, care nu
+    se relaxează. Deci nici un nume otrăvit („Cremă 9.99 lei") nu poate legitima un preț.
+    """
+    token = _collapse(match.group(1))
+    left = _neighbour(reply, match.start(1), before=True)
+    right = _neighbour(reply, match.end(1), before=False)
+    windows = [w for w in (f"{left} {token}" if left else "", f"{token} {right}" if right else "")]
+    return any(window in name for window in windows if window for name in names)
+
+
 def _bad_bare_numbers(
     reply: str, products: list[dict[str, Any]], grounded_prices: set[float]
 ) -> list[float]:
     """Cifrele «grele» fără valută din reply care NU sunt grounded (nici preț cu valută deja
-    validat, nici whitelist de proză, nici valoare din retrieval). Gol = ok. Kill-switch
-    dezactivat → întotdeauna gol (fail-open). Toleranță 0.5 (ca _prices_ok)."""
+    validat, nici whitelist de proză, nici valoare din retrieval, nici citat dintr-un nume
+    fondat). Gol = ok. Kill-switch dezactivat → întotdeauna gol (fail-open). Toleranță 0.5.
+
+    Citatul din nume există fiindcă regula folosește „număr izolat între spații" ca aproximare
+    pentru „afirmație", iar pe un catalog real formatul face parte din identitatea produsului:
+    măsurat pe SOLE, 2.218 din 2.758 de nume (80%) conțineau un număr izolat — gramaje, nu
+    prețuri — deci botul nu putea rosti numele produsului pe care tocmai îl afișa pe card."""
     if not get_settings().validator_bare_numbers_enabled:
         return []
     # NX-117: _PRICE_RE are 2 grupuri (prefix/sufix-valută) → finditer + group, nu findall (tuple).
@@ -166,15 +219,19 @@ def _bad_bare_numbers(
         parse_amount(m.group(1) or m.group(2)) for m in _PRICE_RE.finditer(reply)
     }  # prețurile deja validate în _prices_ok
     allowed = _allowed_numbers(products, grounded_prices)
+    names = _grounded_names(products)
     bad: list[float] = []
-    for token in _BARE_NUM_RE.findall(reply):
-        value = parse_amount(token)
+    for match in _BARE_NUM_RE.finditer(reply):
+        value = parse_amount(match.group(1))
         if any(abs(value - p) <= 0.5 for p in priced):  # „89 lei" → numărul 89 e deja acoperit
             continue
         if value in _SAFE_BARE:
             continue
-        if not any(abs(value - a) <= 0.5 for a in allowed):
-            bad.append(value)
+        if any(abs(value - a) <= 0.5 for a in allowed):
+            continue
+        if names and _quotes_a_name(reply, match, names):
+            continue
+        bad.append(value)
     return bad
 
 

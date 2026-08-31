@@ -211,7 +211,17 @@ def bundle_products_for_validator(bundle: EvidenceBundle) -> list[dict[str, Any]
         rating = product.fact("rating")
         url = product.fact("url")
         availability = product.fact("availability")
+        title = product.fact("title")
+        variant = product.fact("variant")
         row: dict[str, Any] = {}
+        # Numele e un fapt ca oricare altul, doar că e TEXT. Fără el, validatorul nu putea
+        # deosebi un număr afirmat de unul citat din identitatea produsului, iar pe un catalog
+        # unde formatul e în nume („… - 50 ml") respingea răspunsuri corecte. Trece numai dacă e
+        # afișabil: un titlu pe care nu-l arătăm n-are ce legitima.
+        if title.usable:
+            row["name"] = title.value
+        if variant.usable:
+            row.setdefault("variants", []).append({"label": variant.value})
         if price.usable:
             row["price"] = float(price.value) if isinstance(price.value, Decimal) else price.value
         if stock.usable:
@@ -228,13 +238,15 @@ def bundle_products_for_validator(bundle: EvidenceBundle) -> list[dict[str, Any]
         if list_price.usable:
             # `variants` e canalul prin care validatorul acceptă un al doilea preț legitim pentru
             # ACELAȘI produs (prețul tăiat) — fără el, „era 120 lei, acum 89" ar pica.
-            row["variants"] = [
+            # `setdefault` + append, nu atribuire: lista poate purta deja eticheta de variantă,
+            # iar o suprascriere aici ar șterge-o tăcut.
+            row.setdefault("variants", []).append(
                 {
                     "price": float(list_price.value)
                     if isinstance(list_price.value, Decimal)
                     else list_price.value
                 }
-            ]
+            )
         out.append(row)
     return out
 
