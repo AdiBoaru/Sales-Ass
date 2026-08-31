@@ -14,7 +14,10 @@ testabilă fără DB, cu semantica UNKNOWN moștenită din `context_resolver`:
     unknown, ca `STRUCTURALLY_UNKNOWN` din NX-234) — nu se derivă din `updated_at` generic.
 
 Prospețimea: `synced_at` (sync-ul de catalog) cu fallback `updated_at`; fără timestamp ⇒ stale
-conservator. Pragul (`sla_s`) vine din config (`commerce_facts_sla_s`), nu e hardcodat.
+conservator. Pragul (`sla_s`) e al TENANTULUI (`src/catalog/freshness.py`, declarat în
+`businesses.settings`, cu `commerce_facts_sla_s` drept implicit) — niciodată hardcodat. `None`
+înseamnă catalog declarat static: vârsta se raportează, dar nu există prag față de care s-o
+judeci, deci niciun fapt nu devine `stale` doar pentru că timpul a trecut.
 """
 
 from __future__ import annotations
@@ -67,7 +70,7 @@ def _variant_row(row: Mapping[str, Any], variant_id: str) -> Mapping[str, Any] |
 
 
 def _facts_for(
-    row: Mapping[str, Any], variant_id: str | None, *, now: datetime, sla_s: int
+    row: Mapping[str, Any], variant_id: str | None, *, now: datetime, sla_s: int | None
 ) -> CommerceFacts | None:
     """Rândul canonic (+ eventual varianta) → fapte typed. None DOAR când varianta cerută nu
     aparține produsului — apelantul decide dacă e reject (mutație) sau UNKNOWN (afișare)."""
@@ -136,7 +139,7 @@ def build_facts(
     refs: list[FactsKey],
     *,
     now: datetime,
-    sla_s: int,
+    sla_s: int | None,
     query_count: int = 0,
 ) -> FactsBatch:
     """PUR: rânduri hidratate + refs cerute → batch. O pereche (produs, variantă) cu variantă
@@ -163,7 +166,7 @@ async def load_facts(
     refs: list[FactsKey],
     *,
     now: datetime | None = None,
-    sla_s: int,
+    sla_s: int | None,
 ) -> FactsBatch:
     """UN query pentru toate refs (bugetul anti-N+1), apoi conversia pură. `conn` vine de la
     apelant: în mutații e conexiunea TRANZACȚIEI (faptele critice se revalidează în tx), la

@@ -318,6 +318,16 @@ class Fact:
         )
 
 
+def _sla_from_jsonb(raw: Any) -> int | None:
+    """`sla_s` persistat → prag. `None` rămâne `None` (catalog declarat static); orice altceva
+    neinterpretabil cade pe `0`, forma pe care o aveau bundle-urile scrise înainte de declarație."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool):  # `bool` e subclasă de `int` — l-ar citi ca prag de 1 secundă
+        return 0
+    return int(raw) if isinstance(raw, int) else 0
+
+
 def _parse_iso(raw: Any) -> datetime | None:
     if isinstance(raw, datetime):
         return raw if raw.tzinfo else raw.replace(tzinfo=UTC)
@@ -575,7 +585,9 @@ class EvidenceBundle:
     products: tuple[ProductEvidence, ...] = ()
     cart: CartEvidence | None = None
     query_count: int = 0
-    sla_s: int = 0
+    # `None` = tenantul și-a declarat catalogul static (`src/catalog/freshness.py`), deci faptele
+    # nu se judecă în timp. DISTINCT de `0`, care ar însemna „prag zero" ⇒ totul expirat.
+    sla_s: int | None = 0
     schema_version: int = BUNDLE_SCHEMA_VERSION
 
     def by_id(self, product_id: Any) -> ProductEvidence | None:
@@ -640,7 +652,9 @@ class EvidenceBundle:
             products=products[:MAX_BUNDLE_PRODUCTS],
             cart=CartEvidence.from_jsonb(raw.get("cart")),
             query_count=int(raw.get("query_count") or 0),
-            sla_s=int(raw.get("sla_s") or 0),
+            # `None` persistat trebuie să se întoarcă `None`: citit ca `0` ar transforma
+            # „nu se judecă în timp" în „prag zero", adică exact verdictul opus.
+            sla_s=_sla_from_jsonb(raw.get("sla_s")),
         )
 
 
@@ -652,7 +666,7 @@ def _price_facts(
     source: str,
     observed: datetime | None,
     age_s: int | None,
-    sla_s: int,
+    sla_s: int | None,
 ) -> dict[str, Fact]:
     """Preț efectiv + preț tăiat + monedă. Trei reguli inseparabile:
 
@@ -702,7 +716,7 @@ def _stock_facts(
     source: str,
     observed: datetime | None,
     age_s: int | None,
-    sla_s: int,
+    sla_s: int | None,
 ) -> dict[str, Fact]:
     """Disponibilitate + stoc. Faptul mai SPECIFIC câștigă: o variantă cu stoc cunoscut 0 e
     `out_of_stock` pentru acea variantă, chiar dacă produsul e „in_stock" la nivel de clasă."""
@@ -785,7 +799,7 @@ def build_product_evidence(
     *,
     business_id: str,
     now: datetime,
-    sla_s: int,
+    sla_s: int | None,
     variant_id: str | None = None,
     match_class: str = "exact",
     constraints: Sequence[Any] = (),
@@ -935,7 +949,7 @@ def build_evidence_bundle(
     locale: str,
     rows: Sequence[Mapping[str, Any]],
     now: datetime,
-    sla_s: int,
+    sla_s: int | None,
     variant_by_product: Mapping[str, str | None] | None = None,
     match_class_by_product: Mapping[str, str] | None = None,
     constraints_by_product: Mapping[str, Sequence[Any]] | None = None,
