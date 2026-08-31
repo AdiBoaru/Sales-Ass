@@ -15,6 +15,7 @@ from src.worker.aftercare import _cache_writeback
 from src.worker.runner import PipelineDeps
 from src.worker.stages import cache as cache_mod
 from src.worker.stages.cache import cache_stage
+from tests.tenants import CATALOG_BIZ
 
 DYNAMIC_Q = "caut o crema sub 80 lei"  # classify_volatility → dynamic
 STATIC_Q = "care e politica de retur"  # classify_volatility → static
@@ -320,7 +321,8 @@ async def test_writeback_dynamic_without_products_skips(monkeypatch):
 
 # --- Integration (DB real) ---------------------------------------------------
 
-DEMO = "6098812a-50fc-44bd-a1ba-bc77e6399158"
+
+DEMO = CATALOG_BIZ
 
 
 @pytest.fixture

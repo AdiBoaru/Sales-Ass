@@ -19,10 +19,12 @@ from src.db.queries.proactive import (
     find_restocked_subscriptions,
 )
 from src.proactive.initiators import sweep_abandoned_cart, sweep_back_in_stock
+from tests.tenants import CATALOG_BIZ
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
-DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
+
+DEMO_BIZ = CATALOG_BIZ
 
 
 @pytest.fixture

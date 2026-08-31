@@ -23,8 +23,11 @@ from src.db.connection import (
     register_vector_codec,
     tenant_conn,
 )
+from tests.tenants import CATALOG_BIZ
 
-DEMO_BIZ = "6098812a-50fc-44bd-a1ba-bc77e6399158"
+# Tenantul cu catalog: invariantul verificat aici e „tenantul își vede produsele, celălalt nu",
+# deci partea „își vede" cere un tenant care CHIAR are produse.
+DEMO_BIZ = CATALOG_BIZ
 OTHER_BIZ = "00000000-0000-0000-0000-000000000000"
 
 

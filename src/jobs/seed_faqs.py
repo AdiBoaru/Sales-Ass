@@ -18,12 +18,24 @@ knowledge; `bot_runtime` are doar SELECT pe `faqs`) prin `admin_conn`, ca `embed
 
     python -m src.jobs.seed_faqs                       # baza curatată pe businessul demo
     python -m src.jobs.seed_faqs --generate            # bază + întrebări generate de LLM
-    python -m src.jobs.seed_faqs --business <uuid>      # alt tenant
+    python -m src.jobs.seed_faqs --business sole-ro     # alt tenant (slug sau uuid)
     python -m src.jobs.seed_faqs --locale ro --generate-n 8
+
+**Setul per CLIENT vine dintr-un fișier, nu din constanta de mai jos.** `BASE_FAQS_RO` a fost
+scrisă pentru demo, cu cifre plauzibile pentru un magazin fictiv (prag de transport, termen de
+retur, cost de livrare). Pe un client real sunt pur și simplu false, iar odată în `faqs` devin
+fapte pe care validatorul le confirmă. Deci:
+
+    python -m src.jobs.seed_faqs --business sole-ro --source db/seed/faqs_sole_ro.json --no-embed
+
+`--no-embed` scrie rândurile cu `embedding` NULL: lookup-ul cere `embedding is not null`, deci
+rândul EXISTĂ dar nu e servit până la un re-run fără flag. Util ca să separi scrierea (gratuită)
+de embedding (costă).
 """
 
 import argparse
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -307,6 +319,33 @@ async def _upsert(
     return "created"
 
 
+def load_faq_source(path: str) -> list[tuple[str, str]]:
+    """Citește un set de FAQ dintr-un fișier JSON (`{"faqs": [{question, answer, source_url}]}`).
+
+    De ce un fișier și nu constanta din modul: `BASE_FAQS_RO` a fost scrisă pentru DEMO, cu cifre
+    plauzibile pentru un magazin fictiv (prag de transport, termen de retur, cost de livrare).
+    Pe un client real ele sunt pur și simplu FALSE, iar odată scrise în `faqs` devin fapte pe care
+    validatorul le confirmă. Setul per client trăiește deci în `db/seed/`, versionat, cu
+    `source_url` pe fiecare răspuns, ca să se poată re-verifica atunci când magazinul schimbă
+    politica.
+
+    `source_url` NU intră în DB: `faqs` n-are coloană de proveniență, iar a inventa una ar cere o
+    migrare pentru un lucru care aparține sursei, nu răspunsului. Fișierul e urma de audit.
+    """
+    with open(path, encoding="utf-8") as fh:
+        payload = json.load(fh)
+    items = payload["faqs"] if isinstance(payload, dict) else payload
+    out: list[tuple[str, str]] = []
+    for item in items:
+        q, a = str(item["question"]).strip(), str(item["answer"]).strip()
+        if not q or not a:
+            raise ValueError(f"FAQ incomplet în {path}: {item!r}")
+        out.append((q, a))
+    if not out:
+        raise ValueError(f"{path} nu conține niciun FAQ")
+    return out
+
+
 async def seed_faqs(
     conn,
     llm,
@@ -316,10 +355,13 @@ async def seed_faqs(
     generate: bool = False,
     generate_n: int = 6,
     vertical: str = "beauty",
+    source: str | None = None,
 ) -> dict[str, int]:
     """Popularea `faqs`: bază curatată (+ generare LLM opțională), embed pe întrebare, upsert
-    idempotent. Întoarce {'created', 'updated', 'embedded'}."""
-    faqs = list(BASE_FAQS_RO)
+    idempotent. Întoarce {'created', 'updated', 'embedded'}.
+
+    `source` = fișier JSON per client; fără el se folosește baza demo din modul."""
+    faqs = load_faq_source(source) if source else list(BASE_FAQS_RO)
     if generate and llm is not None:
         faqs += await generate_faqs(llm, vertical, generate_n)
 
@@ -355,15 +397,26 @@ async def seed_faqs(
 async def _main() -> None:
     logging.basicConfig(level=logging.INFO)
     ap = argparse.ArgumentParser()
-    ap.add_argument("--business", default=DEMO_BIZ, help="business_id țintă (default: demo)")
+    ap.add_argument("--business", default=DEMO_BIZ, help="slug sau uuid (default: demo)")
     ap.add_argument("--locale", default="ro")
     ap.add_argument("--generate", action="store_true", help="adaugă FAQ generate de LLM")
     ap.add_argument("--generate-n", type=int, default=6)
     ap.add_argument("--vertical", default="beauty")
+    ap.add_argument("--source", default=None, help="fișier JSON cu setul de FAQ (db/seed/*.json)")
+    ap.add_argument(
+        "--no-embed",
+        action="store_true",
+        help="scrie rândurile FĂRĂ embedding (nu sunt servite de lookup până la un re-run)",
+    )
     args = ap.parse_args()
 
-    llm = get_llm()
-    if llm is None:
+    llm = None if args.no_embed else get_llm()
+    if args.no_embed:
+        log.warning(
+            "--no-embed: rândurile se scriu cu embedding NULL. Lookup-ul FAQ cere "
+            "`embedding is not null`, deci NU vor fi servite până la un re-run fără flagul ăsta."
+        )
+    elif llm is None:
         log.warning(
             "OPENAI_API_KEY lipsește — inserez FAQ-urile FĂRĂ embedding (nu vor fi servite de "
             "lookup până la un re-run cu cheie). Generarea LLM e dezactivată."
@@ -374,14 +427,20 @@ async def _main() -> None:
     pool = await get_pool()
     try:
         async with admin_conn(pool) as conn:
+            business_id = await conn.fetchval(
+                "select id::text from businesses where slug = $1 or id::text = $1", args.business
+            )
+            if business_id is None:
+                raise SystemExit(f"Business inexistent: {args.business!r} (nici slug, nici uuid)")
             stats = await seed_faqs(
                 conn,
                 llm,
-                args.business,
+                business_id,
                 locale=args.locale,
                 generate=args.generate,
                 generate_n=args.generate_n,
                 vertical=args.vertical,
+                source=args.source,
             )
         log.info(
             "FAQ seed gata pe %s: %d create, %d actualizate, %d embed-uite",

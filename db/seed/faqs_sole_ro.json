@@ -1,0 +1,111 @@
+{
+  "_meta": {
+    "business_slug": "sole-ro",
+    "locale": "ro",
+    "fetched_at": "2026-08-28",
+    "why": "Setul de FAQ al DEMOULUI nu se putea copia: cifrele lui erau inventate pentru un magazin fictiv si difera de SOLE aproape peste tot (200 vs 199/149 lei prag de transport, 14 vs 30 de zile retur, iar returul de cosmetice deschise era REFUZAT desi SOLE il accepta). Odata scrise in `faqs`, ar fi devenit fapte pe care `grounding_guard` le confirma. Fiecare raspuns de mai jos are `source_url`, deci se poate re-verifica atunci cand SOLE schimba politica.",
+    "not_included": "Ce n-are sursa verificata NU e aici: anularea comenzii, confirmarea prin e-mail, contul si parola, comisionul de ramburs, termenul exact de rambursare. Un raspuns plauzibil e mai periculos decat o lipsa: lipsa produce un refuz onest, plauzibilul produce o minciuna cu aparenta de fapt."
+  },
+  "faqs": [
+    {
+      "question": "Cât costă livrarea?",
+      "answer": "Taxa de livrare e între 19,9 și 24,90 lei cu TVA inclus, iar suma exactă o vezi la finalizarea comenzii. Peste 199 lei transportul e gratuit, iar dacă ai mai comandat la noi pragul scade la 149 lei.",
+      "source_url": "https://sole.ro/informatii-generale/livrare-comanda"
+    },
+    {
+      "question": "De la ce sumă e livrarea gratuită?",
+      "answer": "La prima comandă, transportul e gratuit peste 199 lei. Dacă ai mai comandat la noi cel puțin o dată, pragul e 149 lei.",
+      "source_url": "https://sole.ro/faq-intrebari-si-raspunsuri-frecvente"
+    },
+    {
+      "question": "Aveți livrare gratuită?",
+      "answer": "Da. Peste 199 lei transportul e gratuit, iar dacă ai mai comandat la noi pragul e 149 lei.",
+      "source_url": "https://sole.ro/faq-intrebari-si-raspunsuri-frecvente"
+    },
+    {
+      "question": "Cu ce curier livrați?",
+      "answer": "Livrăm prin Fan Courier, Sameday și Cargus. Curierul care îți aduce coletul apare în e-mailul de expediere.",
+      "source_url": "https://sole.ro/informatii-generale/livrare-comanda"
+    },
+    {
+      "question": "În cât timp primesc comanda?",
+      "answer": "Expediem de luni până vineri, iar produsele din stocul nostru ajung în 24 de ore oriunde în România. Termenul exact e afișat pe pagina fiecărui produs, fiindcă diferă de la unul la altul.",
+      "source_url": "https://sole.ro/informatii-generale/livrare-comanda"
+    },
+    {
+      "question": "Cum returnez un produs?",
+      "answer": "Ai 30 de zile de la cumpărare. Intri pe www.service-return.com, la secțiunea „Returnează un produs\", completezi datele și validezi cererea, apoi curierul vine să ridice produsul împreună cu documentele.",
+      "source_url": "https://sole.ro/informatii-generale/garantie-si-retur"
+    },
+    {
+      "question": "Cât timp am la dispoziție pentru retur?",
+      "answer": "30 de zile calendaristice de la cumpărare. E peste minimul legal, iar dreptul tău de retragere în 14 zile rămâne neatins.",
+      "source_url": "https://sole.ro/informatii-generale/garantie-si-retur"
+    },
+    {
+      "question": "Cât costă returul?",
+      "answer": "Taxa de transport pentru retur e 49,9 lei și se reține din suma pe care ți-o rambursăm. Dacă produsul e defect, returul e gratuit.",
+      "source_url": "https://sole.ro/informatii-generale/garantie-si-retur"
+    },
+    {
+      "question": "Cine plătește transportul de retur?",
+      "answer": "Costul de 49,9 lei îl suporți tu și se scade din rambursare. Excepție: dacă produsul e defect, transportul e pe cheltuiala noastră.",
+      "source_url": "https://sole.ro/informatii-generale/garantie-si-retur"
+    },
+    {
+      "question": "Pot returna un produs cosmetic deschis sau desigilat?",
+      "answer": "Da, dacă produsul nu are urme de utilizare, cutia nu e deteriorată sau incompletă și trimiți și o copie a documentului de achiziție.",
+      "source_url": "https://sole.ro/informatii-generale/garantie-si-retur"
+    },
+    {
+      "question": "Pot returna un produs desfăcut?",
+      "answer": "Da, cât timp nu are urme de utilizare, iar cutia e întreagă și completă. Adaugă în colet și o copie a documentului de achiziție.",
+      "source_url": "https://sole.ro/informatii-generale/garantie-si-retur"
+    },
+    {
+      "question": "Ce metode de plată acceptați?",
+      "answer": "Poți plăti online cu cardul Visa, Visa Electron, Maestro sau Mastercard, prin PayPal, sau în numerar la curier când primești coletul. Există și plata în rate fără dobândă.",
+      "source_url": "https://sole.ro/optiuni-de-plata"
+    },
+    {
+      "question": "Cum plătesc?",
+      "answer": "Cu cardul online (Visa, Visa Electron, Maestro, Mastercard), prin PayPal, în numerar la curier sau în rate fără dobândă.",
+      "source_url": "https://sole.ro/optiuni-de-plata"
+    },
+    {
+      "question": "Pot plăti ramburs la livrare?",
+      "answer": "Da, plătești în numerar curierului atunci când îți livrează produsele.",
+      "source_url": "https://sole.ro/optiuni-de-plata"
+    },
+    {
+      "question": "Pot plăti în rate?",
+      "answer": "Da, în rate fără dobândă, fără comision pentru tine. Star Card de la Banca Transilvania în 3, 6, 9 sau 12 rate, Bonus Card între 2 și 6 rate, iar BRD, Card Avantaj de la Credit Europe Bank, Alpha Bank și ING în 6 rate. La BRD pragul e de 600 lei.",
+      "source_url": "https://sole.ro/optiuni-de-plata"
+    },
+    {
+      "question": "Sunt produsele originale?",
+      "answer": "Da. Toate produsele de pe SOLE sunt originale, provin din distribuție oficială și sunt verificate înainte de listare. Respectă cerințele legale ale Uniunii Europene, inclusiv notificarea în CPNP. Poți verifica retailerii autorizați pe onemasterdistribution.com/verify-retailers.",
+      "source_url": "https://sole.ro/de-ce-poti-avea-incredere-in-sole"
+    },
+    {
+      "question": "Ce înseamnă CashBack și cum funcționează punctele?",
+      "answer": "Primești puncte pentru comenzi (un procent care se schimbă lunar și e afișat pe fiecare produs), 5 puncte pentru o recenzie (2,5 pentru text și 2,5 dacă adaugi poză) și 0,5 puncte pe zi dacă te loghezi. Un punct valorează 1 leu și îl folosești ca plată. Punctele nu expiră.",
+      "source_url": "https://sole.ro/faq-intrebari-si-raspunsuri-frecvente"
+    },
+    {
+      "question": "Ce înseamnă produs la precomandă?",
+      "answer": "Plătești integral în avans, iar termenul de livrare e specificat la produs.",
+      "source_url": "https://sole.ro/faq-intrebari-si-raspunsuri-frecvente"
+    },
+    {
+      "question": "Unde găsesc lista de ingrediente? Am alergie la ceva.",
+      "answer": "Lista completă de ingrediente e pe pagina fiecărui produs, iar eu ți-o pot spune aici dacă îmi zici produsul. Dacă ești alergic la un ingredient, verifică lista înainte să comanzi.",
+      "source_url": "catalog: `ingredients` + `product_ingredients` (93.913 legături importate)"
+    },
+    {
+      "question": "Am avut o reacție sau o iritație de la un produs, ce fac?",
+      "answer": "Oprește imediat folosirea produsului, iar dacă simptomele persistă consultă un medic. Eu nu pot da sfat medical. Pentru retur sau înlocuire, cererea se face pe www.service-return.com.",
+      "source_url": "politica de siguranță a asistentului (NX-173) + https://sole.ro/informatii-generale/garantie-si-retur"
+    }
+  ]
+}

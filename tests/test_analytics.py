@@ -102,7 +102,12 @@ async def test_fetch_turn_events_preserves_insertion_order_on_created_at_tie(poo
 
     turn_id = str(uuid4())
     async with tenant_tx(pool) as (conn, _):
-        ts = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
+        # Data trebuie să cadă într-o partiție EXISTENTĂ: `analytics_events` e partiționat lunar,
+        # iar o bază proaspătă are doar luna curentă + următoarea (`partition_maintenance`). O dată
+        # fixă în trecut trecea doar fiindcă baza veche apucase să acumuleze partiții — pe proiectul
+        # v3 dă „no partition of relation found for row". Ce testăm e egalitatea celor două
+        # `created_at`, nu o zi anume; microsecundele se taie ca egalitatea să fie exactă.
+        ts = datetime.now(UTC).replace(microsecond=0)
         # „z_event" înainte de „a_event" — dacă tiebreaker-ul ar fi event_type, ordinea ar ieși
         # inversată alfabetic; cu `id` ca tiebreaker, ordinea de inserare se păstrează.
         await conn.execute(

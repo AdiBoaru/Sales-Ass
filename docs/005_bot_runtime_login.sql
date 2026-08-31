@@ -1,3 +1,4 @@
+-- sqlcheck: skip — sablon psql, contine `:'bot_password'` (substituit de apply_005.py)
 -- ============================================================================
 -- 005 — NX-50: bot_runtime devine rol de LOGIN (P0-A din audit)
 -- ----------------------------------------------------------------------------

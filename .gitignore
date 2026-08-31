@@ -82,3 +82,4 @@ scripts/sim/runs/
 # Certificatul de pereche (SHA backend + SHA frontend) e artefact de CI, nu sursă: îl produce
 # rularea, îl consumă NX-249. Un fișier comis ar fi provenance care nu corespunde niciunei rulări.
 reports/stage1/
+.env.new
