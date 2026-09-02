@@ -1,0 +1,323 @@
+{
+  "_note": "DomainPack pentru tenantul `sole-ro` (vertical `ecommerce`, catalog cosmetice, 2.758 produse). Se scrie in `businesses.settings.domain_pack` cu `scripts/set_domain_pack.py` si face DEEP-MERGE peste `src/domain/defaults/ecommerce.json` (override-ul castiga). NU e copiat din `beauty_salon.json`: ala descrie catalogul DEMO. Fiecare intrare de aici e derivata din catalogul real si masurata cu `python scripts/derive_domain_pack.py --business sole-ro`.",
+  "_provenance": {
+    "derived_from": "2.758 produse, 12.665 fraze reale de cautare (`product_sections.kind='recommendation_trigger'`, sursa `aura`) si 12.665 bullets `fit`",
+    "measured_at": "2026-09-02",
+    "catalog_snapshot": "import SOLE 2026-08-28, migrari 003-047",
+    "regenerate": "python scripts/derive_domain_pack.py --business sole-ro --check db/seed/domain_pack_sole_ro.json"
+  },
+
+  "currency": "RON",
+
+  "_concern_map_note": "Fraza colocviala NORMALIZATA (lower + fara diacritice) -> cheie canonica. Doua consumatoare AZI: (a) `src/conversation/needs.py` — vocabularul canonic de nevoi al starii v2 (P9), fara care o nevoie rostita nu are cheie in care sa fie tinuta minte; (b) `src/agent/query_rewrite.py` — constrangere SOFT pe fateta de concern. Filtrarea propriu-zisa pe `attributes->'concerns'` e INERTA pana la extractorul F2 (coloana e goala pe toate cele 2.758 de randuri): o tinta inexistenta iese `UNKNOWN(overlay_target_dead)` cu disclosure onest, NU filtru care goleste. Cifra de dupa fiecare cheie in `_coverage` = cate produse din catalog chiar servesc nevoia (potrivire pe textul semantic `aura`). O nevoie fara produse NU intra aici: ar fi o promisiune care intoarce zero.",
+  "concern_map": {
+    "ten gras": "oily",
+    "piele grasa": "oily",
+    "ten cu sebum": "oily",
+    "exces de sebum": "oily",
+    "ma lucesc": "oily",
+    "sa nu lucesc": "oily",
+    "luciu": "oily",
+    "lucios": "oily",
+
+    "ten uscat": "dry",
+    "piele uscata": "dry",
+    "ten deshidratat": "dry",
+    "piele deshidratata": "dry",
+    "deshidratat": "dry",
+    "uscaciune": "dry",
+    "senzatie de piele care tine": "dry",
+
+    "ten mixt": "combination",
+    "piele mixta": "combination",
+
+    "ten sensibil": "sensitive",
+    "piele sensibila": "sensitive",
+    "ten reactiv": "sensitive",
+    "piele reactiva": "sensitive",
+    "scalp sensibil": "sensitive",
+
+    "ten normal": "normal",
+    "piele normala": "normal",
+
+    "acnee": "acne",
+    "ten acneic": "acne",
+    "tendinta acneica": "acne",
+    "predispus la imperfectiuni": "acne",
+    "imperfectiuni": "acne",
+    "cosuri": "acne",
+    "puncte negre": "acne",
+
+    "riduri": "anti_aging",
+    "linii fine": "anti_aging",
+    "linii de expresie": "anti_aging",
+    "fermitate": "anti_aging",
+    "elasticitate": "anti_aging",
+    "antiimbatranire": "anti_aging",
+    "imbatranire": "anti_aging",
+
+    "pete": "hyperpigmentation",
+    "pete pigmentare": "hyperpigmentation",
+    "pete brune": "hyperpigmentation",
+    "hiperpigmentare": "hyperpigmentation",
+    "ton neuniform": "hyperpigmentation",
+    "uniformizarea tenului": "hyperpigmentation",
+
+    "hidratare": "hydration",
+    "hidratare intensa": "hydration",
+    "piele hidratata": "hydration",
+
+    "roseata": "redness",
+    "piele iritata": "redness",
+    "iritatii": "redness",
+    "calmare": "redness",
+    "piele inrosita": "redness",
+
+    "pori": "pores",
+    "pori dilatati": "pores",
+    "pori vizibili": "pores",
+    "pori mariti": "pores",
+
+    "bariera cutanata": "barrier",
+    "bariera pielii": "barrier",
+    "bariera de protectie": "barrier",
+    "piele cu bariera afectata": "barrier",
+
+    "ten tern": "dullness",
+    "piele terna": "dullness",
+    "luminozitate": "dullness",
+    "aspect obosit": "dullness",
+    "fara stralucire": "dullness",
+
+    "cearcane": "dark_circles",
+    "cearcane inchise": "dark_circles",
+    "pungi sub ochi": "dark_circles",
+
+    "protectie solara": "sun_protection",
+    "protectie uv": "sun_protection",
+    "spf": "sun_protection",
+    "crema cu protectie": "sun_protection",
+
+    "par uscat": "hair_dryness",
+    "par deshidratat": "hair_dryness",
+
+    "par deteriorat": "hair_damage",
+    "par fragil": "hair_damage",
+    "par vopsit": "hair_damage",
+    "par degradat": "hair_damage",
+    "varfuri despicate": "hair_damage",
+
+    "scalp": "scalp_care",
+    "scalp uscat": "scalp_care",
+    "scalp gras": "scalp_care",
+    "scalp iritat": "scalp_care",
+
+    "matreata": "dandruff",
+
+    "caderea parului": "hair_loss",
+    "par subtire": "hair_loss",
+    "par rar": "hair_loss"
+  },
+  "_coverage": {
+    "_note": "produse din catalog care servesc nevoia, masurate pe textul semantic `aura` (fit/problem/recommendation_trigger). Nu e acoperire de FILTRU (`attributes->'concerns'` e 0/2.758); e dovada ca nevoia are marfa in spate.",
+    "hydration": 2420,
+    "redness": 1400,
+    "anti_aging": 1237,
+    "dry": 1157,
+    "oily": 1078,
+    "barrier": 885,
+    "sensitive": 862,
+    "sun_protection": 843,
+    "dullness": 812,
+    "acne": 674,
+    "hyperpigmentation": 335,
+    "pores": 271,
+    "combination": 146,
+    "scalp_care": 139,
+    "dark_circles": 131,
+    "hair_dryness": 80,
+    "hair_damage": 70,
+    "hair_loss": 21,
+    "dandruff": 13,
+    "normal": 0
+  },
+
+  "_query_expansions_note": "GOL DELIBERAT, pe masuratoare, nu din lene. Un set de 27 de expandari a fost construit si RULAT pe catalogul live: niciuna n-a imbunatatit vreo interogare, si toate au inrautatit-o. Cauza e in CONSUMATOR, nu in vocabular: `query_rewrite` concateneaza termenii in `search_text`, iar `search_products_lexical` ii trece prin `content_terms` si leaga TOT cu SI pe treapta `strict` (046). Deci o expandare poate doar sa INGUSTEZE. Masurat pe 11 interogari, toate servite `strict` inainte: «am cearcane» 18 -> 1, «pete pigmentare pe fata» 41 -> 3, «pori dilatati» 26 -> 2, «bariera afectata» 29 -> 1, «puncte negre» 22 -> 1, «ten tern fara stralucire» 12 -> 1. Iar cele care par castiguri sunt mai rele: «crema pentru riduri» 20 -> 50, «ten iritat si cu roseata» 5 -> 50, «caderea parului» 17 -> 50 — toate au CAZUT de pe `strict` pe `relaxed`, adica pe SAU, care intoarce 50 de rezultate vagi. Reparatia nu e aici: expandarea trebuie sa largeasca ramura SAU si ranking-ul, NICIODATA conjunctia stricta — adica o schimbare in scara lexicala, cu masuratoarea ei. Pana atunci, orice intrare aici degradeaza retrievalul. Vezi §12.7 din docs/DB-V3-SOLE-IMPORT.md.",
+  "query_expansions": {},
+
+  "_facets_note": "Fatete TIPIZATE (NX-186). `binding` decide singur daca o valoare rostita de client poate EXCLUDE produse (NX-257): `partitioning` = cumparatorul are exact UNA dintre valori (tipul de ten) ⇒ o alta valoare il contrazice; `additive` = obiectiv/beneficiu (riduri, luminozitate) ⇒ niciodata exclus, doar depunctat. De aia tipul de ten e o fateta SEPARATA de concerns si nu o valoare in aceeasi lista, cum le amesteca pachetul demo. Sub `min_coverage` nu se aplica nimic (`src/agent/relevance_gate.py`), deci fatetele a caror sursa e goala azi (`concerns`, `skin_type`, `key_ingredients`, `spf`, `texture`) sunt INERTE si se aprind singure cand extractorul F2 scrie `attributes` — fara schimbare de cod. Singura fateta de atribut vie AZI e `routine_time`: 2.393/2.758 (86,8%).",
+  "facets": [
+    {
+      "key": "price", "value_type": "number", "source": "column", "source_key": "price",
+      "operators": ["lte", "gte", "eq"], "provenance": "structural", "binding": "partitioning",
+      "min_coverage": 0.98,
+      "labels": {"ro": "Pret", "en": "Price", "hu": "Ar"}
+    },
+    {
+      "key": "category", "value_type": "enum", "source": "category",
+      "operators": ["eq"], "provenance": "structural", "binding": "partitioning",
+      "min_coverage": 0.98,
+      "labels": {"ro": "Categorie", "en": "Category", "hu": "Kategoria"}
+    },
+    {
+      "key": "routine_time", "value_type": "enum", "source": "attribute",
+      "source_key": "routine_time", "operators": ["eq"], "provenance": "structural",
+      "binding": "additive", "missing_value": "unknown", "min_coverage": 0.8,
+      "values": ["am", "pm", "am_pm"],
+      "aliases": {
+        "dimineata": "am", "de dimineata": "am", "rutina de dimineata": "am",
+        "seara": "pm", "de seara": "pm", "rutina de seara": "pm", "noaptea": "pm",
+        "zi si noapte": "am_pm", "dimineata si seara": "am_pm"
+      },
+      "labels": {"ro": "Moment din rutina", "en": "Routine time", "hu": "Rutin ideje"}
+    },
+    {
+      "key": "skin_type", "value_type": "enum", "source": "attribute", "source_key": "skin_type",
+      "operators": ["eq"], "provenance": "claim", "binding": "partitioning",
+      "missing_value": "unknown", "min_coverage": 0.5,
+      "values": ["oily", "dry", "combination", "sensitive", "normal"],
+      "labels": {"ro": "Tip de ten", "en": "Skin type", "hu": "Borttipus"}
+    },
+    {
+      "key": "concerns", "value_type": "list", "source": "attribute", "source_key": "concerns",
+      "operators": ["contains"], "list_semantics": "any", "provenance": "claim",
+      "binding": "additive", "missing_value": "unknown", "min_coverage": 0.5,
+      "values": ["acne", "anti_aging", "hyperpigmentation", "hydration", "redness", "pores",
+                 "barrier", "dullness", "dark_circles", "sun_protection", "hair_dryness",
+                 "hair_damage", "scalp_care", "dandruff", "hair_loss"],
+      "labels": {"ro": "Potrivit pentru", "en": "Suitable for", "hu": "Kinek ajanlott"}
+    },
+    {
+      "key": "key_ingredients", "value_type": "list", "source": "attribute",
+      "source_key": "key_ingredients", "operators": ["contains"], "list_semantics": "any",
+      "provenance": "claim", "binding": "additive", "missing_value": "unknown",
+      "min_coverage": 0.4,
+      "labels": {"ro": "Ingrediente cheie", "en": "Key ingredients", "hu": "Fo osszetevok"}
+    },
+    {
+      "key": "fragrance_free", "value_type": "bool", "source": "attribute",
+      "source_key": "fragrance_free", "operators": ["eq"], "provenance": "claim",
+      "binding": "partitioning", "missing_value": "unknown", "min_coverage": 0.4,
+      "labels": {"ro": "Fara parfum", "en": "Fragrance-free", "hu": "Illatmentes"}
+    },
+    {
+      "key": "spf", "value_type": "number", "source": "attribute", "source_key": "spf",
+      "operators": ["gte", "lte", "eq"], "provenance": "structural", "binding": "additive",
+      "missing_value": "unknown", "min_coverage": 0.05,
+      "labels": {"ro": "SPF", "en": "SPF", "hu": "SPF"}
+    },
+    {
+      "key": "texture", "value_type": "text", "source": "attribute", "source_key": "texture",
+      "operators": ["eq", "contains"], "provenance": "structural", "binding": "additive",
+      "missing_value": "unknown", "min_coverage": 0.3,
+      "labels": {"ro": "Textura", "en": "Texture", "hu": "Allag"}
+    }
+  ],
+
+  "_searchable_facets_note": "Cheile ARRAY din `attributes` pe care le poate filtra cautarea de feature («ceva cu niacinamida»). Goale azi — se aprind cu F2.",
+  "searchable_facets": ["key_ingredients", "concerns"],
+
+  "_comparison_facets_note": "Randurile de DOMENIU din tabelul de comparatie, in ordinea de afisare. `routine_time` e primul fiindca e singurul populat azi; restul apar automat cand `attributes` creste.",
+  "comparison_facets": [
+    {
+      "key": "routine_time",
+      "labels": {"ro": "Moment din rutina", "en": "Routine time"},
+      "value_labels": {
+        "am": {"ro": "dimineata", "en": "morning"},
+        "pm": {"ro": "seara", "en": "evening"},
+        "am_pm": {"ro": "dimineata si seara", "en": "morning and evening"}
+      }
+    },
+    {
+      "key": "skin_type",
+      "labels": {"ro": "Tip de ten", "en": "Skin type"},
+      "value_labels": {
+        "oily": {"ro": "ten gras", "en": "oily"},
+        "dry": {"ro": "ten uscat", "en": "dry"},
+        "combination": {"ro": "ten mixt", "en": "combination"},
+        "sensitive": {"ro": "ten sensibil", "en": "sensitive"},
+        "normal": {"ro": "ten normal", "en": "normal"}
+      }
+    },
+    {
+      "key": "concerns",
+      "labels": {"ro": "Potrivit pentru", "en": "Suitable for"},
+      "value_labels": {
+        "acne": {"ro": "acnee si imperfectiuni", "en": "acne"},
+        "anti_aging": {"ro": "riduri si fermitate", "en": "anti-aging"},
+        "hyperpigmentation": {"ro": "pete pigmentare", "en": "hyperpigmentation"},
+        "hydration": {"ro": "hidratare", "en": "hydration"},
+        "redness": {"ro": "roseata si calmare", "en": "redness"},
+        "pores": {"ro": "pori dilatati", "en": "pores"},
+        "barrier": {"ro": "bariera cutanata", "en": "skin barrier"},
+        "dullness": {"ro": "ten tern", "en": "dullness"},
+        "dark_circles": {"ro": "cearcane", "en": "dark circles"},
+        "sun_protection": {"ro": "protectie solara", "en": "sun protection"},
+        "hair_dryness": {"ro": "par uscat", "en": "dry hair"},
+        "hair_damage": {"ro": "par deteriorat", "en": "damaged hair"},
+        "scalp_care": {"ro": "ingrijirea scalpului", "en": "scalp care"},
+        "dandruff": {"ro": "matreata", "en": "dandruff"},
+        "hair_loss": {"ro": "par subtire", "en": "thinning hair"}
+      }
+    },
+    {"key": "key_ingredients", "labels": {"ro": "Ingrediente cheie", "en": "Key ingredients"}},
+    {"key": "texture", "labels": {"ro": "Textura", "en": "Texture"}},
+    {"key": "spf", "labels": {"ro": "SPF", "en": "SPF"}}
+  ],
+
+  "_profile_note": "Chei permise in `contacts.profile` si tipuri permise in `conversation_facts`. NICIODATA PII (P12). `skin_type` si `hair_type` sunt aici fiindca sunt exact ce isi aminteste un consultant intre tururi.",
+  "profile_whitelist": [
+    "budget_band", "fav_brands", "concerns", "skin_type", "hair_type", "routine_time"
+  ],
+  "fact_type_whitelist": [
+    "budget_band", "fav_brands", "concerns", "skin_type", "hair_type", "size", "restriction"
+  ],
+
+  "_relation_kinds_note": "Ce INSEAMNA fiecare muchie din `product_relations` si cat adanc are voie cineva s-o urmeze (NX-262). Tabelul e GOL azi (0 randuri), deci registrul e inert — dar el e conditia ca cele 391 de produse epuizate sa poata primi un substitut cand graful se construieste. Tacerea nu acorda traversare: fara declaratia asta, fiecare tip ar ramane vecini-directi. `purpose` are exact doua valori in cod (`upsell` / `requirement`) si NU exista `recovery`: distinctia e despre SUPRIMARE (un `requirement` se arata chiar si cand scade conversia), nu despre motivul comercial. Un substitut e o ocazie in sensul asta, deci `upsell`; recuperarea pe produs epuizat nu depinde de flagul asta, ci de existenta muchiilor.",
+  "relation_kinds": {
+    "substitute": {
+      "mode": "bounded", "max_depth": 2, "purpose": "upsell",
+      "labels": {"ro": "Alternative apropiate", "en": "Close alternatives"}
+    },
+    "routine_next": {
+      "mode": "chain", "max_depth": 4, "ordered": true, "purpose": "upsell",
+      "labels": {"ro": "Pasii urmatori din rutina", "en": "Next routine steps"}
+    },
+    "complement": {"mode": "neighbors"},
+    "accessory": {"mode": "neighbors"}
+  },
+
+  "_required_attributes_note": "Contractul de continut per categorie (NX-205), citit de `scripts/audit_catalog_v2.py`. Slug-urile sunt cele REALE ale lui `sole-ro` (45 de categorii) — cele din `ecommerce.json` sunt ale catalogului demo (`fond-de-ten`, `mascara`, `anticearcan`) si nu exista in taxonomia SOLE, deci raman inerte dupa merge. Semantica: slug BATE root (override, NU cumul).",
+  "required_attributes": {
+    "by_root": {
+      "ten": ["concerns", "skin_type", "texture", "key_ingredients", "routine_time"],
+      "par": ["hair_type", "usage"],
+      "corp": ["concerns", "texture", "usage"],
+      "machiaj": ["finish"],
+      "protectie-solara": ["spf", "texture", "skin_type"],
+      "igiena-dentara": ["usage"],
+      "dermato-cosmetice": ["concerns", "skin_type", "key_ingredients"]
+    },
+    "by_slug": {
+      "ten-ingrijirea-tenului": ["concerns", "skin_type", "texture", "key_ingredients", "routine_time"],
+      "ten-demachierea-si-curatarea-tenului": ["skin_type", "texture", "usage"],
+      "ten-ingrijirea-zonei-din-jurul-ochilor": ["concerns", "texture"],
+      "ten-tonifierea-si-calmarea-pielii": ["concerns", "skin_type", "texture"],
+      "protectie-solara-protectie-solara": ["spf", "texture", "skin_type"],
+      "machiaj-fata": ["finish", "coverage", "skin_type"],
+      "machiaj-buze": ["finish"],
+      "machiaj-ochi": ["finish"],
+      "par-ingrijirea-parului": ["hair_type", "usage", "key_ingredients"],
+      "par-styling": ["hair_type", "usage"]
+    }
+  },
+
+  "_response_style_note": "Ghid de STIL (NX-159 felia 3) — input de model pe caile de compunere, peste regulile dure de grounding si siguranta. Scris IN vocea pe care o cere (principiul 13): niciun exemplu de aici n-are liniuta de pauza sau punct si virgula, fiindca un exemplu cu semnul interzis il invata pe model exact ce ii interzici.",
+  "response_style": {
+    "ton": "prietenos si direct, ca un consultant de raion care chiar stie marfa. Scurt, la obiect, fara formulari de brosura",
+    "nivel_detaliu": "raspunde intai concret la ce s-a intrebat, apoi cel mult o propozitie de context. Nu repeta acelasi intro sau aceeasi incheiere de la un tur la altul",
+    "reguli_salut": "saluta o singura data per conversatie",
+    "reguli_upsell": "propune un pas urmator din rutina sau un accesoriu doar cand ajuta natural, si niciodata doua produse in plus in acelasi mesaj",
+    "disclaimere": "nu promite stoc, livrare, reduceri sau efecte care nu sunt in date. Nu da sfat medical si nu spune ca un produs trateaza o afectiune. Cand nu stii ceva, spune ca nu stii si ofera ce stii"
+  }
+}

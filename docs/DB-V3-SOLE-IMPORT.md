@@ -793,11 +793,153 @@ Ordonată după cât cumpără fiecare pas, nu după cât e de ușor:
 
 1. **`python -m src.jobs.embed_products`** (~$0,03, îl rulează owner-ul) — al doilea braț al RRF.
    Singurul pas care e o comandă, nu o construcție.
-2. **`domain_pack` pentru `sole-ro`** (`businesses.settings` e `{}`) — fără vocabularul de nevoi
-   nu există chei canonice în care să se scrie semnalele, deci extractorul F2 n-are unde scrie.
+2. ~~**`domain_pack` pentru `sole-ro`**~~ — **LIVRAT 2026-09-02, vezi §13.** Fără vocabularul de
+   nevoi nu existau chei canonice în care să se scrie semnalele, deci extractorul F2 n-avea unde
+   scrie. 20 de chei derivate din 12.665 de fraze reale de căutare, fiecare confruntată cu marfa.
 3. **F2 → `product_derived_signals`** → de aici se umplu `concerns` și fațetele, care deblochează
    filtrarea, boost-ul de rerank și `product_card_blurbs`.
 4. **`product_review_summaries`** din cele 183.003 recenzii, cu agregare DETERMINISTĂ (§11 explică
    de ce scriptul existent nu se poate refolosi: variază ratingul).
 5. **`product_relations`** — substitute pentru cele 391 de produse epuizate, apoi complement/rutină.
 6. **`intent_aliases`** — ruta gratuită, după ce traficul real arată ce se cere des.
+
+---
+
+## 13. Vocabularul de domeniu al lui `sole-ro` (2026-09-02)
+
+Pasul 2 din §12.6. Până acum `businesses.settings` era `{}`, iar `vertical='ecommerce'` încărca
+[`src/domain/defaults/ecommerce.json`](../src/domain/defaults/ecommerce.json), care are
+`concern_map` **gol**, zero fațete, zero `query_expansions` și zero `relation_kinds`. Consecința nu
+era o eroare, ci absența tăcută a unui vocabular: o nevoie rostită de client n-avea cheie canonică
+în care să fie ținută minte (`src/conversation/needs.py`, P9), tabelul de comparație n-avea rânduri
+de domeniu, iar extractorul F2 n-avea unde să scrie semnalele.
+
+Pachetul e [`db/seed/domain_pack_sole_ro.json`](../db/seed/domain_pack_sole_ro.json), scris cu
+`python scripts/set_domain_pack.py --business sole-ro --pack <fișier> --apply` (dry-run implicit).
+**Aplicat pe tenant, 2026-09-02.**
+
+### 13.1 Derivat din catalog, nu copiat din pachetul demo
+
+`beauty_salon.json` descrie catalogul DEMO. Confruntat cu marfa reală, vocabularul lui e în urmă:
+n-are pori, barieră cutanată, roșeață, luminozitate, fermitate, cearcăne sau scalp, deși toate sunt
+printre cele mai cerute lucruri din catalogul SOLE.
+
+Sursa de derivare există în baza importată: `product_sections` cu `source='aura'` conține
+`recommendation_trigger` — **12.665 de fraze de căutare reale**, ~5 per produs, plus tot atâtea
+bulleturi `fit` („cui i se potrivește"). Din ele au ieșit 20 de chei canonice și 87 de fraze
+colocviale. Fiecare cheie a fost apoi CONFRUNTATĂ cu catalogul: numărul de produse care chiar
+servesc nevoia. O nevoie fără marfă nu intră în vocabular, fiindcă e o promisiune care întoarce zero.
+
+| cheie | produse | | cheie | produse |
+|---|---|---|---|---|
+| `hydration` | 2.139 | | `acne` | 516 |
+| `dry` | 1.464 | | `pores` | 370 |
+| `oily` | 1.266 | | `combination` | 244 |
+| `sensitive` | 1.207 | | `hair_dryness` | 157 |
+| `dullness` | 1.171 | | `normal` | 141 |
+| `barrier` | 1.117 | | `hair_damage` | 110 |
+| `redness` | 1.093 | | `scalp_care` | 109 |
+| `sun_protection` | 1.092 | | `dark_circles` | 103 |
+| `anti_aging` | 811 | | `hair_loss` | 57 |
+| `hyperpigmentation` | 805 | | `dandruff` | **12** |
+
+`dandruff` la 12 produse e cel mai subțire rând și rămâne în vocabular tocmai fiindcă e adevărat:
+pe catalogul demo, „mătreață" avea **zero** produse și botul nu putea nici măcar să spună onest ce
+are. Douăsprezece e puțin, dar e marfă.
+
+### 13.2 Tipul de ten e o fațetă SEPARATĂ de nevoi, și asta e decizia centrală
+
+Pachetul demo le amestecă într-o singură listă `concerns` cu valori
+`[oily, dry, combination, sensitive, normal, acne, anti_aging, ...]`. Codul are însă de mult
+distincția care contează (NX-257, `domain/facets._BINDING_KINDS`):
+
+- `partitioning` — cumpărătorul are exact UNA dintre valori (tipul de ten). Un produs cu altă
+  valoare îl CONTRAZICE, deci excluderea e corectă.
+- `additive` — valoarea e un obiectiv (riduri, luminozitate). Un produs care nu-l țintește nu
+  contrazice nimic, deci nu se exclude niciodată, doar se depunctează la ranking.
+
+Într-o listă amestecată binding-ul nu se poate declara: ori tratezi „riduri" ca pe un tip de ten și
+excluzi produse care nu contrazic nimic, ori tratezi tipul de ten ca pe un obiectiv și nu excluzi
+niciodată. Pachetul SOLE declară `skin_type` (`partitioning`, 5 valori) separat de `concerns`
+(`additive`, 15 valori). Contractul e scris acum, ca extractorul F2 să aibă unde scrie.
+
+### 13.3 Ce e VIU azi și ce se aprinde singur
+
+Sub `min_coverage` nu se aplică nimic ([`src/agent/relevance_gate.py`](../src/agent/relevance_gate.py)),
+deci fațetele a căror sursă e goală sunt inerte, nu stricate. Ele se aprind fără schimbare de cod
+când F2 scrie `attributes`.
+
+| ce | stare azi |
+|---|---|
+| `concern_map` (vocabular de nevoi, `needs.py`) | **viu** |
+| `response_style` (intră în prompturi) | **viu** |
+| fațeta `routine_time` (`am` / `pm` / `am_pm`) | **vie**, 2.393/2.758 = 86,8% |
+| `price`, `category` | vii |
+| `skin_type`, `concerns`, `key_ingredients`, `spf`, `texture` | inerte până la F2 |
+| `relation_kinds` | inert până la `product_relations` |
+| `required_attributes` | citit doar de auditul de catalog |
+
+Adăugarea `concern_map`-ului **nu produce nicio regresie de căutare**, verificat pe baza live: un
+termen ca „ten gras" era `UNKNOWN(not_in_vocabulary)` înainte și e `UNKNOWN(overlay_target_dead)`
+acum. În ambele cazuri zero filtru și aceeași dezvăluire onestă către model, dar al doilea motiv e
+alarma de drift de configurare pe care codul o aștepta.
+
+### 13.4 `query_expansions` rămâne GOL, pe măsurătoare
+
+Asta era partea de la care așteptam cel mai mult, fiindcă hrănește direct căutarea lexicală
+reparată de 046. Un set de 27 de expandări a fost construit din vocabularul real și rulat pe baza
+live. **Niciuna n-a îmbunătățit vreo interogare. Toate au înrăutățit-o.**
+
+Cauza e în consumator, nu în vocabular: `query_rewrite` concatenează termenii în `search_text`, iar
+`search_products_lexical` îi trece prin `content_terms` și leagă TOT cu ȘI pe treapta `strict`.
+Deci o expandare poate doar să îngusteze.
+
+| interogare | brut | expandat |
+|---|---|---|
+| `am cearcane` | 18 `strict` | **1** `strict` |
+| `pete pigmentare pe fata` | 41 `strict` | **3** `strict` |
+| `bariera afectata` | 29 `strict` | **1** `strict` |
+| `pori dilatati` | 26 `strict` | **2** `strict` |
+| `puncte negre` | 22 `strict` | **1** `strict` |
+| `ten tern fara stralucire` | 12 `strict` | **1** `strict` |
+| `crema pentru riduri` | 20 `strict` | 50 **`relaxed`** |
+| `ten iritat si cu roseata` | 5 `strict` | 50 **`relaxed`** |
+| `caderea parului` | 17 `strict` | 50 **`relaxed`** |
+| `toata rutina` | 17 `strict` | 50 **`relaxed`** |
+
+Numărul de rezultate minte aici, treapta nu: toate cele 11 interogări erau servite `strict` înainte.
+Unde strictul încă potrivește, expandarea sufocă. Unde nu mai potrivește, turul cade pe `relaxed`,
+adică pe SAU, și primește 50 de rezultate vagi — aceeași degradare de precizie descrisă în §12.4,
+declanșată acum de propria noastră configurare.
+
+**Reparația nu e în pachet.** Expandarea trebuie să lărgească ramura SAU și ranking-ul, NICIODATĂ
+conjuncția strictă, adică o schimbare în scara lexicală, cu măsurătoarea ei. Până atunci orice
+intrare în `query_expansions` degradează retrievalul, iar asta e valabil și pentru cele 13 expandări
+pe care `beauty_salon.json` le trimite azi tenantului demo: defectul nu e nou, doar n-a fost măsurat.
+
+Decizia e pinuită de
+`tests/test_domain_pack_sole.py::test_expandarile_raman_goale_pana_cand_scara_lexicala_se_repara`,
+care cere și explicația: o valoare goală fără motiv se reumple.
+
+### 13.5 Două lucruri găsite pe drum
+
+- **`purpose: "recovery"` nu există.** Prima versiune a pachetului declara muchia `substitute` cu
+  un `purpose` inventat. `RelationPurpose` are exact două valori (`upsell` / `requirement`), iar
+  distincția e despre SUPRIMARE, nu despre motiv comercial. Loader-ul a respins muchia fail-closed
+  și a logat, comportament corect, dar în producție diferența dintre „am declarat" și „rulează" e
+  invizibilă. Exact muchia care salvează un produs epuizat ar fi căzut tăcut. Prins de
+  `test_loaderul_nu_arunca_nimic_din_pachet`.
+- **Vocabularul descoperit conține chei tehnice.** `load_vocabulary` întoarce ca dimensiuni
+  filtrabile `sku`, `compliance`, `volume_raw`, `price_per_unit_source` — tot ce e cheie în
+  `attributes`. Nu e periculos azi (rezolvarea cere potrivire pe VALOARE), dar spațiul de fațete al
+  unui tenant nu ar trebui să conțină identificatori interni. Rămâne finding, nu reparație.
+
+### 13.6 Cum se verifică, oricând
+
+```bash
+python scripts/set_domain_pack.py --business sole-ro --check     # confruntă ce e ÎN DB cu catalogul
+python -m pytest tests/test_domain_pack_sole.py -q               # invarianții, fără DB
+```
+
+`--check` iese non-zero dacă vreo nevoie a scăzut sub prag sau dacă loader-ul aruncă ceva. Pachetul
+nu îmbătrânește singur, dar catalogul se mișcă sub el.
