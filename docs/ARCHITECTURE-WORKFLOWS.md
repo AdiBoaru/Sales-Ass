@@ -1830,6 +1830,7 @@ profile_extraction_enabled = true
 query_spec_shadow_enabled = false
 rate_limit_enabled = true
 reference_precedence_v2_enabled = false
+refinement_guard_enabled = true
 relation_traversal_enabled = false
 relations_first_enabled = true
 release_controller_enabled = false

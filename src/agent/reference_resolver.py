@@ -240,8 +240,10 @@ _DEICTIC_RE = re.compile(
 )
 # Ordinalele EXPRIMATE, independent de lungimea listei. `match_ordinal` mărginește la `count`;
 # aici ne interesează dacă clientul A CERUT un ordinal, ca „a treia" pe o listă de două să nu cadă
-# tăcut pe altă sursă (ar selecta un produs pe care clientul nu l-a cerut).
-_ANY_ORDINAL_RE = tuple(pattern for _, pattern in (*ORDINALS, *NUMERIC_ORDINALS))
+# tăcut pe altă sursă (ar selecta un produs pe care clientul nu l-a cerut). PUBLIC: gardul de
+# rafinare (`deterministic.carries_new_constraints`) scade referințele din mesaj cu ACELEAȘI
+# tipare — un ordinal e formulă de selecție, nu o cerere nouă, iar două tabele ar diverge.
+ANY_ORDINAL_RE = tuple(pattern for _, pattern in (*ORDINALS, *NUMERIC_ORDINALS))
 
 
 def is_deictic(query: str) -> bool:
@@ -252,7 +254,7 @@ def is_deictic(query: str) -> bool:
 def expresses_ordinal(query: str) -> bool:
     """`True` dacă mesajul cere un ordinal, indiferent dacă lista îl poate onora."""
     normalized = normalize_for_match(query)
-    return any(pattern.search(normalized) for pattern in _ANY_ORDINAL_RE)
+    return any(pattern.search(normalized) for pattern in ANY_ORDINAL_RE)
 
 
 def resolve_reference(request: ReferenceRequest) -> ReferenceResolution:
