@@ -1109,7 +1109,13 @@ codul refuză să cadă pe numele produsului) și `attributes->'concerns'` = 0, 
 = 0 (183.003 recenzii reale, nerezumate → `top_pros` iese NULL pe orice card); `product_relations`
 = 0 (graful e inert: `traverse_relations` → 0 noduri, iar cele **391 de produse epuizate n-au
 niciun substitut**, deci „nu mai avem" e răspunsul final — situația pentru care s-a construit
-NX-195); `intent_aliases` = 0; `businesses.settings` = `{}` → niciun `domain_pack` per tenant.
+NX-195); `intent_aliases` = 0. **`domain_pack` NU mai lipsește** (§13 din doc): 20 de chei canonice de
+nevoie derivate din cele 12.665 de fraze reale de căutare din secțiunile `aura`, fiecare
+confruntată cu catalogul, plus `skin_type` declarat SEPARAT de `concerns` (`partitioning` vs
+`additive`, NX-257) și `routine_time` ca fațetă vie (86,8% acoperire). `query_expansions` rămâne
+GOL **pe măsurătoare**: expandările intră în `search_text` și se leagă cu ȘI pe treapta `strict`,
+deci pot doar să îngusteze (11/11 interogări înrăutățite, «am cearcane» 18→1, «crema pentru riduri»
+20 strict→50 relaxed). Reparația e în scara lexicală, nu în config.
 
 **Căutarea lexicală a fost REPARATĂ pe catalogul real (migrarea 046 + `src/catalog/query_terms.py`).**
 Măsurat pe 18 fraze scrise ca de client, **13 întorceau ZERO** — nu rezultate slabe, tăcere. Trei
