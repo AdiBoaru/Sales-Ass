@@ -770,6 +770,15 @@ class Settings(BaseSettings):
     # NX-119: sesiuni de căutare (pool + paginare „mai arată-mi"). OFF → fără sesiune persistată
     # (fiecare căutare e fresh) ȘI fără ramura deterministă de paginare (cade pe bucla LLM normală).
     search_sessions_enabled: bool = Field(default=True, validation_alias="SEARCH_SESSIONS_ENABLED")
+    # Gardul care distinge o SCURTĂTURĂ („mai arată-mi") de o RAFINARE („mai arată-mi, dar sub 100
+    # lei"): a doua trebuie să ajungă la model, altfel constrângerea se pierde tăcut în paginarea
+    # pool-ului vechi. Avea un singur producător — sloturile triajului (`RouteDecision.filters`) —
+    # care sub NX-251 sunt goale la fiecare tur, deci gardul era permanent deschis. Al doilea
+    # producător e extractorul determinist NX-208, pe mesajul BRUT. Kill-switch: OFF → gardul
+    # depinde iar DOAR de filtrele triajului (comportamentul de dinainte, byte-identic).
+    refinement_guard_enabled: bool = Field(
+        default=True, validation_alias="REFINEMENT_GUARD_ENABLED"
+    )
     # IZI: badge de card DERIVAT din semnale reale (rating+recenzii → „Top Favorit"; reducere reală
     # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).
     # Determinist, NU inventat. OFF → doar badge-uri pre-seedate curate (comportament vechi).

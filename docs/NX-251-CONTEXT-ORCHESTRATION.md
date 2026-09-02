@@ -102,6 +102,69 @@ Shadow-ul compară **verdicte structurale** (ce a făcut turul: `answered` / `cl
 `handoff`), cu hartă de acord **strictă**: una indulgentă ar coborî rata de dezacord exact acolo
 unde vrem s-o vedem, și ar valida promovarea din construcție.
 
+### 2.5.1 Consecință găsită după livrare: scurtăturile deterministe înghițeau rafinările
+
+Mutarea de mai sus a lăsat `RouteDecision.filters` **gol la fiecare tur** (`agent_stage` emite
+`RouteDecision(route=SALES)`). Trei porți din `src/agent/deterministic.py` foloseau exact
+`not route.filters` ca să deosebească o SCURTĂTURĂ de o RAFINARE, deci au rămas permanent deschise:
+
+| Mesaj | Înainte | După NX-251 | Acum |
+|---|---|---|---|
+| „mai arată-mi" | paginare deterministă | paginare deterministă | paginare deterministă |
+| „mai arată-mi, dar sub 100 lei" | bucla de model | **paginarea pool-ului vechi** | bucla de model |
+| „mai arată-mi, dar de la <brand>" | bucla de model | **paginarea pool-ului vechi** | bucla de model |
+| „mai arată-mi, dar pentru ten gras" | bucla de model | **paginarea pool-ului vechi** | bucla de model |
+| „dă-mi linkul, dar la varianta sub 150" | bucla de model | link pe produsul ancorat | link pe produsul ancorat (§ mai jos) |
+
+Gravitatea nu stă în alegerea greșită, ci în ce urmează după ea. Ramura de paginare se consumă în
+`agent_stage` **înaintea** ramurii de creier unic, deci turul nu ajungea deloc la model: singurul
+lucru care „citea" mesajul era un regex. Iar rezultatul trecea toate porțile de aval — produsele
+sunt reale, prețurile există în `ctx.retrieval` — fiindcă validatorul (stagiul 8) și
+`grounding_guard` (NX-240) sunt porți de **adevăr**, nu de **potrivire**. Un răspuns corect la altă
+întrebare nu are cine să-l prindă, nici în cod, nici în analytics.
+
+**Forma reparației contează mai mult decât acoperirea ei.** Prima variantă întreba extractorul
+NX-208 „poartă mesajul o constrângere?" — adică enumera o mulțime **DESCHISĂ**. Clienții nu scriu la
+fel: lista rămâne mereu în urmă, iar fiecare frază neprevăzută redevine un răspuns greșit tăcut.
+Varianta livrată întreabă invers, pe mulțimea **ÎNCHISĂ**: *ce rămâne din mesaj după ce scoatem
+formula scurtăturii?* Se scad, în ordine, potrivirea declanșatorului (poate conține cuvinte pline —
+„alte opțiuni"), referințele (`reference_resolver.ANY_ORDINAL_RE`, tabel PARTAJAT ca să nu diverge),
+cuvintele funcționale ale locale-i (`catalog.query_terms`, tabelul care hrănește deja căutarea
+lexicală) și `_FORMULA_FILLERS`. Orice rămâne = s-a cerut ceva în plus, **oricum ar fi scris**.
+
+Măsurat pe un corpus de 24 de fraze, cele două forme ratează aproape la fel de des, dar în direcții
+opuse — și doar direcția contează:
+
+| formă | ratări | unde cad |
+|---|---|---|
+| enumerarea constrângerilor | 7/24 | rafinări ratate ⇒ **răspuns greșit, tăcut** |
+| reziduul scurtăturii | 4/24 | scurtături pure ratate ⇒ **o inferență în plus, răspuns corect** |
+
+Cele 4 fals-pozitive aveau reziduul `direct`, `trimite`, `primele două`, `astea două` — formulă
+conversațională pură; au intrat în `_FORMULA_FILLERS` sub aceeași regulă strictă ca lista de
+stopwords (un cuvânt intră doar dacă nu poate numi niciodată un produs, un brand sau o nevoie).
+Când lista rămâne incompletă — și va rămâne, la orice volum — cuvântul necunoscut stă în reziduu și
+turul pleacă la model: costă o inferență, nu adevărul.
+
+`route.filters` rămâne primul producător, deci calea de dinainte de NX-251 e neatinsă. Kill-switch
+`REFINEMENT_GUARD_ENABLED=false` → comportamentul vechi, byte-identic.
+`refinement_over_shortcut{shortcut}` numără cazul, altfel reparația ar fi la fel de invizibilă cum
+a fost defectul.
+
+**Locale necunoscută:** fără tabel de cuvinte funcționale, aproape orice text lasă reziduu, deci
+scurtăturile se sting și totul pleacă la model. Declanșatoarele fiind RO/EN/HU, o scurtătură GOALĂ
+(„többet") rămâne deterministă în orice limbă. Degradarea costă inferențe, nu adevăr (P6/P11).
+
+**Aplicat DOAR pe paginare — decizie, nu omisiune.** Pe porțile ANCORATE (link/compare) cuvintele în
+plus sunt de obicei o REFERINȚĂ la produsul deja arătat („linkul către crema asta"), interpretată de
+`resolve_reference`. Un reziduu lexical nu deosebește „crema asta" de „varianta de 200ml", iar
+căderea pe model ar risca regresia pe care NX-131 a reparat-o (calea rich interzice modelului
+linkurile). Pe paginare ambiguitatea nu există: căderea pe model e o căutare nouă, adică exact ce a
+cerut clientul. **Preț asumat:** „dă-mi linkul, dar la varianta de 200ml" servește linkul produsului
+de bază, tăcut. Se închide cu vocabularul de categorii al tenantului (P9, tabelul `categories`), ceea
+ce cere un citit de DB pe calea scurtă — de măsurat, nu de ghicit. Decizia e pinuită de
+`test_anchored_gates_keep_serving_references`.
+
 ### 2.6 Contextul nu se mai repetă
 
 Sub v2, constrângerile aparțin exclusiv lui `memory_block`; `state_block` rămâne proprietarul

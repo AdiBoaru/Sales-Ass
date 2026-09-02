@@ -217,3 +217,91 @@ def test_variant_price_with_currency_accepted(monkeypatch):
         }
     ]
     assert _valid("Varianta mare e 149 lei", prod) is True  # 149 = preț variantă grounded
+
+
+# --- Numărul din NUMELE produsului: citat, nu afirmație -----------------------
+# Regula folosește „număr izolat între spații" ca aproximare pentru „afirmație". Pe catalogul
+# demo funcționa: numele erau „Ser hidratant LumaDerm". Pe unul real, formatul face parte din
+# identitate (măsurat pe SOLE: 2.218 din 2.758 de nume conțineau un număr izolat), deci botul nu
+# putea rosti numele produsului pe care tocmai îl afișa pe card. Se recunoaște CITATUL, nu se
+# permite VALOAREA: același număr, în altă frază, rămâne respins.
+
+_NAMED = [
+    {
+        "id": "p1",
+        "name": "ANUA Peach 77 Niacin Enriched Cream - crema de fata, 50 ml",
+        "price": 155.0,
+        "url": "https://shop/p1",
+    }
+]
+
+
+def test_number_inside_a_quoted_product_name_is_not_a_claim(monkeypatch):
+    _enable(monkeypatch)
+    reply = "Iti recomand ANUA Peach 77 Niacin Enriched Cream"
+    assert _bad_bare_numbers(reply, _NAMED, set()) == []
+
+
+def test_the_format_from_the_name_may_be_spoken(monkeypatch):
+    _enable(monkeypatch)
+    assert _bad_bare_numbers("Are 50 ml si e potrivita pentru ten uscat", _NAMED, set()) == []
+
+
+def test_the_same_number_in_another_sentence_is_still_rejected(monkeypatch):
+    """Miezul: nu se adaugă 77 la valorile permise. Dacă s-ar adăuga, orice cifră dintr-un nume
+    de produs ar deveni rostibilă oriunde — iar cu un catalog întreg de nume, regula ar rămâne
+    fără dinți exact acolo unde e nevoie de ea."""
+    _enable(monkeypatch)
+    assert _bad_bare_numbers("Livram in 77 de zile", _NAMED, set()) == [77.0]
+    assert _bad_bare_numbers("Are reducere de 30 la suta", _NAMED, set()) == [30.0]
+
+
+def test_a_price_is_still_judged_as_a_price(monkeypatch):
+    """Sumele cu valută rămân pe `_prices_ok`, care nu se relaxează: un nume otrăvit („Crema
+    9.99 lei") nu poate legitima un preț inventat."""
+    _enable(monkeypatch)
+    poisoned = [{"id": "p1", "name": "Crema 77 lei Special", "price": 155.0, "url": "https://s/p1"}]
+    assert _valid("Costa 77 lei", poisoned) is False
+    assert _valid("Costa 155 lei", poisoned) is True
+
+
+def test_a_bare_number_with_no_neighbour_from_the_name_is_rejected(monkeypatch):
+    """Vecinul e obligatoriu: fără el am valida numărul GOL, nu citatul."""
+    _enable(monkeypatch)
+    assert _bad_bare_numbers("Pretul urca la 77 curand", _NAMED, set()) == [77.0]
+
+
+def test_products_without_names_behave_exactly_as_before(monkeypatch):
+    """Compatibilitate: pe rândurile fără `name`, regula rămâne cea dinainte."""
+    _enable(monkeypatch)
+    assert _bad_bare_numbers("Costa 77", [{"id": "p1", "price": 155.0}], set()) == [77.0]
+
+
+def test_variant_labels_count_as_quotable_names(monkeypatch):
+    _enable(monkeypatch)
+    prod = [
+        {
+            "id": "p1",
+            "name": "Ser hidratant",
+            "price": 89.0,
+            "variants": [{"id": "v1", "label": "Refill 250 ml", "price": 89.0}],
+        }
+    ]
+    assert _bad_bare_numbers("Vine si ca Refill 250 ml", prod, set()) == []
+    assert _bad_bare_numbers("Livram in 250 de zile", prod, set()) == [250.0]
+
+
+def test_punctuation_inside_the_name_does_not_break_the_quote(monkeypatch):
+    """Nuanța unui BB cream stă între virgule în nume („… PA+++, 27, 50 ml"), iar răspunsul nu
+    reproduce neapărat punctuația. Comparația se face pe formă colapsată pe AMBELE părți, altfel
+    ar rata exact cazurile pentru care există."""
+    _enable(monkeypatch)
+    prod = [
+        {
+            "id": "p1",
+            "name": "MIZON Snail Repair Intensive BB Cream SPF 50 PA+++, 27, 50 ml",
+            "price": 75.0,
+        }
+    ]
+    assert _bad_bare_numbers("Iti recomand MIZON BB Cream SPF 50 PA+++ 27 50 ml", prod, set()) == []
+    assert _bad_bare_numbers("Livram in 27 de zile", prod, set()) == [27.0]

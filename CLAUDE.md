@@ -350,7 +350,21 @@ trece neatins); clarificarea brain-ului se PERSISTĂ (altfel `clarify_resume` n-
 digest de evidence cu trunchierea DECLARATĂ (rula în afara conversației cu tool results, deci nu
 putea repara exact planurile care depindeau de ele). Sub state v2, constrângerile nu mai pleacă de
 două ori în prompt (`memory_block` e proprietarul; `state_block` rămâne al produselor afișate), iar
-octeții se măsoară pe sursă (`context_bytes{consumer}`). Detalii:
+octeții se măsoară pe sursă (`context_bytes{consumer}`).
+**Consecință găsită după livrare (reparată):** cu `filters` gol la fiecare tur, porțile din
+`src/agent/deterministic.py` care foloseau `not route.filters` ca să deosebească o SCURTĂTURĂ de o
+RAFINARE au rămas permanent deschise — „mai arată-mi, dar sub 100 lei" pagina pool-ul căutării
+VECHI, iar ramura de paginare se consumă ÎNAINTEA creierului unic, deci mesajul nu ajungea deloc la
+model. Nimic din aval nu prinde asta: produsele și prețurile sunt reale, iar validatorul și
+`grounding_guard` sunt porți de ADEVĂR, nu de POTRIVIRE. `carries_new_constraints` nu enumeră
+CONSTRÂNGERILE (mulțime deschisă: clienții nu scriu la fel, iar o listă în urmă = răspuns greșit
+tăcut), ci scade FORMULA scurtăturii — declanșator + referințe (`ANY_ORDINAL_RE`, tabel partajat) +
+cuvintele funcționale ale locale-i (`catalog.query_terms`) + fillers; orice reziduu ⇒ turul pleacă
+la model. Măsurat pe 24 de fraze: ambele forme ratează ~la fel, dar enumerarea ratează RAFINĂRI
+(răspuns greșit) și reziduul ratează SCURTĂTURI (o inferență în plus). Aplicat DOAR pe paginare:
+pe porțile ancorate (link/compare) cuvintele în plus sunt de obicei referință („linkul către crema
+asta"), iar căderea pe model ar risca regresia NX-131 — preț asumat și pinuit prin test. Kill-switch
+`REFINEMENT_GUARD_ENABLED=false`. Detalii:
 [`docs/NX-251-CONTEXT-ORCHESTRATION.md`](docs/NX-251-CONTEXT-ORCHESTRATION.md); probă:
 `pytest tests/test_context_journeys.py tests/test_context_orchestration.py -q`.
 

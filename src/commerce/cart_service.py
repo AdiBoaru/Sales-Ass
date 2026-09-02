@@ -32,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
+from src.catalog.freshness import facts_sla_s
 from src.commerce.adapters.base import StorefrontCartAdapter, configured_adapter
 from src.commerce.cart_models import (
     CART_MAX_LINE_QUANTITY,
@@ -82,6 +83,10 @@ class CartService:
     safety_emit: Callable[[Any, str], None] | None = None
     adapter: StorefrontCartAdapter | None = None
     sla_s: int | None = None
+    # Declarația de prospețime a TENANTULUI (`businesses.settings`), din care se derivă pragul
+    # când nu e injectat explicit. Coșul și vitrina trebuie să judece cu aceeași cifră: altfel
+    # cardul ar spune „preț cunoscut", iar linia de coș „preț expirat", din același rând de DB.
+    business_settings: Mapping[str, Any] = field(default_factory=dict)
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     @classmethod
@@ -100,12 +105,17 @@ class CartService:
             emit=ctx.emit,
             safety_emit=lambda decision, purpose: policy.emit(ctx, decision, purpose=purpose),
             adapter=configured_adapter(),
+            business_settings=ctx.business.settings or {},
         )
 
     # ── utilitare interne ────────────────────────────────────────────────────────────────────
 
-    def _sla(self) -> int:
-        return self.sla_s if self.sla_s is not None else get_settings().commerce_facts_sla_s
+    def _sla(self) -> int | None:
+        """Pragul de prospețime al faptelor. `None` = catalogul tenantului e declarat static, deci
+        faptele nu se judecă în timp. `sla_s` injectat rămâne override explicit (teste)."""
+        if self.sla_s is not None:
+            return self.sla_s
+        return facts_sla_s(self.business_settings, default=get_settings().commerce_facts_sla_s)
 
     def _event(self, name: str, **props: Any) -> None:
         if self.emit is not None:

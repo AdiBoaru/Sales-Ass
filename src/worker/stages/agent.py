@@ -23,7 +23,9 @@ from src.agent.deterministic import (
     _COMPARE_RE,  # noqa: F401 — re-export (teste)
     _LINK_RE,  # noqa: F401 — re-export (teste)
     _MORE_RE,  # noqa: F401 — re-export (teste)
+    carries_new_constraints,
     is_show_more,
+    show_more_phrase,
     try_pre_intents,
 )
 from src.agent.fallbacks import (
@@ -395,6 +397,17 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # deterministic.py; paginarea propriu-zisă e mai jos, în GENERATE, via continue_search_session).
     sess = ctx.state.active_search
     show_more = is_show_more(ctx)
+    # „Mai arată-mi, dar sub 100 lei" NU e paginare: pool-ul sesiunii a fost construit fără acel
+    # plafon și `continue_search_session` nu re-caută. Gardul îl trimite pe bucla de model; aici
+    # doar NUMĂRĂM cazul, fiindcă altfel reparația n-are niciun semn în analytics (răspunsul greșit
+    # de dinainte trecea și de validator, și de grounding guard).
+    if (
+        sess
+        and not show_more
+        and show_more_phrase(query)
+        and carries_new_constraints(ctx, _MORE_RE)
+    ):
+        ctx.emit("refinement_over_shortcut", shortcut="show_more")
 
     tool_names = enabled_tools(ctx.business, route.route.value)
     if unrouted:

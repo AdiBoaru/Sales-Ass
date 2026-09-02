@@ -315,6 +315,11 @@ async def import_products(
                 SOURCE_SITE,
                 run,
                 EXTRACTOR_VERSION,
+                # `synced_at` = când a fost CITITĂ sursa, nu când a rulat importul. Cu `now()`,
+                # un re-import peste un snapshot vechi ar declara catalogul proaspăt verificat —
+                # exact minciuna pe care coloana o previne. Iar scraperul sare peste produsele
+                # deja salvate, deci „re-rulez tot lanțul" poate să nu recitească nimic.
+                _parse_scraped_at(r["scraped_at"]),
             )
         )
         var_batch.append(
@@ -334,7 +339,7 @@ async def import_products(
     )
     placeholders = ", ".join(f"${i}" for i in range(1, 29))
     await conn.executemany(
-        f"insert into products ({PRODUCT_COLS}) values ({placeholders}, now()) "
+        f"insert into products ({PRODUCT_COLS}) values ({placeholders}, coalesce($29, now())) "
         "on conflict (business_id, external_id) do update set "
         "  name=excluded.name, slug=excluded.slug, description=excluded.description, "
         "  price=excluded.price, sale_price=excluded.sale_price, "
@@ -346,7 +351,7 @@ async def import_products(
         "  storage_temp_min_c=excluded.storage_temp_min_c, "
         "  storage_temp_max_c=excluded.storage_temp_max_c, "
         "  source_fingerprint=excluded.source_fingerprint, "
-        "  last_sync_run_id=excluded.last_sync_run_id, synced_at=now()",
+        "  last_sync_run_id=excluded.last_sync_run_id, synced_at=excluded.synced_at",
         prod_batch,
     )
     ids = {

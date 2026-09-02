@@ -31,8 +31,10 @@ from pathlib import Path
 from typing import Any
 
 from src.agent.evidence_bundle import FACT_FIELDS, FIELD_POLICY, build_product_evidence
+from src.catalog.freshness import facts_sla_s, is_static
 from src.config import get_settings
 from src.db.connection import close_pool, tenant_conn
+from src.db.queries.businesses import load_business
 
 DEMO_BUSINESS_ID = "6098812a-50fc-44bd-a1ba-bc77e6399158"
 
@@ -80,7 +82,7 @@ def _pct(part: int, total: int) -> str:
     return f"{(100 * part / total):5.1f}%" if total else "    -"
 
 
-async def measure(business_id: str, sla_s: int) -> dict[str, Any]:
+async def measure(business_id: str, sla_s: int | None, *, static: bool = False) -> dict[str, Any]:
     now = datetime.now(UTC)
     async with tenant_conn(business_id) as conn:
         rows = [dict(r) for r in await conn.fetch(_SQL, business_id)]
@@ -105,6 +107,7 @@ async def measure(business_id: str, sla_s: int) -> dict[str, Any]:
         "business_id": business_id,
         "measured_at": now.isoformat(),
         "sla_s": sla_s,
+        "static_catalog": static,
         "products": len(rows),
         "fields": {
             name: {
@@ -128,10 +131,14 @@ async def measure(business_id: str, sla_s: int) -> dict[str, Any]:
 
 def render(report: dict[str, Any]) -> str:
     total = report["products"]
+    policy = (
+        "catalog DECLARAT STATIC (faptele nu se judecă în timp)"
+        if report.get("static_catalog")
+        else f"SLA prospețime: {report['sla_s']}s"
+    )
     lines = [
         f"NX-240 data-readiness — business {report['business_id']}",
-        f"produse active: {total} · SLA prospețime: {report['sla_s']}s"
-        f" · măsurat: {report['measured_at']}",
+        f"produse active: {total} · {policy} · măsurat: {report['measured_at']}",
         "",
         f"{'câmp':<18}{'known':>8}{'stale':>8}{'unknown':>9}{'verified':>10}  sursă",
         "-" * 84,
@@ -145,18 +152,29 @@ def render(report: dict[str, Any]) -> str:
     lines.append("")
     blocking = [n for n, d in report["fields"].items() if d["blocks_commerce_cta"]]
     sellable = min((report["fields"][n]["known"] for n in blocking), default=0)
-    verified = min((report["fields"][n]["verified"] for n in blocking), default=0)
     lines.append(
         f"CTA de comerț: cel mult {sellable}/{total} produse ({_pct(sellable, total).strip()}) — "
         f"cere `known` (nu expirat) pe {', '.join(blocking)}. Garanția reală rămâne la mutație "
         f"(CartService revalidează), deci butonul e o ofertă de a încerca, nu o promisiune."
     )
+    # Verificarea se măsoară DOAR pe câmpurile verificabile: `verified` cere `verified_at`, iar
+    # acela se pune doar unde se aplică SLA-ul. Luat peste TOATE câmpurile blocante, minimul
+    # cădea mereu la 0 din pricina lui `identity`/`title`/`currency` — care n-au ce verifica — și
+    # raportul contrazicea propriul tabel: preț 100% `verified` pe rândul lui, 0% în concluzie.
+    verifiable = [n for n in blocking if FIELD_POLICY[n].sla_applies]
+    verified = min((report["fields"][n]["verified"] for n in verifiable), default=0)
     lines.append(
-        f"Pipeline de VERIFICARE: {verified}/{total} produse ({_pct(verified, total).strip()}) au "
-        "`synced_at`. Consecința lui 0% nu e absența butoanelor, ci imposibilitatea de a declara "
-        "un fapt EXPIRAT: nu avem de unde ști că s-a stricat. Un sync real ar aduce ambele — "
-        "prospețime afișabilă și expirare detectabilă."
+        f"Fapte verificate ({', '.join(verifiable)}): {verified}/{total} "
+        f"({_pct(verified, total).strip()}) — afișabile ȘI cu `verified_at`. Un 0% aici NU "
+        "înseamnă că `synced_at` lipsește din tabel: poate însemna și că tot ce e verificat a "
+        "expirat. Coloanele `stale` și `unknown` de mai sus spun care din două."
     )
+    if report.get("static_catalog"):
+        lines.append(
+            "Tenantul și-a declarat catalogul STATIC: nimic nu devine `stale` doar pentru că a "
+            "trecut timpul, iar vârsta rămâne vizibilă pe fapte. Scutirea e o declarație explicită "
+            "(`businesses.settings.catalog_freshness`), nu o consecință tăcută a lipsei unui sync."
+        )
     return "\n".join(lines)
 
 
@@ -166,7 +184,16 @@ async def main() -> None:
     parser.add_argument("--json", type=Path, default=None, help="scrie raportul și ca JSON")
     args = parser.parse_args()
     try:
-        report = await measure(args.business, get_settings().commerce_facts_sla_s)
+        # Raportul trebuie să măsoare politica pe care o aplică PRODUCȚIA, nu pragul din mediu:
+        # altfel instrumentul și sistemul măsurat pot diverge tăcut, iar raportul devine fals
+        # exact în cazul pe care e chemat să-l explice.
+        async with tenant_conn(args.business) as conn:
+            settings = (await load_business(conn, args.business)).settings or {}
+        report = await measure(
+            args.business,
+            facts_sla_s(settings, default=get_settings().commerce_facts_sla_s),
+            static=is_static(settings),
+        )
     finally:
         await close_pool()
     print(render(report))

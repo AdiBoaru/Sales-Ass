@@ -49,6 +49,7 @@ from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
+from src.catalog.freshness import facts_sla_s
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
@@ -510,7 +511,9 @@ def _attach_grounding(
         locale=ctx.language,
         rows=run.retrieved,
         now=datetime.now(UTC),
-        sla_s=settings.commerce_facts_sla_s,
+        # Pragul aparține TENANTULUI, nu mediului: un catalog alimentat de feed live și unul
+        # importat o dată nu se pot judeca cu aceeași cifră (`src/catalog/freshness.py`).
+        sla_s=facts_sla_s(ctx.business.settings, default=settings.commerce_facts_sla_s),
         match_class_by_product=classes,
         constraints_by_product=constraints,
         cart=getattr(run, "cart_snapshot", None),

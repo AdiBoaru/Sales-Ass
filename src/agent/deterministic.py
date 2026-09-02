@@ -16,6 +16,7 @@ follow-up de preț («mai ieftin») NU e link/compare/paginare, ci re-căutare (
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,7 @@ from src.agent.fallbacks import (
     fit_chip,
 )
 from src.agent.reference_resolver import (
+    ANY_ORDINAL_RE,
     ActionAnchor,
     ReferenceRequest,
     normalize_for_match,
@@ -37,6 +39,7 @@ from src.agent.reference_resolver import (
     resolve_product_reference,
     resolve_reference,
 )
+from src.catalog.query_terms import fold, stopwords
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
@@ -48,6 +51,8 @@ from src.worker.text_scrub import has_medical_claim
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
+
+log = logging.getLogger(__name__)
 
 # P1 (ARCH-product-retrieval): follow-up de PREȚ pe un set deja afișat → re-căutare DETERMINISTĂ a
 # produselor strict mai ieftine (search_cheaper_than), NU re-rank pe setul afișat (R3). Precizie
@@ -581,6 +586,111 @@ async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str])
     return True
 
 
+# Cuvintele care fac parte din FORMULA unei scurtături, dincolo de ce prinde regexul declanșator
+# și de cuvintele funcționale din `query_terms.stopwords`. Indexate pe locale (P11: limba e o
+# cheie); o locale necunoscută primește mulțimea goală, deci nu aplicăm româna peste altă limbă.
+#
+# Regula de includere e ACEEAȘI ca a listei de stopwords, și e strictă: un cuvânt intră aici doar
+# dacă nu poate numi NICIODATĂ un produs, un brand sau o nevoie. Verbe de arătare/trimitere, adverbe
+# de manieră și numeralele SCRISE cu litere (o cantitate de selecție: „primele două") — niciodată o
+# CIFRĂ, fiindcă o cifră poate fi un preț, un volum sau un SPF.
+#
+# Ce se întâmplă când lista e incompletă (și va fi, la orice volum de clienți): cuvântul necunoscut
+# rămâne în reziduu, turul pleacă la model și clientul primește răspunsul corect, plătit cu o
+# inferență. Asta e toată miza formei alese — enumerăm mulțimea ÎNCHISĂ (cum se cere o scurtătură),
+# nu pe cea DESCHISĂ (cum se rostește o constrângere), iar necunoscutul cade spre model, nu spre
+# tăcere.
+_FORMULA_FILLERS: dict[str, frozenset[str]] = {
+    "ro": frozenset(
+        """
+        arata arati aratati trimite trimiteti da dati vezi vreau as putea poti
+        direct rapid repede acum imediat te va rog rogu hai
+        prima primul primele primii ultima ultimul ultimele ambele astea alea acelea astealalte
+        doua doi trei patru cinci
+        """.split()
+    )
+}
+
+
+def _formula_fillers(locale: str | None) -> frozenset[str]:
+    if not locale:
+        return frozenset()
+    return _FORMULA_FILLERS.get(locale.split("-")[0].lower(), frozenset())
+
+
+def carries_new_constraints(ctx: TurnContext, trigger: re.Pattern[str]) -> bool:
+    """Mesajul CURENT cere ALTCEVA decât scurtătura pe care a declanșat-o `trigger`? PUR, zero
+    LLM/DB.
+
+    Ăsta e predicatul care desparte o SCURTĂTURĂ („mai arată-mi", „dă-mi linkul", „compară-le") de
+    o RAFINARE („mai arată-mi, dar sub 100 lei"). Prima se poate servi determinist din setul deja
+    afișat; a doua trebuie să ajungă la model. Confuzia dintre ele nu produce o eroare vizibilă:
+    paginăm pool-ul căutării vechi, produsele sunt reale, prețurile există în `ctx.retrieval`, deci
+    validatorul (stagiul 8) și grounding guardul trec — sunt porți de ADEVĂR, nu de POTRIVIRE.
+    Clientul primește un răspuns corect la altă întrebare, iar analytics-ul nu are ce raporta.
+
+    Predicatul avea un singur producător: sloturile extrase de triaj (`RouteDecision.filters`). Cu
+    triajul scos de pe drumul sincron (NX-251) ruta o construiește `agent_stage` cu `filters` gol la
+    FIECARE tur, deci gardul `not route.filters` era permanent deschis și toate cele trei scurtături
+    înghițeau rafinările.
+
+    **Forma răspunsului contează mai mult decât acoperirea lui.** Un gard care ar enumera
+    CONSTRÂNGERILE („sub N", „fără parfum", concern din pack) enumeră o mulțime DESCHISĂ: clienții
+    nu scriu la fel, lista rămâne mereu în urmă, iar fiecare frază neprevăzută devine un răspuns
+    greșit TĂCUT. Așa că întrebăm invers, pe mulțimea ÎNCHISĂ: **ce rămâne din mesaj după ce scoatem
+    formula scurtăturii?** Scoatem potrivirea declanșatorului, referințele (ordinalele NX-234),
+    cuvintele funcționale ale locale-i (`query_terms`, tabelul care hrănește deja căutarea lexicală)
+    și `_FORMULA_FILLERS`. Orice rămâne = clientul a cerut ceva în plus, oricum ar fi scris-o:
+    „dar sub 100 lei", „dar de la Cerave", „pentru ten gras", „ceva ce nu mă lucește" — niciuna
+    dintre ele nu e prevăzută nicăieri, toate lasă reziduu.
+
+    Măsurat pe un corpus de 24 de fraze, cele două forme ratează la fel de des, dar în direcții
+    OPUSE: enumerarea constrângerilor ratează 7 rafinări (răspuns greșit, tăcut), reziduul ratează
+    4 scurtături pure (o inferență în plus, răspuns corect).
+
+    Locale necunoscută → fără stopwords și fără fillers → aproape orice text lasă reziduu → totul
+    pleacă la model. Scurtăturile se sting, adevărul nu. E direcția corectă de degradare (P6) și
+    motivul pentru care nu hardcodăm româna ca implicit (P11).
+
+    **Aplicat DOAR pe paginare.** Pe porțile ANCORATE (link/compare) cuvintele în plus sunt de
+    obicei o REFERINȚĂ la produsul deja arătat („linkul către crema asta"), pe care le interpretează
+    `resolve_reference`; un reziduu lexical nu le poate deosebi de o rafinare, iar o cădere pe model
+    ar risca regresia NX-131 (calea rich interzice modelului linkurile). Pe paginare nu există
+    ambiguitatea asta: căderea pe model înseamnă o căutare nouă, adică exact ce a cerut clientul."""
+    route = ctx.route
+    if route is not None and route.filters:
+        # Triajul a extras sloturi (calea de dinainte de NX-251) — nimic de recalculat.
+        return True
+    if not get_settings().refinement_guard_enabled:
+        return False
+    body = (ctx.message.body or "").strip()
+    if not body:
+        # Acțiune opacă (NX-236): mesajul e gol prin construcție, comanda e DECLARATĂ, nu dedusă.
+        return False
+    return bool(_shortcut_residue(body, trigger, ctx.language))
+
+
+def _shortcut_residue(body: str, trigger: re.Pattern[str], locale: str | None) -> list[str]:
+    """Ce rămâne din mesaj după scăderea formulei. Pur; expus pentru teste și pentru diagnostic.
+
+    Ordinea scăderilor nu e arbitrară: întâi declanșatorul (el poate conține cuvinte purtătoare de
+    sens — „alte opțiuni"), apoi referințele, apoi vocabularul funcțional."""
+    text = fold(body)
+    text = trigger.sub(" ", text)
+    for pattern in ANY_ORDINAL_RE:
+        text = pattern.sub(" ", text)
+    skip = stopwords(locale) | _formula_fillers(locale)
+    return [t for t in re.split(r"[^0-9a-z]+", text) if t and t not in skip]
+
+
+def show_more_phrase(query: str) -> bool:
+    """Textul CERE paginare („mai arată-mi"), independent de starea conversației. Pur.
+
+    Extras din `is_show_more` ca apelantul să poată distinge „n-a cerut" de „a cerut, dar mesajul
+    rafinează" — fără distincția asta, reparația de mai jos ar fi invizibilă în analytics."""
+    return _MORE_RE.search(query) is not None and _CHEAPER_RE.search(query) is None
+
+
 async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     """Faza B: intenții deterministe PRE-loop (link + compare). True = tratat (early-exit din
     `stage.py`); False = lasă bucla LLM. Doar SALES; toate exclud «mai ieftin» (cheaper_intent) și
@@ -631,6 +741,15 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     # NX-131: cerere de LINK pe un produs deja arătat = intenție DETERMINISTĂ, NU re-recomandare.
     # Calea rich interzice modelului linkurile → cererea de link cădea în re-randarea bogată cu
     # coaching repetat. O servim direct din state → product_url proaspăt → Offer(open_url) + card.
+    #
+    # GARDUL DE RAFINARE NU E APLICAT AICI, deliberat (vezi `carries_new_constraints`). Pe o poartă
+    # ANCORATĂ, cuvintele în plus sunt de obicei REFERINȚĂ, nu cerere nouă: „linkul către crema
+    # asta" numește produsul, iar `resolve_reference` e cel care le interpretează. Un reziduu
+    # calculat lexical nu poate deosebi „crema asta" (referință) de „varianta de 200ml" (rafinare),
+    # iar căderea pe model ar risca exact regresia pe care NX-131 a reparat-o. Consecința ASUMATĂ:
+    # „dă-mi linkul, dar la varianta de 200ml" servește linkul produsului de bază, tăcut. Se închide
+    # cu vocabularul de categorii al tenantului (P9, `categories`), care cere un citit de DB pe
+    # calea asta — decizie de măsurat, nu de ghicit.
     link_intent = (
         get_settings().link_intent_enabled
         and bool(anchorable)
@@ -644,6 +763,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
 
     # IZI-parity G2: COMPARAȚIE pe setul afișat → tabel structurat determinist, fără să depindem de
     # model. ≥2 afișate; fără filtre noi; NU «mai ieftin». <2 valide la fetch → handler False.
+    # Aceeași excepție ca la link: poartă ancorată, gardul de rafinare nu se aplică.
     compare_intent = (
         get_settings().compare_intent_enabled
         and len(ctx.state.displayed_products) >= 2
@@ -658,8 +778,11 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
 
 def is_show_more(ctx: TurnContext) -> bool:
     """Faza B: predicat de PAGINARE („mai arată-mi" pe o sesiune activă). Paginarea propriu-zisă
-    (`continue_search_session`) rămâne în `stage.py`/GENERATE. `not route.filters`: constrângeri NOI
-    = RAFINARE (cade pe bucla LLM), nu paginare pură. NU pe «mai ieftin» (cheaper_intent)."""
+    (`continue_search_session`) rămâne în `stage.py`/GENERATE. `carries_new_constraints`:
+    constrângeri NOI = RAFINARE (cade pe bucla LLM), nu paginare pură — poarta e critică aici,
+    fiindcă ramura de paginare se consumă ÎNAINTEA creierului unic (`agent_stage`), deci un
+    fals-pozitiv nu doar alege prost, ci scoate turul de sub model cu totul. NU pe «mai ieftin»
+    (cheaper_intent)."""
     route = ctx.route
     if route is None or route.route != Route.SALES:
         return False
@@ -672,7 +795,6 @@ def is_show_more(ctx: TurnContext) -> bool:
     return (
         get_settings().search_sessions_enabled
         and bool(ctx.state.active_search)
-        and not route.filters
-        and _MORE_RE.search(query) is not None
-        and _CHEAPER_RE.search(query) is None
+        and show_more_phrase(query)
+        and not carries_new_constraints(ctx, _MORE_RE)
     )

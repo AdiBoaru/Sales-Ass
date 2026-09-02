@@ -89,13 +89,18 @@ class Freshness:
     stale: bool
 
     @classmethod
-    def of(cls, observed_at: datetime | None, *, now: datetime, sla_s: int) -> Freshness:
+    def of(cls, observed_at: datetime | None, *, now: datetime, sla_s: int | None) -> Freshness:
         bucket = age_bucket(observed_at, now=now)
         if observed_at is None:
             # Fără timestamp nu putem susține prospețimea → tratat ca stale (conservator), nu ca
             # proaspăt prin lipsă de dovadă.
             return cls(None, bucket, True)
         ref = observed_at if observed_at.tzinfo else observed_at.replace(tzinfo=UTC)
+        if sla_s is None:
+            # Tenantul și-a declarat catalogul static (`src/catalog/freshness.py`): faptul are
+            # vârstă (rămâne în `bucket`), dar nu există prag față de care s-o judeci. Vechimea
+            # se RAPORTEAZĂ, nu se sancționează.
+            return cls(ref, bucket, False)
         return cls(ref, bucket, (now - ref) > timedelta(seconds=sla_s))
 
 
