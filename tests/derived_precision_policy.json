@@ -1,0 +1,45 @@
+{
+  "_note": "NX-268 — pragurile de PRECIZIE ale faptelor derivate, PREINREGISTRATE. Se scriu INAINTE de audit si nu se schimba dupa ce se vad rezultatele: amprenta lor intra in raport, deci o schimbare ulterioara e vizibila. Aceeasi disciplina ca la NX-246 felia 3 (`GatePolicy`).",
+  "_de_ce_praguri_diferite": "Pragul urmeaza ce PROMITE fateta, nu cat de greu e s-o derivi. `fragrance_free` si `spf` sunt promisiuni: clientul cumpara pe baza lor, iar un fals pozitiv e o minciuna comerciala pe care validatorul (stagiul 8) n-o poate prinde, fiindca el verifica adevarul FATA DE tabela de fapte — daca faptul e gresit, verificarea confirma greseala. `concerns`, `skin_type` si `texture` sunt semnale de RANG: un fals pozitiv coboara calitatea unei recomandari, nu produce o afirmatie falsa. NX-271 aprinde excluderea o fateta pe rand, si numai peste pragul ei.",
+  "_de_ce_wilson": "Verdictul se da pe limita de JOS a intervalului Wilson, nu pe proportia bruta. 100 de esantioane cu 95 de „da\" nu inseamna „precizie 95%\", inseamna „precizie intre ~89% si ~98%\". Pe esantioane mici diferenta e enorma, si exact acolo tentatia de a declara victorie e mai mare.",
+  "_unsure": "Verdictul `?` (nu pot decide) NU intra in numitor. O valoare pe care auditorul n-o poate decide fata de textul sursa nu e nici dovada pentru, nici impotriva; se raporteaza separat. Daca `unsure` e mare, problema e a SURSEI, nu a derivarii.",
+  "version": "nx268.2026-09-03",
+  "facets": {
+    "concerns": {
+      "sample_size": 100,
+      "min_sample": 60,
+      "min_precision": 0.8,
+      "promise": "rank_signal"
+    },
+    "skin_type": {
+      "sample_size": 100,
+      "min_sample": 60,
+      "min_precision": 0.85,
+      "promise": "rank_signal"
+    },
+    "key_ingredients": {
+      "sample_size": 100,
+      "min_sample": 60,
+      "min_precision": 0.9,
+      "promise": "claim"
+    },
+    "spf": {
+      "sample_size": 100,
+      "min_sample": 40,
+      "min_precision": 0.95,
+      "promise": "claim"
+    },
+    "fragrance_free": {
+      "sample_size": 100,
+      "min_sample": 40,
+      "min_precision": 0.95,
+      "promise": "claim"
+    },
+    "texture": {
+      "sample_size": 100,
+      "min_sample": 60,
+      "min_precision": 0.8,
+      "promise": "rank_signal"
+    }
+  }
+}

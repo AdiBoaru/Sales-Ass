@@ -1,0 +1,67 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "policy_fingerprint": "c429c67efecc5239",
+  "facets": {
+    "concerns": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.8,
+      "min_sample": 60,
+      "verdict": "INSUFFICIENT"
+    },
+    "fragrance_free": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.95,
+      "min_sample": 40,
+      "verdict": "INSUFFICIENT"
+    },
+    "key_ingredients": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.9,
+      "min_sample": 60,
+      "verdict": "INSUFFICIENT"
+    },
+    "skin_type": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.85,
+      "min_sample": 60,
+      "verdict": "INSUFFICIENT"
+    },
+    "spf": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.95,
+      "min_sample": 40,
+      "verdict": "INSUFFICIENT"
+    },
+    "texture": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.8,
+      "min_sample": 60,
+      "verdict": "INSUFFICIENT"
+    }
+  },
+  "enforce_ready": []
+}
