@@ -422,11 +422,13 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       pentru facturare = usage_daily, rollup nocturn), XAUTOCLAIM
 
 [3] GATES (cod pur, fără LLM)
-    • bot_active check (conversations.bot_active) → early exit cu handoff dacă false
-    • handoff_until check → dacă în viitor, tăcere (om preia)
-    • risc detection (pattern-uri) → request_human dacă necesar — DOAR pe canale cu
-      handoff activ (config.handoff_enabled_channels). Web exclus by default: fără
-      operator → nu escaladăm/nu tăcem, mesajul curge normal (botul asistă singur)
+    • bot_active check (conversations.bot_active) → tăcere intenționată dacă false
+      (kill-switch per conversație, setat din DB — NU o escaladare din conversație)
+    • abuse blocklist (contacts.is_blocked) → tăcere
+    • risc detection (pattern-uri) → DOAR event `risk_detected`, zero efect pe tur.
+      TRANSFERUL LA OPERATOR A FOST SCOS DIN PRODUS (nu există consolă, nu există om de
+      gardă): un client care cere un om, o reclamație sau o amenințare legală primesc
+      răspunsul agentului, nu o promisiune neonorată și nu tăcere (P6)
     • media routing: vocale → STT (Whisper), poze → Vision (match catalog)
     • language detect → RO / HU / EN (setează ctx.language; TOATE
       lookup-urile în faqs / semantic_cache / wa_templates includ locale)
@@ -442,7 +444,7 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • oricare produce reply → early exit la Sender
 
 [5] TRIAJ (GPT-5.4-nano, ~300 tokens input)
-    • clasificare: simple | sales | order | handoff | clarify
+    • clasificare: simple | sales | order | clarify
     • output JSON validat cu Pydantic: {route, category_key, filters, missing_field}
     • category_key validat contra categories (dacă inventează → CLARIFY)
     • «simple»: nano compune și răspunsul → early exit la Sender
@@ -681,7 +683,9 @@ channel_identities— id, business_id, contact_id, channel_kind, external_id,
 ### Conversații & mesaje (hot path)
 ```
 conversations     — id, business_id, contact_id, channel_id, status,
-                    bot_active, handoff_until, last_inbound_at (24h window),
+                    bot_active, last_inbound_at (24h window),
+                    handoff_until/risk_flags/assigned_user_id = coloane MOARTE (handoff scos;
+                    păstrate în schemă, nimeni nu le mai scrie),
                     last_outbound_at, locale, state jsonb (≤8KB), state_version
                     (optimistic lock), risk_flags[], shadow_mode
                     • in_24h_window(conv) = funcție SQL (derivat, nu flag stocat)
@@ -761,10 +765,10 @@ appointments      — business_id, contact_id, service_name, starts_at, ends_at,
 ```
 analytics_events [PARTIȚIONAT] — business_id, conversation_id, event_type,
                     properties jsonb, tokens_in/out, cost_usd, turn_id (NX-122)
-                    • model generic: intent_detected/route/tool_call/cache_hit/handoff...
+                    • model generic: intent_detected/route/tool_call/cache_hit/risk_detected...
                     • turn_id: corelare per-tur (emit() îl injectează; replay traiectorie)
 usage_daily       — business_id, day PK, conversations, messages_in/out,
-                    templates_sent, tokens, cost_usd, cache_hits, handoffs,
+                    templates_sent, tokens, cost_usd, cache_hits, handoffs (=0, handoff scos),
                     orders_attributed, revenue_attributed, intents jsonb
                     • rollup nocturn; dashboard-ul și facturarea citesc DOAR de aici
 conversation_evals, golden_tests — LLM-as-judge + gate CI
@@ -822,8 +826,6 @@ faq_lookup(query)
 book_appointment(service_name, preferred_datetime, contact_info)
   # creare în appointments + Google Calendar sync
 
-request_human(reason)
-  # setează conversations.handoff_until, notifică operatorul
 ```
 
 ---
@@ -1196,6 +1198,12 @@ nou din 2026-08-28; configul vechi e păstrat în `.env.bak.old-project` (gitign
 - NU recovery agent pentru cazuri ambigue — CLARIFY ieftin
 - NU scriere în catalog din worker (excepție: `semantic_cache` și `intent_aliases` candidates)
 - NU tăcere la erori — întotdeauna ceva iese spre client
+- **NU transfer la operator uman** — nu există consolă, inbox sau om de gardă, deci botul nu
+  promite niciodată „te conectez cu un coleg". Un client care cere explicit un om, o reclamație
+  sau o amenințare legală primesc răspunsul agentului: cel mai bun răspuns pe care îl avem bate
+  o promisiune pe care nimeni n-o onorează, iar tăcerea ar încălca P6. Riscul se DETECTEAZĂ
+  (event `risk_detected`, ca să știm cât de des se cere), dar nu schimbă turul. Singurul
+  kill-switch rămas e `conversations.bot_active`, setat din DB — nu declanșat de conversație
 - NU trimitere directă la Meta/Telegram din stagii — totul prin `outbox` + dispatcher (ChannelSender)
 - NU cod specific de canal în pipeline/worker — doar la margini (parser ingestie + ChannelSender)
 - NU mesaje proactive fără consent + (24h window SAU template approved)

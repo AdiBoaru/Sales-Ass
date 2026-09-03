@@ -256,13 +256,13 @@ async def test_deadline_never_speaks_before_the_authority_gate_ran(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_deadline_respects_an_intentional_halt(monkeypatch):
-    """Gates a decis tăcere (handoff activ). Deadline-ul nu o transformă într-un mesaj de bot."""
+    """Gates a decis tăcere (bot oprit). Deadline-ul nu o transformă într-un mesaj de bot."""
     monkeypatch.setattr(rnr, "get_settings", lambda: _settings(TURN_DEADLINE_ENABLED=True))
     ctx = _ctx()
     d = _spent_deadline()
 
     async def gates_stage(ctx, deps):  # noqa: ARG001
-        ctx.halt_silent("handoff_active")
+        ctx.halt_silent("bot_inactive")
         d.elapsed_before_ms = 5_000
 
     async def agent_stage(ctx, deps):  # noqa: ARG001

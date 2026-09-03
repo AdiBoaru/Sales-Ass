@@ -64,7 +64,7 @@ def _spec(name, kind, parallel_safe, idempotent, priority) -> ToolSpec:
 
 #: Registrul de clasificare. `idempotent` la mutații NU e o speranță: `cart_add`/`checkout_link` au
 #: receipts idempotente per (tur, acțiune) (NX-237), `subscribe_back_in_stock` are UNIQUE pe
-#: (business, contact, produs, variantă), iar `request_human` scrie un `handoff_until` absolut.
+#: (business, contact, produs, variantă).
 _SPECS: dict[str, ToolSpec] = {
     s.name: s
     for s in (
@@ -77,7 +77,6 @@ _SPECS: dict[str, ToolSpec] = {
         _spec("cart_add", ToolKind.MUTATION, False, True, ToolPriority.CRITICAL),
         _spec("checkout_link", ToolKind.MUTATION, False, True, ToolPriority.CRITICAL),
         _spec("subscribe_back_in_stock", ToolKind.MUTATION, False, True, ToolPriority.CRITICAL),
-        _spec("request_human", ToolKind.MUTATION, False, True, ToolPriority.CRITICAL),
     )
 }
 

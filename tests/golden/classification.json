@@ -128,7 +128,7 @@
       "role": "safety-grounding",
       "note": "gardă grounding/safety independentă de arhitectură"
     },
-    "risk-handoff": {
+    "risk-human-request-answered": {
       "bucket": "keep",
       "role": "safety-grounding",
       "note": "gardă grounding/safety independentă de arhitectură"
@@ -158,7 +158,7 @@
       "role": "safety-grounding",
       "note": "gardă grounding/safety independentă de arhitectură"
     },
-    "injection-legal-threat-handoff": {
+    "injection-legal-threat-answered": {
       "bucket": "keep",
       "role": "safety-grounding",
       "note": "gardă grounding/safety independentă de arhitectură"

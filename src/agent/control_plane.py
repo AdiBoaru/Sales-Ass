@@ -26,14 +26,13 @@ CONTROL_PLANE_VERSION = "control_plane.v1"
 #: Stagiile care POT finaliza turul (copy authored/canonic sau gate de corectitudine/terminal).
 #: `gates` (auth/risc/tăcere), `action_kernel` (decizie deja luată, mesaj gol prin construcție),
 #: `clarify_resume` (consum determinist de slot), `greeting` (pur salut prin construcție),
-#: `alias` (match exact aprobat), `handoff` (escaladare), `fallback` (terminal P6). `faq`/`cache`
+#: `alias` (match exact aprobat), `fallback` (terminal P6). `faq`/`cache`
 #: servesc conținut canonic, dar DOAR pe mesaje cu o singură obligație (nu întrerup un mesaj mixt).
 _ALWAYS_COMPLETE: frozenset[str] = frozenset(
     {
         "gates_stage",
         "action_kernel_stage",
         "clarify_resume_stage",
-        "handoff_stage",
         "fallback_stage",
         "agent_stage",  # MainBrain / agentul E writerul principal — reply-ul lui e finalul
     }
@@ -48,13 +47,12 @@ def _stage_covers() -> dict[str, tuple[str, ...]]:
     """Ce acoperă reply-ul fiecărui stagiu — DECLARAT de stagii (`FAST_PATH_COVERS`), citit aici.
     Import LAZY + tolerant: un stagiu fără declarație cade pe default-ul conservator."""
     try:
-        from src.worker.stages import cache, faq, greeting, handoff, triage  # noqa: PLC0415
+        from src.worker.stages import cache, faq, greeting, triage  # noqa: PLC0415
 
         return {
             "greeting_stage": greeting.FAST_PATH_COVERS,
             "faq_stage": faq.FAST_PATH_COVERS,
             "cache_stage": cache.FAST_PATH_COVERS,
-            "handoff_stage": handoff.FAST_PATH_COVERS,
             "triage_stage": triage.FAST_PATH_COVERS,
             "alias_stage": ("question_0",),
             "action_kernel_stage": ("opaque_action",),

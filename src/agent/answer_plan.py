@@ -261,7 +261,6 @@ class AnswerPlanV2(BaseModel):
     state_update_proposals: tuple[NeedProposal, ...] = Field(max_length=6)
     action_intents: tuple[str, ...] = Field(max_length=4)
     disclosures: tuple[str, ...] = Field(max_length=4)
-    handoff: bool
     confirmed_actions: tuple[ConfirmedAction, ...] = Field(max_length=4)
     style_signals: StyleSignals
 

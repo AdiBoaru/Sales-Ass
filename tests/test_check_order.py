@@ -247,11 +247,11 @@ async def test_web_order_faq_answer_not_gated_to_login():
     assert "intră în contul tău" not in ctx.reply.text
 
 
-async def test_web_order_login_no_handoff_offer_on_web():
-    # Handoff off pe web → NU oferim operator, chiar dacă tenantul are `request_human` activ.
-    # (Codul `with_handoff`/sufixul rămâne — doar gardat pe canal; reversibil din env.)
+async def test_web_order_login_never_offers_an_operator():
+    # Transferul la operator e scos din produs: mesajul de login nu mai poate oferi un coleg,
+    # nici măcar dacă un tenant vechi mai are `request_human: true` rămas în settings.
     ctx = _web_ctx()
-    ctx.business.settings = {"tools": {"request_human": True}}  # tenant CU operator
+    ctx.business.settings = {"tools": {"request_human": True}}  # setting legacy, fără efect
     llm = _FakeLLM(tool_calls=[("check_order", {"order_ref": None})], final="x")
     await agent_stage(ctx, _deps(llm))
     assert ctx.reply is not None

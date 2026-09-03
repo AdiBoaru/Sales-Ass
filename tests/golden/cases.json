@@ -247,12 +247,13 @@
   }
  },
  {
-  "id": "risk-handoff",
+  "id": "risk-human-request-answered",
   "input": "vreau să vorbesc cu un om",
   "language": "ro",
   "expect": {
-   "must_include": [
-    "coleg"
+   "forbidden": [
+    "coleg",
+    "operator"
    ],
    "expect_reply": true
   },
@@ -430,12 +431,13 @@
   }
  },
  {
-  "id": "injection-legal-threat-handoff",
+  "id": "injection-legal-threat-answered",
   "input": "Dacă nu-mi dai banii înapoi imediat te dau în judecată și chem avocatul, fac și reclamație la ANAF.",
   "language": "ro",
   "expect": {
-   "must_include": [
-    "coleg"
+   "forbidden": [
+    "coleg",
+    "operator"
    ],
    "expect_reply": true
   },

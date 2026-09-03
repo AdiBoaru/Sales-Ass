@@ -316,24 +316,6 @@ class Settings(BaseSettings):
     env: str = Field(default="dev", validation_alias="ENV")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     daily_cost_cap_usd: float = Field(default=5.0, validation_alias="DAILY_COST_CAP_USD")
-    operator_alert_webhook: str = Field(default="", validation_alias="OPERATOR_ALERT_WEBHOOK")
-    # Gates (G5a): cât timp tace botul după un handoff (risc / preluare de om).
-    # Agentul (consola, ulterior) poate prelungi/curăța fereastra.
-    handoff_window_minutes: int = Field(default=45, validation_alias="HANDOFF_WINDOW_MINUTES")
-    # Handoff per-canal: pe ce canale e PERMIS transferul la om (CSV). Web (`webchat`) e exclus
-    # by default — anonim (src/web/session.py) și fără operator conectat (consolă/inbox = task
-    # viitor), deci o escaladare ar fi tăcere/fundătură, nu un om real → botul asistă singur.
-    # WhatsApp/Telegram (operator real, planificat) → permis. Codul de handoff rămâne intact,
-    # doar gardat aici. Reversibil din env fără cod: adaugă `webchat` când web-ul are operator.
-    handoff_enabled_channels: str = Field(
-        default="whatsapp,telegram", validation_alias="HANDOFF_ENABLED_CHANNELS"
-    )
-
-    @property
-    def handoff_enabled_channels_set(self) -> frozenset[str]:
-        """CSV → set de canale unde handoff-ul la om e permis (vezi `handoff_enabled_channels`)."""
-        return frozenset(c.strip() for c in self.handoff_enabled_channels.split(",") if c.strip())
-
     # --- Mesaj de întâmpinare (free layer, stagiul 4) ---
     # Un pur salut → mesaj de welcome branded, determinist (fără LLM). Numele botului și
     # sugestiile pot fi override-uite per business din businesses.settings["welcome"].
@@ -894,8 +876,8 @@ class Settings(BaseSettings):
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")
-    # NX-116: anti-bucla de clarificare — după atâtea re-întrebări pe ACELAȘI slot, escaladăm
-    # (HANDOFF pe slot critic / best-effort SALES altfel), niciodată re-întrebare la infinit (P6).
+    # NX-116: anti-bucla de clarificare — după atâtea re-întrebări pe ACELAȘI slot mergem pe
+    # best-effort SALES cu ce avem, niciodată re-întrebare la infinit (P6).
     clarify_max_attempts: int = Field(default=2, validation_alias="CLARIFY_MAX_ATTEMPTS")
     # NX-126: reziliență adaptor OpenAI (llm.py). `timeout` anti-hang (mai ales pe web sincron);
     # retry bounded pe tranzitoriu (429/5xx/timeout). `sampling_enabled` = kill-switch pt modele
@@ -1644,11 +1626,3 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Singleton — citit o singură dată per proces."""
     return Settings()
-
-
-def handoff_enabled_for(channel_kind: str) -> bool:
-    """Handoff la om permis pe acest canal? Web (`webchat`) e exclus by default — anonim, fără
-    operator conectat → escaladarea ar fi tăcere. Reversibil din `HANDOFF_ENABLED_CHANNELS` (vezi
-    `Settings.handoff_enabled_channels`). Consumatori: gates (risc), handoff_stage (triaj/clarify),
-    tool `request_human`, poarta de comandă web (oferta de operator)."""
-    return channel_kind in get_settings().handoff_enabled_channels_set

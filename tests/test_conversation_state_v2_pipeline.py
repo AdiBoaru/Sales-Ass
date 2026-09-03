@@ -70,7 +70,6 @@ async def _run(monkeypatch, stage, *, initial_state, body="salut") -> tuple[dict
             "state_version": 3,
             "locale": "ro",
             "bot_active": True,
-            "handoff_until": None,
         }
 
     async def fake_patch(conn, business_id, conv_id, new_state, version, **k):

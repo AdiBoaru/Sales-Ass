@@ -1,10 +1,10 @@
-"""G5a — Gates (stagiul 3): detect_risk + porțile bot_active / handoff / risc.
+"""G5a — Gates (stagiul 3): detect_risk + porțile bot_active / blocklist / moderare.
 
-Unit, fără DB/LLM: `detect_risk` e pur; `gates_stage` cu `set_handoff`
-monkeypatch-uit. Verifică tăcerea intenționată (halt) și escaladarea la om.
+Unit, fără DB/LLM: `detect_risk` e pur. Verifică tăcerea intenționată (halt) și faptul că
+riscul detectat NU mai schimbă turul — transferul la operator a fost scos din produs, deci
+`detect_risk` e pur telemetrie.
 """
 
-from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from src.agent.llm import LLMClient, ModerationResult
@@ -60,7 +60,6 @@ def _ctx(
     body: str = "salut",
     *,
     bot_active: bool = True,
-    handoff_until=None,
     is_blocked: bool = False,
 ) -> TurnContext:
     return TurnContext(
@@ -70,7 +69,6 @@ def _ctx(
         message=InboundMessage(provider_msg_id="m1", body=body),
         conversation_id="conv-1",
         bot_active=bot_active,
-        handoff_until=handoff_until,
     )
 
 
@@ -84,66 +82,45 @@ async def test_bot_inactive_halts_silent():
     )
 
 
-async def test_handoff_active_halts_silent():
-    ctx = _ctx(handoff_until=datetime.now(UTC) + timedelta(minutes=10))
-    await gates.gates_stage(ctx, PipelineDeps(conn=None))
-    assert ctx.halt is True
-    assert ctx.reply is None
+async def test_risk_is_telemetry_only_and_never_promises_a_colleague():
+    """Miezul scoaterii handoff-ului: „vreau sa vorbesc cu un om" e DETECTAT, dar turul curge.
 
-
-async def test_handoff_expired_does_not_halt():
-    ctx = _ctx(handoff_until=datetime.now(UTC) - timedelta(minutes=1))
-    await gates.gates_stage(ctx, PipelineDeps(conn=None))
-    assert ctx.halt is False
-    assert ctx.reply is None  # continuă la triaj
-
-
-async def test_risk_escalates_and_replies(monkeypatch):
-    calls = {}
-
-    async def fake_set_handoff(conn, bid, conv_id, *, window_minutes, risk_flag, **kw):
-        calls["risk_flag"] = risk_flag
-        calls["window"] = window_minutes
-        calls["business_id"] = bid
-
-    monkeypatch.setattr(gates, "set_handoff", fake_set_handoff)
-
+    Nu setăm reply, nu oprim pipeline-ul, nu scriem nimic în DB. Un mesaj de tranziție aici ar
+    promite un coleg care nu există — iar tăcerea ar încălca P6. Mesajul merge la agent."""
     ctx = _ctx(body="vreau sa vorbesc cu un om")
     await gates.gates_stage(ctx, PipelineDeps(conn=None))
 
-    assert calls["risk_flag"] == "human_request"
-    assert calls["business_id"] == "biz-1"
-    assert calls["window"] > 0
-    assert ctx.reply is not None
-    assert "coleg" in ctx.reply.text.lower()
-    assert ctx.reply.cacheable is False  # NX-126: escaladarea NU se cache-uiește (cache-poison)
-    assert ctx.halt is False  # are reply (tranziție), nu halt
+    assert ctx.reply is None  # niciun mesaj de „coleg"
+    assert ctx.halt is False  # curge spre triaj/agent
+    risk = [e for e in ctx.events if e.type == "risk_detected"]
+    assert len(risk) == 1
+    assert risk[0].properties["reason"] == "human_request"
+
+
+async def test_gates_no_longer_exposes_an_escalation_path():
+    """Anti-regresie structurală: dacă cineva readuce escaladarea, testul de mai sus ar putea
+    rămâne verde pe altă ramură. Poarta e pe SIMBOLURI — nu mai există nici funcția, nici
+    scrierea în DB, nici eventul pe care se sprijineau."""
+    assert not hasattr(gates, "request_human")
+    assert not hasattr(gates, "set_handoff")
+    assert not hasattr(gates, "handoff_enabled_for")
+
+
+async def test_legal_threat_is_detected_but_still_answered():
+    """Consecință ASUMATĂ a scoaterii: o amenințare legală nu mai ajunge la un om. O numărăm
+    (ca să se vadă în analytics cât de des se întâmplă), dar botul răspunde el."""
+    ctx = _ctx(body="te dau in judecata si chem avocatul")
+    await gates.gates_stage(ctx, PipelineDeps(conn=None))
+
+    assert ctx.halt is False
+    assert ctx.reply is None
     assert any(
-        e.type == "handoff_requested" and e.properties["reason"] == "human_request"
+        e.type == "risk_detected" and e.properties["reason"] == "legal_complaint"
         for e in ctx.events
     )
 
 
-async def test_risk_not_escalated_on_web(monkeypatch):
-    # Web (handoff off): risc detectat, dar NU escaladăm și NU întrerupem — mesajul curge normal.
-    async def _boom(*a, **k):
-        raise AssertionError("nu escaladăm pe web")
-
-    monkeypatch.setattr(gates, "set_handoff", _boom)
-    ctx = _ctx(body="vreau sa vorbesc cu un om")
-    ctx.message.channel_kind = "webchat"
-    await gates.gates_stage(ctx, PipelineDeps(conn=None))
-    assert ctx.reply is None  # niciun mesaj de „coleg"
-    assert ctx.halt is False  # nu oprește pipeline-ul (curge la triaj)
-    assert any(e.type == "handoff_suppressed" for e in ctx.events)
-
-
-async def test_normal_message_passes(monkeypatch):
-    # set_handoff NU trebuie atins pe un mesaj normal
-    async def boom(*a, **k):
-        raise AssertionError("set_handoff nu trebuie apelat pe mesaj normal")
-
-    monkeypatch.setattr(gates, "set_handoff", boom)
+async def test_normal_message_passes():
     ctx = _ctx(body="caut o cremă")
     await gates.gates_stage(ctx, PipelineDeps(conn=None))
     assert ctx.halt is False
@@ -236,10 +213,6 @@ async def test_blocked_contact_halts_before_moderation():
 
 async def test_moderation_failopen_on_error(monkeypatch):
     # API jos → fail-open: mesajul trece (fără reply de moderation), risc încă evaluat
-    async def boom(*a, **k):
-        raise AssertionError("mesaj curat → fără handoff")
-
-    monkeypatch.setattr(gates, "set_handoff", boom)
     llm = _FakeLLM(raise_exc=RuntimeError("moderation API down"))
     ctx = _ctx(body="caut un parfum")
     await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=None, llm=llm))
@@ -292,10 +265,6 @@ async def test_adapter_moderate_parses_flagged_categories():
 
 
 async def test_rate_limit_under_threshold_passes(monkeypatch):
-    async def boom(*a, **k):
-        raise AssertionError("mesaj normal sub prag → fără handoff")
-
-    monkeypatch.setattr(gates, "set_handoff", boom)
     ctx = _ctx(body="salut")
     # count=5 ≤ max(20) → trece (llm=None → moderation sărit)
     await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=_FakeRedis(count=5), llm=None))
@@ -319,11 +288,7 @@ async def test_rate_limit_already_over_halts_silent():
     assert any(e.type == "rate_limited" for e in ctx.events)
 
 
-async def test_rate_limit_no_redis_is_noop(monkeypatch):
-    async def boom(*a, **k):
-        raise AssertionError("fără redis → rate limit no-op")
-
-    monkeypatch.setattr(gates, "set_handoff", boom)
+async def test_rate_limit_no_redis_is_noop():
     ctx = _ctx(body="salut")
     await gates.gates_stage(ctx, PipelineDeps(conn=None, redis=None, llm=None))
     assert ctx.reply is None and ctx.halt is False

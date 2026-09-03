@@ -221,28 +221,6 @@ async def test_search_tool_releases_conn_before_embedding(monkeypatch):
     assert "has_embeddings" in db.operations and "search_products_ladder" in db.operations
 
 
-async def test_handoff_tool_releases_conn_before_operator_http(monkeypatch):
-    """Escaladarea scrie în DB și apoi face un POST către operator. POST-ul e rețeaua altcuiva."""
-    from src.tools import handoff_tools as ht
-
-    db = GuardedProvider()
-
-    async def _set_handoff(conn, *a, **k):
-        await conn.execute("update conversations")
-
-    async def _notify(ctx, reason):
-        await db.external_call("notify_operator")
-
-    monkeypatch.setattr(ht, "set_handoff", _set_handoff)
-    monkeypatch.setattr(ht, "notify_operator", _notify)
-    monkeypatch.setattr(ht, "handoff_enabled_for", lambda kind: True)
-
-    ctx = _ctx()
-    res = await ht.request_human_tool(ctx, PipelineDeps(db=db), {"reason": "vreau om"})
-    assert res.ok
-    assert db.max_open == 1
-
-
 # --------------------------------------------------------------------------- #
 # 3. Unit of Work — load/commit iau checkout-uri proprii, pipeline-ul niciunul
 # --------------------------------------------------------------------------- #
@@ -684,7 +662,6 @@ async def _conv(conn, *a, **k):
         "state_version": 0,
         "locale": "ro",
         "bot_active": True,
-        "handoff_until": None,
         "shadow_mode": False,
     }
 

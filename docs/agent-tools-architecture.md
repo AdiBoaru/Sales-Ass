@@ -145,7 +145,6 @@ Decizii cheie:
 | `checkout_link` | **write** | checkout_links (ref_code, atribuire) | 2 |
 | `subscribe_back_in_stock` | **write** | back_in_stock_subscriptions | 4 |
 | `book_appointment` | **write+extern** | appointments + Google Calendar | 4 |
-| `request_human` | write | conversations (handoff) | ✅ există (gates) |
 
 **Faze:**
 - **Faza 1 — read core (acest PR):** framework + `search_products` + `get_product_details` +
@@ -289,8 +288,11 @@ Decizii cheie:
   seed + secret webhook comenzi. Devine API-ul de onboarding la scară.
 - **Config per-tenant:** tool-uri active, `supported_locales` (G5c ✅), tarife Meta (NX-54 ❌),
   praguri cost/rate.
-- **Human-in-the-loop:** consolă de agent (inbox) pentru handoff (`assigned_user_id` = cârlig
-  ✅, UI ❌). Esențial: AI-ul escaladează, omul preia.
+- ~~**Human-in-the-loop:** consolă de agent (inbox), escaladare la operator~~ — **SCOS din
+  produs.** Nu există consolă și nici om de gardă, deci nu promitem un coleg care nu vine: un
+  client care cere un om primește răspunsul agentului. `handoff_until` / `risk_flags` /
+  `assigned_user_id` rămân coloane MOARTE în schemă (nimeni nu le mai scrie). Singurul
+  kill-switch e `bot_active`, o decizie luată din DB, nu din conversație.
 - **Runbooks + on-call:** ce faci la outage OpenAI / Redis / Supabase; cum repornești workerii;
   cum oprești un tenant (kill-switch `bot_active` ✅).
 

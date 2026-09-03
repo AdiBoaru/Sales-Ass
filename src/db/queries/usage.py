@@ -31,6 +31,10 @@ with ev as (
             where event_type = 'cache_lookup'
               and properties->>'layer' in ('exact', 'semantic')
         )                                                     as cache_hits,
+        -- Transferul la operator a fost scos din produs: nimeni nu mai emite `handoff_requested`,
+        -- deci coloana e 0 pentru orice zi de după. O păstrăm fiindcă `usage_daily.handoffs`
+        -- rămâne în schemă și are date ISTORICE reale — a nu o mai scrie ar lăsa NULL-uri într-o
+        -- serie pe care dashboardul o citește ca sumă. 0 e adevărul, NULL ar fi o gaură.
         count(*) filter (where event_type = 'handoff_requested') as handoffs
     from analytics_events
     where business_id = $1 and (created_at at time zone 'UTC')::date = $2

@@ -25,7 +25,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
 from src.db.provider import DbProvider
@@ -62,7 +61,6 @@ class TurnLoadSnapshot:
     state_version: int = 0
     locale: str | None = None
     bot_active: bool = True
-    handoff_until: datetime | None = None
     shadow_mode: bool = False
     history: list[Message] = field(default_factory=list)
     summary: str | None = None
@@ -183,7 +181,6 @@ async def _load_turn(
         state_version=conv["state_version"],
         locale=conv["locale"],
         bot_active=conv["bot_active"],
-        handoff_until=conv["handoff_until"],
         shadow_mode=bool(conv.get("shadow_mode")),
         history=history,
         summary=summary,

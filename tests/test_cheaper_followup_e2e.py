@@ -125,7 +125,6 @@ class _Store:
             "id": "conv-1",
             "status": "open",
             "bot_active": True,
-            "handoff_until": None,
             "last_inbound_at": None,
             "last_outbound_at": None,
             "last_message_at": None,

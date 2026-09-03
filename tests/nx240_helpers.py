@@ -87,7 +87,6 @@ def plan(**overrides: Any) -> AnswerPlanV2:
         "state_update_proposals": (),
         "action_intents": (),
         "disclosures": (),
-        "handoff": False,
         "confirmed_actions": (),
         "style_signals": StyleSignals(tone="neutral", verbosity="short"),
     }

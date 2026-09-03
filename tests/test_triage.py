@@ -182,11 +182,13 @@ async def test_low_confidence_forces_clarify():
     assert ctx.reply.pending_question is not None
 
 
-async def test_low_confidence_does_not_override_handoff():
+async def test_unknown_route_from_nano_is_rejected():
+    """`handoff` a fost o rută validă. Acum nu mai e, iar un nano care o mai emite (prompt
+    cache-uit, model vechi) trebuie să pice validarea Pydantic, nu să treacă tăcut."""
     ctx = _ctx("vreau un om")
     llm = FakeLLM({"route": "handoff", "confidence": "low"})
     await triage_stage(ctx, _deps(llm))
-    assert ctx.route.route == Route.HANDOFF  # handoff e terminal, nu-l forțăm clarify
+    assert ctx.route is None  # output invalid → stagiul nu scrie nimic, pipeline-ul continuă
 
 
 async def test_backcompat_no_confidence_slots():

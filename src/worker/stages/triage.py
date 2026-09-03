@@ -1,6 +1,6 @@
 """Stagiul 5 — Triaj (GPT-5.4-nano). Primul touchpoint LLM al pipeline-ului.
 
-Clasifică mesajul în: simple | sales | order | handoff | clarify. Output JSON
+Clasifică mesajul în: simple | sales | order | clarify. Output JSON
 validat cu Pydantic. `category_key` e validat contra `categories` din DB — dacă
 nano inventează o categorie, o aruncăm (principiul: incertitudinea = CLARIFY, nu
 recovery). Pentru `simple`/`clarify`, nano compune și răspunsul → early exit.
@@ -191,13 +191,12 @@ Rute posibile (câmpul "route"):
   „vreau să-l iau") — face parte din procesul de cumpărare.
 - "order"   : DOAR despre o comandă DEJA PLASATĂ de client — statusul ei, „unde e comanda mea",
   livrarea/AWB-ul ei, returul/refund-ul unei comenzi pe care a primit-o. NU „cum comand" (= sales).
-- "handoff" : cere explicit un operator uman, reclamație serioasă, caz sensibil.
 - "clarify" : cererea e SUB-SPECIFICATĂ pentru o recomandare bună — fie nu e clar CE produs vrea
   („un cadou", „ceva"), fie e doar o categorie/tip LARG fără context util („un laptop", „o cremă",
   „ceva de ten", „o rutină"). Vezi regula de SUFICIENȚĂ mai jos.
 
 Format JSON de răspuns:
-{"route": "<una din cele 5>", "category_key": <slug din lista dată sau null>,
+{"route": "<una din cele 4>", "category_key": <slug din lista dată sau null>,
  "missing_field": <ce lipsește, pt clarify, sau null>, "reply": <text sau null>,
  "confidence": "<low|med|high>",
  "slots": {"budget_max": <număr sau null>, "concerns": [<termeni din lista de nevoi sau []>],
@@ -387,7 +386,7 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.emit("triage_factual_guard", original="simple")
 
     # NX-116: confidence LOW → CODUL forțează CLARIFY (nu sales/order pe ghicit). „LLM înțelege,
-    # codul decide" (P2). simple/handoff rămân neatinse (low-risk / deja terminale).
+    # codul decide" (P2). `simple` rămâne neatins (low-risk).
     # NX-176a (P0, fix review Codex #233): EXCEPȚIA DE SIGURANȚĂ e impusă în cod, nu doar în
     # promptul nano. Pe un tur cu context de sănătate ACTIV (sarcină/alăptare) NU clarificăm
     # NICIODATĂ — o clarificare ar rata gate-ul determinist de contraindicații (sales filtrează +

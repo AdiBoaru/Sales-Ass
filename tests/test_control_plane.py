@@ -59,7 +59,7 @@ def test_triage_never_finalizes_under_single_brain():
 
 
 def test_gates_and_terminal_stages_always_finalize():
-    for stage in ("gates_stage", "handoff_stage", "fallback_stage", "agent_stage"):
+    for stage in ("gates_stage", "fallback_stage", "agent_stage"):
         assert control_plane.decide(_ctx("orice mesaj"), stage).complete
 
 
@@ -172,7 +172,7 @@ async def test_runner_flag_on_halt_untouched(monkeypatch):
     ctx = _ctx("orice")
 
     async def _gate(ctx, deps):
-        ctx.halt_silent("handoff_active")
+        ctx.halt_silent("bot_inactive")
 
     _gate.__name__ = "gates_stage"
     ran: list[str] = []

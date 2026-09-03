@@ -50,7 +50,6 @@ from src.tools import catalog_tools as ct
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, run_pipeline
 from src.worker.stages import agent as agent_mod
 from src.worker.stages import cache as cache_mod
-from src.worker.stages import gates as gates_mod
 from src.worker.stages import triage as triage_mod
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,9 +133,6 @@ def _apply_stubs(patch: _Patcher, get_fx) -> None:
     async def none_lookup(*args, **kwargs):
         return None
 
-    async def noop_handoff(*args, **kwargs):
-        return None
-
     async def no_prompt_inputs(conn, business_id, **kwargs):
         return []
 
@@ -158,7 +154,6 @@ def _apply_stubs(patch: _Patcher, get_fx) -> None:
     patch.setattr(planner_mod, "get_complementary_products", fake_complementary)
     patch.setattr(cache_mod, "exact_lookup", none_lookup)
     patch.setattr(cache_mod, "semantic_lookup", none_lookup)
-    patch.setattr(gates_mod, "set_handoff", noop_handoff)
     patch.setattr(get_settings(), "moderation_enabled", True)
 
 

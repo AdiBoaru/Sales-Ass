@@ -392,7 +392,7 @@ Calea **sincronă** `/web/chat` diferă doar la capete: sesiune HMAC + rate-limi
 ## Diagram 4a — Pipeline Routing Workflow (cele 12 stagii)
 
 Ordinea stagiilor: `DEFAULT_STAGES`, `src/worker/runner.py:207-219`. Internele stagiului Agent → Diagram 4b.
-*(Corectat după trace-ul invers: alias route-hit continuă spre agent, clarify are escaladare pe attempts, greeting rulează și după resume, handoff are ramura web→SALES, rate-limit are tăcere pe burst.)*
+*(Corectat după trace-ul invers: alias route-hit continuă spre agent, clarify cade pe vânzare după prea multe încercări, greeting rulează și după resume, rate-limit are tăcere pe burst.)*
 
 ```mermaid
 flowchart TD
@@ -410,16 +410,16 @@ flowchart TD
     G2{"Trimite prea multe mesaje? (:323)"}:::dec
     G3{"Mesaj abuziv? — moderare automată (:348)"}:::llm
     MODB["Prea multe abateri în 24h →<br/>contactul e blocat (:305-318)"]:::err
-    G4{"Semne de risc: amenințare legală,<br/>cere explicit un om? (:468)"}:::dec
-    G5{"A trimis o poză? (:482)"}:::dec
+    G4{"Semne de risc: amenințare legală,<br/>cere explicit un om? (:442)"}:::dec
+    G5{"A trimis o poză? (:449)"}:::dec
     VIS["AI descrie poza → devine text de căutare<br/>(dacă pică, păstrăm descrierea clientului)<br/>(:385-436)"]:::llm
-    GRD["Curățăm mesajul: tăiem excesul,<br/>mascăm datele personale (:487)"]:::stage
+    GRD["Curățăm mesajul: tăiem excesul,<br/>mascăm datele personale (:454)"]:::stage
   end
 
-  HALT["TĂCERE intenționată — nu răspundem<br/>(un om se ocupă / rafală de spam)"]:::err
+  HALT["TĂCERE intenționată — nu răspundem<br/>(bot oprit pe conversație / rafală de spam)"]:::err
   THR["Îi spunem O singură dată<br/>«hai mai încet» (:340-342)"]:::out
   NEU["Răspuns neutru, fără discuție"]:::out
-  ESC["Chemăm un operator + mesaj de tranziție<br/>(gates.py:473-476)"]:::out
+  RISKEV["DOAR numărăm evenimentul —<br/>nu există operator, mesajul curge (:444)"]:::step
 
   LANG["2 · Detectăm limba: RO / HU / EN<br/>(language.py:27)"]:::stage
 
@@ -428,7 +428,7 @@ flowchart TD
     CONS["Răspunsul lui completează formularul:<br/>buget, nevoie, categorie (:41-52)"]:::stage
     ATT{"A răspuns vag de prea multe ori? (:59)"}:::dec
     RESUME["Reluăm de unde rămăsese<br/>(ruta salvată) (:69-73)"]:::stage
-    ESCR["Prea multe încercări → om<br/>sau vânzare (:61-62)"]:::stage
+    ESCR["Prea multe încercări → vânzare<br/>cu ce știm (:61-62)"]:::stage
   end
 
   GREET{"4 · E doar un salut? («bună»)<br/>(greeting.py:184)"}:::dec
@@ -451,12 +451,8 @@ flowchart TD
   SIMPLE["AI-ul mic răspunde direct<br/>+ butoane de continuare (:298-308)"]:::out
   CLARIFY["Punem O întrebare de clarificare<br/>+ variante de răspuns (:309-319)"]:::out
 
-  HOFF{"9 · Canalul are operator uman?<br/>(handoff.py:39)"}:::dec
-  HESC["Anunțăm operatorul + îi confirmăm<br/>clientului (:44-49)"]:::out
-  HSUP["Pe site nu e operator → tratăm<br/>ca vânzare (:40-42)"]:::stage
-
-  AGENT["10 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:347)"]:::llm
-  FB["11 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
+  AGENT["9 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:347)"]:::llm
+  FB["10 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
   SEND["Răspunsul pleacă spre client<br/>(un singur punct de ieșire)"]:::out
 
   IN --> G1
@@ -467,8 +463,7 @@ flowchart TD
   G2 -- nu --> G3
   G3 -- da --> MODB --> NEU
   G3 -- nu --> G4
-  G4 -- "da + canal cu operator" --> ESC
-  G4 -- "da, fără operator → continuăm (:470)" --> G5
+  G4 -- da --> RISKEV --> G5
   G4 -- nu --> G5
   G5 -- da --> VIS --> GRD
   G5 -- nu --> GRD
@@ -495,9 +490,7 @@ flowchart TD
   ROUTE -- "simplu + are răspuns" --> SIMPLE
   ROUTE -- "simplu, fără text (:298)" --> FB
   ROUTE -- clarificare --> CLARIFY
-  ROUTE -- "cere om" --> HOFF
-  HOFF -- da --> HESC --> SEND
-  HOFF -- "nu — site" --> HSUP --> AGENT
+  ROUTE -- vânzare/comandă --> AGENT
   ROUTE -- "vânzare / comandă" --> AGENT
   AGENT -- "răspuns compus" --> SEND
   AGENT -- "AI-ul a picat → fără răspuns (:370)" --> FB
@@ -1283,10 +1276,6 @@ flowchart LR
     MMED["media download GET — fetch_media<br/>meta_client.py:137 · media.py:34-43"]:::ext
   end
 
-  subgraph Operator["Operator (handoff)"]
-    OPW["notify webhook POST, best-effort, no PII<br/>handoff_tools.py:28-47"]:::ext
-  end
-
   subgraph TG["Telegram Bot API"]
     TIN["long polling getUpdates<br/>poller.py:70"]:::ext
     TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:78"]:::ext
@@ -1312,7 +1301,6 @@ flowchart LR
   WIN --> SYS
   OIN --> SYS
   MMED --> SYS
-  SYS --> OPW
   SYS --> MOUT
   SYS --> TOUT
   SYS --> WOUT2
@@ -1386,10 +1374,10 @@ flowchart TD
     S5["dispatcher dead between claim/mark →<br/>visibility timeout, row redeemed"]:::ok
   end
 
-  subgraph Human["Human handoff"]
-    H1["risk pattern / route handoff"]:::dec
-    H2["request_human: set handoff_until + notify<br/>gates.py:473"]:::ok
-    H3["next turns: gates → intentional silence"]:::deg
+  subgraph Kill["Kill-switch per conversație"]
+    H1["bot_active=false (setat din DB, nu din conversație)"]:::dec
+    H2["gates → intentional silence"]:::deg
+    H3["risc detectat = DOAR event; turul curge la agent"]:::ok
   end
 
   L1 --> L2
@@ -1483,7 +1471,7 @@ flowchart TD
 3. **„Validatorul (stagiul 8)" din CLAUDE.md nu e stagiu separat:** trăiește în [`src/agent/validator.py`](../src/agent/validator.py) (`validate_prose:195`) și e chemat din faza F a agentului, nu ca stagiu al pipeline-ului. Comportamentul e cel documentat, structura diferă. *(Actualizat 2026-08-10: până la NX-142 erau funcții private în monolitul `agent.py` — de aceea R2 din tabelul de refactoring apare ca rezolvat.)*
 4. **arch_explorer e ușor stale pe branch-ul curent:** raportează `agent_stage` la linia 858 și `triage_stage` la 179; în cod sunt la `stages/agent.py:347` și `triage.py:293`. Necesită re-rulare `arch_explorer/analyze.py`.
 5. **`webhook/status.py` NU există** — CLAUDE.md îl listează ca LIVE; statusurile sunt parsate în `webhook/meta.py:104` (`parse_statuses`) și scrise de worker (`consumer.py:137-146`).
-6. **STT/Whisper NU e implementat** — CLAUDE.md promite „vocale → STT (Whisper)"; `audio` e doar un tip de media parsat cu caption drept body (`webhook/meta.py:27,36-39`), ne-rutat spre vreo transcriere (gates rutează DOAR `image`, `gates.py:482`).
+6. **STT/Whisper NU e implementat** — CLAUDE.md promite „vocale → STT (Whisper)"; `audio` e doar un tip de media parsat cu caption drept body (`webhook/meta.py:27,36-39`), ne-rutat spre vreo transcriere (gates rutează DOAR `image`, `gates.py:449`).
 7. **Tool-ul `delivery_eta` NU există** — CLAUDE.md îl listează; registry-ul real are 10 tool-uri (grep `@register` în `src/tools/`), fără `delivery_eta`.
 
 **Adăugate de auditul NX-250 (2026-08-18)** — detalii, dovezi și dispoziții în
@@ -1561,7 +1549,7 @@ care îl scrie. Când două vor să scrie același câmp, arhitectura e greșit�
 | Câmp | Proprietar unic | Notă |
 | --- | --- | --- |
 | `language` | `language_stage` | Cheie în TOATE lookup-urile (faqs / semantic_cache / wa_templates) |
-| `route` | `triage_stage` | Excepții documentate: `alias_stage` setează ruta fără reply; `handoff_stage` o rescrie în SALES pe canale fără operator; `clarify_resume` o restaurează; `action_kernel_stage` o fixează pentru o acțiune opacă (NX-236) |
+| `route` | `triage_stage` | Excepții documentate: `alias_stage` setează ruta fără reply; `clarify_resume` o restaurează; `action_kernel_stage` o fixează pentru o acțiune opacă (NX-236) |
 | `action` | `processor` | Comanda deja autorizată la marginea web; kernelul o CITEȘTE, nu o produce |
 | `retrieval` | `planner.build_plan` | Singurul scriitor — de aceea gate-ul de siguranță final stă tot acolo |
 | `reply` | orice stagiu (early exit) | Un singur punct de IEȘIRE (Sender), dar multe puncte de decizie |
@@ -1699,7 +1687,6 @@ alias_stage
 cache_stage
 faq_stage
 triage_stage
-handoff_stage
 agent_stage
 fallback_stage
 ```
@@ -1712,7 +1699,6 @@ compare_products
 faq_lookup
 get_product_details
 reorder
-request_human
 search_products
 subscribe_back_in_stock
 ```

@@ -33,7 +33,6 @@ class Route(str, Enum):
     SIMPLE = "simple"
     SALES = "sales"
     ORDER = "order"
-    HANDOFF = "handoff"
     CLARIFY = "clarify"
 
 
@@ -565,7 +564,6 @@ class TurnContext:
     # seed: processor (din conv.locale); owner refinare per-tur: language_stage (G5c)
     language: str = "ro"
     bot_active: bool = True  # owner: processor (din conversations.bot_active)
-    handoff_until: datetime | None = None  # owner: processor (conversations.handoff_until)
     # NX-129: customer_ref verificat (login passthrough web) — id stabil de client din eshop,
     # stabilit la marginea de canal și rezolvat de processor în contact verificat. None = anonim.
     # Owner: processor. Citit de order_gate (poarta de comandă) și de check_order (NX-130: lookup).
@@ -655,7 +653,7 @@ class TurnContext:
 
     def halt_silent(self, reason: str) -> None:
         """Tăcere INTENȚIONATĂ (Gates): oprește pipeline-ul FĂRĂ reply de bot —
-        omul se ocupă (handoff activ / bot oprit). Singura excepție de la
+        botul e oprit pe conversație (`bot_active`) sau contactul e blocat. Singura excepție de la
         principiul 6 ('niciodată tăcere'). Emite `gate_halt` pentru observabilitate."""
         self.halt = True
         self.emit("gate_halt", reason=reason)

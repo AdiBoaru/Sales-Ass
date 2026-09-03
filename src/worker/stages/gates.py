@@ -1,18 +1,19 @@
 """Stagiul 3 — Gates. Decide DETERMINIST dacă botul are voie să răspundă.
 
-Primul stagiu real de control, înaintea oricărui LLM (principiul 2). Trei porți,
-în ordine, fiecare cu early-exit:
+Primul stagiu real de control, înaintea oricărui LLM (principiul 2). Porțile cu
+early-exit, în ordine:
   1. bot_active=False  → tăcere (kill-switch per conversație; omul scrie din inbox)
-  2. handoff activ     → tăcere (un om a preluat până la handoff_until)
-  3. risc (pattern)    → request_human + UN mesaj de tranziție, apoi botul tace
+  2. contact blocat    → tăcere (abuse blocklist, NX-15)
 
-AGNOSTIC de canal: gate-ul decide doar „răspunde botul?". CUM arată handoff-ul
-(tăcere pe WhatsApp/TG vs agent live pe webchat) e treaba marginilor, nu a
-gate-ului — aici doar setăm starea (`handoff_until`/`risk_flags`) și emitem
-`handoff_requested`. Tăcerea intenționată (`ctx.halt_silent`) e singura excepție
-documentată de la principiul 6.
+AGNOSTIC de canal: gate-ul decide doar „răspunde botul?". Tăcerea intenționată
+(`ctx.halt_silent`) e singura excepție documentată de la principiul 6.
 
-Câmpuri TurnContext scrise aici: `ctx.halt` (via halt_silent), `ctx.reply` (risc) și
+Produsul NU are transfer către operator uman (vezi `detect_risk`): nu există consolă, nu
+există om de gardă, deci nu promitem un coleg care nu vine. Un client care cere explicit un
+om primește răspunsul agentului, nu tăcere. Singurul kill-switch rămas e `bot_active`, care
+e o decizie a OPERATORULUI de magazin luată din DB, nu o escaladare declanșată de conversație.
+
+Câmpuri TurnContext scrise aici: `ctx.halt` (via halt_silent), `ctx.reply` (moderare/throttle) și
 `ctx.message.body` (media routing NX-76: descrierea Vision a unei poze devine text de căutare).
 """
 
@@ -22,15 +23,11 @@ import logging
 import re
 import unicodedata
 from base64 import b64encode
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import asyncpg
-
 from src.agent.llm import VISION_NOT_PRODUCT
-from src.config import INBOUND_BODY_MAX, get_settings, handoff_enabled_for
+from src.config import INBOUND_BODY_MAX, get_settings
 from src.db.queries.contacts import block_contact
-from src.db.queries.conversations import set_handoff
 from src.models import TurnContext
 from src.worker.limits import cost_add, rate_limit_count
 
@@ -57,8 +54,13 @@ THROTTLE_MSG = (
 )
 
 # Pattern-uri de risc (RO + HU + EN, normalizate fără diacritice/uppercase). Determinist, NU LLM.
-# Val3 (CONV-COMMERCE): RO era solid, HU/EN „fără risk_terms" → un client HU/EN nu putea escalada
-# la om / nu era detectat un caz legal. Paritate multilingvă. Extensibil per-business = follow-up.
+# Val3 (CONV-COMMERCE): RO era solid, HU/EN „fără risk_terms" → un client HU/EN nu era detectat.
+# Paritate multilingvă. Extensibil per-business = follow-up.
+#
+# De la scoaterea transferului la operator, lista NU mai declanșează nimic în conversație: e pur
+# TELEMETRIE. O păstrăm fiindcă răspunde la o întrebare pe care altfel n-o putem pune datelor —
+# „cât de des cere cineva un om?" — iar răspunsul ei decide dacă merită vreodată construită o
+# consolă. Un contor care nu schimbă turul e ieftin; o listă ștearsă nu se mai poate întreba.
 RISK_PATTERNS: dict[str, list[str]] = {
     "human_request": [
         # RO
@@ -120,7 +122,9 @@ def _norm(text: str) -> str:
 
 
 def detect_risk(text: str | None) -> str | None:
-    """Întoarce motivul de escaladare (primul găsit) sau None. Pur, fără LLM."""
+    """Întoarce motivul de risc (primul găsit) sau None. Pur, fără LLM.
+
+    Observațional: rezultatul se emite ca event și NU schimbă ruta, reply-ul sau starea."""
     if not text:
         return None
     norm = _norm(text)
@@ -277,31 +281,6 @@ def _apply_input_guardrails(ctx: TurnContext) -> None:
             log.warning("injection screen eșuat (%s) → fail-open", type(e).__name__)
 
 
-async def request_human(
-    conn: asyncpg.Connection,
-    ctx: TurnContext,
-    reason: str,
-    *,
-    source: str = "risk",
-    assigned_user_id: str | None = None,
-) -> None:
-    """Escaladează la om: setează fereastra de handoff + risk_flag, emite evenimentul.
-
-    `assigned_user_id` e un CÂRLIG (web-ready): G5a nu auto-asignează — îl umple
-    consola de agent (task de margine). Partea activă acum = `handoff_until` +
-    `risk_flags` + `handoff_requested` (channel-agnostic)."""
-    window = get_settings().handoff_window_minutes
-    await set_handoff(
-        conn,
-        ctx.business.id,
-        ctx.conversation_id,
-        window_minutes=window,
-        risk_flag=reason,
-        assigned_user_id=assigned_user_id,
-    )
-    ctx.emit("handoff_requested", reason=reason, source=source)
-
-
 async def _record_flag_and_maybe_block(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Contor de flag-uri în Redis (analytics e append-only fără SELECT din runtime).
     La ≥ prag într-o fereastră de 24h → abuse blocklist. Best-effort: orice eșec se
@@ -444,46 +423,32 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.halt_silent("bot_inactive")
         return
 
-    # 2. abuse blocklist (NX-15): contact blocat → tăcere (ca handoff).
+    # 2. abuse blocklist (NX-15): contact blocat → tăcere.
     if ctx.contact.is_blocked:
         ctx.halt_silent("contact_blocked")
         return
 
-    # 3. handoff activ: un om a preluat până la handoff_until → tăcere.
-    if ctx.handoff_until is not None and ctx.handoff_until > datetime.now(UTC):
-        ctx.halt_silent("handoff_active")
-        return
-
-    # 4. rate limit (G2c): prea multe mesaje/fereastră → throttle (ieftin, înaintea moderării).
+    # 3. rate limit (G2c): prea multe mesaje/fereastră → throttle (ieftin, înaintea moderării).
     if await _rate_limited(ctx, deps):
         return
 
-    # 5. moderare (NX-15): mesaj toxic → răspuns neutru, NU ajunge la triaj/agent.
-    #    Înaintea riscului: abuzul primește răspuns neutru, nu escaladare la om.
+    # 4. moderare (NX-15): mesaj toxic → răspuns neutru, NU ajunge la triaj/agent.
     if await _moderation_blocked(ctx, deps):
         return
 
-    # 6. risc → escaladează + UN mesaj de tranziție; turul următor va cădea pe (3). DOAR pe canale
-    #    cu handoff activ: pe web (fără operator) NU escaladăm și NU întrerupem — mesajul curge
-    #    normal spre triaj/agent (botul asistă singur; flux normal, fără mesaj special; P6).
+    # 5. risc → DOAR telemetrie. Nu escaladăm (nu există operator), nu întrerupem, nu setăm reply:
+    #    mesajul curge normal spre agent, care asistă singur (P6). Un client care cere un om
+    #    primește cel mai bun răspuns pe care îl avem, nu o promisiune pe care nimeni n-o onorează.
     reason = detect_risk(ctx.message.body)
     if reason:
-        if not handoff_enabled_for(ctx.message.channel_kind):
-            ctx.emit("handoff_suppressed", reason=reason, source="risk")
-        else:
-            async with deps.db("set_handoff") as conn:
-                await request_human(conn, ctx, reason, source="risk")
-            # NX-126: necacheabil — escaladarea scrisă în semantic_cache ar fi servită altui user
-            # FĂRĂ ca un om să fie notificat (cache poisoning → tăcere de facto, încalcă P6).
-            ctx.set_reply("Te conectez cu un coleg, revin imediat 🙂", cacheable=False)
-            return
+        ctx.emit("risk_detected", reason=reason)
 
-    # 7. media routing (NX-76): poză → Vision → descriere ca text de căutare, apoi pipeline normal.
+    # 6. media routing (NX-76): poză → Vision → descriere ca text de căutare, apoi pipeline normal.
     #    DUPĂ rate-limit/moderare (nu cheltui Vision pe un contact throttled/blocat); NU early-exit
     #    (doar îmbogățește ctx.message.body) → triajul/agentul curg pe textul derivat din poză.
     if ctx.message.content_type == "image":
         await _route_image(ctx, deps)
 
-    # 8. NX-121: guardrails de input (clamp lungime + mascare PII + ecran injection) ÎNAINTE de
+    # 7. NX-121: guardrails de input (clamp lungime + mascare PII + ecran injection) ÎNAINTE de
     #    triaj/agent. DUPĂ media routing → plasă unică pe orice cale (web/WA/Vision). Nu early-exit.
     _apply_input_guardrails(ctx)
