@@ -93,10 +93,15 @@ Secțiunile disponibile, per produs: `fit` (2.535), `anti_fit` (2.535), `problem
 |---|---|---|
 | concerns | 2.354 | 85,4% |
 | skin_type | 1.702 | 61,7% |
-| texture | 2.173 | 78,8% |
 | key_ingredients | 2.734 | 99,1% |
 | spf | 182 | 6,6% |
-| fragrance_free | 117 | 4,2% |
+| ~~texture~~ | ~~2.173~~ | ~~78,8%~~ (nereproductibil, vezi mai jos) |
+| ~~fragrance_free~~ | ~~117~~ | ~~4,2%~~ (nereproductibil, vezi mai jos) |
+
+> **Ultimele două cifre au fost șterse de NX-264 și nu se mai pot reproduce.** Le producea o listă
+> de cuvinte de beauty scrisă direct în script (`TEXTURE_TERMS`, `FRAGRANCE_FREE_RE`). Azi ambele
+> fațete derivă 0%, fiindcă pachetul nu le declară valorile. Rămân notate ca **plafon orientativ**
+> pentru ce ar trebui să recupereze valorile ratificate din `scripts/facet_discovery.py`.
 
 **306 produse (11,1%) rămân fără nicio nevoie**, concentrate acolo unde nevoia nu se aplică:
 Sprâncene 93%, Accesorii 79%, Ochi 70%. Multe n-au deloc secțiuni `aura` — doar
