@@ -1831,6 +1831,7 @@ query_spec_shadow_enabled = false
 rate_limit_enabled = true
 reference_precedence_v2_enabled = false
 refinement_guard_enabled = true
+relation_graph_enabled = false
 relation_traversal_enabled = false
 relations_first_enabled = true
 release_controller_enabled = false
@@ -1867,6 +1868,7 @@ turn_budget_enforced = false
 turn_deadline_enabled = false
 turn_latency_spans_enabled = true
 turn_parallel_reads_enabled = false
+typed_constraints_enabled = false
 typing_enabled = true
 validator_bare_numbers_enabled = true
 validator_claims_enabled = true
@@ -1937,6 +1939,7 @@ welcome_enabled = true
 045_conversation_traces.sql
 046_search_tsv_description.sql
 047_variant_stock_unknown.sql
+048_relation_provenance.sql
 ```
 
 
