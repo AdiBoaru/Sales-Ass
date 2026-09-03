@@ -189,7 +189,11 @@ def _apply_relevance_mask(ctx: TurnContext, products: list[dict[str, Any]]) -> l
     dp = ctx.business.domain_pack
     facets = {f.key: f for f in (dp.facets if dp else ())}
     try:
-        outcome = apply_mask(products, ctx.match_set, facets)
+        # NX-271: lista ACTIVĂ, o fațetă pe rând. Goală ⇒ poarta rulează dar nu exclude
+        # nimic — flagul singur nu ajunge, exact ca la promovarea retrievalului (NX-238).
+        outcome = apply_mask(
+            products, ctx.match_set, facets, get_settings().active_relevance_facets
+        )
     except Exception:  # noqa: BLE001 — o poartă de calitate nu are voie să dărâme turul
         log.warning("relevance_mask failed", exc_info=True)
         return products

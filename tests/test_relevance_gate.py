@@ -22,6 +22,9 @@ _FACETS_RAW = [
         "operators": ["eq"],
         "values": ["110v", "230v"],
         "binding": "partitioning",
+        # NX-271: fără auditul de precizie, nicio fațetă nu exclude. Fixture-ul îl declară ca să
+        # poată testa REGULILE de mai jos; producția îl primește doar după ce un om a verificat.
+        "enforce_ready": True,
         "min_coverage": 0.5,
     },
     {
@@ -177,3 +180,65 @@ def test_invalid_binding_is_rejected_fail_closed():
         assert "binding" in str(e)
     else:  # pragma: no cover
         raise AssertionError("binding invalid ar fi trebuit respins")
+
+
+# --- NX-271: cele două porți care fac diferența dintre „mecanismul există" și „rulează" ----------
+
+
+def _facet_raw(**over):
+    base = {
+        "key": "voltage",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "voltage",
+        "operators": ["eq"],
+        "values": ["110v", "230v"],
+        "binding": "partitioning",
+        "enforce_ready": True,
+        "min_coverage": 0.5,
+    }
+    return {**base, **over}
+
+
+def test_fateta_neauditata_nu_exclude_nimic():
+    """NX-271 — acoperirea spune câte produse poartă o valoare, precizia spune câte o poartă pe
+    bună dreptate. La EXCLUDERE contează doar a doua: un filtru dur peste un atribut derivat cu
+    precizie 70% șterge tăcut produse corecte, iar clientul nu vede o eroare, vede mai puține
+    opțiuni și pleacă."""
+    facets = {f.key: f for f in build_facets([_facet_raw(enforce_ready=False)])}
+    products = [_p("a", voltage="110v"), _p("b", voltage="230v")]
+    ms = build_match_set(
+        products, (Constraint(facet="voltage", op="eq", value="230v", strength="hard"),), facets
+    )
+    out = apply_mask(products, ms, facets)
+    assert out.kept == tuple(products)  # influențează ordinea, niciodată apartenența
+    assert out.excluded_ids == ()
+
+
+def test_fateta_auditata_dar_neaprinsa_nu_exclude():
+    """O fațetă pe rând. Fără lista activă, o fațetă auditată acum trei luni s-ar aprinde odată cu
+    flagul, iar dacă ceva se strică n-ai ști care dintre ele a stricat."""
+    facets = {f.key: f for f in build_facets([_facet_raw()])}
+    products = [_p("a", voltage="110v"), _p("b", voltage="230v")]
+    ms = build_match_set(
+        products, (Constraint(facet="voltage", op="eq", value="230v", strength="hard"),), facets
+    )
+    assert apply_mask(products, ms, facets, frozenset()).kept == tuple(products)
+    assert apply_mask(products, ms, facets, frozenset({"altceva"})).kept == tuple(products)
+    # aprinsă EXPLICIT → excludere
+    aprinsa = apply_mask(products, ms, facets, frozenset({"voltage"}))
+    assert [p["id"] for p in aprinsa.kept] == ["b"]
+
+
+def test_enforce_ready_e_bool_sau_fateta_e_respinsa():
+    """Vocabular strict: un `enforce_ready: "da"` ar fi adevărat în Python și ar deschide poarta
+    prin tăcere. Fail-closed la load, ca la restul registrului."""
+    assert build_facets([_facet_raw(enforce_ready="da")]) == ()
+
+
+def test_default_ul_lui_enforce_ready_e_fals():
+    """Nicio fațetă nu capătă drept de excludere pentru că cineva a uitat să declare ceva."""
+    raw = _facet_raw()
+    del raw["enforce_ready"]
+    facets = build_facets([raw])
+    assert facets and facets[0].enforce_ready is False

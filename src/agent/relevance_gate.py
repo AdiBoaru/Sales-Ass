@@ -82,11 +82,28 @@ def enforceable_facets(
     products: list[dict[str, Any]],
     match_set: MatchSet,
     facets_by_key: dict[str, TypedFacet],
+    active: frozenset[str] | None = None,
 ) -> tuple[set[str], tuple[str, ...]]:
     """Care fațete au drept de excludere în turul ăsta → `(chei_aplicabile, sărite_sub_prag)`.
 
-    O fațetă intră DOAR dacă: e `partitioning`, a produs cel puțin un verdict hard în `match_set`
-    (altfel n-are ce exclude) și acoperirea printre candidați îi atinge pragul declarat."""
+    O fațetă intră DOAR dacă TOATE sunt adevărate:
+
+    * e `partitioning` — cumpărătorul are exact una dintre valori, deci alta îl contrazice;
+    * a produs cel puțin un verdict hard în `match_set` (altfel n-are ce exclude);
+    * acoperirea printre candidați îi atinge pragul declarat;
+    * **a trecut auditul de precizie** (`enforce_ready`, NX-271/NX-268);
+    * **e în lista ACTIVĂ** (`active`), care se aprinde o fațetă pe rând.
+
+    Ultimele două sunt NX-271 și sunt cele care fac diferența dintre „mecanismul există" și
+    „mecanismul rulează". Flagul singur nu ajunge — aceeași formă ca la promovarea retrievalului
+    (NX-238): un kill-switch aprins fără artefactul de decizie nu schimbă nimic. Aici artefactul e
+    dublu, fiindcă și greșeala e dublă: `enforce_ready` spune că faptul e destul de precis ca să
+    excludă, iar lista activă spune că am ales SĂ-L aprindem acum, pe el, singur. Fără a doua, o
+    fațetă auditată acum trei luni s-ar aprinde odată cu flagul, iar dacă ceva se strică n-ai ști
+    care dintre ele a stricat.
+
+    `active=None` înseamnă „fără restricție de listă" și există DOAR pentru testele care verifică
+    celelalte reguli; calea de producție trece mereu o listă (goală, dacă nu s-a aprins nimic)."""
     hard_keys = {
         canonical_facet_key(facets_by_key, r.facet)
         for v in match_set.verdicts
@@ -99,6 +116,10 @@ def enforceable_facets(
         facet = facets_by_key.get(key)
         if facet is None or facet.binding != BINDING_PARTITIONING:
             continue  # additive (sau necunoscută registrului): influențează scorul, nu apartenența
+        if not facet.enforce_ready:
+            continue  # NX-271: fapt neauditat ⇒ influențează ordinea, niciodată apartenența
+        if active is not None and key not in active:
+            continue  # aprins, dar nu ACUM: o fațetă pe rând, ca să se știe care a stricat
         if _coverage(products, facet) < facet.min_coverage:
             skipped.append(key)
             continue
@@ -110,6 +131,7 @@ def apply_mask(
     products: list[dict[str, Any]],
     match_set: MatchSet | None,
     facets_by_key: dict[str, TypedFacet],
+    active: frozenset[str] | None = None,
 ) -> MaskOutcome:
     """Scoate produsele care CONTRAZIC o constrângere hard pe o fațetă cu drept de excludere.
 
@@ -123,7 +145,7 @@ def apply_mask(
     if match_set is None or not products:
         return MaskOutcome(tuple(products), (), (), ())
 
-    enforceable, skipped = enforceable_facets(products, match_set, facets_by_key)
+    enforceable, skipped = enforceable_facets(products, match_set, facets_by_key, active)
     if not enforceable:
         return MaskOutcome(tuple(products), (), (), skipped)
 

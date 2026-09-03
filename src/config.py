@@ -266,6 +266,20 @@ class Settings(BaseSettings):
     # deci rămâne DARK până la GO-ul NX-210 (care așteaptă corpusul NX-203) — dar mecanismul
     # există, testat, ca aprinderea să fie un flag, nu un proiect.
     relevance_mask_enabled: bool = Field(default=False, validation_alias="RELEVANCE_MASK_ENABLED")
+    # NX-271: CARE fațete au voie să excludă, aprinse una pe rând. Flagul de mai sus spune „poarta
+    # poate rula", lista asta spune „pe ce". Sunt separate fiindcă greșeala e dublă: o fațetă poate
+    # fi destul de precisă ca să excludă (`enforce_ready` în pachet, dat de auditul NX-268) și
+    # totuși să nu fie momentul s-o aprinzi. Fără listă, un flag aprins ar porni deodată tot ce a
+    # fost vreodată auditat, iar dacă rezultatul se strică n-ai ști care fațetă a stricat.
+    # Gol (default) = nicio excludere, oricât de aprins ar fi flagul.
+    relevance_mask_facets: str = Field(default="", validation_alias="RELEVANCE_MASK_FACETS")
+
+    @property
+    def active_relevance_facets(self) -> frozenset[str]:
+        """Lista activă, normalizată. Text în env (o listă separată prin virgulă) fiindcă e o
+        decizie de OPERARE, schimbată între două deploy-uri, nu o structură de config."""
+        return frozenset(f.strip() for f in self.relevance_mask_facets.split(",") if f.strip())
+
     # Retenția capturii (zile) — purjată de cleanup_conversation_traces (job admin, bounded).
     # Ca la web_turns, retenția NU e gated pe flag: rândurile acumulate nu rămân pe disc dacă
     # flagul se stinge; jobul e no-op pe o DB fără migrarea 045 (guard `to_regclass`).
