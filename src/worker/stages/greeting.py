@@ -25,9 +25,11 @@ purta altă obligație). Control plane-ul verifică oricum obligațiile; contrac
 from __future__ import annotations
 
 import unicodedata
+from itertools import zip_longest
 from typing import TYPE_CHECKING
 
 from src.config import get_settings
+from src.domain import vocab_examples
 from src.models import BusinessConfig, TurnContext
 
 if TYPE_CHECKING:
@@ -98,30 +100,22 @@ _WELCOME: dict[str, dict[str, str]] = {
     },
 }
 
-# Sugestii implicite pe VERTICAL (nu hardcodate global — multi-tenant). Override din
-# settings["welcome"]["suggestions"]. Cheie pe limbă; fallback pe 'ro'.
-_DEFAULT_SUGGESTIONS: dict[str, dict[str, list[str]]] = {
-    "beauty": {
-        "ro": [
-            "Caut o cremă pentru ten uscat",
-            "Recomandă-mi un parfum sub 200 lei",
-            "Ce aveți pentru păr vopsit?",
-            "Idei de cadou pentru ea",
-        ],
-        "en": [
-            "I'm looking for a cream for dry skin",
-            "Recommend a perfume under 200 lei",
-            "What do you have for colored hair?",
-            "Gift ideas for her",
-        ],
-        "hu": [
-            "Krémet keresek száraz bőrre",
-            "Ajánlj egy parfümöt 200 lej alatt",
-            "Mi van festett hajra?",
-            "Ajándékötletek neki",
-        ],
-    },
+# NX-273 — sugestiile de start se DERIVĂ din catalogul tenantului, nu se scriu.
+#
+# Aici erau patru fraze de beauty pe vertical („Caut o cremă pentru ten uscat", „Ce aveți pentru
+# păr vopsit?"). Pe un magazin de electrocasnice, primul lucru pe care îl vedea clientul era o
+# sugestie despre ten uscat — și nimic nu pica, fiindcă o sugestie greșită nu e o eroare.
+#
+# ȘABLOANELE de mai jos sunt ale LIMBII, nu ale magazinului: „Caut {x}" / „Ce aveți pentru {x}?"
+# funcționează la fel pe orice raft. Ce se pune în ele vine din categorii și din nevoile
+# pachetului. Un magazin fără pachet primește sugestii pe categorii; unul fără nici categorii cade
+# pe cele generice, care nu numesc niciun produs.
+_SUGGESTION_TEMPLATES: dict[str, dict[str, str]] = {
+    "ro": {"category": "Caut {x}", "need": "Ce aveți pentru {x}?"},
+    "en": {"category": "I'm looking for {x}", "need": "What do you have for {x}?"},
+    "hu": {"category": "{x} keresek", "need": "Mi van {x} esetén?"},
 }
+
 _GENERIC_SUGGESTIONS: dict[str, list[str]] = {
     "ro": ["Caut un produs anume", "Vreau o recomandare", "Am o întrebare despre o comandă"],
     "en": [
@@ -169,9 +163,35 @@ def _suggestions(business: BusinessConfig, language: str, override: object) -> l
         return list(override.get(language) or override.get("ro") or [])
     if isinstance(override, list):
         return [str(x) for x in override]
-    by_vertical = _DEFAULT_SUGGESTIONS.get(business.vertical)
-    src = by_vertical or _GENERIC_SUGGESTIONS
+    derived = _derived_suggestions(business, language)
+    if derived:
+        return derived
+    src = _GENERIC_SUGGESTIONS
     return list(src.get(language) or src.get("ro") or [])
+
+
+def _derived_suggestions(business: BusinessConfig, language: str) -> list[str]:
+    """Sugestii compuse din CATALOGUL tenantului: categorii + nevoi, prin șabloane de limbă.
+
+    Ordinea e categorie, nevoie, categorie, nevoie — alternate deliberat: patru sugestii de același
+    fel arată ca un meniu, iar amestecul arată că se poate cere și după raft, și după problemă.
+    Selecția e cea din pachet/catalog (vezi `domain/vocab_examples`), deci stabilă între rulări.
+
+    Fără pachet ȘI fără categorii → listă goală, iar apelantul cade pe generice. Nu inventăm."""
+    templates = _SUGGESTION_TEMPLATES.get(language) or _SUGGESTION_TEMPLATES["ro"]
+    pack = getattr(business, "domain_pack", None)
+    examples = vocab_examples.from_pack(pack)
+    # Categoriile vin din `settings.welcome.categories` — o declarație EXPLICITĂ a tenantului, nu
+    # o citire de catalog: salutul e fast path și n-are voie să adauge un query pe drumul cel mai
+    # scurt al conversației. Nevoile vin din pachet, unde sunt oricum.
+    categories = tuple((business.settings or {}).get("welcome", {}).get("categories") or ())
+    out: list[str] = []
+    for category, need in zip_longest(categories[:2], examples.needs[:2]):
+        if category:
+            out.append(templates["category"].format(x=category))
+        if need:
+            out.append(templates["need"].format(x=need))
+    return out
 
 
 def _ask(language: str, override: object) -> str:

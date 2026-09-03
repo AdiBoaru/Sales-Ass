@@ -71,6 +71,7 @@ from src.db.queries.catalog import (
     list_category_names,
     list_routing_aliases,
 )
+from src.domain import vocab_examples
 from src.models import Route, RouteDecision, TurnContext
 from src.safety.policy import SafetyPolicy, safety_state
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
@@ -112,6 +113,10 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     # compunere (buclă/retry/rich). Gated; pack absent / OFF → None → prefix byte-identic.
     pack = getattr(ctx.business, "domain_pack", None)
     style = pack.response_style if (pack and get_settings().response_style_enabled) else None
+    # NX-273: exemplele de vocabular din PACHET, nu scrise de mână. Pachet absent → tuple gol →
+    # promptul rămâne valid, doar fără clauza „(ex. …)". Diferența dintre a nu ști ce vinde
+    # clientul și a presupune greșit.
+    examples = vocab_examples.from_pack(pack)
     return PromptInputs.build(
         ctx.business.name,
         ctx.business.vertical,
@@ -119,6 +124,7 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
         categories,
         aliases,
         response_style=style,
+        need_examples=examples.needs,
     )
 
 
@@ -416,7 +422,11 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # recomandare de produs. Brain-ul primește reuniunea și alege el. `check_order` are zidul
         # lui de login (NX-128/129), deci a-l oferi nu deschide nimic.
         tool_names = list(dict.fromkeys(tool_names + enabled_tools(ctx.business, "order")))
-    tools = tool_schemas(tool_names)
+    # NX-273: descrierile parametrilor primesc exemplele TENANTULUI. Sunt instrucțiuni pentru
+    # model, nu documentație — vezi `tool_definitions`.
+    tools = tool_schemas(
+        tool_names, vocab_examples.from_pack(getattr(ctx.business, "domain_pack", None))
+    )
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)

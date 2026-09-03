@@ -53,7 +53,11 @@ _TELL_ME_RE = re.compile(r"\bzi-?mi\b|\bspune-?mi\b|\bexplica-?mi\b|\btell\s+me\
 #: Cerere de recomandare/căutare de produs (RO/EN, fără diacritice) — obligație `recommend`.
 _RECOMMEND_RE = re.compile(
     r"\brecomand\w*\b|\bcaut\b|\bvreau\b|\bimi\s+trebuie\b|\bam\s+nevoie\b"
-    r"|\bce\s+(?:crema|ser|produs|sampon|parfum)\b"
+    # NX-273: „ce <substantiv> ai / aveți / recomanzi" — declanșatorul e VERBUL, nu substantivul.
+    # Aici era o listă de produse de cosmetice („crema|ser|sampon|parfum"), adică exact scurgerea
+    # pe care o descrie NX-264: pe un magazin de electrocasnice regexul ar fi fost mort, fără ca
+    # nimic să pice. Cu verbul ca ancoră, „ce frigider aveți" se prinde la fel de bine.
+    r"|\bce\s+\w+\s+(?:imi\s+|mi\s+)?(?:recomanzi|recomandati|aveti|ai|as\s+lua)\b"
     r"|\bsugest\w*\b|\brecommend\w*\b|\blooking\s+for\b|\bi\s+need\b",
     re.IGNORECASE,
 )
