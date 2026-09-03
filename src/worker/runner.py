@@ -324,9 +324,9 @@ def _deadline_stop(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> bool:
         d.total_ms,
     )
     # Tăcerea rămâne a Gates, nu a deadline-ului. Două situații în care NU punem niciun reply:
-    #   • `ctx.halt` — Gates a decis tăcere intenționată (bot oprit / om a preluat conversația);
+    #   • `ctx.halt` — Gates a decis tăcere intenționată (bot oprit / contact blocat);
     #   • gates n-a apucat să ruleze — nu ȘTIM încă dacă botul are voie să vorbească, iar un mesaj
-    #     de „n-am apucat" într-o conversație preluată de un operator ar fi mai rău decât nimic.
+    #     de „n-am apucat" într-o conversație cu botul oprit ar fi mai rău decât nimic.
     # În ambele cazuri turul iese fără reply, iar marginea web îl terminalizează onest cu
     # error-view randabil (`empty_result`/`deadline_exceeded`) — P6 e respectat acolo, nu aici.
     if ctx.reply is None and rt.gates_done and not ctx.halt:
