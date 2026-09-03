@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime as dt
 import hashlib
 import json
 import pathlib
@@ -40,6 +41,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.catalog import search_products_lexical  # noqa: E402
+from src.evals.retrieval.snapshot import CatalogSnapshot, read_snapshot  # noqa: E402
 
 CANDIDATES = ROOT / "reports" / "goldset-candidates.json"
 GOLDSET_DIR = ROOT / "tests" / "golden" / "retrieval_goldset"
@@ -79,8 +81,18 @@ def _save_cases(cases: dict[str, dict], business_id: str, locale: str) -> None:
     tmp.replace(CASES)
 
 
-def _write_manifest(cases: dict[str, dict]) -> None:
-    """Amprentă peste cazurile ORDONATE. Dacă setul se schimbă sub raport, se vede."""
+def _write_manifest(cases: dict[str, dict], snapshot: CatalogSnapshot | None) -> None:
+    """Amprentă peste cazurile ORDONATE, plus starea catalogului sub care au fost judecate.
+
+    Sunt DOUĂ direcții de drift, și doar una era acoperită. `sha256` apără setul de editare; el nu
+    poate spune nimic despre catalogul de sub set, care se schimbă singur, la fiecare import. Un
+    produs judecat „corect" azi și dezactivat mâine face raportul de poimâine să arate un top-3 mai
+    slab — iar diferența ar fi citită ca regresie de relevanță, fiindcă nimic nu spune că raftul s-a
+    mișcat.
+
+    `measured_at` e aici din același motiv, și e cea mai ieftină informație din tot fișierul: fără
+    ea, „când a fost judecat setul ăsta" e o întrebare la care se răspunde prin arheologie de
+    git."""
     digest = hashlib.sha256()
     for case in sorted(cases.values(), key=lambda c: c["fingerprint"]):
         digest.update(case["fingerprint"].encode())
@@ -91,9 +103,13 @@ def _write_manifest(cases: dict[str, dict]) -> None:
             {
                 "cases": len(cases),
                 "sha256": digest.hexdigest(),
+                "measured_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                "catalog_snapshot": snapshot.as_dict() if snapshot else None,
                 "_note": (
                     "Amprenta acoperă (fingerprint, corecte, greșite) în ordine. "
-                    "Conținut modificat fără regenerare ⇒ test roșu."
+                    "Conținut modificat fără regenerare ⇒ test roșu. `catalog_snapshot` e "
+                    "catalogul sub care s-a judecat: raportul îl recalculează și SPUNE dacă s-a "
+                    "mișcat, ca diferența dintre două rulări să fie atribuibilă."
                 ),
             },
             ensure_ascii=False,
@@ -143,8 +159,13 @@ async def main() -> int:
         "  enter      niciunul corect · s sari · q ieși (progresul e salvat)\n"
     )
 
+    snapshot = None
     try:
         async with tenant_conn(args.business) as conn:
+            # Amprenta se ia ÎNAINTE de prima judecată, nu după: setul e judecat față de catalogul
+            # de la începutul sesiunii, iar un import care intră în timpul zilei de adnotare e chiar
+            # cazul pe care amprenta trebuie să-l facă vizibil.
+            snapshot = await read_snapshot(conn, args.business)
             for index, (cls, entry) in enumerate(queue, 1):
                 query = entry["query"]
                 rows = await search_products_lexical(
@@ -223,7 +244,7 @@ async def main() -> int:
         await close_pool()
 
     _save_cases(cases, args.business, args.locale)
-    _write_manifest(cases)
+    _write_manifest(cases, snapshot)
     judged = sum(1 for c in cases.values() if c.get("correct") or c.get("expect_empty"))
     print(f"\nsalvat: {CASES}")
     print(f"cazuri: {len(cases)} · cu verdict utilizabil: {judged}")
