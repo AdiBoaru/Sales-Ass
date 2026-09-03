@@ -351,7 +351,7 @@ async def main() -> int:
             name_specs = {
                 key: pats
                 for key, spec in raw_facets.items()
-                if spec.get("source") == "name" and (pats := _value_patterns(spec))
+                if spec.get("derived_from") == "name" and (pats := _value_patterns(spec))
             }
             claim_specs = {
                 key: _claim_patterns(spec)

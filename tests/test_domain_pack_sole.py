@@ -131,11 +131,16 @@ def test_doar_tipul_de_ten_poate_exclude(raw: dict) -> None:
     contrazice nimic — un produs care nu-l țintește doar nu-l țintește, deci `additive`.
 
     `fragrance_free` e tot partiționantă, dar din alt motiv: e o cerință binară a clientului.
-    Testul le enumeră ca să nu apară a treia prin distragere.
+    `shade` (NX-269) e a treia, și își merită locul dintr-un al treilea motiv: cumpărătorul cere o
+    nuanță ANUME („116 Candid"), iar alta nu e o potrivire mai slabă, e produsul greșit — la fel de
+    greșit ca un ten uscat servit cuiva cu ten gras.
+
+    Testul le ENUMERĂ ca să nu apară a patra prin distragere: fiecare intrare aici e o fațetă care
+    capătă dreptul de a șterge produse din rezultate, iar dreptul ăla se dă cu motivul scris.
     """
     partitioning = {
         f["key"]
         for f in raw["facets"]
         if f.get("binding") == "partitioning" and f["source"] == "attribute"
     }
-    assert partitioning == {"skin_type", "fragrance_free"}
+    assert partitioning == {"skin_type", "fragrance_free", "shade"}

@@ -1,0 +1,24 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "roots": [
+    "machiaj"
+  ],
+  "products_in_roots": 681,
+  "shades": 581,
+  "shade_groups": 485,
+  "largest_group": 10,
+  "with_digit_in_name": 646,
+  "with_digit_and_shade": 573,
+  "violations": [],
+  "finish": {
+    "matte": 78,
+    "glow": 52,
+    "velvet": 30,
+    "satin": 21,
+    "glossy": 41
+  },
+  "rules": {
+    "shade": "name.variable_suffix.v1",
+    "finish": "pack.name_values.finish.v1"
+  }
+}
