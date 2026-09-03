@@ -1,6 +1,5 @@
 {
   "_note": "Excepții la poarta NX-264. Fiecare intrare are motiv OBLIGATORIU (testul respinge una fără). Preferă pragma pe linie `# domain-leak: ok — motiv` unei intrări aici: e mai îngustă.",
-
   "terms": [
     {
       "term": "natural",
@@ -31,7 +30,6 @@
       "reason": "coincide cu `usage_daily` și cu joburile nocturne; nu descrie niciun produs."
     }
   ],
-
   "paths": [
     {
       "path": "scripts/generate_products.py",
@@ -140,6 +138,10 @@
     {
       "path": "src/catalog/sole_source.py",
       "reason": "adaptor pentru FORMATUL sursei SOLE: mapează cheile exacte din exportul furnizorului. Un adaptor de sursă e legat de sursă prin definiție; generalitatea se păstrează prin faptul că restul codului nu-l vede."
+    },
+    {
+      "path": "scripts/goldset_*.py",
+      "reason": "harnessul de evaluare NX-265: intrarea lui SUNT frazele reale de client (extrase din catalog), plus transformările declarate peste ele. Un set de evaluare fără vocabularul clientului n-ar măsura nimic."
     }
   ]
 }
