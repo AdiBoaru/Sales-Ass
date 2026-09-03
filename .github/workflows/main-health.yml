@@ -1,0 +1,91 @@
+# NX-254 / NX-252 — semnalul care face un gate roșu vizibil fără ca cineva să caute.
+#
+# Findingul care a produs workflow-ul ăsta e același de două ori, cu fețe diferite:
+#
+#   • `CI` a stat roșu pe `main` din 21 august, cinci zile, fără ca nimeni să observe. Poarta de PR
+#     (`pytest -m "not integration"`) e verde, deci senzația la fiecare merge era „totul e ok".
+#   • Pipeline-ul de livrare a fost mort ~6 săptămâni, 0 din 85 de push-uri ajunse în producție.
+#
+# În ambele cazuri semnalul EXISTA — într-un tab pe care nimeni nu-l deschide. Un gate roșu pe care
+# nu-l vede nimeni nu e un gate, e o cheltuială. De aia workflow-ul ăsta nu adaugă o verificare
+# nouă: ia verificările care există deja și le mută într-un loc pe care oamenii îl citesc oricum,
+# lista de issues.
+#
+# ISSUE UNIC, ACTUALIZAT, nu unul pe rulare: o listă de 40 de issue-uri identice e tot o formă de
+# tăcere. Se închide singur când următoarea rulare e verde, deci starea issue-ului E starea lui
+# `main`, nu un istoric de alarme.
+name: Sănătatea lui main
+
+on:
+  workflow_run:
+    workflows: ["CI", "Release"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  raport:
+    name: Deschide sau închide alarma
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const title = `🔴 ${run.name} e roșu pe main`;
+            const failed = run.conclusion === 'failure';
+
+            // Căutăm DUPĂ TITLU, nu după etichetă: eticheta se poate șterge, titlul e chiar cheia
+            // de identitate a alarmei, iar workflow-ul trebuie să găsească propriul issue chiar
+            // dacă cineva a curățat labels-urile.
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = issues.find((i) => i.title === title);
+
+            const body = [
+              `**${run.name}** a ieșit \`${run.conclusion}\` pe \`main\`.`,
+              '',
+              `- rulare: ${run.html_url}`,
+              `- commit: \`${run.head_sha.slice(0, 7)}\``,
+              `- când: ${run.updated_at}`,
+              '',
+              'Issue-ul se închide SINGUR când următoarea rulare e verde, deci starea lui e starea',
+              'lui `main`. Dacă e deschis de mai multe zile, ăsta e chiar findingul: un gate roșu',
+              'permanent nu mai spune nimic (NX-252, NX-254).',
+            ].join('\n');
+
+            if (failed) {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: existing.number, body,
+                });
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  title, body,
+                });
+              }
+              // Jobul NU pică: alarma e mesajul, iar un job roșu care raportează un job roșu ar
+              // adăuga zgomot fără informație.
+              return;
+            }
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Verde din nou: ${run.html_url} (\`${run.head_sha.slice(0, 7)}\`).`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, state: 'closed',
+              });
+            }

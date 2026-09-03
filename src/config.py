@@ -265,6 +265,24 @@ class Settings(BaseSettings):
     # `ctx.retrieval`. UNKNOWN trece mereu (D7). OFF = byte-identic. Asta E enforcement-ul NX-188,
     # deci rămâne DARK până la GO-ul NX-210 (care așteaptă corpusul NX-203) — dar mecanismul
     # există, testat, ca aprinderea să fie un flag, nu un proiect.
+    # NX-254 — BUGETUL DE SESIUNI al procesului, pe cele două pooluri.
+    #
+    # Erau constante în `db/connection.py` (10 + 10). Nu e o setare de performanță, e o setare de
+    # CAPACITATE: poolerul Supabase în session mode plafonează userul la 15 clienți, iar bugetul e
+    # împărțit cu PRODUCȚIA, care ține sesiuni permanent. Un singur proces care cere 20 în vârf îl
+    # depășește garantat — și exact așa a stat `CI` roșu pe `main` de pe 21 august, cu un
+    # `(EMAXCONNSESSION)` raportat ca eșec al testului de IZOLARE.
+    #
+    # Default-urile sunt cele de dinainte, deci producția e neatinsă. Se coboară acolo unde bugetul
+    # e strâmt (jobul de izolare din CI), nu peste tot.
+    db_admin_pool_max: int = Field(default=10, ge=1, validation_alias="DB_ADMIN_POOL_MAX")
+    db_bot_pool_max: int = Field(default=10, ge=1, validation_alias="DB_BOT_POOL_MAX")
+    # Câte sesiuni are voie procesul ăsta să ceară, TOTAL. `None` = nedeclarat, deci nu se verifică
+    # nimic — nu presupunem un plafon pe care nu-l cunoaștem. Unde e declarat (jobul de izolare din
+    # CI), garda din `test_isolation_concurrent` compară suma poolurilor cu el ÎNAINTE de a atinge
+    # DB-ul, ca depășirea să iasă ca „buget depășit", nu ca `(EMAXCONNSESSION)` raportat drept eșec
+    # de izolare.
+    db_session_budget: int | None = Field(default=None, ge=1, validation_alias="DB_SESSION_BUDGET")
     relevance_mask_enabled: bool = Field(default=False, validation_alias="RELEVANCE_MASK_ENABLED")
     # NX-271: CARE fațete au voie să excludă, aprinse una pe rând. Flagul de mai sus spune „poarta
     # poate rula", lista asta spune „pe ce". Sunt separate fiindcă greșeala e dublă: o fațetă poate

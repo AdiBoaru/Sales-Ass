@@ -103,7 +103,8 @@ async def get_pool() -> asyncpg.Pool:
         _pool = await asyncpg.create_pool(
             **_connect_kwargs(dsn),
             min_size=1,
-            max_size=10,
+            # NX-254: buget de SESIUNI, nu de performanță — vezi `db_admin_pool_max` în config.
+            max_size=get_settings().db_admin_pool_max,
             # fără prepared statement cache: pooler-ul Supabase (pgbouncer)
             # nu garantează aceeași sesiune backend între statement-uri
             statement_cache_size=0,
@@ -241,8 +242,10 @@ async def get_bot_pool() -> asyncpg.Pool:
         init = _init_bot_login if _bot_login_mode else _init_bot_compat
         _bot_pool = await asyncpg.create_pool(
             **_connect_kwargs(dsn),
-            min_size=2,
-            max_size=10,
+            min_size=min(2, s.db_bot_pool_max),
+            # NX-254: idem. `min_size` nu poate depăși `max_size` — pe un buget de 1, un
+            # `min_size=2` hardcodat ar face poolul să crape la creare, nu la saturare.
+            max_size=s.db_bot_pool_max,
             # login direct (conexiune de sesiune) → cache OK; compat pe pooler → 0
             statement_cache_size=100 if _bot_login_mode else 0,
             init=init,

@@ -9,6 +9,18 @@ Integration + slow → exclus din CI normal (`-m "not integration"`); rulează �
 jobul nightly `isolation-concurrent` (vezi .github/workflows/ci.yml) și local:
     pytest -m "integration and slow"
 
+NX-254 — CELE 50 DE TURURI NU CER 50 DE SESIUNI, și confuzia asta a ținut `CI`
+roșu pe `main` de pe 21 august. Task-urile se așteaptă la coadă pe `bot_pool`,
+care are `max_size` sesiuni; concurența logică rămâne 50, bugetul de sesiuni e
+al poolului. Ce depășea plafonul poolerului (15 clienți în session mode, ÎMPĂRȚIT
+cu producția) era suma celor două pooluri ale procesului: 10 admin + 10 bot = 20.
+
+Deci fixul nu e mai puține tururi — ar fi fost teatru, fiindcă REFOLOSIREA
+agresivă a conexiunilor între tenanți ESTE scenariul pe care testul îl dovedește.
+Fixul e bugetul: `DB_ADMIN_POOL_MAX` + `DB_BOT_POOL_MAX` sub plafon, cu loc lăsat
+producției. Cu mai puține sloturi, aceleași 50 de tururi refolosesc conexiunile
+MAI des, deci testul e mai strict, nu mai slab.
+
 Fixture-ul creează 2 businesses throwaway (COMMIT — trebuie vizibile între
 conexiuni concurente, deci NU rollback) și le curăță la final.
 """
@@ -18,7 +30,14 @@ from uuid import uuid4
 
 import pytest
 
-from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool, tenant_conn
+from src.config import get_settings
+from src.db.connection import (
+    admin_conn,
+    close_pool,
+    get_bot_pool,
+    get_pool,
+    tenant_conn,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
@@ -62,6 +81,31 @@ async def _probe(bid: str, run_id: str, idx: str) -> dict:
         )
         visible = await conn.fetch("select distinct business_id::text as bid from contacts")
     return {"user": user, "guc": guc, "visible": sorted(r["bid"] for r in visible)}
+
+
+def test_bugetul_de_sesiuni_incape_sub_plafonul_poolerului():
+    """NX-254 — garda care transformă `(EMAXCONNSESSION)` într-un mesaj care spune ce s-a întâmplat.
+
+    Fără ea, depășirea bugetului iese ca eșec al testului de IZOLARE: gate-ul de securitate arată
+    roșu din motive de capacitate, iar cine se uită caută o scurgere de tenant care nu există. A
+    durat cinci zile prima oară.
+
+    Se verifică doar acolo unde bugetul e DECLARAT (`DB_SESSION_BUDGET`). Nedeclarat înseamnă „nu
+    cunoaștem plafonul mediului ăstuia", iar o gardă care inventează un plafon ar fi al doilea fel
+    de a minți. NU e un skip pe eșec de capacitate — e absența unei constrângeri de verificat.
+
+    Verifică o proprietate a CONFIGURĂRII, deci nu atinge DB-ul și rulează în milisecunde."""
+    settings = get_settings()
+    if settings.db_session_budget is None:
+        pytest.skip("DB_SESSION_BUDGET nedeclarat: nu există plafon de verificat în mediul ăsta")
+    total = settings.db_admin_pool_max + settings.db_bot_pool_max
+    assert total <= settings.db_session_budget, (
+        f"procesul poate cere {total} sesiuni (admin {settings.db_admin_pool_max} + bot "
+        f"{settings.db_bot_pool_max}), dar bugetul declarat e {settings.db_session_budget}. "
+        "Coboară DB_ADMIN_POOL_MAX / DB_BOT_POOL_MAX. NU reduce N_PER_TENANT: cele 50 de tururi "
+        "se așteaptă la coadă pe pool, deci nu cer 50 de sesiuni, iar reducerea lor ar slăbi exact "
+        "refolosirea de conexiuni pe care testul o dovedește."
+    )
 
 
 async def test_concurrent_isolation_holds(two_tenants):
