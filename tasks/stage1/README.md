@@ -157,6 +157,7 @@ care s-ar sprijini potrivirea sunt la 0% acoperire.
 | [NX-270](NX-270.md) | Graf de relații derivat (391 epuizate) | Backend | NX-268, NX-269 | H6 |
 | [NX-271](NX-271.md) | Aprinderea excluderii, o fațetă pe rând | Backend | NX-265, NX-266, NX-268 | H7 |
 | [NX-272](NX-272.md) | Măsurătoarea permanentă: trei cifre | Backend | NX-265 | H8 (continuu) |
+| [NX-273](NX-273.md) | Prompt, schemă de tool-uri și sugestii generate din pachet | Backend | NX-264, NX-265 | H9 |
 
 ```text
 NX-264 ─┬─> NX-265 ──> NX-267 ─────────────> NX-271
@@ -169,6 +170,11 @@ Două ordini nu sunt negociabile: **NX-265 înaintea lui NX-267** (fără baseli
 că rerankarea a ajutat) și **NX-268 înaintea lui NX-270** (un graf peste fapte goale e un raft, nu
 o alternativă). NX-271 e singurul card care SCOATE produse din rezultate și se aprinde o fațetă pe
 rând, cu criteriu de oprire preînregistrat.
+
+NX-273 nu era în planul inițial: l-a produs poarta NX-264, care la prima rulare a găsit **36 de
+scurgeri reale** în textele ce ajung la model (prompt de sistem, descrierile schemei de tool-uri,
+promptul de triaj, cele 4 sugestii de start). Sunt îngheţate în `tests/domain_leak_baseline.json` și
+pot doar să scadă.
 
 ### Critical path
 

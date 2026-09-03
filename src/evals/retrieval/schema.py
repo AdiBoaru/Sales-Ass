@@ -139,6 +139,7 @@ class QrelsSet(BaseModel):
         if incomplete:
             raise ValueError(
                 f"grupare parţială: {len(incomplete)} query-uri fără ambele id-uri {incomplete[:5]}"
+                # domain-leak: ok — „protecţia" e a setului faţă de contaminare, nu solară
                 f" — ar fi excluse tăcut din agregare şi din protecţia de contaminare"
             )
         return self

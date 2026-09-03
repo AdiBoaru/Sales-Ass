@@ -35,7 +35,9 @@ import json
 import pathlib
 import re
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -61,33 +63,47 @@ POSITIVE_SECTIONS = (
     "editorial",
 )
 
-# Secțiunile din care se citește compoziția — separat, fiindcă „fara parfum" e o afirmație despre
-# formulă, nu o nevoie a cumpărătorului.
+# Secțiunile din care se citește formula — separat, fiindcă o afirmație despre compoziție („fără
+# X") nu e o nevoie a cumpărătorului.
 FORMULA_SECTIONS = ("composition", "key_ingredients")
 
-# Texturile se citesc din NUME, nu din proză: în proză „gel" apare și în „se aplică peste gelul de
-# curățare", care descrie alt produs. Numele e forma produsului, o dată, fără context de rutină.
-TEXTURE_TERMS: dict[str, tuple[str, ...]] = {
-    "crema": (r"\bcrem[ae]\b", r"\bcream\b"),
-    "ser": (r"\bser\b", r"\bserum\b"),
-    "gel": (r"\bgel\b",),
-    "ulei": (r"\bulei\b", r"\boil\b"),
-    "lotiune": (r"\blotiune\b", r"\blotion\b"),
-    "spuma": (r"\bspum[ae]\b", r"\bfoam\b", r"\bmousse\b"),
-    "masca": (r"\bmasc[ae]\b", r"\bmask\b"),
-    "apa": (r"\bap[ae] micelar[ae]\b", r"\bmicellar\b", r"\btonic\b", r"\btoner\b"),
-    "fluid": (r"\bfluid\b", r"\bemulsie\b", r"\bessence\b", r"\besent[ae]\b"),
-    "balsam": (r"\bbalsam\b", r"\bbalm\b", r"\bunt\b", r"\bbutter\b"),
-    "spray": (r"\bspray\b", r"\bmist\b"),
-    "stick": (r"\bstick\b", r"\bbaton\b"),
-    "pudra": (r"\bpudr[ae]\b", r"\bpowder\b", r"\bscrub\b", r"\bpeeling\b"),
-}
 
-# „fara parfum" e o PROMISIUNE, deci pragul e precizia, nu recall-ul. Se acceptă doar formularea
-# afirmativă explicită, iar orice mențiune contrară în același text o anulează: un produs care
-# declară și „parfum" în compoziție nu e fără parfum, indiferent ce spune marketingul.
-FRAGRANCE_FREE_RE = re.compile(r"far[aă] parfum|fragrance[ -]?free|far[aă] fragran|parfum[ -]?free")
-FRAGRANCE_PRESENT_RE = re.compile(r"\bcu parfum\b|\bparfumat[aăe]?\b|\bcontine parfum\b|\bfragrance\b(?![ -]?free)")
+def _value_patterns(spec: Mapping[str, Any]) -> dict[str, tuple[re.Pattern[str], ...]]:
+    """Valorile unei fațete DECLARATE în pachet → tiparele care le recunosc în text.
+
+    Aici a fost, până la NX-264, un dicționar `TEXTURE_TERMS` cu „crema"/„ser"/„gel" scris direct în
+    cod: cuvinte de beauty, în românește, dictate de mine. Pe alt catalog erau zgomot mort, iar pe
+    al nostru erau o fațetă pe care n-a produs-o catalogul.
+
+    Acum valorile vin din fațeta tenantului, iar sinonimele fiecăreia din `aliases`. Fațeta fără
+    valori nu se derivă — se raportează ca nedeclarată, ca să se vadă că lipsește, nu ca să fie
+    presupusă. Propunerile se obțin cu `scripts/facet_discovery.py` și le ratifică un om, o dată per
+    tenant."""
+    out: dict[str, tuple[re.Pattern[str], ...]] = {}
+    for value in spec.get("values") or ():
+        forms = [str(value)] + [str(a) for a in (spec.get("aliases") or {}).get(value, ())]
+        pats = tuple(re.compile(rf"(?<!\w){re.escape(normalize(f))}(?!\w)") for f in forms if f)
+        if pats:
+            out[str(value)] = pats
+    return out
+
+
+def _claim_patterns(
+    spec: Mapping[str, Any],
+) -> tuple[re.Pattern[str] | None, re.Pattern[str] | None]:
+    """(afirmă, contrazice) pentru o fațetă de tip PROMISIUNE, din pachet.
+
+    „Fără parfum" e o promisiune, deci pragul e precizia, nu recall-ul: se acceptă doar formularea
+    afirmativă explicită, iar orice mențiune contrară în același text o anulează. Frazele sunt însă
+    ale limbii și ale verticalului, deci stau în pachet (`claim_affirms` / `claim_denies`), nu
+    într-un `re.compile` din cod — a doua scurgere pe care NX-264 o închide."""
+    affirms = [normalize(str(x)) for x in (spec.get("claim_affirms") or ()) if str(x).strip()]
+    denies = [normalize(str(x)) for x in (spec.get("claim_denies") or ()) if str(x).strip()]
+    yes = re.compile("|".join(re.escape(a) for a in affirms)) if affirms else None
+    no = re.compile("|".join(re.escape(d) for d in denies)) if denies else None
+    return yes, no
+
+
 SPF_RE = re.compile(r"\bspf\s*([0-9]{1,2})\s*\+?")
 
 
@@ -148,12 +164,40 @@ async def main() -> int:
                 return 2
             concern_map = dict(pack.concern_map)
             facet_values = {f.key: set(f.values or ()) for f in pack.facets}
+            # Fațetele care se citesc din NUME și cele de tip promisiune, amândouă DECLARATE în
+            # pachet. Ce nu e declarat nu se derivă: raportul spune care lipsesc, ca absența să se
+            # vadă. Propunerile se obțin cu `scripts/facet_discovery.py` și le ratifică un om.
+            raw_facets = {
+                str(f.get("key")): f
+                for f in ((business.settings or {}).get("domain_pack") or {}).get("facets") or []
+                if isinstance(f, dict) and f.get("key")
+            }
+            name_specs = {
+                key: pats
+                for key, spec in raw_facets.items()
+                if spec.get("source") == "name" and (pats := _value_patterns(spec))
+            }
+            claim_specs = {
+                key: _claim_patterns(spec)
+                for key, spec in raw_facets.items()
+                if spec.get("claim_affirms")
+            }
+            undeclared = sorted(
+                key
+                for key in facet_values
+                if key not in name_specs and key not in claim_specs and not facet_values[key]
+            )
             skin_vals = facet_values.get("skin_type", set())
             concern_vals = facet_values.get("concerns", set())
             print(
                 f"pachet: {len(concern_map)} fraze · skin_type {len(skin_vals)} valori · "
                 f"concerns {len(concern_vals)} valori"
             )
+            if undeclared:
+                print(
+                    f"fațete DECLARATE dar fără valori (nu se derivă): {', '.join(undeclared)}\n"
+                    "  propuneri: python scripts/facet_discovery.py --business <uuid>"
+                )
 
             products = await conn.fetch(
                 """select p.id::text as id, p.name, coalesce(p.description,'') as description,
@@ -189,9 +233,9 @@ async def main() -> int:
                 for kind in POSITIVE_SECTIONS:
                     for body in secs.get(kind, []):
                         positive_parts.append((kind, body))
-                formula_parts = [
-                    (k, b) for k in FORMULA_SECTIONS for b in secs.get(k, [])
-                ] + [("description", p["description"])]
+                formula_parts = [(k, b) for k in FORMULA_SECTIONS for b in secs.get(k, [])] + [
+                    ("description", p["description"])
+                ]
 
                 derived: dict[str, dict] = {}
 
@@ -209,9 +253,7 @@ async def main() -> int:
                     derived["concerns"] = {
                         "values": concerns,
                         "rule_id": "concern_map.phrase_match.v1",
-                        "derived_from": sorted(
-                            {s for k in concerns for s in key_sources[k]}
-                        ),
+                        "derived_from": sorted({s for k in concerns for s in key_sources[k]}),
                         "evidence": {k: sorted(key_phrases[k])[:3] for k in concerns},
                     }
                 if skin:
@@ -247,27 +289,38 @@ async def main() -> int:
                         "derived_from": [spf_src],
                     }
 
-                # --- fara parfum: promisiune ⇒ afirmativ explicit ȘI nicio contrazicere -----
+                # --- fațete de PROMISIUNE, din pachet (ex. „fără parfum") -------------------
+                # Afirmativ explicit ȘI nicio contrazicere în același text. Frazele sunt ale
+                # pachetului; fără ele fațeta nu se derivă, se raportează ca nedeclarată.
                 formula_norm = " ".join(normalize(b) for _, b in formula_parts)
-                if FRAGRANCE_FREE_RE.search(formula_norm) and not FRAGRANCE_PRESENT_RE.search(
-                    formula_norm
-                ):
-                    derived["fragrance_free"] = {
-                        "values": ["true"],
-                        "rule_id": "regex.fragrance_free.strict.v1",
-                        "derived_from": ["composition", "description"],
-                    }
+                for facet_key, (affirms, denies) in claim_specs.items():
+                    if affirms is None:
+                        continue
+                    if affirms.search(formula_norm) and not (
+                        denies is not None and denies.search(formula_norm)
+                    ):
+                        derived[facet_key] = {
+                            "values": ["true"],
+                            "rule_id": f"pack.claim.{facet_key}.strict.v1",
+                            "derived_from": sorted({src for src, _ in formula_parts}),
+                        }
 
-                # --- textura: din nume ------------------------------------------------------
-                textures = [
-                    t for t, pats in TEXTURE_TERMS.items() if any(re.search(x, name_norm) for x in pats)
-                ]
-                if textures:
-                    derived["texture"] = {
-                        "values": sorted(textures),
-                        "rule_id": "name.texture_terms.v1",
-                        "derived_from": ["name"],
-                    }
+                # --- fațete de FORMĂ, citite din NUME ---------------------------------------
+                # Din nume, nu din proză: în proză „gel" apare și în „se aplică peste gelul de
+                # curățare", care descrie ALT produs. Numele e forma produsului, o dată, fără
+                # context de rutină. Valorile vin din pachet (vezi `_value_patterns`).
+                for facet_key, value_pats in name_specs.items():
+                    matched = sorted(
+                        v
+                        for v, pats in value_pats.items()
+                        if any(x.search(name_norm) for x in pats)
+                    )
+                    if matched:
+                        derived[facet_key] = {
+                            "values": matched,
+                            "rule_id": f"pack.name_values.{facet_key}.v1",
+                            "derived_from": ["name"],
+                        }
 
                 for facet, info in derived.items():
                     t = tallies[facet]
@@ -302,9 +355,11 @@ async def main() -> int:
                 t = tallies.get(facet, FacetTally())
                 n = len(t.products)
                 top = ", ".join(f"{v}:{c}" for v, c in t.values.most_common(6))
-                print(f"{facet:18}{n:>9}{n / total if total else 0:>10.1%}  {len(t.values)} / {top}")
+                cov = n / total if total else 0
+                print(f"{facet:18}{n:>9}{cov:>10.1%}  {len(t.values)} / {top}")
 
-            print(f"\nprodusr fără NICIO nevoie și fără tip de ten: {len(no_need)} ({len(no_need)/total:.1%})")
+            share = len(no_need) / total if total else 0
+            print(f"\nfără NICIO nevoie și fără tip de ten: {len(no_need)} ({share:.1%})")
             print("\nunde se concentrează golul (top categorii):")
             print(f"  {'categorie':45}{'fără':>7}{'total':>7}{'rată':>8}")
             for cat, miss in by_cat_missing.most_common(10):

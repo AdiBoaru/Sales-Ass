@@ -54,7 +54,10 @@ async def _safe_products(
     try:
         hydrated = await get_products_by_ids(conn, business.id, ids, limit=len(ids))
     except Exception:  # noqa: BLE001
-        log.exception("carusel: hidratare eșuată pe context de siguranță — no-op (fail-closed)")
+        log.exception(
+            # domain-leak: ok — „hidratare" = rehidratarea contextului, nu a pielii
+            "carusel: hidratare eșuată pe context de siguranță — no-op (fail-closed)"
+        )
         return []
     blocked = set(policy.evaluate(hydrated, purpose="carousel").blocked_ids)
     if not blocked:

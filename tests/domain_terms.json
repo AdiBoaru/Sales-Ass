@@ -1,0 +1,554 @@
+{
+  "_provenance": {
+    "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+    "locale": "ro",
+    "declared_from": "src/domain/defaults/*.json + db/seed/domain_pack_*.json",
+    "catalog_from": "products.name + categories.name (status='active'), prin content_terms",
+    "products_scanned": 2758,
+    "band_products": [
+      82,
+      689
+    ],
+    "band_ratio": [
+      0.03,
+      0.25
+    ],
+    "min_token_len": 4,
+    "max_catalog_terms": 400,
+    "regenerate": "python scripts/build_domain_terms.py --business 99fe1292-f9ed-469e-8183-f994ea5b59c0 --out tests/domain_terms.json"
+  },
+  "declared": {
+    "acne": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "acnee": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "acoperire lejera": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "am": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "am_pm": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "anti-aging": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "anti-imbatranire": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "anti_aging": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "antiimbatranire": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "apa micelara": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "aspect natural": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "aspect obosit": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "bariera cutanata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "bariera de protectie": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "bariera pielii": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "barrier": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "buildable": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "caderea parului": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "calmare": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "cearcane": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "cearcane inchise": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "combination": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "cosuri": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "crema cu protectie": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "crema hidratanta": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "curatare": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "dandruff": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "dark_circles": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "demachiant": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "deshidratat": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "dewy": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "dry": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "dullness": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "elasticitate": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "exces de sebum": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "fara stralucire": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "fermitate": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "full": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "hair_damage": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "hair_dryness": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "hair_loss": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "hidratare": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "hidratare intensa": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "hiperpigmentare": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "hydration": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "hyperpigmentation": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "imbatranire": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "imperfectiuni": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "iritatii": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "lejer": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "light": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "linii de expresie": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "linii fine": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "long lasting": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "lucios": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "luciu": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "luminozitate": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ma lucesc": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "machiaj discret": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "mat": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "matifiant": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "matreata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "matte": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "medium": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "natural": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "normal": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "oily": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "par degradat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par deshidratat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par deteriorat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par fragil": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par rar": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par subtire": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par uscat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "par vopsit": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pe caldura": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "pete": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "pete brune": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pete pigmentare": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "piele cu bariera afectata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele deshidratata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele grasa": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "piele hidratata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele inrosita": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele iritata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele mixta": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "piele normala": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele reactiva": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "piele sensibila": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "piele terna": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "piele uscata": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "pm": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pores": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pori": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pori dilatati": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pori mariti": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pori vizibili": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "predispus la imperfectiuni": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "protectie solara": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "protectie uv": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "puncte negre": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "pungi sub ochi": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "reactiv": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "reactiva": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "redness": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "rezistent": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "rezistent la caldura": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "riduri": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "roseata": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "rutina de fata": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "sa nu lucesc": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "sa reziste": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "satin": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "scalp": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "scalp gras": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "scalp iritat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "scalp sensibil": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "scalp uscat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "scalp_care": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "sensitive": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "senzatie de piele care tine": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ser": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "spf": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "sun_protection": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ten acneic": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ten cu sebum": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ten deshidratat": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ten gras": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "ten mixt": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "ten normal": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ten reactiv": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "ten sensibil": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "ten tern": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "ten uscat": [
+      "db/seed/domain_pack_sole_ro.json",
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "tendinta acneica": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "toata rutina": [
+      "src/domain/defaults/beauty_salon.json"
+    ],
+    "ton neuniform": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "uniformizarea tenului": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "uscaciune": [
+      "db/seed/domain_pack_sole_ro.json"
+    ],
+    "varfuri despicate": [
+      "db/seed/domain_pack_sole_ro.json"
+    ]
+  },
+  "catalog": {
+    "acid": 626,
+    "extract": 578,
+    "hialuronic": 477,
+    "crema": 455,
+    "calmarea": 397,
+    "cutanat": 361,
+    "mask": 317,
+    "curatarea": 316,
+    "buze": 315,
+    "ulei": 308,
+    "masca": 298,
+    "centella": 297,
+    "niacinamida": 285,
+    "asiatica": 271,
+    "aspectului": 268,
+    "cream": 268,
+    "hidratare": 264,
+    "buzelor": 229,
+    "parului": 225,
+    "tonifierea": 215,
+    "curatare": 209,
+    "demachierea": 206,
+    "vitamina": 191,
+    "uniformizarea": 187,
+    "serum": 183,
+    "hidratarii": 178,
+    "protectie": 174,
+    "reducerea": 172,
+    "toner": 167,
+    "pantenol": 156,
+    "tirtir": 156,
+    "barierei": 151,
+    "nuantator": 145,
+    "ochi": 141,
+    "solara": 136,
+    "indepartarea": 135,
+    "sebum": 132,
+    "cushion": 129,
+    "laka": 129,
+    "porilor": 129,
+    "skin": 127,
+    "glow": 119,
+    "black": 118,
+    "fard": 115,
+    "echilibrului": 113,
+    "cica": 109,
+    "corp": 109,
+    "fond": 109,
+    "ampoule": 107,
+    "daily": 107,
+    "imbunatatirea": 107,
+    "ochilor": 106,
+    "impuritatilor": 105,
+    "finisaj": 103,
+    "mizon": 103,
+    "natural": 100,
+    "glicerina": 99,
+    "balsam": 98,
+    "complex": 98,
+    "aspect": 97,
+    "corpului": 96,
+    "excesului": 96,
+    "cosmetics": 95,
+    "naturale": 95,
+    "skin1004": 93,
+    "ceai": 91,
+    "ceramide": 91,
+    "imperfectiunilor": 90,
+    "madagascar": 90,
+    "some": 90,
+    "intensa": 89,
+    "protectia": 88,
+    "spuma": 88,
+    "tint": 87,
+    "delicata": 86,
+    "sensibile": 85,
+    "shot": 84,
+    "niacinamide": 83,
+    "collagen": 82
+  }
+}

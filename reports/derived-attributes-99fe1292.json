@@ -103,27 +103,6 @@
         ]
       ]
     },
-    "fragrance_free": {
-      "products": 117,
-      "coverage": 0.0424,
-      "distinct_values": 1,
-      "top_values": [
-        [
-          "true",
-          117
-        ]
-      ],
-      "sources": [
-        [
-          "composition",
-          117
-        ],
-        [
-          "description",
-          117
-        ]
-      ]
-    },
     "key_ingredients": {
       "products": 2734,
       "coverage": 0.9913,
@@ -336,71 +315,6 @@
         [
           "description",
           44
-        ]
-      ]
-    },
-    "texture": {
-      "products": 2173,
-      "coverage": 0.7879,
-      "distinct_values": 13,
-      "top_values": [
-        [
-          "crema",
-          482
-        ],
-        [
-          "masca",
-          418
-        ],
-        [
-          "ser",
-          394
-        ],
-        [
-          "ulei",
-          320
-        ],
-        [
-          "balsam",
-          188
-        ],
-        [
-          "apa",
-          179
-        ],
-        [
-          "gel",
-          160
-        ],
-        [
-          "spuma",
-          98
-        ],
-        [
-          "fluid",
-          92
-        ],
-        [
-          "pudra",
-          78
-        ],
-        [
-          "lotiune",
-          70
-        ],
-        [
-          "spray",
-          57
-        ],
-        [
-          "stick",
-          34
-        ]
-      ],
-      "sources": [
-        [
-          "name",
-          2173
         ]
       ]
     }

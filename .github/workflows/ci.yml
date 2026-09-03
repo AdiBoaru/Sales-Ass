@@ -42,6 +42,13 @@ jobs:
       - name: Guard conn-per-op (NX-231)
         run: python scripts/check_no_raw_conn.py
 
+      # NX-264: codul n-are voie să știe ce vinde tenantul. Principiul 9 (vocabularul vine din DB)
+      # era o intenție până acum — poarta îl face invariant. Termenii se derivă din pachetele de
+      # domeniu ȘI din catalogul real (tests/domain_terms.json), nu se scriu de mână. Scurgerile
+      # existente sunt îngheţate în tests/domain_leak_baseline.json și pot doar să scadă.
+      - name: Guard scurgere de domeniu (NX-264)
+        run: pytest -q tests/test_domain_leak.py tests/test_facet_discovery.py
+
       # Documentația de arhitectură a devenit falsă o dată (redactată 2026-07-02, resincronizată
       # 2026-08-10 — între timp descria un agent monolitic care nu mai exista). Poarta compară
       # blocurile ```claim:...``` din doc cu codul: stagii în ordine, tool-uri, procese, rute,
