@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.config import get_settings
+from src.domain.constraints import build_units
 from src.domain.contracts import build_category_requirements
 from src.domain.facets import build_facets
 from src.domain.normalize import normalize
@@ -213,6 +214,9 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare
         # respinsă rămâne vecini-direcți, deci pierde o capabilitate, nu lărgește nimic).
         relation_kinds=load_relation_kinds(merged.get("relation_kinds")),
+        # NX-266: tabelul de unități (fail-closed per fațetă — o intrare stricată dispare, restul
+        # rămân; un tabel absent înseamnă doar că tenantul n-are constrângeri numerice extrase).
+        units=build_units(merged.get("units")),
     )
 
 

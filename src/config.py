@@ -653,6 +653,15 @@ class Settings(BaseSettings):
     lexical_query_v2_enabled: bool = Field(
         default=True, validation_alias="LEXICAL_QUERY_V2_ENABLED"
     )
+    # NX-266: constrângerile numerice ale clientului („sub 100 lei", „SPF minim 30") ca VALORI
+    # tipizate cu unitate, aplicate în cod de ambele părți ale rerankării, nu ca text care ajunge
+    # în căutarea lexicală. OFF (default) = byte-identic: extracția nu rulează, retrieverele
+    # primesc `constraints=()`, iar bugetul continuă să curgă prin `price_max` exact ca azi.
+    # Prerechizit pentru NX-267: un reranker care citește text va urca un SPF 15 la o cerere de
+    # „SPF minim 30", iar nicio poartă de adevăr nu-l prinde — produsul chiar are SPF 15.
+    typed_constraints_enabled: bool = Field(
+        default=False, validation_alias="TYPED_CONSTRAINTS_ENABLED"
+    )
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).

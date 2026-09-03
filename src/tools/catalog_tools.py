@@ -30,6 +30,7 @@ from src.catalog.vocabulary import (
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
 from src.config import get_settings
+from src.conversation.needs import corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
     get_substitutes,
@@ -38,6 +39,24 @@ from src.db.queries.catalog import (
     search_products_semantic,
 )
 from src.db.queries.fusion import fuse_candidates
+from src.domain.constraints import (
+    ENFORCING_SOURCES,
+    MATCH,
+    MISMATCH,
+    OP_LTE,
+    REASON_INFERRED,
+    SOURCE_MODEL,
+    SOURCE_USER,
+    UNKNOWN,
+    BoundConstraint,
+    Rejection,
+    TypedConstraint,
+    apply_constraints,
+    bind_constraints,
+    constraint_from_value,
+    extract_constraints,
+    merge_constraints,
+)
 from src.domain.normalize import normalize
 from src.models import MAX_SEARCH_POOL, Relevance
 from src.safety.compose import model_hint as safety_model_hint
@@ -421,6 +440,7 @@ def _relax_ladder(
     category: Sequence[str] | None,
     in_stock_only: bool,
     features: list[str] | None = None,
+    constraints: Sequence[BoundConstraint] = (),
 ) -> list[dict[str, Any]]:
     """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
     (P6). Brand-ul NU se relaxează niciodată.
@@ -433,13 +453,19 @@ def _relax_ladder(
     `category` e acum o LISTĂ de chei REZOLVATE, nu un cuvânt venit de la model. Diferența e toată
     povestea: un token neverificat făcea din relaxare singura scăpare (și una imposibilă, fiindcă
     `category` e dură), în timp ce o listă rezolvată are produse în spate prin construcție — deci
-    treapta zero nu mai poate ieși goală din vina vocabularului."""
+    treapta zero nu mai poate ieși goală din vina vocabularului.
+
+    NX-266: constrângerile numerice NE-de-preț nu se relaxează pe nicio treaptă. Asta e teza
+    cardului — un număr rostit („SPF minim 30") nu e o preferință de care să scapi ca să iasă ceva,
+    ci o cerință pe care produsele fie o îndeplinesc, fie nu. Cele de PREȚ se relaxează exact acolo
+    unde se relaxa `price_max`, ca migrarea bugetului pe noul contract să nu schimbe nimic."""
     base = {
         "price_max": price_max,
         "facet_filters": facet_filters or None,
         "category": list(category) if category else None,
         "in_stock_only": in_stock_only,
         "features": features,  # Tier 2b p2: relaxat ULTIMUL (hard requirement „cu niacinamidă")
+        "constraints": tuple(constraints),
     }
     steps: list[dict[str, Any]] = [base]
     if get_settings().search_sort_mode_enabled:
@@ -449,8 +475,15 @@ def _relax_ladder(
         if category and not getattr(get_settings(), "search_category_hard_enabled", True):
             steps.append({**steps[-1], "category": None})
     else:
-        if price_max is not None:
-            steps.append({**steps[-1], "price_max": None})
+        priced = _without_price(constraints) != tuple(constraints)
+        if price_max is not None or priced:
+            steps.append(
+                {
+                    **steps[-1],
+                    "price_max": None,
+                    "constraints": _without_price(steps[-1]["constraints"]),
+                }
+            )
         if facet_filters:
             steps.append({**steps[-1], "facet_filters": None})
         if category and not getattr(get_settings(), "search_category_hard_enabled", True):
@@ -617,6 +650,103 @@ def _searchable_facets(ctx: TurnContext) -> tuple[str, ...]:
     return pack.searchable_facets if pack else ()
 
 
+# NX-266 — fațeta pe care o poartă `SearchArgs.price_max`. Numele e al REGISTRULUI de fațete (cel
+# din pachet), nu al catalogului: `price` e cheia sub care fiecare pachet își declară prețul.
+_PRICE_FACET = "price"
+
+
+@dataclass(frozen=True, slots=True)
+class _Constraints:
+    """Ce a rămas din numerele cererii după tipizare: ce se poate executa, ce s-a respins și dacă
+    prețul a devenit constrângere (caz în care `price_max` nu mai pleacă separat spre SQL)."""
+
+    bounds: tuple[BoundConstraint, ...] = ()
+    rejected: tuple[Rejection, ...] = ()
+    owns_price: bool = False
+
+
+def _typed_constraints(ctx: TurnContext, a: SearchArgs) -> _Constraints:
+    """Numerele cererii → constrângeri EXECUTABILE (NX-266). Flag OFF → nimic, byte-identic.
+
+    Două surse, tratate diferit fiindcă nu au aceeași autoritate:
+      • mesajul BRUT al clientului — rostit, deci `user_explicit`, deci poate exclude;
+      • `price_max` propus de model — devine `user_explicit` doar dacă `corroborated_by` (NX-251)
+        confirmă că numărul chiar a fost rostit în turul ăsta. Altfel rămâne `model_inferred`.
+
+    Distincția nu e decorativă: modelul poate deduce un buget din context („căutam ceva
+    accesibil"), iar o deducție n-are voie să șteargă produse din catalog. Poarta e a codului, nu
+    a modelului — exact ca la nevoi.
+
+    Consecința practică: o constrângere `model_inferred` **nu intră** în stratul tipizat. Pentru
+    preț asta înseamnă că `price_max` continuă să curgă pe calea veche, exact ca azi — singura
+    constrângere din sistem care are o cale moștenită. A i-o tăia aici ar fi o schimbare de
+    comportament care nu e a acestui card (și care ar LĂRGI rezultatele, nu le-ar îngusta).
+    Pentru orice altă fațetă, o inferență nu are cale, deci pur și simplu nu exclude."""
+    if not get_settings().typed_constraints_enabled:
+        return _Constraints()
+    pack = getattr(ctx.business, "domain_pack", None)
+    units = getattr(pack, "units", None)
+    if pack is None or units is None or not units.specs:
+        return _Constraints()
+
+    message = getattr(getattr(ctx, "message", None), "body", "") or ""
+    spoken, rejected = extract_constraints(
+        message, units=units, locale=ctx.language, source=SOURCE_USER
+    )
+    candidates = list(spoken)
+    if a.price_max is not None:
+        source = SOURCE_USER if corroborated_by(message, a.price_max) else SOURCE_MODEL
+        proposed, rejection = constraint_from_value(
+            _PRICE_FACET, OP_LTE, a.price_max, units=units, source=source
+        )
+        if proposed is not None:
+            candidates.append(proposed)
+        elif rejection is not None:
+            rejected += (rejection,)
+
+    # Inferențele se opresc AICI, înainte de compunere. Dacă ar intra în merge, o margine dedusă
+    # s-ar putea combina cu una rostită și ar moșteni autoritatea ei — „sub 100 lei" (client) +
+    # `price_max=80` (dedus) ar deveni o excludere la 80 pe care clientul n-a cerut-o.
+    enforceable: list[TypedConstraint] = []
+    for c in candidates:
+        if c.source in ENFORCING_SOURCES:
+            enforceable.append(c)
+        else:
+            rejected += (Rejection(REASON_INFERRED, facet=c.facet, detail=c.source),)
+
+    merged, merge_rejected = merge_constraints(enforceable)
+    bounds, bind_rejected = bind_constraints(merged, pack.facets)
+    owns_price = any(_is_price(b) for b in bounds)
+    return _Constraints(
+        bounds=bounds,
+        rejected=rejected + merge_rejected + bind_rejected,
+        owns_price=owns_price,
+    )
+
+
+def _facet_label(ctx: TurnContext, key: str) -> str:
+    """Eticheta de afișare a fațetei în limba turului (din registrul tipizat, NX-186). Fără pachet
+    sau fără etichetă → cheia, care e tot un cuvânt lizibil. P11: eticheta vine din date."""
+    pack = getattr(ctx.business, "domain_pack", None)
+    for spec in getattr(pack, "facets", ()) or ():
+        if spec.key == key:
+            return spec.label(ctx.language, fallback_locale=getattr(ctx.business, "locale", None))
+    return key
+
+
+def _without_price(bounds: Sequence[BoundConstraint]) -> tuple[BoundConstraint, ...]:
+    """Constrângerile FĂRĂ cele de preț — treapta de relaxare care renunța la `price_max` trebuie
+    să renunțe la același lucru și când prețul călătorește ca valoare tipizată. Altfel migrarea lui
+    `budget_max` pe noul contract ar schimba tăcut comportamentul scării."""
+    return tuple(b for b in bounds if not _is_price(b))
+
+
+def _is_price(bound: BoundConstraint) -> bool:
+    """Constrângerea asta e pe preț? Se citește din LEGĂTURĂ (coloana reală), nu din numele
+    fațetei: un pachet care își numește prețul altfel rămâne corect."""
+    return bound.source_kind == "column" and bound.source_key in ("price", "sale_price")
+
+
 def _displayed_ids(ctx: TurnContext) -> set[str]:
     """Id-urile produselor deja afișate (din `state.displayed_products`, ref-uri P8) — pentru
     dedup la „arată-mi altele". State gol / lipsă → set gol (fără efect)."""
@@ -643,7 +773,10 @@ def _safety_gate(
 
 
 def _session_filters(
-    a: SearchArgs, concern_keys: list[str] | None, features: list[str] | None = None
+    a: SearchArgs,
+    concern_keys: list[str] | None,
+    features: list[str] | None = None,
+    constraints: Sequence[BoundConstraint] = (),
 ) -> dict[str, Any]:
     """Setul canonic de filtre care DEFINEȘTE o sesiune de căutare (baza fp-ului). Rafinarea
     oricăruia (preț, concerns, features, brand...) schimbă fp → sesiune nouă (NX-119).
@@ -656,8 +789,15 @@ def _session_filters(
 
     Cele două se NORMALIZEAZĂ (lower + fără diacritice, ca restul lanțului): „warm beige" ≡
     „Warm Beige" nu trebuie să spargă sesiunea degeaba (P11). String gol → `None` (același fp ca
-    lipsa lui — exact truthiness-ul cu care retrieverul decide dacă aplică clauza)."""
-    return {
+    lipsa lui — exact truthiness-ul cu care retrieverul decide dacă aplică clauza).
+
+    NX-266: constrângerile numerice intră în fp ca text canonic, dar **doar când există**. Fără
+    ele, „mai arată-mi, dar cu SPF minim 50" ar avea fp identic cu turul dinainte și ar pagina
+    pool-ul VECHI, nefiltrat pe număr — exact clasa de bug pe care o descrie NX-223, cu un filtru
+    pe care clientul îl vede. Cheia lipsește când nu sunt constrângeri (nu e `None`), ca fp-ul cu
+    flagul stins să rămână IDENTIC cu cel de dinainte de card — altfel toate sesiunile în curs ar
+    fi invalidate de o schimbare care, pe flagul stins, nu face nimic."""
+    out: dict[str, Any] = {
         "query": a.query,
         "category": a.category,
         "brand": a.brand,
@@ -669,6 +809,9 @@ def _session_filters(
         "variant_label": normalize(a.variant_label) if a.variant_label else None,
         "product_name": normalize(a.product_name) if a.product_name else None,
     }
+    if constraints:
+        out["constraints"] = sorted(b.constraint.describe() for b in constraints)
+    return out
 
 
 def _fp(filters: dict[str, Any]) -> str:
@@ -812,8 +955,16 @@ async def search_products_tool(
         norm_features = [
             normalize(f) for f in a.features if isinstance(f, str) and f.strip()
         ] or None
+    # NX-266: numerele cererii, tipizate. Cu flagul stins e `_Constraints()` gol, deci tot ce
+    # urmează (fp, scară, SQL, plasă) e byte-identic cu azi.
+    tc = _typed_constraints(ctx, a)
+    # Migrarea lui `budget_max`: când prețul a devenit constrângere tipizată, NU mai pleacă și ca
+    # `price_max` — ar fi același predicat de două ori, iar valoarea autoritară trebuie să fie una
+    # singură. Predicatul rezultat e echivalent (fațeta declară `missing_value: skip`, adică un
+    # produs fără preț cade, exact ca la `NULL <= x`).
+    price_max_sql = None if tc.owns_price else a.price_max
     seen = _displayed_ids(ctx)
-    filters = _session_filters(a, concern_keys, norm_features)
+    filters = _session_filters(a, concern_keys, norm_features, tc.bounds)
     fp = _fp(filters)
     sess = ctx.state.active_search or {}
 
@@ -836,11 +987,12 @@ async def search_products_tool(
             category_key=a.category,
         )
     ladder = _relax_ladder(
-        price_max=a.price_max,
+        price_max=price_max_sql,
         facet_filters=facet_filters,
         category=category_keys,
         in_stock_only=a.in_stock_only,
         features=norm_features,
+        constraints=tc.bounds,
     )
 
     # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
@@ -900,6 +1052,7 @@ async def search_products_tool(
                 ctx.business.id,
                 query_text=a.query,
                 price_max=f["price_max"],
+                constraints=f["constraints"],  # NX-266: numerele, pe aceeași treaptă
                 facet_filters=f["facet_filters"],
                 features=f["features"],
                 searchable_facets=searchable_facets,
@@ -919,6 +1072,7 @@ async def search_products_tool(
                         ctx.business.id,
                         query_vec,
                         price_max=f["price_max"],
+                        constraints=f["constraints"],  # NX-266: identic pe ambele retrievere
                         facet_filters=f["facet_filters"],
                         features=f["features"],
                         searchable_facets=searchable_facets,
@@ -952,6 +1106,32 @@ async def search_products_tool(
     # ar rămâne în `active_search.pool` și ar reapărea la „arată-mi altele". Filtrat aici, dispare
     # din pool, pagină, `llm_view`, `ctx.retrieval`, carduri și `displayed_products` deodată.
     ranked_final, safety_hint = _safety_gate(ctx, ranked_final, purpose="search")
+
+    # NX-266: plasa de DUPĂ fuziune/rerankare, în ACELAȘI loc cu gate-ul de siguranță și din
+    # același motiv: pool-ul sesiunii se seamănă mai jos din `ranked_final` și supraviețuiește
+    # turului, deci un produs filtrat mai târziu ar reapărea la „arată-mi altele". Constrângerile
+    # sunt cele ale TREPTEI CÂȘTIGĂTOARE — dacă scara a renunțat la preț ca să iasă ceva, plasa nu
+    # are voie să-l reaplice; ar goli exact rezultatele pe care relaxarea le-a produs.
+    step_bounds: tuple[BoundConstraint, ...] = (
+        tuple(winning_step.get("constraints") or ()) if winning_step else tc.bounds
+    )
+    if step_bounds:
+        before = len(ranked_final)
+        ranked_final, constraint_stats = apply_constraints(ranked_final, step_bounds)
+        for bound in step_bounds:
+            counts = constraint_stats[bound.facet]
+            ctx.emit(
+                "constraint_applied",
+                facet=bound.facet,
+                op=bound.constraint.op,
+                unit=bound.constraint.unit,
+                source=bound.constraint.source,
+                # P12: numărătoare + vocabular de config, NICIODATĂ valoarea rostită de client.
+                matched=counts[MATCH],
+                mismatched=counts[MISMATCH],
+                unknown=counts[UNKNOWN],
+                dropped_total=before - len(ranked_final),
+            )
 
     # NX-134: diversificare sortiment — reordonează pool-ul ca prima pagină să acopere scara de preț
     # + branduri (nu top-N clone). DOAR pe `relevance` (sort explicit = ordinea cerută de client,
@@ -1134,6 +1314,16 @@ async def search_products_tool(
             f"(«{a.category}» nu e o categorie din catalog — rezultatele NU sunt filtrate pe ea; "
             f"nu afirma că sunt din categoria asta, propune o categorie reală sau cere o "
             f"clarificare)"
+        )
+    # NX-266: o constrângere numerică a golit setul. Nu se repopulează tăcut — asta ar fi exact
+    # minciuna pe care o previne cardul (produse care contrazic numărul, prezentate ca potrivite).
+    # Se NUMEȘTE cerința: modelul trebuie să poată spune „nimic sub 100 lei", nu „n-am găsit".
+    if not products and step_bounds:
+        cerinte = "; ".join(b.constraint.describe(_facet_label(ctx, b.facet)) for b in step_bounds)
+        notes.append(
+            f"(niciun produs din catalog nu îndeplinește: {cerinte}. Spune-i clientului exact ce "
+            f"cerință nu poate fi îndeplinită, nu prezenta produse care o încalcă. Poți întreba "
+            f"dacă acceptă o valoare diferită.)"
         )
     # Relaxare cu disclosure: search a renunțat la o constrângere SOFT (nevoie/categorie) ca să iasă
     # ceva → agentul trebuie să fie sincer că nu e potrivire exactă pe ce a cerut (P6, nu tăcere).

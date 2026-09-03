@@ -150,7 +150,7 @@
     {
       "key": "price", "value_type": "number", "source": "column", "source_key": "price",
       "operators": ["lte", "gte", "eq"], "provenance": "structural", "binding": "partitioning",
-      "min_coverage": 0.98,
+      "min_coverage": 0.98, "missing_value": "skip",
       "labels": {"ro": "Pret", "en": "Price", "hu": "Ar"}
     },
     {
@@ -213,6 +213,22 @@
       "labels": {"ro": "Textura", "en": "Texture", "hu": "Allag"}
     }
   ],
+
+  "_units_note": "NX-266 — unitatea CANONICA a fiecarei fatete numerice si factorii de conversie. Cheia e fateta, `factors[alias]` = cate unitati canonice face un alias (deci canonicul are mereu 1, verificat la load). `default_op` = operatorul cand clientul da un numar FARA cuvant de comparatie: la pret un numar gol inseamna aproape intotdeauna un plafon («crema de 100 lei»), la SPF inseamna un prag de jos («SPF 30» = macar 30). Amandoua sunt afirmatii despre CE VINDE tenantul, deci stau aici, nu in cod. `volume` e declarat DELIBERAT fara fateta corespondenta: tabelul de conversie e adevarat despre catalog (mililitri si litri), dar cata vreme niciun produs nu poarta valoarea, o constrangere pe el e RESPINSA cu motiv (`facet_not_declared`), nu aplicata aproximativ. Cand F2 scrie `volume` in `attributes` si fateta apare in lista de mai sus, constrangerea incepe sa se aplice fara nicio schimbare de cod.",
+  "units": {
+    "price": {
+      "canonical": "lei", "default_op": "lte",
+      "factors": {"lei": 1, "ron": 1, "bani": 0.01}
+    },
+    "spf": {
+      "canonical": "spf", "default_op": "gte",
+      "factors": {"spf": 1, "ip": 1}
+    },
+    "volume": {
+      "canonical": "ml", "default_op": "eq",
+      "factors": {"ml": 1, "mililitri": 1, "cl": 10, "dl": 100, "l": 1000, "litri": 1000}
+    }
+  },
 
   "_searchable_facets_note": "Cheile ARRAY din `attributes` pe care le poate filtra cautarea de feature («ceva cu niacinamida»). Goale azi — se aprind cu F2.",
   "searchable_facets": ["key_ingredients", "concerns"],
