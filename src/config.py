@@ -662,6 +662,12 @@ class Settings(BaseSettings):
     typed_constraints_enabled: bool = Field(
         default=False, validation_alias="TYPED_CONSTRAINTS_ENABLED"
     )
+    # NX-270: citirea grafului de relații DERIVAT (`source='derived_content'`). OFF (default) =
+    # calea de azi, byte-identică: `product_relations` are 0 rânduri, deci ambele consumatoare cad
+    # oricum pe heuristica veche. Flagul contează în ziua în care jobul a scris muchii și vrem să
+    # le putem stinge fără să ștergem tabela — un graf derivat e SCHELĂ (vezi migrarea 048), iar
+    # schela trebuie să se poată da jos.
+    relation_graph_enabled: bool = Field(default=False, validation_alias="RELATION_GRAPH_ENABLED")
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).

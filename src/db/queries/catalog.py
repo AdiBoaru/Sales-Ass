@@ -45,6 +45,34 @@ _SHRUNK_RATING = (
     " / (coalesce(p.review_count, 0) + 30))"
 )
 
+# NX-270 — tipurile de muchie pe care le citește calea de COMPLEMENTARITATE, într-un singur loc.
+#
+# Erau scrise de două ori, ca literale în două query-uri („are relații?" și „care sunt?"), iar
+# `variant_of` (NX-269/270) ar fi fost scris de job și necitit de nimeni — a treia formă a
+# aceleiași greșeli, după CHECK-ul de schemă și declarația din pachet. Un `kind` nou care ajunge în
+# tabelă fără să ajungă aici nu dă nicio eroare: doar nu se vede.
+#
+# Ordinea E semantica de prezentare: rutina întâi (pasul următor e cel mai concret lucru pe care îl
+# poate face clientul), apoi complementul, apoi alte nuanțe, apoi accesoriile. `substitute` NU e
+# aici — un înlocuitor nu e un „merge bine cu", și are calea lui (`get_substitutes`).
+COMPLEMENTARY_KINDS: tuple[str, ...] = ("routine_next", "complement", "variant_of", "accessory")
+
+
+def _complementary_kinds_sql() -> str:
+    """Lista de `kind` ca literali SQL. Valorile sunt un vocabular ÎNCHIS din cod (nu ajung
+    niciodată aici din config sau din model), deci interpolarea e sigură prin construcție — dar
+    trece printr-o funcție ca să existe UN singur loc unde forma se poate verifica."""
+    return ", ".join(f"'{kind}'" for kind in COMPLEMENTARY_KINDS)
+
+
+def _complementary_prio_expr() -> str:
+    """`CASE` de prioritate derivat din ORDINEA lui `COMPLEMENTARY_KINDS`. Derivat, nu scris a
+    doua oară: o listă și un `case` întreținute separat divergează, iar divergența arată ca o
+    ordonare ciudată, nu ca un bug."""
+    arms = " ".join(f"when '{kind}' then {i}" for i, kind in enumerate(COMPLEMENTARY_KINDS))
+    return f"case kind {arms} else {len(COMPLEMENTARY_KINDS)} end"
+
+
 # Moduri de sortare (allowlist → zero injection; sort_mode e structural, nu param bindabil).
 _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
 
@@ -1079,7 +1107,7 @@ async def _has_complementary_relations(
     return bool(
         await conn.fetchval(
             "select exists(select 1 from product_relations where business_id=$1 and product_id=$2 "
-            "and kind in ('complement', 'routine_next', 'accessory'))",
+            f"and kind in ({_complementary_kinds_sql()}))",
             business_id,
             anchor_id,
         )
@@ -1101,12 +1129,11 @@ async def _complementary_from_relations(
     sql = (
         _SELECT
         + " join (select related_id,"
-        + "          min(case kind when 'routine_next' then 0 when 'complement' then 1 else 2 end)"
-        + "            as prio,"
+        + f"          min({_complementary_prio_expr()}) as prio,"
         + "          min(position) as pos"
         + "        from product_relations"
         + "        where business_id = $1 and product_id = $2"
-        + "          and kind in ('complement', 'routine_next', 'accessory')"
+        + f"          and kind in ({_complementary_kinds_sql()})"
         + "        group by related_id) pr on pr.related_id = p.id"
         + " where p.business_id = $1 and p.status = 'active'"
         + " and p.availability in ('in_stock', 'low_stock')"

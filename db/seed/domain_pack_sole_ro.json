@@ -326,7 +326,13 @@
       "labels": {"ro": "Pasii urmatori din rutina", "en": "Next routine steps"}
     },
     "complement": {"mode": "neighbors"},
-    "accessory": {"mode": "neighbors"}
+    "accessory": {"mode": "neighbors"},
+    "_variant_of_note": "NX-269/270 — alte nuante ale aceluiasi produs. `neighbors`: nuantele sunt vecini directi, nu un drum („alta nuanta a altei nuante\" nu adauga nimic). E felul IEFTIN si REVERSIBIL de a lega nuantele, in locul restructurarii catalogului pe produs-parinte cu variante reale (varianta (b) din NX-269): sursa insasi trateaza fiecare nuanta ca produs separat, deci restructurarea ar fi cost mare cu beneficiu incert. Tipul trebuie DECLARAT aici, nu doar admis de schema (migrarea 048): un tip nedeclarat nu crapa, cade tacut pe comportamentul implicit, deci diferenta dintre „am declarat\" si „ruleaza\" ar fi invizibila — capcana care a prins deja o data pachetul SOLE, cu un `purpose` inexistent respins fail-closed si logat.",
+    "variant_of": {
+      "mode": "neighbors",
+      "purpose": "upsell",
+      "labels": {"ro": "Alte nuante", "en": "Other shades"}
+    }
   },
 
   "_required_attributes_note": "Contractul de continut per categorie (NX-205), citit de `scripts/audit_catalog_v2.py`. Slug-urile sunt cele REALE ale lui `sole-ro` (45 de categorii) — cele din `ecommerce.json` sunt ale catalogului demo (`fond-de-ten`, `mascara`, `anticearcan`) si nu exista in taxonomia SOLE, deci raman inerte dupa merge. Semantica: slug BATE root (override, NU cumul).",

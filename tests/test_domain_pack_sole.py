@@ -48,7 +48,10 @@ def test_loaderul_nu_arunca_nimic_din_pachet(raw: dict, pack) -> None:
     declared_facets = {f["key"] for f in raw["facets"]}
     assert {f.key for f in pack.facets} == declared_facets
 
-    declared_kinds = set(raw["relation_kinds"])
+    # Cheile care încep cu `_` sunt NOTE, convenția întregului pachet („de ce e goală lista asta",
+    # „de unde vin cifrele"). Loader-ul le sare deliberat; a le cere aici ar transforma o notă
+    # într-un tip de muchie fantomă.
+    declared_kinds = {k for k in raw["relation_kinds"] if not k.startswith("_")}
     assert set(pack.relation_kinds.specs) == declared_kinds
 
 
