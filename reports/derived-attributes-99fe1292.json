@@ -1,0 +1,1623 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "products_active": 2758,
+  "facets": {
+    "concerns": {
+      "products": 2354,
+      "coverage": 0.8535,
+      "distinct_values": 15,
+      "top_values": [
+        [
+          "hydration",
+          1709
+        ],
+        [
+          "redness",
+          755
+        ],
+        [
+          "dullness",
+          503
+        ],
+        [
+          "anti_aging",
+          490
+        ],
+        [
+          "acne",
+          403
+        ],
+        [
+          "barrier",
+          398
+        ],
+        [
+          "hyperpigmentation",
+          342
+        ],
+        [
+          "pores",
+          331
+        ],
+        [
+          "sun_protection",
+          237
+        ],
+        [
+          "dark_circles",
+          99
+        ],
+        [
+          "scalp_care",
+          80
+        ],
+        [
+          "hair_damage",
+          61
+        ],
+        [
+          "hair_dryness",
+          57
+        ],
+        [
+          "hair_loss",
+          16
+        ],
+        [
+          "dandruff",
+          12
+        ]
+      ],
+      "sources": [
+        [
+          "fit",
+          1983
+        ],
+        [
+          "summary",
+          1892
+        ],
+        [
+          "purpose",
+          1841
+        ],
+        [
+          "problem",
+          1720
+        ],
+        [
+          "recommendation_trigger",
+          1605
+        ],
+        [
+          "editorial",
+          1471
+        ],
+        [
+          "questions",
+          1321
+        ],
+        [
+          "name",
+          576
+        ]
+      ]
+    },
+    "fragrance_free": {
+      "products": 117,
+      "coverage": 0.0424,
+      "distinct_values": 1,
+      "top_values": [
+        [
+          "true",
+          117
+        ]
+      ],
+      "sources": [
+        [
+          "composition",
+          117
+        ],
+        [
+          "description",
+          117
+        ]
+      ]
+    },
+    "key_ingredients": {
+      "products": 2734,
+      "coverage": 0.9913,
+      "distinct_values": 10392,
+      "top_values": [
+        [
+          "acid hialuronic",
+          732
+        ],
+        [
+          "centella asiatica",
+          515
+        ],
+        [
+          "niacinamida",
+          425
+        ],
+        [
+          "pantenol",
+          365
+        ],
+        [
+          "extract de",
+          318
+        ],
+        [
+          "colagen",
+          297
+        ],
+        [
+          "ceramide",
+          242
+        ],
+        [
+          "glicerina",
+          187
+        ],
+        [
+          "peptide",
+          163
+        ],
+        [
+          "vitamina c",
+          160
+        ],
+        [
+          "ceai verde",
+          136
+        ],
+        [
+          "bha",
+          87
+        ],
+        [
+          "complex de",
+          84
+        ],
+        [
+          "niacinamide",
+          74
+        ],
+        [
+          "bakuchiol",
+          70
+        ],
+        [
+          "aha",
+          67
+        ],
+        [
+          "vitamina e",
+          66
+        ],
+        [
+          "pdrn",
+          62
+        ],
+        [
+          "retinol",
+          61
+        ],
+        [
+          "adenozina",
+          59
+        ],
+        [
+          "ginseng",
+          58
+        ],
+        [
+          "squalane",
+          57
+        ],
+        [
+          "alantoina",
+          54
+        ],
+        [
+          "antioxidanti",
+          53
+        ],
+        [
+          "propolis",
+          53
+        ]
+      ],
+      "sources": [
+        [
+          "key_ingredients",
+          2734
+        ]
+      ]
+    },
+    "skin_type": {
+      "products": 1702,
+      "coverage": 0.6171,
+      "distinct_values": 5,
+      "top_values": [
+        [
+          "dry",
+          875
+        ],
+        [
+          "sensitive",
+          790
+        ],
+        [
+          "oily",
+          547
+        ],
+        [
+          "combination",
+          121
+        ],
+        [
+          "normal",
+          31
+        ]
+      ],
+      "sources": [
+        [
+          "fit",
+          1227
+        ],
+        [
+          "summary",
+          1022
+        ],
+        [
+          "recommendation_trigger",
+          967
+        ],
+        [
+          "questions",
+          932
+        ],
+        [
+          "problem",
+          823
+        ],
+        [
+          "purpose",
+          694
+        ],
+        [
+          "editorial",
+          635
+        ],
+        [
+          "name",
+          117
+        ]
+      ]
+    },
+    "spf": {
+      "products": 182,
+      "coverage": 0.066,
+      "distinct_values": 6,
+      "top_values": [
+        [
+          "50",
+          139
+        ],
+        [
+          "30",
+          33
+        ],
+        [
+          "15",
+          4
+        ],
+        [
+          "40",
+          3
+        ],
+        [
+          "20",
+          2
+        ],
+        [
+          "22",
+          1
+        ]
+      ],
+      "sources": [
+        [
+          "name",
+          138
+        ],
+        [
+          "description",
+          44
+        ]
+      ]
+    },
+    "texture": {
+      "products": 2173,
+      "coverage": 0.7879,
+      "distinct_values": 13,
+      "top_values": [
+        [
+          "crema",
+          482
+        ],
+        [
+          "masca",
+          418
+        ],
+        [
+          "ser",
+          394
+        ],
+        [
+          "ulei",
+          320
+        ],
+        [
+          "balsam",
+          188
+        ],
+        [
+          "apa",
+          179
+        ],
+        [
+          "gel",
+          160
+        ],
+        [
+          "spuma",
+          98
+        ],
+        [
+          "fluid",
+          92
+        ],
+        [
+          "pudra",
+          78
+        ],
+        [
+          "lotiune",
+          70
+        ],
+        [
+          "spray",
+          57
+        ],
+        [
+          "stick",
+          34
+        ]
+      ],
+      "sources": [
+        [
+          "name",
+          2173
+        ]
+      ]
+    }
+  },
+  "without_any_need": {
+    "count": 306,
+    "rate": 0.1109,
+    "by_category": [
+      [
+        "Ingrijirea tenului",
+        50
+      ],
+      [
+        "Ochi",
+        47
+      ],
+      [
+        "Ingrijirea parului",
+        29
+      ],
+      [
+        "Fata",
+        28
+      ],
+      [
+        "Buze",
+        23
+      ],
+      [
+        "Accesorii",
+        22
+      ],
+      [
+        "Demachierea si curatarea tenului",
+        15
+      ],
+      [
+        "Sprancene",
+        14
+      ],
+      [
+        "Dus si baie",
+        11
+      ],
+      [
+        "Creme autobronzante si bronzere",
+        9
+      ],
+      [
+        "Tonifierea si calmarea pielii",
+        9
+      ],
+      [
+        "Styling",
+        8
+      ],
+      [
+        "Pasta de dinti",
+        7
+      ],
+      [
+        "Ingrijirea corpului",
+        7
+      ],
+      [
+        "Protectie solara",
+        7
+      ],
+      [
+        "Ingrijirea zonei din jurul ochilor",
+        5
+      ],
+      [
+        "Produse de igiena",
+        4
+      ],
+      [
+        "Periute de dinti electrice",
+        4
+      ],
+      [
+        "Ingrijire interdentara",
+        2
+      ],
+      [
+        "Ten",
+        2
+      ],
+      [
+        "Corp",
+        1
+      ],
+      [
+        "Machiaj",
+        1
+      ],
+      [
+        "Par",
+        1
+      ]
+    ],
+    "examples": [
+      {
+        "id": "12f577fe-18bd-4209-a2e7-f055a0691299",
+        "name": "AQUAPICK AQ-350 - irigator bucal cu jet de apa ultra-fin pulsatoriu si duze rotative 360 grade, care contribui",
+        "category": "Ingrijire interdentara",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "2427d4ad-12bf-4adf-8f5e-cd8ef09344aa",
+        "name": "ZETTOC Smile Honey Mini-Tube Spear Mint - pasta de dinti formulata cu fluor si extract de ginseng asiatic, car",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "7b3a9640-b0f5-4bc0-9318-7dfdcf46b2d2",
+        "name": "SOME BY MI PDRN Spirulina Poreless Primer - baza de machiaj sub forma de stick formulata cu Spirulina Platensi",
+        "category": "Fata",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "ea5836ec-fc98-49a9-b4db-9b80bfb243de",
+        "name": "UNLEASHIA Shaper Defining Eyebrow Pencil creion de sprancene No. 1 Oatmeal Brown - precizie si rezistenta, 0.2",
+        "category": "Sprancene",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "ff11d51d-bbd9-4e2c-87fb-c15adb21f7ee",
+        "name": "UNLEASHIA Glitterpedia Eye Palette - fard de pleoape formulata cu glitter holografic si sidefuri satinate, car",
+        "category": "Ochi",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "0090bd70-f965-4bb0-b1aa-241bf56b6766",
+        "name": "ROYAL AND LANGNICKEL Omnia Pro Gold Ferrule - set pensule formulat cu filamente sintetice Omnilux si fibre sin",
+        "category": "Accesorii",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "88707d27-3ee2-41f8-8a24-1705f197bcd4",
+        "name": "ROYAL AND LANGNICKEL Omnia Rose Gold - pensula formulata cu filamente sintetice Omnilux si fibre sintetice fin",
+        "category": "Accesorii",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "30469aa7-785d-4610-86f0-946f29ffb1e6",
+        "name": "BLACK ROUGE Power Proof Tus de Ochi P01 Deep Black - Rezistent la Apa si Precizie Profesionala, 0.6g",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "4f6809e8-c28a-4a31-a65c-04ce3f6c697b",
+        "name": "GLOV Multitasking Bentita Cosmetica Extra Lata Alb - Fixare Usoara si Uscare Rapida a Parului, 1 buc",
+        "category": "Ingrijirea parului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "d62cd833-b299-42a0-b441-b8950b732501",
+        "name": "GLOV Sport Prosop pentru par Alb - Uscare Rapida si Absorbtie Sporita, Ideal pentru Sala si Calatorii, 1 buc",
+        "category": "Ingrijirea parului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "4ca3d636-c571-4307-99a4-0cd491337f32",
+        "name": "B.tan Erase tan repeat - gel de dus exfoliant pentru corp formulat cu granule exfoliante fine si ingrediente h",
+        "category": "Creme autobronzante si bronzere",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "34d359d9-6d30-46d8-9d71-7350782b3054",
+        "name": "Dr. Melaxin Cemenrete Calcium Intense Cream - crema de fata formulata cu gluconat de calciu si adenozina, care",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "fafcf42c-1e55-483a-8c73-0707cd147a5e",
+        "name": "Dr. Melaxin Cemenrete Calcium Dark Spot Eye Cream - crema contur ochi formulata cu niacinamida si calciu gluco",
+        "category": "Ingrijirea zonei din jurul ochilor",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "1125e88f-8200-4976-8872-5f7a7cc44e4a",
+        "name": "I'M FROM Mugwort Essence - esenta formulata cu extract de Mugwort si arnica fermentata, care contribuie la cal",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "5ea6c5ed-8ea2-412d-b5a0-02a8184efa1d",
+        "name": "MEDICUBE Zero Pore Pad Mild - toner de fata formulat cu PHA Gluconolactone si Madecassoside Centella Asiatica,",
+        "category": "Tonifierea si calmarea pielii",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "c5bcb93a-83d5-4606-b1dc-980d0e360e45",
+        "name": "DR. KONOPKA'S LITTLE HERBAL COMPANY Men Deo roll-on - deodorant formulat cu ulei de cedru organic si extract d",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "acaccf2c-9b72-4f8c-9ce4-b105ff760fa8",
+        "name": "DR. KONOPKA'S LITTLE HERBAL COMPANY Men Shower Gel - gel de dus formulat cu salvie organica si carbune de bamb",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "60d48cf3-2ef7-482d-a8c5-ca0f78eddbb7",
+        "name": "Lunette PureCare Absorbant Reutilizabil Mini Negru - Protectie Eco si Confort Zilnic, 3 bucati",
+        "category": "Produse de igiena",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "3a0371c5-3dd3-4078-8c4d-a037fe3e3bd6",
+        "name": "Lunette PureComfort Chilot pentru Menstruatie Negru XL - Absorbtie Sigura si Protectie Anti-scurgeri, 1 buc",
+        "category": "Produse de igiena",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "9256fb47-3124-482c-9619-b08ee9cb8736",
+        "name": "LUNETTE EcoComfort Chilot pentru menstruatie XXL Negru - Protectie Antiscurgere si Confort Organic, 1 buc",
+        "category": "Produse de igiena",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "d32004fa-1fd4-4761-8cb7-adf9fe305c95",
+        "name": "Lunette ComfortCare Chilot pentru menstruatie Negru XXS - Absorbtie Puternica si Protectie Antiscurgere, 1 buc",
+        "category": "Produse de igiena",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "de16e340-c6f7-4488-8fa5-16481afd7a4d",
+        "name": "KUNDAL Shea Butter & Macadamia Pure Hand Cream - crema de maini formulata cu unt de shea si ulei de macadamia,",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "79d6f59c-4733-430e-82ea-8f9172b0abea",
+        "name": "SKYBOTTLE Muhwagua Perfumed Hand Cream - crema de maini formulata cu unt de shea si acid hialuronic, care cont",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "e560d6de-af9d-44b7-8540-52772d74fb6d",
+        "name": "B.fresh Nutty Bout Coconut - deodorant formulat cu ulei de cocos si ulei de argan, care contribuie la eliminar",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "111700e8-0b74-4095-b748-8d3cdc52d6b3",
+        "name": "BAREN Foot Exfoliant Softener At Home Kit - set pentru ingrijirea calcaielor cu pila si spray exfoliant formul",
+        "category": "Corp",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "0cf6cbae-28cb-48f1-ba37-cd153e834111",
+        "name": "B.fresh A Cococnut A Day, 473 ml - gel de dus formulat cu ulei de cocos si unt de cacao, care contribuie la me",
+        "category": "Dus si baie",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "93384150-b379-40f6-91db-d400c902dcc6",
+        "name": "B.fresh It s Not Just a Glaze Body Wash, 473 ml - gel de dus formulat cu niacinamida si unt de shea, care cont",
+        "category": "Dus si baie",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "83dc1948-5387-4236-8205-55a36fc4f194",
+        "name": "B.fresh You're One In A Melon - gel de dus formulat cu pepene verde si menta, care contribuie la curatarea pie",
+        "category": "Dus si baie",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "699ed560-dfdf-40aa-8e5e-301e790532c4",
+        "name": "KUNDAL Honey & Macadamia Pure Body Wash - gel de dus formulat cu aloe vera si extract de miere, care contribui",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "cf5fd83e-07d9-4ece-a5e1-32f0cab567cc",
+        "name": "KUNDAL Honey & Macadamia Pure Body Wash - gel de dus formulat cu aloe vera si extract de miere, care contribui",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "a9be3009-a529-4a4b-aaee-c3864eeed38d",
+        "name": "KUNDAL Honey & Macadamia Pure Body Wash - gel de dus formulat cu aloe vera si extract de miere, care contribui",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "9bebb057-b1a5-4d89-9b4f-871064dd8890",
+        "name": "KUNDAL Honey & Macadamia Pure Body Wash - gel de dus formulat cu aloe vera si extract de miere, care contribui",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "90fadfbd-cc62-499e-a5b2-ed42ed3f46da",
+        "name": "KUNDAL Rich Soymilk Body Wash - gel de dus formulat cu extract de lapte de soia si ceramide, care contribuie l",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "25ed3e4d-8a3b-4a9a-8c5d-27e86218a28f",
+        "name": "PLU Scrub Wash Rasperry and Mint - gel de dus exfoliant formulat cu pudra fina de coaja de nuca din California",
+        "category": "Dus si baie",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "b1a21eb6-348b-4e17-ba21-2cffe00e19be",
+        "name": "SKYBOTTLE Muhwagua Perfumed Body Wash - gel de dus formulat cu extract de smochine si frunze de smochin, care ",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "0a5b8c81-70ca-4864-83db-6c139dade023",
+        "name": "VILLAGE 11 FACTORY Will Refresh Hand And Body Wash - gel de dus formulat cu ulei de eucalipt si patchouli, car",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "96df7f88-6f30-4381-ae96-4cb08e38abcf",
+        "name": "KUNDAL Honey & Macadamia Pure Body Lotion - lotiune de corp formulata cu extract de frunze de aloe vera si ext",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "ede8af37-4b3f-4341-9aad-85abf662ac7f",
+        "name": "KUNDAL Honey & Macadamia Pure Body Lotion - lotiune de corp formulata cu extract de frunze de aloe vera si ext",
+        "category": "Ingrijirea corpului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "84534b5b-4cdf-4cf9-a2f5-84518e9ff115",
+        "name": "AQUAPICK AQ-102 Toothbrush - periuta de dinti pentru rutina de igiena orala - Black",
+        "category": "Periute de dinti electrice",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "af0830fe-f32e-4c33-a824-ecb4fcf5690a",
+        "name": "GESKE Magnetic USB Cable - cablu formulat cu certificare IPX7 si port magnetic USB pentru conectare si deconec",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "5aae287d-b26b-41a9-8efc-450fae8ac550",
+        "name": "GESKE SmartAppGuided Lip Volumizer and Booster 4 in 1 Black - volumizare instantanee buze si revitalizare culo",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "22ca084a-7192-4eff-bf43-d77e4a8508e8",
+        "name": "GESKE Lip Volumizer and Booster 4 in 1 mini - dispozitiv volumizator pentru buze - Black",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "c84ac688-2195-4819-9b6c-0bd2b34c5c74",
+        "name": "GESKE Lip Volumizer and Booster 4 in 1 mini - dispozitiv volumizator pentru buze - Magenta",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "af2cfcd4-414f-4a06-acae-797faddd8d56",
+        "name": "GESKE Lip Volumizer and Booster 4 in 1 - dispozitiv volumizator pentru buze cu Tehnologie Ultra-Volume si Tehn",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "81797f2e-0212-4ba6-a68c-0ea1553869ad",
+        "name": "GESKE Lip Volumizer and Booster 4 in 1 mini - dispozitiv volumizator pentru buze - Starlight",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "f8869765-ea7b-49d3-b979-cf1b9f453446",
+        "name": "GESKE Anti-Aging Skin Renewer 9 in 1 - Aparat Pentru Masaj Facial cu radiofrecventa incalzita si microcurent -",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "e70021e3-8a3d-4438-9b26-90f25cf7dbac",
+        "name": "GESKE Anti-Aging Skin Renewer 9 in 1 - Aparat pentru masaj facial cu radiofrecventa incalzita si microcurent, ",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "e7c1afb7-bb64-496f-b051-74f1e1d948ae",
+        "name": "MEDICUBE Age-R Booster Pro - aparat de ingrijire a pielii, cu electroporatie si microcurent, care contribuie l",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "9799b3bb-e7bb-4f4e-bd78-f917568bfc90",
+        "name": "GESKE Sonic Thermo Facial Brush 6 in 1 - Aparat Sonic Pentru Curatarea Tenului cu silicon ultra moale, pentru ",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "5199b44a-267e-450e-946d-07cadb874ece",
+        "name": "TOUCH BEAUTY TB-1788 - Aparat sonic pentru curatarea tenului cu silicon, cu doua suprafete utilizabile pentru ",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "f6de7a2f-e082-461a-91df-99e63e0b51e2",
+        "name": "AQUAPICK AQ-102 Toothbrush Heads - periuta de dinti capete de rezerva concepute special pentru periuta de dint",
+        "category": "Periute de dinti electrice",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "5efbfbc6-d325-4bf1-9eed-a6a546ffba48",
+        "name": "AQUAPICK AQ-230 - irigator bucal cu jeturi de apa cu presiune ridicata si rezervor de apa de 200 ml, care cont",
+        "category": "Ingrijire interdentara",
+        "has_sections": [
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "ed522928-9b91-40b4-be59-fca50a609588",
+        "name": "AQUAPICK AQ-102 Toothbrush, White - periuta de dinti care contribuie la curatarea dintilor si la mentinerea ig",
+        "category": "Periute de dinti electrice",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "a83e520e-37fd-4c3a-80c8-b068c21471e6",
+        "name": "ZETTOC ProPearl Pasta de Dinti Sakura Mint - Albire si Curatare Profunda, 100 gr",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "ab4c1cfb-052c-4e69-bafb-1ea3a6179474",
+        "name": "ZETTOC MD' cial Toothpaste Cooling Mint - pasta de dinti formulata cu fluor 1400 ppm si extract de Scutellaria",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "d203ecea-4de6-4c6e-8e6f-650a14883b80",
+        "name": "ZETTOC MD' cial Toothpaste Medical Mint - pasta de dinti formulata cu fluor 1400 ppm si extract de Scutellaria",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "0e5a5501-49bb-443e-ba66-ee8efbaa680b",
+        "name": "ZETTOC MD' cial Toothpaste Rose Mint - pasta de dinti formulata cu fluor 1400 ppm si extract de Scutellaria Ba",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "337378a8-8775-47ad-bf33-c5e1b4cad16e",
+        "name": "ZETTOC Smile Honey Toothpaste Herb Mint - pasta de dinti formulata cu fluor 1400ppm si extract de Sanguisorba,",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "1f398680-1801-47f0-98a8-762b62d07c86",
+        "name": "ZETTOC Smile Honey Toothpaste Spear Mint - Pasta de dinti formulata cu fluor 1400ppm si extract de ginseng asi",
+        "category": "Pasta de dinti",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "57eb1bc7-5bdb-4fe3-810f-12667ad0b456",
+        "name": "AQUAPICK Aquapick AQ-102 Toothbrush - periuta de dinti formulata cu micro-perii delicate si timer inteligent i",
+        "category": "Periute de dinti electrice",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      }
+    ]
+  }
+}
