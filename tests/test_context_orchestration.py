@@ -362,4 +362,5 @@ def test_the_agreement_map_is_strict():
     """O hartă indulgentă („clarify e ok și dacă a răspuns") ar coborî rata de dezacord exact
     acolo unde vrem s-o vedem, iar shadow-ul ar valida promovarea din construcție."""
     assert aftercare_mod._SHADOW_AGREEMENT["clarify"] == "clarify"
-    assert aftercare_mod._SHADOW_AGREEMENT["handoff"] == "handoff"
+    assert aftercare_mod._SHADOW_AGREEMENT["order"] == "order"
+    assert "handoff" not in aftercare_mod._SHADOW_AGREEMENT  # ruta nu mai există

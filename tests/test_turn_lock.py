@@ -335,7 +335,6 @@ async def _run_processor(
             "state_version": 0,
             "locale": "ro",
             "bot_active": True,
-            "handoff_until": None,
         }
 
     async def fake_patch(conn, business_id, conv_id, new_state, version, **k):

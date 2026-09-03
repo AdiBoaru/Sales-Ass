@@ -548,7 +548,6 @@ async def _run_turn(
             "state_version": 7,
             "locale": "ro",
             "bot_active": True,
-            "handoff_until": None,
         }
 
     async def anoop(*a, **k):

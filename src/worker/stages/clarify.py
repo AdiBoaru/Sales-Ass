@@ -130,17 +130,17 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         ctx.state.asked_intents[:] = ctx.state.asked_intents[-8:]
 
     # NX-116: ANTI-BUCLĂ reală — `attempts` (scris de set_clarify la re-întrebarea ACELUIAȘI slot,
-    # azi necitit) e consumat aici. Peste prag NU mai re-întrebăm la infinit (P6): escaladăm. Slot
-    # „intent" (nu știm nici măcar ce vrea) → HANDOFF (operator, prin handoff_stage); slot specific
-    # (buget/etc.) → best-effort SALES cu ce avem (agentul vede constraint-ul stocat). În ambele
-    # cazuri pending_question se curăță la writeback (reply non-clarify din handoff/agent).
+    # azi necitit) e consumat aici. Peste prag NU mai re-întrebăm la infinit (P6): mergem pe SALES
+    # cu ce avem (agentul vede constraint-ul stocat). `pending_question` se curăță la writeback.
+    #
+    # Slotul „intent" (nu știm nici măcar ce vrea) trimitea înainte la HANDOFF. Fără operator,
+    # asta ar fi însemnat o promisiune neonorată; cel mai bun răspuns pe care îl avem e tot un
+    # răspuns, iar agentul poate întreba din nou în vocea lui dacă chiar nu are pe ce merge.
     attempts = int(pq.get("attempts") or 0)
     if attempts >= get_settings().clarify_max_attempts:
-        escalate_to = "handoff" if field == "intent" else "sales"
-        ctx.route = RouteDecision(route=Route.HANDOFF if escalate_to == "handoff" else Route.SALES)
-        ctx.emit(
-            "clarify_escalated", field=field, attempts=attempts, to=escalate_to
-        )  # P12: fără answer
+        ctx.route = RouteDecision(route=Route.SALES)
+        # P12: fără `answer` în event (poate fi PII).
+        ctx.emit("clarify_escalated", field=field, attempts=attempts, to="sales")
         return
 
     # 2. rutăm determinist pe intenția de reluat — fără triaj. `route` deja setat → triajul no-op.

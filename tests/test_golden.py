@@ -239,7 +239,6 @@ def _derive_plan(fx: dict, *, user: str, business_id: str, locale: str) -> dict:
         "state_update_proposals": [],
         "action_intents": [],
         "disclosures": [],
-        "handoff": False,
         "confirmed_actions": [],
         "style_signals": {"tone": "neutral", "verbosity": "short"},
     }
@@ -295,9 +294,6 @@ def _apply_stubs_dyn(monkeypatch, get_fx, *, single_brain: bool = False) -> None
     async def none_lookup(*args, **kwargs):
         return None
 
-    async def noop_handoff(*args, **kwargs):
-        return None
-
     # triaj → categorii valide ale cazului
     monkeypatch.setattr(triage_mod, "list_category_slugs", fake_categories)
     # tool-uri agent → catalogul cazului
@@ -308,8 +304,6 @@ def _apply_stubs_dyn(monkeypatch, get_fx, *, single_brain: bool = False) -> None
     # cache → miss curat (forțăm regenerarea prin pipeline)
     monkeypatch.setattr(cache_mod, "exact_lookup", none_lookup)
     monkeypatch.setattr(cache_mod, "semantic_lookup", none_lookup)
-    # risc/handoff → no-op (nu atingem DB)
-    monkeypatch.setattr(gates_mod, "set_handoff", noop_handoff)
     # moderation gate e premisa cazului moderation-neutral → pin True (independent de .env)
     monkeypatch.setattr(get_settings(), "moderation_enabled", True)
     # Calea (v1 legacy / creier unic) e a HARNESSULUI, nu a `.env`-ului mașinii — vezi antetul.
@@ -467,13 +461,13 @@ def test_all_seed_cases_present():
         "invented-price-blocked",
         "prose-claim-scrubbed",
         "moderation-neutral",
-        "risk-handoff",
+        "risk-human-request-answered",
         "order-never-silent",
         # NX-16: prompt-injection / jailbreak → guard determinist neutralizează
         "injection-fake-discount-blocked",
         "injection-fake-link-blocked",
         "injection-toxic-stays-neutral",
-        "injection-legal-threat-handoff",
+        "injection-legal-threat-answered",
         "injection-ignore-instructions-stays-grounded",
     }
     adversarial = [c for c in CASES if c.id.startswith(("injection-", "adversarial-"))]
@@ -501,8 +495,6 @@ async def _disable_guard(monkeypatch, which: str) -> None:
             return False
 
         monkeypatch.setattr(gates_mod, "_moderation_blocked", _no_block)
-    elif which == "risk":
-        monkeypatch.setattr(gates_mod, "detect_risk", lambda text: None)
 
 
 @pytest.mark.parametrize(
@@ -512,7 +504,6 @@ async def _disable_guard(monkeypatch, which: str) -> None:
         ("injection-fake-link-blocked", "validator"),
         ("injection-ignore-instructions-stays-grounded", "validator"),
         ("injection-toxic-stays-neutral", "moderation"),
-        ("injection-legal-threat-handoff", "risk"),
     ],
 )
 async def test_injection_case_fails_without_its_guard(case_id, guard, monkeypatch):

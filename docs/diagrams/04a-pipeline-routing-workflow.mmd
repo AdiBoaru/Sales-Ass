@@ -17,16 +17,16 @@ flowchart TD
     G2{"Trimite prea multe mesaje? (:323)"}:::dec
     G3{"Mesaj abuziv? — moderare automată (:348)"}:::llm
     MODB["Prea multe abateri în 24h →<br/>contactul e blocat (:305-318)"]:::err
-    G4{"Semne de risc: amenințare legală,<br/>cere explicit un om? (:468)"}:::dec
-    G5{"A trimis o poză? (:482)"}:::dec
+    G4{"Semne de risc: amenințare legală,<br/>cere explicit un om? (:442)"}:::dec
+    G5{"A trimis o poză? (:449)"}:::dec
     VIS["AI descrie poza → devine text de căutare<br/>(dacă pică, păstrăm descrierea clientului)<br/>(:385-436)"]:::llm
-    GRD["Curățăm mesajul: tăiem excesul,<br/>mascăm datele personale (:487)"]:::stage
+    GRD["Curățăm mesajul: tăiem excesul,<br/>mascăm datele personale (:454)"]:::stage
   end
 
-  HALT["TĂCERE intenționată — nu răspundem<br/>(un om se ocupă / rafală de spam)"]:::err
+  HALT["TĂCERE intenționată — nu răspundem<br/>(bot oprit pe conversație / rafală de spam)"]:::err
   THR["Îi spunem O singură dată<br/>«hai mai încet» (:340-342)"]:::out
   NEU["Răspuns neutru, fără discuție"]:::out
-  ESC["Chemăm un operator + mesaj de tranziție<br/>(gates.py:473-476)"]:::out
+  RISKEV["DOAR numărăm evenimentul —<br/>nu există operator, mesajul curge (:444)"]:::step
 
   LANG["2 · Detectăm limba: RO / HU / EN<br/>(language.py:27)"]:::stage
 
@@ -35,7 +35,7 @@ flowchart TD
     CONS["Răspunsul lui completează formularul:<br/>buget, nevoie, categorie (:41-52)"]:::stage
     ATT{"A răspuns vag de prea multe ori? (:59)"}:::dec
     RESUME["Reluăm de unde rămăsese<br/>(ruta salvată) (:69-73)"]:::stage
-    ESCR["Prea multe încercări → om<br/>sau vânzare (:61-62)"]:::stage
+    ESCR["Prea multe încercări → vânzare<br/>cu ce știm (:61-62)"]:::stage
   end
 
   GREET{"4 · E doar un salut? («bună»)<br/>(greeting.py:184)"}:::dec
@@ -58,12 +58,8 @@ flowchart TD
   SIMPLE["AI-ul mic răspunde direct<br/>+ butoane de continuare (:298-308)"]:::out
   CLARIFY["Punem O întrebare de clarificare<br/>+ variante de răspuns (:309-319)"]:::out
 
-  HOFF{"9 · Canalul are operator uman?<br/>(handoff.py:39)"}:::dec
-  HESC["Anunțăm operatorul + îi confirmăm<br/>clientului (:44-49)"]:::out
-  HSUP["Pe site nu e operator → tratăm<br/>ca vânzare (:40-42)"]:::stage
-
-  AGENT["10 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:347)"]:::llm
-  FB["11 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
+  AGENT["9 · AI-ul MARE: caută în catalog și<br/>compune recomandarea → Diagram 4b<br/>(stages/agent.py:347)"]:::llm
+  FB["10 · Plasa finală: nimic n-a produs răspuns →<br/>punem o întrebare de clarificare<br/>(runner.py:169)"]:::out
   SEND["Răspunsul pleacă spre client<br/>(un singur punct de ieșire)"]:::out
 
   IN --> G1
@@ -74,8 +70,7 @@ flowchart TD
   G2 -- nu --> G3
   G3 -- da --> MODB --> NEU
   G3 -- nu --> G4
-  G4 -- "da + canal cu operator" --> ESC
-  G4 -- "da, fără operator → continuăm (:470)" --> G5
+  G4 -- da --> RISKEV --> G5
   G4 -- nu --> G5
   G5 -- da --> VIS --> GRD
   G5 -- nu --> GRD
@@ -102,9 +97,7 @@ flowchart TD
   ROUTE -- "simplu + are răspuns" --> SIMPLE
   ROUTE -- "simplu, fără text (:298)" --> FB
   ROUTE -- clarificare --> CLARIFY
-  ROUTE -- "cere om" --> HOFF
-  HOFF -- da --> HESC --> SEND
-  HOFF -- "nu — site" --> HSUP --> AGENT
+  ROUTE -- vânzare/comandă --> AGENT
   ROUTE -- "vânzare / comandă" --> AGENT
   AGENT -- "răspuns compus" --> SEND
   AGENT -- "AI-ul a picat → fără răspuns (:370)" --> FB

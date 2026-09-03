@@ -45,11 +45,11 @@ def test_every_model_callable_tool_is_classified():
 
 
 def test_commerce_tools_are_mutations_and_not_parallel_safe():
-    for name in ("cart_add", "checkout_link", "subscribe_back_in_stock", "request_human"):
+    for name in ("cart_add", "checkout_link", "subscribe_back_in_stock"):
         spec = spec_for(name)
         assert spec.kind is ToolKind.MUTATION
         assert spec.parallel_safe is False
-        assert spec.idempotent is True  # receipts NX-237 / UNIQUE / handoff_until absolut
+        assert spec.idempotent is True  # receipts NX-237 / UNIQUE pe (business, contact, produs)
 
 
 def test_catalog_reads_are_parallel_safe():

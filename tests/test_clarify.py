@@ -150,13 +150,14 @@ async def test_resume_empty_body_does_not_touch_asked_intents():
 # --- NX-116: anti-buclă (attempts) — escaladare peste prag -------------------
 
 
-async def test_resume_escalates_handoff_on_intent_after_max_attempts():
-    # attempts >= clarify_max_attempts (default 2) pe slotul „intent" → HANDOFF (operator).
+async def test_resume_falls_back_to_sales_on_intent_after_max_attempts():
+    # attempts >= clarify_max_attempts (default 2) pe slotul „intent" ducea la HANDOFF. Fără
+    # operator, cel mai bun răspuns pe care îl avem bate o promisiune neonorată → SALES.
     ctx = _ctx("nu stiu", pending={"field": "intent", "resume_route": "sales", "attempts": 2})
     await clarify_resume_stage(ctx, _deps())
-    assert ctx.route.route == Route.HANDOFF
+    assert ctx.route.route == Route.SALES
     ev = _event(ctx, "clarify_escalated")
-    assert ev.properties == {"field": "intent", "attempts": 2, "to": "handoff", "turn_id": "t"}
+    assert ev.properties == {"field": "intent", "attempts": 2, "to": "sales", "turn_id": "t"}
     assert "nu stiu" not in str(ev.properties)  # P12 — fără answer
 
 
@@ -215,7 +216,6 @@ async def _run_handle_turn(monkeypatch, stage):
             "state_version": 0,
             "locale": "ro",
             "bot_active": True,
-            "handoff_until": None,
         }
 
     async def fake_patch(conn, business_id, conv_id, new_state, version, **k):

@@ -65,7 +65,6 @@ def _plan(**overrides) -> AnswerPlanV2:
         state_update_proposals=(),
         action_intents=(),
         disclosures=(),
-        handoff=False,
         confirmed_actions=(),
         style_signals=StyleSignals(tone="neutral", verbosity="short"),
     )

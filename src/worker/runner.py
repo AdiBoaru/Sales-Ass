@@ -188,7 +188,6 @@ _PHASE_BY_STAGE: dict[str, str] = {
     "alias_stage": "gates",
     "cache_stage": "gates",
     "faq_stage": "gates",
-    "handoff_stage": "gates",
     "triage_stage": "model",
 }
 
@@ -203,7 +202,7 @@ class TurnRuntime:
     _tokens: list[tuple[str, object]] = field(default_factory=list)
     owns_deadline: bool = False
     #: A rulat poarta de AUTORITATE (`gates_stage`)? Cât timp nu a rulat, nu știm dacă botul are
-    #: voie să vorbească (bot_active / handoff activ) — deci fallback-ul de deadline TACE.
+    #: voie să vorbească (bot_active / contact blocat) — deci fallback-ul de deadline TACE.
     gates_done: bool = False
 
 
@@ -325,9 +324,9 @@ def _deadline_stop(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> bool:
         d.total_ms,
     )
     # Tăcerea rămâne a Gates, nu a deadline-ului. Două situații în care NU punem niciun reply:
-    #   • `ctx.halt` — Gates a decis tăcere intenționată (bot oprit / om a preluat conversația);
+    #   • `ctx.halt` — Gates a decis tăcere intenționată (bot oprit / contact blocat);
     #   • gates n-a apucat să ruleze — nu ȘTIM încă dacă botul are voie să vorbească, iar un mesaj
-    #     de „n-am apucat" într-o conversație preluată de un operator ar fi mai rău decât nimic.
+    #     de „n-am apucat" într-o conversație cu botul oprit ar fi mai rău decât nimic.
     # În ambele cazuri turul iese fără reply, iar marginea web îl terminalizează onest cu
     # error-view randabil (`empty_result`/`deadline_exceeded`) — P6 e respectat acolo, nu aici.
     if ctx.reply is None and rt.gates_done and not ctx.halt:
@@ -453,8 +452,8 @@ def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Fallback grațios: dacă niciun stagiu n-a produs reply (rută order/handoff
-    neacoperită încă, triaj fără răspuns, sau fără cheie OpenAI), iese o întrebare
+    """Fallback grațios: dacă niciun stagiu n-a produs reply (rută order neacoperită
+    încă, triaj fără răspuns, sau fără cheie OpenAI), iese o întrebare
     de clarificare — NU tăcere (principiul 6) și NU text de schelet."""
     ctx.set_reply(
         "Hmm, n-am înțeles exact 🙂 Cauți un produs anume, ai o întrebare despre o "
@@ -465,9 +464,9 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
 # Pipeline-ul: Gates (3) → Limbă (3) → Welcome (4) → Alias (4) → Cache (4) → FAQ (4) →
 # Triaj (5) → Agent (7) → fallback.
-# Gates (G5a) decide PRIMUL dacă botul răspunde (bot_active/handoff/risc) — poate opri
-# cu reply (risc) sau tăcere intenționată (halt). Limbă (G5c) refină ctx.language ÎNAINTE
-# de straturile locale-keyed (principiul 11). Welcome întâmpină DETERMINIST un pur salut
+# Gates (G5a) decide PRIMUL dacă botul răspunde (bot_active / blocklist / moderare) — poate opri
+# cu reply (moderare/throttle) sau tăcere intenționată (halt). Limbă (G5c) refină ctx.language
+# ÎNAINTE de straturile locale-keyed (principiul 11). Welcome întâmpină DETERMINIST un pur salut
 # (free layer, fără LLM). Alias (NX-73) face match EXACT pe `intent_aliases` aprobate (index
 # B-tree, zero token) ÎNAINTE de cache — cel mai ieftin strat. Cache (G5b) servește query-uri
 # statice repetate fără LLM; FAQ (NX-74) răspunde la întrebări de cunoștințe din `faqs` (un
@@ -482,7 +481,6 @@ from src.worker.stages.clarify import clarify_resume_stage  # noqa: E402
 from src.worker.stages.faq import faq_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.greeting import greeting_stage  # noqa: E402
-from src.worker.stages.handoff import handoff_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
 from src.worker.stages.triage import triage_stage  # noqa: E402
 
@@ -507,7 +505,6 @@ DEFAULT_STAGES: list[Stage] = [
     cache_stage,
     faq_stage,
     triage_stage,
-    handoff_stage,  # NX-123: consumă Route.HANDOFF (escaladare) înainte ca agentul să-l ignore
     agent_stage,
     fallback_stage,
 ]

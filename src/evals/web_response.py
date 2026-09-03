@@ -151,7 +151,7 @@ def validate_web_payload(
 
     `source_products` can be a list of product dicts or a dict keyed by product id.
     When provided, every emitted product id and product price must match it.
-    `allow_empty` permits an empty `content` (intentional silence / handoff — Gates
+    `allow_empty` permits an empty `content` (intentional silence — Gates
     may produce a bot-less reply; that payload is valid, not a hallucination).
     """
     failures: list[str] = []

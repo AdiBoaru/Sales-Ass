@@ -526,7 +526,6 @@ _SHADOW_AGREEMENT: dict[str, str] = {
     "simple": "answered",
     "clarify": "clarify",
     "order": "order",
-    "handoff": "handoff",
 }
 
 
@@ -536,8 +535,6 @@ def _brain_outcome(ctx: TurnContext) -> str:
     Vocabular ÎNCHIS — intră ca label. Nu re-interpretăm textul: ne uităm la deciziile structurale,
     singurele care se pot compara cu o rută."""
     plan = getattr(ctx, "answer_plan", None)
-    if plan is not None and getattr(plan, "handoff", False):
-        return "handoff"
     if ctx.reply is not None and ctx.reply.pending_question:
         return "clarify"
     if any(

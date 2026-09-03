@@ -95,7 +95,6 @@ async def _run(monkeypatch, stage):
             "state_version": 0,
             "locale": "ro",
             "bot_active": True,
-            "handoff_until": None,
         }
 
     async def fake_insert_msg(conn, business_id, conv_id, contact_id, direction, author, **k):

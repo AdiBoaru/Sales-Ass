@@ -20,7 +20,7 @@ from typing import Any
 import asyncpg
 
 _CONV_COLS = (
-    "id::text, status, bot_active, handoff_until, last_inbound_at, "
+    "id::text, status, bot_active, last_inbound_at, "
     "last_outbound_at, last_message_at, locale, state, state_version, "
     "risk_flags, shadow_mode"
 )
@@ -168,36 +168,6 @@ async def get_state_and_version(
         return None
     state = json.loads(row["state"]) if isinstance(row["state"], str) else (row["state"] or {})
     return state, row["state_version"]
-
-
-async def set_handoff(
-    conn: asyncpg.Connection,
-    business_id: str,
-    conversation_id: str,
-    *,
-    window_minutes: int,
-    risk_flag: str,
-    assigned_user_id: str | None = None,
-) -> None:
-    """Escaladează conversația la un om (Gates, G5a): împinge `handoff_until` cu
-    `window_minutes` în viitor (botul tace în fereastra asta), adaugă `risk_flag`
-    și — opțional — asignează un agent. `assigned_user_id` rămâne cârlig (consola
-    de agent îl umple). NU atinge `state`/`state_version` → nu intră în conflict
-    cu patch-ul Sender-ului din același tur."""
-    await conn.execute(
-        """
-        update conversations
-           set handoff_until = now() + make_interval(mins => $3),
-               risk_flags = array_append(risk_flags, $4),
-               assigned_user_id = coalesce($5::uuid, assigned_user_id)
-         where business_id = $1 and id = $2
-        """,
-        business_id,
-        conversation_id,
-        window_minutes,
-        risk_flag,
-        assigned_user_id,
-    )
 
 
 async def set_conversation_locale(

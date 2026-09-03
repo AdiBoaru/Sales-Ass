@@ -45,11 +45,6 @@ _LOGIN_REQUIRED: dict[str, str] = {
     "hu": "Egy rendelés ellenőrzéséhez vagy visszaküldés indításához jelentkezz be a fiókodba az "
     "oldalon, majd térj vissza ide, így biztonságosan látom a rendeléseidet.",
 }
-_HANDOFF_SUFFIX: dict[str, str] = {
-    "ro": " Dacă preferi, te pot pune în legătură cu un coleg.",
-    "en": " If you'd prefer, I can connect you with a colleague.",
-    "hu": " Ha szeretnéd, összekötlek egy kollégával.",
-}
 _NO_ORDERS: dict[str, str] = {
     "ro": "Nu găsesc nicio comandă pe contul tău. Dacă ai folosit alt număr sau cont, dă-mi "
     "numărul comenzii și verific din nou.",
@@ -64,27 +59,19 @@ def _pick(table: dict[str, str], language: str | None) -> str:
     return table.get(language or "ro") or table["ro"]
 
 
-def login_required_message(language: str | None, *, with_handoff: bool = False) -> str:
-    """Mesaj determinist „loghează-te ca să-ți verific comanda" (web anonim). `with_handoff` adaugă
-    oferta de operator DOAR când tenantul are `request_human` activ — nu promitem ce nu există."""
-    msg = _pick(_LOGIN_REQUIRED, language)
-    return msg + _pick(_HANDOFF_SUFFIX, language) if with_handoff else msg
+def login_required_message(language: str | None) -> str:
+    """Mesaj determinist „loghează-te ca să-ți verific comanda" (web anonim).
+
+    Nu mai oferă un operator: transferul la om a fost scos din produs, iar o ofertă pe care
+    nimeni n-o onorează e mai rea decât absența ei."""
+    return _pick(_LOGIN_REQUIRED, language)
 
 
 def login_required_for_ctx(ctx: TurnContext) -> str:
-    """Mesajul de login pentru contextul curent: oferta de operator DOAR dacă tenantul are
-    `request_human` activ ȘI canalul permite handoff (web off by default → nu promitem un coleg
-    inexistent). Folosit la marginea tool-urilor de cont (`check_order`/`reorder`) pe web anonim —
-    mesajul apare DOAR fiindcă modelul a cerut un lookup care chiar are nevoie de cont."""
-    # Import lazy: evită un ciclu la încărcarea modulului (src.tools.base → ... → order_gate).
-    from src.config import handoff_enabled_for
-    from src.tools.base import enabled_tools
-
-    channel_kind = getattr(ctx.message, "channel_kind", "") or ""
-    with_handoff = "request_human" in enabled_tools(ctx.business) and handoff_enabled_for(
-        channel_kind
-    )
-    return login_required_message(getattr(ctx, "language", None), with_handoff=with_handoff)
+    """Mesajul de login pentru contextul curent. Folosit la marginea tool-urilor de cont
+    (`check_order`/`reorder`) pe web anonim — apare DOAR fiindcă modelul a cerut un lookup care
+    chiar are nevoie de cont."""
+    return login_required_message(getattr(ctx, "language", None))
 
 
 def no_orders_message(ctx: TurnContext) -> str:

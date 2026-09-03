@@ -53,10 +53,10 @@ flowchart TD
     S5["dispatcher dead between claim/mark →<br/>visibility timeout, row redeemed"]:::ok
   end
 
-  subgraph Human["Human handoff"]
-    H1["risk pattern / route handoff"]:::dec
-    H2["request_human: set handoff_until + notify<br/>gates.py:473"]:::ok
-    H3["next turns: gates → intentional silence"]:::deg
+  subgraph Kill["Kill-switch per conversație"]
+    H1["bot_active=false (setat din DB, nu din conversație)"]:::dec
+    H2["gates → intentional silence"]:::deg
+    H3["risc detectat = DOAR event; turul curge la agent"]:::ok
   end
 
   L1 --> L2

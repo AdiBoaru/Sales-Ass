@@ -77,7 +77,6 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
     commerce_tools,
     faq_tools,
-    handoff_tools,
     orders_tools,
 )
 from src.tools.base import enabled_tools
@@ -294,7 +293,7 @@ def _lead_score_hint(ctx: TurnContext) -> str:
 # `search_products.query` e EXCLUS deliberat (e textul de căutare al modelului, poate ecoua
 # fraza userului) — păstrăm doar FILTRELE structurate (category/concerns/price_max...) care
 # răspund la „de ce a căutat în categoria greșită". `check_order` e special (vezi _safe_tool_args).
-# Tool-urile cu arg-uri PII (faq_lookup.query, reorder, request_human) NU-s în whitelist → `{}`.
+# Tool-urile cu arg-uri PII (faq_lookup.query, reorder) NU-s în whitelist → `{}`.
 async def _persist_safety_context(ctx: TurnContext, deps: PipelineDeps) -> None:
     """NX-173: scrie `state.safety` când clientul declară un context nou + curăță din state
     produsele care nu mai pot fi arătate. `state` local se actualizează pe loc, ca policy-ul chemat
@@ -428,7 +427,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
     cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
-    # NX-133: stiva de constrângeri multi-tur — DOAR pe SALES (order/handoff nu ating stiva).
+    # NX-133: stiva de constrângeri multi-tur — DOAR pe SALES (order nu atinge stiva).
     # Filters curente merged peste ce s-a spus deja → rafinarea nu resetează căutarea. Scriere pe
     # ctx.state (owner = agent); persistat de processor (merge canonic, ca `constraints`).
     if is_order:

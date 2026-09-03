@@ -338,7 +338,7 @@ def classify(
         return TurnClass.MUTATION
     if compare:
         return TurnClass.COMPLEX
-    if route in ("simple", "order", "clarify", "handoff"):
+    if route in ("simple", "order", "clarify"):
         return TurnClass.EXACT
     return TurnClass.RECOMMENDATION
 

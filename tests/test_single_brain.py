@@ -68,7 +68,6 @@ def _plan_dict(**overrides) -> dict:
         "state_update_proposals": [],
         "action_intents": [],
         "disclosures": [],
-        "handoff": False,
         "confirmed_actions": [],
         "style_signals": {"tone": "neutral", "verbosity": "short"},
     }

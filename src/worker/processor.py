@@ -767,7 +767,6 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         facts=snap.facts,  # NX-148: memorie structurată (facts_block)
         language=snap.locale or business.default_locale,
         bot_active=snap.bot_active,
-        handoff_until=snap.handoff_until,
         verified_customer_ref=verified_customer_ref,  # NX-129: login passthrough (None = anonim)
     )
 
@@ -852,8 +851,8 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
 
     if ctx.reply is None:
         if ctx.halt:
-            # tăcere INTENȚIONATĂ (Gates): handoff activ / bot oprit — omul se ocupă.
-            log.info("tăcere intenționată (handoff): conv=%s turn=%s", conversation_id, turn_id)
+            # tăcere INTENȚIONATĂ (Gates): bot oprit pe conversație / contact blocat.
+            log.info("tăcere intenționată: conv=%s turn=%s", conversation_id, turn_id)
         else:
             # „niciodată tăcere" (principiul 6) e responsabilitatea stagiilor reale;
             # aici doar raportăm că turul n-a produs reply.

@@ -6,7 +6,7 @@ Când clientul deschide conversația cu un PUR salut ("salut", "bună ziua", "hi
 start și afișează disclaimer-ul AI (art. 50 AI Act). Comportament inspirat de
 iZi/eMAG, dar cu numele asistentului nostru.
 
-Rulează DUPĂ Gates (deci un contact blocat/handoff nu primește welcome) și DUPĂ
+Rulează DUPĂ Gates (deci un contact blocat nu primește welcome) și DUPĂ
 Limbă (`ctx.language` setat), ÎNAINTE de Cache/Triaj — un salut nu trebuie să
 coste un apel de triaj (free layer). Dacă mesajul NU e un pur salut (ex. „salut,
 caut o cremă" sau „caut telefon"), stagiul nu face nimic și pipeline-ul continuă.

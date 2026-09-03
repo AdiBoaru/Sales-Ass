@@ -150,7 +150,8 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
     intro + pick + educație + disclaimer), NU enumerarea — o fac cardurile (`products`) și butoanele
     (`suggestions`). Reply simplu (text/produse fără rich): `content` = `reply.text`. Disclaimer-ul
     AI re-aplicat idempotent pe `language`. `Reply.offer` (NX-114) → câmp `offer` opțional (buton).
-    Reply gol (handoff tăcut / degradare) → content gol, fără carduri (frontendul dă fallback)."""
+    Reply gol (tăcere intenționată / degradare) → content gol, fără carduri (frontendul dă
+    fallback)."""
     if reply is None:
         return {"content": "", "products": [], "suggestions": []}
     lang = language or "ro"

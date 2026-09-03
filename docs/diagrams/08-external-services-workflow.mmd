@@ -23,10 +23,6 @@ flowchart LR
     MMED["media download GET — fetch_media<br/>meta_client.py:137 · media.py:34-43"]:::ext
   end
 
-  subgraph Operator["Operator (handoff)"]
-    OPW["notify webhook POST, best-effort, no PII<br/>handoff_tools.py:28-47"]:::ext
-  end
-
   subgraph TG["Telegram Bot API"]
     TIN["long polling getUpdates<br/>poller.py:70"]:::ext
     TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:78"]:::ext
@@ -52,7 +48,6 @@ flowchart LR
   WIN --> SYS
   OIN --> SYS
   MMED --> SYS
-  SYS --> OPW
   SYS --> MOUT
   SYS --> TOUT
   SYS --> WOUT2

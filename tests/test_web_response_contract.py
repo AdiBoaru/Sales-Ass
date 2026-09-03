@@ -221,8 +221,8 @@ def test_web_response_checker_catches_invented_price_in_text_only_reply():
     assert any("content price" in f for f in result.failures)
 
 
-def test_web_response_checker_allows_empty_content_for_silent_handoff():
-    # tacere intentionata (handoff / degradare) → payload gol e valid cand allow_empty=True
+def test_web_response_checker_allows_empty_content_for_intentional_silence():
+    # tacere intentionata (bot oprit / degradare) → payload gol e valid cand allow_empty=True
     payload = {"content": "", "products": [], "suggestions": []}
 
     strict = validate_web_payload(payload)
