@@ -142,6 +142,8 @@ folosește nivelul imediat inferior și notează explicit abaterea în PR.
 
 ### Wave H — calitatea recomandării pe catalogul SOLE real
 
+> **Starea curentă și predarea de sesiune: [`WAVE-H-HANDOFF.md`](WAVE-H-HANDOFF.md).** Citește-l înainte de a începe orice card din val.
+
 Lanț derivat din auditul de retrieval din 2026-09-03 (vezi `docs/RETRIEVAL-QUALITY-PLAN.md`).
 Premisa comună: sistemul are porți de ADEVĂR peste tot și niciuna de POTRIVIRE, iar fațetele pe
 care s-ar sprijini potrivirea sunt la 0% acoperire.
