@@ -20,6 +20,7 @@ from src.catalog.derivation import (
     build_matchers,
     ingredient_head,
     match_keys,
+    owned_facets,
     phrase_span,
     signal_name,
     tokens,
@@ -254,3 +255,67 @@ def test_promisiunile_au_prag_mai_inalt_decat_semnalele_de_rang():
     claims = [s["min_precision"] for s in policy.values() if s["promise"] == "claim"]
     signals = [s["min_precision"] for s in policy.values() if s["promise"] == "rank_signal"]
     assert min(claims) > max(signals)
+
+
+# --- ce DEȚINE o rulare de derivare (NX-268, ștergerea faptelor moarte) -------------------------
+
+
+def test_fatetele_detinute_nu_depind_de_ce_a_produs_rularea():
+    """Mulțimea se calculează din PACHET, nu din rezultat.
+
+    Diferența e chiar defectul pe care îl repară: dacă „deținut" ar însemna „a produs valori acum",
+    o fațetă care nu mai potrivește nimic pe tot catalogul ar ieși din mulțime exact în rularea care
+    ar trebui s-o curețe, iar valorile ei vechi ar rămâne în `attributes` și în semnale la infinit.
+    Aici, `finish` e declarată și deținută chiar dacă niciun produs n-o mai poartă."""
+    owned = owned_facets(
+        facet_values={"concerns": {"hydration"}, "skin_type": {"dry"}, "finish": set()},
+        name_derived=["finish"],
+        claim_derived=[],
+    )
+    assert "finish" in owned
+
+
+def test_fatetele_altor_joburi_nu_se_ating():
+    """`routine_time` vine din import, `shade`/`shade_group` din NX-269. Toate trei sunt scrise în
+    ACEEAȘI coloană `attributes`, deci o ștergere prea largă ar șterge munca altui job fără nicio
+    eroare — s-ar vedea abia ca un catalog mai sărac la următoarea rulare."""
+    owned = owned_facets(
+        facet_values={
+            "concerns": {"hydration"},
+            "routine_time": {"am", "pm"},
+            "shade": set(),
+        },
+        name_derived=[],
+        claim_derived=[],
+    )
+    assert "routine_time" not in owned
+    assert "shade" not in owned and "shade_group" not in owned
+    assert "concerns" in owned
+
+
+def test_vocabular_gol_nu_e_o_instructiune_de_stergere():
+    """Fără valori declarate, potrivirea n-are ce căuta, deci rularea NU deține fațeta. Altfel un
+    pachet golit din greșeală ar șterge nevoile de pe tot catalogul la prima rulare — o pierdere
+    tăcută de date pornită de la o editare de config."""
+    owned = owned_facets(
+        facet_values={"concerns": set(), "skin_type": set()},
+        name_derived=[],
+        claim_derived=[],
+    )
+    assert "concerns" not in owned and "skin_type" not in owned
+    # `spf` și `key_ingredients` rămân: nu depind de vocabular, se derivă structural (regex, capul
+    # liniei), deci rularea le încearcă mereu și le deține mereu.
+    assert set(owned) == {"spf", "key_ingredients"}
+
+
+def test_stergerea_are_acelasi_scop_ca_proiectia():
+    """Semnalele și `attributes` trebuie curățate pe ACEEAȘI mulțime de fațete. Dacă cele două
+    scopuri ar diverge, ștergerea n-ar închide divergența, ar muta-o dintr-o parte în alta — iar
+    partea rămasă murdară ar fi tocmai copia pe care o citește read-path-ul."""
+    source = (ROOT / "scripts" / "derive_product_attributes.py").read_text(encoding="utf-8")
+    # Ambele statement-uri de curățare primesc `owned`, iar sweep-ul are scop POZITIV pe produse
+    # (`= any`), nu negativ: derivarea vede doar produsele `active`, deci un `not in` ar șterge și
+    # faptele celor arhivate, pe care rularea nici nu le-a examinat.
+    assert "_DELETE_ORPHAN_SIGNALS, args.business, locale, owned, empty" in source
+    assert "_STRIP_ATTRS, args.business, empty, owned" in source
+    assert "and product_id = any($4::uuid[])" in source

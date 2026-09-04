@@ -39,6 +39,11 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.catalog import search_products_lexical  # noqa: E402
+from src.evals.retrieval.snapshot import (  # noqa: E402
+    CatalogSnapshot,
+    compare,
+    read_snapshot,
+)
 
 GOLDSET_DIR = ROOT / "tests" / "golden" / "retrieval_goldset"
 CASES = GOLDSET_DIR / "cases.json"
@@ -46,6 +51,48 @@ MANIFEST = GOLDSET_DIR / "manifest.json"
 
 MIN_PER_CLASS = 10
 TOP_POOL = 12
+
+
+def _manifest_field(key: str):
+    """Un câmp din manifest, sau `None` dacă manifestul e mai vechi decât câmpul."""
+    if not MANIFEST.exists():
+        return None
+    return json.loads(MANIFEST.read_text(encoding="utf-8")).get(key)
+
+
+def _sealed_snapshot() -> CatalogSnapshot | None:
+    """Catalogul sub care a fost judecat setul, dacă manifestul îl poartă."""
+    if not MANIFEST.exists():
+        return None
+    raw = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    return CatalogSnapshot.from_dict(raw.get("catalog_snapshot"))
+
+
+_JUDGED_SQL = """
+select id::text as id, status
+  from products
+ where business_id = $1 and id = any($2::uuid[])
+"""
+
+
+async def _judged_products_still_valid(conn, business_id: str, ids: set[str]) -> dict:
+    """Produsele judecate care nu mai pot fi găsite de nimeni.
+
+    Fără verificarea asta, un produs judecat „corect" și dezactivat între timp se comportă în raport
+    exact ca o ratare de relevanță: nu apare în top, deci scade top-3. Cifra ar fi corectă și
+    concluzia complet greșită — ai căuta o regresie de motor acolo unde s-a mișcat raftul.
+
+    Se raportează, NU se corectează scorul. A scoate tăcut cazurile afectate ar face setul să se
+    micșoreze singur în timp, iar metrica pe un eșantion care se subțiază de la sine e mai
+    periculoasă decât una care spune „aici am o problemă de date"."""
+    if not ids:
+        return {"missing": [], "inactive": []}
+    rows = await conn.fetch(_JUDGED_SQL, business_id, sorted(ids))
+    found = {r["id"]: r["status"] for r in rows}
+    return {
+        "missing": sorted(ids - set(found)),
+        "inactive": sorted(pid for pid, st in found.items() if st != "active"),
+    }
 
 
 def _verify_manifest(cases: list[dict]) -> str:
@@ -91,8 +138,16 @@ async def main() -> int:
         return 2
 
     per_class: dict[str, list[dict]] = collections.defaultdict(list)
+    drift: dict = {}
+    integrity: dict = {}
     try:
         async with tenant_conn(args.business) as conn:
+            drift = compare(_sealed_snapshot(), await read_snapshot(conn, args.business))
+            integrity = await _judged_products_still_valid(
+                conn,
+                args.business,
+                {pid for c in cases for pid in (c.get("correct") or ())},
+            )
             for case in usable:
                 rows = await search_products_lexical(
                     conn,
@@ -148,7 +203,16 @@ async def main() -> int:
             "cases_usable": len(usable),
             "min_per_class": MIN_PER_CLASS,
             "path": "lexical",
+            # Momentul JUDECĂȚII, citit din manifest — nu ceasul de acum. Cardul cere și
+            # `measured_at`, și rulări bit-identice; un timestamp proaspăt în artefact le-ar
+            # face imposibil de îndeplinit pe amândouă, iar cel util e oricum primul: „ce
+            # vechime are judecata din spatele cifrei ăsteia".
+            "goldset_measured_at": _manifest_field("measured_at"),
         },
+        # Amândouă sunt OBSERVAȚII, nu porți: catalogul unui client trebuie să se schimbe. Ce n-are
+        # voie e ca schimbarea să treacă drept diferență de calitate.
+        "catalog_drift": drift,
+        "judged_products": integrity,
         "overall": _agg(everything),
         "by_class": {cls: _agg(items) for cls, items in sorted(per_class.items())},
     }
@@ -158,6 +222,23 @@ async def main() -> int:
 
     o = report["overall"]
     print(f"set: {len(usable)} cazuri utilizabile din {len(cases)} · amprentă {sha[:12]}\n")
+    # Driftul se spune ÎNAINTEA cifrelor, nu într-o notă de subsol: dacă raftul s-a mișcat, cifra
+    # de dedesubt nu mai măsoară ce crede cititorul că măsoară.
+    if drift.get("verdict") == "drifted":
+        moved = ", ".join(
+            f"{k} {v['sealed']} → {v['current']}" for k, v in drift["changed"].items()
+        )
+        print(f"  ATENȚIE: catalogul s-a mișcat de la judecarea setului — {moved}")
+    elif drift.get("verdict") == "unknown":
+        print("  amprenta catalogului lipsește din manifest (set sigilat înainte de amprentă)")
+    if integrity.get("missing") or integrity.get("inactive"):
+        print(
+            f"  {len(integrity['missing'])} produse judecate au DISPĂRUT, "
+            f"{len(integrity['inactive'])} nu mai sunt active — cifrele de mai jos le numără drept "
+            "ratări, deci o scădere poate fi de DATE, nu de relevanță"
+        )
+    if drift.get("verdict") != "same" or integrity.get("missing") or integrity.get("inactive"):
+        print()
     if o["verdict"] == "MEASURED":
         print(f"  top-3 {o['top3']:.1%} · top-6 {o['top6']:.1%} · zero {o['zero_rate']:.1%}")
         print(f"  contradicție {o['contradiction_rate']:.1%} · MRR {o['mrr']:.3f}\n")
