@@ -37,7 +37,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from src.catalog.derivation import signal_name  # noqa: E402
 from src.catalog.shade import derive_shades, shade_appears_in_name, tokenize  # noqa: E402
-from src.db.connection import close_pool, tenant_conn  # noqa: E402
+from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.domain.loader import load_domain_pack  # noqa: E402
 from src.domain.normalize import normalize  # noqa: E402
@@ -161,8 +161,11 @@ async def main() -> int:
     args = ap.parse_args()
     roots = frozenset(r.strip() for r in args.roots.split(",") if r.strip())
 
+    # `admin_conn`, nu `tenant_conn` — job offline care scrie în catalog, iar `bot_runtime` e
+    # SELECT-only acolo prin proiectare. Motivul complet: `scripts/derive_product_attributes.py`.
     try:
-        async with tenant_conn(args.business) as conn:
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
             business = await load_business(conn, args.business)
             if business is None:
                 print("business inexistent", file=sys.stderr)

@@ -72,7 +72,7 @@ from src.catalog.derivation import (  # noqa: E402
     tokens,
 )
 from src.catalog.query_terms import stopwords  # noqa: E402
-from src.db.connection import close_pool, tenant_conn  # noqa: E402
+from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.domain.loader import load_domain_pack  # noqa: E402
 from src.domain.normalize import normalize  # noqa: E402
@@ -394,8 +394,18 @@ async def main() -> int:
     )
     args = ap.parse_args()
 
+    # `admin_conn`, nu `tenant_conn`: ăsta e un job OFFLINE care scrie în catalog, iar
+    # `bot_runtime` are SELECT-only pe tot catalogul (`products`, `product_derived_signals`) —
+    # prin proiectare, principiul „NU scriere în catalog din worker". Pe conexiunea de runtime
+    # scrierea moare cu `InsufficientPrivilegeError`, și moare DOAR cu `--apply`: dry-run-ul face
+    # numai citiri, deci asimetria a ascuns defectul până la prima rulare reală.
+    #
+    # RLS e bypass-at aici, deci izolarea cade în întregime pe `where business_id = $1` — prezent
+    # în FIECARE statement al jobului (verificat), adică exact mecanismul primar din principiul 7.
+    # Același tipar ca `scripts/seed_catalog_v2.py`, celălalt job care scrie în catalog.
     try:
-        async with tenant_conn(args.business) as conn:
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
             business = await load_business(conn, args.business)
             if business is None:
                 print("business inexistent", file=sys.stderr)

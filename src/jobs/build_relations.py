@@ -420,6 +420,13 @@ def _routine_target_categories(
 
 
 async def main() -> int:
+    # Raportul se printează ÎNAINTE de `_write_edges`, iar consola Windows e cp1252: fără garda
+    # asta, un „ă" din eticheta unui contor omoară jobul la print și `--apply` nu scrie NIMIC.
+    # Eșecul e cu atât mai urât cu cât apare doar după ce toată munca a fost făcută. Aceeași gardă
+    # ca în `scripts/derive_shade_finish.py` și `scripts/derive_product_attributes.py`.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--business", required=True)
     ap.add_argument("--apply", action="store_true", help="chiar scrie (fără el: doar raportează)")
@@ -434,10 +441,14 @@ async def main() -> int:
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    from src.db.connection import close_pool, tenant_conn
+    from src.db.connection import admin_conn, close_pool, get_pool
 
+    # `admin_conn`, nu `tenant_conn` — job offline care scrie în catalog (`product_relations`),
+    # iar `bot_runtime` e SELECT-only acolo prin proiectare. Motivul complet:
+    # `scripts/derive_product_attributes.py`.
     try:
-        async with tenant_conn(args.business) as conn:
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
             rows = await conn.fetch(_PRODUCTS_SQL, args.business)
             products = []
             for row in rows:
