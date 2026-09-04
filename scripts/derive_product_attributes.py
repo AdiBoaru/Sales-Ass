@@ -272,12 +272,13 @@ async def _write_batch(
                         values = info["values"]
                         # Semnalul rămâne TEXT (`spf:30` e un identificator, nu o cantitate);
                         # proiecția poartă tipul JSON pe care îl cere contractul.
-                        projected = [_project_value(facet, value) for value in values]
-                        attrs[facet] = (
-                            projected
-                            if len(projected) > 1 or facet in _LIST_FACETS
-                            else projected[0]
-                        )
+                        if facet not in _SIGNAL_ONLY_FACETS:
+                            projected = [_project_value(facet, value) for value in values]
+                            attrs[facet] = (
+                                projected
+                                if len(projected) > 1 or facet in _LIST_FACETS
+                                else projected[0]
+                            )
                         for value in values:
                             signal = signal_name(facet, value)
                             produced.append(signal)
@@ -317,6 +318,23 @@ async def _write_batch(
 # rămân liste chiar cu o singură valoare. O fațetă-listă scrisă ca scalar ar face filtrul
 # `attributes->'concerns' ?| …` să nu se mai potrivească — și n-ar da nicio eroare.
 _LIST_FACETS = frozenset({"concerns", "key_ingredients"})
+
+# Fațetele care trăiesc DOAR ca semnale derivate, niciodată în `products.attributes`.
+#
+# `key_ingredients` e acolo fiindcă în `attributes` contractul NX-205 îl citește ca CLAIM, iar un
+# claim cere `claim_provenance` completă — `source`, `source_ref` și `verified_at`. Derivarea are o
+# sursă (`derived_from`), dar n-are verificare: o regulă a potrivit un cap de secțiune, nimeni n-a
+# confirmat nimic. A completa `verified_at` cu data rulării ar spăla o potrivire de regex în „sursă
+# verificată" și ar șterge exact distincția pe care se sprijină validatorul (stagiul 8) și
+# `grounding_guard` (NX-240).
+#
+# Contractul o spune singur, pentru badge-uri: un fapt e „ori DERIVAT (`DerivedSignal{rule_id}`),
+# ori confirmat prin proveniență". `key_ingredients` n-are încă ramura derivată — extinderea e un
+# card separat, nu ceva de strecurat aici. Până atunci, locul onest e tabela de semnale.
+#
+# Fațeta rămâne în `owned`, deci proiecția o ȘTERGE din `attributes` la următoarea rulare: cele
+# 2.420 de produse scrise pe 2026-09-04 blocau complet `build_search_documents` cu ValidationError.
+_SIGNAL_ONLY_FACETS = frozenset({"key_ingredients"})
 
 # Fațetele NUMERICE prin contract (`ProductFacts.spf: float | None`, validat cu `_num`). Scrise ca
 # șir, trec de orice `attributes ? 'spf'` și de derivarea însăși, care raportează succes — și cad
