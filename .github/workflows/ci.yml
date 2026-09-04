@@ -42,6 +42,13 @@ jobs:
       - name: Guard conn-per-op (NX-231)
         run: python scripts/check_no_raw_conn.py
 
+      # NX-264: codul n-are voie să știe ce vinde tenantul. Principiul 9 (vocabularul vine din DB)
+      # era o intenție până acum — poarta îl face invariant. Termenii se derivă din pachetele de
+      # domeniu ȘI din catalogul real (tests/domain_terms.json), nu se scriu de mână. Scurgerile
+      # existente sunt îngheţate în tests/domain_leak_baseline.json și pot doar să scadă.
+      - name: Guard scurgere de domeniu (NX-264)
+        run: pytest -q tests/test_domain_leak.py tests/test_facet_discovery.py
+
       # Documentația de arhitectură a devenit falsă o dată (redactată 2026-07-02, resincronizată
       # 2026-08-10 — între timp descria un agent monolitic care nu mai exista). Poarta compară
       # blocurile ```claim:...``` din doc cu codul: stagii în ordine, tool-uri, procese, rute,
@@ -275,6 +282,19 @@ jobs:
       ENV: test
       LOG_LEVEL: WARNING
       DAILY_COST_CAP_USD: "5"
+      # NX-254 — BUGETUL DE SESIUNI, nu de performanță. Poolerul plafonează userul la 15 clienți
+      # în session mode, iar bugetul e ÎMPĂRȚIT cu producția, care ține sesiuni permanent.
+      # Default-urile procesului (10 admin + 10 bot = 20) îl depășeau garantat, iar simptomul ieșea
+      # ca `(EMAXCONNSESSION)` raportat drept eșec al testului de IZOLARE — gate-ul de securitate
+      # roșu din motive de capacitate. `CI` a stat roșu pe `main` din 21 august din cauza asta.
+      #
+      # 2 + 8 = 10, cu 5 lăsați producției. Cele 50 de tururi concurente rămân 50: se așteaptă la
+      # coadă pe pool, deci REFOLOSESC conexiunile mai des, ceea ce face testul mai strict, nu mai
+      # slab. `test_bugetul_de_sesiuni_incape_sub_plafonul_poolerului` verifică relația asta și
+      # pică zgomotos dacă cineva urcă un pool fără să urce plafonul.
+      DB_ADMIN_POOL_MAX: "2"
+      DB_BOT_POOL_MAX: "8"
+      DB_SESSION_BUDGET: "10"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

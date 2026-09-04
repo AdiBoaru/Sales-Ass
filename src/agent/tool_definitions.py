@@ -7,6 +7,8 @@ Prefix STATIC (ordine fixă) → prompt caching OpenAI pe tokenii de schemă. `s
 
 from typing import Any
 
+from src.domain import vocab_examples
+
 _SCHEMAS: dict[str, dict[str, Any]] = {
     "search_products": {
         "type": "function",
@@ -24,7 +26,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Nevoia clientului în limbaj natural (ex. cremă ten uscat).",
+                        "description": "Nevoia clientului în limbaj natural, așa cum a scris-o el.",
                     },
                     "price_max": {
                         "type": ["number", "null"],
@@ -45,17 +47,17 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                         "type": ["array", "null"],
                         "items": {"type": "string"},
                         "description": (
-                            "Nevoile/atributele în cuvintele clientului (ex. „ten gras”, "
-                            "„piele sensibilă”, „acnee”); altfel null."
+                            "Nevoile/atributele în cuvintele clientului{NEED_EXAMPLES}; "
+                            "altfel null."
                         ),
                     },
                     "features": {
                         "type": ["array", "null"],
                         "items": {"type": "string"},
                         "description": (
-                            "Ingrediente / caracteristici cheie cerute EXPLICIT de client (ex. "
-                            "„cu niacinamidă”, „cu retinol”, „finisaj mat”). DOAR când cere o "
-                            "componentă/proprietate anume, nu o nevoie; altfel null."
+                            "Componente sau caracteristici cheie cerute EXPLICIT de "
+                            "client{FEATURE_EXAMPLES}. DOAR când cere o componentă/proprietate "
+                            "anume, nu o nevoie; altfel null."
                         ),
                     },
                     "limit": {
@@ -330,6 +332,42 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
 TOOL_NAMES: tuple[str, ...] = tuple(_SCHEMAS)
 
 
-def tool_schemas(names: list[str]) -> list[dict[str, Any]]:
-    """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching)."""
-    return [_SCHEMAS[n] for n in names if n in _SCHEMAS]
+# NX-273 — marcatorii pe care îi umple pachetul tenantului. Sunt în DESCRIERI, iar descrierea unui
+# parametru nu e documentație, e o INSTRUCȚIUNE: un model care citește „ex. «ten gras»" învață ce
+# fel de valori se așteaptă acolo. Scrise de mână, făceau sistemul mai bun pe clientul de azi și
+# mai prost pe următorul, fără niciun semnal.
+_EXAMPLE_MARKERS = ("{NEED_EXAMPLES}", "{FEATURE_EXAMPLES}")
+
+
+def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
+    """Înlocuiește marcatorii într-o schemă, recursiv, fără să mute nimic în original.
+
+    Copie, nu mutație: `_SCHEMAS` e o constantă de modul partajată între tenanți, iar o singură
+    scriere în ea ar face ca al doilea tenant să primească exemplele primului — un bug de izolare
+    care n-ar da nicio eroare."""
+    out: dict[str, Any] = {}
+    for key, value in schema.items():
+        if isinstance(value, dict):
+            out[key] = _fill(value, filled)
+        elif isinstance(value, str) and any(m in value for m in _EXAMPLE_MARKERS):
+            for marker, text in filled.items():
+                value = value.replace(marker, text)
+            out[key] = value
+        else:
+            out[key] = value
+    return out
+
+
+def tool_schemas(
+    names: list[str], examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES
+) -> list[dict[str, Any]]:
+    """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching).
+
+    `examples` vine din pachetul tenantului. Absent → marcatorii se înlocuiesc cu ȘIRUL GOL, deci
+    descrierea rămâne o propoziție corectă fără clauza „(ex. …)". Substituția e deterministă, deci
+    schemele rămân byte-identice pentru același pachet — condiția de caching."""
+    filled = {
+        "{NEED_EXAMPLES}": vocab_examples.clause(examples.needs),
+        "{FEATURE_EXAMPLES}": vocab_examples.clause(examples.features),
+    }
+    return [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]

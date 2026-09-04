@@ -193,6 +193,32 @@ async def _check(conn, business_id: str, pack_json: dict, vertical: str, min_pro
     else:
         print("\nexpandări  : niciuna (vezi `_query_expansions_note` din pachet)")
 
+    # 4. NX-266 — tabelul de unități. Aceeași întrebare ca la nevoi, pusă numerelor: unitatea
+    # declarată are unde să fie evaluată? O fațetă numerică fără unități nu poate primi niciodată o
+    # constrângere din mesaj, iar un tabel de unități fără fațetă produce constrângeri respinse.
+    # Niciuna dintre cele două nu e o eroare de sintaxă, deci nimic altceva nu le-ar arăta.
+    declared_units = {u for u in (pack_json.get("units") or {}) if not str(u).startswith("_")}
+    loaded_units = set(pack.units.specs)
+    numeric_facets = {f.key for f in pack.facets if f.value_type.value == "number"}
+    print(f"\nunități    : {len(loaded_units)} fațete cu tabel de conversie")
+    if dropped_units := declared_units - loaded_units:
+        print(f"  ! tabele RESPINSE de loader: {sorted(dropped_units)}")
+        problems += len(dropped_units)
+    for key in sorted(loaded_units):
+        spec = pack.units.specs[key]
+        aliases = ", ".join(sorted(spec.factors))
+        mark = "" if key in numeric_facets else "   (fără fațetă → constrângeri RESPINSE)"
+        print(
+            f"  {key:<20} canonic={spec.canonical:<6} implicit={spec.default_op:<4} "
+            f"[{aliases}]{mark}"
+        )
+    if orphan := numeric_facets - loaded_units:
+        print(f"  ! fațete numerice FĂRĂ unități (nu pot primi constrângeri): {sorted(orphan)}")
+        problems += len(orphan)
+    if pack.units.ambiguous:
+        print(f"  ! aliasuri AMBIGUE, dropate: {sorted(pack.units.ambiguous)}")
+        problems += len(pack.units.ambiguous)
+
     return problems
 
 

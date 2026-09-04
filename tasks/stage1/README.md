@@ -140,6 +140,44 @@ folosește nivelul imediat inferior și notează explicit abaterea în PR.
 | [NX-249](NX-249.md) | Canary, cutover v2, rollback și ritual calitate | Backend | Opus 5 xhigh | NX-241, NX-247, NX-248 | F |
 | [NX-250](NX-250.md) | Diagrame 04a–04c și runbookuri sincronizate as-built | Backend/docs | Sonnet 5 high | NX-247, NX-248, NX-249 | G |
 
+### Wave H — calitatea recomandării pe catalogul SOLE real
+
+> **Starea curentă și predarea de sesiune: [`WAVE-H-HANDOFF.md`](WAVE-H-HANDOFF.md).** Citește-l înainte de a începe orice card din val.
+
+Lanț derivat din auditul de retrieval din 2026-09-03 (vezi `docs/RETRIEVAL-QUALITY-PLAN.md`).
+Premisa comună: sistemul are porți de ADEVĂR peste tot și niciuna de POTRIVIRE, iar fațetele pe
+care s-ar sprijini potrivirea sunt la 0% acoperire.
+
+| Card | Titlu | Repo | Depinde de | Ordin |
+|---|---|---|---|---|
+| [NX-264](NX-264.md) | Poartă de scurgere de domeniu + diversitate pe rădăcini | Backend | — | H0 |
+| [NX-265](NX-265.md) | Set de 150 de fraze judecate + baseline | Backend | NX-264 | H1 |
+| [NX-266](NX-266.md) | Constrângeri tipizate cu unități | Backend | NX-264, NX-265 | H2 |
+| [NX-267](NX-267.md) | Rerankare peste candidați | Backend | NX-265, NX-266 | H3 |
+| [NX-268](NX-268.md) | Fapte derivate din secțiuni, cu provenance | Backend | NX-264, NX-265 | H4 |
+| [NX-269](NX-269.md) | Nuanță și finish pentru `machiaj` (681 produse) | Backend | NX-264, NX-268 | H5 |
+| [NX-270](NX-270.md) | Graf de relații derivat (391 epuizate) | Backend | NX-268, NX-269 | H6 |
+| [NX-271](NX-271.md) | Aprinderea excluderii, o fațetă pe rând | Backend | NX-265, NX-266, NX-268 | H7 |
+| [NX-272](NX-272.md) | Măsurătoarea permanentă: trei cifre | Backend | NX-265 | H8 (continuu) |
+| [NX-273](NX-273.md) | Prompt, schemă de tool-uri și sugestii generate din pachet | Backend | NX-264, NX-265 | H9 |
+
+```text
+NX-264 ─┬─> NX-265 ──> NX-267 ─────────────> NX-271
+        └─> NX-266 ──> NX-267
+            NX-268 ──> NX-269 ──> NX-270
+                                  NX-272 (pornește la NX-265, crește cu restul)
+```
+
+Două ordini nu sunt negociabile: **NX-265 înaintea lui NX-267** (fără baseline nu se poate dovedi
+că rerankarea a ajutat) și **NX-268 înaintea lui NX-270** (un graf peste fapte goale e un raft, nu
+o alternativă). NX-271 e singurul card care SCOATE produse din rezultate și se aprinde o fațetă pe
+rând, cu criteriu de oprire preînregistrat.
+
+NX-273 nu era în planul inițial: l-a produs poarta NX-264, care la prima rulare a găsit **36 de
+scurgeri reale** în textele ce ajung la model (prompt de sistem, descrierile schemei de tool-uri,
+promptul de triaj, cele 4 sugestii de start). Sunt îngheţate în `tests/domain_leak_baseline.json` și
+pot doar să scadă.
+
 ### Critical path
 
 ```text

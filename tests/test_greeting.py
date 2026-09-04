@@ -77,7 +77,11 @@ async def test_welcome_on_pure_greeting():
     assert "Cu ce te ajut azi?" in text
     assert "Spune-mi ce cauți" not in text
     assert "inteligență artificială" not in text  # disclaimer OFF default (#2)
-    assert "Caut o cremă pentru ten uscat" in text  # sugestie pe vertical beauty
+    # NX-273: businessul din fixture n-are pachet de domeniu și nu declară categorii, deci nu e
+    # nimic din care să se DERIVE o sugestie. Cădem pe cele generice — care nu numesc niciun
+    # produs. Înainte, aici era o sugestie de beauty hardcodată pe vertical, iar un magazin de
+    # electrocasnice ar fi întâmpinat clientul cu „Caut o cremă pentru ten uscat".
+    assert "Caut un produs anume" in text
     assert ctx.reply.cacheable is False
     assert any(e.type == "welcome_sent" for e in ctx.events)
 
@@ -151,3 +155,34 @@ async def test_welcome_ask_override_per_language():
     assert ctx.reply is not None
     assert "What are you after?" in ctx.reply.text
     assert "How can I help today?" not in ctx.reply.text  # override înlocuiește default-ul EN
+
+
+# --- NX-273: sugestiile vin din catalogul TENANTULUI ---------------------------------------------
+
+
+async def test_sugestiile_se_deriva_din_pachetul_tenantului():
+    """Cazul din card: al doilea pachet, sintetic, produce ALTE sugestii — fără nicio schimbare de
+    cod. Dacă ar fi rămas hardcodate pe vertical, testul ăsta n-ar fi putut exista."""
+    from src.domain.pack import DomainPack
+
+    ctx = _ctx("salut", settings={"welcome": {"categories": ["frigidere"]}})
+    ctx.business.domain_pack = DomainPack(
+        vertical="electrocasnice", concern_map={"consum mic": "eco", "zgomot redus": "silent"}
+    )
+    await greeting.greeting_stage(ctx, _DEPS)
+    bullets = [ln for ln in ctx.reply.text.splitlines() if ln.startswith("•")]
+    assert "• Caut frigidere" in bullets
+    assert "• Ce aveți pentru consum mic?" in bullets
+    # niciun cuvânt din alt vertical: sugestiile descriu MAGAZINUL ăsta
+    assert not any("crem" in b or "ten uscat" in b for b in bullets)
+
+
+async def test_fara_pachet_si_fara_categorii_sugestiile_sunt_neutre():
+    """P6 — un tenant despre care nu știm nimic primește sugestii care nu numesc niciun produs, nu
+    sugestii despre produsele altcuiva."""
+    ctx = _ctx("salut")
+    await greeting.greeting_stage(ctx, _DEPS)
+    bullets = [ln for ln in ctx.reply.text.splitlines() if ln.startswith("•")]
+    assert bullets, "un salut fără nicio sugestie e o regresie separată"
+    for word in ("crem", "ten uscat", "păr vopsit", "parfum"):
+        assert not any(word in b for b in bullets), word

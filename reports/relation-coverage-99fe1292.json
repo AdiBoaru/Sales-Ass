@@ -1,0 +1,11 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "total_edges": 0,
+  "by_kind": [],
+  "dead_ends": {},
+  "out_of_stock": {
+    "total": 391,
+    "with_substitute": 0
+  },
+  "written_but_unread_kinds": []
+}

@@ -1,0 +1,24 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "edges": 35008,
+  "by_kind": {
+    "substitute": 13616,
+    "complement": 14148,
+    "routine_next": 7244
+  },
+  "out_of_stock": 391,
+  "out_of_stock_covered": 155,
+  "out_of_stock_without_substitute": [
+    "cfb34739-f8cb-4d06-a3b5-d079b4052679",
+    "da9e516a-6f69-40ab-a4d6-5ac2df10a2e4"
+  ],
+  "out_of_stock_without_needs": 234,
+  "routine_chains_2plus": 2276,
+  "skipped_no_needs": 400,
+  "rules": {
+    "substitute": "content.same_category_shared_need_price_band.v1",
+    "complement": "content.cross_category_shared_need.v1",
+    "routine_next": "content.routine_step_representative.v1",
+    "variant_of": "content.shade_group.v1"
+  }
+}

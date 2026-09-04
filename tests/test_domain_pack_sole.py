@@ -48,7 +48,10 @@ def test_loaderul_nu_arunca_nimic_din_pachet(raw: dict, pack) -> None:
     declared_facets = {f["key"] for f in raw["facets"]}
     assert {f.key for f in pack.facets} == declared_facets
 
-    declared_kinds = set(raw["relation_kinds"])
+    # Cheile care încep cu `_` sunt NOTE, convenția întregului pachet („de ce e goală lista asta",
+    # „de unde vin cifrele"). Loader-ul le sare deliberat; a le cere aici ar transforma o notă
+    # într-un tip de muchie fantomă.
+    declared_kinds = {k for k in raw["relation_kinds"] if not k.startswith("_")}
     assert set(pack.relation_kinds.specs) == declared_kinds
 
 
@@ -131,11 +134,16 @@ def test_doar_tipul_de_ten_poate_exclude(raw: dict) -> None:
     contrazice nimic — un produs care nu-l țintește doar nu-l țintește, deci `additive`.
 
     `fragrance_free` e tot partiționantă, dar din alt motiv: e o cerință binară a clientului.
-    Testul le enumeră ca să nu apară a treia prin distragere.
+    `shade` (NX-269) e a treia, și își merită locul dintr-un al treilea motiv: cumpărătorul cere o
+    nuanță ANUME („116 Candid"), iar alta nu e o potrivire mai slabă, e produsul greșit — la fel de
+    greșit ca un ten uscat servit cuiva cu ten gras.
+
+    Testul le ENUMERĂ ca să nu apară a patra prin distragere: fiecare intrare aici e o fațetă care
+    capătă dreptul de a șterge produse din rezultate, iar dreptul ăla se dă cu motivul scris.
     """
     partitioning = {
         f["key"]
         for f in raw["facets"]
         if f.get("binding") == "partitioning" and f["source"] == "attribute"
     }
-    assert partitioning == {"skin_type", "fragrance_free"}
+    assert partitioning == {"skin_type", "fragrance_free", "shade"}

@@ -1,0 +1,147 @@
+{
+  "_note": "Excepții la poarta NX-264. Fiecare intrare are motiv OBLIGATORIU (testul respinge una fără). Preferă pragma pe linie `# domain-leak: ok — motiv` unei intrări aici: e mai îngustă.",
+  "terms": [
+    {
+      "term": "natural",
+      "reason": "valoare de fațetă `finish` în beauty_salon.json, dar cuvânt generic în orice limbă („limbaj natural\", „ordine naturală\"). Ca termen de poartă produce doar zgomot."
+    },
+    {
+      "term": "normal",
+      "reason": "valoare de `skin_type`, dar și adverbul cel mai comun din mesajele de operator („conversația continuă normal\")."
+    },
+    {
+      "term": "medium",
+      "reason": "valoare de `coverage` în pachetul demo; coincide cu treapta de mijloc a oricărui enum din cod (efort, prioritate, complexitate)."
+    },
+    {
+      "term": "full",
+      "reason": "valoare de `coverage`; coincide cu un cuvânt de control folosit peste tot („full\" vs „partial\")."
+    },
+    {
+      "term": "light",
+      "reason": "valoare de `coverage`; coincide cu denumirea unui mod/variantă în cod."
+    },
+    {
+      "term": "complex",
+      "reason": "nu e vocabular de vertical, e clasa de tur din manifestul de bugete NX-241."
+    },
+    {
+      "term": "daily",
+      "reason": "coincide cu `usage_daily` și cu joburile nocturne; nu descrie niciun produs."
+    }
+  ],
+  "paths": [
+    {
+      "path": "scripts/generate_products.py",
+      "reason": "AUTOREAZĂ catalogul demo. Conținutul lui de domeniu ESTE ieșirea, nu o cuplare a logicii."
+    },
+    {
+      "path": "scripts/content_library.py",
+      "reason": "bibliotecă de conținut demo — text de produs scris de mână, destinat bazei, nu comportamentului."
+    },
+    {
+      "path": "scripts/content_categories.py",
+      "reason": "taxonomia demo ca dată de seed."
+    },
+    {
+      "path": "scripts/authored_content.py",
+      "reason": "conținut autorat pentru catalogul demo."
+    },
+    {
+      "path": "scripts/faq_content.py",
+      "reason": "FAQ-uri demo ca dată de seed."
+    },
+    {
+      "path": "scripts/pdp_content.py",
+      "reason": "conținut de fișă de produs pentru catalogul demo."
+    },
+    {
+      "path": "scripts/enrich_catalog*.py",
+      "reason": "îmbogățesc catalogul demo cu atribute și text; ieșirea lor sunt datele."
+    },
+    {
+      "path": "scripts/enrich_key_ingredients.py",
+      "reason": "scrie ingrediente în catalogul demo."
+    },
+    {
+      "path": "scripts/revive_archived.py",
+      "reason": "readuce produse demo arhivate, cu textul lor."
+    },
+    {
+      "path": "scripts/seed_demo_domain_pack.py",
+      "reason": "seedează PACHETUL de domeniu demo — locul unde vocabularul trebuie să fie scris."
+    },
+    {
+      "path": "scripts/seed_catalog_v2.py",
+      "reason": "seed de catalog demo."
+    },
+    {
+      "path": "scripts/seed_demo_demand.py",
+      "reason": "seed de cerere demo (interogări sintetice)."
+    },
+    {
+      "path": "scripts/normalize_catalog.py",
+      "reason": "normalizează valori din catalogul demo; operează pe vocabularul lui prin definiție."
+    },
+    {
+      "path": "scripts/dedupe_product_names.py",
+      "reason": "operează pe numele produselor demo."
+    },
+    {
+      "path": "scripts/audit_catalog_v2.py",
+      "reason": "audit al catalogului demo: verifică valori de domeniu, deci le conține."
+    },
+    {
+      "path": "scripts/audit_catalog_coherence.py",
+      "reason": "audit de coerență pe valorile catalogului demo."
+    },
+    {
+      "path": "scripts/fix_catalog_coherence.py",
+      "reason": "reparare de date în catalogul demo."
+    },
+    {
+      "path": "scripts/lexical_rank_compare.py",
+      "reason": "SONDĂ de măsurare: intrarea ei sunt frazele reale de client, care sunt vocabular prin definiție."
+    },
+    {
+      "path": "scripts/nx203_*.py",
+      "reason": "construcția corpusului de evaluare: interogări de client, scrise ca date de test."
+    },
+    {
+      "path": "scripts/nx172_live_audit.py",
+      "reason": "audit live pe fraze reale de client."
+    },
+    {
+      "path": "scripts/compare_drive.py",
+      "reason": "drive manual: conversație scriptată cu fraze de client."
+    },
+    {
+      "path": "scripts/*_drive.py",
+      "reason": "drive-uri manuale (NX-234/235/240): conversații scriptate, deci fraze de client."
+    },
+    {
+      "path": "scripts/sim/*.py",
+      "reason": "harness de simulare: conversații scriptate cu mesaje de client."
+    },
+    {
+      "path": "scripts/release/smoke_web_v2.py",
+      "reason": "smoke de release: trimite un mesaj realist de client prin calea live."
+    },
+    {
+      "path": "src/tools/taxonomy.py",
+      "reason": "`_BEAUTY_RAW` e documentat explicit ca REFERINȚĂ de seed pentru parity-guardul din test_domain_pack, NU sursa de mapare la runtime (aceea e DomainPack din DB, NX-124). DATORIE recunoscută: referința unui parity-guard aparține în `tests/`, nu în `src/` — mutarea e a unui card separat, nu a NX-264."
+    },
+    {
+      "path": "src/jobs/seed_faqs.py",
+      "reason": "job de SEED: scrie conținut FAQ în bază. Textul de domeniu e ieșirea lui."
+    },
+    {
+      "path": "src/catalog/sole_source.py",
+      "reason": "adaptor pentru FORMATUL sursei SOLE: mapează cheile exacte din exportul furnizorului. Un adaptor de sursă e legat de sursă prin definiție; generalitatea se păstrează prin faptul că restul codului nu-l vede."
+    },
+    {
+      "path": "scripts/goldset_*.py",
+      "reason": "harnessul de evaluare NX-265: intrarea lui SUNT frazele reale de client (extrase din catalog), plus transformările declarate peste ele. Un set de evaluare fără vocabularul clientului n-ar măsura nimic."
+    }
+  ]
+}

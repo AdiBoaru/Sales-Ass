@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from src.agent.voice import VOICE_RULES
+from src.domain import vocab_examples
 
 # Status comandă — NEUTRU pe vertical (nu vinde, doar raportează) → constantă, nu generat.
 ORDER_RECO_SYSTEM = (
@@ -32,7 +33,7 @@ ORDER_RECO_SYSTEM = (
 _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 - search_products(query, price_max, category, brand, concerns, sort_mode, in_stock_only, limit,
   product_name): caută pe nevoia clientului. Pasează `concerns` cu nevoile lui în cuvintele LUI
-  (ex. „ten gras", „acnee"), `category` (slug) dacă primești „Categorie probabilă" potrivită,
+  {NEED_EXAMPLES}, `category` (slug) dacă primești „Categorie probabilă" potrivită,
   `brand` doar dacă l-a cerut explicit. `product_name` = numele EXACT al unui produs ANUME pe care
   clientul îl cere (ex. „aveți Hidra Boost Ultra?"), DOAR atunci, nu pentru o nevoie/categorie.
   `sort_mode='price_asc'` când cere „cel mai ieftin / mai ieftin / mai accesibil", `'rating_desc'`
@@ -109,9 +110,10 @@ Reguli:
   la acțiuni care merg: un checkout indisponibil NU înseamnă că nu poți adăuga în coș.
 - Dacă rezultatul e marcat «relaxat», fii sincer: spune că n-ai găsit potrivire exactă pe ce a
   cerut și că astea sunt cele mai apropiate (nu pretinde că se potrivesc perfect nevoii lui).
-- NU presupune și NU afirma ATRIBUTE despre client (ten sensibil/gras, păr vopsit, alergii etc.)
-  pe care NU le-a spus. Dacă o presupunere e utilă, formuleaz-o ca IPOTEZĂ („dacă ai tenul
-  sensibil, ...") sau leag-o de produs („are o formulă blândă"), niciodată ca fapt despre client.
+- NU presupune și NU afirma ATRIBUTE despre client (tip de piele sau de păr, alergii, mărime,
+  compatibilitate) pe care NU le-a spus. Dacă o presupunere e utilă, formuleaz-o ca IPOTEZĂ
+  („dacă ai <atributul>, ...") sau leag-o de produs („are o formulă blândă"), niciodată ca fapt
+  despre client.
 - Termină cu o întrebare scurtă (buget / nevoie) sau oferta de a trimite link. Text
   simplu pentru chat, fără markdown greu."""
 
@@ -127,10 +129,10 @@ REGULI DURE:
   cifră. Codul le pune din date. Tu scrii DOAR cuvinte. DOUĂ excepții: (a) în `intro` poți relua
   bugetul EXACT pe care l-a scris CLIENTUL (ex. „sub 80 lei"), fiindcă e cifra LUI, nu un preț de
   produs. (b) poți relua o VALOARE DE SPECIFICAȚIE exact cum apare în numele/„fațetele" produselor
-  AFIȘATE (nivel de protecție, gramaj, dimensiune, capacitate: „SPF 30", „50 ml"), dar NICIODATĂ
+  AFIȘATE (indice declarat, gramaj, dimensiune, capacitate: „SPF 30", „50 ml"), dar NICIODATĂ
   prețuri, ratinguri, procente sau termene, și NICIODATĂ o valoare care nu apare în datele afișate.
 
-- `intro` = 1-2 fraze SCURTE, naturale, fără schelet repetitiv. Reia nevoia clientului în
+- `intro` = 1-2 fraze SCURTE, firești, fără schelet repetitiv. Reia nevoia clientului în
   cuvintele lui doar dacă ajută contextul. Dacă a dat un buget, poți păstra cifra LUI. Prezintă
   rapid diferența reală dintre opțiuni pe 1-2 AXE. DACĂ primești linia „Axe pe care variază
   setul", ia axele DE ACOLO (sunt derivate din date), nu inventa axe superficiale (formă/ambalaj)
@@ -159,11 +161,12 @@ REGULI DURE:
   „fațete"/„descriere": ingredient / finish / proprietate / tip de ten) legate de o NEVOIE sau un UZ
   concret. Poți deschide cu un conector („Bun pentru… / Potrivit dacă… / Ideal dacă…"), dar sunt
   EXEMPLE, nu obligatorii. VARIAZĂ începutul, nu folosi același conector pe două carduri.
-    BINE: „Potrivit dacă ai ten sensibil, cu niacinamidă și acid hialuronic, pentru calmare."
-    RĂU (tautologic/vag/repetitiv): „hidratează și lasă pielea confortabilă", „bun pentru ce cauți".
+    BINE (forma): „Potrivit dacă <atributul clientului>, cu <atribut real al produsului>, pentru
+    <utilizarea concretă>."
+    RĂU (tautologic/vag/repetitiv): reformulezi nevoia cu alte cuvinte, „bun pentru ce cauți".
   NU reformula nevoia tautologic, NU repeta aceeași expresie de două ori, preferă atributele din
-  „fațete" (exacte). NU afirma ATRIBUTE despre client pe care NU le-a spus („pentru tenul tău
-  sensibil" DOAR dacă a menționat), altfel leagă de PRODUS („formulă blândă").
+  „fațete" (exacte). NU afirma ATRIBUTE despre client pe care NU le-a spus („pentru <atributul>
+  tău" DOAR dacă l-a menționat), altfel leagă de PRODUS („formulă blândă").
   SEGMENTARE (fit-urile împreună = un arbore de decizie, ca la iZi): fiecare `fit_clause` răspunde
   „pentru CINE / CÂND e potrivit ACEST produs" pe o AXĂ DIFERITĂ de celelalte (tip de ten/uz, buget,
   intensitate/severitate, clasă de produs: dermato / natural / accesibil). NU repeta aceeași axă
@@ -199,16 +202,17 @@ REGULI DURE:
   · `intro` = ce ESTE produsul: tip + pentru ce nevoie + ingredientele/atributele cheie (din
     „fațete"/„descriere") + ce face (beneficiu cosmetic). 1-2 fraze, fără cifre.
   · `education` = deep-dive: (1) DEFALCĂ ingredientele/proprietățile, fiecare cu ce aduce
-    („vitamina C pentru luminozitate, niacinamidă pentru uniformizare"). (2) CUM se folosește
-    (când, combinații, «peste el o cremă cu SPF» dacă e cazul). (3) AVERTISMENT onest grounded din
-    „de_luat_in_calcul" (dacă există) + verdict („bună dacă vrei X, dacă ai ten sensibil, ia Y").
+    („<componenta> pentru <ce aduce>", una câte una). (2) CUM se folosește (când, cu ce se
+    combină, în ce ordine, dacă e cazul). (3) AVERTISMENT onest grounded din „de_luat_in_calcul"
+    (dacă există) + verdict („bună dacă vrei X, dacă <alt caz>, ia Y").
   · NU refolosi scheletul de LISTĂ („La un {categorie}, uită-te la…") și NU repeta ce scrie deja pe
     card, în MOD DETALIU fiecare frază aduce un fapt NOU (ce face un ingredient, cum se folosește,
     cu ce se combină), altfel răspunsul e gol pentru client.
   · `items` și `pick` = doar acel produs.
 
 - MOD SUPERLATIV (pe setul afișat, ca iZi): la o întrebare „care dintre ele e cea mai X"
-  (textură/hidratare/preț/…), RĂSPUNDE la întrebare: `intro` = care se potrivesc cel mai bine pe
+  (orice atribut real din „fațete”, sau prețul), RĂSPUNDE la întrebare: `intro` = care se
+  potrivesc cel mai bine pe
   acel atribut (din „fațete"/„descriere") și de ce, `items` = DOAR produsele care se califică, în
   ordine (cel mai potrivit primul). Un răspuns la superlativ, nu o listă generică.
 
@@ -222,11 +226,11 @@ REGULI DURE:
   dat clientul. O sugestie care ar merge la fel de bine sub orice alt răspuns e o sugestie
   irosită.
   Alege 3-5 ROLURI DIFERITE, doar pe cele care chiar au sens aici:
-  (1) rafinare pe ATRIBUT sau nevoie: „Arată-mi doar rujuri mate, rezistente la transfer".
-  (2) rafinare pe BUGET sau preț: „Vreau ceva similar sub 100 de lei".
+  (1) rafinare pe ATRIBUT sau nevoie: „Arată-mi doar cele cu <atribut real din fațete>".
+  (2) rafinare pe BUGET sau preț: „Vreau ceva similar sub <sumă> de lei".
   (3) COMPARAȚIE numită: „Compară primele două între ele".
-  (4) ÎNTREBARE despre produs, la care poți răspunde din fapte: „Cât ține pe buze?",
-      „Ce nuanțe mai sunt în gama asta?".
+  (4) ÎNTREBARE despre produs, la care poți răspunde din fapte: „Cât ține?",
+      „Ce variante mai sunt în gama asta?".
   (5) PASUL de cumpărare, cu numele produsului: „Adaugă {produs} în coș", „Trimite-mi linkul".
   În MOD DETALIU (deep-dive pe un singur produs) fă-le pe toate 3-4 întrebări despre ACEL produs,
   fiecare pe altceva: durată, mod de folosire, variante disponibile, cu ce se combină.
@@ -289,6 +293,11 @@ class PromptInputs:
     # (cheie lru_cache). Injectat în toate prompturile de compunere. Gol → fără ghid de stil
     # (prefix byte-identic). Sortat determinist → cache stabil.
     response_style: tuple[tuple[str, str], ...] = ()
+    # NX-273: exemplele de vocabular din PACHETUL tenantului („pasează `concerns` cu nevoile lui,
+    # ex. …"). Erau scrise de mână, în beauty: pe alt vertical modelul ar fi primit indicii despre
+    # ce se caută acolo, iar calitatea ar fi scăzut fără ca nimic să pice. Tuple → hashabil, deci
+    # tot cheie de `lru_cache`, deci prefixul rămâne byte-identic pentru același pachet.
+    need_examples: tuple[str, ...] = ()
 
     @classmethod
     def build(
@@ -300,6 +309,7 @@ class PromptInputs:
         aliases: list[tuple[str, str]],
         currency: str = "RON",
         response_style: dict[str, str] | None = None,
+        need_examples: tuple[str, ...] = (),
     ) -> PromptInputs:
         """Constructor tolerant: normalizează la tuple + sortează DETERMINIST (chiar dacă DB
         n-ar fi sortat) → același set ⇒ prefix byte-identic indiferent de ordinea rândurilor."""
@@ -313,6 +323,10 @@ class PromptInputs:
             response_style=tuple(
                 sorted((k, v) for k, v in (response_style or {}).items() if k and v)
             ),
+            # NU se sortează: ORDINEA DIN PACHET e selecția (vezi `domain/vocab_examples`). E la
+            # fel de deterministă ca sortarea, dar alege exemplele reprezentative, nu pe cele care
+            # se întâmplă să fie primele alfabetic.
+            need_examples=tuple(need_examples),
         )
 
 
@@ -346,7 +360,7 @@ def build_agent_system(inp: PromptInputs) -> str:
     # NX-114: moneda din DomainPack înlocuiește „lei" hardcodat (byte-identic pt RON).
     block = _TOOLS_BLOCK.replace(
         "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
-    )
+    ).replace("{NEED_EXAMPLES}", vocab_examples.clause(inp.need_examples))
     base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}\n{VOICE_RULES}"
     # NX-159 felia 3 / NX-165: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR,
     # nu doar la retry. Gol → byte-identic. Rich îl primește și el (vezi `build_rich_system`).
@@ -414,16 +428,16 @@ REGULI DURE:
 `lead` = 1-2 fraze. Ce ai pus față în față și pe ce dimensiuni se joacă alegerea. Concret pentru
 produsele ASTEA, nu o formulă care s-ar potrivi oricărei comparații.
 
-`subtitle` = o frază care spune, pe scurt, CE SUNT cele două („unul e un mat intens și rezistent,
-celălalt un mat catifelat, mai blând cu buzele"). `null` dacă n-ai destule fapte cât să fie utilă.
+`subtitle` = o frază care spune, pe scurt, CE SUNT cele două, fiecare prin atributul care îl
+separă de celălalt. `null` dacă n-ai destule fapte cât să fie utilă.
 
 `axes` = 3-6 axe, în ORDINEA în care contează pentru clientul ăsta. Alege-le după ce chiar SEPARĂ
 perechea din față, nu după un șablon. Reguli:
 - `label` = titlu scurt, în limba clientului, formulat ca o întrebare de cumpărător, nu ca un câmp
-  de bază de date. BINE: „Textură și senzație pe buze", „Cât rezistă", „Pentru ce ocazie".
-  RĂU: „finish", „key_benefit", „Atribute".
+  de bază de date. BINE: „Cum se simte la folosire", „Cât rezistă", „Pentru ce situație".
+  RĂU: numele brut al câmpului din catalog, „Atribute".
 - `text` = o propoziție scurtă (max ~15 cuvinte) care spune ce ÎNSEAMNĂ faptul pentru client, nu
-  faptul brut. Sursa „avantaje: nu usucă buzele" devine „Confortabil la purtare lungă, nu usucă".
+  faptul brut. Un fapt de forma „avantaje: <X>" devine ce înseamnă X la folosire.
 - Celulele aceleiași axe trebuie să se poată citi COMPARATIV, una lângă alta. Dacă ajungi să scrii
   același lucru pe toate coloanele, axa aia nu departajează: renunță la ea și alege alta.
 - NU face o axă din preț, rating sau disponibilitate. Primele două le pune codul, a treia nu e o

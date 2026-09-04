@@ -150,7 +150,7 @@
     {
       "key": "price", "value_type": "number", "source": "column", "source_key": "price",
       "operators": ["lte", "gte", "eq"], "provenance": "structural", "binding": "partitioning",
-      "min_coverage": 0.98,
+      "min_coverage": 0.98, "missing_value": "skip",
       "labels": {"ro": "Pret", "en": "Price", "hu": "Ar"}
     },
     {
@@ -211,8 +211,50 @@
       "operators": ["eq", "contains"], "provenance": "structural", "binding": "additive",
       "missing_value": "unknown", "min_coverage": 0.3,
       "labels": {"ro": "Textura", "en": "Texture", "hu": "Allag"}
+    },
+    {
+      "_note": "NX-269 — nuanta. `binding: partitioning`: cumparatorul vrea O nuanta anume, iar alta nuanta il CONTRAZICE, deci excluderea e corecta. `provenance: structural` fiindca valoarea e o felie din numele produsului, nu o afirmatie despre el — invariantul „apare literal in nume\" e verificat inainte de scriere. Se deriva comparativ (`src/catalog/shade.py`), nu dintr-o lista de culori: nuantele catalogului sunt coduri de producator („116 Candid\"), nu culori romanesti.",
+      "key": "shade", "value_type": "text", "source": "attribute", "source_key": "shade",
+      "operators": ["eq", "contains"], "provenance": "structural", "binding": "partitioning",
+      "missing_value": "unknown", "min_coverage": 0.2,
+      "labels": {"ro": "Nuanta", "en": "Shade", "hu": "Arnyalat"}
+    },
+    {
+      "_note": "NX-269 — finish. `source` spune de unde se CITESTE valoarea la interogare (`attributes->finish`), iar `derived_from` de unde a fost EXTRASA (numele produsului). Cele doua sunt lucruri diferite si confundarea lor a fost un bug tacut: pachetul dinainte scria `source: \"name\"`, iar loader-ul respingea fateta fail-closed, fara ca nimeni sa observe — deci fateta n-ar fi existat pentru `facet_coverage`, poarta de relevanta sau comparatie. Extragerea se face din NUME, nu din proza, din acelasi motiv ca la NX-268: in proza „mat\" apare si in „se aplica peste fondul de ten mat\", care descrie ALT produs. VALORILE sunt masurate pe cele 681 de produse din radacina `machiaj`, nu alese: mat 38 + matifiant 28 + matifianta 23, lucios 33, glow 60, velvet 29, satin 16 — toate in banda de discriminare a NX-264 (peste 2%, mult sub 70%). DOUA au fost RESPINSE deliberat: `luciu` (67 produse, 9,8%) e un TIP de produs in numele romanesc („luciu de buze\" = lip gloss), nu un finish, iar `natural` (55) e prea generic — e chiar in allowlistul portii NX-264 pentru ca inseamna orice. Le-am fi putut adauga si acoperirea ar fi crescut cu ~18 puncte; ar fi crescut cifra, nu adevarul.",
+      "key": "finish", "value_type": "enum", "source": "attribute", "source_key": "finish",
+      "derived_from": "name",
+      "operators": ["eq"], "provenance": "structural", "binding": "additive",
+      "missing_value": "unknown", "min_coverage": 0.15,
+      "values": ["matte", "satin", "glossy", "glow", "velvet"],
+      "aliases": {
+        "mat": "matte", "matifiant": "matte", "matifianta": "matte", "matte": "matte",
+        "satin": "satin", "satinat": "satin",
+        "lucios": "glossy", "lucioasa": "glossy", "glossy": "glossy", "gloss": "glossy",
+        "glow": "glow", "dewy": "glow",
+        "velvet": "velvet", "catifelat": "velvet"
+      },
+      "labels": {"ro": "Finisaj", "en": "Finish", "hu": "Hatas"}
     }
   ],
+
+  "_concern_stems_note": "NX-268 — stemuri dintr-un singur cuvant si excluderi, PER CHEIE canonica. Forma: {\"oily\": {\"stems\": [\"grasa\"], \"excludes\": [\"acizi grasi\"]}}. GOL DELIBERAT, pe masuratoare. Cardul pornea de la „ten gras\" = 93 de produse ca fraza exacta si 1.120 pe stemurile `gras`/`sebum`/`luci`, deci de 12 ori mai mult semnal. Masurat pe catalogul real, cifra NU se confirma ca imbunatatire: `gras` PICA testul de discriminare (lift sub 3) fiindca prinde „acizi grasi\" din orice compozitie, iar `pielii` ar fi urcat `barrier` de 4,8x fara sa insemne nimic. Solutia care a trecut masuratoarea nu e „renunta la fraza\", ci „pastreaza fraza si tolereaza flexiunea\" — si aia e in COD (`src/catalog/derivation.py`), fiindca e mecanica limbii, nu vocabular. Rezultat: 7.726 -> 9.500 potriviri (1,23x), zero pierderi, plus concerns 85,4% -> 90,9% si skin_type 61,7% -> 68,6% pe catalog. Excluderile sunt goale din acelasi motiv: cu potrivirea pe fraza, „acizi grasi\" nu mai poate produce `oily`, fiindca „ten\" nu apare. Propunerile de stemuri se obtin cu `python scripts/derive_product_attributes.py --business <uuid> --propose-stems` (trei porti declarate: len>=5, lift>=4, crestere<=2x) si le ratifica un OM, dupa auditul de precizie. Azi majoritatea propunerilor aduc +0 produse, adica fraza le acopera deja.",
+  "concern_stems": {},
+
+  "_units_note": "NX-266 — unitatea CANONICA a fiecarei fatete numerice si factorii de conversie. Cheia e fateta, `factors[alias]` = cate unitati canonice face un alias (deci canonicul are mereu 1, verificat la load). `default_op` = operatorul cand clientul da un numar FARA cuvant de comparatie: la pret un numar gol inseamna aproape intotdeauna un plafon («crema de 100 lei»), la SPF inseamna un prag de jos («SPF 30» = macar 30). Amandoua sunt afirmatii despre CE VINDE tenantul, deci stau aici, nu in cod. `volume` e declarat DELIBERAT fara fateta corespondenta: tabelul de conversie e adevarat despre catalog (mililitri si litri), dar cata vreme niciun produs nu poarta valoarea, o constrangere pe el e RESPINSA cu motiv (`facet_not_declared`), nu aplicata aproximativ. Cand F2 scrie `volume` in `attributes` si fateta apare in lista de mai sus, constrangerea incepe sa se aplice fara nicio schimbare de cod.",
+  "units": {
+    "price": {
+      "canonical": "lei", "default_op": "lte",
+      "factors": {"lei": 1, "ron": 1, "bani": 0.01}
+    },
+    "spf": {
+      "canonical": "spf", "default_op": "gte",
+      "factors": {"spf": 1, "ip": 1}
+    },
+    "volume": {
+      "canonical": "ml", "default_op": "eq",
+      "factors": {"ml": 1, "mililitri": 1, "cl": 10, "dl": 100, "l": 1000, "litri": 1000}
+    }
+  },
 
   "_searchable_facets_note": "Cheile ARRAY din `attributes` pe care le poate filtra cautarea de feature («ceva cu niacinamida»). Goale azi — se aprind cu F2.",
   "searchable_facets": ["key_ingredients", "concerns"],
@@ -284,7 +326,13 @@
       "labels": {"ro": "Pasii urmatori din rutina", "en": "Next routine steps"}
     },
     "complement": {"mode": "neighbors"},
-    "accessory": {"mode": "neighbors"}
+    "accessory": {"mode": "neighbors"},
+    "_variant_of_note": "NX-269/270 — alte nuante ale aceluiasi produs. `neighbors`: nuantele sunt vecini directi, nu un drum („alta nuanta a altei nuante\" nu adauga nimic). E felul IEFTIN si REVERSIBIL de a lega nuantele, in locul restructurarii catalogului pe produs-parinte cu variante reale (varianta (b) din NX-269): sursa insasi trateaza fiecare nuanta ca produs separat, deci restructurarea ar fi cost mare cu beneficiu incert. Tipul trebuie DECLARAT aici, nu doar admis de schema (migrarea 048): un tip nedeclarat nu crapa, cade tacut pe comportamentul implicit, deci diferenta dintre „am declarat\" si „ruleaza\" ar fi invizibila — capcana care a prins deja o data pachetul SOLE, cu un `purpose` inexistent respins fail-closed si logat.",
+    "variant_of": {
+      "mode": "neighbors",
+      "purpose": "upsell",
+      "labels": {"ro": "Alte nuante", "en": "Other shades"}
+    }
   },
 
   "_required_attributes_note": "Contractul de continut per categorie (NX-205), citit de `scripts/audit_catalog_v2.py`. Slug-urile sunt cele REALE ale lui `sole-ro` (45 de categorii) — cele din `ecommerce.json` sunt ale catalogului demo (`fond-de-ten`, `mascara`, `anticearcan`) si nu exista in taxonomia SOLE, deci raman inerte dupa merge. Semantica: slug BATE root (override, NU cumul).",

@@ -1,0 +1,756 @@
+{
+  "_provenance": {
+    "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+    "locale": "ro",
+    "source": "product_sections.recommendation_trigger + faqs.question",
+    "phrases_seen": 10823,
+    "per_class": 15,
+    "_note": "CANDIDAȚI, nu set. Clasa `fara_rezultat` se determină MĂSURAT în pasul de adnotare (frazele care întorc zero), nu se ghicește aici. Clasa referință/rafinare e scoasă: n-are sens fără turul dinainte."
+  },
+  "classes": {
+    "brand": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "ALLIES OF SKIN Molecular Saviour Probiotics",
+          "source_product": "346b7d81-c82c-4fcf-8a9c-72b84cd57eac",
+          "fingerprint": "0060f14604b8d8fd"
+        },
+        {
+          "query": "SOME BY MI set galactomyces trial",
+          "source_product": "a74eb06b-a8ae-49dd-94b9-254a32a425c9",
+          "fingerprint": "006460246c5936b7"
+        },
+        {
+          "query": "EUBOS gel de duș Sensitive Care",
+          "source_product": "807da5ed-19e5-4ede-954c-256530333a4f",
+          "fingerprint": "006a35da67198914"
+        },
+        {
+          "query": "B.fresh gel de duș vegan",
+          "source_product": "2889378c-0b77-43f0-8c52-e73dd67347d9",
+          "fingerprint": "00e26c2de67d5c78"
+        },
+        {
+          "query": "BIODANCE Hydro Cera-nol Real Deep",
+          "source_product": "6d79d582-43bf-42e9-b7f2-832488d54dc8",
+          "fingerprint": "00e6657f31cfc938"
+        },
+        {
+          "query": "GLOV Expert Line mănușă demachiere",
+          "source_product": "21df2b9c-cbf4-4628-9c8e-1ca239de0485",
+          "fingerprint": "0124ce3ae2f9570f"
+        },
+        {
+          "query": "CELIMAX Dual Barrier Mild Gel Cleanser",
+          "source_product": "4dc1392c-2d03-4729-adb0-291151d31173",
+          "fingerprint": "012c23d752811d21"
+        },
+        {
+          "query": "Dear Klairs Midnight Blue Calming Cream",
+          "source_product": "3d242f78-b3d5-4765-baa2-faeaeb59c979",
+          "fingerprint": "0157ae430e7c187b"
+        },
+        {
+          "query": "VILLAGE 11 FACTORY Daily Mild Sun Fluid",
+          "source_product": "546456b4-079a-4ec8-ae4e-29590365aa6a",
+          "fingerprint": "0185406487f3164f"
+        },
+        {
+          "query": "B.fresh Turn up the volume balsam",
+          "source_product": "50ae546d-e645-4c6f-8aaa-92f23816e52e",
+          "fingerprint": "01931c228992e8b0"
+        },
+        {
+          "query": "ROUND LAB tone-up sunscreen bază de machiaj",
+          "source_product": "c3b1d500-e570-4390-8847-e2f2560d690b",
+          "fingerprint": "01bac59dac3fca4d"
+        },
+        {
+          "query": "ACROPASS patch buze pentru volum",
+          "source_product": "bf736755-610f-450c-8a51-e4f1c0cb2a31",
+          "fingerprint": "028f799b1ae641f7"
+        },
+        {
+          "query": "LEE STAFFORD For The Love Of Curls",
+          "source_product": "24306921-b227-4963-b193-92a6e50929a5",
+          "fingerprint": "02c695e8a4283d62"
+        },
+        {
+          "query": "HARUHARU WONDER ulei de curatare",
+          "source_product": "f729b04c-0451-4858-961e-d78d901c6d93",
+          "fingerprint": "02f6ee65015ce5a2"
+        },
+        {
+          "query": "VT COSMETICS Hyaluronic Cica Exosome H3",
+          "source_product": "3cd67edc-9e6b-4ff6-9723-9c96c14717d9",
+          "fingerprint": "0352ed61c278b7d3"
+        }
+      ]
+    },
+    "buget": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "cremă față piele sensibilă bebeluși sub 100 lei",
+          "derived_from": "a0658f4e3ca5c9e1",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "2b24d24e03b013b6"
+        },
+        {
+          "query": "balsam hidratant absorbție rapidă fără peliculă sub 100 lei",
+          "derived_from": "7b5d54a636c3a338",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "3bcc1985333ba611"
+        },
+        {
+          "query": "crema de maini vegana hidratare profunda sub 100 lei",
+          "derived_from": "9abf5b1207c5fd71",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "40779316b4f992eb"
+        },
+        {
+          "query": "absorbante reutilizabile bumbac organic certificat Öko-tex sub 100 lei",
+          "derived_from": "04c836e05d42039f",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "41622db583e3c899"
+        },
+        {
+          "query": "balsam hidratant corp absorbtie rapida sub 100 lei",
+          "derived_from": "da70452dc5a16abd",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "52058bd2102cf952"
+        },
+        {
+          "query": "balsam corp pentru piele foarte uscată sub 100 lei",
+          "derived_from": "67d3459dfffa6df5",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "545df3dabc3fb74f"
+        },
+        {
+          "query": "absorbante reutilizabile mini pentru flux usor sub 100 lei",
+          "derived_from": "0957a1d60a7a65e9",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "5a5b661ad6120f7b"
+        },
+        {
+          "query": "lotiune emolienta bebelusi piele sensibila sub 100 lei",
+          "derived_from": "c993e46790c99474",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "5d041f75829f0f55"
+        },
+        {
+          "query": "loțiune non-parfumată întărire barieră cutanată sub 100 lei",
+          "derived_from": "3be6b3eb8b384cd1",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "6297d0062c063139"
+        },
+        {
+          "query": "cremă față calmare iritații și mâncărime sub 100 lei",
+          "derived_from": "a1f9096372752d77",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "944e86acd76473ff"
+        },
+        {
+          "query": "balsam pentru corp hidratare zilnică sub 100 lei",
+          "derived_from": "193a7b5a09293c14",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "c2db5192911c6b2f"
+        },
+        {
+          "query": "cremă față pentru piele uscată copii sub 100 lei",
+          "derived_from": "ce657361d355cc08",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "cf853ebad359eeb6"
+        },
+        {
+          "query": "balsam corp fara pelicula grasa sub 100 lei",
+          "derived_from": "2eae8285622eb2e4",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "d5844070a122482a"
+        },
+        {
+          "query": "crema maini fara siliconi piele sensibila sub 100 lei",
+          "derived_from": "f54b9ce80e7234a2",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "ea81d19c081a418a"
+        },
+        {
+          "query": "absorbante mini pentru secretii vaginale zilnice sub 100 lei",
+          "derived_from": "33ee196bb7aaf9e9",
+          "transform": "sufix_buget.v1",
+          "fingerprint": "f68d4bfc4c69f0ac"
+        }
+      ]
+    },
+    "ingredient": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "săpun lichid cu ulei de mentă",
+          "source_product": "549e94f6-23ba-4f37-8770-f9f64b5788f0",
+          "fingerprint": "00351160a935dfb5"
+        },
+        {
+          "query": "lotiune hidratanta cu absorbtie rapida",
+          "source_product": "02d79b98-c77e-4750-ac3f-e35ca1543130",
+          "fingerprint": "0056b5dd537da50f"
+        },
+        {
+          "query": "cremă cu niacinamidă pentru ten luminos",
+          "source_product": "236b1684-9131-4d8f-baef-bc7952dbd076",
+          "fingerprint": "005d0f48fd766bda"
+        },
+        {
+          "query": "mist gel-serum cu Centella Asiatica",
+          "source_product": "374489c3-8fa8-4789-b2b0-fceb4a4bb47d",
+          "fingerprint": "00858233c1d3f845"
+        },
+        {
+          "query": "mască hidratantă cu complex multi-acid hialuronic",
+          "source_product": "d27369f9-7b4a-4b2f-867a-7fd85d19e5a1",
+          "fingerprint": "00b7df83497bfff3"
+        },
+        {
+          "query": "gel de duș cu surfactanți naturali cocos",
+          "source_product": "812d5f67-734f-44d9-a803-f5540d867d0c",
+          "fingerprint": "010204035397c2da"
+        },
+        {
+          "query": "ser pentru păr cu Vitamina E",
+          "source_product": "342898a3-0805-480a-ae66-4431da079df2",
+          "fingerprint": "011a397b3ceef95b"
+        },
+        {
+          "query": "pieptene cu varf subtire pentru carari",
+          "source_product": "ce9e0d97-76db-4c68-b340-cf3407974f66",
+          "fingerprint": "01842d284ce0dc3c"
+        },
+        {
+          "query": "cremă pentru păr cu aspect neted",
+          "source_product": "5de017a2-1593-4d52-aad9-b45bcf3b3203",
+          "fingerprint": "018cf84e73bf19d5"
+        },
+        {
+          "query": "șampon cu miere și ulei macadamia",
+          "source_product": "65b3da73-d2c5-4659-836d-174de3771bf8",
+          "fingerprint": "01b1c44e8c5dd8b8"
+        },
+        {
+          "query": "ser cu apă de trandafiri Provence",
+          "source_product": "9156b663-58f2-4f31-8216-8fd8d34090eb",
+          "fingerprint": "01d771fd121f8244"
+        },
+        {
+          "query": "mască cu Pantenol pentru păr blond",
+          "source_product": "8b7c4f5e-c336-4bd2-9ea6-16925e806f4a",
+          "fingerprint": "0228f93c8fecf419"
+        },
+        {
+          "query": "șampon pentru păr cu tendință de uscare",
+          "source_product": "2b6fbbbc-c4cc-47ca-b1bf-957fd9257c17",
+          "fingerprint": "022a061a234dc5f6"
+        },
+        {
+          "query": "ser de față cu Bifida Ferment",
+          "source_product": "d3e31bf6-2344-4cea-ab5a-e409d45206c3",
+          "fingerprint": "0249b1ab12a1080e"
+        },
+        {
+          "query": "corectare rapida ruj cu manusa demachianta",
+          "source_product": "06e77f21-1a5c-4c39-a766-cc2a9c9b9b47",
+          "fingerprint": "025a821d5d459d83"
+        }
+      ]
+    },
+    "multi": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "SOME BY MI Super Matcha set pori",
+          "source_product": "6e6684c1-e170-43a3-b966-618ac9107e58",
+          "fingerprint": "0012bb5a2050c767"
+        },
+        {
+          "query": "BANILA CO Clean it Zero spumă pori",
+          "source_product": "846b8e8f-987a-485c-99e4-ebe93d339a88",
+          "fingerprint": "0034b2c499a0a118"
+        },
+        {
+          "query": "LUQUE Milk emulsie față 84 gr",
+          "source_product": "7dbd0a07-906b-46f4-8bd9-cd0791ad7f72",
+          "fingerprint": "003b13cc51086bcb"
+        },
+        {
+          "query": "TIRTIR Glide and Hide Blurring Concealer 4.5N",
+          "source_product": "1e416269-3ec7-43d7-bf6b-4c3672d9adea",
+          "fingerprint": "00657f580c9ce97a"
+        },
+        {
+          "query": "lotiune spot cu 15% calamina",
+          "source_product": "9d326f26-175d-4fe8-9e37-e4f9635f641d",
+          "fingerprint": "00821e3ee838be24"
+        },
+        {
+          "query": "tonic cu cafeină și biotină scalp",
+          "source_product": "e8fe81f1-f5f1-440a-81c0-9dd969d5d2f7",
+          "fingerprint": "00dd7c7ce0ea8cb3"
+        },
+        {
+          "query": "cushion SPF 50 PA++++ față",
+          "source_product": "3e5912ae-2675-4b21-bbac-b516ed5059ed",
+          "fingerprint": "00fc272571232c28"
+        },
+        {
+          "query": "TIRTIR Mask Fit Red Cushion 21C",
+          "source_product": "d14ad939-aff4-42ae-b838-c1d625b41d72",
+          "fingerprint": "01024fc451c0b07a"
+        },
+        {
+          "query": "ser pentru pete pigmentare cu arbutină",
+          "source_product": "e29ec4be-7b2e-49b6-b75a-dc2f1eab245e",
+          "fingerprint": "0121c4536aeae407"
+        },
+        {
+          "query": "VT COSMETICS Reedle Shot 100 mask",
+          "source_product": "06621c7d-8013-4304-aa30-2001abab472a",
+          "fingerprint": "0127979bda7b7aa3"
+        },
+        {
+          "query": "MEDIHEAL mască retinol pentru fermitatea pielii",
+          "source_product": "5e6bb6f0-0f7f-4f9f-90ac-6444bfe4745c",
+          "fingerprint": "01357ecd023ef94f"
+        },
+        {
+          "query": "TIRTIR cushion cu niacinamida vitamina C",
+          "source_product": "3749a531-0f10-4f14-b4b6-f5c02016ea82",
+          "fingerprint": "0168000f2c7eb2e0"
+        },
+        {
+          "query": "mini mască 3-5 minute cu CICA",
+          "source_product": "bff794af-9ccb-4d04-bb50-2a8250a3cdf8",
+          "fingerprint": "017daa0fd08271e7"
+        },
+        {
+          "query": "ampouluă cu Centella Asiatica pentru roșeață",
+          "source_product": "1ab8b0e2-23e8-498c-baf8-31baedb7a2d7",
+          "fingerprint": "019389482f51c224"
+        },
+        {
+          "query": "periuta de dinti cu timer 2 minute",
+          "source_product": "57eb1bc7-5bdb-4fe3-810f-12667ad0b456",
+          "fingerprint": "01bf722872a1419d"
+        }
+      ]
+    },
+    "nevoie": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "prosop par satin dublu dupa dus",
+          "source_product": "86e4e1cb-eed9-4218-95f5-3f9575e0f279",
+          "fingerprint": "000ae99088d283a3"
+        },
+        {
+          "query": "seturi cosmetice mini pentru piele sensibila",
+          "source_product": "84e14dca-8815-421d-bd78-78be15a86ed2",
+          "fingerprint": "001d52e64b8a66b3"
+        },
+        {
+          "query": "plasturi slim pentru zona ochilor",
+          "source_product": "32920430-3413-4a20-8da8-09cfdfa1c840",
+          "fingerprint": "00233d351a88b179"
+        },
+        {
+          "query": "dischete exfoliante BHA pentru față zilnic",
+          "source_product": "78943305-e02d-41a7-90d0-4e9ece8397f5",
+          "fingerprint": "0039a856b12d46c6"
+        },
+        {
+          "query": "mănușă reutilizabilă pentru îndepărtarea machiajului",
+          "source_product": "21df2b9c-cbf4-4628-9c8e-1ca239de0485",
+          "fingerprint": "003d40ba92c94dc3"
+        },
+        {
+          "query": "ulei de curatare pentru sebum",
+          "source_product": "7db05f95-c600-4966-8c02-7883ac5fb4bb",
+          "fingerprint": "004b343bfd26a705"
+        },
+        {
+          "query": "cordeluță pentru bucle fără căldură peste noapte",
+          "source_product": "ac4f883b-c221-4979-943c-0545608d68b4",
+          "fingerprint": "005e55b00b4a0336"
+        },
+        {
+          "query": "balsam vegan certificat COSMOS NATURAL",
+          "source_product": "e620b10c-4195-416b-96a6-5062b2e24f42",
+          "fingerprint": "00611aa1562b248b"
+        },
+        {
+          "query": "curatare puncte negre si sebum",
+          "source_product": "85dc6f54-ab77-4fab-a168-6faf62f2f4fb",
+          "fingerprint": "00867eda3611abb3"
+        },
+        {
+          "query": "toner serum crema pentru bariera cutanata",
+          "source_product": "14a2e2e1-9555-4ad4-a91b-9b5a7d728003",
+          "fingerprint": "00d1a58f8e1a6990"
+        },
+        {
+          "query": "ser local pentru puncte negre și albe",
+          "source_product": "e1b0520d-5182-43b2-a58a-e9cf0be2933b",
+          "fingerprint": "00e2248af2725799"
+        },
+        {
+          "query": "cremă lejeră fără senzație grasă",
+          "source_product": "cb94ba33-010a-4162-8248-351c738793b0",
+          "fingerprint": "00e315a1a862ec85"
+        },
+        {
+          "query": "măști tip sheet pentru hidratare profundă",
+          "source_product": "0a042da5-561e-4eea-b118-dfe6390d1664",
+          "fingerprint": "00f324fab6b3088d"
+        },
+        {
+          "query": "masca pentru ten sensibil iritat si uscat",
+          "source_product": "6fbde800-ec34-4204-93df-9e567cd279ab",
+          "fingerprint": "0101f5ca48d91a7b"
+        },
+        {
+          "query": "ser de fata pentru roseata si iritatii",
+          "source_product": "374489c3-8fa8-4789-b2b0-fceb4a4bb47d",
+          "fingerprint": "012fd8f95a7c8ddc"
+        }
+      ]
+    },
+    "nu_e_cautare": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "Pot plăti în rate?",
+          "source": "faqs.question",
+          "fingerprint": "0d003bec2a785e73"
+        },
+        {
+          "query": "De la ce sumă e livrarea gratuită?",
+          "source": "faqs.question",
+          "fingerprint": "2494e1389b8d5b0b"
+        },
+        {
+          "query": "Cât timp am la dispoziție pentru retur?",
+          "source": "faqs.question",
+          "fingerprint": "3c07119fc08e65bb"
+        },
+        {
+          "query": "Aveți livrare gratuită?",
+          "source": "faqs.question",
+          "fingerprint": "4284d1e955154e47"
+        },
+        {
+          "query": "Unde găsesc lista de ingrediente? Am alergie la ceva.",
+          "source": "faqs.question",
+          "fingerprint": "48f3ee5bf8901c8d"
+        },
+        {
+          "query": "Pot plăti ramburs la livrare?",
+          "source": "faqs.question",
+          "fingerprint": "70c9cf796d070163"
+        },
+        {
+          "query": "Cu ce curier livrați?",
+          "source": "faqs.question",
+          "fingerprint": "78c3549085f9d715"
+        },
+        {
+          "query": "Ce metode de plată acceptați?",
+          "source": "faqs.question",
+          "fingerprint": "8320b00dff98a1d7"
+        },
+        {
+          "query": "Cât costă livrarea?",
+          "source": "faqs.question",
+          "fingerprint": "8f7513f8620f0262"
+        },
+        {
+          "query": "În cât timp primesc comanda?",
+          "source": "faqs.question",
+          "fingerprint": "9177b24a7e2c8f54"
+        },
+        {
+          "query": "Cum plătesc?",
+          "source": "faqs.question",
+          "fingerprint": "95d7603253d4bc28"
+        },
+        {
+          "query": "Pot returna un produs desfăcut?",
+          "source": "faqs.question",
+          "fingerprint": "9619693c2616f022"
+        },
+        {
+          "query": "Cum returnez un produs?",
+          "source": "faqs.question",
+          "fingerprint": "9821239595df62f9"
+        },
+        {
+          "query": "Ce înseamnă CashBack și cum funcționează punctele?",
+          "source": "faqs.question",
+          "fingerprint": "9f11b8a15ee16f65"
+        },
+        {
+          "query": "Cât costă returul?",
+          "source": "faqs.question",
+          "fingerprint": "af854de93733aa4f"
+        }
+      ]
+    },
+    "nuanta_finish": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "ruj lichid lucios rezistent la transfer",
+          "source_product": "54c7d4af-56c7-4314-af42-adf39b7ceb74",
+          "fingerprint": "000d90e1637352c6"
+        },
+        {
+          "query": "luciu de buze volumizant fără senzație lipicioasă",
+          "source_product": "31a2550a-d367-4af4-9ec8-9184903a9d26",
+          "fingerprint": "0034fe14f93cce05"
+        },
+        {
+          "query": "tint de buze lucios hidratant intens",
+          "source_product": "dadc53d2-9a95-450e-9440-5b79b6b39d97",
+          "fingerprint": "005a93a8b10fe246"
+        },
+        {
+          "query": "tus de ochi care nu se intinde",
+          "source_product": "33bfd957-c2fc-4f17-bff5-c76f13f6dc81",
+          "fingerprint": "00bc41e46b5a594a"
+        },
+        {
+          "query": "gloss buze cu ferment Lactobacillus",
+          "source_product": "50982785-3803-4553-9883-2e2744556254",
+          "fingerprint": "00d45eece92e2a01"
+        },
+        {
+          "query": "balsam de buze cu peptide",
+          "source_product": "964bb765-94ec-4cfd-a34d-99fd13c40985",
+          "fingerprint": "015853b279ab6fcd"
+        },
+        {
+          "query": "mascara cu perie curbata pentru definire",
+          "source_product": "c0113008-841a-4098-a47e-f6ea4154ed28",
+          "fingerprint": "015db8ae311a4ad6"
+        },
+        {
+          "query": "fard de contur cu pigmenti calzi",
+          "source_product": "3798d864-74a3-4125-a9d6-527f6ff044dd",
+          "fingerprint": "017537f8d2c685cd"
+        },
+        {
+          "query": "tint vegan cruelty-free pentru buze",
+          "source_product": "cd36f06b-5004-4297-ad05-ad36124fbe6c",
+          "fingerprint": "01826c677cdce796"
+        },
+        {
+          "query": "blush cu particule fine reflectă lumina",
+          "source_product": "7d09ee42-e298-4995-adf2-104cc1c9334f",
+          "fingerprint": "01859868fd76b711"
+        },
+        {
+          "query": "pensule sintetice vegane pentru aplicare machiaj",
+          "source_product": "8d06f12d-94e2-4728-ace2-e8011d58e4c3",
+          "fingerprint": "018864dc12421a24"
+        },
+        {
+          "query": "corector acoperire mare pentru cearcăne",
+          "source_product": "ae456bea-564a-49da-a2b6-9a4ceb80f4c1",
+          "fingerprint": "01b47ec2468d86d4"
+        },
+        {
+          "query": "creion buze pentru efect estompat natural",
+          "source_product": "9ffbaf1e-01da-49a1-8f8d-9a3bf3e70e65",
+          "fingerprint": "02781174c9be46d6"
+        },
+        {
+          "query": "nuantator buze si obraji cu efect blurat",
+          "source_product": "ea3a1a43-c034-44da-a58a-f905ef6e5946",
+          "fingerprint": "02ed30c55c0d3e04"
+        },
+        {
+          "query": "fard de pleoape cu sclipici intens",
+          "source_product": "02977273-dd58-47d3-b51b-37922f041d03",
+          "fingerprint": "02f39863966f9c55"
+        }
+      ]
+    },
+    "specificatie": {
+      "count": 15,
+      "queries": [
+        {
+          "query": "ulei de argan 100% pur nerafinat",
+          "source_product": "345185ee-e89e-400b-8e44-333d5c0a857c",
+          "fingerprint": "00818c3128af682a"
+        },
+        {
+          "query": "mască față rezistentă la apă IPX7",
+          "source_product": "58c8bf65-d131-4d8b-8aaf-bccea76ed04a",
+          "fingerprint": "00c1ba8093dd078b"
+        },
+        {
+          "query": "ruj mat nuanta marsala CM14",
+          "source_product": "6b3fd3ba-9a24-456d-88f6-fe91a429dc8b",
+          "fingerprint": "02cba33570cce54b"
+        },
+        {
+          "query": "ruj tint Vienna Rose GB08",
+          "source_product": "eadc8999-ac67-431f-b04c-a4fcddb6b81c",
+          "fingerprint": "03285a49c11395b2"
+        },
+        {
+          "query": "gel de styling pentru bucle 2A-3C",
+          "source_product": "fd63df5c-9d76-4193-8365-b6b6085b26ed",
+          "fingerprint": "03baaedc065afda7"
+        },
+        {
+          "query": "produs 3 in 1 buze culoare",
+          "source_product": "bed252d5-c53a-48b3-919a-6d5cb3170f45",
+          "fingerprint": "057a71577e5e52d3"
+        },
+        {
+          "query": "masca cleanser 2 in 1 ten",
+          "source_product": "85dc6f54-ab77-4fab-a168-6faf62f2f4fb",
+          "fingerprint": "092da9829a4c49cd"
+        },
+        {
+          "query": "set 30 măști față pentru textură netedă",
+          "source_product": "20e1b690-449d-4163-9171-5325228e84ac",
+          "fingerprint": "094653a5611093a7"
+        },
+        {
+          "query": "dispozitiv 6 în 1 îngrijirea tenului",
+          "source_product": "de9370c9-676d-4996-831b-00730458af99",
+          "fingerprint": "09827d142174c3f0"
+        },
+        {
+          "query": "fond de ten 23 Natural Beige",
+          "source_product": "938014c8-9228-4322-81df-0173d638d542",
+          "fingerprint": "0a8f99760ecc8b31"
+        },
+        {
+          "query": "cushion rezistent la transfer 72 ore",
+          "source_product": "fcdcb9af-89ac-4c23-b177-0fe40512c041",
+          "fingerprint": "0be64fbb6b40abb1"
+        },
+        {
+          "query": "toner exfoliant BHA 2% pentru față",
+          "source_product": "0270be9f-4a2c-4eb1-a2ba-b3427ab52c6a",
+          "fingerprint": "0deb46fe2f56e7ca"
+        },
+        {
+          "query": "I’M FROM Fig Foam Cleanser 150 ml",
+          "source_product": "e11377fd-0848-4fb5-ae20-ef15d620b996",
+          "fingerprint": "0ea9b6bbed7c312c"
+        },
+        {
+          "query": "fond de ten rezistent pana la 72 ore",
+          "source_product": "651d7f6d-e642-451a-b53f-717153528703",
+          "fingerprint": "10da63d6aa78bebe"
+        },
+        {
+          "query": "cremă hidratantă profundă până la 72 ore",
+          "source_product": "43b3333b-a5a2-4c44-a7c4-8533d5faadad",
+          "fingerprint": "1206c50ccce3577a"
+        }
+      ]
+    },
+    "typo": {
+      "count": 14,
+      "queries": [
+        {
+          "query": "gel de duș curățare profundă prospțeime",
+          "derived_from": "6df40d77c190e4db",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "1264621212740d36"
+        },
+        {
+          "query": "gel de duș pentru piele energziată",
+          "derived_from": "7d041eb8436fe446",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "169d0f949194a3bb"
+        },
+        {
+          "query": "gel de dus hipoalregenic fara parfum",
+          "derived_from": "0a62212f5b64fda6",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "19272ca9dfc95eb4"
+        },
+        {
+          "query": "gel de curățare bebeluși piele sensbiilă",
+          "derived_from": "559d29bfa1a8708c",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "2d4ef088b1337c2a"
+        },
+        {
+          "query": "sampon si gel de dus bebeulsi",
+          "derived_from": "5b6c78c29788e240",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "3570c59f3fa0a4f6"
+        },
+        {
+          "query": "gel corp și păr bebeulși",
+          "derived_from": "5d50b12075b29f81",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "4dd9b299aa9f288c"
+        },
+        {
+          "query": "deodroant eficient impotriva mirosului corporal",
+          "derived_from": "744cf349a754e1a9",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "5b776c4bd43e479f"
+        },
+        {
+          "query": "ingrijirea tenului barbati piele mixta deshidartata",
+          "derived_from": "77531af6bf2cee8c",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "974b652c1871ae0a"
+        },
+        {
+          "query": "lotuine de fata barbati all in one",
+          "derived_from": "46ec29ab801a70fc",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "9e24706446e36ff6"
+        },
+        {
+          "query": "lotiune hidraatnta usoara fara senzatie grasa",
+          "derived_from": "88c4a0c82bcc303c",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "b1e0e34719076d54"
+        },
+        {
+          "query": "gel duş copii piele usctaă pH neutru",
+          "derived_from": "66000c64fe828a6c",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "b91b0a7b98e74fa6"
+        },
+        {
+          "query": "loțiune hidraatntă pentru piele sensibilă",
+          "derived_from": "4eb5d8bbffc317ca",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "bd70dea9241633a4"
+        },
+        {
+          "query": "deodroant roll-on natural pentru barbati",
+          "derived_from": "047f8aa154344aa0",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "d03a5f6b3880c88f"
+        },
+        {
+          "query": "loțuine de corp pentru piele uscată",
+          "derived_from": "fba8009241c65407",
+          "transform": "transpozitie_litere.v1",
+          "fingerprint": "d181410d2087eb2b"
+        }
+      ]
+    }
+  }
+}

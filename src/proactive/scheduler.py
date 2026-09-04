@@ -102,7 +102,10 @@ async def _safety_allows_job(conn, business_id: str, job: dict[str, Any], route:
     try:
         products = await get_products_by_ids(conn, business_id, ids, limit=len(ids))
     except Exception:  # noqa: BLE001
-        log.exception("proactiv: hidratare eșuată pe context de siguranță — anulez (fail-closed)")
+        log.exception(
+            # domain-leak: ok — „hidratare" = rehidratarea contextului, nu a pielii
+            "proactiv: hidratare eșuată pe context de siguranță — anulez (fail-closed)"
+        )
         return False
     return not policy.evaluate(products, purpose=f"proactive:{job['kind']}").blocked
 

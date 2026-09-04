@@ -92,7 +92,7 @@ RISK_PATTERNS: dict[str, list[str]] = {
         # RO
         "avocat",
         "anaf",
-        "protectia consumatorului",
+        "protectia consumatorului",  # domain-leak: ok — termen de RISC juridic, nu de produs
         "reclamatie",
         "instanta",
         "te dau in judecata",

@@ -547,7 +547,10 @@ def hydrate_state_v2(
     try:
         state = ConversationStateV2.from_jsonb(raw) if is_v2(raw) else adapt_v1(raw, vocab)
     except Exception:  # noqa: BLE001 — memorie coruptă ⇒ pornim curat, nu rupem turul (P6)
-        log.warning("state_v2: hidratare eșuată — pornim de la starea goală")
+        log.warning(
+            # domain-leak: ok — „hidratare" = rehidratarea STĂRII, nu a pielii
+            "state_v2: hidratare eșuată — pornim de la starea goală"
+        )
         return ConversationStateV2(revision=revision)
     return replace(state, revision=max(state.revision, revision))
 

@@ -89,9 +89,23 @@ def _claim_verified(attributes: dict, facet, value) -> bool:
     return False  # bool/number claim fără proveniență la nivel de valoare → nu confirmăm
 
 
-def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -> list[dict]:
+def compute_coverage(
+    facets,
+    by_cat: dict[str, list[dict]],
+    min_products: int,
+    precision_ready: frozenset[str] = frozenset(),
+) -> list[dict]:
     """PUR (fără DB): per (categorie × fațetă) → rând de coverage. `by_cat[cat]` = listă de produse
-    cu `price`/`category_slug`/`stock_total`/... la nivel de rând și `attributes` deja parsat."""
+    cu `price`/`category_slug`/`stock_total`/... la nivel de rând și `attributes` deja parsat.
+
+    NX-268 — `precision_ready` sunt fațetele care au trecut AUDITUL DE PRECIZIE
+    (`scripts/derived_precision_audit.py --report`). Acoperirea singură nu mai poate face o fațetă
+    `enforce_ready`: măsoară câte produse poartă o valoare, nu câte o poartă pe bună dreptate, iar
+    o fațetă derivată care exclude produse pe baza unei etichete greșite e exact eșecul pe care
+    nimic din aval nu-l mai prinde (validatorul verifică adevărul FAȚĂ DE tabela de fapte).
+
+    Fațetele STRUCTURALE (preț, categorie) nu trec prin audit: valoarea lor nu e derivată dintr-un
+    text, e citită dintr-o coloană. Auditul e pentru ce a fost DEDUS."""
     out: list[dict] = []
     for category in sorted(by_cat):
         prods = by_cat[category]
@@ -116,6 +130,10 @@ def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -
                             dist[str(item)] += 1
             coverage = round(valid / denom, 3) if denom else 0.0
             insufficient = denom < min_products
+            # O fațetă de tip `claim` e o afirmație despre produs; una `structural` e o citire.
+            # Doar prima are nevoie de audit de precizie ca să poată exclude.
+            needs_audit = facet.provenance == "claim"
+            audited = (not needs_audit) or facet.key in precision_ready
             out.append(
                 {
                     "category": category,
@@ -127,7 +145,10 @@ def compute_coverage(facets, by_cat: dict[str, list[dict]], min_products: int) -
                     "coverage": coverage,
                     "unknown_rate": round(1 - coverage, 3),
                     "insufficient_data": insufficient,
-                    "enforce_ready": (not insufficient) and coverage >= facet.min_coverage,
+                    "precision_audited": audited,
+                    "enforce_ready": (
+                        (not insufficient) and coverage >= facet.min_coverage and audited
+                    ),
                     "value_distribution": dict(dist.most_common(12)) or None,
                 }
             )
@@ -241,6 +262,21 @@ async def main() -> None:
     if QRELS.exists():  # F3: distribuția MATCH/MISMATCH/UNKNOWN pe query-uri REALE (best-effort)
         queries = json.loads(QRELS.read_text(encoding="utf-8")).get("queries", [])
 
+    # NX-268 — fațetele care au trecut AUDITUL DE PRECIZIE. Fail-closed: raport absent sau ilizibil
+    # ⇒ mulțime goală ⇒ nicio fațetă de tip `claim` nu poate fi `enforce_ready`. Un audit lipsă nu
+    # e o eroare, e starea de dinainte de audit, și trebuie să se comporte exact ca un audit picat.
+    precision_report = ROOT / "reports" / "derived_precision" / f"{args.business[:8]}-report.json"
+    precision_ready: frozenset[str] = frozenset()
+    if precision_report.exists():
+        try:
+            precision_ready = frozenset(
+                json.loads(precision_report.read_text(encoding="utf-8")).get("enforce_ready") or []
+            )
+        except (OSError, json.JSONDecodeError):
+            precision_ready = frozenset()
+    else:
+        precision_report = None
+
     report: dict = {
         "_meta": {
             "generated": "NX-186 facet coverage (per business+category+facet)",
@@ -261,8 +297,14 @@ async def main() -> None:
             }
             for f in facets
         },
-        "coverage": compute_coverage(facets, by_cat, MIN_PRODUCTS),
+        "coverage": compute_coverage(facets, by_cat, MIN_PRODUCTS, precision_ready),
         "query_distribution": query_match_distribution(facets, queries, products),
+        # NX-268: de unde vine lista fațetelor auditate. Absența raportului NU e o eroare, e starea
+        # de dinainte de audit — și atunci nicio fațetă de tip `claim` nu e `enforce_ready`.
+        "precision_audit": {
+            "report": str(precision_report.relative_to(ROOT)) if precision_report else None,
+            "enforce_ready": sorted(precision_ready),
+        },
     }
 
     out = ROOT / "reports" / f"facet-coverage-{args.business[:8]}-{args.date}.json"

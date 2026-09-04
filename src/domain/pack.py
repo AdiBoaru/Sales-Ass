@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from src.domain.constraints import EMPTY_UNITS, UnitRegistry
 from src.domain.contracts import EMPTY_REQUIREMENTS, CategoryRequirements
 from src.domain.facets import TypedFacet
 from src.domain.relation_kinds import EMPTY_RELATION_KINDS, RelationKindRegistry
@@ -101,3 +102,9 @@ class DomainPack:
     # (`src/domain/relation_kinds.py`). Gol → fiecare tip e vecini-direcți, adică EXACT
     # comportamentul de azi: tăcerea nu acordă traversare.
     relation_kinds: RelationKindRegistry = EMPTY_RELATION_KINDS
+    # NX-266: unitatea CANONICĂ a fiecărei fațete numerice + factorii de conversie („0,05 l" = 50
+    # ml) + operatorul implicit când clientul dă un număr fără cuvânt de comparație. Stă în date,
+    # nu în cod, din două motive: un factor scris în cod ar fi scurgere de domeniu (P9, poarta
+    # NX-264), iar presupunerea că toți tenanții măsoară la fel e falsă chiar în interiorul unui
+    # vertical. Gol → extracția de constrângeri numerice nu produce nimic (comportamentul de azi).
+    units: UnitRegistry = EMPTY_UNITS

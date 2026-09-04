@@ -265,7 +265,39 @@ class Settings(BaseSettings):
     # `ctx.retrieval`. UNKNOWN trece mereu (D7). OFF = byte-identic. Asta E enforcement-ul NX-188,
     # deci rămâne DARK până la GO-ul NX-210 (care așteaptă corpusul NX-203) — dar mecanismul
     # există, testat, ca aprinderea să fie un flag, nu un proiect.
+    # NX-254 — BUGETUL DE SESIUNI al procesului, pe cele două pooluri.
+    #
+    # Erau constante în `db/connection.py` (10 + 10). Nu e o setare de performanță, e o setare de
+    # CAPACITATE: poolerul Supabase în session mode plafonează userul la 15 clienți, iar bugetul e
+    # împărțit cu PRODUCȚIA, care ține sesiuni permanent. Un singur proces care cere 20 în vârf îl
+    # depășește garantat — și exact așa a stat `CI` roșu pe `main` de pe 21 august, cu un
+    # `(EMAXCONNSESSION)` raportat ca eșec al testului de IZOLARE.
+    #
+    # Default-urile sunt cele de dinainte, deci producția e neatinsă. Se coboară acolo unde bugetul
+    # e strâmt (jobul de izolare din CI), nu peste tot.
+    db_admin_pool_max: int = Field(default=10, ge=1, validation_alias="DB_ADMIN_POOL_MAX")
+    db_bot_pool_max: int = Field(default=10, ge=1, validation_alias="DB_BOT_POOL_MAX")
+    # Câte sesiuni are voie procesul ăsta să ceară, TOTAL. `None` = nedeclarat, deci nu se verifică
+    # nimic — nu presupunem un plafon pe care nu-l cunoaștem. Unde e declarat (jobul de izolare din
+    # CI), garda din `test_isolation_concurrent` compară suma poolurilor cu el ÎNAINTE de a atinge
+    # DB-ul, ca depășirea să iasă ca „buget depășit", nu ca `(EMAXCONNSESSION)` raportat drept eșec
+    # de izolare.
+    db_session_budget: int | None = Field(default=None, ge=1, validation_alias="DB_SESSION_BUDGET")
     relevance_mask_enabled: bool = Field(default=False, validation_alias="RELEVANCE_MASK_ENABLED")
+    # NX-271: CARE fațete au voie să excludă, aprinse una pe rând. Flagul de mai sus spune „poarta
+    # poate rula", lista asta spune „pe ce". Sunt separate fiindcă greșeala e dublă: o fațetă poate
+    # fi destul de precisă ca să excludă (`enforce_ready` în pachet, dat de auditul NX-268) și
+    # totuși să nu fie momentul s-o aprinzi. Fără listă, un flag aprins ar porni deodată tot ce a
+    # fost vreodată auditat, iar dacă rezultatul se strică n-ai ști care fațetă a stricat.
+    # Gol (default) = nicio excludere, oricât de aprins ar fi flagul.
+    relevance_mask_facets: str = Field(default="", validation_alias="RELEVANCE_MASK_FACETS")
+
+    @property
+    def active_relevance_facets(self) -> frozenset[str]:
+        """Lista activă, normalizată. Text în env (o listă separată prin virgulă) fiindcă e o
+        decizie de OPERARE, schimbată între două deploy-uri, nu o structură de config."""
+        return frozenset(f.strip() for f in self.relevance_mask_facets.split(",") if f.strip())
+
     # Retenția capturii (zile) — purjată de cleanup_conversation_traces (job admin, bounded).
     # Ca la web_turns, retenția NU e gated pe flag: rândurile acumulate nu rămân pe disc dacă
     # flagul se stinge; jobul e no-op pe o DB fără migrarea 045 (guard `to_regclass`).
@@ -635,6 +667,21 @@ class Settings(BaseSettings):
     lexical_query_v2_enabled: bool = Field(
         default=True, validation_alias="LEXICAL_QUERY_V2_ENABLED"
     )
+    # NX-266: constrângerile numerice ale clientului („sub 100 lei", „SPF minim 30") ca VALORI
+    # tipizate cu unitate, aplicate în cod de ambele părți ale rerankării, nu ca text care ajunge
+    # în căutarea lexicală. OFF (default) = byte-identic: extracția nu rulează, retrieverele
+    # primesc `constraints=()`, iar bugetul continuă să curgă prin `price_max` exact ca azi.
+    # Prerechizit pentru NX-267: un reranker care citește text va urca un SPF 15 la o cerere de
+    # „SPF minim 30", iar nicio poartă de adevăr nu-l prinde — produsul chiar are SPF 15.
+    typed_constraints_enabled: bool = Field(
+        default=False, validation_alias="TYPED_CONSTRAINTS_ENABLED"
+    )
+    # NX-270: citirea grafului de relații DERIVAT (`source='derived_content'`). OFF (default) =
+    # calea de azi, byte-identică: `product_relations` are 0 rânduri, deci ambele consumatoare cad
+    # oricum pe heuristica veche. Flagul contează în ziua în care jobul a scris muchii și vrem să
+    # le putem stinge fără să ștergem tabela — un graf derivat e SCHELĂ (vezi migrarea 048), iar
+    # schela trebuie să se poată da jos.
+    relation_graph_enabled: bool = Field(default=False, validation_alias="RELATION_GRAPH_ENABLED")
     # NX-169: proiecția faptelor canonice v3 (suitable_for/finish/texture/ingrediente/usage/badges/
     # best_for) în view-urile text ale agentului (_brief/_detail/_compare) + compare pe DIFERENȚE.
     # OFF → view-urile vechi (nume+preț+rating+ai_summary+pros/cons) byte-identic (degradare lină).

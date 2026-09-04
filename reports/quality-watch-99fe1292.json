@@ -1,0 +1,60 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "window": {
+    "from": "2026-08-04T00:00:00+00:00",
+    "to": "2026-09-03T00:00:00+00:00"
+  },
+  "min_samples": 30,
+  "metrics": [
+    {
+      "metric": "zero_results_rate",
+      "value": null,
+      "threshold": 0.1,
+      "samples": 0,
+      "verdict": "UNKNOWN"
+    },
+    {
+      "metric": "deaf_turn_rate",
+      "value": null,
+      "threshold": 0.15,
+      "samples": 0,
+      "verdict": "UNKNOWN"
+    },
+    {
+      "metric": "facet_coverage.concerns",
+      "value": 0.0,
+      "threshold": null,
+      "samples": 2758,
+      "verdict": "MEASURED"
+    },
+    {
+      "metric": "facet_coverage.skin_type",
+      "value": 0.0,
+      "threshold": null,
+      "samples": 2758,
+      "verdict": "MEASURED"
+    },
+    {
+      "metric": "facet_coverage.shade",
+      "value": 0.0,
+      "threshold": null,
+      "samples": 2758,
+      "verdict": "MEASURED"
+    },
+    {
+      "metric": "catalog_staleness_days",
+      "value": 6.2335,
+      "threshold": 7.0,
+      "samples": 2758,
+      "verdict": "PASS"
+    },
+    {
+      "metric": "head_precision_top3",
+      "value": null,
+      "threshold": null,
+      "samples": 0,
+      "verdict": "UNKNOWN",
+      "note": "setul NX-265 nu e adnotat: rulează `scripts/goldset_annotate.py`, apoi `scripts/goldset_report.py --label baseline`"
+    }
+  ]
+}

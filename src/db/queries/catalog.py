@@ -17,6 +17,7 @@ import asyncpg
 from src.catalog.query_terms import content_terms, fold, relaxed_query, strict_query
 from src.catalog.vocabulary import servable_count_sql
 from src.config import get_settings
+from src.domain.constraints import OP_BETWEEN, BoundConstraint
 
 # NX-191 — FEREASTRA promoției. `sale_price` fără verificarea ferestrei = minciună comercială:
 # o promoție încheiată ar continua să se afișeze ca preț curent, iar validatorul (stagiul 8) ar
@@ -43,6 +44,34 @@ _SHRUNK_RATING = (
     "((coalesce(p.review_count, 0) * coalesce(p.rating, 0) + 30 * 4.0)"
     " / (coalesce(p.review_count, 0) + 30))"
 )
+
+# NX-270 — tipurile de muchie pe care le citește calea de COMPLEMENTARITATE, într-un singur loc.
+#
+# Erau scrise de două ori, ca literale în două query-uri („are relații?" și „care sunt?"), iar
+# `variant_of` (NX-269/270) ar fi fost scris de job și necitit de nimeni — a treia formă a
+# aceleiași greșeli, după CHECK-ul de schemă și declarația din pachet. Un `kind` nou care ajunge în
+# tabelă fără să ajungă aici nu dă nicio eroare: doar nu se vede.
+#
+# Ordinea E semantica de prezentare: rutina întâi (pasul următor e cel mai concret lucru pe care îl
+# poate face clientul), apoi complementul, apoi alte nuanțe, apoi accesoriile. `substitute` NU e
+# aici — un înlocuitor nu e un „merge bine cu", și are calea lui (`get_substitutes`).
+COMPLEMENTARY_KINDS: tuple[str, ...] = ("routine_next", "complement", "variant_of", "accessory")
+
+
+def _complementary_kinds_sql() -> str:
+    """Lista de `kind` ca literali SQL. Valorile sunt un vocabular ÎNCHIS din cod (nu ajung
+    niciodată aici din config sau din model), deci interpolarea e sigură prin construcție — dar
+    trece printr-o funcție ca să existe UN singur loc unde forma se poate verifica."""
+    return ", ".join(f"'{kind}'" for kind in COMPLEMENTARY_KINDS)
+
+
+def _complementary_prio_expr() -> str:
+    """`CASE` de prioritate derivat din ORDINEA lui `COMPLEMENTARY_KINDS`. Derivat, nu scris a
+    doua oară: o listă și un `case` întreținute separat divergează, iar divergența arată ca o
+    ordonare ciudată, nu ca un bug."""
+    arms = " ".join(f"when '{kind}' then {i}" for i, kind in enumerate(COMPLEMENTARY_KINDS))
+    return f"case kind {arms} else {len(COMPLEMENTARY_KINDS)} end"
+
 
 # Moduri de sortare (allowlist → zero injection; sort_mode e structural, nu param bindabil).
 _VALID_SORT = frozenset({"relevance", "price_asc", "price_desc", "rating_desc"})
@@ -360,6 +389,64 @@ def _feature_clause(facet_keys: tuple[str, ...], values: list[str], placeholder:
     )
 
 
+# NX-266 — expresia SQL a unei fațete de tip `column`. Prețul NU e `p.price`: prețul REAL e pe
+# variantă (vezi `_EFFECTIVE_PRICE`), și e exact cel pe care îl vede clientul. O constrângere de
+# buget evaluată pe altă coloană decât cea afișată ar produce exact bug-ul pe care îl previne
+# cardul: un produs „sub 100" care se afișează cu 149.
+_CONSTRAINT_COLUMN_EXPR: Mapping[str, str] = {
+    "price": _EFFECTIVE_PRICE,
+    "sale_price": _EFFECTIVE_PRICE,
+    "rating": "p.rating",
+    "stock_total": "p.stock_total",
+}
+
+# Un atribut numeric poate fi scris în `attributes` ca număr JSON sau ca text („30"). Al doilea e
+# forma pe care o produce orice derivare care trece prin text, deci a-l refuza ar face constrângerea
+# inertă exact pe datele derivate (NX-268). Cast-ul e protejat de regex ÎN ACEEAȘI expresie CASE —
+# Postgres garantează ordinea de evaluare a lui CASE, deci nu există drum spre un cast pe gunoi.
+_JSON_NUMERIC_TEXT = r"^\s*-?\d+(\.\d+)?\s*$"
+
+
+def _numeric_source(bound: BoundConstraint, placeholder: Any) -> tuple[str, str]:
+    """`(predicat_de_cunoscut, expresie_numerică)` pentru o constrângere legată.
+
+    Cele două se folosesc întotdeauna împreună, într-un CASE: fără predicatul de „se cunoaște",
+    un atribut ne-numeric ar ajunge la cast; fără expresie, n-am avea ce compara."""
+    if bound.source_kind == "column":
+        expr = _CONSTRAINT_COLUMN_EXPR[bound.source_key]
+        return f"{expr} is not null", expr
+    key = placeholder(bound.source_key)
+    known = (
+        f"(jsonb_typeof(p.attributes->{key}) = 'number'"
+        f" or (jsonb_typeof(p.attributes->{key}) = 'string'"
+        f" and (p.attributes->>{key}) ~ {placeholder(_JSON_NUMERIC_TEXT)}))"
+    )
+    return known, f"(p.attributes->>{key})::numeric"
+
+
+def _constraint_clause(bounds: Sequence[BoundConstraint], placeholder: Any) -> str:
+    """Constrângeri numerice tipizate (NX-266) → predicat SQL TRI-STATE.
+
+    Forma e mereu `case when <se cunoaște> then <comparație> else <politica de lipsă> end`, iar
+    ramura `else` e tot ce separă D7 de un filtru obișnuit: pe `missing_value='unknown'` un produs
+    care nu declară valoarea RĂMÂNE (nu știm că e greșit), pe `skip` cade (fațeta declară că fără
+    valoare nu se poate promite nimic — prețul). Politica e a FAȚETEI, nu a acestui cod.
+
+    Constrângerile se leagă cu AND: două numere rostite se cumulează, ca la fațete."""
+    parts: list[str] = []
+    for bound in bounds:
+        known, expr = _numeric_source(bound, placeholder)
+        c = bound.constraint
+        if c.op == OP_BETWEEN and c.value_max is not None:
+            cmp_sql = f"({expr} >= {placeholder(c.value)} and {expr} <= {placeholder(c.value_max)})"
+        else:
+            operator = {"lte": "<=", "gte": ">=", "eq": "="}[c.op]
+            cmp_sql = f"{expr} {operator} {placeholder(c.value)}"
+        missing = "true" if bound.keeps_unknown else "false"
+        parts.append(f"(case when {known} then {cmp_sql} else {missing} end)")
+    return " and ".join(parts)
+
+
 def _facet_filter_clause(filters: Mapping[str, Sequence[str]], placeholder: Any) -> str:
     """Filtru GENERIC pe fațete, pentru dimensiuni DESCOPERITE din catalog — nu pentru o listă de
     chei știute de cod.
@@ -530,6 +617,7 @@ async def search_products_lexical(
     searchable_facets: tuple[str, ...] = (),
     variant_label: str | None = None,
     price_max: float | None = None,
+    constraints: Sequence[BoundConstraint] = (),
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
     locale: str | None = None,
@@ -574,6 +662,7 @@ async def search_products_lexical(
             searchable_facets=searchable_facets,
             variant_label=variant_label,
             price_max=price_max,
+            constraints=constraints,
             sort_mode=sort_mode,
             in_stock_only=in_stock_only,
             pool=pool,
@@ -609,6 +698,7 @@ async def _lexical_fetch(
     searchable_facets: tuple[str, ...],
     variant_label: str | None,
     price_max: float | None,
+    constraints: Sequence[BoundConstraint],
     sort_mode: str,
     in_stock_only: bool,
     pool: int,
@@ -669,6 +759,8 @@ async def _lexical_fetch(
         conds.append(_variant_label_clause(variant_label, placeholder))
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
+    if constraints:  # NX-266: numerele nu se negociază — tri-state, UNKNOWN după politica fațetei
+        conds.append(_constraint_clause(constraints, placeholder))
     if in_stock_only:
         conds.append("p.availability in ('in_stock', 'low_stock')")
     if cs := _content_status_pred():  # NX-171c: doar 'published' (per-tenant, gated)
@@ -1015,7 +1107,7 @@ async def _has_complementary_relations(
     return bool(
         await conn.fetchval(
             "select exists(select 1 from product_relations where business_id=$1 and product_id=$2 "
-            "and kind in ('complement', 'routine_next', 'accessory'))",
+            f"and kind in ({_complementary_kinds_sql()}))",
             business_id,
             anchor_id,
         )
@@ -1037,12 +1129,11 @@ async def _complementary_from_relations(
     sql = (
         _SELECT
         + " join (select related_id,"
-        + "          min(case kind when 'routine_next' then 0 when 'complement' then 1 else 2 end)"
-        + "            as prio,"
+        + f"          min({_complementary_prio_expr()}) as prio,"
         + "          min(position) as pos"
         + "        from product_relations"
         + "        where business_id = $1 and product_id = $2"
-        + "          and kind in ('complement', 'routine_next', 'accessory')"
+        + f"          and kind in ({_complementary_kinds_sql()})"
         + "        group by related_id) pr on pr.related_id = p.id"
         + " where p.business_id = $1 and p.status = 'active'"
         + " and p.availability in ('in_stock', 'low_stock')"
@@ -1532,6 +1623,7 @@ async def search_products_semantic(
     query_embedding: list[float],
     *,
     price_max: float | None = None,
+    constraints: Sequence[BoundConstraint] = (),
     concerns: list[str] | None = None,
     facet_filters: Mapping[str, Sequence[str]] | None = None,
     features: list[str] | None = None,
@@ -1571,6 +1663,8 @@ async def search_products_semantic(
     qvec_ph = placeholder(query_embedding)  # vectorul de query (list[float], codec pgvector)
     if price_max is not None:
         conds.append(f"{_EFFECTIVE_PRICE} <= {placeholder(price_max)}")
+    if constraints:  # NX-266: aceleași numere pe AMBELE retrievere — altfel vectorul le-ar ocoli
+        conds.append(_constraint_clause(constraints, placeholder))
     if category:
         conds.append(_category_clause(category, placeholder))  # NX-167 (A): match pe arbore
     if brand:

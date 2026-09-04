@@ -236,6 +236,12 @@ def load_relation_kinds(raw: Any) -> RelationKindRegistry:
 
     specs: dict[str, RelationKindSpec] = {}
     for kind, cfg in raw.items():
+        # Cheile care încep cu `_` sunt NOTE, convenția întregului pachet de domeniu („de ce e
+        # goală lista asta", „de unde vin cifrele"). Fără regula asta, o notă lângă un tip de
+        # muchie iese ca avertisment de config invalid — adică zgomot exact în logul în care ar
+        # trebui să se vadă configurările chiar stricate.
+        if str(kind).startswith("_"):
+            continue
         if len(specs) >= MAX_RELATION_KINDS:
             log.warning(
                 "relation_kinds: peste %d tipuri, restul ignorate (începând cu %r)",

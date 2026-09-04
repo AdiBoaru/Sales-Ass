@@ -205,13 +205,44 @@ def test_f1_provenance_without_value_is_not_verified():
 
 
 def test_enforce_ready_uses_per_facet_threshold():
-    # coverage 0.5 pe fragrance_free (prag 0.4) → ready; pe price (prag 0.9) 0.5 → NOT ready.
+    # coverage 0.5 pe fragrance_free (prag 0.4) → trece pragul de acoperire; pe price (prag 0.9)
+    # 0.5 → NU. NX-268: pentru o fațetă de tip `claim`, acoperirea nu mai e suficientă (vezi
+    # testele de mai jos) — de aia `fragrance_free` primește aici auditul de precizie.
     prods = [_prod(50, {"fragrance_free": True}), _prod(None, {})]
-    rows = compute_coverage([_PRICE, _FF], {"seruri": prods}, min_products=1)
+    rows = compute_coverage(
+        [_PRICE, _FF],
+        {"seruri": prods},
+        min_products=1,
+        precision_ready=frozenset({"fragrance_free"}),
+    )
     assert _row(rows, "fragrance_free")["coverage"] == 0.5
     assert _row(rows, "fragrance_free")["enforce_ready"] is True
     assert _row(rows, "price")["coverage"] == 0.5
     assert _row(rows, "price")["enforce_ready"] is False  # sub pragul 0.9
+
+
+def test_o_fateta_de_claim_nu_devine_enforce_ready_doar_din_acoperire():
+    """NX-268 — acoperirea numără câte produse poartă o valoare, nu câte o poartă pe bună dreptate.
+
+    Pentru o fațetă DERIVATĂ dintr-un text, diferența e tot: o etichetă greșită aici nu mai e prinsă
+    de nimeni în aval, fiindcă validatorul (stagiul 8) și `grounding_guard` verifică afirmațiile
+    FAȚĂ DE tabela de fapte — dacă faptul e greșit, verificarea îl confirmă."""
+    prods = [_prod(50, {"fragrance_free": True}), _prod(60, {"fragrance_free": True})]
+    rows = compute_coverage([_FF], {"seruri": prods}, min_products=1)  # fără audit
+    row = _row(rows, "fragrance_free")
+    assert row["coverage"] == 1.0
+    assert row["precision_audited"] is False
+    assert row["enforce_ready"] is False
+
+
+def test_o_fateta_structurala_nu_are_nevoie_de_audit():
+    """Prețul nu e dedus dintr-o propoziție, e citit dintr-o coloană. Auditul e pentru ce a fost
+    DEDUS; a-l cere și aici ar bloca enforcement-ul pe fapte care n-au cum să fie greșite."""
+    prods = [_prod(50, {}), _prod(60, {})]
+    rows = compute_coverage([_PRICE], {"seruri": prods}, min_products=1)
+    row = _row(rows, "price")
+    assert row["coverage"] == 1.0 and row["precision_audited"] is True
+    assert row["enforce_ready"] is True
 
 
 def test_value_distribution_for_list():

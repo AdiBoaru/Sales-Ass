@@ -1,0 +1,10 @@
+{
+  "_note": "NX-264 a inghetat aici 34 de scurgeri REALE, ca datorie recunoscuta. NX-273 le-a REPARAT pe toate: textele care ajung la model (prompt, schema de tool-uri, sugestii de start, prompt de triaj, regexul de obligatii) se compun acum din pachetul tenantului sau si-au pierdut substantivele de produs. Cricul e GOL, si asta e forma lui corecta: `test_cricul_nu_are_intrari_moarte` cere ca o intrare care nu se mai potriveste sa fie STEARSA, deci datoria poate doar sa scada. O intrare noua aici trebuie sa vina cu motiv scris si cu un card care o repara.",
+  "_measured_at": "2026-09-03",
+  "known": [],
+  "_cleared": {
+    "card": "NX-273",
+    "at": "2026-09-03",
+    "entries_removed": 34
+  }
+}

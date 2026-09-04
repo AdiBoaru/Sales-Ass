@@ -1,0 +1,761 @@
+{
+  "_provenance": {
+    "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+    "locale": "ro",
+    "source": "products.name (status='active'), prin content_terms",
+    "min_root_products": 50,
+    "support_band_ratio": [
+      0.03,
+      0.7
+    ],
+    "max_global_share": 0.25,
+    "boilerplate_rejected": 9,
+    "regenerate": "python scripts/facet_discovery.py --business 99fe1292-f9ed-469e-8183-f994ea5b59c0",
+    "_note": "PROPUNERI, nu configurație. Se ratifică de un om, o dată per tenant, și abia apoi intră în domain_pack. O valoare cu share > 70% e respinsă: descrie raftul, nu produsul."
+  },
+  "roots": {
+    "corp": {
+      "products": 163,
+      "band_products": [
+        4,
+        114
+      ],
+      "values": [
+        {
+          "value": "corp",
+          "products": 76,
+          "share": 0.4663
+        },
+        {
+          "value": "cutanat",
+          "products": 59,
+          "share": 0.362
+        },
+        {
+          "value": "ulei",
+          "products": 43,
+          "share": 0.2638
+        },
+        {
+          "value": "body",
+          "products": 42,
+          "share": 0.2577
+        },
+        {
+          "value": "lotiune",
+          "products": 36,
+          "share": 0.2209
+        },
+        {
+          "value": "eubos",
+          "products": 34,
+          "share": 0.2086
+        },
+        {
+          "value": "crema",
+          "products": 32,
+          "share": 0.1963
+        },
+        {
+          "value": "extract",
+          "products": 29,
+          "share": 0.1779
+        },
+        {
+          "value": "curatarea",
+          "products": 28,
+          "share": 0.1718
+        },
+        {
+          "value": "acid",
+          "products": 27,
+          "share": 0.1656
+        },
+        {
+          "value": "shea",
+          "products": 24,
+          "share": 0.1472
+        },
+        {
+          "value": "lotion",
+          "products": 24,
+          "share": 0.1472
+        },
+        {
+          "value": "cream",
+          "products": 22,
+          "share": 0.135
+        },
+        {
+          "value": "fresh",
+          "products": 22,
+          "share": 0.135
+        },
+        {
+          "value": "exfoliant",
+          "products": 21,
+          "share": 0.1288
+        },
+        {
+          "value": "hialuronic",
+          "products": 21,
+          "share": 0.1288
+        },
+        {
+          "value": "hidratare",
+          "products": 21,
+          "share": 0.1288
+        },
+        {
+          "value": "hand",
+          "products": 20,
+          "share": 0.1227
+        },
+        {
+          "value": "maini",
+          "products": 19,
+          "share": 0.1166
+        },
+        {
+          "value": "wash",
+          "products": 19,
+          "share": 0.1166
+        },
+        {
+          "value": "uscate",
+          "products": 18,
+          "share": 0.1104
+        },
+        {
+          "value": "perfumed",
+          "products": 15,
+          "share": 0.092
+        },
+        {
+          "value": "basic",
+          "products": 14,
+          "share": 0.0859
+        },
+        {
+          "value": "macadamia",
+          "products": 14,
+          "share": 0.0859
+        },
+        {
+          "value": "skybottle",
+          "products": 13,
+          "share": 0.0798
+        }
+      ],
+      "rejected_as_dominant": [
+        "contribuie",
+        "pielii"
+      ],
+      "rejected_as_boilerplate": [
+        "confortului",
+        "contribuie",
+        "fata",
+        "formulat",
+        "formulata",
+        "hidratarea",
+        "mentinerea",
+        "metinerea",
+        "pielii"
+      ]
+    },
+    "machiaj": {
+      "products": 681,
+      "band_products": [
+        20,
+        476
+      ],
+      "values": [
+        {
+          "value": "buze",
+          "products": 275,
+          "share": 0.4038
+        },
+        {
+          "value": "buzelor",
+          "products": 218,
+          "share": 0.3201
+        },
+        {
+          "value": "nuantator",
+          "products": 145,
+          "share": 0.2129
+        },
+        {
+          "value": "tirtir",
+          "products": 138,
+          "share": 0.2026
+        },
+        {
+          "value": "laka",
+          "products": 129,
+          "share": 0.1894
+        },
+        {
+          "value": "cushion",
+          "products": 127,
+          "share": 0.1865
+        },
+        {
+          "value": "acid",
+          "products": 116,
+          "share": 0.1703
+        },
+        {
+          "value": "fard",
+          "products": 115,
+          "share": 0.1689
+        },
+        {
+          "value": "fond",
+          "products": 109,
+          "share": 0.1601
+        },
+        {
+          "value": "hialuronic",
+          "products": 108,
+          "share": 0.1586
+        },
+        {
+          "value": "mask",
+          "products": 104,
+          "share": 0.1527
+        },
+        {
+          "value": "finisaj",
+          "products": 97,
+          "share": 0.1424
+        },
+        {
+          "value": "ulei",
+          "products": 93,
+          "share": 0.1366
+        },
+        {
+          "value": "tint",
+          "products": 87,
+          "share": 0.1278
+        },
+        {
+          "value": "extract",
+          "products": 81,
+          "share": 0.1189
+        },
+        {
+          "value": "imperfectiunilor",
+          "products": 71,
+          "share": 0.1043
+        },
+        {
+          "value": "acoperirea",
+          "products": 71,
+          "share": 0.1043
+        },
+        {
+          "value": "tenului",
+          "products": 70,
+          "share": 0.1028
+        },
+        {
+          "value": "unleashia",
+          "products": 67,
+          "share": 0.0984
+        },
+        {
+          "value": "pigmenti",
+          "products": 67,
+          "share": 0.0984
+        },
+        {
+          "value": "luciu",
+          "products": 67,
+          "share": 0.0984
+        },
+        {
+          "value": "aspectului",
+          "products": 66,
+          "share": 0.0969
+        },
+        {
+          "value": "pleoape",
+          "products": 65,
+          "share": 0.0954
+        },
+        {
+          "value": "black",
+          "products": 64,
+          "share": 0.094
+        },
+        {
+          "value": "uniformizarea",
+          "products": 63,
+          "share": 0.0925
+        }
+      ],
+      "rejected_as_dominant": [
+        "contribuie"
+      ],
+      "rejected_as_boilerplate": [
+        "confortului",
+        "contribuie",
+        "fata",
+        "formulat",
+        "formulata",
+        "hidratarea",
+        "mentinerea",
+        "metinerea",
+        "pielii"
+      ]
+    },
+    "par": {
+      "products": 233,
+      "band_products": [
+        6,
+        163
+      ],
+      "values": [
+        {
+          "value": "parului",
+          "products": 152,
+          "share": 0.6524
+        },
+        {
+          "value": "ulei",
+          "products": 76,
+          "share": 0.3262
+        },
+        {
+          "value": "stafford",
+          "products": 76,
+          "share": 0.3262
+        },
+        {
+          "value": "sampon",
+          "products": 71,
+          "share": 0.3047
+        },
+        {
+          "value": "extract",
+          "products": 65,
+          "share": 0.279
+        },
+        {
+          "value": "scalpului",
+          "products": 58,
+          "share": 0.2489
+        },
+        {
+          "value": "shampoo",
+          "products": 48,
+          "share": 0.206
+        },
+        {
+          "value": "balsam",
+          "products": 33,
+          "share": 0.1416
+        },
+        {
+          "value": "hair",
+          "products": 33,
+          "share": 0.1416
+        },
+        {
+          "value": "aspectului",
+          "products": 33,
+          "share": 0.1416
+        },
+        {
+          "value": "curatarea",
+          "products": 31,
+          "share": 0.133
+        },
+        {
+          "value": "uscat",
+          "products": 29,
+          "share": 0.1245
+        },
+        {
+          "value": "masca",
+          "products": 27,
+          "share": 0.1159
+        },
+        {
+          "value": "color",
+          "products": 26,
+          "share": 0.1116
+        },
+        {
+          "value": "ayunche",
+          "products": 26,
+          "share": 0.1116
+        },
+        {
+          "value": "vitamina",
+          "products": 25,
+          "share": 0.1073
+        },
+        {
+          "value": "argan",
+          "products": 25,
+          "share": 0.1073
+        },
+        {
+          "value": "scalp",
+          "products": 25,
+          "share": 0.1073
+        },
+        {
+          "value": "treatment",
+          "products": 25,
+          "share": 0.1073
+        },
+        {
+          "value": "spray",
+          "products": 25,
+          "share": 0.1073
+        },
+        {
+          "value": "conditioner",
+          "products": 22,
+          "share": 0.0944
+        },
+        {
+          "value": "deteriorat",
+          "products": 21,
+          "share": 0.0901
+        },
+        {
+          "value": "neted",
+          "products": 21,
+          "share": 0.0901
+        },
+        {
+          "value": "konopka",
+          "products": 20,
+          "share": 0.0858
+        },
+        {
+          "value": "little",
+          "products": 20,
+          "share": 0.0858
+        }
+      ],
+      "rejected_as_dominant": [
+        "contribuie"
+      ],
+      "rejected_as_boilerplate": [
+        "confortului",
+        "contribuie",
+        "formulat",
+        "formulata",
+        "hidratarea",
+        "mentinerea",
+        "metinerea",
+        "pielii"
+      ]
+    },
+    "protectie": {
+      "products": 137,
+      "band_products": [
+        4,
+        95
+      ],
+      "values": [
+        {
+          "value": "crema",
+          "products": 91,
+          "share": 0.6642
+        },
+        {
+          "value": "daily",
+          "products": 78,
+          "share": 0.5693
+        },
+        {
+          "value": "protectia",
+          "products": 70,
+          "share": 0.5109
+        },
+        {
+          "value": "sunscreen",
+          "products": 38,
+          "share": 0.2774
+        },
+        {
+          "value": "spf50",
+          "products": 34,
+          "share": 0.2482
+        },
+        {
+          "value": "impotriva",
+          "products": 34,
+          "share": 0.2482
+        },
+        {
+          "value": "acid",
+          "products": 33,
+          "share": 0.2409
+        },
+        {
+          "value": "extract",
+          "products": 33,
+          "share": 0.2409
+        },
+        {
+          "value": "hialuronic",
+          "products": 32,
+          "share": 0.2336
+        },
+        {
+          "value": "razelor",
+          "products": 31,
+          "share": 0.2263
+        },
+        {
+          "value": "solara",
+          "products": 28,
+          "share": 0.2044
+        },
+        {
+          "value": "niacinamida",
+          "products": 22,
+          "share": 0.1606
+        },
+        {
+          "value": "outdoor",
+          "products": 20,
+          "share": 0.146
+        },
+        {
+          "value": "corp",
+          "products": 20,
+          "share": 0.146
+        },
+        {
+          "value": "filtre",
+          "products": 19,
+          "share": 0.1387
+        },
+        {
+          "value": "centella",
+          "products": 18,
+          "share": 0.1314
+        },
+        {
+          "value": "hidratarii",
+          "products": 17,
+          "share": 0.1241
+        },
+        {
+          "value": "asiatica",
+          "products": 17,
+          "share": 0.1241
+        },
+        {
+          "value": "vitamina",
+          "products": 17,
+          "share": 0.1241
+        },
+        {
+          "value": "zinc",
+          "products": 16,
+          "share": 0.1168
+        },
+        {
+          "value": "cutanat",
+          "products": 14,
+          "share": 0.1022
+        },
+        {
+          "value": "fara",
+          "products": 14,
+          "share": 0.1022
+        },
+        {
+          "value": "joseon",
+          "products": 14,
+          "share": 0.1022
+        },
+        {
+          "value": "beauty",
+          "products": 14,
+          "share": 0.1022
+        },
+        {
+          "value": "oxid",
+          "products": 14,
+          "share": 0.1022
+        }
+      ],
+      "rejected_as_dominant": [
+        "contribuie",
+        "fata",
+        "formulata"
+      ],
+      "rejected_as_boilerplate": [
+        "confortului",
+        "contribuie",
+        "fata",
+        "formulat",
+        "formulata",
+        "hidratarea",
+        "mentinerea",
+        "metinerea",
+        "pielii"
+      ]
+    },
+    "ten": {
+      "products": 1461,
+      "band_products": [
+        43,
+        1022
+      ],
+      "values": [
+        {
+          "value": "acid",
+          "products": 434,
+          "share": 0.2971
+        },
+        {
+          "value": "extract",
+          "products": 361,
+          "share": 0.2471
+        },
+        {
+          "value": "hialuronic",
+          "products": 308,
+          "share": 0.2108
+        },
+        {
+          "value": "crema",
+          "products": 295,
+          "share": 0.2019
+        },
+        {
+          "value": "masca",
+          "products": 268,
+          "share": 0.1834
+        },
+        {
+          "value": "cutanat",
+          "products": 262,
+          "share": 0.1793
+        },
+        {
+          "value": "centella",
+          "products": 250,
+          "share": 0.1711
+        },
+        {
+          "value": "niacinamida",
+          "products": 243,
+          "share": 0.1663
+        },
+        {
+          "value": "asiatica",
+          "products": 225,
+          "share": 0.154
+        },
+        {
+          "value": "cream",
+          "products": 197,
+          "share": 0.1348
+        },
+        {
+          "value": "mask",
+          "products": 197,
+          "share": 0.1348
+        },
+        {
+          "value": "hidratare",
+          "products": 196,
+          "share": 0.1342
+        },
+        {
+          "value": "curatare",
+          "products": 193,
+          "share": 0.1321
+        },
+        {
+          "value": "calmarea",
+          "products": 187,
+          "share": 0.128
+        },
+        {
+          "value": "toner",
+          "products": 165,
+          "share": 0.1129
+        },
+        {
+          "value": "serum",
+          "products": 150,
+          "share": 0.1027
+        },
+        {
+          "value": "aspectului",
+          "products": 149,
+          "share": 0.102
+        },
+        {
+          "value": "reducerea",
+          "products": 145,
+          "share": 0.0992
+        },
+        {
+          "value": "barierei",
+          "products": 131,
+          "share": 0.0897
+        },
+        {
+          "value": "tenului",
+          "products": 128,
+          "share": 0.0876
+        },
+        {
+          "value": "curatarea",
+          "products": 125,
+          "share": 0.0856
+        },
+        {
+          "value": "hidratarii",
+          "products": 122,
+          "share": 0.0835
+        },
+        {
+          "value": "uniformizarea",
+          "products": 113,
+          "share": 0.0773
+        },
+        {
+          "value": "sebum",
+          "products": 112,
+          "share": 0.0767
+        },
+        {
+          "value": "porilor",
+          "products": 111,
+          "share": 0.076
+        }
+      ],
+      "rejected_as_dominant": [
+        "contribuie",
+        "fata"
+      ],
+      "rejected_as_boilerplate": [
+        "confortului",
+        "contribuie",
+        "fata",
+        "formulat",
+        "formulata",
+        "hidratarea",
+        "mentinerea",
+        "metinerea",
+        "pielii"
+      ]
+    }
+  }
+}

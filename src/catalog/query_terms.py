@@ -52,6 +52,57 @@ _RO_STOPWORDS = """
 
 _STOPWORDS: dict[str, frozenset[str]] = {"ro": frozenset(_RO_STOPWORDS.split())}
 
+# NX-266 — cuvintele de COMPARAȚIE, per locale. Stau aici, lângă cuvintele goale, din același
+# motiv: sunt vocabular FUNCȚIONAL al limbii, nu al magazinului. „sub 100 lei" înseamnă același
+# lucru într-un magazin de cosmetice și într-unul de anvelope, iar un tenant nou nu trebuie să le
+# redeclare. Ce ÎNSEAMNĂ „100" (lei? ml?) e al pachetului de domeniu; ce înseamnă „sub" e al limbii.
+#
+# Formatul e o tabelă `op: frază, frază, …`, scrisă ca text ca să rămână citibilă pe grupuri după
+# formatter. Frazele se potrivesc pe text NORMALIZAT (lower, fără diacritice), cea mai LUNGĂ prima:
+# „cel putin" trebuie să bată „putin", altfel o negație parțială ar schimba operatorul.
+#
+# Lista e deliberat conservatoare. Un cuvânt de comparație scăpat înseamnă un operator implicit
+# (cel declarat de fațetă în pachet), nu o constrângere inversată — degradarea merge spre „mai
+# puțin precis", niciodată spre „exclude ce nu trebuie".
+_RO_COMPARATORS = """
+    lte: cel mult, nu mai mult de, nu mai scump de, mai putin de, mai ieftin de, pana in, pana la,
+         maximum, maxim, sub
+    gte: cel putin, nu mai putin de, mai mult de, incepand de la, incepand cu, minimum, minim,
+         macar, peste
+    eq:  exact, fix de, fix
+"""
+
+_COMPARATORS: dict[str, tuple[tuple[str, str], ...]] = {}
+
+
+def _parse_comparators(table: str) -> tuple[tuple[str, str], ...]:
+    """Tabela text → perechi `(frază, op)`, ordonate descrescător după lungime.
+
+    Ordinea NU e cosmetică: potrivirea se face pe prima frază care se potrivește, iar „cel putin"
+    conține „putin". Fără sortare, operatorul depinde de ordinea în care cineva a scris lista."""
+    pairs: list[tuple[str, str]] = []
+    for chunk in table.split(";"):
+        for op_block in re.finditer(r"(\w+)\s*:\s*([^:]*?)(?=\s+\w+\s*:|$)", chunk, re.S):
+            op = op_block.group(1).strip()
+            for phrase in op_block.group(2).split(","):
+                cleaned = " ".join(phrase.split())
+                if cleaned:
+                    pairs.append((cleaned, op))
+    return tuple(sorted(pairs, key=lambda p: (-len(p[0]), p[0])))
+
+
+def comparators(locale: str | None) -> tuple[tuple[str, str], ...]:
+    """Frazele de comparație ale unei locale, cele mai lungi întâi. Locale necunoscută → `()`,
+    adică extracția cade pe operatorul implicit al fațetei (P11: nu aplicăm româna peste o limbă
+    pe care n-o cunoaștem)."""
+    if not locale:
+        return ()
+    key = locale.split("-")[0].lower()
+    if key not in _COMPARATORS:
+        table = {"ro": _RO_COMPARATORS}.get(key)
+        _COMPARATORS[key] = _parse_comparators(table) if table else ()
+    return _COMPARATORS[key]
+
 
 def fold(text: str) -> str:
     """`lower` + fără diacritice RO — oglinda Python a lui `ro_unaccent(text)` din 033."""

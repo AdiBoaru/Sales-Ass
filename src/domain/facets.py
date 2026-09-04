@@ -104,6 +104,13 @@ class TypedFacet:
     min_coverage: float = 0.0  # prag minim de coverage pt enforcement (NX-188)
     # NX-257: partitioning | additive — vezi `_BINDING_KINDS`. Doar `partitioning` poate exclude.
     binding: str = "additive"
+    # NX-271: fațeta a trecut AUDITUL DE PRECIZIE (NX-268)? Default `False`, și defaultul e toată
+    # ideea: o fațetă derivată dintr-un text nu capătă drept de excludere pentru că are acoperire
+    # mare, ci pentru că un om a verificat un eșantion și precizia a trecut pragul preînregistrat.
+    # Acoperirea spune câte produse poartă o valoare; precizia spune câte o poartă pe bună dreptate,
+    # iar la excludere doar a doua contează: un filtru dur peste un atribut cu precizie 70% șterge
+    # TĂCUT produse corecte, iar clientul nu vede o eroare, vede mai puține opțiuni și pleacă.
+    enforce_ready: bool = False
     labels: dict[str, str] = field(
         default_factory=dict
     )  # locale → etichetă display (absoarbe NX-182)
@@ -167,6 +174,9 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
     binding = raw.get("binding", "additive")
     if binding not in _BINDING_KINDS:
         raise FacetConfigError(f"binding invalid pt {key!r}: {binding!r}")
+    enforce_ready = raw.get("enforce_ready", False)
+    if not isinstance(enforce_ready, bool):
+        raise FacetConfigError(f"enforce_ready invalid pt {key!r}: {enforce_ready!r}")
 
     try:
         min_cov = float(raw.get("min_coverage", 0.0))
@@ -212,6 +222,7 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
         provenance=provenance,
         min_coverage=min_cov,
         binding=binding,
+        enforce_ready=enforce_ready,
         labels=labels,
     )
 
