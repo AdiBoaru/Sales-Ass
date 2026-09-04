@@ -270,8 +270,13 @@ async def _write_batch(
                     produced: list[str] = []
                     for facet, info in derived.items():
                         values = info["values"]
+                        # Semnalul rămâne TEXT (`spf:30` e un identificator, nu o cantitate);
+                        # proiecția poartă tipul JSON pe care îl cere contractul.
+                        projected = [_project_value(facet, value) for value in values]
                         attrs[facet] = (
-                            values if len(values) > 1 or facet in _LIST_FACETS else values[0]
+                            projected
+                            if len(projected) > 1 or facet in _LIST_FACETS
+                            else projected[0]
                         )
                         for value in values:
                             signal = signal_name(facet, value)
@@ -312,6 +317,26 @@ async def _write_batch(
 # rămân liste chiar cu o singură valoare. O fațetă-listă scrisă ca scalar ar face filtrul
 # `attributes->'concerns' ?| …` să nu se mai potrivească — și n-ar da nicio eroare.
 _LIST_FACETS = frozenset({"concerns", "key_ingredients"})
+
+# Fațetele NUMERICE prin contract (`ProductFacts.spf: float | None`, validat cu `_num`). Scrise ca
+# șir, trec de orice `attributes ? 'spf'` și de derivarea însăși, care raportează succes — și cad
+# abia la `ProductFacts.from_product`, adică în ALT job. Măsurat: 182 de produse cu `"30"` în loc de
+# 30 au oprit complet construcția documentelor de căutare și a blurb-urilor, cu `ContractError`.
+_NUMERIC_FACETS = frozenset({"spf"})
+
+
+def _project_value(facet: str, value: str) -> str | int | float:
+    """Valoarea canonică (text) → tipul JSON pe care îl cere contractul pentru fațeta asta.
+
+    Fallback pe text dacă nu se convertește: o valoare numerică malformată e o problemă de derivare,
+    iar ascunderea ei într-un 0 ar fi mai rea decât eroarea de contract pe care o repară funcția."""
+    if facet not in _NUMERIC_FACETS:
+        return value
+    try:
+        number = float(value)
+    except ValueError:
+        return value
+    return int(number) if number.is_integer() else number
 
 
 # --- propunerea de stemuri (read-only, nu scrie în pachet) --------------------------------------
