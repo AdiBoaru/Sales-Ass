@@ -18,7 +18,18 @@ ClaimType = Literal["fact", "recommendation"]
 EvidenceKind = Literal["identity", "variant", "price", "stock", "url", "claim"]
 ConstraintVerdict = Literal["MATCH", "MISMATCH", "UNKNOWN"]
 # NX-239: obligațiile unui tur (vocabular ÎNCHIS — intră în telemetrie ca labels).
-ObligationKind = Literal["answer", "recommend", "compare", "explain", "action", "clarify", "safety"]
+ObligationKind = Literal[
+    "answer",
+    "recommend",
+    "compare",
+    "explain",
+    "action",
+    "clarify",
+    "safety",
+    # NX-275 felia 5: o SECVENTA de pasi, nu o lista de produse. Distincta de `recommend`
+    # fiindca acoperirea se verifica altfel: o rutina cu un singur produs nu e rutina.
+    "routine",
+]
 # NX-239: taxonomia ONESTĂ de no-results (D7: „n-am găsit" ≠ „nu știu" ≠ „nu pot verifica acum").
 NoResultsClass = Literal["no_match", "insufficient_data", "dependency_unavailable"]
 ValidationCode = Literal[
@@ -500,6 +511,14 @@ def _obligation_covered(plan: AnswerPlanV2, kind: str) -> bool:
             bool(plan.recommendations)
             or plan.no_results is not None
             or plan.clarification is not None
+        )
+    if kind == "routine":
+        # O rutină cu UN produs nu e rutină, e o recomandare cu alt nume — de aceea pragul e 2,
+        # nu 1, și de aceea `routine` nu se validează ca `recommend`. `no_results` rămâne o
+        # acoperire validă (ca la toate celelalte tipuri): o ancoră fără muchii declarate trebuie
+        # să poată primi un răspuns onest, nu să cadă în repair și apoi în fallback.
+        return (len(plan.selected_products) >= 2 and bool(plan.recommendations)) or (
+            plan.no_results is not None
         )
     if kind == "compare":
         return plan.comparison is not None or plan.no_results is not None

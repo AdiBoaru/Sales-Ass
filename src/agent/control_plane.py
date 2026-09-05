@@ -109,7 +109,11 @@ def decide(ctx: Any, stage_name: str) -> FastPathDecision:
         )
     if stage_name in _SINGLE_OBLIGATION_ONLY:
         answerable = [o for o in obligations if o.kind in ("answer", "recommend", "compare")]
-        blocking = [o for o in obligations if o.kind in ("action",)]
+        # NX-275 felia 5: `routine` BLOCHEAZĂ, nu e „answerable". Un hit de FAQ sau de cache poate
+        # răspunde la o întrebare, dar nu poate compune o secvență de pași ancorată în graful de
+        # relații al tenantului. Fără linia asta, un `routine` singur ar da `answerable = []`, deci
+        # `complete = True`, iar turul s-ar încheia cu un răspuns de FAQ care seamănă a răspuns.
+        blocking = [o for o in obligations if o.kind in ("action", "routine")]
         greeted = any(o.key == "greeting" for o in obligations)
         mixed = len(answerable) > 1 or bool(blocking) or greeted
         safety = any(o.kind == "safety" for o in obligations)

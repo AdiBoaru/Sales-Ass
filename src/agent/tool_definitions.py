@@ -321,6 +321,49 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    # NX-275 felia 5 — singura DOVADĂ la care creierul nu ajunge azi: vecinii unei ancore în graful
+    # de relații. Cele ~37k de muchii din `product_relations` sunt citite doar de cross-sell-ul
+    # determinist de după `cart_add`; niciun tool nu le expune, deci modelul nu poate compune o
+    # secvență de pași nici când datele există.
+    #
+    # `relation` e `enum` (cerință `strict`), completat din registrul TENANTULUI la
+    # `tool_schemas(...)`. Nu apare niciun tip de muchie scris de mână aici: `routine_next` e un
+    # cuvânt de cosmetică, iar la electrocasnice aceeași poziție e ocupată de pașii de instalare.
+    "related_products": {
+        "type": "function",
+        "function": {
+            "name": "related_products",
+            "description": (
+                "Produsele legate de un produs ANCORĂ prin graful de relații al magazinului. "
+                "Folosește când clientul cere o secvență de pași sau ce merge împreună cu un "
+                "produs. Serverul decide cât adânc se urmează fiecare tip de legătură."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "anchor_id": {
+                        "type": "string",
+                        "description": (
+                            "Id-ul produsului de la care pornim (din rezultatele unei căutări, "
+                            "din produsul discutat sau din pagina pe care e clientul)."
+                        ),
+                    },
+                    "relation": {
+                        "type": "string",
+                        "enum": [],  # completat per tenant; gol ⇒ tool-ul nu se oferă deloc
+                        "description": "Tipul de legătură urmărit.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Câte produse cel mult (1-6).",
+                    },
+                },
+                "required": ["anchor_id", "relation", "limit"],
+            },
+        },
+    },
 }
 
 
@@ -359,7 +402,9 @@ def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
 
 
 def tool_schemas(
-    names: list[str], examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES
+    names: list[str],
+    examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES,
+    relation_kinds: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching).
 
@@ -370,4 +415,25 @@ def tool_schemas(
         "{NEED_EXAMPLES}": vocab_examples.clause(examples.needs),
         "{FEATURE_EXAMPLES}": vocab_examples.clause(examples.features),
     }
-    return [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]
+    out = [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]
+    return [_with_relation_enum(s, relation_kinds) for s in out]
+
+
+def _with_relation_enum(schema: dict[str, Any], kinds: tuple[str, ...]) -> dict[str, Any]:
+    """Completează enumul de relații al lui `related_products` din registrul TENANTULUI.
+
+    De ce enum și nu string liber: `strict: true` cere valori închise, iar un `relation` liber ar
+    lăsa modelul să inventeze un tip de muchie care nu există — o interogare pe gol care arată ca
+    un răspuns onest („nu am legături de tipul ăsta") fără să fie.
+
+    Sortat: pentru același pachet ies aceiași octeți, deci schema rămâne cache-uibilă (felia 3).
+    Enum GOL înseamnă că tenantul n-a declarat nimic; apelantul nu trebuie să ofere tool-ul deloc
+    (vezi `turn_profile.select`), iar dacă totuși o face, un enum vid e refuzat de furnizor —
+    zgomotos, nu tăcut."""
+    fn = schema.get("function", {})
+    if fn.get("name") != "related_products":
+        return schema
+    props = dict(fn["parameters"]["properties"])
+    props["relation"] = {**props["relation"], "enum": sorted(set(kinds))}
+    params = {**fn["parameters"], "properties": props}
+    return {**schema, "function": {**fn, "parameters": params}}

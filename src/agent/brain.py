@@ -855,8 +855,11 @@ async def run_main_brain(
     # NX-275 felia 4: direcția de răspuns, aleasă de COD din obligații + clasa de tur. Adaugă un
     # sufix la FINALUL system-ului (prefixul rămâne byte-identic, deci cache-ul ține) și, cel mult,
     # tool-uri în plus. OFF → `profile is None` și nimic nu se schimbă.
+    pack = getattr(ctx.business, "domain_pack", None)
+    registry = getattr(pack, "relation_kinds", None)
+    sequences = tuple(s.kind for s in registry.sequences()) if registry is not None else ()
     profile = (
-        turn_profile.select(turn_class, obligations)
+        turn_profile.select(turn_class, obligations, has_sequences=bool(sequences))
         if getattr(settings, "turn_profiles_enabled", False)
         else None
     )
@@ -865,8 +868,12 @@ async def run_main_brain(
         have = {s.get("function", {}).get("name") for s in tools}
         extra = [t for t in profile.extra_tools if t not in have]
         if extra:
-            examples = vocab_examples.from_pack(getattr(ctx.business, "domain_pack", None))
-            tools = [*tools, *tool_schemas(extra, examples)]
+            # Enumul de relații e al TENANTULUI. Trimitem tipurile DECLARATE (nu doar secvențele):
+            # o rutină poate avea nevoie și de un complement, iar un tip nedeclarat e refuzat de
+            # tool oricum (`unknown_relation`).
+            declared = tuple(getattr(registry, "specs", {})) if registry is not None else ()
+            examples = vocab_examples.from_pack(pack)
+            tools = [*tools, *tool_schemas(extra, examples, declared)]
 
     brain_system = f"{system}\n{_PLAN_V2_SYSTEM}"
     if profile is not None:

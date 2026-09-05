@@ -80,6 +80,13 @@ _COMPARE_SUFFIX = (
     "Recomanzi un câștigător doar dacă știi ce nevoie are clientul, altfel arăți diferențele."
 )
 
+_ROUTINE_SUFFIX = (
+    "Turul ăsta cere o SECVENȚĂ de pași, nu o listă de produse. Pașii vin din `related_products`, "
+    "în ordinea întoarsă de unealtă, un produs per pas, doar produse pe care clientul le poate "
+    "cumpăra. Nu inventa pași pentru care nu ai primit o legătură. Dacă unealta spune că nu există "
+    "o secvență, spune-i clientului asta și oferă ce ai."
+)
+
 _MUTATION_SUFFIX = (
     "Turul ăsta conține o acțiune. Confirmi DOAR acțiunile care apar în `successful_action_ids`. "
     "Dacă o acțiune n-a reușit, spui ce s-a întâmplat, nu presupui că a mers. După o adăugare în "
@@ -98,15 +105,29 @@ _RECOMMEND = TurnProfile(
 # componența nucleului nu e treaba lui: dacă cineva subțiază `_SALES_TOOLS`, comparația rămâne
 # întreagă.
 _COMPARE = TurnProfile(name="compare", extra_tools=("compare_products",), suffix=_COMPARE_SUFFIX)
+_ROUTINE = TurnProfile(name="routine", extra_tools=("related_products",), suffix=_ROUTINE_SUFFIX)
 _MUTATION = TurnProfile(name="mutation", extra_tools=(), suffix=_MUTATION_SUFFIX)
 
-#: Toate profilele, indexate pe nume. `routine` se adaugă în felia 5, împreună cu unealta de care
-#: depinde: un profil care trimite modelul spre un tool inexistent e mai rău decât unul lipsă.
-PROFILES: dict[str, TurnProfile] = {p.name: p for p in (_EXACT, _RECOMMEND, _COMPARE, _MUTATION)}
+#: Toate profilele, indexate pe nume.
+PROFILES: dict[str, TurnProfile] = {
+    p.name: p for p in (_EXACT, _RECOMMEND, _COMPARE, _ROUTINE, _MUTATION)
+}
 
 
-def select(turn_class: TurnClass, obligations: Iterable[object]) -> TurnProfile:
+def select(
+    turn_class: TurnClass,
+    obligations: Iterable[object],
+    *,
+    has_sequences: bool = False,
+) -> TurnProfile:
     """Profilul turului. PUR, determinist, fără model.
+
+    `has_sequences` = tenantul a DECLARAT cel puțin un tip de muchie ordonată
+    (`DomainPack.relation_kinds.sequences()`). Fără el, profilul `routine` nu se poate selecta,
+    oricât de clar ar cere clientul o rutină: sufixul lui trimite modelul la `related_products`, iar
+    unealta n-ar avea ce tip de legătură să urmeze. Un profil care promite o secvență inexistentă e
+    mai rău decât unul absent, fiindcă modelul ar umple golul singur. Se cade pe `recommend`, care
+    răspunde onest cu produse.
 
     Precedența e de la cel mai specific la cel mai general, iar necunoscutul URCĂ spre `recommend`
     (ca la `turn_class_for`): un tur pe care nu-l recunoaștem primește tratamentul bogat, nu pe cel
@@ -123,6 +144,8 @@ def select(turn_class: TurnClass, obligations: Iterable[object]) -> TurnProfile:
         return _MUTATION
     if "compare" in kinds:
         return _COMPARE
+    if "routine" in kinds:
+        return _ROUTINE if has_sequences else _RECOMMEND
     if turn_class is TurnClass.EXACT and kinds and kinds <= {"answer", "safety"}:
         # `EXACT` singur nu ajunge: clasa spune „ieftin", profilul spune „fapt". Un tur exact care
         # conține și o cerere de recomandare (`recommend`) n-are ce căuta pe sufixul care interzice

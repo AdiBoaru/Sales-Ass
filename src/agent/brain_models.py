@@ -50,6 +50,28 @@ _COMPARE_RE = re.compile(
 #: semnul de întrebare (imperativul îl înlocuiește).
 _TELL_ME_RE = re.compile(r"\bzi-?mi\b|\bspune-?mi\b|\bexplica-?mi\b|\btell\s+me\b", re.IGNORECASE)
 
+#: Cerere de SECVENȚĂ de pași — obligație `routine`. Se testează ÎNAINTEA lui `_RECOMMEND_RE`,
+#: fiindcă „ce rutină îmi recomanzi" conține și declanșatorul de recomandare: prima potrivire
+#: câștigă, iar forma mai specifică trebuie să fie prima.
+#:
+#: Cuvintele sunt de SECVENȚĂ, nu de vertical (P9 + poarta NX-264): „rutină", „pași", „pas cu pas",
+#: „dimineața … seara", „ce folosesc întâi". La un magazin de electrocasnice aceleași cuvinte
+#: descriu pașii de instalare. Verificat: niciunul nu apare în `tests/domain_terms.json`, deci
+#: regexul nu leagă codul de cosmetice. CE ÎNSEAMNĂ un pas rămâne al tenantului
+#: (`DomainPack.relation_kinds`), aici e doar recunoașterea CERERII.
+#: `pasi{1,2}` prinde și forma articulată („pașii"), dar NU „pasiune": un `\w*` lacom acolo ar fi
+#: transformat „am pasiune pentru parfumuri" într-o cerere de secvență.
+_ROUTINE_RE = re.compile(
+    r"\brutin\w*\b|\bpasi{1,2}\b|\bpas\s+cu\s+pas\b"
+    r"|\bce\s+(?:folosesc|aplic|pun)\s+(?:intai|dupa|prima\s+data)\b|\broutine\b|\bsteps\b",
+    re.IGNORECASE,
+)
+
+#: Cererea de secvență care se întinde peste DOUĂ clauze: „dimineața ce pun și seara ce pun".
+#: Se testează pe textul ÎNTREG, fiindcă niciuna dintre clauze nu conține ambele capete — de aceea
+#: e separată de `_ROUTINE_RE`, care lucrează pe clauză.
+_ROUTINE_SPAN_RE = re.compile(r"\bdiminea\w+\b.*\bsear\w+\b", re.IGNORECASE | re.DOTALL)
+
 #: Cerere de recomandare/căutare de produs (RO/EN, fără diacritice) — obligație `recommend`.
 _RECOMMEND_RE = re.compile(
     r"\brecomand\w*\b|\bcaut\b|\bvreau\b|\bimi\s+trebuie\b|\bam\s+nevoie\b"
@@ -150,6 +172,11 @@ def extract_obligations(
             kind, key = "compare", "compare"
         elif _ACTION_RE.search(clause):
             kind, key = "action", "commerce_action"
+        elif _ROUTINE_RE.search(clause):
+            # ÎNAINTEA recomandării: „ce rutină îmi recomanzi" conține ambii declanșatori, iar
+            # forma cerută e secvența. Cheia e fixă (`routine`), nu indexată: o rutină e una
+            # singură per tur, spre deosebire de mai multe cereri de recomandare.
+            kind, key = "routine", "routine"
         elif _RECOMMEND_RE.search(clause):
             kind, key = "recommend", f"recommend_{min(idx, 3)}"
         elif (
@@ -165,6 +192,11 @@ def extract_obligations(
         if (kind, key) not in seen:
             seen.add((kind, key))
             obligations.append(DetectedObligation(kind, key, source))
+
+    # Secvența care se întinde peste clauze (dimineața … seara). Adăugată o singură dată, și doar
+    # dacă nicio clauză n-a produs deja `routine`.
+    if not any(o.kind == "routine" for o in obligations) and _ROUTINE_SPAN_RE.search(_norm(text)):
+        obligations.append(DetectedObligation("routine", "routine", "question"))
 
     # Mesaj non-gol în care NICIO clauză n-a produs nimic (o afirmație, o rafinare) = tot ceva de
     # răspuns. Dacă o clauză a produs deja o obligație (ex. `action`), nu inventăm încă una.
