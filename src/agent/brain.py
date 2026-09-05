@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from src.agent import tool_budget, turn_profile
+from src.agent import speculative_retrieval, tool_budget, turn_profile
 from src.agent.answer_plan import (
     AnswerPlanContext,
     AnswerPlanV2,
@@ -260,12 +260,13 @@ async def _generate_plan(
     tools: list[dict[str, Any]],
     execute: Any,
     model: str | None = None,
+    seed: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, int]:
     """Bucla structurată; eșecul (JSON invalid/API) devine `(None, rounds)` — caller-ul repară."""
     try:
         with prompt_cache_scope(_cache_key(ctx)):
             raw, rounds = await deps.llm.run_tool_loop_structured(
-                system, user, tools, execute, plan_schema_for_model(), model=model
+                system, user, tools, execute, plan_schema_for_model(), model=model, seed=seed
             )
         return raw, rounds
     except Exception as e:  # noqa: BLE001 — model/JSON/API: vizibil, nu fatal (repair/fallback)
@@ -782,6 +783,39 @@ class _PortedExecute:
         return view or "(fără rezultat)"
 
 
+async def _speculative_seed(
+    ctx: TurnContext, profile: Any, execute: Any, query: str
+) -> list[dict[str, Any]] | None:
+    """NX-275 felia 6: căutarea rulată ÎNAINTE de primul apel, sau None.
+
+    Trece prin ACELAȘI `execute` ca orice tool al buclei, deci prin portul NX-238, prin safety
+    (NX-173) și prin admission/buget (NX-241). Nu e o scurtătură pe lângă porți, e aceeași cale
+    chemată mai devreme.
+
+    Emite `speculative_retrieval{outcome}` pe fiecare ramură de refuz, cu MOTIVUL: fără el, o felie
+    stinsă de fapt (toate turele sar peste seed dintr-un motiv sau altul) ar arăta la fel ca una
+    aprinsă care nu nimerește niciodată."""
+    if not getattr(get_settings(), "speculative_retrieval_enabled", False):
+        return None
+    reason = speculative_retrieval.skip_reason(
+        speculative_profile=bool(profile is not None and profile.speculative_retrieval),
+        has_action=getattr(ctx, "action", None) is not None,
+        has_anchor=bool(getattr(ctx, "resolved_reference", None)),
+        is_pagination=bool(getattr(ctx, "show_more", False)),
+        message=query,
+        locale=ctx.language,
+    )
+    if reason is not None:
+        ctx.emit("speculative_retrieval", outcome="skipped", reason=reason)
+        return None
+    messages, outcome = await speculative_retrieval.seed_messages(
+        turn_id=ctx.turn_id, message=query, locale=ctx.language, execute=execute
+    )
+    if messages is None:
+        ctx.emit("speculative_retrieval", outcome="skipped", reason=outcome)
+    return messages
+
+
 def _cache_key(ctx: TurnContext) -> str:
     """Partiția de cache a turului: tenant + versiunea de prompt (NX-275 felia 3).
 
@@ -893,10 +927,23 @@ async def run_main_brain(
     versions = brain_versions(brain_system, tools, model, profile.name if profile else None)
 
     execute = _PortedExecute(ctx, deps, run, port)
+    seed = await _speculative_seed(ctx, profile, execute, query)
     raw, rounds = await _generate_plan(
-        ctx, deps, system=brain_system, user=brain_user, tools=tools, execute=execute, model=model
+        ctx,
+        deps,
+        system=brain_system,
+        user=brain_user,
+        tools=tools,
+        execute=execute,
+        model=model,
+        seed=seed,
     )
     ctx.emit("main_brain_tool_rounds_bucket", bucket=_rounds_bucket(rounds))
+    if seed is not None:
+        # HIT = modelul a produs planul din candidații seedați, fără să mai caute (rounds == 0),
+        # adică am scos un apel întreg. MISS = a căutat din nou, deci seed-ul a costat un apel în
+        # plus. Raportul dintre ele decide dacă felia merită: pragul e 43% (vezi design §6).
+        ctx.emit("speculative_retrieval", outcome="hit" if rounds == 0 else "miss")
     # NX-256: planul BRUT al modelului, înainte de validare — singurul loc unde există. Un plan
     # respins la validare e exact cazul pe care vrei să-l citești, iar el nu ajunge nici în
     # `ctx.answer_plan`, nici în reply.

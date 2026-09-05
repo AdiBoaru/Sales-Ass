@@ -608,6 +608,7 @@ class LLMClient:
         *,
         max_steps: int = 3,
         model: str | None = None,
+        seed: list[dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any], int]:
         """NX-239 — aceeași buclă de tool-calling, dar răspunsul FINAL al ACELUIAȘI model este
         un obiect STRUCTURAT (`response_format=json_schema`), nu proză: planul iese din bucla în
@@ -624,6 +625,12 @@ class LLMClient:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]
+        # NX-275 felia 6: retrieval speculativ. Perechea (assistant tool_call, tool result) se
+        # inserează DUPĂ user, exact unde ar fi apărut dacă modelul ar fi cerut căutarea el însuși.
+        # NU consumă o rundă: `rounds` numără apelurile de MODEL, iar aici n-a fost niciunul. Tool
+        # call-ul e însă real în ledgerul NX-241, fiindcă a trecut prin `admit` la execuție.
+        if seed:
+            messages.extend(seed)
         rounds = 0
         for _ in range(max_steps):
             if not _round_admitted():

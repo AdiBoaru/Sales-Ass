@@ -650,6 +650,15 @@ class Settings(BaseSettings):
     # finalul system-ului plus, cel mult, tool-uri în plus. Prefixul rămâne byte-identic, deci
     # cache-ul ține. OFF = niciun sufix, niciun tool extra: byte-identic cu azi.
     turn_profiles_enabled: bool = Field(default=False, validation_alias="TURN_PROFILES_ENABLED")
+    # NX-275 felia 6: cautarea se face INAINTE de primul apel de model, pe profilul `recommend`,
+    # iar bucla porneste cu rezultatul deja in conversatie. Masurat pe drive-ul NX-239: 15 din 16
+    # ture au exact o runda de tool, deci apelul 1 nu face altceva decat sa ceara o cautare pe care
+    # codul o putea decide singur. Un seed nimerit scoate un apel, unul ratat adauga unul: pragul
+    # de rentabilitate e 43% hit (design §6), masurat prin `speculative_retrieval{outcome}`.
+    # Cere `TURN_PROFILES_ENABLED` (profilul e cel care spune CAND speculam) — validat la boot.
+    speculative_retrieval_enabled: bool = Field(
+        default=False, validation_alias="SPECULATIVE_RETRIEVAL_ENABLED"
+    )
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
@@ -1641,6 +1650,19 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TRIAGE_SYNC_SHADOW_ENABLED cere SINGLE_BRAIN_ENABLED (fără creierul unic nimeni "
                 "nu mai decide ruta, iar turul ar răspunde doar cu fallback)"
+            )
+        # NX-275 feliile 4/6: profilele trăiesc în creierul unic, iar speculativul se declanșează
+        # DOAR pe profilul `recommend`. Aprinse singure, ar fi flag-uri care nu pot face nimic — și,
+        # mai rău, ar sugera în config o optimizare care nu rulează.
+        if self.turn_profiles_enabled and not self.single_brain_enabled:
+            raise ValueError(
+                "TURN_PROFILES_ENABLED cere SINGLE_BRAIN_ENABLED (profilul se aplică pe promptul "
+                "MainBrain; fără el nu există unde adăuga sufixul)"
+            )
+        if self.speculative_retrieval_enabled and not self.turn_profiles_enabled:
+            raise ValueError(
+                "SPECULATIVE_RETRIEVAL_ENABLED cere TURN_PROFILES_ENABLED (profilul e cel care "
+                "spune CÂND se speculează; fără el nu s-ar specula niciodată)"
             )
         return self
 
