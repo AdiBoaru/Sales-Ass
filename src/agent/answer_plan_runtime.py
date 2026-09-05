@@ -74,6 +74,73 @@ ANSWER_PLAN_V2_SCHEMA: dict[str, Any] = {
     "schema": AnswerPlanV2.model_json_schema(by_alias=True),
 }
 
+# NX-275 felia 2 — câmpurile pe care SERVERUL le știe deja și pe care modelul doar le repeta.
+#
+# `business_id` e cazul care contează: principiul 7 spune că e server-owned, iar azi asta se
+# obține VERIFICÂND ce a scris modelul. Scos din schemă, proprietatea devine adevărată prin
+# construcție — nu mai există o valoare de la model pe care cineva să uite s-o compare.
+# `schema_version` și `locale` sunt constante ale turului; `obligations` sunt extrase DETERMINIST
+# din mesaj înainte de apel (`brain_models`), deci ecoul lor e cerere de a repeta un input.
+#
+# Ce NU se schimbă: `AnswerPlanV2` rămâne cu forma FIXĂ (toate câmpurile prezente după injectare),
+# deci `to_v1()`, validatorul NX-211 și toți consumatorii văd exact ce vedeau. Se scurtează doar ce
+# EMITE modelul. Și `obligation_uncovered` rămâne semnificativ, fiindcă verifică SECȚIUNILE
+# planului (`_obligation_covered`), nu lista de obligații ecouită.
+SERVER_OWNED_PLAN_FIELDS: tuple[str, ...] = (
+    "schema_version",
+    "business_id",
+    "locale",
+    "obligations",
+)
+
+
+def _without_server_owned(schema: dict[str, Any]) -> dict[str, Any]:
+    """Schema modelului = schema completă minus câmpurile server-owned, prin ȘTERGERE.
+
+    Derivată, nu rescrisă: o a doua definiție scrisă de mână ar diverge de `AnswerPlanV2` la prima
+    schimbare de câmp, iar divergența s-ar vedea abia ca `strict` refuzat de furnizor, în producție.
+    `strict: true` cere ca `required` să conțină exact proprietățile rămase.
+    """
+    inner = dict(schema["schema"])
+    props = {k: v for k, v in inner["properties"].items() if k not in SERVER_OWNED_PLAN_FIELDS}
+    inner["properties"] = props
+    inner["required"] = [k for k in inner.get("required", ()) if k in props]
+    return {**schema, "name": f"{schema['name']}_model", "schema": inner}
+
+
+#: Ce i se cere EFECTIV modelului sub `PLAN_SERVER_OWNED_FIELDS_ENABLED`.
+ANSWER_PLAN_V2_MODEL_SCHEMA: dict[str, Any] = _without_server_owned(ANSWER_PLAN_V2_SCHEMA)
+
+
+def plan_schema_for_model() -> dict[str, Any]:
+    """Schema cerută modelului: redusă sub flag, cea de azi altfel (OFF = byte-identic)."""
+    from src.config import get_settings  # noqa: PLC0415 — evită ciclul la import
+
+    if getattr(get_settings(), "plan_server_owned_fields_enabled", False):
+        return ANSWER_PLAN_V2_MODEL_SCHEMA
+    return ANSWER_PLAN_V2_SCHEMA
+
+
+def inject_server_owned(
+    raw: dict[str, Any] | None, *, business_id: str, locale: str, obligations: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Completează în planul BRUT câmpurile pe care nu le-am mai cerut modelului.
+
+    Idempotent și sigur cu flagul stins: dacă modelul le-a emis oricum (schema completă), valorile
+    SERVERULUI le suprascriu. Asta nu e o pierdere — e exact garanția pe care principiul 7 o cere,
+    iar un `business_id` venit de la model n-a fost niciodată acceptabil.
+    """
+    if raw is None:
+        return None
+    return {
+        **raw,
+        "schema_version": 2,
+        "business_id": business_id,
+        "locale": locale,
+        "obligations": obligations,
+    }
+
+
 CRITIC_SCHEMA: dict[str, Any] = {
     "name": "answer_plan_critic_v1",
     "strict": True,

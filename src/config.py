@@ -628,6 +628,14 @@ class Settings(BaseSettings):
     triage_shadow_sample_pct: int = Field(
         default=100, ge=0, le=100, validation_alias="TRIAGE_SHADOW_SAMPLE_PCT"
     )
+    # NX-275 felia 2: modelul nu mai EMITE ce știe deja serverul (`schema_version`, `business_id`,
+    # `locale`, `obligations`) — se injectează după parsare. Forma lui `AnswerPlanV2` rămâne fixă,
+    # deci consumatorii nu văd nicio diferență; se scurtează doar cererea. Câștigul principal nu e
+    # de tokeni, ci de principiu: `business_id` server-owned (P7) devine adevărat prin CONSTRUCȚIE,
+    # nu prin verificarea a ce a scris modelul. OFF = schema de azi, byte-identic.
+    plan_server_owned_fields_enabled: bool = Field(
+        default=False, validation_alias="PLAN_SERVER_OWNED_FIELDS_ENABLED"
+    )
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e

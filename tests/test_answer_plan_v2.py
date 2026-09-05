@@ -283,3 +283,71 @@ def test_claims_and_recommendations_share_claim_rules():
     )
     validation = validate_answer_plan_v2(plan, _context())
     assert "missing_claim_evidence" in validation.failures
+
+
+# --- NX-275 felia 2: ecoul scos din output -----------------------------------
+
+
+def test_schema_modelului_e_schema_completa_minus_campurile_serverului():
+    """Reuniunea trebuie să refacă EXACT schema de azi.
+
+    Derivarea prin ștergere e ce ține cele două în sincron: o a doua schemă scrisă de mână ar
+    diverge de `AnswerPlanV2` la prima schimbare de câmp, iar divergența s-ar vedea abia ca
+    `strict` refuzat de furnizor, în producție. Testul prinde și cazul invers: cineva scoate un
+    câmp din model fără să-l pună în `SERVER_OWNED_PLAN_FIELDS`, deci nimeni nu-l mai injectează
+    și planul devine neparsabil."""
+    from src.agent.answer_plan_runtime import (
+        ANSWER_PLAN_V2_MODEL_SCHEMA as RED,
+    )
+    from src.agent.answer_plan_runtime import (
+        SERVER_OWNED_PLAN_FIELDS,
+    )
+
+    full_props = set(ANSWER_PLAN_V2_SCHEMA["schema"]["properties"])
+    red_props = set(RED["schema"]["properties"])
+    assert red_props | set(SERVER_OWNED_PLAN_FIELDS) == full_props
+    assert red_props.isdisjoint(SERVER_OWNED_PLAN_FIELDS)
+    # `strict: true` cere required == properties; altfel furnizorul refuză schema.
+    assert set(RED["schema"]["required"]) == red_props
+    assert RED["strict"] is True and RED["name"] != ANSWER_PLAN_V2_SCHEMA["name"]
+
+
+def test_injectarea_serverului_bate_ce_a_emis_modelul():
+    """P7 devine adevărat prin CONSTRUCȚIE, nu prin verificare.
+
+    Cazul care contează: un plan care poartă `business_id`-ul altui tenant. Azi asta e prinsă de
+    validator; după felia asta nu mai are cum să existe, fiindcă valoarea vine de la server
+    indiferent ce a emis modelul. Injectarea e idempotentă, deci merge la fel cu flagul stins."""
+    from src.agent.answer_plan_runtime import inject_server_owned
+
+    raw = {"business_id": "biz-STRAIN", "locale": "en", "schema_version": 99, "obligations": []}
+    out = inject_server_owned(
+        raw,
+        business_id="biz-corect",
+        locale="ro",
+        obligations=[{"kind": "answer", "key": "question_0"}],
+    )
+    assert out["business_id"] == "biz-corect"
+    assert out["locale"] == "ro" and out["schema_version"] == 2
+    assert out["obligations"] == [{"kind": "answer", "key": "question_0"}]
+    assert inject_server_owned(None, business_id="b", locale="ro", obligations=[]) is None
+
+
+def test_planul_injectat_ramane_parsabil_ca_AnswerPlanV2():
+    """Forma FIXĂ a planului nu se schimbă: consumatorii (to_v1, validator, render) văd exact ce
+    vedeau. Pornim de la un plan VALID construit cu helperul existent, îi scoatem exact câmpurile
+    server-owned (ce ar emite modelul sub flag) și verificăm că injectarea îl reface întreg."""
+    from src.agent.answer_plan_runtime import (
+        SERVER_OWNED_PLAN_FIELDS,
+        inject_server_owned,
+    )
+
+    emis = _plan().model_dump(mode="json")
+    for field in SERVER_OWNED_PLAN_FIELDS:
+        emis.pop(field, None)
+    assert set(emis).isdisjoint(SERVER_OWNED_PLAN_FIELDS)
+
+    plan = AnswerPlanV2.model_validate(
+        inject_server_owned(emis, business_id="biz-1", locale="ro", obligations=[])
+    )
+    assert plan.business_id == "biz-1" and plan.locale == "ro" and plan.schema_version == 2

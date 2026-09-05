@@ -35,8 +35,9 @@ from src.agent.answer_plan import (
     validate_answer_plan_v2,
 )
 from src.agent.answer_plan_runtime import (
-    ANSWER_PLAN_V2_SCHEMA,
     build_answer_plan_context,
+    inject_server_owned,
+    plan_schema_for_model,
     run_semantic_critic,
     safe_fallback,
     validate_revised_draft,
@@ -133,7 +134,7 @@ def brain_versions(system: str, tools: list[dict[str, Any]], model: str | None) 
         "prompt_version": BRAIN_PROMPT_VERSION,
         "prompt_hash": _sha(system),
         "tool_schema_hash": _sha(json.dumps(tools, sort_keys=True, ensure_ascii=False)),
-        "plan_schema": ANSWER_PLAN_V2_SCHEMA["name"],
+        "plan_schema": plan_schema_for_model()["name"],
         "model": model,
     }
 
@@ -252,7 +253,7 @@ async def _generate_plan(
     """Bucla structurată; eșecul (JSON invalid/API) devine `(None, rounds)` — caller-ul repară."""
     try:
         raw, rounds = await deps.llm.run_tool_loop_structured(
-            system, user, tools, execute, ANSWER_PLAN_V2_SCHEMA, model=model
+            system, user, tools, execute, plan_schema_for_model(), model=model
         )
         return raw, rounds
     except Exception as e:  # noqa: BLE001 — model/JSON/API: vizibil, nu fatal (repair/fallback)
@@ -354,7 +355,7 @@ async def _repair_plan(
     )
     try:
         return await deps.llm.complete_schema(
-            system, user + feedback, ANSWER_PLAN_V2_SCHEMA, model=model
+            system, user + feedback, plan_schema_for_model(), model=model
         )
     except Exception as e:  # noqa: BLE001 — repair eșuat → fallback determinist
         log.warning("main_brain: repair eșuat (%s)", type(e).__name__)
@@ -362,12 +363,23 @@ async def _repair_plan(
 
 
 def _validate(
+    ctx: TurnContext,
     brain_input: BrainInput,
     raw: dict[str, Any] | None,
     context: AnswerPlanContext,
     required: tuple[tuple[str, str], ...],
 ) -> tuple[AnswerPlanV2 | None, tuple[str, ...]]:
-    """Parsare + validare V2. Întoarce `(plan, failures)`; plan None = nici măcar parsabil."""
+    """Parsare + validare V2. Întoarce `(plan, failures)`; plan None = nici măcar parsabil.
+
+    NX-275 felia 2: câmpurile server-owned se INJECTEAZĂ aici, într-un singur loc, fiindcă toate
+    cele trei căi (plan inițial, repair, repair-ul de pe ramura de critic) trec pe aici. Injectarea
+    e idempotentă, deci merge identic cu flagul stins, când modelul le-a emis oricum."""
+    raw = inject_server_owned(
+        raw,
+        business_id=ctx.business.id,
+        locale=ctx.language,
+        obligations=[{"kind": kind, "key": key} for kind, key in required],
+    )
     if raw is None:
         return None, ("unknown_evidence",)
     try:
@@ -838,7 +850,7 @@ async def run_main_brain(
         successful_action_ids=run.successful_action_ids,
         known_need_ids=_known_need_ids(brain_input),
     )
-    plan, failures = _validate(brain_input, raw, context, required)
+    plan, failures = _validate(ctx, brain_input, raw, context, required)
     repairs = 0
     if plan is None or failures:
         _trace(ctx, "brain_plan_failures", list(failures or ("unknown_evidence",)))
@@ -853,7 +865,7 @@ async def run_main_brain(
             model=model,
         )
         _trace(ctx, "brain_repair_raw", repaired)
-        plan, failures = _validate(brain_input, repaired, context, required)
+        plan, failures = _validate(ctx, brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan is not None and not failures else "exhausted")
 
     if plan is None or failures:
@@ -939,7 +951,7 @@ async def run_main_brain(
             context=context,
             model=model,
         )
-        plan2, failures2 = _validate(brain_input, repaired, context, required)
+        plan2, failures2 = _validate(ctx, brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan2 is not None and not failures2 else "exhausted")
         if plan2 is None or failures2:
             ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
