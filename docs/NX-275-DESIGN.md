@@ -19,7 +19,24 @@ răspuns declarate ca DATE, (b) o dovadă nouă la care creierul nu ajunge azi (
 | creierul poate compune o rutină | **FALS** | cele 30.881 de muchii din `product_relations` sunt citite doar de cross-sell-ul v1 după `cart_add` (`planner._cart_followup_products`); niciun tool nu le expune |
 
 Cifre reproductibile: `python scripts/prompt_budget_probe.py` (tokenii), plus calculul de cost din
-§6 al acestui doc, cu tarifele `mini` fiindcă `gpt-5.6-luna` n-are tarife (L4 din card).
+§6 al acestui doc.
+
+> **Addendum 2026-09-05 — tarifele lui `gpt-5.6-luna` există acum (felia 1, PR #339), iar §6 NU
+> trebuie recalculat.** Calculele de aici s-au făcut pe tarifele `mini`, fiindcă luna lipsea din
+> tabelă. Măsurat după completare: luna e o scalare **UNIFORMĂ** a lui mini, 3,750x pe toate trei
+> câmpurile (input, cached, output), cu același raport `output/input = 6,0x` și același
+> `cached/input = 0,10x`. Deci fiecare PROCENT și fiecare prag din §6 — inclusiv pragul de
+> rentabilitate de **43% hit** al retrievalului speculativ — rămâne valabil neatins. Se schimbă
+> doar cifrele absolute, împărțite la 3,75: turul de recomandare e ~$0,0022 în loc de ~$0,0083.
+>
+> **Ce se schimbă însă, și nu e în §6: tierul ieftin a dispărut.** `gpt-5.4-nano` are ACELAȘI preț
+> de input ca luna ($0,20) și un output cu **4% mai scump** ($1,25 vs $1,20). Premisa „nano e
+> ieftin, deci merită un apel în plus" nu mai stă în picioare nicăieri (triaj shadow, extractor de
+> profil, summarizer, ramura `simple`). **Dar swap-ul nano → luna NU e gratuit**: luna raționează
+> IMPLICIT (`reasons_by_default=True`), iar pe apelurile `agent=False` `_sampling` nu trimite
+> niciodată `reasoning_effort`, deci nimic nu-l stinge. Măsurat: **4 tokeni de raționament** anulează
+> avantajul, 200 îl transformă în +34%, 1.000 în +175%. Un swap corect ar cere întâi ca decizia de
+> raționament să acopere și apelurile non-agent.
 
 ---
 
