@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from src.agent import tool_budget
+from src.agent import tool_budget, turn_profile
 from src.agent.answer_plan import (
     AnswerPlanContext,
     AnswerPlanV2,
@@ -49,6 +49,7 @@ from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.llm import prompt_cache_scope
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
+from src.agent.tool_definitions import tool_schemas
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
 from src.catalog.freshness import facts_sla_s
@@ -56,6 +57,7 @@ from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
+from src.domain import vocab_examples
 from src.models import RetrievalResult, Route, TurnContext
 from src.observability import turn_latency
 from src.retrieval.port import deadline_from_turn, query_count_bucket
@@ -129,7 +131,12 @@ def _trace(ctx: TurnContext, key: str, value: Any) -> None:
         trace[key] = value
 
 
-def brain_versions(system: str, tools: list[dict[str, Any]], model: str | None) -> dict[str, Any]:
+def brain_versions(
+    system: str,
+    tools: list[dict[str, Any]],
+    model: str | None,
+    profile: str | None = None,
+) -> dict[str, Any]:
     """Amprentele versionate ale rulării (trace attrs, nu labels): prompt/tool-schema/model."""
     return {
         "prompt_version": BRAIN_PROMPT_VERSION,
@@ -137,6 +144,9 @@ def brain_versions(system: str, tools: list[dict[str, Any]], model: str | None) 
         "tool_schema_hash": _sha(json.dumps(tools, sort_keys=True, ensure_ascii=False)),
         "plan_schema": plan_schema_for_model()["name"],
         "model": model,
+        # NX-275 felia 4: care direcție a rulat. Fără ea, două ture cu prompturi diferite ar
+        # arăta identic în trace, iar `prompt_hash` ar diferi fără să spună de ce.
+        "turn_profile": profile,
     }
 
 
@@ -842,7 +852,25 @@ async def run_main_brain(
         blocking_code=selection.blocking_code,
     )
 
+    # NX-275 felia 4: direcția de răspuns, aleasă de COD din obligații + clasa de tur. Adaugă un
+    # sufix la FINALUL system-ului (prefixul rămâne byte-identic, deci cache-ul ține) și, cel mult,
+    # tool-uri în plus. OFF → `profile is None` și nimic nu se schimbă.
+    profile = (
+        turn_profile.select(turn_class, obligations)
+        if getattr(settings, "turn_profiles_enabled", False)
+        else None
+    )
+    if profile is not None:
+        ctx.emit("turn_profile", name=profile.name, turn_class=turn_class.value)
+        have = {s.get("function", {}).get("name") for s in tools}
+        extra = [t for t in profile.extra_tools if t not in have]
+        if extra:
+            examples = vocab_examples.from_pack(getattr(ctx.business, "domain_pack", None))
+            tools = [*tools, *tool_schemas(extra, examples)]
+
     brain_system = f"{system}\n{_PLAN_V2_SYSTEM}"
+    if profile is not None:
+        brain_system = f"{brain_system}\n{profile.suffix}"
     obligations_block = (
         "Obligațiile turului (acoperă-le pe TOATE în plan): "
         + "; ".join(f"{o.kind}:{o.key}" for o in obligations)
@@ -855,7 +883,7 @@ async def run_main_brain(
         "Nevoi cunoscute (need_ids valide): " + ", ".join(_known_need_ids(brain_input)) + "\n"
     )
     brain_user = _compose_user(user, user_parts, f"{obligations_block}{needs_block}{signals_block}")
-    versions = brain_versions(brain_system, tools, model)
+    versions = brain_versions(brain_system, tools, model, profile.name if profile else None)
 
     execute = _PortedExecute(ctx, deps, run, port)
     raw, rounds = await _generate_plan(

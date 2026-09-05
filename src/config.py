@@ -645,6 +645,11 @@ class Settings(BaseSettings):
     prompt_cache_layout_enabled: bool = Field(
         default=False, validation_alias="PROMPT_CACHE_LAYOUT_ENABLED"
     )
+    # NX-275 felia 4: profile de tur — direcția răspunsului (fapt / recomandare / comparație /
+    # mutație / rutină), aleasă de COD din obligații + clasa de tur, materializată ca un SUFIX la
+    # finalul system-ului plus, cel mult, tool-uri în plus. Prefixul rămâne byte-identic, deci
+    # cache-ul ține. OFF = niciun sufix, niciun tool extra: byte-identic cu azi.
+    turn_profiles_enabled: bool = Field(default=False, validation_alias="TURN_PROFILES_ENABLED")
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
