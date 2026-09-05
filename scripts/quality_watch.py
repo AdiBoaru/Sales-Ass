@@ -55,6 +55,7 @@ sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+from src.catalog.freshness import is_static  # noqa: E402
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.observability.slo import (  # noqa: E402
     VERDICT_FAIL,
@@ -117,6 +118,12 @@ select max(synced_at) as newest,
  where business_id = $1 and status = 'active'
 """
 
+# Declarația de prospețime a tenantului. Citită de pe conexiunea tenant-scoped, ca tot restul
+# raportului: e o proprietate a ACESTUI business, nu configurație de mediu.
+_BUSINESS_SETTINGS = """
+select settings from businesses where id = $1
+"""
+
 
 def _verdict(value: float | None, threshold: float, samples: int, *, higher_is_worse=True) -> str:
     """Verdictul unei cifre. Ordinea condițiilor E contractul: instrumentul stricat înaintea
@@ -128,6 +135,24 @@ def _verdict(value: float | None, threshold: float, samples: int, *, higher_is_w
         return VERDICT_INSUFFICIENT
     bad = value > threshold if higher_is_worse else value < threshold
     return VERDICT_FAIL if bad else VERDICT_PASS
+
+
+def declared_settings(raw: object) -> dict:
+    """`businesses.settings` → dict, oricare ar fi forma în care vine de pe conexiune.
+
+    Există fiindcă `settings` sosește ca ȘIR pe conexiunile fără codec `jsonb` înregistrat, iar
+    `freshness.is_static` e pură și primește un `Mapping`. Fără pasul ăsta, raportul arunca
+    `AttributeError` pe baza reală și trecea în teste, care exersează doar funcția pură — exact
+    clasa de defect care a ținut joburile de derivare nerulabile: cod exersat într-un singur regim.
+
+    Orice altceva decât un obiect JSON devine `{}`: o declarație malformată nu e o declarație, iar
+    politica pentru necunoscut e cea conservatoare (judecăm vechimea)."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def _row(name: str, value: float | None, threshold: float, samples: int, **kw) -> dict:
@@ -206,14 +231,39 @@ async def main() -> int:
             fresh = dict(await conn.fetchrow(_FRESHNESS, args.business) or {})
             newest = fresh.get("newest")
             age_days = (end - newest).total_seconds() / 86400 if newest else None
-            metrics.append(
-                _row(
-                    "catalog_staleness_days",
-                    age_days,
-                    THRESHOLDS["catalog_staleness_days"],
-                    int(fresh.get("products") or 0),
+            # Cine judecă vechimea în timp e TENANTUL, nu o constantă a raportului. Un catalog
+            # declarat `static_snapshot` e o fotografie importată o dată, fără proces care s-o
+            # reîmprospăteze — deci n-ar exista niciodată un „proaspăt" în care să intre înapoi, iar
+            # un prag i-ar da `FAIL` zilnic, tot mai tare, despre nimic. `freshness.is_static`
+            # există exact pentru rapoarte („o scutire permanentă trebuie să fie VIZIBILĂ"), doar că
+            # raportul ăsta n-o chema. Vechimea se RAPORTEAZĂ în continuare — a o ascunde ar fi
+            # cealaltă greșeală, fiindcă un snapshot vechi de un an rămâne un fapt despre catalog.
+            # `settings` vine ca ȘIR pe conexiunea asta (fără codec jsonb înregistrat), nu ca dict.
+            # `is_static` e pură și primește un Mapping; fără decodare ar arunca `AttributeError`
+            # exact în producție și niciodată în teste, fiindcă testele exersează funcția pură.
+            settings_row = await conn.fetchrow(_BUSINESS_SETTINGS, args.business)
+            raw = settings_row["settings"] if settings_row else None
+            static = is_static(declared_settings(raw))
+            if static:
+                metrics.append(
+                    {
+                        "metric": "catalog_staleness_days",
+                        "value": None if age_days is None else round(age_days, 4),
+                        "threshold": None,
+                        "samples": int(fresh.get("products") or 0),
+                        "verdict": VERDICT_UNKNOWN if age_days is None else "MEASURED",
+                        "note": "catalog declarat `static_snapshot` — vechimea nu se judecă",
+                    }
                 )
-            )
+            else:
+                metrics.append(
+                    _row(
+                        "catalog_staleness_days",
+                        age_days,
+                        THRESHOLDS["catalog_staleness_days"],
+                        int(fresh.get("products") or 0),
+                    )
+                )
 
             # Cifra 5: setul NX-265. Nu se calculează aici — se citește raportul lui, dacă există.
             # Un raport de calitate care își inventează propriul set de evaluare ar fi al doilea
