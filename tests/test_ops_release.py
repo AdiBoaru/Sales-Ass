@@ -501,6 +501,89 @@ def test_buildul_paseaza_o_tinta_de_rollback_manifestului():
         )
 
 
+def _step(job: str, *, name_contains: str) -> dict:
+    hits = [s for s in _job_steps("release.yml", job) if name_contains in str(s.get("name", ""))]
+    assert len(hits) == 1, f"aștept exact un pas «{name_contains}» în {job}, am găsit {len(hits)}"
+    return hits[0]
+
+
+def _cond(step: dict) -> str:
+    """Condiția `if:`, cu spațiile normalizate — YAML-ul plicat (`>-`) o dă pe mai multe rânduri."""
+    return " ".join(str(step.get("if", "")).split())
+
+
+def test_promovarea_picata_face_rollback_automat():
+    """Smoke-ul DETECTA o promovare stricată, dar repararea era manuală: fereastra dintre „smoke
+    roșu" și „un om observă" era timp de nefuncționare pentru clienți.
+
+    Cele trei condiții nu sunt decor — fiecare acoperă un mod distinct de a face rău. Cea mai
+    importantă e `!inputs.rollback`: o promovare de rollback care pică NU se repară revenind,
+    fiindcă întoarcerea ei e chiar versiunea stricată de la care fugim.
+    """
+    step = _step("production", name_contains="Rollback automat")
+    cond = _cond(step)
+
+    assert "!inputs.rollback" in cond, (
+        "rollbackul automat s-ar declanșa și pe o promovare de rollback ⇒ ar readuce exact "
+        f"versiunea stricată de la care se fugea (if: {cond})"
+    )
+    assert "steps.deploy.outcome == 'failure'" in cond, (
+        f"un deploy picat lasă hostul pe imaginea nouă, nesănătoasă — trebuie acoperit (if: {cond})"
+    )
+    assert "steps.smoke.outcome == 'failure'" in cond, f"smoke picat neacoperit (if: {cond})"
+    assert "always()" in cond, (
+        f"fără `always()`, pasul nu se evaluează deloc după un pas picat (if: {cond})"
+    )
+
+    # Refolosește drumul testat către host. Un al doilea mecanism de atins producția ar fi exact
+    # cel neexersat atunci când chiar contează.
+    assert "deploy.sh production" in step["run"], "rollbackul nu trece prin `deploy.sh`"
+    assert "previous_digest" in step["run"], "ținta nu vine din manifest"
+
+
+def test_rollbackul_automat_e_verificat():
+    """Un rollback neverificat e o speranță. `deploy.sh` așteaptă containerul healthy, dar
+    health ≠ servește corect — doar smoke-ul trece printr-un tur real."""
+    step = _step("production", name_contains="Verifică rollbackul")
+    assert "steps.rollback.outcome == 'success'" in _cond(step)
+    assert "smoke_web_v2.py" in step["run"]
+
+
+def test_dovada_promovarii_supravietuieste_esecului():
+    """Aceeași lecție ca la raportul de scan din jobul de build: fără `always()`, artefactul se
+    pierde EXACT când e cel mai necesar — la promovarea picată, pe un mediu poate
+    nereproductibil."""
+    uploads = [
+        s
+        for s in _job_steps("release.yml", "production")
+        if str(s.get("uses", "")).startswith("actions/upload-artifact")
+        and str(s.get("with", {}).get("name", "")).startswith("production-evidence")
+    ]
+    assert len(uploads) == 1
+    assert "always()" in _cond(uploads[0]), "dovada promovării se pierde exact la eșec"
+    assert uploads[0]["with"]["if-no-files-found"] != "error", (
+        "un smoke care n-a apucat să ruleze nu trebuie să producă un AL DOILEA eșec de raportat"
+    )
+
+
+def test_championul_nu_se_inregistreaza_dupa_un_rollback():
+    """Garda pentru cea mai periculoasă editare „de bun-simț" din acest workflow.
+
+    Pasul se sprijină pe `if: success()`-ul implicit. Cine ar adăuga `always()` „ca să înregistrăm
+    mereu championul" ar declara champion exact digestul de la care s-a fugit — iar buildul următor
+    și-ar lua ținta de rollback dintr-o versiune despre care ȘTIM că nu servește.
+    """
+    step = next(
+        s
+        for s in _job_steps("release.yml", "production")
+        if s.get("with", {}).get("name") == "champion-manifest"
+    )
+    cond = _cond(step)
+    assert not cond or ("always" not in cond and "failure" not in cond), (
+        f"championul s-ar înregistra și după un rollback (if: {cond})"
+    )
+
+
 def test_promovarea_inregistreaza_championul():
     """Perechea celuilalt test: cine SCRIE ținta pe care buildul următor o citește.
 
