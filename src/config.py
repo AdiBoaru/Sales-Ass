@@ -636,6 +636,15 @@ class Settings(BaseSettings):
     plan_server_owned_fields_enabled: bool = Field(
         default=False, validation_alias="PLAN_SERVER_OWNED_FIELDS_ENABLED"
     )
+    # NX-275 felia 3: ordinea blocurilor din mesajul USER, așezată pentru prompt caching —
+    # istoricul ÎNAINTEA a tot ce e per tur. Conținutul e identic; se schimbă doar poziția, iar
+    # asta contează fiindcă un cache se prinde pe PREFIX: azi istoricul e precedat de octeți care
+    # diferă la fiecare tur, deci nu poate fi servit din cache niciodată. Flag propriu (nu legat
+    # de felia 2) fiindcă reordonarea poate schimba comportamentul modelului fără să schimbe
+    # informația — se măsoară pe golden înainte de aprindere, nu se presupune.
+    prompt_cache_layout_enabled: bool = Field(
+        default=False, validation_alias="PROMPT_CACHE_LAYOUT_ENABLED"
+    )
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e

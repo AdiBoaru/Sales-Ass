@@ -42,11 +42,12 @@ from src.agent.answer_plan_runtime import (
     safe_fallback,
     validate_revised_draft,
 )
-from src.agent.brain_models import BrainInput
+from src.agent.brain_models import BrainInput, UserParts
 from src.agent.conversation_quality import evaluate_reply
 from src.agent.evidence_bundle import EvidenceBundle, build_evidence_bundle
 from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
+from src.agent.llm import prompt_cache_scope
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
@@ -252,9 +253,10 @@ async def _generate_plan(
 ) -> tuple[dict[str, Any] | None, int]:
     """Bucla structurată; eșecul (JSON invalid/API) devine `(None, rounds)` — caller-ul repară."""
     try:
-        raw, rounds = await deps.llm.run_tool_loop_structured(
-            system, user, tools, execute, plan_schema_for_model(), model=model
-        )
+        with prompt_cache_scope(_cache_key(ctx)):
+            raw, rounds = await deps.llm.run_tool_loop_structured(
+                system, user, tools, execute, plan_schema_for_model(), model=model
+            )
         return raw, rounds
     except Exception as e:  # noqa: BLE001 — model/JSON/API: vizibil, nu fatal (repair/fallback)
         log.warning("main_brain: bucla structurată a eșuat (%s)", type(e).__name__)
@@ -354,9 +356,10 @@ async def _repair_plan(
         f"{_evidence_digest(context)}"
     )
     try:
-        return await deps.llm.complete_schema(
-            system, user + feedback, plan_schema_for_model(), model=model
-        )
+        with prompt_cache_scope(_cache_key(ctx)):
+            return await deps.llm.complete_schema(
+                system, user + feedback, plan_schema_for_model(), model=model
+            )
     except Exception as e:  # noqa: BLE001 — repair eșuat → fallback determinist
         log.warning("main_brain: repair eșuat (%s)", type(e).__name__)
         return None
@@ -769,6 +772,37 @@ class _PortedExecute:
         return view or "(fără rezultat)"
 
 
+def _cache_key(ctx: TurnContext) -> str:
+    """Partiția de cache a turului: tenant + versiunea de prompt (NX-275 felia 3).
+
+    Tenantul, fiindcă prefixul (system generat din DB + tool-uri) e al lui. Versiunea, fiindcă la
+    o schimbare de prompt vrei să NU cauți într-un cache al formei vechi. Nimic per conversație:
+    ar face fiecare conversație propria partiție, adică fix opusul scopului."""
+    return f"{ctx.business.id}:{BRAIN_PROMPT_VERSION}"
+
+
+def _compose_user(user: str, parts: UserParts | None, brain_blocks: str) -> str:
+    """Mesajul USER al brain-ului, compus într-UN singur loc (NX-275 felia 3).
+
+    Stins (implicit) sau fără părți: exact ordinea de azi — blocurile brain-ului, apoi `user`
+    (care e deja `per_turn + istoric + mesaj`). Byte-identic, deci nimic nu se mișcă.
+
+    Aprins: istoricul URCĂ în față. Motivul e mecanic, nu estetic: prompt cachingul se prinde pe
+    un prefix identic, iar orice octet care se schimbă mai devreme îl invalidează pe tot ce
+    urmează. Cu obligațiile și hint-urile turului scrise ÎNAINTEA istoricului, istoricul (partea
+    care crește cel mai mult și e stabilă în interiorul unei conversații) e mereu precedat de
+    octeți diferiți, deci nu are cum să fie servit din cache. Inversând ordinea, turul 2+ al
+    aceleiași conversații retrimite un prefix pe care furnizorul l-a mai văzut.
+
+    Conținutul e IDENTIC în ambele ramuri — se schimbă doar poziția. De asta felia are flag
+    propriu: reordonarea poate schimba comportamentul modelului chiar dacă nu schimbă informația,
+    iar asta se măsoară pe golden, nu se presupune.
+    """
+    if parts is None or not getattr(get_settings(), "prompt_cache_layout_enabled", False):
+        return f"{brain_blocks}{user}"
+    return parts.cache_first(brain_blocks=brain_blocks)
+
+
 async def run_main_brain(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -778,6 +812,7 @@ async def run_main_brain(
     tools: list[dict[str, Any]],
     system: str,
     user: str,
+    user_parts: UserParts | None = None,
     query: str,
 ) -> None:
     """Turul MainBrain: plan structurat în aceeași buclă → validare → (un repair) → render →
@@ -819,7 +854,7 @@ async def run_main_brain(
     needs_block = (
         "Nevoi cunoscute (need_ids valide): " + ", ".join(_known_need_ids(brain_input)) + "\n"
     )
-    brain_user = f"{obligations_block}{needs_block}{signals_block}{user}"
+    brain_user = _compose_user(user, user_parts, f"{obligations_block}{needs_block}{signals_block}")
     versions = brain_versions(brain_system, tools, model)
 
     execute = _PortedExecute(ctx, deps, run, port)

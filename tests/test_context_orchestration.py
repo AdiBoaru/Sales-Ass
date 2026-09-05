@@ -395,3 +395,104 @@ def test_shadow_sampling_este_determinista_si_fail_open():
     assert aftercare_mod._shadow_sampled("", 1) is True
     assert aftercare_mod._shadow_sampled(turn, 100) is True
     assert aftercare_mod._shadow_sampled(turn, 0) is False
+
+
+# --- NX-275 felia 3: layoutul pentru prompt caching --------------------------
+
+
+def test_layoutul_stins_e_byte_identic_cu_azi(monkeypatch):
+    """Poarta feliei: cu flagul stins, mesajul compus trebuie să fie EXACT cel de azi.
+
+    Nu „echivalent", nu „aceleași informații" — aceiași octeți. Un layout care se schimbă tăcut
+    ar invalida prompt cachingul existent (prefixul de system) și ar schimba comportamentul
+    modelului, iar amândouă ar fi puse pe seama altui card.
+
+    Flagul se stinge EXPLICIT, nu se presupune: `.env`-ul de dezvoltare are stiva aprinsă, deci un
+    test care citește configul ambiental măsoară mediul, nu invariantul."""
+    from src.agent.brain import _compose_user
+    from src.agent.brain_models import UserParts
+    from src.config import get_settings
+
+    monkeypatch.setenv("PROMPT_CACHE_LAYOUT_ENABLED", "false")
+    get_settings.cache_clear()
+    try:
+        parts = UserParts(history="ISTORIC\n", per_turn="PERTUR\n", message="Mesaj client: bla")
+        blocks = "OBLIGATII\nNEVOI\nSEMNALE\n"
+        assert _compose_user(parts.legacy(), parts, blocks) == blocks + parts.legacy()
+        assert _compose_user(parts.legacy(), None, blocks) == blocks + parts.legacy()
+    finally:
+        monkeypatch.delenv("PROMPT_CACHE_LAYOUT_ENABLED", raising=False)
+        get_settings.cache_clear()
+
+
+def test_layoutul_aprins_urca_istoricul_in_fata(monkeypatch):
+    """Aprins: istoricul primul, mesajul ultimul, conținut neschimbat.
+
+    Cele două aserții care contează: (a) niciun octet nu se pierde pe drum — reordonare, nu
+    rescriere; (b) istoricul chiar e la POZIȚIA 0, fiindcă un cache se prinde pe prefix și orice
+    octet variabil pus înaintea lui îl scoate din joc."""
+    from src.agent.brain import _compose_user
+    from src.agent.brain_models import UserParts
+    from src.config import get_settings
+
+    monkeypatch.setenv("PROMPT_CACHE_LAYOUT_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        parts = UserParts(history="ISTORIC\n", per_turn="PERTUR\n", message="Mesaj client: bla")
+        blocks = "OBLIGATII\n"
+        out = _compose_user(parts.legacy(), parts, blocks)
+        assert out.startswith("ISTORIC\n")
+        assert out.endswith("Mesaj client: bla")
+        assert sorted(out) == sorted(blocks + parts.legacy())  # aceiași octeți, altă ordine
+    finally:
+        monkeypatch.delenv("PROMPT_CACHE_LAYOUT_ENABLED", raising=False)
+        get_settings.cache_clear()
+
+
+def test_cheia_de_cache_e_a_tenantului_si_a_versiunii_nu_a_conversatiei():
+    """Cheia leagă turele care CHIAR au același prefix și le separă pe cele care n-au.
+
+    `conversation_id` în cheie ar face fiecare conversație propria partiție — adică exact opusul
+    scopului, cu aparența că s-a făcut ceva. Versiunea de prompt trebuie SĂ FIE acolo: altfel, la
+    o schimbare de prompt, cererile ar căuta într-un cache al formei vechi."""
+    from types import SimpleNamespace
+
+    from src.agent.brain import BRAIN_PROMPT_VERSION, _cache_key
+
+    ctx = SimpleNamespace(business=SimpleNamespace(id="biz-1"), conversation_id="conv-9")
+    key = _cache_key(ctx)
+    assert key == f"biz-1:{BRAIN_PROMPT_VERSION}"
+    assert "conv-9" not in key
+
+
+def test_cheia_de_cache_nu_pleaca_pe_sarma_cu_flagul_stins(monkeypatch):
+    """OFF = byte-identic, inclusiv pe parametrii trimiși furnizorului.
+
+    Un parametru în plus e nevinovat la OpenAI, dar nu și la un endpoint compatibil care refuză
+    câmpuri necunoscute — iar felia asta nu are voie să schimbe nimic până nu e măsurată."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from src.agent import llm as llm_mod
+    from src.config import get_settings
+
+    monkeypatch.setenv("PROMPT_CACHE_LAYOUT_ENABLED", "false")
+    get_settings.cache_clear()
+    sent: dict = {}
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            sent.update(kwargs)
+            raise RuntimeError("stop")  # nu ne interesează răspunsul, doar ce s-a trimis
+
+    client = llm_mod.LLMClient.__new__(llm_mod.LLMClient)
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=_FakeCompletions()))
+
+    try:
+        with llm_mod.prompt_cache_scope("biz-1:main_brain.v1"):
+            with pytest.raises(Exception):
+                asyncio.run(client._chat(agent=True, model="gpt-5.6-luna", messages=[]))
+        assert "prompt_cache_key" not in sent
+    finally:
+        monkeypatch.delenv("PROMPT_CACHE_LAYOUT_ENABLED", raising=False)
+        get_settings.cache_clear()

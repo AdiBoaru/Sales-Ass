@@ -13,7 +13,9 @@ import asyncio
 import json
 import logging
 import random
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -320,6 +322,29 @@ def _note_truncation(resp: Any, *, cap: int | None) -> None:
         return
 
 
+#: Cheia de rutare a cache-ului de prompt pentru turul curent (NX-275 felia 3). ContextVar, ca
+#: `usage` / `turn_latency` / `deadline`: valoarea aparține TURULUI, nu unei semnături de apel.
+_prompt_cache_key: ContextVar[str] = ContextVar("prompt_cache_key", default="")
+
+
+@contextmanager
+def prompt_cache_scope(key: str) -> Iterator[None]:
+    """Toate apelurile din bloc cer aceeași partiție de cache la furnizor.
+
+    Fără cheie, ruterul OpenAI distribuie cererile după un hash implicit al prefixului; cu trafic
+    mic și mai multe instanțe, două ture ale aceluiași tenant pot nimeri noduri diferite și niciunul
+    nu găsește prefixul celuilalt. Cheia e `business_id` + versiunea de prompt: leagă turele care
+    CHIAR au același prefix și le separă pe cele care n-au (o schimbare de prompt nu trebuie să
+    caute într-un cache al versiunii vechi). NU conține `conversation_id`: ar face fiecare
+    conversație propria partiție, adică exact opusul scopului.
+    """
+    token = _prompt_cache_key.set(key or "")
+    try:
+        yield
+    finally:
+        _prompt_cache_key.reset(token)
+
+
 def _note_cache_on_span(resp: Any) -> None:
     """NX-275 felia 1: tokenii serviți din cache, pe spanul APELULUI curent.
 
@@ -433,6 +458,12 @@ class LLMClient:
             self._sampling(agent=agent, model=kwargs["model"], has_tools=bool(kwargs.get("tools")))
         )
         s = get_settings()
+        # NX-275 felia 3: sub același flag ca layoutul, fiindcă amândouă sunt inutile una fără
+        # cealaltă (un prefix stabil pe care ruterul îl trimite în altă parte nu se cache-uiește,
+        # și invers). Stins → parametrul nu pleacă deloc pe sârmă: OFF rămâne byte-identic.
+        cache_key = _prompt_cache_key.get()
+        if cache_key and getattr(s, "prompt_cache_layout_enabled", False):
+            kwargs["prompt_cache_key"] = cache_key
         resp = await _with_retry(
             lambda: self._client.chat.completions.create(**kwargs),
             max_retries=s.llm_retry_max,

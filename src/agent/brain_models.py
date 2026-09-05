@@ -236,3 +236,32 @@ __all__ = [
     "obligations_from_ctx",
     "split_clauses",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class UserParts:
+    """Blocurile mesajului USER, ținute SEPARAT ca să poată fi așezate pentru prompt caching.
+
+    NX-275 felia 3. Contează ordinea, nu conținutul: cache-ul OpenAI se prinde pe un PREFIX
+    byte-identic, iar azi tot ce e per tur (limbă, hint-uri, context de pagină, obligații, nevoi,
+    semnale) stă ÎNAINTEA istoricului. Cum partea per tur se schimbă la fiecare mesaj, istoricul
+    (care e stabil în interiorul unei conversații și e cea mai mare parte care crește) nu poate
+    intra niciodată în prefixul cache-uit: e precedat de octeți care diferă de fiecare dată.
+
+    Așezate invers — istoric întâi, per tur după — turul 2+ al aceleiași conversații reciteste un
+    prefix pe care l-a mai trimis. Nimic din conținut nu se schimbă; doar poziția.
+
+    `message` stă mereu la FINAL: e ancora pe care modelul o citește ultima.
+    """
+
+    history: str
+    per_turn: str
+    message: str
+
+    def legacy(self) -> str:
+        """Ordinea de AZI, byte-identică (per tur, istoric, mesaj). Flag stins → exact asta."""
+        return f"{self.per_turn}{self.history}{self.message}"
+
+    def cache_first(self, *, brain_blocks: str = "") -> str:
+        """Ordinea NOUĂ: istoricul întâi (prefix stabil), apoi tot ce e al turului curent."""
+        return f"{self.history}{self.per_turn}{brain_blocks}{self.message}"
