@@ -1,6 +1,7 @@
 """NX-99 — set_store_config (config jsonb store_base_url + checkout_url). Stub conn, ZERO DB."""
 
 import importlib.util
+import os
 import pathlib
 
 # Scriptul stă în scripts/ (nu pachet importabil) — îl încărcăm prin spec.
@@ -9,7 +10,22 @@ _SPEC = importlib.util.spec_from_file_location(
     pathlib.Path(__file__).resolve().parents[1] / "scripts" / "set_store_config.py",
 )
 ssc = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(ssc)
+
+# Scriptul cheamă `load_dotenv()` la import — corect pentru un om care îl rulează din shell, dar
+# `load_dotenv` scrie DIRECT în `os.environ`, iar aici suntem în procesul pytest. Efectul măsurat:
+# `.env`-ul de dezvoltare (cu stiva de flag-uri APRINSĂ) ajungea în mediul întregii sesiuni, la
+# COLECTARE, deci înaintea primului test. 63 de teste care verifică defaultul stins picau local și
+# treceau în CI — nu fiindcă ar fi fost fragile, ci fiindcă un import de test le schimbase mediul
+# pe sub picioare. Cel mai greu de găsit fel de eșec: cauza e într-un fișier care n-are nicio
+# legătură cu testele care pică.
+#
+# Restaurăm mediul imediat după execuție. Scriptul rămâne neatins.
+_ENV_BEFORE = dict(os.environ)
+try:
+    _SPEC.loader.exec_module(ssc)
+finally:
+    os.environ.clear()
+    os.environ.update(_ENV_BEFORE)
 
 
 class _FakeConn:
