@@ -320,6 +320,27 @@ def _note_truncation(resp: Any, *, cap: int | None) -> None:
         return
 
 
+def _note_cache_on_span(resp: Any) -> None:
+    """NX-275 felia 1: tokenii serviți din cache, pe spanul APELULUI curent.
+
+    Aici, și nu în `usage.record_chat`, dintr-un motiv de poziție: `record_chat` e chemat DUPĂ ce
+    `with turn_latency.span("model")` s-a închis, deci un atribut pus acolo n-ar avea pe ce să
+    stea. `_chat` e wrapperul unic al tuturor apelurilor și rulează ÎNĂUNTRUL spanului.
+
+    Ce se câștigă față de totalul pe tur: pe un tur cu două apeluri, primul SCRIE cache-ul și al
+    doilea îl citește. Însumate, cele două arată o valoare de mijloc care nu spune dacă prefixul
+    chiar se cache-uiește. Separate, apelul 2 răspunde direct. De cifra asta atârnă dacă schema de
+    `response_format` costă 1x sau 0,1x (vezi `docs/NX-275-DESIGN.md` §0)."""
+    try:
+        cached = usage.cached_tokens_of(resp)
+        if cached:
+            from src.observability import tracing  # noqa: PLC0415 — evită ciclu la import
+
+            tracing.set_attribute("tokens_cached", cached)
+    except Exception:  # noqa: BLE001 — ca mai sus (P6, P10)
+        return
+
+
 class LLMClient:
     """Wrapper subțire peste AsyncOpenAI. Modelele vin din settings (nano/mini)."""
 
@@ -418,6 +439,7 @@ class LLMClient:
             cap_ms=getattr(s, "llm_call_cap_ms", 8_000),
         )
         _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
+        _note_cache_on_span(resp)
         return resp
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:

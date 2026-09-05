@@ -619,6 +619,15 @@ class Settings(BaseSettings):
     # ce ar fi rutat triajul, plătim un apel nano post-tur. Se stinge separat când shadow-ul și-a
     # spus cuvântul, fără schimbare de cod și fără să readucă triajul pe calea sincronă.
     triage_shadow_enabled: bool = Field(default=True, validation_alias="TRIAGE_SHADOW_ENABLED")
+    # NX-275 felia 1: CÂT de des plătim măsurătoarea. 100 = comportamentul de azi (fiecare tur).
+    # Acordul brain-vs-nano e o proporție, deci se estimează la fel de bine dintr-un eșantion; la
+    # 10% mai ai nevoie de ~10x mai multe ture ca să-l declari, ceea ce e o decizie de PRODUS
+    # („e gata măsurătoarea?"), nu de cod. Eșantionarea e DETERMINISTĂ pe `turn_id` (același tur
+    # dă același verdict la reclaim), nu `random()`: altfel un tur reluat ar putea fi măsurat de
+    # două ori sau deloc, iar numărătorul și numitorul ar diverge tăcut.
+    triage_shadow_sample_pct: int = Field(
+        default=100, ge=0, le=100, validation_alias="TRIAGE_SHADOW_SAMPLE_PCT"
+    )
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e

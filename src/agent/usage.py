@@ -116,6 +116,15 @@ def _cached_from(usage: Any) -> int:
     return int(getattr(details, "cached_tokens", 0) or 0)
 
 
+def cached_tokens_of(resp: Any) -> int:
+    """Tokenii de prompt serviți din cache pe UN răspuns (NX-275). Tolerant ca `_cached_from`.
+
+    Public fiindcă îl citește și `llm._chat`, ca să pună cifra pe spanul apelului: acolo se vede
+    ce nu se vede în totalul pe tur — apelul 1 SCRIE cache-ul, abia apelul 2 îl citește."""
+    usage = getattr(resp, "usage", None)
+    return _cached_from(usage) if usage is not None else 0
+
+
 def _reasoning_from(usage: Any) -> int | None:
     """`completion_tokens_details.reasoning_tokens` — obiect SDK SAU dict. `None` = NERAPORTAT.
 
@@ -236,6 +245,7 @@ def _record_model_metrics(model: str, tokens_in: int, tokens_out: int, cached: i
         model_role=model_role(model),
         tokens_in=tokens_in,
         tokens_out=tokens_out,
+        cached_tokens=cached,
         cost_usd=cost,
     )
 

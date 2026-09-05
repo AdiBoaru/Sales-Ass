@@ -59,13 +59,25 @@ def test_published_rates_are_pinned():
 
     Pinuite ca să nu redevină ghicite pe tăcute: valorile de dinainte erau subevaluate de
     2,25x-4,00x, ceea ce făcea ca plafoanele de cost să se declanșeze de 2-4x mai târziu decât
-    se credea. Sursă: https://developers.openai.com/api/docs/pricing (verificat 2026-07-31).
+    se credea. Sursă: https://developers.openai.com/api/docs/pricing.
     Dacă OpenAI schimbă prețurile, se actualizează AICI + în doc, deliberat.
+
+    Re-verificat 2026-09-05 (NX-275 felia 1): familia `gpt-5.6` a intrat în listă, iar `terra`
+    s-a ieftinit de la 2,50/15,00. Pinul a prins schimbarea — exact ce trebuia să facă.
     """
     from src.agent.pricing import _DEFAULT_PRICING
 
+    assert _DEFAULT_PRICING["gpt-6-astra"] == ModelRates(
+        input=10.00, cached_input=1.00, output=50.00
+    )
+    assert _DEFAULT_PRICING["gpt-5.6-sol"] == ModelRates(
+        input=4.00, cached_input=0.40, output=20.00
+    )
     assert _DEFAULT_PRICING["gpt-5.6-terra"] == ModelRates(
-        input=2.50, cached_input=0.25, output=15.00
+        input=2.00, cached_input=0.20, output=12.00
+    )
+    assert _DEFAULT_PRICING["gpt-5.6-luna"] == ModelRates(
+        input=0.20, cached_input=0.02, output=1.20
     )
     assert _DEFAULT_PRICING["gpt-5.4"] == ModelRates(input=2.50, cached_input=0.25, output=15.00)
     assert _DEFAULT_PRICING["gpt-5.4-mini"] == ModelRates(
@@ -452,3 +464,34 @@ def test_usage_event_props_post_turn_phase():
     assert props["phase"] == "post_turn"
     assert props["tokens_in"] == 120 and props["llm_calls"] == 1
     assert props["cost_usd"] > 0 and "by_model" in props
+
+
+# --- NX-275 felia 1: modelele CONFIGURATE trebuie să aibă tarife -------------
+
+
+def test_modelele_din_config_au_tarife_publicate():
+    """Un model fără tarife nu costă 0 — costă `mini`, tăcut (`_DEFAULT`, vezi `pricing`).
+
+    Așa a stat `gpt-5.6-luna` de pe 24 august: fiecare cifră de cost raportată de sistem (inclusiv
+    pragul lui `DAILY_COST_CAP_USD`) era o supraestimare de 3,75x, iar nimic nu spunea asta.
+    Testul e ieftin și prinde exact schimbarea care produce tăcerea: cineva schimbă `MODEL_AGENT`
+    în `.env` fără să adauge tariful. `has_rates` există din NX-204a tocmai ca fallback-ul să fie
+    DETECTABIL; aici îl facem și blocant pentru modelele pe care chiar le rutăm."""
+    s = get_settings()
+    routed = [s.model_agent, s.model_triage, s.model_embed]
+    if s.model_agent_complex.strip():
+        routed.append(s.model_agent_complex.strip())
+    missing = [m for m in routed if m and not pricing.has_rates(m)]
+    assert not missing, (
+        f"modele rutate fără tarife: {missing}. Adaugă-le în `_DEFAULT_PRICING` "
+        "(sursa documentată) sau în `LLM_PRICING_JSON` — altfel costul raportat e al lui `mini`."
+    )
+
+
+def test_luna_e_mai_ieftin_decat_fallbackul_care_il_inlocuia():
+    """Ancoră pe direcția erorii, nu pe cifră: fallback-ul SUPRAESTIMA, nu subestima.
+
+    Contează fiindcă un plafon de cost calculat pe tarif mai mare oprește turele mai devreme
+    decât trebuie — degradare plătită fără motiv, invizibilă în loguri."""
+    luna, fallback = pricing.rates_for("gpt-5.6-luna"), pricing.rates_for("model-inexistent-xyz")
+    assert luna.input < fallback.input and luna.output < fallback.output

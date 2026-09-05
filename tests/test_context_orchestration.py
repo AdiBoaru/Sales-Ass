@@ -364,3 +364,34 @@ def test_the_agreement_map_is_strict():
     assert aftercare_mod._SHADOW_AGREEMENT["clarify"] == "clarify"
     assert aftercare_mod._SHADOW_AGREEMENT["order"] == "order"
     assert "handoff" not in aftercare_mod._SHADOW_AGREEMENT  # ruta nu mai există
+
+
+# --- NX-275 felia 1: eșantionarea măsurătorii ---------------------------------
+
+
+def test_shadow_sampling_este_uniforma_pe_uuid_uri():
+    """Regresie pe o capcană reală, nu pe una imaginată.
+
+    Prima versiune pasa `turn_id`-ul direct lui `should_sample`, care citește ultimele 16
+    caractere hex ca fracțiune din 2^64. Într-un UUID RFC 4122, exact acolo începe nibble-ul de
+    VARIANTĂ (mereu 8|9|a|b), deci bucket-ul cade întotdeauna în [0,5 … 0,75): la 10% se
+    eșantiona ZERO, fără nicio eroare, iar raportul de acord ar fi rămas gol la nesfârșit.
+    Testul pinuiește proprietatea care contează (distribuția), nu implementarea hashului.
+    """
+    import uuid
+
+    ids = [str(uuid.uuid4()) for _ in range(3000)]
+    for pct, tol in ((50, 0.04), (10, 0.03), (1, 0.015)):
+        rate = sum(aftercare_mod._shadow_sampled(i, pct) for i in ids) / len(ids)
+        assert abs(rate - pct / 100) < tol, f"la {pct}% rata măsurată e {rate:.3f}"
+
+
+def test_shadow_sampling_este_determinista_si_fail_open():
+    """Determinismul e cerința de la reclaim: un tur reluat nu are voie să fie măsurat de două
+    ori (ar dubla numărătorul fără să miște numitorul). Iar un id absent MĂSOARĂ: mai bine un
+    apel nano în plus decât un gol tăcut în raport."""
+    turn = "7ac7fc36-9bac-44d6-93c8-c3dec0fe42eb"
+    assert len({aftercare_mod._shadow_sampled(turn, 37) for _ in range(50)}) == 1
+    assert aftercare_mod._shadow_sampled("", 1) is True
+    assert aftercare_mod._shadow_sampled(turn, 100) is True
+    assert aftercare_mod._shadow_sampled(turn, 0) is False
