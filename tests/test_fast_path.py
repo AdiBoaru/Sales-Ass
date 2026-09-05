@@ -201,3 +201,68 @@ def test_flagul_cere_creierul_unic():
     with pytest.raises((ValidationError, ValueError), match="SINGLE_BRAIN_ENABLED"):
         Settings(_env_file=None, FAST_PATH_EXACT_ENABLED="true", **base)
     Settings(_env_file=None, FAST_PATH_EXACT_ENABLED="true", SINGLE_BRAIN_ENABLED="true", **base)
+
+
+# ── Ancorarea prin nume rostit (cea mai strânsă) ────────────────────────────
+
+
+def test_garda_de_cost_evita_scanarea_cand_mesajul_nu_poate_contine_un_nume():
+    """Decizie de COST, luată fără să atingem DB-ul: interogarea de ancorare e o scanare
+    (indexurile sunt inerte sub RLS pe conexiunea de runtime), 130-235ms măsurat pe catalogul
+    SOLE. Pe un „cât costă?" fără nume am plăti-o degeaba și tot am merge la creier."""
+    assert fast_path.name_lookup_worth_it("cat costa?", "ro") is False
+    assert fast_path.name_lookup_worth_it("ce pret are?", "ro") is False
+    assert fast_path.name_lookup_worth_it("cat costa crema aia?", "ro") is False
+    assert fast_path.name_lookup_worth_it("cat costa RIEMANN P20 Original SPF 50+?", "ro") is True
+
+
+async def test_numele_ambiguu_nu_ancoreaza(monkeypatch):
+    """Cazul care contează pe un catalog real: 35 de produse împart prefixul
+    `TIRTIR Mask Fit Red Cushion` (nuanțe). A răspunde cu prețul uneia ar fi o ghicire cu preț
+    perfect real — genul de greșeală pe care nicio poartă din aval n-o prinde."""
+    from src.config import get_settings
+
+    monkeypatch.setenv("FAST_PATH_EXACT_ENABLED", "true")
+    monkeypatch.setenv("SINGLE_BRAIN_ENABLED", "true")
+    get_settings.cache_clear()
+
+    async def fake_anchor(ctx, deps, query):
+        return None, "ambiguous"
+
+    monkeypatch.setattr(fast_path, "_anchor_by_name", fake_anchor)
+    try:
+        q = "cat costa TIRTIR Mask Fit Red Cushion?"
+        out = await fast_path.try_fast_path(_ctx(q), SimpleNamespace())
+        assert out.served is False and out.reason == "ambiguous"
+    finally:
+        monkeypatch.delenv("FAST_PATH_EXACT_ENABLED", raising=False)
+        monkeypatch.delenv("SINGLE_BRAIN_ENABLED", raising=False)
+        get_settings.cache_clear()
+
+
+async def test_ancora_aratata_de_server_are_intaietate_fata_de_nume(monkeypatch):
+    """Pagina pe care E clientul bate un nume rostit: prima e un fapt al serverului, a doua o
+    potrivire de text. Dacă ordinea s-ar inversa, o frază care conține din întâmplare alt nume ar
+    răspunde despre alt produs decât cel de pe ecran."""
+    from src.config import get_settings
+
+    monkeypatch.setenv("FAST_PATH_EXACT_ENABLED", "true")
+    monkeypatch.setenv("SINGLE_BRAIN_ENABLED", "true")
+    get_settings.cache_clear()
+
+    called = {"n": 0}
+
+    async def fake_anchor(ctx, deps, query):
+        called["n"] += 1
+        return "ALT-PRODUS", "named_in_query"
+
+    monkeypatch.setattr(fast_path, "_anchor_by_name", fake_anchor)
+    try:
+        q = "cat costa RIEMANN P20 Original SPF 50+ PA++++?"
+        reason, fact, pid = fast_path.eligible(_ctx(q, page_id="p1"), q)
+        assert pid == "p1" and reason is None and fact == "price"
+        assert called["n"] == 0  # ancora de pagină a rezolvat deja: nicio scanare
+    finally:
+        monkeypatch.delenv("FAST_PATH_EXACT_ENABLED", raising=False)
+        monkeypatch.delenv("SINGLE_BRAIN_ENABLED", raising=False)
+        get_settings.cache_clear()

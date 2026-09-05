@@ -81,6 +81,15 @@ _FACT_PATTERNS: tuple[tuple[FactKind, re.Pattern[str]], ...] = (
 #: despre el întreabă) și orice sursă derivată dintr-o căutare făcută acum.
 _TRUSTED_SOURCES: frozenset[str] = frozenset({"page", "ordinal", "named", "action"})
 
+#: Câți termeni de conținut trebuie să aibă mesajul ca să merite o căutare de nume în catalog.
+#:
+#: Nu e o euristică de calitate, e una de COST. Interogarea de ancorare e o scanare (indexurile
+#: sunt inerte pe conexiunea de runtime sub RLS) și costă 130-235ms măsurat pe catalogul SOLE.
+#: Pe un „cât costă?" fără nume am plăti-o degeaba, apoi tot am merge la creier. Numele distinctiv
+#: are în medie 39 de caractere, deci un mesaj care chiar conține unul are cel puțin 4 termeni de
+#: conținut („cât costă RIEMANN P20 Original SPF" are 7); unul care nu are, are 1-3.
+_MIN_TERMS_FOR_NAME_LOOKUP = 4
+
 
 @dataclass(frozen=True, slots=True)
 class FastPathOutcome:
@@ -139,6 +148,13 @@ def eligible(ctx: TurnContext, query: str) -> tuple[str | None, FactKind | None,
     return None, fact, resolution.product_id
 
 
+def name_lookup_worth_it(query: str, locale: str) -> bool:
+    """Merită să plătim scanarea de nume? Decizie de COST, luată fără să atingem DB-ul."""
+    from src.catalog.query_terms import content_terms  # noqa: PLC0415 — cale rece
+
+    return len(content_terms(query or "", locale)) >= _MIN_TERMS_FOR_NAME_LOOKUP
+
+
 def _compose(fact: FactKind, facts: Any, locale: str) -> str | None:
     """Textul, din tabelul de copy. None = faptul nu se poate rosti (necunoscut/stale) ⇒ creier."""
     template = copy_for(locale)["fast_path"][fact]
@@ -160,6 +176,26 @@ def _compose(fact: FactKind, facts: Any, locale: str) -> str | None:
     return template.format(name=name, url=url) if url else None
 
 
+async def _anchor_by_name(
+    ctx: TurnContext, deps: PipelineDeps, query: str
+) -> tuple[str | None, str]:
+    """Ancorare prin numele DISTINCTIV al produsului, rostit de client. `(product_id, motiv)`.
+
+    E singura ancoră care nu vine din ceva ce serverul a arătat, deci are cele mai strânse condiții:
+    conținere EXACTĂ a numelui în mesaj (nu similaritate) plus unicitatea potrivirii maximale. Pe
+    catalogul SOLE asta refuză familiile de nuanțe (35 de variante `TIRTIR Mask Fit Red Cushion`) și
+    variantele de culoare — exact cazurile în care un răspuns ar fi o ghicire cu preț real.
+    """
+    from src.db.queries.catalog import find_product_named_in_query  # noqa: PLC0415 — cale rece
+
+    try:
+        async with deps.db("fast_path_anchor") as conn:
+            return await find_product_named_in_query(conn, ctx.business.id, query)
+    except Exception as e:  # noqa: BLE001 — ancorarea eșuată = turul merge la creier (P6)
+        log.warning("fast_path: ancorarea prin nume a eșuat (%s)", type(e).__name__)
+        return None, "anchor_unavailable"
+
+
 async def try_fast_path(ctx: TurnContext, deps: PipelineDeps) -> FastPathOutcome:
     """Răspunde la o întrebare de fapt fără niciun apel de model, sau lasă turul creierului.
 
@@ -172,6 +208,15 @@ async def try_fast_path(ctx: TurnContext, deps: PipelineDeps) -> FastPathOutcome
 
     query = (ctx.message.body or "").strip()
     reason, fact, product_id = eligible(ctx, query)
+    if fact is not None and product_id is None and reason in ("no_anchor", "weak_anchor"):
+        # Ancorele ARĂTATE de server (pagină, ordinal, nume din lista afișată) au întâietate. Abia
+        # când niciuna nu se aplică încercăm numele din catalog — și doar dacă mesajul e destul de
+        # lung ca să conțină unul, fiindcă interogarea e o scanare, nu un lookup.
+        if name_lookup_worth_it(query, ctx.language):
+            product_id, name_reason = await _anchor_by_name(ctx, deps, query)
+            reason = None if product_id else name_reason
+        else:
+            reason = "name_lookup_skipped"
     if reason is not None or fact is None or product_id is None:
         ctx.emit("fast_path", outcome="skipped", reason=reason or "no_anchor")
         return FastPathOutcome(False, reason or "no_anchor", fact)

@@ -1705,3 +1705,63 @@ async def search_products_semantic(
     )
     rows = await conn.fetch(sql, *params)
     return [_row_to_product(r) for r in rows]
+
+
+#: Lungimea minimă a unui nume care are voie să ancoreze o întrebare (NX-275 felia 7). Un nume
+#: scurt și generic („Ser", „Cremă") apare în aproape orice mesaj de vânzare, deci ar ancora fals.
+MIN_ANCHOR_NAME_LEN = 8
+
+#: Numele DISTINCTIV: partea dinaintea primei liniuțe de descriere sau virgule.
+#:
+#: Măsurat pe catalogul SOLE (2.758 produse active): numele COMPLET are în medie 191 de caractere,
+#: 97% conțin virgulă, 100% au peste 6 cuvinte, iar **zero** sunt rostibile de un om. O potrivire
+#: pe numele întreg ar fi fost o scanare cu rată de succes 0. Prefixul distinctiv are în medie 39
+#: de caractere („GESKE MicroCurrent Face-Lifter 6 in 1") și e unic pentru 2.115 din 2.758 de
+#: produse; coliziunile sunt familiile de nuanțe (`TIRTIR Mask Fit Red Cushion` × 35), adică exact
+#: cazurile în care a răspunde ar însemna a ghici nuanța.
+_DISTINCTIVE_NAME = "btrim(split_part(split_part(p.name, ' - ', 1), ',', 1))"
+
+
+async def find_product_named_in_query(
+    conn: asyncpg.Connection,
+    business_id: str,
+    query: str,
+    *,
+    min_name_len: int = MIN_ANCHOR_NAME_LEN,
+) -> tuple[str | None, str]:
+    """Produsul al cărui nume DISTINCTIV apare literal în mesajul clientului. `(product_id, motiv)`.
+
+    Folosit DOAR de fast path (NX-275 felia 7), unde nu există poartă de adevăr în aval. De aceea
+    potrivirea e prin CONȚINERE exactă (case/diacritic-insensitive), nu prin similaritate: o
+    potrivire fuzzy ar fi exact mecanismul prin care s-ar răspunde despre alt produs.
+
+    **Ambiguitatea se rezolvă prin potrivirea MAXIMALĂ, nu printr-o euristică.** Într-un catalog cu
+    familii de produse, un nume scurt e subșir din unul lung, deci ambele se potrivesc cu mesajul.
+    Numele mai LUNG e strict mai specific și îl conține pe cel scurt, deci alegerea lui e maximul,
+    nu o preferință. Dar dacă DOUĂ nume de aceeași lungime se potrivesc, nu există maxim unic →
+    refuzăm (`ambiguous`) — cazul nuanțelor, unde a răspunde ar însemna a ghici.
+
+    `business_id = $1` (izolare P7; RLS plasă) + `status='active'` + quality-gate-ul de conținut.
+    `limit 2`: ne trebuie doar să distingem 0 / 1 / mai multe.
+    """
+    if not (query or "").strip():
+        return None, "empty_query"
+    cs = _content_status_pred()
+    rows = await conn.fetch(
+        f"select p.id::text as id, length({_DISTINCTIVE_NAME}) as name_len"
+        " from products p"
+        " where p.business_id = $1 and p.status = 'active'"
+        f" and length({_DISTINCTIVE_NAME}) >= $3"
+        f" and position(lower(ro_unaccent({_DISTINCTIVE_NAME})) in lower(ro_unaccent($2))) > 0"
+        + (f" and {cs}" if cs else "")
+        + f" order by length({_DISTINCTIVE_NAME}) desc, p.id"
+        " limit 2",
+        business_id,
+        query,
+        min_name_len,
+    )
+    if not rows:
+        return None, "no_name_match"
+    if len(rows) > 1 and rows[0]["name_len"] == rows[1]["name_len"]:
+        return None, "ambiguous"
+    return rows[0]["id"], "named_in_query"
