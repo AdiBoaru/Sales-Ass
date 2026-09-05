@@ -1,24 +1,22 @@
 {
   "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
-  "edges": 37082,
+  "edges": 30881,
   "by_kind": {
-    "substitute": 14434,
-    "complement": 15031,
-    "variant_of": 373,
+    "substitute": 11528,
+    "complement": 12109,
     "routine_next": 7244
   },
   "out_of_stock": 391,
-  "out_of_stock_covered": 298,
+  "out_of_stock_covered": 246,
   "out_of_stock_without_substitute": [
     "e7c1afb7-bb64-496f-b051-74f1e1d948ae",
     "cfb34739-f8cb-4d06-a3b5-d079b4052679",
     "5210e78a-6d36-4435-ada1-915da91d9df6",
-    "da9e516a-6f69-40ab-a4d6-5ac2df10a2e4",
-    "39549dfc-61a0-46a4-a0ea-2bbc761bdb12"
+    "da9e516a-6f69-40ab-a4d6-5ac2df10a2e4"
   ],
-  "out_of_stock_without_needs": 88,
+  "out_of_stock_without_needs": 141,
   "routine_chains_2plus": 2276,
-  "skipped_no_needs": 252,
+  "skipped_no_needs": 739,
   "rules": {
     "substitute": "content.same_category_shared_need_price_band.v1",
     "complement": "content.cross_category_shared_need.v1",

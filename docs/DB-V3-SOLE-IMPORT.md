@@ -451,7 +451,16 @@ Se semnalează acum, nu la demo:
   structurată: răspunsul e text de politică, nu un câmp per produs.
 - **Garanție** — nu apare ca termen explicit pe paginile publice. `grounding_guard` respinge din
   construcție orice afirmație despre garanție fără sursă, deci botul refuză onest.
-- **Stoc cantitativ** — doar binar. `stock_total` rămâne NULL peste tot.
+- **Stoc cantitativ** — doar binar. `stock_total` rămâne NULL peste tot, la fel `variants.stock`
+  (2.755/2.755). **Decizie de owner, 2026-09-04: iese din scop, nu e gaură de închis.** Autoritatea
+  e `availability` (2.367 `in_stock` / 391 `out_of_stock`), iar codul o tratează deja așa: filtrul
+  `in_stock_only` e pe `availability`, nu pe un număr; `_stock_facts` emite `availability` cunoscut
+  lângă `stock` UNKNOWN; `format_availability` cere `0 < stock <= 5` ca să scrie „Ultimele N bucăți",
+  deci fără cifră cade pe eticheta de disponibilitate; poarta de CTA și validatorul cer
+  `in_stock`/`low_stock`, nu cantitate. Două consecințe asumate: (1) coșul NU plafonează cantitatea
+  (`cart_service` compară doar când stocul e cunoscut) — reconcilierea e a magazinului, noi n-avem
+  API de storefront; (2) urgența pe raritate („mai sunt 3") nu se poate folosi ca pârghie de
+  vânzare. `low_stock` rămâne în vocabular, dar importul SOLE nu-l produce niciodată.
 - **Politica de preț / istoricul prețului** — `sale_start`/`sale_end` rămân NULL.
 
 ### 8.1 FAQ: ce e acoperit și ce nu

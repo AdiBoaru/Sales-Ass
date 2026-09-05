@@ -1,8 +1,8 @@
 {
   "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
   "window": {
-    "from": "2026-08-04T00:00:00+00:00",
-    "to": "2026-09-03T00:00:00+00:00"
+    "from": "2026-08-28T00:00:00+00:00",
+    "to": "2026-09-04T00:00:00+00:00"
   },
   "min_samples": 30,
   "metrics": [
@@ -22,31 +22,31 @@
     },
     {
       "metric": "facet_coverage.concerns",
-      "value": 0.0,
+      "value": 0.9086,
       "threshold": null,
       "samples": 2758,
       "verdict": "MEASURED"
     },
     {
       "metric": "facet_coverage.skin_type",
-      "value": 0.0,
+      "value": 0.686,
       "threshold": null,
       "samples": 2758,
       "verdict": "MEASURED"
     },
     {
       "metric": "facet_coverage.shade",
-      "value": 0.0,
+      "value": 0.2107,
       "threshold": null,
       "samples": 2758,
       "verdict": "MEASURED"
     },
     {
       "metric": "catalog_staleness_days",
-      "value": 6.2335,
+      "value": 7.2335,
       "threshold": 7.0,
       "samples": 2758,
-      "verdict": "PASS"
+      "verdict": "FAIL"
     },
     {
       "metric": "head_precision_top3",
