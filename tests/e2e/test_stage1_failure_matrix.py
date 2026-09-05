@@ -116,6 +116,24 @@ async def env():
             "OPENAI_API_KEY",
         )
     }
+
+    def _restore_env() -> None:
+        """Repune mediul procesului exact cum era. Cheia e că se cheamă și pe calea de EȘEC.
+
+        Mutațiile de mai jos sunt GLOBALE (`os.environ` + cache-ul de settings), iar `try`-ul mare
+        al fixture-ului începe abia după ce harnessul e gata. Orice excepție între cele două (fără
+        Postgres local, migrare lipsă, aplicație care refuză să pornească) lăsa mediul pe profilul
+        APRINS pentru tot restul sesiunii — adică zeci de teste care verifică defaultul stins picau
+        pe un profil pe care nu-l ceruse nimeni. Simptomul arăta ca „testele sunt fragile", cauza
+        era o fixture care nu-și curăța starea globală decât pe calea fericită.
+        """
+        for key, value in {**saved_env, **saved_secrets}.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        config_mod.get_settings.cache_clear()
+
     ha.apply_flag_profile(ha.CERTIFIED_PROFILE)
     os.environ.update(HARNESS_OVERRIDES)
     os.environ["WEB_ACTION_KEYS"] = "e2e1:" + "A" * 44
@@ -125,38 +143,44 @@ async def env():
     os.environ["OPENAI_API_KEY"] = "stage1-e2e-no-network"
     config_mod.get_settings.cache_clear()
 
-    from src.db.connection import admin_conn, close_pool, get_pool
+    # Din punctul ăsta mediul procesului e MUTAT. Orice eșec până la `yield` trebuie să-l pună
+    # la loc, altfel restul sesiunii rulează pe profilul aprins (vezi `_restore_env`).
+    try:
+        from src.db.connection import admin_conn, close_pool, get_pool
 
-    settings = config_mod.get_settings()
-    pool = await get_pool()
-    async with admin_conn(pool) as conn:
-        if not await conn.fetchval("select to_regclass('public.web_turns') is not null"):
-            pytest.skip("migrarea 040_web_turns nu e aplicată (rulează scripts/migrate.py)")
-        if not await conn.fetchval("select to_regclass('public.web_feedback') is not null"):
-            pytest.skip("migrarea 042_web_feedback nu e aplicată")
+        settings = config_mod.get_settings()
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
+            if not await conn.fetchval("select to_regclass('public.web_turns') is not null"):
+                pytest.skip("migrarea 040_web_turns nu e aplicată (rulează scripts/migrate.py)")
+            if not await conn.fetchval("select to_regclass('public.web_feedback') is not null"):
+                pytest.skip("migrarea 042_web_feedback nu e aplicată")
 
-    import src.webhook.app as webhook_app
+        import src.webhook.app as webhook_app
 
-    importlib.reload(webhook_app)
+        importlib.reload(webhook_app)
 
-    alpha, beta = sc.make_tenants()
-    async with admin_conn(pool) as conn:
-        for tenant in (alpha, beta):
-            await sc.seed_tenant(conn, tenant, embed_model=settings.model_embed)
+        alpha, beta = sc.make_tenants()
+        async with admin_conn(pool) as conn:
+            for tenant in (alpha, beta):
+                await sc.seed_tenant(conn, tenant, embed_model=settings.model_embed)
 
-    app = ha.build_stage1_app(
-        control_secret=CONTROL_SECRET,
-        bind_host="127.0.0.1",
-        tenants={alpha.key: alpha, beta.key: beta},
-    )
-    from src.redis_bus import get_redis
-    from src.web.turn_executor import WebTurnExecutor
+        app = ha.build_stage1_app(
+            control_secret=CONTROL_SECRET,
+            bind_host="127.0.0.1",
+            tenants={alpha.key: alpha, beta.key: beta},
+        )
+        from src.redis_bus import get_redis
+        from src.web.turn_executor import WebTurnExecutor
 
-    redis = await get_redis()
-    await redis.flushdb()
-    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
-    client = httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1")
-    executor = WebTurnExecutor(redis, owner="stage1-e2e-primary")
+        redis = await get_redis()
+        await redis.flushdb()
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
+        client = httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1")
+        executor = WebTurnExecutor(redis, owner="stage1-e2e-primary")
+    except BaseException:
+        _restore_env()
+        raise
 
     try:
         yield Stage1Env(
@@ -168,12 +192,7 @@ async def env():
             for tenant in (alpha, beta):
                 await sc.drop_tenant(conn, tenant.business_id)
         await close_pool()
-        for key, value in {**saved_env, **saved_secrets}.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-        config_mod.get_settings.cache_clear()
+        _restore_env()
 
 
 @pytest.fixture(autouse=True)

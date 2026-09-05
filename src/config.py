@@ -85,8 +85,14 @@ _PROD_ENVS = frozenset({"prod", "production"})
 
 
 class Settings(BaseSettings):
+    # `env_file` e configurabil printr-o variabilă de mediu, cu `.env` ca implicit — adică exact
+    # comportamentul de până acum în runtime. Singurul consumator al excepției e suita de teste
+    # (`tests/conftest.py`), și există dintr-un motiv măsurat: `.env`-ul de dezvoltare are stiva de
+    # flag-uri APRINSĂ, deci suita rulată local măsura mediul, nu invariantul. CI (fără `.env`)
+    # ieșea verde, local ieșeau 108 roșii, iar diferența nu era un bug de cod. Un test care vrea
+    # profilul aprins îl declară el, cu `monkeypatch`.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.getenv("NX_CONFIG_ENV_FILE", ".env") or None,
         env_file_encoding="utf-8",
         extra="ignore",  # .env are și variabile pt seed-ul node (SUPABASE_URL etc.)
     )
