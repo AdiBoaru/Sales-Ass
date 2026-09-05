@@ -40,8 +40,20 @@ class ModelRates:
 # din `cost_for` (pipeline). Aftercare și contorul web per-vizitator scriu încă o euristică fixă din
 # config, deci NU se mișcă cu tarifele; cartografia celor trei alimentatori e în
 # docs/NX-201-PRICING.md.
+#
+# NX-275 felia 1, re-verificat 2026-09-05 pe aceeași pagină. Două lucruri s-au schimbat:
+#   • familia `gpt-5.6` a intrat în listă. `gpt-5.6-luna` — modelul de VÂNZARE de azi
+#     (`MODEL_AGENT`) — lipsea de tot, deci cădea pe fallback-ul `mini` și fiecare cifră de cost
+#     raportată de sistem era o supraestimare de 3,75x (0,75 vs 0,20 pe input, 4,50 vs 1,20 pe
+#     output). Plafonul zilnic se declanșa pe bani care nu se cheltuiseră;
+#   • `gpt-5.6-terra` s-a IEFTINIT (2,50/15,00 → 2,00/12,00), deci valoarea din iulie era stale.
+# Tarifele de mai jos sunt cele STANDARD (API sincron). Batch/Flex sunt jumătate, Fast Mode e
+# dublu — dacă vreodată rutăm un apel pe alt tier, tierul devine parte din cheie, nu o notă.
 _DEFAULT_PRICING: dict[str, ModelRates] = {
-    "gpt-5.6-terra": ModelRates(input=2.50, cached_input=0.25, output=15.00),
+    "gpt-6-astra": ModelRates(input=10.00, cached_input=1.00, output=50.00),
+    "gpt-5.6-sol": ModelRates(input=4.00, cached_input=0.40, output=20.00),
+    "gpt-5.6-terra": ModelRates(input=2.00, cached_input=0.20, output=12.00),
+    "gpt-5.6-luna": ModelRates(input=0.20, cached_input=0.02, output=1.20),
     "gpt-5.4": ModelRates(input=2.50, cached_input=0.25, output=15.00),
     "gpt-5.4-mini": ModelRates(input=0.75, cached_input=0.075, output=4.50),
     "gpt-5.4-nano": ModelRates(input=0.20, cached_input=0.02, output=1.25),

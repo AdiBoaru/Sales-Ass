@@ -210,6 +210,12 @@ def should_sample(trace_id: str, ratio: float) -> bool:
     Un `random()` per span ar produce traces ciobite (jumătate din spans exportate), care sunt
     mai rele decât niciun trace: arată ca o pierdere de date și te trimit să cauți un bug care
     nu există.
+
+    ⚠ `trace_id` trebuie să fie hex UNIFORM distribuit. Apelantul din modulul ăsta îl derivă prin
+    HMAC, deci e. Un UUID RFC 4122 NU e: nibble-ul de variantă (mereu 8|9|a|b) cade exact pe prima
+    poziție din ultimele 16 caractere, deci bucket-ul iese întotdeauna în [0,5 … 0,75) și orice
+    rată sub 50% eșantionează ZERO, fără nicio eroare. Treci id-ul printr-un hash întâi (vezi
+    `aftercare._shadow_sampled`).
     """
     if ratio >= 1.0:
         return True

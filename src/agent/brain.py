@@ -28,25 +28,28 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from src.agent import tool_budget
+from src.agent import speculative_retrieval, tool_budget, turn_profile
 from src.agent.answer_plan import (
     AnswerPlanContext,
     AnswerPlanV2,
     validate_answer_plan_v2,
 )
 from src.agent.answer_plan_runtime import (
-    ANSWER_PLAN_V2_SCHEMA,
     build_answer_plan_context,
+    inject_server_owned,
+    plan_schema_for_model,
     run_semantic_critic,
     safe_fallback,
     validate_revised_draft,
 )
-from src.agent.brain_models import BrainInput
+from src.agent.brain_models import BrainInput, UserParts
 from src.agent.conversation_quality import evaluate_reply
 from src.agent.evidence_bundle import EvidenceBundle, build_evidence_bundle
 from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
+from src.agent.llm import prompt_cache_scope
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
+from src.agent.tool_definitions import tool_schemas
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
 from src.catalog.freshness import facts_sla_s
@@ -54,6 +57,7 @@ from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
+from src.domain import vocab_examples
 from src.models import RetrievalResult, Route, TurnContext
 from src.observability import turn_latency
 from src.retrieval.port import deadline_from_turn, query_count_bucket
@@ -127,14 +131,22 @@ def _trace(ctx: TurnContext, key: str, value: Any) -> None:
         trace[key] = value
 
 
-def brain_versions(system: str, tools: list[dict[str, Any]], model: str | None) -> dict[str, Any]:
+def brain_versions(
+    system: str,
+    tools: list[dict[str, Any]],
+    model: str | None,
+    profile: str | None = None,
+) -> dict[str, Any]:
     """Amprentele versionate ale rulării (trace attrs, nu labels): prompt/tool-schema/model."""
     return {
         "prompt_version": BRAIN_PROMPT_VERSION,
         "prompt_hash": _sha(system),
         "tool_schema_hash": _sha(json.dumps(tools, sort_keys=True, ensure_ascii=False)),
-        "plan_schema": ANSWER_PLAN_V2_SCHEMA["name"],
+        "plan_schema": plan_schema_for_model()["name"],
         "model": model,
+        # NX-275 felia 4: care direcție a rulat. Fără ea, două ture cu prompturi diferite ar
+        # arăta identic în trace, iar `prompt_hash` ar diferi fără să spună de ce.
+        "turn_profile": profile,
     }
 
 
@@ -248,12 +260,14 @@ async def _generate_plan(
     tools: list[dict[str, Any]],
     execute: Any,
     model: str | None = None,
+    seed: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, int]:
     """Bucla structurată; eșecul (JSON invalid/API) devine `(None, rounds)` — caller-ul repară."""
     try:
-        raw, rounds = await deps.llm.run_tool_loop_structured(
-            system, user, tools, execute, ANSWER_PLAN_V2_SCHEMA, model=model
-        )
+        with prompt_cache_scope(_cache_key(ctx)):
+            raw, rounds = await deps.llm.run_tool_loop_structured(
+                system, user, tools, execute, plan_schema_for_model(), model=model, seed=seed
+            )
         return raw, rounds
     except Exception as e:  # noqa: BLE001 — model/JSON/API: vizibil, nu fatal (repair/fallback)
         log.warning("main_brain: bucla structurată a eșuat (%s)", type(e).__name__)
@@ -353,21 +367,33 @@ async def _repair_plan(
         f"{_evidence_digest(context)}"
     )
     try:
-        return await deps.llm.complete_schema(
-            system, user + feedback, ANSWER_PLAN_V2_SCHEMA, model=model
-        )
+        with prompt_cache_scope(_cache_key(ctx)):
+            return await deps.llm.complete_schema(
+                system, user + feedback, plan_schema_for_model(), model=model
+            )
     except Exception as e:  # noqa: BLE001 — repair eșuat → fallback determinist
         log.warning("main_brain: repair eșuat (%s)", type(e).__name__)
         return None
 
 
 def _validate(
+    ctx: TurnContext,
     brain_input: BrainInput,
     raw: dict[str, Any] | None,
     context: AnswerPlanContext,
     required: tuple[tuple[str, str], ...],
 ) -> tuple[AnswerPlanV2 | None, tuple[str, ...]]:
-    """Parsare + validare V2. Întoarce `(plan, failures)`; plan None = nici măcar parsabil."""
+    """Parsare + validare V2. Întoarce `(plan, failures)`; plan None = nici măcar parsabil.
+
+    NX-275 felia 2: câmpurile server-owned se INJECTEAZĂ aici, într-un singur loc, fiindcă toate
+    cele trei căi (plan inițial, repair, repair-ul de pe ramura de critic) trec pe aici. Injectarea
+    e idempotentă, deci merge identic cu flagul stins, când modelul le-a emis oricum."""
+    raw = inject_server_owned(
+        raw,
+        business_id=ctx.business.id,
+        locale=ctx.language,
+        obligations=[{"kind": kind, "key": key} for kind, key in required],
+    )
     if raw is None:
         return None, ("unknown_evidence",)
     try:
@@ -757,6 +783,70 @@ class _PortedExecute:
         return view or "(fără rezultat)"
 
 
+async def _speculative_seed(
+    ctx: TurnContext, profile: Any, execute: Any, query: str
+) -> list[dict[str, Any]] | None:
+    """NX-275 felia 6: căutarea rulată ÎNAINTE de primul apel, sau None.
+
+    Trece prin ACELAȘI `execute` ca orice tool al buclei, deci prin portul NX-238, prin safety
+    (NX-173) și prin admission/buget (NX-241). Nu e o scurtătură pe lângă porți, e aceeași cale
+    chemată mai devreme.
+
+    Emite `speculative_retrieval{outcome}` pe fiecare ramură de refuz, cu MOTIVUL: fără el, o felie
+    stinsă de fapt (toate turele sar peste seed dintr-un motiv sau altul) ar arăta la fel ca una
+    aprinsă care nu nimerește niciodată."""
+    if not getattr(get_settings(), "speculative_retrieval_enabled", False):
+        return None
+    reason = speculative_retrieval.skip_reason(
+        speculative_profile=bool(profile is not None and profile.speculative_retrieval),
+        has_action=getattr(ctx, "action", None) is not None,
+        has_anchor=bool(getattr(ctx, "resolved_reference", None)),
+        is_pagination=bool(getattr(ctx, "show_more", False)),
+        message=query,
+        locale=ctx.language,
+    )
+    if reason is not None:
+        ctx.emit("speculative_retrieval", outcome="skipped", reason=reason)
+        return None
+    messages, outcome = await speculative_retrieval.seed_messages(
+        turn_id=ctx.turn_id, message=query, locale=ctx.language, execute=execute
+    )
+    if messages is None:
+        ctx.emit("speculative_retrieval", outcome="skipped", reason=outcome)
+    return messages
+
+
+def _cache_key(ctx: TurnContext) -> str:
+    """Partiția de cache a turului: tenant + versiunea de prompt (NX-275 felia 3).
+
+    Tenantul, fiindcă prefixul (system generat din DB + tool-uri) e al lui. Versiunea, fiindcă la
+    o schimbare de prompt vrei să NU cauți într-un cache al formei vechi. Nimic per conversație:
+    ar face fiecare conversație propria partiție, adică fix opusul scopului."""
+    return f"{ctx.business.id}:{BRAIN_PROMPT_VERSION}"
+
+
+def _compose_user(user: str, parts: UserParts | None, brain_blocks: str) -> str:
+    """Mesajul USER al brain-ului, compus într-UN singur loc (NX-275 felia 3).
+
+    Stins (implicit) sau fără părți: exact ordinea de azi — blocurile brain-ului, apoi `user`
+    (care e deja `per_turn + istoric + mesaj`). Byte-identic, deci nimic nu se mișcă.
+
+    Aprins: istoricul URCĂ în față. Motivul e mecanic, nu estetic: prompt cachingul se prinde pe
+    un prefix identic, iar orice octet care se schimbă mai devreme îl invalidează pe tot ce
+    urmează. Cu obligațiile și hint-urile turului scrise ÎNAINTEA istoricului, istoricul (partea
+    care crește cel mai mult și e stabilă în interiorul unei conversații) e mereu precedat de
+    octeți diferiți, deci nu are cum să fie servit din cache. Inversând ordinea, turul 2+ al
+    aceleiași conversații retrimite un prefix pe care furnizorul l-a mai văzut.
+
+    Conținutul e IDENTIC în ambele ramuri — se schimbă doar poziția. De asta felia are flag
+    propriu: reordonarea poate schimba comportamentul modelului chiar dacă nu schimbă informația,
+    iar asta se măsoară pe golden, nu se presupune.
+    """
+    if parts is None or not getattr(get_settings(), "prompt_cache_layout_enabled", False):
+        return f"{brain_blocks}{user}"
+    return parts.cache_first(brain_blocks=brain_blocks)
+
+
 async def run_main_brain(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -766,6 +856,7 @@ async def run_main_brain(
     tools: list[dict[str, Any]],
     system: str,
     user: str,
+    user_parts: UserParts | None = None,
     query: str,
 ) -> None:
     """Turul MainBrain: plan structurat în aceeași buclă → validare → (un repair) → render →
@@ -795,7 +886,32 @@ async def run_main_brain(
         blocking_code=selection.blocking_code,
     )
 
+    # NX-275 felia 4: direcția de răspuns, aleasă de COD din obligații + clasa de tur. Adaugă un
+    # sufix la FINALUL system-ului (prefixul rămâne byte-identic, deci cache-ul ține) și, cel mult,
+    # tool-uri în plus. OFF → `profile is None` și nimic nu se schimbă.
+    pack = getattr(ctx.business, "domain_pack", None)
+    registry = getattr(pack, "relation_kinds", None)
+    sequences = tuple(s.kind for s in registry.sequences()) if registry is not None else ()
+    profile = (
+        turn_profile.select(turn_class, obligations, has_sequences=bool(sequences))
+        if getattr(settings, "turn_profiles_enabled", False)
+        else None
+    )
+    if profile is not None:
+        ctx.emit("turn_profile", name=profile.name, turn_class=turn_class.value)
+        have = {s.get("function", {}).get("name") for s in tools}
+        extra = [t for t in profile.extra_tools if t not in have]
+        if extra:
+            # Enumul de relații e al TENANTULUI. Trimitem tipurile DECLARATE (nu doar secvențele):
+            # o rutină poate avea nevoie și de un complement, iar un tip nedeclarat e refuzat de
+            # tool oricum (`unknown_relation`).
+            declared = tuple(getattr(registry, "specs", {})) if registry is not None else ()
+            examples = vocab_examples.from_pack(pack)
+            tools = [*tools, *tool_schemas(extra, examples, declared)]
+
     brain_system = f"{system}\n{_PLAN_V2_SYSTEM}"
+    if profile is not None:
+        brain_system = f"{brain_system}\n{profile.suffix}"
     obligations_block = (
         "Obligațiile turului (acoperă-le pe TOATE în plan): "
         + "; ".join(f"{o.kind}:{o.key}" for o in obligations)
@@ -807,14 +923,27 @@ async def run_main_brain(
     needs_block = (
         "Nevoi cunoscute (need_ids valide): " + ", ".join(_known_need_ids(brain_input)) + "\n"
     )
-    brain_user = f"{obligations_block}{needs_block}{signals_block}{user}"
-    versions = brain_versions(brain_system, tools, model)
+    brain_user = _compose_user(user, user_parts, f"{obligations_block}{needs_block}{signals_block}")
+    versions = brain_versions(brain_system, tools, model, profile.name if profile else None)
 
     execute = _PortedExecute(ctx, deps, run, port)
+    seed = await _speculative_seed(ctx, profile, execute, query)
     raw, rounds = await _generate_plan(
-        ctx, deps, system=brain_system, user=brain_user, tools=tools, execute=execute, model=model
+        ctx,
+        deps,
+        system=brain_system,
+        user=brain_user,
+        tools=tools,
+        execute=execute,
+        model=model,
+        seed=seed,
     )
     ctx.emit("main_brain_tool_rounds_bucket", bucket=_rounds_bucket(rounds))
+    if seed is not None:
+        # HIT = modelul a produs planul din candidații seedați, fără să mai caute (rounds == 0),
+        # adică am scos un apel întreg. MISS = a căutat din nou, deci seed-ul a costat un apel în
+        # plus. Raportul dintre ele decide dacă felia merită: pragul e 43% (vezi design §6).
+        ctx.emit("speculative_retrieval", outcome="hit" if rounds == 0 else "miss")
     # NX-256: planul BRUT al modelului, înainte de validare — singurul loc unde există. Un plan
     # respins la validare e exact cazul pe care vrei să-l citești, iar el nu ajunge nici în
     # `ctx.answer_plan`, nici în reply.
@@ -838,7 +967,7 @@ async def run_main_brain(
         successful_action_ids=run.successful_action_ids,
         known_need_ids=_known_need_ids(brain_input),
     )
-    plan, failures = _validate(brain_input, raw, context, required)
+    plan, failures = _validate(ctx, brain_input, raw, context, required)
     repairs = 0
     if plan is None or failures:
         _trace(ctx, "brain_plan_failures", list(failures or ("unknown_evidence",)))
@@ -853,7 +982,7 @@ async def run_main_brain(
             model=model,
         )
         _trace(ctx, "brain_repair_raw", repaired)
-        plan, failures = _validate(brain_input, repaired, context, required)
+        plan, failures = _validate(ctx, brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan is not None and not failures else "exhausted")
 
     if plan is None or failures:
@@ -939,7 +1068,7 @@ async def run_main_brain(
             context=context,
             model=model,
         )
-        plan2, failures2 = _validate(brain_input, repaired, context, required)
+        plan2, failures2 = _validate(ctx, brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan2 is not None and not failures2 else "exhausted")
         if plan2 is None or failures2:
             ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)

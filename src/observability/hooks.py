@@ -128,9 +128,16 @@ def on_model_call(
     latency_s: float | None = None,
     tokens_in: int = 0,
     tokens_out: int = 0,
+    cached_tokens: int = 0,
     cost_usd: float = 0.0,
 ) -> None:
-    """Un apel de model. `model_id` e exact (buget de 24 valori distincte — vezi contract)."""
+    """Un apel de model. `model_id` e exact (buget de 24 valori distincte — vezi contract).
+
+    NX-275 felia 1: `cached_tokens` se publică PER APEL, nu doar însumat pe tur. Diferența e tot
+    ce contează pentru bugetul de prompt: pe un tur cu două apeluri, cache-ul lovește abia la al
+    doilea (primul îl SCRIE), iar un total pe tur amestecă cele două și face imposibil de spus
+    dacă prefixul se cache-uiește sau nu. Ipoteza asta decide dacă schema de `response_format`
+    costă 1x sau 0,1x — vezi `docs/NX-275-DESIGN.md` §0."""
     metrics.record_counter(
         "web_model_calls_total", model_role=model_role, model_id=model_id, outcome=outcome
     )
@@ -145,6 +152,10 @@ def on_model_call(
     if tokens_out:
         metrics.record_histogram(
             "web_model_tokens", tokens_out, model_role=model_role, direction="out"
+        )
+    if cached_tokens:
+        metrics.record_histogram(
+            "web_model_tokens", cached_tokens, model_role=model_role, direction="cached"
         )
     if cost_usd:
         metrics.record_histogram("web_model_cost_usd", cost_usd, model_role=model_role)

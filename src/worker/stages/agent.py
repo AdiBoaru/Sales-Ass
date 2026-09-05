@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
 from src.agent.answer_plan_guard import enforce_answer_plan
+from src.agent.brain_models import UserParts
 from src.agent.deterministic import (
     _CHEAPER_RE,  # noqa: F401 — re-export (teste)
     _COMPARE_RE,  # noqa: F401 — re-export (teste)
@@ -33,6 +34,7 @@ from src.agent.fallbacks import (
     _cheapest_already_msg,  # noqa: F401 — re-export (teste)
     _no_more_msg,
 )
+from src.agent.fast_path import try_fast_path
 from src.agent.finalize import (
     _rich_bundle,  # noqa: F401 — re-export (teste)
     render,
@@ -398,6 +400,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if await try_pre_intents(ctx, deps):
         return
 
+    # NX-275 felia 7 (D2): fapt exact pe un produs ANCORAT → răspuns fără niciun apel de model.
+    # După `try_pre_intents` (care are deja căile lui deterministe) și ÎNAINTE de orice construcție
+    # de prompt: dacă servește, n-am plătit nici măcar citirea categoriilor din DB.
+    if (await try_fast_path(ctx, deps)).served:
+        return
+
     # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (predicatul e în
     # deterministic.py; paginarea propriu-zisă e mai jos, în GENERATE, via continue_search_session).
     sess = ctx.state.active_search
@@ -475,10 +483,18 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         else ""
     )
     lead_hint = _lead_score_hint(ctx)  # Val3: nudge la lead_score ridicat (câmp altfel mort)
-    user = (
-        f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{purchase_hint}{lead_hint}"
-        f"{context_block}{history_block}Mesaj client: {query}"
+    # NX-275 felia 3: aceleași blocuri, ținute SEPARAT ca să poată fi așezate pentru prompt
+    # caching (vezi `UserParts`). `user` rămâne compus în ordinea de azi, byte-identic: el
+    # alimentează calea v1 și evenimentul `agent_prompt`. Doar brain-ul primește părțile.
+    user_parts = UserParts(
+        history=history_block,
+        per_turn=(
+            f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{purchase_hint}"
+            f"{lead_hint}{context_block}"
+        ),
+        message=f"Mesaj client: {query}",
     )
+    user = user_parts.legacy()
 
     system: str | None = None  # NX-146: promptul de sistem rendered (pt agent_prompt event)
     try:
@@ -505,7 +521,15 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 from src.agent.brain import run_main_brain  # noqa: PLC0415 — evită ciclul
 
                 await run_main_brain(
-                    ctx, deps, run=run, inp=inp, tools=tools, system=system, user=user, query=query
+                    ctx,
+                    deps,
+                    run=run,
+                    inp=inp,
+                    tools=tools,
+                    system=system,
+                    user=user,
+                    user_parts=user_parts,
+                    query=query,
                 )
                 return
             final = await deps.llm.run_tool_loop(system, user, tools, run.execute)

@@ -269,6 +269,11 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "few": "Ultimele {n} bucăți",
             "other": "Ultimele {n} de bucăți",
         },
+        "fast_path": {
+            "price": "{name} costă {amount}.",
+            "stock": "{name}: {availability}.",
+            "link": "{name}: {url}",
+        },
         "freshness": {
             "now": "verificat acum",
             "minutes": {
@@ -357,6 +362,11 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "discontinued": "Discontinued",
         },
         "availability_units": {"one": "Last one left", "other": "Only {n} left"},
+        "fast_path": {
+            "price": "{name} costs {amount}.",
+            "stock": "{name}: {availability}.",
+            "link": "{name}: {url}",
+        },
         "freshness": {
             "now": "checked just now",
             "minutes": {"one": "checked a minute ago", "other": "checked {n} minutes ago"},
@@ -433,6 +443,11 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "discontinued": "Kifutott",
         },
         "availability_units": {"one": "Az utolsó darab", "other": "Már csak {n} db"},
+        "fast_path": {
+            "price": "{name} ára {amount}.",
+            "stock": "{name}: {availability}.",
+            "link": "{name}: {url}",
+        },
         "freshness": {
             "now": "most ellenőrizve",
             "minutes": {"one": "egy perce ellenőrizve", "other": "{n} perce ellenőrizve"},

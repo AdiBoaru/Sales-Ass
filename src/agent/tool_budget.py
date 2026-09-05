@@ -71,6 +71,9 @@ _SPECS: dict[str, ToolSpec] = {
         _spec("search_products", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("get_product_details", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("compare_products", ToolKind.READ, True, True, ToolPriority.OPTIONAL),
+        # NX-275 felia 5: citire pură pe graful de relații. `OPTIONAL` fiindcă un tur rămâne util
+        # și fără pașii următori, iar la buget epuizat vrem să cadă ăsta, nu căutarea.
+        _spec("related_products", ToolKind.READ, True, True, ToolPriority.OPTIONAL),
         _spec("faq_lookup", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("check_order", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("reorder", ToolKind.READ, True, True, ToolPriority.OPTIONAL),

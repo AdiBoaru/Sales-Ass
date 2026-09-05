@@ -1464,3 +1464,122 @@ async def compare_products_tool(
         products=products,
         llm_view=_compare_view(products, getattr(ctx.business, "domain_pack", None), ctx.language),
     )
+
+
+class RelatedArgs(BaseModel):
+    anchor_id: str = Field(min_length=1, max_length=64)
+    relation: str = Field(min_length=1, max_length=64)
+    limit: int = Field(default=4, ge=1, le=6)
+
+
+def _related_view(products: list[dict[str, Any]], spec: Any, locale: str, *, ordered: bool) -> str:
+    """Vederea pentru model: o linie per produs, cu indexul pasului DOAR când relația e ordonată.
+
+    Titlul e eticheta declarată de tenant (`spec.label(locale)`) sau NIMIC. Nu inventăm un titlu:
+    un bloc fără titlu e onest, unul cu titlu greșit („Pașii următori" peste niște accesorii) e o
+    afirmație pe care nicio poartă din aval n-o verifică — produsele EXISTĂ, prețurile sunt REALE,
+    doar relația ar fi inventată."""
+    if not products:
+        return ""
+    title = spec.label(locale) if spec is not None else None
+    lines = [f"{title}:"] if title else []
+    for i, p in enumerate(products, start=1):
+        prefix = f"{i}. " if ordered else "- "
+        price = amount_text(p.get("price"), locale) if p.get("price") is not None else ""
+        avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
+        lines.append(
+            f"{prefix}[{p.get('id')}] {p.get('name')}{f' | {price}' if price else ''}{avail}"
+        )
+    return "\n".join(lines)
+
+
+@register("related_products")
+async def related_products_tool(
+    ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
+) -> ToolResult:
+    """NX-275 felia 5 — vecinii unei ancore în graful de relații al tenantului.
+
+    **Serverul face graful, nu modelul.** Modelul spune doar de unde pornim (`anchor_id`) și ce fel
+    de legătură urmărim (`relation`, enum din registrul tenantului). CÂT de adânc se merge și DACĂ
+    rezultatul e o secvență sunt proprietăți DECLARATE ale tipului de muchie
+    (`DomainPack.relation_kinds`, NX-262), nu decizii de model: un traversal „ca la rutine" aplicat
+    pe compatibilitate produce recomandări care trec și validatorul, și grounding guardul, fiindcă
+    produsele există și prețurile sunt reale. Doar relația ar fi inventată.
+
+    Refolosește funcțiile de graf existente (`traverse_relation_chain` + `walk_chain` pentru
+    secvențe, `traverse_relations` pentru rest) — cross-sell-ul determinist de după `cart_add`
+    rămâne neatins și nu se duplică nimic.
+
+    Ancoră fără muchii → `ok=False, error="no_relations"` cu o vedere ONESTĂ, ca modelul să pună
+    `unknowns` în loc să inventeze pași.
+    """
+    a = RelatedArgs(**args)
+    pack = getattr(ctx.business, "domain_pack", None)
+    registry = getattr(pack, "relation_kinds", None)
+    spec = registry.get(a.relation) if registry is not None else None
+    if spec is None or a.relation not in getattr(registry, "specs", {}):
+        # Tip nedeclarat: NU traversăm. Registrul dă un default `NEIGHBORS`/1 tocmai ca apelantul
+        # să n-aibă ramură de `None`, dar aici a cere o relație pe care tenantul n-a declarat-o e
+        # o interogare pe gol care ar arăta ca un răspuns.
+        return ToolResult(
+            ok=False,
+            products=[],
+            error="unknown_relation",
+            llm_view="Magazinul nu are declarat tipul ăsta de legătură între produse.",
+        )
+
+    from src.catalog.relation_chain import walk_chain  # noqa: PLC0415 — evită cuplaj la import
+    from src.db.queries.catalog import traverse_relation_chain, traverse_relations  # noqa: PLC0415
+
+    ordered = bool(getattr(spec, "ordered", False))
+    depth = int(getattr(spec, "max_depth", 1) or 1)
+    async with deps.db("related_products") as conn:
+        if ordered:
+            hops = await traverse_relation_chain(
+                conn, ctx.business.id, anchor_id=a.anchor_id, kind=a.relation, max_depth=depth
+            )
+            refs = walk_chain(hops, a.anchor_id, a.limit)
+        else:
+            refs = await traverse_relations(
+                conn,
+                ctx.business.id,
+                anchor_id=a.anchor_id,
+                kind=a.relation,
+                max_depth=depth,
+                limit=a.limit,
+            )
+        ids = [str(r["id"]) for r in refs][: a.limit]
+        products = (
+            await get_products_by_ids(
+                conn, ctx.business.id, ids, limit=a.limit, respect_content_status=True
+            )
+            if ids
+            else []
+        )
+
+    # Ordinea contează pentru o secvență: `get_products_by_ids` nu promite ordinea cerută, iar o
+    # rutină cu pașii amestecați e mai rea decât niciuna.
+    by_id = {str(p.get("id")): p for p in products}
+    products = [by_id[i] for i in ids if i in by_id]
+
+    # Cumpărabilitate: un pas pe care clientul nu-l poate cumpăra nu e un pas. `availability`
+    # necunoscut NU exclude (UNKNOWN ≠ epuizat, NX-240/047).
+    products = [p for p in products if str(p.get("availability") or "") != "out_of_stock"]
+
+    # NX-173 (P0): e o cale de AFIȘARE, deci trece prin aceeași poartă ca search/details/compare.
+    products, _ = _safety_gate(ctx, products, purpose="related")
+    if not products:
+        return ToolResult(
+            ok=False,
+            products=[],
+            error="no_relations",
+            llm_view=(
+                "Nu am legături declarate de tipul ăsta pentru produsul ăsta. Spune-i clientului "
+                "că nu ai o secvență pentru el, nu inventa pași."
+            ),
+        )
+    return ToolResult(
+        ok=True,
+        products=products,
+        llm_view=_related_view(products, spec, ctx.language, ordered=ordered),
+    )

@@ -69,6 +69,10 @@ SPAN_ATTRIBUTES: frozenset[str] = frozenset(
         "attempt_bucket",
         "model_role",
         "model_id",
+        # NX-275 felia 1: tokenii de prompt serviți din cache pe APELUL ăsta. Numeric, deci fără
+        # risc de cardinalitate pe metrici (e atribut de span, nu etichetă) și fără conținut de
+        # client. Separă apelul care SCRIE cache-ul de cel care îl citește.
+        "tokens_cached",
         "tool_name",
         "cache_result",
         "turn_id",
@@ -426,7 +430,10 @@ METRICS: dict[str, MetricSpec] = {
             "1",
             (
                 LabelSpec("model_role", MODEL_ROLES),
-                LabelSpec("direction", frozenset({"in", "out"})),
+                # NX-275 felia 1: `cached` e un SUBSET al lui `in` (convenția OpenAI:
+                # `prompt_tokens` include `cached_tokens`), nu o a treia cantitate. Nu se adună
+                # peste `in` — cine face suma pe direcții numără de două ori.
+                LabelSpec("direction", frozenset({"in", "out", "cached"})),
             ),
             TOKEN_BUCKETS,
         ),

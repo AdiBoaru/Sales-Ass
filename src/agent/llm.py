@@ -13,7 +13,9 @@ import asyncio
 import json
 import logging
 import random
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -320,6 +322,50 @@ def _note_truncation(resp: Any, *, cap: int | None) -> None:
         return
 
 
+#: Cheia de rutare a cache-ului de prompt pentru turul curent (NX-275 felia 3). ContextVar, ca
+#: `usage` / `turn_latency` / `deadline`: valoarea aparține TURULUI, nu unei semnături de apel.
+_prompt_cache_key: ContextVar[str] = ContextVar("prompt_cache_key", default="")
+
+
+@contextmanager
+def prompt_cache_scope(key: str) -> Iterator[None]:
+    """Toate apelurile din bloc cer aceeași partiție de cache la furnizor.
+
+    Fără cheie, ruterul OpenAI distribuie cererile după un hash implicit al prefixului; cu trafic
+    mic și mai multe instanțe, două ture ale aceluiași tenant pot nimeri noduri diferite și niciunul
+    nu găsește prefixul celuilalt. Cheia e `business_id` + versiunea de prompt: leagă turele care
+    CHIAR au același prefix și le separă pe cele care n-au (o schimbare de prompt nu trebuie să
+    caute într-un cache al versiunii vechi). NU conține `conversation_id`: ar face fiecare
+    conversație propria partiție, adică exact opusul scopului.
+    """
+    token = _prompt_cache_key.set(key or "")
+    try:
+        yield
+    finally:
+        _prompt_cache_key.reset(token)
+
+
+def _note_cache_on_span(resp: Any) -> None:
+    """NX-275 felia 1: tokenii serviți din cache, pe spanul APELULUI curent.
+
+    Aici, și nu în `usage.record_chat`, dintr-un motiv de poziție: `record_chat` e chemat DUPĂ ce
+    `with turn_latency.span("model")` s-a închis, deci un atribut pus acolo n-ar avea pe ce să
+    stea. `_chat` e wrapperul unic al tuturor apelurilor și rulează ÎNĂUNTRUL spanului.
+
+    Ce se câștigă față de totalul pe tur: pe un tur cu două apeluri, primul SCRIE cache-ul și al
+    doilea îl citește. Însumate, cele două arată o valoare de mijloc care nu spune dacă prefixul
+    chiar se cache-uiește. Separate, apelul 2 răspunde direct. De cifra asta atârnă dacă schema de
+    `response_format` costă 1x sau 0,1x (vezi `docs/NX-275-DESIGN.md` §0)."""
+    try:
+        cached = usage.cached_tokens_of(resp)
+        if cached:
+            from src.observability import tracing  # noqa: PLC0415 — evită ciclu la import
+
+            tracing.set_attribute("tokens_cached", cached)
+    except Exception:  # noqa: BLE001 — ca mai sus (P6, P10)
+        return
+
+
 class LLMClient:
     """Wrapper subțire peste AsyncOpenAI. Modelele vin din settings (nano/mini)."""
 
@@ -412,12 +458,19 @@ class LLMClient:
             self._sampling(agent=agent, model=kwargs["model"], has_tools=bool(kwargs.get("tools")))
         )
         s = get_settings()
+        # NX-275 felia 3: sub același flag ca layoutul, fiindcă amândouă sunt inutile una fără
+        # cealaltă (un prefix stabil pe care ruterul îl trimite în altă parte nu se cache-uiește,
+        # și invers). Stins → parametrul nu pleacă deloc pe sârmă: OFF rămâne byte-identic.
+        cache_key = _prompt_cache_key.get()
+        if cache_key and getattr(s, "prompt_cache_layout_enabled", False):
+            kwargs["prompt_cache_key"] = cache_key
         resp = await _with_retry(
             lambda: self._client.chat.completions.create(**kwargs),
             max_retries=s.llm_retry_max,
             cap_ms=getattr(s, "llm_call_cap_ms", 8_000),
         )
         _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
+        _note_cache_on_span(resp)
         return resp
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
@@ -555,6 +608,7 @@ class LLMClient:
         *,
         max_steps: int = 3,
         model: str | None = None,
+        seed: list[dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any], int]:
         """NX-239 — aceeași buclă de tool-calling, dar răspunsul FINAL al ACELUIAȘI model este
         un obiect STRUCTURAT (`response_format=json_schema`), nu proză: planul iese din bucla în
@@ -571,6 +625,12 @@ class LLMClient:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]
+        # NX-275 felia 6: retrieval speculativ. Perechea (assistant tool_call, tool result) se
+        # inserează DUPĂ user, exact unde ar fi apărut dacă modelul ar fi cerut căutarea el însuși.
+        # NU consumă o rundă: `rounds` numără apelurile de MODEL, iar aici n-a fost niciunul. Tool
+        # call-ul e însă real în ledgerul NX-241, fiindcă a trecut prin `admit` la execuție.
+        if seed:
+            messages.extend(seed)
         rounds = 0
         for _ in range(max_steps):
             if not _round_admitted():

@@ -1698,6 +1698,7 @@ checkout_link
 compare_products
 faq_lookup
 get_product_details
+related_products
 reorder
 search_products
 subscribe_back_in_stock
@@ -1790,6 +1791,7 @@ faq_enabled = true
 faq_locale_fallback_enabled = false
 faq_policy_gate_on_faq_kind = true
 faq_rerank_enabled = true
+fast_path_exact_enabled = false
 injection_screen_enabled = false
 input_pii_mask_enabled = true
 lead_score_hint_enabled = true
@@ -1809,10 +1811,12 @@ observability_enabled = false
 observability_metrics_enabled = true
 observability_traces_enabled = true
 partition_job_enabled = true
+plan_server_owned_fields_enabled = false
 pool_metrics_enabled = true
 proactive_enabled = true
 proactive_initiators_enabled = true
 profile_extraction_enabled = true
+prompt_cache_layout_enabled = false
 query_spec_shadow_enabled = false
 rate_limit_enabled = true
 reference_precedence_v2_enabled = false
@@ -1845,6 +1849,7 @@ search_sort_mode_enabled = true
 short_ack_guard_enabled = true
 single_brain_enabled = false
 spec_digits_grounded_enabled = true
+speculative_retrieval_enabled = false
 summary_enabled = true
 triage_factual_guard_enabled = true
 triage_shadow_enabled = true
@@ -1854,6 +1859,7 @@ turn_budget_enforced = false
 turn_deadline_enabled = false
 turn_latency_spans_enabled = true
 turn_parallel_reads_enabled = false
+turn_profiles_enabled = false
 typed_constraints_enabled = false
 typing_enabled = true
 validator_bare_numbers_enabled = true

@@ -619,6 +619,52 @@ class Settings(BaseSettings):
     # ce ar fi rutat triajul, plătim un apel nano post-tur. Se stinge separat când shadow-ul și-a
     # spus cuvântul, fără schimbare de cod și fără să readucă triajul pe calea sincronă.
     triage_shadow_enabled: bool = Field(default=True, validation_alias="TRIAGE_SHADOW_ENABLED")
+    # NX-275 felia 1: CÂT de des plătim măsurătoarea. 100 = comportamentul de azi (fiecare tur).
+    # Acordul brain-vs-nano e o proporție, deci se estimează la fel de bine dintr-un eșantion; la
+    # 10% mai ai nevoie de ~10x mai multe ture ca să-l declari, ceea ce e o decizie de PRODUS
+    # („e gata măsurătoarea?"), nu de cod. Eșantionarea e DETERMINISTĂ pe `turn_id` (același tur
+    # dă același verdict la reclaim), nu `random()`: altfel un tur reluat ar putea fi măsurat de
+    # două ori sau deloc, iar numărătorul și numitorul ar diverge tăcut.
+    triage_shadow_sample_pct: int = Field(
+        default=100, ge=0, le=100, validation_alias="TRIAGE_SHADOW_SAMPLE_PCT"
+    )
+    # NX-275 felia 2: modelul nu mai EMITE ce știe deja serverul (`schema_version`, `business_id`,
+    # `locale`, `obligations`) — se injectează după parsare. Forma lui `AnswerPlanV2` rămâne fixă,
+    # deci consumatorii nu văd nicio diferență; se scurtează doar cererea. Câștigul principal nu e
+    # de tokeni, ci de principiu: `business_id` server-owned (P7) devine adevărat prin CONSTRUCȚIE,
+    # nu prin verificarea a ce a scris modelul. OFF = schema de azi, byte-identic.
+    plan_server_owned_fields_enabled: bool = Field(
+        default=False, validation_alias="PLAN_SERVER_OWNED_FIELDS_ENABLED"
+    )
+    # NX-275 felia 3: ordinea blocurilor din mesajul USER, așezată pentru prompt caching —
+    # istoricul ÎNAINTEA a tot ce e per tur. Conținutul e identic; se schimbă doar poziția, iar
+    # asta contează fiindcă un cache se prinde pe PREFIX: azi istoricul e precedat de octeți care
+    # diferă la fiecare tur, deci nu poate fi servit din cache niciodată. Flag propriu (nu legat
+    # de felia 2) fiindcă reordonarea poate schimba comportamentul modelului fără să schimbe
+    # informația — se măsoară pe golden înainte de aprindere, nu se presupune.
+    prompt_cache_layout_enabled: bool = Field(
+        default=False, validation_alias="PROMPT_CACHE_LAYOUT_ENABLED"
+    )
+    # NX-275 felia 4: profile de tur — direcția răspunsului (fapt / recomandare / comparație /
+    # mutație / rutină), aleasă de COD din obligații + clasa de tur, materializată ca un SUFIX la
+    # finalul system-ului plus, cel mult, tool-uri în plus. Prefixul rămâne byte-identic, deci
+    # cache-ul ține. OFF = niciun sufix, niciun tool extra: byte-identic cu azi.
+    turn_profiles_enabled: bool = Field(default=False, validation_alias="TURN_PROFILES_ENABLED")
+    # NX-275 felia 6: cautarea se face INAINTE de primul apel de model, pe profilul `recommend`,
+    # iar bucla porneste cu rezultatul deja in conversatie. Masurat pe drive-ul NX-239: 15 din 16
+    # ture au exact o runda de tool, deci apelul 1 nu face altceva decat sa ceara o cautare pe care
+    # codul o putea decide singur. Un seed nimerit scoate un apel, unul ratat adauga unul: pragul
+    # de rentabilitate e 43% hit (design §6), masurat prin `speculative_retrieval{outcome}`.
+    # Cere `TURN_PROFILES_ENABLED` (profilul e cel care spune CAND speculam) — validat la boot.
+    speculative_retrieval_enabled: bool = Field(
+        default=False, validation_alias="SPECULATIVE_RETRIEVAL_ENABLED"
+    )
+    # NX-275 felia 7 (D2): fapte pe un produs identificat EXACT (pret/stoc/link), servite fara
+    # niciun apel de model. E singura felie care poate raspunde GRESIT fara poarta in aval —
+    # validatorul si grounding guardul verifica daca pretul EXISTA, nu daca e al produsului despre
+    # care a intrebat clientul. De aceea conditiile sunt cumulative si conservatoare (o obligatie,
+    # un fapt, ancora de incredere, fapt cunoscut si proaspat), iar orice dubiu merge la creier.
+    fast_path_exact_enabled: bool = Field(default=False, validation_alias="FAST_PATH_EXACT_ENABLED")
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
@@ -1610,6 +1656,25 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TRIAGE_SYNC_SHADOW_ENABLED cere SINGLE_BRAIN_ENABLED (fără creierul unic nimeni "
                 "nu mai decide ruta, iar turul ar răspunde doar cu fallback)"
+            )
+        # NX-275 feliile 4/6: profilele trăiesc în creierul unic, iar speculativul se declanșează
+        # DOAR pe profilul `recommend`. Aprinse singure, ar fi flag-uri care nu pot face nimic — și,
+        # mai rău, ar sugera în config o optimizare care nu rulează.
+        if self.turn_profiles_enabled and not self.single_brain_enabled:
+            raise ValueError(
+                "TURN_PROFILES_ENABLED cere SINGLE_BRAIN_ENABLED (profilul se aplică pe promptul "
+                "MainBrain; fără el nu există unde adăuga sufixul)"
+            )
+        if self.fast_path_exact_enabled and not self.single_brain_enabled:
+            raise ValueError(
+                "FAST_PATH_EXACT_ENABLED cere SINGLE_BRAIN_ENABLED (fast path-ul se declară "
+                "acoperitor prin control plane-ul creierului unic; fără el, obligația ar rămâne "
+                "neacoperită și turul ar răspunde de două ori)"
+            )
+        if self.speculative_retrieval_enabled and not self.turn_profiles_enabled:
+            raise ValueError(
+                "SPECULATIVE_RETRIEVAL_ENABLED cere TURN_PROFILES_ENABLED (profilul e cel care "
+                "spune CÂND se speculează; fără el nu s-ar specula niciodată)"
             )
         return self
 
