@@ -659,6 +659,12 @@ class Settings(BaseSettings):
     speculative_retrieval_enabled: bool = Field(
         default=False, validation_alias="SPECULATIVE_RETRIEVAL_ENABLED"
     )
+    # NX-275 felia 7 (D2): fapte pe un produs identificat EXACT (pret/stoc/link), servite fara
+    # niciun apel de model. E singura felie care poate raspunde GRESIT fara poarta in aval —
+    # validatorul si grounding guardul verifica daca pretul EXISTA, nu daca e al produsului despre
+    # care a intrebat clientul. De aceea conditiile sunt cumulative si conservatoare (o obligatie,
+    # un fapt, ancora de incredere, fapt cunoscut si proaspat), iar orice dubiu merge la creier.
+    fast_path_exact_enabled: bool = Field(default=False, validation_alias="FAST_PATH_EXACT_ENABLED")
     # NX-121: guardrails de input la gate (cod determinist, înainte de LLM). PII mask ON (defense-
     # in-depth peste channel_identities — PII liber-tastat nu intră în prompt/analytics, P12).
     # Injection screen OFF până e seedat DomainPack-ul per-tenant (fallback neutru în cod); e
@@ -1658,6 +1664,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TURN_PROFILES_ENABLED cere SINGLE_BRAIN_ENABLED (profilul se aplică pe promptul "
                 "MainBrain; fără el nu există unde adăuga sufixul)"
+            )
+        if self.fast_path_exact_enabled and not self.single_brain_enabled:
+            raise ValueError(
+                "FAST_PATH_EXACT_ENABLED cere SINGLE_BRAIN_ENABLED (fast path-ul se declară "
+                "acoperitor prin control plane-ul creierului unic; fără el, obligația ar rămâne "
+                "neacoperită și turul ar răspunde de două ori)"
             )
         if self.speculative_retrieval_enabled and not self.turn_profiles_enabled:
             raise ValueError(

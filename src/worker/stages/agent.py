@@ -34,6 +34,7 @@ from src.agent.fallbacks import (
     _cheapest_already_msg,  # noqa: F401 — re-export (teste)
     _no_more_msg,
 )
+from src.agent.fast_path import try_fast_path
 from src.agent.finalize import (
     _rich_bundle,  # noqa: F401 — re-export (teste)
     render,
@@ -397,6 +398,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     # Faza B (NX-143): intenții deterministe PRE-loop (link/compare) → early-exit, $0 inferență.
     if await try_pre_intents(ctx, deps):
+        return
+
+    # NX-275 felia 7 (D2): fapt exact pe un produs ANCORAT → răspuns fără niciun apel de model.
+    # După `try_pre_intents` (care are deja căile lui deterministe) și ÎNAINTE de orice construcție
+    # de prompt: dacă servește, n-am plătit nici măcar citirea categoriilor din DB.
+    if (await try_fast_path(ctx, deps)).served:
         return
 
     # NX-119b: „mai arată-mi" pe o sesiune activă = paginare DETERMINISTĂ (predicatul e în
