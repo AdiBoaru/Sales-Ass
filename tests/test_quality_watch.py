@@ -18,7 +18,8 @@ import json
 import pathlib
 import re
 
-from scripts.quality_watch import MIN_SAMPLES, _verdict
+from scripts.quality_watch import MIN_SAMPLES, _verdict, declared_settings
+from src.catalog.freshness import is_static
 from src.observability.slo import (
     VERDICT_FAIL,
     VERDICT_INSUFFICIENT,
@@ -147,3 +148,42 @@ def _strings(node, key: str = "(rădăcină)") -> list[tuple[str, str]]:
     if isinstance(node, list):
         return [pair for item in node for pair in _strings(item, key)]
     return []
+
+
+# --- prospețimea e a TENANTULUI, nu a raportului -------------------------------------------------
+
+
+def test_snapshotul_declarat_nu_poate_primi_FAIL_pe_vechime():
+    """Un catalog declarat `static_snapshot` e o fotografie importată o dată, fără proces care s-o
+    reîmprospăteze. Un prag i-ar da `FAIL` zilnic, tot mai tare, despre nimic — iar o metrică ce
+    strigă lupul zilnic e mai rea decât una absentă: antrenează pe toată lumea s-o ignore.
+
+    Măsurat pe `sole-ro`: catalogul importat pe 27.08 a trecut pragul de 7 zile pe 04.09 și a dat
+    `FAIL` deși nimic nu se stricase."""
+    assert is_static({"catalog_freshness": {"mode": "static_snapshot"}}) is True
+    # Declarația lipsă sau necunoscută NU scutește: necunoscutul duce la politica conservatoare.
+    assert is_static({}) is False
+    assert is_static({"catalog_freshness": {"mode": "synced", "sla_s": 86400}}) is False
+    assert is_static({"catalog_freshness": "static_snapshot"}) is False
+
+
+def test_catalogul_cu_sync_ramane_judecat_in_timp():
+    """Cealaltă jumătate a contractului: scutirea e pentru snapshot-uri DECLARATE, nu pentru toată
+    lumea. Un tenant alimentat de un feed care tace de o lună trebuie să dea `FAIL`."""
+    assert _verdict(9.0, 7.0, MIN_SAMPLES) == VERDICT_FAIL
+    assert _verdict(3.0, 7.0, MIN_SAMPLES) == VERDICT_PASS
+
+
+def test_settings_ul_se_decodeaza_indiferent_de_forma_de_pe_conexiune():
+    """Regresie: `settings` vine ca ȘIR pe conexiunile fără codec `jsonb`, iar `is_static` cere un
+    `Mapping`. Bug-ul a crăpat pe baza reală și ar fi trecut în teste, fiindcă restul testelor
+    exersează funcția pură — aceeași clasă de defect ca joburile care mergeau doar în dry-run."""
+    declared = {"catalog_freshness": {"mode": "static_snapshot"}}
+    assert declared_settings(json.dumps(declared)) == declared
+    assert declared_settings(declared) == declared
+    assert is_static(declared_settings(json.dumps(declared))) is True
+    # Necunoscutul duce la politica CONSERVATOARE: judecăm vechimea.
+    assert declared_settings(None) == {}
+    assert declared_settings("{nu e json") == {}
+    assert declared_settings("[1,2]") == {}
+    assert is_static(declared_settings("{nu e json")) is False
