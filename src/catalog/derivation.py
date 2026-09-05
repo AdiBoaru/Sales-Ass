@@ -309,3 +309,36 @@ def signal_name(facet: str, value: str) -> str:
     deci descompunerea e neambiguă, iar o valoare care ar conține-o e un semn că vocabularul e
     stricat, nu ceva de tolerat."""
     return f"{facet}:{value}"
+
+
+# Fațetele pe care derivarea le produce fără să fie declarate ca atare în pachet: `spf` are un
+# regex propriu (o cifră e o cifră în orice limbă), `key_ingredients` iese din capul liniilor unei
+# secțiuni. Amândouă sunt structurale, nu vocabular, deci nu depind de valorile pachetului.
+_ALWAYS_DERIVED = frozenset({"spf", "key_ingredients"})
+
+
+def owned_facets(
+    *,
+    facet_values: Mapping[str, Iterable[str]],
+    name_derived: Iterable[str],
+    claim_derived: Iterable[str],
+) -> tuple[str, ...]:
+    """Fațetele pentru care o rulare de derivare e AUTORITATEA — deci singurele pe care are voie să
+    le rescrie și să le ȘTEARGĂ, în `products.attributes` și în `product_derived_signals`.
+
+    Se calculează din pachet, ÎNAINTE de a privi vreun produs, și asta e toată ideea. Varianta
+    „fațetele care au produs valori acum" pare echivalentă și nu e: o fațetă care nu mai potrivește
+    nimic pe tot catalogul ar ieși din mulțime exact în rularea care ar trebui s-o curețe, iar
+    valorile ei vechi ar supraviețui la infinit. Curățenia trebuie să depindă de ce am ÎNCERCAT să
+    derivăm, nu de ce ne-a ieșit.
+
+    Ce nu e aici nu se atinge, și lista celor lăsate pe dinafară e concretă: `routine_time` vine din
+    import, `shade`/`shade_group` din NX-269 (alt job, altă regulă). Un job care șterge dincolo de
+    ce produce calcă datele altuia — și, cum ambele scriu în aceeași coloană `attributes`, n-ar da
+    nicio eroare, ar da doar un catalog mai sărac la următoarea rulare.
+    """
+    # `concerns` și `skin_type` se derivă din VOCABULARUL pachetului: fără valori declarate,
+    # potrivirea n-are ce căuta, deci rularea nu le deține și n-are dreptul să le șteargă. Un pachet
+    # gol nu e o instrucțiune de curățare a catalogului.
+    vocab = {key for key in ("concerns", "skin_type") if set(facet_values.get(key) or ())}
+    return tuple(sorted(_ALWAYS_DERIVED | set(name_derived) | set(claim_derived) | vocab))

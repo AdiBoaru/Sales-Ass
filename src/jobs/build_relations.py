@@ -378,11 +378,23 @@ select product_id::text as id, coalesce(body, '') as body
  where business_id = $1 and kind = 'routine_integration'
 """
 
+# `not exists`, nu `not in`. Semantica e aceeași (coloanele sunt NOT NULL), planul nu: un `not in`
+# pe constructor de rând obligă Postgres la nested loop, fiindcă trebuie să distingă „nu e în set"
+# de „setul conține NULL". La ~37.000 de tupluri de păstrat × ~31.000 de rânduri asta a lovit
+# `statement_timeout` (2 min pe Supabase). `not exists` peste `unnest` zipuit e anti-join hashuibil.
+#
+# Defectul se vedea DOAR la a doua rulare: pe tabelă goală ștergerea n-are ce scana, deci prima
+# rulare (cea testată) trece instantaneu. Aceeași formă ca celelalte două găsite azi — codul mergea
+# exact în condițiile în care fusese exersat.
 _DELETE_RULE = """
-delete from product_relations
- where business_id = $1 and rule_id = any($2::text[])
-   and (product_id, related_id, kind) not in (
-       select unnest($3::uuid[]), unnest($4::uuid[]), unnest($5::text[]))
+delete from product_relations r
+ where r.business_id = $1 and r.rule_id = any($2::text[])
+   and not exists (
+       select 1
+         from unnest($3::uuid[], $4::uuid[], $5::text[]) as keep(product_id, related_id, kind)
+        where keep.product_id = r.product_id
+          and keep.related_id = r.related_id
+          and keep.kind       = r.kind)
 """
 
 _UPSERT = """
@@ -420,6 +432,13 @@ def _routine_target_categories(
 
 
 async def main() -> int:
+    # Raportul se printează ÎNAINTE de `_write_edges`, iar consola Windows e cp1252: fără garda
+    # asta, un „ă" din eticheta unui contor omoară jobul la print și `--apply` nu scrie NIMIC.
+    # Eșecul e cu atât mai urât cu cât apare doar după ce toată munca a fost făcută. Aceeași gardă
+    # ca în `scripts/derive_shade_finish.py` și `scripts/derive_product_attributes.py`.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--business", required=True)
     ap.add_argument("--apply", action="store_true", help="chiar scrie (fără el: doar raportează)")
@@ -434,10 +453,14 @@ async def main() -> int:
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    from src.db.connection import close_pool, tenant_conn
+    from src.db.connection import admin_conn, close_pool, get_pool
 
+    # `admin_conn`, nu `tenant_conn` — job offline care scrie în catalog (`product_relations`),
+    # iar `bot_runtime` e SELECT-only acolo prin proiectare. Motivul complet:
+    # `scripts/derive_product_attributes.py`.
     try:
-        async with tenant_conn(args.business) as conn:
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
             rows = await conn.fetch(_PRODUCTS_SQL, args.business)
             products = []
             for row in rows:

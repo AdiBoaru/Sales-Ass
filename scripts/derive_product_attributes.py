@@ -66,13 +66,15 @@ from src.catalog.derivation import (  # noqa: E402
     build_matchers,
     ingredient_head,
     match_keys,
+    owned_facets,
     phrase_span,
     signal_name,
     tokens,
 )
 from src.catalog.query_terms import stopwords  # noqa: E402
-from src.db.connection import close_pool, tenant_conn  # noqa: E402
+from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
+from src.domain.facets import FacetType  # noqa: E402
 from src.domain.loader import load_domain_pack  # noqa: E402
 from src.domain.normalize import normalize  # noqa: E402
 
@@ -177,6 +179,38 @@ on conflict (business_id, product_id, signal, rule_id, locale) do update
  where product_derived_signals.derived_from is distinct from excluded.derived_from
 """
 
+# Semnalele pe care regula NU le mai produce pentru produsul ăsta. Fără ștergerea asta, proiecția
+# și tabela de fapte DIVERG la a doua rulare cu reguli îngustate: `attributes` pierde valoarea (se
+# rescrie de la zero), iar `product_derived_signals` o păstrează pentru totdeauna. Tabela de fapte e
+# declarată sursa de adevăr — cea pe care validatorul (stagiul 8) și `grounding_guard` (NX-240) o
+# vor consulta —, deci un orfan acolo e mai rău decât unul în copie.
+#
+# Scopul e FAȚETA, nu `rule_id`: id-ul regulii e versionat (`...v1` → `...v2`) și parțial dinamic
+# (`pack.name_values.<fațetă>.v1`), deci o ștergere legată de el ar rata exact cazul pentru care
+# există — bumpul de versiune. Fațeta se citește din prefixul semnalului, separatorul fiind cel
+# documentat de `signal_name` (`:`, imposibil în cheile de fațetă și în valorile canonice).
+_DELETE_STALE_SIGNALS = """
+delete from product_derived_signals
+ where business_id = $1 and product_id = $2::uuid and locale = $3
+   and split_part(signal, ':', 1) = any($4::text[])
+   and signal <> all($5::text[])
+"""
+
+# Sweep-ul de final: produsele care nu mai derivă NIMIC nu ajung în niciun lot (`rows` le exclude),
+# deci ștergerea de mai sus nu le-ar atinge niciodată.
+#
+# Scopul e POZITIV — lista produselor pe care rularea le-a examinat și care n-au produs nimic — nu
+# „tot ce nu e în `rows`". Diferența nu e stilistică: derivarea citește doar produsele `active`, iar
+# o excludere negativă ar șterge și faptele celor ARHIVATE, pe care rularea nici nu le-a văzut. Un
+# job n-are voie să șteargă în afara a ce a măsurat. Produsele SĂRITE (eroare de scriere) rămân și
+# ele pe dinafară: n-am reușit să le rescriem, deci n-avem dreptul să le ștergem faptele.
+_DELETE_ORPHAN_SIGNALS = """
+delete from product_derived_signals
+ where business_id = $1 and locale = $2
+   and split_part(signal, ':', 1) = any($3::text[])
+   and product_id = any($4::uuid[])
+"""
+
 # Proiecția în `products.attributes` — ce citește read-path-ul AZI (fațetele NX-186 au
 # `source: attribute`). Sursa rămâne `product_derived_signals`; asta e o copie derivată din ea,
 # scrisă în aceeași tranzacție, ca cele două să nu poată diverge.
@@ -191,61 +225,148 @@ update products
    and attributes is distinct from ((coalesce(attributes, '{}'::jsonb) - $3::text[]) || $4::jsonb)
 """
 
+# Perechea proiecției, pentru produsele care nu mai derivă NIMIC. `_PROJECT_ATTRS` rulează doar
+# pentru produsele din lot, deci fără asta un produs care pierde ultima potrivire și-ar păstra
+# valorile vechi în `attributes` — adică exact în copia pe care o citește read-path-ul, unde
+# greșeala doare cel mai tare. Ștergerea semnalelor fără asta ar muta divergența, nu ar închide-o.
+_STRIP_ATTRS = """
+update products
+   set attributes = coalesce(attributes, '{}'::jsonb) - $3::text[]
+ where business_id = $1 and id = any($2::uuid[])
+   and attributes is distinct from (coalesce(attributes, '{}'::jsonb) - $3::text[])
+"""
+
 
 async def _write_batch(
     conn,
     business_id: str,
     locale: str,
     rows: list[tuple[str, dict[str, dict]]],
-    facet_keys: list[str],
-) -> tuple[int, int, list[str]]:
-    """Scrie un lot ÎNTR-O tranzacție: semnalele + proiecția. → (semnale, produse atinse, sărite).
+    owned: list[str],
+    multi_valued: frozenset[str],
+) -> tuple[int, int, int, list[str], collections.Counter]:
+    """Scrie un lot ÎNTR-O tranzacție: semnalele + proiecția.
+    → (semnale scrise, produse atinse, semnale șterse, sărite, ambigue per fațetă).
 
     Semnalele și proiecția stau în aceeași tranzacție deliberat: dacă proiecția ar fi separată, o
     cădere între ele ar lăsa `products.attributes` să contrazică tabela de fapte, iar
     `grounding_guard` ar verifica afirmațiile față de copia greșită.
 
+    Scrierea singură nu ajunge pentru asta, și lipsea: proiecția se rescrie de la zero (cheile
+    fațetelor se șterg înainte de `||`), pe când semnalele se acumulau. O a doua rulare cu regula
+    îngustată lăsa în tabela de FAPTE valori pe care copia nu le mai avea — exact invers decât
+    trebuie, fiindcă faptele sunt sursa. De aia ștergerea e aici, în același savepoint, nu un pas
+    de mentenanță separat pe care cineva și-l amintește.
+
     Fiecare produs are însă SAVEPOINT-ul lui. În Postgres, un statement care crapă abortează toată
     tranzacția, deci fără savepoint un singur produs cu o secțiune stricată ar anula lotul întreg —
     și, la 200 de produse pe lot, ar putea bloca derivarea la nesfârșit pe același rând. Cu
     savepoint, produsul e SĂRIT, numărat și raportat, iar restul lotului trece."""
-    signals = touched = 0
+    signals = touched = removed = 0
     skipped: list[str] = []
+    ambiguous: collections.Counter = collections.Counter()
     async with conn.transaction():
         for product_id, derived in rows:
             try:
                 async with conn.transaction():  # savepoint (tranzacție imbricată în asyncpg)
                     attrs = {}
+                    produced: list[str] = []
                     for facet, info in derived.items():
                         values = info["values"]
-                        attrs[facet] = (
-                            values if len(values) > 1 or facet in _LIST_FACETS else values[0]
-                        )
+                        # Semnalul rămâne TEXT (`spf:30` e un identificator, nu o cantitate);
+                        # proiecția poartă tipul JSON pe care îl cere contractul.
+                        if facet not in _SIGNAL_ONLY_FACETS:
+                            projected = [_project_value(facet, value) for value in values]
+                            if facet in multi_valued:
+                                attrs[facet] = projected
+                            elif len(projected) == 1:
+                                attrs[facet] = projected[0]
+                            else:
+                                # Fațetă declarată cu O SINGURĂ valoare în registru
+                                # (`value_type: enum|text|number`) care a potrivit mai multe.
+                                # Nu e bogăție, e o contradicție: pe `skin_type` (partitioning)
+                                # „uscat ȘI gras" nu descrie niciun produs. A alege una ar fi o
+                                # ghicitoare, a le scrie pe amândouă e ce a blocat contractul
+                                # NX-205 pe 794 de produse. Deci UNKNOWN (D7) — iar semnalele se
+                                # scriu oricum mai jos, cu `rule_id`, ca ambiguitatea să rămână
+                                # măsurabilă în loc să dispară.
+                                ambiguous[facet] += 1
                         for value in values:
+                            signal = signal_name(facet, value)
+                            produced.append(signal)
                             status = await conn.execute(
                                 _UPSERT_SIGNAL,
                                 business_id,
                                 product_id,
-                                signal_name(facet, value),
+                                signal,
                                 info["derived_from"],
                                 info["rule_id"],
                                 locale,
                             )
                             signals += int(status.split()[-1])
+                    # Ștergerea stă ÎN savepoint-ul produsului, lângă scrierile lui: dacă upsertul
+                    # crapă, nici ștergerea nu se aplică. Un produs cu fapte șterse și nerescrise ar
+                    # arăta ca UNKNOWN, adică o pierdere tăcută de adevăr.
                     status = await conn.execute(
-                        _PROJECT_ATTRS, business_id, product_id, facet_keys, json.dumps(attrs)
+                        _DELETE_STALE_SIGNALS,
+                        business_id,
+                        product_id,
+                        locale,
+                        owned,
+                        produced,
+                    )
+                    removed += int(status.split()[-1])
+                    status = await conn.execute(
+                        _PROJECT_ATTRS, business_id, product_id, owned, json.dumps(attrs)
                     )
                     touched += int(status.split()[-1])
             except Exception as e:  # noqa: BLE001 — un produs stricat nu oprește lotul
                 skipped.append(product_id)
                 print(f"  ! sărit {product_id}: {type(e).__name__}", file=sys.stderr)
-    return signals, touched, skipped
+    return signals, touched, removed, skipped, ambiguous
 
 
 # Fațetele care sunt LISTE prin contract (registrul NX-186 le declară `value_type: list`), deci
 # rămân liste chiar cu o singură valoare. O fațetă-listă scrisă ca scalar ar face filtrul
 # `attributes->'concerns' ?| …` să nu se mai potrivească — și n-ar da nicio eroare.
 _LIST_FACETS = frozenset({"concerns", "key_ingredients"})
+
+# Fațetele care trăiesc DOAR ca semnale derivate, niciodată în `products.attributes`.
+#
+# `key_ingredients` e acolo fiindcă în `attributes` contractul NX-205 îl citește ca CLAIM, iar un
+# claim cere `claim_provenance` completă — `source`, `source_ref` și `verified_at`. Derivarea are o
+# sursă (`derived_from`), dar n-are verificare: o regulă a potrivit un cap de secțiune, nimeni n-a
+# confirmat nimic. A completa `verified_at` cu data rulării ar spăla o potrivire de regex în „sursă
+# verificată" și ar șterge exact distincția pe care se sprijină validatorul (stagiul 8) și
+# `grounding_guard` (NX-240).
+#
+# Contractul o spune singur, pentru badge-uri: un fapt e „ori DERIVAT (`DerivedSignal{rule_id}`),
+# ori confirmat prin proveniență". `key_ingredients` n-are încă ramura derivată — extinderea e un
+# card separat, nu ceva de strecurat aici. Până atunci, locul onest e tabela de semnale.
+#
+# Fațeta rămâne în `owned`, deci proiecția o ȘTERGE din `attributes` la următoarea rulare: cele
+# 2.420 de produse scrise pe 2026-09-04 blocau complet `build_search_documents` cu ValidationError.
+_SIGNAL_ONLY_FACETS = frozenset({"key_ingredients"})
+
+# Fațetele NUMERICE prin contract (`ProductFacts.spf: float | None`, validat cu `_num`). Scrise ca
+# șir, trec de orice `attributes ? 'spf'` și de derivarea însăși, care raportează succes — și cad
+# abia la `ProductFacts.from_product`, adică în ALT job. Măsurat: 182 de produse cu `"30"` în loc de
+# 30 au oprit complet construcția documentelor de căutare și a blurb-urilor, cu `ContractError`.
+_NUMERIC_FACETS = frozenset({"spf"})
+
+
+def _project_value(facet: str, value: str) -> str | int | float:
+    """Valoarea canonică (text) → tipul JSON pe care îl cere contractul pentru fațeta asta.
+
+    Fallback pe text dacă nu se convertește: o valoare numerică malformată e o problemă de derivare,
+    iar ascunderea ei într-un 0 ar fi mai rea decât eroarea de contract pe care o repară funcția."""
+    if facet not in _NUMERIC_FACETS:
+        return value
+    try:
+        number = float(value)
+    except ValueError:
+        return value
+    return int(number) if number.is_integer() else number
 
 
 # --- propunerea de stemuri (read-only, nu scrie în pachet) --------------------------------------
@@ -328,8 +449,18 @@ async def main() -> int:
     )
     args = ap.parse_args()
 
+    # `admin_conn`, nu `tenant_conn`: ăsta e un job OFFLINE care scrie în catalog, iar
+    # `bot_runtime` are SELECT-only pe tot catalogul (`products`, `product_derived_signals`) —
+    # prin proiectare, principiul „NU scriere în catalog din worker". Pe conexiunea de runtime
+    # scrierea moare cu `InsufficientPrivilegeError`, și moare DOAR cu `--apply`: dry-run-ul face
+    # numai citiri, deci asimetria a ascuns defectul până la prima rulare reală.
+    #
+    # RLS e bypass-at aici, deci izolarea cade în întregime pe `where business_id = $1` — prezent
+    # în FIECARE statement al jobului (verificat), adică exact mecanismul primar din principiul 7.
+    # Același tipar ca `scripts/seed_catalog_v2.py`, celălalt job care scrie în catalog.
     try:
-        async with tenant_conn(args.business) as conn:
+        pool = await get_pool()
+        async with admin_conn(pool) as conn:
             business = await load_business(conn, args.business)
             if business is None:
                 print("business inexistent", file=sys.stderr)
@@ -365,6 +496,17 @@ async def main() -> int:
             )
             skin_vals = facet_values.get("skin_type", set())
             concern_vals = facet_values.get("concerns", set())
+            # Fațetele pentru care rularea asta e AUTORITATEA — deci singurele pe care le rescrie
+            # și le șterge. Calculate din pachet, înainte de a privi vreun produs; motivul complet
+            # e în docstringul funcției (`src/catalog/derivation.py`), fiindcă e o decizie, nu o
+            # comoditate.
+            owned = list(
+                owned_facets(
+                    facet_values=facet_values,
+                    name_derived=name_specs,
+                    claim_derived=claim_specs,
+                )
+            )
             # NX-268: stemurile și excluderile sunt DATE, nu cod. Absente → potrivirea rămâne pe
             # fraze (cu toleranță de flexiune), adică exact comportamentul conservator.
             raw_pack = (business.settings or {}).get("domain_pack") or {}
@@ -691,31 +833,68 @@ async def main() -> int:
                 return 0
 
             # --- scrierea -------------------------------------------------------------------
-            # Fațetele proiectate în `attributes` sunt EXACT cele derivate acum. Cheile lor se
-            # șterg înainte de scriere, ca o valoare rămasă dintr-o rulare veche să nu treacă
-            # peste o re-derivare care n-o mai produce: UNKNOWN ar rămâne o valoare (anti-D7).
-            facet_keys = sorted({f for d in per_product.values() for f in d})
+            # Fațetele curățate înainte de scriere sunt cele pe care rularea le DEȚINE, nu cele
+            # care au produs valori acum: o valoare rămasă dintr-o rulare veche nu are voie să
+            # treacă peste o re-derivare care n-o mai produce, altfel UNKNOWN rămâne o valoare
+            # (anti-D7). Aceeași mulțime dă și scopul ștergerii de semnale.
+            locale = business.default_locale or "ro"
             rows = [(pid, d) for pid, d in per_product.items() if d]
-            written = touched = 0
+            written = touched = deleted = 0
             all_skipped: list[str] = []
+            # Aritatea vine din REGISTRU (`value_type: list`), nu dintr-o listă în cod. A treia
+            # copie a aceleiași informații e cea care a produs defectul: `skin_type`/`finish` sunt
+            # `enum` în registru ȘI scalare în contractul NX-205, dar derivarea le scria ca listă.
+            multi_valued = frozenset(
+                f.key for f in pack.facets if f.value_type is FacetType.LIST
+            ) | frozenset(_LIST_FACETS)
+            all_ambiguous: collections.Counter = collections.Counter()
             for i in range(0, len(rows), BATCH):
-                s, t, skipped = await _write_batch(
+                s, t, d, skipped, amb = await _write_batch(
                     conn,
                     args.business,
-                    business.default_locale or "ro",
+                    locale,
                     rows[i : i + BATCH],
-                    facet_keys,
+                    owned,
+                    multi_valued,
                 )
                 written += s
                 touched += t
+                deleted += d
                 all_skipped.extend(skipped)
+                all_ambiguous.update(amb)
+
+            # Sweep-ul pentru produsele care nu mai derivă NIMIC: ele nu apar în `rows`, deci
+            # ștergerea per-produs nu le atinge. Fără el, un produs care pierde ultima potrivire
+            # și-ar păstra faptele vechi pentru totdeauna — cazul cel mai probabil dintre toate,
+            # fiindcă o regulă îngustată scoate produse din mulțime, nu valori dintr-un produs.
+            skipped_set = set(all_skipped)
+            empty = sorted(
+                pid for pid, d in per_product.items() if not d and pid not in skipped_set
+            )
+            async with conn.transaction():
+                status = await conn.execute(
+                    _DELETE_ORPHAN_SIGNALS, args.business, locale, owned, empty
+                )
+                deleted += int(status.split()[-1])
+                status = await conn.execute(_STRIP_ATTRS, args.business, empty, owned)
+                touched += int(status.split()[-1])
             print(
-                f"\nscris: {written} semnale, {touched} produse cu `attributes` schimbat "
-                f"({len(rows)} produse cu fapte derivate)"
+                f"\nscris: {written} semnale, {deleted} semnale șterse (nu se mai derivă), "
+                f"{touched} produse cu `attributes` schimbat "
+                f"({len(rows)} produse cu fapte derivate, fațete deținute: {', '.join(owned)})"
             )
             if all_skipped:
                 print(f"sărite (eroare la scriere, lotul a continuat): {len(all_skipped)}")
-            print("rerulează comanda: a doua trecere trebuie să raporteze 0 și 0 (idempotență)")
+            if all_ambiguous:
+                # Raportat, nu ascuns: golul din `attributes` are o cauză, iar cauza e a REGULII
+                # (potrivește prea larg) sau a PACHETULUI (fațeta ar fi `list`), nu a produsului.
+                total = sum(all_ambiguous.values())
+                detail = ", ".join(f"{k}:{v}" for k, v in sorted(all_ambiguous.items()))
+                print(
+                    f"ambigue (fațetă cu o valoare, mai multe potriviri ⇒ UNKNOWN): {total}"
+                    f"  [{detail}]"
+                )
+            print("rerulează comanda: a doua trecere trebuie să raporteze 0, 0 și 0 (idempotență)")
             return 0
     finally:
         await close_pool()
