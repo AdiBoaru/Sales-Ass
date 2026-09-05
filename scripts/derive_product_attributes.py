@@ -74,6 +74,7 @@ from src.catalog.derivation import (  # noqa: E402
 from src.catalog.query_terms import stopwords  # noqa: E402
 from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
+from src.domain.facets import FacetType  # noqa: E402
 from src.domain.loader import load_domain_pack  # noqa: E402
 from src.domain.normalize import normalize  # noqa: E402
 
@@ -242,9 +243,10 @@ async def _write_batch(
     locale: str,
     rows: list[tuple[str, dict[str, dict]]],
     owned: list[str],
-) -> tuple[int, int, int, list[str]]:
+    multi_valued: frozenset[str],
+) -> tuple[int, int, int, list[str], collections.Counter]:
     """Scrie un lot ÎNTR-O tranzacție: semnalele + proiecția.
-    → (semnale scrise, produse atinse, semnale șterse, sărite).
+    → (semnale scrise, produse atinse, semnale șterse, sărite, ambigue per fațetă).
 
     Semnalele și proiecția stau în aceeași tranzacție deliberat: dacă proiecția ar fi separată, o
     cădere între ele ar lăsa `products.attributes` să contrazică tabela de fapte, iar
@@ -262,6 +264,7 @@ async def _write_batch(
     savepoint, produsul e SĂRIT, numărat și raportat, iar restul lotului trece."""
     signals = touched = removed = 0
     skipped: list[str] = []
+    ambiguous: collections.Counter = collections.Counter()
     async with conn.transaction():
         for product_id, derived in rows:
             try:
@@ -274,11 +277,20 @@ async def _write_batch(
                         # proiecția poartă tipul JSON pe care îl cere contractul.
                         if facet not in _SIGNAL_ONLY_FACETS:
                             projected = [_project_value(facet, value) for value in values]
-                            attrs[facet] = (
-                                projected
-                                if len(projected) > 1 or facet in _LIST_FACETS
-                                else projected[0]
-                            )
+                            if facet in multi_valued:
+                                attrs[facet] = projected
+                            elif len(projected) == 1:
+                                attrs[facet] = projected[0]
+                            else:
+                                # Fațetă declarată cu O SINGURĂ valoare în registru
+                                # (`value_type: enum|text|number`) care a potrivit mai multe.
+                                # Nu e bogăție, e o contradicție: pe `skin_type` (partitioning)
+                                # „uscat ȘI gras" nu descrie niciun produs. A alege una ar fi o
+                                # ghicitoare, a le scrie pe amândouă e ce a blocat contractul
+                                # NX-205 pe 794 de produse. Deci UNKNOWN (D7) — iar semnalele se
+                                # scriu oricum mai jos, cu `rule_id`, ca ambiguitatea să rămână
+                                # măsurabilă în loc să dispară.
+                                ambiguous[facet] += 1
                         for value in values:
                             signal = signal_name(facet, value)
                             produced.append(signal)
@@ -311,7 +323,7 @@ async def _write_batch(
             except Exception as e:  # noqa: BLE001 — un produs stricat nu oprește lotul
                 skipped.append(product_id)
                 print(f"  ! sărit {product_id}: {type(e).__name__}", file=sys.stderr)
-    return signals, touched, removed, skipped
+    return signals, touched, removed, skipped, ambiguous
 
 
 # Fațetele care sunt LISTE prin contract (registrul NX-186 le declară `value_type: list`), deci
@@ -829,18 +841,27 @@ async def main() -> int:
             rows = [(pid, d) for pid, d in per_product.items() if d]
             written = touched = deleted = 0
             all_skipped: list[str] = []
+            # Aritatea vine din REGISTRU (`value_type: list`), nu dintr-o listă în cod. A treia
+            # copie a aceleiași informații e cea care a produs defectul: `skin_type`/`finish` sunt
+            # `enum` în registru ȘI scalare în contractul NX-205, dar derivarea le scria ca listă.
+            multi_valued = frozenset(
+                f.key for f in pack.facets if f.value_type is FacetType.LIST
+            ) | frozenset(_LIST_FACETS)
+            all_ambiguous: collections.Counter = collections.Counter()
             for i in range(0, len(rows), BATCH):
-                s, t, d, skipped = await _write_batch(
+                s, t, d, skipped, amb = await _write_batch(
                     conn,
                     args.business,
                     locale,
                     rows[i : i + BATCH],
                     owned,
+                    multi_valued,
                 )
                 written += s
                 touched += t
                 deleted += d
                 all_skipped.extend(skipped)
+                all_ambiguous.update(amb)
 
             # Sweep-ul pentru produsele care nu mai derivă NIMIC: ele nu apar în `rows`, deci
             # ștergerea per-produs nu le atinge. Fără el, un produs care pierde ultima potrivire
@@ -864,6 +885,15 @@ async def main() -> int:
             )
             if all_skipped:
                 print(f"sărite (eroare la scriere, lotul a continuat): {len(all_skipped)}")
+            if all_ambiguous:
+                # Raportat, nu ascuns: golul din `attributes` are o cauză, iar cauza e a REGULII
+                # (potrivește prea larg) sau a PACHETULUI (fațeta ar fi `list`), nu a produsului.
+                total = sum(all_ambiguous.values())
+                detail = ", ".join(f"{k}:{v}" for k, v in sorted(all_ambiguous.items()))
+                print(
+                    f"ambigue (fațetă cu o valoare, mai multe potriviri ⇒ UNKNOWN): {total}"
+                    f"  [{detail}]"
+                )
             print("rerulează comanda: a doua trecere trebuie să raporteze 0, 0 și 0 (idempotență)")
             return 0
     finally:
