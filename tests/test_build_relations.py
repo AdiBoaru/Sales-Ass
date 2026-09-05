@@ -22,8 +22,10 @@ from src.jobs.build_relations import (
     WRITTEN_KINDS,
     BuildReport,
     build_all,
+    build_complements,
     build_routine,
     build_substitutes,
+    need_rarity,
 )
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -296,3 +298,119 @@ def test_migrarea_extinde_checkul_si_adauga_provenance():
     for column in ("source", "rule_id", "reason"):
         assert f"add column if not exists {column}" in sql
     assert "variant_of" in _schema_kinds()
+
+
+# --- NX-276: raritatea nevoii comune decide ordinea -----------------------------------------------
+
+
+def test_o_nevoie_purtata_de_tot_catalogul_nu_informeaza():
+    """DoD 4a — ponderea e `log(N/df)`, deci o nevoie universală valorează zero.
+
+    Asta e toată ideea cardului: `hydration` la 69,9% din catalog nu deosebește doi candidați, dar
+    `build_substitutes` o trata identic cu `dandruff` la 0,4%."""
+    products = [_p(f"p{i}", needs=("universala",)) for i in range(10)]
+    products.append(_p("rar", needs=("universala", "rara")))
+    rarity = need_rarity(products)
+
+    assert rarity.weight["universala"] == 0.0
+    assert rarity.weight["rara"] > 0.0
+    # Suma peste nevoile comune: nevoia rară e singura care mișcă scorul.
+    assert rarity.score(["universala"]) == 0.0
+    assert rarity.score(["universala", "rara"]) == rarity.score(["rara"])
+
+
+def test_nevoia_rara_bate_ratingul_mai_bun_pe_o_nevoie_comuna():
+    """DoD 4b — cazul real `ACROPASS`: singurul candidat care împarte `acne` cu ancora ieșea pe
+    locul 3, fiindcă ceilalți doi aveau rating mai bun pe `hydration`."""
+    anchor = _p("ancora", price=100.0, stock=False, needs=("comuna", "rara"))
+    # Rating maxim, dar împarte doar nevoia comună.
+    bun_dar_generic = _p("generic", price=105.0, needs=("comuna",), rating=5.0, reviews=500)
+    # Rating slab, dar împarte nevoia rară.
+    slab_dar_potrivit = _p("potrivit", price=95.0, needs=("comuna", "rara"), rating=3.5, reviews=10)
+    # Zgomotul care face `comuna` comună și `rara` rară.
+    umplutura = [_p(f"u{i}", needs=("comuna",)) for i in range(30)]
+
+    report = BuildReport()
+    build_substitutes([anchor, bun_dar_generic, slab_dar_potrivit, *umplutura], report)
+    edges = [e for e in _edges(report, "substitute") if e.product_id == "ancora"]
+
+    assert edges[0].related_id == "potrivit", "nevoia rară trebuie să bată rating-ul"
+    assert edges[0].reason["match_strength"]["rarest_need"] == "rara"
+    assert edges[0].reason["match_strength"]["score"] > edges[1].reason["match_strength"]["score"]
+
+
+def test_match_strength_poarta_si_cat_de_comuna_e_nevoia():
+    """`score` singur nu se poate citi de un om: „1,7" nu spune nimic. `rarest_share` spune „nevoia
+    asta o poartă 4% din catalog", care e verificabil contra bazei."""
+    anchor = _p("a", price=100.0, needs=("comuna", "rara"))
+    other = _p("b", price=100.0, needs=("comuna", "rara"))
+    umplutura = [_p(f"u{i}", needs=("comuna",)) for i in range(18)]
+
+    report = BuildReport()
+    build_substitutes([anchor, other, *umplutura], report)
+    strength = _edges(report, "substitute")[0].reason["match_strength"]
+
+    assert strength["rarest_need"] == "rara"
+    assert 0.0 < strength["rarest_share"] < 0.2
+    # Rotunjit, ca `reason` să nu difere între rulări (upsertul compară conținutul).
+    assert strength["score"] == round(strength["score"], 4)
+
+
+def test_ordinea_e_determinista_intre_rulari():
+    """DoD 4c — două treceri pe aceleași date aleg aceiași șase, în aceeași ordine. Fără asta,
+    fiecare rulare ar rescrie muchii identice și idempotența ar fi o iluzie."""
+    products = [
+        _p("ancora", price=100.0, needs=("c", "r")),
+        *[
+            _p(f"cand{i}", price=100.0 + i, needs=("c", "r") if i % 3 == 0 else ("c",))
+            for i in range(12)
+        ],
+        *[_p(f"u{i}", needs=("c",)) for i in range(20)],
+    ]
+    first, second = BuildReport(), BuildReport()
+    build_substitutes(products, first)
+    build_substitutes(products, second)
+
+    def key(report):
+        return [(e.product_id, e.related_id, e.position) for e in _edges(report, "substitute")]
+
+    assert key(first) == key(second)
+
+
+def test_raritatea_nu_scade_numarul_de_muchii():
+    """Ordinea decide CARE șase se scriu, nu câte. O scădere ar însemna că sortarea a pierdut
+    candidați, nu că i-a re-ordonat."""
+    products = [
+        _p("ancora", price=100.0, needs=("c", "r")),
+        *[_p(f"cand{i}", price=100.0, needs=("c", "r") if i % 2 else ("c",)) for i in range(10)],
+    ]
+    report = BuildReport()
+    build_substitutes(products, report)
+    anchor_edges = [e for e in _edges(report, "substitute") if e.product_id == "ancora"]
+    assert len(anchor_edges) == MAX_EDGES_PER_ANCHOR
+
+
+def test_complementele_raman_neatinse():
+    """Non-regresie: `_rank` e partajat, deci schimbarea lui ar re-ordona tăcut și complementele —
+    tip pe care NX-276 nu l-a măsurat. Raritatea intră DOAR în cheia de sortare a substituților."""
+    products = [
+        _p("a", cat="creme", needs=("c", "r")),
+        _p("b", cat="seruri", needs=("c",), rating=5.0, reviews=500),
+        _p("d", cat="seruri", needs=("c", "r"), rating=3.0, reviews=10),
+    ]
+    report = BuildReport()
+    build_complements(products, report)
+    order = [e.related_id for e in _edges(report, "complement") if e.product_id == "a"]
+    # Ordinea complementelor rămâne cea de rating: „b" (5.0) înaintea lui „d" (3.0).
+    assert order == ["b", "d"]
+
+
+def test_niciun_nume_de_nevoie_nu_apare_in_cod():
+    """Poarta NX-264, asertată local: dacă `hydration` ar apărea în `build_relations.py`, jobul ar
+    fi cuplat la un vertical de beauty, iar pe alt catalog raritatea ar minți."""
+    source = (ROOT / "src" / "jobs" / "build_relations.py").read_text(encoding="utf-8")
+    code = "\n".join(line for line in source.splitlines() if not line.strip().startswith("#"))
+    # Docstringurile citează măsurătoarea, deci verificăm codul executabil, fără ele.
+    code = re.sub(r'""".*?"""', "", code, flags=re.S)
+    for need in ("hydration", "acne", "dandruff", "redness"):
+        assert need not in code, f"`{need}` e vocabular de tenant, n-are ce căuta în cod"

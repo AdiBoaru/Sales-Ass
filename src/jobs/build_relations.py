@@ -40,7 +40,9 @@ import asyncio
 import collections
 import json
 import logging
+import math
 import sys
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -121,6 +123,57 @@ def _needs(product: dict[str, Any]) -> set[str]:
     return {str(values)} if isinstance(values, str) else set()
 
 
+@dataclass(frozen=True)
+class NeedRarity:
+    """Cât INFORMEAZĂ fiecare nevoie, calculat din catalogul însuși (NX-276).
+
+    Măsurat pe SOLE: `hydration` e purtată de 69,9% din produse, `dandruff` de 0,4%. „Amândouă
+    hidratează" e, ca argument, aproape identic cu „amândouă sunt cosmetice". Dar substituții tratau
+    orice nevoie comună ca pe o poartă binară, apoi ordonau pe rating. Măsurat: 30,8% din muchiile
+    `substitute` se sprijineau EXCLUSIV pe `hydration`, iar în 16% din ancore poziția 1 era o
+    potrivire comună deși exista una rară.
+
+    Ponderea e `log(N / df)` — IDF, aplicat la nevoi în loc de cuvinte. Nicio valoare de nevoie nu
+    apare în cod (poarta NX-264): jobul nu știe ce e `hydration`, știe doar câte produse o poartă.
+
+    Numitorul e „produse care AU fapte derivate", nu „produse active". O nevoie absentă fiindcă
+    produsul n-a fost derivat nu e o dovadă de raritate, e o gaură în date — iar cu 2.506 din 2.758
+    de produse derivate, diferența e reală."""
+
+    weight: Mapping[str, float]
+    share: Mapping[str, float]
+
+    def score(self, needs: Iterable[str]) -> float:
+        """SUMA ponderilor, nu maximul: doi candidați care împart `acne`, iar unul în plus și
+        `pores`, se ordonează corect. Suma nu poate fi păcălită adăugând o nevoie comună — aportul
+        ei e mic prin construcție, fiindcă ponderea ei e mică."""
+        return sum(self.weight.get(need, 0.0) for need in needs)
+
+    def rarest(self, needs: Iterable[str]) -> str | None:
+        """Nevoia cea mai informativă dintre cele comune. Egalitățile se rup pe nume, ca două
+        rulări să scrie același `reason`."""
+        ranked = sorted(needs, key=lambda n: (-self.weight.get(n, 0.0), n))
+        return ranked[0] if ranked else None
+
+
+def need_rarity(products: Iterable[dict[str, Any]]) -> NeedRarity:
+    """Frecvența fiecărei nevoi în catalog → ponderi. Pură: nicio atingere de DB."""
+    documents = 0
+    frequency: collections.Counter = collections.Counter()
+    for product in products:
+        needs = _needs(product)
+        if not needs:
+            continue
+        documents += 1
+        frequency.update(needs)
+    if not documents:
+        return NeedRarity(weight={}, share={})
+    return NeedRarity(
+        weight={need: math.log(documents / count) for need, count in frequency.items()},
+        share={need: count / documents for need, count in frequency.items()},
+    )
+
+
 def _price(product: dict[str, Any]) -> float | None:
     value = product.get("price")
     return float(value) if isinstance(value, (int, float)) else None
@@ -150,7 +203,16 @@ def build_substitutes(products: list[dict[str, Any]], report: BuildReport) -> No
     """`substitute` — aceeași categorie, ≥1 nevoie comună, preț în bandă. Prioritate: epuizatele.
 
     Ancorele fără nevoi cunoscute sunt SĂRITE, nu servite din raft (test dedicat). Asta e diferența
-    dintre „rezolvă aceeași problemă, în aceeași bandă de preț" și „altă cremă de 90 de lei"."""
+    dintre „rezolvă aceeași problemă, în aceeași bandă de preț" și „altă cremă de 90 de lei".
+
+    NX-276: dintre candidații care trec poarta, ordinea o dă cât de RARĂ e nevoia comună, nu doar
+    rating-ul. Nu e cosmetic: `MAX_EDGES_PER_ANCHOR` taie după sortare, deci ordinea decide CARE
+    șase muchii se scriu, nu doar în ce ordine se afișează.
+
+    Nu se ȘTERGE nicio muchie slabă, și e o decizie măsurată: un prag care ar refuza potrivirile
+    sprijinite doar pe o nevoie foarte comună ar readuce 82 de produse epuizate în „nu mai avem"
+    (298 → 216). Dintr-un substitut imperfect clientul poate ieși, dintr-o fundătură nu."""
+    rarity = need_rarity(products)
     by_category: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
     for product in products:
         by_category[str(product.get("category_id") or "")].append(product)
@@ -172,8 +234,12 @@ def build_substitutes(products: list[dict[str, Any]], report: BuildReport) -> No
             if not ok:
                 continue
             candidates.append((_rank(other), other, shared, delta))
-        candidates.sort(key=lambda c: c[0])
+        # `_rank` rămâne NEATINS: e partajat cu `build_complements`, iar o schimbare acolo ar
+        # re-ordona tăcut și complementele — tip pe care NX-276 nu l-a măsurat. Raritatea se compune
+        # doar aici, în cheia de sortare, unde `shared` e deja disponibil.
+        candidates.sort(key=lambda c: (-rarity.score(c[2]), c[0]))
         for position, (_, other, shared, delta) in enumerate(candidates[:MAX_EDGES_PER_ANCHOR]):
+            rarest = rarity.rarest(shared)
             report.add(
                 Edge(
                     product_id=str(anchor["id"]),
@@ -185,6 +251,16 @@ def build_substitutes(products: list[dict[str, Any]], report: BuildReport) -> No
                         "shared_needs": shared,
                         "same_category": True,
                         "price_delta_pct": delta,
+                        # Rotunjit ca `reason` să fie STABIL între rulări: upsertul compară
+                        # conținutul, deci o zecimală instabilă ar rescrie toate muchiile la
+                        # fiecare trecere și ar transforma idempotența într-o iluzie.
+                        "match_strength": {
+                            "score": round(rarity.score(shared), 4),
+                            "rarest_need": rarest,
+                            "rarest_share": round(rarity.share.get(rarest, 0.0), 4)
+                            if rarest
+                            else None,
+                        },
                     },
                 )
             )
