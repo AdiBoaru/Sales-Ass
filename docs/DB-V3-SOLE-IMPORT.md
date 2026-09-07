@@ -952,3 +952,154 @@ python -m pytest tests/test_domain_pack_sole.py -q               # invarianții,
 
 `--check` iese non-zero dacă vreo nevoie a scăzut sub prag sau dacă loader-ul aruncă ceva. Pachetul
 nu îmbătrânește singur, dar catalogul se mișcă sub el.
+
+---
+
+## 14. `product_type`: fațeta care lipsea, și de ce lipsa ei se vedea ca „recomandări proaste" (2026-09-07)
+
+### 14.1 Simptomul
+
+Rulat pe traseul REAL de retrieval (`search_products_tool`, zero LLM, catalogul live):
+
+| interogare | primul rezultat |
+|---|---|
+| «protectie solara spf» | un **ser cu retinol**; 3 din 6 rezultate nu erau SPF |
+| «ser hidratant ten uscat» | **cremă de ochi** în rezultate |
+| «gel de curatare» | **gel de DUȘ** |
+| «rutina ten uscat» | un **ruj**, de două ori |
+
+Nu sunt halucinații și nu sunt rezultate „slabe": produsele și prețurile sunt REALE, deci
+validatorul (stagiul 8) și `grounding_guard` (NX-240) le lasă să treacă — sunt porți de ADEVĂR, nu
+de POTRIVIRE. E categoria greșită, servită cu încredere.
+
+### 14.2 Cauza 1 — numele nu e un nume, iar `search_tsv` îl credea pe cuvânt
+
+    lungimea medie a numelui             191 caractere (min 38, max 383)
+    nume care conțin „care contribuie"   2.287 / 2.758  (83%)
+    nume cu coadă >40 car. după ' - '    2.647 / 2.758  (96%)
+
+Migrarea 046 a pus `name` în greutatea `A` cu argumentul scris în antetul ei: „A = numele
+(identitatea produsului)". Pe catalogul demo era adevărat. Pe primul catalog REAL, `name` e nume
+PLUS descriere, deci fraza de marketing „care contribuie la hidratarea pielii" stă în greutatea
+maximă pe 18% din catalog — iar `ts_rank_cd` o răsplătește cu 1.0 în loc de 0.2. Cuvintele care
+decid ordinea sunt aceleași pe o șesime din raft, deci nu decid nimic.
+
+Migrarea **049** pune în `A` doar capul numelui (`split_part(name, ' - ', 1)`, 40 de caractere în
+medie) plus tipul canonic, și mută numele ÎNTREG în `C`, lângă descriere. Recall-ul rămâne identic
+(același set de rânduri se potrivește); se schimbă ORDINEA.
+
+Tipul în `A` nu e un bonus, e condiția ca restul să nu strice recall-ul: capul numelui e aproape
+mereu brand + denumire comercială în ENGLEZĂ („ANUA Ceramide 3 + Panthenol Moisture Barrier
+Cream"), iar clientul scrie „crema". Cuvântul românesc există DOAR în coadă. Fără tipul canonic în
+`A`, o interogare românească ar rămâne fără niciun termen de greutate mare.
+
+### 14.3 Cauza 2 — nu exista fațetă de TIP, deși tipul era deja în date
+
+Categoria e completă (2.758/2.758 legate, 45 de categorii) dar prea grosieră:
+`ten-ingrijirea-tenului` are 933 de produse și le conține și pe creme, și pe seruri. Categoria nu
+poate separa „vreau o cremă" de „vreau un ser".
+
+Numele are însă formă fixă — `<NUME REAL> - <TIP> formulat cu <ingrediente>, care contribuie la
+<beneficii>` — deci tipul se extrage determinist. Regulile trăiesc în
+[`src/catalog/product_type.py`](../src/catalog/product_type.py) și sunt **gramaticale, nu de
+cosmetice**, deci țin pe orice vertical:
+
+* **R1 (fuziune):** un calificativ introdus de PREPOZIȚIE numește ținta și schimbă clasa
+  obiectului („balsam **de buze**" ≠ „balsam **de par**"); unul alipit e format sau textură și nu
+  o schimbă („fond de ten **cushion**", „ruj **lichid**").
+* **R2 (coordonare):** un obiect nu coordonează. „hidratare si luminozitate" e o listă de
+  beneficii scăpată din nume, nu un produs.
+
+Rezultat: **54 de chei canonice, 2.088 de produse (75,7%)**, zero fraze de marketing.
+
+Direcția erorii e aleasă, nu întâmplătoare. O cheie prea îngustă golește filtrul, iar golirea are
+deja treaptă de relaxare în `search_products_lexical` (P6). O cheie prea largă amestecă TĂCUT, și
+nimic din aval n-o prinde. Deci la dubiu nu se fuzionează.
+
+**Trei reguli încercate ȘI picate pe date** (sunt scrise în modul ca să nu se reintroducă):
+
+1. *fuziune pe subset de cuvinte* — pliază „balsam de buze"(21), „balsam de par"(2) și „balsam de
+   curatare"(28) peste „balsam"(31), producând o cheie de 90 care amestecă balsamul de buze cu cel
+   de păr. Exact eroarea pe care fațeta trebuie s-o excludă;
+2. *prag pe branduri distincte* (ipoteza: o frază de marketing e ticul unui singur brand) — picată
+   în ambele sensuri: „hidratare si luminozitate" apare la 10 branduri (stilul de denumire e al
+   importatorului), iar „pasta de dinti" și „creion contur buze" au unul singur;
+3. *respingere când un cuvânt al tipului e o nevoie declarată* (`concern_map`) — respinge „luciu de
+   buze" (66 de produse), fiindcă „luciu" e și nevoie (`oily`) și obiect (gloss). Un cuvânt poate
+   numi și o nevoie și un obiect; dezambiguizează structura, nu cuvântul.
+
+Fațeta e `partitioning` (un cumpărător vrea exact un tip de obiect), `provenance: structural`
+(derivare deterministă, nu inferență de model) și **`enforce_ready: false`**: acoperirea dă dreptul
+de a FILTRA, nu pe cel de a EXCLUDE candidați deja găsiți — acela se ia cu un audit de precizie
+(NX-268/271), nu cu o cifră de acoperire.
+
+### 14.4 Trei defecte vecine, găsite pe drum
+
+**`compliance` fura termenii altor fațete.** `["CPNP"]` pe 2.711/2.758 trecea ambele teste din
+`_keep_dimension` (valorile se repetă, sunt scurte) — dar are **o singură valoare**, deci nu
+desparte catalogul în nimic. Prezența ei nu era inofensivă: `resolve_any` încearcă TOATE
+dimensiunile, deci cheia concura pentru termenii clientului. Măsurat, „seara" se rezolva pe
+`compliance` cu verdict `UNKNOWN`. Testul e acum pe INFORMAȚIE: sub 2 valori, sau o valoare peste
+98% din cheie, dimensiunea nu e vocabular. Închide parțial findingul din §13.5.
+
+**`TypedFacet.aliases` erau inerte.** `load_vocabulary` descoperă dimensiunile din cheile reale ale
+lui `attributes` și nu citește pachetul, iar singurul overlay pasat în `_resolve_search_terms` era
+`concern_map`. Deci `routine_time` își declara cele 9 aliasuri („seara" → `pm`) și niciunul nu era
+consultat — filtrul nu rula niciodată, deși atributul e populat pe **2.758/2.758** de produse.
+Aliasurile fațetei se aplică acum DOAR fațetei lor.
+
+Prima variantă de reparație a fost să le mut în `concern_map`, și un test al pachetului a oprit-o,
+corect: acela e overlay-ul de NEVOI, cu invariantul că fiecare valoare din el trebuie purtată de
+`skin_type` sau `concerns`. „seara" nu e o nevoie, e un moment al rutinei — iar o hartă în care
+încap amândouă n-ar mai putea fi verificată de nimic.
+
+**`nevoie` lipsea din cuvintele goale.** Lista din `query_terms.py` avea deja formele verbale ale
+cererii („vreau", „caut", „doresc", „trebuie") și o rata pe cea substantivală, deci «am nevoie de
+sampon» cerea pe treapta `strict` ca produsul să conțină LITERAL cuvântul „nevoie". Nu potrivea
+nimic, cădea pe treapta relaxată, iar acolo „nevoie" aduce zgomot în locul preciziei. Intră în
+listă fiindcă respectă regula ei: nu poate numi niciodată un produs, un brand sau o nevoie ANUME
+(acelea se numesc „hidratare", „acnee" — chei din `concern_map`). Măsurat, singur: **83,6% → 87,0%**.
+
+### 14.5 Cât de bine merge, măsurat
+
+15 interogări scrise ca de client („vreau o crema hidratanta", „am nevoie de sampon", „ce toner imi
+recomanzi"…), top-6 fiecare. Un rezultat e CORECT dacă `attributes.product_type` conține
+cuvântul-tip din interogare; produsele fără tip (cei 24% nederivați) se numără separat — nu sunt
+greșite, sunt necunoscute.
+
+    corecte                          60
+    greșite                           9
+    fără tip                         21
+    precizie pe produsele CU tip   87,0%   (era 83,6% înainte de fixul `nevoie`)
+
+Perfecte (6/6): «ce toner imi recomanzi», «o masca de fata buna», «lotiune de corp», «ulei de
+curatare», «crema de ochi». Slabă: «exfoliant pentru fata» (1/6).
+
+**«protectie solara spf» NU s-a reparat** și e important de spus de ce: tipul canonic al unui
+produs SPF e „crema de fata", nu „protectie solara". Fațeta de tip nu are cum să ajute acolo —
+pârghia corectă e categoria (`protectie-solara-protectie-solara`, 111 produse) sau fațeta `spf`
+(182 de produse). E o a doua reparație, nu o continuare a acesteia.
+
+Reproducere: `scripts/derive_product_type.py --business <uuid>` pentru vocabular, iar măsurătoarea
+de precizie e o buclă peste `search_products_tool` cu `llm=None` (lexical-only, ca în producție —
+`product_embeddings` = 0).
+
+### 14.6 Ce NU s-a reparat, și de ce nu e o linie de cod
+
+Findingul din §13.5 rămâne deschis parțial: după fix, `load_vocabulary` întoarce în continuare ca
+dimensiuni filtrabile `sku` (2 valori), `volume_raw` (126), `price_per_unit_source` (200) și
+`shade_group` (48 de hash-uri, ex. `254d9a22fa84`). Sunt identificatori interni, nu vocabular pe
+care l-ar rosti un client.
+
+Regula evidentă — „valoarea conține cifre" — e greșită: ar ucide `shade`, care e o fațetă
+`partitioning` DECLARATĂ, ale cărei valori sunt tocmai „1", „116 Candid". Nu există un semnal
+structural ieftin care să separe `volume_raw` de `shade`, deci reparația cere o decizie de design
+(de exemplu: discovery-ul propune, pachetul ratifică), nu un prag în plus. Rămâne finding.
+
+### 14.7 Cum se verifică, oricând
+
+```bash
+python scripts/derive_product_type.py --business <uuid>          # dry-run: acoperire + vocabular
+python -m pytest tests/test_product_type.py tests/test_catalog_vocabulary.py -q
+python scripts/set_domain_pack.py --business sole-ro --check
+```

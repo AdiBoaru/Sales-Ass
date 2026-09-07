@@ -517,10 +517,28 @@ def _resolve_search_terms(
     Harta de sinonime a tenantului e tratată ca overlay de LIMBĂ, deci se încearcă pe toate
     fațetele — validarea contra vocabularului decide unde se potrivește, iar o țintă moartă iese
     ca `UNKNOWN(overlay_target_dead)`, nu ca filtru.
+
+    Peste ea vin aliasurile DECLARATE ale fiecărei fațete (`TypedFacet.aliases`), aplicate DOAR
+    fațetei lor. Erau inerte până acum: `load_vocabulary` descoperă dimensiunile din cheile reale
+    ale lui `attributes` și nu citește pachetul, iar singurul overlay pasat aici era `concern_map`.
+    Deci `routine_time` își declara cele 9 aliasuri („seara" → `pm`) și niciunul nu era consultat —
+    măsurat, „seara" se rezolva pe `compliance` cu verdict `UNKNOWN`, adică filtrul nu rula, deși
+    atributul e populat pe 2.758/2.758 de produse.
+
+    Aliasurile fațetei NU intră în `concern_map`, deliberat: acela e overlay-ul de NEVOI, iar
+    pachetul are un invariant testat care cere ca fiecare valoare din el să fie purtată de
+    `skin_type` sau `concerns`. „seara" nu e o nevoie, e un moment al rutinei — iar o hartă în care
+    încap amândouă n-ar mai putea fi verificată de nimic.
     """
     pack = getattr(ctx.business, "domain_pack", None)
     lang_overlay = dict(getattr(pack, "concern_map", None) or {})
-    overlays = {name: lang_overlay for name in vocab.facet_names} if lang_overlay else None
+    facet_aliases = {
+        f.key: dict(f.aliases)
+        for f in (getattr(pack, "facets", ()) or ())
+        if getattr(f, "aliases", None)
+    }
+    overlays = {name: {**lang_overlay, **facet_aliases.get(name, {})} for name in vocab.facet_names}
+    overlays = {name: ov for name, ov in overlays.items() if ov} or None
 
     emitted: list[Resolution] = []
 

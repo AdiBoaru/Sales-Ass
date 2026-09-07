@@ -138,7 +138,17 @@ def test_doar_tipul_de_ten_poate_exclude(raw: dict) -> None:
     nuanță ANUME („116 Candid"), iar alta nu e o potrivire mai slabă, e produsul greșit — la fel de
     greșit ca un ten uscat servit cuiva cu ten gras.
 
-    Testul le ENUMERĂ ca să nu apară a patra prin distragere: fiecare intrare aici e o fațetă care
+    `product_type` e a patra, cu al patrulea motiv: cumpărătorul vrea exact un TIP de obiect. Un
+    ser nu e o cremă mai slabă, e alt lucru. Măsurat pe catalogul SOLE înainte să existe fațeta,
+    „ser" întorcea o cremă de ochi și „protectie solara spf" un ser cu retinol — nu rezultate
+    proaste, ci categoria greșită servită cu încredere. Spre deosebire de celelalte trei, valoarea
+    e DERIVATĂ (`src/catalog/product_type.py`), de aceea `provenance` e `structural` (reguli
+    gramaticale deterministe pe numele de catalog, nu inferență de model) și de aceea
+    `enforce_ready` rămâne fals: acoperirea măsurată (75,7%) dă dreptul de a FILTRA, nu pe cel de a
+    exclude candidați deja găsiți — ăla se ia cu un audit de precizie (NX-268/271), nu cu o cifră
+    de acoperire.
+
+    Testul le ENUMERĂ ca să nu apară a cincea prin distragere: fiecare intrare aici e o fațetă care
     capătă dreptul de a șterge produse din rezultate, iar dreptul ăla se dă cu motivul scris.
     """
     partitioning = {
@@ -146,4 +156,8 @@ def test_doar_tipul_de_ten_poate_exclude(raw: dict) -> None:
         for f in raw["facets"]
         if f.get("binding") == "partitioning" and f["source"] == "attribute"
     }
-    assert partitioning == {"skin_type", "fragrance_free", "shade"}
+    assert partitioning == {"skin_type", "fragrance_free", "shade", "product_type"}
+
+    derived = next(f for f in raw["facets"] if f["key"] == "product_type")
+    assert derived["provenance"] == "structural"
+    assert derived.get("enforce_ready", False) is False
