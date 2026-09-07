@@ -107,9 +107,20 @@ def _value_patterns(spec: Mapping[str, Any]) -> dict[str, tuple[re.Pattern[str],
     valori nu se derivă — se raportează ca nedeclarată, ca să se vadă că lipsește, nu ca să fie
     presupusă. Propunerile se obțin cu `scripts/facet_discovery.py` și le ratifică un om, o dată per
     tenant."""
+    # NX-277 — `aliases` e `{alias: valoare canonică}`, nu invers. Contractul e declarat în
+    # `src/domain/facets.py:100` și îl respectă `derive_shade_finish`; aici era citit pe dos.
+    #
+    # Consecința nu era „câteva aliasuri ratate". `aliases.get("matte")` întorcea STRINGUL "matte"
+    # (fiindcă „matte" chiar e o cheie, mapată la ea însăși), iar iterarea peste un string dă
+    # CARACTERE — deci se compilau tipare pentru litere izolate: `(?<!\w)m(?!\w)`, `(?<!\w)a(?!\w)`.
+    # Măsurat pe catalogul SOLE: 654 din 807 de potriviri (81%) veneau dintr-o literă singură, iar
+    # 70 de produse aveau deja în catalog un `finish` pe care numele nu-l conține — „SKINTEGRA
+    # Solar I SPF 30" primea `satin` din „I". Fațeta hrănește poarta de relevanță (NX-257), deci
+    # „ruj mat" întorcea produse etichetate mat din întâmplare.
+    aliases = spec.get("aliases") or {}
     out: dict[str, tuple[re.Pattern[str], ...]] = {}
     for value in spec.get("values") or ():
-        forms = [str(value)] + [str(a) for a in (spec.get("aliases") or {}).get(value, ())]
+        forms = [str(value)] + [str(a) for a, canon in aliases.items() if canon == value]
         pats = tuple(re.compile(rf"(?<!\w){re.escape(normalize(f))}(?!\w)") for f in forms if f)
         if pats:
             out[str(value)] = pats
