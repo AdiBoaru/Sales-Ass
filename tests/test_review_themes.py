@@ -198,7 +198,7 @@ def test_8_bands_and_ordering_by_count_then_pack_position():
     assert comp.summary == (
         "Cele mai multe recenzii spun că nu lasă urme. Multe recenzii spun că se absoarbe rapid."
     )
-    assert band(0.5) == "majority" and band(0.2) == "many" and band(0.19) == "some"
+    assert band(0.5) == "majority" and band(0.2) == "many" and band(0.19) == "minority"
 
 
 # --- failure --------------------------------------------------------------------------------------
@@ -256,7 +256,7 @@ def test_11_missing_version_empties_the_vocabulary():
 
 def test_12_summary_never_carries_digits_or_forbidden_punctuation():
     for locale, copy in COPY.items():
-        for key in ("majority", "many", "some", "nuance"):
+        for key in ("majority", "many", "minority", "nuance"):
             text = copy[key].format(list="x")
             assert label_problem(text) is None, (locale, key, text)
             assert not has_medical_claim(text)

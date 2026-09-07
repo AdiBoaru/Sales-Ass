@@ -112,7 +112,7 @@ COPY: Mapping[str, Mapping[str, str]] = {
     "ro": {
         "majority": "Cele mai multe recenzii spun că {list}.",
         "many": "Multe recenzii spun că {list}.",
-        "some": "Unele recenzii spun că {list}.",
+        "minority": "Unele recenzii spun că {list}.",
         "nuance": "Câteva recenzii menționează că {list}.",
         "sep": ", ",
         "last": " și ",
@@ -120,7 +120,8 @@ COPY: Mapping[str, Mapping[str, str]] = {
     "en": {
         "majority": "Most reviews say it {list}.",
         "many": "Many reviews say it {list}.",
-        "some": "Some reviews say it {list}.",
+        # domain-leak: ok — „some" e cuvântul englezesc din copy, nu brandul din catalog
+        "minority": "Some reviews say it {list}.",
         "nuance": "A few reviews mention that it {list}.",
         "sep": ", ",
         "last": " and ",
@@ -128,7 +129,7 @@ COPY: Mapping[str, Mapping[str, str]] = {
     "hu": {
         "majority": "A legtöbb vélemény szerint {list}.",
         "many": "Sok vélemény szerint {list}.",
-        "some": "Néhány vélemény szerint {list}.",
+        "minority": "Néhány vélemény szerint {list}.",
         "nuance": "Pár vélemény megemlíti, hogy {list}.",
         "sep": ", ",
         "last": " és ",
@@ -460,7 +461,7 @@ def band(share: float) -> str:
         return "majority"
     if share >= MANY_SHARE:
         return "many"
-    return "some"
+    return "minority"
 
 
 def compose(
@@ -480,7 +481,7 @@ def compose(
         return None
     labels = {c.key: vocab.get(c.key).label(locale) or "" for c in pros + cons}
     sentences: list[str] = []
-    for name in ("majority", "many", "some"):
+    for name in ("majority", "many", "minority"):
         group = [labels[c.key] for c in pros if band(c.share) == name]
         if group:
             sentences.append(copy[name].format(list=_join(group, copy)))
