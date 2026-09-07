@@ -1,0 +1,153 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "max_depth_probed": 6,
+  "probe_budget": {
+    "anchor_sample": 400,
+    "max_branch": 3,
+    "max_rows_per_kind": 291600
+  },
+  "active_products": 2758,
+  "products_with_outgoing": 2681,
+  "products_with_incoming": 955,
+  "kinds": [
+    {
+      "kind": "complement",
+      "edges": 15031,
+      "anchors": 2506,
+      "targets": 88,
+      "out_degree": {
+        "median": 6,
+        "p90": 6,
+        "max": 6
+      },
+      "chain_max_depth": 6,
+      "anchors_with_chain_ge2": 400,
+      "anchors_with_chain_ge3": 400,
+      "anchors_hitting_probe_cap": 400,
+      "cyclic_anchors": 400,
+      "measured": {
+        "anchor_sample": 400,
+        "anchor_population": 2506,
+        "branch_cap": 3,
+        "observed_max_out_degree": 6,
+        "completeness": "sampled+branch_capped"
+      },
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 0
+      },
+      "reciprocated": 84,
+      "reciprocity_pct": 0.5588450535559844,
+      "traversal": "neighbors-only",
+      "suggested_max_depth": 1,
+      "traversal_reason": "toate cele 400 ancore măsurate sunt ciclice ⇒ relație simetrică, nu secvență"
+    },
+    {
+      "kind": "substitute",
+      "edges": 14434,
+      "anchors": 2463,
+      "targets": 729,
+      "out_degree": {
+        "median": 6,
+        "p90": 6,
+        "max": 6
+      },
+      "chain_max_depth": 6,
+      "anchors_with_chain_ge2": 399,
+      "anchors_with_chain_ge3": 396,
+      "anchors_hitting_probe_cap": 290,
+      "cyclic_anchors": 399,
+      "measured": {
+        "anchor_sample": 400,
+        "anchor_population": 2463,
+        "branch_cap": 3,
+        "observed_max_out_degree": 6,
+        "completeness": "sampled+branch_capped"
+      },
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 0
+      },
+      "reciprocated": 1680,
+      "reciprocity_pct": 11.639185257032008,
+      "traversal": "bounded",
+      "suggested_max_depth": 2,
+      "traversal_reason": "399/400 ancore ciclice ⇒ gardă de ciclu + plafon mic"
+    },
+    {
+      "kind": "routine_next",
+      "edges": 7244,
+      "anchors": 2337,
+      "targets": 246,
+      "out_degree": {
+        "median": 3,
+        "p90": 5,
+        "max": 5
+      },
+      "chain_max_depth": 6,
+      "anchors_with_chain_ge2": 386,
+      "anchors_with_chain_ge3": 233,
+      "anchors_hitting_probe_cap": 171,
+      "cyclic_anchors": 0,
+      "measured": {
+        "anchor_sample": 400,
+        "anchor_population": 2337,
+        "branch_cap": 3,
+        "observed_max_out_degree": 5,
+        "completeness": "sampled+branch_capped"
+      },
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 0
+      },
+      "reciprocated": 0,
+      "reciprocity_pct": 0.0,
+      "traversal": "chain",
+      "suggested_max_depth": 6,
+      "traversal_reason": "aciclic, dar 171/400 ancore ating plafonul probei (6) ⇒ adâncime reală CEL PUȚIN 6; ridică `--max-depth` ca să vezi capătul"
+    },
+    {
+      "kind": "variant_of",
+      "edges": 373,
+      "anchors": 137,
+      "targets": 129,
+      "out_degree": {
+        "median": 2,
+        "p90": 6,
+        "max": 6
+      },
+      "chain_max_depth": 4,
+      "anchors_with_chain_ge2": 132,
+      "anchors_with_chain_ge3": 77,
+      "anchors_hitting_probe_cap": 0,
+      "cyclic_anchors": 132,
+      "measured": {
+        "anchor_sample": 137,
+        "anchor_population": 137,
+        "branch_cap": 3,
+        "observed_max_out_degree": 6,
+        "completeness": "branch_capped"
+      },
+      "dead_edges": {
+        "target_missing": 0,
+        "target_inactive": 0,
+        "target_out_of_stock": 0
+      },
+      "reciprocated": 332,
+      "reciprocity_pct": 89.00804289544236,
+      "traversal": "bounded",
+      "suggested_max_depth": 2,
+      "traversal_reason": "132/137 ancore ciclice ⇒ gardă de ciclu + plafon mic"
+    }
+  ],
+  "verdict": "READY",
+  "verdict_reasons": [
+    "`complement` → neighbors-only: toate cele 400 ancore măsurate sunt ciclice ⇒ relație simetrică, nu secvență",
+    "`substitute` → bounded: 399/400 ancore ciclice ⇒ gardă de ciclu + plafon mic",
+    "`routine_next` → chain: aciclic, dar 171/400 ancore ating plafonul probei (6) ⇒ adâncime reală CEL PUȚIN 6; ridică `--max-depth` ca să vezi capătul",
+    "`variant_of` → bounded: 132/137 ancore ciclice ⇒ gardă de ciclu + plafon mic"
+  ]
+}
