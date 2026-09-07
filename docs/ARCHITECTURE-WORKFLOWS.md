@@ -1932,6 +1932,7 @@ welcome_enabled = true
 046_search_tsv_description.sql
 047_variant_stock_unknown.sql
 048_relation_provenance.sql
+049_search_tsv_product_type.sql
 ```
 
 

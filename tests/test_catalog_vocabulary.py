@@ -161,6 +161,29 @@ def test_real_vocabulary_dimension_is_kept() -> None:
     assert _keep_dimension([("dry", 83), ("oily", 23), ("acid hialuronic", 42)]) is True
 
 
+def test_constant_dimension_is_rejected() -> None:
+    """O cheie cu o singură valoare descrie RAFTUL, nu o alegere.
+
+    Cazul real: `compliance` = `["CPNP"]` pe 2.711 din 2.758 de produse SOLE. Trece testul de
+    repetiție (valorile se repetă) și pe cel de lungime (un cuvânt), dar nu desparte catalogul în
+    nimic. Prezența ei nu e inofensivă: `resolve_any` încearcă TOATE dimensiunile, deci cheia
+    concură pentru termenii clientului și îi consumă — măsurat, „seara" se rezolva pe `compliance`
+    cu verdict UNKNOWN, iar filtrul de `routine_time` (populat pe 2.758/2.758) nu rula niciodată.
+    """
+    assert _keep_dimension([("CPNP", 2711)]) is False
+
+
+def test_near_constant_dimension_is_rejected() -> None:
+    """Și una în care o valoare acoperă practic tot: informația e la fel de aproape de zero."""
+    assert _keep_dimension([("CPNP", 2711), ("ALTCEVA", 3)]) is False
+
+
+def test_a_dominant_but_informative_dimension_is_kept() -> None:
+    """Dar un dezechilibru NORMAL nu descalifică: `routine_time` pe SOLE e `am_pm` 1992 / `am` 255
+    / `pm` 146 — dominantă, și totuși alegerea clientului separă catalogul."""
+    assert _keep_dimension([("am_pm", 1992), ("am", 255), ("pm", 146)]) is True
+
+
 def test_servable_labels_are_what_the_prompt_may_announce() -> None:
     """Promptul primește etichete de categorii care există; intrările fără produse nici nu ajung
     în vocabular, deci nu pot fi anunțate."""

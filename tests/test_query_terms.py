@@ -33,6 +33,24 @@ def test_cuvintele_functionale_dispar_termenii_de_produs_raman():
     assert content_terms("ce imi recomanzi pentru riduri", "ro") == ["riduri"]
 
 
+def test_nevoie_e_umplutura_nu_o_nevoie_anume():
+    """„am nevoie de șampon" cerea ca produsul să conțină LITERAL cuvântul „nevoie".
+
+    Lista avea deja formele verbale („vreau", „caut", „doresc", „trebuie") și o rata pe cea
+    substantivală. Pe treapta `strict` termenii se leagă cu ȘI, deci interogarea nu potrivea nimic
+    și cădea pe treapta relaxată, unde „nevoie" aduce zgomot în locul preciziei: măsurat pe 15
+    interogări reale, precizia pe produsele cu tip a urcat de la 83,6% la 87,0% doar din asta.
+
+    Intră în listă fiindcă respectă regula ei: `nevoie` nu poate numi niciodată un produs, un brand
+    sau o nevoie ANUME (nevoile se numesc „hidratare", „acnee" — chei din `concern_map`). E
+    cuantificatorul abstract, nu conținutul.
+    """
+    assert content_terms("am nevoie de sampon", "ro") == ["sampon"]
+    assert content_terms("am nevoie de o crema hidratanta", "ro") == ["crema", "hidratanta"]
+    # Dar o nevoie NUMITĂ rămâne intactă — lista nu are voie s-o atingă.
+    assert content_terms("am nevoie de ceva pentru acnee", "ro") == ["acnee"]
+
+
 def test_termenii_scurti_care_poarta_sens_supravietuiesc():
     """Nu există prag pe lungime: „c" din „vitamina c" și „50" din „spf 50" discriminează."""
     assert content_terms("ser cu vitamina c", "ro") == ["ser", "vitamina", "c"]

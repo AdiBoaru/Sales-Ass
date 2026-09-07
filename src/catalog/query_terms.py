@@ -44,6 +44,7 @@ _RO_STOPWORDS = """
     eu tu el ea noi voi ei imi iti isi mi ti ma te se ne va le lui mea meu mei tau ta
     am ai are as ar au fi fie este sunt esti era fost vreau vrei vrea caut cauti doresc trebuie
     poate pot recomanzi recomanda spune arata da ajuta
+    nevoie nevoi
     ce care cine cum cand unde cat cata cati cate ceva orice altceva nimic mai prea foarte doar
     numai tot toate toti buna salut multumesc rog
     produs produse produsul produsele articol articole varianta optiune optiuni recomandare

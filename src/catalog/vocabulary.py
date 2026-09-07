@@ -82,6 +82,15 @@ _MAX_VALUE_LEN = 60  # o „valoare" mai lungă de-atât e o propoziție, nu un 
 # conține cuvinte comune care produc potriviri false: o cheie cu descrieri care conțin „ten" ar
 # fura orice cerere despre ten. Testul e pe MEDIA cuvintelor, nu pe o listă de chei interzise.
 _MAX_MEAN_WORDS = 3.0
+# O cheie ale cărei valori sunt practic TOATE aceeași valoare descrie raftul, nu o alegere. Măsurat
+# pe catalogul SOLE: `compliance` = `["CPNP"]` pe 2.711 din 2.758 de produse — o singură valoare,
+# scurtă, care se repetă, deci trece ambele teste de mai sus. Dar o dimensiune constantă nu poate
+# discrimina nimic, iar prezența ei nu e inofensivă: `resolve_any` încearcă TOATE dimensiunile, deci
+# cheia concurează pentru termenii clientului și îi consumă. Măsurat, exact asta s-a întâmplat —
+# „seara" se rezolva pe `compliance` cu verdict UNKNOWN, deci filtrul de `routine_time` (populat pe
+# 2.758/2.758) nu rula niciodată. Testul e pe informație, nu pe numele cheii: o cheie care nu
+# desparte catalogul în nimic nu e vocabular.
+_MAX_DOMINANT_SHARE = 0.98
 # O intrare de UN SINGUR cuvânt trebuie potrivită EXACT. Altfel „uscat" (o valoare de `hair_type`)
 # ar fi subset al lui „ten uscat" și ar rezolva o cerere de îngrijire a tenului la produse de păr —
 # măsurat pe catalogul real, nu ipotetic.
@@ -304,6 +313,9 @@ def _keep_dimension(values: list[tuple[str, int]]) -> bool:
     2. **Sunt valorile TERMENI, nu propoziții?** O cheie ale cărei valori sună a frază („cine vrea
        un finish luminos") conține cuvinte comune care fură cereri: măsurat pe catalogul demo,
        cheia `best_for` capta orice întrebare care conținea cuvântul „ten".
+    3. **DESPARTE cheia catalogul în ceva?** O cheie cu o singură valoare — sau cu una care acoperă
+       aproape tot — descrie raftul, nu o alegere. Vezi `_MAX_DOMINANT_SHARE`: `compliance` trecea
+       primele două teste și fura termenii altor fațete.
     """
     if not values:
         return False
@@ -311,7 +323,11 @@ def _keep_dimension(values: list[tuple[str, int]]) -> bool:
     if total <= 0 or (len(values) / total) > _MAX_DISTINCT_RATIO:
         return False
     mean_words = sum(len(v.split()) for v, _ in values) / len(values)
-    return mean_words <= _MAX_MEAN_WORDS
+    if mean_words > _MAX_MEAN_WORDS:
+        return False
+    if len(values) < 2:  # o singură valoare = zero informație
+        return False
+    return (max(n for _, n in values) / total) <= _MAX_DOMINANT_SHARE
 
 
 async def load_vocabulary(conn: asyncpg.Connection, business_id: str) -> CatalogVocabulary:

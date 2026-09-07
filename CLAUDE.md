@@ -929,8 +929,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→044), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 045)
+│   ├── 0NN_*.sql                ← migrări delta (003→049), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 050)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
@@ -997,7 +997,8 @@ nativx-assistant/
 │   │   facets.py (NX-186: fațete tipizate) · contracts.py (NX-205: contractul de adevăr —
 │   │   Facts/Evidence/Provenance/DerivedSignals + obligatorii per categorie)
 │   ├── catalog/                 ← NX-234: regulile canonice de catalog (SQL-ul rămâne în db/queries)
-│   │   └── context_resolver.py  ← rehidratare batch a contextului de pagină + relații + freshness
+│   │   ├── context_resolver.py  ← rehidratare batch a contextului de pagină + relații + freshness
+│   │   └── product_type.py      ← tipul de produs, extras determinist din nume (2 reguli gramaticale)
 │   ├── conversation/            ← NX-235: memoria conversației ca STARE REDUSĂ (totul PUR)
 │   │   ├── state_v2.py          ← schema `ConversationStateV2` + caps + adapter v1↔v2 + serialize
 │   │   ├── needs.py             ← vocabularul de nevoi din DomainPack (P9) + normalizare canonică
@@ -1104,14 +1105,18 @@ secrete sunt connection stringurile). Cele 41 de migrări (003→045, cu 030/031
 `public_token=pub_b738dd1aa2ff2e0535b491792cc789d9` (`data-token` în widget). Recreabil idempotent
 cu `python scripts/seed_web_channel.py --business sole-ro`.
 
-**GOL azi, și fiecare gol are consecință:** `product_embeddings` = 0 (căutarea e DOAR lexicală, deci
-RRF-ul n-are al doilea braț); `product_derived_signals` = 0 → `product_card_blurbs` = 0 (corect:
-codul refuză să cadă pe numele produsului) și `attributes->'concerns'` = 0, deci filtrul de
-`concerns`, fațetele și boost-ul de concern din rerank n-au pe ce opera; `product_review_summaries`
-= 0 (183.003 recenzii reale, nerezumate → `top_pros` iese NULL pe orice card); `product_relations`
-= 0 (graful e inert: `traverse_relations` → 0 noduri, iar cele **391 de produse epuizate n-au
-niciun substitut**, deci „nu mai avem" e răspunsul final — situația pentru care s-a construit
-NX-195); `intent_aliases` = 0. **`domain_pack` NU mai lipsește** (§13 din doc): 20 de chei canonice de
+**Ce e PLIN și ce e GOL, remăsurat 2026-09-07** (cifrele de mai jos au fost verificate pe DB; lista
+veche declara zero pe patru dintre ele și era depășită — vezi principiul din
+`scripts/mvp_audit.py`: starea reală se citește, nu se ține minte):
+`product_embeddings` = **2.758/2.758** (`text-embedding-3-small`, scrise 2026-09-02) ⇒ **RRF-ul ARE
+al doilea braț**; `product_derived_signals` = **22.434**; `attributes->'concerns'` = **2.506**, deci
+filtrul de `concerns`, fațetele și boost-ul din rerank au pe ce opera; `product_relations` =
+**37.082** ⇒ graful NU mai e inert, iar cele 391 de produse epuizate au substitut (NX-195).
+Rămân GOALE, cu consecință: `product_card_blurbs` = 0 (corect: codul refuză să cadă pe numele
+produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate → `top_pros` iese
+NULL pe orice card); `intent_aliases` = 0; `faqs.embedding` = 0 pe toate cele 20 (deci lookup-ul de
+FAQ la nivel de business tot nu servește nimic).
+**`domain_pack` NU mai lipsește** (§13 din doc): 20 de chei canonice de
 nevoie derivate din cele 12.665 de fraze reale de căutare din secțiunile `aura`, fiecare
 confruntată cu catalogul, plus `skin_type` declarat SEPARAT de `concerns` (`partitioning` vs
 `additive`, NX-257) și `routine_time` ca fațetă vie (86,8% acoperire). `query_expansions` rămâne
@@ -1142,6 +1147,41 @@ UNKNOWN nu era reprezentabil la nivel de variantă (deși e la produs, `stock_to
 deci **2.364 din cele 2.367 de produse în stoc se prezentau ca epuizate** coșului (NX-237) și
 faptelor turului (NX-240). Codul aștepta deja NULL peste tot; doar schema forța minciuna.
 Detalii + planurile de execuție: [`docs/DB-V3-SOLE-IMPORT.md`](docs/DB-V3-SOLE-IMPORT.md) §12.
+
+**Fațeta `product_type` + migrarea 049 — categoria greșită se servea cu încredere.** Măsurat pe
+traseul real de retrieval, «protectie solara spf» întorcea pe locul 1 un ser cu retinol, «ser» o
+cremă de ochi, «gel de curatare» un gel de DUȘ, iar «rutina ten uscat» un ruj (de două ori). Nu
+rezultate slabe: categoria greșită, cu produse și prețuri REALE — deci validatorul (stagiul 8) și
+`grounding_guard` (NX-240) o lasă să treacă, fiind porți de ADEVĂR, nu de potrivire. Două cauze.
+(1) **Numele nu e nume**, e nume + descriere: 191 de caractere în medie, `care contribuie` în
+2.287/2.758, coadă >40 car. după ` - ` în 2.647 — deci premisa migrării 046 („A = identitatea
+produsului") era falsă pe primul catalog real, iar fraza de marketing stătea în greutatea maximă.
+Migrarea **049** pune în `A` doar capul numelui (40 car.) plus tipul canonic, și mută numele întreg
+în `C` lângă descriere: recall identic, se schimbă ORDINEA. Tipul în `A` nu e bonus, e condiția —
+capul numelui e în engleză („…Moisture Barrier Cream"), clientul scrie „crema", iar cuvântul există
+DOAR în coadă. (2) **Nu exista fațetă de TIP.** Categoria e prea grosieră (`ten-ingrijirea-tenului`
+= 933 de produse, cu creme și seruri la un loc). Tipul era însă deja în date, îngropat:
+[`src/catalog/product_type.py`](src/catalog/product_type.py) îl extrage DETERMINIST cu două reguli
+GRAMATICALE (nu de cosmetice, deci țin pe orice vertical) — un calificativ prepozițional schimbă
+clasa („balsam **de buze**" ≠ „balsam **de par**"), unul alipit nu („fond de ten **cushion**"); iar
+un obiect nu coordonează („hidratare si luminozitate" e beneficiu, nu produs). Rezultat: **54 de
+chei canonice pe 2.088 de produse (75,7%)**, scrise cu `scripts/derive_product_type.py --apply`,
+declarate `partitioning` + `provenance: structural` + **`enforce_ready: false`** (acoperirea dă
+dreptul de a FILTRA, nu pe cel de a exclude candidați deja găsiți — ăla cere audit de precizie,
+NX-268/271). Cele trei reguli încercate ȘI picate pe date sunt scrise în modul, ca să nu se
+reintroducă. Măsurat: cu tipul cerut explicit, 6/6 seruri și 6/6 creme.
+
+**Două defecte vecine, găsite pe drum.** (a) `compliance` = `["CPNP"]` pe 2.711/2.758 trecea ambele
+teste din `_keep_dimension` (valorile se repetă, sunt scurte), deși are **o singură valoare** — iar
+o dimensiune constantă nu discriminează nimic, dar `resolve_any` o încearcă și îi CONSUMĂ termenii.
+Testul e acum pe informație: sub 2 valori, sau o valoare peste 98% din cheie, dimensiunea nu e
+vocabular. (b) `TypedFacet.aliases` erau INERTE: `load_vocabulary` descoperă dimensiunile din
+cheile reale ale lui `attributes` și nu citește pachetul, iar singurul overlay pasat în
+`_resolve_search_terms` era `concern_map`. Deci `routine_time` își declara cele 9 aliasuri
+(„seara" → `pm`) și niciunul nu era consultat: „seara" se rezolva pe `compliance` cu verdict
+UNKNOWN, iar filtrul nu rula, deși atributul e populat pe 2.758/2.758. Aliasurile fațetei se aplică
+acum DOAR fațetei lor — nu în `concern_map`, care e overlay-ul de NEVOI și are un invariant testat
+(fiecare valoare trebuie purtată de `skin_type` sau `concerns`); „seara" nu e o nevoie.
 
 > **Indexurile GIN sunt INERTE pe conexiunea de runtime, și nu e un index lipsă.** Cu RLS activ,
 > predicatele non-leakproof (`@@`, `%`, `<%`) nu pot fi evaluate înaintea predicatelor de securitate,
