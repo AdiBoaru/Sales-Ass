@@ -1,4 +1,14 @@
-"""Rezumate de recenzii (D3) — credibilitate pentru recomandări.
+"""DEMO-ONLY, ARHIVAT (NX-279). Nu rula pe un tenant cu recenzii reale.
+
+Scriptul ăsta NU citește tabela `reviews`: INVENTEAZĂ cu un model ce ar spune clienții, pornind de
+la numele și descrierea produsului, și RESCRIE `products.rating` cu o variație inventată. A fost
+scris pentru catalogul demo, unde recenziile erau fictive. Pe SOLE (183.003 recenzii reale, rating
+real și consistent pe toate cele 2.758 de produse) ar fi falsificare de opinii de clienți și
+corupere de date bune. Producătorul real al tabelei e `scripts/derive_review_summaries.py`
+(frecvență verificabilă, zero model). Garda din `main` refuză să pornească dacă tenantul are
+recenzii care nu vin din seed-ul demo.
+
+Rezumate de recenzii (D3) — credibilitate pentru recomandări.
 
 Recenziile demo sunt fictive (toate 5★, formulaice). Pentru un demo credibil,
 generăm cu LLM (mini) un rezumat realist al feedback-ului + pro-uri/contra, și
@@ -150,6 +160,17 @@ async def main() -> None:
 
     conn = await _connect()
     try:
+        # NX-279: garda demo-only. Recenziile demo vin din seed (`source = 'platform'`); orice
+        # altă sursă înseamnă recenzii REALE, pe care scriptul ăsta le-ar înlocui cu invenții.
+        real = await conn.fetchval(
+            "select count(*) from reviews where business_id = $1 and source <> 'platform'", BIZ
+        )
+        if real:
+            sys.exit(
+                f"REFUZ: tenantul are {real} recenzii reale (source ≠ 'platform'). Scriptul ăsta "
+                "inventează rezumate și rescrie ratingul; folosește "
+                "scripts/derive_review_summaries.py"
+            )
         where = "" if args.force else "and prs.product_id is null"
         limit = f"limit {args.limit}" if args.limit else ""
         rows = await conn.fetch(

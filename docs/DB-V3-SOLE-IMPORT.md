@@ -597,10 +597,15 @@ făcute, iar ce nu s-a putut face aici e numit exact mai jos, nu presupus.
    wordlists") și, mai grav, vocabularul de nevoi vine din `DomainPack` (P9), iar `sole-ro` are
    `settings = {}`: nu există încă vocabularul în care s-ar scrie semnalele. Ordinea corectă e
    domain pack întâi, extractor după.
-2. **`product_review_summaries` din recenzii REALE.** `scripts/summarize_reviews.py` există, dar e
+2. **`product_review_summaries` din recenzii REALE.** ~~`scripts/summarize_reviews.py` există, dar e
    scris pentru recenziile FICTIVE ale demoului: inventează rezumatul cu LLM și **variază ratingul**
    ca să nu fie toate 5★. Pe 183.003 recenzii adevărate, varierea ratingului ar fi falsificare.
-   Cere un job nou, cu agregare determinist ancorată în rânduri.
+   Cere un job nou, cu agregare determinist ancorată în rânduri.~~ **JOBUL EXISTĂ** (NX-279):
+   `scripts/derive_review_summaries.py`, frecvență verificabilă pe teme din
+   `domain_pack.review_themes`, zero model; scriptul vechi e arhivat cu gardă
+   (`scripts/archive/summarize_reviews_demo.py`). Scrierea cere migrarea **050** (provenance:
+   `rule_id`/`evidence`/`locale`), pachetul re-aplicat cu `set_domain_pack.py` și `--apply`, după
+   auditul de precizie (`--audit <temă>`). Card: `tasks/stage1/NX-279.md`.
 3. ~~**`faqs` la nivel de business.**~~ **FĂCUT** (§8.1): 20 de intrări de pe paginile reale
    sole.ro, în așteptarea embeddingului. `intent_aliases` rămâne gol - se umple din shadow mode,
    pe trafic real, nu prin seed.
