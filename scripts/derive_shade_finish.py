@@ -82,7 +82,11 @@ update products
    and attributes is distinct from ((coalesce(attributes, '{}'::jsonb) - $3::text[]) || $4::jsonb)
 """
 
-_SHADE_KEYS = ["shade", "shade_code", "shade_group", "finish"]
+# NX-277: `finish` a IEȘIT din listă. `_PROJECT_ATTRS` șterge cheile de aici care nu mai apar în
+# `attrs`, deci cât timp `finish` era listat, fiecare rulare a pasului ăstuia rescria o fațetă al
+# cărei proprietar e alt job. Proprietatea unei fațete e o proprietate a SISTEMULUI, nu a ordinii
+# în care se întâmplă să ruleze cineva joburile.
+_SHADE_KEYS = ["shade", "shade_code", "shade_group"]
 
 
 def _finish_values(business) -> dict[str, list[str]]:
@@ -118,6 +122,15 @@ async def _write_batch(conn, business_id: str, locale: str, rows: list[tuple[str
     skipped: list[str] = []
     async with conn.transaction():
         for product_id, attrs in rows:
+            # NX-277, invariantul DECLARAT (DoD 5): jobul ăsta nu are voie să scrie `finish`.
+            # Nu e o convenție de documentație — un invariant pe care îl știe doar autorul nu e un
+            # invariant. Dacă cineva îl reintroduce, rularea se oprește aici, nu peste o lună
+            # într-un catalog care s-a subțiat tăcut.
+            if "finish" in attrs:
+                raise AssertionError(
+                    "derive_shade_finish nu deține `finish` (NX-277): proprietarul e "
+                    "derive_product_attributes. Vezi `_SHADE_KEYS`."
+                )
             try:
                 async with conn.transaction():
                     for facet, value in attrs.items():
@@ -127,7 +140,7 @@ async def _write_batch(conn, business_id: str, locale: str, rows: list[tuple[str
                             product_id,
                             signal_name(facet, str(value)),
                             ["name"],
-                            RULE_FINISH if facet == "finish" else RULE_SHADE,
+                            RULE_SHADE,
                             locale,
                         )
                         signals += int(status.split()[-1])
@@ -293,8 +306,9 @@ async def main() -> int:
                     attrs["shade_group"] = a.group
                     if a.shade_code:
                         attrs["shade_code"] = a.shade_code
-                if value := finishes.get(pid):
-                    attrs["finish"] = value
+                # NX-277: `finish` NU se mai scrie de aici. Are un singur proprietar acum
+                # (`derive_product_attributes`), iar `finishes` rămâne pentru RAPORT: cifra e
+                # utilă ca verificare încrucișată, scrierea era o a doua autoritate.
                 to_write.append((pid, attrs))
 
             written = touched = 0

@@ -104,35 +104,35 @@
       ]
     },
     "finish": {
-      "products": 807,
-      "coverage": 0.2926,
+      "products": 301,
+      "coverage": 0.1091,
       "distinct_values": 5,
       "top_values": [
         [
-          "satin",
-          542
+          "glow",
+          125
         ],
         [
           "matte",
-          506
-        ],
-        [
-          "glow",
-          177
-        ],
-        [
-          "glossy",
-          166
+          83
         ],
         [
           "velvet",
-          120
+          44
+        ],
+        [
+          "glossy",
+          43
+        ],
+        [
+          "satin",
+          28
         ]
       ],
       "sources": [
         [
           "name",
-          807
+          301
         ]
       ]
     },
@@ -413,15 +413,15 @@
         3
       ],
       [
+        "Tonifierea si calmarea pielii",
+        2
+      ],
+      [
         "Ingrijire interdentara",
         2
       ],
       [
         "Protectie solara",
-        2
-      ],
-      [
-        "Tonifierea si calmarea pielii",
         2
       ],
       [
@@ -491,773 +491,8 @@
         ]
       },
       {
-        "id": "7fc719d7-c835-4577-b18e-ba94f9cd4715",
-        "name": "LAKA Soothing Prep Lip Mask - balsam de buze formulat cu ulei de jojoba si Tocopherol (Vitamina E), care contr",
-        "category": "Buze",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "30d319eb-2d8f-4b04-8927-992087fc382e",
-        "name": "BODYOGRAPHY Color Cassette Liquid Blush Lip, SOUL - Baby Doll Pink, 5.5 gr - Fard de obraz si buze lichid form",
-        "category": "Fata",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "69151819-46c2-40b0-82e4-1d72567fff5c",
-        "name": "LAKA Mono Eyeshadow 920 Canna - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul och",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "cfd29e66-c895-4714-ae65-80162e19f317",
-        "name": "LAKA Mono Eyeshadow 919 Summer - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul oc",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "7e2051c3-015c-4ea9-b153-ab53b43a80e0",
-        "name": "LAKA Pixi Brow Cara - gel de sprancene formulata cu pigmenti de culoare si polimeri de fixare, care contribuie",
-        "category": "Sprancene",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "d51351a4-6eee-40f1-aabc-b8d1fa02d34f",
-        "name": "LAKA Mono Eyeshadow 901 Teddy - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul och",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "7b2fc4dc-9313-4137-bfb7-aff5f8c40828",
-        "name": "LAKA Mono Eyeshadow 908 Vanila - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul oc",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "12f577fe-18bd-4209-a2e7-f055a0691299",
-        "name": "AQUAPICK AQ-350 - irigator bucal cu jet de apa ultra-fin pulsatoriu si duze rotative 360 grade, care contribui",
-        "category": "Ingrijire interdentara",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "30c67bcd-e703-47e4-ace3-2527d031f768",
-        "name": "Dr. Melaxin TX Cream - crema de fata formulata cu acid tranexamic si niacinamida, care contribuie la uniformiz",
-        "category": "Ingrijirea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "af2cfcd4-414f-4a06-acae-797faddd8d56",
-        "name": "GESKE Lip Volumizer and Booster 4 in 1 - dispozitiv volumizator pentru buze cu Tehnologie Ultra-Volume si Tehn",
-        "category": "Ingrijirea tenului",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "5efbfbc6-d325-4bf1-9eed-a6a546ffba48",
-        "name": "AQUAPICK AQ-230 - irigator bucal cu jeturi de apa cu presiune ridicata si rezervor de apa de 200 ml, care cont",
-        "category": "Ingrijire interdentara",
-        "has_sections": [
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "ab4c1cfb-052c-4e69-bafb-1ea3a6179474",
-        "name": "ZETTOC MD' cial Toothpaste Cooling Mint - pasta de dinti formulata cu fluor 1400 ppm si extract de Scutellaria",
-        "category": "Pasta de dinti",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "d203ecea-4de6-4c6e-8e6f-650a14883b80",
-        "name": "ZETTOC MD' cial Toothpaste Medical Mint - pasta de dinti formulata cu fluor 1400 ppm si extract de Scutellaria",
-        "category": "Pasta de dinti",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "0e5a5501-49bb-443e-ba66-ee8efbaa680b",
-        "name": "ZETTOC MD' cial Toothpaste Rose Mint - pasta de dinti formulata cu fluor 1400 ppm si extract de Scutellaria Ba",
-        "category": "Pasta de dinti",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "465cf5f9-387f-4cab-bf3e-8353b49681d7",
-        "name": "MEDICUBE Triple Collagen Cream 4.0 - crema de fata formulata cu colagen si niacinamida, care contribuie la men",
-        "category": "Ingrijirea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "1ac87c05-476e-444f-8d95-f89dc534ff0e",
-        "name": "REAL BARRIER Extreme Cream - crema de fata formulata cu Omega Ceramide 16 si acid hialuronic, care contribuie ",
-        "category": "Ingrijirea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "83677e76-45b4-4dbd-b1f1-ead0bdac1ae2",
-        "name": "West Barn Co The Brow Pomade - fard de sprancene formulat cu pigmenti intensi si formula rezistenta la apa, ca",
-        "category": "Sprancene",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "2e10e6d8-1b5f-47ac-82eb-cd4e42e93a05",
-        "name": "UNLEASHIA Tap Me Palette Duo - fard de pleoape compact in format duo, cu o nuanta mata si o nuanta glitter, fo",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "bcf1d05b-23bc-4fb7-b4ef-eaec2065fb04",
-        "name": "UNLEASHIA Glitterpedia Eye Palette - fard de pleoape cu 9 nuante si texturi variate (mat, shimmer perlat, glit",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "bc511fb9-2132-4b1b-84ff-155333d81aa4",
-        "name": "UNLEASHIA Satin Wear Healthy-Green Cushion Re-Feel Case - cushion destinat folosirii impreuna cu rezervele din",
-        "category": "Fata",
-        "has_sections": [
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "168b353e-cfd3-4c6a-9ca3-47eb490859ce",
-        "name": "LAKA Mono Eyeshadow 912 Sandalwood - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiaju",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "5ee1929a-5e61-4d6a-a489-e7fd16ce29fc",
-        "name": "UNLEASHIA Tap Me Palette Duo - fard de pleoape cu format duo, o nuanta mata si o nuanta glitter, pentru machia",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "14353f8f-02cf-4c78-9d0e-632523f4323f",
-        "name": "LAKA Mono Eyeshadow 902 Earth - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul och",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "eaa8de2b-8357-4018-8c0b-3ec6dfea30e7",
-        "name": "BLACK ROUGE Pearlvely I Glitter, G01 Sweet Sweet Honey, 2 gr - Fard de pleoape formulat cu sclipici cosmetic s",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "69dc8eb9-bdfb-40b0-821f-b541ed7715a2",
-        "name": "COSRX Low ph Good Morning, 150 ml - gel de curatare formulat cu ingrediente cu pH scazut si agenti delicati de",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "05aae493-511b-4076-bd3d-5344f0f28d28",
-        "name": "Dr. Melaxin Melting Cleanser - spuma de curatare zilnica formulata cu calamina si niacinamida, care contribuie",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "018be20a-85cd-4c53-8ca0-b5989718985e",
-        "name": "EVY TECHNOLOGY Daily Essentials Spuma de Curatare pentru Fata 100 ml - Curatare Delicata si Hidratanta cu Aciz",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "5e904126-f6e9-47dd-8701-573a893a84d0",
-        "name": "TIRTIR Mask Fit Red Foundation - fond de ten formulat cu hibiscus rosu si propolis rosu, care contribuie la un",
-        "category": "Fata",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "a79f65bb-5985-40a7-9e72-1597644c678e",
-        "name": "JUMISO All Day Vitamin Facial Cleanser - spuma de curatare formulata cu acid salicilic si extract din arborele",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
-        "id": "f5f96b03-4a52-4c2f-a03a-347c9c74d59d",
-        "name": "LAKA Mono Eyeshadow 918 Florist - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul o",
-        "category": "Ochi",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "c98121b7-7d74-48cc-baa7-a39b0917a65d",
-        "name": "ROYAL AND LANGNICKEL Omnia Pro - set pensule formulat cu filamente sintetice Omnilux si fibre vegane, cu 20 de",
-        "category": "Accesorii",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "45cc42e8-66d5-4024-8b81-9168b28be177",
-        "name": "DELETE MAKEUP The Original - Manusa pentru demachiere folosita cu apa pentru indepartarea machiajului si pentr",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "06e77f21-1a5c-4c39-a766-cc2a9c9b9b47",
-        "name": "GLOV Original Quick Treat, Blue - Manusa pentru demachiere formulata cu fibra speciala si apa, care contribuie",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "b0e3516b-6ad5-47d2-bb16-c3add5f296be",
-        "name": "I'M FROM Fig - balsam de curatare formulat cu ulei de smochin si peptide, care contribuie la indepartarea murd",
-        "category": "Demachierea si curatarea tenului",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "composition",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "014c0a66-5e5a-4079-85f9-a963fe355f02",
-        "name": "SOLE Glow Voiaj - geanta cosmetica pentru organizarea produselor travel size, formulata cu poliester si polyur",
-        "category": "Accesorii",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "e8d100ce-1529-4245-8e91-8aedba51534e",
-        "name": "LEE STAFFORD The Big In Shower Comb - pieptene de par pentru descurcarea parului ud si incurcat in timpul dusu",
-        "category": "Ingrijirea parului",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "5bee942a-5996-4f70-865a-5f3eda76193a",
-        "name": "BEAUTY OF JOSEON Ginseng Moist Sun Serum, 50 ml - crema de fata formulata cu Extract de Panax Ginseng si Niaci",
-        "category": "Protectie solara",
-        "has_sections": [
-          "composition",
-          "description",
-          "key_ingredients",
-          "storage",
-          "usage"
-        ]
-      },
-      {
         "id": "f32a9830-b595-4316-aa36-5a37196a29df",
         "name": "GLOV Barbie - bentita cosmetica din plus moale pentru a tine sub control suvitele de par pentru aplicarea mach",
-        "category": "Ingrijirea parului",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "8213eede-d60a-46cd-be40-a05906b92957",
-        "name": "GLOV Barbie - prosop pentru par formulat cu microfibra super absorbanta si satin catifelat, care contribuie la",
         "category": "Ingrijirea parului",
         "has_sections": [
           "anti_fit",
@@ -1337,6 +572,605 @@
         ]
       },
       {
+        "id": "d689ed51-6e50-4985-afb4-3ef96223532d",
+        "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de jojoba si extract de lavanda, care contri",
+        "category": "Fata",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "bcf1d05b-23bc-4fb7-b4ef-eaec2065fb04",
+        "name": "UNLEASHIA Glitterpedia Eye Palette - fard de pleoape cu 9 nuante si texturi variate (mat, shimmer perlat, glit",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "7e2051c3-015c-4ea9-b153-ab53b43a80e0",
+        "name": "LAKA Pixi Brow Cara - gel de sprancene formulata cu pigmenti de culoare si polimeri de fixare, care contribuie",
+        "category": "Sprancene",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "126b6ce6-9b2c-40a5-ade9-fab2414f728f",
+        "name": "BANILA CO Smudging Lip Pencil, PK01 Nude Rose - Creion contur buze formulat cu silica si mica, care contribuie",
+        "category": "Buze",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "204b18c5-9e88-4ed2-9792-d9519a84baf1",
+        "name": "LAKA Mono Eyeshadow 905 Modernist - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "12f577fe-18bd-4209-a2e7-f055a0691299",
+        "name": "AQUAPICK AQ-350 - irigator bucal cu jet de apa ultra-fin pulsatoriu si duze rotative 360 grade, care contribui",
+        "category": "Ingrijire interdentara",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "30c67bcd-e703-47e4-ace3-2527d031f768",
+        "name": "Dr. Melaxin TX Cream - crema de fata formulata cu acid tranexamic si niacinamida, care contribuie la uniformiz",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "9eaa2b44-86e3-4201-b534-cbe628dfd3dc",
+        "name": "DR.JART+ Cicapair Intensive Soothing Repair Serum Mask - masca de fata formulata cu Centella Asiatica si Alant",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "c75f8c31-7212-469c-a23b-0edc1e42962d",
+        "name": "ROYAL AND LANGNICKEL Omnia Rose Gold - pensula pentru definirea pometilor, liniei maxilarului si tamplelor, pe",
+        "category": "Accesorii",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "86f4c7ca-bd9b-4978-ab5d-6bbd463ea2e2",
+        "name": "ROYAL AND LANGNICKEL Omnia Rose Gold - pensula pentru aplicarea pudrei lejere sau a pudrei iluminatoare, formu",
+        "category": "Accesorii",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "465cf5f9-387f-4cab-bf3e-8353b49681d7",
+        "name": "MEDICUBE Triple Collagen Cream 4.0 - crema de fata formulata cu colagen si niacinamida, care contribuie la men",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "76c382ed-6488-41f3-b101-14daf41ae5e7",
+        "name": "B.tan I don't want tan on my hands - Manusa pentru aplicarea autobronzantului, formulata cu material textil la",
+        "category": "Creme autobronzante si bronzere",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "2e10e6d8-1b5f-47ac-82eb-cd4e42e93a05",
+        "name": "UNLEASHIA Tap Me Palette Duo - fard de pleoape compact in format duo, cu o nuanta mata si o nuanta glitter, fo",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "bc511fb9-2132-4b1b-84ff-155333d81aa4",
+        "name": "UNLEASHIA Satin Wear Healthy-Green Cushion Re-Feel Case - cushion destinat folosirii impreuna cu rezervele din",
+        "category": "Fata",
+        "has_sections": [
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "5ee1929a-5e61-4d6a-a489-e7fd16ce29fc",
+        "name": "UNLEASHIA Tap Me Palette Duo - fard de pleoape cu format duo, o nuanta mata si o nuanta glitter, pentru machia",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "eaa8de2b-8357-4018-8c0b-3ec6dfea30e7",
+        "name": "BLACK ROUGE Pearlvely I Glitter, G01 Sweet Sweet Honey, 2 gr - Fard de pleoape formulat cu sclipici cosmetic s",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "bb7442cf-0c0a-4111-b229-7f8b2ceb309a",
+        "name": "I'M FROM Rice Serum - ser de fata formulat cu extract de ferment de germeni de orez si niacinamida, care contr",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "69dc8eb9-bdfb-40b0-821f-b541ed7715a2",
+        "name": "COSRX Low ph Good Morning, 150 ml - gel de curatare formulat cu ingrediente cu pH scazut si agenti delicati de",
+        "category": "Demachierea si curatarea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "05aae493-511b-4076-bd3d-5344f0f28d28",
+        "name": "Dr. Melaxin Melting Cleanser - spuma de curatare zilnica formulata cu calamina si niacinamida, care contribuie",
+        "category": "Demachierea si curatarea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "018be20a-85cd-4c53-8ca0-b5989718985e",
+        "name": "EVY TECHNOLOGY Daily Essentials Spuma de Curatare pentru Fata 100 ml - Curatare Delicata si Hidratanta cu Aciz",
+        "category": "Demachierea si curatarea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "5e904126-f6e9-47dd-8701-573a893a84d0",
+        "name": "TIRTIR Mask Fit Red Foundation - fond de ten formulat cu hibiscus rosu si propolis rosu, care contribuie la un",
+        "category": "Fata",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "a79f65bb-5985-40a7-9e72-1597644c678e",
+        "name": "JUMISO All Day Vitamin Facial Cleanser - spuma de curatare formulata cu acid salicilic si extract din arborele",
+        "category": "Demachierea si curatarea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "c98121b7-7d74-48cc-baa7-a39b0917a65d",
+        "name": "ROYAL AND LANGNICKEL Omnia Pro - set pensule formulat cu filamente sintetice Omnilux si fibre vegane, cu 20 de",
+        "category": "Accesorii",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "ddff8018-8235-4069-b07f-be3f37feacb7",
+        "name": "GLOV Original Quick Treat, Peach - Manusa pentru demachiere conceputa pentru corectarea rapida a machiajului f",
+        "category": "Demachierea si curatarea tenului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "014c0a66-5e5a-4079-85f9-a963fe355f02",
+        "name": "SOLE Glow Voiaj - geanta cosmetica pentru organizarea produselor travel size, formulata cu poliester si polyur",
+        "category": "Accesorii",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "f5f96b03-4a52-4c2f-a03a-347c9c74d59d",
+        "name": "LAKA Mono Eyeshadow 918 Florist - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul o",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "6e99e23f-ba94-4fd9-af48-e40650a18f1b",
+        "name": "BEAUTY OF JOSEON Relief Sun Cream 10 ml - crema de fata formulata cu extract de orez si probiotice din cereale",
+        "category": "Protectie solara",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "5bee942a-5996-4f70-865a-5f3eda76193a",
+        "name": "BEAUTY OF JOSEON Ginseng Moist Sun Serum, 50 ml - crema de fata formulata cu Extract de Panax Ginseng si Niaci",
+        "category": "Protectie solara",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
+        "id": "0cf6cbae-28cb-48f1-ba37-cd153e834111",
+        "name": "B.fresh A Cococnut A Day, 473 ml - gel de dus formulat cu ulei de cocos si unt de cacao, care contribuie la me",
+        "category": "Dus si baie",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "93384150-b379-40f6-91db-d400c902dcc6",
+        "name": "B.fresh It s Not Just a Glaze Body Wash, 473 ml - gel de dus formulat cu niacinamida si unt de shea, care cont",
+        "category": "Dus si baie",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "8213eede-d60a-46cd-be40-a05906b92957",
+        "name": "GLOV Barbie - prosop pentru par formulat cu microfibra super absorbanta si satin catifelat, care contribuie la",
+        "category": "Ingrijirea parului",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "cf5fd83e-07d9-4ece-a5e1-32f0cab567cc",
+        "name": "KUNDAL Honey & Macadamia Pure Body Wash - gel de dus formulat cu aloe vera si extract de miere, care contribui",
+        "category": "Dus si baie",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
+          "usage"
+        ]
+      },
+      {
         "id": "d62cd833-b299-42a0-b441-b8950b732501",
         "name": "GLOV Sport Prosop pentru par Alb - Uscare Rapida si Absorbtie Sporita, Ideal pentru Sala si Calatorii, 1 buc",
         "category": "Ingrijirea parului",
@@ -1360,14 +1194,122 @@
         ]
       },
       {
-        "id": "9eaa2b44-86e3-4201-b534-cbe628dfd3dc",
-        "name": "DR.JART+ Cicapair Intensive Soothing Repair Serum Mask - masca de fata formulata cu Centella Asiatica si Alant",
-        "category": "Ingrijirea tenului",
+        "id": "6f3e6455-2dd8-4605-a055-9a5ee36f4731",
+        "name": "West Barn Co The Brow Pomade - fard de sprancene formulat cu pigmenti intensi si agent matifiant, care contrib",
+        "category": "Sprancene",
         "has_sections": [
+          "anti_fit",
+          "comparison",
           "composition",
           "description",
+          "dosage",
+          "editorial",
+          "fit",
           "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
           "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "69151819-46c2-40b0-82e4-1d72567fff5c",
+        "name": "LAKA Mono Eyeshadow 920 Canna - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul och",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "83677e76-45b4-4dbd-b1f1-ead0bdac1ae2",
+        "name": "West Barn Co The Brow Pomade - fard de sprancene formulat cu pigmenti intensi si formula rezistenta la apa, ca",
+        "category": "Sprancene",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "168b353e-cfd3-4c6a-9ca3-47eb490859ce",
+        "name": "LAKA Mono Eyeshadow 912 Sandalwood - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiaju",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "533d8201-85ae-4433-a25f-cf9341231aa5",
+        "name": "LAKA Mono Eyeshadow 915 Hazel - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul och",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
           "usage"
         ]
       },
@@ -1420,9 +1362,33 @@
         ]
       },
       {
-        "id": "d689ed51-6e50-4985-afb4-3ef96223532d",
-        "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de jojoba si extract de lavanda, care contri",
-        "category": "Fata",
+        "id": "ded0b27b-0fd8-4fd4-8110-b9fe17499e1e",
+        "name": "LAKA Mono Eyeshadow 911 Terrapeach - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiaju",
+        "category": "Ochi",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "d51351a4-6eee-40f1-aabc-b8d1fa02d34f",
+        "name": "LAKA Mono Eyeshadow 901 Teddy - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul och",
+        "category": "Ochi",
         "has_sections": [
           "anti_fit",
           "comparison",
@@ -1583,35 +1549,13 @@
         ]
       },
       {
-        "id": "c75f8c31-7212-469c-a23b-0edc1e42962d",
-        "name": "ROYAL AND LANGNICKEL Omnia Rose Gold - pensula pentru definirea pometilor, liniei maxilarului si tamplelor, pe",
-        "category": "Accesorii",
+        "id": "7b2fc4dc-9313-4137-bfb7-aff5f8c40828",
+        "name": "LAKA Mono Eyeshadow 908 Vanila - fard de pleoape cu finisaj mat, pentru definire si profunzime in machiajul oc",
+        "category": "Ochi",
         "has_sections": [
           "anti_fit",
           "comparison",
-          "description",
-          "dosage",
-          "editorial",
-          "fit",
-          "key_ingredients",
-          "problem",
-          "purpose",
-          "questions",
-          "recommendation_trigger",
-          "routine_integration",
-          "routine_time",
-          "storage",
-          "summary",
-          "usage"
-        ]
-      },
-      {
-        "id": "86f4c7ca-bd9b-4978-ab5d-6bbd463ea2e2",
-        "name": "ROYAL AND LANGNICKEL Omnia Rose Gold - pensula pentru aplicarea pudrei lejere sau a pudrei iluminatoare, formu",
-        "category": "Accesorii",
-        "has_sections": [
-          "anti_fit",
-          "comparison",
+          "composition",
           "description",
           "dosage",
           "editorial",
@@ -1652,6 +1596,30 @@
         ]
       },
       {
+        "id": "72e10ab0-0c76-47e5-86e2-15ff6c4cbcee",
+        "name": "West Barn Co The Brow Pomade - fard de sprancene formulata cu pigmenti intensi si ingrediente cu finisaj mat, ",
+        "category": "Sprancene",
+        "has_sections": [
+          "anti_fit",
+          "comparison",
+          "composition",
+          "description",
+          "dosage",
+          "editorial",
+          "fit",
+          "key_ingredients",
+          "problem",
+          "purpose",
+          "questions",
+          "recommendation_trigger",
+          "routine_integration",
+          "routine_time",
+          "storage",
+          "summary",
+          "usage"
+        ]
+      },
+      {
         "id": "88707d27-3ee2-41f8-8a24-1705f197bcd4",
         "name": "ROYAL AND LANGNICKEL Omnia Rose Gold - pensula formulata cu filamente sintetice Omnilux si fibre sintetice fin",
         "category": "Accesorii",
@@ -1671,6 +1639,18 @@
           "routine_time",
           "storage",
           "summary",
+          "usage"
+        ]
+      },
+      {
+        "id": "c998dfaa-b32e-4f20-ab11-47eba4aa7856",
+        "name": "COSRX Advanced The Vitamin C 23, 20 ml - ser de fata formulat cu vitamina C si niacinamida, care contribuie la",
+        "category": "Ingrijirea tenului",
+        "has_sections": [
+          "composition",
+          "description",
+          "key_ingredients",
+          "storage",
           "usage"
         ]
       }
@@ -1697,20 +1677,20 @@
       "redness": 0,
       "sun_protection": 0,
       "oily": 0,
-      "sensitive": 0,
-      "combination": 0,
-      "normal": 0,
-      "hydration": 0,
-      "acne": 0,
       "dry": 0,
-      "dullness": 0,
-      "hyperpigmentation": 0,
+      "hydration": 0,
+      "sensitive": 0,
       "barrier": 0,
-      "scalp_care": 0,
+      "dullness": 0,
       "hair_dryness": 0,
-      "hair_loss": 0,
+      "acne": 0,
+      "hyperpigmentation": 0,
+      "combination": 0,
+      "scalp_care": 0,
+      "normal": 0,
       "hair_damage": 0,
-      "dandruff": 0
+      "dandruff": 0,
+      "hair_loss": 0
     }
   }
 }

@@ -11,10 +11,10 @@
   "with_digit_and_shade": 573,
   "violations": [],
   "finish": {
-    "glossy": 41,
-    "satin": 21,
-    "matte": 78,
     "glow": 52,
+    "matte": 78,
+    "satin": 21,
+    "glossy": 41,
     "velvet": 30
   },
   "rules": {
