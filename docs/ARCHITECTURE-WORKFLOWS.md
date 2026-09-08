@@ -1843,6 +1843,7 @@ search_category_hard_enabled = true
 search_category_tree_enabled = true
 search_diversify_enabled = true
 search_offcategory_guard_enabled = true
+search_semantic_enabled = false
 search_sessions_enabled = true
 search_shadow_enabled = false
 search_sort_mode_enabled = true

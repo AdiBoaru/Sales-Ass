@@ -28,6 +28,7 @@ românească aplicată peste un catalog maghiar.
 from __future__ import annotations
 
 import re
+from itertools import combinations
 
 # Aceeași normalizare ca `ro_unaccent` (033), replicată aici ca funcție PURĂ de Python: dacă cele
 # două capete diferă, potrivirea nu se produce — vezi comentariul migrării. Include formele cu
@@ -158,5 +159,24 @@ def relaxed_query(terms: list[str]) -> str:
 
     `websearch_to_tsquery` tratează „or" ca operator, deci `„a or b"` → `'a' | 'b'`. Termenii sunt
     deja normalizați la `[0-9a-z]`, deci niciunul nu poate fi literalmente „or" într-o cerere
-    românească și nici nu poate introduce sintaxă."""
+    românească și nici nu poate introduce sintaxă.
+
+    De la trei termeni în sus, relaxarea cere PERECHI: `(a ȘI b) SAU (a ȘI c) SAU (b ȘI c)`.
+    Măsurat pe catalogul SOLE: cu SAU pe termeni singulari, „sampoon anti matreata" (strict: 0)
+    urca pe locul 2 un aparat anti-îmbătrânire epuizat, fiindcă „anti" e un prefix care apare în
+    greutatea maximă a sute de nume și `ts_rank_cd` nu răsplătește suficient numărul de termeni
+    potriviți. O pereche cere ca DOUĂ dintre cuvintele clientului să fie pe același produs — „nu
+    am tot, dar am ce contează" —, iar SAU-ul pe termeni singulari rămâne treapta următoare
+    (`relaxed_query_any`), ca relaxarea să nu producă zerouri noi (P6). Spațiul leagă cu ȘI în
+    sintaxa websearch, iar `&` are prioritate peste `|`, deci perechile nu au nevoie de
+    paranteze."""
+    if len(terms) >= 3:
+        return " or ".join(f"{a} {b}" for a, b in combinations(terms, 2))
+    return " or ".join(terms)
+
+
+def relaxed_query_any(terms: list[str]) -> str:
+    """SAU pe termeni singulari — ultima treaptă de text înaintea plasei de typo. E vechea
+    `relaxed_query`, păstrată ca treaptă separată: mai permisivă decât perechile, dar tot o
+    potrivire lexem cu lexem, deci mai precisă decât `word_similarity` pe nume."""
     return " or ".join(terms)

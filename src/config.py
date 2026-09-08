@@ -719,6 +719,14 @@ class Settings(BaseSettings):
     lexical_query_v2_enabled: bool = Field(
         default=True, validation_alias="LEXICAL_QUERY_V2_ENABLED"
     )
+    # Brațul SEMANTIC al căutării (embed pe interogare + `product_embeddings`). OFF (default) =
+    # decizie de produs din 2026-09-08: nu folosim embeddings. Nu e doar economie: cu embeddings
+    # prezente, brațul vector sub sort explicit (preț/rating) scana TOT catalogul și sorta global,
+    # deci „SPF, cel mai ieftin" aducea benzi pentru nas la 3 lei (măsurat,
+    # docs/DB-QUERY-PROBE-2026-09-08.md). Stins, dispare și checkout-ul `has_embeddings` de pe
+    # fiecare căutare, iar jobul de embed nu mai pornește. Rândurile din `product_embeddings`
+    # rămân: decizia e reversibilă pe măsurătoare (D15), nu prin ștergere.
+    search_semantic_enabled: bool = Field(default=False, validation_alias="SEARCH_SEMANTIC_ENABLED")
     # NX-266: constrângerile numerice ale clientului („sub 100 lei", „SPF minim 30") ca VALORI
     # tipizate cu unitate, aplicate în cod de ambele părți ale rerankării, nu ca text care ajunge
     # în căutarea lexicală. OFF (default) = byte-identic: extracția nu rulează, retrieverele

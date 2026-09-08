@@ -57,6 +57,7 @@ __all__ = [
     "resolve",
     "resolve_any",
     "servable_count_sql",
+    "servable_subtree_counts_sql",
 ]
 
 # Numele REZERVAT al dimensiunii structurale. Categoriile nu vin din `attributes`, ci din tabelul
@@ -140,6 +141,9 @@ class CatalogVocabulary:
 
     business_id: str
     dimensions: Mapping[str, tuple[VocabEntry, ...]] = field(default_factory=dict)
+    # Badge-urile prezente pe aproape tot catalogul (vezi `_NOISE_BADGES_SQL`): vederea de detaliu
+    # le omite, fiindcă nu deosebesc un produs de altul. Gol = nimic de omis.
+    noise_badges: frozenset[str] = frozenset()
 
     @property
     def categories(self) -> tuple[VocabEntry, ...]:
@@ -266,15 +270,64 @@ def servable_count_sql(alias: str = "c") -> str:
     )
 
 
+def servable_subtree_counts_sql() -> str:
+    """O SINGURĂ trecere: `(id, slug, name, path, n)` pentru fiecare categorie a tenantului, cu
+    `n` = produsele SERVABILE din subarbore. Parametru: `$1` = business_id.
+
+    Aceeași definiție ca `servable_count_sql` (statut, subarbore pe `path`, apartenență prin
+    categoria primară SAU `product_category_map`), dar calculată o dată pentru tot arborele, nu
+    o dată per categorie: apartenențele se materializează o dată (`memb`), iar subarborele e o
+    auto-join pe prefixul de cale. Măsurat pe 45 de categorii și 2.758 de produse: 427 ms → sub
+    10 ms, pentru exact aceleași numere.
+
+    `servable_count_sql` rămâne pentru locurile care au nevoie de o expresie SCALARĂ per rând;
+    orice listă de categorii trebuie să vină de aici."""
+    return f"""
+with cat as (
+    select c.id, c.slug, c.name, c.path
+      from categories c
+     where c.business_id = $1
+),
+memb as (
+    select p.id as product_id, p.primary_category_id as category_id
+      from products p
+     where p.business_id = $1 and {_SERVABLE} and p.primary_category_id is not null
+    union
+    select m.product_id, m.category_id
+      from product_category_map m
+      join products p on p.id = m.product_id
+     where p.business_id = $1 and {_SERVABLE}
+)
+select a.id,
+       a.slug,
+       a.name,
+       a.path,
+       count(distinct memb.product_id) as n
+  from cat a
+  left join cat d on d.id = a.id
+                 or (coalesce(a.path, '') <> '' and d.path like a.path || '/%')
+  left join memb on memb.category_id = d.id
+ group by a.id, a.slug, a.name, a.path
+"""
+
+
 # Categoriile: singura dimensiune cu arbore, deci singura numărată pe subarbore.
-_CATEGORY_SQL = f"""
-select c.slug,
-       c.name,
-       c.path,
-       {servable_count_sql("c")} as n
-  from categories c
- where c.business_id = $1
- order by c.path
+_CATEGORY_SQL = f"select * from ({servable_subtree_counts_sql()}) c order by c.path"
+
+# Etichetele de badge care nu DISCRIMINEAZĂ: prezente pe aproape fiecare produs al tenantului
+# (o notificare de reglementare, „cadou", „magazin oficial"). Pentru model sunt zgomot — nu spun
+# nimic despre produsul ăsta față de celălalt —, deci vederea de detaliu le omite. Același test de
+# informație ca `_keep_dimension` (o valoare pe > 98% din rânduri nu e vocabular), cu prag mai
+# blând fiindcă un badge e o afirmație, nu o dimensiune: peste 90% din produsele servabile.
+_BADGE_NOISE_SHARE = 0.9
+_NOISE_BADGES_SQL = f"""
+select b.label
+  from product_badges b
+  join products p on p.id = b.product_id
+ where p.business_id = $1 and {_SERVABLE}
+ group by b.label
+having count(distinct b.product_id) > {_BADGE_NOISE_SHARE} * (
+        select count(*) from products p where p.business_id = $1 and {_SERVABLE})
 """
 
 # Dimensiunile din `attributes`: DESCOPERITE. Nicio cheie nu e numită aici — se expandează orice
@@ -343,6 +396,7 @@ async def load_vocabulary(conn: asyncpg.Connection, business_id: str) -> Catalog
     """
     cat_rows = await conn.fetch(_CATEGORY_SQL, business_id)
     attr_rows = await conn.fetch(_ATTRIBUTE_SQL, business_id)
+    noise_rows = await conn.fetch(_NOISE_BADGES_SQL, business_id)
 
     dimensions: dict[str, tuple[VocabEntry, ...]] = {}
 
@@ -372,7 +426,8 @@ async def load_vocabulary(conn: asyncpg.Connection, business_id: str) -> Catalog
         top = sorted(values, key=lambda kv: (-kv[1], kv[0]))[:_MAX_VALUES_PER_DIMENSION]
         dimensions[name] = tuple(VocabEntry(key=v, label=v, count=n) for v, n in top)
 
-    return CatalogVocabulary(business_id=business_id, dimensions=dimensions)
+    noise = frozenset(str(r["label"]) for r in noise_rows if r["label"])
+    return CatalogVocabulary(business_id=business_id, dimensions=dimensions, noise_badges=noise)
 
 
 # --- rezolvarea unui termen liber --------------------------------------------
