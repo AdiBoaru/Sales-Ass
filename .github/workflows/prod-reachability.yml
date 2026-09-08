@@ -1,4 +1,4 @@
-# NX-279 — producția nu răspundea, și nimic n-avea sarcina să observe.
+# NX-280 — producția nu răspundea, și nimic n-avea sarcina să observe.
 #
 # Findingul, măsurat pe 2026-09-08: `https://bot.nativextech.com/health` nu accepta conexiuni
 # deloc — nu 404, nu 502, nu eroare TLS, ci „unable to connect" după 21 de secunde. Vitrina
