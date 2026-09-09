@@ -71,6 +71,7 @@ from src.catalog.derivation import (  # noqa: E402
     signal_name,
     tokens,
 )
+from src.catalog.prose import is_advice, sentence_with  # noqa: E402
 from src.catalog.query_terms import stopwords  # noqa: E402
 from src.db.connection import admin_conn, close_pool, get_pool  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
@@ -144,6 +145,10 @@ def _claim_patterns(
 
 
 SPF_RE = re.compile(r"\bspf\s*([0-9]{1,2})\s*\+?")
+#: Aceeași formă, dar peste text NEnormalizat: garda NX-286 trebuie să găsească fraza în proza
+#: originală (cu majuscule și punctuație), fiindcă segmentarea în fraze depinde de ele. `normalize`
+#: se aplică DUPĂ ce fraza e izolată.
+SPF_RE_RAW = re.compile(r"\bspf\s*([0-9]{1,2})\s*\+?", re.IGNORECASE)
 
 
 @dataclass
@@ -500,6 +505,15 @@ async def main() -> int:
                 for key, spec in raw_facets.items()
                 if spec.get("claim_affirms")
             }
+            # NX-286 — rădăcinile care marchează o frază drept SFAT, declarate pe fațeta pe care
+            # o păzesc. Normalizate aici o dată, ca potrivirea să fie pe aceeași formă ca proza.
+            # Absente ⇒ garda nu rulează, iar derivarea rămâne exact cea de dinainte (P6).
+            spf_advice_markers = tuple(
+                normalize(str(m))
+                for m in ((raw_facets.get("spf") or {}).get("prose_advice_markers") or ())
+                if str(m).strip()
+            )
+            spf_advice_skipped = 0
             undeclared = sorted(
                 key
                 for key in facet_values
@@ -647,11 +661,24 @@ async def main() -> int:
 
                 # --- SPF: cifră, deci se citește o dată, din nume, iar altundeva doar dacă
                 # numele tace. Un „SPF 30" pomenit în proza unei rutine e despre alt produs.
+                #
+                # NX-286: comentariul de mai sus numea riscul, dar nimic nu-l verifica. Măsurat pe
+                # SOLE: din 44 de valori luate din descriere, 10 veneau din fraze de SFAT, care
+                # trimit către alt produs („Folositi crema cu SPF 50+ in timpul zilei, deoarece
+                # retinolul face pielea mai sensibila la soare" → spf=50 pe o cremă cu retinol).
+                # Produsele prinse așa sunt exact cele care sensibilizează pielea la soare.
+                # Garda judecă FRAZA în care a apărut cifra, nu tot textul; markerii vin din pachet
+                # (P9/P11 — „folositi" e al limbii, nu al codului). Fallback-ul pe descriere RĂMÂNE:
+                # 33 din 44 sunt corecte (protecții solare care își declară SPF-ul doar în proză).
                 spf_m = SPF_RE.search(name_norm)
                 spf_src = "name"
                 if not spf_m:
-                    spf_m = SPF_RE.search(normalize(p["description"]))
-                    spf_src = "description"
+                    sentence = sentence_with(p["description"], SPF_RE_RAW)
+                    if sentence and not is_advice(normalize(sentence), spf_advice_markers):
+                        spf_m = SPF_RE.search(normalize(sentence))
+                        spf_src = "description"
+                    elif sentence:
+                        spf_advice_skipped += 1
                 if spf_m:
                     derived["spf"] = {
                         "values": [spf_m.group(1)],
@@ -756,6 +783,16 @@ async def main() -> int:
                 )
             if vetoed_total:
                 print(f"excluderi active: {dict(vetoed_total.most_common(8))}")
+            # NX-286: câte valori de `spf` au fost REFUZATE fiindcă veneau din fraze de sfat.
+            # Se publică, nu se tace: o gardă care lucrează invizibil nu se poate distinge de una
+            # care nu rulează (cazul markerilor absenți din pachet).
+            if spf_advice_markers:
+                print(
+                    f"spf refuzat (frază de sfat, nu proprietate): {spf_advice_skipped}"
+                    f"  · {len(spf_advice_markers)} rădăcini din pachet"
+                )
+            else:
+                print("spf: garda de sfat INACTIVĂ (`prose_advice_markers` absent din pachet)")
 
             share = len(no_need) / total if total else 0
             print(f"\nfără NICIO nevoie și fără tip de ten: {len(no_need)} ({share:.1%})")
