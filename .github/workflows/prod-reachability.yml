@@ -1,0 +1,172 @@
+# NX-280 — producția nu răspundea, și nimic n-avea sarcina să observe.
+#
+# Findingul, măsurat pe 2026-09-08: `https://bot.nativextech.com/health` nu accepta conexiuni
+# deloc — nu 404, nu 502, nu eroare TLS, ci „unable to connect" după 21 de secunde. Vitrina
+# (`demo.*`) răspundea 200, dar e servită de CDN-ul Hostinger (`Server: hcdn`), deci nu spune
+# nimic despre VPS. Nimeni n-a aflat.
+#
+# De ce n-a aflat nimeni, deși există deja un workflow de alarmă:
+#
+#   • `main-health.yml` urmărește CI-ul pe `main` — sănătatea REPO-ului, nu a producției;
+#   • singura verificare care atinge `PROD_BASE_URL` (`smoke_web_v2`) trăiește în jobul de deploy
+#     din `release.yml`, iar acel job e `skipped` la fiecare rulare, fiindcă promovarea cere
+#     aprobare manuală (NX-248). Verificat pe ultima rulare: „Build + atestări" success,
+#     „Producție" skipped, „Staging" skipped.
+#
+# Deci fiecare bifă verde spune „imaginea s-a construit", și e citită ca „suntem bine". Aceeași
+# clasă cu defectele din #340/#347: un semnal adevărat despre un lucru, citit ca fiind despre altul.
+#
+# Workflow-ul ăsta nu inventează o verificare nouă. Reia MECANISMUL din `main-health.yml` (un
+# singur issue, actualizat, care se închide singur) și îl pune pe întrebarea care lipsea:
+# **răspunde producția, acum?**
+#
+# Rulează pe ORAR, nu pe `workflow_run`, și asta e diferența care contează: o cădere de producție
+# nu e cauzată de un push, deci nu poate fi detectată de ceva declanșat de push-uri. Exact de-aia
+# n-a văzut-o nimeni săptămâni la rând.
+
+name: Producția răspunde?
+
+on:
+  schedule:
+    # La fiecare 30 de minute. Nu mai des: e o sondă externă pe un endpoint de sănătate, iar o
+    # alarmă care se aprinde la o eroare tranzitorie de rețea antrenează pe toată lumea s-o ignore
+    # — chiar defectul pe care NX-252/254 l-au numit.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: prod-reachability
+  cancel-in-progress: false
+
+jobs:
+  sonda:
+    name: Sondă externă + alarmă
+    runs-on: ubuntu-latest
+    steps:
+      - name: Interoghează /health
+        id: probe
+        env:
+          BASE_URL: ${{ secrets.PROD_BASE_URL }}
+        run: |
+          set -uo pipefail
+          if [ -z "${BASE_URL:-}" ]; then
+            echo "verdict=unknown" >> "$GITHUB_OUTPUT"
+            echo "detail=PROD_BASE_URL nu e configurat" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # DOUĂ încercări, la 20 de secunde distanță. O singură sondă eșuată e zgomot de rețea;
+          # două la rând, de pe un runner GitHub, e un fapt despre producție. Alarma trebuie să
+          # coste ceva ca să merite citită.
+          verdict=down
+          detail=""
+          for attempt in 1 2; do
+            # Fișierele se GOLESC înainte de fiecare încercare. La eșec de conexiune curl nu scrie
+            # nimic în `-o`, deci fără golire `detail` ar raporta corpul sondei ANTERIOARE — o
+            # alarmă care descrie alt server. Prins rulând sonda local, nu recitind-o.
+            : > body.txt; : > err.txt
+            # `curl` tipărește el însuși `000` la eșec de conexiune (prin `-w`), deci un
+            # `|| echo "000"` ar concatena încă unul și ar produce `000000`.
+            code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 20 \
+                     "${BASE_URL%/}/health" 2>err.txt) || true
+            [ -n "$code" ] || code="000"
+            if [ "$code" = "200" ]; then
+              verdict=up
+              detail="HTTP 200"
+              break
+            fi
+            if [ "$code" = "000" ]; then
+              detail="fără răspuns: $(tr -d '\n' < err.txt | tail -c 160)"
+            else
+              detail="HTTP $code — $(head -c 160 body.txt | tr -d '\n')"
+            fi
+            [ "$attempt" = 1 ] && sleep 20
+          done
+
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+          echo "detail=$detail" >> "$GITHUB_OUTPUT"
+          echo "Verdict: $verdict ($detail)"
+
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          VERDICT: ${{ steps.probe.outputs.verdict }}
+          DETAIL: ${{ steps.probe.outputs.detail }}
+        with:
+          script: |
+            const verdict = process.env.VERDICT;
+            const detail = process.env.DETAIL || '(fără detalii)';
+
+            // `unknown` NU e `down`: dacă secretul lipsește, instrumentul e stricat, nu producția.
+            // Aceeași regulă ca la verdictele din NX-238/NX-272 — un `FAIL` obținut pe date lipsă
+            // e mai periculos decât absența unui verdict.
+            if (verdict === 'unknown') {
+              core.warning(`Sonda n-a putut rula: ${detail}`);
+              return;
+            }
+
+            const title = '🔴 Producția nu răspunde';
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', per_page: 100,
+            });
+            const existing = issues.find((i) => i.title === title);
+
+            if (verdict === 'down') {
+              const body = [
+                `Sonda externă nu obține \`200\` de la \`/health\`, de două ori la rând.`,
+                '',
+                `- rezultat: ${detail}`,
+                `- când: ${new Date().toISOString()}`,
+                `- rulare: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                '',
+                'De verificat, în ordinea în care costă:',
+                '1. a fost promovat vreodată un deploy? Jobul „Producție" din `release.yml` e',
+                '   `skipped` pe fiecare push — promovarea cere aprobare manuală (NX-248);',
+                '2. răspunde Traefik? Un 404 plain-text ar însemna că filtrează containere',
+                '   nesănătoase; „unable to connect" înseamnă că nu răspunde nici el;',
+                '3. mai arată DNS-ul spre IP-ul corect al VPS-ului?',
+                '',
+                'Issue-ul se închide SINGUR la prima sondă verde.',
+              ].join('\n');
+              if (existing) {
+                // Un comentariu la fiecare 30 de minute ar fi tot o formă de tăcere. Comentăm doar
+                // dacă ultimul semnal e mai vechi de 12 ore, ca issue-ul să arate că e VIU fără să
+                // devină un flux pe care nimeni nu-l citește.
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: existing.number, per_page: 100,
+                });
+                const last = comments.length ? comments[comments.length - 1] : null;
+                const age = last
+                  ? Date.now() - Date.parse(last.created_at)
+                  : Date.now() - Date.parse(existing.created_at);
+                if (age > 12 * 3600 * 1000) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: existing.number,
+                    body: `Încă jos. ${detail} (${new Date().toISOString()})`,
+                  });
+                }
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner, repo: context.repo.repo, title, body,
+                });
+              }
+              return;
+            }
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Producția răspunde din nou (${detail}), ${new Date().toISOString()}.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, state: 'closed',
+              });
+            }
