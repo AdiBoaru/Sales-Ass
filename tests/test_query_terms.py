@@ -78,9 +78,9 @@ def test_fara_text_nu_inventeaza_termeni():
 def test_locala_e_cheie_nu_constanta():
     """P11/D3: nu aplicăm româna peste o limbă pe care n-o cunoaștem — o locale necunoscută
     păstrează fraza întreagă, adică exact comportamentul de dinainte de 046."""
-    assert stopwords("hu") == frozenset()
+    assert stopwords("de") == frozenset()
     assert stopwords(None) == frozenset()
-    assert content_terms("sampon pentru par gras", "hu") == ["sampon", "pentru", "par", "gras"]
+    assert content_terms("sampon pentru par gras", "de") == ["sampon", "pentru", "par", "gras"]
     assert content_terms("sampon pentru par gras", None) == ["sampon", "pentru", "par", "gras"]
 
 

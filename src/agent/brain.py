@@ -211,17 +211,14 @@ def _no_results_text(no_results: Any, locale: str) -> str:
         "no_match": {
             "ro": "Nu am găsit produse care să respecte toate criteriile cerute.",
             "en": "I could not find products matching all the requested criteria.",
-            "hu": "Nem találtam a kért feltételeknek megfelelő terméket.",
         },
         "insufficient_data": {
             "ro": "Nu pot verifica acum toate criteriile cerute, nu am datele necesare.",
             "en": "I cannot verify all the requested criteria right now, data is missing.",
-            "hu": "Most nem tudom ellenőrizni az összes feltételt, hiányzanak az adatok.",
         },
         "dependency_unavailable": {
             "ro": "Căutarea nu e disponibilă momentan. Te rog încearcă din nou puțin mai târziu.",
             "en": "Search is temporarily unavailable. Please try again shortly.",
-            "hu": "A keresés átmenetileg nem érhető el. Kérlek, próbáld újra kicsit később.",
         },
     }
     by_class = texts.get(getattr(no_results, "reason_class", ""), texts["insufficient_data"])

@@ -54,16 +54,14 @@ if TYPE_CHECKING:
 _DISCLAIMER: dict[str, str] = {
     "ro": "Funcționez cu inteligență artificială, așa că pot greși uneori.",
     "en": "I run on artificial intelligence, so I can be wrong sometimes.",
-    "hu": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
 }
 
 # Eticheta pick-ului („Recomandarea mea") per-locale — text de UI pus de COD; numele + motivul vin
 # din date / proza LLM scrubuită. Fallback pe 'ro'. (IZI-parity G1: pick-ul e vizibil pe web acum,
-# deci eticheta trebuie să urmeze limba clientului — un bot HU/EN nu mai scoate „Recomandarea mea".)
+# deci eticheta trebuie să urmeze limba clientului — un bot EN nu mai scoate „Recomandarea mea".)
 _PICK_LABEL: dict[str, str] = {
     "ro": "👉 Recomandarea mea: ",
     "en": "👉 My pick: ",
-    "hu": "👉 Az ajánlatom: ",
 }
 
 
@@ -85,11 +83,6 @@ _OFF_CATEGORY_INTRO: dict[str, str] = {
         "To be honest, I don't have exactly what you're looking for in the current range. Still, "
         "here are the closest options I could find, they might suit you. Tell me if any of these "
         "is heading in the right direction, or I'll look for something else entirely."
-    ),
-    "hu": (
-        "Őszintén szólva, pontosan azt, amit keresel, most nincs a kínálatban. De összeszedtem a "
-        "legközelebbi lehetőségeket, lehet, hogy megfelelnek. Mondd meg, ha valamelyik jó irányba "
-        "mutat, vagy keresek valami egészen mást."
     ),
 }
 
@@ -590,7 +583,6 @@ def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:
 _CHIP_LEADS: dict[str, tuple[str, ...]] = {
     "ro": ("Dacă vrei, putem continua cu:", "Îți mai pot arăta:", "Sau, dacă preferi:"),
     "en": ("If you like, we can continue with:", "I can also show you:", "Or, if you prefer:"),
-    "hu": ("Ha szeretnéd, folytathatjuk:", "Ezt is meg tudom mutatni:", "Vagy, ha inkább:"),
 }
 
 
@@ -706,28 +698,10 @@ _COMPARE_LABELS: dict[str, dict[str, str]] = {
         "same_rating": "They are rated the same.",
         "heading": "Main differences",
     },
-    "hu": {
-        "title": "Összehasonlítás",
-        "price": "Ár",
-        "rating": "Értékelés",
-        "avail": "Elérhetőség",
-        "pros": "Előnyök",
-        "cons": "Megfontolandó",
-        "brand": "Márka",
-        "lead": "Íme a fő különbségek, válassz aszerint, ami neked fontos.",
-        "cheapest": "A legkedvezőbb: {name}.",
-        "top_rated": "A legjobbra értékelt: {name}.",
-        "same_two": "Mindkettőnél ugyanaz: {items}.",
-        "same_many": "Mindegyiknél ugyanaz: {items}.",
-        "close_price": "Az árkülönbség kicsi, {gap} lei.",
-        "same_rating": "Ugyanolyan értékelésűek.",
-        "heading": "Fő különbségek",
-    },
 }
 _AVAIL_LABELS: dict[str, dict[str, str]] = {
     "ro": {"in_stock": "În stoc", "low_stock": "Stoc limitat", "out_of_stock": "Indisponibil"},
     "en": {"in_stock": "In stock", "low_stock": "Low stock", "out_of_stock": "Out of stock"},
-    "hu": {"in_stock": "Raktáron", "low_stock": "Kevés", "out_of_stock": "Elfogyott"},
 }
 
 
@@ -737,7 +711,8 @@ def _labels(language: str | None) -> dict[str, str]:
 
 def comparison_heading(language: str | None) -> str:
     """Titlul de deasupra tabelului („Diferențe principale"), localizat. Copy SERVER-OWNED: un
-    titlu hardcodat în frontend ar rămâne în română pentru un tenant HU (principiul 11)."""
+    titlu hardcodat în frontend ar rămâne în română pentru un tenant pe altă locale
+    (principiul 11)."""
     return _labels(language)["heading"]
 
 

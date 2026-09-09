@@ -363,7 +363,7 @@ async def test_snapshot_is_frozen():
     db = _db(_rows(("product", PID, _product_row())))
     snap = await _build(db, context=_claim(surface="product", product_id=PID))
     with pytest.raises(Exception):  # noqa: B017 — FrozenInstanceError
-        snap.locale = "hu"
+        snap.locale = "de"
     with pytest.raises(Exception):  # noqa: B017
         snap.surface.product.price = 1.0
 
@@ -474,7 +474,7 @@ async def test_locale_fallback_is_reported_and_server_owned():
     db = _db([])
     snap = await _build(
         db,
-        context=_claim(surface="product", locale="hu-HU"),
+        context=_claim(surface="product", locale="de-DE"),
         business=_business(supported_locales=["ro"]),
     )
     assert snap.locale == "ro"

@@ -21,7 +21,6 @@ def test_is_greeting_positive():
     assert is_greeting("Bună ziua!")  # diacritice + punctuație
     assert is_greeting("buna 😊")  # emoji ignorat
     assert is_greeting("  HEY  ")
-    assert is_greeting("szia")  # HU
     assert is_greeting("hello")
 
 
@@ -45,10 +44,13 @@ def test_all_greetings_are_self_normalized_ascii():
     assert not non_ascii, f"saluturi non-ASCII: {non_ascii}"
 
 
-def test_hungarian_greetings_match():
-    assert is_greeting("helló")  # HU: normalizează la „hello" (acoperit de intrarea ASCII)
-    assert is_greeting("szia")
-    assert is_greeting("Jó napot!")
+def test_unsupported_language_greeting_does_not_match():
+    """Un salut într-o limbă pe care n-o servim nu e „pur salut": pipeline-ul decide, nu welcome.
+
+    `hu` a fost retrasă (NX-287) — testul păzește exact regresia inversă, adică reintroducerea
+    tăcută a unui set de saluturi pe care nu-l mai susține niciun tabel de copy."""
+    assert not is_greeting("szia")
+    assert not is_greeting("Jó napot!")
 
 
 # --- greeting_stage ----------------------------------------------------------

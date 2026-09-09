@@ -62,7 +62,8 @@ def test_beauty_labels_are_locale_aware_not_hardcoded_romanian():
     routine = load_domain_pack(_biz("beauty_salon")).relation_kinds.get("routine_next")
     assert routine.label("ro-RO") == "Pasi recomandati"
     assert routine.label("en") == "Recommended steps"
-    assert routine.label("hu") is not None
+    # o locale pe care pachetul nu o poartă → None, NU eticheta română (D3)
+    assert routine.label("de") is None
 
 
 def test_json_note_keys_do_not_break_loading():

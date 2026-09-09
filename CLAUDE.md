@@ -430,7 +430,7 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       gardă): un client care cere un om, o reclamație sau o amenințare legală primesc
       răspunsul agentului, nu o promisiune neonorată și nu tăcere (P6)
     • media routing: vocale → STT (Whisper), poze → Vision (match catalog)
-    • language detect → RO / HU / EN (setează ctx.language; TOATE
+    • language detect → RO / EN (setează ctx.language; TOATE
       lookup-urile în faqs / semantic_cache / wa_templates includ locale)
     • identity resolution: lookup în channel_identities →
       același user pe 2 canale = un singur contact
@@ -930,7 +930,7 @@ nativx-assistant/
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
 │   ├── 0NN_*.sql                ← migrări delta (003→049), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 050)
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 051)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
@@ -1114,7 +1114,11 @@ filtrul de `concerns`, fațetele și boost-ul din rerank au pe ce opera; `produc
 **37.082** ⇒ graful NU mai e inert, iar cele 391 de produse epuizate au substitut (NX-195).
 Rămân GOALE, cu consecință: `product_card_blurbs` = 0 (corect: codul refuză să cadă pe numele
 produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate → `top_pros` iese
-NULL pe orice card); `intent_aliases` = 0; `faqs.embedding` = 0 pe toate cele 20 (deci lookup-ul de
+NULL pe orice card) — dar are acum PRODUCĂTOR determinist (NX-279,
+`scripts/derive_review_summaries.py`: teme din `domain_pack.review_themes`, numărate ca recenzii
+distincte, zero model; cere migrarea 050, pachetul re-aplicat și `--apply`; vechiul
+`summarize_reviews.py` INVENTA rezumatele și rescria `products.rating`, e arhivat cu gardă);
+`intent_aliases` = 0; `faqs.embedding` = 0 pe toate cele 20 (deci lookup-ul de
 FAQ la nivel de business tot nu servește nimic).
 **`domain_pack` NU mai lipsește** (§13 din doc): 20 de chei canonice de
 nevoie derivate din cele 12.665 de fraze reale de căutare din secțiunile `aura`, fiecare

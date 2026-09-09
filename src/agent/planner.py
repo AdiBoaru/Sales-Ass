@@ -218,7 +218,7 @@ def _apply_relevance_mask(ctx: TurnContext, products: list[dict[str, Any]]) -> l
 # MOD SUPERLATIV (IZI): întrebare despre setul AFIȘAT de tip „care dintre ele e cea mai X". ÎNALTĂ
 # precizie (ca _COMPARE_RE): „care" + „cea/cel/cele mai" în aceeași frază, SAU „care dintre ele/
 # acestea", SAU „cea mai <atribut> dintre ele". Prinde „care e cea mai ușoară/ieftină" (superlativ
-# pe setul afișat), NU o căutare nouă („arată-mi ceva mai ieftin" = cheaper). RO/EN/HU. Intenție
+# pe setul afișat), NU o căutare nouă („arată-mi ceva mai ieftin" = cheaper). RO/EN. Intenție
 # POST-loop (faza E) → trăiește aici (NX-144), nu în `deterministic.py` (intenții PRE-loop).
 _ATTR_QUERY_RE = re.compile(
     r"\bcare\b[^?]{0,40}\b(cea|cel|cele|cei)\s+mai\b"

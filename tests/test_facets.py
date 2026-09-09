@@ -67,9 +67,9 @@ def test_label_locale_agnostic_fallback():
     # explicit → eticheta acelui locale.
     price = {f.key: f for f in build_facets(_OK)}["price"]
     assert price.label("ro") == "Preț"
-    assert price.label("hu") == "price"  # niciun fallback → cheia, NU „Preț" (fără hardcodare ro)
-    assert price.label("hu", fallback_locale="ro") == "Preț"  # fallback explicit dat de apelant
-    assert price.label("hu", fallback_locale="en") == "price"  # fallback fără etichetă → cheia
+    assert price.label("de") == "price"  # niciun fallback → cheia, NU „Preț" (fără hardcodare ro)
+    assert price.label("de", fallback_locale="ro") == "Preț"  # fallback explicit dat de apelant
+    assert price.label("de", fallback_locale="en") == "price"  # fallback fără etichetă → cheia
 
 
 # --- fail-closed (config nesigur RESPINS la load) ---------------------------

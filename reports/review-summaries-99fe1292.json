@@ -1,0 +1,295 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "locale": "ro",
+  "rule_id": "review_themes.v1:sole.2026-09-07",
+  "vocabulary": {
+    "source": "db/seed/domain_pack_sole_ro.json",
+    "version": "sole.2026-09-07",
+    "themes": 26,
+    "rejected": []
+  },
+  "reviews": 183003,
+  "products_with_reviews": 2743,
+  "eligible_products": 2719,
+  "rows_composed": 2557,
+  "rows_with_cons": 48,
+  "skipped": {
+    "under_min_reviews": 24,
+    "no_theme_selected": 162
+  },
+  "withheld": {
+    "below_min_reviews": 8014,
+    "claim_unratified": 475,
+    "below_min_share": 5552,
+    "over_cap": 1537
+  },
+  "themes": {
+    "absorbs_fast": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1366,
+      "product_share": 0.5024,
+      "reviews": 22109,
+      "used": 1007,
+      "universal": false
+    },
+    "no_white_cast": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 147,
+      "product_share": 0.0541,
+      "reviews": 2458,
+      "used": 95,
+      "universal": false
+    },
+    "no_residue": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1610,
+      "product_share": 0.5921,
+      "reviews": 8496,
+      "used": 174,
+      "universal": false
+    },
+    "light_texture": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 2395,
+      "product_share": 0.8808,
+      "reviews": 27376,
+      "used": 1138,
+      "universal": false
+    },
+    "easy_apply": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1954,
+      "product_share": 0.7186,
+      "reviews": 8908,
+      "used": 317,
+      "universal": false
+    },
+    "hydrating": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1822,
+      "product_share": 0.6701,
+      "reviews": 16075,
+      "used": 642,
+      "universal": false
+    },
+    "soft_skin": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1426,
+      "product_share": 0.5245,
+      "reviews": 9086,
+      "used": 349,
+      "universal": false
+    },
+    "not_drying": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 930,
+      "product_share": 0.342,
+      "reviews": 5932,
+      "used": 246,
+      "universal": false
+    },
+    "long_wear": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1115,
+      "product_share": 0.4101,
+      "reviews": 7505,
+      "used": 391,
+      "universal": false
+    },
+    "no_transfer": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 236,
+      "product_share": 0.0868,
+      "reviews": 908,
+      "used": 24,
+      "universal": false
+    },
+    "pleasant_scent": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1207,
+      "product_share": 0.4439,
+      "reviews": 6312,
+      "used": 267,
+      "universal": false
+    },
+    "true_to_picture": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 380,
+      "product_share": 0.1398,
+      "reviews": 1268,
+      "used": 52,
+      "universal": false
+    },
+    "visible_results": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1931,
+      "product_share": 0.7102,
+      "reviews": 17619,
+      "used": 970,
+      "universal": false
+    },
+    "natural_finish": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 715,
+      "product_share": 0.263,
+      "reviews": 5431,
+      "used": 372,
+      "universal": false
+    },
+    "coverage": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 219,
+      "product_share": 0.0805,
+      "reviews": 1609,
+      "used": 114,
+      "universal": false
+    },
+    "pigmentation": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 182,
+      "product_share": 0.0669,
+      "reviews": 699,
+      "used": 30,
+      "universal": false
+    },
+    "not_heavy": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 861,
+      "product_share": 0.3167,
+      "reviews": 3254,
+      "used": 85,
+      "universal": false
+    },
+    "hair_soft": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 211,
+      "product_share": 0.0776,
+      "reviews": 2640,
+      "used": 129,
+      "universal": false
+    },
+    "no_weigh_down": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 143,
+      "product_share": 0.0526,
+      "reviews": 950,
+      "used": 52,
+      "universal": false
+    },
+    "value": {
+      "kind": "praise",
+      "promise": "experience",
+      "ratified": false,
+      "products": 1517,
+      "product_share": 0.5579,
+      "reviews": 7952,
+      "used": 36,
+      "universal": false
+    },
+    "gentle": {
+      "kind": "praise",
+      "promise": "claim",
+      "ratified": false,
+      "products": 1642,
+      "product_share": 0.6039,
+      "reviews": 11420,
+      "used": 0,
+      "universal": false
+    },
+    "tingling": {
+      "kind": "nuance",
+      "promise": "experience",
+      "ratified": false,
+      "products": 73,
+      "product_share": 0.0268,
+      "reviews": 461,
+      "used": 43,
+      "universal": false
+    },
+    "strong_scent": {
+      "kind": "nuance",
+      "promise": "experience",
+      "ratified": false,
+      "products": 157,
+      "product_share": 0.0577,
+      "reviews": 191,
+      "used": 1,
+      "universal": false
+    },
+    "pricey": {
+      "kind": "nuance",
+      "promise": "experience",
+      "ratified": false,
+      "products": 385,
+      "product_share": 0.1416,
+      "reviews": 645,
+      "used": 4,
+      "universal": false
+    },
+    "transfers": {
+      "kind": "nuance",
+      "promise": "experience",
+      "ratified": false,
+      "products": 11,
+      "product_share": 0.004,
+      "reviews": 12,
+      "used": 0,
+      "universal": false
+    },
+    "short_wear": {
+      "kind": "nuance",
+      "promise": "experience",
+      "ratified": false,
+      "products": 182,
+      "product_share": 0.0669,
+      "reviews": 256,
+      "used": 0,
+      "universal": false
+    }
+  },
+  "diff": {
+    "new": 2557,
+    "changed": 0,
+    "unchanged": 0,
+    "stale": 0
+  },
+  "applied": false
+}

@@ -18,7 +18,6 @@ from src.worker.processor import handle_turn
 
 RO = compose._DISCLAIMER["ro"]
 EN = compose._DISCLAIMER["en"]
-HU = compose._DISCLAIMER["hu"]
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +54,6 @@ def test_empty_and_none_return_just_disclaimer():
 
 def test_locale_selection_and_fallback():
     assert ensure_disclaimer("Hi", "en").endswith(EN)
-    assert ensure_disclaimer("Szia", "hu").endswith(HU)
     assert ensure_disclaimer("Hallo", "de").endswith(RO)  # locale necunoscut → fallback ro
     assert ensure_disclaimer("X", None).endswith(RO)
 

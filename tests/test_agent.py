@@ -222,12 +222,11 @@ def test_rich_bundle_no_facets_unchanged():
 
 
 def test_compare_re_matches_intent_not_face():
-    # IZI-parity G2: ÎNALTĂ PRECIZIE — verbul de comparație (RO/EN/HU) + vs/versus; generic.
+    # IZI-parity G2: ÎNALTĂ PRECIZIE — verbul de comparație (RO/EN) + vs/versus; generic.
     assert _COMPARE_RE.search("Compară-mi primele două")
     assert _COMPARE_RE.search("Compară-mi primele două variante Velvet")
     assert _COMPARE_RE.search("compare these two")
     assert _COMPARE_RE.search("Crema A vs Crema B")
-    assert _COMPARE_RE.search("hasonlítsd össze a kettőt")
     # fals-pozitive de evitat (gate-ul n-are recurs la model): policy „diferența", „compartiment",
     # „față" (zona feței). Frazele laxe de tip „ce diferență" cad intenționat pe calea model-driven.
     assert not _COMPARE_RE.search("care e diferența dintre garanție și retur")

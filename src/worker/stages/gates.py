@@ -53,8 +53,8 @@ THROTTLE_MSG = (
     "Primesc multe mesaje deodată 🙂 Îți răspund imediat, mai trimite-mi în câteva secunde."
 )
 
-# Pattern-uri de risc (RO + HU + EN, normalizate fără diacritice/uppercase). Determinist, NU LLM.
-# Val3 (CONV-COMMERCE): RO era solid, HU/EN „fără risk_terms" → un client HU/EN nu era detectat.
+# Pattern-uri de risc (RO + EN, normalizate fără diacritice/uppercase). Determinist, NU LLM.
+# Val3 (CONV-COMMERCE): RO era solid, EN „fără risk_terms" → un client EN nu era detectat.
 # Paritate multilingvă. Extensibil per-business = follow-up.
 #
 # De la scoaterea transferului la operator, lista NU mai declanșează nimic în conversație: e pur
@@ -71,13 +71,6 @@ RISK_PATTERNS: dict[str, list[str]] = {
         "agent uman",
         "om real",
         "persoana reala",
-        # HU
-        "emberrel",  # „beszélni egy emberrel" (să vorbesc cu un om)
-        "operatorral",
-        "operatorhoz",
-        "ugyintezo",  # ügyintéző (operator/agent)
-        "valodi szemely",  # valódi személy
-        "elo szemely",  # élő személy
         # EN
         "talk to a human",
         "speak to a human",
@@ -97,12 +90,6 @@ RISK_PATTERNS: dict[str, list[str]] = {
         "instanta",
         "te dau in judecata",
         "in judecata",
-        # HU
-        "ugyved",  # ügyvéd (avocat)
-        "panasz",  # plângere
-        "fogyasztovedelem",  # protecția consumatorului
-        "birosag",  # bíróság (instanță)
-        "perelni",  # a da în judecată
         # EN
         "lawyer",
         "attorney",

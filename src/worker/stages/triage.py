@@ -51,7 +51,6 @@ FAST_PATH_COVERS: tuple[str, ...] = ()
 _CLARIFY_FALLBACK = {
     "ro": "Ca să te ajut mai bine, poți să-mi spui mai exact ce cauți?",
     "en": "To help you better, could you tell me a bit more about what you're looking for?",
-    "hu": "Hogy jobban segíthessek, elmondanád pontosabban, mit keresel?",
 }
 
 # NX-136: șablonul chip-ului de închidere per-locale (voce de client → reintră ca tur nou). `{}` =
@@ -59,7 +58,6 @@ _CLARIFY_FALLBACK = {
 _CLOSURE_CHIP = {
     "ro": "Recomandă-mi și {}",
     "en": "Also recommend {}",
-    "hu": "Ajánlj még {}",
 }
 
 
@@ -149,11 +147,11 @@ def _normalize_slots(slots: Any, domain_pack: DomainPack | None) -> dict[str, An
 # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): cuvinte-cheie de FAPT DE
 # BUSINESS (reducere/preț/stoc/disponibilitate/politică). Dacă nano zice „simple" dar mesajul atinge
 # un astfel de fapt, NU servim confirmarea nevalidată — re-rutăm la `sales` (agent grounded + prompt
-# întărit). Substring-uri normalizate (fără diacritice), RO + HU + EN. Cost al unui fals-pozitiv =
+# întărit). Substring-uri normalizate (fără diacritice), RO + EN. Cost al unui fals-pozitiv =
 # doar o căutare în plus (nu o eroare de corectitudine), deci e ok să fie larg.
 _FACTUAL_BAIT_RE = re.compile(
     r"reducer|discount|promo|oferta|ofert|gratis|gratuit|cupon|voucher|garant|retur|rambursar"
-    r"|livrar|transport|pret|stoc|ieftin|%|kedvezm|akci|ingyen|garanci|szallit|keszlet"
+    r"|livrar|transport|pret|stoc|ieftin|%"
     r"|coupon|warrant|shipping|refund|in stock|on sale|cheaper|\bfree\b|\bsale\b",
     re.IGNORECASE,
 )

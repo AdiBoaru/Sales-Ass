@@ -15,9 +15,10 @@ validator. Aici mută TOATE, cu trei proprietăți impuse de tip:
   3. **Fără ceas, fără I/O, fără config.** Doar stdlib. `now` se pasează; locale-ul e argument.
      Modulul e importabil din orice strat fără să tragă după el `src.config` sau un ciclu.
 
-**Locale, nu română hardcodată (D3).** Pilotul e `ro`, dar fiecare tabel are cele trei locale
+**Locale, nu română hardcodată (D3).** Pilotul e `ro`, dar fiecare tabel are AMBELE locale
 Stage 1 și un fallback EXPLICIT (`ro`), nu un `KeyError` mascat. Pluralul românesc are trei forme
-reale (1 / 2–19 / „de" la ≥20) — regula CLDR, nu „adaugă un s".
+reale (1 / 2–19 / „de" la ≥20) — regula CLDR, nu „adaugă un s". A doua locale nu e decor: ea e
+singurul lucru care dovedește că tabelele chiar sunt tabele, nu constante cu un dicționar în jur.
 
 **Ce NU e aici:** decizia dacă un câmp are voie să apară. Asta e a `GroundingGuard`-ului:
 formatarea presupune că faptul e deja dovedit. Un preț fără sursă nu ajunge niciodată la
@@ -30,11 +31,14 @@ from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Final, Literal
 
 # ── Locale ──────────────────────────────────────────────────────────────────────────────────
-#: Localele Stage 1. Pilotul e `ro`; celelalte există ca nucleul să rămână locale-aware (D3).
-SUPPORTED_LOCALES: Final[tuple[str, ...]] = ("ro", "hu", "en")
+#: Localele Stage 1. Pilotul e `ro`; `en` există ca nucleul să rămână locale-aware (D3) —
+#: fără ea, fiecare tabel de mai jos ar avea o singură coloană și „locale-aware" ar fi o
+#: afirmație pe care n-o mai verifică nimeni. `hu` a fost scoasă: niciun tenant nu o declara
+#: în `supported_locales`, deci întreținea traduceri pe care nu le citea nimic.
+SUPPORTED_LOCALES: Final[tuple[str, ...]] = ("ro", "en")
 DEFAULT_LOCALE: Final[str] = "ro"
 
-Locale = Literal["ro", "hu", "en"]
+Locale = Literal["ro", "en"]
 
 
 def normalize_locale(raw: Any) -> str:
@@ -47,19 +51,17 @@ def normalize_locale(raw: Any) -> str:
 
 
 # ── Separatoare numerice per locale ─────────────────────────────────────────────────────────
-# `en` folosește convenția anglo-saxonă; `ro`/`hu` pe cea continentală. Grupurile de mii sunt
-# aceleași (3), deci diferă doar simbolurile — un tabel, nu trei implementări.
+# `en` folosește convenția anglo-saxonă; `ro` pe cea continentală. Grupurile de mii sunt
+# aceleași (3), deci diferă doar simbolurile — un tabel, nu două implementări.
 _SEPARATORS: Final[dict[str, tuple[str, str]]] = {
     "ro": (".", ","),
-    "hu": (" ", ","),  # maghiara folosește spațiu ca separator de mii
     "en": (",", "."),
 }
 
-#: RON se rostește „lei" în RO/HU. Alte monede rămân cod ISO — nu inventăm simboluri pe care
+#: RON se rostește „lei" în RO. Alte monede rămân cod ISO — nu inventăm simboluri pe care
 #: nu le putem susține (un „€" pentru EUR ar fi o presupunere de formatare, nu un fapt).
 _CURRENCY_WORDS: Final[dict[str, dict[str, str]]] = {
     "ro": {"RON": "lei"},
-    "hu": {"RON": "lei", "HUF": "Ft"},
     "en": {},
 }
 
@@ -387,87 +389,6 @@ _COPY: Final[dict[str, dict[str, Any]]] = {
             "attempts_exhausted": "I could not prepare the reply. Please try again.",
             "projection_error": "Something went wrong while displaying the reply.",
             "grounding_failed": "I cannot confirm the data needed for a correct answer right now.",
-        },
-    },
-    "hu": {
-        "chrome": {
-            "launcher_label": "Asszisztens megnyitása",
-            "dialog_title": "Vásárlási asszisztens",
-            "dialog_description": "Kérdezz termékekről, rendelésekről vagy szállításról.",
-            "close_label": "Bezárás",
-            "new_chat_label": "Új beszélgetés",
-        },
-        "composer": {
-            "label": "Üzeneted",
-            "placeholder": "Írj egy üzenetet…",
-            "send_label": "Küldés",
-        },
-        "announcements": {
-            "accepted": "Az üzenet megérkezett.",
-            "working": "Az asszisztens készíti a választ.",
-            "validating": "Az asszisztens ellenőrzi a választ.",
-            "completed": "A válasz elkészült.",
-            "failed": "Hiba történt a válasz elkészítése közben.",
-            "cancelled": "A kérés meg lett szakítva.",
-        },
-        "progress": {
-            "accepted": "Üzenet megérkezett",
-            "working": "Válasz készítése",
-            "validating": "Válasz ellenőrzése",
-        },
-        "labels": {
-            "view_product": "Termék megtekintése",
-            "retry": "Próbáld újra",
-            "memory_title": "Amit a kereséseddel kapcsolatban tudok",
-            "cart_title": "Kosarad",
-            "cart_total": "Összesen",
-            "routine_title": "Ajánlott lépések",
-            "comparison_title": "Összehasonlítás",
-            "unknown_cell": "—",
-            "add_to_cart": "Kosárba",
-            "checkout": "Megrendelés",
-            "yes": "Igen",
-            "no": "Nem",
-            "feedback_thanks_positive": "Örülök, hogy segíthettem.",
-            "feedback_thanks_negative": "Köszönöm, figyelembe veszem.",
-        },
-        "needs": {"budget_max": "Keret: legfeljebb {value}", "brand": "Márka: {value}"},
-        "rating": "{rating} / 5",
-        "reviews": {"one": "({n} értékelés)", "other": "({n} értékelés)"},
-        "quantity": {"one": "{n} db", "other": "{n} db"},
-        "availability": {
-            "in_stock": "Raktáron",
-            "low_stock": "Korlátozott készlet",
-            "out_of_stock": "Elfogyott",
-            "preorder": "Előrendelés",
-            "discontinued": "Kifutott",
-        },
-        "availability_units": {"one": "Az utolsó darab", "other": "Már csak {n} db"},
-        "fast_path": {
-            "price": "{name} ára {amount}.",
-            "stock": "{name}: {availability}.",
-            "link": "{name}: {url}",
-        },
-        "freshness": {
-            "now": "most ellenőrizve",
-            "minutes": {"one": "egy perce ellenőrizve", "other": "{n} perce ellenőrizve"},
-            "hours": {"one": "egy órája ellenőrizve", "other": "{n} órája ellenőrizve"},
-            "days": {"one": "tegnap ellenőrizve", "other": "{n} napja ellenőrizve"},
-        },
-        "no_results": {
-            "no_match": "Nem találtam a kért feltételeknek megfelelő terméket.",
-            "insufficient_data": "Most nem tudom ellenőrizni az összes feltételt, hiányzanak az "
-            "adatok.",
-            "dependency_unavailable": "A keresés átmenetileg nem érhető el. Kérlek, próbáld újra "
-            "kicsit később.",
-        },
-        "errors": {
-            "processing_error": "Hiba történt a válasz elkészítése közben.",
-            "deadline_exceeded": "A válasz túl sokáig tartott. Kérlek, próbáld újra.",
-            "empty_result": "Nem tudtam választ készíteni az üzenetedre.",
-            "attempts_exhausted": "Nem tudtam elkészíteni a választ. Kérlek, próbáld újra.",
-            "projection_error": "Hiba történt a válasz megjelenítésekor.",
-            "grounding_failed": "Most nem tudom megerősíteni a válaszhoz szükséges adatokat.",
         },
     },
 }

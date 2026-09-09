@@ -738,17 +738,6 @@ ACTION_LABELS: Mapping[str, Mapping[str, str]] = {
         "feedback_up": "This helped",
         "feedback_down": "This did not help",
     },
-    "hu": {
-        "select_product": "Ezt választom",
-        "request_details": "Mesélj róla többet",
-        "request_reviews": "Vélemények",
-        "compare_selection": "Hasonlítsd össze",
-        "show_more": "Mutass többet",
-        "cart_add_line": "Kosárba",
-        "checkout": "Megrendelés",
-        "feedback_up": "Ez segített",
-        "feedback_down": "Ez nem segített",
-    },
 }
 
 

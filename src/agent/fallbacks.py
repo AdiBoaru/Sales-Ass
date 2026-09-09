@@ -19,7 +19,6 @@ _CHEAPEST_ALREADY: dict[str, str] = {
     "Vrei să-ți arăt altceva sau o altă categorie?",
     "en": "This is the cheapest option I have right now. "
     "Want me to show you something else or another category?",
-    "hu": "Jelenleg ez a legolcsóbb lehetőség, amim van. Mutassak mást vagy egy másik kategóriát?",
 }
 
 
@@ -43,11 +42,6 @@ _THIN_PATH_CHIPS: dict[str, list[str]] = {
         "Let's change the budget",
         "I'd rather look in another category",
     ],
-    "hu": [
-        "Mutasd, mit vásárolnak nálatok a legtöbben",
-        "Változtassunk a kereten",
-        "Inkább másik kategóriában keresnék",
-    ],
 }
 
 
@@ -58,12 +52,10 @@ _THIN_PATH_CHIPS: dict[str, list[str]] = {
 _DEADLINE_EMPTY: dict[str, str] = {
     "ro": "Nu am apucat să verific tot la timp. Vrei să încerc din nou?",
     "en": "I didn't manage to check everything in time. Want me to try again?",
-    "hu": "Nem sikerült időben mindent ellenőriznem. Megpróbáljam újra?",
 }
 _DEADLINE_PARTIAL: dict[str, str] = {
     "ro": "Uite ce am găsit până acum. Spune-mi dacă vrei să caut mai departe.",
     "en": "Here's what I found so far. Tell me if you want me to keep looking.",
-    "hu": "Ezt találtam eddig. Szólj, ha keressek tovább.",
 }
 
 
@@ -94,7 +86,6 @@ def _is_short_ack(text: str | None) -> bool:
 _CART_CONFIRM: dict[str, str] = {
     "ro": "Gata, am adăugat {name} în coș 🛒 Iată ce merge bine cu el:",
     "en": "Done, I added {name} to your cart 🛒 Here's what pairs well with it:",
-    "hu": "Kész, betettem a kosaradba: {name} 🛒 Íme, ami jól illik hozzá:",
 }
 _CROSS_SELL_QUERY: dict[str, str] = {
     "ro": "Clientul tocmai a adăugat în coș «{name}». Recomandă produsele de mai jos ca fiind "
@@ -103,9 +94,6 @@ _CROSS_SELL_QUERY: dict[str, str] = {
     "en": "The customer just added «{name}» to the cart. Recommend the products below as "
     "COMPLEMENTARY (they pair well / complete the routine or choice), NOT as alternatives. For "
     "each, briefly say why it fits with «{name}».",
-    "hu": "Az ügyfél most tette a kosárba: «{name}». Ajánld az alábbi termékeket KIEGÉSZÍTŐKÉNT "
-    "(jól illenek együtt / kiegészítik a választást), NEM alternatívaként. Mindegyiknél mondd el "
-    "röviden, miért illik «{name}»-hez.",
 }
 
 
@@ -121,9 +109,6 @@ _RELATION_CHAIN_QUERY: dict[str, str] = {
     "en": "The customer just added «{name}» to the cart. The products below are the next STEPS, "
     "IN ORDER ({sequence}), not alternatives and not a list of suggestions. Briefly say what each "
     "step is for, and keep the order you were given.",
-    "hu": "Az ügyfél most tette a kosárba: «{name}». Az alábbi termékek a következő LÉPÉSEK, "
-    "SORRENDBEN ({sequence}), nem alternatívák és nem javaslatlista. Mondd el röviden, mire való "
-    "az egyes lépések, és tartsd meg a kapott sorrendet.",
 }
 
 
@@ -163,17 +148,12 @@ _COMPARE_FOLLOWUPS: dict[str, dict[str, str]] = {
         "detail": "Tell me more about {name}",
         "cheaper": "I want something cheaper than these",
     },
-    "hu": {
-        "add": "Tedd a kosárba: {name}",
-        "detail": "Mesélj még erről: {name}",
-        "cheaper": "Valami olcsóbbat szeretnék ezeknél",
-    },
 }
 
 
 def fit_chip(template: str, name: str) -> str:
     """Umple `{name}` scurtând NUMELE, nu chip-ul. Tăierea la coadă („Adaugă Velora Soft…") ar
-    rupe fix partea care rutează (verbul e la început în hu: „Tedd a kosárba: …"), deci bugetul
+    rupe fix partea care rutează (în engleză verbul e la început: „Add to cart: …"), deci bugetul
     se calculează din ce rămâne după șablon. Nume prea lung → elipsă pe nume, chip întreg."""
     budget = MAX_CHIP_LEN - len(template.format(name=""))
     trimmed = name if len(name) <= budget else name[: max(1, budget - 1)].rstrip() + "…"
@@ -200,7 +180,6 @@ _NO_MORE_RESULTS: dict[str, str] = {
     "Vrei să căutăm altceva sau să schimbăm filtrele?",
     "en": "That's everything I have for these criteria. "
     "Want to search for something else or adjust the filters?",
-    "hu": "Ez minden, amim ezekre a feltételekre van. Keressünk mást vagy módosítsuk a szűrőket?",
 }
 
 
@@ -213,12 +192,10 @@ def _no_more_msg(language: str | None) -> str:
 _LINK_LEAD_ONE: dict[str, str] = {
     "ro": "Sigur! 🙂 Uite linkul direct 👇",
     "en": "Sure! 🙂 Here's the direct link 👇",
-    "hu": "Persze! 🙂 Itt a közvetlen link 👇",
 }
 _LINK_LEAD_MANY: dict[str, str] = {
     "ro": "Sigur! Uite linkurile direct la produsele de mai sus 👇",
     "en": "Sure! Here are the direct links to the products above 👇",
-    "hu": "Persze! Itt a fenti termékek közvetlen linkjei 👇",
 }
 # product_url absent (gaură de date pe demo) → ONEST, fără link inventat (PP-F4). Channel-neutru
 # (pipeline-ul nu știe de „butonul Adaugă" al web-ului); oferim pasul care EXISTĂ. cacheable=False.
@@ -227,19 +204,15 @@ _NO_LINK: dict[str, str] = {
     "să-l comanzi pas cu pas. Vrei?",
     "en": "I don't have a product page I can open directly right now, but I can help you order "
     "it step by step. Want me to?",
-    "hu": "Most nincs külön termékoldalam, amit közvetlenül megnyithatnék, de segíthetek "
-    "lépésről lépésre megrendelni. Szeretnéd?",
 }
 _VIEW_LABEL: dict[str, str] = {
     "ro": "Vezi produsul",
     "en": "View product",
-    "hu": "Termék megtekintése",
 }
 # NX-137: eticheta CTA-ului de plată (Offer pe linkul de checkout creat în acest tur).
 _CHECKOUT_LABEL: dict[str, str] = {
     "ro": "Finalizează comanda",
     "en": "Complete your order",
-    "hu": "Rendelés befejezése",
 }
 
 

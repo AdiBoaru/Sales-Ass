@@ -539,7 +539,7 @@ def test_compare_chips_are_client_messages_that_still_route():
 
 
 def test_compare_chips_shorten_the_name_not_the_verb():
-    """Un nume lung cedează primul: tăierea la coadă ar mânca fix „în coș" / „Tedd a kosárba",
+    """Un nume lung cedează primul: tăierea la coadă ar mânca fix „în coș" / „Add to cart",
     adică partea care poartă intenția."""
     products = _products()
     products[0]["name"] = "Crema Hidratantă Foarte Foarte Lungă Pentru Ten Uscat Și Sensibil"
