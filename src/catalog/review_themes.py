@@ -126,14 +126,6 @@ COPY: Mapping[str, Mapping[str, str]] = {
         "sep": ", ",
         "last": " and ",
     },
-    "hu": {
-        "majority": "A legtöbb vélemény szerint {list}.",
-        "many": "Sok vélemény szerint {list}.",
-        "minority": "Néhány vélemény szerint {list}.",
-        "nuance": "Pár vélemény megemlíti, hogy {list}.",
-        "sep": ", ",
-        "last": " és ",
-    },
 }
 
 
