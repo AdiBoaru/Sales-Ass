@@ -44,12 +44,21 @@ _PRODUCT_PRICE = f"(case when {_SALE_ACTIVE} then p.sale_price else p.price end)
 # la products. Validatorul de preț trebuie să vadă același preț ca clientul.
 _EFFECTIVE_PRICE = f"coalesce(vp.price, {_PRODUCT_PRICE})"
 
+
 # Rating „shrunk" (Bayesian) — un 5.0 cu 1 recenzie NU mai îngroapă un 4.6 cu 200 (cold-start).
 # Prior C≈30 spre media 4.0: (n*rating + C*4.0)/(n + C). Pur SQL, `review_count` deja selectat.
-_SHRUNK_RATING = (
-    "((coalesce(p.review_count, 0) * coalesce(p.rating, 0) + 30 * 4.0)"
-    " / (coalesce(p.review_count, 0) + 30))"
-)
+#
+# Sursa e o FUNCȚIE de prefixul tabelului, nu un string: aceeași formulă se aplică și pe rândurile
+# produsului (`p.`), și pe rândurile deja proiectate ale unei subinterogări (NX-288, fereastra de
+# recall semantic). Două copii ale priorului ar fi două praguri care se despart tăcut.
+def _shrunk_rating(src: str = "p") -> str:
+    return (
+        f"((coalesce({src}.review_count, 0) * coalesce({src}.rating, 0) + 30 * 4.0)"
+        f" / (coalesce({src}.review_count, 0) + 30))"
+    )
+
+
+_SHRUNK_RATING = _shrunk_rating()
 
 # NX-270 — tipurile de muchie pe care le citește calea de COMPLEMENTARITATE, într-un singur loc.
 #
@@ -291,8 +300,9 @@ def _order_clause(sort_mode: str, *, qvec_ph: str | None = None) -> str:
     """`ORDER BY` pe mod de sortare + tie-break determinist `p.id` (omoară ordonarea instabilă pe
     egalități → cache + golden stabile). Filter-then-sort: constrângerile dure stau în WHERE, AICI
     doar sortăm. Kill-switch `SEARCH_SORT_MODE_ENABLED=False` → `ORDER BY`-ul vechi (byte-identic).
-    Pe calea semantică (`qvec_ph`): `relevance` = cosine; price/rating = sort explicit pe subsetul
-    deja filtrat semantic (NB: sub HNSW = cel-mai-ieftin-din-recall, nu global — vezi ARCH §P3)."""
+    Pe calea semantică (`qvec_ph`): `relevance` = cosine. Sortul EXPLICIT nu se mai construiește
+    de aici — el se aplică peste fereastra de recall (`_recall_order_clause`, NX-288), fiindcă un
+    `order by pret` lipit de aceeași interogare sortează TOT catalogul filtrat, nu vecinătatea."""
     if not get_settings().search_sort_mode_enabled:
         # Kill-switch: revert EXACT — pe semantic = cosine (qvec_ph), pe SQL = rating desc.
         if qvec_ph is not None:
@@ -309,6 +319,49 @@ def _order_clause(sort_mode: str, *, qvec_ph: str | None = None) -> str:
     if qvec_ph is not None:
         return f" order by pe.embedding <=> {qvec_ph}::vector, p.id"
     return f" order by {_SHRUNK_RATING} desc, {_EFFECTIVE_PRICE} asc, p.id"
+
+
+#: Câte produse CEREM în fereastra de recall semantic înainte ca un sort explicit să le
+#: reordoneze. Egal cu pool-ul de fuziune al lui `search_products_tool`, deci brațul vector
+#: contribuie cu același număr de candidați ca pe `relevance`. Numărul e chiar schimbul dintre
+#: relevanță și criteriul cerut: mai mare = „mai ieftin, dar mai departe de ce a cerut clientul".
+#:
+#: ⚠️ CÂT PRIMIM e altceva. `hnsw.ef_search` (implicit **40** în Postgres) plafonează câți vecini
+#: întoarce indexul, indiferent de `LIMIT`. Măsurat pe SOLE (2026-09-09, 2.758 embeddings):
+#: `limit 40` → 40 rânduri, `limit 50` → 40, `limit 100` → 40; cu `set local hnsw.ef_search = 200`,
+#: `limit 100` → 100. Deci ORICE pool cerut peste 40 e tăcut trunchiat — inclusiv `_FUSION_POOL`
+#: pe calea `relevance`, unde brațul vector aduce de fapt 40 din cele 50 de locuri pe care
+#: fuziunea RRF crede că i le dă. Nu se repară aici: cere `SET LOCAL` într-o tranzacție pe fiecare
+#: căutare semantică, adică o schimbare de contract de conexiune (NX-231). E al doilea element din
+#: lista „de reparat ÎNAINTE de reaprinderea flagului"; vezi docs/DB-QUERY-PROBE-2026-09-08.md.
+_SEMANTIC_SORT_RECALL = 50
+
+
+def _recall_order_clause(sort_mode: str, alias: str = "s") -> str:
+    """`ORDER BY`-ul explicit aplicat PESTE fereastra de recall semantic (alias-ul subinterogării).
+
+    Aceleași criterii ca `_order_clause`, dar exprimate pe coloanele DEJA proiectate: `price` e
+    prețul efectiv (`_EFFECTIVE_PRICE` a fost calculat în interior), iar ratingul shrunk se
+    recompune din `rating`/`review_count` cu ACELAȘI prior (`_shrunk_rating`)."""
+    mode = sort_mode if sort_mode in _VALID_SORT else "relevance"
+    rating = _shrunk_rating(alias)
+    if mode == "price_asc":
+        return f" order by {alias}.price asc, {rating} desc, {alias}.id"
+    if mode == "price_desc":
+        return f" order by {alias}.price desc, {rating} desc, {alias}.id"
+    return f" order by {rating} desc, {alias}.price asc, {alias}.id"
+
+
+def _wants_explicit_sort(sort_mode: str) -> bool:
+    """Turul cere o ORDINE anume (preț/rating), nu „cel mai potrivit"?
+
+    Cu `search_sort_mode_enabled` stins, sortul explicit nu se onorează deloc pe calea semantică
+    (`_order_clause` întoarce cosine), deci nici fereastra de recall n-are ce face."""
+    return (
+        get_settings().search_sort_mode_enabled
+        and sort_mode in _VALID_SORT
+        and sort_mode != "relevance"
+    )
 
 
 def _content_status_pred(business_id_ph: str = "$1") -> str | None:
@@ -1677,16 +1730,18 @@ async def search_products_semantic(
     NU apelează LLM). `conn` trebuie tenant-scoped (tenant_conn).
 
     `sort_mode`: `relevance` = cosine (cel mai apropiat primul); `price_asc`/`rating_desc` = sort
-    explicit pe subsetul filtrat semantic. `concerns` filtrează pe `attributes->'concerns'`.
+    explicit peste FEREASTRA DE RECALL semantic. `concerns` filtrează pe `attributes->'concerns'`.
 
-    **DEFECT CUNOSCUT, inert cât `search_semantic_enabled` e OFF**
-    (docs/DB-QUERY-PROBE-2026-09-08.md):
-    pe sort explicit NU există nicio limitare pe cosine — planul scanează TOATE embeddings-urile
-    (`product_embeddings_pkey`, nu HNSW) și sortează global pe preț, deci întoarce cele mai
-    ieftine `pool` produse din catalog care trec filtrele dure, indiferent de interogare; iar
-    `_merge_by_sort` le pune în față. Măsurat: «protectie solara spf» + `price_asc` → benzi pentru
-    nas la 3 lei, 0/50 cu SPF. Dacă brațul se reaprinde, întâi: subquery cu
-    `order by embedding <=> q limit pool`, apoi sortul explicit DOAR pe acel subset.
+    NX-288 — defectul P0 din `docs/DB-QUERY-PROBE-2026-09-08.md` e REPARAT aici. Înainte, sortul
+    explicit se lipea de aceeași interogare, deci nu exista nicio limitare pe cosine: planul
+    scana TOATE embeddings-urile (`product_embeddings_pkey`, nu HNSW) și sorta global pe preț,
+    întorcând cele mai ieftine `pool` produse din catalog, indiferent de interogare — iar
+    `_merge_by_sort` le punea în față. Măsurat pe SOLE: «protectie solara spf» + `price_asc` →
+    benzi pentru puncte negre la 3 lei, 0/50 cu SPF. Acum recall-ul (cosine, `limit`) e
+    subinterogare, iar sortul cerut reordonează doar fereastra — vezi `_SEMANTIC_SORT_RECALL`.
+
+    Reparat cu `search_semantic_enabled` OFF (decizie 2026-09-08): fixul nu schimbă nimic azi, dar
+    reaprinderea flagului redevine o decizie de flag, nu un proiect.
 
     `pool` (NX-113b): când e dat, întoarce ~`pool` candidați pentru fuziunea RRF (nu doar 6);
     poziția în listă = rangul vectorial. Lipsă (`None`) → comportament compat (max 6).
@@ -1737,16 +1792,43 @@ async def search_products_semantic(
     # Injectează coloana distanței vectoriale (cosine) în SELECT — semnal de calitate pt emit.
     cos_col = f"        (pe.embedding <=> {qvec_ph}::vector)::float8 as cosine_distance,\n"
     select_with_cos = _SELECT.replace("    select\n", "    select\n" + cos_col, 1)
-    sql = (
+    base = (
         select_with_cos
         + " join product_embeddings pe on pe.product_id = p.id"
         + f"   and pe.business_id = p.business_id and pe.doc_type = {emb_doc}"
         + f"   and pe.model = {emb_model}"
         + " where "
         + " and ".join(conds)
-        + _order_clause(sort_mode, qvec_ph=qvec_ph)
-        + f" limit {placeholder(sql_limit)}"
     )
+    if _wants_explicit_sort(sort_mode):
+        # NX-288 — RECALL ÎNTÂI, sortare DUPĂ.
+        #
+        # Un `order by pret` lipit de interogarea de mai sus nu restrânge nimic la vecinătatea
+        # vectorială: planificatorul n-are niciun motiv să atingă HNSW (nu există `order by`
+        # pe distanță), deci scanează toate embeddings-urile tenantului și sortează global.
+        # Rezultatul măsurat pe SOLE: «protectie solara spf» + `price_asc` întorcea benzi pentru
+        # puncte negre la 3 lei, 0/50 cu SPF — produse reale, prețuri reale, deci nici validatorul
+        # (stagiul 8) nici `grounding_guard` (NX-240) n-aveau ce respinge: sunt porți de ADEVĂR,
+        # nu de POTRIVIRE.
+        #
+        # Aici, subinterogarea ia ÎNTÂI cele mai apropiate `recall` produse pe cosine (asta E
+        # ordonarea pe care o poate servi HNSW), iar sortul cerut reordonează DOAR fereastra aia.
+        # „Cel mai ieftin" înseamnă acum „cel mai ieftin dintre cele relevante", nu „cel mai
+        # ieftin din catalog".
+        recall = max(pool if pool is not None else _SEMANTIC_SORT_RECALL, sql_limit)
+        recall_ph = placeholder(recall)
+        limit_ph = placeholder(sql_limit)
+        sql = (
+            "select * from ("
+            + base
+            + f" order by pe.embedding <=> {qvec_ph}::vector, p.id"
+            + f" limit {recall_ph}"
+            + ") s"
+            + _recall_order_clause(sort_mode)
+            + f" limit {limit_ph}"
+        )
+    else:
+        sql = base + _order_clause(sort_mode, qvec_ph=qvec_ph) + f" limit {placeholder(sql_limit)}"
     rows = await conn.fetch(sql, *params)
     return [_row_to_product(r) for r in rows]
 

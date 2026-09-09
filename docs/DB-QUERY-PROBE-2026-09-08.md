@@ -19,7 +19,8 @@ Timpii „exec" sunt ai Postgres-ului (independenți de RTT); timpii „wall" in
 
 | constatare | reparație | măsurat după |
 |---|---|---|
-| P0 sort pe preț + vector | brațul vector OFF prin flag; bug-ul rămâne în cod, marcat în `search_products_semantic` | n/a (stins) |
+| P0 sort pe preț + vector | **REPARAT (NX-288)**: recall pe cosine ca subinterogare, sortul cerut reordonează doar fereastra | «SPF» + `price_asc`: 0/50 → **25/40** cu SPF |
+| P0b `hnsw.ef_search` = 40 plafonează recall-ul | **NEREPARAT** — cere `SET LOCAL` în tranzacție pe fiecare căutare (contract de conexiune, NX-231) | `limit 50` → 40 rânduri; cu `ef_search=200`, `limit 100` → 100 |
 | P0 `get_substitutes` 8,5 s | id-uri din `product_relations` întâi, apoi `get_products_by_ids` | 594 ms wall, 7,5 ms exec |
 | P1 categorii 427 ms/tur | `servable_subtree_counts_sql`: o trecere, join + group | 35 ms exec |
 | P1 `has_embeddings`/căutare | dispare cu flagul OFF; cache 5 min per tenant când e ON | 0 checkouts |
@@ -37,6 +38,31 @@ Teste: `tests/test_agent_data_path.py` (+ actualizări în `test_query_terms`,
 (`conftest`), fiindcă codul lui rămâne; comportamentul implicit are testele lui explicite.
 
 ## 1. Constatări, în ordinea gravității
+
+### P0b — `hnsw.ef_search` taie recall-ul semantic la 40, oricât ceri (găsit 2026-09-09, NX-288)
+
+Descoperit reparând P0-ul de mai jos: fereastra de recall cerea 50 de vecini și primea 40.
+
+`hnsw.ef_search` (implicit **40**) mărginește câți candidați întoarce indexul HNSW, indiferent de
+`LIMIT`. Măsurat pe SOLE (2.758 embeddings, `bot_runtime`, RLS activ):
+
+| cerere | rânduri |
+|---|---|
+| `order by embedding <=> q limit 40` | 40 |
+| `order by embedding <=> q limit 50` | **40** |
+| `order by embedding <=> q limit 100` | **40** |
+| aceeași, după `set local hnsw.ef_search = 200`, `limit 100` | 100 |
+
+Consecința nu e doar a sortului explicit: pe calea `relevance`, `search_products_tool` cere
+`_FUSION_POOL = 50` candidați vectoriali pentru fuziunea RRF și primește 40. Fuziunea nu are cum
+să observe — un braț care aduce mai puțin nu semnalează nimic, arată doar ca un braț cu recall mai
+slab. Exact forma de degradare tăcută pe care o interzice principiul „layer mort tăcut".
+
+**De ce nu s-a reparat aici:** `SET LOCAL` are efect doar într-o tranzacție, deci ar însemna ca
+FIECARE căutare semantică să deschidă una — o schimbare a contractului de conexiune (NX-231:
+checkout scurt, nu tranzacție per operație). Merită făcut, dar e o decizie de arhitectură, nu o
+constantă. Inert cât `search_semantic_enabled` e OFF.
+
 
 ### P0 — sortarea pe preț cu embeddings PORNITE aduce produse fără nicio legătură cu cererea
 

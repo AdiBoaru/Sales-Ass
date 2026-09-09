@@ -291,6 +291,72 @@ async def test_semantic_sql_injects_cosine_and_sends_vector_list():
     assert conn.params[0] == "biz-1" and vec in conn.params  # list[float] direct, fără literal text
 
 
+# --- NX-288: recall semantic ÎNAINTE de sortul explicit ----------------------
+
+
+async def test_semantic_explicit_sort_orders_only_the_recall_window(flag_on):
+    """P0 din sonda 2026-09-08: „cel mai ieftin" întorcea cel mai ieftin din CATALOG.
+
+    Un `order by pret` lipit de interogarea semantică nu restrânge nimic la vecinătatea
+    vectorială — planificatorul n-are `order by` pe distanță, deci nu atinge HNSW, scanează toate
+    embeddings-urile și sortează global. Măsurat pe SOLE: «protectie solara spf» + `price_asc` →
+    benzi pentru puncte negre la 3 lei, 0/50 cu SPF.
+
+    Testul ține FORMA care repară asta: cosine + `limit` ÎNĂUNTRU, criteriul cerut PE DINAFARĂ.
+    Nu poate dovedi ordinea rândurilor (o dă Postgres), dar poate dovedi că sortul nu mai vede
+    decât fereastra — iar asta e exact diferența dintre cele două comportamente."""
+    conn = _CaptureConn()
+    await catalog.search_products_semantic(
+        conn, "biz-1", [0.1, 0.2], sort_mode="price_asc", pool=50
+    )
+
+    inner, _, outer = conn.sql.partition(") s")
+    assert inner.startswith("select * from ("), (
+        "sortul explicit trebuie să stea peste subinterogare"
+    )
+    assert "pe.embedding <=>" in inner and "limit" in inner  # recall = vecinătate MĂRGINITĂ
+    assert "pe.embedding <=>" not in outer  # afară nu se mai măsoară distanța, doar se reordonează
+    assert "s.price asc" in outer and "s.id" in outer  # criteriul cerut + tie-break determinist
+
+
+async def test_semantic_relevance_stays_a_single_query(flag_on):
+    """`relevance` nu are ce reordona: cosine E deja ordinea cerută. Fără subinterogare = fără
+    cost în plus pe drumul implicit."""
+    conn = _CaptureConn()
+    await catalog.search_products_semantic(conn, "biz-1", [0.1], sort_mode="relevance", pool=50)
+    assert "select * from (" not in conn.sql
+    assert "pe.embedding <=>" in conn.sql
+
+
+async def test_semantic_explicit_sort_is_inert_with_the_killswitch_off(flag_off):
+    """`search_sort_mode_enabled` OFF = revert EXACT: pe calea semantică sortul explicit nu se
+    onorează deloc (cosine pur), deci fereastra n-are ce să încadreze."""
+    conn = _CaptureConn()
+    await catalog.search_products_semantic(conn, "biz-1", [0.1], sort_mode="price_asc", pool=50)
+    assert "select * from (" not in conn.sql
+    assert "embedding <=>" in conn.sql
+
+
+async def test_recall_window_is_never_smaller_than_what_we_return(flag_on):
+    """Fereastra trebuie să încapă rezultatul: un recall sub `limit` ar tăia rânduri ÎNAINTE ca
+    sortul cerut să apuce să le vadă — adică ar reintroduce arbitrarul, doar din altă direcție.
+
+    Fără `pool`, `sql_limit` e min(limit, 6), iar fereastra rămâne cea declarată."""
+    conn = _CaptureConn()
+    await catalog.search_products_semantic(conn, "biz-1", [0.1], sort_mode="price_asc", limit=6)
+    recall, out = conn.params[-2], conn.params[-1]
+    assert recall == catalog._SEMANTIC_SORT_RECALL
+    assert recall >= out, "fereastra de recall nu poate fi mai mică decât ce întoarcem"
+
+
+async def test_recall_window_follows_the_fusion_pool(flag_on):
+    """Cu `pool` dat, fereastra E pool-ul: brațul vector contribuie la fuziunea RRF cu același
+    număr de candidați ca pe `relevance`, nu cu mai puțini fiindcă turul a cerut un preț."""
+    conn = _CaptureConn()
+    await catalog.search_products_semantic(conn, "biz-1", [0.1], sort_mode="rating_desc", pool=37)
+    assert conn.params[-2] == 37 and conn.params[-1] == 37
+
+
 async def test_lexical_applies_hard_filters():
     conn = _CaptureConn()
     await catalog.search_products_lexical(
