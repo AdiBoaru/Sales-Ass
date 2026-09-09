@@ -76,6 +76,9 @@ class Store:
             "catalog_version": self.catalog_version,
             "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "judgments": {},  # family_id → {product_id: 0|1|2|3|"forbidden"}
+            # family_id → {product_id: motiv}. Separat de judecăți fiindcă privește DOAR
+            # interdicțiile, iar schema corpusului le respinge fără el.
+            "rationales": {},
             "family_notes": {},  # family_id → {action, note, at}
             "trail": [],  # istoricul apăsărilor, pentru „înapoi"
         }
@@ -144,12 +147,14 @@ class Store:
             else None,
         }
 
-    def judge(self, relevance) -> None:
+    def judge(self, relevance, reason: str = "") -> None:
         cur = self.cursor()
         if cur is None:
             return
         fid, pid = cur
         self.state["judgments"].setdefault(fid, {})[pid] = relevance
+        if relevance == "forbidden" and reason:
+            self.state.setdefault("rationales", {}).setdefault(fid, {})[pid] = reason
         self.state["trail"].append({"kind": "judge", "family_id": fid, "product_id": pid})
         self.save()
 
@@ -173,6 +178,9 @@ class Store:
             last = self.state["trail"].pop()
             if last["kind"] == "judge":
                 self.state["judgments"].get(last["family_id"], {}).pop(last["product_id"], None)
+                self.state.get("rationales", {}).get(last["family_id"], {}).pop(
+                    last["product_id"], None
+                )
                 break
             if self.state["family_notes"].pop(last["family_id"], None) is not None:
                 break
@@ -209,7 +217,7 @@ def make_handler(store: Store):
             payload = json.loads(self.rfile.read(length) or b"{}")
             with _LOCK:
                 if self.path.startswith("/api/judge"):
-                    store.judge(payload.get("relevance"))
+                    store.judge(payload.get("relevance"), payload.get("reason", ""))
                 elif self.path.startswith("/api/undo"):
                     store.undo()
                 elif self.path.startswith("/api/family"):

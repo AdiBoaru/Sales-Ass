@@ -286,3 +286,113 @@ def test_pool_respecta_plafonul_indiferent_de_brate(cap):
     merchant = [f"m{i}" for i in range(15)]
     engine = {f"e{i}": ["raw#0"] for i in range(15)}
     assert len(pools._assemble(_fam(merchant=merchant), engine, cap=cap)) == cap
+
+
+# ── finalizarea: din judecăți în corpus ──────────────────────────────────────────────────────
+
+finalize = _load("nx203_finalize")
+
+
+def _corpus(judged, notes=None, pool_size=2, constraints=None):
+    """Un tenant minimal: o familie, două formulări, `pool_size` candidați."""
+    families = {
+        "families": [
+            {
+                "family_id": "f-1",
+                "queries": ["crema pentru ten uscat", "crema ten uscat"],
+                "product_type": "crema de fata",
+                "catalog_version": "sole-test",
+                "locale": "ro",
+                "hard_constraints": constraints
+                or [{"facet": "product_type", "op": "eq", "value": "crema de fata"}],
+                "unresolved_terms": [],
+                "merchant_asserted_products": [],
+            }
+        ]
+    }
+    pools = {
+        "business_id": "biz-1",
+        "catalog_version": "sole-test",
+        "pools": {"f-1": [{"product_id": f"p{i}", "sources": ["raw#0"]} for i in range(pool_size)]},
+        "products": {},
+    }
+    state = {
+        "catalog_version": "sole-test",
+        "judgments": {"f-1": judged},
+        "family_notes": notes or {},
+    }
+    return families, pools, state
+
+
+def test_familia_complet_etichetata_intra_in_corpus():
+    qset, info, abstention = finalize.build_qrels(*_corpus({"p0": 3, "p1": 0}))
+    assert info["counts"]["familii_incluse"] == 1
+    assert abstention == []
+    # O familie, două formulări → două query-uri, ACELAȘI grup de split.
+    assert len(qset.queries) == 2
+    assert {q.split_group_id for q in qset.queries} == {"f-1"}
+
+
+def test_relevanta_zero_se_pastreaza():
+    """«judecat nerelevant» nu e «nejudecat»: șters, produsul ar arăta ca unul pe care nimeni nu
+    l-a văzut, iar acoperirea pool-ului n-ar mai putea fi reconstituită."""
+    qset, _info, _ = finalize.build_qrels(*_corpus({"p0": 3, "p1": 0}))
+    judged = {j.product_id: int(j.relevance) for j in qset.queries[0].judgments}
+    assert judged == {"p0": 3, "p1": 0}
+
+
+def test_familia_etichetata_partial_nu_intra():
+    """Recall-ul are la numitor produsele relevante CUNOSCUTE. Cu jumătate din pool nejudecată,
+    numitorul e arbitrar și metrica iese optimistă exact cât de leneș a fost evaluatorul."""
+    qset, info, _ = finalize.build_qrels(*_corpus({"p0": 3}, pool_size=4))
+    assert info["counts"]["partiale"] == 1
+    assert qset.queries == []
+
+
+def test_familia_inchisa_ca_amestecata_nu_intra():
+    """Judecățile puse pe un contract pe care l-ai declarat inexistent ar arăta în fișier exact ca
+    datele bune."""
+    families, pools, state = _corpus({"p0": 3, "p1": 2})
+    state["family_notes"] = {"f-1": {"action": "split", "note": "cereri diferite"}}
+    qset, info, _ = finalize.build_qrels(families, pools, state)
+    assert info["counts"]["inchisa_split"] == 1
+    assert qset.queries == []
+
+
+def test_familia_fara_produse_relevante_merge_la_abstentie():
+    """Nu e o eroare, e alt contract («n-am așa ceva»), care se măsoară cu alte metrici."""
+    qset, info, abstention = finalize.build_qrels(*_corpus({"p0": 0, "p1": 1}))
+    assert info["counts"]["abstentie"] == 1
+    assert qset.queries == []
+    assert abstention[0]["family_id"] == "f-1"
+
+
+def test_interdictiile_ies_ca_forbidden_products():
+    """Schema cere RAȚIUNE pentru fiecare interdicție: fără ea, „interzis" e indistinct de un
+    fals-pozitiv cules din retrieval, iar corpusul ar consfinți greșeala. Unealta o cere la `x`."""
+    families, pools, state = _corpus({"p0": 3, "p1": "forbidden"})
+    state["rationales"] = {"f-1": {"p1": "e ser, nu crema"}}
+    qset, _info, _ = finalize.build_qrels(families, pools, state)
+    q = qset.queries[0]
+    assert q.forbidden_products == ["p1"]
+    assert [j.product_id for j in q.judgments] == ["p0"]
+
+
+def test_provenienta_nu_se_da_drept_trafic_real():
+    """Contate ca `real_sanitized`, frazele comerciantului ar trece gate-ul care există tocmai ca
+    să prevină un corpus în care niciun client n-a scris nimic."""
+    qset, _info, _ = finalize.build_qrels(*_corpus({"p0": 3, "p1": 2}))
+    assert qset.queries[0].provenance.value == "merchant_content"
+
+
+def test_evaluatorul_de_constrangeri_cunoaste_product_type():
+    """Defectul găsit în infrastructura existentă: `product_type` e axa principală a fiecărei
+    familii, dar lipsea din vocabularul evaluatorului, deci orice constrângere pe ea ieșea
+    `unknown` — adică «n-am verificat», indistinct în raport de «zero violări»."""
+    from src.evals.retrieval.constraints import SATISFIES, UNKNOWN, VIOLATES, evaluate
+
+    c = {"facet": "product_type", "op": "eq", "value": "crema de fata"}
+    assert evaluate({"attributes": {"product_type": "crema de fata"}}, c) == SATISFIES
+    assert evaluate({"attributes": {"product_type": "ser de fata"}}, c) == VIOLATES
+    # Fațeta acoperă 75,7% din catalog: absența înseamnă „nu știm", nu „încalcă".
+    assert evaluate({"attributes": {}}, c) == UNKNOWN

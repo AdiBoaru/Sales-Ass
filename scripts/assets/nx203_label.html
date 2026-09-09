@@ -114,7 +114,17 @@ async function post(url,body){
   try{ S=await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
        body:JSON.stringify(body)})).json(); render(); } finally { busy=false; }
 }
-const judge=v=>post("/api/judge",{relevance:v});
+function judge(v){
+  if(v==="forbidden"){
+    // Schema corpusului REFUZA o interdictie fara ratiune scrisa: fara ea, „interzis" e
+    // indistinct de un fals-pozitiv cules din retrieval. Anulezi lasand campul gol.
+    const why=prompt("Ce cerinta incalca? (scurt: „are parfum", „alt tip de produs")")||"";
+    if(!why.trim())return;
+    post("/api/judge",{relevance:v,reason:why.trim()});
+    return;
+  }
+  post("/api/judge",{relevance:v});
+}
 const undo=()=>post("/api/undo",{});
 function act(kind){
   let note="";

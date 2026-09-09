@@ -28,7 +28,14 @@ VIOLATES = "violates"
 UNKNOWN = "unknown"
 
 #: Atribute scalare comparate direct (eq / in).
-_SCALAR = ("finish", "coverage", "texture", "routine_step")
+#:
+#: `product_type` a fost adăugat în 2026-09: e axa principală a fiecărei familii din corpusul SOLE
+#: (fațeta scrisă de `derive_product_type.py`), dar lipsea din vocabularul evaluatorului, deci orice
+#: constrângere pe ea cădea prin toate ramurile și ieșea `unknown`. Metrica de încălcări nu spunea
+#: „zero violări", spunea „n-am verificat" — indistinct de afară, fiindcă ambele arată la fel în
+#: raport. Politica implicită rămâne `unknown` ≠ violare: fațeta acoperă 75,7% din catalog, iar
+#: `enforce_ready: false` înseamnă exact că absența nu are voie să excludă un produs.
+_SCALAR = ("finish", "coverage", "texture", "routine_step", "product_type")
 #: Liste unde absenţa valorii cerute rămâne `unknown`, nu `violates`.
 _TOLERANT_LISTS = ("suitable_for", "concerns", "key_ingredients")
 
