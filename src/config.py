@@ -860,6 +860,14 @@ class Settings(BaseSettings):
     refinement_guard_enabled: bool = Field(
         default=True, validation_alias="REFINEMENT_GUARD_ENABLED"
     )
+    # NX-280: o rutină afirmată cere DOVADA unei secvențe (doi pași DISTINCȚI din aceeași familie,
+    # din `attributes.routine_step`), nu doar ≥2 produse. Pragul de cardinalitate lăsa să treacă
+    # „rutine" din două rujuri cu prețuri reale, fiindcă validatorul și `grounding_guard` sunt porți
+    # de ADEVĂR, nu de POTRIVIRE. Fără dovadă, planul nu are voie să fie `routine` și degradează la
+    # o recomandare pe un pas, formulată onest (P6). OFF → pragul vechi, byte-identic.
+    routine_evidence_required: bool = Field(
+        default=True, validation_alias="ROUTINE_EVIDENCE_REQUIRED"
+    )
     # IZI: badge de card DERIVAT din semnale reale (rating+recenzii → „Top Favorit"; reducere reală
     # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).
     # Determinist, NU inventat. OFF → doar badge-uri pre-seedate curate (comportament vechi).

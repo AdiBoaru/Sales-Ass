@@ -54,6 +54,7 @@ nouă.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -86,11 +87,23 @@ class Promotion:
 
     `within_family` e obligatoriu prin proiectare, nu prin convenție: o promovare nemărginită e
     exact bugul măsurat în docstringul modulului.
+
+    `corroborate_name` cere ca NUMELE produsului să confirme atributul. Există fiindcă o promovare
+    e la fel de bună ca atributul pe care se sprijină, iar `spf` s-a dovedit MĂSURABIL nesigur:
+    derivarea lui citește numărul din fraze de SFAT, care trimit către alt produs — «Obligatoriu:
+    foloseste crema cu SPF 50 in fiecare dimineata, deoarece retinolul poate sensibiliza pielea la
+    soare» a pus `spf=50` pe un ser cu retinol. Opt produse pe catalogul SOLE, dintre care șapte
+    în familia feței, deci promovate la pasul de protecție solară — iar un retinol prezentat ca
+    protecție solară nu e o recomandare slabă, e sfat care contrazice propria fișă a produsului.
+
+    Tokenii sunt vocabular de VERTICAL, deci stau în pachet, nu aici (P9). Gol → fără cerință de
+    coroborare, adică promovare pe atribut simplu.
     """
 
     when_attribute: str
     within_family: str
     to_step: str
+    corroborate_name: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -105,6 +118,15 @@ class RoutineSpec:
     promotions: tuple[Promotion, ...] = ()
     #: tipuri care NU sunt un pas — declarate EXPLICIT, ca să se distingă de cele uitate.
     not_a_step: frozenset[str] = field(default_factory=frozenset)
+    #: tipuri pentru care TIPUL NU AJUNGE ca să determine pasul. Distinct de `not_a_step`, și
+    #: distincția e tot `UNKNOWN ≠ MISMATCH`: un «set» nu e un pas (afirmație), o «lotiune de
+    #: fata» e sigur un pas, doar nu știm care (ignoranță). Măsurat pe SOLE: cele 18 produse
+    #: tipizate așa se împrăștie pe ȘASE categorii — demachiant, toner, hidratant, protecție
+    #: solară, corp, all-in-one. Un pas majoritar le-ar da unei treimi pasul greșit, iar
+    #: `not_a_step` ar afirma că nu sunt produse de rutină, ceea ce e fals.
+    #: Amândouă întorc None din `resolve`; diferă în RAPORT, unde contează: o scăpare trebuie
+    #: reparată, o ambiguitate declarată e o decizie luată.
+    ambiguous: frozenset[str] = field(default_factory=frozenset)
 
     def canonical_values(self) -> tuple[str, ...]:
         """Toate valorile `familie:pas` posibile, în ordinea de parcurs. Astea intră ca `values`
@@ -179,23 +201,33 @@ def build_spec(raw: Any) -> RoutineSpec:
             raise RoutineStepConfigError(f"promovare către familia necunoscută {fam!r}")
         if step not in families[fam]:
             raise RoutineStepConfigError(f"promovare către pasul {step!r}, absent din {fam!r}")
-        promotions.append(Promotion(attr, fam, step))
+        tokens = p.get("corroborate_name") or []
+        if not isinstance(tokens, list) or not all(isinstance(t, str) and t for t in tokens):
+            raise RoutineStepConfigError(f"corroborate_name invalid pt promovarea {p!r}")
+        promotions.append(Promotion(attr, fam, step, tuple(t.lower() for t in tokens)))
 
-    not_a_step = raw.get("not_a_step") or []
-    if not isinstance(not_a_step, list) or not all(isinstance(x, str) for x in not_a_step):
-        raise RoutineStepConfigError("routine_steps.not_a_step trebuie să fie listă de stringuri")
+    buckets: dict[str, frozenset[str]] = {}
+    for name in ("not_a_step", "ambiguous"):
+        items = raw.get(name) or []
+        if not isinstance(items, list) or not all(isinstance(x, str) for x in items):
+            raise RoutineStepConfigError(f"routine_steps.{name} trebuie să fie listă de stringuri")
+        if overlap := set(items) & by_product_type.keys():
+            raise RoutineStepConfigError(
+                f"tipuri și mapate, și declarate {name}: {sorted(overlap)}"
+            )
+        buckets[name] = frozenset(items)
 
-    overlap = set(not_a_step) & by_product_type.keys()
-    if overlap:
-        raise RoutineStepConfigError(
-            f"tipuri și mapate, și declarate not_a_step: {sorted(overlap)}"
-        )
+    # Un tip nu poate fi simultan „nu e un pas" și „nu știm care pas" — sunt afirmații care se
+    # contrazic, iar o contradicție în config ar face raportul să mintă indiferent de ramură.
+    if both := buckets["not_a_step"] & buckets["ambiguous"]:
+        raise RoutineStepConfigError(f"tipuri și not_a_step, și ambiguous: {sorted(both)}")
 
     return RoutineSpec(
         families=families,
         by_product_type=by_product_type,
         promotions=tuple(promotions),
-        not_a_step=frozenset(not_a_step),
+        not_a_step=buckets["not_a_step"],
+        ambiguous=buckets["ambiguous"],
     )
 
 
@@ -223,7 +255,18 @@ def load_routine_steps(raw: Any) -> RoutineSpec:
         return EMPTY_ROUTINE_STEPS
 
 
-def resolve(attributes: dict[str, Any] | None, spec: RoutineSpec) -> str | None:
+def _name_corroborates(name: str, tokens: tuple[str, ...]) -> bool:
+    """Numele produsului conține vreunul dintre tokeni, la ÎNCEPUT de cuvânt?
+
+    Granița e doar la început, deliberat: „SPF50+" trebuie să potrivească tokenul „spf", iar `\\b`
+    la coadă n-ar potrivi (F și 5 sunt amândouă caractere de cuvânt). Aceeași greșeală a produs o
+    măsurătoare falsă în timpul proiectării regulii — pinuită aici ca test.
+    """
+    low = (name or "").lower()
+    return any(re.search(r"\b" + re.escape(t), low) for t in tokens)
+
+
+def resolve(attributes: dict[str, Any] | None, spec: RoutineSpec, *, name: str = "") -> str | None:
     """`attributes` ale unui produs → valoarea canonică `familie:pas`, sau None dacă nu se știe.
 
     None e un răspuns, nu un eșec: înseamnă „produsul ăsta nu are pas cunoscut". Un produs fără
@@ -234,7 +277,7 @@ def resolve(attributes: dict[str, Any] | None, spec: RoutineSpec) -> str | None:
     ptype = attrs.get("product_type")
     if not isinstance(ptype, str) or not ptype:
         return None
-    if ptype in spec.not_a_step:
+    if ptype in spec.not_a_step or ptype in spec.ambiguous:
         return None
 
     base = spec.by_product_type.get(ptype)
@@ -249,6 +292,8 @@ def resolve(attributes: dict[str, Any] | None, spec: RoutineSpec) -> str | None:
         raw = attrs.get(promo.when_attribute)
         if raw is None or raw == "" or raw is False:
             continue
+        if promo.corroborate_name and not _name_corroborates(name, promo.corroborate_name):
+            continue  # atributul e prezent, dar produsul nu-l confirmă → rămâne pe pasul lui
         return f"{promo.within_family}{SEP}{promo.to_step}"
     return base
 

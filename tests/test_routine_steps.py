@@ -94,6 +94,74 @@ def test_spf_gol_sau_fals_nu_promoveaza(spec):
         assert resolve({"product_type": "crema de fata", "spf": value}, spec) == "fata:hidratare"
 
 
+# --- coroborarea pe nume: o promovare e la fel de bună ca atributul ei -------------------
+
+COR = {
+    **RAW,
+    "promotions": [
+        {
+            "when_attribute": "spf",
+            "within_family": "fata",
+            "to_step": "protectie",
+            "corroborate_name": ["spf", "sun", "solar", "uv"],
+        }
+    ],
+}
+
+
+def test_promovarea_cere_ca_numele_sa_confirme_atributul():
+    """Măsurat pe SOLE: derivarea lui `spf` citește numărul din fraze de SFAT — «Obligatoriu:
+    foloseste crema cu SPF 50 in fiecare dimineata, deoarece retinolul poate sensibiliza pielea la
+    soare» pune `spf=50` pe un ser cu RETINOL. Opt produse, șapte în familia feței. Un retinol
+    prezentat ca protecție solară contrazice propria fișă a produsului."""
+    s = build_spec(COR)
+    attrs = {"product_type": "ser de fata", "spf": "50"}
+    assert resolve(attrs, s, name="MEDICUBE Deep Vita A Retinol Serum") == "fata:tratament"
+    assert resolve(attrs, s, name="SKIN1004 Centella Glow Sun Ampoule") == "fata:protectie"
+
+
+def test_coroborarea_prinde_SPF50_lipit_de_cifra():
+    """`\\bspf\\b` NU potrivește „SPF50+" (F și 5 sunt amândouă caractere de cuvânt), iar greșeala
+    asta a produs o măsurătoare falsă în timpul proiectării regulii. Granița e doar la început."""
+    s = build_spec(COR)
+    attrs = {"product_type": "crema de fata", "spf": "50"}
+    for name in ("TFIT Tone Up Sun Fluid SPF50+ PA++++", "COSRX Aloe Tone-up SPF50", "X SPF 30"):
+        assert resolve(attrs, s, name=name) == "fata:protectie", name
+
+
+def test_coroborarea_accepta_si_alti_tokeni_decat_cheia():
+    """Protecțiile solare reale spun adesea „Sun", nu „SPF" — a cere doar cheia ar fi eliminat 16
+    produse corecte („Relief Sun Cream", „Sunscreen Mousse", „Sunstick")."""
+    s = build_spec(COR)
+    attrs = {"product_type": "crema de fata", "spf": "50"}
+    for name in ("BEAUTY OF JOSEON Relief Sun Cream", "EVY Sunscreen Mousse Daily UV"):
+        assert resolve(attrs, s, name=name) == "fata:protectie", name
+
+
+def test_fara_tokeni_declarati_promovarea_ramane_pe_atribut_simplu(spec):
+    """Gol → comportamentul de dinainte. Coroborarea e opt-in, per promovare."""
+    assert resolve({"product_type": "crema de fata", "spf": "50"}, spec, name="orice") == (
+        "fata:protectie"
+    )
+
+
+def test_corroborate_name_invalid_e_respins():
+    with pytest.raises(RoutineStepConfigError, match="corroborate_name"):
+        build_spec(
+            {
+                **RAW,
+                "promotions": [
+                    {
+                        "when_attribute": "spf",
+                        "within_family": "fata",
+                        "to_step": "protectie",
+                        "corroborate_name": "spf",
+                    }
+                ],
+            }
+        )
+
+
 # --- ce NU face: nu ghicește -------------------------------------------------------------
 
 
@@ -204,3 +272,211 @@ def test_rutina_de_machiaj_cere_pasi_distincti(spec):
     tot trece, dar cere pași chiar distincți — iar testul fixează intenția."""
     got = distinct_steps(["machiaj:ten", "machiaj:buze"], spec)
     assert max(len(s) for s in got.values()) == 2
+
+
+# --- ambiguu ≠ „nu e un pas" -------------------------------------------------------------
+
+
+def test_ambiguu_si_not_a_step_dau_amandoua_None_dar_sunt_DECIZII_diferite(spec):
+    """`UNKNOWN ≠ MISMATCH` aplicat la config: un «set» nu e un pas (afirmație), o «lotiune de
+    fata» e sigur un pas dar nu se știe care (ignoranță). Măsurat pe SOLE: cele 18 produse
+    tipizate „lotiune de fata" se împrăștie pe ȘASE categorii, deci un pas majoritar ar da unei
+    treimi pasul greșit. Ambele întorc None; diferă în RAPORT, unde o scăpare cere reparație iar
+    o ambiguitate declarată e o decizie luată."""
+    raw = {**RAW, "ambiguous": ["lotiune de fata"]}
+    s = build_spec(raw)
+    assert resolve({"product_type": "lotiune de fata"}, s) is None
+    assert resolve({"product_type": "set"}, s) is None
+    assert "lotiune de fata" in s.ambiguous
+    assert "lotiune de fata" not in s.not_a_step
+    assert "set" in s.not_a_step and "set" not in s.ambiguous
+
+
+def test_un_tip_nu_poate_fi_si_ambiguu_si_not_a_step():
+    """Contradicție în config: raportul ar minți indiferent de ramura pe care ar merge."""
+    with pytest.raises(RoutineStepConfigError, match="și not_a_step, și ambiguous"):
+        build_spec({**RAW, "ambiguous": ["set"]})
+
+
+def test_ambiguu_nu_poate_fi_si_mapat():
+    with pytest.raises(RoutineStepConfigError, match="ambiguous"):
+        build_spec({**RAW, "ambiguous": ["ruj"]})
+
+
+def test_spf_nu_salveaza_un_tip_ambiguu(spec):
+    """Un produs ambiguu cu SPF rămâne fără pas: promovarea are nevoie de familie, iar familia e
+    exact ce nu știm. Concret pe SOLE: TFIT Airy Sun Fluid SPF 50 e tipizat „lotiune de fata"."""
+    s = build_spec({**RAW, "ambiguous": ["lotiune de fata"]})
+    assert resolve({"product_type": "lotiune de fata", "spf": "50"}, s) is None
+
+
+# --- poarta din `answer_plan` (felia 4) --------------------------------------------------
+
+
+def _routine_case(steps: list[str | None]):
+    """Un plan `routine` cu N produse, fiecare cu pasul dat, plus contextul server-side."""
+    from src.agent.answer_plan import (
+        AnswerPlanContext,
+        AnswerPlanV2,
+        EvidenceRecord,
+        GroundedProduct,
+        PlanFacts,
+        PlanObligation,
+        PlanRecommendation,
+        SelectedProduct,
+        StyleSignals,
+    )
+
+    ids = [f"p{i}" for i in range(len(steps))]
+    plan = AnswerPlanV2(
+        schema_version=2,
+        business_id="b1",
+        locale="ro",
+        intent_summary="rutina pentru ten uscat",
+        obligations=(PlanObligation(kind="routine", key="routine"),),
+        direct_answer="Pentru ten uscat, iată pașii pe care ți-i recomand din catalog.",
+        selected_products=tuple(
+            SelectedProduct(product_id=i, variant_id=None, evidence_ids=(f"product:{i}:identity",))
+            for i in ids
+        ),
+        claims=(),
+        facts=PlanFacts(prices=(), stocks=(), urls=()),
+        recommendations=tuple(
+            PlanRecommendation(
+                product_id=i,
+                variant_id=None,
+                reason="potrivit pentru ten uscat",
+                evidence_ids=(f"product:{i}:identity",),
+                need_ids=("concerns",),
+            )
+            for i in ids
+        ),
+        comparison=None,
+        constraints_applied=(),
+        unknowns=(),
+        relaxations=(),
+        clarification=None,
+        no_results=None,
+        state_update_proposals=(),
+        action_intents=(),
+        disclosures=(),
+        confirmed_actions=(),
+        style_signals=StyleSignals(tone="neutral", verbosity="short"),
+    )
+    context = AnswerPlanContext(
+        business_id="b1",
+        locale="ro",
+        products=tuple(
+            GroundedProduct(
+                product_id=i,
+                business_id="b1",
+                resolution="exact",
+                variant_ids=(),
+                routine_step=step,
+            )
+            for i, step in zip(ids, steps, strict=True)
+        ),
+        evidence=tuple(
+            EvidenceRecord(
+                evidence_id=f"product:{i}:identity",
+                business_id="b1",
+                product_id=i,
+                variant_id=None,
+                kind="identity",
+                value=i,
+                source_version="live",
+                current=True,
+            )
+            for i in ids
+        ),
+        hard_constraints=(),
+        successful_action_ids=(),
+        known_need_ids=("concerns",),
+    )
+    return plan, context
+
+
+def _validate(steps: list[str | None]):
+    from src.agent.answer_plan import validate_answer_plan_v2
+
+    plan, context = _routine_case(steps)
+    return validate_answer_plan_v2(plan, context, required_obligations=(("routine", "routine"),))
+
+
+def test_doi_pasi_distincti_trec_poarta():
+    assert "routine_without_sequence" not in _validate(["fata:curatare", "fata:hidratare"]).failures
+
+
+def test_doua_produse_din_acelasi_pas_NU_trec():
+    """Pragul de cardinalitate (≥2 produse) le accepta. Două creme nu sunt o rutină."""
+    assert "routine_without_sequence" in _validate(["fata:hidratare", "fata:hidratare"]).failures
+
+
+def test_familii_amestecate_NU_trec():
+    """Un șampon și un ser de față nu sunt pași unul după altul."""
+    assert "routine_without_sequence" in _validate(["par:spalare", "fata:tratament"]).failures
+
+
+def test_produse_fara_pas_NU_constituie_dovada():
+    """Eșecul MĂSURAT pe SOLE: «rutina ten uscat» întorcea același ruj în două nuanțe. Produsele
+    fără pas nu contrazic nimic (`UNKNOWN ≠ MISMATCH`), dar nici nu dovedesc o secvență."""
+    assert "routine_without_sequence" in _validate([None, None]).failures
+
+
+def test_un_singur_pas_cunoscut_nu_ajunge():
+    assert "routine_without_sequence" in _validate(["fata:curatare", None]).failures
+
+
+def test_trei_pasi_distincti_trec():
+    got = _validate(["fata:curatare", "fata:tonifiere", "fata:hidratare"])
+    assert "routine_without_sequence" not in got.failures
+
+
+def test_no_results_onest_NU_e_respins_de_poarta():
+    """P6: „nu pot compune o rutină pentru asta" e acoperire validă. A-l trece prin poarta de
+    secvență ar transforma degradarea corectă în eșec — exact invers decât scopul porții."""
+    from src.agent.answer_plan import PlanNoResults, validate_answer_plan_v2
+
+    plan, context = _routine_case([None])
+    plan = plan.model_copy(
+        update={
+            "recommendations": (),
+            "selected_products": (),
+            "no_results": PlanNoResults(
+                reason_class="no_match",
+                criteria=("ten uscat", "rutina completa"),
+                alternatives=(),
+            ),
+        }
+    )
+    got = validate_answer_plan_v2(plan, context, required_obligations=(("routine", "routine"),))
+    assert "routine_without_sequence" not in got.failures
+
+
+def test_poarta_stinsa_restaureaza_pragul_vechi(monkeypatch):
+    """Kill-switch: OFF → comportamentul de dinainte, byte-identic."""
+    from src.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("ROUTINE_EVIDENCE_REQUIRED", "false")
+    try:
+        assert (
+            "routine_without_sequence"
+            not in _validate(["fata:hidratare", "fata:hidratare"]).failures
+        )
+    finally:
+        get_settings.cache_clear()
+
+
+def test_un_plan_care_nu_afirma_rutina_nu_e_atins():
+    """Poarta se aplică DOAR planurilor care chiar afirmă o rutină."""
+    from src.agent.answer_plan import PlanObligation, validate_answer_plan_v2
+
+    plan, context = _routine_case(["fata:hidratare", "fata:hidratare"])
+    plan = plan.model_copy(
+        update={"obligations": (PlanObligation(kind="recommend", key="recommend_0"),)}
+    )
+    got = validate_answer_plan_v2(
+        plan, context, required_obligations=(("recommend", "recommend_0"),)
+    )
+    assert "routine_without_sequence" not in got.failures

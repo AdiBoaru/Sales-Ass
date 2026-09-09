@@ -247,6 +247,7 @@
       "values": [
         "fata:curatare",
         "fata:tonifiere",
+        "fata:esenta",
         "fata:tratament",
         "fata:hidratare",
         "fata:protectie",
@@ -854,6 +855,7 @@
       "fata": [
         "curatare",
         "tonifiere",
+        "esenta",
         "tratament",
         "hidratare",
         "protectie"
@@ -886,7 +888,7 @@
       "manusa pentru demachiere": "fata:curatare",
       "toner de fata": "fata:tonifiere",
       "tonic": "fata:tonifiere",
-      "esenta": "fata:tonifiere",
+      "esenta": "fata:esenta",
       "ser de fata": "fata:tratament",
       "masca de fata": "fata:tratament",
       "exfoliant": "fata:tratament",
@@ -898,7 +900,6 @@
       "crema contur ochi": "fata:hidratare",
       "crema de ochi": "fata:hidratare",
       "mist facial": "fata:hidratare",
-      "lotiune de fata": "fata:hidratare",
       "sampon": "par:spalare",
       "balsam": "par:conditionare",
       "masca de par": "par:tratament",
@@ -933,7 +934,13 @@
       {
         "when_attribute": "spf",
         "within_family": "fata",
-        "to_step": "protectie"
+        "to_step": "protectie",
+        "corroborate_name": [
+          "spf",
+          "sun",
+          "solar",
+          "uv"
+        ]
       }
     ],
     "not_a_step": [
@@ -941,7 +948,10 @@
       "gel autobronzant",
       "spuma autobronzanta",
       "pasta de dinti"
+    ],
+    "ambiguous": [
+      "lotiune de fata"
     ]
   },
-  "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. Masurat pe catalog: 2.037 produse primesc pas (73,9% din catalog, 97,6% din cele cu tip)."
+  "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. `ambiguous` e DISTINCT de `not_a_step`: un «set» nu e un pas (afirmatie), o «lotiune de fata» e sigur un pas dar nu se stie care (ignoranta) — cele 18 se imprastie pe sase categorii. Amandoua nu primesc pas; difera in RAPORT, unde o scapare cere reparatie iar o ambiguitate declarata e o decizie luata."
 }

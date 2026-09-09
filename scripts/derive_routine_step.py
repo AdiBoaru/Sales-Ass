@@ -27,6 +27,7 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -57,14 +58,22 @@ _SELECT = """
 _PACK = "select settings -> 'domain_pack' -> 'routine_steps' from businesses where id = $1"
 
 # `jsonb_set` cu `create_if_missing` — scrie doar cheia, nu înlocuiește `attributes`.
+#
+# UN SINGUR statement pentru tot catalogul, nu unul per rând. Nu e micro-optimizare: round-trip-ul
+# către Supabase eu-west-2 e ~101 ms MĂSURAT, deci 2.037 de update-uri secvențiale iau ~3,6 minute
+# și țin o tranzacție admin deschisă tot timpul ăla, pe un pooler care dă 15 sesiuni. Varianta în
+# lot face aceeași muncă într-un round-trip. `is distinct from` păstrează idempotența (a doua
+# rulare raportează 0 rânduri), iar `updated_at` se mișcă doar pentru rândurile chiar schimbate.
 _UPDATE = """
-    update products
-    set attributes = jsonb_set(
-            coalesce(attributes, '{}'::jsonb), '{routine_step}', to_jsonb($2::text), true
-        ),
-        updated_at = now()
-    where business_id = $3 and id = $1
-      and attributes->>'routine_step' is distinct from $2
+    update products p
+       set attributes = jsonb_set(
+               coalesce(p.attributes, '{}'::jsonb), '{routine_step}', to_jsonb(v.step), true
+           ),
+           updated_at = now()
+      from unnest($2::uuid[], $3::text[]) as v(id, step)
+     where p.business_id = $1
+       and p.id = v.id
+       and p.attributes->>'routine_step' is distinct from v.step
 """
 
 
@@ -121,7 +130,9 @@ async def main() -> int:
             print("0 produse active — nimic de derivat.")
             return 2
 
-        assigned = {r["id"]: resolve(_as_dict(r["attributes"]), spec) for r in rows}
+        assigned = {
+            r["id"]: resolve(_as_dict(r["attributes"]), spec, name=r["name"] or "") for r in rows
+        }
         typed = sum(1 for r in rows if _as_dict(r["attributes"]).get("product_type"))
         n_step = sum(1 for v in assigned.values() if v)
         n_change = sum(1 for r in rows if assigned[r["id"]] and assigned[r["id"]] != r["current"])
@@ -142,20 +153,31 @@ async def main() -> int:
             for i, s in enumerate(steps, 1):
                 print(f"    {i}. {s:<14} {counts.get(f'{fam}:{s}', 0):>5}")
 
-        # Tipurile care n-au pas ȘI nu sunt declarate `not_a_step` sunt scăpări, nu decizii.
-        missing = Counter(
-            t
-            for r in rows
-            if (t := _as_dict(r["attributes"]).get("product_type"))
-            and t not in spec.by_product_type
-            and t not in spec.not_a_step
+        # Trei categorii distincte de „fără pas", și distincția e tot ce contează în raport:
+        # `not_a_step` + `ambiguous` sunt DECIZII declarate, restul sunt SCĂPĂRI de reparat.
+        declared = spec.not_a_step | spec.ambiguous
+        types_in_catalog = Counter(
+            t for r in rows if (t := _as_dict(r["attributes"]).get("product_type"))
         )
+        for name, bucket in (("not_a_step", spec.not_a_step), ("ambiguous", spec.ambiguous)):
+            present = {t: types_in_catalog[t] for t in sorted(bucket) if types_in_catalog[t]}
+            if present:
+                total = sum(present.values())
+                print(f"\n  `{name}` (decizie declarată): {total} produse, fără pas")
+                for t, n in sorted(present.items(), key=lambda kv: -kv[1]):
+                    print(f"      {n:>5}  {t}")
+
+        missing = Counter(
+            {t: n for t, n in types_in_catalog.items() if t not in spec.by_product_type}
+        )
+        for t in declared:
+            missing.pop(t, None)
         if missing:
-            print(f"\n  ! {len(missing)} tipuri NEmapate și nedeclarate `not_a_step`:")
+            print(f"\n  ! {len(missing)} tipuri NEmapate și NEdeclarate (scăpări, nu decizii):")
             for t, n in missing.most_common(10):
                 print(f"      {n:>5}  {t}")
         else:
-            print("\n  toate tipurile din catalog sunt fie mapate, fie declarate `not_a_step`.")
+            print("\n  fiecare tip din catalog e fie mapat, fie o decizie declarată.")
 
         if args.sample:
             print(f"\n--- {args.sample} exemple ---")
@@ -171,14 +193,12 @@ async def main() -> int:
             print("\nDRY-RUN. Nimic scris. Adaugă --apply ca să scrii.")
             return 0
 
-        written = 0
-        async with conn.transaction():
-            for r in rows:
-                if (v := assigned[r["id"]]) is None:
-                    continue
-                res = await conn.execute(_UPDATE, r["id"], v, args.business)
-                written += int(res.rsplit(" ", 1)[-1] or 0)
-        print(f"\nSCRIS: {written} rânduri.")
+        ids = [r["id"] for r in rows if assigned[r["id"]] is not None]
+        steps = [assigned[i] for i in ids]
+        t0 = time.perf_counter()
+        res = await conn.execute(_UPDATE, args.business, ids, steps)
+        written = int(res.rsplit(" ", 1)[-1] or 0)
+        print(f"\nSCRIS: {written} rânduri în {(time.perf_counter() - t0) * 1000:.0f} ms.")
 
         # Verificare pe DB, nu pe intenție. Inclusiv invariantul care contează cel mai mult:
         # `fata:protectie` trebuie să fie EXACT produsele cu `spf` din familia `fata`.
