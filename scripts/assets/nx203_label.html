@@ -47,6 +47,10 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .aux{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
      display:flex;gap:8px;flex-wrap:wrap}
 .aux .key{font-size:13px;padding:6px 10px}
+.warn{background:#2a1f18;border-left:3px solid #d8a15a;color:#e8d3b8;padding:8px 12px;
+      border-radius:4px;margin-bottom:10px;font-size:13px}
+.warn kbd{background:#000;border:1px solid #4a3a2a;border-radius:3px;padding:1px 5px;
+      font:12px ui-monospace,monospace}
 .done{text-align:center;padding:80px 20px}
 .done h1{font-size:22px}
 a{color:var(--acc)}
@@ -78,6 +82,8 @@ function render(){
   </div>
   <div class="meter"><i style="width:${pct}%"></i></div>
   <div class="fam"><h2>cererea clientului · tip ${esc(f.product_type||"?")}</h2>
+    ${f.needs_split?`<div class="warn">Formulările de mai jos par să fie cereri DIFERITE.
+      Dacă sunt, apasă <kbd>s</kbd>.</div>`:""}
     ${(f.queries||[]).slice(0,4).map(q=>`<div class="q">${esc(q)}</div>`).join("")}
     <div class="cons">${cons||"<span>fără constrângeri rezolvate</span>"}</div></div>
   <div class="cand">${img}<div class="info">

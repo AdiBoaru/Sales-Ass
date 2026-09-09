@@ -77,11 +77,27 @@ _SIZE_RE = re.compile(r"\b\d{1,4}\s?(ml|l|g|gr|kg|buc|bucati|capsule|comprimate)
 
 #: Negațiile care schimbă contractul de adevăr al cererii („fără parfum" INTERZICE, nu preferă).
 #: Sunt cuvinte funcționale de limbă, nu de cosmetice — se mută cu `locale`, nu cu verticalul.
-_NEGATION_RE = re.compile(r"\b(fara|fär|nu\s+(vreau|contine|are)|non|free)\b")
+_NEGATION_RE = re.compile(r"\b(fara|fär|nu\s+(vreau|contine|are|usuca)|non|free)\b")
+
+#: Cuvintele care ÎNCHID domeniul unei negații, fiindcă deschid o afirmație nouă: în „fara parabeni
+#: cu acid hialuronic", acidul e cerut, nu interzis. Fără regula asta, negația s-ar întinde până la
+#: capătul frazei și ar interzice exact ce cere clientul. „si"/„sau" NU închid: în „fara parabeni si
+#: sulfati" enumerarea continuă negația, iar oprirea acolo ar lăsa al doilea termen ca o CERINȚĂ.
+_NEGATION_STOP = frozenset({"cu", "pentru", "care", "plus", "dar"})
+
+#: Câte cuvinte de conținut poate acoperi o negație. „fara parabeni, sulfati si siliconi" are trei;
+#: peste patru, aproape sigur am depășit clauza și interzicem lucruri nespuse.
+_NEGATION_SPAN = 4
+
+#: Conectorii dintr-o enumerare negată. Nu sunt termeni și nu consumă din domeniu.
+_NEGATION_CONNECTORS = frozenset({"si", "sau", "ori", "de", "la", "in"})
+
+#: Marcatorii înșiși. Nu sunt termeni de conținut: negația trăiește în prefixul `!` de pe cuvântul
+#: negat, nu în cuvântul „fara".
+_NEGATION_MARKERS = frozenset({"fara", "non", "free", "nu"})
 
 #: Sub atâtea produse în spate, o valoare de fațetă e prea rară ca să ancoreze o familie: am
-#: eticheta
-#: un caz pe care catalogul nu-l poate servi nici în cel mai bun scenariu.
+#: eticheta un caz pe care catalogul nu-l poate servi nici în cel mai bun scenariu.
 _MIN_FACET_SUPPORT = 3
 
 #: O familie susținută de o singură frază e o formulare, nu un contract de adevăr. Pragul ține
@@ -97,14 +113,20 @@ _MAX_FACET_WORDS = 4
 #: Dimensiunea care poartă TIPUL de produs. E o fațetă ca oricare alta în `attributes`
 #: (scrisă de `derive_product_type.py` pe 2.088 de produse), dar are un rol special aici: fără
 #: ea, familia n-are margini. „Orice conține acid hialuronic" nu e un contract de adevăr — 311
-#: produse îl satisfac, iar
-#: un top-6 din 311 nu poate fi nici corect, nici greșit.
+#: produse îl satisfac, iar un top-6 din 311 nu poate fi nici corect, nici greșit.
 _TYPE_DIMENSION = "product_type"
 
 #: Sub atâta suprapunere lexicală între formulările unei familii, gruparea e suspectă: fațetele
 #: tenantului n-au fost destul de fine ca să deosebească două cereri diferite. Familia nu se aruncă
-#: (golul e informație), dar pleacă la om marcată `needs_split`.
-_MIN_MERGE_OVERLAP = 0.18
+#: (golul e informație) și nici nu se exclude — pleacă la om MARCATĂ.
+#:
+#: Pragul e ales pentru RECALL, nu pentru precizie, fiindcă cele două greșeli nu costă la fel: o
+#: fuziune ratată intră în corpus ca dată bună și strică măsurătoarea tăcut, în timp ce un semnal
+#: fals costă o privire, iar decizia rămâne oricum a omului. Măsurat pe cele 307 familii ne-exacte,
+#: 0,35 marchează 13%; în zona 0,29-0,33 stau amestecate cazuri reale („ruj lucios" vs „ruj mat")
+#: și parafraze adevărate („balsam ... păr gros" vs „balsam ... pentru par"), deci un prag mai jos
+#: le-ar pierde pe primele.
+_MIN_MERGE_OVERLAP = 0.35
 
 #: Un termen rezidual e o AXĂ de nevoie doar dacă CATALOGUL îl cunoaște — apare într-un nume de
 #: produs sau într-o valoare de atribut. Prima variantă filtra pe frecvența în interogări (df ≥ 12)
@@ -121,6 +143,10 @@ _MAX_RESIDUAL_DF = 1200
 #: Câte reziduuri intră în cheia unei familii. Peste două, fiecare frază devine propria familie și
 #: n-am mai grupat nimic — am doar redenumit corpusul.
 _MAX_RESIDUALS_PER_FAMILY = 2
+
+#: Marcajul unui termen rostit sub negație. Intră în cheia familiei, deci „cu volum" și „fara
+#: volum" sunt contracte de adevăr diferite — ceea ce chiar sunt.
+NEGATED_PREFIX = "!"
 
 
 def _norm_words(text: str) -> str:
@@ -146,6 +172,7 @@ class Phrase:
     facets: tuple[tuple[str, str], ...] = ()
     residuals: tuple[str, ...] = ()
     residual_pool: tuple[str, ...] = ()
+    forbidden: tuple[tuple[str, str], ...] = ()
     klass: str = "colloquial"
 
     @property
@@ -161,12 +188,13 @@ class Phrase:
         facets = ",".join(f"{d}={v}" for d, v in sorted(self.facets) if d != _TYPE_DIMENSION)
         # Reziduurile intră în cheie fiindcă altfel „șampon pentru păr uscat" și „șampon pentru
         # scalp sensibil" sunt aceeași familie: catalogul n-are nicio fațetă pentru păr, deci
-        # ambele se
-        # reduc la `product_type=sampon`. Un top-6 măsurat pe familia aia n-ar putea fi nici corect,
+        # ambele se reduc la `product_type=sampon`. Un top-6 măsurat pe familia aia n-ar putea fi
+        # nici corect,
         # nici greșit. Termenul nerezolvat e tot ce avem ca să deosebim două nevoi — și, în plus,
         # lista lui e chiar inventarul de goluri de vocabular al catalogului.
         residuals = ",".join(sorted(self.residuals))
-        return f"{self.product_type}|{facets}|{residuals}"
+        forbidden = ",".join(f"!{d}={v}" for d, v in sorted(self.forbidden))
+        return f"{self.product_type}|{facets}|{residuals}|{forbidden}"
 
 
 @dataclass
@@ -178,6 +206,7 @@ class Family:
     facets: tuple[tuple[str, str], ...]
     klass: str
     residuals: tuple[str, ...] = ()
+    forbidden: tuple[tuple[str, str], ...] = ()
     phrases: list[str] = field(default_factory=list)
     merchant_products: set[str] = field(default_factory=set)
     merge_overlap: float = 1.0
@@ -201,6 +230,12 @@ class Family:
             "unresolved_terms": list(self.residuals),
             "hard_constraints": [
                 {"facet": d, "op": "contains", "value": v} for d, v in sorted(self.facets)
+            ],
+            # Cerute EXPLICIT să lipsească. Separate de `hard_constraints` fiindca metricile le
+            # trateaza diferit: o cerinta neindeplinita scade relevanta, o interdictie incalcata
+            # e o VIOLARE, care se numara aparte (§2 din card).
+            "forbidden_constraints": [
+                {"facet": d, "op": "not_contains", "value": v} for d, v in sorted(self.forbidden)
             ],
             # Formulările familiei. Prima e reprezentantul pe care îl vede omul la etichetare;
             # restul rămân ca indicator de robusteţe la formă (nu sunt familii separate).
@@ -256,6 +291,40 @@ def _facet_index(vocab, brands: set[str]) -> dict[str, list[tuple[str, str]]]:
     return index
 
 
+def negated_words(folded: str) -> set[str]:
+    """Cuvintele aflate sub domeniul unei negații.
+
+    Defectul real care a cerut funcția: „balsam pentru volum păr fin" și „balsam pentru par fin fara
+    volum" ajungeau în ACEEAȘI familie. Sunt cereri opuse. `volum` era rezidual în amândouă, iar
+    negația era doar o etichetă de clasă, nu parte din contractul de adevăr — deci un motor care
+    întoarce balsamuri de volum ar fi „corect" pe amândouă.
+
+    Domeniul începe la marcatorul de negație și se închide la primul cuvânt care deschide o
+    afirmație nouă (`_NEGATION_STOP`) sau după `_NEGATION_SPAN` cuvinte de conținut. Regula e de
+    limbă, nu de vertical: se mută cu `locale`, ca listele de cuvinte goale (P11).
+    """
+    words = [w for w in re.split(r"[^a-z0-9]+", folded) if w]
+    out: set[str] = set()
+    i = 0
+    while i < len(words):
+        if not _NEGATION_RE.fullmatch(words[i]) and words[i] not in _NEGATION_MARKERS:
+            i += 1
+            continue
+        taken = 0
+        j = i + 1
+        while j < len(words) and taken < _NEGATION_SPAN:
+            if words[j] in _NEGATION_STOP:
+                break
+            # Conectorii nu se neagă și nu consumă din domeniu: „fara parabeni si sulfati si
+            # siliconi" are TREI termeni negați, iar numărându-i pe „si" al treilea ar rămâne afară.
+            if words[j] not in _NEGATION_CONNECTORS:
+                out.add(words[j])
+                taken += 1
+            j += 1
+        i = j if j > i else i + 1
+    return out
+
+
 def _ngrams(folded: str, max_words: int) -> set[str]:
     """N-gramele de cuvinte ale frazei, până la `max_words`.
 
@@ -279,12 +348,21 @@ def classify_phrase(
     folded = phrase.folded
     grams = _ngrams(folded, _MAX_FACET_WORDS)
 
+    negated = negated_words(folded)
+
     hits: list[tuple[str, str]] = []
+    forbidden: list[tuple[str, str]] = []
     consumed: set[str] = set()
     for gram in grams:
         pairs = facet_index.get(gram)
         if pairs:
-            hits.extend(pairs)
+            # O valoare rostită sub negație e o INTERDICȚIE, nu o cerință. Pusă în
+            # `hard_constraints`, ar cere exact ce clientul a exclus — iar benchmarkul ar număra
+            # drept „încălcare" tocmai răspunsul corect.
+            if set(gram.split()) & negated:
+                forbidden.extend(pairs)
+            else:
+                hits.extend(pairs)
             consumed.update(gram.split())
         if gram in brands:
             consumed.update(gram.split())
@@ -310,11 +388,21 @@ def classify_phrase(
 
     # Ce a rămas din cerere după ce vocabularul tenantului și-a luat partea. Astea sunt cuvintele pe
     # care clientul le folosește și catalogul nu le poate reprezenta.
+    # Reziduul negat poartă prefixul `!`, ca „fara volum" să nu ajungă în aceeași familie cu
+    # „pentru volum". Prefixul intră în cheia familiei prin `residuals`, deci separarea e
+    # structurală, nu o etichetă pusă alături.
     phrase.residual_pool = tuple(
-        w
+        (NEGATED_PREFIX + w if w in negated else w)
         for w in content_terms(phrase.text, "ro")
-        if w not in consumed and len(w) > 2 and not w.isdigit()
+        if w not in consumed
+        and len(w) > 2
+        and not w.isdigit()
+        # Marcatorul de negație nu e un termen. Lăsat înăuntru, „fara" ajungea în cheia familiei
+        # lângă `!transfer` și o despărțea de formulări identice care spun „nu are transfer".
+        and w not in _NEGATION_MARKERS
+        and w not in _NEGATION_CONNECTORS
     )
+    phrase.forbidden = tuple(sorted(set(forbidden)))
 
     refinements = [d for d in by_dim if d != _TYPE_DIMENSION]
     has_brand = bool(grams & brands)
@@ -425,12 +513,12 @@ def build_families(
     df: Counter = Counter()
     for ph in parsed:
         df.update(set(ph.residual_pool))
-    salient = {
-        t for t, n in df.items() if _MIN_RESIDUAL_DF <= n <= _MAX_RESIDUAL_DF and t in catalog_terms
-    }
+    salient = {t for t, n in df.items() if is_salient(t, n, catalog_terms)}
     stats["residual_vocab"] = len(salient)
     stats["residual_not_in_catalog"] = sum(
-        1 for t, n in df.items() if n >= _MIN_RESIDUAL_DF and t not in catalog_terms
+        1
+        for t, n in df.items()
+        if n >= _MIN_RESIDUAL_DF and t.removeprefix(NEGATED_PREFIX) not in catalog_terms
     )
 
     # === FAZA 2 — grupare pe contractul de adevăr ============================================
@@ -447,6 +535,7 @@ def build_families(
                 product_type=ph.product_type,
                 facets=ph.facets,
                 residuals=ph.residuals,
+                forbidden=ph.forbidden,
                 klass=ph.klass,
             )
             families[key] = fam
@@ -460,8 +549,8 @@ def build_families(
         if fam.klass == "exact":
             # O cerere de produs ANUME are, firesc, o singură formulare în fișa acelui produs.
             # Pragul de ≥2 e făcut pentru familii de RAFT, unde o singură frază înseamnă
-            # „formulare",
-            # nu „contract". Aplicat aici, ștergea tăcut toată clasa `exact` — 0 familii în prima
+            # „formulare", nu „contract". Aplicat aici, ștergea tăcut toată clasa `exact` — 0
+            # familii în prima
             # rulare, deși frazele existau.
             kept.append(fam)
             continue
@@ -473,7 +562,14 @@ def build_families(
             continue
         kept.append(fam)
     for fam in kept:
-        fam.merge_overlap = _phrase_overlap(fam.phrases)
+        # Cuvintele care NU deosebesc nimic în interiorul familiei: tipul de produs și valorile de
+        # fațetă sunt, prin definiție, comune tuturor formulărilor ei. Măsurate împreună cu restul,
+        # ridicau artificial suprapunerea — „șampon cu cica" și „șampon cu acid salicilic" ieșeau
+        # „asemănătoare" fiindcă amândouă conțin „sampon".
+        shared = set((fam.product_type or "").split())
+        for _dim, value in fam.facets:
+            shared.update(_norm_words(value).split())
+        fam.merge_overlap = _phrase_overlap(fam.phrases, shared)
         if fam.klass != "exact" and fam.merge_overlap < _MIN_MERGE_OVERLAP:
             fam.needs_split = True
             stats["needs_split"] += 1
@@ -482,8 +578,26 @@ def build_families(
     return kept, stats
 
 
-def _phrase_overlap(phrases: list[str]) -> float:
-    """Cât de mult seamănă între ele formulările unei familii (Jaccard mediu pe cuvinte).
+def is_salient(term: str, doc_freq: int, catalog_terms: set[str]) -> bool:
+    """E `term` o axă de nevoie, sau zgomot?
+
+    `NEGATED_PREFIX` se scoate ÎNAINTE de confruntarea cu catalogul. Fără asta, fixul de negație
+    era inert și n-avea niciun semn: `!volum` nu apare în niciun nume de produs, deci fiecare
+    reziduu negat pica testul de apartenență la catalog și dispărea din cheie — adică exact
+    reziduurile care despart cererile opuse. Frecvența se numără însă pe forma PREFIXATĂ, fiindcă
+    „cu volum" și „fara volum" chiar sunt termeni diferiți.
+    """
+    bare = term.removeprefix(NEGATED_PREFIX)
+    return _MIN_RESIDUAL_DF <= doc_freq <= _MAX_RESIDUAL_DF and bare in catalog_terms
+
+
+def _phrase_overlap(phrases: list[str], shared: set[str]) -> float:
+    """Cât de mult seamănă între ele formulările unei familii, pe cuvintele care DEOSEBESC.
+
+    `shared` = cuvintele comune prin construcție (tipul + valorile de fațetă). Prima variantă le
+    includea și, măsurat pe catalogul real, detecta doar 3 familii din 779 — inutilizabil: două
+    cereri de șampon complet diferite împărtășesc „sampon", deci păreau apropiate. Excluse, rămâne
+    exact partea în care cele două cereri chiar diferă.
 
     Nu e o măsură de calitate, e un DETECTOR de fuziune prea largă. Exemplu real din prima rulare:
     „șampon pentru păr uscat", „șampon delicat scalp sensibil" și „șampon cu biotină" au căzut în
@@ -492,7 +606,7 @@ def _phrase_overlap(phrases: list[str]) -> float:
     un top-6 să însemne ceva. Golul e informație despre catalog și merită văzut, nu ascuns: familia
     pleacă la om marcată, nu se aruncă și nici nu se etichetează ca și cum ar fi fină.
     """
-    sets = [{w for w in _norm_words(p).split() if len(w) > 2} for p in phrases]
+    sets = [{w for w in _norm_words(p).split() if len(w) > 2 and w not in shared} for p in phrases]
     sets = [s for s in sets if s]
     if len(sets) < 2:
         return 1.0

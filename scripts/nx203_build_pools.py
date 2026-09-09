@@ -175,13 +175,22 @@ def _assemble(fam: dict, engine_hits: dict[str, list[str]], cap: int) -> list[di
     ordered = sorted(entries.values(), key=lambda e: _rank_key(fam["family_id"], e["product_id"]))
     if len(ordered) <= cap:
         return ordered
-    keep = [e for e in ordered if "merchant" in e["sources"]][:cap]
-    for e in ordered:
+
+    # Cotă, nu prioritate. Varianta dinainte lua întâi TOATE afirmațiile comerciantului și abia apoi
+    # completa din motor — deci o familie cu peste `cap` produse afirmate ar fi produs un pool fără
+    # niciun rezultat de motor, adică o familie pe care precizia motorului nu se poate măsura deloc.
+    # Pe datele de azi asta se întâmplă la o singură familie din 120, dar un instrument de măsură
+    # trebuie să fie corect prin construcție, nu prin norocul distribuției.
+    merchant = [e for e in ordered if "merchant" in e["sources"]]
+    engine = [e for e in ordered if "merchant" not in e["sources"]]
+    quota = cap // 2
+    keep = merchant[:quota] + engine[: cap - min(quota, len(merchant))]
+    for e in ordered:  # completează cu ce a rămas, dacă un braț a fost mai sărac decât cota lui
         if len(keep) >= cap:
             break
         if e not in keep:
             keep.append(e)
-    return sorted(keep, key=lambda e: _rank_key(fam["family_id"], e["product_id"]))
+    return sorted(keep[:cap], key=lambda e: _rank_key(fam["family_id"], e["product_id"]))
 
 
 def _stratify(families: list[dict], limit: int) -> list[dict]:
@@ -195,6 +204,13 @@ def _stratify(families: list[dict], limit: int) -> list[dict]:
     buckets: dict[str, list[dict]] = defaultdict(list)
     for fam in families:
         buckets[fam.get("product_type") or "?"].append(fam)
+    # În interiorul unui tip: întâi familiile NEmarcate, apoi cele mai bine atestate. Ordinea asta
+    # ajunge nemodificată în unealta de etichetare, deci dacă timpul se termină la jumătate, ce s-a
+    # etichetat sunt familiile cu contractul cel mai solid. Cele suspecte de fuziune stau la coadă:
+    # sunt exact cele pe care evaluatorul le poate închide cu `s`, iar o familie închisă nu intră în
+    # corpus — dacă ar fi fost primele, jumătatea etichetată ar fi fost și cea mai fragilă.
+    for bucket in buckets.values():
+        bucket.sort(key=lambda f: (bool(f.get("needs_split")), -len(f["queries"])))
     picked: list[dict] = []
     while len(picked) < limit:
         added = False
