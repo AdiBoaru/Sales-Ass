@@ -61,7 +61,35 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",
 
 async function load(){ S=await (await fetch("/api/next")).json(); render(); }
 
+function renderReview(){
+  const a=document.getElementById("app"), f=S.family;
+  const cons=(f.hard_constraints||[]).map(c=>`<span>${esc(c.facet)}=${esc(c.value)}</span>`).join("")
+    +(f.unresolved_terms||[]).map(t=>`<span style="background:#2a2418;color:#d8b070">?${esc(t)}</span>`).join("");
+  const G={3:"var(--r3)",2:"var(--r2)",1:"var(--r1)",0:"var(--r0)"};
+  const rows=(S.rows||[]).map(p=>{
+    const g=p.grade, lab=g==="forbidden"?"INTERZIS":g;
+    const col=g==="forbidden"?"var(--bad)":(G[g]||"var(--r0)");
+    return `<tr><td style="color:${col};font-weight:600;width:70px">${esc(lab)}</td>
+      <td>${esc((p.name||"").slice(0,92))}<div class="meta" style="font-size:12px">
+      ${esc(p.product_type||"—")} · ${esc(p.brand||"—")}</div></td></tr>`;}).join("");
+  a.innerHTML=`
+  <div class="bar"><div class="prog">confirmate <b>${S.reviewed}</b> · rămase <b>${S.pending}</b></div>
+    <div class="prog">confirmi FAMILIA, nu fiecare notă</div></div>
+  <div class="fam"><h2>cererea clientului · tip ${esc(f.product_type||"?")}</h2>
+    ${(f.queries||[]).slice(0,4).map(q=>`<div class="q">${esc(q)}</div>`).join("")}
+    <div class="cons">${cons||"<span>fără constrângeri</span>"}</div></div>
+  <div class="cand" style="display:block;padding:8px 14px">
+    <table style="width:100%;border-collapse:collapse">${rows}</table></div>
+  <div class="keys">
+    <button class="key r3" onclick="post('/api/confirm',{})"><kbd>a</kbd> corect, confirmă familia</button>
+    <button class="key bad" onclick="post('/api/reopen',{})"><kbd>r</kbd> greșit, reetichetează de la zero</button>
+    <button class="key" onclick="act('split')"><kbd>s</kbd> amestecă cereri diferite</button>
+    <button class="key" onclick="act('bad_constraint')"><kbd>c</kbd> constrângerea e greșită</button>
+  </div>`;
+}
+
 function render(){
+  if(S.mode==="review"&&!S.done){renderReview();return;}
   const a=document.getElementById("app");
   if(S.done){ a.innerHTML=`<div class="done"><h1>Gata.</h1>
     <p class="prog"><b>${S.labeled}</b> judecăți pe <b>${S.families_done}</b> familii.</p>
@@ -104,6 +132,7 @@ function render(){
     <button class="key" onclick="undo()"><kbd>←</kbd> înapoi</button>
     <button class="key" onclick="act('split')"><kbd>s</kbd> familia amestecă cereri diferite</button>
     <button class="key" onclick="act('skip_family')"><kbd>k</kbd> familia nu e o cerere validă</button>
+    <button class="key" onclick="act('bad_constraint')"><kbd>c</kbd> constrângerea de sus e greșită</button>
     <button class="key" onclick="act('next_family')"><kbd>n</kbd> destul pe familia asta</button>
   </div>`;
   if(S.next_image){const i=new Image();i.src=S.next_image;}
@@ -129,16 +158,25 @@ const undo=()=>post("/api/undo",{});
 function act(kind){
   let note="";
   if(kind==="split"){ note=prompt("Ce cereri diferite amestecă? (o linie, ajunge scurt)")||""; if(!note)return; }
+  if(kind==="bad_constraint"){ note=prompt("Ce e gresit in constrangere? (ex: „cere blush, nu esenta\")")||""; if(!note)return; }
   post("/api/family",{action:kind,note:note});
 }
 addEventListener("keydown",e=>{
   if(e.metaKey||e.ctrlKey||e.altKey)return;
   const k=e.key.toLowerCase();
+  if(S&&S.mode==="review"){
+    if(k==="a"){e.preventDefault();post("/api/confirm",{});}
+    else if(k==="r"){e.preventDefault();post("/api/reopen",{});}
+    else if(k==="s"){e.preventDefault();act("split");}
+    else if(k==="c"){e.preventDefault();act("bad_constraint");}
+    return;
+  }
   if("0123".includes(k)&&k.length===1){e.preventDefault();judge(parseInt(k,10));}
   else if(k==="x"){e.preventDefault();judge("forbidden");}
   else if(k==="arrowleft"||k==="backspace"){e.preventDefault();undo();}
   else if(k==="s"){e.preventDefault();act("split");}
   else if(k==="k"){e.preventDefault();act("skip_family");}
+  else if(k==="c"){e.preventDefault();act("bad_constraint");}
   else if(k==="n"){e.preventDefault();act("next_family");}
 });
 load();

@@ -396,3 +396,22 @@ def test_evaluatorul_de_constrangeri_cunoaste_product_type():
     assert evaluate({"attributes": {"product_type": "ser de fata"}}, c) == VIOLATES
     # Fațeta acoperă 75,7% din catalog: absența înseamnă „nu știm", nu „încalcă".
     assert evaluate({"attributes": {}}, c) == UNKNOWN
+
+
+def test_etichetele_de_model_nu_sunt_human_verified():
+    """`human_verified` e chiar afirmația pe care se sprijină gate-ul. Pusă automat, un corpus
+    etichetat de model și-ar certifica propriul autor, iar feliile sigilate s-ar deschide pe o
+    independență care nu există."""
+    families, pools, state = _corpus({"p0": 3, "p1": 0})
+    state["labelers"] = {"f-1": "model"}
+    qset, _info, _ = finalize.build_qrels(families, pools, state)
+    assert qset.queries[0].human_verified is False
+
+
+def test_confirmarea_umana_ridica_steagul_per_familie():
+    """Trecerea de confirmare trebuie să poată ridica steagul familie cu familie, altfel o singură
+    familie nerevizuită ar bloca tot corpusul sau, mai rău, ar fi trecută cu vederea."""
+    families, pools, state = _corpus({"p0": 3, "p1": 0})
+    state["labelers"] = {"f-1": "human"}
+    qset, _info, _ = finalize.build_qrels(families, pools, state)
+    assert qset.queries[0].human_verified is True

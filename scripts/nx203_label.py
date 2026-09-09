@@ -43,6 +43,9 @@ JUDGMENTS = DATA_DIR / "judgments.json"
 
 _LOCK = threading.Lock()
 
+#: Modul de rulare, citit de handler. Lista (nu bool) fiindcă handler-ul o închide prin closure.
+REVIEW = [False]
+
 #: Pagina stă în `scripts/assets/nx203_label.html`, nu într-un string aici: HTML-ul în
 #: interiorul unui literal Python trece prin linterul de Python, care îi numără liniile ca pe
 #: cod, iar rupturile cerute de el fac markupul mai greu de citit fără să-l facă mai corect.
@@ -90,6 +93,56 @@ class Store:
         tmp.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(JUDGMENTS)
 
+    def review_view(self) -> dict:
+        """Următoarea familie etichetată de MODEL, cu toate notele ei, pentru confirmare umană."""
+        labelers = self.state.get("labelers", {})
+        pending = [
+            fid for fid in self.order if labelers.get(fid) == "model" and not self._closed(fid)
+        ]
+        if not pending:
+            return {"done": True, "mode": "review", "labeled": self.labeled(), "families_done": 0}
+        fid = pending[0]
+        judged = self.state["judgments"].get(fid, {})
+        rows = []
+        for entry in self.pools[fid]:
+            pid = entry["product_id"]
+            product = dict(self.products.get(pid, {"product_id": pid, "name": "(lipsă)"}))
+            product["grade"] = judged.get(pid)
+            product["sources"] = entry["sources"]
+            rows.append(product)
+        return {
+            "done": False,
+            "mode": "review",
+            "family": self.families.get(fid, {"family_id": fid}),
+            "rows": rows,
+            "reviewed": sum(1 for f in self.order if labelers.get(f) == "human"),
+            "pending": len(pending),
+        }
+
+    def confirm(self) -> None:
+        """Familia trece de la `model` la `human`. Doar asta ridică `human_verified` în corpus."""
+        view = self.review_view()
+        if view.get("done"):
+            return
+        fid = view["family"]["family_id"]
+        self.state.setdefault("labelers", {})[fid] = "human"
+        self.state["trail"].append({"kind": "confirm", "family_id": fid})
+        self.save()
+
+    def reopen(self) -> None:
+        """Familia se întoarce la etichetare de la zero: judecățile modelului se șterg.
+
+        Nu se „corectează" o notă anume, fiindcă atunci confirmarea ar fi parțială și n-ar mai fi
+        clar ce a văzut omul. Familia respinsă e re-etichetată integral, în modul normal."""
+        view = self.review_view()
+        if view.get("done"):
+            return
+        fid = view["family"]["family_id"]
+        self.state["judgments"].pop(fid, None)
+        self.state.get("labelers", {}).pop(fid, None)
+        self.state.get("rationales", {}).pop(fid, None)
+        self.save()
+
     def _closed(self, fid: str) -> bool:
         """Familiile pe care nu se mai pun judecăți.
 
@@ -98,7 +151,9 @@ class Store:
         puse mai departe ar arăta ca date bune. Familia se întoarce prin re-extragere, cu nota ta ca
         indiciu despre fațeta care lipsește."""
         note = self.state["family_notes"].get(fid)
-        return bool(note and note["action"] in ("skip_family", "next_family", "split"))
+        return bool(
+            note and note["action"] in ("skip_family", "next_family", "split", "bad_constraint")
+        )
 
     def cursor(self) -> tuple[str, str] | None:
         """Următoarea pereche (familie, produs) neetichetată, în ordinea din pool."""
@@ -203,7 +258,7 @@ def make_handler(store: Store):
         def do_GET(self) -> None:  # noqa: N802
             if self.path.startswith("/api/next"):
                 with _LOCK:
-                    self._json(store.view())
+                    self._json(store.review_view() if REVIEW[0] else store.view())
                 return
             body = PAGE.encode("utf-8")
             self.send_response(200)
@@ -222,7 +277,11 @@ def make_handler(store: Store):
                     store.undo()
                 elif self.path.startswith("/api/family"):
                     store.family_action(payload.get("action", ""), payload.get("note", ""))
-                self._json(store.view())
+                elif self.path.startswith("/api/confirm"):
+                    store.confirm()
+                elif self.path.startswith("/api/reopen"):
+                    store.reopen()
+                self._json(store.review_view() if REVIEW[0] else store.view())
 
     return Handler
 
@@ -233,6 +292,11 @@ def main() -> int:
     )
     ap.add_argument("--port", type=int, default=8123)
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument(
+        "--review",
+        action="store_true",
+        help="confirmă familiile etichetate de model, una câte una (nu re-etichetezi)",
+    )
     args = ap.parse_args()
 
     if not POOLS.exists() or not FAMILIES.exists():
@@ -241,12 +305,17 @@ def main() -> int:
         print("  python scripts/nx203_build_pools.py --business <uuid> --write")
         return 1
 
+    REVIEW[0] = args.review
     store = Store(
         json.loads(POOLS.read_text(encoding="utf-8")),
         json.loads(FAMILIES.read_text(encoding="utf-8")),
     )
     url = f"http://127.0.0.1:{args.port}/"
-    print(f"Etichetare NX-203 · {store.total()} judecăți de pus · {store.labeled()} deja făcute")
+    if args.review:
+        v = store.review_view()
+        print(f"Confirmare NX-203 · {v.get('pending', 0)} familii de confirmat")
+    else:
+        print(f"Etichetare NX-203 · {store.total()} judecăți · {store.labeled()} deja făcute")
     print(f"Deschide: {url}   (Ctrl+C oprește; progresul e salvat la fiecare apăsare)")
     if not args.no_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

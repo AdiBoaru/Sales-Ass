@@ -79,7 +79,7 @@ def _closed(notes: dict, fid: str) -> str | None:
     note = notes.get(fid)
     return (
         note["action"]
-        if note and note["action"] in ("skip_family", "next_family", "split")
+        if note and note["action"] in ("skip_family", "next_family", "split", "bad_constraint")
         else None
     )
 
@@ -90,6 +90,11 @@ def build_qrels(families: dict, pools: dict, state: dict) -> tuple[QrelsSet, dic
     judgments = state.get("judgments", {})
     notes = state.get("family_notes", {})
     rationales = state.get("rationales", {})
+    # CINE a pus etichetele. `human_verified` nu e o constantă optimistă: e chiar afirmația pe care
+    # se sprijină gate-ul, iar dacă o pune modelul care urmează să fie măsurat, corpusul își
+    # certifică propriul autor. `labelers` e per FAMILIE, ca o trecere de confirmare umană să poată
+    # ridica steagul familie cu familie, fără să reetichetezi tot.
+    labelers = state.get("labelers", {})
     stats: Counter = Counter()
     excluded: dict[str, list[str]] = defaultdict(list)
     abstention: list[dict] = []
@@ -143,7 +148,7 @@ def build_qrels(families: dict, pools: dict, state: dict) -> tuple[QrelsSet, dic
                     # corectă: pe categoria de catalog (933 de produse sub `ingrijirea-tenului`)
                     # stratificarea n-ar echilibra nimic.
                     category=fam["product_type"],
-                    human_verified=True,
+                    human_verified=labelers.get(fid, state.get("labeler", "human")) == "human",
                     # Toate formulările unei familii primesc ACELAȘI grup, deci cad în ACEEAȘI
                     # felie.
                     # Fără asta, o frază și parafraza ei ajung în tuning și în holdout, iar gate-ul
@@ -213,6 +218,7 @@ def _render(qset: QrelsSet, info: dict, abstention: list[dict], report, splits: 
         f"| închise: amestecă cereri (`s`) | {c['inchisa_split']} |",
         f"| închise: nu e cerere validă (`k`) | {c['inchisa_skip_family']} |",
         f"| închise: destul (`n`) | {c['inchisa_next_family']} |",
+        f"| închise: constrângere derivată greșit | {c['inchisa_bad_constraint']} |",
         f"| abstenție (niciun produs relevant) | {c['abstentie']} |",
         "",
         "## Felii",
@@ -266,7 +272,7 @@ async def main() -> int:
         qset,
         min_queries=1,
         min_families=args.min_families,
-        require_human_verified=True,
+        require_human_verified=True,  # familiile etichetate de model NU trec — și e corect
         require_real_per_category=False,  # corpusul e `merchant_content`; vezi docstring
         require_split_sizes=True,
         catalog_product_ids=catalog_ids,
@@ -291,7 +297,7 @@ async def main() -> int:
     # Verdictul e al validatorului, nu al scriptului: ieșirea non-zero înseamnă „corpusul nu e
     # gata", nu „scriptul a crăpat". Feliile de holdout rămân sigilate până la gate-ul lor
     # (NX-207/209/210).
-    return 0 if report.is_clean() else 2
+    return 0 if report.is_clean else 2
 
 
 if __name__ == "__main__":
