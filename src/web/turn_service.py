@@ -268,14 +268,6 @@ _ERROR_TEXTS: dict[str, dict[str, str]] = {
         "attempts_exhausted": "I could not process the request. Please try again.",
         "release_draining": "We are updating right now. Please come back in a few minutes.",
     },
-    "hu": {
-        "empty_result": "Most nem sikerült választ készítenem. Kérlek, próbáld újra.",
-        "processing_error": "Hiba történt a feldolgozás során. Kérlek, próbáld újra.",
-        "cancelled": "A kérés meg lett szakítva.",
-        "deadline_exceeded": "A válasz elkészítése túl sokáig tartott. Kérlek, próbáld újra.",
-        "attempts_exhausted": "Nem sikerült feldolgoznom a kérést. Kérlek, próbáld újra.",
-        "release_draining": "Éppen frissítünk. Kérlek, térj vissza néhány perc múlva.",
-    },
 }
 
 

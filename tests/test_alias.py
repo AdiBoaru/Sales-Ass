@@ -134,7 +134,7 @@ async def test_faq_locale_miss_is_graceful(monkeypatch):
         return None  # FAQ lipsă în limba curentă
 
     monkeypatch.setattr(alias_mod, "get_faq_answer", none_faq)
-    ctx = _ctx("retur", locale="hu")
+    ctx = _ctx("retur", locale="de")
     await alias_stage(ctx, PipelineDeps(conn=None, llm=None))
     assert ctx.reply is None and ctx.route is None  # miss → pipeline continuă
     assert any(e.properties.get("reason") == "faq_locale_miss" for e in ctx.events)
@@ -338,4 +338,4 @@ async def test_get_faq_answer_filters_locale():
 
 async def test_get_faq_answer_none_on_no_rows():
     conn = _FakeConn(None)
-    assert await aliases_q.get_faq_answer(conn, "biz-1", "f1", "hu") is None
+    assert await aliases_q.get_faq_answer(conn, "biz-1", "f1", "de") is None

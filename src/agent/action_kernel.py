@@ -93,22 +93,6 @@ _COPY: dict[str, dict[str, str]] = {
         "cart_empty": "Your cart is empty for now. Pick a product first.",
         "checkout_failed": "I can't prepare the payment right now. Your cart is unchanged.",
     },
-    "hu": {
-        "unavailable": "Ezt még nem tudom megcsinálni a chatből. Megmutathatom a terméket vagy "
-        "a részleteit.",
-        "stale_search": "Az a keresés már nem aktív. Mondd el újra, mit keresel, és elölről "
-        "kezdem.",
-        "stale_question": "Közben témát váltottunk, így ennek a válasznak már nincs hova "
-        "mennie. Mondd el, mire van szükséged, és folytatjuk.",
-        "compare_failed": "Most nem tudom összehasonlítani a kiválasztott termékeket. "
-        "Megmutathatom külön-külön a részleteiket.",
-        "cart_failed": "Nem tudtam frissíteni a kosarat ezzel a termékkel. Mutathatok "
-        "alternatívákat, ha szeretnéd.",
-        "cart_stale": "A kosár időközben megváltozott. Nézd meg a jelenlegi állapotát, és "
-        "próbáld újra.",
-        "cart_empty": "A kosár egyelőre üres. Válassz először egy terméket.",
-        "checkout_failed": "Most nem tudom előkészíteni a fizetést. A kosár változatlan.",
-    },
 }
 
 # Confirmările de coș — DETERMINISTE, server-owned, din snapshot. Numărul de produse și totalul
@@ -125,12 +109,6 @@ _CART_CONFIRM_COPY: dict[str, dict[str, str]] = {
         "updated_total": "I updated this conversation's cart: {n} items, total {total}.",
         "cleared": "I emptied the cart.",
         "checkout": "Here is your payment link: {url}",
-    },
-    "hu": {
-        "updated": "Frissítettem a beszélgetés kosarát: {n} termék.",
-        "updated_total": "Frissítettem a beszélgetés kosarát: {n} termék, összesen {total}.",
-        "cleared": "Kiürítettem a kosarat.",
-        "checkout": "Itt a fizetési linked: {url}",
     },
 }
 

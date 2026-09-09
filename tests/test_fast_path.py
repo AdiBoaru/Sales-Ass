@@ -141,7 +141,7 @@ def test_fiecare_locale_are_propriul_sablon():
     primul client pe alt locale."""
     from src.web.localization import copy_for
 
-    for locale in ("ro", "en", "hu"):
+    for locale in ("ro", "en"):
         block = copy_for(locale)["fast_path"]
         assert set(block) == {"price", "stock", "link"}
         assert "{name}" in block["price"] and "{amount}" in block["price"]

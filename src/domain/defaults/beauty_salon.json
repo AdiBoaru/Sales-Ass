@@ -146,65 +146,54 @@
       "key": "key_benefit",
       "labels": {
         "ro": "Beneficiu principal",
-        "en": "Key benefit",
-        "hu": "Fő előny"
+        "en": "Key benefit"
       }
     },
     {
       "key": "key_ingredients",
       "labels": {
         "ro": "Ingrediente cheie",
-        "en": "Key ingredients",
-        "hu": "Fő összetevők"
+        "en": "Key ingredients"
       }
     },
     {
       "key": "concerns",
       "labels": {
         "ro": "Potrivit pentru",
-        "en": "Suitable for",
-        "hu": "Kinek ajánlott"
+        "en": "Suitable for"
       },
       "value_labels": {
         "oily": {
           "ro": "ten gras",
-          "en": "oily skin",
-          "hu": "zsíros bőr"
+          "en": "oily skin"
         },
         "dry": {
           "ro": "ten uscat",
-          "en": "dry skin",
-          "hu": "száraz bőr"
+          "en": "dry skin"
         },
         "sensitive": {
           "ro": "ten sensibil",
-          "en": "sensitive skin",
-          "hu": "érzékeny bőr"
+          "en": "sensitive skin"
         },
         "combination": {
           "ro": "ten mixt",
-          "en": "combination skin",
-          "hu": "kombinált bőr"
+          "en": "combination skin"
         },
         "acne": {
           "ro": "acnee",
-          "en": "acne-prone",
-          "hu": "aknés bőr"
+          "en": "acne-prone"
         },
         "anti_aging": {
           "ro": "anti-îmbătrânire",
-          "en": "anti-aging",
-          "hu": "öregedésgátló"
+          "en": "anti-aging"
         },
         "hyperpigmentation": {
           "ro": "pete pigmentare",
-          "en": "hyperpigmentation",
-          "hu": "pigmentfoltok"
+          "en": "hyperpigmentation"
         },
         "hydration": {
           "ro": "hidratare",
-          "en": "hydration",
-          "hu": "hidratálás"
+          "en": "hydration"
         }
       }
     },
@@ -212,8 +201,7 @@
       "key": "suitable_for",
       "labels": {
         "ro": "Potrivit pentru",
-        "en": "Suitable for",
-        "hu": "Kinek ajánlott"
+        "en": "Suitable for"
       },
       "value_labels": {
         "oily": {
@@ -264,8 +252,7 @@
       "key": "finish",
       "labels": {
         "ro": "Finish",
-        "en": "Finish",
-        "hu": "Hatás"
+        "en": "Finish"
       },
       "value_labels": {
         "matte": {
@@ -286,8 +273,7 @@
       "key": "coverage",
       "labels": {
         "ro": "Acoperire",
-        "en": "Coverage",
-        "hu": "Fedés"
+        "en": "Coverage"
       },
       "value_labels": {
         "light": {
@@ -308,8 +294,7 @@
       "key": "texture",
       "labels": {
         "ro": "Textură",
-        "en": "Texture",
-        "hu": "Textúra"
+        "en": "Texture"
       }
     }
   ],
@@ -333,8 +318,7 @@
       "min_coverage": 0.98,
       "labels": {
         "ro": "Preț",
-        "en": "Price",
-        "hu": "Ár"
+        "en": "Price"
       }
     },
     {
@@ -348,8 +332,7 @@
       "min_coverage": 0.98,
       "labels": {
         "ro": "Categorie",
-        "en": "Category",
-        "hu": "Kategória"
+        "en": "Category"
       }
     },
     {
@@ -365,8 +348,7 @@
       "min_coverage": 0.4,
       "labels": {
         "ro": "Fără parfum",
-        "en": "Fragrance-free",
-        "hu": "Illatmentes"
+        "en": "Fragrance-free"
       }
     },
     {
@@ -393,8 +375,7 @@
       ],
       "labels": {
         "ro": "Potrivit pentru",
-        "en": "Suitable for",
-        "hu": "Kinek ajánlott"
+        "en": "Suitable for"
       }
     },
     {
@@ -410,8 +391,7 @@
       "min_coverage": 0.5,
       "labels": {
         "ro": "Potrivit pentru",
-        "en": "Suitable for",
-        "hu": "Kinek ajánlott"
+        "en": "Suitable for"
       }
     },
     {
@@ -427,8 +407,7 @@
       "min_coverage": 0.5,
       "labels": {
         "ro": "Ingrediente cheie",
-        "en": "Key ingredients",
-        "hu": "Fő összetevők"
+        "en": "Key ingredients"
       }
     },
     {
@@ -449,8 +428,7 @@
       ],
       "labels": {
         "ro": "Finish",
-        "en": "Finish",
-        "hu": "Hatás"
+        "en": "Finish"
       }
     },
     {
@@ -471,8 +449,7 @@
       ],
       "labels": {
         "ro": "Acoperire",
-        "en": "Coverage",
-        "hu": "Fedés"
+        "en": "Coverage"
       }
     },
     {
@@ -489,8 +466,7 @@
       "min_coverage": 0.05,
       "labels": {
         "ro": "SPF",
-        "en": "SPF",
-        "hu": "SPF"
+        "en": "SPF"
       }
     },
     {
@@ -506,8 +482,7 @@
       "min_coverage": 0.3,
       "labels": {
         "ro": "Textură",
-        "en": "Texture",
-        "hu": "Textúra"
+        "en": "Texture"
       }
     }
   ],
@@ -579,8 +554,7 @@
       "purpose": "upsell",
       "labels": {
         "ro": "Pasi recomandati",
-        "en": "Recommended steps",
-        "hu": "Ajanlott lepesek"
+        "en": "Recommended steps"
       }
     },
     "substitute": {
@@ -589,8 +563,7 @@
       "purpose": "upsell",
       "labels": {
         "ro": "Alternative apropiate",
-        "en": "Close alternatives",
-        "hu": "Hasonlo termekek"
+        "en": "Close alternatives"
       }
     },
     "complement": {

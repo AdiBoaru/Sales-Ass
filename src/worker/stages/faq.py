@@ -53,7 +53,6 @@ _POLICY_RE = re.compile(
 _CLARIFY_LEAD = {
     "ro": "Ca să-ți dau răspunsul potrivit, la care te referi?",
     "en": "So I give you the right answer, which do you mean?",
-    "hu": "Hogy a megfelelő választ adjam, melyikre gondolsz?",
 }
 
 

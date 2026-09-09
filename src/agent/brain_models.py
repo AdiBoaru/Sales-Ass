@@ -29,7 +29,7 @@ ObligationSource = Literal[
 
 #: Fraze: păstrăm delimitatorul ca să știm dacă fraza a fost o ÎNTREBARE (splitul l-ar înghiți).
 _SENT_SPLIT_RE = re.compile(r"([.!?;,]+)")
-#: Conjuncții care despart clauze cu intenții potențial diferite (RO/EN/HU, fără diacritice).
+#: Conjuncții care despart clauze cu intenții potențial diferite (RO/EN, fără diacritice).
 _CONJ_SPLIT_RE = re.compile(r"\bsi\b|\bdar\b|\biar\b|\bapoi\b|\band\b|\bbut\b|\balso\b")
 
 #: Verbe/forme imperative de ACȚIUNE comercială (adaugă/comandă/cumpără) — semnal `action` în text.

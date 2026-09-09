@@ -408,7 +408,7 @@ def test_terminal_without_content_still_renders_a_notice():
 
 
 # ── Chrome / a11y ───────────────────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("locale", ["ro", "en", "hu"])
+@pytest.mark.parametrize("locale", ["ro", "en"])
 def test_chrome_and_announcements_are_complete_in_every_locale(locale):
     view = render(locale=locale)
     assert set(view["chrome"]) == {

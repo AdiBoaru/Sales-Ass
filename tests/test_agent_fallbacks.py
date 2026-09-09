@@ -18,7 +18,6 @@ from src.agent.fallbacks import (
 def test_per_locale_fallback_messages():
     assert "ieftin" in _cheapest_already_msg("ro").lower()
     assert "cheapest" in _cheapest_already_msg("en").lower()
-    assert _cheapest_already_msg("hu")  # HU are text
     # locale necunoscut → RO (fără tăcere)
     assert _cheapest_already_msg("de") == _cheapest_already_msg("ro")
     assert _cheapest_already_msg(None) == _cheapest_already_msg("ro")
@@ -26,7 +25,7 @@ def test_per_locale_fallback_messages():
 
 def test_no_more_and_view_label_localized():
     assert _no_more_msg("en") != _no_more_msg("ro")
-    assert _view_label("hu") and _view_label("en") == "View product"
+    assert _view_label("en") == "View product"
 
 
 def test_link_lead_singular_vs_plural():

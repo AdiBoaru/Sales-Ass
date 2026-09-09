@@ -121,7 +121,7 @@ def test_a_common_token_never_decides_between_two_products():
 
 
 @pytest.mark.parametrize(
-    "query", ["ce părere ai despre acesta?", "și asta cum e?", "is this good?", "ez jó?"]
+    "query", ["ce părere ai despre acesta?", "și asta cum e?", "is this good?", "are these ok?"]
 )
 def test_a_deictic_expression_anchors_the_page(query):
     r = rr.resolve_reference(_req(query, refs=TWO, page=rr.PageAnchor(PAGE_ID, "Ser")))

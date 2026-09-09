@@ -42,16 +42,12 @@ _LOGIN_REQUIRED: dict[str, str] = {
     "aici, așa îți pot vedea comenzile în siguranță.",
     "en": "To check an order or start a return, please sign in to your account on the site and "
     "come back here, that lets me see your orders securely.",
-    "hu": "Egy rendelés ellenőrzéséhez vagy visszaküldés indításához jelentkezz be a fiókodba az "
-    "oldalon, majd térj vissza ide, így biztonságosan látom a rendeléseidet.",
 }
 _NO_ORDERS: dict[str, str] = {
     "ro": "Nu găsesc nicio comandă pe contul tău. Dacă ai folosit alt număr sau cont, dă-mi "
     "numărul comenzii și verific din nou.",
     "en": "I can't find any orders on your account. If you used a different number or account, "
     "send me the order number and I'll check again.",
-    "hu": "Nem találok rendelést a fiókodban. Ha másik számot vagy fiókot használtál, küldd el a "
-    "rendelési számot, és újra megnézem.",
 }
 
 

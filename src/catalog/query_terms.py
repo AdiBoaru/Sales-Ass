@@ -22,7 +22,7 @@ un produs sau o nevoie.
 
 Principiul 11 (D3): limba e o CHEIE, nu o constantă. Tabelul e indexat pe locale, iar o locale
 necunoscută primește mulțimea goală — adică exact comportamentul de dinainte, nu o listă
-românească aplicată peste un catalog maghiar.
+românească aplicată peste un catalog în altă limbă.
 """
 
 from __future__ import annotations

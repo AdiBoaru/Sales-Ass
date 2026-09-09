@@ -75,7 +75,6 @@ def test_sentence_has_no_internal_jargon():
 
 def test_sentence_is_localized():
     assert "doctor or pharmacist" in safety_sentence_for(_blocked_decision(), "en")
-    assert "orvosoddal" in safety_sentence_for(_blocked_decision(), "hu")
     # locale necunoscut → cade pe RO (nu gol, nu crapă)
     assert "medicul" in safety_sentence_for(_blocked_decision(), "de")
 
@@ -194,7 +193,7 @@ def test_enforce_emits_event():
 # --- catalogul de mesaje -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("locale", ["ro", "en", "hu"])
+@pytest.mark.parametrize("locale", ["ro", "en"])
 def test_refer_sentence_exists_for_every_supported_locale(locale):
     assert messages.refer_sentence(locale)
     assert messages.unavailable_sentence(locale)
@@ -236,7 +235,7 @@ def test_still_adds_when_model_only_says_doctor_without_pharmacist():
     assert ctx.reply.text.lower().count("farmacist") == 1
 
 
-@pytest.mark.parametrize("locale,stem", [("en", "pharmacist"), ("hu", "gyógyszerész")])
+@pytest.mark.parametrize("locale,stem", [("en", "pharmacist")])
 def test_no_duplicate_in_other_locales(locale, stem):
     ctx = _Ctx(Reply(text=f"Please ask your {stem}."), _blocked_decision(), language=locale)
     enforce(ctx)
