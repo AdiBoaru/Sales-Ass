@@ -1826,6 +1826,7 @@ relation_traversal_enabled = false
 relations_first_enabled = true
 release_controller_enabled = false
 relevance_mask_enabled = false
+routine_evidence_required = true
 replay_store_prompt_enabled = false
 response_style_enabled = true
 response_telemetry_enabled = true
