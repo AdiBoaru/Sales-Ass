@@ -174,7 +174,7 @@ def test_active_same_fingerprint_is_in_progress():
 
 
 def test_error_view_renderable_for_all_codes_and_locales():
-    for lang in ("ro", "en", "hu", "de"):  # de → fallback pe pilot, nu KeyError
+    for lang in ("ro", "en", "de"):  # de → fallback pe pilot, nu KeyError
         for code in ("empty_result", "processing_error", "cancelled", "unknown_code"):
             view = ts.error_view(code, lang)
             assert ts.renderable(view)

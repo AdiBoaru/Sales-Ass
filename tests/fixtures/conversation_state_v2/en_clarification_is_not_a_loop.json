@@ -1,38 +1,38 @@
 {
-  "name": "hu — ugyanazt a kerdest nem tesszuk fel a vegtelensegig",
-  "locale": "hu",
+  "name": "en — we do not ask the same question forever",
+  "locale": "en",
   "turns": [
     {
-      "utterance": "keresek valamit",
+      "utterance": "i'm looking for something",
       "proposals": [
         {"op": "set_pending_question", "key": "budget_max", "source": "policy"}
       ],
       "expect": {"pending": "budget_max"}
     },
     {
-      "utterance": "nem tudom",
+      "utterance": "i don't know",
       "proposals": [
         {"op": "resolve_question", "key": "budget_max", "source": "user_explicit"},
-        {"op": "set_need", "key": "budget_max", "value": "nem tudom", "source": "user_explicit"}
+        {"op": "set_need", "key": "budget_max", "value": "i don't know", "source": "user_explicit"}
       ],
       "expect": {"pending": null, "absent": ["budget_max"], "asked": ["budget_max"]}
     },
     {
-      "utterance": "(a rendszer ujra kerdezne)",
+      "utterance": "(the system would ask again)",
       "proposals": [
         {"op": "set_pending_question", "key": "budget_max", "source": "policy"}
       ],
       "expect": {"pending": "budget_max"}
     },
     {
-      "utterance": "tenyleg nem tudom",
+      "utterance": "really, i don't know",
       "proposals": [
         {"op": "resolve_question", "key": "budget_max", "source": "user_explicit"}
       ],
       "expect": {"pending": null}
     },
     {
-      "utterance": "(harmadszor is kerdezne — nem szabad)",
+      "utterance": "(a third attempt — must not happen)",
       "proposals": [
         {"op": "set_pending_question", "key": "budget_max", "source": "policy"}
       ],

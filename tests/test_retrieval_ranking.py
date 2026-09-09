@@ -134,7 +134,6 @@ def test_relax_ladder_never_receives_unresolved_tokens(flag_on):
         "vreau un pret mai mic",
         "cheaper",
         "the cheapest one",
-        "valami olcsóbb",
     ],
 )
 def test_cheaper_re_matches(text):

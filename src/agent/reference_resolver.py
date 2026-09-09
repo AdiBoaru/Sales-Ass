@@ -58,12 +58,12 @@ ReferenceReason = Literal[
     "",
 ]
 
-# Ordinalele conversaționale, în RO/EN/HU. Rulează pe text normalizat FĂRĂ diacritice, ca aceeași
+# Ordinalele conversaționale, în RO/EN. Rulează pe text normalizat FĂRĂ diacritice, ca aceeași
 # intenție să funcționeze și când clientul tastează „prima" fără să aibă diacritice pe tastatură.
 ORDINALS: tuple[tuple[int, re.Pattern[str]], ...] = (
-    (0, re.compile(r"(?<![a-z0-9])(?:prima|primul|intai|first|elso)(?![a-z0-9])")),
-    (1, re.compile(r"(?<![a-z0-9])(?:a[ ]+doua|al[ ]+doilea|second|masodik)(?![a-z0-9])")),
-    (2, re.compile(r"(?<![a-z0-9])(?:a[ ]+treia|al[ ]+treilea|third|harmadik)(?![a-z0-9])")),
+    (0, re.compile(r"(?<![a-z0-9])(?:prima|primul|intai|first)(?![a-z0-9])")),
+    (1, re.compile(r"(?<![a-z0-9])(?:a[ ]+doua|al[ ]+doilea|second)(?![a-z0-9])")),
+    (2, re.compile(r"(?<![a-z0-9])(?:a[ ]+treia|al[ ]+treilea|third)(?![a-z0-9])")),
 )
 # „recenzii 2" / „review #3": ordinal NUMERIC, valid doar lipit de un cuvânt de recenzie — un „2"
 # liber într-o propoziție nu e o referință („am 2 copii" nu selectează al doilea produs).
@@ -226,7 +226,7 @@ def resolve_product_reference(
     )
 
 
-# Deixis: „acesta / asta / ăsta / acest produs" + echivalentele EN/HU. Rulează pe text normalizat
+# Deixis: „acesta / asta / ăsta / acest produs" + echivalentele EN. Rulează pe text normalizat
 # fără diacritice, ca și ordinalele. Deliberat NU conține pronume slabe („îl", „o"): ele apar în
 # fraze care nu se referă la pagină („mi-o recomanzi pe cea de ieri?"), iar o ancorare greșită e
 # mai scumpă decât una ratată.
@@ -234,8 +234,7 @@ _DEICTIC_RE = re.compile(
     r"(?<![a-z0-9])(?:"
     r"acest|acesta|aceasta|aceste|acestea|acestia|acestui|acestei|"
     r"asta|astea|astia|asa?ta|"
-    r"this|these|it|"
-    r"ez|ezt|ezek|ezeket|ezzel"
+    r"this|these|it"
     r")(?![a-z0-9])"
 )
 # Ordinalele EXPRIMATE, independent de lungimea listei. `match_ordinal` mărginește la `count`;

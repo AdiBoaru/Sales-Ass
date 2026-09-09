@@ -219,14 +219,14 @@ _CURRENCY_WORDS = {"RON": "lei"}
 
 
 def format_amount(value: float, currency: str | None, language: str | None = "ro") -> str:
-    """`89.0` → `89,00 lei` (ro/hu) / `89.00 RON` (en). Determinist, fără locale de sistem —
+    """`89.0` → `89,00 lei` (ro) / `89.00 RON` (en). Determinist, fără locale de sistem —
     aceeași convenție ca proiecția v2 (`turn_events`)."""
     lang = (language or "ro")[:2]
     text = f"{value:.2f}"
     if lang != "en":
         text = text.replace(".", ",")
     word = currency or ""
-    if lang != "en":  # „lei" e limbaj natural RO/HU; în engleză rămâne codul ISO
+    if lang != "en":  # „lei" e limbaj natural în RO; în engleză rămâne codul ISO
         word = _CURRENCY_WORDS.get(word, word)
     return f"{text} {word}".strip()
 

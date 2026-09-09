@@ -450,10 +450,6 @@ def safe_fallback(locale: str) -> str:
             "Nu pot confirma recomandarea in siguranta acum. "
             "Pot restrange optiunile dupa buget sau nevoie."
         ),
-        "hu": (
-            "Most nem tudom biztonsagosan megerositeni az ajanlast. "
-            "Szukithetem a lehetosegeket dupa nevoie sau buget."
-        ),
         "en": (
             "I cannot safely confirm that recommendation right now. "
             "I can narrow the options by need or budget."

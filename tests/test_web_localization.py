@@ -47,7 +47,7 @@ def test_half_up_rounding_is_explicit():
 
 @pytest.mark.parametrize(
     ("locale", "expected"),
-    [("ro", "1.234.567,89"), ("en", "1,234,567.89"), ("hu", "1 234 567,89")],
+    [("ro", "1.234.567,89"), ("en", "1,234,567.89")],
 )
 def test_grouping_and_separators_per_locale(locale, expected):
     assert format_amount(Decimal("1234567.89"), locale) == expected
@@ -104,9 +104,8 @@ def test_romanian_plural_has_three_categories(count, expected):
     assert plural_form(count, "ro") == expected
 
 
-def test_english_and_hungarian_have_two():
+def test_english_has_two():
     assert plural_form(5, "en") == "other" and plural_form(1, "en") == "one"
-    assert plural_form(5, "hu") == "other"
 
 
 def test_rating_uses_the_right_plural_and_drops_a_decorative_zero():

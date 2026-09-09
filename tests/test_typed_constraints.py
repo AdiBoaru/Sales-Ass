@@ -133,7 +133,7 @@ def test_extragerea_citeste_numar_unitate_comparatie(message, expected):
 def test_fara_locale_cunoscuta_cade_pe_operatorul_implicit():
     """P11 — o limbă necunoscută nu primește comparatorii românești. Numărul rămâne o
     constrângere (unitatea e a tenantului, nu a limbii), dar operatorul e cel declarat."""
-    spoken, _ = extract_constraints("valami 100 lei alatt", units=UNITS, locale="hu")
+    spoken, _ = extract_constraints("valami 100 lei alatt", units=UNITS, locale="de")
     assert [(c.facet, c.op) for c in spoken] == [("price", OP_LTE)]  # `default_op` = lte
 
 

@@ -73,20 +73,18 @@ _CONTEXTUAL_RE = re.compile(
 # — duplicat intenționat (cache-ul e strat inferior, nu importă din agent). Blochează ȘI
 # lookup-ul (cache.py) ȘI writeback-ul (aftercare.py) — ambele cheamă classify_volatility.
 _DEIXIS_RE = re.compile(
-    # compară / versus / vs / HU összehasonlít, hasonlíts (NU „compartiment": compar+t)
-    r"\bcompar[aie]\w*|\bversus\b|\bvs\.?\b|\bosszehasonl\w*|\bhasonlits\w*"
-    # link / „unde (o/îl/le) (pot) cumpăr|comand|găsesc" / where…buy|get|find / HU hol…veszem
+    # compară / versus / vs (NU „compartiment": compar+t)
+    r"\bcompar[aie]\w*|\bversus\b|\bvs\.?\b"
+    # link / „unde (o/îl/le) (pot) cumpăr|comand|găsesc" / where…buy|get|find
     r"|\blink\w*"
     r"|\bunde\s+(?:o\s+|il\s+|le\s+)?(?:pot\s+)?(?:cumpar|comand|gasesc)\w*"
     r"|\bwhere\s+(?:can\s+i\s+|to\s+)?(?:buy|get|find)\b"
-    r"|\bhol\s+(?:tudom\s+)?(?:veszem|vehetem|megvenni|megveszem)\b"
-    # „mai arată-mi" / „mai multe" (paginare) / „alte opțiuni" / altele / show more / HU többet
+    # „mai arată-mi" / „mai multe" (paginare) / „alte opțiuni" / altele / show more
     r"|\bmai\s+arat\w*|\bmai\s+multe\b(?!\s+\w)"
     r"|\bmai\s+multe\s+(?:produse|optiuni|variante|rezultate|exemple)\b"
     r"|\balte\s+(?:optiuni|variante|produse)\b|\bsi\s+alte\s+(?:optiuni|variante|produse)\b"
     r"|\baltele\b|\bmai\s+vreau\b"
     r"|\bshow\s+more\b|\bmore\s+(?:options|products|results)\b|\bother\s+(?:options|ones)\b"
-    r"|\btobbet\b"
 )
 # Buget / număr + monedă („sub 80 lei", „100 ron") → query de produs.
 _BUDGET_RE = re.compile(r"\d+\s*(lei|ron)")

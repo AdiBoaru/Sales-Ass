@@ -118,7 +118,7 @@ SURFACE_REQUIRES_ANCHOR: dict[str, str | None] = {
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 # `external_id` din feed poate fi lung, dar nu nelimitat; capul rămâne cel de contract (NX-228).
 MAX_CONTEXT_ID_LEN = MAX_OPAQUE_ID_LEN
-# Un tag de limbă („ro", „ro-RO", „hu-HU"). Normalizat la subtagul primar, lowercase.
+# Un tag de limbă („ro", „ro-RO", „en-US"). Normalizat la subtagul primar, lowercase.
 _LOCALE_RE = re.compile(r"^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$")
 MAX_LOCALE_LEN = 35  # BCP-47 practic; capul de contract (`Label`, 60) e mai larg
 

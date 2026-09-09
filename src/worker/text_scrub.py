@@ -29,10 +29,10 @@ _SUPER = re.compile(
     r"|recomandat de specialiști)\b",
     re.IGNORECASE,
 )
-# NX-117/NX-118: claim de STOC / disponibilitate (RO + EN + HU). Livrarea e deja prinsă de
+# NX-117/NX-118: claim de STOC / disponibilitate (RO + EN). Livrarea e deja prinsă de
 # `_CLAIMY` („livrare"/„zile"). Aici țintim stocul: „pe stoc", „în stoc", „disponibil", „in stock".
 _STOCK_CLAIM = re.compile(
-    r"\b(pe stoc|[iî]n stoc|disponibil\w*|[iî]n stock|in stock|on stock|available|k[ée]szlet\w*)\b",
+    r"\b(pe stoc|[iî]n stoc|disponibil\w*|[iî]n stock|in stock|on stock|available)\b",
     re.IGNORECASE,
 )
 # NX-118: NEGAȚIE / VIITOR înaintea lexemului de stoc → NU e o afirmație POZITIVĂ de disponibilitate
@@ -40,7 +40,7 @@ _STOCK_CLAIM = re.compile(
 # respinge un răspuns ONEST de indisponibilitate. Fereastră mică înainte de match (~24 caractere).
 _STOCK_NEG = re.compile(
     r"\b(nu|n-|fără|fara|niciun|nicio|ne-|not|no|n't|out of|no longer"
-    r"|nincs|elfogyott|revine|reapare|reaprovizion\w*|[iî]napoi|back)\b",
+    r"|revine|reapare|reaprovizion\w*|[iî]napoi|back)\b",
     re.IGNORECASE,
 )
 

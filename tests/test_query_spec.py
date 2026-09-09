@@ -238,7 +238,7 @@ def test_to_safe_validates_intent_sort_locale():
     assert safe.locale is None
     # locale necunoscut businessului (chiar dacă e un cod valid altundeva) → None
     assert (
-        RuntimeQuerySpec(raw_query="x", normalized_query="x", search_text="x", locale="hu")
+        RuntimeQuerySpec(raw_query="x", normalized_query="x", search_text="x", locale="de")
         .to_safe(_vocab())
         .locale
         is None

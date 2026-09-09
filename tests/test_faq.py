@@ -254,9 +254,9 @@ def _fallback_settings(**over):
 
 
 async def test_locale_fallback_serves_default_locale(monkeypatch):
-    # user pe HU → miss (topk pe hu = gol); default_locale RO are cunoștința → fallback (care
+    # user pe DE → miss (topk pe de = gol); default_locale RO are cunoștința → fallback (care
     # folosește `semantic_lookup`) o servește. NX-175: calea primară e topk, fallback rămâne lookup.
-    _patch_topk(monkeypatch)  # primary pe hu → gol
+    _patch_topk(monkeypatch)  # primary pe de → gol
 
     async def fake_lookup(conn, bid, locale, emb, **k):
         if locale == "ro":
@@ -265,7 +265,7 @@ async def test_locale_fallback_serves_default_locale(monkeypatch):
 
     monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
     monkeypatch.setattr(faq_mod, "get_settings", _fallback_settings)
-    ctx = _ctx(FAQ_Q, locale="hu")  # business.default_locale = "ro" (default)
+    ctx = _ctx(FAQ_Q, locale="de")  # business.default_locale = "ro" (default)
     await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
     assert ctx.reply is not None and ctx.reply.text == "Retur 14 zile."
     assert ctx.reply.cacheable is False  # cross-locale → NU se cache-uiește (evită otrăvirea)
@@ -280,10 +280,10 @@ async def test_locale_unserved_when_no_fallback_hit(monkeypatch):
 
     monkeypatch.setattr(faq_mod, "semantic_lookup", none_lookup)
     monkeypatch.setattr(faq_mod, "get_settings", _fallback_settings)
-    ctx = _ctx(FAQ_Q, locale="hu")
+    ctx = _ctx(FAQ_Q, locale="de")
     await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
     assert ctx.reply is None
-    assert any(e.type == "locale_unserved" and e.properties["locale"] == "hu" for e in ctx.events)
+    assert any(e.type == "locale_unserved" and e.properties["locale"] == "de" for e in ctx.events)
 
 
 async def test_locale_fallback_skipped_when_same_locale(monkeypatch):
@@ -325,10 +325,10 @@ class _FakeConn:
 
 async def test_query_returns_dict_and_passes_locale():
     conn = _FakeConn({"id": "f9", "question": "q", "answer": "a", "similarity": 0.88})
-    out = await faqs_q.semantic_lookup(conn, "biz-1", "hu", [0.1, 0.2], embedding_model="m1")
+    out = await faqs_q.semantic_lookup(conn, "biz-1", "de", [0.1, 0.2], embedding_model="m1")
     assert out["answer"] == "a"
     # business_id=$1, locale=$2, embedding_model=$4 trec în WHERE (izolare + limbă + model)
-    assert conn.captured[0] == "biz-1" and conn.captured[1] == "hu"
+    assert conn.captured[0] == "biz-1" and conn.captured[1] == "de"
     assert conn.captured[3] == "m1"  # NX-124a: filtru pe model
 
 

@@ -1,11 +1,11 @@
 {
   "_meta": {
     "source": "docs/GOLDEN-SET-AUDIT-NX202.md",
-    "decizie": "pilot DOAR ro (2026-07-23); en/hu = locale-regression INGHETAT, nu se extinde (D3: nucleu locale-aware, efortul e ro-only)",
+    "decizie": "pilot DOAR ro (2026-07-23); en = locale-regression INGHETAT, nu se extinde (D3: nucleu locale-aware, efortul e ro-only); hu retrasa la NX-287",
     "roluri": {
       "ro-quality": "în setul de calitate ro-RO",
       "safety-grounding": "gardă grounding/safety independentă de arhitectură (plasă de regresie, NU conținut de calitate)",
-      "locale-regression": "en/hu — gardă nucleu locale-aware; INGHETAT, nu în setul de calitate ro"
+      "locale-regression": "en — gardă nucleu locale-aware; INGHETAT, nu în setul de calitate ro"
     },
     "buckets": {
       "keep": "valid pe arhitectura țintă",
@@ -114,11 +114,6 @@
       "note": "recomandare grounded (require_reason); fixture pe contract vechi search_products/ai_summary → rescrie la NX-209/NX-207"
     },
     "sales-en-face-cream": {
-      "bucket": "rewrite",
-      "role": "locale-regression",
-      "note": "recomandare en/hu — INGHETAT (doar ro acum); nu se extinde"
-    },
-    "sales-hu-face-cream": {
       "bucket": "rewrite",
       "role": "locale-regression",
       "note": "recomandare en/hu — INGHETAT (doar ro acum); nu se extinde"
@@ -243,11 +238,6 @@
       "role": "locale-regression",
       "note": "gardă grounding en/hu — INGHETAT (doar ro acum)"
     },
-    "adversarial-hu-fake-link": {
-      "bucket": "keep",
-      "role": "locale-regression",
-      "note": "gardă grounding en/hu — INGHETAT (doar ro acum)"
-    },
     "greeting-simple": {
       "bucket": "keep",
       "role": "ro-quality",
@@ -306,22 +296,12 @@
     "simple-en-thanks": {
       "bucket": "keep",
       "role": "locale-regression",
-      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
-    },
-    "simple-hu-thanks": {
-      "bucket": "keep",
-      "role": "locale-regression",
-      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
+      "note": "fast-path/clarify en — INGHETAT (doar ro acum)"
     },
     "clarify-en-vague": {
       "bucket": "keep",
       "role": "locale-regression",
-      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
-    },
-    "clarify-hu-vague": {
-      "bucket": "keep",
-      "role": "locale-regression",
-      "note": "fast-path/clarify en/hu — INGHETAT (doar ro acum)"
+      "note": "fast-path/clarify en — INGHETAT (doar ro acum)"
     }
   },
   "conversations": {
@@ -379,11 +359,6 @@
       "bucket": "keep",
       "role": "ro-quality",
       "note": "order status apoi mulțumire"
-    },
-    "conv-hu-sales-refine": {
-      "bucket": "rewrite",
-      "role": "locale-regression",
-      "note": "refine hu — INGHETAT (doar ro acum)"
     },
     "conv-en-sales-refine": {
       "bucket": "rewrite",

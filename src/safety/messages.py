@@ -14,8 +14,14 @@ from __future__ import annotations
 
 # Etichetele de context, per locale. Cheie = `context_id` din registru (NU text în registru).
 _CONTEXT_LABELS: dict[str, dict[str, str]] = {
-    "pregnancy": {"ro": "ești însărcinată", "en": "you're pregnant", "hu": "várandós vagy"},
-    "breastfeeding": {"ro": "alăptezi", "en": "you're breastfeeding", "hu": "szoptatsz"},
+    "pregnancy": {
+        "ro": "ești însărcinată",
+        "en": "you're pregnant",
+    },
+    "breastfeeding": {
+        "ro": "alăptezi",
+        "en": "you're breastfeeding",
+    },
 }
 
 # Ce s-a lăsat deoparte, per `rule_id` — formulare de client, nu `reason_ro` intern din registru.
@@ -23,14 +29,12 @@ _RULE_OMISSION: dict[str, dict[str, str]] = {
     "pregnancy-retinoids": {
         "ro": "opțiunile cu retinoizi",
         "en": "the options with retinoids",
-        "hu": "a retinoidos termékeket",
     },
 }
 
 _FALLBACK_OMISSION = {
     "ro": "opțiunile nepotrivite",
     "en": "the unsuitable options",
-    "hu": "a nem megfelelő termékeket",
 }
 
 # Declinarea + trimiterea la medic. Singura propoziție „medicală" pe care o scriem — și e o
@@ -43,10 +47,6 @@ _REFER: dict[str, str] = {
     "en": (
         "I can't confirm from catalogue data alone that a product is suitable in this situation, "
         "so please check your choice with your doctor or pharmacist."
-    ),
-    "hu": (
-        "A katalógus adataiból nem tudom megerősíteni, hogy egy termék megfelelő-e ebben a "
-        "helyzetben, ezért kérlek, egyeztesd az orvosoddal vagy a gyógyszerészeddel."
     ),
 }
 
@@ -63,11 +63,6 @@ _UNAVAILABLE: dict[str, str] = {
         "I've noted your situation, but I can't verify right now whether the products are "
         "suitable, so I'd rather not recommend anything blindly. Please ask your doctor or "
         "pharmacist, or try again a bit later."
-    ),
-    "hu": (
-        "Figyelembe veszem a helyzetedet, de most nem tudom ellenőrizni, hogy a termékek "
-        "megfelelőek-e, ezért inkább nem ajánlok semmit vaktában. Kérdezd meg az orvosodat vagy "
-        "a gyógyszerészedet, vagy nézz vissza kicsit később."
     ),
 }
 
@@ -112,14 +107,10 @@ def safety_sentence(contexts: list[str], rule_ids: list[str], *, locale: str, bl
 def _ack(who: str, locale: str) -> str:
     if locale == "en":
         return f"I've noted that {who}."
-    if locale == "hu":
-        return f"Figyelembe veszem, hogy {who}."
     return f"Țin cont că {who}."
 
 
 def _ack_omitted(who: str, what: str, locale: str) -> str:
     if locale == "en":
         return f"I've noted that {who}, so I've left out {what}."
-    if locale == "hu":
-        return f"Figyelembe veszem, hogy {who}, ezért kihagytam {what}."
     return f"Țin cont că {who} și am lăsat deoparte {what}."

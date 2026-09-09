@@ -56,25 +56,25 @@ log = logging.getLogger(__name__)
 
 # P1 (ARCH-product-retrieval): follow-up de PREȚ pe un set deja afișat → re-căutare DETERMINISTĂ a
 # produselor strict mai ieftine (search_cheaper_than), NU re-rank pe setul afișat (R3). Precizie
-# mare RO/HU/EN (comparativ/superlativ de preț). Un miss cade grațios pe comportamentul vechi (R3).
+# mare RO/EN (comparativ/superlativ de preț). Un miss cade grațios pe comportamentul vechi (R3).
 # Partajat cu planner-ul (NX-144): gating-ul link/compare/show_more exclude «mai ieftin».
 _CHEAPER_RE = re.compile(
     r"\bmai\s+ieftin\w*|\bcea\s+mai\s+ieftin\w*|\bmai\s+accesibil\w*"
     r"|\bpre[țt]\s+mai\s+mic|\bmai\s+mic\s+la\s+pre[țt]|\bbuget\s+mai\s+mic"
     r"|\bprea\s+scump\w*|\bcam\s+scump\w*"
-    r"|\bcheaper\b|\bcheapest\b|\bolcs[óo]bb\w*|\blegolcs[óo]bb\w*",
+    r"|\bcheaper\b|\bcheapest\b",
     re.IGNORECASE,
 )
 
 # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat → tabel DETERMINIST (ca
-# cheaper/show_more/link), fără să depindem de modelul care cheamă `compare_products`. RO/EN/HU,
+# cheaper/show_more/link), fără să depindem de modelul care cheamă `compare_products`. RO/EN,
 # agnostic de vertical. ÎNALTĂ PRECIZIE deliberat (gate-ul n-are recurs la model pe fals-pozitiv):
-# DOAR verbul „a compara" + „versus/vs" + verbul HU. `compar[aăie]\w*` prinde compara/compară/
+# DOAR verbul „a compara" + „versus/vs". `compar[aăie]\w*` prinde compara/compară/
 # comparați/comparație ȘI EN compare/comparison/comparing, dar NU „compartiment" (compar+t). Frazele
 # laxe („ce diferență e între ele") cad pe calea model-driven (modelul cheamă compare_products) — nu
 # le prindem determinist ca să nu confundăm „diferența dintre garanție și retur" cu o comparație.
 _COMPARE_RE = re.compile(
-    r"\bcompar[aăie]\w*|\bversus\b|\bvs\.?\b|\b[öo]sszehasonl\w*|\bhasonl[íi]ts\w*",
+    r"\bcompar[aăie]\w*|\bversus\b|\bvs\.?\b",
     re.IGNORECASE,
 )
 # Numărul explicit din cerere controlează comparația; implicit rămâne perechea dominantă.
@@ -92,8 +92,7 @@ _MORE_RE = re.compile(
     r"|\bmai\s+multe\s+(?:produse|op[țt]iuni|variante|rezultate|exemple)\b"
     r"|\balte\s+(?:op[țt]iuni|variante|produse)\b|\b[șs]i\s+alte\s+(?:op[țt]iuni|variante|produse)\b"
     r"|\baltele\b|\bmai\s+vreau\b"
-    r"|\bshow\s+more\b|\bmore\s+(?:options|products|results)\b|\bother\s+(?:options|ones)\b"
-    r"|\bt[öo]bbet\b",  # HU: többet (mai mult)
+    r"|\bshow\s+more\b|\bmore\s+(?:options|products|results)\b|\bother\s+(?:options|ones)\b",
     re.IGNORECASE,
 )
 
@@ -106,19 +105,18 @@ _MORE_RE = re.compile(
 _LINK_RE = re.compile(
     r"\blink\w*"
     r"|\bunde\s+(?:o\s+|[îi]l\s+|le\s+)?(?:pot\s+)?(?:cump[ăa]r|comand|g[ăa]sesc)\w*"
-    r"|\bwhere\s+(?:can\s+i\s+|to\s+)?(?:buy|get|find)\b"
-    r"|\bhol\s+(?:tudom\s+)?(?:veszem|vehetem|megvenni|megveszem)\b",
+    r"|\bwhere\s+(?:can\s+i\s+|to\s+)?(?:buy|get|find)\b",
     re.IGNORECASE,
 )
 
 # Follow-up de recenzii pe un set deja afișat. Rulează pe text normalizat fără diacritice, astfel
-# încât aceeași intenție să funcționeze în RO/HU/EN și când clientul tastează fără diacritice.
-_REVIEW_RE = re.compile(r"(?<![a-z0-9])(?:recenzi|parer|opini|review|velemen)[a-z]*", re.IGNORECASE)
+# încât aceeași intenție să funcționeze în RO/EN și când clientul tastează fără diacritice.
+_REVIEW_RE = re.compile(r"(?<![a-z0-9])(?:recenzi|parer|opini|review)[a-z]*", re.IGNORECASE)
 _DETAIL_RE = re.compile(
     r"\b(?:spune|zi)-?mi\s+mai\s+multe\b"
     r"|\bmai\s+multe\s+detali\w*\b|\bdetali\w*\s+(?:despre|pentru)\b"
     r"|\b(?:vreau|as vrea)\s+detali\w*\b|\bmore\s+(?:details|about)\b"
-    r"|\btell\s+me\s+more\b|\btovabbi\s+reszletek\b",
+    r"|\btell\s+me\s+more\b",
     re.IGNORECASE,
 )
 
@@ -252,16 +250,6 @@ def _review_copy(language: str) -> dict[str, str]:
             "empty": "I don't have enough review data for {name} yet.",
             "chip": "Show me the reviews for {name}",
         }
-    if language == "hu":
-        return {
-            "which": "Melyik termék véleményeit szeretnéd látni?",
-            "summary": "A(z) {name} véleményeinek összefoglalója: {value}",
-            "pros": "Amit a vásárlók kedveltek: {value}.",
-            "cons": "Amit érdemes mérlegelni: {value}.",
-            "rating": "Értékelés: {rating}/5, {count} vélemény alapján.",
-            "empty": "Még nincs elég véleményadat a(z) {name} termékről.",
-            "chip": "Mutasd a véleményeket: {name}",
-        }
     return {
         "which": "Pentru care produs vrei să vezi recenziile?",
         "summary": "Rezumatul recenziilor pentru {name}: {value}",
@@ -318,8 +306,6 @@ def _review_next_steps(language: str) -> list[str]:
     care le prind `_DETAIL_RE` / `_LINK_RE` — altfel chip-ul sună mai bine și rutează mai prost."""
     if language == "en":
         return ["Tell me more about it", "Send me the product link", "Add it to my cart"]
-    if language == "hu":
-        return ["Mesélj még róla", "Küldd el a termék linkjét", "Tedd a kosárba"]
     return ["Spune-mi mai multe despre el", "Trimite-mi linkul la produs", "Adaugă-l în coș"]
 
 
@@ -375,21 +361,6 @@ def _detail_copy(language: str) -> dict[str, str]:
             "review_chip": "What do the reviews say about it?",
             "link_chip": "Send me the product link",
             "compare_chip": "Compare it with a similar product",
-        }
-    if language == "hu":
-        return {
-            "which": "Melyik termékről szeretnél további részleteket?",
-            "why": "Miért ajánlom",
-            "features": "Fő jellemzők",
-            "reviews": "Amit a vásárlók mondanak",
-            "empty_features": "Ehhez a termékhez még nincs további specifikációm.",
-            "unavailable": (
-                "Ez a termék már nem elérhető, ezért nem tudok megbízható részleteket mutatni."
-            ),
-            "chip": "Mesélj még erről: {name}",
-            "review_chip": "Mit írnak róla a vélemények?",
-            "link_chip": "Küldd el a termék linkjét",
-            "compare_chip": "Hasonlítsd össze egy hasonlóval",
         }
     return {
         "which": "Pentru care produs vrei mai multe detalii?",

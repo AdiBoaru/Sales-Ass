@@ -481,7 +481,7 @@ def test_flatten_framing_hides_pick_when_web_flag_off(monkeypatch) -> None:
 
 
 def test_flatten_pick_label_localized(monkeypatch) -> None:
-    """Când pick-ul e PORNIT explicit, eticheta lui urmează limba clientului (EN/HU/RO). `flatten`
+    """Când pick-ul e PORNIT explicit, eticheta lui urmează limba clientului (EN/RO). `flatten`
     (floor) e gated pe `rich_pick_web_enabled` — îl pornim aici ca să-l verificăm."""
     monkeypatch.setattr(
         compose, "get_settings", lambda: SimpleNamespace(rich_pick_web_enabled=True)
@@ -495,7 +495,6 @@ def test_flatten_pick_label_localized(monkeypatch) -> None:
         disclaimer="",
     )
     assert "My pick: Cream A" in compose.flatten(rich, "en")
-    assert "Az ajánlatom: Cream A" in compose.flatten(rich, "hu")
     assert "Recomandarea mea: Cream A" in compose.flatten(rich, "ro")
     assert "Recomandarea mea: Cream A" in compose.flatten(rich)  # fallback ro (back-compat)
 
@@ -684,7 +683,6 @@ def test_off_category_gate_kill_switch_off(monkeypatch) -> None:
 
 def test_off_category_intro_localized() -> None:
     assert compose._off_category_intro("en").startswith("To be honest")
-    assert compose._off_category_intro("hu").startswith("Őszintén")
     assert compose._off_category_intro("ro").startswith("Ca să fiu sincer")
     assert compose._off_category_intro(None) == compose._off_category_intro("ro")
 

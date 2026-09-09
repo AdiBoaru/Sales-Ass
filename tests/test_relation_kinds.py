@@ -150,8 +150,8 @@ def test_label_falls_back_to_base_locale():
 def test_label_without_match_returns_default_not_invention():
     """Un bloc fără titlu e onest; unul cu titlu în limba greșită nu e (P11)."""
     spec = RelationKindSpec(kind="routine_next", mode=TraversalMode.CHAIN, max_depth=2)
-    assert spec.label("hu") is None
-    assert spec.label("hu", default="Pasi") == "Pasi"
+    assert spec.label("de") is None
+    assert spec.label("de", default="Pasi") == "Pasi"
 
 
 @pytest.mark.parametrize("labels", [{"romanian": "x"}, {"ro": "   "}, {"r": "x"}])

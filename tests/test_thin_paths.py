@@ -91,7 +91,7 @@ def test_thin_path_chips_are_client_messages_within_contract():
     """Pe o cale subțire nu există nimic afișat de care chip-ul să se agațe, deci textul lui e
     tot contextul pe care îl primim înapoi: trebuie să fie o cerere completă, nu o etichetă. Și
     trebuie să încapă în capul de contract, altfel randorul web l-ar tăia tăcut."""
-    for lang in ("ro", "en", "hu"):
+    for lang in ("ro", "en"):
         chips = _thin_path_chips(lang)
         assert all(len(c) <= MAX_CHIP_LEN for c in chips)
         assert all(len(c.split()) >= 3 for c in chips)  # frază, nu etichetă de două cuvinte

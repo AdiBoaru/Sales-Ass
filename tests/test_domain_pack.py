@@ -191,7 +191,7 @@ def test_facets_override_merges_and_fails_closed():
 def test_risk_terms_keyed_on_locale():
     pack = load_domain_pack(_biz("beauty_salon"))
     assert "om real" in pack.risk_terms["ro"]["human_request"]
-    assert pack.risk_terms.get("hu") is None  # locale absent → fără KeyError
+    assert pack.risk_terms.get("de") is None  # locale absent → fără KeyError
 
 
 def test_greetings_override_normalized_and_locale_keyed():

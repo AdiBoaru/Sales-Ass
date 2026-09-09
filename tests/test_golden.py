@@ -406,7 +406,7 @@ async def test_golden_conversation(case, monkeypatch):
 
 def test_all_conversations_present():
     """Plasa de regresie pentru cazurile MULTI-TUR (NX-145 felia 2): ≥10 conversații care
-    acoperă memoria (constraint carry / topic-switch reset), limbi non-RO (HU/EN) și
+    acoperă memoria (constraint carry / topic-switch reset), limbi non-RO (EN) și
     adversarial mid-conversație (preț/produs inventat). Fiecare conversație are ≥1 tur."""
     ids = {c.id for c in CONVERSATIONS}
     required = {
@@ -417,7 +417,6 @@ def test_all_conversations_present():
         "conv-order-then-thanks",
         "conv-sales-topic-switch-resets-constraints",
         "conv-sales-no-result-no-invention",
-        "conv-hu-sales-refine",
         "conv-greeting-sales-refine-3turn",
         "conv-en-sales-refine",
         "conv-sales-then-invented-product-blocked",
