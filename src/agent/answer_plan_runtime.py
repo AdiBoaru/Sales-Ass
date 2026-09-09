@@ -203,6 +203,25 @@ def _variants(product: dict[str, Any]) -> tuple[str, ...]:
     )
 
 
+def _routine_step(product: dict[str, Any]) -> str | None:
+    """`attributes.routine_step` al rândului, sau None.
+
+    `attributes` ajunge aici fie ca dict, fie ca text JSON, în funcție de drumul pe care a venit
+    rândul. Conversia e explicită fiindcă ambiguitatea asta a produs deja măsurători greșite pe
+    acest card (un câmp JSON citit ca string se iterează pe CARACTERE, fără nicio eroare).
+    """
+    attrs = product.get("attributes")
+    if isinstance(attrs, str):
+        try:
+            attrs = json.loads(attrs)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(attrs, dict):
+        return None
+    value = attrs.get("routine_step")
+    return value if isinstance(value, str) and value else None
+
+
 def build_answer_plan_context(
     *,
     business_id: str,
@@ -228,6 +247,10 @@ def build_answer_plan_context(
                 business_id=tenant,
                 resolution=resolution,
                 variant_ids=_variants(product),
+                # NX-280: pasul vine din rândul LIVE, nu din ce afirmă modelul — e condiția ca
+                # poarta de secvență să însemne ceva. Absent → None, adică „nu știm care pas",
+                # niciodată „un pas oarecare".
+                routine_step=_routine_step(product),
             )
         )
         version = str(product.get("source_version") or product.get("updated_at") or "live")

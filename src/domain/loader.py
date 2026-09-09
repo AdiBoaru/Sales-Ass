@@ -25,6 +25,7 @@ from src.domain.facets import build_facets
 from src.domain.normalize import normalize
 from src.domain.pack import DomainPack, FacetSpec
 from src.domain.relation_kinds import load_relation_kinds
+from src.domain.routine_steps import load_routine_steps
 
 if TYPE_CHECKING:
     from src.models import BusinessConfig
@@ -217,6 +218,10 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         # NX-266: tabelul de unități (fail-closed per fațetă — o intrare stricată dispare, restul
         # rămân; un tabel absent înseamnă doar că tenantul n-are constrângeri numerice extrase).
         units=build_units(merged.get("units")),
+        # NX-280: pașii de rutină (fail-closed pe TOT blocul, nu per intrare — o hartă parțial
+        # validă ar scrie în catalog pași pe care fațeta nu-i declară, iar filtrul ar întoarce
+        # tăcut zero rânduri; o hartă absentă înseamnă doar că tenantul n-are rutine).
+        routine_steps=load_routine_steps(merged.get("routine_steps")),
     )
 
 

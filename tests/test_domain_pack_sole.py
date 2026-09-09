@@ -148,7 +148,14 @@ def test_doar_tipul_de_ten_poate_exclude(raw: dict) -> None:
     exclude candidați deja găsiți — ăla se ia cu un audit de precizie (NX-268/271), nu cu o cifră
     de acoperire.
 
-    Testul le ENUMERĂ ca să nu apară a cincea prin distragere: fiecare intrare aici e o fațetă care
+    `routine_step` (NX-280) e a cincea, cu al cincilea motiv: un produs ocupă exact o poziție într-o
+    secvență. Dacă cineva cere pasul de curățare, un produs de la alt pas nu e o potrivire mai
+    slabă, e alt pas. Ca și `product_type`, valoarea e DERIVATĂ — dintr-o hartă declarată în pachet
+    peste `product_type` însuși — deci `provenance` e `structural` și `enforce_ready` rămâne fals:
+    moștenește acoperirea lui `product_type` (73,9% din catalog), iar dreptul de a exclude se ia cu
+    un audit de precizie, nu cu o cifră de acoperire.
+
+    Testul le ENUMERĂ ca să nu apară a șasea prin distragere: fiecare intrare aici e o fațetă care
     capătă dreptul de a șterge produse din rezultate, iar dreptul ăla se dă cu motivul scris.
     """
     partitioning = {
@@ -156,8 +163,15 @@ def test_doar_tipul_de_ten_poate_exclude(raw: dict) -> None:
         for f in raw["facets"]
         if f.get("binding") == "partitioning" and f["source"] == "attribute"
     }
-    assert partitioning == {"skin_type", "fragrance_free", "shade", "product_type"}
+    assert partitioning == {
+        "skin_type",
+        "fragrance_free",
+        "shade",
+        "product_type",
+        "routine_step",
+    }
 
-    derived = next(f for f in raw["facets"] if f["key"] == "product_type")
-    assert derived["provenance"] == "structural"
-    assert derived.get("enforce_ready", False) is False
+    for key in ("product_type", "routine_step"):
+        derived = next(f for f in raw["facets"] if f["key"] == key)
+        assert derived["provenance"] == "structural"
+        assert derived.get("enforce_ready", False) is False

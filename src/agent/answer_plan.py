@@ -11,6 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.config import get_settings
+from src.domain.routine_steps import SEP as ROUTINE_SEP
 from src.safety.external_data import contains_pii
 
 Scalar = str | int | float | bool
@@ -48,6 +50,10 @@ ValidationCode = Literal[
     "obligation_uncovered",
     "pii_detected",
     "revoked_need_used",
+    # NX-280: planul se declară `routine`, dar produsele alese nu formează o SECVENȚĂ (doi pași
+    # distincți din aceeași familie). Distinct de `obligation_uncovered`: acolo lipsește secțiunea,
+    # aici secțiunea există și e nefondată — iar diferența decide dacă repair-ul are ce repara.
+    "routine_without_sequence",
     "stale_evidence",
     "tenant_mismatch",
     "unknown_action_intent",
@@ -336,6 +342,11 @@ class GroundedProduct(BaseModel):
     business_id: str
     resolution: Literal["exact", "ambiguous"]
     variant_ids: tuple[str, ...]
+    # NX-280: pasul de rutină al produsului (`familie:pas`), proiectat de SERVER din
+    # `attributes.routine_step`. E aici, și nu dedus din proza planului, pentru același motiv
+    # pentru care prețul e aici: o secvență afirmată de model fără acoperire în date e exact
+    # eșecul pe care poarta îl prinde. `None` = produsul n-are pas cunoscut, nu „pas oarecare".
+    routine_step: str | None = None
 
 
 class EvidenceRecord(BaseModel):
@@ -517,6 +528,10 @@ def _obligation_covered(plan: AnswerPlanV2, kind: str) -> bool:
         # nu 1, și de aceea `routine` nu se validează ca `recommend`. `no_results` rămâne o
         # acoperire validă (ca la toate celelalte tipuri): o ancoră fără muchii declarate trebuie
         # să poată primi un răspuns onest, nu să cadă în repair și apoi în fallback.
+        #
+        # Pragul de CARDINALITATE rămâne aici; dovada de SECVENȚĂ se verifică separat
+        # (`_routine_sequence_ok`), fiindcă are nevoie de context, iar „secțiune lipsă" și
+        # „secțiune nefondată" sunt două eșecuri diferite cu două coduri diferite.
         return (len(plan.selected_products) >= 2 and bool(plan.recommendations)) or (
             plan.no_results is not None
         )
@@ -531,6 +546,35 @@ def _obligation_covered(plan: AnswerPlanV2, kind: str) -> bool:
     if kind == "safety":
         return bool(plan.disclosures) or bool(plan.direct_answer.strip())
     return False
+
+
+def _routine_sequence_ok(plan: AnswerPlanV2, context: AnswerPlanContext) -> bool:
+    """Produsele alese formează o SECVENȚĂ, nu doar o listă de lungime ≥2?
+
+    Regula: cel puțin doi pași DISTINCȚI din ACEEAȘI familie. Fiecare jumătate e acolo pentru un
+    eșec măsurat pe catalogul SOLE:
+
+    * *distincți* — două creme nu sunt o rutină. Pragul de cardinalitate le accepta, fiindcă
+      numără produse, nu poziții.
+    * *aceeași familie* — un șampon și un ser de față nu sunt pași unul după altul. Fără asta,
+      cheia compusă `familie:pas` ar fi decorativă.
+
+    `no_results` e tratat de `_obligation_covered`, nu aici: un răspuns onest „nu pot compune o
+    rutină" e acoperire validă și nu trebuie să treacă prin poarta de secvență.
+
+    Produsele fără pas cunoscut (26% din catalogul SOLE, plus cele declarate ambigue) nu
+    CONTRAZIC nimic, doar nu contribuie la dovadă — `UNKNOWN ≠ MISMATCH` (D7). Un plan construit
+    exclusiv din ele nu trece, și e corect: n-avem cum să știm că e o secvență.
+    """
+    steps_by_id = {p.product_id: p.routine_step for p in context.products}
+    by_family: dict[str, set[str]] = {}
+    for ref in plan.selected_products:
+        value = steps_by_id.get(ref.product_id)
+        if not value or ROUTINE_SEP not in value:
+            continue
+        family, _, step = value.partition(ROUTINE_SEP)
+        by_family.setdefault(family, set()).add(step)
+    return any(len(steps) >= 2 for steps in by_family.values())
 
 
 def validate_answer_plan_v2(
@@ -560,6 +604,28 @@ def validate_answer_plan_v2(
             plan, kind
         ):
             failures.append("obligation_uncovered")
+
+    # NX-280 — o rutină afirmată cere DOVADA unei secvențe, nu doar două produse.
+    #
+    # De ce e nevoie de o poartă, când produsele sunt reale: validatorul de stagiul 8 și
+    # `grounding_guard` verifică ADEVĂRUL (prețul există? produsul există?), nu POTRIVIREA. Deci o
+    # „rutină" din două rujuri cu prețuri corecte trecea cu toate ștampilele puse. Măsurat pe
+    # catalogul SOLE: «rutina ten uscat» întorcea același ruj în două nuanțe pe pozițiile 4 și 6.
+    #
+    # Poarta se aplică doar planurilor care CHIAR afirmă o rutină (secțiune de recomandări, nu
+    # `no_results`): un „nu pot compune o rutină pentru asta" onest e acoperire validă, iar a-l
+    # trece prin poarta de secvență ar transforma degradarea corectă în eșec (P6).
+    if get_settings().routine_evidence_required:
+        wants_routine = any(o.kind == "routine" for o in plan.obligations) or any(
+            kind == "routine" for kind, _ in required_obligations
+        )
+        if (
+            wants_routine
+            and plan.no_results is None
+            and bool(plan.recommendations)
+            and not _routine_sequence_ok(plan, context)
+        ):
+            failures.append("routine_without_sequence")
 
     # Un răspuns fără NIMIC pentru client (nici direct answer, nici clarificare, nici no-results
     # onest) nu e un plan — e tăcere structurată.
