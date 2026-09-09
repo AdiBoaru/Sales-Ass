@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ro"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NX-203 etichetare</title>
+<style>
+:root{--bg:#12100f;--card:#1c1917;--line:#2f2a27;--ink:#f0ebe6;--muted:#a09890;
+      --r0:#8a8580;--r1:#b08a4a;--r2:#5f9e6a;--r3:#3fb27f;--bad:#c05a5a;--acc:#7aa7d8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:18px 20px 60px}
+.bar{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+     border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:16px}
+.prog{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.prog b{color:var(--ink)}
+.meter{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:18px}
+.meter i{display:block;height:100%;background:var(--acc);transition:width .2s}
+.fam{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+     margin-bottom:16px}
+.fam h2{margin:0 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+        color:var(--muted);font-weight:600}
+.q{margin:3px 0;font-size:15px}
+.q::before{content:"„";color:var(--muted)}.q::after{content:"”";color:var(--muted)}
+.cons{margin-top:10px;font:12px ui-monospace,monospace;color:var(--acc)}
+.cons span{background:#1a2430;padding:2px 7px;border-radius:3px;margin-right:6px}
+.cand{display:flex;gap:18px;background:var(--card);border:1px solid var(--line);
+      border-radius:8px;padding:16px;align-items:flex-start;min-height:190px}
+.cand img{width:150px;height:150px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto}
+.noimg{width:150px;height:150px;display:grid;place-items:center;background:#242020;
+       border-radius:6px;color:var(--muted);font-size:12px;flex:0 0 auto}
+.info{flex:1;min-width:0}
+.nm{font-size:16px;font-weight:600;margin:0 0 6px;line-height:1.35}
+.meta{color:var(--muted);font-size:13px;margin:2px 0}
+.meta b{color:var(--ink);font-weight:600}
+.src{margin-top:10px;font:11px ui-monospace,monospace;color:var(--muted)}
+.src i{font-style:normal;background:#242020;padding:2px 6px;border-radius:3px;margin-right:5px}
+.src i.m{background:#2a2418;color:#d8b070}
+.keys{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.key{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:8px 12px;
+     cursor:pointer;color:var(--ink);font:inherit;display:flex;gap:8px;align-items:center}
+.key:hover{border-color:var(--acc)}
+.key kbd{background:#000;border:1px solid var(--line);border-radius:3px;padding:1px 6px;
+         font:12px ui-monospace,monospace}
+.key.r0{border-left:3px solid var(--r0)}.key.r1{border-left:3px solid var(--r1)}
+.key.r2{border-left:3px solid var(--r2)}.key.r3{border-left:3px solid var(--r3)}
+.key.bad{border-left:3px solid var(--bad)}
+.aux{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
+     display:flex;gap:8px;flex-wrap:wrap}
+.aux .key{font-size:13px;padding:6px 10px}
+.done{text-align:center;padding:80px 20px}
+.done h1{font-size:22px}
+a{color:var(--acc)}
+</style></head><body><div class="wrap" id="app">se încarcă…</div>
+<script>
+let S=null, busy=false;
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function load(){ S=await (await fetch("/api/next")).json(); render(); }
+
+function render(){
+  const a=document.getElementById("app");
+  if(S.done){ a.innerHTML=`<div class="done"><h1>Gata.</h1>
+    <p class="prog"><b>${S.labeled}</b> judecăți pe <b>${S.families_done}</b> familii.</p>
+    <p class="prog">Scris în tests/golden/nx203/judgments.json</p></div>`; return; }
+  const f=S.family, p=S.product, pct=(100*S.labeled/Math.max(1,S.total)).toFixed(1);
+  const cons=(f.hard_constraints||[]).map(c=>`<span>${esc(c.facet)}=${esc(c.value)}</span>`).join("")
+    +(f.unresolved_terms||[]).map(t=>`<span style="background:#2a2418;color:#d8b070">?${esc(t)}</span>`).join("");
+  const price=p.sale_price&&p.sale_price<p.price
+     ? `<b>${p.sale_price.toFixed(2)} lei</b> <s style="color:#7a726c">${p.price.toFixed(2)}</s>`
+     : (p.price!=null?`<b>${p.price.toFixed(2)} lei</b>`:"<b>preț necunoscut</b>");
+  const img=p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="noimg">fără imagine</div>`;
+  const src=(p.sources||[]).map(s=>`<i class="${s==="merchant"?"m":""}">${esc(s)}</i>`).join("");
+  a.innerHTML=`
+  <div class="bar">
+    <div class="prog">familia <b>${S.family_index+1}</b>/${S.family_total}
+      · candidat <b>${S.cand_index+1}</b>/${S.cand_total}</div>
+    <div class="prog"><b>${S.labeled}</b>/${S.total} judecăți · ${pct}%</div>
+  </div>
+  <div class="meter"><i style="width:${pct}%"></i></div>
+  <div class="fam"><h2>cererea clientului · tip ${esc(f.product_type||"?")}</h2>
+    ${(f.queries||[]).slice(0,4).map(q=>`<div class="q">${esc(q)}</div>`).join("")}
+    <div class="cons">${cons||"<span>fără constrângeri rezolvate</span>"}</div></div>
+  <div class="cand">${img}<div class="info">
+    <p class="nm">${esc(p.name)}</p>
+    <p class="meta">${esc(p.brand||"fără brand")} · ${price}</p>
+    <p class="meta">tip: ${esc(p.product_type||"—")} · ${esc(p.availability||"stoc necunoscut")}</p>
+    ${p.product_url?`<p class="meta"><a href="${esc(p.product_url)}" target="_blank" rel="noopener">deschide fișa ↗</a></p>`:""}
+    <div class="src">${src}</div>
+  </div></div>
+  <div class="keys">
+    <button class="key r3" onclick="judge(3)"><kbd>3</kbd> exact ce a cerut</button>
+    <button class="key r2" onclick="judge(2)"><kbd>2</kbd> relevant</button>
+    <button class="key r1" onclick="judge(1)"><kbd>1</kbd> marginal</button>
+    <button class="key r0" onclick="judge(0)"><kbd>0</kbd> nerelevant</button>
+    <button class="key bad" onclick="judge('forbidden')"><kbd>x</kbd> INTERZIS (încalcă o cerință)</button>
+  </div>
+  <div class="aux">
+    <button class="key" onclick="undo()"><kbd>←</kbd> înapoi</button>
+    <button class="key" onclick="act('split')"><kbd>s</kbd> familia amestecă cereri diferite</button>
+    <button class="key" onclick="act('skip_family')"><kbd>k</kbd> familia nu e o cerere validă</button>
+    <button class="key" onclick="act('next_family')"><kbd>n</kbd> destul pe familia asta</button>
+  </div>`;
+  if(S.next_image){const i=new Image();i.src=S.next_image;}
+}
+
+async function post(url,body){
+  if(busy)return; busy=true;
+  try{ S=await (await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify(body)})).json(); render(); } finally { busy=false; }
+}
+const judge=v=>post("/api/judge",{relevance:v});
+const undo=()=>post("/api/undo",{});
+function act(kind){
+  let note="";
+  if(kind==="split"){ note=prompt("Ce cereri diferite amestecă? (o linie, ajunge scurt)")||""; if(!note)return; }
+  post("/api/family",{action:kind,note:note});
+}
+addEventListener("keydown",e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  const k=e.key.toLowerCase();
+  if("0123".includes(k)&&k.length===1){e.preventDefault();judge(parseInt(k,10));}
+  else if(k==="x"){e.preventDefault();judge("forbidden");}
+  else if(k==="arrowleft"||k==="backspace"){e.preventDefault();undo();}
+  else if(k==="s"){e.preventDefault();act("split");}
+  else if(k==="k"){e.preventDefault();act("skip_family");}
+  else if(k==="n"){e.preventDefault();act("next_family");}
+});
+load();
+</script></body></html>
