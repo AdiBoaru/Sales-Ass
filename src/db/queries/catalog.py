@@ -14,8 +14,14 @@ from typing import Any
 
 import asyncpg
 
-from src.catalog.query_terms import content_terms, fold, relaxed_query, strict_query
-from src.catalog.vocabulary import servable_count_sql
+from src.catalog.query_terms import (
+    content_terms,
+    fold,
+    relaxed_query,
+    relaxed_query_any,
+    strict_query,
+)
+from src.catalog.vocabulary import servable_subtree_counts_sql
 from src.config import get_settings
 from src.domain.constraints import OP_BETWEEN, BoundConstraint
 
@@ -119,8 +125,12 @@ _LEX_W_TRGM = 0.4  # typo/SKU = plasă secundară; 0.4 ≠ 0, „sanpon" trebuie
 # altfel am fi întors tăcere.
 _LEXICAL_STRICT = "strict"
 _LEXICAL_RELAXED = "relaxed"
+# SAU pe termeni singulari, DUPĂ perechi: cu ≥3 termeni, `relaxed` cere doi dintre ei pe același
+# produs (vezi `relaxed_query`); treapta asta e vechea relaxare, păstrată ca relaxarea să nu
+# producă zerouri noi (P6). Cu 2 termeni perechea E singularul, deci treapta se sare.
+_LEXICAL_RELAXED_ANY = "relaxed_any"
 _LEXICAL_FUZZY = "fuzzy"
-_LEXICAL_STEPS = (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_FUZZY)
+_LEXICAL_STEPS = (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_RELAXED_ANY, _LEXICAL_FUZZY)
 
 # Pragul treptei de typo, scris EXPLICIT în cod și nu lăsat pe seama GUC-ului `pg_trgm`
 # (`word_similarity_threshold`, implicit tot 0,6, pe care îl folosește operatorul `<%`): un `SET`
@@ -148,6 +158,8 @@ def _lexical_steps(v2: bool, terms: list[str]) -> tuple[str, ...]:
         return (_LEXICAL_STRICT,)
     if len(terms) == 1:
         return (_LEXICAL_STRICT, _LEXICAL_FUZZY)
+    if len(terms) == 2:
+        return (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_FUZZY)
     return _LEXICAL_STEPS
 
 
@@ -738,7 +750,12 @@ async def _lexical_fetch(
         # Treptele de text: aceeași expresie de rang, tsquery diferit. `ts_rank_cd` are sens abia
         # după 046, care pune ponderi pe câmpuri (nume A / ai_summary B / descriere C) — înainte
         # tot vectorul era pe greutatea D și rangul era practic plat.
-        phrase = strict_query(terms) if step == _LEXICAL_STRICT else relaxed_query(terms)
+        if step == _LEXICAL_STRICT:
+            phrase = strict_query(terms)
+        elif step == _LEXICAL_RELAXED:
+            phrase = relaxed_query(terms)
+        else:
+            phrase = relaxed_query_any(terms)
         q_ph = placeholder(phrase)
         tsq = f"websearch_to_tsquery('simple', ro_unaccent({q_ph}))"
         conds.append(f"p.search_tsv @@ {tsq}")
@@ -888,16 +905,20 @@ _DETAIL_SELECT = f"""
             order by position limit 6
         ) f
     ) faq on true
-    -- NX-169: consumă recenziile INDIVIDUALE (168e-2) — top 2 după rating, corelate pe tenant.
+    -- NX-169: consumă recenziile INDIVIDUALE (168e-2), corelate pe tenant. Alegerea e pe LUNGIME,
+    -- nu pe rating: pe primul catalog real 173.657 din 183.003 recenzii au 5★, deci „top după
+    -- rating" alegea la întâmplare (și servea recenzii despre livrare); o recenzie de peste 120
+    -- de caractere are de obicei un motiv, nu doar o notă. Textul se taie în cod, la graniță de
+    -- propoziție (`cut_at_sentence`), nu aici.
     left join lateral (
         select json_agg(
                    json_build_object('author', r.author, 'rating', r.rating, 'body', r.body)
-                   order by r.rating desc
+                   order by length(r.body) desc
                ) as items
         from (
             select author, rating, body from reviews
-            where product_id = p.id and business_id = p.business_id
-            order by rating desc limit 2
+            where product_id = p.id and business_id = p.business_id and body is not null
+            order by (length(body) >= 120) desc, length(body) desc limit 2
         ) r
     ) rvw on true
 {_VARIANTS_AGG}
@@ -997,20 +1018,32 @@ async def get_substitutes(
 
     `business_id = $1` pe AMBELE capete (P7; FK-ul compus din 027 face cross-tenant imposibil
     structural, dar predicatul rămâne mecanismul primar)."""
-    cs = _content_status_pred()
-    rows = await conn.fetch(
-        _DETAIL_SELECT
-        + " join product_relations r on r.related_id = p.id and r.business_id = p.business_id"
-        + " where p.business_id = $1 and r.product_id = $2::uuid and r.kind = 'substitute'"
-        + " and p.status = 'active' and p.availability <> 'out_of_stock'"
-        + (f" and {cs}" if cs else "")
-        + " order by r.position asc, p.id"
-        + " limit $3",
+    limit = min(limit, 3)
+    # Doi pași, deliberat. Varianta cu un singur statement (`_DETAIL_SELECT join product_relations`)
+    # era planificată de la `products` spre relații: hidrata TOATE produsele în stoc cu toate
+    # lateralele (imagini, secțiuni, badge-uri, ingrediente, variante — ~60.000 de buffere) și abia
+    # la sfârșit păstra cele două substitute. Măsurat pe catalogul SOLE: 580 ms cald, 8,5 s rece,
+    # pentru 2 rânduri (docs/DB-QUERY-PROBE-2026-09-08.md). Aici întâi id-urile de pe indexul de
+    # ancoră (`product_relations_anchor_idx`), apoi hidratarea DOAR a lor — același tipar ca
+    # `related_products_tool`. Cerem mai multe id-uri decât `limit`, fiindcă filtrarea pe stoc și
+    # pe statut se face după hidratare; plafonul e cel al hidratării (6).
+    ids = await conn.fetch(
+        "select r.related_id::text as id from product_relations r"
+        " where r.business_id = $1 and r.product_id = $2::uuid and r.kind = 'substitute'"
+        " order by r.position asc, r.related_id"
+        " limit $3",
         business_id,
         product_id,
-        min(limit, 3),
+        6,
     )
-    return [_row_to_product(r) for r in rows]
+    candidates = [r["id"] for r in ids if r["id"] != product_id]
+    if not candidates:
+        return []
+    products = await get_products_by_ids(
+        conn, business_id, candidates, limit=6, respect_content_status=True
+    )
+    # Un substitut epuizat nu e un substitut. `availability` necunoscut NU exclude (UNKNOWN ≠ 0).
+    return [p for p in products if (p.get("availability") or "") != "out_of_stock"][:limit]
 
 
 async def product_category_roots(
@@ -1358,9 +1391,7 @@ async def list_category_slugs(conn: asyncpg.Connection, business_id: str) -> lis
     categorii n-aveau niciun produs, iar un `category_key` ales dintre ele producea garantat zero
     rezultate — indistinct, pentru straturile de deasupra, de „catalogul chiar n-are asta"."""
     rows = await conn.fetch(
-        f"select c.slug from categories c"
-        f" where c.business_id = $1 and {servable_count_sql('c')} > 0"
-        f" order by c.slug",
+        f"select c.slug from ({servable_subtree_counts_sql()}) c where c.n > 0 order by c.slug",
         business_id,
     )
     return [r["slug"] for r in rows]
@@ -1406,11 +1437,15 @@ async def list_category_names(conn: asyncpg.Connection, business_id: str) -> lis
     2. **Toate nivelurile, nu doar rădăcinile.** Cu doar 15 rădăcini, o cerere de cremă de față
        trebuia ghicită ca părinte; cu frunzele disponibile, modelul poate numi «Creme hidratante»
        direct, iar o cerere de cremă nu mai poate ateriza pe măști. Costul e câteva sute de tokeni
-       într-un prefix oricum cache-uit."""
+       într-un prefix oricum cache-uit.
+
+    Rulează la FIECARE tur cu agent, deci forma SQL contează: varianta cu subquery corelat
+    (`servable_count_sql`) costa 427 ms pe 45 de categorii — un index scan pe `products` per
+    categorie (docs/DB-QUERY-PROBE-2026-09-08.md). Numărătoarea pe subarbore se face acum o
+    singură dată, într-o trecere (`servable_subtree_counts_sql`), aceeași pe care o folosește
+    vocabularul."""
     rows = await conn.fetch(
-        f"select c.name from categories c"
-        f" where c.business_id = $1 and {servable_count_sql('c')} > 0"
-        f" order by c.name",
+        f"select c.name from ({servable_subtree_counts_sql()}) c where c.n > 0 order by c.name",
         business_id,
     )
     return [r["name"] for r in rows]
@@ -1643,6 +1678,15 @@ async def search_products_semantic(
 
     `sort_mode`: `relevance` = cosine (cel mai apropiat primul); `price_asc`/`rating_desc` = sort
     explicit pe subsetul filtrat semantic. `concerns` filtrează pe `attributes->'concerns'`.
+
+    **DEFECT CUNOSCUT, inert cât `search_semantic_enabled` e OFF**
+    (docs/DB-QUERY-PROBE-2026-09-08.md):
+    pe sort explicit NU există nicio limitare pe cosine — planul scanează TOATE embeddings-urile
+    (`product_embeddings_pkey`, nu HNSW) și sortează global pe preț, deci întoarce cele mai
+    ieftine `pool` produse din catalog care trec filtrele dure, indiferent de interogare; iar
+    `_merge_by_sort` le pune în față. Măsurat: «protectie solara spf» + `price_asc` → benzi pentru
+    nas la 3 lei, 0/50 cu SPF. Dacă brațul se reaprinde, întâi: subquery cu
+    `order by embedding <=> q limit pool`, apoi sortul explicit DOAR pe acel subset.
 
     `pool` (NX-113b): când e dat, întoarce ~`pool` candidați pentru fuziunea RRF (nu doar 6);
     poziția în listă = rangul vectorial. Lipsă (`None`) → comportament compat (max 6).

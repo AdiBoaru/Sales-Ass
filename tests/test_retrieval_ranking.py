@@ -210,16 +210,17 @@ async def test_lexical_strict_step_cere_toti_termenii_de_continut():
 
 async def test_lexical_scara_coboara_doar_cand_treapta_de_deasupra_e_goala():
     """Contractul scării: relaxarea și plasa de typo se plătesc DOAR pe ratare."""
-    conn = _CaptureConn([[], [], []])
+    conn = _CaptureConn([[], [], [], []])
     await catalog.search_products_lexical(conn, "b", "cremă pentru ten gras", locale="ro", pool=10)
 
-    assert len(conn.sqls) == 3
+    assert len(conn.sqls) == 4
     assert "crema ten gras" in conn.all_params[0]  # strict: ȘI
-    assert "crema or ten or gras" in conn.all_params[1]  # relaxat: SAU
+    assert "crema ten or crema gras or ten gras" in conn.all_params[1]  # relaxat: PERECHI
+    assert "crema or ten or gras" in conn.all_params[2]  # relaxat: SAU pe singulari
     # typo: word_similarity pe cel mai bun CUVÂNT din nume, nu `similarity` pe numele întreg
-    assert "word_similarity(" in conn.sqls[2]
-    assert " <% " in conn.sqls[2]
-    assert "ro_unaccent(p.name) %" not in conn.sqls[2]
+    assert "word_similarity(" in conn.sqls[3]
+    assert " <% " in conn.sqls[3]
+    assert "ro_unaccent(p.name) %" not in conn.sqls[3]
 
 
 async def test_lexical_nu_coboara_daca_prima_treapta_a_gasit():
@@ -231,7 +232,7 @@ async def test_lexical_nu_coboara_daca_prima_treapta_a_gasit():
 async def test_lexical_filtrele_dure_sunt_identice_pe_toate_treptele():
     """Se relaxează TEXTUL, niciodată constrângerile: un buget sau un brand nu se pierd fiindcă
     prima formulare n-a găsit nimic."""
-    conn = _CaptureConn([[], [], []])
+    conn = _CaptureConn([[], [], [], []])
     await catalog.search_products_lexical(
         conn, "b", "cremă scumpă", locale="ro", brand="Nivea", price_max=80.0, in_stock_only=True
     )

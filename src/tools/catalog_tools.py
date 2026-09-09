@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import json
 import re
+import time
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
+from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
     CatalogVocabulary,
@@ -164,8 +166,24 @@ _USAGE_RO = {
     "daily": "zilnic",
     "occasional": "ocazional",
 }
-# fapte-cheie compacte pt search brief (buget tokens); restul apar în detail.
-_BRIEF_FACET_KEYS = {"concerns", "suitable_for", "finish", "coverage", "texture", "key_ingredients"}
+# Câte fațete de domeniu intră într-o linie de brief (buget de tokeni); restul apar în detail.
+# CARE fațete = primele din `pack.comparison_facets` care au valoare pe produs — ordinea din
+# pachet e ordinea de importanță declarată de tenant. Înainte era un set fix de chei scris pentru
+# catalogul demo, care pe primul catalog real lăsa afară exact fațetele derivate (`skin_type`,
+# `spf`, `routine_time`) și cerea cod pentru fiecare vertical nou (P9).
+_BRIEF_FACETS_MAX = 3
+
+# Secțiunile de fișă randate la detaliu când pachetul NU declară `detail_sections` (catalogul
+# demo v3). Un pachet cu declarație le înlocuiește integral — ordinea și plafoanele sunt ale lui.
+_LEGACY_DETAIL_SECTIONS: tuple[tuple[str, int], ...] = (
+    ("usage", 150),
+    ("warnings", 150),
+    ("features", 220),
+    ("benefits", 220),
+    ("scenarios", 220),
+)
+#: Plafonul unui citat de recenzie în vederea de detaliu (tăiat la graniță de propoziție).
+_REVIEW_QUOTE_CHARS = 160
 
 
 def _projection_on() -> bool:
@@ -247,7 +265,10 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
         vmatch = " | are varianta cerută" if p.get("variant_match") else ""
         variants = _variant_view(p.get("variants"), limit=4, locale=locale)
         vline = f" | variante: {variants}" if variants else ""
+        # Rezumatul e opțional în date (NULL pe tot primul catalog real): fără el nu lăsăm un
+        # separator gol la coada fiecărei linii.
         summ = (p.get("ai_summary") or "")[:120]
+        sline = f" | {summ}" if summ else ""
         base = (
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
             f"{amount_text(p['price'], locale)} lei{rating}{avail}{vmatch}{vline}"
@@ -255,14 +276,14 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
         if proj:
             a = _pattrs(p)
             # NX-169: fapte-cheie canonice (fit specific, nu tautologie) + best_for static, compact.
-            facts = _facet_pairs(a, pack, locale, keys=_BRIEF_FACET_KEYS)
-            bits = [f"{lbl}: {val}" for lbl, val in facts[:3]]
+            facts = _facet_pairs(a, pack, locale)
+            bits = [f"{lbl}: {val}" for lbl, val in facts[:_BRIEF_FACETS_MAX]]
             if a.get("best_for"):
                 bits.append(f"bun pt {a['best_for']}")
             fline = (" | " + " · ".join(bits)) if bits else ""
-            lines.append(f"{base}{fline} | {summ}{_reason_str(p)}")
+            lines.append(f"{base}{fline}{sline}{_reason_str(p)}")
         else:
-            lines.append(f"{base} | {summ}{_reason_str(p)}")
+            lines.append(f"{base}{sline}{_reason_str(p)}")
     return "\n".join(lines)
 
 
@@ -303,7 +324,12 @@ def _variant_view(raw_variants: Any, *, limit: int, locale: str = "ro") -> str:
 
 
 def _detail_view(
-    p: dict[str, Any], pack: Any = None, locale: str = "ro", delivery: str | None = None
+    p: dict[str, Any],
+    pack: Any = None,
+    locale: str = "ro",
+    delivery: str | None = None,
+    *,
+    noise_badges: frozenset[str] | set[str] = frozenset(),
 ) -> str:
     parts = [
         f"[{p['id']}] {p['name']} ({p.get('brand') or '-'}) — "
@@ -336,29 +362,40 @@ def _detail_view(
         ]
         if warns:
             parts.append("de reținut — nepotrivit pentru: " + ", ".join(warns[:3]))
-        # NX-168e-2 graf PDP (consumat aici): secțiuni usage/warnings + badge-uri (dacă query le-a
-        # adus). Beneficii/ingrediente-secțiune sunt deja în fațete/ai_summary → nu le dublăm.
-        # NX-196: fișa autorată aduce blocuri noi (features/benefits/scenarios). Le randăm pe
-        # toate, dar cu buget: modelul primește esențialul, nu fișa întreagă — descrierea lungă
-        # rămâne pe pagina de produs, unde are loc.
+        # NX-168e-2 graf PDP (consumat aici): secțiunile fișei, cu buget per secțiune — modelul
+        # primește esențialul, nu fișa întreagă; descrierea lungă rămâne pe pagina de produs.
+        # CARE secțiuni și CÂT din fiecare e declarat de pachet (`detail_sections`), în ordinea
+        # lui: lista de tipuri era scrisă în cod pentru catalogul demo și, pe primul catalog real,
+        # randa UNA din cele 17 secțiuni ale fișei („cui i se potrivește", „când nu e alegerea
+        # potrivită", „pe scurt" cădeau tăcut — docs/DB-QUERY-PROBE-2026-09-08.md). Tăierea e la
+        # graniță de propoziție, nu la caracter.
+        declared = getattr(pack, "detail_sections", None) or ()
+        section_caps: dict[str, int] = (
+            {s.kind: s.max_chars for s in declared} if declared else dict(_LEGACY_DETAIL_SECTIONS)
+        )
+        by_kind: dict[str, dict[str, Any]] = {}
         for sec in p.get("sections") or []:
-            if not isinstance(sec, dict) or not sec.get("body"):
+            if isinstance(sec, dict) and sec.get("body") and sec.get("kind") in section_caps:
+                by_kind.setdefault(str(sec["kind"]), sec)  # prima secțiune per tip
+        for kind, cap in section_caps.items():
+            sec = by_kind.get(kind)
+            if sec is None:
                 continue
-            kind = sec.get("kind")
-            if kind not in ("usage", "warnings", "features", "benefits", "scenarios"):
-                continue
-            cap = 220 if kind in ("features", "benefits", "scenarios") else 150
-            body = " ".join(str(sec["body"]).split())
-            parts.append(f"{(sec.get('title') or kind).lower()}: {body[:cap]}")
-        if p.get("badges"):
-            parts.append("etichete: " + ", ".join(str(b) for b in list(p["badges"])[:4]))
+            body = cut_at_sentence(str(sec["body"]), cap)
+            parts.append(f"{(sec.get('title') or kind).lower()}: {body}")
+        # Badge-urile care nu deosebesc produsul de restul catalogului (`noise_badges`, calculate
+        # în vocabular) nu ajung la model: „CPNP" pe 2.711 din 2.758 de produse nu e o etichetă.
+        badges = [str(b) for b in list(p.get("badges") or []) if str(b) not in noise_badges]
+        if badges:
+            parts.append("etichete: " + ", ".join(badges[:4]))
         # NX-169: recenzii INDIVIDUALE (tabelul reviews, 168e-2) — 1-2 citate reale + autor/rating.
         quotes = []
         for rv in (p.get("reviews_list") or [])[:2]:
             if isinstance(rv, dict) and rv.get("body"):
                 who = rv.get("author") or "client"
                 star = f", {int(rv['rating'])}★" if rv.get("rating") else ""
-                quotes.append(f'„{str(rv["body"])[:90]}" ({who}{star})')
+                quote = cut_at_sentence(str(rv["body"]), _REVIEW_QUOTE_CHARS)
+                quotes.append(f"„{quote}” ({who}{star})")
         if quotes:
             parts.append("recenzii clienți: " + "; ".join(quotes))
     if p.get("review_summary"):
@@ -401,12 +438,16 @@ def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str 
     diffs: list[str] = []
     # preț ca axă de diferență (dacă nu-s toate egale)
     prices = [round(float(p.get("price") or 0), 2) for p in products]
+    # Pe axe, produsul e numit SCURT (`display_name`): numele întreg e deja în antet, iar pe
+    # primul catalog real are ~190 de caractere — repetat pe fiecare axă, comparația a două
+    # produse ajungea la 1.400 de caractere din care ~800 erau numele de patru ori.
+    short = [display_name(p.get("name")) for p in products]
+    if len(set(short)) < len(short):  # capete identice (familie de nuanțe) → numele întreg
+        short = [str(p.get("name") or "") for p in products]
     if len(set(prices)) > 1:
         diffs.append(
             "preț: "
-            + " vs ".join(
-                f"{p['name']}={amount_text(pr, locale)} lei" for p, pr in zip(products, prices)
-            )
+            + " vs ".join(f"{nm}={amount_text(pr, locale)} lei" for nm, pr in zip(short, prices))
         )
     # fațete de domeniu: afișează axa DOAR dacă valorile diferă între produse
     seen_keys: list[str] = []
@@ -421,7 +462,7 @@ def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str 
             vals.append(pair.get(lbl, "—"))
         if len({v for v in vals}) > 1:  # diferă → axă utilă
             diffs.append(
-                f"{lbl.lower()}: " + " vs ".join(f"{p['name']}={v}" for p, v in zip(products, vals))
+                f"{lbl.lower()}: " + " vs ".join(f"{nm}={v}" for nm, v in zip(short, vals))
             )
     if diffs:
         lines.append("diferențe: " + " | ".join(diffs))
@@ -900,6 +941,30 @@ async def continue_search_session(
     return ToolResult(ok=True, products=[], llm_view=_NO_MORE_VIEW)
 
 
+# Răspunsul lui `has_embeddings` se schimbă doar când rulează jobul de embed, dar înainte se
+# plătea un checkout întreg (set_config + select + reset = 3 round-trip-uri) la FIECARE căutare.
+# Cache per tenant cu TTL-ul vocabularului: aceeași politică plictisitoare, același argument.
+_EMBEDDINGS_TTL_S = 300.0
+_embeddings_cache: dict[str, tuple[float, bool]] = {}
+
+
+def clear_embeddings_cache() -> None:
+    _embeddings_cache.clear()
+
+
+async def _embeddings_available(deps: PipelineDeps, business_id: str) -> bool:
+    now = time.monotonic()
+    hit = _embeddings_cache.get(business_id)
+    if hit is not None and (now - hit[0]) < _EMBEDDINGS_TTL_S:
+        return hit[1]
+    # NX-231: checkout scurt DOAR pentru verificare; embed-ul (extern, cu buget de timp propriu)
+    # rulează cu poolul liber — el era exact locul unde o conexiune stătea blocată pe rețea.
+    async with deps.db("has_embeddings") as conn:
+        available = await has_embeddings(conn, business_id)
+    _embeddings_cache[business_id] = (now, bool(available))
+    return bool(available)
+
+
 @register("search_products")
 async def search_products_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
@@ -1021,12 +1086,10 @@ async def search_products_tool(
     # mort (`embed_failed`) — fără ele degradarea semantică rămâne invizibilă (layer mort tăcut).
     query_vec: list[float] | None = None
     embeddings_available = False
-    if deps.llm is not None:
-        # NX-231: checkout scurt DOAR pentru verificare; embed-ul de mai jos (extern, cu buget de
-        # timp propriu) rulează cu poolul liber — el era exact locul unde o conexiune stătea
-        # blocată pe timp de rețea.
-        async with deps.db("has_embeddings") as conn:
-            embeddings_available = await has_embeddings(conn, ctx.business.id)
+    # `search_semantic_enabled` OFF (default, decizie 2026-09-08) = brațul vector nu există:
+    # niciun embed, niciun checkout de verificare — căutarea e scara lexicală + filtre.
+    if deps.llm is not None and get_settings().search_semantic_enabled:
+        embeddings_available = await _embeddings_available(deps, ctx.business.id)
     if embeddings_available:
         timeout_ms = get_settings().embed_timeout_ms
         try:
@@ -1418,11 +1481,14 @@ async def get_product_details_tool(
     if not products:
         return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_TOOL_VIEW)
     p = products[0]
+    # Vocabularul (cache 5 min) știe care badge-uri sunt pe tot catalogul, deci zgomot.
+    vocab = await get_vocabulary(deps, ctx.business.id)
     view = _detail_view(
         p,
         getattr(ctx.business, "domain_pack", None),
         ctx.language,
         delivery=delivery_for(p, ctx.business).text,
+        noise_badges=vocab.noise_badges,
     )
     # NX-195: produs epuizat → propunem ALTERNATIVA, nu doar „nu mai avem". Relațiile de substitut
     # (222, din NX-171b) existau și nu le citea nimeni. Alternativele intră și în `products`, ca
@@ -1444,7 +1510,8 @@ async def get_product_details_tool(
         subs, _ = _safety_gate(ctx, subs, purpose="details")
         if subs:
             alt = ", ".join(
-                f"[{s['id']}] {s['name']}, {amount_text(s['price'], ctx.language)} lei"
+                f"[{s['id']}] {display_name(s['name'])}, "
+                f"{amount_text(s['price'], ctx.language)} lei"
                 for s in subs
             )
             view += f" | alternative pe stoc: {alt}"
@@ -1506,7 +1573,8 @@ def _related_view(products: list[dict[str, Any]], spec: Any, locale: str, *, ord
         price = amount_text(p.get("price"), locale) if p.get("price") is not None else ""
         avail = f" | stoc: {p['availability']}" if p.get("availability") else ""
         lines.append(
-            f"{prefix}[{p.get('id')}] {p.get('name')}{f' | {price}' if price else ''}{avail}"
+            f"{prefix}[{p.get('id')}] {display_name(p.get('name'))}"
+            f"{f' | {price}' if price else ''}{avail}"
         )
     return "\n".join(lines)
 

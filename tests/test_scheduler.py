@@ -16,6 +16,7 @@ def _settings(
     *,
     key="sk-x",
     embed=True,
+    semantic=True,
     proactive=True,
     initiators=True,
     lifecycle=True,
@@ -29,6 +30,7 @@ def _settings(
         demand_rollup_enabled=demand,
         openai_api_key=key,
         embed_job_enabled=embed,
+        search_semantic_enabled=semantic,
         scheduler_rollup_hour_utc=0,
         scheduler_dedupe_interval_seconds=21600,
         scheduler_web_turns_interval_seconds=21600,
@@ -139,6 +141,15 @@ def test_build_jobs_always_includes_web_turns_retention(monkeypatch):
 
 def test_build_jobs_excludes_embed_when_disabled(monkeypatch):
     monkeypatch.setattr(sch, "get_settings", lambda: _settings(key="sk-x", embed=False))
+    assert "embed_products" not in [j.name for j in _build_jobs()]
+
+
+def test_build_jobs_excludes_embed_when_semantic_arm_is_off(monkeypatch):
+    """Fără brațul semantic nimeni nu citește vectorii, deci jobul ar plăti credite degeaba
+    (decizia 2026-09-08: `SEARCH_SEMANTIC_ENABLED=false`)."""
+    monkeypatch.setattr(
+        sch, "get_settings", lambda: _settings(key="sk-x", embed=True, semantic=False)
+    )
     assert "embed_products" not in [j.name for j in _build_jobs()]
 
 

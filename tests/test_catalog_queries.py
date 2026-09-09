@@ -35,10 +35,15 @@ async def test_list_category_names_only_servable():
 
     assert out == ["Creme", "Parfumuri"]  # maparea r["name"]
     assert "business_id = $1" in conn.sql  # izolare (P7)
-    assert "count(*)" in conn.sql and "> 0" in conn.sql  # doar categorii cu produse servabile
+    assert "count(distinct" in conn.sql and "> 0" in conn.sql  # doar categorii cu produse servabile
     assert "p.status = 'active'" in conn.sql  # definiția lui „servabil", partajată cu vocabularul
     assert "order by c.name" in conn.sql  # determinist → prefix de cache stabil
     assert conn.params[0] == "biz-1"
+    # Numărătoarea e O singură trecere (CTE pe apartenențe + auto-join pe subarbore), nu un
+    # subquery corelat per categorie: rula la fiecare tur cu agent și costa 427 ms pe 45 de
+    # categorii (docs/DB-QUERY-PROBE-2026-09-08.md).
+    assert "with cat as" in conn.sql and "memb" in conn.sql
+    assert "exists (select 1 from categories sub" not in conn.sql
 
 
 async def test_list_category_slugs_only_servable():
@@ -51,7 +56,7 @@ async def test_list_category_slugs_only_servable():
 
     assert out == ["creme-hidratante"]
     assert "business_id = $1" in conn.sql
-    assert "count(*)" in conn.sql and "> 0" in conn.sql
+    assert "count(distinct" in conn.sql and "> 0" in conn.sql
     assert conn.params[0] == "biz-1"
 
 

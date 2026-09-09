@@ -59,6 +59,26 @@ def _stub_agent_prompt_inputs(monkeypatch):
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _no_aliases, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _semantic_arm_on_for_suite():
+    """Brațul semantic e OFF în producție (decizie 2026-09-08, `SEARCH_SEMANTIC_ENABLED`), dar
+    codul lui rămâne și trebuie să rămână testat: zeci de teste exersează fuziunea, degradarea
+    la lexical-only și bugetul de embed prin `has_embeddings` + un LLM fals. Suita rulează cu
+    brațul APRINS; comportamentul implicit (stins) are testele lui explicite în
+    `tests/test_agent_data_path.py`. Reset după fiecare test, ca un test care îl stinge să nu
+    scurgă starea în următorul."""
+    from src.config import get_settings
+    from src.tools.catalog_tools import clear_embeddings_cache
+
+    s = get_settings()
+    before = s.search_semantic_enabled
+    s.search_semantic_enabled = True
+    clear_embeddings_cache()  # `has_embeddings` e cache-uit per tenant; un test nu-l lasă altuia
+    yield
+    s.search_semantic_enabled = before
+    clear_embeddings_cache()
+
+
 def tamper_token(token: str) -> str:
     """Strică SIGILIUL unui token de acțiune (NX-236), nu textul care îl transportă.
 

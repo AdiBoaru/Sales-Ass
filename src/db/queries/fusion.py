@@ -104,6 +104,33 @@ def rrf_fuse(
     return sorted(scores, key=lambda pid: (-scores[pid], pid))
 
 
+#: Cu câte POZIȚII de rang coboară un produs EPUIZAT în fuziune. Măsurat pe catalogul SOLE
+#: (docs/DB-QUERY-PROBE-2026-09-08.md): „sampoon anti matreata" servea pe locul 2 un aparat
+#: `out_of_stock`, fiindcă disponibilitatea era doar departajator la scor egal (rerankul
+#: determinist) sau un semnal de 0,15 față de relevanța normalizată la 1 (rerankul blended) —
+#: niciunul nu mișcă un produs de pe locul 2. Un client nu poate cumpăra ce nu e pe stoc, deci
+#: locul lui e după alternativele cumpărabile de relevanță apropiată, dar NU în afara pool-ului:
+#: rămâne candidat (substitutele și „mai arată-mi" au nevoie de el), iar `UNKNOWN` nu e epuizat
+#: (NX-240/047) — doar `out_of_stock` explicit coboară.
+OOS_RANK_OFFSET = 5
+
+
+def demote_out_of_stock(
+    products: list[dict[str, Any]], scores: dict[str, float], *, k: int = RRF_K
+) -> dict[str, float]:
+    """Scade din scorul RRF al produselor EPUIZATE diferența dintre rangul 1 și rangul
+    `1 + OOS_RANK_OFFSET` — adică exact cât ar pierde dacă ar fi apărut cu cinci poziții mai jos
+    în AMBELE liste. Exprimat în unități de RRF, nu ca procent, ca să însemne același lucru
+    indiferent de mărimea pool-ului. Pur; întoarce un dict nou."""
+    penalty = 1.0 / (k + 1) - 1.0 / (k + 1 + OOS_RANK_OFFSET)
+    out = dict(scores)
+    for p in products:
+        if p.get("availability") == "out_of_stock":
+            pid = _pid(p)
+            out[pid] = out.get(pid, 0.0) - penalty
+    return out
+
+
 def deterministic_rerank(
     products: list[dict[str, Any]],
     scores: dict[str, float],
@@ -237,6 +264,7 @@ def fuse_candidates(
             by_id.setdefault(_pid(p), p)
         scores = rrf_scores(lexical, vector, k=k)
         products = list(by_id.values())
+        scores = demote_out_of_stock(products, scores, k=k)
         if weights is not None:
             return blended_rerank(products, scores, weights=weights, concerns=concerns)
         return deterministic_rerank(products, scores, concerns=concerns)

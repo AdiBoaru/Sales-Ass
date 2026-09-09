@@ -23,7 +23,7 @@ from src.domain.constraints import build_units
 from src.domain.contracts import build_category_requirements
 from src.domain.facets import build_facets
 from src.domain.normalize import normalize
-from src.domain.pack import DomainPack, FacetSpec
+from src.domain.pack import DomainPack, FacetSpec, SectionSpec
 from src.domain.relation_kinds import load_relation_kinds
 from src.domain.routine_steps import load_routine_steps
 
@@ -140,6 +140,28 @@ def _norm_str_map(raw: Any) -> dict[str, str]:
     return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
 
 
+def _norm_detail_sections(raw: Any) -> tuple[SectionSpec, ...]:
+    """Listă de `{kind, max_chars?}` → tuple[SectionSpec]. Intrare fără `kind` string, cu
+    `max_chars` ne-întreg sau ≤ 0 → sărită (fail-safe per intrare, ca la fațete). Un `kind`
+    repetat păstrează prima apariție: ordinea E semantica de afișare."""
+    if not isinstance(raw, list):
+        return ()
+    out: list[SectionSpec] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind")
+        if not isinstance(kind, str) or not kind or kind in seen:
+            continue
+        cap = item.get("max_chars", SectionSpec.max_chars)
+        if isinstance(cap, bool) or not isinstance(cap, int) or cap <= 0:
+            continue
+        seen.add(kind)
+        out.append(SectionSpec(kind=kind, max_chars=cap))
+    return tuple(out)
+
+
 def _norm_comparison_facets(raw: Any) -> tuple[FacetSpec, ...]:
     """Tier 2: listă de fațete de comparație din JSON → tuple[FacetSpec]. Fiecare element valid =
     `{key, labels:{locale:str}, value_labels?:{cod:{locale:str}}}`. `key` lipsă/ne-string → sărit
@@ -205,6 +227,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         badge_rules=_norm_numeric_map(merged.get("badge_rules")),
         rank_weights=_norm_numeric_map(merged.get("rank_weights")),
         comparison_facets=_norm_comparison_facets(merged.get("comparison_facets")),
+        detail_sections=_norm_detail_sections(merged.get("detail_sections")),
         searchable_facets=tuple(
             k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
         ),

@@ -142,6 +142,10 @@
     {
       "path": "scripts/goldset_*.py",
       "reason": "harnessul de evaluare NX-265: intrarea lui SUNT frazele reale de client (extrase din catalog), plus transformările declarate peste ele. Un set de evaluare fără vocabularul clientului n-ar măsura nimic."
+    },
+    {
+      "path": "scripts/db_query_probe.py",
+      "reason": "sondă read-only care MĂSOARĂ fraze scrise ca de client pe tool-urile reale (docs/DB-QUERY-PROBE-2026-09-08.md); frazele sunt intrarea măsurătorii, nu logică."
     }
   ]
 }

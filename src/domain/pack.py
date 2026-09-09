@@ -35,6 +35,20 @@ class FacetSpec:
 
 
 @dataclass(frozen=True)
+class SectionSpec:
+    """O SECȚIUNE de fișă de produs (`product_sections.kind`) pe care vederea de detaliu a
+    agentului o randează, cu plafonul ei de caractere. Ordinea în pachet = ordinea în vedere.
+
+    De ce e config și nu cod: tipurile de secțiune sunt ale CONȚINUTULUI tenantului („cui i se
+    potrivește", „când nu e alegerea potrivită", „pe scurt"), nu ale motorului. Măsurat pe primul
+    catalog real: fișa avea 17 tipuri și codul randa unul singur, fiindcă lista era scrisă în cod
+    pentru catalogul demo (docs/DB-QUERY-PROBE-2026-09-08.md)."""
+
+    kind: str
+    max_chars: int = 200
+
+
+@dataclass(frozen=True)
 class DomainPack:
     """Config per-(business, vertical). Owner: `load_domain_pack` (atașat pe BusinessConfig).
     Toate câmpurile au default-uri agnostice de vertical (P6 — un pack incomplet nu crapă)."""
@@ -76,6 +90,10 @@ class DomainPack:
     # tabelul are doar rândurile generice (preț/rating/avantaje/brand) ca azi. Auto-scalează: când
     # `attributes` crește, rândurile apar fără schimbare de cod. Per-vertical (defaults JSON).
     comparison_facets: tuple[FacetSpec, ...] = ()
+    # Secțiunile de fișă pe care le vede modelul la detaliu, în ordine, cu plafon per secțiune.
+    # Gol → lista istorică din cod (`_detail_view`), ca verticalele fără declarație să rămână
+    # byte-identice. Per-vertical (defaults JSON) + override per-tenant.
+    detail_sections: tuple[SectionSpec, ...] = ()
     # Tier 2b p2: cheile din `attributes` (ARRAY) pe care le poate FILTRA search-ul de feature
     # („ceva cu niacinamidă" → key_ingredients). Match NORMALIZAT (lower + strip diacritice). Gol →
     # fără filtru de feature. Separat de concern_map (concerns are calea lor de mapare).

@@ -182,7 +182,9 @@ def _build_jobs() -> list[Job]:
                 at_hour_utc=s.scheduler_rollup_hour_utc,
             )
         )
-    if s.embed_job_enabled and s.openai_api_key:  # embed cere cheie OpenAI
+    # embed cere cheie OpenAI ȘI un consumator: fără brațul semantic, vectorii n-ar fi citiți de
+    # nimeni, iar jobul ar plăti credite pentru fiecare `content_hash` schimbat.
+    if s.embed_job_enabled and s.search_semantic_enabled and s.openai_api_key:
         jobs.append(
             Job(
                 "embed_products",

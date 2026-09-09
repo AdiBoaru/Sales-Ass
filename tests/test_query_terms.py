@@ -104,7 +104,9 @@ def test_forma_interogarilor_pentru_websearch_to_tsquery():
     niciunul nu poate introduce sintaxă."""
     terms = ["sampon", "par", "gras"]
     assert strict_query(terms) == "sampon par gras"
-    assert relaxed_query(terms) == "sampon or par or gras"
+    # de la trei termeni, relaxarea cere PERECHI (spațiul = ȘI, cu prioritate peste `or`)
+    assert relaxed_query(terms) == "sampon par or sampon gras or par gras"
+    assert relaxed_query(["sampon", "gras"]) == "sampon or gras"
 
 
 def test_termenii_nu_pot_purta_sintaxa_de_tsquery():

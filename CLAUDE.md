@@ -1171,6 +1171,34 @@ dreptul de a FILTRA, nu pe cel de a exclude candidați deja găsiți — ăla ce
 NX-268/271). Cele trei reguli încercate ȘI picate pe date sunt scrise în modul, ca să nu se
 reintroducă. Măsurat: cu tipul cerut explicit, 6/6 seruri și 6/6 creme.
 
+**Sonda DB → agent (2026-09-08) — ce vede modelul și ce plătește DB-ul, măsurat pe tool-urile
+reale.** `python scripts/db_query_probe.py` rulează tool-urile de catalog pe tenant, cu fiecare
+statement înregistrat și re-rulat cu `EXPLAIN ANALYZE` pe `bot_runtime` (planul de sub RLS, nu al
+superuserului); raportul brut, cu fiecare `llm_view`, e în `reports/db-query-probe-<biz>.md`.
+Constatări + ce s-a reparat: [`docs/DB-QUERY-PROBE-2026-09-08.md`](docs/DB-QUERY-PROBE-2026-09-08.md).
+**Embeddings: NU se folosesc (decizie de produs).** `SEARCH_SEMANTIC_ENABLED=false` (default)
+închide brațul vector și checkout-ul `has_embeddings` de pe fiecare căutare, iar jobul de embed
+nu mai pornește fără el; rândurile din `product_embeddings` rămân (reversibil pe măsurătoare). Nu
+era doar cost: cu embeddings prezente, sub sort explicit (preț/rating) brațul vector scana TOT
+catalogul și sorta global, deci «protectie solara spf, cel mai ieftin» aducea benzi pentru nas la
+3 lei și măști epuizate. Reparate pe drumul lexical: `get_substitutes` hidrata toate produsele în
+stoc înainte de join-ul cu relațiile (8,5 s rece → 0,3 s; id-urile întâi, hidratarea după);
+numărătoarea de categorii servabile (`list_category_names`, FIECARE tur cu agent) era un subquery
+corelat per categorie (427 ms → 35 ms, o trecere: `servable_subtree_counts_sql`); vederea de
+detaliu randa UNA din cele 17 secțiuni ale fișei SOLE — lista de tipuri e acum în pachet
+(`detail_sections`, ecommerce.json: summary/fit/anti_fit/…), cu tăiere la graniță de propoziție;
+fațetele din brief vin din `comparison_facets` în ordinea pachetului (nu un set fix care lăsa afară
+`skin_type`/`spf`); pe axele de comparație produsul e numit scurt (`display_name`); badge-urile
+prezente pe > 90% din catalog (`CPNP`, „Cadou") nu ajung la model (`noise_badges`, în vocabular);
+recenziile se aleg pe lungime, nu pe rating (173.657 din 183.003 au 5★); relaxarea lexicală cere
+PERECHI de termeni de la 3 în sus (SAU pe singulari rămâne treaptă separată), iar epuizatul
+coboară 5 ranguri în fuziune fără să iasă din pool. `attributes.key_ingredients` e acum scris pe
+2.577/2.758 (93,4%) din secțiunea `key_ingredients` cu `scripts/derive_key_ingredients.py`
+(parser pur în `src/catalog/key_ingredients.py`), deci filtrul de ingredient are în sfârșit pe ce
+opera; potrivirea rămâne EXACTĂ pe valoare («niacinamida» da, «centella» ≠ «centella asiatica»).
+Rămân în date, nu în cod: 4 perechi KUNDAL cu nume și preț identice și 216 capete-de-nume repetate
+(familii de nuanțe/gramaje) pe care modelul le primește ca produse distincte.
+
 **Două defecte vecine, găsite pe drum.** (a) `compliance` = `["CPNP"]` pe 2.711/2.758 trecea ambele
 teste din `_keep_dimension` (valorile se repetă, sunt scurte), deși are **o singură valoare** — iar
 o dimensiune constantă nu discriminează nimic, dar `resolve_any` o încearcă și îi CONSUMĂ termenii.
