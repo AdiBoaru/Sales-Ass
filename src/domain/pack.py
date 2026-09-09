@@ -18,6 +18,7 @@ from src.domain.constraints import EMPTY_UNITS, UnitRegistry
 from src.domain.contracts import EMPTY_REQUIREMENTS, CategoryRequirements
 from src.domain.facets import TypedFacet
 from src.domain.relation_kinds import EMPTY_RELATION_KINDS, RelationKindRegistry
+from src.domain.routine_steps import EMPTY_ROUTINE_STEPS, RoutineSpec
 
 
 @dataclass(frozen=True)
@@ -108,3 +109,9 @@ class DomainPack:
     # NX-264), iar presupunerea că toți tenanții măsoară la fel e falsă chiar în interiorul unui
     # vertical. Gol → extracția de constrângeri numerice nu produce nimic (comportamentul de azi).
     units: UnitRegistry = EMPTY_UNITS
+    # NX-280: pașii unei RUTINE — `familie:pas`, ordinea lor, ce tip de produs ocupă fiecare pas și
+    # ce atribut promovează un produs într-un pas anume (`spf` → protecție). Stă în date din același
+    # motiv ca `relation_kinds`: verticalul își numește pașii (curățare/tonifiere la cosmetice,
+    # pașii de instalare la electrocasnice), iar codul definește doar ce E un pas. Gol → niciun
+    # produs n-are pas, adică exact comportamentul de dinaintea NX-280.
+    routine_steps: RoutineSpec = EMPTY_ROUTINE_STEPS

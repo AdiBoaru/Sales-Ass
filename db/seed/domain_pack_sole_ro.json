@@ -235,6 +235,55 @@
       "missing_value": "unknown"
     },
     {
+      "key": "routine_step",
+      "labels": {
+        "ro": "Pas din rutina",
+        "en": "Routine step",
+        "hu": "Rutinlepes"
+      },
+      "source": "attribute",
+      "source_key": "routine_step",
+      "value_type": "enum",
+      "values": [
+        "fata:curatare",
+        "fata:tonifiere",
+        "fata:tratament",
+        "fata:hidratare",
+        "fata:protectie",
+        "par:spalare",
+        "par:conditionare",
+        "par:tratament",
+        "par:styling",
+        "corp:curatare",
+        "corp:exfoliere",
+        "corp:hidratare",
+        "machiaj:ten",
+        "machiaj:pudra",
+        "machiaj:obraz",
+        "machiaj:ochi",
+        "machiaj:buze"
+      ],
+      "aliases": {
+        "demachiere": "fata:curatare",
+        "curatarea tenului": "fata:curatare",
+        "tonifiere": "fata:tonifiere",
+        "hidratarea tenului": "fata:hidratare",
+        "protectie solara": "fata:protectie",
+        "spalarea parului": "par:spalare",
+        "conditionarea parului": "par:conditionare",
+        "exfolierea corpului": "corp:exfoliere",
+        "hidratarea corpului": "corp:hidratare"
+      },
+      "operators": [
+        "eq"
+      ],
+      "binding": "partitioning",
+      "provenance": "structural",
+      "missing_value": "unknown",
+      "min_coverage": 0.7,
+      "enforce_ready": false
+    },
+    {
       "key": "routine_time",
       "value_type": "enum",
       "source": "attribute",
@@ -799,5 +848,100 @@
     "disclaimere": "nu promite stoc, livrare, reduceri sau efecte care nu sunt in date. Nu da sfat medical si nu spune ca un produs trateaza o afectiune. Cand nu stii ceva, spune ca nu stii si ofera ce stii"
   },
   "_product_type_note": "product_type e DERIVAT din numele de catalog (src/catalog/product_type.py), scris de scripts/derive_product_type.py. Valorile de aici sunt cele existente EFECTIV în catalog, citite din DB — nu o listă întreținută separat. Regenerare: rulează jobul, apoi actualizează lista. Fațeta e partitioning fiindcă un cumpărător vrea exact un tip de obiect.",
-  "_variant_of_note": "NX-269/270 — alte nuante ale aceluiasi produs. `neighbors`: nuantele sunt vecini directi, nu un drum („alta nuanta a altei nuante\" nu adauga nimic). E felul IEFTIN si REVERSIBIL de a lega nuantele, in locul restructurarii catalogului pe produs-parinte cu variante reale (varianta (b) din NX-269): sursa insasi trateaza fiecare nuanta ca produs separat, deci restructurarea ar fi cost mare cu beneficiu incert. Tipul trebuie DECLARAT aici, nu doar admis de schema (migrarea 048): un tip nedeclarat nu crapa, cade tacut pe comportamentul implicit, deci diferenta dintre „am declarat\" si „ruleaza\" ar fi invizibila — capcana care a prins deja o data pachetul SOLE, cu un `purpose` inexistent respins fail-closed si logat."
+  "_variant_of_note": "NX-269/270 — alte nuante ale aceluiasi produs. `neighbors`: nuantele sunt vecini directi, nu un drum („alta nuanta a altei nuante\" nu adauga nimic). E felul IEFTIN si REVERSIBIL de a lega nuantele, in locul restructurarii catalogului pe produs-parinte cu variante reale (varianta (b) din NX-269): sursa insasi trateaza fiecare nuanta ca produs separat, deci restructurarea ar fi cost mare cu beneficiu incert. Tipul trebuie DECLARAT aici, nu doar admis de schema (migrarea 048): un tip nedeclarat nu crapa, cade tacut pe comportamentul implicit, deci diferenta dintre „am declarat\" si „ruleaza\" ar fi invizibila — capcana care a prins deja o data pachetul SOLE, cu un `purpose` inexistent respins fail-closed si logat.",
+  "routine_steps": {
+    "families": {
+      "fata": [
+        "curatare",
+        "tonifiere",
+        "tratament",
+        "hidratare",
+        "protectie"
+      ],
+      "par": [
+        "spalare",
+        "conditionare",
+        "tratament",
+        "styling"
+      ],
+      "corp": [
+        "curatare",
+        "exfoliere",
+        "hidratare"
+      ],
+      "machiaj": [
+        "ten",
+        "pudra",
+        "obraz",
+        "ochi",
+        "buze"
+      ]
+    },
+    "by_product_type": {
+      "spuma de curatare": "fata:curatare",
+      "gel de curatare": "fata:curatare",
+      "balsam de curatare": "fata:curatare",
+      "ulei de curatare": "fata:curatare",
+      "crema de curatare": "fata:curatare",
+      "manusa pentru demachiere": "fata:curatare",
+      "toner de fata": "fata:tonifiere",
+      "tonic": "fata:tonifiere",
+      "esenta": "fata:tonifiere",
+      "ser de fata": "fata:tratament",
+      "masca de fata": "fata:tratament",
+      "exfoliant": "fata:tratament",
+      "plasturi": "fata:tratament",
+      "benzi pentru ochi": "fata:tratament",
+      "gel de fata": "fata:tratament",
+      "stick pentru fata": "fata:tratament",
+      "crema de fata": "fata:hidratare",
+      "crema contur ochi": "fata:hidratare",
+      "crema de ochi": "fata:hidratare",
+      "mist facial": "fata:hidratare",
+      "lotiune de fata": "fata:hidratare",
+      "sampon": "par:spalare",
+      "balsam": "par:conditionare",
+      "masca de par": "par:tratament",
+      "ser de par": "par:tratament",
+      "ulei de par": "par:tratament",
+      "crema de par": "par:tratament",
+      "spray pentru par": "par:styling",
+      "mist pentru par": "par:styling",
+      "gel de dus": "corp:curatare",
+      "sapun lichid": "corp:curatare",
+      "exfoliant de corp": "corp:exfoliere",
+      "lotiune de corp": "corp:hidratare",
+      "crema de corp": "corp:hidratare",
+      "balsam pentru corp": "corp:hidratare",
+      "crema de maini": "corp:hidratare",
+      "fond de ten": "machiaj:ten",
+      "cushion": "machiaj:ten",
+      "corector": "machiaj:ten",
+      "crema coloranta de fata": "machiaj:ten",
+      "pudra de fata": "machiaj:pudra",
+      "fard de obraz": "machiaj:obraz",
+      "fard de pleoape": "machiaj:ochi",
+      "gel de sprancene": "machiaj:ochi",
+      "ruj": "machiaj:buze",
+      "luciu de buze": "machiaj:buze",
+      "nuantator pentru buze": "machiaj:buze",
+      "creion contur buze": "machiaj:buze",
+      "ulei de buze": "machiaj:buze",
+      "balsam de buze": "machiaj:buze"
+    },
+    "promotions": [
+      {
+        "when_attribute": "spf",
+        "within_family": "fata",
+        "to_step": "protectie"
+      }
+    ],
+    "not_a_step": [
+      "set",
+      "gel autobronzant",
+      "spuma autobronzanta",
+      "pasta de dinti"
+    ]
+  },
+  "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. Masurat pe catalog: 2.037 produse primesc pas (73,9% din catalog, 97,6% din cele cu tip)."
 }
