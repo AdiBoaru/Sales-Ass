@@ -954,5 +954,715 @@
     ]
   },
   "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. `ambiguous` e DISTINCT de `not_a_step`: un «set» nu e un pas (afirmatie), o «lotiune de fata» e sigur un pas dar nu se stie care (ignoranta) — cele 18 se imprastie pe sase categorii. Amandoua nu primesc pas; difera in RAPORT, unde o scapare cere reparatie iar o ambiguitate declarata e o decizie luata.",
-  "_spf_advice_note": "NX-286. `spf` se deriva din nume, iar daca numele tace din descriere. Masurat pe catalog: din 44 de valori luate din descriere, 10 veneau din fraze de SFAT, care trimit catre ALT produs — «Folositi crema cu SPF 50+ in timpul zilei, deoarece retinolul face pielea mai sensibila la soare» punea spf=50 pe o crema cu retinol. Produsele prinse asa sunt exact cele care sensibilizeaza pielea la soare (retinol, AHA/BHA), deci a le prezenta ca protectie solara contrazice propria fisa a produsului. Fallback-ul pe descriere RAMANE: 33 din 44 sunt corecte. Radacinile sunt PREFIXE de cuvant, nu infixuri: „aplica” a fost SCOS fiindca potrivea substantivul „aplicarea” din «face aplicarea protectiei solare usoara», marcand gresit o protectie solara reala (Beauty of Joseon Ginseng Moist Sun Serum). Raman doar formele imperative. Masurat final: 10 refuzate, zero fals pozitive."
+  "_spf_advice_note": "NX-286. `spf` se deriva din nume, iar daca numele tace din descriere. Masurat pe catalog: din 44 de valori luate din descriere, 10 veneau din fraze de SFAT, care trimit catre ALT produs — «Folositi crema cu SPF 50+ in timpul zilei, deoarece retinolul face pielea mai sensibila la soare» punea spf=50 pe o crema cu retinol. Produsele prinse asa sunt exact cele care sensibilizeaza pielea la soare (retinol, AHA/BHA), deci a le prezenta ca protectie solara contrazice propria fisa a produsului. Fallback-ul pe descriere RAMANE: 33 din 44 sunt corecte. Radacinile sunt PREFIXE de cuvant, nu infixuri: „aplica” a fost SCOS fiindca potrivea substantivul „aplicarea” din «face aplicarea protectiei solare usoara», marcand gresit o protectie solara reala (Beauty of Joseon Ginseng Moist Sun Serum). Raman doar formele imperative. Masurat final: 10 refuzate, zero fals pozitive.",
+  "_review_themes_note": "NX-279 — vocabularul de TEME din recenzii (praise/nuance), din care se deriva `product_review_summaries` DETERMINIST (`scripts/derive_review_summaries.py`; regula, pragurile si portile in `src/catalog/review_themes.py`). Fiecare tema = cheie + eticheta afisabila PER LOCALE (o propozitie fara subiect, se leaga dupa „spun ca …”) + fraze potrivite cu matcherul NX-268 (prefix + flexiune + gap) + excluderi cu pozitie (negatia). Masurat pe 183.003 recenzii SOLE, 2026-09-07: lauda se scrie in negatie („nu irita” 6.334), 4★ e identic cu 5★ ca text (nuanta NU se deduce din rating, ci din fraza), iar 99,9% din produse au recenzii despre MAGAZIN (mostre, curier, cashback) — acelea nu sunt teme de produs si nu apar aici. `promise: claim` = promisiune (toleranta), se NUMARA dar nu se AFISEAZA fara `ratified: true`. `version` intra in `rule_id`-ul randului; orice schimbare aici = versiune noua. Precizia se auditeaza de mana cu `--audit <cheie>` inainte de `--apply`.",
+  "review_themes": {
+    "version": "sole.2026-09-07",
+    "themes": [
+      {
+        "key": "absorbs_fast",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "se absoarbe rapid"
+        },
+        "phrases": [
+          "se absoarbe rapid",
+          "se absoarbe repede",
+          "se absoarbe instant",
+          "se absoarbe imediat",
+          "se absoarbe usor",
+          "absorbtie rapida"
+        ],
+        "excludes": [
+          "nu se absoarbe"
+        ],
+        "reason": "13.275 recenzii / 1.216 produse pe „absoarbe rapid”; excluderea prinde forma negată din recenziile slabe"
+      },
+      {
+        "key": "no_white_cast",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu lasă urme albe"
+        },
+        "phrases": [
+          "nu lasa urme albe",
+          "fara urme albe",
+          "nu lasa pelicula alba",
+          "nu albeste",
+          "nu lasa un film alb"
+        ],
+        "excludes": [],
+        "reason": "2.022 recenzii pe 127 de produse, aproape toate SPF: temă specifică, deci separată de „nu lasă urme”"
+      },
+      {
+        "key": "no_residue",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu lasă urme sau senzație lipicioasă"
+        },
+        "phrases": [
+          "nu lasa urme",
+          "fara urme",
+          "nu lasa senzatie de lipicios",
+          "nu lasa senzatia de lipicios",
+          "nu lasa o senzatie lipicioasa",
+          "nu e lipicios",
+          "nu este lipicios",
+          "nu lasa film",
+          "nu lasa pelicula",
+          "nu lasa reziduuri",
+          "nu lasa pielea grasa",
+          "nu e gras",
+          "nu este gras",
+          "nu ramane lipicios"
+        ],
+        "excludes": [
+          "nu lasa urme albe"
+        ],
+        "reason": "5.275 recenzii pe „nu lasa urme”; forma cu „albe” e cedată temei no_white_cast prin excludere"
+      },
+      {
+        "key": "light_texture",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "are o textură ușoară și plăcută"
+        },
+        "phrases": [
+          "textura usoara",
+          "textura lejera",
+          "textura fina",
+          "textura placuta",
+          "textura catifelata",
+          "textura cremoasa",
+          "textura minunata",
+          "textura superba",
+          "usoara pe piele",
+          "nu se simte pe piele"
+        ],
+        "excludes": [],
+        "reason": "„textura usoara” 4.108 / 1.010 produse, „textura placuta” 3.407; unite, ca două pro-uri despre textură să nu ocupe două din trei locuri"
+      },
+      {
+        "key": "easy_apply",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "se aplică ușor"
+        },
+        "phrases": [
+          "se aplica usor",
+          "usor de aplicat",
+          "se intinde usor",
+          "aplicare usoara",
+          "se aplica simplu",
+          "se aplica foarte usor",
+          "se intinde foarte usor",
+          "usor de intins"
+        ],
+        "excludes": [],
+        "reason": "„aplica usor” 3.784 / 1.395 produse. „usor de folosit” a fost SCOS după prima rulare: prindea „site-ul este usor de folosit” (magazinul, nu produsul)"
+      },
+      {
+        "key": "hydrating",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "hidratează bine"
+        },
+        "phrases": [
+          "hidrateaza perfect",
+          "hidrateaza foarte bine",
+          "hidrateaza excelent",
+          "hidrateaza bine",
+          "hidrateaza intens",
+          "hidrateaza in profunzime",
+          "pielea hidratata",
+          "buzele hidratate",
+          "pielea mai hidratata",
+          "hidratare intensa",
+          "hidratare de durata",
+          "foarte hidratant",
+          "foarte hidratanta",
+          "hidrateaza minunat"
+        ],
+        "excludes": [
+          "nu hidrateaza"
+        ],
+        "reason": "„hidrateaza perfect” 3.733 / 753 produse"
+      },
+      {
+        "key": "soft_skin",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "lasă pielea catifelată"
+        },
+        "phrases": [
+          "pielea catifelata",
+          "pielea moale",
+          "pielea fina",
+          "piele catifelata",
+          "pielea neteda",
+          "pielea mai fina",
+          "pielea mai neteda",
+          "pielea mai moale",
+          "pielea mai catifelata"
+        ],
+        "excludes": [],
+        "reason": "„pielea catifelata” 2.596 / 835 produse"
+      },
+      {
+        "key": "not_drying",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu usucă"
+        },
+        "phrases": [
+          "nu usuca"
+        ],
+        "excludes": [],
+        "reason": "5.272 recenzii / 820 produse; fraza cu gap prinde „nu usuca deloc tenul”; nu e promisiune de siguranță, e senzație"
+      },
+      {
+        "key": "long_wear",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "rezistă toată ziua"
+        },
+        "phrases": [
+          "rezista toata ziua",
+          "tine toata ziua",
+          "rezistenta toata ziua",
+          "rezista bine",
+          "rezista mult",
+          "rezista foarte bine",
+          "tine foarte bine",
+          "de lunga durata",
+          "rezista ore",
+          "ramane intact",
+          "a tinut toata ziua",
+          "rezista pe tot parcursul zilei"
+        ],
+        "excludes": [
+          "nu rezista",
+          "nu tine"
+        ],
+        "reason": "„toata ziua” 6.959 / 1.412 produse (machiaj, parfum)"
+      },
+      {
+        "key": "no_transfer",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu se transferă"
+        },
+        "phrases": [
+          "nu se transfera",
+          "nu se ia pe masca",
+          "nu se ia pe haine",
+          "nu pateaza",
+          "nu migreaza",
+          "fara sa se transfere",
+          "fara transfer"
+        ],
+        "excludes": [],
+        "reason": "„se transfera” 381 recenzii, majoritatea negate: forma negată e laudă, cea pozitivă e nuanță (tema transfers)"
+      },
+      {
+        "key": "pleasant_scent",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "miroase plăcut"
+        },
+        "phrases": [
+          "miros placut",
+          "miroase frumos",
+          "miroase minunat",
+          "miroase divin",
+          "miros discret",
+          "miros fin",
+          "miros delicat",
+          "miros minunat",
+          "miros frumos",
+          "parfum discret",
+          "parfum placut",
+          "miros proaspat",
+          "miros superb",
+          "miroase placut",
+          "miroase superb",
+          "miros usor"
+        ],
+        "excludes": [],
+        "reason": "„miros placut” apare pe 144 din 289 de produse în recenziile de 4★"
+      },
+      {
+        "key": "true_to_picture",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "arată exact ca în poze"
+        },
+        "phrases": [
+          "exact ca in poze",
+          "ca in poze",
+          "ca in imagini",
+          "exact ca in poza",
+          "corespunde descrierii",
+          "corespunde cu descrierea"
+        ],
+        "excludes": [],
+        "reason": "nuanțe de machiaj: „arata exact ca in poze” e decizia de cumpărare"
+      },
+      {
+        "key": "visible_results",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "dă rezultate vizibile"
+        },
+        "phrases": [
+          "rezultate vizibile",
+          "diferenta e vizibila",
+          "diferenta este vizibila",
+          "se vede diferenta",
+          "am observat o diferenta",
+          "observ o diferenta",
+          "diferenta se vede",
+          "rezultatele sunt vizibile",
+          "efect vizibil",
+          "rezultate rapide",
+          "rezultate dupa",
+          "diferenta dupa",
+          "imbunatatire vizibila",
+          "s a imbunatatit vizibil"
+        ],
+        "excludes": [
+          "nu se vede",
+          "nicio diferenta",
+          "nu am observat"
+        ],
+        "reason": "„chiar functioneaza” / „face diferenta” au fost SCOASE după prima rulare: tema ajungea pe 85% din produse, adică laudă generică, nu rezultat. Rămân doar formulările care numesc un rezultat observat"
+      },
+      {
+        "key": "natural_finish",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "dă un finish natural"
+        },
+        "phrases": [
+          "finish natural",
+          "aspect natural",
+          "acoperire naturala",
+          "efect natural",
+          "arata natural",
+          "rezultat natural",
+          "look natural"
+        ],
+        "excludes": [],
+        "reason": "machiaj: finishul e axa de decizie"
+      },
+      {
+        "key": "coverage",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "acoperă bine"
+        },
+        "phrases": [
+          "acoperire buna",
+          "acoperire excelenta",
+          "acoperire foarte buna",
+          "acopera bine",
+          "acopera perfect",
+          "acoperire mare",
+          "acoperire medie spre mare",
+          "acopera foarte bine",
+          "acoperire frumoasa"
+        ],
+        "excludes": [
+          "nu acopera"
+        ],
+        "reason": "machiaj (fond de ten, corector)"
+      },
+      {
+        "key": "pigmentation",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "e bine pigmentat"
+        },
+        "phrases": [
+          "pigmentare buna",
+          "foarte pigmentat",
+          "bine pigmentat",
+          "pigmentare excelenta",
+          "pigmentare intensa",
+          "foarte pigmentata",
+          "bine pigmentata",
+          "pigmentat frumos",
+          "pigmentare frumoasa"
+        ],
+        "excludes": [
+          "nu e pigmentat",
+          "nu este pigmentat",
+          "slab pigmentat"
+        ],
+        "reason": "machiaj (ruj, fard, blush)"
+      },
+      {
+        "key": "not_heavy",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu încarcă tenul"
+        },
+        "phrases": [
+          "nu incarca tenul",
+          "nu incarca pielea",
+          "nu se simte pe ten",
+          "nu ingreuneaza tenul",
+          "fara sa incarce tenul",
+          "nu infunda porii",
+          "nu se simte greu",
+          "nu incarca deloc tenul"
+        ],
+        "excludes": [],
+        "reason": "„nu incarca” apare pe ten ȘI pe păr: frazele poartă obiectul, ca eticheta să nu mintă pe celălalt"
+      },
+      {
+        "key": "hair_soft",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "lasă părul moale și ușor de coafat"
+        },
+        "phrases": [
+          "parul moale",
+          "parul mai moale",
+          "parul matasos",
+          "parul catifelat",
+          "parul mai matasos",
+          "lasa parul moale",
+          "usor de coafat",
+          "usor de pieptanat",
+          "se descurca usor",
+          "parul mai neted",
+          "parul mai usor de coafat",
+          "parul mai fin"
+        ],
+        "excludes": [],
+        "reason": "„lasa parul” 154 / 84 produse în recenziile de 4★"
+      },
+      {
+        "key": "no_weigh_down",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu încarcă părul"
+        },
+        "phrases": [
+          "nu incarca parul",
+          "nu ingreuneaza parul",
+          "nu lasa parul gras",
+          "fara sa incarce parul",
+          "nu incarca deloc parul",
+          "nu lasa parul greu"
+        ],
+        "excludes": [],
+        "reason": "îngrijirea părului; fratele lui not_heavy, cu obiectul în frază"
+      },
+      {
+        "key": "value",
+        "kind": "praise",
+        "promise": "experience",
+        "labels": {
+          "ro": "merită banii"
+        },
+        "phrases": [
+          "merita banii",
+          "merita toti banii",
+          "merita fiecare banut",
+          "raport calitate pret",
+          "pret bun",
+          "merita pretul",
+          "merita investitia",
+          "merita fiecare leu",
+          "merita fiecare ban"
+        ],
+        "excludes": [
+          "nu merita"
+        ],
+        "reason": "„merita toti banii” 2.675 / 1.090"
+      },
+      {
+        "key": "gentle",
+        "kind": "praise",
+        "promise": "claim",
+        "labels": {
+          "ro": "e blând cu pielea sensibilă"
+        },
+        "phrases": [
+          "nu irita",
+          "nu a iritat",
+          "nu mi a iritat",
+          "nu m a iritat",
+          "fara iritatii",
+          "fara sa irite",
+          "bland cu pielea",
+          "blanda cu pielea",
+          "foarte bland",
+          "foarte blanda",
+          "delicat cu pielea",
+          "delicata cu pielea",
+          "nu creeaza iritatii",
+          "nu creeaza disconfort",
+          "nu mi a creat disconfort",
+          "nu a creat disconfort",
+          "nu provoaca iritatii",
+          "nu mi a provocat"
+        ],
+        "excludes": [
+          "predispus la iritatii",
+          "predispusa la iritatii",
+          "tendinta de iritare"
+        ],
+        "reason": "PROMISIUNE: „nu irita” 6.334 / 1.294 produse, dar eticheta e o garanție de toleranță pe care botul n-o poate da fără ratificarea tenantului (P0). Se numără, nu se afișează. Ratificare: `ratified: true`."
+      },
+      {
+        "key": "tingling",
+        "kind": "nuance",
+        "promise": "experience",
+        "labels": {
+          "ro": "dă o senzație de furnicături"
+        },
+        "phrases": [
+          "furnicatur",
+          "senzati de furnicatur",
+          "intepatur",
+          "senzati de intepatur",
+          "pisca",
+          "furnica"
+        ],
+        "excludes": [
+          "nu pisca",
+          "fara furnicatur",
+          "nu intepa",
+          "fara intepatur",
+          "nu da furnicatur",
+          "nu provoaca furnicatur",
+          "fara senzati",
+          "fara nicio senzati",
+          "nu am simtit",
+          "nicio senzati",
+          "nu da senzati",
+          "nu produce",
+          "nu provoaca",
+          "nu lasa senzati",
+          "fara sa",
+          "nu simt",
+          "intepatur de tantar",
+          "intepatur de insect",
+          "intepatur de tantari",
+          "intepatur de purici",
+          "intepatur de albin"
+        ],
+        "reason": "„furnicaturi” 266 recenzii pe 41 de produse, 29 pe unul singur (plumper): cazul care justifică existența lui top_cons. Audit (25 de mostre): 23 corecte; cele două greșite erau „înțepături de țânțari” pe plasturi, de aici excluderile cu insecte. Multe recenzii spun că senzația „e în descriere”: nuanța rămâne adevărată și utilă"
+      },
+      {
+        "key": "strong_scent",
+        "kind": "nuance",
+        "promise": "experience",
+        "labels": {
+          "ro": "are un miros puternic"
+        },
+        "phrases": [
+          "miros puternic",
+          "miroase puternic",
+          "miros intens",
+          "parfum puternic",
+          "miros prea puternic",
+          "parfumul e puternic",
+          "parfumul este puternic",
+          "miros cam puternic",
+          "prea parfumat",
+          "prea parfumata",
+          "mirosul e prea",
+          "mirosul este prea",
+          "mirosul e cam",
+          "mirosul este cam",
+          "miros destul de puternic"
+        ],
+        "excludes": [
+          "nu are un miros puternic",
+          "nu are miros puternic",
+          "fara miros puternic",
+          "nu miroase puternic",
+          "nu are un parfum puternic",
+          "fara un miros puternic",
+          "nu are un miros prea",
+          "nu e prea puternic",
+          "nu este prea puternic",
+          "nu e un miros puternic",
+          "nu este un miros puternic",
+          "nu e deranjant",
+          "fara sa fie puternic",
+          "nu prea puternic",
+          "mirosul nu e",
+          "mirosul nu este",
+          "nu are un parfum prea",
+          "nici prea puternic",
+          "desi are un miros",
+          "nu deranjeaza",
+          "nu e deloc puternic",
+          "nu este deloc puternic",
+          "nu e un parfum puternic",
+          "nu este un parfum puternic",
+          "nu are un miros",
+          "nu are miros",
+          "fara sa aiba un miros",
+          "nu miroase",
+          "mirosul nu",
+          "parfumul nu",
+          "nu e puternic",
+          "nu este puternic"
+        ],
+        "reason": "„miros puternic” 472 / 357 produse, în mare parte negat: excluderile fac diferența"
+      },
+      {
+        "key": "pricey",
+        "kind": "nuance",
+        "promise": "experience",
+        "labels": {
+          "ro": "e cam scump"
+        },
+        "phrases": [
+          "cam scump",
+          "cam scumpa",
+          "putin scump",
+          "putin scumpa",
+          "pretul e mare",
+          "pretul este mare",
+          "pret mare",
+          "pretul e ridicat",
+          "pretul este ridicat",
+          "pretul e piperat",
+          "pretul este piperat",
+          "cam piperat",
+          "destul de scump",
+          "destul de scumpa",
+          "pretul este putin mai ridicat",
+          "pretul e putin mai ridicat",
+          "pretul e putin mai mare",
+          "pretul este putin mai mare",
+          "pret cam mare",
+          "pretul cam mare",
+          "pretul e cam mare",
+          "pretul este cam mare"
+        ],
+        "excludes": [
+          "nu e scump",
+          "nu este scump",
+          "nu e deloc scump",
+          "nu este deloc scump",
+          "nu mi se pare scump",
+          "nu e cam scump",
+          "nu este cam scump",
+          "nu e prea scump",
+          "nu este prea scump",
+          "nu il consider scump",
+          "nu mi se pare cam scump",
+          "nu e un pret mare",
+          "nu este un pret mare",
+          "nu are un pret mare",
+          "nu are pret mare",
+          "nu e pret mare",
+          "pretul nu e mare",
+          "pretul nu este mare",
+          "pretul nu e ridicat",
+          "pretul nu este ridicat",
+          "nu e pretul mare",
+          "fara sa fie scump",
+          "fara a fi scump",
+          "nici scump",
+          "nici prea scump",
+          "nici cam scump",
+          "deloc scump"
+        ],
+        "reason": "„cam scump” 242 / 195 produse, max 4 pe un produs. Audit (30 de mostre): 30/30 spun că prețul e mare, aproape toate concesiv („chiar dacă prețul e mai mare, merită”). Mențiunea rămâne ADEVĂRATĂ și utilă ca nuanță; concesia („merită”) nu se afișează fiindcă nu e verificată separat. Excluderile sunt doar negații reale"
+      },
+      {
+        "key": "transfers",
+        "kind": "nuance",
+        "promise": "experience",
+        "labels": {
+          "ro": "se transferă"
+        },
+        "phrases": [
+          "se transfera",
+          "se ia pe masca",
+          "se ia pe haine",
+          "se ia pe pahar",
+          "se ia pe cana"
+        ],
+        "excludes": [
+          "nu se transfera",
+          "fara sa se transfere",
+          "nu se ia",
+          "nu prea se transfera",
+          "abia se transfera",
+          "nu se transfera deloc",
+          "fara sa se ia"
+        ],
+        "reason": "„se transfera” 381 / 116 produse, max 12 pe un produs; forma negată e laudă (no_transfer)"
+      },
+      {
+        "key": "short_wear",
+        "kind": "nuance",
+        "promise": "experience",
+        "labels": {
+          "ro": "nu rezistă prea mult"
+        },
+        "phrases": [
+          "nu rezista mult",
+          "nu tine mult",
+          "trebuie reaplicat",
+          "trebuie reaplicata",
+          "se sterge repede",
+          "dispare repede",
+          "se duce repede",
+          "nu tine toata ziua",
+          "nu rezista toata ziua",
+          "nu rezista prea mult",
+          "nu tine prea mult",
+          "trebuie sa reaplic",
+          "reaplicat des",
+          "reaplicare deasa"
+        ],
+        "excludes": [
+          "nu trebuie reaplicat",
+          "nu trebuie reaplicata",
+          "fara sa fie reaplicat",
+          "nu trebuie sa reaplic",
+          "fara sa reaplic",
+          "fara sa fie nevoie",
+          "nu a trebuit sa reaplic",
+          "nu e nevoie sa reaplic",
+          "nu este nevoie sa reaplic",
+          "fara a fi nevoie"
+        ],
+        "reason": "„nu rezista” 337 / 177 produse, max 9 pe un produs; excluderile prind „nu trebuie reaplicat” = laudă"
+      }
+    ],
+    "_removed": {
+      "sticky": "SCOASĂ pe măsurătoare (2026-09-07). Trei runde: literal 36% din produse (flexiune negată), apoi 484 recenzii cu 4/30 corecte (coordonare sub negație: „nu lasă urme albe sau lipicioase”), apoi 148 recenzii cu 20/40 corecte (negație la distanță, contrast „mă temeam că… dar”, „alte produse lasă strat lipicios, acesta nu”). 50% precizie pentru un CONTRA afișat e inacceptabil; regulile structurale (prefix, gap, excluderi cu poziție) nu trec zidul semantic al negației la distanță. Se reia doar cu alt mecanism, nu cu mai multe excluderi."
+    }
+  }
 }

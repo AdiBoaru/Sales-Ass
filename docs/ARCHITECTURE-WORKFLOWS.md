@@ -1934,6 +1934,7 @@ welcome_enabled = true
 047_variant_stock_unknown.sql
 048_relation_provenance.sql
 049_search_tsv_product_type.sql
+050_review_summary_provenance.sql
 ```
 
 
