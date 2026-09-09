@@ -434,7 +434,20 @@
         "ro": "SPF",
         "en": "SPF",
         "hu": "SPF"
-      }
+      },
+      "prose_advice_markers": [
+        "recomand",
+        "folosit",
+        "foloses",
+        "folositi",
+        "aplicati",
+        "aplici",
+        "sfaturi",
+        "intotdeauna",
+        "obligatoriu",
+        "urmati",
+        "nu uita"
+      ]
     },
     {
       "key": "texture",
@@ -953,5 +966,6 @@
       "lotiune de fata"
     ]
   },
-  "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. `ambiguous` e DISTINCT de `not_a_step`: un «set» nu e un pas (afirmatie), o «lotiune de fata» e sigur un pas dar nu se stie care (ignoranta) — cele 18 se imprastie pe sase categorii. Amandoua nu primesc pas; difera in RAPORT, unde o scapare cere reparatie iar o ambiguitate declarata e o decizie luata."
+  "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. `ambiguous` e DISTINCT de `not_a_step`: un «set» nu e un pas (afirmatie), o «lotiune de fata» e sigur un pas dar nu se stie care (ignoranta) — cele 18 se imprastie pe sase categorii. Amandoua nu primesc pas; difera in RAPORT, unde o scapare cere reparatie iar o ambiguitate declarata e o decizie luata.",
+  "_spf_advice_note": "NX-286. `spf` se deriva din nume, iar daca numele tace din descriere. Masurat pe catalog: din 44 de valori luate din descriere, 10 veneau din fraze de SFAT, care trimit catre ALT produs — «Folositi crema cu SPF 50+ in timpul zilei, deoarece retinolul face pielea mai sensibila la soare» punea spf=50 pe o crema cu retinol. Produsele prinse asa sunt exact cele care sensibilizeaza pielea la soare (retinol, AHA/BHA), deci a le prezenta ca protectie solara contrazice propria fisa a produsului. Fallback-ul pe descriere RAMANE: 33 din 44 sunt corecte. Radacinile sunt PREFIXE de cuvant, nu infixuri: „aplica” a fost SCOS fiindca potrivea substantivul „aplicarea” din «face aplicarea protectiei solare usoara», marcand gresit o protectie solara reala (Beauty of Joseon Ginseng Moist Sun Serum). Raman doar formele imperative. Masurat final: 10 refuzate, zero fals pozitive."
 }
