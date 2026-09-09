@@ -128,7 +128,7 @@ def test_missing_anchor_is_reported_per_surface():
 
 def test_locale_is_reduced_to_the_primary_subtag():
     assert wc.normalize_context(PageContextClaim(locale="ro-RO")).locale == "ro"
-    assert wc.normalize_context(PageContextClaim(locale="HU_hu")).locale == "hu"
+    assert wc.normalize_context(PageContextClaim(locale="DE_de")).locale == "de"
 
 
 def test_malformed_locale_is_dropped():
@@ -138,8 +138,8 @@ def test_malformed_locale_is_dropped():
 
 
 def test_unsupported_locale_falls_back_to_the_business_default_deterministically():
-    assert wc.negotiate_locale("hu", supported=["ro"], default="ro") == ("ro", "locale_unsupported")
-    assert wc.negotiate_locale("hu", supported=["ro", "hu"], default="ro") == ("hu", None)
+    assert wc.negotiate_locale("de", supported=["ro"], default="ro") == ("ro", "locale_unsupported")
+    assert wc.negotiate_locale("de", supported=["ro", "de"], default="ro") == ("de", None)
     assert wc.negotiate_locale(None, supported=["ro"], default="ro") == ("ro", None)
 
 

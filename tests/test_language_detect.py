@@ -10,7 +10,7 @@ from src.worker.runner import PipelineDeps
 from src.worker.stages import language as language_mod
 from src.worker.stages.language import language_stage
 
-ALL = ["ro", "hu", "en"]
+ALL = ["ro", "en"]
 
 
 # --- detect_language (pur) ---------------------------------------------------
@@ -21,9 +21,12 @@ def test_detect_romanian():
     assert detect_language("Bună, vreau un șampon fără sulfați", ALL) == "ro"
 
 
-def test_detect_hungarian():
-    assert detect_language("szeretnék egy arckrémet", ALL) == "hu"
-    assert detect_language("Szia, mennyibe kerül a szállítás?", ALL) == "hu"
+def test_retired_language_is_not_detected():
+    """`hu` a fost retrasă (NX-287): un text maghiar nu mai are scor, deci nu mai e o limbă.
+
+    Precision-first: rezultatul e None („păstrăm limba curentă"), NU româna — o limbă pe care
+    n-o servim nu trebuie să devină tăcut pilotul."""
+    assert detect_language("szeretnék egy arckrémet", ALL) is None
 
 
 def test_detect_english():
@@ -32,8 +35,8 @@ def test_detect_english():
 
 
 def test_out_of_supported_returns_none():
-    # text HU, dar tenantul suportă DOAR ro → nu inventăm o limbă neacceptată
-    assert detect_language("szeretnék egy arckrémet", ["ro"]) is None
+    # text EN, dar tenantul suportă DOAR ro → nu inventăm o limbă neacceptată
+    assert detect_language("do you have face cream", ["ro"]) is None
 
 
 def test_ambiguous_or_short_returns_none():
@@ -69,15 +72,15 @@ async def test_stage_detects_and_persists(monkeypatch):
 
     monkeypatch.setattr(language_mod, "set_conversation_locale", fake_persist)
 
-    ctx = _ctx("szeretnék egy arckrémet", language="ro")
+    ctx = _ctx("do you have face cream for dry skin", language="ro")
     await language_stage(ctx, PipelineDeps(conn=None))
 
-    assert ctx.language == "hu"
-    assert persisted["args"] == ("biz-1", "conv-1", "hu")
+    assert ctx.language == "en"
+    assert persisted["args"] == ("biz-1", "conv-1", "en")
     assert any(
         e.type == "language_detected"
         and e.properties["from"] == "ro"
-        and e.properties["to"] == "hu"
+        and e.properties["to"] == "en"
         for e in ctx.events
     )
     assert ctx.reply is None and ctx.halt is False  # nu setează reply/halt

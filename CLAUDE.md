@@ -430,7 +430,7 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       gardă): un client care cere un om, o reclamație sau o amenințare legală primesc
       răspunsul agentului, nu o promisiune neonorată și nu tăcere (P6)
     • media routing: vocale → STT (Whisper), poze → Vision (match catalog)
-    • language detect → RO / HU / EN (setează ctx.language; TOATE
+    • language detect → RO / EN (setează ctx.language; TOATE
       lookup-urile în faqs / semantic_cache / wa_templates includ locale)
     • identity resolution: lookup în channel_identities →
       același user pe 2 canale = un singur contact

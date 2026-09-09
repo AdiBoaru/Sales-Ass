@@ -412,7 +412,7 @@ class Settings(BaseSettings):
     faq_topk: int = Field(default=5, validation_alias="FAQ_TOPK")
     # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
     # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
-    # servesc o limbă fără FAQ seedat, ex. RO→HU). Prag STRICT (precision-first).
+    # servesc o limbă fără FAQ seedat, ex. RO→EN). Prag STRICT (precision-first).
     faq_locale_fallback_enabled: bool = Field(
         default=False, validation_alias="FAQ_LOCALE_FALLBACK_ENABLED"
     )

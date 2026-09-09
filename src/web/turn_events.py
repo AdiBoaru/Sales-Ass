@@ -119,37 +119,6 @@ _COPY: dict[str, dict[str, Any]] = {
         "reviews": "({n} reviews)",
         "currency": "lei",
     },
-    "hu": {
-        "chrome": {
-            "launcher_label": "Asszisztens megnyitása",
-            "dialog_title": "Vásárlási asszisztens",
-            "dialog_description": "Kérdezz termékekről, rendelésekről vagy szállításról.",
-            "close_label": "Bezárás",
-            "new_chat_label": "Új beszélgetés",
-        },
-        "composer": {
-            "label": "Üzeneted",
-            "placeholder": "Írj egy üzenetet…",
-            "send_label": "Küldés",
-        },
-        "announcements": {
-            "accepted": "Az üzenet megérkezett.",
-            "working": "Az asszisztens készíti a választ.",
-            "validating": "Az asszisztens ellenőrzi a választ.",
-            "completed": "A válasz elkészült.",
-            "failed": "Hiba történt a válasz elkészítése közben.",
-            "cancelled": "A kérés meg lett szakítva.",
-        },
-        "progress": {
-            "accepted": "Üzenet megérkezett",
-            "working": "Válasz készítése",
-            "validating": "Válasz ellenőrzése",
-        },
-        "view_product": "Termék megtekintése",
-        "rating": "{rating} / 5",
-        "reviews": "({n} értékelés)",
-        "currency": "lei",
-    },
 }
 
 
@@ -228,10 +197,16 @@ def status_payload(
 
 
 # ── Formatare display-ready (server-owned; v1 lăsa exact calculele astea în browser) ────────
+#: Localele care scriu zecimala cu virgulă. E o proprietate a LIMBII, nu „locale != en", ca
+#: adăugarea uneia noi să fie o intrare în set, nu o ramură rescrisă (D3: nucleul rămâne
+#: locale-aware chiar dacă pilotul e `ro`).
+_COMMA_DECIMAL_LOCALES: frozenset[str] = frozenset({"ro"})
+
+
 def _fmt_amount(value: float, language: str) -> str:
-    """`89.0` → `89,00` (ro/hu) sau `89.00` (en). Determinist, fără locale de sistem."""
+    """`89.0` → `89,00` (ro) sau `89.00` (en). Determinist, fără locale de sistem."""
     text = f"{float(value):,.2f}"
-    if (language or "ro")[:2] in ("ro", "hu"):
+    if (language or "ro")[:2] in _COMMA_DECIMAL_LOCALES:
         text = text.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
     return text
 
@@ -242,7 +217,7 @@ def _fmt_price(value: float, currency: str | None, language: str) -> str:
 
 def _fmt_rating(value: float, language: str) -> str:
     text = f"{value:.1f}".rstrip("0").rstrip(".") if value != int(value) else str(int(value))
-    if (language or "ro")[:2] in ("ro", "hu"):
+    if (language or "ro")[:2] in _COMMA_DECIMAL_LOCALES:
         text = text.replace(".", ",")
     return text
 

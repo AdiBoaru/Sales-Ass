@@ -25,7 +25,6 @@ _DEFAULT_RULES: dict[str, float] = {
 _LABELS: dict[str, dict[str, str]] = {
     "ro": {"top": "Top Favorit", "deal": "Super Preț"},
     "en": {"top": "Top Favorite", "deal": "Great Deal"},
-    "hu": {"top": "Top kedvenc", "deal": "Szuper ár"},
 }
 
 # Full-eMAG: tonul semantic al badge-ului (pt `badges:[{label,tone}]`). Reducere = accent tare

@@ -1,7 +1,7 @@
 """Stagiul 4 (free layer) — Mesaj de întâmpinare la deschiderea conversației.
 
-Când clientul deschide conversația cu un PUR salut ("salut", "bună ziua", "hi",
-"szia"), botul răspunde DETERMINIST (fără LLM, principiul 2/4) cu un mesaj de
+Când clientul deschide conversația cu un PUR salut ("salut", "bună ziua", "hi"),
+botul răspunde DETERMINIST (fără LLM, principiul 2/4) cu un mesaj de
 întâmpinare branded: se prezintă, întreabă ce caută, oferă câteva sugestii de
 start și afișează disclaimer-ul AI (art. 50 AI Act). Comportament inspirat de
 iZi/eMAG, dar cu numele asistentului nostru.
@@ -36,9 +36,11 @@ if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
 
 
-# Saluturi PURE (normalizate: lowercase, fără diacritice, doar litere+spații). RO/EN/HU.
+# Saluturi PURE (normalizate: lowercase, fără diacritice, doar litere+spații). RO/EN.
 # Conservator: dacă mesajul curățat NU e exact în set, nu e „pur salut" → lăsăm pipeline-ul
 # să decidă (mai bine ratăm un salut decât să trântim welcome peste o întrebare de produs).
+# NX-126: intrarea veche „hellо" avea un „о" CHIRILIC (homoglif) ce nu se match-uia pe input
+# ASCII → ștearsă. Guard: test_greeting verifică `_norm(g)==g` pe tot setul.
 _GREETINGS: frozenset[str] = frozenset(
     {
         # RO
@@ -64,21 +66,10 @@ _GREETINGS: frozenset[str] = frozenset(
         "good morning",
         "good evening",
         "good afternoon",
-        # HU
-        "szia",
-        "sziasztok",
-        # NX-126: „helló" (HU) normalizează la „hello" (NFKD) — deja acoperit de intrarea EN ASCII.
-        # Intrarea veche „hellо" avea un „о" CHIRILIC (homoglif) ce nu se match-uia pe input ASCII →
-        # ștearsă. Guard: test_greeting verifică `_norm(g)==g` pe tot setul.
-        "jo napot",
-        "jo napot kivanok",
-        "udv",
-        "udvozlom",
-        "csa",
     }
 )
 
-# Șabloane de welcome per limbă (RO/HU/EN). `{bot}` = numele botului, `{shop}` = numele magazinului.
+# Șabloane de welcome per limbă (RO/EN). `{bot}` = numele botului, `{shop}` = numele magazinului.
 _WELCOME: dict[str, dict[str, str]] = {
     "ro": {
         "intro": "Bună! 👋 Eu sunt {bot}, asistentul tău de shopping {shop}.",
@@ -91,12 +82,6 @@ _WELCOME: dict[str, dict[str, str]] = {
         "ask": "How can I help today? Tell me the product, the budget, or who it's for.",
         "try": "You can try:",
         "disclaimer": "I run on artificial intelligence, so I can be wrong sometimes.",
-    },
-    "hu": {
-        "intro": "Szia! 👋 {bot} vagyok, a(z) {shop} vásárlási asszisztense.",
-        "ask": "Miben segíthetek ma? Írd le a terméket, a kereted, vagy hogy kinek keresel.",
-        "try": "Kipróbálhatod:",
-        "disclaimer": "Mesterséges intelligenciával működöm, ezért néha tévedhetek.",
     },
 }
 
@@ -113,7 +98,6 @@ _WELCOME: dict[str, dict[str, str]] = {
 _SUGGESTION_TEMPLATES: dict[str, dict[str, str]] = {
     "ro": {"category": "Caut {x}", "need": "Ce aveți pentru {x}?"},
     "en": {"category": "I'm looking for {x}", "need": "What do you have for {x}?"},
-    "hu": {"category": "{x} keresek", "need": "Mi van {x} esetén?"},
 }
 
 _GENERIC_SUGGESTIONS: dict[str, list[str]] = {
@@ -123,7 +107,6 @@ _GENERIC_SUGGESTIONS: dict[str, list[str]] = {
         "I'd like a recommendation",
         "I have a question about an order",
     ],
-    "hu": ["Egy konkrét terméket keresek", "Ajánlást szeretnék", "Kérdésem van egy rendelésről"],
 }
 
 

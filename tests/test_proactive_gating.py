@@ -171,12 +171,12 @@ async def test_db_error_on_template_lookup_propagates():
 async def test_get_approved_template_passes_locale_and_returns_none():
     conn = FakeConn(template_row=None)
     res = await get_approved_template(
-        conn, "biz-1", channel_id="chan-1", name="awb_update", locale="hu"
+        conn, "biz-1", channel_id="chan-1", name="awb_update", locale="de"
     )
     assert res is None
     # filtrele cheie ajung în query: business_id, channel, nume, limbă
     [(_query, args)] = conn.fetchrow_calls
-    assert args == ("biz-1", "chan-1", "awb_update", "hu")
+    assert args == ("biz-1", "chan-1", "awb_update", "de")
 
 
 async def test_get_approved_template_deserializes_variables():

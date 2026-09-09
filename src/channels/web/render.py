@@ -116,7 +116,8 @@ def _comparison_payload(cmp: Comparison, language: str) -> dict[str, Any]:
     opționale lipsesc dacă datele nu există. Vezi docs/FRONTEND-CONTRACT-IZI.md.
 
     `heading` e copy SERVER-OWNED (localizat din `compose`), nu o constantă în frontend: un titlu
-    hardcodat în browser ar rămâne în română pentru un tenant HU, iar contractul v2 (NX-228) merge
+    hardcodat în browser ar rămâne în română pentru un tenant pe altă locale, iar contractul
+    v2 (NX-228) merge
     oricum în direcția „tot ce e afișabil vine de la server"."""
     columns: list[dict[str, Any]] = []
     for c in cmp.columns:

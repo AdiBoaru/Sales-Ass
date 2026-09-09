@@ -103,7 +103,7 @@ MAX_RELATION_KINDS = 32
 # cardinalitatea mărginită și face driftul de config vizibil.
 _KIND_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 
-# Cheile de etichetă sunt locale (`ro`, `en`, `hu`, `ro-RO`). Pilotul e `ro-RO`, dar nucleul rămâne
+# Cheile de etichetă sunt locale (`ro`, `en`, `ro-RO`). Pilotul e `ro-RO`, dar nucleul rămâne
 # locale-aware (D3): eticheta unui tip de muchie e text către client, deci nu poate fi o constantă.
 _LOCALE_RE = re.compile(r"^[a-z]{2}(-[A-Za-z]{2,4})?$")
 

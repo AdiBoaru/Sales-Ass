@@ -865,15 +865,6 @@ _ACTION_MESSAGES: dict[str, dict[str, str]] = {
         "Tell me what you're looking for and we'll start over.",
         "action_unavailable": "I can't do that from chat yet.",
     },
-    "hu": {
-        "action_invalid": "Ez a gomb már nem érvényes. Írd meg, mire van szükséged, és folytatjuk.",
-        "action_expired": "A gomb lejárt. Kérdezd meg újra, és megmutatom.",
-        "action_not_found": "Ez a gomb már nem érvényes. Írd meg, mire van szükséged.",
-        "action_already_consumed": "Ezt már elintéztem. Mondd, mi következik.",
-        "action_stale": "Közben megváltozott a lista, így nincs mit választani. Mondd el, mit "
-        "keresel, és elölről kezdjük.",
-        "action_unavailable": "Ezt még nem tudom megcsinálni a chatből.",
-    },
 }
 
 # Statusul HTTP per cod: separat de copy, ca semantica de protocol să nu se piardă în traduceri.
@@ -961,15 +952,6 @@ _FEEDBACK_MESSAGES: dict[str, dict[str, str]] = {
         "feedback_locked": "I already recorded your feedback for this reply.",
         "feedback_unavailable": "I couldn't save your feedback. The chat continues normally.",
         "feedback_disabled": "I couldn't save your feedback. The chat continues normally.",
-    },
-    "hu": {
-        "feedback_invalid": "Ez a gomb már nem érvényes.",
-        "feedback_expired": "A gomb lejárt.",
-        "feedback_not_found": "Ez a gomb már nem érvényes.",
-        "feedback_locked": "Ehhez a válaszhoz már rögzítettem a véleményedet.",
-        "feedback_unavailable": "Most nem tudtam elmenteni a véleményedet. "
-        "A beszélgetés folytatódik.",
-        "feedback_disabled": "Most nem tudtam elmenteni a véleményedet. A beszélgetés folytatódik.",
     },
 }
 

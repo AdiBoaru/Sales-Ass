@@ -59,7 +59,7 @@ def _product(product_id: str = "p1", name: str = "Solora Shield Cremă SPF 50") 
 
 @pytest.mark.parametrize(
     "text",
-    ["Vezi recenzii", "ce păreri are?", "customer reviews", "Vélemények"],
+    ["Vezi recenzii", "ce păreri are?", "customer reviews", "what do the reviews say?"],
 )
 def test_review_intent_matches_multilingual_text(text):
     assert det._REVIEW_RE.search(det._norm_followup(text)) is not None

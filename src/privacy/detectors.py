@@ -66,7 +66,7 @@ def _valid_cnp(digits: str) -> bool:
     return int(digits[12]) == (1 if control == 10 else control)
 
 
-# ── Adresă (RO/HU/EN, conservativ) ──────────────────────────────────────────────────────────
+# ── Adresă (RO/EN, conservativ) ──────────────────────────────────────────────────────────
 # Cere un cuvânt de stradă URMAT de un număr: „strada" singur într-o propoziție nu e o adresă
 # („locuiesc pe strada mea" nu se maschează). Diacriticele sunt opționale — clienții scriu fără.
 _ADDRESS = re.compile(

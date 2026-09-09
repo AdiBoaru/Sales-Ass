@@ -1108,7 +1108,7 @@ async def test_unmapped_concern_emits_and_discloses(monkeypatch):
     assert captured["concerns"] == {"concerns": ["oily"]}  # politica de filtrare NEschimbată
     ev = _events(ctx, "concern_unmapped")[0]
     assert ev.properties["terms"] == ["ten reactiv-x"]
-    assert ev.properties["locale"] == ctx.language  # P11: „ten reactiv" pe ro ≠ pe hu
+    assert ev.properties["locale"] == ctx.language  # P11: „ten reactiv" pe ro ≠ pe en
     assert "ten reactiv-x" in res.llm_view  # disclosure
     assert "NU sunt filtrate" in res.llm_view  # ... precis: filtrul n-a rulat
     assert "query" not in ev.properties  # P12: vocabular, nu textul clientului

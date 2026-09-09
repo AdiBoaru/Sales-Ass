@@ -3,7 +3,7 @@
 Regulile care contează în cardul ăsta nu se văd într-un singur apel: o revocare care nu revine,
 un `hard` care nu se relaxează, un topic switch care nu atinge siguranța — toate se manifestă
 peste tururi. Fixture-urile din `tests/fixtures/conversation_state_v2/` descriu conversații
-întregi (RO/EN/HU), iar testul de aici le rulează prin reducerul REAL.
+întregi (RO/EN), iar testul de aici le rulează prin reducerul REAL.
 
 Un caz nou = un fișier JSON, nu cod. Vezi `README.md` din folderul de fixture-uri pentru schemă.
 """
@@ -83,7 +83,7 @@ def test_the_fixture_corpus_covers_the_failure_matrix():
     """Plasă: dacă un fixture dispare la un refactor, testul de mai sus ar trece cu 0 cazuri."""
     names = {p.stem for p in FIXTURES}
     assert len(FIXTURES) >= 6
-    assert {"ro", "en", "hu"} <= {n.split("_")[0] for n in names}
+    assert {"ro", "en"} <= {n.split("_")[0] for n in names}
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)

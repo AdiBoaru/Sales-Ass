@@ -61,7 +61,6 @@ def _carousel_keyboard(product: dict, index: int, total: int) -> dict:
 _CHIP_LEADS: dict[str, tuple[str, ...]] = {
     "ro": ("Sau, dacă vrei:", "Îți mai pot arăta:", "Poți continua cu:"),
     "en": ("Or, if you want:", "I can also show you:", "You can continue with:"),
-    "hu": ("Vagy, ha szeretnéd:", "Ezt is meg tudom mutatni:", "Folytathatod ezzel:"),
 }
 
 

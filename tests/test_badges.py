@@ -48,7 +48,7 @@ def test_deal_beats_top_priority():
 
 def test_locale_labels():
     assert derive_badge(_prod(price=60.0, list_price=80.0), "en") == "Great Deal"
-    assert derive_badge(_prod(rating=4.8, review_count=120), "hu") == "Top kedvenc"
+    assert derive_badge(_prod(rating=4.8, review_count=120), "en") == "Top Favorite"
 
 
 def test_custom_rules_override_thresholds():

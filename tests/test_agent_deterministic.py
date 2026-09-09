@@ -177,16 +177,16 @@ def test_residue_is_computed_against_its_own_trigger(monkeypatch):
 
 
 def test_unknown_locale_degrades_toward_the_model_not_toward_blindness(monkeypatch):
-    # P11: fără tabel de limbă nu aplicăm româna peste altă limbă. Declanșatoarele sunt RO/EN/HU,
+    # P11: fără tabel de limbă nu aplicăm româna peste altă limbă. Declanșatoarele sunt RO/EN,
     # deci o scurtătură GOALĂ rămâne deterministă în orice limbă; doar textul din jur, pe care nu-l
     # putem citi, împinge turul la model. Degradarea costă inferențe, nu adevăr.
     _settings(monkeypatch)
-    bare = _ctx("tobbet")
-    bare.language = "hu"
+    bare = _ctx("show more")
+    bare.language = "de"
     assert det.carries_new_constraints(bare, det._MORE_RE) is False
 
-    refined = _ctx("tobbet, de 100 lei alatt")
-    refined.language = "hu"
+    refined = _ctx("show more, aber unter 100 lei")
+    refined.language = "de"
     assert det.carries_new_constraints(refined, det._MORE_RE) is True
 
 

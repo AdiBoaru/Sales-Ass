@@ -184,7 +184,7 @@ sunt măsurate (principiul 10).
 | # | Stagiu | Fișier:linie | Scrie | Ce face |
 |---|---|---|---|---|
 | 1 | `gates_stage` | [`stages/gates.py:186`](../src/worker/stages/gates.py) | `ctx.halt`, `ctx.reply` | 6 porți (vezi mai jos) |
-| 2 | `language_stage` | [`stages/language.py:27`](../src/worker/stages/language.py) | `ctx.language` | RO/HU/EN ÎNAINTE de cache (P11) |
+| 2 | `language_stage` | [`stages/language.py:27`](../src/worker/stages/language.py) | `ctx.language` | RO/EN ÎNAINTE de cache (P11) |
 | 3 | `cache_stage` | [`stages/cache.py:89`](../src/worker/stages/cache.py) | `ctx.reply`, `ctx.from_cache` | L1 exact + L2 semantic |
 | 4 | `triage_stage` | [`stages/triage.py:65`](../src/worker/stages/triage.py) | `ctx.route`, `ctx.reply` | **LLM nano** — clasificare |
 | 5 | `agent_stage` | [`stages/agent.py:197`](../src/worker/stages/agent.py) | `ctx.retrieval`, `ctx.reply` | **LLM mini** — tool-calling |

@@ -140,8 +140,7 @@
       "missing_value": "skip",
       "labels": {
         "ro": "Pret",
-        "en": "Price",
-        "hu": "Ar"
+        "en": "Price"
       }
     },
     {
@@ -156,16 +155,14 @@
       "min_coverage": 0.98,
       "labels": {
         "ro": "Categorie",
-        "en": "Category",
-        "hu": "Kategoria"
+        "en": "Category"
       }
     },
     {
       "key": "product_type",
       "labels": {
         "ro": "Tip de produs",
-        "en": "Product type",
-        "hu": "Termektipus"
+        "en": "Product type"
       },
       "source": "attribute",
       "source_key": "product_type",
@@ -238,8 +235,7 @@
       "key": "routine_step",
       "labels": {
         "ro": "Pas din rutina",
-        "en": "Routine step",
-        "hu": "Rutinlepes"
+        "en": "Routine step"
       },
       "source": "attribute",
       "source_key": "routine_step",
@@ -314,8 +310,7 @@
       },
       "labels": {
         "ro": "Moment din rutina",
-        "en": "Routine time",
-        "hu": "Rutin ideje"
+        "en": "Routine time"
       }
     },
     {
@@ -339,8 +334,7 @@
       ],
       "labels": {
         "ro": "Tip de ten",
-        "en": "Skin type",
-        "hu": "Borttipus"
+        "en": "Skin type"
       }
     },
     {
@@ -375,8 +369,7 @@
       ],
       "labels": {
         "ro": "Potrivit pentru",
-        "en": "Suitable for",
-        "hu": "Kinek ajanlott"
+        "en": "Suitable for"
       }
     },
     {
@@ -394,8 +387,7 @@
       "min_coverage": 0.4,
       "labels": {
         "ro": "Ingrediente cheie",
-        "en": "Key ingredients",
-        "hu": "Fo osszetevok"
+        "en": "Key ingredients"
       }
     },
     {
@@ -412,8 +404,7 @@
       "min_coverage": 0.4,
       "labels": {
         "ro": "Fara parfum",
-        "en": "Fragrance-free",
-        "hu": "Illatmentes"
+        "en": "Fragrance-free"
       }
     },
     {
@@ -432,8 +423,7 @@
       "min_coverage": 0.05,
       "labels": {
         "ro": "SPF",
-        "en": "SPF",
-        "hu": "SPF"
+        "en": "SPF"
       },
       "prose_advice_markers": [
         "recomand",
@@ -464,8 +454,7 @@
       "min_coverage": 0.3,
       "labels": {
         "ro": "Textura",
-        "en": "Texture",
-        "hu": "Allag"
+        "en": "Texture"
       }
     },
     {
@@ -484,8 +473,7 @@
       "min_coverage": 0.2,
       "labels": {
         "ro": "Nuanta",
-        "en": "Shade",
-        "hu": "Arnyalat"
+        "en": "Shade"
       }
     },
     {
@@ -527,8 +515,7 @@
       },
       "labels": {
         "ro": "Finisaj",
-        "en": "Finish",
-        "hu": "Hatas"
+        "en": "Finish"
       }
     }
   ],

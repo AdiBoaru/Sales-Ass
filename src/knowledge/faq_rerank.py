@@ -32,7 +32,7 @@ def _norm(s: str) -> str:
 
 # Markeri CANONICI de excepție/restricție (fără diacritice). O întrebare de FAQ care îi conține e o
 # SPECIALIZARE (răspunde la un caz mai îngust). Vocabular de NORMALIZARE, nu wordlist semantic:
-# extensibil per limbă, dar principiul (specializare lexicală) e generic. RO acum; en/hu la nevoie.
+# extensibil per limbă, dar principiul (specializare lexicală) e generic. RO acum; `en` la nevoie.
 _EXCEPTION_MARKERS: tuple[str, ...] = (
     "desfacut",
     "desigilat",
