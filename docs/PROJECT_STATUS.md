@@ -9,6 +9,19 @@ nu în numele fișierului._
 Document de referință pentru: (1) ce e implementat și în ce stadiu, (2) riscuri
 și datorie tehnică, (3) ce urmează — material pentru generarea taskurilor.
 
+> ## ⚠️ SNAPSHOT ISTORIC (2026-06-16) — nu mai descrie sistemul de azi
+>
+> Documentul n-a mai fost actualizat din iunie 2026 și e păstrat ca RECORD al etapei
+> „Telegram echo e2e live", nu ca stare curentă. Ce s-a schimbat major de atunci:
+> **NX-179** a mutat focusul exclusiv pe web widget, iar **NX-289 (2026-09-10) a ȘTERS
+> WhatsApp și Telegram din proiect** — cod, schemă, servicii de compose, variabile de mediu.
+> Tot ce citești mai jos despre `@solechat_bot`, `telegram-poller`, `MetaClient` sau
+> `phone_number_id` descrie un sistem care nu mai există.
+>
+> **Starea curentă:** [`../CLAUDE.md`](../CLAUDE.md) (arhitectură + client activ) și
+> [`ARCHITECTURE-WORKFLOWS.md`](ARCHITECTURE-WORKFLOWS.md) (verificat în CI contra codului).
+> Cifrele reale de DB se citesc, nu se țin minte: `python scripts/mvp_audit.py`.
+
 ---
 
 ## 1. Executive summary

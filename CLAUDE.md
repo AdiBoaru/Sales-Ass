@@ -2,8 +2,9 @@
 
 ## Ce e acest proiect
 Platformă multi-tenant de AI Sales Assistant pentru ecommerce.
-**Canalul de lucru ACUM: WEB WIDGET, exclusiv (NX-179).** WhatsApp/Telegram sunt ÎNGHEȚATE — cod
-păstrat, zero investiție, nimic nu rulează pe ele. Orice task nou se măsoară pe web sau nu se face.
+**Canalul de lucru: WEB WIDGET, exclusiv (NX-179).** NX-289 a mers mai departe: WhatsApp și
+Telegram nu mai sunt înghețate, sunt **ȘTERSE** — cod, migrare de schemă, servicii de compose,
+variabile de mediu, teste. Orice task nou se măsoară pe web sau nu se face.
 Nume comercial: **Nativx Assistant** (by Nativx Technology — nativxtech.com)
 Clienți țintă: magazine ecommerce și retaileri din România (beauty, HVAC, auto, salon).
 Model de business: agenție SaaS — setup fee + retainer lunar per client.
@@ -23,8 +24,6 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | LLM triaj + simple | OpenAI GPT-5.4-nano |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
-| WhatsApp | Meta Cloud API direct (NU Twilio) — cod LIVE, dar **niciodată conectat** (0 conversații reale; lipsește phone_number_id, T013). **ÎNGHEȚAT** |
-| Telegram | Bot API (long polling) — a fost canal de TEST. **ÎNGHEȚAT** (ultimul mesaj real: 2026-06-18). Poller OFF by default: `docker compose --profile telegram up` ca să-l repornești |
 | Validare | Pydantic v2 |
 | Teste | pytest + pytest-asyncio |
 
@@ -243,9 +242,9 @@ flag-urile sunt OFF în producție, iar suitele existente foloseau monkeypatch �
 (1) `messages.content_type = 'action'` (scris de `src/web/app.py` la accept) era respins de CHECK-ul
 schemei ⇒ cu `WEB_ACTIONS_ENABLED=true` acceptul ORICĂRUI turn pornit dintr-un buton crăpa cu
 `CheckViolationError`. Migrarea **043** extinde vocabularul (nu schimbă valoarea scrisă: `body` e gol
-pentru o acțiune, deci `text` ar fi o minciună în ledger, iar `interactive` e termen Meta pentru
-mesaje de PROVIDER — l-am împrumuta pentru un concept web-only și analytics-ul n-ar mai putea
-distinge „a scris" de „a apăsat"). (2) `load_execution_refs` citea `payload` din Record, dar
+pentru o acțiune, deci `text` ar fi o minciună în ledger, iar `interactive` era termenul de
+PROVIDER pentru mesaje cu butoane — împrumutat pentru un concept web-only, analytics-ul n-ar mai
+putea distinge „a scris" de „a apăsat"; NX-289 l-a scos de tot din CHECK). (2) `load_execution_refs` citea `payload` din Record, dar
 proiecția EXTERIOARĂ a query-ului nu-l selecta — coloana exista doar în subqueryul lateral, deci
 `page_context` și `action` ieșeau MEREU `None`: ancora de pagină (NX-234) nu ajungea niciodată la
 execuție, iar un tur de acțiune reluat își pierdea comanda (NX-236). Persistarea era corectă tot
@@ -390,6 +389,28 @@ păstrându-le faptele), apoi se elimină intrări întregi; un mesaj de client 
 poate fi mutilat. Card: [`tasks/stage1/NX-255.md`](tasks/stage1/NX-255.md); probă:
 `pytest tests/test_structured_history.py -q`.
 
+**NX-289 — WhatsApp și Telegram nu mai există în proiect (cod + schemă).**
+NX-179 le declarase ÎNGHEȚATE: cod păstrat, zero investiție. Costul înghețului nu era zero —
+fiecare stagiu care le numea era o ramură pe care nimeni n-o executa dar toți o citeau, iar
+CHECK-urile care încă acceptau `whatsapp` erau o invitație. Au plecat: pachetul Telegram,
+`MetaClient`, parserul Meta, rutele `GET/POST /webhook` + `verify_meta_signature`, `wa_templates`
+și poarta de template din proactiv, `message_status_events`, `in_24h_window`, callback-urile de
+butoane inline (navigarea de carusel), capabilitățile `TEMPLATE/CAROUSEL/EDIT/TYPING`, serviciile
+`telegram-poller` din ambele compose-uri, variabilele `META_*`/`TELEGRAM_BOT_TOKEN`/
+`TYPING_ENABLED`. **Seam-ul de canal (NX-60) a RĂMAS** — nu e o dependență de un canal anume, e
+motivul pentru care stagiile 3-9 nu știu de niciunul; registrul are azi o intrare.
+Trei consecințe găsite prin măsurare, nu presupuse: (a) `IDENTIFIED_CHANNELS` devenea mulțimea
+VIDĂ, deci plafonul de cost per-contact (NX-125) și poarta de comandă/retur (NX-128) ar fi murit
+TĂCUT — re-cheiate pe `identity_is_stable`, unde sursa rămasă e login passthrough-ul verificat
+(NX-129); (b) `check_order` avea o ramură `contact_id` pentru canalele unde id-ul de canal ERA
+contul — devenise inaccesibilă prin construcție, deci a fost scoasă; (c) default-ul
+`InboundMessage.channel_kind = "whatsapp"` era load-bearing în teste (le făcea „client
+identificat" fără să ceară identitate). Migrarea **051** scoate obiectele rămase și restrânge
+vocabularul CHECK-urilor; măsurat înainte pe baza live: 22 canale, TOATE `webchat`, zero rânduri
+în tabelele care se șterg. Detalii:
+[`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql) +
+[`tasks/NX-289.md`](tasks/NX-289.md).
+
 ---
 
 ## Arhitectura — pipeline liniar (12 stagii)
@@ -400,19 +421,21 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
 
 ```
 [1] WEBHOOK SVC  (implementat: src/webhook/ — subțire, FĂRĂ DB)
-    • validare semnătură Meta X-Hub-Signature-256 peste corpul BRUT (signature.py)
-    • dedupe LAYER 1 (NX-51): Redis SET NX EX pe (phone_number_id, wamid).
+    • ACCEPT: /web/messages + /web/chat + /web/v2/turns (src/web/app.py) — sesiune
+      semnată HMAC (token public per tenant + visitor_id), rate limit, cap de body
+    • dedupe LAYER 1 (NX-51): Redis SET NX EX pe (channel_account_id, provider_msg_id).
       NB: unique-ul de pe messages include cheia de partiționare (created_at) →
-      retry-ul Meta vine cu alt created_at, ON CONFLICT nu prinde. De aceea
+      un retry vine cu alt created_at, ON CONFLICT nu prinde. De aceea
       dedupe-ul e în 2 straturi, NU pe messages.
     • push pe stream-ul Redis unic `inbound` (conversation_id nu e cunoscut
-      la webhook fără round-trip în DB; ordinea per conversație = în worker)
-    • ACK 200 în < 50ms (Meta face retry agresiv la timeout)
+      la accept fără round-trip în DB; ordinea per conversație = în worker)
+    • POST /webhook/orders/{business_id} (F2-2) — semnat HMAC, margine subțire, fără DB
+    • NX-289: rutele Meta (GET/POST /webhook) au fost ȘTERSE odată cu canalul
     • update conversations.last_inbound_at s-a mutat în worker (processor)
 
 [2] REDIS BACKBONE + WORKER  (implementat: redis_bus.py, worker/consumer.py + processor.py)
     • stream unic `inbound` + consumer group `workers` (XREADGROUP + ACK)
-    • worker: resolve phone_number_id → business (admin_conn, control plane)
+    • worker: resolve (channel_kind, channel_account_id) → business (admin_conn)
       → tenant_conn → dedupe LAYER 2 durabil (inbound_dedupe, claim ÎNAINTE
       de orice scriere — prinde retry scăpat de Redis după restart/FLUSHALL)
       → contact/conversație → last_inbound_at → pipeline
@@ -431,7 +454,7 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       răspunsul agentului, nu o promisiune neonorată și nu tăcere (P6)
     • media routing: vocale → STT (Whisper), poze → Vision (match catalog)
     • language detect → RO / EN (setează ctx.language; TOATE
-      lookup-urile în faqs / semantic_cache / wa_templates includ locale)
+      lookup-urile în faqs / semantic_cache includ locale)
     • identity resolution: lookup în channel_identities →
       același user pe 2 canale = un singur contact
 
@@ -506,22 +529,19 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • ZERO prețuri inventate structural
 
 [9] SENDER (singurul punct de ieșire din sistem)
-    • typing indicator trimis instant la primire (Meta API)
     • răspuns spart în 2 mesaje scurte dacă > 200 caractere
     • scriere tranzacțională în aceeași TX: reply în outbox +
       patch conversations.state (cu state_version) + insert messages
-    • dispatcher separat citește outbox → trimite la Meta →
-      salvează provider_msg_id pe messages → retry cu backoff la fail
-    • statusurile delivered/read/failed (webhook status) intră în
-      message_status_events → update messages.status pe provider_msg_id
+    • dispatcher separat citește outbox → `ChannelSender` (azi: WebSender, publish
+      pe Redis Pub/Sub + backlog SSE) → retry cu backoff la fail
+    • NX-289: statusurile de livrare (delivered/read/failed) erau raportate de provider
+      prin webhook; nu mai există producător, iar `message_status_events` a fost ștearsă
     • POST-TUR async (nu blochează): extractor profil nano + lead_score update
 
 PROACTIV (în afara pipeline-ului, scheduler separat — proactive_jobs)
     • AWB la expediere (shipments) · back-in-stock · follow-up coș abandonat
-    • verifică opt-in: contacts.consent
-    • verifică 24h window: in_24h_window(conversation) →
-      mesaj normal; altfel → DOAR template cu status='approved'
-      din wa_templates
+    • verifică opt-in: contacts.consent — SINGURA poartă (NX-289: fereastra 24h și
+      template-urile aprobate erau reguli ale platformei Meta, au plecat cu canalul)
 ```
 
 ---
@@ -534,9 +554,9 @@ exact DOUĂ margini, izolat prin contracte (NX-60):
 
 - **Ingestie** (stagiul 1): fiecare canal are parser-ul + verificarea lui →
   produc un **envelope NEUTRU** pe stream-ul unic `inbound`:
-  `channel_kind`, `channel_account_id` (id-ul canalului RECEPTOR — phone_number_id
-  la WhatsApp, bot id la Telegram), `sender_external_id` (id-ul userului — wa_id /
-  chat.id), `provider_msg_id`, `body`, ... Worker-ul rezolvă tenantul cu
+  `channel_kind`, `channel_account_id` (id-ul canalului RECEPTOR — public_token la
+  web), `sender_external_id` (id-ul userului — visitor_id), `provider_msg_id`, `body`,
+  ... Worker-ul rezolvă tenantul cu
   `resolve_channel(channel_kind, channel_account_id)` și nu mai știe de canal.
 - **Trimitere** (stagiul 9): `outbox` e singurul punct de ieșire; un **registru
   `ChannelSender`** mapează `channel_kind → client`. Dispatcher-ul alege clientul
@@ -548,7 +568,7 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   outbox/dispatcher, prin `render_web`) + `GET /web/stream` (SSE) + `POST /web/messages` +
   `GET /web/bootstrap` (`src/web/app.py`). Widgetul propriu-zis trăiește într-un **repo FE
   separat**; backendul emite DOAR JSON — [`docs/FRONTEND-CONTRACT-IZI.md`](docs/FRONTEND-CONTRACT-IZI.md).
-  Fără fereastră 24h, fără template-uri. Handoff dezactivat by default (fără operator). Identitate:
+  Fără fereastră impusă de platformă, fără template-uri. Handoff scos din produs. Identitate:
   anonim by default; login passthrough JWT în spatele `WEB_IDENTITY_ENABLED` (NX-128/129/130).
   Audit conversațional pe calea reală: `scripts/sim/web_audit.py`.
   > **Contract v2 (NX-228→NX-234): rutele există, flags OFF.** Contractul de mai sus e
@@ -603,17 +623,19 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   > [`docs/WEB-WIDGET-BOUNDARY-V2.md`](docs/WEB-WIDGET-BOUNDARY-V2.md); forma pentru FE:
   > [`docs/FRONTEND-CONTRACT-IZI-V2.md`](docs/FRONTEND-CONTRACT-IZI-V2.md). **Nu modifica v1
   > in-place** ca să adaugi ceva în v2 — sunt contracte, randori și validatori separați.
-- **WhatsApp** — Meta Cloud API, webhook semnat. Codul e LIVE și testat, dar canalul **n-a fost
-  niciodată conectat** (0 conversații reale; lipsește `phone_number_id` — T013). **ÎNGHEȚAT.**
-  Fereastră 24h + template-uri (proactiv) — relevant doar când se reia.
-- **Telegram** — Bot API prin long polling. A fost canal de TEST pe VPS fără HTTPS.
-  **ÎNGHEȚAT** (17 conversații, ultimul mesaj 2026-06-18). Poller OFF by default în ambele
-  compose-uri (`profiles: ["telegram"]`) → `docker compose --profile telegram up` ca să-l repornești.
+**WhatsApp și Telegram — ȘTERSE (NX-289).** Erau ÎNGHEȚATE din NX-179 (cod păstrat, zero
+investiție). Un canal înghețat nu e însă gratis: fiecare stagiu care îl numește e o ramură pe care
+nimeni n-o mai execută dar toți o citesc, iar un CHECK care încă acceptă `whatsapp` e o invitație.
+Au plecat: `src/channels/telegram/`, `src/meta_client.py`, `src/webhook/meta.py`, rutele
+`GET/POST /webhook`, `wa_templates` + poarta de template din proactiv, `message_status_events`,
+callback-urile de butoane inline, serviciile de compose, variabilele de mediu. Migrarea de schemă:
+[`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql).
 
-**De ce rămâne codul de canal:** abstracția (NX-60) NU e o dependență de Telegram/WhatsApp — e
-motivul pentru care pipeline-ul (stagiile 3-9) e agnostic. A o scoate ar cupla engine-ul la web și
-ar arunca seam-ul care face WhatsApp posibil pentru clienții români (modelul de business). Îngheț ≠
-ștergere: nu se investește, nu rulează, dar nici nu blochează.
+**Ce a RĂMAS, deliberat: seam-ul de canal (NX-60).** Nu e o dependență de Telegram/WhatsApp — e
+motivul pentru care pipeline-ul (stagiile 3-9) e agnostic. A-l scoate ar cupla engine-ul la web.
+Registrul `ChannelSender` are azi o singură intrare (`webchat`); `channel_kind` rămâne pe envelope,
+pe `conversations` și pe `channel_identities`. Un canal nou = o clasă + o înregistrare, nu o
+rescriere a pipeline-ului.
 
 ---
 
@@ -661,12 +683,8 @@ businesses        — id, slug, name, vertical, status, default_locale,
                     supported_locales[], timezone, settings jsonb,
                     daily_cost_cap_usd
 business_users    — business_id, user_id (auth.users), role  (dashboard)
-channels          — id, business_id, kind(whatsapp|telegram|...),
+channels          — id, business_id, kind (doar `webchat` — restrâns de 051),
                     provider_account_id, credentials_ref (secret manager, NU secrete în DB)
-wa_templates      — id, business_id, channel_id, name, language, category,
-                    version, body, variables jsonb, status(draft|submitted|
-                    approved|rejected|paused|deprecated), provider_template_id
-                    • proactivul în afara ferestrei 24h folosește DOAR status='approved'
 ```
 
 ### Contacts & identitate
@@ -683,12 +701,11 @@ channel_identities— id, business_id, contact_id, channel_kind, external_id,
 ### Conversații & mesaje (hot path)
 ```
 conversations     — id, business_id, contact_id, channel_id, status,
-                    bot_active, last_inbound_at (24h window),
+                    bot_active, last_inbound_at (alimentează sweeper-ele proactive),
                     handoff_until/risk_flags/assigned_user_id = coloane MOARTE (handoff scos;
                     păstrate în schemă, nimeni nu le mai scrie),
                     last_outbound_at, locale, state jsonb (≤8KB), state_version
                     (optimistic lock), risk_flags[], shadow_mode
-                    • in_24h_window(conv) = funcție SQL (derivat, nu flag stocat)
                     • state = ref-uri (displayed_products: {id,name,price}), NU obiecte
                     • NX-235: `state` are DOUĂ forme. v1 = azi; v2 (`schema_version: 2`) =
                       stare REDUSĂ (needs cu strength/status/source + revocations + references),
@@ -709,7 +726,6 @@ inbound_dedupe    — business_id + provider_msg_id (PK compus), first_seen
                     • NE-partiționat → ON CONFLICT funcționează; claim în worker
                       înainte de orice scriere; purjă >48h (jobs/cleanup_dedupe)
                     • migrare: docs/004_inbound_dedupe.sql (aplicată live)
-message_status_events — provider_msg_id, status, occurred_at  (delivered/read/failed)
 outbox            — id, business_id, conversation_id, idempotency_key UNIQUE,
                     kind, payload jsonb, status(pending|dispatching|sent|failed|dead),
                     attempts, next_attempt_at, last_error
@@ -860,7 +876,7 @@ bypassrls. Control plane-ul (`admin_conn`) rulează pe un pool privilegiat separ
 Detalii: `docs/db_connections.md`.
 
 **Excepții documentate — `admin_conn` (control plane), exact DOUĂ:**
-(1) lookup-ul `phone_number_id → business_id` (db/queries/channels.py) rulează
+(1) lookup-ul `(channel_kind, channel_account_id) → business_id` (db/queries/channels.py) rulează
 ÎNAINTE ca tenantul să fie cunoscut — e operația care îl derivă;
 (2) NX-249: `release_policies` (db/queries/release.py) — policy-ul de release e un
 obiect de MEDIU, nu de tenant, iar rândul poartă allowlistul de tenanți eligibili;
@@ -902,7 +918,7 @@ poartă pe worker și pe `/web/chat`). Detalii: `docs/db_connections.md`.
 8. **State = ref-uri, nu obiecte** — în displayed_products: {product_id, name, price}, NU obiectul complet
 9. **Promptul se generează din DB** — system prompt din `categories` (+ `intent_aliases`), nu hardcodat. (Un tabel `taxonomy` bogat se adaugă aditiv DOAR când verticalul cere filtre pe concerns — vezi schema_reference.)
 10. **Observabilitate din runner** — stagiile nu știu că sunt măsurate; runner-ul scrie event-ul
-11. **Limba e parte din cheie** — orice lookup în faqs / semantic_cache / wa_templates include locale. Un cache hit în limba greșită e un bug, nu un hit. **Pilotul e `ro-RO`, dar nucleul rămâne locale-aware (D3): nu hardcoda română** — limba activă e configurație, nu constantă
+11. **Limba e parte din cheie** — orice lookup în faqs / semantic_cache include locale. Un cache hit în limba greșită e un bug, nu un hit. **Pilotul e `ro-RO`, dar nucleul rămâne locale-aware (D3): nu hardcoda română** — limba activă e configurație, nu constantă
 12. **PII trăiește într-un loc** — `channel_identities` (telefon E.164 / id canal, + hash). Nicăieri altundeva. Logurile nu conțin telefoane (redaction în logger)
 13. **Vocea e cod, nu speranță** — un mesaj nu trebuie să „se vadă că e făcut cu AI". În textul
     către client NU există liniuță de pauză („—", „–" sau „-" între spații) și nici punct și
@@ -929,8 +945,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→049), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 051)
+│   ├── 0NN_*.sql                ← migrări delta (003→051), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 052)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
@@ -971,8 +987,7 @@ nativx-assistant/
 │   │                              outbox, inbound_dedupe, catalog, channels, businesses)
 │   ├── webhook/
 │   │   ├── app.py               ← FastAPI: GET verify + POST inbound (ambele LIVE)
-│   │   ├── signature.py         ← verificare X-Hub-Signature-256 (corp brut)
-│   │   ├── meta.py              ← parser payload Meta → InboundEvent
+│   │   ├── signature.py         ← verificare HMAC-SHA256 peste corpul brut (comenzi)
 │   │   ├── status.py            ← LIVE: delivered/read/failed → messages.status (#26)
 │   │   └── orders.py            ← TODO: webhook comenzi → match ref_code → atribuire
 │   ├── worker/
@@ -982,15 +997,13 @@ nativx-assistant/
 │   │   ├── turn_snapshot.py     ← NX-234: TurnSnapshot IMUABIL (tenant/actor/conv/input/suprafață)
 │   │   ├── admission.py         ← frâna de concurență: lease-uri Redis, plafon global + per-tenant
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
-│   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (Meta/Telegram), retry idempotent
+│   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (webchat), retry idempotent
 │   │   ├── context.py           ← stagiul 6: istoric conversație bugetat (triaj+agent)
 │   │   └── stages/             ← triage.py (nano) ✅ + agent.py (mini, RAG+validator) ✅;
 │   │                             TODO: gates, free_layers; echo=fallback
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
 │   │   └── web/render_v2.py     ← NX-240: projectorul PUR `web-view.v2` (zero I/O, zero ceas)
 │   │   ├── base.py              ← ChannelSender Protocol + Capability matrix (NX-115) + registry
-│   │   └── telegram/            ← client.py (Bot API) + poller.py (long polling, TEST)
-│   ├── meta_client.py           ← MetaClient (WhatsApp Cloud API send); implementează ChannelSender
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)
 │   ├── domain/                  ← NX-114: DomainPack (config per-vertical din DB+seed)
 │   │   ├── pack.py + loader.py + normalize.py + defaults/*.json (ecommerce/beauty_salon/...)
@@ -1047,7 +1060,7 @@ nativx-assistant/
 │   │   ├── initiators.py        ← PL-1: sweeper-e care CREEAZĂ proactive_jobs (coș abandonat +
 │   │   │                          back-in-stock) + seam-uri awb/follow_up; rulate de jobs/scheduler
 │   │   ├── builders.py          ← text per kind (free_text + template_name + variables)
-│   │   └── templates.py         ← wa_templates + 24h window + consent check (poartă NX-71)
+│   │   └── templates.py         ← poarta NX-71: consent check (NX-289: doar atât a rămas)
 │   ├── safety/                  ← NX-173 (P0): gate-uri DETERMINISTE, în afara deciziei de model
 │   │   └── contraindications.py ← context (sarcină/alăptare) × registru curat → excludere dură
 │   ├── gdpr/
@@ -1249,10 +1262,10 @@ cuplate la „500" au picat la 654 și au fost raportate ca regresie — vezi ta
 Datele de simulare (`sim:*`, din `scripts/sim/server.py`) se curăță cu
 `scripts/sim/cleanup.py` (dry-run default, `--apply` ca să șteargă).
 **Canale** (re-verificat pe DB live 2026-07-17 — NX-179): **webchat = ACTIV** (64 conversații,
-ultimul mesaj 2026-07-14) → SINGURUL pe care se lucrează. Telegram ÎNGHEȚAT (17 conv, ultimul
-2026-06-18; poller OFF: `profiles: ["telegram"]`). WhatsApp ÎNGHEȚAT (0 conversații reale; canalul
-din DB e `SIM-DRIVER`, harness-ul de test). Testele integration își creează channel throwaway
-(tranzacție rollback-uită).
+ultimul mesaj 2026-07-14). Proiectul avea atunci și 17 conversații Telegram de test (ultima
+2026-06-18) și zero WhatsApp; toate trăiau pe acest proiect abandonat. NX-289 a șters canalele —
+pe baza curentă (`NativexSales`) nu există niciun rând care să le numească. Testele integration
+își creează channel throwaway (tranzacție rollback-uită).
 
 </details>
 
@@ -1276,9 +1289,9 @@ nou din 2026-08-28; configul vechi e păstrat în `.env.bak.old-project` (gitign
   o promisiune pe care nimeni n-o onorează, iar tăcerea ar încălca P6. Riscul se DETECTEAZĂ
   (event `risk_detected`, ca să știm cât de des se cere), dar nu schimbă turul. Singurul
   kill-switch rămas e `conversations.bot_active`, setat din DB — nu declanșat de conversație
-- NU trimitere directă la Meta/Telegram din stagii — totul prin `outbox` + dispatcher (ChannelSender)
+- NU trimitere directă la un canal din stagii — totul prin `outbox` + dispatcher (ChannelSender)
 - NU cod specific de canal în pipeline/worker — doar la margini (parser ingestie + ChannelSender)
-- NU mesaje proactive fără consent + (24h window SAU template approved)
+- NU mesaje proactive fără consent (`contacts.consent`) — singura poartă rămasă (NX-289)
 - NU telefoane/PII în loguri sau în analytics — doar în `channel_identities`
 - NU `service_role` în worker — workerul folosește `bot_runtime` (RLS activ)
 ```

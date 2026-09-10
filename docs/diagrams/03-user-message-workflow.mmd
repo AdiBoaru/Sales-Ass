@@ -1,7 +1,7 @@
 %% GENERAT din docs/ARCHITECTURE-WORKFLOWS.md — nu edita doar aici.
 %% Regenerare: python scripts/export_diagrams.py
 %% Editare vizuală: https://mermaid.live (paste tot fișierul)
-%% Diagram 3 — User Message Workflow (async: WhatsApp / Telegram / web-SSE)
+%% Diagram 3 — User Message Workflow (async: web-SSE)
 flowchart TD
   classDef edge fill:#aed6f1,stroke:#2874a6,color:#000
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
@@ -10,10 +10,10 @@ flowchart TD
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
   classDef err fill:#f1948a,stroke:#922b21,color:#000
 
-  MSG["Mesaj primit<br/>(WhatsApp / Telegram / site)"]:::edge
+  MSG["Mesaj primit<br/>(site — widget web)"]:::edge
   CAP{"Mesajul e anormal de mare?<br/>(apărare anti-OOM) (app.py:99-101)"}:::dec
   R413["Refuzat: prea mare (413)"]:::err
-  SIG{"Semnătura Meta e autentică?<br/>(webhook/app.py:103)"}:::dec
+  SIG{"Sesiunea web e autentică?<br/>(web/session.py)"}:::dec
   JSONV{"E JSON valid? (:106-109)"}:::dec
   R400["Refuzat: cerere stricată (400)"]:::err
   R403["Refuzat: semnătură falsă (403)"]:::err
@@ -58,7 +58,7 @@ flowchart TD
 
   DISP["Dispecerul (alt proces) ia din coadă<br/>ce e de trimis"]:::step
   RENDER{"Alegem forma după ce POATE canalul:<br/>carduri / carusel / șablon / text<br/>(dispatcher.py:101)"}:::dec
-  SEND["Trimitem prin canal (Meta / Telegram)"]:::edge
+  SEND["Trimitem prin canal (web)"]:::edge
   SENT["Marcat trimis + legăm id-ul de la<br/>provider (dispatcher.py:215)"]:::db
   FAIL["Eșec → reîncercăm cu pauze crescânde<br/>→ marcat mort (dispatcher.py:211)"]:::err
   RP["Notăm când forma cerută ≠ forma<br/>livrată (dispatcher.py:69-98)"]:::step

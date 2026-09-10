@@ -10,13 +10,13 @@
 > - **[docs/DISASTER-RECOVERY.md](docs/DISASTER-RECOVERY.md)** — surse de adevăr, restore, RPO/RTO
 > - **[docs/SECRETS-ROTATION.md](docs/SECRETS-ROTATION.md)** — inventar, livrare prin fișier, rotație
 >
-> Fișierul ăsta rămâne pentru **topologia** VPS-ului (coabitare, Traefik, DNS, profile de canal) și
+> Fișierul ăsta rămâne pentru **topologia** VPS-ului (coabitare, Traefik, DNS) și
 > pentru istoricul deciziilor. Unde cele două se contrazic, **runbook-ul de release câștigă**;
 > secțiunile depășite sunt marcate ca atare mai jos.
 
 Runbook pentru a rula Nativx **alături** de stack-ul existent al VPS-ului, fără
-să-l atingem. DB = Supabase remote (nu se atinge Postgres-ul local). Canale:
-**WhatsApp** (Meta Cloud API, număr separat) + **Telegram** (long polling).
+să-l atingem. DB = Supabase remote (nu se atinge Postgres-ul local). Canal: **web widget**
+(`webchat`) — singurul, din NX-179/NX-289.
 
 ## Garanții de coabitare (ce NU atingem)
 
@@ -94,43 +94,27 @@ Traefik un middleware de `buffering` ca pachetele mari să fie oprite la margine
 > separat pentru `/web`, folosește `maxRequestBodyBytes=16384` pe el. Capul Traefik e un plus —
 > NU înlocuiește gardul din app.
 
-## Faza 2 — Telegram live (risc ~0, validare)
+## Faza 2 — pornirea stivei fără ingress (risc ~0, validare)
 
-DNS încă nenecesar (Telegram = polling, fără ingress). Pornește fără webhook expus:
+DNS încă nenecesar: worker-ul, dispatcher-ul și scheduler-ul nu au nevoie de nimic expus.
 
 ```bash
 cd /opt/nativextech/nativx
-docker compose up -d --build redis worker dispatcher telegram-poller scheduler
+docker compose up -d --build redis worker dispatcher scheduler
 docker compose ps
-docker compose logs -f telegram-poller worker
+docker compose logs -f worker
 docker stats --no-stream            # ← verifică RAM-ul sub sarcină
 ```
 
-Trimite un mesaj botului de Telegram → confirmă răspuns e2e. Urmărește `docker stats`
-câteva minute. Dacă RAM-ul e ok, treci la WhatsApp.
+Urmărește `docker stats` câteva minute. Dacă RAM-ul e ok, treci la widget.
 
-## Faza 3 — WhatsApp (Meta Cloud API)
+> **Fazele 2 și 3 de dinainte (Telegram live, apoi WhatsApp / Meta Cloud API) au dispărut**
+> odată cu canalele — NX-289 le-a șters din proiect. Nu mai există `telegram-poller`,
+> `META_*` în `.env`, callback URL de webhook Meta sau verificare Meta Business.
 
-1. **DNS:** A-record `WEBHOOK_HOST` → `72.62.34.245` (+ AAAA către IPv6 dacă vrei).
-2. **Pornește webhook-ul** (Traefik îi emite certul automat la prima cerere HTTPS):
-   ```bash
-   docker compose up -d webhook
-   docker compose logs -f webhook
-   ```
-3. **Meta dashboard** (T013 — număr WhatsApp Business propriu, NU Evolution):
-   - completează în `.env`: `META_ACCESS_TOKEN`, `META_APP_SECRET`,
-     `META_PHONE_NUMBER_ID`, `META_VERIFY_TOKEN` → `up -d webhook` din nou.
-   - Webhook callback URL: `https://WEBHOOK_HOST/webhook`
-   - Verify token: același `META_VERIFY_TOKEN`. Meta face GET `/webhook?hub.*` →
-     trebuie 200 cu challenge-ul (vezi `src/webhook/app.py`).
-   - Subscribe la câmpul `messages`.
-4. Trimite un mesaj real pe numărul Meta → confirmă răspuns.
+## Faza 3 — Widget web (chat pe site)
 
-> Verificarea Meta Business poate dura zile — începe paperwork-ul T013 din timp.
-
-## Faza 4 — Widget web (chat pe site)
-
-Al treilea canal: widget de chat embeddabil pe site-ul clientului. Rulează pe rute
+Canalul: widget de chat embeddabil pe site-ul clientului. Rulează pe rute
 suplimentare în serviciul `webhook` (deja rutat de Traefik) — **fără container nou, fără
 DNS nou** (același `WEBHOOK_HOST`). `/web/chat` (sincron) rulează pipeline-ul IN-PROCES în
 `webhook`, deci acel container are nevoie de `OPENAI_API_KEY` + `DATABASE_URL_BOT` (deja în `.env`).
@@ -252,6 +236,6 @@ Setup (o singură dată), pe lângă cel de mai jos:
 - **Swap** (amânat): `fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap
   /swapfile && swapon /swapfile` + linie în `/etc/fstab` + `sysctl vm.swappiness=10`.
   Plasă contra epuizării TOTALE de RAM (peste ce prind `mem_limit`-urile).
-- **Widget web** — LIVE (vezi Faza 4). Rute în serviciul `webhook`, fără container nou.
+- **Widget web** — LIVE (vezi Faza 3). Rute în serviciul `webhook`, fără container nou.
   Dacă traficul web crește, mută `/web/*` într-un serviciu `webgw` dedicat (aceeași imagine,
-  alt router Traefik) ca să nu concureze cu ingestia de webhook pe CPU/RAM.
+  alt router Traefik) ca să nu concureze cu restul rutelor pe CPU/RAM.

@@ -16,7 +16,7 @@ flowchart TD
     W4{"current_user == bot_runtime?<br/>connection.py:96"}:::gate
     W5["register pgvector codec<br/>connection.py:138"]:::step
     W6["get_redis"]:::step
-    W7["build_registry — Meta/TG senders<br/>dispatcher.py:348"]:::step
+    W7["build_registry — WebSender<br/>dispatcher.py:325"]:::step
     W8["ensure_group XGROUP MKSTREAM<br/>consumer.py:81"]:::step
     W9["run_consumer loop READY"]:::proc
     WFAIL["BOOT REFUSED — crash loud"]:::gate
@@ -31,7 +31,7 @@ flowchart TD
   end
 
   subgraph DispatcherBoot["dispatcher: python -m src.worker.dispatcher"]
-    D0["_main dispatcher.py:369"]:::proc
+    D0["_main dispatcher.py:342"]:::proc
     D1["get_pool + get_bot_pool eager"]:::step
     D2{"web_enabled?"}:::gate
     D3["get_redis → WebSender"]:::step
@@ -39,7 +39,7 @@ flowchart TD
     D5["run_dispatcher loop READY"]:::proc
   end
 
-  subgraph OtherBoot["scheduler / proactive / telegram-poller"]
+  subgraph OtherBoot["scheduler / proactive"]
     J0["jobs._main scheduler.py:224<br/>job list built by flags :122-162"]:::proc
     J1["loop: run due jobs + heartbeat<br/>scheduler.py:186-194"]:::step
     P0["proactive._main scheduler.py:262"]:::proc

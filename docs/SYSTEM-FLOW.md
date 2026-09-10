@@ -1,8 +1,14 @@
 # SYSTEM-FLOW — Nativx Assistant cap-coadă
 
 > Documentul de orientare pentru un dezvoltator nou. Explică EXACT cum curge un
-> mesaj de la canal (WhatsApp / Telegram) până la răspuns, plus ce se întâmplă
-> post-tur (cache, summarizer, cost). Toate referințele sunt `fișier:linie` reale.
+> mesaj de la canal până la răspuns, plus ce se întâmplă post-tur (cache, summarizer, cost).
+>
+> ⚠️ **Scris când existau trei canale.** NX-289 (2026-09-10) a șters WhatsApp și Telegram:
+> secțiunile despre `verify_meta_signature`, pollerul Telegram, `parse_statuses`, fereastra
+> de 24h și template-urile aprobate descriu cod care nu mai există. Marginea de intrare de
+> azi e `/web/*` (+ webhook-ul de comenzi). Pentru o hartă VERIFICATĂ automat contra codului,
+> citește [`ARCHITECTURE-WORKFLOWS.md`](ARCHITECTURE-WORKFLOWS.md) — are o poartă în CI care
+> pică dacă documentul divergează.
 > Sursa de adevăr pentru schemă: [`schema_v2_production.sql`](schema_v2_production.sql).
 > Arhitectura de ansamblu și principiile: [`../CLAUDE.md`](../CLAUDE.md).
 

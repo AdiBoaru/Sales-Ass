@@ -1,6 +1,7 @@
 # Nativx Assistant
 
-Platformă multi-tenant de AI Sales Assistant pe WhatsApp (by Nativx Technology).
+Platformă multi-tenant de AI Sales Assistant pentru ecommerce, livrată ca **web widget**
+(by Nativx Technology).
 Arhitectura completă, schema și principiile sunt în [`CLAUDE.md`](CLAUDE.md).
 
 > De la `git clone` la teste verzi în ~10 minute. Pașii sunt scriși executându-i
@@ -14,7 +15,6 @@ Arhitectura completă, schema și principiile sunt în [`CLAUDE.md`](CLAUDE.md).
 |---|---|---|
 | **Python 3.12** | runtime + teste | local merge și 3.11; CI rulează 3.12 |
 | **gh** (GitHub CLI) | PR-uri | `winget install GitHub.cli`, apoi `gh auth login` |
-| **cloudflared** | tunel webhook (dev) | doar când testezi mesaje live de la Meta |
 | **Docker** | rulare stack containerizat | OPȚIONAL — necesar doar pe VPS / pentru `docker compose`. Dev local merge fără. |
 
 DB-ul (Postgres) NU rulează local — e **Supabase remote**.
@@ -46,8 +46,7 @@ Valorile reale le iei din vault-ul echipei / dashboard-uri. Minim pentru a rula:
   postgresql://postgres.<ref>:<PAROLA>@aws-0-<region>.pooler.supabase.com:5432/postgres
   ```
   ⚠️ NU conexiunea directă `db.<ref>.supabase.co` — nu se rezolvă pe rețele IPv4.
-- `OPENAI_API_KEY`, `META_*` — vezi `.env.example` (necesare pentru LLM / WhatsApp,
-  nu pentru testele de bază).
+- `OPENAI_API_KEY` — vezi `.env.example` (necesar pentru LLM, nu pentru testele de bază).
 
 ### DB: aplică plasa RLS (o singură dată per proiect)
 
@@ -79,41 +78,33 @@ ruff check . && ruff format --check .
 ## Rulare stack (opțional, necesită Docker)
 
 ```bash
-docker compose up      # redis + webhook + worker + dispatcher + telegram-poller
+docker compose up      # redis + webhook + worker + dispatcher
 ```
 Postgres nu e în compose (e Supabase). Pe Win10 Home, Docker Desktop cere backend
 **WSL2** (vezi Troubleshooting). Fără Docker, rulezi procesele direct:
 ```bash
-uvicorn src.webhook.app:app --reload      # webhook (inbound WhatsApp)
+uvicorn src.webhook.app:app --reload      # API (endpointurile /web/*, health, comenzi)
 python -m src.worker.consumer             # worker (consumer → pipeline → outbox)
 python -m src.worker.dispatcher           # dispatcher (outbox → canal)
-python -m src.channels.telegram.poller    # poller Telegram (long polling, TEST)
 ```
 > ⚠️ Procesele directe au nevoie de un Redis accesibil (`REDIS_URL`). `docker
 > compose` îl pornește pe `redis`; local fără Docker ai nevoie de un Redis separat.
 
-## Canal de TEST: Telegram (cel mai rapid e2e — fără HTTPS)
+## Canalul: web widget (singurul)
 
-Pentru a testa botul vorbind direct cu el, fără birocrația Meta. Long polling →
-niciun webhook public / tunel / TLS. WhatsApp rămâne canalul primar de producție.
-
-```bash
-# 1. token de la @BotFather (/newbot) → în .env:  TELEGRAM_BOT_TOKEN=...
-# 2. seed-ul canalului demo (validează tokenul + inserează rândul channels):
-python scripts/seed_telegram_channel.py
-# 3. pornește stack-ul (poller-ul Telegram + worker + dispatcher + redis):
-docker compose up -d
-# 4. scrie „salut" botului pe Telegram → primești echo
-```
-Pașii pe VPS sunt în `TODO-MANUAL.md` (secțiunea Deploy VPS).
-
-## Webhook live de la Meta (după setup Meta — T013)
+`WEB_ENABLED=true` montează endpointurile `/web/*` pe aplicația FastAPI. Widgetul propriu-zis
+trăiește într-un repo FE separat; backendul emite doar JSON
+([`docs/FRONTEND-CONTRACT-IZI.md`](docs/FRONTEND-CONTRACT-IZI.md)).
 
 ```bash
-cloudflared tunnel --url http://localhost:8000
+# canalul webchat al tenantului (idempotent — întoarce public_token pt data-token din widget):
+python scripts/seed_web_channel.py --business sole-ro
+# audit conversațional pe calea REALĂ (fără HTTP server):
+python scripts/sim/web_audit.py
 ```
-Pune `https://<url-tunel>/webhook` + verify token în Meta config → Verify and Save.
-⚠️ URL-ul tunelului se schimbă la fiecare restart → re-verifică webhook-ul în Meta.
+
+> NX-289: WhatsApp și Telegram au fost ȘTERSE din proiect (erau înghețate din NX-179).
+> Nu mai există poller, webhook Meta, tunel `cloudflared` sau template-uri aprobate.
 
 ---
 
