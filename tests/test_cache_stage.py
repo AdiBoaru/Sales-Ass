@@ -218,3 +218,90 @@ async def test_writeback_skips_not_cacheable(monkeypatch):
     monkeypatch.setattr(ac_mod, "upsert_entry", boom)
     ctx = _ctx_reply("ceva ambiguu", Reply(text="ce anume cauți?", cacheable=False))
     await _cache_writeback(static_db(None), _LLM(), "biz-1", "ro", "ceva ambiguu", ctx)
+
+
+# --- NX-291: sonda de dinaintea embed-ului ----------------------------------
+# `embed()` e singurul apel EXTERN al stratului gratuit și rulează pe tot traficul care ajunge
+# aici. Pe o mulțime servibilă goală, L2 nu poate întoarce nimic — deci apelul e plătit pentru un
+# rezultat imposibil. Sonda folosește exact filtrul lui `semantic_lookup`, deci nu ghicește.
+
+
+class _ExplodingLLM:
+    """Orice apel de embedding e un eșec al testului: exact costul pe care îl evităm."""
+
+    async def embed(self, texts):
+        raise AssertionError("embed() nu trebuie chemat fără candidați servibili")
+
+
+async def _run_with_probe(monkeypatch, probe, llm):
+    async def no_exact(*a, **k):
+        return None
+
+    monkeypatch.setattr(cache_mod, "exact_lookup", no_exact)
+    monkeypatch.setattr(cache_mod, "semantic_candidates_exist", probe)
+    ctx = _ctx(STATIC_Q)
+    await cache_stage(ctx, PipelineDeps(conn=None, llm=llm))
+    return ctx
+
+
+async def test_no_candidates_skips_the_embedding_call(monkeypatch):
+    async def empty(*a, **k):
+        return False
+
+    ctx = await _run_with_probe(monkeypatch, empty, _ExplodingLLM())
+    assert ctx.reply is None and ctx.from_cache is False  # miss → pipeline continuă
+    assert any(
+        e.type == "cache_lookup"
+        and e.properties["layer"] == "miss"
+        and e.properties.get("reason") == "no_candidates"
+        for e in ctx.events
+    )
+
+
+async def test_candidates_present_still_pays_for_l2(monkeypatch):
+    """Simetria care contează: sonda nu are voie să devină un al doilea prag de servire."""
+
+    async def present(*a, **k):
+        return True
+
+    async def fake_sem(conn, bid, locale, emb, **k):
+        return {"id": "e9", "answer": "Livrare 2-4 zile.", "similarity": 0.99}
+
+    async def fake_touch(*a):
+        pass
+
+    monkeypatch.setattr(cache_mod, "semantic_lookup", fake_sem)
+    monkeypatch.setattr(cache_mod, "touch_hit", fake_touch)
+    ctx = await _run_with_probe(monkeypatch, present, _LLM())
+    assert ctx.from_cache is True and ctx.reply.text == "Livrare 2-4 zile."
+
+
+async def test_probe_failure_falls_back_to_embedding(monkeypatch):
+    """FAIL-OPEN. O optimizare a unei optimizări n-are voie să stingă stratul pe care îl servește:
+    un cache care nu mai servește niciodată nu se vede în niciun răspuns, doar în factură."""
+
+    async def boom(*a, **k):
+        raise RuntimeError("migrare lipsă / DB jos")
+
+    async def fake_sem(conn, bid, locale, emb, **k):
+        return {"id": "e10", "answer": "Retur în 30 de zile.", "similarity": 0.99}
+
+    async def fake_touch(*a):
+        pass
+
+    monkeypatch.setattr(cache_mod, "semantic_lookup", fake_sem)
+    monkeypatch.setattr(cache_mod, "touch_hit", fake_touch)
+    ctx = await _run_with_probe(monkeypatch, boom, _LLM())
+    assert ctx.from_cache is True  # sonda a picat, dar L2 a rulat exact ca înainte
+
+
+def test_probe_and_lookup_cannot_drift():
+    """Structural: ambele interogări se construiesc din ACELAȘI fragment de filtru. Dacă cineva
+    schimbă o dimensiune de cheie într-una singură, sonda ar răspunde despre altă mulțime decât
+    cea căutată — iar greșeala ar fi tăcută în ambele sensuri."""
+    from src.db.queries import semantic_cache as sc
+
+    assert sc._SERVABLE_FILTER in sc._EXISTS_SQL
+    assert sc._SERVABLE_FILTER in sc._SEMANTIC_SQL
+    for key in ("business_id", "locale", "volatility_class", "embedding_model", "prompt_version"):
+        assert key in sc._SERVABLE_FILTER

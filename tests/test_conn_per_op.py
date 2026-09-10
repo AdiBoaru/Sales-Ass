@@ -167,7 +167,16 @@ async def test_cache_stage_releases_conn_before_embedding(monkeypatch):
         await conn.fetchrow("select semantic")
         return None
 
+    # NX-291: sonda de candidați decide dacă L2 mai rulează. Aici măsurăm CICLUL DE VIAȚĂ al
+    # conexiunii peste un embed, nu sonda — deci îi dăm răspunsul care duce testul pe drumul lung.
+    # Cu ea „goală", n-ar mai exista embed, iar testul ar trece degeaba: ar verifica un drum pe
+    # care apelul extern nici nu se face.
+    async def _has_candidates(conn, *a, **k):
+        await conn.fetchval("select exists")
+        return True
+
     monkeypatch.setattr(cache_stage_mod, "exact_lookup", _exact)
+    monkeypatch.setattr(cache_stage_mod, "semantic_candidates_exist", _has_candidates)
     monkeypatch.setattr(cache_stage_mod, "semantic_lookup", _semantic)
 
     ctx = _ctx()

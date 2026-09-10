@@ -78,6 +78,54 @@ async def exact_lookup(
     return _row(row)
 
 
+# Filtrul care decide ce entry-uri sunt SERVIBILE pe calea cosine. Scos în constantă fiindcă e
+# folosit de DOUĂ interogări (sonda de existență + lookup-ul propriu-zis), iar dacă ele ar diverge,
+# sonda ar răspunde despre altă mulțime decât cea căutată — adică ar stinge L2 tăcut. Ordinea
+# parametrilor e comună; vectorul vine ultimul, tocmai ca fragmentul să fie literal identic.
+_SERVABLE_FILTER = """
+        where business_id = $1
+          and locale = $2
+          and volatility_class = $3
+          and embedding_model = $4
+          and prompt_version = $5
+          and expires_at > now()
+"""
+
+_EXISTS_SQL = f"select exists(select 1 from semantic_cache{_SERVABLE_FILTER})"
+
+_SEMANTIC_SQL = f"""
+        select id::text as id, answer, retrieval_signature, data_version,
+               1 - (embedding <=> $6::vector) as similarity
+        from semantic_cache{_SERVABLE_FILTER}
+        order by embedding <=> $6::vector
+        limit 1
+"""
+
+
+async def semantic_candidates_exist(
+    conn: asyncpg.Connection,
+    business_id: str,
+    locale: str,
+    *,
+    volatility_class: str = "static",
+    embedding_model: str,
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
+) -> bool:
+    """Există MĂCAR UN entry pe care `semantic_lookup` l-ar putea întoarce? (NX-291)
+
+    Rostul: `embed()` e cel mai scump pas al stratului gratuit, iar pe o mulțime goală L2 nu poate
+    întoarce nimic. Sonda folosește EXACT filtrul lui `semantic_lookup` (`_SERVABLE_FILTER`), deci
+    „false" e o dovadă, nu o presupunere: dacă nu există niciun rând servibil, apelul de embedding
+    ar fi fost plătit pentru un rezultat imposibil.
+
+    E o verificare pe index, gândită să ruleze în ACELAȘI checkout cu L1 — nu deschide conexiune."""
+    return bool(
+        await conn.fetchval(
+            _EXISTS_SQL, business_id, locale, volatility_class, embedding_model, prompt_version
+        )
+    )
+
+
 async def semantic_lookup(
     conn: asyncpg.Connection,
     business_id: str,
@@ -95,25 +143,13 @@ async def semantic_lookup(
     NX-124a: filtru OBLIGATORIU pe `embedding_model` — ordonarea cosine pe vectori din alt model
     (dim/spațiu diferit) e zgomot. Un upgrade de embeddings nu mai amestecă spațiile (P11)."""
     row = await conn.fetchrow(
-        """
-        select id::text as id, answer, retrieval_signature, data_version,
-               1 - (embedding <=> $3::vector) as similarity
-        from semantic_cache
-        where business_id = $1
-          and locale = $2
-          and volatility_class = $4
-          and embedding_model = $5
-          and prompt_version = $6
-          and expires_at > now()
-        order by embedding <=> $3::vector
-        limit 1
-        """,
+        _SEMANTIC_SQL,
         business_id,
         locale,
-        _vec(embedding),
         volatility_class,
         embedding_model,
         prompt_version,
+        _vec(embedding),
     )
     return _row(row)
 
