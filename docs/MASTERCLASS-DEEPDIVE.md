@@ -23,7 +23,7 @@
 | 5 | **Tools** | catalog_tools, commerce_tools, orders_tools, faq_tools, handoff_tools, taxonomy, base | ✅ |
 | 6 | **DB** | connection, queries/* (~20 fișiere) | ✅ (connection ✅ în MASTERCLASS-RO) |
 | 7 | **Intrare** | webhook/app, signature, meta, body_limit, orders, redis_bus | ✅ (webhook/app ✅ în MASTERCLASS-RO) |
-| 8 | **Canale** | channels/base, media, meta_client, telegram/*, web/* | ✅ |
+| 8 | **Canale** | channels/base, media, web/* (NX-289: meta_client + telegram/* șterse) | ✅ |
 | 9 | **Web gateway** | web/app, session, identity | ✅ |
 | 10 | **Domain & config** | domain/*, config, models, lang/detect, cache/canonical | ✅ (config+models ✅ în MASTERCLASS-RO) |
 | 11 | **Proactiv & joburi** | proactive/*, jobs/*, gdpr/* | ✅ |
@@ -423,7 +423,7 @@ ctx.set_reply("Te conectez cu un coleg…", cacheable=False)  # NICIODATĂ tăce
 **4. 🔀 Cazuri:**
 | Canal | Rezultat |
 |---|---|
-| WhatsApp/Telegram (operator planificat) | escaladare + „te conectez cu un coleg" + tur următor tace |
+| (istoric) escaladare + promisiunea unui coleg + tur următor tace — SCOS din produs |
 | Web (fără operator) | rută rescrisă SALES → agentul răspunde normal (fără mesaj de operator) |
 | escaladare eșuează (DB jos) | răspunde oricum „te conectez cu un coleg" (nu tăcere) |
 
@@ -634,41 +634,13 @@ cardurilor — vezi processor pas 7).
 
 ---
 
-## `callback.py` — navigarea caruselului
-
-**0. 📍 Unde:** [callback.py:36](../src/worker/callback.py#L36) (`handle_callback`). Apelat de consumer
-pe `kind=callback` ([consumer.py:179](../src/worker/consumer.py#L179)). Nodul `CAROUSEL` din 3.
-
-**1. 🎭 Analogie:** clientul apasă săgeata ▶ la un carusel de produse. Nu e o întrebare nouă — e doar
-„arată-mi cardul următor". Nu chemi vânzătorul, doar întorci pagina.
-
-**2. ❓ De ce:** o apăsare ◀/▶ e **UI deterministă**, NU trebuie să treacă prin triaj/agent (cost + LLM
-degeaba). Citești setul afișat din state și editezi cardul.
-
-**3. ⚙️ Cum:**
-```python
-idx = parse_nav(event["data"])                          # "car:nav:3" → 3
-products = conv["state"]["displayed_products"]          # setul persistat de Sender
-if not 0 <= idx < len(products): return None            # index invalid → no-op
-payload = {"type":"edit_media", "card_message_id":..., "products":products, "index":idx}
-outbox_id = await enqueue_outbox(..., f"cb:{provider_msg_id}", payload)  # EDIT prin outbox
-```
-
-**4. 🔀 Cazuri:**
-| Situație | Rezultat |
-|---|---|
-| apasă ▶ la index valid | editează cardul (edit_media prin outbox) |
-| callback necunoscut (nu `car:nav:`) | no-op, log |
-| card expirat (state fără produse) | no-op (index în afara setului) |
-| re-livrare Telegram a aceleiași apăsări | idempotent (`cb:{provider_msg_id}`) → nu dublează |
-
-**5. 🧠 De ce tot prin outbox (nu edit direct):** principiul 5 — **un singur punct de ieșire**. Chiar și
-o editare de card iese prin outbox → dispatcher. Zero logică de trimitere duplicată.
-
-**6. 💥 Ce-ar fi dacă nu verifici `0 <= idx < len`:** un index din afara setului (card vechi) ar da
-IndexError sau ar afișa produsul greșit. Guard-ul face no-op curat.
-
-**7. 🐛 Debug:** `grep carousel_navigated` (to_idx, total, product_id).
+> ### ~~`callback.py` — navigarea caruselului~~ — ȘTERS de NX-289
+>
+> Caruselul (◀/▶ pe `callback_query`, `editMessageMedia`) era **numai** Telegram: un drum de inbound NON-LLM care edita cardul deja trimis. Pe web, echivalentul e o **acțiune opacă semnată** (NX-236) care trece prin pipeline ca orice tur, nu un handler paralel.
+>
+> Secțiunea a fost scoasă, nu marcată: manualul ăsta documentează **fiecare fișier din proiect**,
+> iar un capitol despre un fișier inexistent, cu linkuri `file#L42` care nu se mai deschid, e mai
+> rău decât o lipsă. Ce a supraviețuit e **abstracția** (`channels/base.py`) — vezi acolo.
 
 ---
 
@@ -689,7 +661,7 @@ REALTIME (rapid); facturarea reală rămâne `usage_daily`. Contoarele de aici s
 | `rate_limit_count` ([:50](../src/worker/limits.py#L50)) | INCR mesaje/fereastră fixă → gates decide throttle |
 | `cost_over_budget` ([:59](../src/worker/limits.py#L59)) | pre-check read-only: azi ≥ plafon? |
 | `cost_add_and_total` ([:75](../src/worker/limits.py#L75)) | **INCR atomic + întoarce totalul** (fără TOCTOU) |
-| `spend_over_cap` ([:139](../src/worker/limits.py#L139)) | plafon per-contact (fereastră 24h) |
+| `spend_over_cap` ([:139](../src/worker/limits.py#L139)) | plafon per-contact (fereastră glisantă) |
 | `web_cost_over_visitor_cap` ([:93](../src/worker/limits.py#L93)) | plafon per-vizitator web |
 | `seed_daily_cost` ([:161](../src/worker/limits.py#L161)) | reseed din `usage_daily` (supraviețuiește FLUSHALL) |
 
@@ -718,8 +690,8 @@ funcțiile NU prind erori — caller-ul le tratează **fail-open** (guard indisp
 
 **0. 📍 Unde:** [order_gate.py](../src/worker/order_gate.py). Folosit de agent + tool-urile de comandă.
 
-**1. 🎭 Analogie:** ca să-ți verific comanda, am nevoie să știu CINE ești. Pe WhatsApp știu (numărul =
-contul). Pe web anonim NU știu (n-ai cont) → te rog să te loghezi.
+**1. 🎭 Analogie:** ca să-ți verific comanda, am nevoie să știu CINE ești. Dacă te-ai logat pe site,
+știu (login passthrough). Ca vizitator anonim NU știu (n-ai cont) → te rog să te loghezi.
 
 **2. ❓ De ce (bug real NX-128):** pe web nu există cont (contact throwaway) → `check_order` (scoped pe
 `contact_id`) NU găsește nimic, oricât de corect ar fi numărul. Mesajul vechi „n-am găsit pe acest cont"
@@ -727,19 +699,21 @@ era înșelător + intra în buclă (modelul cerea nr/email pe care tool-ul nu l
 
 **3. ⚙️ Cum:**
 ```python
-def web_unidentified(ctx):                              # canal anonim fără identitate verificată?
-    if channel_kind in IDENTIFIED_CHANNELS: return False   # WhatsApp/Telegram = identificat
-    return not ctx.verified_customer_ref                # web fără login = True
+def web_unidentified(ctx):                              # vizitator anonim, fără identitate verificată?
+    return not identity_is_stable(ctx.message.channel_kind, ctx.verified_customer_ref)
 # mesaje deterministe per-locale: login_required / no_orders
 ```
+> **NX-289:** testul era `channel_kind in IDENTIFIED_CHANNELS` (WhatsApp/Telegram — acolo id-ul de
+> canal ERA contul). Cu canalele șterse, mulțimea a devenit VIDĂ, deci testul ar fi întors mereu
+> `False` — poarta ar fi murit tăcut. `identity_is_stable` (`channels/base.py`) e același concept,
+> cu sursa de identitate care a rămas: login passthrough-ul verificat.
 
 **4. 🔀 Cazuri cu exemplu:**
-| Canal | „unde e comanda mea?" | Rezultat |
+| Vizitator | „unde e comanda mea?" | Rezultat |
 |---|---|---|
-| WhatsApp | numărul = contul | `check_order` caută normal |
 | Web anonim | fără cont | mesaj de login („intră în cont și revino") |
 | Web cu login passthrough (JWT) | `verified_customer_ref` setat | trece de poartă (NX-129) |
-| WhatsApp, dar fără comenzi | — | „nu găsesc comenzi pe contul tău" (onest) |
+| Web logat, dar fără comenzi | — | „nu găsesc comenzi pe contul tău" (onest) |
 
 **5. 🧠 De ce „FAQ-first" (NX-128++):** zidul de login NU e pe toată ruta ORDER. „Cum returnez?" (proces)
 se răspunde fără cont (FAQ). Zidul apare DOAR când modelul cheamă `check_order` (lookup ce chiar cere cont).
@@ -784,9 +758,9 @@ async with conn.transaction():                              # atomic: nu rămân
 **4. 🔀 Cazuri — `choose_render` (degradare grațioasă, [dispatcher.py:101](../src/worker/dispatcher.py#L101)):**
 | Payload | Canal are capability? | Ramura |
 |---|---|---|
-| `rich` | WhatsApp are RICH? | `rich` (carduri native) |
+| `rich` | canalul are RICH? | `rich` (carduri native) |
 | `rich` | canal fără RICH | `text` (floor aplatizat) |
-| `template` (proactiv) | WhatsApp TEMPLATE | `template` (Meta randează) |
+| `carousel` (listă de carduri) | canalul are CARDS? | `products` |
 | `template` | canal fără TEMPLATE | `text` (degradare vizibilă) |
 | `carousel` | canal fără CAROUSEL/CARDS | `text` (lead-in ca text) |
 | `edit_media` | canal fără EDIT | `edit_unsupported` → **dead** (nu degradează — e UI) |
@@ -891,7 +865,7 @@ imbatabilă (nu poți hidrata fapte pentru un id care nu există în retrieval).
 `scrub_intro`? De ce (indiciu: `_allowed_client_numbers`)?
 
 ### Funcțiile-satelit din compose
-- `flatten` ([:466](../src/worker/compose.py#L466)) — aplatizează RichReply în TEXT (floor pentru WhatsApp/cache).
+- `flatten` ([:466](../src/worker/compose.py#L466)) — aplatizează RichReply în TEXT (floor pentru `messages.body`/cache).
 - `flatten_framing` ([:499](../src/worker/compose.py#L499)) — pentru web (cardurile fac enumerarea; textul e doar framing + education).
 - `build_comparison` ([:722](../src/worker/compose.py#L722)) — tabel comparativ 100% determinist (fiecare celulă = fapt real, zero LLM).
 - `decision_axes`/`spec_numbers` ([:661](../src/worker/compose.py#L661)/[:704](../src/worker/compose.py#L704)) — NX-139: axele reale pe care variază setul + cifrele de specificație grounded.
@@ -1452,7 +1426,7 @@ return ToolResult(prices=_order_totals(orders), llm_view=_orders_view(orders))  
 **4. 🔀 Cazuri:**
 | Situație | Rezultat |
 |---|---|
-| WhatsApp, „status ORD-123" | caută pe contul lui (contact_id) → status + AWB + ETA |
+| Web logat, „status ORD-123" | caută pe identitatea verificată (`external_customer_ref`) → status + AWB + ETA |
 | Web anonim | mesaj de login (nu poate avea comenzi legate de contact throwaway) |
 | Web cu login verificat | caută pe `customer_ref` (comenzile reale din eshop) |
 | comandă inexistentă / a altcuiva | `not_found` IDENTIC (nu divulgă existența) |
@@ -1771,7 +1745,6 @@ Restul query-urilor sunt wrappere SQL directe, scoped pe `business_id`. Le carac
 | `proactive.py` | joburi proactive (claim_due FOR UPDATE SKIP LOCKED) | `claim_due_jobs`, `mark_*` |
 | `analytics.py` | event-uri (append-only, INSERT) | `insert_events` |
 | `usage.py` | rollup zilnic (sursa de facturare) | rollup |
-| `wa_templates.py` | template-uri WhatsApp aprobate | lookup template |
 | `gdpr.py` | ștergere/export (security definer) | `gdpr_erase_contact` |
 
 **Firul roșu al tuturor:** `where business_id = $1` explicit + RLS ca plasă; idempotență prin UNIQUE; hot
@@ -1838,41 +1811,13 @@ procesa comenzi false. Semnătura e poarta de autenticitate.
 
 ---
 
-## `meta.py` — parserul payload-ului Meta
-
-**0. 📍 Unde:** [meta.py:50](../src/webhook/meta.py#L50) (`parse_webhook`). **Fără DB** (webhook subțire).
-
-**1. 🎭 Analogie:** un traducător care ia formularul complicat de la Meta și scoate din el doar mesajele, în
-forma noastră simplă (envelope neutru).
-
-**2. ❓ De ce:** structura Meta e imbricată (`entry[].changes[].value.messages[]`). O aplatizezi într-o listă
-plată de `InboundEvent`. NU atinge DB (asta e treaba workerului) → webhook rămâne <50ms.
-
-**3. ⚙️ Cum:**
-```python
-for entry in payload["entry"]:
-    for change in entry["changes"]:
-        for msg in value.get("messages", []):     # ignoră statuses (parse_statuses separat)
-            body, media_id = _extract_body(msg, content_type)  # text/image/button/interactive
-            if len(body) > INBOUND_BODY_MAX: body = body[:2000]  # trunchiere la 2000
-            events.append(InboundEvent(channel_kind="whatsapp", ...))
-```
-
-**4. 🔀 Cazuri:**
-| Tip mesaj | Ce extrage |
-|---|---|
-| text | `text.body` |
-| image/audio/... | caption + `media.id` (pentru Vision) |
-| button | `button.text` |
-| interactive | titlul reply-ului (buton/listă) |
-| mesaj fără id/expeditor | sărit (inutilizabil) |
-| payload doar cu statuses | listă goală |
-
-**5. 🧠 De ce parsare DEFENSIVĂ (chei lipsă → sărim):** Meta poate trimite structuri parțiale/neașteptate. Un
-`change` malformat nu trebuie să crape tot webhook-ul → sari peste el, nu crăpa.
-
-**6. 💥 Ce-ar fi dacă ai atinge DB aici:** webhook-ul ar depăși 50ms → Meta ar face retry → dublă procesare.
-DB-ul trăiește în worker, nu la margine.
+> ### ~~`meta.py` — parserul payload-ului Meta~~ — ȘTERS de NX-289
+>
+> Traducea payload-ul Meta (`entry[].changes[].value.messages[]`) în `InboundEvent` neutru și extrăgea statusurile de livrare. Marginea de ingestie de azi e `src/web/app.py` — vezi `MASTERCLASS-RO.md` cap. 5.
+>
+> Secțiunea a fost scoasă, nu marcată: manualul ăsta documentează **fiecare fișier din proiect**,
+> iar un capitol despre un fișier inexistent, cu linkuri `file#L42` care nu se mai deschid, e mai
+> rău decât o lipsă. Ce a supraviețuit e **abstracția** (`channels/base.py`) — vezi acolo.
 
 ---
 
@@ -1995,64 +1940,46 @@ editezi `if/elif`-uri.
 | TEXT | `send_text` | OBLIGATORIU pentru orice sender |
 | RICH | `send_rich` | recomandare structurată (carduri + chips) |
 | CARDS | `send_products` | listă compactă cu butoane |
-| CAROUSEL | `send_carousel_card` | carusel navigabil |
-| EDIT | `edit_message_media` | editează cardul (navigare) |
-| TYPING | `mark_typing` | „scrie…" |
 | MEDIA | `fetch_media` | download inbound (Vision) |
-| TEMPLATE | `send_template` | proactiv în afara ferestrei 24h |
 | OFFER/COMPARISON | (în send_rich) | buton CTA / tabel |
 
-**4. 🔀 Envelope-urile neutre:** `InboundEvent` (mesaj), `StatusEvent` (delivered/read), `CallbackEvent`
-(apăsare buton). Toate au `to_dict()` cu `kind` → consumer-ul rutează pe `kind`.
+> **NX-289:** matricea avea și `CAROUSEL` (`send_carousel_card`), `EDIT` (`edit_message_media`),
+> `TYPING` (`mark_typing`) și `TEMPLATE` (`send_template`) — declarate DOAR de senderele
+> WhatsApp/Telegram. Au plecat cu ele; ce a rămas e vocabularul pe care îl completează canalul
+> următor. `MEDIA` rămâne declarat, dar niciun sender nu-l implementează azi.
 
-**5. 🧠 De ce `IDENTIFIED_CHANNELS = (whatsapp, telegram)`:** pe astea id-ul de canal ESTE userul (telefon/chat).
-Web e anonim → identitatea vine doar din login passthrough (NX-129). Un singur loc de adevăr (cost per-contact,
-poarta de comandă).
+**4. 🔀 Envelope-urile neutre:** `InboundEvent` (mesaj). Toate au `to_dict()` cu `kind` → consumer-ul
+rutează pe `kind`. **NX-289:** existau și `StatusEvent` (delivered/read raportat de provider) și
+`CallbackEvent` (apăsare de buton inline); n-au mai avut producător și au fost șterse.
+
+**5. 🧠 De ce `IDENTIFIED_CHANNELS` e acum GOL:** era `(whatsapp, telegram)` — pe astea id-ul de canal
+ESTE userul (telefon/chat). Web e anonim → identitatea vine doar din login passthrough (NX-129).
+Constanta rămâne fiindcă `identity_is_stable` trebuie să se poată reactiva la un canal viitor fără
+să se rescrie consumatorii (cost per-contact, poarta de comandă).
 
 **6. 💥 Ce-ar fi dacă un sender n-ar declara `TEXT`:** dispatcher-ul n-ar avea la ce degrada → mesajul ar
 rămâne blocat. TEXT e obligatoriu = floor-ul garantat (niciodată tăcere).
 
 ---
 
-## `meta_client.py` — WhatsApp Cloud API (send + typing + media)
-
-**0. 📍 Unde:** [meta_client.py:28](../src/meta_client.py#L28). Implementează `ChannelSender` + `MediaFetcher`.
-
-**1. 🎭 Analogie:** curierul WhatsApp. Livrează text, arată „scrie…", trimite template-uri, și aduce pozele pe
-care le trimite clientul.
-
-**2. ❓ De ce injectabil (`httpx.AsyncClient`):** testele pasează un MockTransport → zero apeluri reale în CI.
-
-**3. ⚙️ Metodele:**
-| Metodă | Ce face |
-|---|---|
-| `send_text` ([:51](../src/meta_client.py#L51)) | POST `/{phone}/messages` → wamid; clamp la 4096 |
-| `send_template` ([:75](../src/meta_client.py#L75)) | template aprobat (Meta randează server-side) |
-| `mark_typing` ([:117](../src/meta_client.py#L117)) | read + „typing…" într-un call (dispare la ~25s) |
-| `fetch_media` ([:137](../src/meta_client.py#L137)) | 2 hop-uri: metadata → bytes (cu cap `max_bytes`) |
-
-**4. 🔀 Cazuri:**
-| Situație | Rezultat |
-|---|---|
-| text > 4096 | clamp cu elipsă (mai bine trunchiat decât respins de Meta) |
-| răspuns fără message id | `MetaSendError` (dispatcher retry) |
-| media > `max_bytes` | ridică ÎNAINTE de download (nu bufferiza MB) |
-| eroare HTTP | se propagă → dispatcher backoff |
-
-**5. 🧠 De ce `send_template` NU trimite textul randat:** Meta randează template-ul server-side din `name` +
-`params`. Trimiți doar valorile poziționale ({{1}},{{2}}). Poarta NX-71 a validat deja consent + approved.
-
-**6. 💥 Ce-ar fi dacă erorile n-ar propaga:** un mesaj eșuat ar fi marcat „sent" tăcut → client nu primește
-nimic. Propagarea → dispatcher retry → livrare eventuală sau `dead` vizibil.
+> ### ~~`meta_client.py` — WhatsApp Cloud API~~ — ȘTERS de NX-289
+>
+> Implementa `ChannelSender` + `MediaFetcher` peste Graph API: text, template-uri aprobate, indicatorul de scriere, si download-ul pozelor pentru Vision. Era singurul `MediaFetcher` din sistem — de aceea registrul de media e acum GOL (vezi `media.py`).
+>
+> Secțiunea a fost scoasă, nu marcată: manualul ăsta documentează **fiecare fișier din proiect**,
+> iar un capitol despre un fișier inexistent, cu linkuri `file#L42` care nu se mai deschid, e mai
+> rău decât o lipsă. Ce a supraviețuit e **abstracția** (`channels/base.py`) — vezi acolo.
 
 ---
 
 ## `media.py` — registry de MediaFetcher (download inbound)
 
-**📍** [media.py:34](../src/channels/media.py#L34) (`get_media_registry`). **🎭** biroul de recepție colete:
-doar WhatsApp poate primi poze azi. **⚙️** singleton per proces (ca `get_llm`); creează `httpx.AsyncClient`
-DOAR dacă e token Meta. Fără token → registry gol → Gates degradează fail-soft (nicio poză rutată, dar nici
-excepție). **🧠** cuplajul de transport la margine, zero cod de canal în pipeline.
+**📍** [media.py](../src/channels/media.py) (`get_media_registry`). **🎭** biroul de recepție colete —
+azi **fără niciun curier**. **⚙️** singleton per proces (ca `get_llm`); registrul e GOL: singurul
+`MediaFetcher` implementat era `MetaClient.fetch_media`, iar `webchat` nu trimite media inbound.
+Gates degradează fail-soft pe `no_downloader` (nicio poză rutată, dar nici excepție). **🧠** păstrăm
+SEAM-ul, nu un `if` de rescris: un canal care aduce binar se înregistrează aici, iar calea Vision
+(NX-76) rămâne neatinsă în pipeline.
 
 ---
 
@@ -2092,37 +2019,13 @@ offline. Backlog-ul + Last-Event-ID = livrare la reconectare.
 
 ---
 
-## `telegram/` — client + poller (canal de TEST)
-
-**📍** [telegram/poller.py:70](../src/channels/telegram/poller.py#L70) (`poll_once`) +
-[telegram/client.py](../src/channels/telegram/client.py) (`TelegramClient`).
-
-**1. 🎭 Analogie:** un curier de test care, în loc să aștepte scrisori (webhook), merge el la poștă la fiecare
-30s să întrebe „aveți ceva pentru mine?" (long polling).
-
-**2. ❓ De ce polling (nu webhook):** rulează pe VPS **fără HTTPS/tunel** — perfect pentru iterare rapidă pe
-comportamentul botului. Canal de TEST, aditiv (nu înlocuiește WhatsApp).
-
-**3. ⚙️ Cum (poller):**
-```python
-offset = await redis.get(offset_key)                     # dedupe: offset în Redis
-updates = await client.get_updates(offset, timeout=30)   # long poll
-for update in updates:
-    if "callback_query": answer_callback_query + enqueue(CallbackEvent)  # navigare carusel
-    else: enqueue(InboundEvent)                          # pe ACELAȘI stream ca WhatsApp
-await redis.set(offset_key, max_update_id + 1)           # avansează peste TOATE (chiar ignorate)
-```
-
-**4. 🔀 Cazuri:** mesaj text → envelope neutru → stream (consumer-ul rezolvă `resolve_channel('telegram',
-bot_id)`); apăsare buton → `answer_callback_query` (oprește spinner-ul) + `CallbackEvent`; media fără text →
-ignorat (TEST). `TelegramClient` are `send_carousel_card` + `edit_message_media` (RICH pe Telegram).
-
-**5. 🧠 De ce offset în Redis:** garantează că nu re-procesezi update-uri confirmate. `inbound_dedupe` (DB)
-rămâne plasa durabilă. Offset-ul avansează peste TOATE update-urile (chiar ignorate), altfel le-ai re-cere la
-infinit.
-
-**6. 💥 Ce-ar fi dacă un update crapă procesarea:** bucla `run_poller` prinde excepția → log + sleep 3s + retry
-(nu oprește pollerul, P6).
+> ### ~~`telegram/` — client + poller~~ — ȘTERS de NX-289
+>
+> Canal de TEST (long polling, fără HTTPS): `client.py` (send + edit carusel) și `poller.py` (`getUpdates` → envelope neutru). Ultimul mesaj real: 2026-06-18.
+>
+> Secțiunea a fost scoasă, nu marcată: manualul ăsta documentează **fiecare fișier din proiect**,
+> iar un capitol despre un fișier inexistent, cu linkuri `file#L42` care nu se mai deschid, e mai
+> rău decât o lipsă. Ce a supraviețuit e **abstracția** (`channels/base.py`) — vezi acolo.
 
 ---
 
@@ -2140,13 +2043,13 @@ emite doar JSON (vezi [[web-render-contract-fe-separate]]).
 # Recap valurile 7-8
 
 ```
-INTRARE:  signature (HMAC brut) → meta (parser neutru) → body_limit (anti-OOM) → orders (atribuire)
+INTRARE:  web/app (sesiune HMAC + rate limit) → body_limit (anti-OOM) → orders (HMAC brut, atribuire)
           → redis_bus (XADD + dedupe + lock)
-CANALE:   base (Capability matrix) — WhatsApp (meta_client) / Telegram (poller+client, TEST) /
-          Web (WebSender SSE + render JSON) — cuplaj DOAR la margini (NX-60)
+CANALE:   base (Capability matrix) — Web (WebSender SSE + render JSON)
+          — cuplaj DOAR la margini (NX-60); registrul are O intrare din NX-289
 ```
 
-**Firul roșu:** autenticitate prin HMAC pe corpul brut; margini subțiri (fără DB, <50ms); envelope neutru →
+**Firul roșu:** autenticitate prin HMAC pe corpul/sesiunea brută; margini subțiri (fără DB); envelope neutru →
 pipeline agnostic de canal; degradare grațioasă la `send_text` (floor garantat); PII de canal doar în chei
 efemere.
 
@@ -2440,7 +2343,8 @@ separat. Diagrama 10.
 pe stoc produsul pe care-l voiai" — dar DOAR dacă ai fost de acord să primești astfel de mesaje.
 
 **2. ❓ De ce:** recuperezi vânzări pierdute (coș abandonat) + reangajezi clienți (stoc revenit, AWB). Dar cu
-reguli STRICTE (consent + fereastra 24h Meta) — cele mai reglementate decizii din sistem.
+reguli STRICTE (consent) — cea mai reglementată decizie din sistem. **NX-289:** poarta avea și
+fereastra de 24h Meta + template-urile aprobate; erau reguli ale PLATFORMEI, au plecat cu canalul.
 
 **3. ⚙️ Cum (ca dispatcher-ul):**
 ```python
@@ -2452,18 +2356,17 @@ for business_id:
             async with conn.transaction():               # savepoint per job
                 route = get_proactive_route(...)         # conversație + canal + destinatar
                 spec = build_message_spec(...)           # textul per kind
-                decision = decide_proactive(...)         # POARTA (consent + 24h + template)
+                decision = decide_proactive(...)         # POARTA (consent) — nu mai e async
                 if decision.allowed: enqueue_outbox(f"proactive:{job_id}", ...); mark_job("sent")
-                else: mark_job("skipped_no_optin"/"skipped_no_window")
+                else: mark_job("skipped_no_optin")
 ```
 
 **4. 🔀 Cazuri:**
 | Situație | Rezultat |
 |---|---|
-| consent + în fereastra 24h | mesaj liber → outbox |
-| consent + în afara ferestrei + template aprobat | template → outbox |
-| consent + în afara ferestrei + fără template | `skipped_no_window` |
-| fără consent | `skipped_no_optin` (nici în fereastră) |
+| consent | mesaj (`type=text`) → outbox |
+| fără consent | `skipped_no_optin` |
+| produs contraindicat pe contextul conversației (NX-173) | `cancelled` (`safety_excluded`) |
 | job crapă | savepoint curat → `failed` (nu rupe lotul) |
 
 **5. 🧠 De ce tot prin outbox (nu trimite direct):** principiul 5 — un singur punct de ieșire. Motorul produce
@@ -2474,26 +2377,30 @@ valide s-ar reprocesa. Savepoint-ul izolează eșecul.
 
 ---
 
-## `proactive/templates.py` — POARTA (consent + 24h + template) 🚦
+## `proactive/templates.py` — POARTA (consent) 🚦
 
-**0. 📍 Unde:** [templates.py:83](../src/proactive/templates.py#L83) (`decide_proactive`). **100% cod
+**0. 📍 Unde:** [templates.py](../src/proactive/templates.py) (`decide_proactive`). **100% cod
 determinist, ZERO LLM.**
 
-**1. 🎭 Analogie:** un portar juridic foarte strict. Înainte să lase orice mesaj proactiv să plece, verifică 3
-lucruri, în ordine: ai voie (consent)? ești în fereastra permisă (24h)? dacă nu, ai un template aprobat?
+**1. 🎭 Analogie:** un portar juridic. Înainte să lase orice mesaj proactiv să plece, verifică un singur
+lucru, dar fără excepții: ai voie (consent)?
 
-**2. ❓ De ce atât de strict:** Meta INTERZICE mesaje libere în afara ferestrei de 24h (doar template-uri
-aprobate). Iar GDPR/consent interzice marketing fără opt-in. Încălcarea = ban de la Meta + amenzi. Astea sunt
-cele mai reglementate decizii din tot sistemul.
+**2. ❓ De ce atât de strict:** GDPR/consent interzice marketing fără opt-in. Un mesaj proactiv nu are
+urgență — a nu trimite e gratis, a trimite greșit nu.
 
-**3. ⚙️ Cum (3 porți în ordine):**
+> **NX-289 — poarta avea TREI etaje, are UNUL.** Etajele 2 și 3 erau `in_24h_window` (Meta interzice
+> mesaje libere în afara ferestrei de 24h de la ultimul inbound al clientului) și `get_approved_template`
+> (în afara ferestrei, doar un `wa_templates` cu `status='approved'` în limba cerută). Erau reguli ale
+> **platformei WhatsApp**, nu ale produsului — au plecat cu canalul, împreună cu tabelul și cu funcția SQL
+> (migrarea 051). Consecința care se vede în semnătură: `decide_proactive` **nu mai e `async`** și nu mai
+> primește `conn`. Singura interogare pe care o făcea era lookup-ul de template, deci acum poarta nu mai
+> atinge DB-ul — nici nu mai poate eșua din cauza lui.
+
+**3. ⚙️ Cum:**
 ```python
-if not _has_optin(consent, kind): return blocked("no_optin")   # 1. CONSENT
-in_window = await is_in_24h_window(...)                          # 2. FEREASTRA 24h (funcție SQL)
-if in_window: return free(free_text)                            # în fereastră → mesaj liber
-tmpl = await get_approved_template(business, channel, name, locale)  # 3. TEMPLATE
-if tmpl is None: return blocked("no_window_no_template")
-return template(render_template(...), params)                   # afară → template aprobat
+if not _has_optin(contact.consent, kind):
+    return ProactiveDecision(allowed=False, mode="blocked", reason="no_optin")
+return ProactiveDecision(allowed=True, mode="free", reason="ok_free", rendered_text=free_text)
 ```
 
 **4. 🔀 Cazuri consent (`_has_optin`):**
@@ -2501,18 +2408,23 @@ return template(render_template(...), params)                   # afară → tem
 |---|---|---|
 | `{marketing: true}` | abandoned_cart (marketing) | opt-in |
 | `{proactive: true}` | awb_update (tranzacțional) | opt-in |
+| `{proactive: true}` | abandoned_cart | NU — marketing ≠ proactive |
 | `{abandoned_cart: false}` | abandoned_cart | opt-out EXPLICIT (bate default-ul) |
 | `{}` (fără consent) | orice | NU (default = fără opt-in) |
 
-**5. 🧠 De ce fereastra 24h e o funcție SQL (`is_in_24h_window`), nu recalculată în Python:** e derivat din
-`last_inbound_at` — sursa de adevăr e DB, nu un flag stocat (poate diverge). Un singur loc de calcul.
+**5. 🧠 De ce override-ul per-kind bate default-ul, în AMBELE sensuri:** un client care a spus „da la AWB,
+nu la promoții" trebuie să poată. Un `false` explicit bate `{marketing: true}`; un `true` explicit bate
+absența default-ului. Consimțământul fin e mai puternic decât cel general, oricare ar fi direcția.
 
-**5b. 🧠 De ce template NU trimite textul randat (doar name+params):** Meta randează template-ul server-side din
-`name` + valorile poziționale. `rendered_text` e doar floor de degradare pe canale fără TEMPLATE. Filtru pe
-`locale` (P11: lipsă în limbă ≠ fallback pe altă limbă).
+**6. 💥 Ce-ar fi dacă poarta ar mai putea BLOCA după consent:** exact ce s-a întâmplat cu
+`no_window_no_template` — „clientul a cerut notificări, dar tenantul n-avea template aprobat la Meta pentru
+limba lui", adică un mesaj pierdut din motive de platformă. Azi, cu opt-in dat, poarta nu mai are cum să
+întoarcă `allowed=False`; e fixat printr-un test, ca o viitoare ramură de blocare să fie o decizie, nu o
+regresie.
 
-**6. 💥 Ce-ar fi dacă poarta ar returna `allowed=True` la eroare DB:** ai trimite un mesaj neautorizat (fără să
-verifici template-ul) → posibil ban Meta. De aceea eroarea se PROPAGĂ (jobul → `failed`, retry), nu „allowed tăcut".
+**7. 🐛 Debug:** verdictul apare în `proactive_jobs.status` (`sent` / `skipped_no_optin` / `cancelled` /
+`failed`) + evenimentul `proactive_skipped {kind, reason}`. Statusul `skipped_no_window` rămâne în CHECK-ul
+tabelului pentru rândurile ISTORICE — nimeni nu-l mai scrie.
 
 ---
 
@@ -2639,13 +2551,13 @@ la ștergere. Funcția SQL îl șterge; mesajele își păstrează structura (bo
 # Recap Valul 11
 
 ```
-PROACTIV: scheduler (motor, claim+outbox) → templates (POARTA: consent + 24h + template, zero LLM)
+PROACTIV: scheduler (motor, claim+outbox) → templates (POARTA: consent, zero LLM)
           → initiators (sweep coș abandonat + stoc revenit) → builders (text per kind)
 JOBURI:   scheduler (mini-cron intern) → rollup (facturare) / embed / lifecycle / cleanup
 GDPR:     erase (anonimizare + șterge PII) / export / access — urmărit în gdpr_requests + audit_log
 ```
 
-**Firul roșu:** proactivul e cel mai reglementat (consent + 24h, 100% determinist); mentenanța refolosește
+**Firul roșu:** proactivul e cel mai reglementat (consent, 100% determinist); mentenanța refolosește
 funcțiile existente (DRY); GDPR-ul e urmărit + izolat pe tenant. Tot prin outbox (P5), tot best-effort (P6).
 
 ---
@@ -2657,9 +2569,9 @@ Ai acum TOT proiectul, fișier cu fișier. Iată harta finală, de la un capăt 
 ```
                     ┌─────────────────────────────────────────────────────────────┐
    CLIENT           │                      NATIVX ASSISTANT                         │
-  (WhatsApp/        │                                                               │
-   Telegram/    ┌───┤ VAL 7 INTRARE: webhook (HMAC brut) → dedupe L1 → XADD         │
-   Web/Shop) ───┤   │ VAL 8 CANALE: parser neutru (Capability matrix)               │
+                    │                                                               │
+   (Widget web  ┌───┤ VAL 7 INTRARE: sesiune HMAC → dedupe L1 → XADD                │
+    / Shop) ─────┤   │ VAL 8 CANALE: envelope neutru (Capability matrix)             │
                 │   ├───────────────────────────────────────────────────────────────┤
                 │   │ VAL 2 WORKER: consumer (debounce, lock) → handle_turn (TX)     │
                 │   ├───────────────────────────────────────────────────────────────┤

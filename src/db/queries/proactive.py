@@ -18,10 +18,10 @@ from typing import Any
 import asyncpg
 
 # Câmpurile claim-ului — fără PII (contact_id e uuid, nu telefon).
-_JOB_COLS = (
-    "id::text, kind, contact_id::text, conversation_id::text, "
-    "payload, template_id::text, scheduled_at"
-)
+# NX-289: `template_id` a ieșit din listă odată cu tabelul `wa_templates` pe care îl referea
+# (migrarea 051 dropează și coloana). Nu era doar redundant: un SELECT pe o coloană inexistentă
+# ar fi crăpat motorul proactiv la PRIMUL claim, după migrare.
+_JOB_COLS = "id::text, kind, contact_id::text, conversation_id::text, payload, scheduled_at"
 
 
 def _job_row(row: asyncpg.Record) -> dict[str, Any]:
@@ -92,7 +92,6 @@ async def create_proactive_job(
     kind: str,
     payload: dict[str, Any] | None = None,
     scheduled_at: Any = None,  # None → now() (fire ASAP); altfel timestamptz
-    template_id: str | None = None,
     dedupe_key: str | None = None,
 ) -> str | None:
     """Inserează un job proactiv (PL-1) — primitivul lipsă: până acum NIMENI nu insera joburi.
@@ -107,8 +106,8 @@ async def create_proactive_job(
         """
         insert into proactive_jobs
             (business_id, contact_id, conversation_id, kind, scheduled_at,
-             payload, template_id, dedupe_key)
-        values ($1, $2, $3, $4, coalesce($5, now()), $6::jsonb, $7, $8)
+             payload, dedupe_key)
+        values ($1, $2, $3, $4, coalesce($5, now()), $6::jsonb, $7)
         on conflict (business_id, dedupe_key) where dedupe_key is not null do nothing
         returning id::text
         """,
@@ -118,7 +117,6 @@ async def create_proactive_job(
         kind,
         scheduled_at,
         json.dumps(payload or {}),
-        template_id,
         dedupe_key,
     )
 

@@ -48,7 +48,6 @@ def _job(kind="back_in_stock", product_id="unsafe-retinal"):
         "contact_id": "c1",
         "conversation_id": "conv-1",
         "payload": {"product_id": product_id},
-        "template_id": None,
     }
 
 

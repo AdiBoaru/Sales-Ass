@@ -407,7 +407,14 @@ contul — devenise inaccesibilă prin construcție, deci a fost scoasă; (c) de
 `InboundMessage.channel_kind = "whatsapp"` era load-bearing în teste (le făcea „client
 identificat" fără să ceară identitate). Migrarea **051** scoate obiectele rămase și restrânge
 vocabularul CHECK-urilor; măsurat înainte pe baza live: 22 canale, TOATE `webchat`, zero rânduri
-în tabelele care se șterg. Detalii:
+în tabelele care se șterg, și RULATĂ pe baza reală într-o tranzacție cu `ROLLBACK` (idempotentă,
+zero rânduri pierdute). Rularea aia a scos un al patrulea defect: `db/queries/proactive.py`
+rămăsese cu `template_id` în claim și în INSERT, coloană pe care 051 o dropează — deci motorul
+proactiv ar fi crăpat DUPĂ migrare, pe un drum de background. Suita nu-l putea prinde (testele
+stub-uiesc `conn`, iar coloana încă există azi), așa că fixul vine cu o poartă:
+`tests/test_dropped_objects_guard.py` refuză ca `src/` să numească un obiect pe care o migrare îl
+șterge — cu regula „dropat apoi recreat = viu" (`search_tsv` din 046/049) și privind codul, nu
+proza din docstring-uri. Detalii:
 [`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql) +
 [`tasks/NX-289.md`](tasks/NX-289.md).
 
@@ -452,7 +459,9 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       TRANSFERUL LA OPERATOR A FOST SCOS DIN PRODUS (nu există consolă, nu există om de
       gardă): un client care cere un om, o reclamație sau o amenințare legală primesc
       răspunsul agentului, nu o promisiune neonorată și nu tăcere (P6)
-    • media routing: vocale → STT (Whisper), poze → Vision (match catalog)
+    • media routing: poze → Vision (match catalog). NX-289: registrul de `MediaFetcher`
+      e GOL (singurul era al WhatsApp-ului), deci calea degradează fail-soft pe
+      `no_downloader`. STT (Whisper) e won't-do (NX-75)
     • language detect → RO / EN (setează ctx.language; TOATE
       lookup-urile în faqs / semantic_cache includ locale)
     • identity resolution: lookup în channel_identities →
@@ -509,10 +518,11 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       în ToolRun. MUTAȚIILE (cart/checkout/back-in-stock) cer `policy.allows()` ÎNAINTE de
       scriere — un filtru de rezultat nu poate anula un rând scris. Cache-ul (stagiul 4) face
       BYPASS pe context de siguranță (citire + scriere): un hit ar sări peste tot gate-ul.
-      DRUMURILE DIN AFARA PIPELINE-ului au poarta lor (n-au TurnContext → `SafetyPolicy
-      .from_state`): caruselul (worker/callback.py, ◀/▶ e inbound NON-LLM) și PROACTIVUL
-      (back_in_stock/abandoned_cart — un job vechi ar promova produsul zile mai târziu;
-      awb_update/follow_up NU se gate-uiesc, sunt tranzacționale).
+      DRUMUL DIN AFARA PIPELINE-ului are poarta lui (n-are TurnContext → `SafetyPolicy
+      .from_state`): PROACTIVUL (back_in_stock/abandoned_cart — un job vechi ar promova
+      produsul zile mai târziu; awb_update/follow_up NU se gate-uiesc, sunt tranzacționale).
+      NX-289: al doilea drum era caruselul (`worker/callback.py`, ◀/▶ = inbound NON-LLM), șters
+      odată cu butoanele inline Telegram — `from_state` are acum UN singur apelant.
       COMPUNERE: codul garantează O SINGURĂ frază localizată (recunoaștere + medic/farmacist),
       în runner, idempotent (src/safety/compose.py + messages.py); modelul scrie doar partea
       comercială. Nicio inferență LLM nu devine contraindicație; zero sfat medical.
@@ -772,7 +782,8 @@ orders            — id, business_id, contact_id, external_id, status, total,
 order_items, shipments (AWB → proactiv)
 back_in_stock_subscriptions — UNIQUE(business_id, contact_id, product_id, variant_id)
 proactive_jobs    — kind(awb_update|back_in_stock|abandoned_cart|follow_up),
-                    scheduled_at, status, template_id
+                    scheduled_at, status
+                    • `template_id` a fost DROPAT de 051 (referea wa_templates)
 appointments      — business_id, contact_id, service_name, starts_at, ends_at,
                     status, external_ref (Google Calendar)
 ```
@@ -986,10 +997,11 @@ nativx-assistant/
 │   │   └── queries/             ← SQL per domeniu (contacts, conversations, messages,
 │   │                              outbox, inbound_dedupe, catalog, channels, businesses)
 │   ├── webhook/
-│   │   ├── app.py               ← FastAPI: GET verify + POST inbound (ambele LIVE)
+│   │   ├── app.py               ← FastAPI: health + redirect + /webhook/orders + /web/* (LIVE)
 │   │   ├── signature.py         ← verificare HMAC-SHA256 peste corpul brut (comenzi)
-│   │   ├── status.py            ← LIVE: delivered/read/failed → messages.status (#26)
-│   │   └── orders.py            ← TODO: webhook comenzi → match ref_code → atribuire
+│   │   ├── health.py            ← NX-248: live/startup/ready + vederea de operator
+│   │   ├── redirect.py          ← NX-162: /r/{business_id}/{ref_code} → atribuire click
+│   │   └── orders.py            ← webhook comenzi → match ref_code → atribuire
 │   ├── worker/
 │   │   ├── consumer.py          ← consumer group Redis (XREADGROUP + ACK) + entrypoint __main__
 │   │   ├── processor.py         ← handle_turn: load → compute (fără conn) → commit → aftercare
@@ -1002,8 +1014,10 @@ nativx-assistant/
 │   │   └── stages/             ← triage.py (nano) ✅ + agent.py (mini, RAG+validator) ✅;
 │   │                             TODO: gates, free_layers; echo=fallback
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
-│   │   └── web/render_v2.py     ← NX-240: projectorul PUR `web-view.v2` (zero I/O, zero ceas)
-│   │   ├── base.py              ← ChannelSender Protocol + Capability matrix (NX-115) + registry
+│   │   ├── base.py              ← ChannelSender/MediaFetcher + Capability matrix (NX-115) + registre
+│   │   ├── media.py             ← registru de MediaFetcher (GOL din NX-289 — vezi docstring)
+│   │   └── web/                 ← sender.py (Pub/Sub + backlog SSE) · render.py (v1)
+│   │                              render_v2.py (NX-240: projector PUR, zero I/O, zero ceas)
 │   ├── tools/                   ← search_products, get_product_details, ... (vezi mai sus)
 │   ├── domain/                  ← NX-114: DomainPack (config per-vertical din DB+seed)
 │   │   ├── pack.py + loader.py + normalize.py + defaults/*.json (ecommerce/beauty_salon/...)
@@ -1056,10 +1070,10 @@ nativx-assistant/
 │   │   │                          (action>named>ordinal>page>selected>single), stale = refuz
 │   │   └── tool_definitions.py  ← OpenAI tool schemas
 │   ├── proactive/
-│   │   ├── scheduler.py         ← proactive_jobs → outbox (motor NX-70; calea template LIVE, PR #142)
+│   │   ├── scheduler.py         ← proactive_jobs → outbox (motor NX-70; emite DOAR type=text)
 │   │   ├── initiators.py        ← PL-1: sweeper-e care CREEAZĂ proactive_jobs (coș abandonat +
 │   │   │                          back-in-stock) + seam-uri awb/follow_up; rulate de jobs/scheduler
-│   │   ├── builders.py          ← text per kind (free_text + template_name + variables)
+│   │   ├── builders.py          ← text per kind (`free_text`; NX-289 a scos template_name/variables)
 │   │   └── templates.py         ← poarta NX-71: consent check (NX-289: doar atât a rămas)
 │   ├── safety/                  ← NX-173 (P0): gate-uri DETERMINISTE, în afara deciziei de model
 │   │   └── contraindications.py ← context (sarcină/alăptare) × registru curat → excludere dură

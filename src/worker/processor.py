@@ -424,8 +424,10 @@ def _build_new_state(
 
     new_state = base_state
     if (is_rich or has_products) and ctx.reply.products:
-        # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
-        # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
+        # Recomandare BOGATĂ (iZi): persistăm setul afișat → turul următor rezolvă
+        # referințele („al doilea", „crema asta") din state (ref-uri, principiul 8).
+        # NX-289: consumatorul istoric era și navigarea de carusel (`handle_callback`), ștearsă
+        # odată cu butoanele inline Telegram; `reference_resolver` rămâne cititorul viu.
         new_state = {
             **base_state,
             "displayed_products": _displayed_product_refs(ctx.reply.products),
