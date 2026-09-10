@@ -206,6 +206,18 @@ class Settings(BaseSettings):
     )
     web_rate_limit_max_ip: int = Field(default=40, validation_alias="WEB_RATE_LIMIT_MAX_IP")
     web_rate_limit_window_s: int = Field(default=60, validation_alias="WEB_RATE_LIMIT_WINDOW_S")
+    # NX-290: transportul async v1 (`POST /web/messages` + `GET /web/stream`) e DEPRECAT. Măsurat
+    # pe 2026-09-10: zero clienți — widgetul cheamă `/web/chat` pe v1 și `/web/v2/turns` pe v2,
+    # iar singurul `EventSource` din repo-ul FE e pe transportul v2. Motivul retragerii nu e
+    # „nu-l cheamă nimeni", ci semantica: publish pe pub/sub cu backlog de 300s livrează „către
+    # oricine e conectat acum", deci un mesaj pentru un tab închis se pierde și se marchează
+    # `sent`. Succesorul (ledger + cursor reluabil) e deja construit.
+    # `True` = merge exact ca azi (headere de deprecare pe răspuns). `False` = `410 Gone` cu corp
+    # citibil de mașină. Flip-ul e reversibil dintr-o variabilă de mediu — vezi
+    # docs/WEB-TRANSPORT-CONSOLIDATION.md.
+    web_legacy_async_enabled: bool = Field(
+        default=True, validation_alias="WEB_LEGACY_ASYNC_ENABLED"
+    )
     # SSE: heartbeat (ține proxy-ul deschis) + backlog per vizitator pt reconectare (Last-Event-ID).
     web_sse_heartbeat_s: float = Field(default=15.0, validation_alias="WEB_SSE_HEARTBEAT_S")
     web_backlog_size: int = Field(default=20, validation_alias="WEB_BACKLOG_SIZE")

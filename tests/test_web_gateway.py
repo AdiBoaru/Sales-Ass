@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pydantic
 import pytest
+from fastapi import Response
 
 from src.channels.web.sender import WebSender
 from src.web import app as wa
@@ -131,7 +132,7 @@ async def test_message_enqueues_webchat_envelope(monkeypatch):
     monkeypatch.setattr(wa, "get_redis", lambda: _coro(fr))
 
     req = WebMessageIn(token="tok", visitor_id="web_1", sig="s", text="  salut  ")
-    res = await wa.web_message(req, _Req())
+    res = await wa.web_message(req, _Req(), Response())
 
     assert res["accepted"] is True
     ev = captured["event"]
@@ -147,7 +148,9 @@ async def test_message_invalid_session_403(monkeypatch):
 
     monkeypatch.setattr(wa, "_verify", none_verify)
     with pytest.raises(wa.HTTPException) as ei:
-        await wa.web_message(WebMessageIn(token="t", visitor_id="v", sig="bad", text="x"), _Req())
+        await wa.web_message(
+            WebMessageIn(token="t", visitor_id="v", sig="bad", text="x"), _Req(), Response()
+        )
     assert ei.value.status_code == 403
 
 
@@ -158,7 +161,9 @@ async def test_message_rate_limited_429(monkeypatch):
     monkeypatch.setattr(wa, "_verify", fake_verify)
     monkeypatch.setattr(wa, "get_redis", lambda: _coro(FakeRedis(incr_value=999)))
     with pytest.raises(wa.HTTPException) as ei:
-        await wa.web_message(WebMessageIn(token="t", visitor_id="v", sig="s", text="x"), _Req())
+        await wa.web_message(
+            WebMessageIn(token="t", visitor_id="v", sig="s", text="x"), _Req(), Response()
+        )
     assert ei.value.status_code == 429
 
 

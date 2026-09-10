@@ -97,3 +97,44 @@ async def fetch_turn_events(conn: asyncpg.Connection, business_id: str, turn_id:
             }
         )
     return out
+
+
+async def tally_legacy_route_calls(
+    conn: asyncpg.Connection, business_id: str, since
+) -> tuple[dict[str, dict[str, int]], int]:
+    """NX-290 — câte apeluri a primit fiecare rută retrasă, și CÂTE TURE au fost servite deloc.
+
+    A doua cifră e cea care contează. „Zero apeluri" nu înseamnă nimic dacă în fereastră n-a
+    rulat niciun tur: ar fi absența dovezii citită drept dovada absenței. Numărătorul și
+    numitorul vin din ACELAȘI tabel și aceeași fereastră, deci nu pot descrie perioade diferite.
+
+    Excepție documentată de la „niciun SELECT din runtime" (vezi antetul modulului): e un raport
+    de ops, nu un apel din pipeline. Tenant-scoped pe indexul `(business_id, event_type,
+    created_at desc)`.
+
+    Întoarce `({route: {outcome: n}}, ture_observate)`."""
+    rows = await conn.fetch(
+        """
+        select properties->>'route'   as route,
+               properties->>'outcome' as outcome,
+               count(*)               as n
+        from analytics_events
+        where business_id = $1 and event_type = 'legacy_route_called' and created_at >= $2
+        group by 1, 2
+        """,
+        business_id,
+        since,
+    )
+    calls: dict[str, dict[str, int]] = {}
+    for r in rows:
+        calls.setdefault(r["route"] or "?", {})[r["outcome"] or "?"] = int(r["n"])
+    observed = await conn.fetchval(
+        """
+        select count(distinct turn_id)
+        from analytics_events
+        where business_id = $1 and created_at >= $2 and turn_id is not null
+        """,
+        business_id,
+        since,
+    )
+    return calls, int(observed or 0)

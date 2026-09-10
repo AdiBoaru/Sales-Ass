@@ -1,7 +1,8 @@
 """Gateway web (NX-20) — endpointuri pentru widget-ul de chat pe site (al treilea canal, E26).
 
   • GET  /web/bootstrap → emite o sesiune anonimă (visitor_id semnat HMAC cu secretul tenantului).
-  • POST /web/messages  → verifică sesiunea + rate limit (IP + visitor) → envelope NEUTRU
+  • POST /web/messages  → DEPRECAT (NX-290, sunset 2026-10-08; succesor `POST /web/v2/turns`).
+                          Verifică sesiunea + rate limit (IP + visitor) → envelope NEUTRU
                           `channel_kind='webchat'` pe stream-ul `inbound` (worker-ul îl procesează
                           ca orice canal — zero cod nou în consumer). ASYNC: reply via SSE.
   • POST /web/chat      → varianta SINCRONĂ (NX-25b): rulează pipeline-ul IN-PROCESS și întoarce
@@ -10,9 +11,14 @@
                           de produs. Aceeași autentificare ca /web/messages (token + visitor_id +
                           sig) + CORS + rate-limit. Trece prin TOT pipeline-ul (multi-tenant,
                           validator de prețuri, căutare reală, analytics) — nu un endpoint paralel.
-  • GET  /web/stream    → Server-Sent Events: abonat la `web:out:{visitor_id}`, replay backlog la
-                          reconectare (Last-Event-ID), heartbeat. Outbound vine din `outbox` →
-                          dispatcher → `WebSender` (publish), NU direct din endpoint (P5).
+  • GET  /web/stream    → DEPRECAT (NX-290, sunset 2026-10-08; succesor
+                          `GET /web/v2/turns/{turn_id}/events`). Server-Sent Events: abonat la
+                          `web:out:{visitor_id}`, replay backlog la reconectare (Last-Event-ID),
+                          heartbeat. Outbound vine din `outbox` → dispatcher → `WebSender`
+                          (publish), NU direct din endpoint (P5).
+
+Cele două rute DEPRECATE formează transportul async v1 și se retrag împreună — contract, dovezi
+și faze în `docs/WEB-TRANSPORT-CONSOLIDATION.md`. Kill-switch: `WEB_LEGACY_ASYNC_ENABLED`.
 
 ZERO LLM hardcodat (proza vine din pipeline). `visitor_id` e PII de canal (P12) → trăiește în
 `channel_identities` (scris de pipeline), niciodată în loguri. SSE (nu WebSocket) → trece prin
@@ -28,7 +34,7 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic, perf_counter
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from redis.exceptions import RedisError
@@ -48,6 +54,7 @@ from src.privacy import apply_boundary
 from src.redis_bus import enqueue_inbound, get_redis
 from src.release import policy_store
 from src.release.assignment import ReleaseContext
+from src.web import deprecation
 from src.web.action_crypto import KeyRingError, parse_key_ring
 from src.web.action_models import age_bucket
 from src.web.action_service import (
@@ -270,6 +277,77 @@ def _apply_identity(event: InboundEvent, session: WebSession, id_token: str | No
         event.payload = {**event.payload, "identity_rejected": reject}
 
 
+# NX-290: câte evenimente de contor scriem per (tenant, rută) într-o fereastră de rate limit.
+# Decizia de ștergere are nevoie de „a chemat cineva?", nu de „de câte ori" — orice valoare
+# nenulă blochează ștergerea la fel de tare. Plafonul există ca metering-ul să nu devină el
+# suprafața de abuz pe `/web/stream`, care n-are rate limit propriu.
+_METERING_MAX_PER_WINDOW = 5
+
+
+async def _meter_legacy_call(
+    entry: deprecation.DeprecatedRoute, session: WebSession, token: str, *, served: bool
+) -> None:
+    """Scrie dovada că ruta retrasă a fost chemată — best-effort, mărginit, fără PII.
+
+    E singura piesă care transformă „credem că n-o cheamă nimeni" în „am măsurat". Se scrie și
+    pentru `410`: după flip, un client rupt trebuie să apară în date, nu doar în plângeri.
+
+    Două semnale, deliberat: linia de log e ieftină și există chiar dacă DB-ul e jos, rândul de
+    analytics e cel pe care se poate face un raport. Dovada n-are voie să depindă doar de
+    infrastructura care ar putea fi chiar cauza incidentului."""
+    log.warning(
+        "legacy_route_called route=%s outcome=%s successor=%s",
+        entry.path,
+        "served" if served else "refused",
+        entry.successor,
+    )
+    try:
+        redis = await get_redis()
+        n = await incr_window(
+            redis, f"webdep:{token}:{entry.path}", get_settings().web_rate_limit_window_s
+        )
+    except (RedisError, OSError):
+        n = 1  # Redis jos → scriem oricum: dovada e mai valoroasă decât plafonul
+    if n > _METERING_MAX_PER_WINDOW:
+        return
+    await persist_events(
+        tenant_db(session.business_id),
+        session.business_id,
+        None,
+        None,
+        [
+            Event(
+                "legacy_route_called",
+                {
+                    "route": entry.path,
+                    "outcome": "served" if served else "refused",
+                    "successor": entry.successor,
+                },
+            )
+        ],
+        operation="legacy_route_metering",
+    )
+
+
+async def _legacy_async_gate(path: str, session: WebSession, token: str) -> dict[str, str]:
+    """Poarta de retragere a transportului async v1. Întoarce headerele de pus pe un răspuns care
+    încă merge; ridică `410` (cu corp citibil de mașină) când flagul e stins.
+
+    Stă DUPĂ autentificare și după rate limit, deliberat: un apelant fără sesiune validă primește
+    tot `403` (nu anunțăm retrageri suprafeței de scanare), iar metering-ul nu poate fi folosit ca
+    pârghie de scriere de către cineva care oricum e limitat."""
+    entry = deprecation.route(path)
+    served = get_settings().web_legacy_async_enabled
+    await _meter_legacy_call(entry, session, token, served=served)
+    if not served:
+        raise HTTPException(
+            status_code=410,
+            detail=deprecation.gone_detail(entry),
+            headers=deprecation.gone_headers(entry),
+        )
+    return deprecation.deprecation_headers(entry)
+
+
 async def web_rate_limited(
     redis, token: str, ip: str, visitor_id: str, *, fail_closed: bool
 ) -> bool:
@@ -335,7 +413,13 @@ async def web_bootstrap(token: str, request: Request) -> dict:
         )
     else:
         visitor_id, sig = issue_visitor(token, resolved["session_secret"])
-    body = {"token": token, "visitor_id": visitor_id, "sig": sig, "sse_url": "/web/stream"}
+    body: dict = {"token": token, "visitor_id": visitor_id, "sig": sig}
+    # NX-290: `sse_url` e RECLAMA transportului async v1. Cât timp ruta răspunde, o păstrăm (un
+    # client vechi n-are de unde ști altfel); când e stinsă, cheia DISPARE — a continua s-o
+    # anunțăm ar trimite clienți exact spre un `410`. Bootstrapul însuși nu e deprecat: el
+    # supraviețuiește cutoverului, doar câmpul ăsta moare cu transportul.
+    if s.web_legacy_async_enabled:
+        body["sse_url"] = "/web/stream"
     # NX-244: copy-ul ramei, disponibil ÎNAINTE de primul tur. Fără el, widgetul v2 n-are de unde
     # lua eticheta launcherului sau placeholderul composerului la prima încărcare și ar fi nevoit
     # să le inventeze — ceea ce boundary-ul „frontend pasiv" interzice. Strict aditiv și gated pe
@@ -345,10 +429,13 @@ async def web_bootstrap(token: str, request: Request) -> dict:
     return body
 
 
-@router.post("/messages")
-async def web_message(req: WebMessageIn, request: Request) -> dict:
+@router.post("/messages", deprecated=True)
+async def web_message(req: WebMessageIn, request: Request, response: Response) -> dict:
     """Client → bot: verifică sesiunea + rate limit → envelope neutru pe stream. NU trimite reply
-    (ăla iese prin outbox → dispatcher → WebSender, P5)."""
+    (ăla iese prin outbox → dispatcher → WebSender, P5).
+
+    NX-290: DEPRECAT — succesorul e `POST /web/v2/turns`. `deprecated=True` pune adevărul și în
+    OpenAPI, nu doar în headere: o rută marcată în schemă e vizibilă generatoarelor de client."""
     await enforce_body_cap(request, get_settings().web_max_body_bytes)  # NX-120
     _enforce_demo_access(request)
     origin = _enforce_origin(request)  # NX-229: lipsea complet pe această cale
@@ -361,6 +448,7 @@ async def web_message(req: WebMessageIn, request: Request) -> dict:
     # NX-120: fail-OPEN (doar pune envelope pe stream; spend-ul real se evaluează în worker).
     if await web_rate_limited(redis, req.token, ip, req.visitor_id, fail_closed=False):
         raise HTTPException(status_code=429, detail="rate limited")
+    response.headers.update(await _legacy_async_gate("/web/messages", session, req.token))
     event = InboundEvent(
         channel_kind="webchat",
         channel_account_id=req.token,  # public token = provider_account_id al canalului webchat
@@ -748,7 +836,7 @@ async def _replay_after(
     return out
 
 
-@router.get("/stream")
+@router.get("/stream", deprecated=True)
 async def web_stream(
     token: str,
     visitor_id: str,
@@ -757,13 +845,19 @@ async def web_stream(
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
 ) -> StreamingResponse:
     """Bot → client: conexiune SSE persistentă. Abonat la `web:out:{visitor_id}`, replay backlog
-    la reconectare, heartbeat la idle (ține proxy-ul deschis), iese curat la deconectare."""
+    la reconectare, heartbeat la idle (ține proxy-ul deschis), iese curat la deconectare.
+
+    NX-290: DEPRECAT — succesorul e `GET /web/v2/turns/{turn_id}/events`, care e o PROIECȚIE a
+    ledgerului, nu o abonare la un pub/sub. Diferența nu e de stil: aici, ce se publică cât
+    clientul e deconectat trăiește doar în backlogul cu TTL de 300s, deci livrarea depinde de
+    cine e conectat ACUM. Acolo, autoritatea e rândul din DB și clientul se reia după cursor."""
     _enforce_demo_access(request)
     origin = _enforce_origin(request)  # NX-229: lipsea și aici
     session = await _verify(token, visitor_id, sig)
     if session is None:
         raise HTTPException(status_code=403, detail="invalid session")
     _enforce_session_origin(session, origin)
+    legacy_headers = await _legacy_async_gate("/web/stream", session, token)
     redis = await get_redis()
     heartbeat = get_settings().web_sse_heartbeat_s
 
@@ -788,7 +882,7 @@ async def web_stream(
     return StreamingResponse(
         gen(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", **legacy_headers},
     )
 
 
