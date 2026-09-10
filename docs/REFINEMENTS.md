@@ -5,6 +5,10 @@ funcționalitatea de bază (pipeline-ul LLM complet) e gata. Adi le notează în
 timpul testelor; NU le rezolvăm pe loc — le prioritizăm separat aici ca să nu
 se piardă.
 
+> **NX-289 (2026-09-10):** observațiile de mai jos vin din testele pe Telegram (2026-06), canal
+> ȘTERS de atunci împreună cu WhatsApp. Cele despre CONVERSAȚIE rămân valabile (debounce,
+> follow-up pe produse afișate); cele despre RANDAREA pe un canal dispărut sunt marcate ca atare.
+
 ---
 
 ## 🔧 Deschise
@@ -16,9 +20,9 @@ după alta: „salut", „ce faci", „acuma", „vreau să comand ceva" → **4
 separate → 4 răspunsuri independente**, fiecare clasificat izolat (răspunsuri
 redundante, ex. „cu ce te pot ajuta" de două ori).
 
-**Cauză:** lipsește debounce-ul în worker (stagiul 2). Fiecare update Telegram →
+**Cauză:** lipsește debounce-ul în worker (stagiul 2). Fiecare mesaj inbound →
 un event pe stream `inbound` → un `handle_turn`. Nu există coalescing pe
-conversație.
+conversație. (Observat pe Telegram; cauza e în worker, deci se transferă pe orice canal.)
 
 **Fix planificat:** debounce adaptiv ~2-3s per conversație — adună mesajele din
 fereastră și procesează-le ca **UN singur tur** (lot de mesaje, NU string lipit),
@@ -29,7 +33,7 @@ ajungem la hardening-ul worker-ului.
 **Simptome derivate (aceeași cauză):** răspunsuri redundante între mesaje
 near-simultane; posibilă dezordine la răspunsuri concurente.
 
-### R2 — Carduri de produs: format „pro" pe canale · P2 (Telegram FĂCUT)
+### R2 — Carduri de produs: format „pro" pe canale · ⚪ ÎNCHIS de NX-289 (canalele au dispărut)
 
 **Context:** 2026-06-14, W1. Prima variantă (un `sendPhoto` per produs, poză +
 buton) ocupa tot ecranul pe telefon (Telegram afișează `sendPhoto` mereu la
@@ -45,9 +49,10 @@ Navigarea = drum NON-LLM: `callback_query` → envelope `kind=callback` → hand
 determinist (citește `displayed_products` din state, calculează indexul) → outbox
 `edit_media`. Stateless (indexul în `callback_data`). Vezi `tasks/R2.md`.
 
-**Rămas (WhatsApp prod):** Interactive **List Messages** + **Multi-Product
-Messages** native (catalog Meta Commerce). Blocat pe WhatsApp e2e (T013) — task
-separat.
+**Rămas (WhatsApp prod): FĂRĂ OBIECT.** Interactive List Messages + Multi-Product Messages
+native (catalog Meta Commerce) presupuneau canalul WhatsApp, șters de NX-289. Caruselul Telegram
+(`editMessageMedia`, `callback_query`) a plecat cu el. Ce a rămas din R2 e forma web: listă de
+carduri + chips, iar butoanele sunt acțiuni opace semnate (NX-236), nu `callback_data`.
 
 ### R3 — Follow-up de comparație/detalii pe produse afișate → DataError · P1
 

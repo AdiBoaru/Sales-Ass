@@ -47,11 +47,6 @@ flowchart TD
     P2["get_pool + get_bot_pool eager<br/>:268-269"]:::step
     P3["run_scheduler loop READY"]:::proc
     PX["exit — process ends :266-267"]:::gate
-    T0["poller._main poller.py:118"]:::proc
-    T1{"telegram_bot_token? :122"}:::gate
-    T2["get_me → account_id :129-130"]:::step
-    T3["run_poller loop READY"]:::proc
-    TX2["exit — no token :123-124"]:::gate
   end
 
   subgraph Config["Configuration"]
@@ -66,9 +61,6 @@ flowchart TD
   P0 --> P1
   P1 -- no --> PX
   P1 -- yes --> P2 --> P3
-  T0 --> T1
-  T1 -- no --> TX2
-  T1 -- yes --> T2 --> T3
   W0 --> W1 --> W2
   W2 -- "pending migration" --> WFAIL
   W2 -- ok --> W3 --> W4
