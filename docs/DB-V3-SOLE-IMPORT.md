@@ -80,7 +80,7 @@ real a picat pe produsul 1.648. Fixul folosește aceeași rețetă de hash ca re
 
 Am inventariat baza LIVE, nu documentația: **62 de tabele, 896 de coloane, 42 de migrări
 aplicate (003→045)**, RLS pe tot, roluri `bot_runtime`/`gdpr_svc`/`service_role`, funcții proprii
-(`current_business_id`, `ro_unaccent`, `in_24h_window`, `gdpr_erase_contact`).
+(`current_business_id`, `ro_unaccent`, `gdpr_erase_contact`; `in_24h_window` a fost ștearsă de NX-289).
 
 Schema **nu trebuie regândită**. Trebuie consolidată într-un singur fișier și umplută. Motivul:
 șase tabele proiectate exact pentru acest import există deja și au **0 rânduri**.
@@ -155,7 +155,7 @@ Cele 62 de tabele, pe familii. Toate migrează ca **schemă**, niciunul ca date.
 - **Release / ops:** `release_policies`, `schema_migrations`
 - **Analytics:** `analytics_events` (partiționat), `usage_daily`, `demand_daily`,
   `conversation_evals`, `golden_tests`
-- **Tenanți / GDPR:** `businesses`, `business_users`, `channels`, `wa_templates`,
+- **Tenanți / GDPR:** `businesses`, `business_users`, `channels`,
   `gdpr_requests`, `audit_log`
 
 Plus, obligatoriu, în afara tabelelor: extensiile (`vector`, `pg_trgm`, `pgcrypto`, `uuid-ossp`),
@@ -163,9 +163,11 @@ rolul `bot_runtime` fără `bypassrls`, politicile RLS pe `current_business_id()
 `ro_unaccent`, partițiile lunare pentru `messages` și `analytics_events`, și seedul
 `db/seed/safety_rules.json` (poarta de boot NX-173 refuză să pornească fără el).
 
-**Canalele WhatsApp/Telegram rămân în schemă.** Sunt înghețate ca investiție, dar abstracția e
-motivul pentru care pipeline-ul e agnostic de canal, iar WhatsApp e modelul de business pentru
-clienții români. Îngheț nu înseamnă ștergere.
+**Canalele WhatsApp/Telegram au IEȘIT din schemă (NX-289, migrarea 051).** Erau înghețate ca
+investiție; ștergerea a mers mai departe fiindcă un tabel gol pe care nimeni nu-l scrie e o
+promisiune, nu o rezervă. Ce a rămas e **abstracția** (NX-60) — motivul pentru care pipeline-ul e
+agnostic de canal: `channel_kind` e în continuare pe `conversations` și `channel_identities`, doar
+că vocabularul CHECK-urilor e restrâns la `webchat`.
 
 ---
 

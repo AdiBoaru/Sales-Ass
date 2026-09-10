@@ -1,11 +1,16 @@
 # Baterie de teste — botul Nativx (Sole Demo, beauty)
 
-> Rulează fiecare caz pe `@solechat_bot` (Telegram). Lipește răspunsul botului sub
-> fiecare, apoi trimite-mi fișierul. Cazurile cu **FLUX** sunt conversații CONTINUE
-> (nu reseta între pași). Domeniu: beauty (creme, șampoane, seruri, parfumuri, machiaj).
+> ⚠️ **Scrisă pentru Telegram, canal șters de NX-289 (2026-09-10).** Cazurile în sine rămân
+> valabile (sunt despre CONVERSAȚIE, nu despre transport), dar se rulează pe **widgetul web**:
+> `python scripts/sim/web_audit.py` merge pe calea reală, fără HTTP server, sau direct în widget.
+> Referințele la „carusel" și la butoanele inline descriu randarea Telegram — pe web, echivalentul
+> e lista de carduri + chips.
+>
+> Lipește răspunsul botului sub fiecare caz. Cele cu **FLUX** sunt conversații CONTINUE (nu reseta
+> între pași). Domeniu: beauty (creme, șampoane, seruri, parfumuri, machiaj).
 >
 > Cum trimiți înapoi: e suficient `nr: <ce a răspuns botul>` (scurt). La fluxuri,
-> `nr a) ... b) ...`. Notează și dacă a apărut **carusel**, **butoane**, sau **eroare**.
+> `nr a) ... b) ...`. Notează și dacă a apărut **carduri**, **chips**, sau **eroare**.
 
 ---
 

@@ -4,7 +4,9 @@
 > descriere a sistemului de azi. Trei afirmații din el au fost DEPĂȘITE sau infirmate de atunci:
 > (1) „pipeline liniar de 9 stagii" — sunt **12** (`DEFAULT_STAGES`, verificat mecanic de
 > `scripts/verify_architecture_doc.py`); (2) „WhatsApp (canal primar de producție)" — canalul de
-> lucru e **web widget**, exclusiv (NX-179); WhatsApp n-a fost niciodată conectat; (3) „max 3
+> lucru e **web widget**, exclusiv (NX-179); WhatsApp n-a fost niciodată conectat, iar **NX-289
+> (2026-09-10) l-a șters din proiect împreună cu Telegram** — orice descriere de `MetaClient`,
+> poller, template Meta sau fereastră de 24h din acest document e cod care nu mai există; (3) „max 3
 > apeluri" tool-calling — capul dur e pe **runde de model**, nu pe apeluri (NX-250, măsurat: 9
 > execuții sub „max 3"). În plus, diagramele Mermaid din acest fișier **nu trec** verificatorul
 > (146 de probleme: noduri nedeclarate, `subgraph`/`end` dezechilibrat) — nu au fost niciodată sub

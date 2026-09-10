@@ -186,7 +186,7 @@ cu un **tabel structurat** (ca iZi). `content` = doar lead-ul; tabelul îl rande
 - Mobile: dacă tabelul nu încape, comută pe layout vertical (per produs), nu trunchia.
 
 ### Fallback (canale fără tabel)
-Pe WhatsApp/Telegram backendul trimite acelaşi conținut ca **text aplatizat** în `content`/mesaj
+Pe consumatorii fără randare bogată (`messages.body`, cache) backendul păstrează acelaşi conținut ca **text aplatizat** în `content`/mesaj
 (nu primesc `comparison`). Frontendul web primește MEREU `comparison` când e o comparație.
 
 ---

@@ -17,8 +17,6 @@ pe care îl are un proces care nu-l folosește e o suprafață de atac gratuită
 | `WEB_FEEDBACK_PROMPT_SECRET` | webhook, worker | atenție (§4) | „un vot per prompt" |
 | `OBSERVABILITY_TRACE_SECRET` | toate | da | corelarea traceurilor vechi |
 | `OPS_HEALTH_TOKEN` | webhook | da | `/health/detail` |
-| `META_*` | webhook, dispatcher | da | WhatsApp (ÎNGHEȚAT) |
-| `TELEGRAM_BOT_TOKEN` | telegram-poller | da | Telegram (ÎNGHEȚAT) |
 | `VPS_SSH_KEY` + `VPS_HOST_KEY` | GitHub Environments | da | deployul |
 | `GITHUB_TOKEN` (GHCR) | CI, efemer per rulare | automat | push-ul imaginii |
 | `RELEASE_MANIFEST_KEY` | CI | da | semnătura manifestului |
