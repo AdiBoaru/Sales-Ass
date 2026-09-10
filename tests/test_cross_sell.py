@@ -88,7 +88,7 @@ def _ctx(body="adaugă serul în coș"):
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
         contact=Contact(id="c", business_id="b"),
-        message=InboundMessage(provider_msg_id="m", body=body, channel_kind="whatsapp"),
+        message=InboundMessage(provider_msg_id="m", body=body, channel_kind="webchat"),
         conversation_id="conv",
     )
     ctx.language = "ro"

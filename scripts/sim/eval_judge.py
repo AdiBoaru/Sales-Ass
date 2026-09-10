@@ -19,7 +19,7 @@ JUDGE_VERSION = "v1"
 
 # Promptul e FIX (byte-identic între rulări). Judecă UN tur al botului în contextul conversației.
 JUDGE_PROMPT = """Ești un evaluator RIGUROS al calității conversaționale a unui asistent de vânzări
-pe WhatsApp/web pentru un magazin din România. Primești conversația de până acum și ULTIMUL răspuns
+pe web pentru un magazin din România. Primești conversația de până acum și ULTIMUL răspuns
 al botului ca EXPERIENȚĂ COMPLETĂ servită clientului: TEXT + CARDURI (produse) + eventual un
 OFFER/CTA (buton/link). Evaluează DOAR ultimul răspuns al botului, în contextul conversației.
 

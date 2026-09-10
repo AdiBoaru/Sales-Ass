@@ -86,7 +86,7 @@ class _Deb:
 
 
 async def test_reap_reprocesses_message_via_debounce():
-    evt = {"kind": "message", "channel_kind": "telegram", "body": "x", "provider_msg_id": "p"}
+    evt = {"kind": "message", "channel_kind": "webchat", "body": "x", "provider_msg_id": "p"}
     r = _Redis(xautoclaim_ret=["0-0", [("1-0", {"data": json.dumps(evt)})], []])
     deb = _Deb()
     n = await cons.reap_pending(None, r, "worker-x", deb)

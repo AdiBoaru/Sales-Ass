@@ -190,7 +190,7 @@ class Settings(BaseSettings):
     web_session_secret_ttl_s: float = Field(
         default=60.0, validation_alias="WEB_SESSION_SECRET_TTL_S"
     )
-    # Rate limit web (NX-20): public anonim → praguri mai strânse decât WhatsApp, pe DOUĂ chei
+    # Rate limit web (NX-20): public anonim → praguri strânse, pe DOUĂ chei
     # (IP prinde rotirea de visitor_id; visitor prinde spam-ul unui client legit).
     web_rate_limit_max_visitor: int = Field(
         default=15, validation_alias="WEB_RATE_LIMIT_MAX_VISITOR"
@@ -937,7 +937,7 @@ class Settings(BaseSettings):
     )
     # Linia „👉 Recomandarea mea" (pick angajat din framing). PREFERINȚA FERMĂ A CLIENTULUI (Adi,
     # repetat): NU o vrea în NICIUN mesaj — o simțea „aruncată" / redundantă cu cardurile. Default
-    # OFF pe TOATE canalele (gate în `flatten_framing` web ȘI `flatten` floor WhatsApp/Telegram).
+    # OFF peste tot (gate în `flatten_framing` web ȘI `flatten`, floor-ul text).
     # (Fusese pornit temporar pt „iZi-parity Tier 1 G1"; cererea userului îl anulează.) Reactivare
     # DOAR explicit din env `RICH_PICK_WEB_ENABLED=true` (reversibil) — nu-l re-porni default.
     rich_pick_web_enabled: bool = Field(default=False, validation_alias="RICH_PICK_WEB_ENABLED")

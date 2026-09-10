@@ -74,7 +74,7 @@ BASE_FAQS_RO: list[tuple[str, str]] = [
     # --- comenzi ---
     (
         "Cum urmăresc coletul și unde văd AWB-ul?",
-        "După expediere primești numărul AWB și linkul de urmărire pe e-mail și pe WhatsApp. "
+        "După expediere primești numărul AWB și linkul de urmărire pe e-mail. "
         "Poți verifica statusul oricând pe site-ul curierului sau întrebându-mă aici.",
     ),
     (

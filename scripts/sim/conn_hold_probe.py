@@ -118,7 +118,7 @@ async def _health_probe(stop: asyncio.Event, latencies: list[float], interval_s:
 
 async def _one_turn(biz, channel_id: str, idx: int, results: list[dict]) -> None:
     event = {
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "channel_account_id": SIM_PROVIDER,
         "sender_external_id": f"sim:burst:{uuid.uuid4().hex[:8]}",
         "provider_msg_id": f"sim.{uuid.uuid4().hex}",
@@ -163,7 +163,7 @@ async def main() -> int:
 
     pool = await get_pool()
     async with admin_conn(pool) as conn:
-        ch = await upsert_channel(conn, DEMO_BIZ, "whatsapp", SIM_PROVIDER, display_name="Sim")
+        ch = await upsert_channel(conn, DEMO_BIZ, "webchat", SIM_PROVIDER, display_name="Sim")
     channel_id = ch["id"]
     async with tenant_conn(DEMO_BIZ) as conn:
         biz = await load_business(conn, DEMO_BIZ)

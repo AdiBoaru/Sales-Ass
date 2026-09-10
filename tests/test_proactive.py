@@ -284,8 +284,11 @@ def test_tenant_queries_filter_business_id():
 
 
 def test_no_direct_channel_send_in_proactive():
-    for fname in ("scheduler.py", "builders.py"):
+    """P5: proactivul PROPUNE (outbox), nu trimite. NX-289: garda numea clasele WhatsApp/Telegram,
+    care nu mai există — deci ar fi trecut orice. O ancorăm pe ce apără de fapt: niciun sender de
+    canal și niciun client HTTP în motor."""
+    for fname in ("scheduler.py", "builders.py", "templates.py"):
         src = Path(f"src/proactive/{fname}").read_text(encoding="utf-8")
-        assert "MetaClient" not in src
-        assert "TelegramClient" not in src
+        assert "ChannelSender" not in src
+        assert "WebSender" not in src
         assert "import httpx" not in src

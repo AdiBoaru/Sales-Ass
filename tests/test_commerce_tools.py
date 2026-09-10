@@ -24,7 +24,7 @@ def _ctx() -> TurnContext:
         conversation_id="conv",
     )
     # NX-289: `reorder` trece prin zidul de login (NX-128) doar pentru un client IDENTIFICAT.
-    # Înainte, identitatea venea gratis din default-ul `channel_kind="whatsapp"` al lui
+    # Înainte, identitatea venea gratis din default-ul `channel_kind="webchat"` al lui
     # `InboundMessage`; acum default-ul e `webchat` (anonim), deci o punem explicit.
     ctx.verified_customer_ref = "cust_identified"
     return ctx

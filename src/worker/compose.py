@@ -577,9 +577,9 @@ def comparison_cards(comparison: Comparison) -> list[dict[str, Any]]:
     ]
 
 
-# Intro-uri pt linia de chips pe floor-ul TEXT (WhatsApp/cache) — 2-3 variante naturale per limbă,
+# Intro-uri pt linia de chips pe floor-ul TEXT (`messages.body`/cache) — 2-3 variante per limbă,
 # alese DETERMINIST din conținut (același reply → același text: cache-safe), ca linia să nu sune
-# „template" la fiecare recomandare. Web omite linia (chips = butoane); Telegram are calea lui.
+# „template" la fiecare recomandare. Web omite linia (chips = butoane tappabile).
 _CHIP_LEADS: dict[str, tuple[str, ...]] = {
     "ro": ("Dacă vrei, putem continua cu:", "Îți mai pot arăta:", "Sau, dacă preferi:"),
     "en": ("If you like, we can continue with:", "I can also show you:", "Or, if you prefer:"),
@@ -594,7 +594,7 @@ def _chip_lead(language: str | None, seed: str) -> str:
 
 
 def flatten(rich: RichReply, language: str | None = None) -> str:
-    """Aplatizare deterministă în text — floor-ul pentru canale fără rich (WhatsApp),
+    """Aplatizare deterministă în text — floor-ul pentru consumatorii fără randare bogată,
     messages.body, log și cache. Toate cifrele vin din card (cod), nu din proză. `language` →
     eticheta pick-ului în limba clientului (fallback 'ro' = byte-identic cu vechiul comport.)."""
     lines: list[str] = []
@@ -612,7 +612,7 @@ def flatten(rich: RichReply, language: str | None = None) -> str:
         if it.reason:
             lines.append(f"   {it.reason}")
     # Linia „👉 Recomandarea mea" e OFF pe TOATE canalele (preferința fermă a userului) — gate ȘI pe
-    # floor (WhatsApp/Telegram/cache), nu doar pe web (`flatten_framing`). Reactivabil din env.
+    # floor (`messages.body`/cache), nu doar pe web (`flatten_framing`). Reactivabil din env.
     if rich.pick and get_settings().rich_pick_web_enabled:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
         head = f"{_pick_label(language)}{name}, " if name else "👉 "
@@ -641,12 +641,12 @@ def flatten_framing(rich: RichReply, language: str | None = None) -> str:
 
     IZI-coaching: `education` (paragraful „cum alegi" + cross-sell) revine ca PARAGRAF DE FINAL pe
     widget (gap-ul iZi — botul listează, nu consultă). E scrub-uit (fără cifre/claim-uri), deci
-    sigur. `flatten()` rămâne floor-ul COMPLET pt canalele fără carduri (WhatsApp/cache)."""
+    sigur. `flatten()` rămâne floor-ul COMPLET fără carduri (`messages.body`/cache)."""
     blocks: list[str] = []
     if rich.intro:
         blocks.append(rich.intro)
     # „pick" doar dacă e PORNIT pe web (default OFF) ȘI departajează ≥2 produse (la unul singur
-    # cardul vorbește de la sine). Pe WhatsApp `flatten` îl pune oricum — vezi docstring.
+    # cardul vorbește de la sine). Pe floor-ul text `flatten` îl pune oricum — vezi docstring.
     if get_settings().rich_pick_web_enabled and rich.pick and len(rich.items) > 1:
         name = next((it.name for it in rich.items if it.product_id == rich.pick[0]), None)
         head = f"{_pick_label(language)}{name}, " if name else "👉 "
@@ -1247,7 +1247,7 @@ def comparison_facts_block(comparison: Comparison, language: str | None) -> str:
 
 
 def flatten_comparison(comparison: Comparison, language: str | None) -> str:
-    """Floor aplatizat al tabelului (WhatsApp/cache/messages.body + canale fără randare de tabel):
+    """Floor aplatizat al tabelului (`messages.body`/cache + consumatori fără randare de tabel):
     lead + antet cu numele produselor + un rând per dimensiune, celulele separate cu „ · "."""
     title = _labels(language)["title"]
     head = f"{title}: " + " · ".join(c.name for c in comparison.columns)

@@ -7,7 +7,7 @@ from src.worker.debounce import Debouncer
 
 def _ev(sender: str, body: str, mid: str, *, account="bot1") -> dict:
     return {
-        "channel_kind": "telegram",
+        "channel_kind": "webchat",
         "channel_account_id": account,
         "sender_external_id": sender,
         "body": body,

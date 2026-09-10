@@ -20,7 +20,7 @@ def _row(business_id: str, idx: int, *, priority: int = 10) -> dict:
         "attempts": 1,
         "priority": priority,
         "created_at": datetime.now(UTC) - timedelta(milliseconds=250),
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "channel_account_id": "acct",
     }
 

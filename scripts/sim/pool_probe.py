@@ -109,7 +109,7 @@ async def main() -> int:
     pool = await get_pool()
     async with admin_conn(pool) as conn:
         ch = await upsert_channel(
-            conn, DEMO_BIZ, "whatsapp", SIM_PROVIDER, display_name="Sim Driver"
+            conn, DEMO_BIZ, "webchat", SIM_PROVIDER, display_name="Sim Driver"
         )
     channel_id = ch["id"]
     async with tenant_conn(DEMO_BIZ) as conn:
@@ -122,7 +122,7 @@ async def main() -> int:
     rows = []
     for i, text in enumerate(SCRIPT):
         event = {
-            "channel_kind": "whatsapp",
+            "channel_kind": "webchat",
             "channel_account_id": SIM_PROVIDER,
             "sender_external_id": sender,
             "provider_msg_id": f"sim.{uuid.uuid4().hex}",

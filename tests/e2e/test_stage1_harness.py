@@ -40,7 +40,6 @@ BASE_ENV = {
     "SUPABASE_DB_URL": "postgresql://stage1:stage1@127.0.0.1:55432/stage1",
     "REDIS_URL": "redis://cache.internal:6379/0",
     "OPENAI_API_KEY": "sk-test",
-    "META_VERIFY_TOKEN": "verify-123",
     "WEB_ACTION_KEYS": "e2e1:" + "A" * 44,
     "WEB_TURN_FINGERPRINT_SECRET": "fingerprint-secret-for-tests-0123456789",
     "WEB_FEEDBACK_PROMPT_SECRET": "prompt-secret-for-tests-0123456789",

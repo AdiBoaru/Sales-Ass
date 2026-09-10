@@ -36,7 +36,7 @@ def _route(state=None):
         "id": "conv-1",
         "channel_id": "chan-1",
         "locale": "ro",
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "state": state or {},
     }
 

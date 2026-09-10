@@ -251,7 +251,7 @@ class _StreamRedis:
 
 
 _EVENT = {
-    "channel_kind": "telegram",
+    "channel_kind": "webchat",
     "channel_account_id": "acc",
     "sender_external_id": "u",
     "provider_msg_id": "m",

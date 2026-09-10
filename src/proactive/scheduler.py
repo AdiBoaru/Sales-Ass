@@ -8,9 +8,9 @@ Jobul devine `sent` (enqueue reușit) / `skipped_*` / `cancelled` / `failed`, AT
 Arhitectură (ca dispatcher-ul): control plane (admin_conn) → ce tenanți au joburi
 scadente → per tenant (tenant_conn, RLS) → claim (`FOR UPDATE SKIP LOCKED`) → procesare.
 
-Emite `type=text` (în fereastra 24h) SAU `type=template` (în afara ei, PL-1): poarta NX-71
-decide care, motorul pune payload-ul în outbox → dispatcher-ul rutează după `payload.type`
-(template → canalul cu capabilitatea TEMPLATE; canalele fără ea degradează grațios la text).
+Emite EXCLUSIV `type=text`. NX-289: exista o a doua formă, `type=template` (mesaj în afara
+ferestrei de 24h Meta, randat de platformă din `wa_templates`); a plecat cu canalul, deci
+motorul nu mai are ramură de payload — poarta spune doar dacă, nu și cum.
 
     python -m src.proactive.scheduler
 """

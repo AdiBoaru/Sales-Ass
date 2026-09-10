@@ -196,7 +196,7 @@ async def touch_last_inbound(
     business_id: str,
     conversation_id: str,
 ) -> None:
-    """Marchează `last_inbound_at = now()` (alimentează fereastra 24h Meta).
+    """Marchează `last_inbound_at = now()`.
     Apelat de webhook la primirea unui mesaj inbound."""
     await conn.execute(
         """

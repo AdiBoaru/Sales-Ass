@@ -39,7 +39,7 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
             channel_id = await conn.fetchval(
                 """
                 insert into channels (business_id, kind, provider_account_id)
-                values ($1, 'whatsapp', $2)
+                values ($1, 'webchat', $2)
                 returning id::text
                 """,
                 business_id,
@@ -54,7 +54,7 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
 
 def _event(body="salut", wamid=None):
     return {
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "channel_account_id": "PNID-demo",
         "sender_external_id": f"+40{uuid4().hex[:9]}",
         "provider_msg_id": wamid or f"wamid.{uuid4().hex[:10]}",
@@ -270,7 +270,7 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
 
     async with tenant_tx(pool) as (conn, channel_id):
         contact = await get_or_create_contact(
-            conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}", display_name="Ana"
+            conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}", display_name="Ana"
         )
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id, locale="ro")
         conv_id = conv["id"]
@@ -332,15 +332,15 @@ async def test_get_orders_status_joins_and_contact_isolation(pool):
         try:
             channel_id = await conn.fetchval(
                 "insert into channels (business_id, kind, provider_account_id) "
-                "values ($1, 'whatsapp', $2) returning id::text",
+                "values ($1, 'webchat', $2) returning id::text",
                 DEMO_BIZ,
                 f"test-{_u()}",
             )
             c1 = await get_or_create_contact(
-                conn, DEMO_BIZ, "whatsapp", f"+40{_u().hex[:9]}", display_name="A"
+                conn, DEMO_BIZ, "webchat", f"+40{_u().hex[:9]}", display_name="A"
             )
             c2 = await get_or_create_contact(
-                conn, DEMO_BIZ, "whatsapp", f"+40{_u().hex[:9]}", display_name="B"
+                conn, DEMO_BIZ, "webchat", f"+40{_u().hex[:9]}", display_name="B"
             )
             await get_or_create_conversation(conn, DEMO_BIZ, c1.id, channel_id, locale="ro")
             ext = f"ORD-{_u().hex[:8]}"

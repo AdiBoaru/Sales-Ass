@@ -69,10 +69,6 @@ jobs:
       # Secrete SINTETICE, generate în job. Niciun secret de repo: gate-ul nu are nevoie de niciunul,
       # iar un job care cere secrete nu poate rula pe un fork.
       OPENAI_API_KEY: stage1-e2e-no-network
-      META_ACCESS_TOKEN: test-token
-      META_APP_SECRET: test-secret
-      META_VERIFY_TOKEN: test-verify
-      META_PHONE_NUMBER_ID: "000000000"
       DAILY_COST_CAP_USD: "5"
 
     steps:

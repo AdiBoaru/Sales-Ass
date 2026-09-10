@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI):
     pool = await get_pool()
     async with admin_conn(pool) as conn:
         ch = await upsert_channel(
-            conn, DEMO_BIZ, "whatsapp", SIM_PROVIDER, display_name="Sim Driver"
+            conn, DEMO_BIZ, "webchat", SIM_PROVIDER, display_name="Sim Driver"
         )
     _state["channel_id"] = ch["id"]
     # config de business + verificarea cheii OpenAI (altfel pipeline-ul degradează la fallback).
@@ -201,9 +201,6 @@ async def substrate():
                 "select count(*) from intent_aliases where business_id=$1 and status='approved'"
             ),
             "semantic_cache": await q("select count(*) from semantic_cache where business_id=$1"),
-            "wa_templates_approved": await q(
-                "select count(*) from wa_templates where business_id=$1 and status='approved'"
-            ),
             "orders": await q("select count(*) from orders where business_id=$1"),
         }
 
@@ -211,7 +208,7 @@ async def substrate():
 @app.post("/turn")
 async def turn(inp: TurnIn):
     event = {
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "channel_account_id": SIM_PROVIDER,
         "sender_external_id": inp.sender,
         "provider_msg_id": f"sim.{uuid.uuid4().hex}",

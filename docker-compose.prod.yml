@@ -190,21 +190,12 @@ services:
       retries: 3
       start_period: 90s
 
-  # Outbox → ChannelSender (Meta/Telegram), retry idempotent.
+  # Outbox → ChannelSender (webchat), retry idempotent.
   dispatcher:
     <<: *app
     command: python -m src.worker.dispatcher
     mem_limit: 192m
     cpus: 0.3
-
-  # Canal de TEST: long polling Telegram. ÎNGHEȚAT (NX-179) — focusul e 100% pe WEB WIDGET.
-  # OFF by default, ca `proactive`: pornește-l cu `--profile telegram` dacă se reia canalul.
-  telegram-poller:
-    <<: *app
-    command: python -m src.channels.telegram.poller
-    mem_limit: 192m
-    cpus: 0.2
-    profiles: ["telegram"]
 
   # Joburi de mentenanță (NX-83): rollup nocturn, purjă dedupe, embed incremental.
   scheduler:

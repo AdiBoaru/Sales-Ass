@@ -30,10 +30,10 @@ async def test_upsert_channel_is_idempotent(pool):
         try:
             bot_id = f"tgbot-{uuid4().hex[:10]}"
 
-            first = await upsert_channel(conn, DEMO_BIZ, "telegram", bot_id, display_name="@demo")
+            first = await upsert_channel(conn, DEMO_BIZ, "webchat", bot_id, display_name="@demo")
             assert first["created"] is True
 
-            second = await upsert_channel(conn, DEMO_BIZ, "telegram", bot_id, display_name="@demo")
+            second = await upsert_channel(conn, DEMO_BIZ, "webchat", bot_id, display_name="@demo")
             assert second["created"] is False  # idempotent — același rând
             assert first["id"] == second["id"]
 
@@ -41,7 +41,7 @@ async def test_upsert_channel_is_idempotent(pool):
                 "select kind, status, business_id::text as business_id from channels where id = $1",
                 first["id"],
             )
-            assert row["kind"] == "telegram"
+            assert row["kind"] == "webchat"
             assert row["status"] == "active"
             assert row["business_id"] == DEMO_BIZ
         finally:
@@ -49,14 +49,14 @@ async def test_upsert_channel_is_idempotent(pool):
 
 
 async def test_upsert_then_resolve_finds_it(pool):
-    """După seed, resolve_channel('telegram', bot_id) îl găsește (ca în worker)."""
+    """După seed, resolve_channel('webchat', bot_id) îl găsește (ca în worker)."""
     async with pool.acquire() as conn:
         tr = conn.transaction()
         await tr.start()
         try:
             bot_id = f"tgbot-{uuid4().hex[:10]}"
-            await upsert_channel(conn, DEMO_BIZ, "telegram", bot_id)
-            found = await resolve_channel(conn, "telegram", bot_id)
+            await upsert_channel(conn, DEMO_BIZ, "webchat", bot_id)
+            found = await resolve_channel(conn, "webchat", bot_id)
             assert found is not None
             assert found["business_id"] == DEMO_BIZ
         finally:

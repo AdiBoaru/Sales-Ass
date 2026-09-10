@@ -355,14 +355,14 @@ class RichItem:
 
 @dataclass
 class Chip:
-    """Sugestie de follow-up tappabilă (Telegram reply-keyboard → trimite `label` ca mesaj nou).
+    """Sugestie de follow-up tappabilă (widgetul trimite `label` ca mesaj nou).
 
     NX-236 — de ce NU migrează `payload` în v2. În practică `payload` a ajuns egal cu `label`
     (`compose._suggestion_chips`), deci „tokenul rutat" din contract e azi tot o etichetă: o
     semantică pe care ar trebui s-o RECONSTRUIM parsând text, adică exact ce interzice boundary-ul
     v2. Pe calea v2 sensul unui buton nu se mai deduce din ce scrie pe el — vine din planul TYPED
     al turului (`web.action_models.plan_actions`), sigilat într-un token opac. `Chip` rămâne ce a
-    fost dintotdeauna, o etichetă pentru canalele v1 (web v1, Telegram/WhatsApp), și dispare
+    fost dintotdeauna, o etichetă pentru contractul v1, și dispare
     odată cu ele la cutoverul NX-249."""
 
     label: str
@@ -382,7 +382,7 @@ MAX_CHIP_LEN = 56
 @dataclass
 class RichReply:
     """Recomandarea structurată, NEUTRĂ de canal. Sender-ul o aplatizează în text
-    (floor) + o trimite bogat pe canalele care suportă (Telegram `send_rich`)."""
+    (floor) + o trimite bogat pe canalele care suportă (`send_rich`)."""
 
     intro: str | None  # framing LLM (fără cifre/linkuri), scrubuit
     items: list[RichItem]  # asamblate de COD din retrieval, cap 6
@@ -396,7 +396,7 @@ class RichReply:
 class Offer:
     """NX-114 — ofertă/CTA NEUTRĂ de canal. Emitentul (agent/checkout) setează intenția
     semantică; CUM se randează e exclusiv la margine (NX-60): buton (web), CTA interactiv
-    (WhatsApp), buton inline (Telegram). Floor pe canale fără randare bogată = url append-uit
+    Floor pe canale fără randare bogată = url append-uit
     în text. Owner: stagiul care emite oferta."""
 
     kind: str  # "checkout" | "open_url" | "quick_reply" | "book"
@@ -478,7 +478,7 @@ class Reply:
     # după textul de lead-in. Câmpuri compacte (name, price, url, image), nu obiecte.
     products: list[dict[str, Any]] | None = None
     # NX-richreply: recomandare structurată (model iZi). Dacă setată, Sender-ul o
-    # randează bogat (Telegram); `text` rămâne aplatizarea ei (floor pt WhatsApp/cache).
+    # randează bogat; `text` rămâne aplatizarea ei (floor pt `messages.body`/cache).
     rich: RichReply | None = None
     # IZI-compare: tabel comparativ structurat (2-4 produse). Dacă setat, marginile care îl
     # suportă (web, Capability.COMPARISON) îl randează ca tabel; restul primesc `text` (floor

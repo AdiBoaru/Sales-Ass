@@ -140,7 +140,7 @@ async def _run(monkeypatch, stage):
 
     business = BusinessConfig(id="biz-1", slug="s", name="n")
     event = {
-        "channel_kind": "telegram",
+        "channel_kind": "webchat",
         "sender_external_id": "u1",
         "provider_msg_id": "m1",
         "content_type": "text",

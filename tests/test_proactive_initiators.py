@@ -265,8 +265,10 @@ async def test_run_initiators_iterates_tenants_and_isolates_errors(monkeypatch):
 
 def test_no_direct_channel_send_in_initiators():
     src = Path("src/proactive/initiators.py").read_text(encoding="utf-8")
-    assert "MetaClient" not in src  # P5: inițiatorii NU trimit, doar inserează joburi
-    assert "TelegramClient" not in src
+    # P5: inițiatorii NU trimit, doar inserează joburi. NX-289: garda numea clasele
+    # WhatsApp/Telegram (dispărute) → ar fi trecut orice; acum numește sender-ul care există.
+    assert "ChannelSender" not in src
+    assert "WebSender" not in src
     assert "import httpx" not in src
 
 

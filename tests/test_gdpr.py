@@ -86,7 +86,7 @@ def _patch_reads(monkeypatch, *, fail=False):
         return {"display_name": "Ana", "consent": {}}
 
     async def fetch_identities(conn, biz, cid):
-        return [{"channel_kind": "telegram", "external_id": "tg-1"}]
+        return [{"channel_kind": "webchat", "external_id": "tg-1"}]
 
     async def fetch_conversations(conn, biz, cid):
         return [{"id": "conv1"}]
@@ -207,13 +207,13 @@ async def _seed(conn, biz):
     ext = f"tg-{uuid4().hex[:10]}"
     await conn.execute(
         "insert into channel_identities (business_id, contact_id, channel_kind, external_id) "
-        "values ($1, $2, 'telegram', $3)",
+        "values ($1, $2, 'webchat', $3)",
         biz,
         cid,
         ext,
     )
     chan = await conn.fetchval(
-        "insert into channels (business_id, kind, provider_account_id) values ($1, 'telegram', $2) "
+        "insert into channels (business_id, kind, provider_account_id) values ($1, 'webchat', $2) "
         "returning id::text",
         biz,
         f"acc-{uuid4().hex[:10]}",

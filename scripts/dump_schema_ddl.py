@@ -95,8 +95,8 @@ async def own_functions(conn: asyncpg.Connection, *, after_tables: bool) -> None
 
       • unele TABELE depind de funcții — `products.search_tsv` e o coloană generated care
         cheamă `ro_unaccent()`, deci funcția trebuie să existe înainte de `create table`;
-      • unele FUNCȚII depind de tabele — `in_24h_window(conv conversations)` primește tipul
-        COMPOZIT al tabelului `conversations`, care nu există până nu există tabelul.
+      • unele FUNCȚII pot depinde de tabele — o funcție care primește tipul COMPOZIT al unui
+        tabel (ex. `f(conv conversations)`) nu se poate crea până nu există tabelul.
 
     `check_function_bodies = off` rezolvă doar prima jumătate (corpul), nu SEMNĂTURA: un tip
     de argument inexistent e eroare oricum. Deci separăm după dependență, nu după alfabet.

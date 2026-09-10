@@ -122,7 +122,7 @@ class TurnResult:
 
     `reply` + `language` sunt populate DOAR pe calea sincronă (`deliver=False`, gateway web
     request/response): apelantul mapează `reply` (text + produse + chips) direct în răspunsul HTTP,
-    fără outbox/dispatcher. Pe calea async (WhatsApp/Telegram/SSE) rămân None — livrarea e prin
+    fără outbox/dispatcher. Pe calea async (SSE) rămân None — livrarea e prin
     outbox, iar `reply_text` (text PUR, fără disclaimer) e suficient pt log/teste."""
 
     conversation_id: str | None
@@ -486,7 +486,7 @@ async def handle_turn(
     channel_account_id, sender_external_id, provider_msg_id, content_type, body, ...
 
     `deliver` (NX-25b — gateway web sincron): True (default, calea async) = Sender-ul scrie
-    reply-ul în `outbox` → dispatcher-ul îl livrează (WhatsApp/Telegram/SSE), eventual spart în 2.
+    reply-ul în `outbox` → dispatcher-ul îl livrează (SSE), eventual spart în 2.
     False (request/response: răspunsul HTTP E transportul) = persistăm mesajul outbound (status
     `sent`, un singur fragment) + state, dar NU punem în outbox (n-ar avea cine-l livra) și
     întoarcem `ctx.reply` în `TurnResult` ca apelantul să-l mapeze în răspuns. Restul (dedupe,
