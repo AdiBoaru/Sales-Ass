@@ -1,9 +1,12 @@
 """NX-76 — media routing Vision (poză → descriere → text de căutare) în Gates.
 
-ZERO apeluri reale: `LLMClient.describe_image` cu AsyncOpenAI fake, `MetaClient.fetch_media` cu
-httpx.MockTransport, `gates_stage`/`_route_image` cu fetcher+llm fake. Acoperă: adaptor Vision,
-download 2-hop, îmbogățirea body-ului, sentinel non-produs, păstrarea caption-ului la fail-soft,
-cost guard, skip clarify pe poză, text neatins, P12.
+ZERO apeluri reale: `LLMClient.describe_image` cu AsyncOpenAI fake, `gates_stage`/`_route_image`
+cu fetcher+llm fake. Acoperă: adaptor Vision, îmbogățirea body-ului, sentinel non-produs,
+păstrarea caption-ului la fail-soft, cost guard, skip clarify pe poză, text neatins, P12.
+
+NX-289: testele pe `MetaClient.fetch_media` (download 2-hop de la Graph) au plecat cu clientul.
+Calea rămâne exersată prin `MediaFetcher` fake — seam-ul e ce testăm, nu transportul dispărut.
+`no_downloader` (registrul e GOL azi: `webchat` nu trimite media) e chiar cazul viu acum.
 """
 
 import logging
@@ -13,7 +16,6 @@ import pytest
 
 import src.config as config
 from src.agent.llm import LLMClient, ModerationResult
-from src.meta_client import MetaClient
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.worker.runner import PipelineDeps
 from src.worker.stages import gates
@@ -71,39 +73,6 @@ async def test_describe_image_returns_text_low_detail_bounded():
     assert img["url"].startswith("data:image/jpeg;base64,")
 
 
-# --- MetaClient.fetch_media (httpx MockTransport, 2 hop-uri) -----------------
-
-
-async def test_fetch_media_two_hops_returns_bytes_and_mime():
-    seen = {"auth": []}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["auth"].append(request.headers.get("Authorization"))
-        if request.url.path.endswith("/MID123"):
-            return httpx.Response(
-                200, json={"url": "https://look.test/blob", "mime_type": "image/png"}
-            )
-        return httpx.Response(200, content=b"\x89PNG\r\n")
-
-    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    meta = MetaClient(http, "tok-x", base_url="https://graph.test", version="v21.0")
-    blob, mime = await meta.fetch_media("PNID", "MID123")
-
-    assert blob == b"\x89PNG\r\n"
-    assert mime == "image/png"
-    assert seen["auth"] == ["Bearer tok-x", "Bearer tok-x"]  # Bearer pe AMBELE hop-uri
-
-
-async def test_fetch_media_raises_on_http_error():
-    def handler(request):
-        return httpx.Response(404, json={"error": "gone"})
-
-    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    meta = MetaClient(http, "tok", base_url="https://graph.test")
-    with pytest.raises(httpx.HTTPStatusError):
-        await meta.fetch_media("PNID", "MID")
-
-
 # --- gate _route_image -------------------------------------------------------
 
 
@@ -154,7 +123,7 @@ def _img_ctx(*, body=None, media_ref="m1", content_type="image") -> TurnContext:
             content_type=content_type,
             body=body,
             media_ref=media_ref,
-            channel_kind="whatsapp",
+            channel_kind="webchat",
             channel_account_id="PNID",
         ),
         conversation_id="conv-1",

@@ -437,11 +437,11 @@ async def test_render_path_emitted_on_degradation(monkeypatch):
     monkeypatch.setattr(disp, "insert_events", fake_insert)
     # rich cerut, dar livrat text (canal fără RICH) → event de degradare; conv_id din rândul outbox
     await disp._emit_render_path(
-        object(), "biz", "whatsapp", {"rich": {"x": 1}}, "text", "text", "conv-9"
+        object(), "biz", "webchat", {"rich": {"x": 1}}, "text", "text", "conv-9"
     )
     assert captured["events"][0].type == "render_path"
     assert captured["events"][0].properties == {
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "requested": "rich",
         "delivered": "text",
     }
@@ -459,9 +459,10 @@ async def test_render_path_silent_when_match(monkeypatch):
     monkeypatch.setattr(disp, "insert_events", fake_insert)
     # rich cerut ȘI livrat (webchat are RICH acum) → fără event (zero overhead pe calea fericită)
     await disp._emit_render_path(object(), "biz", "webchat", {"rich": {"x": 1}}, "text", "rich")
-    # carousel cerut ȘI livrat carousel (Telegram) → NU e degradare (fidelitate completă)
+    # NX-289: `type='carousel'` pe sârmă = listă de carduri produs; livrată ca 'products' pe un
+    # canal cu CARDS, e fidelitate completă, NU degradare.
     await disp._emit_render_path(
-        object(), "biz", "telegram", {"products": [{"x": 1}]}, "carousel", "carousel"
+        object(), "biz", "webchat", {"products": [{"x": 1}]}, "carousel", "products"
     )
     assert captured == []
 

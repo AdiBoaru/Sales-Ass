@@ -1,5 +1,5 @@
 """Teste integration pentru worker-ul de procesare (G2b): handle_turn (echo e2e),
-resolve_channel_by_phone, load_business. Ating DB-ul real → marcate `integration`.
+resolve_channel, load_business. Ating DB-ul real → marcate `integration`.
 
 Curățenie ca în test_queries_runtime: tranzacție rollback-uită + channel
 throwaway, query-urile rulează sub rolul `bot_runtime` (RLS de producție).
@@ -13,7 +13,7 @@ import pytest
 from src.db.connection import close_pool, get_pool
 from src.db.provider import static_db
 from src.db.queries.businesses import load_business
-from src.db.queries.channels import resolve_channel_by_phone
+from src.db.queries.channels import resolve_channel
 from src.worker.processor import handle_turn
 
 pytestmark = pytest.mark.integration
@@ -85,26 +85,28 @@ async def test_load_business(pool):
 
 
 # --------------------------------------------------------------------------- #
-# resolve_channel_by_phone (control plane — admin/postgres, fără RLS)
+# resolve_channel (control plane — admin/postgres, fără RLS)
 # --------------------------------------------------------------------------- #
 
 
-async def test_resolve_channel_by_phone(pool):
+async def test_resolve_channel(pool):
+    # NX-289: wrapper-ul `resolve_channel_by_phone` (WhatsApp) a dispărut; ce se testa prin el
+    # era lookup-ul GENERIC canal → business, care rămâne marginea de bootstrap a tenantului.
     async with pool.acquire() as conn:
         tr = conn.transaction()
         await tr.start()
         try:
-            pnid = f"PN-{uuid4().hex[:8]}"
+            account = f"pub-{uuid4().hex[:8]}"
             await conn.execute(
                 "insert into channels (business_id, kind, provider_account_id) "
-                "values ($1, 'whatsapp', $2)",
+                "values ($1, 'webchat', $2)",
                 DEMO_BIZ,
-                pnid,
+                account,
             )
-            found = await resolve_channel_by_phone(conn, pnid)
+            found = await resolve_channel(conn, "webchat", account)
             assert found is not None
             assert found["business_id"] == DEMO_BIZ
-            assert await resolve_channel_by_phone(conn, "does-not-exist") is None
+            assert await resolve_channel(conn, "webchat", "does-not-exist") is None
         finally:
             await tr.rollback()
 

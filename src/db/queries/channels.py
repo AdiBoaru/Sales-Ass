@@ -1,8 +1,8 @@
 """Rezolvarea canalului — control plane (NU date de tenant).
 
-Problema de bootstrap: un mesaj inbound vine cu `phone_number_id` (canalul Meta),
-dar pentru a deschide o conexiune tenant-scoped avem nevoie de `business_id` —
-exact ce încercăm să aflăm. Lookup-ul phone_number_id → business e deci o
+Problema de bootstrap: un mesaj inbound vine cu id-ul canalului RECEPTOR (public_token la
+web), dar pentru a deschide o conexiune tenant-scoped avem nevoie de `business_id` —
+exact ce încercăm să aflăm. Lookup-ul canal → business e deci o
 operație de CONTROL PLANE, rulată pe o conexiune admin (`admin_conn`), nu pe una
 de tenant. E singura excepție de la „business_id pe tot": aici îl DERIVĂM.
 
@@ -73,7 +73,7 @@ async def resolve_channel(
 ) -> dict[str, str] | None:
     """(channel_kind, provider_account_id) → {business_id, channel_id}, sau None.
 
-    Generic pe canal (NX-60): phone_number_id la WhatsApp, bot id la Telegram, ...
+    Generic pe canal (NX-60): azi `webchat` + public_token.
     A se rula pe `admin_conn` (cross-tenant): la momentul apelului încă nu avem
     un tenant scope. Filtrăm pe canal activ — un canal dezactivat nu primește
     procesare (mesajele lui se ignoră, nu crapă worker-ul).
@@ -90,14 +90,6 @@ async def resolve_channel(
         provider_account_id,
     )
     return dict(row) if row else None
-
-
-async def resolve_channel_by_phone(
-    conn: asyncpg.Connection,
-    phone_number_id: str,
-) -> dict[str, str] | None:
-    """Wrapper WhatsApp peste `resolve_channel` (compat)."""
-    return await resolve_channel(conn, "whatsapp", phone_number_id)
 
 
 async def upsert_channel(
@@ -117,7 +109,7 @@ async def upsert_channel(
 
     `settings` (opțional, NX-20): la conflict, cheile EXISTENTE câștig (`$5 || channels.settings`)
     → un re-seed NU suprascrie `session_secret`-ul deja emis (altfel sigurile vizitatorilor
-    devin invalide); adaugă doar cheile noi. `None` (ex. seed Telegram) lasă settings neatins."""
+    devin invalide); adaugă doar cheile noi. `None` lasă settings neatins."""
     row = await conn.fetchrow(
         """
         insert into channels

@@ -80,7 +80,9 @@ def _settings(**over):
     return SimpleNamespace(**base)
 
 
-def _ctx(*, cost_usd=None, biz_cap=5.0) -> TurnContext:
+def _ctx(*, cost_usd=None, biz_cap=5.0, identified=True) -> TurnContext:
+    """NX-289: „contact identificat" nu mai e un nume de canal (`whatsapp`), ci o identitate
+    verificată server-side (NX-129). `identified=False` = vizitator anonim pe web."""
     ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="s", name="n", daily_cost_cap_usd=biz_cap),
@@ -88,6 +90,8 @@ def _ctx(*, cost_usd=None, biz_cap=5.0) -> TurnContext:
         message=InboundMessage(provider_msg_id="m", body="x"),
         conversation_id="conv",
     )
+    if identified:
+        ctx.verified_customer_ref = "cust_identified"
     if cost_usd is not None:
         ctx.usage = TurnUsage(cost_usd=cost_usd, calls=1)
     return ctx
@@ -104,7 +108,7 @@ async def test_over_budget_disables_llm(monkeypatch):
 
     monkeypatch.setattr(proc, "cost_over_budget", over)
     ctx = _ctx()
-    llm = await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="whatsapp")
+    llm = await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="webchat")
     assert llm is None
     assert any(
         e.type == "cost_guard_tripped" and e.properties["cap_usd"] == 5.0 for e in ctx.events
@@ -120,7 +124,7 @@ async def test_under_budget_keeps_llm(monkeypatch):
 
     monkeypatch.setattr(proc, "cost_over_budget", under)
     ctx = _ctx()
-    llm = await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="whatsapp")
+    llm = await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="webchat")
     assert llm is sentinel
     assert not any(e.type == "cost_guard_tripped" for e in ctx.events)
 
@@ -134,15 +138,13 @@ async def test_no_redis_guard_off(monkeypatch):
 
     monkeypatch.setattr(proc, "cost_over_budget", boom)
     ctx = _ctx()
-    assert await _llm_within_budget(ctx, None, ctx.business, channel_kind="whatsapp") is sentinel
+    assert await _llm_within_budget(ctx, None, ctx.business, channel_kind="webchat") is sentinel
 
 
 async def test_no_llm_returns_none(monkeypatch):
     monkeypatch.setattr(proc, "get_llm", lambda: None)
     ctx = _ctx()
-    assert (
-        await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="whatsapp") is None
-    )
+    assert await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="webchat") is None
 
 
 async def test_contact_cap_pre_check_disables_llm(monkeypatch):
@@ -157,7 +159,7 @@ async def test_contact_cap_pre_check_disables_llm(monkeypatch):
     # contactul a depășit deja plafonul per-contact în fereastră
     r.store[f"spend:{contact_scope_key('b', 'c')}"] = 0.06
     ctx = _ctx()
-    llm = await _llm_within_budget(ctx, r, ctx.business, channel_kind="whatsapp")
+    llm = await _llm_within_budget(ctx, r, ctx.business, channel_kind="webchat")
     assert llm is None
     assert any(e.type == "contact_spend_capped" for e in ctx.events)
 
@@ -174,7 +176,7 @@ async def test_contact_cap_with_business_guard_off(monkeypatch):
     r = _FakeRedis()
     r.store[f"spend:{contact_scope_key('b', 'c')}"] = 0.06
     ctx = _ctx(biz_cap=0.0)
-    llm = await _llm_within_budget(ctx, r, ctx.business, channel_kind="whatsapp")
+    llm = await _llm_within_budget(ctx, r, ctx.business, channel_kind="webchat")
     assert llm is None
     assert any(e.type == "contact_spend_capped" for e in ctx.events)
 
@@ -189,7 +191,7 @@ async def test_llm_within_budget_failopen_on_check_error(monkeypatch):
 
     monkeypatch.setattr(proc, "cost_over_budget", boom)
     ctx = _ctx()
-    got = await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="whatsapp")
+    got = await _llm_within_budget(ctx, _FakeRedis(), ctx.business, channel_kind="webchat")
     assert got is sentinel
 
 
@@ -198,7 +200,7 @@ async def test_record_cost_failopen_on_redis_error(monkeypatch):
     # eroarea (turul a răspuns deja); niciun event de cap, nicio excepție propagată (P6).
     monkeypatch.setattr(proc, "get_settings", lambda: _settings(contact_daily_cost_cap_usd=0.05))
     ctx = _ctx(cost_usd=0.06)
-    await _record_turn_cost(_BoomRedis(), ctx.business, ctx, llm_used=True, channel_kind="whatsapp")
+    await _record_turn_cost(_BoomRedis(), ctx.business, ctx, llm_used=True, channel_kind="webchat")
     assert not any(e.type in ("cost_guard_tripped", "contact_spend_capped") for e in ctx.events)
 
 
@@ -213,9 +215,9 @@ async def test_contact_cap_skipped_on_web(monkeypatch):
     monkeypatch.setattr(proc, "cost_over_budget", under)
     r = _FakeRedis()
     r.store[f"spend:{contact_scope_key('b', 'c')}"] = (
-        99.0  # peste, dar pe web NU se aplică (NX-120)
+        99.0  # peste, dar pe web ANONIM NU se aplică (NX-120)
     )
-    ctx = _ctx()
+    ctx = _ctx(identified=False)
     llm = await _llm_within_budget(ctx, r, ctx.business, channel_kind="webchat")
     assert llm is sentinel
     assert not any(e.type == "contact_spend_capped" for e in ctx.events)
@@ -228,7 +230,7 @@ async def test_record_cost_uses_exact_usage(monkeypatch):
     monkeypatch.setattr(proc, "get_settings", lambda: _settings())
     r = _FakeRedis()
     ctx = _ctx(cost_usd=0.0042)
-    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="whatsapp")
+    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="webchat")
     # contorul zilnic = cifra EXACTĂ din tokeni, nu euristica
     assert float(r.store[f"cost:b:{_today()}"]) == 0.0042
     assert not any(e.type == "cost_guard_tripped" for e in ctx.events)
@@ -238,7 +240,7 @@ async def test_record_cost_skips_when_llm_unused(monkeypatch):
     monkeypatch.setattr(proc, "get_settings", lambda: _settings())
     r = _FakeRedis()
     ctx = _ctx(cost_usd=0.01)
-    await _record_turn_cost(r, ctx.business, ctx, llm_used=False, channel_kind="whatsapp")
+    await _record_turn_cost(r, ctx.business, ctx, llm_used=False, channel_kind="webchat")
     assert r.store == {}  # peste buget / fără LLM → nu acumulează
 
 
@@ -246,7 +248,7 @@ async def test_record_cost_zero_usage_no_write(monkeypatch):
     monkeypatch.setattr(proc, "get_settings", lambda: _settings())
     r = _FakeRedis()
     ctx = _ctx(cost_usd=None)  # tur fără apeluri LLM (cache L1/gates)
-    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="whatsapp")
+    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="webchat")
     assert r.store == {}
 
 
@@ -254,7 +256,7 @@ async def test_record_cost_post_increment_trips_business(monkeypatch):
     monkeypatch.setattr(proc, "get_settings", lambda: _settings(daily_cost_cap_usd=0.05))
     r = _FakeRedis()
     ctx = _ctx(cost_usd=0.06, biz_cap=0.05)
-    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="whatsapp")
+    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="webchat")
     # noul total ≥ plafon → emite cost_guard_tripped (turul URMĂTOR blocat determinist)
     ev = next(e for e in ctx.events if e.type == "cost_guard_tripped")
     assert ev.properties["cap_usd"] == 0.05 and ev.properties["total_usd"] == 0.06
@@ -264,17 +266,18 @@ async def test_record_cost_per_contact_capped(monkeypatch):
     monkeypatch.setattr(proc, "get_settings", lambda: _settings(contact_daily_cost_cap_usd=0.05))
     r = _FakeRedis()
     ctx = _ctx(cost_usd=0.06)
-    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="whatsapp")
+    await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="webchat")
     assert any(e.type == "contact_spend_capped" for e in ctx.events)
     assert float(r.store[f"spend:{contact_scope_key('b', 'c')}"]) == 0.06
 
 
-async def test_record_cost_per_contact_not_applied_on_web(monkeypatch):
+async def test_record_cost_per_contact_not_applied_for_anonymous_visitor(monkeypatch):
     monkeypatch.setattr(proc, "get_settings", lambda: _settings(contact_daily_cost_cap_usd=0.001))
     r = _FakeRedis()
-    ctx = _ctx(cost_usd=0.06)
+    ctx = _ctx(cost_usd=0.06, identified=False)
     await _record_turn_cost(r, ctx.business, ctx, llm_used=True, channel_kind="webchat")
-    # web = NX-120 (calea sincronă) → niciun spend per-contact aici
+    # Vizitator anonim: „contactul" e throwaway (se schimbă la golirea cookie-urilor), deci un
+    # plafon per-contact n-ar plafona nimic. Frâna lui e rate-limitul de accept (NX-120).
     assert not any(e.type == "contact_spend_capped" for e in ctx.events)
     assert f"spend:{contact_scope_key('b', 'c')}" not in r.store
 

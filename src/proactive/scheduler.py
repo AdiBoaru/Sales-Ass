@@ -46,10 +46,11 @@ from src.safety.policy import SafetyPolicy
 
 log = logging.getLogger(__name__)
 
-# reason → proactive_jobs.status (verdictul porții NX-71)
+# reason → proactive_jobs.status (verdictul porții NX-71). NX-289: `no_window_no_template` a
+# dispărut odată cu fereastra de 24h Meta; statusul `skipped_no_window` rămâne în CHECK-ul
+# tabelului pentru rândurile ISTORICE, dar nimeni nu-l mai scrie.
 _SKIP_STATUS = {
     "no_optin": "skipped_no_optin",
-    "no_window_no_template": "skipped_no_window",
 }
 
 
@@ -149,43 +150,18 @@ async def _process_job(conn, business_id: str, job: dict[str, Any], events: list
         events.append(Event("proactive_skipped", {"kind": kind, "reason": "cancelled"}))
         return
 
-    decision = await decide_proactive(
-        conn,
-        business_id=business_id,
-        contact=contact,
-        conversation=route,
-        channel_id=route["channel_id"],
-        kind=kind,
-        locale=route.get("locale") or "ro",
-        template_name=spec.template_name,
-        free_text=spec.free_text,
-        variables=spec.variables,
-    )
+    decision = decide_proactive(contact=contact, kind=kind, free_text=spec.free_text)
 
     if not decision.allowed:
-        status = _SKIP_STATUS.get(decision.reason, "skipped_no_window")
+        status = _SKIP_STATUS.get(decision.reason, "skipped_no_optin")
         await mark_job(conn, business_id, job_id, status)
         events.append(Event("proactive_skipped", {"kind": kind, "reason": decision.reason}))
         return
 
-    # Enqueue + mark, ATOMIC (free SAU template — PL-1: calea template e LIVE acum).
-    # outbox.kind = 'message' (transport): CHECK-ul permite message/template/typing/reaction,
-    # iar dispatcher-ul rutează după `payload.type`. Natura proactivă e deja în idempotency_key +
-    # payload.type — NU în kind (care e strategia de transport, nu clasificarea mesajului).
-    if decision.mode == "template":
-        # În afara ferestrei 24h → template Meta aprobat. `text` = textul randat (floor de
-        # degradare pe canale fără TEMPLATE); `template_name`/`language`/`params` → send_template.
-        payload = {
-            "type": "template",
-            "to": to,
-            "text": decision.rendered_text,
-            "template_name": decision.template_name,
-            "language": decision.template_language,
-            "params": decision.template_params,
-        }
-    else:
-        # mode == 'free' → mesaj liber în fereastra 24h.
-        payload = {"type": "text", "to": to, "text": decision.rendered_text}
+    # Enqueue + mark, ATOMIC. outbox.kind = 'message' (transport), iar dispatcher-ul rutează după
+    # `payload.type`. Natura proactivă e deja în idempotency_key + payload.type — NU în kind
+    # (care e strategia de transport, nu clasificarea mesajului).
+    payload = {"type": "text", "to": to, "text": decision.rendered_text}
     new_id = await enqueue_outbox(
         conn,
         business_id,

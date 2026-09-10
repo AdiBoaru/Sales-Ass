@@ -76,23 +76,27 @@ async def check_order_tool(
         )
         return ToolResult(ok=False, error="login_required", llm_view=login_required_for_ctx(ctx))
     # Izolare: cheia de lookup vine din CONTEXT (verificat server-side), NU din args — `order_ref`
-    # doar îngustează. NX-130: web cu login passthrough verificat (`ctx.verified_customer_ref`) →
-    # caută pe customer_ref (comenzile reale, NElegate de contactul web throwaway); canalele
-    # identificate (telefon/chat = cont) → pe contact_id, ca azi. customer_ref din args = ignorat.
+    # doar îngustează, iar un `customer_ref` din args e ignorat. NX-130: căutăm pe customer_ref
+    # (comenzile reale, NElegate de contactul web throwaway).
+    # NX-289: exista o a doua ramură, `contact_id=ctx.contact.id`, pentru canalele unde id-ul de
+    # canal ERA contul (telefon la WhatsApp, chat id la Telegram). Fără ele, ramura devenise
+    # inaccesibilă prin construcție: poarta de deasupra trece doar cu `verified_customer_ref`
+    # nenul. Am scos-o în loc s-o las moartă — un `if` care nu se poate evalua fals e o minciună
+    # despre ce face codul.
     customer_ref = ctx.verified_customer_ref
     async with deps.db("get_orders_status") as conn:
         orders = await get_orders_status(
             conn,
             ctx.business.id,
             external_id=a.order_ref,
-            contact_id=None if customer_ref else ctx.contact.id,
+            contact_id=None,
             external_customer_ref=customer_ref,
             limit=1 if a.order_ref else 3,
         )
     if not orders:
-        # NX-128: mesaj onest, conștient de canal. Web anonim e scurtcircuitat în agent_stage
-        # (mesaj de login) ÎNAINTE de tool → aici ajung doar canalele identificate (telefon/chat =
-        # cont), unde „pe contul tău" e corect, nu „pe acest cont" (cont căutat inexistent).
+        # NX-128: mesaj onest. Vizitatorul anonim e scurtcircuitat în agent_stage (mesaj de login)
+        # ÎNAINTE de tool → aici ajung doar clienții identificați, unde „pe contul tău" e corect,
+        # nu „pe acest cont" (cont căutat inexistent).
         return ToolResult(ok=False, error="not_found", llm_view=no_orders_message(ctx))
     return ToolResult(
         ok=True,

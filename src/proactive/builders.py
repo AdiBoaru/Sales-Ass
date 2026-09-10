@@ -2,9 +2,11 @@
 
 Textele vin din payload-ul jobului / catalog / shipments, NU sunt generate de LLM (P2).
 Fiecare builder întoarce un `MessageSpec`:
-  • `free_text`  — mesajul liber (folosit dacă poarta NX-71 returnează `mode='free'`),
-  • `template_name` + `variables` — pentru ramura de template a porții (P11),
+  • `free_text`  — mesajul (trimis dacă poarta NX-71 returnează `mode='free'`),
   • `cancel=True` — jobul nu mai are sens (ex. coș deja convertit/expirat) → `cancelled`.
+
+NX-289: `template_name` + `variables` au dispărut odată cu template-urile Meta. Textul era deja
+construit AICI pentru ambele ramuri; ce s-a pierdut e a doua randare, nu conținutul.
 
 `BuildError` = jobul nu poate fi construit (date lipsă / kind neacceptat în v1) → motorul
 marchează jobul `failed` (P6: vizibil, nu pierdut tăcut). `kind='custom'` nu e tratat în v1.
@@ -12,7 +14,7 @@ marchează jobul `failed` (P6: vizibil, nu pierdut tăcut). `kind='custom'` nu e
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.db.queries.proactive import (
@@ -29,8 +31,6 @@ class BuildError(RuntimeError):
 @dataclass
 class MessageSpec:
     free_text: str = ""
-    template_name: str = ""
-    variables: dict[str, str] = field(default_factory=dict)
     cancel: bool = False  # job fără sens (coș convertit/expirat) → mark 'cancelled'
 
 
@@ -65,8 +65,6 @@ async def _build_awb(conn, business_id: str, payload: dict[str, Any]) -> Message
     suffix = f" ({carrier})." if carrier else "."
     return MessageSpec(
         free_text=f"Comanda ta a fost expediată! AWB {awb}{suffix}",
-        template_name="awb_update",
-        variables={"awb": str(awb), "courier": str(carrier)},
     )
 
 
@@ -80,9 +78,7 @@ async def _build_back_in_stock(conn, business_id: str, payload: dict[str, Any]) 
     name = prod.get("name") or "Produsul"
     url = prod.get("product_url") or ""
     text = f"{name} e din nou pe stoc!" + (f" {url}" if url else "")
-    return MessageSpec(
-        free_text=text, template_name="back_in_stock", variables={"product": name, "url": url}
-    )
+    return MessageSpec(free_text=text)
 
 
 async def _build_abandoned_cart(conn, business_id: str, route: dict[str, Any]) -> MessageSpec:
@@ -94,8 +90,6 @@ async def _build_abandoned_cart(conn, business_id: str, route: dict[str, Any]) -
     url = co["url"]
     return MessageSpec(
         free_text=f"Ți-am păstrat coșul. Finalizează comanda aici: {url}",
-        template_name="abandoned_cart",
-        variables={"url": url},
     )
 
 
@@ -103,9 +97,4 @@ def _build_follow_up(payload: dict[str, Any]) -> MessageSpec:
     body = (payload.get("body") or "").strip()
     if not body:
         raise BuildError("follow_up fără body")
-    extra = payload.get("variables") or {}
-    return MessageSpec(
-        free_text=body,
-        template_name="follow_up",
-        variables={k: str(v) for k, v in extra.items()},
-    )
+    return MessageSpec(free_text=body)

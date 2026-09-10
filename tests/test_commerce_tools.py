@@ -16,13 +16,18 @@ P_IN = {"id": "p2", "name": "Ser B", "price": 120.0, "availability": "in_stock"}
 
 
 def _ctx() -> TurnContext:
-    return TurnContext(
+    ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="biz-1", slug="s", name="n"),
         contact=Contact(id="contact-1", business_id="biz-1"),
         message=InboundMessage(provider_msg_id="m", body="x"),
         conversation_id="conv",
     )
+    # NX-289: `reorder` trece prin zidul de login (NX-128) doar pentru un client IDENTIFICAT.
+    # Înainte, identitatea venea gratis din default-ul `channel_kind="whatsapp"` al lui
+    # `InboundMessage`; acum default-ul e `webchat` (anonim), deci o punem explicit.
+    ctx.verified_customer_ref = "cust_identified"
+    return ctx
 
 
 def _deps() -> PipelineDeps:

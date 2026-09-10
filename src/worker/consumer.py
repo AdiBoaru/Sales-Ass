@@ -22,18 +22,15 @@ import time
 from collections.abc import Callable
 from uuid import uuid4
 
-import httpx
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
-from src.channels.base import Capability, ChannelSenderRegistry
 from src.channels.media import close_media
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool
 from src.db.provider import tenant_db
 from src.db.queries.businesses import load_business
 from src.db.queries.channels import resolve_channel
-from src.db.queries.message_status import record_status_event
 from src.observability import bootstrap as observability_bootstrap
 from src.redis_bus import (
     STREAM_INBOUND,
@@ -47,9 +44,7 @@ from src.safety.contraindications import registry_healthy
 from src.webhook.orders import process_order
 from src.worker.admission import get_admission, tenant_bucket
 from src.worker.aftercare import run_aftercare
-from src.worker.callback import handle_callback
 from src.worker.debounce import Debouncer
-from src.worker.dispatcher import build_registry
 from src.worker.processor import handle_turn
 
 log = logging.getLogger(__name__)
@@ -61,28 +56,6 @@ CONSUMER_GROUP = "workers"
 REAP_MIN_IDLE_MS = 60_000
 REAP_BATCH = 50
 REAP_INTERVAL_S = 30.0
-
-
-async def _safe_typing(registry: ChannelSenderRegistry | None, event: dict) -> None:
-    """Trimite „typing/read" pentru un mesaj inbound, INSTANT și best-effort (NX-90). Direct prin
-    ChannelSender (NU outbox: un typing întârziat/retry-uit e inutil). Canal fără capabilitatea
-    TYPING → skip tăcut. Orice eroare → log fără PII, turul NU se rupe (P6). Argumentele
-    (channel_account_id receptor + sender_external_id + provider_msg_id) vin din envelope."""
-    if registry is None:
-        return
-    # NX-115: FĂRĂ default „whatsapp" (un canal necunoscut ar fi trimis typing greșit pe WhatsApp);
-    # gardă pe capabilitatea TYPING declarată, nu pe `hasattr(mark_typing)`.
-    sender = registry.get(event.get("channel_kind"))
-    if sender is None or Capability.TYPING not in getattr(sender, "capabilities", frozenset()):
-        return
-    try:
-        await sender.mark_typing(
-            event.get("channel_account_id", ""),
-            event.get("sender_external_id", ""),
-            event.get("provider_msg_id"),
-        )
-    except Exception as e:  # noqa: BLE001 — typing eșuat NU rupe turul (P6)
-        log.warning("typing eșuat (%s) — ignorat", type(e).__name__)
 
 
 async def ensure_group(redis: Redis) -> None:
@@ -124,10 +97,13 @@ async def _requeue_admission(redis: Redis, event: dict, settings) -> str:
 
 
 async def process_event(pool, redis: Redis, event: dict) -> None:
-    """Rezolvă tenantul și rutează evenimentul după `kind` (message | status).
+    """Rezolvă tenantul și rutează evenimentul după `kind` (message | order).
 
-    `channel_kind` (whatsapp|telegram|...) = transportul; `kind` (message|status)
-    = tipul de envelope. Rezolvarea tenantului e comună tuturor canalelor."""
+    `channel_kind` (azi doar `webchat`) = transportul; `kind` = tipul de envelope.
+    Rezolvarea tenantului e comună tuturor canalelor.
+
+    NX-289: envelope-urile `status` (rapoarte de livrare Meta) și `callback` (butoane inline
+    Telegram) au dispărut odată cu canalele care le produceau — nimeni nu le mai scrie pe stream."""
     # Comenzile (F2-2) nu-s evenimente de canal: `business_id` vine din envelope (autentificat
     # de secret la webhook), nu din rezolvarea pe canal. Rutăm ÎNAINTE de resolve_channel.
     if event.get("kind") == "order":
@@ -142,7 +118,7 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
                 log.exception("procesarea comenzii a eșuat (business=%s)", business_id)
         return
 
-    channel_kind = event.get("channel_kind", "whatsapp")
+    channel_kind = event.get("channel_kind", "webchat")
     channel_account_id = event.get("channel_account_id", "")
     async with admin_conn(pool) as conn:
         channel = await resolve_channel(conn, channel_kind, channel_account_id)
@@ -155,24 +131,11 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
         return
 
     business_id = channel["business_id"]
-    kind = event.get("kind", "message")
 
     db = tenant_db(business_id)
 
-    # Statusurile sunt idempotente (delivered/read/failed pe provider_msg_id) → fără lock.
-    if kind == "status":
-        async with db("record_status_event") as conn:
-            await record_status_event(
-                conn,
-                business_id,
-                event["provider_msg_id"],
-                event["status"],
-                payload=event.get("payload"),
-            )
-        return
-
     # NX-85: lock per conversație — serializează tururile aceleiași conversații între REPLICI.
-    # Mesaj/callback mutează state-ul; cheia = business + expeditor (PII de canal → DOAR în cheie,
+    # Mesajul mutează state-ul; cheia = business + expeditor (PII de canal → DOAR în cheie,
     # efemeră cu TTL; nu în loguri). Ocupat → re-queue cu backoff. Redis jos/off → fail-open.
     settings = get_settings()
     sender_key = f"{channel_kind}:{channel_account_id}:{event.get('sender_external_id', '')}"
@@ -236,11 +199,6 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
             if business is None:
                 log.warning("business %s lipsește — ignorat", business_id)
                 return
-            if kind == "callback":
-                # navigare carusel (R2): drum determinist, NU pipeline LLM.
-                async with db("handle_callback") as conn:
-                    await handle_callback(conn, business, channel["channel_id"], event)
-                return
             result = await handle_turn(
                 db, business, channel["channel_id"], event, redis=redis, defer_aftercare=True
             )
@@ -260,12 +218,11 @@ async def consume_once(
     redis: Redis,
     consumer_name: str,
     debouncer: Debouncer,
-    registry: ChannelSenderRegistry | None = None,
     *,
     block_ms: int = 2000,
 ) -> int:
     """Un ciclu de citire+procesare. Mesajele trec prin debounce (lot per expeditor);
-    statusurile se procesează imediat. Întoarce numărul de evenimente tratate."""
+    restul (comenzi) se procesează imediat. Întoarce numărul de evenimente tratate."""
     resp = await redis.xreadgroup(
         CONSUMER_GROUP,
         consumer_name,
@@ -288,13 +245,10 @@ async def consume_once(
                 continue
             try:
                 if event.get("kind", "message") == "message":
-                    # NX-90: „typing…" INSTANT la primire, înainte de debounce (fire-and-forget).
-                    if get_settings().typing_enabled:
-                        asyncio.create_task(_safe_typing(registry, event))
                     # NX-87: ACK delegat Debouncer-ului DUPĂ flush reușit (durabilitate) — NU aici.
                     await debouncer.add(event, msg_id)
                 else:
-                    await process_event(pool, redis, event)  # status/callback/order → imediat
+                    await process_event(pool, redis, event)  # order → imediat
                     await redis.xack(STREAM_INBOUND, CONSUMER_GROUP, msg_id)
             except Exception:  # noqa: BLE001 — eroare → ACK (mesajul e logat, nu blochează coada)
                 log.exception("eroare la procesarea mesajului %s", msg_id)
@@ -347,13 +301,12 @@ async def run_consumer(
     pool,
     redis: Redis,
     consumer_name: str,
-    registry: ChannelSenderRegistry | None = None,
     *,
     reap_interval_s: float = REAP_INTERVAL_S,
     on_cycle: Callable[[], None] | None = None,
 ) -> None:
-    """Bucla principală a worker-ului (rulează până la anulare). `registry` (NX-90) = sender-ele
-    de canal pt typing instant; None → fără typing. Rulează periodic reaper-ul PEL (NX-86).
+    """Bucla principală a worker-ului (rulează până la anulare). Rulează periodic reaper-ul
+    PEL (NX-86).
 
     `on_cycle` (NX-248) e chemat după FIECARE ciclu încheiat — acolo se scrie heartbeat-ul.
     Poziția contează: la sfârșitul ciclului, nu la început, ca un ciclu care se blochează la
@@ -372,7 +325,7 @@ async def run_consumer(
     log.info("consumer %s pornit pe stream %s", consumer_name, STREAM_INBOUND)
     last_reap = time.monotonic()
     while True:
-        await consume_once(pool, redis, consumer_name, debouncer, registry)
+        await consume_once(pool, redis, consumer_name, debouncer)
         now = time.monotonic()
         if now - last_reap >= reap_interval_s:
             last_reap = now
@@ -412,8 +365,6 @@ async def _main() -> None:
     await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot, nu la primul mesaj
     redis = await get_redis()
     consumer_name = f"worker-{socket.gethostname()}"
-    # NX-90: client httpx + registru de sender-e pentru typing instant (reutilizăm build_registry
-    # din dispatcher). Canalele fără credențiale nu se înregistrează → typing-ul lor e skip tăcut.
     # NX-233: executorul async al turelor web + sweeperul de recovery, ca task-uri în ACELAȘI
     # proces worker (flags separate; OFF = zero schimbare). Executorul revendică din DB
     # (autoritatea), wake-ul Redis doar îl trezește mai repede.
@@ -453,28 +404,26 @@ async def _main() -> None:
             worker_health.heartbeat_path(worker_health.ROLE_WORKER),
         )
 
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        registry = build_registry(http, get_settings())
-        try:
-            await run_consumer(pool, redis, consumer_name, registry, on_cycle=_heartbeat)
-        finally:
-            # Shutdown ORDONAT (NX-233): fără claims noi → așteptare bounded → cancel. Un tur
-            # anulat rămâne `running` cu lease → alt worker îl reclamă; nimic fals `completed`.
-            if executor is not None:
-                executor.request_stop()
-            if side_tasks:
-                _done, pending = await asyncio.wait(
-                    side_tasks, timeout=settings.web_turn_shutdown_grace_s
-                )
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-            await close_media()  # închide httpx-ul de download media (NX-76)
-            await close_redis()
-            await close_pool()
-            # NX-246: flush final MĂRGINIT, ULTIMUL — ca să prindă și spans-urile shutdown-ului,
-            # dar fără să poată întârzia oprirea (plafon în `bootstrap.shutdown`).
-            await observability_bootstrap.shutdown()
+    try:
+        await run_consumer(pool, redis, consumer_name, on_cycle=_heartbeat)
+    finally:
+        # Shutdown ORDONAT (NX-233): fără claims noi → așteptare bounded → cancel. Un tur
+        # anulat rămâne `running` cu lease → alt worker îl reclamă; nimic fals `completed`.
+        if executor is not None:
+            executor.request_stop()
+        if side_tasks:
+            _done, pending = await asyncio.wait(
+                side_tasks, timeout=settings.web_turn_shutdown_grace_s
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+        await close_media()  # eliberează registrul de media inbound (NX-76)
+        await close_redis()
+        await close_pool()
+        # NX-246: flush final MĂRGINIT, ULTIMUL — ca să prindă și spans-urile shutdown-ului,
+        # dar fără să poată întârzia oprirea (plafon în `bootstrap.shutdown`).
+        await observability_bootstrap.shutdown()
 
 
 if __name__ == "__main__":

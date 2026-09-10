@@ -378,8 +378,6 @@ async def test_stream_emits_published_event(monkeypatch):
 
 def _settings(**kw):
     base = dict(
-        meta_access_token="",
-        telegram_bot_token="",
         web_enabled=True,
         web_backlog_size=20,
         web_backlog_ttl_s=300,
@@ -391,21 +389,21 @@ def _settings(**kw):
 def test_build_registry_registers_webchat_with_redis():
     from src.worker.dispatcher import build_registry
 
-    reg = build_registry(None, _settings(), FakeRedis())
+    reg = build_registry(_settings(), FakeRedis())
     assert reg.get("webchat") is not None
 
 
 def test_build_registry_no_webchat_without_redis():
     from src.worker.dispatcher import build_registry
 
-    reg = build_registry(None, _settings(), None)
+    reg = build_registry(_settings(), None)
     assert reg.get("webchat") is None
 
 
 def test_build_registry_no_webchat_when_disabled():
     from src.worker.dispatcher import build_registry
 
-    reg = build_registry(None, _settings(web_enabled=False), FakeRedis())
+    reg = build_registry(_settings(web_enabled=False), FakeRedis())
     assert reg.get("webchat") is None
 
 

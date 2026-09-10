@@ -30,7 +30,7 @@ from uuid import uuid4
 from redis.asyncio import Redis
 
 from src.agent.llm import get_llm
-from src.channels.base import IDENTIFIED_CHANNELS
+from src.channels.base import identity_is_stable
 from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary
@@ -162,8 +162,9 @@ async def _llm_within_budget(
                 "cost guard: business %s peste plafon ($%.2f) → LLM dezactivat", business.id, cap
             )
             return None
-        # NX-125: plafon SOFT per-contact (canale identificate; web = NX-120). Pre-check read-only.
-        if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
+        # NX-125: plafon SOFT per-contact (contact identificabil; anonim = NX-120). Pre-check
+        # read-only. NX-289: „identificat" nu mai e un nume de canal, vezi `identity_is_stable`.
+        if contact_cap and identity_is_stable(channel_kind, ctx.verified_customer_ref):
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_capped(redis, scope, contact_cap):
                 ctx.emit("contact_spend_capped", cap_usd=contact_cap)
@@ -202,9 +203,10 @@ async def _record_turn_cost(
             ctx.emit("cost_guard_tripped", cap_usd=cap, total_usd=round(total, 6))
     except Exception as e:  # noqa: BLE001 — contor best-effort, turul a răspuns deja
         log.warning("cost guard: add eșuat (%s)", type(e).__name__)
-    # NX-125: plafon per-contact (canale identificate; web = NX-120). Increment atomic + compară.
+    # NX-125: plafon per-contact (contact identificabil; anonim = NX-120). Increment atomic +
+    # compară.
     contact_cap = settings.contact_daily_cost_cap_usd
-    if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
+    if contact_cap and identity_is_stable(channel_kind, ctx.verified_customer_ref):
         try:
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_over_cap(redis, scope, cost, contact_cap, CONTACT_COST_WINDOW_S):
@@ -504,7 +506,7 @@ async def handle_turn(
     """
     stages = stages or DEFAULT_STAGES
     turn_id = turn_id or str(uuid4())
-    channel_kind = event.get("channel_kind", "whatsapp")
+    channel_kind = event.get("channel_kind", "webchat")
     sender_external_id = event["sender_external_id"]
     provider_msg_id = event.get("provider_msg_id")
     # NX-129: login passthrough — dacă marginea de canal a verificat o identitate stabilă

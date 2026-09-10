@@ -177,20 +177,11 @@ class Settings(BaseSettings):
         default=3, validation_alias="MODERATION_BLOCK_THRESHOLD"
     )
 
-    # --- Meta WhatsApp Cloud API ---
-    meta_access_token: str = Field(default="", validation_alias="META_ACCESS_TOKEN")
-    meta_app_secret: str = Field(default="", validation_alias="META_APP_SECRET")
-    meta_verify_token: str = Field(default="", validation_alias="META_VERIFY_TOKEN")
-    meta_phone_number_id: str = Field(default="", validation_alias="META_PHONE_NUMBER_ID")
-
     # --- Redis ---
     redis_url: str = Field(default="redis://redis:6379/0", validation_alias="REDIS_URL")
 
-    # --- Telegram (canal de TEST — long polling) ---
-    telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
-
-    # --- Web Widget (NX-20, E26 — al treilea canal, V1.5) ---
-    # Gateway SSE pe app-ul FastAPI: POST /web/messages (→ envelope neutru, ca Telegram) +
+    # --- Web Widget (NX-20, E26 — SINGURUL canal, NX-179/NX-289) ---
+    # Gateway SSE pe app-ul FastAPI: POST /web/messages (→ envelope neutru) +
     # GET /web/stream (Server-Sent Events). Sesiune anonimă semnată HMAC (token public per tenant
     # + visitor_id); secretul din channels.settings (control plane, cache). Default OFF (V1.5).
     web_enabled: bool = Field(default=False, validation_alias="WEB_ENABLED")
@@ -679,10 +670,11 @@ class Settings(BaseSettings):
     injection_screen_enabled: bool = Field(
         default=False, validation_alias="INJECTION_SCREEN_ENABLED"
     )
-    # --- Typing indicator + spargere reply (NX-90, stagiul 9 + transport) ---
-    # Typing/read trimis INSTANT pe inbound (best-effort, direct prin ChannelSender, NU outbox).
+    # --- Spargere reply (NX-90, stagiul 9 + transport) ---
     # Reply > reply_split_chars → spart în max 2 mesaje (citire ușoară pe telefon). Pur transport.
-    typing_enabled: bool = Field(default=True, validation_alias="TYPING_ENABLED")
+    # NX-289: `TYPING_ENABLED` a dispărut odată cu WhatsApp/Telegram — typing-ul pleca direct prin
+    # `ChannelSender.mark_typing`, iar `webchat` nu declară capabilitatea (indicatorul de „scrie"
+    # e al widgetului, nu al backendului).
     reply_split_chars: int = Field(default=200, validation_alias="REPLY_SPLIT_CHARS")
 
     # --- Lock per conversație (NX-85, stagiul 2 — ordonare multi-consumer) ---

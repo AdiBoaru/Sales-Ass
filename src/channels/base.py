@@ -1,13 +1,18 @@
 """Contractul de canal — envelope neutru (inbound) + ChannelSender (outbound).
 
 Marginile sistemului (NX-60). Pipeline-ul și worker-ul sunt agnostice de canal:
-  • INTRARE: fiecare canal (Meta webhook, Telegram poller, ...) parsează formatul
-    lui și produce un `InboundEvent`/`StatusEvent` NEUTRU pe stream.
+  • INTRARE: fiecare canal parsează formatul lui și produce un `InboundEvent`
+    NEUTRU pe stream.
   • IEȘIRE: dispatcher-ul citește `channel_kind` din outbox și cere registrului
     `ChannelSender` potrivit. Adăugarea unui canal = o clasă + o înregistrare.
 
-Câmpuri neutre: `channel_account_id` = id-ul canalului (phone_number_id la Meta,
-bot id la Telegram); `sender_external_id` = id-ul userului pe canal (wa_id / chat_id).
+NX-289: singurul canal implementat e `webchat`. Contractul rămâne generic (nu e o
+dependență de un canal anume — e motivul pentru care stagiile 3-9 nu știu de niciunul),
+dar tot ce era specific WhatsApp/Telegram a fost ȘTERS, nu doar dezactivat: statusuri
+de livrare de provider, callback-uri de butoane inline, template-uri aprobate.
+
+Câmpuri neutre: `channel_account_id` = id-ul canalului RECEPTOR (public_token la web);
+`sender_external_id` = id-ul userului pe canal (visitor_id la web).
 """
 
 from dataclasses import asdict, dataclass, field
@@ -23,11 +28,7 @@ class Capability(str, Enum):
     TEXT = "text"  # send_text — OBLIGATORIU pt orice sender
     RICH = "rich"  # send_rich — recomandare structurată (model iZi)
     CARDS = "cards"  # send_products — listă compactă cu butoane-link
-    CAROUSEL = "carousel"  # send_carousel_card
-    EDIT = "edit"  # edit_message_media — navigare carusel (R2)
-    TYPING = "typing"  # mark_typing — semnal inbound (NX-90)
     MEDIA = "media"  # fetch_media — download inbound (informativ aici)
-    TEMPLATE = "template"  # send_template — proactiv în afara ferestrei 24h (template Meta aprobat)
     OFFER = "offer"  # randare nativă Reply.offer (NX-114); fără ea → floor aplatizat în text
     # IZI-compare: randare nativă a tabelului `Reply.comparison` (web). Fără ea → floor aplatizat
     # (tabelul ca text) prin send_text. Randat tot prin `send_rich` (ca OFFER), nu metodă dedicată.
@@ -40,19 +41,33 @@ CAPABILITY_METHODS: dict[Capability, str] = {
     Capability.TEXT: "send_text",
     Capability.RICH: "send_rich",
     Capability.CARDS: "send_products",
-    Capability.CAROUSEL: "send_carousel_card",
-    Capability.EDIT: "edit_message_media",
-    Capability.TYPING: "mark_typing",
     Capability.MEDIA: "fetch_media",
-    Capability.TEMPLATE: "send_template",
 }
 
 
-# Canale cu identitate „de facto" stabilă: id-ul de canal ESTE userul (telefon E.164 la WhatsApp,
-# chat id la Telegram). Web (`webchat`) e ANONIM by design (src/web/session.py) → identitatea vine
-# doar dintr-un login passthrough verificat (NX-129). Consumatori: plafon cost per-contact (NX-125),
-# poarta de comandă/retur (NX-128). Un singur loc de adevăr ca să nu diverge între module.
-IDENTIFIED_CHANNELS: tuple[str, ...] = ("whatsapp", "telegram")
+# Canale cu identitate „de facto" stabilă: id-ul de canal ESTE userul (telefon E.164, chat id).
+# NX-289: după scoaterea WhatsApp/Telegram, mulțimea e GOALĂ — `webchat` e ANONIM by design
+# (src/web/session.py). Constanta rămâne fiindcă `identity_is_stable` trebuie să se poată
+# reactiva la un canal viitor fără să se rescrie consumatorii.
+IDENTIFIED_CHANNELS: tuple[str, ...] = ()
+
+
+def identity_is_stable(channel_kind: str, verified_customer_ref: str | None) -> bool:
+    """True dacă turul aparține unui CLIENT identificabil peste sesiuni, nu unui vizitator anonim.
+
+    Un singur loc de adevăr pentru două întrebări care păreau diferite dar sunt aceeași:
+      • poate ajunge turul la comenzi/retururi? (NX-128, `src/worker/order_gate.py`)
+      • are sens un plafon de cost PER CONTACT? (NX-125, `src/worker/processor.py`)
+    Ambele cer ca „contactul" să fie o persoană stabilă, nu un `visitor_id` care se schimbă la
+    golirea cookie-urilor.
+
+    NX-289: înainte răspunsul era numele canalului (`whatsapp`/`telegram`). Odată cu ele,
+    testul pe canal ar fi întors MEREU False, deci plafonul per-contact ar fi murit tăcut, nu
+    prin decizie. Sursa de identitate care a rămas e login passthrough-ul verificat (NX-129) —
+    aceeași proprietate, exprimată pe canalul care există. Plafonul e oricum opt-in
+    (`CONTACT_DAILY_COST_CAP_USD=0` implicit), deci reconectarea nu schimbă nimic în producție
+    până când cineva îl pornește."""
+    return channel_kind in IDENTIFIED_CHANNELS or bool(verified_customer_ref)
 
 
 @dataclass
@@ -81,53 +96,13 @@ class InboundEvent:
         return {"kind": "message", **asdict(self)}
 
 
-@dataclass
-class StatusEvent:
-    """Un update de status (delivered/read/failed/sent) pentru un mesaj OUTBOUND.
-
-    `provider_msg_id` = id-ul mesajului raportat (pe care l-am trimis noi). NU se
-    deduplică la intrare: 'delivered' și 'read' au același id."""
-
-    channel_kind: str
-    channel_account_id: str
-    provider_msg_id: str
-    status: str
-    timestamp: str | None = None
-    recipient_id: str | None = None
-    payload: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"kind": "status", **asdict(self)}
-
-
-@dataclass
-class CallbackEvent:
-    """Apăsare pe un buton inline (Telegram callback_query) — UI deterministă,
-    NU mesaj. Worker-ul o rutează la handler-ul de carusel (navigare), fără
-    pipeline LLM. `card_message_id` = mesajul de editat; `data` = callback_data
-    (ex. 'car:nav:2'). `provider_msg_id` = callback.id (idempotență)."""
-
-    channel_kind: str
-    channel_account_id: str
-    sender_external_id: str
-    provider_msg_id: str
-    card_message_id: str
-    data: str
-    sender_name: str | None = None
-    payload: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"kind": "callback", **asdict(self)}
-
-
 @runtime_checkable
 class ChannelSender(Protocol):
-    """Un transport de mesaje outbound (WhatsApp, Telegram, ...).
+    """Un transport de mesaje outbound (azi: `webchat`).
 
-    `account_id` = id-ul canalului EXPEDITOR (phone_number_id la WhatsApp, bot id
-    la Telegram). `to` = id-ul destinatarului pe acel canal (wa_id / chat_id).
-    Întoarce provider_msg_id-ul atribuit de platformă (wamid / message_id).
-    Ridică la eroare de transport (dispatcher-ul prinde și programează retry)."""
+    `account_id` = id-ul canalului EXPEDITOR (public_token la web). `to` = id-ul
+    destinatarului pe acel canal (visitor_id). Întoarce provider_msg_id-ul atribuit de
+    transport. Ridică la eroare (dispatcher-ul prinde și programează retry)."""
 
     # NX-115: capabilități DECLARATE (matrice), nu deduse prin `hasattr`. Dispatcher-ul rutează
     # randarea pe baza lor și degradează grațios la send_text. `max_*_len` = clamp de transport
@@ -139,9 +114,8 @@ class ChannelSender(Protocol):
     async def send_text(self, account_id: str, to: str, text: str) -> str: ...
 
     # Metode OPȚIONALE, gardate de CAPABILITY (nu `hasattr`): send_rich (RICH), send_products
-    # (CARDS), send_carousel_card (CAROUSEL), edit_message_media (EDIT), mark_typing (TYPING),
-    # fetch_media (MEDIA), send_template (TEMPLATE). Testul de consistență (test_channel_caps)
-    # verifică declarat ⇔ metodă reală.
+    # (CARDS), fetch_media (MEDIA). Testul de consistență (test_channel_caps) verifică
+    # declarat ⇔ metodă reală.
 
 
 class ChannelSenderRegistry:
@@ -177,8 +151,12 @@ class MediaFetcher(Protocol):
 
 
 class MediaFetcherRegistry:
-    """Mapează `channel_kind → MediaFetcher`. DOAR canalele care suportă download de media inbound
-    (azi: WhatsApp). Un canal neînregistrat → `get` întoarce None → gate-ul degradează fail-soft."""
+    """Mapează `channel_kind → MediaFetcher`. DOAR canalele care suportă download de media inbound.
+    Un canal neînregistrat → `get` întoarce None → gate-ul degradează fail-soft.
+
+    NX-289: azi registrul e GOL — `webchat` nu trimite media inbound, iar singurul fetcher
+    implementat era al WhatsApp-ului. Calea Vision (NX-76) rămâne în cod și degradează pe
+    `no_downloader`; seam-ul se reactivează când un canal aduce binar, fără `if` de rescris."""
 
     def __init__(self) -> None:
         self._fetchers: dict[str, MediaFetcher] = {}

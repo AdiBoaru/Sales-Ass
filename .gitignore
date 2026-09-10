@@ -83,3 +83,6 @@ scripts/sim/runs/
 # rularea, îl consumă NX-249. Un fișier comis ar fi provenance care nu corespunde niciunei rulări.
 reports/stage1/
 .env.new
+
+# Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git
+local/

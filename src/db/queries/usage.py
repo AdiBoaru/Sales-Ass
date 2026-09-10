@@ -55,6 +55,11 @@ msg as (
     select
         count(*) filter (where direction = 'inbound')  as messages_in,
         count(*) filter (where direction = 'outbound') as messages_out,
+        -- NX-289: template-urile Meta au fost scoase din produs odată cu WhatsApp, iar
+        -- 'template' a ieșit din CHECK-ul lui `messages.content_type` (migrarea 051) — deci
+        -- coloana e 0 pentru orice zi de după. O păstrăm din același motiv ca `handoffs`:
+        -- `usage_daily.templates_sent` are date ISTORICE reale, iar dashboardul citește seria
+        -- ca sumă. 0 e adevărul, NULL ar fi o gaură.
         count(*) filter (
             where direction = 'outbound' and content_type = 'template'
         )                                              as templates_sent

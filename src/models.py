@@ -100,7 +100,7 @@ class InboundMessage:
     content_type: str = "text"
     body: str | None = None
     media_ref: str | None = None
-    channel_kind: str = "whatsapp"
+    channel_kind: str = "webchat"
     channel_account_id: str = ""
     payload: dict[str, Any] = field(default_factory=dict)
     # NX-230: forma REDACTATĂ a lui `body`, calculată o singură dată la frontiera de privacy.
