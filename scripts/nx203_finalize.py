@@ -282,9 +282,14 @@ async def main() -> int:
     print(text)
 
     if args.write:
-        QRELS.write_text(
-            json.dumps(qset.model_dump(mode="json"), ensure_ascii=False, indent=1), encoding="utf-8"
-        )
+        doc = qset.model_dump(mode="json")
+        # Blocul de acceptare CĂLĂTOREȘTE în corpus, cu underscore: `QrelsSet` ignoră cheile
+        # `_*` la citire, deci nu schimbă contractul, dar cine deschide fișierul vede pe ce se
+        # sprijină `human_verified`. Fără el, un corpus acceptat în bloc arată identic cu unul
+        # revizuit caz cu caz, iar diferența e chiar greutatea cifrelor.
+        if acceptance := state.get("acceptance"):
+            doc["_acceptance"] = acceptance
+        QRELS.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
         ABSTENTION.write_text(
             json.dumps({"families": abstention}, ensure_ascii=False, indent=1), encoding="utf-8"
         )

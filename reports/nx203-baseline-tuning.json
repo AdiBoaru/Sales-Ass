@@ -5,8 +5,8 @@
     "catalog_version": null,
     "split": "tuning",
     "n_queries": 156,
-    "human_verified": 0,
-    "model_labeled": 156,
+    "human_verified": 156,
+    "model_labeled": 0,
     "semantic_arm": false,
     "note": "raw = retrieval pe text brut; with_constraints = constrângerile familiei aplicate (înțelegere perfectă a cererii). Diferența = cât ține de retrieval vs de rezolvarea cererii."
   },

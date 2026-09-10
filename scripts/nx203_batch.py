@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -177,6 +178,48 @@ def cmd_apply(args) -> int:
     return 1 if errors else 0
 
 
+def cmd_accept(args) -> int:
+    """Proprietarul ACCEPTĂ etichetele existente, în bloc, ca verificate.
+
+    Nu e o revizuire caz cu caz și nu pretinde să fie: e o decizie de proprietar, iar decizia se
+    ÎNREGISTREAZĂ ca atare — cine, când, prin ce metodă, peste ce etichete. Aceeași convenție ca
+    `decided_by` la NX-238 și ca actor + motiv + `--confirm` la NX-249: în sistemul ăsta o decizie
+    umană nu e un bit, e un rând de audit.
+
+    Distincția pe care blocul de acceptare o păstrează, și pe care un simplu `human` ar fi
+    ștears-o: `method` spune dacă cineva a văzut fiecare familie sau a acceptat lotul. Cine ia
+    fișierul peste șase luni are nevoie de exact diferența asta ca să știe cât cântăresc cifrele.
+    """
+    pools, _families, state = _load()
+    judgments = state.get("judgments", {})
+    if not judgments:
+        print("Nicio etichetă de acceptat.")
+        return 1
+    labelers = state.setdefault("labelers", {})
+    before = Counter(labelers.get(fid, "?") for fid in judgments)
+    for fid in judgments:
+        labelers[fid] = "human"
+    state["acceptance"] = {
+        "accepted_by": args.actor,
+        "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "method": "bulk_owner_acceptance",
+        "reason": args.reason,
+        "families": len(judgments),
+        "judgments": sum(len(v) for v in judgments.values()),
+        # De unde veneau etichetele înainte de acceptare. Fără asta, „human" peste tot ar arăta
+        # identic cu un corpus etichetat de om de la bun început.
+        "prior_labelers": dict(before),
+    }
+    tmp = JUDGMENTS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(JUDGMENTS)
+    print(f"Acceptate {len(judgments)} familii de către {args.actor}.")
+    print("  metoda    : bulk_owner_acceptance (NU revizuire caz cu caz)")
+    print(f"  anterior  : {dict(before)}")
+    print("  motivul e scris in `acceptance.reason` si calatoreste in corpus.")
+    return 0
+
+
 def cmd_status(_args) -> int:
     pools, _families, state = _load()
     done = state.get("judgments", {})
@@ -204,6 +247,10 @@ def main() -> int:
     a.add_argument("--file", required=True)
     a.add_argument("--labeler", required=True, choices=["human", "model"])
     a.set_defaults(fn=cmd_apply)
+    ac = sub.add_parser("accept")
+    ac.add_argument("--actor", required=True, help="cine acceptă (nume real, nu rol)")
+    ac.add_argument("--reason", required=True, help="de ce; ajunge in corpus")
+    ac.set_defaults(fn=cmd_accept)
     s = sub.add_parser("status")
     s.set_defaults(fn=cmd_status)
     args = ap.parse_args()
