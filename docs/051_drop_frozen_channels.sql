@@ -20,6 +20,14 @@
 --   `delete`-urile de mai jos rămân totuși în migrare — pe un mediu unde ar exista rânduri,
 --   restrângerea CHECK-urilor ar eșua fără ele, iar un eșec la jumătate e mai rău decât un
 --   no-op explicit. Sunt scrise ca să fie idempotente.
+--   ⚠️ Pe un mediu CU astfel de rânduri, secțiunea 1 ȘTERGE conversațiile și mesajele lor.
+--   E o pierdere de date DELIBERATĂ (canalul nu mai poate fi servit), dar verific-o înainte:
+--     select ch.kind, count(distinct c.id) as conv, count(m.id) as msg
+--       from channels ch
+--       left join conversations c on c.channel_id = ch.id
+--       left join messages m on m.conversation_id = c.id
+--      where ch.kind in ('whatsapp','telegram','instagram') group by 1;
+--   Dacă întoarce rânduri și vrei istoricul, exportă-l ÎNAINTE.
 --
 -- CE SE ȘTERGE ȘI DE CE
 --   wa_templates            — ciclul de viață al template-urilor APROBATE de Meta. Fără WhatsApp
@@ -71,7 +79,28 @@
 -- ---------------------------------------------------------------------------
 -- 1. Rânduri ale canalelor dispărute (no-op pe baza curentă; vezi antetul)
 -- ---------------------------------------------------------------------------
+-- ORDINEA E O CONSTRÂNGERE, nu o preferință — verificată în `pg_constraint`:
+--   • `conversations.channel_id → channels` e **RESTRICT**, deci canalul nu poate pleca
+--     înaintea conversațiilor lui;
+--   • `messages` e PARTIȚIONAT și **nu are FK** către `conversations` (un tabel partiționat nu
+--     poate fi referit ca și copil aici), deci ștergerea conversațiilor ar lăsa mesaje ORFANE
+--     dacă nu le ștergem EXPLICIT, întâi. Copiii cu `on delete cascade` (outbox, web_turns,
+--     conversation_traces, carts, checkout_links, summaries, feedback, receipts) se ocupă singuri;
+--     `proactive_jobs`/`appointments` primesc `set null`, corect — sunt ale contactului, nu ale
+--     conversației.
+-- `analytics_events` (append-only, partiționat, fără FK) NU se atinge: e ledgerul de măsurători,
+-- iar un eveniment despre un tur care chiar a avut loc rămâne adevărat după ce canalul dispare.
 delete from channel_identities where channel_kind in ('whatsapp', 'telegram', 'instagram');
+
+delete from messages m
+ where exists (
+   select 1
+     from conversations c
+     join channels ch on ch.id = c.channel_id
+    where c.id = m.conversation_id
+      and c.business_id = m.business_id
+      and ch.kind in ('whatsapp', 'telegram', 'instagram')
+ );
 
 delete from conversations c
  where exists (
