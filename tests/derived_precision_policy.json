@@ -3,7 +3,7 @@
   "_de_ce_praguri_diferite": "Pragul urmeaza ce PROMITE fateta, nu cat de greu e s-o derivi. `fragrance_free` si `spf` sunt promisiuni: clientul cumpara pe baza lor, iar un fals pozitiv e o minciuna comerciala pe care validatorul (stagiul 8) n-o poate prinde, fiindca el verifica adevarul FATA DE tabela de fapte — daca faptul e gresit, verificarea confirma greseala. `concerns`, `skin_type` si `texture` sunt semnale de RANG: un fals pozitiv coboara calitatea unei recomandari, nu produce o afirmatie falsa. NX-271 aprinde excluderea o fateta pe rand, si numai peste pragul ei.",
   "_de_ce_wilson": "Verdictul se da pe limita de JOS a intervalului Wilson, nu pe proportia bruta. 100 de esantioane cu 95 de „da\" nu inseamna „precizie 95%\", inseamna „precizie intre ~89% si ~98%\". Pe esantioane mici diferenta e enorma, si exact acolo tentatia de a declara victorie e mai mare.",
   "_unsure": "Verdictul `?` (nu pot decide) NU intra in numitor. O valoare pe care auditorul n-o poate decide fata de textul sursa nu e nici dovada pentru, nici impotriva; se raporteaza separat. Daca `unsure` e mare, problema e a SURSEI, nu a derivarii.",
-  "version": "nx268.2026-09-11",
+  "version": "nx268.2026-09-11b",
   "facets": {
     "concerns": {
       "sample_size": 100,
@@ -24,14 +24,14 @@
       "promise": "claim"
     },
     "spf": {
-      "sample_size": 100,
-      "min_sample": 40,
+      "sample_size": 150,
+      "min_sample": 120,
       "min_precision": 0.95,
       "promise": "claim"
     },
     "fragrance_free": {
-      "sample_size": 100,
-      "min_sample": 40,
+      "sample_size": 150,
+      "min_sample": 120,
       "min_precision": 0.95,
       "promise": "claim"
     },
@@ -42,24 +42,25 @@
       "promise": "rank_signal"
     },
     "shade": {
-      "sample_size": 60,
-      "min_sample": 40,
+      "sample_size": 150,
+      "min_sample": 120,
       "min_precision": 0.95,
       "promise": "claim"
     },
     "finish": {
-      "sample_size": 60,
-      "min_sample": 40,
+      "sample_size": 100,
+      "min_sample": 60,
       "min_precision": 0.9,
       "promise": "claim"
     },
     "product_type": {
-      "sample_size": 100,
-      "min_sample": 60,
+      "sample_size": 150,
+      "min_sample": 120,
       "min_precision": 0.95,
       "promise": "partitioning"
     }
   },
   "_nx269": "NX-269 — `shade` are prag de PROMISIUNE (95%): nuanta e vizibila pe card, cerulata la telefon si comparata intre magazine, deci o nuanta gresita e o eroare pe care clientul o vede imediat. Esantionul e 60, nu 100, fiindca acoperirea masurata e 601 de produse si cardul cere exact 60. `finish` e tot claim, dar la 90%: e o afirmatie, insa una pe care clientul o verifica mai greu si care nu blocheaza o comanda.",
-  "_nx271": "NX-271 — `product_type` intra in politica cu prag de 95%, PESTE tierul de `claim`, si motivul e ce face fateta, nu cat de greu e s-o derivi. Ea nu ordoneaza si nu afirma: PARTITIONEAZA, adica sub enforcement decide cine INTRA in raspuns. O valoare gresita face doua rele deodata: produsul corect DISPARE (clientul nu are cum sa-l recupereze, nu stie ca exista) si unul de alt tip ii ia locul. Niciun gate din aval nu prinde asta, fiindca validatorul si `grounding_guard` verifica ADEVARUL, nu POTRIVIREA: un pret real al produsului gresit trece. Un `claim` fals (`fragrance_free`) e cel putin vizibil pe card si contestabil; o excludere e tacuta. De aceea pragul nu poate fi mai mic decat al promisiunilor. Esantion 100, minim 60 decise: valoarea se judeca fata de NUMELE produsului, deci `?` ar trebui sa fie rar. Scris INAINTE de audit, pe zero esantioane etichetate."
+  "_nx271": "NX-271 — `product_type` intra in politica cu prag de 95%, PESTE tierul de `claim`, si motivul e ce face fateta, nu cat de greu e s-o derivi. Ea nu ordoneaza si nu afirma: PARTITIONEAZA, adica sub enforcement decide cine INTRA in raspuns. O valoare gresita face doua rele deodata: produsul corect DISPARE (clientul nu are cum sa-l recupereze, nu stie ca exista) si unul de alt tip ii ia locul. Niciun gate din aval nu prinde asta, fiindca validatorul si `grounding_guard` verifica ADEVARUL, nu POTRIVIREA: un pret real al produsului gresit trece. Un `claim` fals (`fragrance_free`) e cel putin vizibil pe card si contestabil; o excludere e tacuta. De aceea pragul nu poate fi mai mic decat al promisiunilor. Esantion 100, minim 60 decise: valoarea se judeca fata de NUMELE produsului, deci `?` ar trebui sa fie rar. Scris INAINTE de audit, pe zero esantioane etichetate.",
+  "_nx271_aritmetica": "NX-271 — gasit verificand propria munca: pragul se judeca pe limita de JOS Wilson, care depinde de n. La 95%, n=100 tolereaza ZERO greseli, iar la n<73 pragul e matematic IMPOSIBIL de atins, oricat de buna ar fi derivarea. Cum `unsure` nu intra in numitor, un audit cu cateva `?` aluneca spre `min_sample` — deci `shade` (60/40), `spf` (100/40) si `fragrance_free` (100/40) erau porti care nu puteau fi castigate niciodata: labelezi cat sa fii `sufficient` si tot nu treci. Invariantul lipsa, acum testat: la `min_sample`, pragul trebuie sa fie atingibil cu cel putin o greseala tolerata. Reparatia schimba EXCLUSIV `n` (150/120 pentru pragurile de 95%, 100/60 pentru 90%): a cobori un prag ar fi mutarea portii, a mari esantionul e doar a aduna destule dovezi ca sa poti demonstra pragul declarat. Costa mai multa adnotare, nu mai putina rigoare."
 }

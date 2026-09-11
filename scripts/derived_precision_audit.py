@@ -190,7 +190,10 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
             values = sorted(k for k in hits if k in allowed)
             if values:
                 per_facet[facet] = values
-        # NX-271: sursa structurală, adăugată DUPĂ cele din fraze (nu le poate suprascrie).
+        # NX-271: sursa STRUCTURALĂ. Pe catalogul real nu poate intra în coliziune cu potrivirea de
+        # fraze (cheile acelea sunt nevoi — `oily`, `dry` —, nu tipuri de produs), dar dacă vreodată
+        # un pachet ar declara o cheie comună, valoarea structurală e cea care câștigă: ea vine din
+        # ACELAȘI producător care scrie în catalog, deci e ce s-ar aplica în enforcement.
         ptype = classify(p["name"], type_mapping)
         if ptype and type_allowed and ptype not in type_allowed:
             type_drift += 1  # cheie derivată care nu mai e în pachet → vizibilă, nu tăcută

@@ -328,3 +328,37 @@ def test_stergerea_are_acelasi_scop_ca_proiectia():
     assert "_DELETE_ORPHAN_SIGNALS, args.business, locale, owned, empty" in source
     assert "_STRIP_ATTRS, args.business, empty, owned" in source
     assert "and product_id = any($4::uuid[])" in source
+
+
+def test_fiecare_poarta_de_precizie_e_castigabila_la_min_sample():
+    """NX-271 — o poartă care nu poate fi trecută niciodată nu e o poartă, e o capcană.
+
+    Verdictul se dă pe limita de JOS Wilson, care depinde de `n`. La 95%, un eșantion de 60 nu
+    poate atinge pragul nici cu 60 de răspunsuri corecte din 60 (limita de jos e 0,940). Cum
+    `unsure` NU intră în numitor, un audit cu câteva `?` alunecă spre `min_sample` — deci
+    configurația trebuie să fie câștigabilă ACOLO, nu doar la `sample_size`.
+
+    Găsit exact așa: `shade` (60/40), `spf` și `fragrance_free` (100/40) erau imposibile —
+    puteai adnota cât să fii `sufficient` și tot să nu treci, la orice calitate a derivării.
+    Cerem cel puțin o greșeală tolerată: un prag atins doar cu scor perfect e o monedă aruncată,
+    fiindcă un singur caz ambiguu îl doboară."""
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "derived_precision_audit.py"
+    spec = importlib.util.spec_from_file_location("_audit_mod", path)
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+
+    policy = json.loads(POLICY.read_text(encoding="utf-8"))["facets"]
+    for facet, cfg in policy.items():
+        n, prag = cfg["min_sample"], cfg["min_precision"]
+        tolerate = next((n - k for k in range(0, n + 1) if audit._wilson_lower(k, n) >= prag), None)
+        assert tolerate is not None, (
+            f"{facet}: prag {prag:.0%} e IMPOSIBIL la min_sample={n} "
+            f"(Wilson↓ maxim = {audit._wilson_lower(n, n):.3f})"
+        )
+        assert tolerate >= 1, (
+            f"{facet}: prag {prag:.0%} la min_sample={n} cere scor PERFECT — "
+            "o singură ambiguitate doboară poarta"
+        )
