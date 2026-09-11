@@ -23,6 +23,11 @@ class Provenance(str, Enum):
     real_sanitized = "real_sanitized"  # din trafic real, redactat PII
     synthetic = "synthetic"  # construit de la zero
     paraphrase = "paraphrase"  # reformulare a unui query real
+    # Fraze scrise de COMERCIANT despre ce caută clienții (SOLE: `product_sections.kind =
+    # 'recommendation_trigger'`). Valoare separată, nu `real_sanitized`, fiindcă nu e trafic
+    # observat: dacă ar fi contate ca reale, gate-ul `require_real_per_category` ar trece pe un
+    # corpus în care niciun client n-a scris nimic, iar tocmai asta există el să prevină.
+    merchant_content = "merchant_content"
 
 
 class Relevance(int, Enum):

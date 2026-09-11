@@ -5,7 +5,8 @@ Leagă `retrieve_fn` al harness-ului de calea de producție (`search_products_le
 ca să MĂSOARE retrieval-ul pur, izolat de înțelegerea query-ului (aia e NX-208). Două regimuri:
 
 - `raw`: doar textul brut → hibrid, ZERO filtre. „Ce scoate căutarea pe fraza clientului."
-- `with_constraints`: aplică `price_max` + `category` din hard_constraints. „Retrieval cu
+- `with_constraints`: aplică `price_max` + `category` + fațetele structurale (`product_type`,
+  `key_ingredients`, …) din hard_constraints. „Retrieval cu
   înțelegere perfectă a cererii" (plafonul). Diferența raw↔constrained arată cât ține de
   retrieval și cât de query understanding.
 
@@ -52,15 +53,35 @@ def _pid(p: dict[str, Any]) -> str:
     return str(p.get("id") or p.get("product_id"))
 
 
-def _constraints(hard: list[dict[str, Any]] | None) -> tuple[float | None, str | None]:
-    """Extrage price_max + category din hard_constraints (pentru regimul `with_constraints`)."""
+#: Fațetele STRUCTURALE care nu sunt nici preț, nici categorie. Trec în `facet_filters`, adică exact
+#: pe drumul pe care le aplică și retrievalul real.
+#:
+#: Fără ele, regimul `with_constraints` era INERT pe orice corpus modern: extragea doar `price_max`
+#: și `category`, iar corpusul SOLE își exprimă constrângerile în `product_type` și
+#: `key_ingredients`. Măsurat pe felia de tuning, cele două regimuri ieșeau identice la a treia
+#: zecimală — adică „plafonul cu înțelegere perfectă a cererii" nu măsura nimic, iar diferența
+#: raw↔constrained, care există tocmai ca să separe retrievalul de rezolvarea cererii, era zero prin
+#: construcție. Lista nu e închisă la cosmetice: sunt cheile din `attributes`, oricare ar fi ele.
+_FACET_OPS = ("eq", "in", "contains")
+
+
+def _constraints(
+    hard: list[dict[str, Any]] | None,
+) -> tuple[float | None, str | None, dict[str, list[str]]]:
+    """`(price_max, category, facet_filters)` din hard_constraints, pentru `with_constraints`."""
     price_max = category = None
+    facets: dict[str, list[str]] = {}
     for hc in hard or []:
-        if hc.get("facet") == "price" and hc.get("op") == "lte":
+        facet, op = hc.get("facet"), hc.get("op", "eq")
+        if facet == "price" and op == "lte":
             price_max = float(hc["value"])
-        elif hc.get("facet") == "category" and hc.get("op") == "eq":
+        elif facet == "category" and op == "eq":
             category = str(hc["value"])
-    return price_max, category
+        elif facet and op in _FACET_OPS:
+            value = hc.get("value")
+            values = [str(v) for v in value] if isinstance(value, list | tuple) else [str(value)]
+            facets.setdefault(str(facet), []).extend(values)
+    return price_max, category, facets
 
 
 async def retrieve_products(
@@ -76,8 +97,9 @@ async def retrieve_products(
 
     Degradare grațioasă: fără embeddings/LLM → lexical-only (ca în producție, P6)."""
     price_max = category = None
+    facet_filters: dict[str, list[str]] = {}
     if apply_constraints:
-        price_max, category = _constraints(hard_constraints)
+        price_max, category, facet_filters = _constraints(hard_constraints)
 
     lexical = await search_products_lexical(
         conn,
@@ -85,6 +107,7 @@ async def retrieve_products(
         query_text=query,
         price_max=price_max,
         category=category,
+        facet_filters=facet_filters or None,
         locale=await _tenant_locale(conn, business_id),
         pool=_POOL,
     )

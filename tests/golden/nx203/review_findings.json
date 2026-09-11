@@ -1,0 +1,2008 @@
+{
+ "findings": [
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "flat_family",
+   "detail": "toate cele 7 note sunt 3",
+   "query": "balsam demachiant pentru machiaj rezistent la apa"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "d5ec7746-12e0-4bbb-995c-525a8bf5222b",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "Dr. Althea Pure Grinding Cleansing Balm - balsam de curatare formulat "
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "d5ec7746-12e0-4bbb-995c-525a8bf5222b",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "Dr. Althea Pure Grinding Cleansing Balm - balsam de curatare formulat "
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "ec15e8aa-587a-41a5-b352-3073cce25b4f",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "BANILA CO Clean it Zero Original Cleansing Balm SNOOPY Edition - balsa"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "ec15e8aa-587a-41a5-b352-3073cce25b4f",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "BANILA CO Clean it Zero Original Cleansing Balm SNOOPY Edition - balsa"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "ff052689-c56d-44df-8185-0a301525a156",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm SNOOPY Edition "
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "ff052689-c56d-44df-8185-0a301525a156",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm SNOOPY Edition "
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "59fcc952-8fd2-453b-b5fd-b05a6e79c65d",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "ARENCIA Fresh Green Rice Mochi Cleanser, 120 gr - balsam de curatare f"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "59fcc952-8fd2-453b-b5fd-b05a6e79c65d",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "ARENCIA Fresh Green Rice Mochi Cleanser, 120 gr - balsam de curatare f"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "04395794-b106-48bf-97ef-06bcdf28307c",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm - balsam de cur"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "04395794-b106-48bf-97ef-06bcdf28307c",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm - balsam de cur"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "e1755924-038d-4026-965b-af1f9e1a9ba0",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "ARENCIA Fresh Rosehip Rice Mochi Cleanser, 120 gr - balsam de curatare"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "e1755924-038d-4026-965b-af1f9e1a9ba0",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "ARENCIA Fresh Rosehip Rice Mochi Cleanser, 120 gr - balsam de curatare"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "type_mismatch",
+   "product_id": "3d513a9c-1c63-4c06-877c-d76315c1986b",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "TIRTIR Hydro Boost Enzyme Cleansing Balm - balsam de curatare formulat"
+  },
+  {
+   "family_id": "f-ce6865aec9",
+   "kind": "ingredient_unsupported",
+   "product_id": "3d513a9c-1c63-4c06-877c-d76315c1986b",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "balsam demachiant pentru machiaj rezistent la apa",
+   "name": "TIRTIR Hydro Boost Enzyme Cleansing Balm - balsam de curatare formulat"
+  },
+  {
+   "family_id": "f-9a142083fd",
+   "kind": "type_mismatch",
+   "product_id": "bba07097-ec7d-4afa-84ea-6af8eb0e29c5",
+   "grade": 3,
+   "detail": "cerut `crema contur ochi`, produsul e `crema de ochi`",
+   "query": "cremă contur ochi acid hialuronic",
+   "name": "ROUND LAB 1025 Dokdo - crema de ochi formulata cu niacinamida si acid "
+  },
+  {
+   "family_id": "f-9a142083fd",
+   "kind": "ingredient_unsupported",
+   "product_id": "bba07097-ec7d-4afa-84ea-6af8eb0e29c5",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['acid hialuronic']",
+   "query": "cremă contur ochi acid hialuronic",
+   "name": "ROUND LAB 1025 Dokdo - crema de ochi formulata cu niacinamida si acid "
+  },
+  {
+   "family_id": "f-a10334f1b3",
+   "kind": "type_mismatch",
+   "product_id": "8b392062-980a-4c41-accf-938ab4f19414",
+   "grade": 2,
+   "detail": "cerut `crema de corp`, produsul e `lotiune de corp`",
+   "query": "cremă de corp pentru piele sensibilă",
+   "name": "DERMA:B CeraMD Repair Lotion - lotiune de corp formulata cu agenti hid"
+  },
+  {
+   "family_id": "f-a10334f1b3",
+   "kind": "type_mismatch",
+   "product_id": "6975e0f4-d9c6-46a4-92a0-b4e4acaebea2",
+   "grade": 2,
+   "detail": "cerut `crema de corp`, produsul e `lotiune de corp`",
+   "query": "cremă de corp pentru piele sensibilă",
+   "name": "DERMA:B Daily Moisture Body Lotion - lotiune de corp formulata cu apa "
+  },
+  {
+   "family_id": "f-7acd631ee1",
+   "kind": "flat_family",
+   "detail": "toate cele 24 note sunt 3",
+   "query": "crema de fata cu SPF 50"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "type_mismatch",
+   "product_id": "ade432a1-6182-40c6-b047-9bf794658767",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "SOME BY MI Retinol Intense Advanced Triple Action Eye Cream - crema co"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "ingredient_unsupported",
+   "product_id": "aa4f7ca5-534a-4f85-b0f0-56802e9243e0",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "PURITO Wonder Releaf Centella Eye Cream - crema de ochi formulata cu C"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "type_mismatch",
+   "product_id": "fab2c877-c417-4918-bc35-889622cf40a8",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "CENTELLIAN24 360 Shot PDRN Lifting Eye Cream - crema contur ochi formu"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "type_mismatch",
+   "product_id": "df69ccea-a909-4d6f-84f0-6af4d9371073",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "VT COSMETICS Reedle Shot Lifting Eye Cream - crema contur ochi formula"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "type_mismatch",
+   "product_id": "d3772020-9b70-495a-9c99-077c32def9b5",
+   "grade": 3,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "SKIN1004 Madagascar Centella Probio-Cica Bakuchiol Eye Cream - crema c"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "type_mismatch",
+   "product_id": "b5ebe072-ab6f-40f2-8d43-f9a127e2974a",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "SOME BY MI Retinol Intense Advanced Triple Action Eye Cream - crema co"
+  },
+  {
+   "family_id": "f-b0b8ad41d8",
+   "kind": "ingredient_unsupported",
+   "product_id": "4c3f2712-d1ed-4fcd-a14c-ffbc398777c6",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de ochi cu Centella Asiatica",
+   "name": "PURITO Wonder Releaf Centella Unscented Eye Cream - crema de ochi form"
+  },
+  {
+   "family_id": "f-a3e47c6c1c",
+   "kind": "type_mismatch",
+   "product_id": "c99f0a56-0788-411e-a2df-045e89c445dc",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "TIRTIR Mask Fit Red Cushion 13C",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulata cu pudra f"
+  },
+  {
+   "family_id": "f-a3e47c6c1c",
+   "kind": "type_mismatch",
+   "product_id": "0618faef-de16-4144-8420-5c675fc33f22",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "TIRTIR Mask Fit Red Cushion 13C",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulat cu pudra fi"
+  },
+  {
+   "family_id": "f-a3e47c6c1c",
+   "kind": "type_mismatch",
+   "product_id": "b83c0e67-40ae-4ea0-9a5f-dd81460e4bd6",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "TIRTIR Mask Fit Red Cushion 13C",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulat cu pudra fi"
+  },
+  {
+   "family_id": "f-a3e47c6c1c",
+   "kind": "type_mismatch",
+   "product_id": "2e88c36f-d395-40d7-9f54-3a268b215589",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "TIRTIR Mask Fit Red Cushion 13C",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten compact formulat cu antioxid"
+  },
+  {
+   "family_id": "f-5b176439ea",
+   "kind": "flat_family",
+   "detail": "toate cele 16 note sunt 3",
+   "query": "blush cu 50% esență hidratantă"
+  },
+  {
+   "family_id": "f-5b176439ea",
+   "kind": "type_mismatch",
+   "product_id": "60d8e176-6913-4eb7-8848-a338bd0a9ac4",
+   "grade": 3,
+   "detail": "cerut `esenta`, produsul e `fard de obraz`",
+   "query": "blush cu 50% esență hidratantă",
+   "name": "HOUSE OF HUR Moist Ampoule Blusher Mini - fard de obraz care contribui"
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "a4e0ad5f-27bb-4a7c-89cd-d3b24969ab75",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "JUMISO Niacinamide 2+ Pore Smoothing, 205 ml - Toner de fata formulat "
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "58707c78-9e23-4e3c-82db-dca67cfe0eec",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "SKIN1004 Madagascar Centella Hyalu-Cica Brightening Toner - toner de f"
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "b2fafc5a-6c74-4de7-84e9-450c6bffbb2d",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "By Wishtrend Mandelic Acid Gentle Exfoliating Toner, 150 ml - toner de"
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "676cea77-dac5-41fb-9ff0-159165d82b01",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "ZEROID Pimprove Toner - toner de fata formulat cu LHA si Zinc PCA, car"
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "dbee62c4-8730-460e-b71d-e3ca6db5802f",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "SKIN1004 Madagascar Centella Toning Toner - toner de fata formulat cu "
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "a8e582d7-908c-4b91-a16e-a77aada4eec1",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `gel de curatare`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "SKIN1004 Madagascar Centella Tea-Trica Mild Peeling Gel - gel de curat"
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "b5a2cbcc-3e39-4c32-92e1-d5532cf8537e",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "SKINTEGRA Lumion 100 ml - Toner de fata formulat cu acid lactic si glu"
+  },
+  {
+   "family_id": "f-2a3b552246",
+   "kind": "type_mismatch",
+   "product_id": "047c4120-7236-4f1c-95c6-2540b703e1ce",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant delicat cu AHA LHA",
+   "name": "SKIN1004 Madagascar Centella Hyalu-Cica Brightening Toner - toner de f"
+  },
+  {
+   "family_id": "f-8dac62c930",
+   "kind": "flat_family",
+   "detail": "toate cele 7 note sunt 3",
+   "query": "gel autobronzant cu acid hialuronic"
+  },
+  {
+   "family_id": "f-672cb8f934",
+   "kind": "type_mismatch",
+   "product_id": "529f3f7b-d868-49ca-9356-4c59cca13f66",
+   "grade": 2,
+   "detail": "cerut `gel de curatare`, produsul e `spuma de curatare`",
+   "query": "gel de curățare față piele sensibilă",
+   "name": "CNP LABORATORY Propolis Amino Cleanser - spuma de curatare formulata c"
+  },
+  {
+   "family_id": "f-672cb8f934",
+   "kind": "type_mismatch",
+   "product_id": "50db7f8a-d1c6-4cfc-bf2c-ffe194507b0a",
+   "grade": 2,
+   "detail": "cerut `gel de curatare`, produsul e `gel de dus`",
+   "query": "gel de curățare față piele sensibilă",
+   "name": "ATOPALM MLE Body Wash - gel de dus formulat cu Ceramide-9S si acid hia"
+  },
+  {
+   "family_id": "f-672cb8f934",
+   "kind": "type_mismatch",
+   "product_id": "c0c9adfc-058e-4f2f-b4e0-7f9416fbfa4f",
+   "grade": 2,
+   "detail": "cerut `gel de curatare`, produsul e `spuma de curatare`",
+   "query": "gel de curățare față piele sensibilă",
+   "name": "Dear Klairs Vita C Vitamin Pore Clay Mask Cleanser, 150 ml - spuma de "
+  },
+  {
+   "family_id": "f-255a5d6c32",
+   "kind": "type_mismatch",
+   "product_id": "0b7f35e1-7bae-4491-b1b5-a0e19399a731",
+   "grade": 2,
+   "detail": "cerut `gel de dus`, produsul e `gel de curatare`",
+   "query": "gel de dus pH echilibrat",
+   "name": "MIZON Good Bye Blemish Low ph Cleanser - gel de curatare formulat cu a"
+  },
+  {
+   "family_id": "f-046cee566e",
+   "kind": "flat_family",
+   "detail": "toate cele 6 note sunt 3",
+   "query": "luciu de buze mat culoare intensă"
+  },
+  {
+   "family_id": "f-41eb425798",
+   "kind": "flat_family",
+   "detail": "toate cele 3 note sunt 3",
+   "query": "mască de păr cu miere macadamia"
+  },
+  {
+   "family_id": "f-8771f1dcc3",
+   "kind": "flat_family",
+   "detail": "toate cele 24 note sunt 3",
+   "query": "nuantator pentru buze cu finisaj glossy"
+  },
+  {
+   "family_id": "f-4dc63b14ed",
+   "kind": "flat_family",
+   "detail": "toate cele 3 note sunt 2",
+   "query": "pasta de dinti cu aminoacizi L-arginina"
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "50fbd86c-dda6-4cd2-b9f6-251c711ca0d4",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "2a3eb987-c371-4f3f-b706-f62b3c96cd97",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "BLACK ROUGE Glow Bokki Tint - nuantator pentru buze formulat cu pigmen"
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "ad383e95-c801-458d-8f25-8f9c6d9156a3",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "0df23c5e-4666-4b5e-baf0-e01888e3bf7c",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "9b5c90d9-fd43-4709-918c-446ae912f8a0",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "28a19ceb-7ccc-4c69-9740-56f74a9a3df6",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "BLACK ROUGE Glow Bokki Tint - nuantator pentru buze formulat cu pigmen"
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "213ac989-3d7a-438b-ab60-29b7e0e236f4",
+   "grade": 3,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "70773f98-43b2-4108-ba4a-96ba3b78cb8c",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `gel de curatare`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "ELYN'S LAB Must-have - gel de curatare a fetei formulat cu fosfolipide"
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "fd7cdaa2-5f73-458d-96b7-e49aa35c5e99",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Water - nuantator pentru buze formulat cu acid h"
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "e2806dd2-ace7-4c42-8366-ef602f79f2f8",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "9a5d435a-e8e6-4382-a2ca-f789f882ed7c",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "a19810f7-738e-4a85-9cac-a47241d511b6",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-736cea81a5",
+   "kind": "type_mismatch",
+   "product_id": "154c29a8-4f46-483b-a4e8-73ede5ed293e",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid rezistent cu hidratare",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-6c9f5810c2",
+   "kind": "flat_family",
+   "detail": "toate cele 2 note sunt 3",
+   "query": "săpun lichid cu alantoină Sodium PCA"
+  },
+  {
+   "family_id": "f-f950ebc81a",
+   "kind": "ingredient_unsupported",
+   "product_id": "e49efcd8-5aa0-4cb6-956a-3f47482d84c5",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['vitamina c']",
+   "query": "ser de față cu vitamina C",
+   "name": "ANUA Vitamin C 20 + Vitamin E Blemish Serum - Iluminare intensa si red"
+  },
+  {
+   "family_id": "f-f950ebc81a",
+   "kind": "ingredient_unsupported",
+   "product_id": "99fee655-34a7-48d0-b20a-5e2e325007fb",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['vitamina c']",
+   "query": "ser de față cu vitamina C",
+   "name": "MEDICUBE Deep Vita C Ampoule 2.0 - ser de fata formulat cu vitamina C "
+  },
+  {
+   "family_id": "f-f950ebc81a",
+   "kind": "ingredient_unsupported",
+   "product_id": "d6d4e77b-b10c-4785-9fe1-e049945c49bd",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['vitamina c']",
+   "query": "ser de față cu vitamina C",
+   "name": "ALLIES OF SKIN 20% Vitamin C Ser de fata  - Iluminare intensa si fermi"
+  },
+  {
+   "family_id": "f-f950ebc81a",
+   "kind": "ingredient_unsupported",
+   "product_id": "a2855ccd-9ce2-4298-9d09-569d7f140381",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['vitamina c']",
+   "query": "ser de față cu vitamina C",
+   "name": "MEDICUBE Age-R Vita C Pro Ampoule - ser de fata formulat cu vitamina C"
+  },
+  {
+   "family_id": "f-f950ebc81a",
+   "kind": "ingredient_unsupported",
+   "product_id": "01a4dc13-b7b9-4dde-b58e-7d5977565ba8",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['vitamina c']",
+   "query": "ser de față cu vitamina C",
+   "name": "ALLIES OF SKIN Vitamin C 20% & Citrus Cells Advanced Light Reflecting "
+  },
+  {
+   "family_id": "f-f950ebc81a",
+   "kind": "ingredient_unsupported",
+   "product_id": "67e1899c-c984-48e7-9fa5-88ff6657c5cd",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['vitamina c']",
+   "query": "ser de față cu vitamina C",
+   "name": "PURITO Pure Vitamin C Serum - ser de fata formulat cu acid ascorbic si"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "ec15e8aa-587a-41a5-b352-3073cce25b4f",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Original Cleansing Balm SNOOPY Edition - balsa"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "1802a8aa-4791-47fd-922e-5fa2ff847010",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `gel de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Calming Gel Cleanser - gel de curatare formula"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "439fca9f-8b15-49c4-864c-4b5cbbe48bef",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `toner de fata`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Pink Hydrattion Toner Pad - toner de fata form"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "ff052689-c56d-44df-8185-0a301525a156",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm SNOOPY Edition "
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "e1ac482e-7b35-4121-a5af-c4101c0971b7",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero, 100 ml - Balsam de curatare formulat cu extra"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "846b8e8f-987a-485c-99e4-ebe93d339a88",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `spuma de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Foam 150 ml - Spuma de curatar"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "266d6757-720a-4ec6-8ed1-be3467d195fc",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm - balsam de cur"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "e086faa0-1c13-4943-a4fb-b816c12ddb9b",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Calming Cleansing Balm - balsam de curatare fo"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "394be970-252f-47c3-ac60-eeb589356246",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `spuma de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Foam, 150 ml - Spuma de curatare formulata cu "
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "51791878-a742-42e5-a036-200dd5a1aa5a",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean It Zero Avocado Enriching Butter Balm - balsam de cura"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "47064cb7-0411-4344-9331-e819ef723c52",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Original Cleansing Balm - balsam de curatare f"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "fd845689-efa5-44e7-ad70-fb6a5640ce9f",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Mandarin-C Brightening Cleansing Balm - balsam"
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "b9890be6-7a6b-48ea-85cc-00ca6829eaa9",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `exfoliant`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean It Zero Tea Tree Pore Peeling Gel, 120 ml - exfoliant "
+  },
+  {
+   "family_id": "f-65a00474c7",
+   "kind": "type_mismatch",
+   "product_id": "04395794-b106-48bf-97ef-06bcdf28307c",
+   "grade": 2,
+   "detail": "cerut `set`, produsul e `balsam de curatare`",
+   "query": "BANILA CO Clean It Zero set",
+   "name": "BANILA CO Clean it Zero Pore Clarifying Cleansing Balm - balsam de cur"
+  },
+  {
+   "family_id": "f-f753d8aeb4",
+   "kind": "type_mismatch",
+   "product_id": "f158dd72-f2f9-4c93-98ea-9aaaf9b1def6",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent",
+   "name": "MIZON Cicaluronic Cleansing Balm - balsam de curatare formulat cu Cent"
+  },
+  {
+   "family_id": "f-f753d8aeb4",
+   "kind": "type_mismatch",
+   "product_id": "eda8e69b-8b04-4640-840f-5fe485c39323",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent",
+   "name": "Dr. Althea Pore Refresh Grinding Cleansing Balm - balsam de curatare f"
+  },
+  {
+   "family_id": "f-f753d8aeb4",
+   "kind": "type_mismatch",
+   "product_id": "fd845689-efa5-44e7-ad70-fb6a5640ce9f",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent",
+   "name": "BANILA CO Clean it Zero Mandarin-C Brightening Cleansing Balm - balsam"
+  },
+  {
+   "family_id": "f-f753d8aeb4",
+   "kind": "type_mismatch",
+   "product_id": "9dd17352-71be-44b0-bb50-fc0d77f9fce9",
+   "grade": 3,
+   "detail": "cerut `balsam`, produsul e `balsam de curatare`",
+   "query": "balsam demachiant pentru machiaj rezistent",
+   "name": "HOUSE OF HUR Midnight Soothing Cleansing Balm - balsam de curatare for"
+  },
+  {
+   "family_id": "f-3a0cb79caf",
+   "kind": "flat_family",
+   "detail": "toate cele 13 note sunt 3",
+   "query": "corector cearcăne cu acoperire modulabilă"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "ef2333a1-edd1-4b3c-817b-c7fde006a25f",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "SKIN1004 Madagascar Centella Cream - crema de fata formulata cu extrac"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "fd344368-f01d-450c-a0e8-0f6ea355dae2",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "IUNIK Centella  Calming Gel Cream 60 ml - Crema de fata formulata cu a"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "69568e1f-4283-42c2-a360-870ac140a5f8",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "SKIN1004 Madagascar Centella Tone Brightening Capsule Cream - crema de"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "9fcd7e90-63c3-4bdf-8424-66efa1715c7d",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "SKIN1004 Madagascar Centella Teca Cream 75 ml - crema de fata formulat"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "989514ab-ee91-4873-97a8-59c8ada2671c",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "IUNIK Centella Calming Daily Sunscreen SPF 50 PA++++ 60 ml - crema de "
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "2e30ad6b-e111-44e5-8543-7d6c416c8b18",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "CENTELLIAN24 Madeca Cream Time Reverse - crema de fata formulata cu ex"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "c4ff0fef-f53b-4d3a-b3de-61be6939dfc6",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "DR.JART+ Cicapair Tiger Grass Color Correcting Treatment, 50 ml - crem"
+  },
+  {
+   "family_id": "f-35d27f2618",
+   "kind": "ingredient_unsupported",
+   "product_id": "1ed76fb8-b7b3-4714-832e-993beb335986",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "crema de fata cu Centella Asiatica",
+   "name": "SKIN1004 Madagascar Centella Hyalu-Cica Moisture Cream - crema de fata"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "ce03c475-fe70-4ec1-b2a0-fbbc3fc2d5e2",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "VIllage 11 FACTORY Hydro Boost Caffeine Eye Serum 10 ml - Crema contur"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "61fc53bf-f712-45b2-8b1d-09b35ccbe56d",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "Dr. Melaxin Retinol Eyephalt Eyebag Cream - crema contur ochi formulat"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "e0efba73-066d-4140-8a86-419501d64c56",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "NUMBUZIN No.9 NAD+Retinol Volumetox Eye Cream - crema contur ochi form"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "21619f44-55a4-43be-a604-63afc0decc44",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "Dr. Melaxin TX Retinalsome Double Effect Eye Cream - crema contur ochi"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "177959f7-c20f-41f8-9087-55d5f300f7c2",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "COSRX Advanced Snail Peptide, 25 ml - crema contur ochi formulata cu f"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "ade432a1-6182-40c6-b047-9bf794658767",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "SOME BY MI Retinol Intense Advanced Triple Action Eye Cream - crema co"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "d3772020-9b70-495a-9c99-077c32def9b5",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "SKIN1004 Madagascar Centella Probio-Cica Bakuchiol Eye Cream - crema c"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "b5ebe072-ab6f-40f2-8d43-f9a127e2974a",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "SOME BY MI Retinol Intense Advanced Triple Action Eye Cream - crema co"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "64e6d398-955b-4dd0-8abd-a1d1505c207f",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "VT COSMETICS PDRN Reedle Shot Eye Lifter - crema contur ochi formulata"
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "fafcf42c-1e55-483a-8c73-0707cd147a5e",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "Dr. Melaxin Cemenrete Calcium Dark Spot Eye Cream - crema contur ochi "
+  },
+  {
+   "family_id": "f-607d8bff56",
+   "kind": "type_mismatch",
+   "product_id": "42599585-b530-4e8f-9e84-5ed3dbcc0c81",
+   "grade": 2,
+   "detail": "cerut `crema de ochi`, produsul e `crema contur ochi`",
+   "query": "cremă de ochi cu niacinamidă",
+   "name": "BELIF Moisturzing Eye Bomb - crema contur ochi formulata cu ceramide s"
+  },
+  {
+   "family_id": "f-48a30e2f34",
+   "kind": "type_mismatch",
+   "product_id": "0c684d65-7bcd-46a4-a2dc-e5ecca020b54",
+   "grade": 2,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "cushion refill compatibil Re-Feel Case",
+   "name": "UNLEASHIA Satin Wear Healthy-Green Cushion Re-Feel - fond de ten cushi"
+  },
+  {
+   "family_id": "f-967408c0e2",
+   "kind": "type_mismatch",
+   "product_id": "d8f91244-79d5-45e5-ab30-1a5c3f50dc6c",
+   "grade": 2,
+   "detail": "cerut `esenta`, produsul e `ser de fata`",
+   "query": "esenta cu mucina de melc",
+   "name": "COSRX Advanced Snail Radiance Dual Essence, 80 ml - ser de fata formul"
+  },
+  {
+   "family_id": "f-f0d383c5f1",
+   "kind": "type_mismatch",
+   "product_id": "33897149-e41f-46f3-9b3e-eb78c972fda7",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `gel de curatare`",
+   "query": "JUMISO exfoliant pentru textură neuniformă",
+   "name": "SKINTEGRA Clarion 2% BHA - gel de curatare formulat cu acid salicilic "
+  },
+  {
+   "family_id": "f-f0d383c5f1",
+   "kind": "type_mismatch",
+   "product_id": "a68d63bd-e397-4bf7-8ff8-9dd9ffe3da90",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `ser de fata`",
+   "query": "JUMISO exfoliant pentru textură neuniformă",
+   "name": "NUMBUZIN No.4 Ceramide AHA Glazed Skin Prep Serum - ser de fata formul"
+  },
+  {
+   "family_id": "f-f0d383c5f1",
+   "kind": "type_mismatch",
+   "product_id": "b18afcbb-b893-4cef-98e7-a7452e4cc11d",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `gel de fata`",
+   "query": "JUMISO exfoliant pentru textură neuniformă",
+   "name": "AXIS-Y PHA Resurfacing Glow Peel - gel de fata formulat cu Gluconolact"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "528e2318-d49f-423f-97c5-fab84dd2e183",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu pudra fina matifiant"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "25c27269-95db-4595-8322-f158a2dc9713",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu antioxidanti si agen"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "ab436a42-0c8b-4f7e-8f88-1cc33c1891b0",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu pudra fina matifiant"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "ba276914-cc32-45a0-b068-777f69310172",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu antioxidanti si agen"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "71df70d7-e878-4d17-ae4f-b5009418a7b2",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu antioxidanti si agen"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "09938e36-f59e-4f9c-91cf-a81737177caa",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu antioxidanti si agen"
+  },
+  {
+   "family_id": "f-5a4e43791b",
+   "kind": "type_mismatch",
+   "product_id": "ab84a55d-12f0-40e6-b2ec-8ff4e64e52f3",
+   "grade": 3,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact cu acoperire",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu pudra fina matifiant"
+  },
+  {
+   "family_id": "f-f61c6d4196",
+   "kind": "ingredient_unsupported",
+   "product_id": "b5f22040-4aaf-4f78-8cb2-f21e61622745",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['acid salicilic']",
+   "query": "gel de curatare cu acid salicilic",
+   "name": "SKINTEGRA Clarion 2% BHA - gel de curatare exfoliant bland formulat cu"
+  },
+  {
+   "family_id": "f-567bc661fa",
+   "kind": "ingredient_unsupported",
+   "product_id": "6246073f-26f5-4d6a-8e26-1f942432f2f0",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "gel de duș cu apă termală",
+   "name": "EUBOS Sensitive Care Shower and Cream - gel de dus formulat cu apa ter"
+  },
+  {
+   "family_id": "f-567bc661fa",
+   "kind": "ingredient_unsupported",
+   "product_id": "807da5ed-19e5-4ede-954c-256530333a4f",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['apa']",
+   "query": "gel de duș cu apă termală",
+   "name": "EUBOS Sensitive Care Shower and Cream - gel de dus formulat cu apa ter"
+  },
+  {
+   "family_id": "f-d2a9396f1c",
+   "kind": "type_mismatch",
+   "product_id": "b4bed0d9-d461-48e7-9af4-234f291197f0",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze efect oglindă",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-d2a9396f1c",
+   "kind": "type_mismatch",
+   "product_id": "7ac1cb8e-0ba6-4fa2-b40d-dd8a4fe612e4",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze efect oglindă",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-d2a9396f1c",
+   "kind": "type_mismatch",
+   "product_id": "0237e8e7-6c89-4457-b9a2-4a4b19e4a10f",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `ulei de buze`",
+   "query": "luciu de buze efect oglindă",
+   "name": "AXIS-Y Vita Glow Lip Oil - ulei de buze formulat cu ulei de masline si"
+  },
+  {
+   "family_id": "f-d2a9396f1c",
+   "kind": "type_mismatch",
+   "product_id": "d84a8809-4031-49df-8930-c6670b9aa7f7",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze efect oglindă",
+   "name": "LAKA Maxi Glayer Tint - nuantator pentru buze formulat cu pigmenti pen"
+  },
+  {
+   "family_id": "f-d2a9396f1c",
+   "kind": "type_mismatch",
+   "product_id": "7fdb12f4-4343-4a9c-93fd-abb0dd0efab8",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze efect oglindă",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-d2a9396f1c",
+   "kind": "type_mismatch",
+   "product_id": "97a156ae-9a39-42bd-9042-421c6145fcc4",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze efect oglindă",
+   "name": "LAKA Maxi Glayer Tint - nuantator pentru buze formulat cu pigmenti nua"
+  },
+  {
+   "family_id": "f-afb566040f",
+   "kind": "flat_family",
+   "detail": "toate cele 24 note sunt 3",
+   "query": "nuantator pentru buze glossy si hidratant"
+  },
+  {
+   "family_id": "f-0b476be445",
+   "kind": "flat_family",
+   "detail": "toate cele 4 note sunt 3",
+   "query": "pasta de dinti 1400 ppm fluor"
+  },
+  {
+   "family_id": "f-56657e9e83",
+   "kind": "type_mismatch",
+   "product_id": "4ad2a555-0ef7-4316-be08-044eea99c46f",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel pentru zona ochilor",
+   "name": "MIZON Hyaluronic Acid Eye Gel Patch - benzi pentru ochi formulate cu a"
+  },
+  {
+   "family_id": "f-56657e9e83",
+   "kind": "type_mismatch",
+   "product_id": "86d0ce3c-37ee-40aa-bf13-6bb00d906b10",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel pentru zona ochilor",
+   "name": "BEAUTY OF JOSEON Revive Under Eye Patch Ginseng + Retinal - benzi pent"
+  },
+  {
+   "family_id": "f-56657e9e83",
+   "kind": "type_mismatch",
+   "product_id": "8a588f39-c1cb-423d-b4b9-5f2de444f2bc",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel pentru zona ochilor",
+   "name": "Dr. Melaxin Cemenrete Calcium Volume Eye Patch - benzi pentru ochi for"
+  },
+  {
+   "family_id": "f-56657e9e83",
+   "kind": "type_mismatch",
+   "product_id": "55d76267-8c31-490e-b195-6af607ab3d69",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel pentru zona ochilor",
+   "name": "MIZON Phyto Plump Collagen Eye Gel Patch - benzi pentru ochi formulate"
+  },
+  {
+   "family_id": "f-56657e9e83",
+   "kind": "type_mismatch",
+   "product_id": "089af5bd-f6e6-4674-b028-12f810b6ab12",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel pentru zona ochilor",
+   "name": "MIZON Pure Pearl Eye Gel - benzi pentru ochi formulate cu extract de p"
+  },
+  {
+   "family_id": "f-56657e9e83",
+   "kind": "type_mismatch",
+   "product_id": "8518430a-539e-43d8-9877-23bcdd3e8b52",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel pentru zona ochilor",
+   "name": "MIZON Black Pearl Eye Gel Patch - benzi pentru ochi formulate cu extra"
+  },
+  {
+   "family_id": "f-538750e769",
+   "kind": "type_mismatch",
+   "product_id": "dadb32d0-2d0c-4243-ace2-8c9946268203",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `crema coloranta de fata`",
+   "query": "ruj mat rezistent toată ziua",
+   "name": "MIZON Snail Repair Intensive BB Cream SPF 50 PA+++, 27, 50 ml - crema "
+  },
+  {
+   "family_id": "f-d9a7d47ea8",
+   "kind": "flat_family",
+   "detail": "toate cele 5 note sunt 3",
+   "query": "săpun lichid pH neutru piele"
+  },
+  {
+   "family_id": "f-b1727a8268",
+   "kind": "flat_family",
+   "detail": "toate cele 8 note sunt 3",
+   "query": "ser de față cu retinol 0,1%"
+  },
+  {
+   "family_id": "f-d020bf1ecf",
+   "kind": "flat_family",
+   "detail": "toate cele 4 note sunt 3",
+   "query": "set 8 pensule machiaj cu husă"
+  },
+  {
+   "family_id": "f-f2583342a5",
+   "kind": "flat_family",
+   "detail": "toate cele 5 note sunt 2",
+   "query": "toner de față pentru piele matură"
+  },
+  {
+   "family_id": "f-c8d320d005",
+   "kind": "flat_family",
+   "detail": "toate cele 3 note sunt 2",
+   "query": "balsam cu extract de moringa par blond"
+  },
+  {
+   "family_id": "f-db9347762e",
+   "kind": "flat_family",
+   "detail": "toate cele 13 note sunt 3",
+   "query": "corector dual lichid si stick blur"
+  },
+  {
+   "family_id": "f-c9a7320784",
+   "kind": "type_mismatch",
+   "product_id": "937c3195-954f-48e0-888c-73bfc4119198",
+   "grade": 2,
+   "detail": "cerut `crema de fata`, produsul e `ser de fata`",
+   "query": "cremă de față cu retinol 0,05",
+   "name": "SOME BY MI Retinol Intense Reactivating Serum - ser de fata formulat c"
+  },
+  {
+   "family_id": "f-c9a7320784",
+   "kind": "type_mismatch",
+   "product_id": "79cbdb52-e048-4075-b57f-93315266bc68",
+   "grade": 2,
+   "detail": "cerut `crema de fata`, produsul e `ser de fata`",
+   "query": "cremă de față cu retinol 0,05",
+   "name": "SOME BY MI Retinol Intense Reactivating Serum - ser de fata formulat c"
+  },
+  {
+   "family_id": "f-c9a7320784",
+   "kind": "type_mismatch",
+   "product_id": "7ee14546-b960-4847-8529-eadf9678c7a1",
+   "grade": 2,
+   "detail": "cerut `crema de fata`, produsul e `ser de fata`",
+   "query": "cremă de față cu retinol 0,05",
+   "name": "SOME BY MI Retinol Intense Reactivating Serum - ser de fata formulat c"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "flat_family",
+   "detail": "toate cele 6 note sunt 3",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "type_mismatch",
+   "product_id": "877dd157-1461-43a5-af30-218a3a412f77",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fard de obraz`",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01",
+   "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de j"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "type_mismatch",
+   "product_id": "d689ed51-6e50-4985-afb4-3ef96223532d",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fard de obraz`",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01",
+   "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de j"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "type_mismatch",
+   "product_id": "1c5f88d3-e1a7-403d-b7db-c36b165042c6",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fard de obraz`",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01",
+   "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de j"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "type_mismatch",
+   "product_id": "ebfcb2f2-603f-45bc-8579-3fd2c6298903",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fard de obraz`",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01",
+   "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de j"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "type_mismatch",
+   "product_id": "01694f0f-11fc-413a-8bba-4b982effeef7",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fard de obraz`",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01",
+   "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de j"
+  },
+  {
+   "family_id": "f-e8cbeb3766",
+   "kind": "type_mismatch",
+   "product_id": "74968af4-c407-4578-a13b-a12e29ef14dd",
+   "grade": 3,
+   "detail": "cerut `cushion`, produsul e `fard de obraz`",
+   "query": "TFIT Fluffy Velvet Cushion Blush N01",
+   "name": "TFIT Fluffy Velvet Cushion Blush - fard de obraz formulat cu ulei de j"
+  },
+  {
+   "family_id": "f-1a086f3d2f",
+   "kind": "flat_family",
+   "detail": "toate cele 16 note sunt 3",
+   "query": "blush lichid cu esenta hidratanta 50%"
+  },
+  {
+   "family_id": "f-1a086f3d2f",
+   "kind": "type_mismatch",
+   "product_id": "60d8e176-6913-4eb7-8848-a338bd0a9ac4",
+   "grade": 3,
+   "detail": "cerut `esenta`, produsul e `fard de obraz`",
+   "query": "blush lichid cu esenta hidratanta 50%",
+   "name": "HOUSE OF HUR Moist Ampoule Blusher Mini - fard de obraz care contribui"
+  },
+  {
+   "family_id": "f-3c27bd5991",
+   "kind": "type_mismatch",
+   "product_id": "78f5b2ff-52c0-4048-8ba6-f34b755f21bc",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant pentru curatarea porilor",
+   "name": "JUMISO Niacinamide 2+ Pore Smoothing 20 ml - Toner de fata formulat cu"
+  },
+  {
+   "family_id": "f-3c27bd5991",
+   "kind": "type_mismatch",
+   "product_id": "b5f22040-4aaf-4f78-8cb2-f21e61622745",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `gel de curatare`",
+   "query": "toner exfoliant pentru curatarea porilor",
+   "name": "SKINTEGRA Clarion 2% BHA - gel de curatare exfoliant bland formulat cu"
+  },
+  {
+   "family_id": "f-3c27bd5991",
+   "kind": "type_mismatch",
+   "product_id": "a4e0ad5f-27bb-4a7c-89cd-d3b24969ab75",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant pentru curatarea porilor",
+   "name": "JUMISO Niacinamide 2+ Pore Smoothing, 205 ml - Toner de fata formulat "
+  },
+  {
+   "family_id": "f-3c27bd5991",
+   "kind": "type_mismatch",
+   "product_id": "a8e582d7-908c-4b91-a16e-a77aada4eec1",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `gel de curatare`",
+   "query": "toner exfoliant pentru curatarea porilor",
+   "name": "SKIN1004 Madagascar Centella Tea-Trica Mild Peeling Gel - gel de curat"
+  },
+  {
+   "family_id": "f-3c27bd5991",
+   "kind": "type_mismatch",
+   "product_id": "b9ce6537-16a6-41d2-9857-1cc6af4b352e",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "toner exfoliant pentru curatarea porilor",
+   "name": "MIZON AHA&BHA Daily Clean Toner - toner de fata formulat cu AHA Acid G"
+  },
+  {
+   "family_id": "f-3c27bd5991",
+   "kind": "type_mismatch",
+   "product_id": "2714b10b-6cf4-4094-9ba7-b6454c8eb87a",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `gel de fata`",
+   "query": "toner exfoliant pentru curatarea porilor",
+   "name": "MIZON Vita Lemon Sparkling Peeling Gel - gel de fata formulat cu apa c"
+  },
+  {
+   "family_id": "f-a03c2fcdae",
+   "kind": "flat_family",
+   "detail": "toate cele 9 note sunt 3",
+   "query": "fard de obraz compact luminos natural"
+  },
+  {
+   "family_id": "f-63bf53bb39",
+   "kind": "type_mismatch",
+   "product_id": "eb913ec1-0d52-4e1d-bd8d-03c94d14803e",
+   "grade": 2,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact hidratare 72 ore",
+   "name": "TIRTIR Mask Fit All Cover Cushion - cushion formulat cu glicerina si v"
+  },
+  {
+   "family_id": "f-63bf53bb39",
+   "kind": "type_mismatch",
+   "product_id": "608aef54-f7a4-4e7a-8153-512b2c04cbc6",
+   "grade": 2,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact hidratare 72 ore",
+   "name": "TIRTIR Mask Fit All Cover Cushion - cushion formulat cu glicerina si v"
+  },
+  {
+   "family_id": "f-63bf53bb39",
+   "kind": "type_mismatch",
+   "product_id": "46514e23-dad3-4b92-9574-b425b565921f",
+   "grade": 2,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact hidratare 72 ore",
+   "name": "TIRTIR Mask Fit All Cover Cushion - cushion formulata cu glicerina si "
+  },
+  {
+   "family_id": "f-63bf53bb39",
+   "kind": "type_mismatch",
+   "product_id": "0ca2d95a-a60c-4d84-a591-0e40be5b13b2",
+   "grade": 2,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact hidratare 72 ore",
+   "name": "TIRTIR Mask Fit All Cover Cushion - cushion formulata cu glicerina si "
+  },
+  {
+   "family_id": "f-63bf53bb39",
+   "kind": "type_mismatch",
+   "product_id": "0f81cb73-681e-440d-a0f5-47b757771073",
+   "grade": 2,
+   "detail": "cerut `fond de ten`, produsul e `cushion`",
+   "query": "fond de ten compact hidratare 72 ore",
+   "name": "TIRTIR Mask Fit All Cover Cushion - cushion formulat cu glicerina si v"
+  },
+  {
+   "family_id": "f-ee23d0b23d",
+   "kind": "flat_family",
+   "detail": "toate cele 2 note sunt 3",
+   "query": "gel de dus cu ceramide 9S"
+  },
+  {
+   "family_id": "f-ee23d0b23d",
+   "kind": "ingredient_unsupported",
+   "product_id": "7e619c0a-f0f1-4306-aa94-6caf4a2ba2c8",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['ceramide']",
+   "query": "gel de dus cu ceramide 9S",
+   "name": "ATOPALM Top  To Toe Wash - gel de dus formulat cu ceramide 9S si ulei "
+  },
+  {
+   "family_id": "f-0a252a5e7b",
+   "kind": "ingredient_unsupported",
+   "product_id": "6d79d582-43bf-42e9-b7f2-832488d54dc8",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['acid hialuronic']",
+   "query": "masca de fata cu acid hialuronic",
+   "name": "BIODANCE Hydro Cera-nol Real Deep - masca de fata formulata cu acid hi"
+  },
+  {
+   "family_id": "f-0a252a5e7b",
+   "kind": "ingredient_unsupported",
+   "product_id": "86446abb-d4bd-43f0-a5be-32a040331862",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['acid hialuronic']",
+   "query": "masca de fata cu acid hialuronic",
+   "name": "REAL BARRIER Aqua Soothing Ampoule Mask - masca de fata formulata cu a"
+  },
+  {
+   "family_id": "f-eb299076a8",
+   "kind": "flat_family",
+   "detail": "toate cele 3 note sunt 2",
+   "query": "pasta de dinti pentru gingivita parodontoza"
+  },
+  {
+   "family_id": "f-0eef2241fa",
+   "kind": "type_mismatch",
+   "product_id": "4ad2a555-0ef7-4316-be08-044eea99c46f",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi ochi cu acid hialuronic",
+   "name": "MIZON Hyaluronic Acid Eye Gel Patch - benzi pentru ochi formulate cu a"
+  },
+  {
+   "family_id": "f-0eef2241fa",
+   "kind": "type_mismatch",
+   "product_id": "3d158802-edba-4442-b15a-32da8d376f33",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi ochi cu acid hialuronic",
+   "name": "MIZON Cicaluronic Vegan De-Puffing Eye Gel Patches - benzi pentru ochi"
+  },
+  {
+   "family_id": "f-0eef2241fa",
+   "kind": "type_mismatch",
+   "product_id": "363d813c-df80-463d-886a-426cb93a3ade",
+   "grade": 2,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi ochi cu acid hialuronic",
+   "name": "ARENCIA Retinal Boosting Eye Mask - benzi pentru ochi formulate cu ret"
+  },
+  {
+   "family_id": "f-0eef2241fa",
+   "kind": "type_mismatch",
+   "product_id": "55d76267-8c31-490e-b195-6af607ab3d69",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi ochi cu acid hialuronic",
+   "name": "MIZON Phyto Plump Collagen Eye Gel Patch - benzi pentru ochi formulate"
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "f36dae63-18d9-4c6d-8a81-93740d99479d",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "0571a326-9a88-49cc-a055-d74bea57cde5",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "96ff49e6-4104-4229-8b31-a02bd3d75e9b",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "7fe0d33f-c26b-4652-bc2d-f47f6026c25e",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "154c29a8-4f46-483b-a4e8-73ede5ed293e",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "e2806dd2-ace7-4c42-8366-ef602f79f2f8",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "9b5c90d9-fd43-4709-918c-446ae912f8a0",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "b49ef1f6-115f-4bd9-b8fa-0089c342a4d5",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "9a5d435a-e8e6-4382-a2ca-f789f882ed7c",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "d8dbc8ba-9972-46ac-82f7-7e5bb9f217d2",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "f23588fa-e7e3-41ac-872f-aa3aad1493bf",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "a19810f7-738e-4a85-9cac-a47241d511b6",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "213ac989-3d7a-438b-ab60-29b7e0e236f4",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "0df23c5e-4666-4b5e-baf0-e01888e3bf7c",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "a27afe4e-534e-4e3a-8c93-0dc0104a8047",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "4e4fd920-2ba0-412a-bb50-92b0139a3daf",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "50fbd86c-dda6-4cd2-b9f6-251c711ca0d4",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-a6609deff0",
+   "kind": "type_mismatch",
+   "product_id": "f03dbf56-fb47-4780-8c2f-c25cf3d5bd24",
+   "grade": 2,
+   "detail": "cerut `ruj`, produsul e `nuantator pentru buze`",
+   "query": "ruj lichid velvet blurring buze",
+   "name": "MUZIGAE MANSION Objet Liquid - nuantator pentru buze formulat cu ulei "
+  },
+  {
+   "family_id": "f-12c86583be",
+   "kind": "flat_family",
+   "detail": "toate cele 5 note sunt 3",
+   "query": "săpun lichid cu pH neutru"
+  },
+  {
+   "family_id": "f-b053bd530f",
+   "kind": "ingredient_unsupported",
+   "product_id": "7af39f51-1a2d-4c6c-ab44-b6b9374fec2f",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['acid hialuronic']",
+   "query": "ser de față cu acid hialuronic",
+   "name": "IT'S SKIN Dr. Savers Hyaluronic Serum - ser de fata formulat cu acid h"
+  },
+  {
+   "family_id": "f-b053bd530f",
+   "kind": "ingredient_unsupported",
+   "product_id": "bf3a58cd-fe4e-4578-b2d2-72a668efb4e9",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['acid hialuronic']",
+   "query": "ser de față cu acid hialuronic",
+   "name": "BELIF Super Drops Multi 7 Hyaluronic - ser de fata formulat cu 7 tipur"
+  },
+  {
+   "family_id": "f-9119f04696",
+   "kind": "flat_family",
+   "detail": "toate cele 5 note sunt 3",
+   "query": "set pensule machiaj pentru ten"
+  },
+  {
+   "family_id": "f-4ca1765e59",
+   "kind": "type_mismatch",
+   "product_id": "cf933e22-07d7-4d32-b629-7b20a1145efe",
+   "grade": 2,
+   "detail": "cerut `crema contur ochi`, produsul e `crema de ochi`",
+   "query": "crema contur ochi cu niacinamida",
+   "name": "MIZON Snail Repair Eye Cream - crema de ochi formulata cu filtrat de s"
+  },
+  {
+   "family_id": "f-4ca1765e59",
+   "kind": "type_mismatch",
+   "product_id": "bba07097-ec7d-4afa-84ea-6af8eb0e29c5",
+   "grade": 3,
+   "detail": "cerut `crema contur ochi`, produsul e `crema de ochi`",
+   "query": "crema contur ochi cu niacinamida",
+   "name": "ROUND LAB 1025 Dokdo - crema de ochi formulata cu niacinamida si acid "
+  },
+  {
+   "family_id": "f-6b9550bd94",
+   "kind": "flat_family",
+   "detail": "toate cele 24 note sunt 3",
+   "query": "cremă de față SPF50 zilnică"
+  },
+  {
+   "family_id": "f-8eba3eaf8e",
+   "kind": "flat_family",
+   "detail": "toate cele 2 note sunt 3",
+   "query": "SKYBOTTLE White Rain cremă de mâini"
+  },
+  {
+   "family_id": "f-0df9daa688",
+   "kind": "type_mismatch",
+   "product_id": "0e11ca37-87ea-4c25-9119-ec43e3c792d8",
+   "grade": 2,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "cushion hidratant 72 ore glicerina",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulat cu antioxid"
+  },
+  {
+   "family_id": "f-0df9daa688",
+   "kind": "type_mismatch",
+   "product_id": "0e5cef2b-4d42-4cc3-a9d0-56b10e0fa10e",
+   "grade": 2,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "cushion hidratant 72 ore glicerina",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulat cu antioxid"
+  },
+  {
+   "family_id": "f-0df9daa688",
+   "kind": "type_mismatch",
+   "product_id": "c99f0a56-0788-411e-a2df-045e89c445dc",
+   "grade": 2,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "cushion hidratant 72 ore glicerina",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulata cu pudra f"
+  },
+  {
+   "family_id": "f-0df9daa688",
+   "kind": "type_mismatch",
+   "product_id": "2e88c36f-d395-40d7-9f54-3a268b215589",
+   "grade": 2,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "cushion hidratant 72 ore glicerina",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten compact formulat cu antioxid"
+  },
+  {
+   "family_id": "f-0df9daa688",
+   "kind": "type_mismatch",
+   "product_id": "b83c0e67-40ae-4ea0-9a5f-dd81460e4bd6",
+   "grade": 2,
+   "detail": "cerut `cushion`, produsul e `fond de ten`",
+   "query": "cushion hidratant 72 ore glicerina",
+   "name": "TIRTIR Mask Fit Red Cushion - fond de ten cushion formulat cu pudra fi"
+  },
+  {
+   "family_id": "f-0df9daa688",
+   "kind": "ingredient_unsupported",
+   "product_id": "c1fd8041-ef1e-4ab5-b68f-ee83c3922c84",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['glicerina']",
+   "query": "cushion hidratant 72 ore glicerina",
+   "name": "TIRTIR Mask Fit Red Cushion - cushion formulat cu pudra fina matifiant"
+  },
+  {
+   "family_id": "f-e02424f630",
+   "kind": "type_mismatch",
+   "product_id": "60d8e176-6913-4eb7-8848-a338bd0a9ac4",
+   "grade": 3,
+   "detail": "cerut `esenta`, produsul e `fard de obraz`",
+   "query": "blush hidratant cu 50% esenta",
+   "name": "HOUSE OF HUR Moist Ampoule Blusher Mini - fard de obraz care contribui"
+  },
+  {
+   "family_id": "f-c4226a5656",
+   "kind": "type_mismatch",
+   "product_id": "a8e582d7-908c-4b91-a16e-a77aada4eec1",
+   "grade": 3,
+   "detail": "cerut `exfoliant`, produsul e `gel de curatare`",
+   "query": "cleanser exfoliant delicat pentru ten sensibil",
+   "name": "SKIN1004 Madagascar Centella Tea-Trica Mild Peeling Gel - gel de curat"
+  },
+  {
+   "family_id": "f-c4226a5656",
+   "kind": "type_mismatch",
+   "product_id": "dbee62c4-8730-460e-b71d-e3ca6db5802f",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "cleanser exfoliant delicat pentru ten sensibil",
+   "name": "SKIN1004 Madagascar Centella Toning Toner - toner de fata formulat cu "
+  },
+  {
+   "family_id": "f-c4226a5656",
+   "kind": "type_mismatch",
+   "product_id": "3658a086-8f92-495a-af9e-b7257b00d4d6",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "cleanser exfoliant delicat pentru ten sensibil",
+   "name": "PURITO Oat PDRN Gentle Refining - toner de fata formulat cu apa din se"
+  },
+  {
+   "family_id": "f-c4226a5656",
+   "kind": "type_mismatch",
+   "product_id": "b5a2cbcc-3e39-4c32-92e1-d5532cf8537e",
+   "grade": 2,
+   "detail": "cerut `exfoliant`, produsul e `toner de fata`",
+   "query": "cleanser exfoliant delicat pentru ten sensibil",
+   "name": "SKINTEGRA Lumion 100 ml - Toner de fata formulat cu acid lactic si glu"
+  },
+  {
+   "family_id": "f-42f39eaa66",
+   "kind": "flat_family",
+   "detail": "toate cele 17 note sunt 2",
+   "query": "fond de ten satinat radiant"
+  },
+  {
+   "family_id": "f-dfae9fc2ad",
+   "kind": "flat_family",
+   "detail": "toate cele 5 note sunt 3",
+   "query": "gel de dus vegan fara parabeni"
+  },
+  {
+   "family_id": "f-6c8603ece2",
+   "kind": "flat_family",
+   "detail": "toate cele 2 note sunt 2",
+   "query": "lotiune de corp cu ulei de camelie fermentat"
+  },
+  {
+   "family_id": "f-4f35713dbe",
+   "kind": "type_mismatch",
+   "product_id": "2e8ce19f-944d-4691-aedf-3bf3cd86b513",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze vegan efect oglinda",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-4f35713dbe",
+   "kind": "type_mismatch",
+   "product_id": "b58ec7c0-e440-4750-86ab-41ee993f1f67",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze vegan efect oglinda",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-4f35713dbe",
+   "kind": "type_mismatch",
+   "product_id": "9013984a-c9a1-4aeb-9ac1-967d85848cc1",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze vegan efect oglinda",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-4f35713dbe",
+   "kind": "type_mismatch",
+   "product_id": "a79c8a97-5aa1-4d2f-b736-1be774a2398a",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze vegan efect oglinda",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-4f35713dbe",
+   "kind": "type_mismatch",
+   "product_id": "7fdb12f4-4343-4a9c-93fd-abb0dd0efab8",
+   "grade": 2,
+   "detail": "cerut `luciu de buze`, produsul e `nuantator pentru buze`",
+   "query": "luciu de buze vegan efect oglinda",
+   "name": "MUZIGAE MANSION Icy Glow - nuantator pentru buze formulat cu pantenol "
+  },
+  {
+   "family_id": "f-d17bf2986a",
+   "kind": "ingredient_unsupported",
+   "product_id": "43c835ca-7705-4261-9e06-8cb662e72a4b",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "mască de față calmantă cu Centella Asiatica",
+   "name": "MIZON Cicaluronic Masca Servetel pentru Fata Calmanta - Hidratare Inte"
+  },
+  {
+   "family_id": "f-d17bf2986a",
+   "kind": "ingredient_unsupported",
+   "product_id": "67d193d7-9b1f-4222-a8e9-02c171102b1b",
+   "grade": 3,
+   "detail": "nota 3 dar `key_ingredients` n-are ['centella asiatica']",
+   "query": "mască de față calmantă cu Centella Asiatica",
+   "name": "SKIN1004 Madagascar Centella Watergel Sheet Ampoule - masca de fata fo"
+  },
+  {
+   "family_id": "f-32ba2369bb",
+   "kind": "flat_family",
+   "detail": "toate cele 8 note sunt 3",
+   "query": "nuantator pentru buze cu pantenol"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "363d813c-df80-463d-886a-426cb93a3ade",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "ARENCIA Retinal Boosting Eye Mask - benzi pentru ochi formulate cu ret"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "8a588f39-c1cb-423d-b4b9-5f2de444f2bc",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "Dr. Melaxin Cemenrete Calcium Volume Eye Patch - benzi pentru ochi for"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "4ad2a555-0ef7-4316-be08-044eea99c46f",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "MIZON Hyaluronic Acid Eye Gel Patch - benzi pentru ochi formulate cu a"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "8518430a-539e-43d8-9877-23bcdd3e8b52",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "MIZON Black Pearl Eye Gel Patch - benzi pentru ochi formulate cu extra"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "e5f29c95-0781-41c1-9847-03d9c062d92d",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "ABIB PDRN Retinal Eye Patch Glow Jelly - benzi pentru ochi formulate c"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "933b6442-4182-4203-b282-8025d81a6431",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "NUMBUZIN No.9 NAD+Collagen Under Eye Patches - benzi pentru ochi formu"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "b0540435-5a3f-49c8-b825-a1e6ead9ed26",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "COSRX The Peptide Collagen Hydrogel Eye Patch - benzi pentru ochi form"
+  },
+  {
+   "family_id": "f-c90d03c4b2",
+   "kind": "type_mismatch",
+   "product_id": "86d0ce3c-37ee-40aa-bf13-6bb00d906b10",
+   "grade": 3,
+   "detail": "cerut `plasturi`, produsul e `benzi pentru ochi`",
+   "query": "plasturi hidrogel ochi pentru cearcane",
+   "name": "BEAUTY OF JOSEON Revive Under Eye Patch Ginseng + Retinal - benzi pent"
+  }
+ ]
+}
