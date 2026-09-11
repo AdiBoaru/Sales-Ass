@@ -38,6 +38,7 @@ import math
 import pathlib
 import random
 import sys
+import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -121,6 +122,23 @@ def _policy_fingerprint(policy: dict) -> str:
 
 def _audit_path(business_id: str, facet: str) -> pathlib.Path:
     return AUDIT_DIR / f"{business_id[:8]}-{facet}.json"
+
+
+def _require_uuid(business_id: str) -> str:
+    """`--business` TREBUIE să fie UUID, nu slug.
+
+    Fișierele de audit se numesc după primele 8 caractere ale argumentului. Cu un slug (`sole-ro`)
+    scriptul nu crapă — creează TĂCUT un univers paralel gol: `--report` ar raporta „0 eșantioane"
+    peste un audit care există, iar concluzia ar fi exact pe dos. Măsurat pe pielea mea de două ori
+    în aceeași zi. Mai bine un refuz explicit decât o cifră greșită care arată plauzibil."""
+    try:
+        uuid.UUID(business_id)
+    except ValueError:
+        raise SystemExit(
+            f"--business cere UUID-ul tenantului, nu slugul ({business_id!r}). "
+            "Fișierele de audit se cheamă după el, deci un slug ar deschide un audit gol, paralel."
+        ) from None
+    return business_id
 
 
 def _load_audit(business_id: str, facet: str) -> dict:
@@ -348,16 +366,115 @@ def _report(args) -> int:
     return 0
 
 
+async def _blind_out(args) -> int:
+    """Scrie foaia de lucru ÎN ORB: doar dovada comerciantului, fără nume și fără valoarea derivată.
+
+    De ce există modul ăsta: un auditor căruia i se arată întâi `derivat = crema de fata` e ANCORAT
+    — practic o va confirma, iar acordul rezultat nu e o măsurătoare, e o formalitate. Aici judeci
+    invers: citești ce FACE produsul și numești tu tipul, din lista închisă. Codul compară după.
+
+    Numele produsului e ascuns DELIBERAT: coada lui e chiar intrarea regulii, deci a-l arăta ar
+    reintroduce ancorarea pe ușa din dos."""
+    policy = _policy()
+    spec = policy["facets"].get(args.facet)
+    if spec is None:
+        raise SystemExit(f"fațeta {args.facet!r} nu e în politica preînregistrată")
+    derived, context = await _derive_all(args.business)
+    sample = _sample(derived, args.facet, spec["sample_size"], f"{args.business}:{args.facet}")
+    seen: set[str] = set()
+    if args.exclude_seen:
+        seen = set(json.loads(pathlib.Path(args.exclude_seen).read_text(encoding="utf-8")))
+
+    items = []
+    for pid in sample:
+        if pid in seen:
+            continue  # contaminat: valoarea derivată a fost deja văzută pentru produsul ăsta
+        evidence = {
+            kind: body
+            for kind, body in context[pid]["sections"].items()
+            if kind in MERCHANT_SECTIONS
+        }
+        if not evidence:
+            continue  # fără text de comerciant nu există dovadă independentă → nu se judecă în orb
+        items.append({"id": pid, "evidence": evidence})
+
+    out = pathlib.Path(args.blind_out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {
+                "business_id": args.business,
+                "facet": args.facet,
+                "allowed_keys": sorted(_allowed_keys(args.business, derived, args.facet)),
+                "skipped_seen": sorted(seen & set(sample)),
+                "skipped_no_merchant_text": (
+                    spec["sample_size"] - len(items) - len(seen & set(sample))
+                ),
+                "items": items,
+            },
+            ensure_ascii=False,
+            indent=1,
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"foaie în orb: {out} · {len(items)} de judecat · {len(seen & set(sample))} sărite (văzute)"
+    )
+    return 0
+
+
+def _allowed_keys(business_id: str, derived: dict, facet: str) -> set[str]:
+    """Lista ÎNCHISĂ din care poate alege judecătorul: exact cheile pe care regula le poate produce
+    pe catalogul ăsta. Un vocabular deschis ar face dezacordul nemăsurabil (ai inventa o cheie pe
+    care regula n-avea cum s-o aleagă)."""
+    return {vals[0] for f in derived.values() if (vals := f.get(facet))}
+
+
+async def _blind_in(args) -> int:
+    """Ingerează răspunsurile în orb și scrie verdictele. COMPARAȚIA O FACE CODUL, nu judecătorul:
+    el a spus doar ce crede că e produsul, fără să știe ce zisese regula."""
+    derived, _ = await _derive_all(args.business)
+    answers = json.loads(pathlib.Path(args.blind_in).read_text(encoding="utf-8"))
+    data = _load_audit(args.business, args.facet)
+    data["labeled_by"] = "model_blind"  # proveniența stă pe fața artefactului, ca la NX-203
+    agree = disagree = unsure = 0
+    for pid, said in answers.items():
+        truth = (derived.get(pid) or {}).get(args.facet, [None])[0]
+        if truth is None:
+            continue
+        if said in (None, "", "?"):
+            verdict, unsure = "unsure", unsure + 1
+        elif said == truth:
+            verdict, agree = "correct", agree + 1
+        else:
+            verdict, disagree = "wrong", disagree + 1
+        data["verdicts"][pid] = {"verdict": verdict, "values": [truth], "blind_said": said}
+    _save_audit(data)
+    print(
+        f"acord {agree} · dezacord {disagree} · nedecis {unsure} → "
+        f"{_audit_path(args.business, args.facet)}"
+    )
+    return 0
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--business", required=True)
     ap.add_argument("--facet", help="fațeta de auditat (cere adnotare interactivă)")
     ap.add_argument("--report", action="store_true", help="verdicte din ce s-a adnotat deja")
+    ap.add_argument("--blind-out", help="scrie foaia de lucru ÎN ORB (fără nume, fără valoare)")
+    ap.add_argument("--blind-in", help="ingerează răspunsurile în orb și scrie verdictele")
+    ap.add_argument("--exclude-seen", help="JSON cu id-uri deja văzute (contaminate)")
     args = ap.parse_args()
+    _require_uuid(args.business)
     if args.report:
         return _report(args)
     if not args.facet:
         raise SystemExit("dă --facet <nume> ca să adnotezi, sau --report ca să vezi verdictele")
+    if args.blind_out:
+        return await _blind_out(args)
+    if args.blind_in:
+        return await _blind_in(args)
     return await _annotate(args)
 
 
