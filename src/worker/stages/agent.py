@@ -81,6 +81,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     commerce_tools,
     faq_tools,
     orders_tools,
+    routine_tools,
 )
 from src.tools.base import enabled_tools
 from src.worker.context import context_blocks, conversation_transcript

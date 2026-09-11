@@ -81,10 +81,11 @@ _COMPARE_SUFFIX = (
 )
 
 _ROUTINE_SUFFIX = (
-    "Turul ăsta cere o SECVENȚĂ de pași, nu o listă de produse. Pașii vin din `related_products`, "
-    "în ordinea întoarsă de unealtă, un produs per pas, doar produse pe care clientul le poate "
-    "cumpăra. Nu inventa pași pentru care nu ai primit o legătură. Dacă unealta spune că nu există "
-    "o secvență, spune-i clientului asta și oferă ce ai."
+    "Turul ăsta cere o SECVENȚĂ de pași, nu o listă de produse. Pașii vin din `routine_plan`, în "
+    "ordinea și cu numerotarea întoarse de unealtă, un produs per pas. Scrie fiecare pas pe rândul "
+    "lui: ce face, de ce produsul ăla, și cum se leagă de ce a cerut clientul. Un pas marcat LIPSĂ "
+    "se spune ca atare și nu se renumerotează restul. Nu inventa pași și nu muta produse dintr-un "
+    "pas în altul."
 )
 
 _MUTATION_SUFFIX = (
@@ -105,7 +106,7 @@ _RECOMMEND = TurnProfile(
 # componența nucleului nu e treaba lui: dacă cineva subțiază `_SALES_TOOLS`, comparația rămâne
 # întreagă.
 _COMPARE = TurnProfile(name="compare", extra_tools=("compare_products",), suffix=_COMPARE_SUFFIX)
-_ROUTINE = TurnProfile(name="routine", extra_tools=("related_products",), suffix=_ROUTINE_SUFFIX)
+_ROUTINE = TurnProfile(name="routine", extra_tools=("routine_plan",), suffix=_ROUTINE_SUFFIX)
 _MUTATION = TurnProfile(name="mutation", extra_tools=(), suffix=_MUTATION_SUFFIX)
 
 #: Toate profilele, indexate pe nume.
@@ -118,16 +119,19 @@ def select(
     turn_class: TurnClass,
     obligations: Iterable[object],
     *,
-    has_sequences: bool = False,
+    has_routine: bool = False,
 ) -> TurnProfile:
     """Profilul turului. PUR, determinist, fără model.
 
-    `has_sequences` = tenantul a DECLARAT cel puțin un tip de muchie ordonată
-    (`DomainPack.relation_kinds.sequences()`). Fără el, profilul `routine` nu se poate selecta,
-    oricât de clar ar cere clientul o rutină: sufixul lui trimite modelul la `related_products`, iar
-    unealta n-ar avea ce tip de legătură să urmeze. Un profil care promite o secvență inexistentă e
-    mai rău decât unul absent, fiindcă modelul ar umple golul singur. Se cade pe `recommend`, care
-    răspunde onest cu produse.
+    `has_routine` = tenantul a DECLARAT familii de pași (`DomainPack.routine_steps.families`).
+    Fără ele, profilul `routine` nu se poate selecta, oricât de clar ar cere clientul o rutină:
+    sufixul lui trimite modelul la `routine_plan`, iar unealta n-ar avea ce pași să umple. Un profil
+    care promite o secvență inexistentă e mai rău decât unul absent, fiindcă modelul ar umple golul
+    singur. Se cade pe `recommend`, care răspunde onest cu produse.
+
+    Condiția e pe FAMILII, nu pe muchii ordonate (cum era înainte de NX-292): compunerea se face din
+    fațeta `routine_step`, iar graful intră doar ca ancoră opțională. Un tenant cu pași declarați și
+    zero muchii poate compune o rutină perfect validă — cerând muchii, i-am fi refuzat-o.
 
     Precedența e de la cel mai specific la cel mai general, iar necunoscutul URCĂ spre `recommend`
     (ca la `turn_class_for`): un tur pe care nu-l recunoaștem primește tratamentul bogat, nu pe cel
@@ -145,7 +149,7 @@ def select(
     if "compare" in kinds:
         return _COMPARE
     if "routine" in kinds:
-        return _ROUTINE if has_sequences else _RECOMMEND
+        return _ROUTINE if has_routine else _RECOMMEND
     if turn_class is TurnClass.EXACT and kinds and kinds <= {"answer", "safety"}:
         # `EXACT` singur nu ajunge: clasa spune „ieftin", profilul spune „fapt". Un tur exact care
         # conține și o cerere de recomandare (`recommend`) n-are ce căuta pe sufixul care interzice

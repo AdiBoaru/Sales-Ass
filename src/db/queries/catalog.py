@@ -1099,6 +1099,108 @@ async def get_substitutes(
     return [p for p in products if (p.get("availability") or "") != "out_of_stock"][:limit]
 
 
+# NX-292 — candidații fiecărui pas de rutină, IEFTIN: doar `{id, step, price}`, fără laterale.
+#
+# Hidratarea completă (`_DETAIL_SELECT`) aduce imagini, secțiuni, badge-uri, ingrediente și
+# variante. Pe o rutină de 6 pași × 8 candidați ar însemna 48 de produse hidratate ca să păstrăm 6
+# — aceeași greșeală măsurată la `get_substitutes` (8,5 s rece). Deci: întâi id-urile și prețurile,
+# compunerea decide, și abia picks-urile finale se hidratează.
+#
+# `row_number()` per pas dă candidații ORDONAȚI în interiorul fiecărui pas, într-o singură trecere.
+# Ordinea e rating-ul „shrunk" (aceeași formulă ca `build_relations._rank` și ca fuziunea: un 5,0 cu
+# o recenzie nu bate un 4,6 cu 200), apoi id-ul — deci a doua rulare alege aceiași candidați.
+#
+# `availability <> 'out_of_stock'`, nu `= 'in_stock'`: UNKNOWN nu e epuizat (NX-240/047).
+_ROUTINE_CANDIDATES_SQL = """
+    with ranked as (
+        select p.id::text as id,
+               p.attributes->>'routine_step' as step,
+               coalesce(p.sale_price, p.price) as price,
+               row_number() over (
+                   partition by p.attributes->>'routine_step'
+                   order by (p.review_count * p.rating + 30 * 4.0) / (p.review_count + 30) desc,
+                            p.id
+               ) as rn,
+               row_number() over (
+                   partition by p.attributes->>'routine_step'
+                   order by coalesce(p.sale_price, p.price) asc, p.id
+               ) as rn_price
+          from products p
+         where p.business_id = $1
+           and p.status = 'active'
+           and p.availability <> 'out_of_stock'
+           and p.attributes->>'routine_step' = any($2::text[])
+           and ($3::text[] is null or p.attributes->'concerns' ?| $3)
+    )
+    select id, step, price from ranked
+     where rn <= $4 or ($5 and rn_price <= $4)
+     order by step, rn
+"""
+
+
+async def routine_candidates(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    values: list[str],
+    concerns: list[str] | None = None,
+    per_step: int = 8,
+    include_cheapest: bool = False,
+) -> list[dict[str, Any]]:
+    """Candidații vandabili ai fiecărui pas, ordonați după rang, cel mult `per_step` pe pas.
+
+    `include_cheapest` adaugă și cei mai IEFTINI `per_step` de pe fiecare pas. Nu e un lux: fără el,
+    un pool ales exclusiv pe rang face bugetul să mintă. Măsurat pe catalogul SOLE — cererea „rutină
+    de față sub 200 lei" raporta minimul 291, fiindcă cei mai bine cotați opt de pe fiecare pas sunt
+    scumpi, deși o rutină completă de **187** există. Un „nu se poate sub 200" fals e mai rău decât
+    o recomandare slabă: închide vânzarea cu o cifră inventată de selecția noastră de candidați.
+
+    Rândurile rămân ordonate după RANG (`rn`), deci compunerea fără buget alege exact ce alegea
+    înainte; intrările adăugate pe preț vin la coadă și sunt folosite doar de alocarea de buget.
+
+    `values` sunt valorile CANONICE (`fata:curatare`), nu pașii goi: cheia e compusă tocmai fiindcă
+    „curatare" există și la `fata`, și la `corp`, iar un șampon nimerit în rutina feței e exact
+    eșecul pe care fațeta îl repară (NX-280).
+
+    `concerns` filtrează pe nevoile cerute (`attributes->'concerns' ?| ...`). `None`/gol = fără
+    filtru. Operatorul e non-leakproof, deci sub RLS nu devine condiție de index (vezi §12.2 din
+    `docs/DB-V3-SOLE-IMPORT.md`) — la 2.019 rânduri cu pas e suportabil, crește liniar cu catalogul.
+
+    Gol pe un pas = niciun candidat; apelantul decide dacă e „nu există" sau „nu pentru nevoia
+    asta" (`UNKNOWN ≠ MISMATCH`). `business_id = $1` (izolare P7; RLS plasă)."""
+    if not values:
+        return []
+    rows = await conn.fetch(
+        _ROUTINE_CANDIDATES_SQL,
+        business_id,
+        values,
+        list(concerns) if concerns else None,
+        min(per_step, 12),
+        include_cheapest,
+    )
+    return [{"id": r["id"], "step": r["step"], "price": r["price"]} for r in rows]
+
+
+async def routine_steps_of(
+    conn: asyncpg.Connection, business_id: str, product_ids: list[str]
+) -> dict[str, str]:
+    """`product_id → valoarea canonică `familie:pas``, doar pentru produsele care o au.
+
+    Folosit ca să AȘEZĂM hopurile unui lanț de graf: muchia spune „aici urmează un pas", dar CARE
+    pas se citește din fațeta produsului-țintă (muchiile `routine_next` țintesc un REPREZENTANT al
+    categoriei, nu un produs anume). Absența cheii = produsul n-are pas cunoscut, deci nu poate fi
+    așezat — nu ghicim. `business_id = $1` (izolare P7; RLS plasă)."""
+    if not product_ids:
+        return {}
+    rows = await conn.fetch(
+        "select id::text as id, attributes->>'routine_step' as step from products"
+        " where business_id = $1 and id = any($2::uuid[]) and attributes ? 'routine_step'",
+        business_id,
+        product_ids,
+    )
+    return {r["id"]: r["step"] for r in rows if r["step"]}
+
+
 async def product_category_roots(
     conn: asyncpg.Connection, business_id: str, product_ids: list[str]
 ) -> dict[str, str]:

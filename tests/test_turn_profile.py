@@ -21,6 +21,7 @@ from src.tools import (  # noqa: F401 — importul populează TOOL_REGISTRY prin
     commerce_tools,
     faq_tools,
     orders_tools,
+    routine_tools,
 )
 from src.tools.base import TOOL_REGISTRY, enabled_tools
 
@@ -76,10 +77,13 @@ def test_un_profil_adauga_dar_nu_scade_niciodata():
 
     # Reuniunea a tot ce adaugă profilele e MICĂ și declarată: dacă cineva adaugă un tool nou aici,
     # testul cere să fie o decizie, nu o scăpare. `compare_products` e deja în nucleu (deci
-    # adăugarea lui e un no-op de dedupe), `related_products` vine cu felia 5.
+    # adăugarea lui e un no-op de dedupe), `related_products` vine cu felia 5, iar `routine_plan`
+    # cu NX-292 (compunerea unei secvențe, singura unealtă care poate produce dovada cerută de
+    # `routine_evidence_required`).
+    outside_core = {"related_products", "routine_plan"}
     extras = {t for p in PROFILES.values() for t in p.extra_tools}
-    assert extras <= {"compare_products", "related_products"}
-    assert extras & core == extras - {"related_products"}
+    assert extras <= {"compare_products", *outside_core}
+    assert extras & core == extras - outside_core
 
 
 def test_fiecare_tool_extra_are_si_buget_declarat():
@@ -177,13 +181,17 @@ def test_cuvintele_de_secventa_nu_sunt_vocabular_de_domeniu():
     assert not ({"rutina", "pasi", "dimineata", "seara", "routine", "steps"} & terms)
 
 
-def test_profilul_routine_cere_secvente_declarate_de_tenant():
+def test_profilul_routine_cere_pasi_declarati_de_tenant():
     """Un profil care promite o secvență inexistentă e mai rău decât unul absent: sufixul trimite
-    modelul la `related_products`, unealta n-are ce tip de muchie să urmeze, iar modelul umple
-    golul singur. Fără secvențe declarate se cade pe `recommend`, care răspunde onest."""
+    modelul la `routine_plan`, unealta n-are ce pași să umple, iar modelul umple golul singur. Fără
+    familii declarate se cade pe `recommend`, care răspunde onest.
+
+    NX-292: condiția e pe FAMILII, nu pe muchii ordonate. Compunerea se face din fațeta
+    `routine_step`; graful e doar ancoră opțională, deci un tenant cu pași declarați și zero muchii
+    poate compune o rutină validă."""
     obligations = [_o("routine")]
-    assert select(TurnClass.RECOMMENDATION, obligations, has_sequences=True).name == "routine"
-    assert select(TurnClass.RECOMMENDATION, obligations, has_sequences=False).name == "recommend"
+    assert select(TurnClass.RECOMMENDATION, obligations, has_routine=True).name == "routine"
+    assert select(TurnClass.RECOMMENDATION, obligations, has_routine=False).name == "recommend"
 
 
 def test_o_rutina_cu_un_singur_produs_nu_e_rutina():
