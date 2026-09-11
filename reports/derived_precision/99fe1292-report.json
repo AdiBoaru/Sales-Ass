@@ -1,6 +1,6 @@
 {
   "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
-  "policy_fingerprint": "c429c67efecc5239",
+  "policy_fingerprint": "9a65afce3b79e5f1",
   "facets": {
     "concerns": {
       "n_decided": 0,
@@ -12,6 +12,16 @@
       "min_sample": 60,
       "verdict": "INSUFFICIENT"
     },
+    "finish": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.9,
+      "min_sample": 60,
+      "verdict": "INSUFFICIENT"
+    },
     "fragrance_free": {
       "n_decided": 0,
       "correct": 0,
@@ -19,7 +29,7 @@
       "precision": 0,
       "wilson_lower": 0.0,
       "min_precision": 0.95,
-      "min_sample": 40,
+      "min_sample": 120,
       "verdict": "INSUFFICIENT"
     },
     "key_ingredients": {
@@ -30,6 +40,26 @@
       "wilson_lower": 0.0,
       "min_precision": 0.9,
       "min_sample": 60,
+      "verdict": "INSUFFICIENT"
+    },
+    "product_type": {
+      "n_decided": 110,
+      "correct": 88,
+      "unsure": 10,
+      "precision": 0.8,
+      "wilson_lower": 0.7157,
+      "min_precision": 0.95,
+      "min_sample": 120,
+      "verdict": "INSUFFICIENT"
+    },
+    "shade": {
+      "n_decided": 0,
+      "correct": 0,
+      "unsure": 0,
+      "precision": 0,
+      "wilson_lower": 0.0,
+      "min_precision": 0.95,
+      "min_sample": 120,
       "verdict": "INSUFFICIENT"
     },
     "skin_type": {
@@ -49,7 +79,7 @@
       "precision": 0,
       "wilson_lower": 0.0,
       "min_precision": 0.95,
-      "min_sample": 40,
+      "min_sample": 120,
       "verdict": "INSUFFICIENT"
     },
     "texture": {

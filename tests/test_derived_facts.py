@@ -238,13 +238,16 @@ def test_acoperirea_mare_nu_deschide_enforcement():
 
 def test_politica_de_precizie_e_preinregistrata_si_completa():
     """Pragurile se scriu ÎNAINTE de audit. Un prag scris după ce vezi rezultatul e o justificare,
-    nu o poartă — de aia politica e un artefact separat, amprentat în raport."""
+    nu o poartă — de aia politica e un artefact separat, amprentat în raport.
+
+    `promise` rămâne vocabular ÎNCHIS, cu trei membri (NX-271 l-a extins deliberat): o valoare
+    nouă apărută din neatenție ar însemna o fațetă căreia nimeni nu i-a ales conștient tierul."""
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     assert policy.get("version"), "politica trebuie să declare o versiune"
     for facet, spec in policy["facets"].items():
         assert 0 < spec["min_precision"] <= 1, facet
         assert spec["min_sample"] >= 1 and spec["sample_size"] >= spec["min_sample"], facet
-        assert spec["promise"] in ("claim", "rank_signal"), facet
+        assert spec["promise"] in ("claim", "rank_signal", "partitioning"), facet
 
 
 def test_promisiunile_au_prag_mai_inalt_decat_semnalele_de_rang():
@@ -255,6 +258,12 @@ def test_promisiunile_au_prag_mai_inalt_decat_semnalele_de_rang():
     claims = [s["min_precision"] for s in policy.values() if s["promise"] == "claim"]
     signals = [s["min_precision"] for s in policy.values() if s["promise"] == "rank_signal"]
     assert min(claims) > max(signals)
+    # NX-271: o fațetă care PARTIȚIONEAZĂ stă cel puțin la nivelul promisiunilor. O afirmație
+    # falsă e vizibilă pe card și contestabilă; o excludere greșită e tăcută — produsul corect nu
+    # apare, iar clientul nu află niciodată că exista.
+    parts = [s["min_precision"] for s in policy.values() if s["promise"] == "partitioning"]
+    if parts:
+        assert min(parts) >= max(claims)
 
 
 # --- ce DEȚINE o rulare de derivare (NX-268, ștergerea faptelor moarte) -------------------------
@@ -319,3 +328,37 @@ def test_stergerea_are_acelasi_scop_ca_proiectia():
     assert "_DELETE_ORPHAN_SIGNALS, args.business, locale, owned, empty" in source
     assert "_STRIP_ATTRS, args.business, empty, owned" in source
     assert "and product_id = any($4::uuid[])" in source
+
+
+def test_fiecare_poarta_de_precizie_e_castigabila_la_min_sample():
+    """NX-271 — o poartă care nu poate fi trecută niciodată nu e o poartă, e o capcană.
+
+    Verdictul se dă pe limita de JOS Wilson, care depinde de `n`. La 95%, un eșantion de 60 nu
+    poate atinge pragul nici cu 60 de răspunsuri corecte din 60 (limita de jos e 0,940). Cum
+    `unsure` NU intră în numitor, un audit cu câteva `?` alunecă spre `min_sample` — deci
+    configurația trebuie să fie câștigabilă ACOLO, nu doar la `sample_size`.
+
+    Găsit exact așa: `shade` (60/40), `spf` și `fragrance_free` (100/40) erau imposibile —
+    puteai adnota cât să fii `sufficient` și tot să nu treci, la orice calitate a derivării.
+    Cerem cel puțin o greșeală tolerată: un prag atins doar cu scor perfect e o monedă aruncată,
+    fiindcă un singur caz ambiguu îl doboară."""
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "derived_precision_audit.py"
+    spec = importlib.util.spec_from_file_location("_audit_mod", path)
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+
+    policy = json.loads(POLICY.read_text(encoding="utf-8"))["facets"]
+    for facet, cfg in policy.items():
+        n, prag = cfg["min_sample"], cfg["min_precision"]
+        tolerate = next((n - k for k in range(0, n + 1) if audit._wilson_lower(k, n) >= prag), None)
+        assert tolerate is not None, (
+            f"{facet}: prag {prag:.0%} e IMPOSIBIL la min_sample={n} "
+            f"(Wilson↓ maxim = {audit._wilson_lower(n, n):.3f})"
+        )
+        assert tolerate >= 1, (
+            f"{facet}: prag {prag:.0%} la min_sample={n} cere scor PERFECT — "
+            "o singură ambiguitate doboară poarta"
+        )

@@ -1,0 +1,935 @@
+{
+ "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+ "facet": "product_type",
+ "allowed_keys": [
+  "balsam",
+  "balsam de buze",
+  "balsam de curatare",
+  "balsam pentru corp",
+  "benzi pentru ochi",
+  "corector",
+  "creion contur buze",
+  "crema coloranta de fata",
+  "crema contur ochi",
+  "crema de corp",
+  "crema de curatare",
+  "crema de fata",
+  "crema de maini",
+  "crema de ochi",
+  "crema de par",
+  "cushion",
+  "esenta",
+  "exfoliant",
+  "exfoliant de corp",
+  "fard de obraz",
+  "fard de pleoape",
+  "fond de ten",
+  "gel autobronzant",
+  "gel de curatare",
+  "gel de dus",
+  "gel de fata",
+  "gel de sprancene",
+  "lotiune de corp",
+  "lotiune de fata",
+  "luciu de buze",
+  "manusa pentru demachiere",
+  "masca de fata",
+  "masca de par",
+  "mist facial",
+  "mist pentru par",
+  "nuantator pentru buze",
+  "pasta de dinti",
+  "plasturi",
+  "pudra de fata",
+  "ruj",
+  "sampon",
+  "sapun lichid",
+  "ser de fata",
+  "ser de par",
+  "set",
+  "spray pentru par",
+  "spuma autobronzanta",
+  "spuma de curatare",
+  "stick pentru fata",
+  "toner de fata",
+  "tonic",
+  "ulei de buze",
+  "ulei de curatare",
+  "ulei de par"
+ ],
+ "skipped_seen": [
+  "0e4f5f09-38c5-4c2a-b32a-f1345028eb11",
+  "0f01a92b-a96b-41e0-bb5b-b965d47c6966",
+  "151eb022-3a28-405f-91a2-f9f1223228a6",
+  "23b88809-a156-4b81-89a8-028146cd8c23",
+  "23cc8da2-86ad-4f83-9ca1-c1f9b791164a",
+  "3e5912ae-2675-4b21-bbac-b516ed5059ed",
+  "43739d22-15c8-4661-ae1e-f6e0c182299b",
+  "4a0fc175-d594-4179-b02e-c8f775d664b3",
+  "4f1c352f-a638-4237-9521-eab9aff35128",
+  "59c65104-1822-4580-8873-7039560f3bce",
+  "6610fcdd-2343-4866-a516-16e3aa51aded",
+  "86446abb-d4bd-43f0-a5be-32a040331862",
+  "900564cf-0c6c-45a8-90e6-3df4c36e052e",
+  "941b180f-132a-4729-81a1-d3d1642b8f5a",
+  "964bb765-94ec-4cfd-a34d-99fd13c40985",
+  "96be8853-2843-49ba-9248-21ff433ca5e2",
+  "9aa80bdd-cb1d-4175-8335-7d81d389055c",
+  "9d326f26-175d-4fe8-9e37-e4f9635f641d",
+  "a2490ffa-4ac1-4568-987b-b91f87179439",
+  "ab3ba77b-2c8b-4b61-ba0a-6b0b3f7f4ff8",
+  "b86a249e-e27f-4253-8567-b1ac725d3b2e",
+  "bcc83293-8207-4548-8b4d-9d5b3d1625f7",
+  "c1b0ae12-a830-447a-9574-c0459b334a22",
+  "c4b5bc7c-c7d5-4ced-9829-0c79a02013a6",
+  "ca51238f-de0b-4719-acc0-6ba5183c875d",
+  "ca881e4d-c147-4021-89d1-10ed2f2b061f",
+  "e4c1480c-0e98-4826-9329-00082e7d9bbe",
+  "edd75a1b-4697-46c5-bdfe-64f9c9b8cd97",
+  "f05735e4-f3a8-4a0d-8a1d-2cb067bb2d0d",
+  "fd20694b-fe0d-4835-b79c-cef8ef521993"
+ ],
+ "skipped_no_merchant_text": 0,
+ "items": [
+  {
+   "id": "ed590bdf-7254-4c9b-8a79-cc24744eacde",
+   "evidence": {
+    "description": "TFIT\nLayering Fit Glow Cushion EX\neste un fond de ten inovator, cu o formula luminoasa imbunatatita, care confera pielii un aspect stralucitor si impecabil. Datorita metodei unice de iluminare, acesta ofera o acoperire delicata, uniforma si de lunga durata.\nBeneficii:\nConfort pe durata intregii zile\nFinisaj usor si aderent\nProtectie si ingrijire tripla: Cu protectie UV (SPF 50+ / PA++++), efect de albire si diminuarea ridurilor, acest cushion rezolva mai multe probleme ale pielii intr-un singur pas.\nPuf elastic pentru aplicare uniforma\nMod de utilizare:\nLuati o cantitate adecvata de produs pe ",
+    "usage": "Foloseste aplicatorul inclus pentru a prelua o cantitate potrivita din produs si tapoteaza usor pe piele, insistand pe zonele care au nevoie de mai multa acoperire. Repeta aplicarea pentru un efect mai pronuntat si bucura-te zilnic de protectie UV si un finisaj uniform si luminos. Evita contactul produsului cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "4e7fbfa3-df93-4525-939d-478d7400e8ef",
+   "evidence": {
+    "description": "Numbuzin\nNo.3 Tingle-Pore Softening Sheet Mask\neste o masca tip servetel imbibata intr-o esenta bogata, care ofera un efect rapid de rafinare a pielii, contribuind la reducerea aspectului porilor si la uniformizarea texturii inca de la prima utilizare.\nFormula este bazata pe ingrediente fermentate precum Bifida Ferment Lysate si Galactomyces Ferment Filtrate, care ajuta la imbunatatirea elasticitatii pielii, sustin bariera cutanata si ofera un aspect mai neted si mai luminos.\nComplexul botanic Tingle Pore Complex compus din extract de menta, hamamelis,\nceai verde\nsi musetel, alaturi de uleiuri",
+    "usage": "Aplicati masca pe tenul curat si tonifiat, ajustand-o dupa conturul fetei. Lasati sa actioneze 10-20 de minute, apoi indepartati si masati delicat esenta ramasa pana la absorbtia completa pentru hidratare intensa si un aspect mai neted al porilor. O usoara senzatie de furnicaturi este normala in timpul utilizarii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "43b5a7e1-600d-40e9-88ba-5f6c6322ee9e",
+   "evidence": {
+    "description": "VT Cosmetics\nCica Spot Patch\neste un set de plasturi special creati pentru a proteja si trata zonele afectate de imperfectiuni, precum cosurile si leziunile minore, intr-un mod igienic si eficient. Plasturii sunt realizati din material hidrocoloid care absoarbe excesul de sebum si fluidele de la nivelul pielii, accelerand vindecarea si protejand in acelasi timp zona de contaminarea cu impuritati externe.\nBeneficii principale:\nProtectie si vindecare accelerata - Materialul hidrocoloid ajuta la absorbtia secretiilor de la nivelul pielii si protejeaza zona de bacterii si impuritati, facilitand pr",
+    "usage": "Curata si usuca bine zona afectata, apoi aplica plasturele direct pe imperfectiune si lasa-l sa actioneze intre 8 si 12 ore sau pana devine alb. Foloseste plasturii zilnic pentru rezultate optime si evita contactul cu zona ochilor. Indeparteaza plasturele cu atentie dupa utilizare.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "d2414ef7-43e1-4a99-84e5-e70dca35737c",
+   "evidence": {
+    "description": "Haruharu Wonder\nCentella 3% PHA Gentle Liquid Exfoliating Serum\neste un ser exfoliant lichid, conceput pentru a curata porii si a reda pielii un aspect neted si uniform. Textura sa usoara si formula delicata ofera rezultate vizibile fara sa provoace iritatii, fiind potrivit chiar si pentru tenul sensibil.\nBaza sa este alcatuita din apa de portocale (Citrus Aurantium Dulcis) 10%, care ofera un plus de prospetime si vitamine, si gluconolactona (PHA) 3%, un acid cu particule mari, ce exfoliaza usor, fara sa agreseze pielea, ajutand la indepartarea celulelor moarte si la netezirea texturii.\nExtrac",
+    "usage": "Dupa curatare, aplica o cantitate potrivita pe ten si gat, apoi tapoteaza usor pana la absorbire si continua cu esenta sau crema. Utilizeaza de 2-3 ori pe saptamana pentru a mentine porii curati, a echilibra sebumul si a reda luminozitate pielii, inclusiv celei sensibile. Ideal pentru rutina de ingrijire care vizeaza exfoliere delicata si textura mai neteda.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "6cdc5b9b-996c-4a02-a38c-ab2f7b64540e",
+   "evidence": {
+    "description": "Skintegra\nCERA-UREA 10 Body Balm\neste un unt de corp pentru uniformizarea texturii pielii, care vizeaza rugozitatea, aspectul neuniform, firele crescute sub piele si keratoza pilara (KP).\nSpre deosebire de lotiunile de corp clasice, care hidrateaza in principal suprafata pielii, CERA-UREA 10 actioneaza asupra principalelor cauze ale texturii aspre. Formula combina actiunea keratolitica, refacerea barierei cutanate si hidratarea tintita, permitand o imbunatatire treptata, dar vizibila, a texturii pielii, reducand firele crescute sub piele si neregularitatile, fara a fi nevoie de exfoliere mecan",
+    "usage": "Aplica pe pielea curata, de 1-2 ori pe zi, insistand pe zonele predispuse la rugozitate, keratoza pilara si fire crescute sub piele (brate, coapse, fese). Maseaza pana la absorbtie completa pentru hidratare de lunga durata si o textura mai neteda; este potrivit si dupa ras sau epilare.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b58ec7c0-e440-4750-86ab-41ee993f1f67",
+   "evidence": {
+    "description": "Inspirat de eleganta atemporala a trandafirilor,\nIcy Glow\nde la Muzigae Mansion ofera o experienta senzoriala unica pentru buze, combinand estetica si ingrijire. Este un luciu de buze vegan, cu finisaj ultra-stralucitor si textura hidratanta, care confera un efect de buze pline, sanatoase si luminoase.\nDisponibil in 8 nuante inspirate de tonuri florale sofisticate - de la Petal, un roz pal transparent, pana la Slay, un marsala elegant si profund - Icy Glow este conceput pentru a accentua frumusetea naturala a fiecarei expresii.\nBeneficii:\nOfera un luciu intens, cu efect de oglinda, care creeaz",
+    "usage": "Aplica produsul din centrul buzelor spre colturi folosind aplicatorul integrat, pentru un efect uniform si luminos. Foloseste-l singur pentru un aspect natural, ideal pentru utilizare zilnica, sau aplica peste rujul preferat pentru extra volum si stralucire intensa. Reaplica ori de cate ori simti nevoia unei hidratari suplimentare.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "27437ec3-b49d-434d-9f74-4af90e58316e",
+   "evidence": {
+    "description": "Galactomyces Glutathione Brightening Cream\neste o crema iluminatoare conceputa pentru a hidrata intens pielea uscata si pentru a-i reda vitalitatea.\nFormula combina 64% ferment de galactomyces cu glutation si\nvitamina C\n, ingrediente recunoscute pentru efectele lor antioxidante si de uniformizare a nuantei pielii. In plus, contine\nsqualan\nsi Alpha-Bisabolol, ingrediente calmante si\nceramide\ncare intaresc bariera cutanata si previn pierderea apei.\nAceasta crema nu doar ca ilumineaza si reduce aspectul tern al pielii, dar imbunatateste si elasticitatea, oferind un aspect neted si catifelat. Este",
+    "usage": "Aplic-o pe tenul curat si uscat, dimineata si/sau seara, dupa toner si ser, apoi maseaza usor pe fata si gat pana la absorbirea completa. Evita zona ochilor si, pe timp de zi, finalizeaza cu o crema cu SPF pentru a proteja si potenta efectul iluminator al ingredientelor precum galactomyces, glutation si vitamina C.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "82bccdad-84c3-4be7-8190-5c960f52c654",
+   "evidence": {
+    "description": "Eubos\nBasic Care Liquid Washing Emulsion\neste o emulsie de curatare lichida, creata ca alternativa delicata la sapunul clasic, destinata igienei zilnice a pieliii, fiind potrivita atat pentru spalarea mainilor, cat si pentru utilizarea la dus.\nFormula sa curata eficient, inclusiv in profunzimea porilor, fara sa compromita echilibrul natural al pielii. Datorita pH-ului neutru si a agentilor de curatare atent selectati, aceasta ajuta la protejarea barierei cutanate si este potrivita inclusiv pentru pielea sensibila, problematica sau cu intoleranta la sapun.\nTextura sa placuta si parfumul proaspa",
+    "usage": "Aplicati o cantitate mica pe pielea umeda a mainilor sau a corpului, masati usor in timpul dusului sau la chiuveta, apoi clatiti bine. Potrivita pentru utilizare zilnica si frecventa, formula cu pH neutru curata delicat si in profunzimea porilor, protejand bariera cutanata si oferind confort pielii sensibile sau cu intoleranta la sapun.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "c01f3615-1ecf-41c0-a0b5-4361a0e1323f",
+   "evidence": {
+    "description": "Kundal\nHoney & Macadamia Pure Natural Moisturizing Refreshing Body Lotion\neste o lotiune de corp cu textura lejera, conceputa pentru a oferi pielii o hidratare profunda, ce se mentine pentru mai mult de o zi. Este absorbita rapid in piele prin masaj usor, fiind o alegere excelenta chiar si pentru sezonul estival, cand pielea are nevoie de o hidratare racoritoare, fara senzatie lipicioasa.\nFormula sa are la baza un continut generos de 82% extract de frunze de aloe vera, ingredient recunoscut pentru capacitatea sa de a calma pielea si de a ajuta la ameliorarea diverselor afectiuni cutanate, prec",
+    "usage": "Aplica pe pielea curata si uscata, pe tot corpul, apoi maseaza usor pana la absorbtie completa. Foloseste zilnic, dimineata si/sau seara, pentru hidratare intensa si de durata, fara senzatie lipicioasa, ideala inclusiv in sezonul cald. Pentru rezultate optime, reaplica pe zonele foarte uscate sau iritate ori de cate ori este nevoie.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "63048eef-9613-47d4-b288-cba61d5c3a38",
+   "evidence": {
+    "description": "Transforma-ti rutina de ingrijire a buzelor cu Laka\nSoothing Vegan Lip Oil\nCalming Purple\n, un ulei de buze vegan care combina hidratarea intensa cu o textura incredibil de lejera. Creat pentru cei care isi doresc mai mult decat un simplu balsam, dar evita senzatia lipicioasa, acest produs aduce prospetime si un luciu natural care dureaza.\nFormula sa imbogatita cu peste 100.000 ppm de ulei de jojoba este completata de extracte de afine, vanata, floare de aloe vera si busuioc sacru, toate alese pentru proprietatile lor calmante si antioxidante. Rezultatul este o ingrijire completa pentru buze u",
+    "usage": "Aplicati pe buze ori de cate ori doriti hidratare intensiva si luciu natural: glisati uleiul de buze pe contur si repetati la nevoie pe parcursul zilei, pentru un finisaj glossy, non-lipicios. Pentru ingrijire profunda, seara aplicati un strat generos ca masca de noapte pentru buze; dimineata, indepartati surplusul, iar buzele vor fi vizibil mai catifelate si revitalizate.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "a3fbbf75-172d-45c2-b148-47a2f34f9527",
+   "evidence": {
+    "description": "Some By Mi\nAHA\nBHA\nPHA\n30 Days Miracle Toner\neste un toner special conceput pentru ingrijirea zilnica a fetei, fiind ideal pentru pielea predispusa la exces de sebum, textura neuniforma sau sensibilitate. Formula lui delicata contine acizi\nAHA\n,\nBHA\nsi PHA care ajuta la exfolierea blanda a celulelor moarte, la curatarea porilor si la reinnoirea pielii, oferind un aspect mai neted si mai luminos.\nUn element central al formulei este apa din frunze de arbore de ceai (10.000 ppm), recunoscuta pentru proprietatile sale calmante si purifiante, ce contribuie la echilibrarea pielii si la reducerea sen",
+    "usage": "Aplicati tonerul dupa curatare pe tenul uscat, cu o discheta sau cu palmele, evitand zona ochilor; nu se clateste. Folositi zilnic, dimineata si/sau seara, pentru exfoliere blanda cu AHA, BHA si PHA, pori mai curati si un ten mai uniform si luminos. Potrivit chiar si pentru pielea sensibila si cu tendinta acneica; continuati cu crema hidratanta si SPF pe timpul zilei.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "735b60e1-9ea8-4006-b860-c3755b784f88",
+   "evidence": {
+    "description": "Visezi la un look proaspat, difuz si natural, fara efort? Descopera\nFWEE Lip & Cheek Blurry Pudding Pot\n- produsul viral 2-in-1 care reinventeaza machiajul si aduce efectul blurat perfect pentru buze si obraji intr-o singura atingere.\nAcesta\ndevine rapid secretul unui look monocromatic chic, ideal pentru piele uscata, mixta sau sensibila. Textura sa moale, ca o spuma aerata, se topeste instant pe piele si ofera un strat de culoare fin, cu efect mat catifelat in timp ce culoarea se estompeaza delicat in piele si ofera un aspect natural, aproape filtrat, fara urme sau pete.\nInspirat de trenduril",
+    "usage": "Ia o cantitate mica de produs cu degetele curate sau o pensula cu varf de silicon, apoi aplica pe obraji tapotand usor pentru efect difuz; repeta procedeul pe buze, pornind din centru spre margini pentru un finish gradient. Pentru intensitate mai mare, aplica inca un strat, iar pentru un aspect monocromatic modern, foloseste aceeasi nuanta si pentru obraji si pentru buze.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "a0b85e69-35fd-434b-abd4-c6f1f30ecd10",
+   "evidence": {
+    "description": "IUNIK\nBeta-Glucan Lacto Barrier Milk Essence\neste o esenta cu textura laptoasa, creata pentru pielea uscata, sensibila sau predispusa la senzatia de disconfort. Formula combina capacitatea de absorbtie a unui toner cu confortul hidratant al unui ser, oferind hidratare intensa fara o senzatie grea sau excesiv de grasa.\nLa baza formulei se afla 69,7% Lactobacillus Ferment Lysate, un ingredient fermentat de origine probiotica, utilizat pentru sustinerea barierei cutanate si mentinerea unui aspect sanatos si rezistent. Acesta este asociat cu un complex de 7\npeptide\nca parte a ingredientului brevet",
+    "usage": "Dupa curatare, aplica o cantitate potrivita uniform pe fata si gat, apoi tapoteaza usor pentru o absorbtie mai buna. Pentru hidratare intensa, foloseste 1-3 straturi, in functie de nevoile pielii, dimineata si/sau seara. Continua cu crema hidratanta pentru a sigila umezeala si a sustine bariera pielii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "d3772020-9b70-495a-9c99-077c32def9b5",
+   "evidence": {
+    "description": "Eleveaza-ti rutina de ingrijire cu\nProbio-Cica\nBakuchiol\nEye Cream\n, o combinatie armonioasa de\nBakuchiol\n, recunoscut ca o alternativa blanda la\nRetinol\n, si\nCentella Asiatica\n, meticulos conceputa pentru a aborda semnele de imbatranire din zona delicata a ochilor.\nIdeala pentru utilizare in rutina ta zilnica de ingrijire a pielii, textura sa cremoasa si imbietoare, care se aplica cu usurinta, este perfecta chiar si pentru pielea cea mai sensibila si fragila din jurul ochilor, in timp ce absorbtia sa blanda hidrateaza instantaneu si tonifica fara sa incarce.\nIngrediente cheie:\nCentella Asiati",
+    "usage": "Foloseste aplicatorul pentru a aplica o cantitate mica de produs pe pielea curata din jurul ochilor, masand usor pana la absorbtia completa. Integreaza-l in rutina ta zilnica de ingrijire, dimineata si seara, pentru a reduce vizibil ridurile si pentru a mentine zona ochilor hidratata si revigorata. Evita contactul direct cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "fd9856ee-7c79-428d-8dae-31f454d56baf",
+   "evidence": {
+    "description": "Descopera o curatare delicata si eficienta cu\nForest Garden Chamomile Deep Cleansing Oil\nde la NATURE REPUBLIC, imbogatit cu extract de musetel, recunoscut pentru proprietatile sale calmante. Potrivit pentru toate tipurile de piele, acest ulei nu doar purifica, ci lasa si o subtila aroma de musetel, oferind o experienta similara cu un tratament spa.\nTextura sa usoara dizolva fara efort machiajul, impuritatile si excesul de sebum, lasand pielea curata si revitalizata. Pe masura ce il masezi, formula se transforma intr-o emulsie laptoasa, asigurand o curatare profunda, dar blanda.\nMod de utiliza",
+    "usage": "Aplica 2-3 pompe de ulei in palme si maseaza delicat pe pielea uscata. Umezeste apoi mainile si continua masajul pana cand textura devine o emulsie laptoasa, iar la final clateste cu apa calduta. Recomandat pentru utilizare zilnica, potrivit tuturor tipurilor de ten.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "2521f15e-8cfe-4331-adcb-f82086583b65",
+   "evidence": {
+    "description": "Real Barrier\nAqua Soothing Cream Mask\nofera pielii o hidratare profunda si un efect calmant instantaneu, reducand roseata si iritatiile!\nImbogatita cu esenta cremei Aqua Soothing Cream, aceasta masca inovatoare utilizeaza tehnologia brevetata Multi-Lamellar Emulsion (MLE), care imita structura naturala a pielii pentru o absorbtie optima. Cele 8 straturi de\nacid hialuronic\nasigura o hidratare intensa, lasand pielea supla si catifelata, in timp ce un trio racoritor de xilitol, eritritol si ulei de flori de tansy albastru scade temperatura pielii cu 5,3Â°C, oferind o senzatie de prospetime. Compl",
+    "usage": "Dupa curatarea si tonifierea tenului, aplica masca pe fata, potrivind-o usor pe contururile pielii, si lasa sa actioneze timp de 10-20 minute. Indeparteaza delicat masca si maseaza usor surplusul de esenta pana se absoarbe complet. Utilizeaza masca regulat pentru rezultate optime si evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "f7b27299-0e87-417a-b1f0-7a0ad59fd916",
+   "evidence": {
+    "description": "Elyn's Lab Cosmetics Pore Control\neste un ser formulat cu 2% concentrat de acid salicilic care elimina eficient celulele moarte acumulate in profunzimea porilor. Incorporand si 1%\nzinc PCA\n, 1%\npantenol\nsi alantoina in compozitie, acesta nu doar lupta impotriva acneei, punctelor negre si a porilor dilatati, ci si regleaza productia de sebum si calmeaza eficient pielea.\nTextura sa de tip gel se absoarbe usor, fara a lasa o pelicula lipicioasa sau grasa si nu contine parfum si alcool.\nIngrediente active:\n-\n2% Acid Salicilic\n: cunoscut si sub denumirea de\nBHA\nsau Beta Hidroxi Acid, acest ingredie",
+    "usage": "Aplica serul o data pe zi, pe tenul curat si uscat, distribuind uniform cateva picaturi pe fata, cu evitarea zonei ochilor. Pentru inceput, foloseste-l de maxim doua ori pe saptamana si creste treptat frecventa in functie de toleranta pielii; in caz de uscaciune excesiva, redu frecventa aplicarii si hidrateaza corespunzator pielea. Nu uita sa aplici intotdeauna protectie solara in timpul zilei.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b0c04351-b2dd-4250-8fad-36a667095c60",
+   "evidence": {
+    "description": "Nature Republic\nVitapair C Dark Spot Cream\neste o crema iluminatoare ce valorifica puterea extractului de lamaie verde din Jeju si a vitaminei C pentru un ten mai luminos si uniform. Bogata in antioxidanti, aceasta ajuta la reducerea petelor pigmentare si la revitalizarea pielii. Formula sa, imbogatita cu\nniacinamida\n, extract de\nCentella Asiatica\n, ulei de catina si vitamina E, ofera hidratare intensa si protectie, lasand pielea catifelata si sanatoasa.\nBeneficii:\nIlumineaza tenul si ajuta la reducerea petelor pigmentare\nUniformizeaza tonul pielii, oferind un aspect mai radiant\nConfera hidrat",
+    "usage": "Aplica o cantitate potrivita de crema pe ten, ca ultim pas in rutina zilnica de ingrijire a pielii. Maseaza usor pana la absorbtia completa, evitand zona delicata din jurul ochilor. Pentru rezultate optime, utilizeaza regulat, dimineata si seara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "9c270ff4-d753-4012-b0ee-0839fa0965fb",
+   "evidence": {
+    "description": "Descopera Black Rouge\nDouble Layer Over Velvet\nversiunea 3 - Jewelry\n, o colectie de rujuri care imbina conceptul luxos al pietrelor pretioase cu textura inovatoare \"double layer\" caracteristica marcii. Aceasta editie speciala se remarca prin tonul sau principal de verde smarald, aducand un plus de eleganta si rafinament rutinei tale de machiaj.\nTextura catifelata este umeda si usoara pe buze, oferind un finisaj care accentueaza senzatia de netezime si asigura o pigmentare excelenta pentru o culoare naturala si vibranta. Stratul subtire care acopera suprafata previne intinderea sau estomparea ",
+    "usage": "Asigura-te ca buzele sunt curate si uscate, apoi aplica produsul din centrul buzelor catre colturi pentru o culoare uniforma si rezistenta. Pentru efect optim, asteapta 30 de secunde intre straturi daca doresti intensificarea culorii; formula hidratanta face ca utilizarea unui balsam suplimentar sa nu fie necesara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "4ce4a166-59e5-4c1a-9e3b-c0ae8c5ecb30",
+   "evidence": {
+    "description": "Hidrateaza-ti pielea la maxim cu\nTimeless Hyaluronic Acid 100% Pure\naka The Hydrator - un serum cu acid hialuronic creat pentru a-ti rehidrata pielea si a-i creste nivelul de hidratare, datorita capacitatii sale extraordinare de a retine de pana la 1000 de ori greutatea sa in apa.\nDe ce sa alegi acest ser?\nConcentratie ideala\n: Contine 1%\nacid hialuronic\npur, concentratia perfecta pentru o hidratare eficienta.\nPotrivit pentru toate tipurile de piele\n: Indiferent de tipul tau de piele, acest ser este solutia ta pentru o piele hidratata si stralucitoare.\nBeneficii:\n-Hidrateaza profund: Creste ni",
+    "usage": "Aplica zilnic, dimineata si seara, 2-3 pompite pe tenul si gatul curatate in prealabil. Lasa serul sa se absoarba complet in piele inainte de aplicarea altor produse din rutina ta de ingrijire, pentru rezultate vizibile si hidratare optima. Evita zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "3d773573-d1ea-40cd-ae4f-fc43c732d560",
+   "evidence": {
+    "description": "Pielea ta devine foarte uscata, aspra sau descuamata atunci cand temperaturile scad, aerul este uscat ori petreci mult timp in incaperi cu aer conditionat?\nReda-i confortul cu JUMISO\nUrea 5 Intensive Moisture Cream\n, o crema de fata cu 5% uree, conceputa pentru pielea foarte uscata, sensibila, deshidratata sau cu bariera cutanata compromisa.\nPotrivita pentru pielea afectata de diferite forme de uscaciune, inclusiv cea provocata de vreme rece si uscata, temperaturi ridicate si climat uscat sau expunerea constanta la aer conditionat, textura sa bogata, dar confortabila, ajuta la netezirea zonelo",
+    "usage": "Aplica o cantitate potrivita pe fata curata si uscata, apoi maseaza delicat pana la absorbtie. Foloseste zilnic, dimineata si/sau seara, pentru hidratare intensa si confort de lunga durata, mai ales cand pielea este foarte uscata sau descuamata.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "a48bf87e-37a3-453f-8154-0bc60c170e69",
+   "evidence": {
+    "description": "O crema usoara, non-grasa, care calmeaza, repara si hidrateaza toate tipurile de piele, in special pielea sensibila.\nCentella Asiatica\nfermentata din Madagascar din formula calmeaza si repara pielea deteriorata, in timp ce ingredientele Probio-Cica si\nCeramide\nNP ajuta la intarirea functiei de bariera naturala a pielii. Extractul\nTECA\najuta, de asemenea, la reducerea rosetei si a iritatiei.\nIngrediente cheie:\n*\nCentella Asiatica\nfermentata din Madagascar: Acesta este ingredientul vedeta al acestei creme. Este un puternic antioxidant si antiinflamator care ajuta la calmarea si repararea pielii ",
+    "usage": "Aplica o cantitate generoasa pe tenul curat si uscat, imediat dupa toner, prin miscari delicate de masaj. Pentru rezultate optime, utilizeaz-o zilnic, dimineata si seara, evitand zona ochilor. Bucura-te de o piele calmata, hidratata si protejata intreaga zi.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "ff9e5f0f-cd82-47ee-8dab-90424c92f472",
+   "evidence": {
+    "description": "MEDICUBE Zero Foam Cleanser este un produs de curatare zilnica sub forma de spuma, conceput pentru a elimina eficient impuritatile acumulate in profunzimea porilor. Formula sa, imbogatita cu ingrediente naturale si active brevetate pentru ingrijirea porilor, asigura o curatare eficienta si delicata, fara a irita pielea.\nEficacitatea Zero Foam Cleanser in eliminarea micro-prafului a fost demonstrata clinic intr-un institut recunoscut public, rezultatele fiind vizibile inca de la prima utilizare.\nProdusul actioneaza impotriva particulelor de micro-praf daunatoare, asigurand o curatare temeinica ",
+    "usage": "Aplica zilnic o cantitate adecvata de produs in palma, formeaza o spuma usoara cu apa si maseaza delicat pe fata, evitand zona sensibila a ochilor. La final, clateste cu apa calduta pentru o curatare profunda si delicata, potrivita chiar si pentru tenul sensibil. Pentru machiaj intens, utilizeaza in prealabil un demachiant special pentru ochi si buze.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "4564c1fd-6371-488a-8d80-0bde102d3625",
+   "evidence": {
+    "description": "Mizon\nGoodbye Blemish Soothing Gel Cream\neste o crema-gel calmanta special conceputa pentru a trata, calma si reduce eruptiile acneice. Este formulata cu un complex brevetat de\npeptide\n(Acnotide) care are proprietati antibacteriene si antiinflamatoare, ajutand la combaterea acneei si la prevenirea aparitiei viitoarelor eruptii.\nBeneficii:\nReducerea imperfectiunilor: Ajuta la reducerea cosurilor, punctelor negre si a altor imperfectiuni ale pielii.\nCalmarea pielii: Contine ingrediente care calmeaza pielea iritata si inflamata.\nHidratare usoara: Textura sa usoara de gel asigura hidratarea pielii",
+    "usage": "Dupa curatarea tenului si aplicarea unui toner, intinde o cantitate mica de produs pe fata si maseaza delicat pana la absorbtia completa. Foloseste zilnic pentru rezultate vizibile, evitand contactul cu zona sensibila din jurul ochilor. Pentru cele mai bune efecte, integreaza in mod regulat in rutina ta zilnica de ingrijire.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1f398680-1801-47f0-98a8-762b62d07c86",
+   "evidence": {
+    "description": "Pasta de dinti\nSmile Honey Toothpaste\nofera o abordare completa pentru sanatatea orala, combinand ingrediente naturale cu tehnologie avansata pentru a preveni bolile gingivale si cariile specifice adultilor. Aceasta combate eficient bolile gingivale prin prevenirea formarii placii dentare, a tartrului si a umflarii gingiilor, impiedicand astfel progresia inflamatiei catre os si disolutia osoasa care ar putea expune radacinile dintilor.\nIngredientele sale active calmeaza inflamatia gingiilor si sterilizeaza bacteriile asociate cu boala parodontala, concentrandu-se pe prevenirea cariilor in zone",
+    "usage": "Aplica o cantitate de marimea unui bob de mazare pe o periuta moale sau medie si periaza dintii timp de minimum doua minute, insistand asupra tuturor suprafetelor, inclusiv asupra zonei gingivale. Foloseste pasta de dinti de doua ori pe zi, dimineata si seara, pentru a obtine o igiena orala optima si a preveni problemele dentare frecvente. Evita inghitirea produsului si clateste bine dupa folosire.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "74fccbc0-6e15-4c53-a15c-ecf68f0595e2",
+   "evidence": {
+    "description": "Green Derma\nMild Cica Sun Cream SPF50\neste o crema de protectie solara hipoalergenica, creata special pentru pielea sensibila. Aceasta ofera o protectie solara ridicata, avand in acelasi timp o textura usoara si hidratanta, fara senzatie lipicioasa sau aspect gras. Formula sa este imbogatita cu extract de\nCentella Asiatica\ndin Madagascar, cunoscut pentru proprietatile sale calmante si reparatoare, fiind ideala pentru pielea sensibila si iritata.\nIngrediente principale:\nCentella Asiatica\nExtract (CICA): Calmeaza si reface pielea, reducand roseata si iritatiile.\nMadecassoside, Madecassic Acid, A",
+    "usage": "Aplica o cantitate generoasa de crema cu 15-20 minute inainte sa te expui la soare si reaplica frecvent, in special dupa inot, transpiratie sau stergere cu prosopul. Poate fi folosita zilnic, inclusiv pe pielea sensibila, datorita texturii usoare, non-lipicioase si formulei fara parfum. Evita contactul cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "71298c23-34d4-446d-8d91-3f64659070c2",
+   "evidence": {
+    "description": "Lotiunea ultra hidratanta COSRX fara ulei a fost dezvoltata pentru a fi un complement perfect pentru faimoasele produse\nAHA\nsi\nBHA\nale COSRX. Contine 70% seva de mesteacan, un ingredient puternic pentru calmarea si tratarea pielii sensibile, iritate sau proaspat exfoliate, fiind eficienta in restabilirea umiditatii si mentinerea nivelului de hidratare.\nConceputa pentru toate tipurile de piele, inclusiv tenul gras, pielea cu tendinta acneica, pielea sensibila, pielea uscata si pielea crapata.  Hraneste pielea uscata cu zero reziduuri grase si calmeaza pielea predispusa la acnee, fara a provoca ",
+    "usage": "Dupa curatare, tonifiere si exfoliere chimica, aplica o cantitate potrivita de lotiune pe fata, evitand zona ochilor si a gurii. Tapoteaza usor pielea pentru o absorbtie rapida si completa, apoi continua cu crema hidratanta preferata sau protectia solara, pentru un ten revigorat si hidratat in profunzime. Potrivita pentru utilizare zilnica, indiferent de tipul tau de piele.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "62a95914-2633-42f6-b810-b3da188dccd3",
+   "evidence": {
+    "description": "Allies Of Skin Multi Acids & Retinoid Brightening Sleeping Facial\neste solutia suprema pentru obtinerea unui ten vizibil mai luminos si rejuvenat. Conceput pentru a oferi rezultate exceptionale printr-un tratament unic de 3 nopti, acest peeling facial incorporeaza o formula puternica, ce contine 7% Acid Glicolic, Lactic si Salicilic, Complex Retinoid 1%, 7 Iluminatori si 5 Antioxidanti. Exfoliaza delicat, ilumineaza si hidrateaza intens pielea, indiferent de tipul acesteia.\nSpune adio disconfortului asociat cu peeling-urile chimice traditionale si bucura-te de efectele unui tratament facial pr",
+    "usage": "Aplica seara 4 pompe de produs pe fata curata si tonifiata, evitand zona ochilor; lasa-l sa actioneze peste noapte, fara clatire. Utilizeaza-l consecutiv timp de 3 nopti pentru rezultate optime, iar dimineata aplica neaparat o crema cu SPF si limiteaza expunerea la soare in urmatoarea saptamana. Daca ai pielea sensibila, incepe cu utilizarea pe parcursul a 2 seri consecutive pe saptamana.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "61773878-8c19-45a5-9631-b5f3f8c85602",
+   "evidence": {
+    "description": "Descopera\nEGF Blue Youth Activating Drop\n, un ser anti-imbatranire cu\npeptide\nsi antioxidanti care actioneaza in timpul noptii pentru a reda pielii fermitatea, luminozitatea si un aspect intinerit. Formula inovatoare este bazata pe factori de crestere si extracte naturale ce stimuleaza regenerarea celulara, reduc liniile fine si imbunatatesc textura pielii.\nDatorita continutului de EGF (Factor de Crestere Epidermal) si sh-Polipeptid-1, serul accelereaza procesul natural de reinnoire, ajuta la reducerea ridurilor si sustine elasticitatea pielii. In plus, extractul de afine, un antioxidant puter",
+    "usage": "Dupa curatarea tenului, aplica 3-4 picaturi de ser pe fata si tamponeaza usor pana la absorbtia completa. Pentru rezultate optime, utilizeaza zilnic, evitand zona sensibila din jurul ochilor. Bucura-te de o piele mai luminoasa si catifelata cu fiecare utilizare!\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "a7f382a1-bf93-48aa-a55a-7066acced40a",
+   "evidence": {
+    "description": "Laka\nSoul Vegan Lip Balm\neste un balsam de buze intens hidratant, creat pentru a oferi confort rapid buzelor uscate si pentru a le reda aspectul neted si ingrijit. Formula sa, bazata pe ingrediente de origine vegetala, hraneste si protejeaza buzele, lasandu-le moi si catifelate.\nIn functie de nuanta, fiecare varianta include ingrediente-cheie cu rol de ingrijire:\nClear\ncontine extract de avocado si extract de frunze de kale,\nMauve\ninclude apa de lotus albastru si extract de afin american,\nRosy\neste imbogatit cu extract de caisa si extract din fructe de maces, iar\nBerry\ncontine extract de meris",
+    "usage": "Aplica un strat subtire pe buze curate ori de cate ori simti nevoia de hidratare si confort. Reaplica pe parcursul zilei pentru buze mai moi si cu aspect neted, iar pentru o nuanta mai intensa adauga inca 1-2 straturi, pana obtii culoarea dorita.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "9de97e8d-6d80-424a-8ef5-989457541035",
+   "evidence": {
+    "description": "Descopera Some By Mi\nAHA\nBHA\nPHA\n30 Days Miracle Serum\n, serul intensiv care aduce pielii un echilibru perfect intre hidratare si purificare. Creat cu o formula bifazica inovatoare, acesta combina uleiuri vegetale hranitoare cu esente hidratante pentru a reda pielii un aspect proaspat si plin de vitalitate.\nCu 14,5%\nCentella Asiatica\n, serul calmeaza instant pielea sensibila si o ajuta sa-si refaca bariera naturala, in timp ce apa de frunze de arbore de ceai (10.000 ppm) ofera o senzatie de prospetime si puritate, mentinand tenul curat si confortabil.\nComplexul de\nAHA\n,\nBHA\nsi PHA lucreaza del",
+    "usage": "Aplica serul pe pielea curata, dupa tonifiere, cu miscari blande si ascendente, evitand zona ochilor. Foloseste-l dimineata si seara pentru rezultate optime in 30 de zile, ajutand la calmarea si revigorarea pielii. Ofera pielii tale un moment de rasfat, lasand-o neteda si luminoasa fara a lasa o pelicula grasa.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "49c3e5c9-5c62-4755-aebd-912320eee176",
+   "evidence": {
+    "description": "Dr. Althea\nPremium Quick Step Sebum Cleanser\neste un produs vegan destinat curatarii profunde si delicate a pielii, conceput special pentru indepartarea excesului de sebum si a impuritatilor acumulate in pori. Formula sa are o textura usoara, tip ser apos, care inmoaie impuritatile fara sa agreseze pielea, oferind o senzatie de prospetime si confort dupa utilizare.\nCu ajutorul tehnologiei cu lipozomi, ingredientele active patrund eficient in piele, dizolvand sebumul oxidat si impuritatile, facilitand curatarea porilor fara frecare sau presiune mecanica.\nAcesta contine un complex din extracte v",
+    "usage": "Aplicati o cantitate mica pe pielea uscata sau usor umezita, masand delicat pentru o curatare profunda a porilor si dizolvarea sebumului si a punctelor negre, apoi clatiti cu apa calduta. Pentru precizie pe zonele problematice, folositi dischetele de bumbac si betisoarele incluse, fara frecare agresiva. Potrivit pentru utilizare zilnica, dimineata si/sau seara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "aa4a16bb-2b48-4e80-8ef3-1a492672cd83",
+   "evidence": {
+    "description": "Descopera\nBlack Rouge\nRipplesh Jelly Balm\n, un balsam de buze vegan revolutionar care combina stralucirea radianta cu hidratarea intensa de lunga durata!\nFormulat cu un complex hidratant pe baza de plante, balsamul contine ingrediente precum\nacid hialuronic\nsi\ncolagen\n, care asigura volum si hidratare optima. Textura sa unica nu doar ca hraneste buzele, dar actioneaza si ca un exfoliant delicat, indepartand eficient celulele moarte ale pielii. Rezultatul? Buze catifelate, netede si vibrant de sanatoase.\nConceput pentru a oferi ingrijire completa buzelor timp de 24 de ore, acest produs versatil",
+    "usage": "Aplica o cantitate potrivita pe buze ori de cate ori simti nevoia unei hidratari intense pe parcursul zilei. Pentru rezultate optime, foloseste balsamul zilnic pentru a mentine buzele catifelate, netede si sanatoase. Alege-l singur pentru un aspect natural sau aplica-l peste rujul preferat pentru extra stralucire.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "6aac7b4a-77e4-4a52-90b2-bac78131b889",
+   "evidence": {
+    "description": "Protejeaza-ti parul la fiecare coafare cu\nUNOVE\nHeat Guard Leave-In Treatment\n, un produs leave-in infuzat cu proteine care apara firul de par impotriva daunelor cauzate de caldura de pana la 200Â°C / 390Â°F. Textura sa nutritiva si lejera patrunde in cuticula firului de par, fortifica si netezeste suprafata, lasand parul moale, disciplinat si vizibil mai sanatos.\nPotrivita pentru toate tipurile de par, dar creata special pentru a raspunde nevoilor parului uscat, fragil sau deteriorat de styling repetat, formula sa contine un complex bogat de proteine hidrolizate (keratina,\ncolagen\n, matase, l",
+    "usage": "Aplica o cantitate mica de tratament leave-in fara clatire pe parul proaspat spalat si uscat cu prosopul, concentrandu-te pe lungimi si varfuri. Foloseste inainte de uscarea sau coafarea termica (placa, uscator, ondulator) pentru protectie termica a parului pana la 200Â°C si un aspect neted, hidratat si stralucitor. Ideal de utilizat la fiecare coafare, in special pe par uscat, fragil sau deteriorat.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "11325262-02bb-4b15-8e21-9908a3223ddb",
+   "evidence": {
+    "description": "Esenta\nCICA COLLAGEN ESSENCE 300Da\na fost creata pentru a aduce pielii o senzatie imediata de prospetime si echilibru, transformand ingrijirea zilnica intr-un moment de confort. Textura fina se intinde usor pe ten si pregateste pielea pentru actiunea ingredientelor active, oferind o hidratare placuta si un aspect revitalizat.\nIn centrul formulei se afla colagenul hidrolizat cu masa moleculara foarte mica, de 300Da, ales pentru modul eficient in care sustine elasticitatea naturala a pielii. Acest tip de\ncolagen\nse absoarbe rapid, lasand pielea supla, neteda si vizibil mai ferma, cu o senzatie c",
+    "usage": "Aplicati dimineata si seara, dupa toner: turnati cateva picaturi in palma, distribuiti uniform pe ten si gat, apoi presati delicat pentru o absorbtie optima. Integreaza esenta in rutina zilnica pentru hidratare intensa, elasticitate si un ten vizibil mai luminos si neted.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "89be87e3-5f61-434d-901c-b56614ccc7a5",
+   "evidence": {
+    "description": "Descopera protectia solara suprema cu noul membru al gamei Daily Soft Touch -\nDaily Soft Touch Sunscreen Stick\nSPF50+ PA++++.\nAcest stick practic si eficient ofera o aparare puternica impotriva razelor UVA si UVB, avand un finisaj non-gras si fara a lasa urme albe. Perfect pentru utilizare zilnica si activitati in aer liber, formatul sau compact il face usor de purtat si aplicat oriunde te-ai afla.\nCu o textura aerisita si lejera, acest stick de protectie solara hipoalergenic este esential pentru a-ti mentine pielea sanatoasa si protejata in orice moment. Bucura-te de o protectie 5-in-1 inovat",
+    "usage": "Aplica uniform pe piele cu 15 minute inainte de expunerea la soare, ca ultim pas al rutinei tale de ingrijire a pielii. Reaplica pe parcursul zilei, dupa cum este necesar.\nPentru o protectie completa, se recomanda aplicarea a 3-4 straturi uniforme pe toata fata. Pentru zonele sensibile, cum ar fi in jurul ochilor, poti tapota usor cu degetele.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "df3b8f02-d8ab-49f8-96c0-63441890ce6b",
+   "evidence": {
+    "description": "Lee Stafford\nScalp Love Skin-Kind Dry Shampoo\neste un sampon uscat creat pentru a revigora si a improspata parul intre spalari, fara a fi nevoie de apa. Formula sa imbogatita cu\nacid hialuronic\neste special creata pentru a fi blanda cu scalpul sensibil, prevenind uscarea si ajutand la mentinerea sanatatii si confortului acestuia.\nBeneficii:\nImprospatarea parului: Absoarbe excesul de sebum, lasand parul curat si proaspat.\nIngrijirea scalpului: Formula sa delicata este potrivita pentru scalpurile sensibile, prevenind iritatiile si disconfortul.\nVolum si textura: Adauga volum si textura parului, ",
+    "usage": "Agita bine flaconul si pulverizeaza produsul pe radacini de la o distanta de aproximativ 10-15 cm. Maseaza delicat scalpul cu varfurile degetelor sau distribuie uniform folosind o perie. Este ideal pentru utilizare intre spalari, lasand parul proaspat, fara sa usuce sau sa irite scalpul sensibil.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "804b6ee8-c89c-4a45-9ce1-7280d05c9fcd",
+   "evidence": {
+    "description": "Gelul de curatare calmant I'm From Mugwort elimina eficient murdaria, praful fin, reziduurile de protectie solara si particulele moarte, lasand pielea catifelata si neteda. De asemenea, patrunde in pori in acest proces pentru a echilibra productia de sebum si pentru a minimiza eruptiile, fara senzatie de apasare.\nFormula sa nu se bazeaza pe apa, ci pe 60% extract de pelin (Mugwort) din Ganghwa, Coreea de Sud, care calmeaza pielea sensibila si deteriorata, suprima inflamatia, are efect antiseptic si bactericid si ajuta la tratarea acneei si rozaceei. Extractul de pelin pentru produsele I'm From",
+    "usage": "Aplica o cantitate mica pe pielea umeda, maseaza delicat pana se formeaza o spuma fina, apoi clateste bine cu apa calduta. Pentru rezultate optime, foloseste dimineata si seara, evitand zona ochilor. Produsul este potrivit chiar si pentru tenul sensibil.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "099f0c17-ec3c-4c41-bdc5-426f8bd532f5",
+   "evidence": {
+    "description": "Axis-Y\nDark Spot Correcting Glow Toner\neste un toner facial bifazic, cu formula 6+1+1, care combina o faza nutritiva de tip ser cu o faza apoasa revigoranta, oferind un efect calmant imediat si o hidratare profunda. Este conceput pentru a reduce petele pigmentare si a reda luminozitatea pielii, fiind ideal pentru tenul afectat de imperfectiuni post-acnee, pete solare sau ten tern.\nContine 98% glutation de puritate inalta, 5%\nniacinamida\nsi un derivat solubil in apa al vitaminei C (Sodium Ascorbyl Phosphate), oferind o ingrijire intensiva pentru uniformizarea nuantei si textura pielii. Formula ",
+    "usage": "Dupa curatarea fetei, agita bine produsul pentru a amesteca cele doua faze, apoi pulverizeaza uniform pe ten, evitand zona ochilor. Foloseste zilnic, dimineata si seara, pentru rezultate vizibile de calmare, uniformizare a nuantei si hidratare intensa. Continua apoi cu pasii urmatori din rutina ta de ingrijire.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "a632736e-603e-4455-affb-cfbb66879fa9",
+   "evidence": {
+    "description": "Tonerul Skin1004 Madagascar Centella Tone Brightening este un produs multitasking care poate ajuta la luminarea pielii terne, la calmarea iritatiei si la promovarea unui ten sanatos. Formulat cu un amestec de ingrediente puternice, inclusiv Extract de\nCentella Asiatica\n, MadeWhite si\nNiacinamida\n, acesta este un must-have pentru oricine doreste sa obtina un ten clar si luminos.\nTextura sa e usoara, apoasa, si se absoarbe rapid in piele. Este non-iritant si bland pentru toate tipurile de piele, inclusiv pentru pielea sensibila.\nIngrediente cheie\n*Extract de\nCentella Asiatica\n: Acest ingredient ",
+    "usage": "Aplica o cantitate generoasa de toner pe o discheta de bumbac si tapoteaza usor pe fata si pe gat, evitand zona ochilor. Foloseste-l zilnic, dimineata si seara, imediat dupa curatarea tenului, pentru o piele luminoasa si sanatoasa. Potrivit pentru toate tipurile de piele, inclusiv cea sensibila.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1388c4c8-65b5-49d3-b96b-626144727afe",
+   "evidence": {
+    "description": "It's Skin\nDr. Savers Bifida Silky Serum\neste un ser delicat cu textura matasoasa, creat pentru a netezi, hidrata si pregati pielea inainte de machiaj.\nFormula cu Bifida Ferment Lysate si Lactobacillus Ferment sustine echilibrul pielii, o calmeaza si o face mai receptiva la hidratare, in timp ce complexul de\npeptide\nsi\nacid hialuronic\npatrunde in profunzime, oferind un efect de fermitate si catifelare.\nCu o senzatie lejera si non-lipicioasa, acesta lasa pielea mai supla, mai uniforma si vizibil mai sanatoasa, fara disconfort sau pelicula grasa. Aplicat constant, ajuta la mentinerea unui nivel o",
+    "usage": "Aplicati 2-3 picaturi de ser pe tenul curat, dimineata si seara, masand usor pana se absoarbe complet pentru hidratare intensa si netezire. Continuati cu crema hidratanta si, dimineata, cu SPF; folosit inainte de machiaj, ajuta la o aplicare mai uniforma si un finisaj catifelat. Integrati-l in rutina de ingrijire zilnica pentru o piele mai supla si echilibrata.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "065f5326-a989-42f2-8e65-e6fba9594f36",
+   "evidence": {
+    "description": "Trezeste-ti simturile cu\nDrip Hot Water Tint\n- O colectie de rujuri in nuante pentru toamna-iarna, inspirata de 5 tipuri de cafea, fiecare nuanta reprezentand o intensitate diferita de cafeina.\nAlegerea perfecta pentru o zi plina de energie, textura lor usoara si subtire adera pe buze in doar 30 de secunde, creand un strat neted si mat care hidrateaza buzele. In plus, tehnologia exclusiva Tatoo Lasting de la Black Rouge garanteaza durabilitatea culorii, care se mentine intacta pe tot parcursul zilei.\nNuante:\nLV06 -\nHoney Roasting\n(Honey Latte)\nLV07 -\nCaramel Roasting\n(Caramel Macchiato)\nLV08 -",
+    "usage": "Aplica o cantitate potrivita pe buze curate si uscate, fie uniform, fie in efect gradient dinspre interior spre exterior. Foloseste produsul zilnic pentru buze netede, mate si intens hidratate intreaga zi. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "14d6d176-ea88-4c4a-985a-23186c32f0bf",
+   "evidence": {
+    "description": "Descopera un ten fara imperfectiuni, care radiaza de frumusete si aspect sanatos cu ajutorul serului de fata Dr. Konopka.\nAcest ser pentru fata este imbogatit cu ulei de germeni de grau, care contine un nivel ridicat de vitamina E si acizi grasi esentiali pentru ingrijirea completa a pielii, hidratarea si sprijinirea procesului de reconstructie a pielii. Impreuna cu extractul de violete, acest ser ideal pentru tenul uscat si matur, incurajeaza refacerea texturii si tonusului pielii, ascunzand imperfectiunile si dezvaluind un ten neted, catifelat si revitalizat.\nSerul actioneaza si impotriva im",
+    "usage": "Aplica zilnic cateva picaturi pe tenul curat si maseaza usor pana la absorbtia completa. Evita zona sensibila din jurul ochilor si foloseste-l regulat pentru a obtine o piele neteda, hidratata si revitalizata.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "40378dd7-9443-4de9-b30c-083ec2b7b4ce",
+   "evidence": {
+    "description": "Cel mai vandute nuante de BB Cream de la Purito au primit o transformare spectaculoasa in forma de cushion!\nPurito Seoul\nWonder Releaf Centella BB Cushion\nofera o acoperire impecabila intr-un format compact, ideal pentru momentele in care esti in miscare; acum il poti lua cu tine pentru o reaplicare rapida care iti va netezi textura pielii si va ascunde imperfectiunile, petele de acnee si roseata.\nNu doar ca este extrem de convenabil, dar este si multifunctional, combinand ingrijirea pielii, protectia solara si machiajul intr-un singur produs. Cu tehnologia Dual Fitting System, BB Cream-ul asi",
+    "usage": "Dupa aplicarea lotiunii tale preferate cu protectie solara, tapoteaza usor tenul folosind puff-ul inclus pe zonele care necesita acoperire suplimentara sau retusuri rapide pe parcursul zilei. Poti reaplica oricand, in functie de necesitate, pentru obtinerea unui ten luminos si uniform in mod natural. Evita contactul direct cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "37fc583a-1251-45ff-bec3-c808c3e55126",
+   "evidence": {
+    "description": "Dr.Melaxin\nCemenrete Cyano Pink Spicule Serum\neste un ser cu textura hidratanta si catifelata, formulat pentru a sustine fermitatea, elasticitatea si aspectul neted al pielii. Ajuta la imbunatatirea confortului cutanat si la optimizarea absorbtiei ingredientelor active, pentru o rutina orientata catre sustinerea structurii pielii si a densitatii acesteia.\nLa baza formulei se afla REBORNIC, un complex patentat pe baza de calciu, creat pentru a sprijini structura pielii si a contribui la mentinerea fermitatii. Tehnologia este gandita astfel incat sa sustina eficienta ingredientelor cu absorbtie ",
+    "usage": "Aplica pe tenul curat, ca prim pas al rutinei, o cantitate potrivita, intinde uniform si preseaza usor pentru absorbtie. Poate fi folosit zilnic, insa daca apare disconfort sau sensibilitate, fa o pauza si reia aplicarea la fiecare 2-3 zile, in functie de reactia pielii. O usoara inrosire sau senzatie de furnicaturi poate fi normala; daca devine intensa sau persista, intrerupe utilizarea.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b8839dcf-6c12-471f-bb00-4b3ed20e7144",
+   "evidence": {
+    "description": "Ji Woo Gae Cica\nBHA\nBlemish Toner Pad\nsunt dischete tonice care\najuta la indepartarea celulelor moarte, a excesului de sebum si a impuritatilor acumulate, contribuind la imbunatatirea texturii pielii si la diminuarea aspectului porilor dilatati.\nActiunea exfolianta a formulei este sustinuta de un mix de acizi,\nBHA\n, PHA si LHA, care actioneaza complementar:\nBHA\n(acid salicilic) curata porii si ajuta la controlul sebumului, PHA exfoliaza bland la suprafata fara a irita, iar LHA contribuie la netezirea texturii pielii si la uniformizarea aspectului. Aceasta combinatie permite o exfoliere eficien",
+    "usage": "Dupa curatarea tenului, sterge usor fata cu o discheta pentru a indeparta celulele moarte, excesul de sebum si impuritatile, evitand zona ochilor. Tapoteaza delicat pentru a ajuta absorbtia tonerului ramas si pentru o textura mai neteda si pori cu aspect diminuat.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b8e869e3-2833-4eac-b8db-4c32545d74df",
+   "evidence": {
+    "description": "Pop & Lock High Gloss Finish\neste solutia ideala pentru a reda stralucirea, netezimea si aspectul sanatos al parului, fie ca este uscat, electrizat sau lipsit de vitalitate. Acest ser inovator combina beneficiile nutritive ale unui ulei cu puterea de stralucire a unui ser, oferind in acelasi timp protectie termica si UV.\nFormula ultra-usoara penetreaza firul de par cu uleiuri umectante care refac elasticitatea si supletea, in timp ce stratul protector sigileaza cuticula, previne decolorarea culorii si confera un finisaj lucios, intens. Rezultatul este un par cu aspect proaspat, ca in prima zi,",
+    "usage": "Aplica pe parul umed cateva picaturi de produs in palme si distribuie uniform pe lungimi si varfuri, apoi coafeaza dupa preferinte. Pentru parul uscat, foloseste o cantitate mica intre palme si netezeste usor firele rebele pentru un finisaj lucios si anti-frizz instant. Formula non-grasa este potrivita pentru utilizarea zilnica si ofera protectie termica si UV.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "96d8dfe3-9476-413f-bc68-c331ff67dfe0",
+   "evidence": {
+    "description": "Visezi la un look proaspat, difuz si natural, fara efort? Descopera\nFWEE Lip & Cheek Blurry Pudding Pot\n- produsul viral 2-in-1 care reinventeaza machiajul si aduce efectul blurat perfect pentru buze si obraji intr-o singura atingere.\nAcesta\ndevine rapid secretul unui look monocromatic chic, ideal pentru piele uscata, mixta sau sensibila. Textura sa moale, ca o spuma aerata, se topeste instant pe piele si ofera un strat de culoare fin, cu efect mat catifelat in timp ce culoarea se estompeaza delicat in piele si ofera un aspect natural, aproape filtrat, fara urme sau pete.\nInspirat de trenduril",
+    "usage": "Ia o cantitate mica de produs cu degetele curate si aplica usor prin tapotare pe obraji pentru un efect fresh si natural, sau pe centrul buzelor pentru un finish blurat delicat. Adauga treptat in functie de intensitatea dorita si pastreaza produsul intr-un loc racoros pentru o aplicare usoara si confortabila. Evita zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "bb98f505-32a2-4206-a79c-e55a72f316ff",
+   "evidence": {
+    "description": "Doza ta zilnica pentru o piele mai luminoasa si mai ferma, acest ser de ultima generatie, pe baza de apa, este supraincarcat cu 20% acid L-ascorbic etilat, 2% complex de extract de portocale, 0,05% dimetilmetoxi-cromanol, glutation si 3 antioxidanti pentru a ilumina intens, a intari si a oferi protectie antioxidanta pentru toate tipurile de piele.\nBeneficii\nInstantaneu:\n- Tenul este injectat cu o stralucire cu aspect sanatos.\n- Pielea este protejata impotriva agresorilor externi si a poluantilor.\nCu o utilizare zilnica:\n- Aspectul neuniform al pielii este estompat, iar tenul in general pare ma",
+    "usage": "Agita bine inainte de fiecare utilizare, apoi aplica 3 pompe pe tenul proaspat curatat si usor umed, inclusiv zona ochilor si gatul. Continua rutina cu crema hidratanta sau uleiul preferat, iar pentru rezultate optime utilizeaza zilnic si finalizeaza intotdeauna cu protectie solara SPF.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1a0ca678-55e0-4f98-b721-37378f0dafb0",
+   "evidence": {
+    "description": "Glow Your Own Way - un produs autobronzant revolutionar conceput pentru a-ti oferi un bronz inchis impecabil, rezistent la transfer, fara efort! Gelul transparent este infuzat cu doua produse preferate pentru ingrijirea pielii:\nacidul hialuronic\nsi pro-vitamina B5, asigurandu-se ca pielea ta nu numai ca obtine o stralucire superba, dar primeste si hrana si hidratare.\nSpre deosebire de produsele traditionale de bronzare, Glow Your Own Way elimina necesitatea unui timp indelungat de developare. Formula sa unica se usuca rapid, fara a lasa reziduuri lipicioase. Odata aplicat, acesta formeaza o ba",
+    "usage": "Pentru rezultate optime, aplica uniform gelul autobronzant pe pielea curata si uscata, evitand zona ochilor si a buzelor. Dupa utilizare, spala-te bine pe maini; produsul nu necesita clatire. A nu se utiliza ca protectie solara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "5e545b96-356b-480c-a83e-4167040583f4",
+   "evidence": {
+    "description": "Buzele perfecte, voluminoase si fabulos colorate sunt visul oricarei femei. Un machiaj profesional al buzelor poate fi obtinut extrem de simplu cu ajutorul rujului lichid Lip Lava semnat Bodyography, o inovatie care are grija de buzele tale, in timp ce iti ofera cele mai pigmentate culori.\nAcest ruj lichid iti contureaza si acopera perfect buzele cu un finisaj mat luminos, fara sa usuce buzele sau sa creeze disconfort. Formula profesionala rezista ore intregi pe buze si se usuca instantaneu pentru a fi mereu gata la timp. Aplicatorul delicat asigura distribuirea cantatii optime de produs si aj",
+    "usage": "Aplica uniform rujul lichid pe buze folosind aplicatorul delicat incorporat, distribuind culoarea dinspre centru spre exterior. Potrivit pentru utilizare zilnica, asigura-te ca buzele sunt curate si uscate inainte de aplicare, pentru rezistenta optima si culoare intensa pe tot parcursul zilei. Evita contactul cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "6d9c5242-7e1f-4bc1-92bc-8f62b015e7bd",
+   "evidence": {
+    "description": "Some By Mi\nYuja Niacin Anti Blemish Cream\neste o crema intens hidratanta, formulata pentru a reduce petele pigmentare, urmele post-acneice si aspectul tern al pielii. Combinatia dintre 5%\nniacinamida\nsi extractul de Yuja (Citrus Junos) ofera un efect vizibil de uniformizare a tonului pielii, in timp ce ajuta la mentinerea unui nivel optim de hidratare.\nTextura sa usoara tip gel se absoarbe rapid si lasa pielea catifelata si luminoasa, fara senzatie lipicioasa.\nPe langa efectele de iluminare si hidratare, crema este imbogatita cu Alpha-Bisabolol si extracte botanice calmante, care contribuie la",
+    "usage": "Aplic-o pe tenul curat si uscat, dimineata si/sau seara, masand usor pana la absorbirea completa; o cantitate mica este suficienta pentru hidratare si uniformizarea tonului, inclusiv pentru pete pigmentare si urme post-acneice. Evita zona ochilor si folosestee protectie solara pe timpul zilei pentru a maximiza beneficiile ingredientelor precum niacinamidele si extractul de yuja.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "c2b61c9b-d8b9-4972-9d29-56eeccb79983",
+   "evidence": {
+    "description": "SKIN1004\nLab in Nature Madagascar Centella Azelaic Acid 10 Ampoule\neste un ser facial cu textura apoasa, lejera, creat pentru tenul predispus la imperfectiuni, roseata vizibila, urme post-imperfectiuni si textura neuniforma.\nFormula contine\n3X Azelaic Active Formula\n, un complex de 10%\nacid azelaic\nsi derivati ai acestuia (Potassium Azeloyl Diglycinate si Azelamide MEA), conceput pentru a sustine un aspect mai clar al tenului, pentru a ajuta la echilibrarea excesului de sebum si pentru a imbunatati aspectul porilor incarcati.\nSerul include\nCentella Asiatica\ndin Madagascar,\npantenol\n, sodium hy",
+    "usage": "Aplica 2-3 picaturi pe tenul curat, intinde delicat urmand textura pielii si tapoteaza usor pana la absorbtie, apoi continua cu o crema hidratanta si calmanta. In prima saptamana foloseste o cantitate cat un bob de mazare pe zonele vizate o data la doua zile, apoi creste treptat frecventa dimineata si/sau seara, in functie de toleranta pielii. Dimineata, finalizeaza rutina cu protectie solara pentru rezultate optime si pentru a proteja tenul.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "fb2b3fc0-51d8-4d07-818d-ad48ffd84179",
+   "evidence": {
+    "description": "Mizon\nCollagen Power Firming Eye Cream\neste formulata cu o concentratie mare de\ncolagen\nmarin pentru a hidrata si revitaliza zona sensibila din jurul ochilor, imbunatatind elasticitatea pielii si diminuand ridurile.\nBeneficii:\nColagenul marin si adenozina stimuleaza productia naturala de\ncolagen\na pielii, ii confera elasticitate si fermitate, estompand ridurile si liniile fine din jurul ochilor.\nPrevine deshidratarea si mentine pielea supla si catifelata.\nPeptidele si extractul de\nceai verde\ndin compozitia cremei contribuie la reducerea vizibilitatii cearcanelor si a pungilor de sub ochi, ofer",
+    "usage": "Aplicati o cantitate mica de crema pe zona de sub ochi si masati delicat pana cand aceasta este complet absorbita. Pentru cele mai bune rezultate, folositi crema zilnic, dimineata si seara, pastrand pielea hidratata, fina si luminoasa. Evitati contactul direct cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "04ff86f2-7fce-413e-9e29-2fb9d74ee2f2",
+   "evidence": {
+    "description": "EQQUALBERRY\nBakuchiol\nPlumping Capsule Cream\neste o crema pentru fermitate, elasticitate si aspect mai neted al porilor, creata pentru pielea care are nevoie de un plus de volum, hidratare si confort. Aceasta combina o baza cremoasa cu\nbakuchiol\nsi capsule fine de\nbakuchiol\n, care se topesc in timpul masajului si elibereaza treptat ingredientul activ pe piele.\nBakuchiolul, cunoscut ca alternativa blanda la\nretinol\n, ajuta la sustinerea fermitatii si elasticitatii, contribuind la un aspect mai tonifiat al pielii si la reducerea vizibila a porilor dilatati. Acesta ofera ingrijire delicata inclus",
+    "usage": "Aplica o cantitate potrivita pe tenul curat, ca ultim pas al rutinei, si maseaza delicat pana cand capsulele se topesc complet. Foloseste zilnic, dimineata si seara, pentru hidratare intensa, sustinerea barierei pielii si un aspect mai ferm, mai neted si mai luminos. Pentru rezultate optime, continua cu SPF in timpul zilei.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "ab4c1cfb-052c-4e69-bafb-1ea3a6179474",
+   "evidence": {
+    "description": "Zettoc\nMD'CIAL\neste o pasta de dinti medicinala avansata, special conceputa pentru prevenirea si combaterea afectiunilor parodontale, precum gingivita si parodontoza. Dezvoltata in Japonia, formula sa patentata redefineste standardele ingrijirii orale, combinand expertiza stiintifica cu un design modern pentru a oferi o solutie completa pentru sanatatea gingiilor si a dintilor.\nBazata pe cercetari extinse in sanatatea gingivala, pasta de dinti MD'CIAL incorporeaza trei aminoacizi esentiali -\nacid L-aspartic, L-arginina si L-serina\n. Acestia au fost selectati pentru rolul lor vital in mentinere",
+    "usage": "Aplicati aproximativ 1 cm de pasta pe periuta si periati dintii si gingiile de cel putin doua ori pe zi, pentru o protectie completa si respiratie proaspata. Produsul este recomandat adultilor si copiilor peste 6 ani; evitati utilizarea la copii sub aceasta varsta. Folositi regulat pentru mentinerea sanatatii orale pe termen lung.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "bd455d7c-8932-4d91-913c-51be3d1e124f",
+   "evidence": {
+    "description": "A cincea colectie a brandului Muzigae Mansion,\nMoodwear Blur Lipstick\n, redefineste clasicul cu un aer sofisticat si urban, oferind nuante rafinate si un finisaj mat-catifelat care se muleaza delicat pe buze, fara a evidentia imperfectiunile.\nBeneficii:\nTextura moale, catifelata, cu un efect mat rafinat\nStratificare usoara pentru un efect de estompare delicat si o profunzime a culorii\nComplex exclusiv ce hidrateaza si netezeste suprafata buzelor, prevenind uscarea si evidentierea liniilor fine\nFormula vegana certificata de Vegan Society din Marea Britanie\nIngrediente principale:\nUlei de macese",
+    "usage": "Aplicati direct pe buze, din centrul buzelor catre margini.\nPentru un efect mai intens, aplicati in mai multe straturi.\nPoate fi folosit individual sau combinat cu alte nuante.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "e1b0520d-5182-43b2-a58a-e9cf0be2933b",
+   "evidence": {
+    "description": "The\nAHA\n2\nBHA\n2 Blemish Treatment Serum\neste un produs cu aplicare locala, creat pentru tenul predispus la imperfectiuni, puncte negre, puncte albe si pori incarcati. Formula sa combina 2%\nAHA\nsi 2%\nBHA\n, alaturi de PHA,\nZinc PCA\n, alantoina si hialuronat de sodiu, pentru exfoliere, echilibrarea sebumului si mentinerea confortului pielii.\nBilutele comprimate din bumbac 100% natural se imbiba cu serul inainte de prima utilizare si permit aplicarea precisa pe zonele vizate, precum nasul, barbia, fata, pieptul sau spatele. Dupa aplicare, formula lasa o senzatie proaspata, fara reziduuri lipicioas",
+    "usage": "Inainte de prima utilizare, toarna tot serul in recipient peste bilutele din bumbac si lasa-le sa se imbibe. Dupa curatarea tenului, foloseste o biluta cu penseta si aplica local pe zonele cu imperfectiuni, presand usor cateva secunde sau trecand delicat fara frecare; inchide bine capacul si foloseste seara, iar ziua aplica intotdeauna crema cu protectie solara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "d850829a-cadd-4f71-b797-e577e947f36a",
+   "evidence": {
+    "description": "Samponul\nFlower & Herb Moisture Calming\nde la brandul Curly Shyll face parte dintr-o linie de ingrijire a parului si a scalpului cu ingrediente orientate spre natural. Extractele sale de calus de flori si\npropolis\nhranesc parul, oferind nutritie si hidratare, in timp ce un amestec de 5 infuzii de plante calmeaza scalpul sensibil.\nSpecialitatea Flower & Herb\nTextura parului hidratata\n\"Extractul de calus din flori si\npropolis\najuta parul uscat si aspru sa fie hidratat si hranit.\"\nScalpul calmat\n\"5 fiole de infuzie mixta de ierburi calmeaza scalpul sensibil pentru a reduce mancarimile.\"\nAminoaciz",
+    "usage": "Umezeste scalpul si parul, aplica o cantitate potrivita in palma si formeaza spuma, apoi maseaza usor scalpul pentru curatare si calmare eficienta. Clateste bine cu apa calduta, evitand apa fierbinte pentru a mentine echilibrul optim al scalpului; utilizeaza regulat pentru rezultate vizibile. Evita contactul cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "635fb94e-57d0-4063-a0f9-300b28574068",
+   "evidence": {
+    "description": "Skintegra\nimbina ingrijirea pielii cu integritatea etica. Brandul crede intr-o ingrijire a pielii usoara si consecventa, cu ingrediente active curate, amestecate holistic si frumos in formule rafinate, complexe si avansate tehnologic, concepute pentru pielea dificila. Toate produsele lor sunt testate dermatologic, cruelty-free si 100% vegane.\nRetiron 0.05\neste o emulsie serica pe baza de\nretinal\nincapsulat in proportie de 0,05% si mai departe fortificata cu\nniacinamida\n, trei\nceramide\nesentiale si precursorii acestora, antioxidanti,\npantenol\nsi madecassosida. Aceasta are rolul de a preveni apa",
+    "usage": "Aplica initial de maximum doua ori pe saptamana, seara, pe tenul curat si uscat, apoi creste treptat frecventa pe masura ce pielea se adapteaza. Evita zona ochilor si utilizeaza zilnic protectie solara cu factor ridicat pe parcursul zilei. Daca pielea devine uscata, completeaza rutina cu un produs hidratant delicat.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "7f3bbbe5-d82e-489c-a05c-e16b2a0a45a6",
+   "evidence": {
+    "description": "Haruharu Wonder\nBlack Bamboo Mist\neste un mist facial ultra-lejer, hidratant si revitalizant, cu extracte de bambus fermentat si agenti umectanti care sustin echilibrul pielii. Formula sa fina ofera un val instant de hidratare si prospetime, lasand pielea catifelata, fara senzatie lipicioasa sau incarcare.\nExtractele fermentate de bambus (Phyllostachys Nigra Leaf Extract, Phyllostachys Pubescens Shoot Bark Extract, Bambusa Vulgaris Shoot Extract) contribuie la calmarea pielii si protectia antioxidanta, in timp ce betaina ajuta la mentinerea echilibrului apa-ulei si confera un aspect neted. Bet",
+    "usage": "Inchide ochii si pulverizeaza uniform pe fata de la o distanta de 15-20 cm, ori de cate ori pielea se simte uscata, deshidratata sau terna. Tapoteaza usor pentru a facilita absorbtia si bucura-te de un efect racoritor, hidratare instant si un aspect mai luminos, pe tot parcursul zilei.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "81088751-2be9-4491-a015-44db1a1b8f48",
+   "evidence": {
+    "description": "Serul Medicube\nPDRN\nPink\nPeptide\nSerum\neste creat pentru a sustine aspectul uniform al tenului si pentru a oferi o stralucire sanatoasa, in timp ce ajuta pielea sa devina mai ferma si mai elastica.\nIngredientul vedeta,\nPDRN\n(Sodium DNA), este alcatuit din fragmente de ADN obtinute din somon, selectate pentru compatibilitatea lor ridicata cu pielea, datorita similaritatii structurale cu ADN-ul uman. Prin aceasta compatibilitate, formula sprijina functia naturala de bariera a pielii, pentru un ten mai rezistent si mai echilibrat.\nComplexul de 5\npeptide\nsustine productia de\ncolagen\n, ajutand la f",
+    "usage": "Aplicati 2-3 picaturi de ser pe tenul curat, pe fata si gat, dimineata si seara, dupa toner si inainte de crema hidratanta. Masati usor pana la absorbtie pentru a sustine luminozitatea, uniformitatea si bariera cutanata; potrivit pentru utilizare zilnica, inclusiv pe piele sensibila. Dimineata, finalizati rutina cu un SPF.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "f02e632f-dcba-461b-a9e3-63da08a9ba59",
+   "evidence": {
+    "description": "Parte din gama belif Super Knights,\nBerry Tinted Lipcerin\neste un balsam de buze nuantator, creat pentru a netezi si hidrata vizibil buzele, oferind in acelasi timp un strat delicat de culoare.\nPentru buze mai netede si mai uniforme, Formula sa are la baza Penta Turnover Recovery Complex (serine, protease,\ngluconolactone\n), un complex conceput pentru ingrijirea buzelor uscate si crapate care ajuta la exfolierea delicata a zonelor uscate si la mentinerea confortului si hidratarii. In continuare, Multivitamin Complex, cu vitaminele B3, C, E si B12, calmeaza si adauga un plus de prospetime, iar p",
+    "usage": "Roteste baza de cateva ori pentru a elibera produsul, apoi aplica uniform pe buze curate, de la centru spre colturile gurii. Foloseste zilnic si reaplica pe parcursul zilei ori de cate ori ai nevoie de hidratare si culoare; functioneaza perfect ca balsam de buze nuantator purtat singur sau ca baza sub ruj, pentru buze netede si suple.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "3d80c676-fabe-43b0-b0a4-85dfe0e74714",
+   "evidence": {
+    "description": "Centellian24\n360 Shot\nPDRN\nGlowing Eye Patch\nsunt o pereche de patch-uri din hidrogel imbibate cu o cantitate ridicata de esenta, create pentru a revitaliza zona ochilor, a reda luminozitatea privirii si a imbunatati aspectul pielii afectate de deshidratare si pierderea fermitatii.\nFormula are la baza complexul\nTECA\n-2X\nPDRN\n, care combina\nTECA\n, Cica\nPDRN\nsi Salmon\nPDRN\npentru a sustine elasticitatea pielii, aspectul mai ferm si ingrijirea zonei delicate din jurul ochilor si Hydroxypinacolone Retinoate (Pro-\nRetinol\n), un ester de\nretinol\nde ultima generatie, mult mai putin iritant, dar foart",
+    "usage": "Aplica patch-urile pe pielea curata, sub ochi, si lasa-le sa actioneze aproximativ 30 de minute. Indeparteaza-le, apoi tapoteaza usor esenta ramasa pana la absorbtie completa pentru hidratare intensa, luminozitate si un aspect mai odihnit. Atentie: contine vitamina A (retinol); nu se recomanda utilizarea in timpul sarcinii sau alaptarii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1983144b-772a-464b-876c-6db1afe24f59",
+   "evidence": {
+    "description": "IUNIK\nBeta-Glucan All In One Gentle Wash\neste un produs de curatare zilnica pentru fata, par si corp, conceput pentru intreaga familie. Textura gel se transforma intr-o spuma bogata care indeparteaza impuritatile si reziduurile acumulate pe parcursul zilei, lasand pielea confortabila, fara senzatie de uscaciune dupa clatire.\nFormula cu pH usor acid, cuprins intre 4,5 si 6,5, curata delicat si contribuie la mentinerea echilibrului natural de apa si sebum al pielii, fiind potrivita in special pentru pielea predispusa la uscaciune sau sensibilitate.\nComplexul format din trei tipuri de\nacid hialur",
+    "usage": "Aplica in palma o cantitate potrivita, adauga putina apa si formeaza o spuma bogata. Maseaza delicat pe fata, corp si par/scalp, apoi clateste bine cu apa calduta. Potrivit pentru utilizare zilnica, inclusiv pentru pielea sensibila si pentru intreaga familie.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b2709150-0629-4110-8ca1-d4f253be0521",
+   "evidence": {
+    "description": "It Takes Two to Mango Nourishing Body Wash\neste un gel de dus hranitor, creat pentru curatarea delicata si revitalizarea pielii.\nFormula combina uleiul de mango, recunoscut pentru proprietatile sale emoliente si hidratante, cu\npeptide\ncare contribuie la imbunatatirea aspectului si texturii pielii, lasand pielea hidratata si cu un aspect mai neted si mai suplu.\nAgentii de curatare de origine vegetala si minerala indeparteaza impuritatile fara a compromite confortul pielii, in timp ce parfumul exotic de mango transforma dusul intr-un moment placut de rasfat si ofera o senzatie de prospetime de d",
+    "usage": "Aplica pe pielea umeda cu mainile sau un burete, apoi maseaza delicat pana la formarea spumei. Clateste bine cu apa pentru o curatare eficienta si o piele hidratata, moale si placut parfumata. Pentru cele mai bune rezultate, foloseste zilnic in rutina ta de ingrijire.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b0cfa356-d6ba-485a-a015-de3603473a32",
+   "evidence": {
+    "description": "Mediheal\nHydra Soothing Mask\neste o masca tip servetel cu esenta hidratanta, creata pentru a oferi pielii hidratare si confort. Formula ajuta pielea sa se simta mai proaspata, mai supla si mai echilibrata, fiind potrivita atunci cand tenul are nevoie de un plus de calmare si reimprospatare.\nIn compozitie se regaseste Aquaxyl, un complex hidratant cunoscut pentru mentinerea apei in piele, care ajuta pielea sa isi pastreze aspectul neted si confortabil.\nFormula este completata de doua forme de\nacid hialuronic\ncare contribuie la hidratarea pielii si la mentinerea unui aspect plin si sanatos. Pent",
+    "usage": "Dupa curatare, aplica un toner pentru a pregati tenul, apoi aseaza masca pe fata si las-o sa actioneze 10-20 de minute. Indeparteaz-o si tapoteaza usor esenta ramasa pana la absorbtie completa, pentru o hidratare intensa si un plus de calmare si prospetime.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "eda8e69b-8b04-4640-840f-5fe485c39323",
+   "evidence": {
+    "description": "Dr. Althea\nPore Refresh Grinding Cleansing Balm\neste un balsam de curatare inovator, creat pentru o curatare profunda si delicata, care lasa pielea perfect curata, supla si confortabila. Textura sa moale, de tip serbet, se transforma intr-un ulei fin atunci cand intra in contact cu pielea, topind machiajul si impuritatile din pori fara sa provoace uscaciune sau iritatii.\nFormula este imbogatita cu ulei de soia, ulei de jojoba si ulei din tarate de orez, care dizolva delicat machiajul si impuritatile fara sa usuce pielea, mentinand echilibrul de hidratare si lasand pielea catifelata.\nPentru o c",
+    "usage": "Roteste ambalajul pentru a elibera cantitatea necesara, apoi aplica pe pielea uscata si maseaza usor pentru a dizolva machiajul si impuritatile din pori. Adauga putina apa pentru emulsificare si clateste cu apa calduta pana la indepartarea completa; potrivit pentru utilizare zilnica in rutina de demachiere si curatare.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "0d031047-08b3-43b6-895a-6c1b0ee8733b",
+   "evidence": {
+    "description": "Curly Shyll\nRoot Remedy Scalp Shampoo for Normal & Dry Scalp\neste un sampon pentru scalp normal si uscat, cu textura delicata si spuma fina, care curata eficient fara sa lase senzatie de uscaciune. Formula sa echilibrata, cu pH 5.5, ajuta la mentinerea confortului scalpului si sustine refacerea barierei naturale, fiind potrivita inclusiv pentru scalp sensibil.\nActioneaza printr-un complex botanic bogat, cu extracte din plante precum maca, radacina de luminita-noptii si radacina de kudzu, pentru a sustine ingrijirea scalpului si a parului inca de la radacina. Complexul de 6 proteine hidrolizate",
+    "usage": "Umezeste bine scalpul si parul cu apa calduta, apoi aplica o cantitate potrivita in palme si formeaza spuma. Distribuie uniform pe scalp si par, maseaza usor cu varfurile degetelor pentru o curatare delicata si hidratare, apoi clateste bine cu apa calduta. Pentru rezultate optime, repeta la nevoie si continua cu balsam sau tratament de ingrijire.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "3e8f5835-4ec1-4222-b9f3-1193a13bbc89",
+   "evidence": {
+    "description": "Mizon Hyalugen\nGel to Foam Cleanser\neste un produs de curatare formulat pentru a imbina eficienta unui gel delicat cu prospetimea unei spume fine. Textura sa tip jeleu se transforma intr-o spuma matasoasa care curata impuritatile si urmele de sebum fara sa compromita bariera naturala a pielii.\nLa baza formulei se afla complexul Hyalugen, o combinatie avansata de\nacid hialuronic\nsi\ncolagen\nhidrolizat, obtinuta printr-un proces care permite ingredientelor sa actioneze mai eficient prin formarea unei retele stabile de hidratare la suprafata pielii. Acest complex ajuta la imbunatatirea fermitatii ",
+    "usage": "Umezeste fata, aplica o cantitate mica pe pielea umeda si maseaza usor pana se formeaza o spuma fina; clateste bine cu apa calduta. Foloseste zilnic, dimineata si seara, pentru o curatare blanda care elimina impuritatile si sebumul si mentine pielea neteda si confortabila, inclusiv pentru tenul sensibil.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "35548fa1-e801-467c-a164-e825521ef79d",
+   "evidence": {
+    "description": "TIRTIR\nCollagen Core Glow Essence\neste o esenta faciala sub forma de spray, creata pentru a revitaliza pielea terna si deshidratata cu un mix concentrat de\ncolagen\n, apa minerala si nutrienti esentiali.\nFormula lejera patrunde rapid in piele, oferind hidratare profunda, fermitate vizibila si un aspect luminos si sanatos. Datorita colagenului de greutate moleculara redusa (243Da), pielea absoarbe mai eficient ingredientele active, iar bariera cutanata este intarita zi de zi.\nBeneficii:\nHidratare de durata, cu apa minerala si\nacid hialuronic\nin forme multiple\nFermitate si elasticitate imbunatati",
+    "usage": "Pulverizeaza uniform esenta pe tenul curat si uscat, tinand recipientul la aproximativ 20 cm distanta de fata. Foloseste-o zilnic pentru hidratare intensa si o piele luminoasa, sau reaplica ori de cate ori simti nevoia unei revigorari rapide, chiar si peste machiaj. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "458a1d6c-6f39-4ae9-831b-e69742f84555",
+   "evidence": {
+    "description": "Trezeste-ti simturile cu\nDrip Hot Water Tint\n- O colectie de rujuri in nuante pentru toamna-iarna, inspirata de 5 tipuri de cafea, fiecare nuanta reprezentand o intensitate diferita de cafeina.\nAlegerea perfecta pentru o zi plina de energie, textura lor usoara si subtire adera pe buze in doar 30 de secunde, creand un strat neted si mat care hidrateaza buzele. In plus, tehnologia exclusiva Tatoo Lasting de la Black Rouge garanteaza durabilitatea culorii, care se mentine intacta pe tot parcursul zilei.\nNuante:\nLV06 -\nHoney Roasting\n(Honey Latte)\nLV07 -\nCaramel Roasting\n(Caramel Macchiato)\nLV08 -",
+    "usage": "Aplica uniform o cantitate adecvata de produs folosind aplicatorul inclus, direct pe buzele curate si uscate. Creeaza un look intens aplicand pe intreaga suprafata a buzelor sau unul subtil prin tehnica gradient, de la interior spre exterior, ideal pentru un machiaj fresh zi de zi.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1f6f4b8b-243a-40eb-905d-23313fb8997d",
+   "evidence": {
+    "description": "Cauti un toner versatil, care curata in profunzime si hraneste pielea, lasand-o in acelasi timp ultrahidratata?\nSKIN1004 Madagascar Centella Tonic Toner este un tonic exfoliant delicat cu PHA (\nGluconolactone\n*), un exfoliant non-abraziv care te scapa de acumularile de celule moarte si de impuritati pentru a dezvalui o piele stralucitoare. Ingredientele ultra-hidratante si calmante, precum extractul de\nCentella Asiatica\nin proportie de 84% si\nniacinamida\n, se asigura ca pielea ta nu devine uscata sau iritata. Este potrivit pentru toate tipurile de piele, in special pentru pielea sensibila si p",
+    "usage": "Aplica tonic-ul cu ajutorul unei dischete de bumbac pe tenul curat, urmand textura naturala a pielii, apoi tapoteaza delicat pentru absorbtie completa. Poate fi folosit zilnic, dimineata si seara; in cazul utilizarii pe timp de zi, aplica ulterior o crema cu SPF cu spectru larg pentru a-ti proteja pielea. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "8eb65892-7425-4364-b4f1-c7eea4b93bd0",
+   "evidence": {
+    "description": "Daca esti in cautarea unei creme de protectie solara multifunctionale, care sa iti lumineze tenul si sa reduca aspectul petelor intunecate, Skin1004 Madagascar Centella Tone Brightening Sunscreen este solutia pentru tine!\nAceasta crema usor nuantatoare dispune de un spectru larg SPF 50+ PA++++, pentru a te proteja de razele UVA si UVB, si contine, de asemenea, ingrediente active precum\ncentella asiatica\n,\nacid tranexamic\n,\nniacinamida\nsi adenozina, pentru a ajuta eficient la uniformizarea nuantei pielii si a-i conferi o stralucire sanatoasa. Formula ei este usoara si non-grasa, facand-o potriv",
+    "usage": "Aplica o cantitate generoasa de crema pe fata si gat, ca ultim pas al rutinei zilnice de ingrijire a tenului, acoperind uniform zonele expuse la soare. Lasa crema sa se absoarba complet inainte de aplicarea machiajului si reaplica la fiecare doua ore sau dupa transpiratie excesiva ori inot pentru o protectie eficienta pe tot parcursul zilei. Evita contactul cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "a6860252-15b9-4e41-82f9-873d222df56e",
+   "evidence": {
+    "description": "Abib\nGlutathiosome CC Sunscreen Toning Tube\neste o crema de protectie solara SPF50+ PA++++ cu efect de uniformizare a nuantei, textura usoara si capsule tonifiante care se adapteaza tonului pielii. Aceasta combina protectia solara ridicata cu efect de tone-up si aspect uniform, fara a fi nevoie de fond de ten.\nCapsule tonifiante care isi schimba culoarea la aplicare elibereaza un pigment bej ce se adapteaza nuantelor de piele 17-23, oferind un rezultat natural, fara efect albicios.\nFormula cu glutation incapsulat in structuri lipidice sustine ingrijirea aspectului petelor pigmentare si contrib",
+    "usage": "Aplica o cantitate adecvata ca ultim pas al rutinei de ingrijire, pe ten si gat, apoi distribuie uniform pe toate zonele expuse la razele UV. Maseaza usor pana cand capsulele elibereaza pigmentul si obtine un efect natural de uniformizare si luminozitate, ideal pentru utilizare zilnica sub sau in loc de machiaj. Pentru protectie solara optima, reaplica pe parcursul zilei, mai ales dupa transpiratie sau stergere.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "b48305b5-03e5-4bdc-8ac4-4ea4acdc8491",
+   "evidence": {
+    "description": "Mizon\nAll In One Snail Repair Cream\neste o crema faciala multifunctionala, conceputa pentru a proteja, hidrata si regenera pielea.\nContinand 46,000 ppm de filtrat de secretie de melc, formula sa ajuta la imbunatatirea elasticitatii pielii, la reducerea semnelor post-acneice si la calmarea pielii sensibile. Complexul de ingrediente active, inclusiv\nCentella Asiatica\n, Madecassoside si extract de\nceai verde\n, contribuie la hidratarea profunda, refacerea barierei cutanate si prevenirea imbatranirii premature.\nTextura sa lejera si non-lipicioasa asigura o absorbtie rapida fara a lasa o pelicula gr",
+    "usage": "Aplica o cantitate mica de crema pe tenul curat si maseaza delicat pana la absorbtia completa. Pentru rezultate optime, utilizeaza zilnic, dimineata si seara, evitand contactul cu zona ochilor. Potrivita pentru toate tipurile de ten, inclusiv cel sensibil.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "dff08557-009b-4d97-844a-2a022977a306",
+   "evidence": {
+    "description": "Setul de pensule Moda Complexion Perfection semnat Royal and Langnickel este setul de care ai nevoie pentru a obtine un machiaj de vis, chiar la tine acasa! Setul este format dintr-o pensula pentru aplicarea pudrei, o pensula pentru aplicarea corectorului, o pensula plata pentru aplicarea fondului de ten si o husa destinata depozitarii si organizarii acestora. Cu ajutorul acestui set te vei bucura de un make-up de invidiat, realizat rapid, usor si la un nivel extrem de profesionist! Pensulele sunt fabricate din materiale 100% vegane si au un design ergonomic, care faciliteaza obtinerea unui ma",
+    "usage": "Foloseste pensula plata pentru a aplica uniform fondul de ten, apoi acopera micile imperfectiuni cu pensula speciala pentru corector. La final, fixeaza machiajul aplicand usor pudra cu pensula dedicata, iar dupa utilizare depoziteaza-le in husa practica pentru organizare si pastrare usoara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "9f945dc5-252a-4c8e-9df8-2b83d69b1f3b",
+   "evidence": {
+    "description": "Descopera secretul unor buze mai netede, mai hidratate si cu un aspect vizibil mai plin!\nPEPTINT\nTripeptide & Goji Cells Plumping Lip Treatment\nde la Allies of Skin este un produs multifunctional, creat pentru a combina culoarea delicata si finisajul lucios cu ingrediente orientate spre hidratare, netezire si imbunatatirea aspectului volumului buzelor.\nFormula gloss-ului combina Palmitoyl Tripeptide-1, o peptida biomimetica ce contribuie la un aspect mai neted, ferm si suplu al buzelor, cu extract de goji si extract de trandafir, ingrediente cu proprietati antioxidante care ajuta la protejarea",
+    "usage": "Aplica direct pe buze dimineata, seara sau oricand ai nevoie de hidratare si stralucire, pentru un aspect vizibil mai plin si neted. Reaplica pe parcursul zilei, ori de cate ori este necesar, pentru confort de lunga durata, finisaj lucios nelipicios si culoare discreta.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "5f1bf8f6-7a51-4a89-8da9-262b0eb17354",
+   "evidence": {
+    "description": "Aceasta masca wash-off premium contine 3,97% extract concentrat de\nGinseng\nRosu crescut timp de 6 ani in regiunea Geumsan County, Coreea si ulei din seminte de Panax\nGinseng\n. Ginsengul detoxifica porii in timp ce ii hraneste cu antioxidanti, ajuta la obtinerea echilibrului ideal intre ulei si apa si imbunatateste circulatia sangelui pentru a intineri pielea, restabilind elasticitatea si fermitatea acesteia.\nSe aplica intr-o formula densa pentru a indeparta celulele moarte ale pielii si alte impuritati. Este sigura pentru utilizare, deoarece nu contine aditivi daunatori, are o formula fara ale",
+    "usage": "Dupa curatarea tenului, aplica masca uniform pe fata, evitand zona ochilor, si maseaza delicat cu miscari circulare timp de 5-10 minute; vei observa o senzatie placuta de incalzire. Clateste bine cu apa calduta si bucura-te de o piele curata, ferma si revitalizata; formula sigura permite folosirea regulata pentru rezultate vizibile.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "f18ab748-c31d-4e77-be9a-151062e84890",
+   "evidence": {
+    "description": "TIRTIR\nMask Fit AI Filter Cushion\neste un fond de ten tip cushion semi-mat, cu acoperire ridicata si textura lejera, creat pentru un efect uniform, neted si estompat, ca un filtru aplicat pe ten.\nFormula foloseste tehnologia ThinTech, cu pudre ultrafine procesate pentru a se aseza uniform pe piele, ajutand la estomparea porilor, a texturii neuniforme si a imperfectiunilor, fara aspect incarcat. Finisajul este semi-mat, cu efect de pudra fina, dar confortabil pe ten.\nPe langa efectul de machiaj, acesta include ingrediente de ingrijire care sustin aspectul sanatos al pielii.\nNiacinamida\najuta la",
+    "usage": "Ia o cantitate mica cu buretelul si aplica prin tapotari delicate, in strat subtire si uniform pe ten; foloseste paleta de blending integrata pentru a indeparta excesul si a obtine un finish semi-mat natural. Poate fi aplicat in straturi pentru acoperire mai mare, fara aspect incarcat. Atentie: contine vitamina A; tine cont de aportul zilnic total si evita utilizarea in sarcina si alaptare.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "32f6a276-705c-40f0-92f0-798c278d58d1",
+   "evidence": {
+    "description": "Seoul 1988\nSun: Pine Tree +\nCeramide\neste o crema de protectie solara hidratanta cu SPF50+ PA++++, formulata cu 1% extract de muguri de pin (Pinus Sylvestris) si ceramida NP, doua ingrediente cheie ce calmeaza pielea, reduc inflamatia si intaresc bariera naturala a pielii.\nAceasta protejeaza eficient impotriva razelor UVA, UVB si a luminii albastre, fara sa lase urme albe si fara sa incarce tenul. Textura sa ultrausoara si absorbtia rapida o fac ideala pentru utilizarea zilnica, fiind testata dermatologic si potrivita chiar si pentru pielea sensibila.\nBeneficii:\nProtectie larga UVA / UVB + lum",
+    "usage": "Aplica o cantitate generoasa pe tenul curat in fiecare dimineata, ca ultim pas al rutinei tale de ingrijire, evitand zona ochilor. Pentru protectie optima, utilizeaza cu regularitate si reaplica pe parcursul zilei, in special dupa expunerea prelungita la soare.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "0618faef-de16-4144-8420-5c675fc33f22",
+   "evidence": {
+    "description": "Stralucire eleganta si de lunga durata, de pana la 72 de ore!\nTIRTIR\nMask Fit Red Cushion\neste un fond de ten compact care ofera o acoperire impecabila, cu un finish matifiant, luminos si rafinat de pana la 72 de ore. Pudra fina si uniforma se aplica usor pe piele, acoperind eficient roseata, imperfectiunile si cearcanele.\nCaracteristici principale:\nRezistenta ridicata la transfer.\nOfera stralucire naturala si acoperire eficienta.\nInfuzat cu 3 tipuri de antioxidanti, ajuta la mentinerea unui aspect sanatos si vibrant al pielii.\nPudra usoara permite pielii sa respire, oferind un confort deosebi",
+    "usage": "Aplica o cantitate mica de produs pe buretel si tapoteaza delicat pe fata, pentru o acoperire uniforma si un look natural. Pentru rezultate optime si un ten radiant, utilizeaza zilnic, evitand contactul direct cu zona ochilor. Bucura-te de o rezistenta indelungata si protectie solara eficienta in fiecare zi.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "e227dd14-e22d-4388-b841-126b751674f4",
+   "evidence": {
+    "description": "EUBOS\nAnti Age Hyaluron Repair Filler Night\neste o crema de noapte regeneranta, creata pentru a sustine pielea in timpul somnului. Aceasta ajuta la reducerea ridurilor, la intarirea structurii pielii si la redarea aspectului mai plin, pentru un ten mai neted si mai odihnit dimineata.\nFormula sa este construita in jurul unui complex de ingrediente active care actioneaza complementar pe timpul noptii, cand pielea isi intensifica procesele naturale de refacere. DermCom, un ingredient activ de tip biotehnologic sustine comunicarea celulara, stimuleaza sinteza de\ncolagen\nsi\nelastina\nsi promoveaza r",
+    "usage": "Aplic-o seara, dupa curatare, pe fata, gat si decolteu, apoi maseaza delicat pana la absorbirea completa. Pentru un ten mai neted, hidratat si cu riduri estompate, integreaz-o ca ultim pas in rutina de ingrijire pe timp de noapte.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "6947b8b4-39d8-475e-be41-c59710381278",
+   "evidence": {
+    "description": "Haruharu Wonder\nBlack Rice Hyaluronic Toner\neste un toner premiat, recunoscut pentru textura sa lejera si capacitatea de a oferi hidratare intensa chiar din primul pas al rutinei de ingrijire.\nFormula este creata cu extract de orez negru fermentat, recunoscut pentru concentratia sa ridicata de polifenoli si flavonoide, care ofera o protectie antioxidanta puternica si sustin sanatatea pielii, si\nacid hialuronic\n, un ingredient esential pentru mentinerea nivelului optim de umiditate in piele.\nPe langa hidratare, acesta contribuie la calmarea pielii si la imbunatatirea elasticitatii, reducand sen",
+    "usage": "Aplica dupa curatare pe tenul curat, pe piele uscata sau usor umeda, turnand cateva picaturi in palme sau pe o discheta si tapoteaza delicat pana la absorbire completa; evita zona ochilor. Foloseste zilnic, dimineata si seara, apoi continua cu serul si crema pentru hidratare intensa si o rutina eficienta cu toner cu acid hialuronic.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "3227660e-02ba-4a26-a6b6-668b57a64dd7",
+   "evidence": {
+    "description": "Some By Mi\nYuja Niacin Brightening All-in-One Cleanser\neste un gel de curatare bland, cu pH scazut, creat pentru a oferi prospetime si luminozitate pielii inca din primul pas al rutinei, in timp ce indeparteaza eficient impuritatile, excesul de sebum si urmele de machiaj.\nFormula sa hipoalergenica combina\nniacinamida\nsi extract de Yuzu, doua ingrediente recunoscute pentru capacitatea lor de a uniformiza tonul pielii si de a conferi un aspect mai curat si mai radiant. Pe langa aceste ingrediente cheie, acesta este imbogatit cu un complex de acizi hialuronici in diverse forme care ajuta la menti",
+    "usage": "Aplica o cantitate mica pe tenul umed, spumeaza usor intre palme, maseaza cu miscari circulare pentru a indeparta impuritatile, excesul de sebum si urmele de machiaj, apoi clateste bine cu apa calduta. Ideal pentru utilizare zilnica, dimineata si seara, pentru o curatare blanda cu pH scazut si un ten mai luminos si hidratat.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1d4baa39-cb38-4e12-ac29-65584ba1a1d3",
+   "evidence": {
+    "description": "VT\nReedle Shot Lifting Mask\neste o masca tip servetel dezvoltata pentru a sustine fermitatea pielii si a reda tonusul tenului printr-un sistem avansat de ingrijire, ce imbina tehnologia CICA REEDLE cu ingrediente active intens hidratante.\nTehnologia CICA REEDLE integreaza microstructuri fine obtinute din extract de\nCentella Asiatica\n, care favorizeaza o distributie uniforma a esentei pe piele si o absorbtie eficienta a ingredientelor active.\nFormula esentei contine complexul CICAHYALON, care combina extractul de\nCentella Asiatica\ncu multiple forme de\nacid hialuronic\n. Acesta ofera un efect de ",
+    "usage": "Aplic-o pe ten curat si uscat, aliniaza masca pe conturul fetei si mandibulei pentru o fixare ferma, evitand zona ochilor si a buzelor. Lasa sa actioneze 10-20 minute, apoi indeparteaz-o si maseaza usor esenta ramasa pana la absorbtie, fara clatire. Ideala pentru un ritual rapid de ingrijire cu efect de lifting si hidratare intensa.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "ddf5ba5f-a72a-4d69-a6fb-793e2328b6e3",
+   "evidence": {
+    "description": "De la curatare pana la ingrijirea de baza a pielii, acest set de calatorie cuprinde cele cinci produse esentiale din linia Madagascar Centella in dimensiuni de calatorie, pentru a-ti reimprospata si relaxa pielea dupa o zi lunga de calatorie.\nSpuma de curatare, uleiul de curatare, tonerul, fiola si crema din linia SKIN1004 Madagascar Centella, in dimensiuni convenabile si compacte care incap in orice geanta, iti permit sa ai grija de pielea ta oriunde ai merge.\nProdusele sunt realizate din ingrediente esentiale minime, pentru o ingrijire delicata, dar eficienta a pielii, excluzand in acelasi t",
+    "usage": "Pentru o rutina completa si eficienta in calatorii, incepe prin a indeparta machiajul sau crema SPF folosind uleiul de curatare aplicat pe pielea uscata, emulsionand apoi cu apa si clatind bine. Continua cu spuma delicata de curatare pentru o piele revigorata, aplica tonerul pentru echilibrare, urmat apoi de fiola concentrata, iar la final crema hidratanta pentru a fixa hidratarea si confortul pielii. Evita contactul produselor cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "3fa2d447-2cfc-4806-9a14-db56738f3c50",
+   "evidence": {
+    "description": "Expunerea excesiva la soare, poluarea, exfolierea repetata sau utilizarea unor produse de ingrijire nepotrivite pot deteriora pielea, lasand urme vizibile, precum iritatii, roseata, imbatranire prematura si sensibilitate la probleme precum eruptiile, uscaciunea sau senzatia de arsura, iar pielea are nevoie de aproximativ 40-56 de zile pentru a regenera cele 5 straturi ale epidermei.\nSerumul Allies of Skin\nAdvanced Repair Copper Tripeptide & Ectoin\neste un tratament inovator, dovedit clinic, care calmeaza iritatiile, reduce roseata si ajuta la combaterea semnelor multiple ale imbatranirii pieli",
+    "usage": "Aplica 1-3 pompe uniform pe fata si gat, zilnic, dimineata si/sau seara, dupa curatarea tenului si inainte de crema hidratanta preferata. Evita zona sensibila din jurul ochilor si maseaza usor pana la absorbtia completa, pentru o piele vizibil calmata si revitalizata. Pentru rezultate optime, utilizeaza constant timp de minim o luna.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "23cc5689-a153-4778-8faa-45b0a74d0fdc",
+   "evidence": {
+    "description": "EUBOS\nBasic Care Skin Balm\neste un balsam hidratant cu textura lejera, cu absorbtie rapida, conceput pentru a sustine confortul zilnic al pielii, oferind o senzatie de piele catifelata, neteda si bine echilibrata, fara sa lase pelicula grasa.\nFormula se bazeaza pe ingrediente bogate in lipide, cum ar fi uleiul de Jojoba, care contribuie la mentinerea nivelului optim de hidratare si la prevenirea pierderilor de apa. Pantenolul si alantoina sunt incluse pentru efectul lor calmant si de sustinere a functiei de protectie a pielii, in timp ce vitamina E completeaza formula prin rolul sau antioxidan",
+    "usage": "Aplicati balsamul de corp pe pielea curata si uscata, masand usor cu miscari circulare pana la absorbire completa. Folositi zilnic, de preferat dupa dus, pentru hidratare de durata si o piele neteda si catifelata; reaplicati pe zonele uscate ori de cate ori este nevoie.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "6d82d993-7c30-4db2-a64f-439b5cd6055a",
+   "evidence": {
+    "description": "Allies of Skin Peptides & Antioxidants Advanced Firming Daily Treatment\neste un tratament hidratant avansat 5-in-1, conceput pentru utilizare atat dimineata, cat si seara, care revolutioneaza ingrijirea zilnica a tenului. Aceasta formula avansata ofera o solutie completa pentru reducerea vizibila a semnelor de imbatranire, in timp ce ofera pielii protectia si nutrientii necesari pentru o stralucire naturala si sanatoasa.\nCu o concentratie demna de o masca de tratament dar cu usurinta de aplicare a unei creme hidratante, aceasta formula premiata combina cinci beneficii esentiale intr-un singur ",
+    "usage": "Aplica 4 pompe pe fata si gat, dimineata si seara, dupa curatare si tonifiere, evitand zona ochilor. Pentru rezultate optime, include un SPF in rutina ta zilnica de dimineata si bucura-te de un ten radiant, hidratat si protejat pe tot parcursul zilei.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "0ff5913c-97a2-4d91-ac99-950fa936b6fc",
+   "evidence": {
+    "description": "Protejeaza-ti tenul impotriva razelor UV intr-un mod inovativ cu noul stick de fata Hello Sunny Fresh Stick conceput de Banila CO.\nProdusul este ideal pentru tenul gras, efectele sale benefice fiind vizibile de la prima utilizare a acestuia.\nHello Sunny Fresh este stick-ul de fata produs din ingrediente atent alese, printre care se numara extractul de menta, dar si factorii de protectie SPF 50+ si PA++++.\nRazele UVA si UVB sunt radiatiile solare, care isi pun amprenta in cel mai rapid si evident mod asupra pielii tale, iar datorita factorilor de protectie foarte ridicati, SPF 50+ si a PA++++, ",
+    "usage": "Aplica uniform pe fata, gat sau alte zone expuse la soare, prin miscari usoare, pentru o protectie ridicata SPF 50+ si un finisaj mat. Reaplica pe parcursul zilei, mai ales dupa transpiratie sau stergere, pentru a mentine protectia UVA/UVB si hidratarea optima.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "68acea1b-21d3-45eb-9dcc-624ba6f56b85",
+   "evidence": {
+    "description": "Dr. Konopka's te invita sa descoperi o linie noua de produse de ingrijire a parului si corpului, cu ingrediente naturale si organice, bazata pe retetele pe baza de plante ale Dr. Konopka.\nAcest sampon si gel de dus revigorant 2in1 este imbogatit cu uleiul pe baza de plante N52 al Dr. Konopka si alge marine facand ca aceasta formula 2 in 1 sa fie perfecta pentru ingrijirea zilnica. Ofera o curatare delicata, dar completa a parului si a pielii, lasandu-le proaspete si hidratate.\nMod de utilizare:\nAplicati pe pielea si parul umed, masati pana se creeaza spuma, apoi clatiti bine.\nVezi mai mult\nAsc",
+    "usage": "Aplica produsul pe pielea si parul umed, maseaza delicat pana obtii o spuma catifelata, apoi clateste bine cu apa calda. Pentru rezultate optime, utilizeaza-l zilnic si bucura-te de o senzatie de prospetime si hidratare de durata. Evita contactul cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "ac1324da-e3b9-41f6-9e41-810ccd79e497",
+   "evidence": {
+    "description": "Centellian24\nMadeca Homme All-in-One\neste o lotiune hidratanta multifunctionala, creata special pentru barbatii care prefera o rutina simpla, dar eficienta. Formula usoara ofera hidratare intensa fara senzatie grasa, fiind ideala pentru pielea mixta sau predispusa la deshidratare.\nContine complexul exclusiv Blue Madeca, format din\nCentella Asiatica\nExtract,\nTECA\n(Madecassic Acid, Asiaticoside, Asiatic Acid) si Blue Chamomile (musetel albastru - Chamomilla Recutita Flower Extract), care actioneaza sinergic pentru a calma pielea, a reface bariera cutanata si a mentine echilibrul optim intre hidr",
+    "usage": "Aplicati 1-2 pompe de lotiune pe tenul curat si uscat, pe fata si gat, apoi masati usor pana la absorbire completa. Folositi zilnic, dimineata si/sau seara, ca pas unic in rutina de ingrijire pentru barbati, pentru hidratare echilibrata fara senzatie grasa; pe timpul zilei, completati cu un produs cu SPF.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "d5bcaf23-0dff-473b-a838-cd7677ae679c",
+   "evidence": {
+    "description": "Unleashia\nGet Loose Glitter Gel\neste un gel vegan si cruelty-free cu sclipici intens, creat pentru a adauga luminozitate si energie oricarui machiaj. Formula usoara si flexibila adera perfect la piele, oferind o stralucire de lunga durata care ramane uniforma ore intregi.\nPerfect pentru petreceri, evenimente, festivaluri sau look-uri creative, produsul ofera libertatea de a experimenta si de a personaliza intensitatea in functie de stil. Fie ca vrei un accent discret sau un efect spectaculos, gelul permite aplicarea in straturi si se potriveste atat pentru fata, cat si pentru corp sau par.\nTex",
+    "usage": "Aplicati o cantitate mica de glitter gel cu o pensula plata sau cu varful degetelor, pe pielea uscata sau peste primer pentru aderenta sporita. Lasati-l sa se usuce complet pentru a fixa sclipiciul si a obtine un machiaj cu efect clar, uniform si rezistent; intensitatea se ajusteaza prin stratificare, iar produsul poate fi folosit pe fata, corp, maini sau par.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "499c4f61-367d-43fd-829d-e92d19db54d2",
+   "evidence": {
+    "description": "Hidrateaza intens si hraneste pielea in profunzime cu crema de fata\nBeauty of Joseon Dynasty\n, intr-un nou format generos de 100 ml, perfect pentru o utilizare indelungata si eficienta in rutina ta de skincare.\nAcest produs esential este inspirat din ritualurile traditionale coreene si formulat pentru a oferi un echilibru ideal intre hidratare si hranire, perfect pentru toate tipurile de ten, in special pentru cel uscat, deshidratat sau tern.\nTextura sa bogata, dar usor de absorbit, lasa pielea neteda, supla si vizibil mai luminoasa, fara a incarca porii creeand un strat protector care previne",
+    "usage": "Aplica zilnic o cantitate potrivita pe tenul curat, ca ultim pas al rutinei tale de skincare, si maseaza delicat pana la absorbtia completa. Pentru cele mai bune rezultate, foloseste produsul atat dimineata, cat si seara, evitand zona sensibila din jurul ochilor. Bucura-te de o piele hidratata, neteda si luminoasa, indiferent de anotimp.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "f36dae63-18d9-4c6d-8a81-93740d99479d",
+   "evidence": {
+    "description": "Muzigae Mansion\nObjet Liquid\neste un ruj lichid vegan cu textura catifelata, ce imbraca buzele intr-o culoare intensa, uniforma si de durata, fara riscul de intindere sau uscaciune. Datorita combinatiei de ulei de seminte de trandafir salbatic si\nacid hialuronic\nin forme multiple, acesta ofera o hidratare profunda si contribuie la netezirea vizibila a liniilor fine, lasand buzele suple si catifelate pe parcursul intregii zile.\nBeneficii:\nTextura velvet blurring - efect de filtrare vizuala, cu estomparea imperfectiunilor buzelor.\nHidratare de durata\nProtectie antioxidanta\nRezistenta prelungita ",
+    "usage": "Aplica produsul folosind aplicatorul inclus, pornind din centrul buzelor si estompand delicat spre margini pentru un aspect elegant si natural. Utilizeaza-l zilnic sau ori de cate ori doresti culoare intensa, confort hidratant si rezistenta de durata. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "21df2b9c-cbf4-4628-9c8e-1ca239de0485",
+   "evidence": {
+    "description": "Suferi din cauza tenului tau gras?\nGLOV a conceput pentru tine o manusa confectionata dintr-o fibra special creata pentru procesul de exfoliere.\nAceasta manusa are rolul de a stimula natural tesutul hidrolipidic, a curata fata in profunzime fata si a indeparta machiajul. Un alt beneficiu oferit de aceasta manusa este grija pe care o are vis-a-vis de impiedicarea deshidratarii tenului tau.\nRezultatele se vad chiar de la prima intrebuintare, tenul tau fiind mat si vitalizat.\nMod de utilizare:\nSe umezeste manusa cu apa, iar procesul demachierii poate incepe. La final, manusa se spala manual cu ap",
+    "usage": "Umezeste manusa cu apa si curata delicat fata pentru a indeparta machiajul si impuritatile, evitand zona sensibila a ochilor. Dupa utilizare, spala manusa manual cu apa si sapun, lasa-o la uscat natural, fiind astfel gata pentru urmatoarea rutina zilnica de ingrijire a tenului.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "55e38ba3-5c8f-437a-b78d-e5013b40e858",
+   "evidence": {
+    "description": "Descopera cum poti obtine un ten impecabil, radiant si hidratat pe tot parcursul zilei cu TIRTIR\nMask Fit Aura Cushio\nn, un fond de ten sub forma de cushion care combina acoperirea ajustabila cu un finish natural semi-stralucitor.\nAlegerea perfecta pentru cei care isi doresc un machiaj care sa le puna in valoare frumusetea naturala, formula sa, bogata in ingrediente care hranesc pielea, precum\nacidul hialuronic\nsi extractele naturale, asigura o hidratare profunda si o senzatie placuta de confort, chiar si dupa ore intregi de purtare. Fondul de ten acopera eficient imperfectiunile, uniformizeaz",
+    "usage": "Aplica produsul pe tenul curat, folosind buretelul inclus, prin tapotari usoare pentru o acoperire naturala si uniforma. Reaplica in straturi suplimentare pentru a obtine acoperirea dorita sau pentru retusuri rapide pe parcursul zilei. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "965343b4-026a-40fb-86d1-80b8a00613d4",
+   "evidence": {
+    "description": "Samponul Lee Stafford\nIlluminate & Shine Smoothing\neste solutia perfecta pentru parul lipsit de stralucire sau predispus la incretire, caruia ii ofera un aspect matasos si ultra-lucios.\nFormula sa unica, imbogatita cu Pro-Vitamina B5, ulei de Marula si extract de galbenele, curata delicat, combate electrizarea si hraneste firul de par de la radacina pana la varf. Rezultatul este un par stralucitor, hidratat si matasos, cu o luminozitate de durata.\nMod de utilizare:\nAplicati pe parul umed, masati pentru a forma spuma, clatiti bine si repetati daca este necesar. Pentru cele mai bune rezultate, c",
+    "usage": "Aplicati samponul pe parul umed si masati delicat pana obtineti o spuma bogata, apoi clatiti bine si repetati daca este necesar. Pentru rezultate optime si par hidratat, utilizati ulterior balsamul si serul pentru stralucire din aceeasi gama. Evitati contactul cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "7ef0d424-dae1-4c78-8a46-7d3569caca9a",
+   "evidence": {
+    "description": "Descopera magia parului roz pastel fara angajamente pe termen lung cu Lee Stafford\nBleach Blondes Kiss of Colour Pi\nnk\n!\nPerfect pentru persoanele cu o latura colorata, tratamentul non-permanent este ideal pentru blondele care vor sa-si adauge tonuri pastelate fara a-si compromite nuanta perfecta de blond., oferind posibilitatea de a experimenta cu nuante jucause, balayage sau culoare roz uniforma, fara a vopsi permanent parul. Efectul sau temporar dispare in 1-4 spalari, oferindu-ti flexibilitatea de care ai nevoie.\nFormulat ca o masca de par, produsul nu doar coloreaza temporar, ci si hidrat",
+    "usage": "Aplica masca pe parul curat si umed, dupa samponare si balsam, distribuind uniform pe zonele pe care doresti sa le colorezi sau evidentiezi. Lasa sa actioneze 5-10 minute, in functie de intensitatea dorita, apoi clateste bine si coafeaza-te ca de obicei. Evita contactul cu ochii si tine cont ca efectul temporar se mentine intre 1 si 4 spalari.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1802a8aa-4791-47fd-922e-5fa2ff847010",
+   "evidence": {
+    "description": "Clean It Zero\nCalming Gel Cleanser\neste un gel delicat cu pH scazut, creat special pentru a mentine confortul pielii si pentru a sustine echilibrul natural al barierei cutanate.\nFormula sa usoara formeaza o spuma fina care indeparteaza eficient particulele de praf, sebumul si machiajul lejer, oferind in acelasi timp o senzatie placuta de prospetime. Este imbogatita cu complexul calmant\nCica-Barrier\nce combina extractul de\nCentella Asiatica\ncu Aqua\nCeramide\n. Impreuna, acestea imita structura lipidica naturala a pielii, ceea ce le permite sa se aseze armonios pe suprafata ei si sa contribuie la",
+    "usage": "Umezeste tenul, aplica o cantitate mica de gel de curatare cu pH scazut, maseaza 30-60 secunde pana face spuma fina, apoi clateste bine cu apa calduta. Foloseste zilnic, dimineata si seara, pentru a indeparta praful, sebumul, machiajul lejer si protectia solara, menajand pielea sensibila si sustinand bariera cutanata. Urmeaza cu toner si crema hidratanta.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "1db68b71-3965-47e9-9553-3c3d98ecd08c",
+   "evidence": {
+    "description": "Uleiul de curatare PURITO From Green, acum intr-un ambalaj si formula reinnoite, ofera o curatare delicata si eficienta pentru toate tipurile de ten, inclusiv pielea sensibila, mentinand in acelasi timp o hidratare intensa.\nDemachiantul contine cinci uleiuri derivate din natura si este excelent pentru indepartarea machiajului greu si uleios, a protectiei solare, impuritatilor sau sebumului din pori, fara iritatii si senzatie de usturime.\nUleiul de masline este bogat in vitamina E si creeaza o bariera hidratanta asupra pielii. Uleiul de seminte de floarea soarelui contine acizi grasi esentiali ",
+    "usage": "Cu mainile curate si uscate, aplica 2-3 pompe de ulei in palme si maseaza usor pe tenul uscat. Adauga putina apa si continua masajul pentru a obtine o emulsie delicata, apoi clateste bine fata cu apa calduta. Poate fi folosit zilnic, fiind potrivit pentru toate tipurile de ten, inclusiv cel sensibil.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "65edf12a-80bf-4107-bf80-082ab484a1e2",
+   "evidence": {
+    "description": "Banila Co\nSmudging Lip Pencil\neste un creion multifunctional pentru conturarea, definirea si colorarea buzelor, creat pentru realizarea unor lookuri variate, de la o baza discreta si uniforma pana la un efect natural de over-lip. Gama cuprinde diferite nuante, concepute pentru a se integra usor in diferite stiluri de machiaj si pentru a putea fi asociate cu alte produse pentru buze.\nFormula ofera un finisaj mat, fin si usor difuz, care contribuie la uniformizarea vizuala a liniilor buzelor si la obtinerea unui aspect catifelat. Efectul optic de estompare si finisajul uniform sunt sustinute de ",
+    "usage": "Contureaza buzele urmarind linia naturala si, pentru un efect natural de over-lip, extinde usor conturul cu 1-2 mm. Aplica apoi culoarea dorita din interior spre exterior, estompeaza marginile cu degetele sau o pensula si reaplica pentru mai multa definire; poate fi folosit si ca baza sau pentru umplerea completa a buzelor, iar o cantitate mica poate fi aplicata pe obraji ca blush delicat.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "e8ed07c0-8b58-4db4-8a07-c2ecc36f4255",
+   "evidence": {
+    "description": "Aceasta masca racoritoare este bazata pe retetele Dr. Konopka si contine amestecul organic nr. 54, care regleaza si mentine nivelul optim de hidratare. Impreuna cu argila alba, este masca ideala pentru a curata porii infundati, pentru a hrani si hidrata pielea in cel mai eficient mod. Combinata cu ulei de rozmarin si extract organic de menta, aceasta masca pe langa proprietatile de diminuare a aspectului porilor, are un efect racoritor, stimuland tonicitatea si elasticitatea pielii. Ingredientele atent selectionate ajuta la mentinerea hidratarii optime, stimuleaza productia de\ncolagen\n,\nelasti",
+    "usage": "Aplica un strat uniform pe tenul curat si lasa sa actioneze timp de 15 minute pentru rezultate optime. Evita zona ochilor si apoi indeparteaza produsul cu apa din abundenta. Se recomanda utilizarea de 1-2 ori pe saptamana pentru o piele hidratata, revigorata si sanatoasa.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "3d463c03-6316-4a41-ada9-d8ad3cc0859e",
+   "evidence": {
+    "description": "Skintegra\nimbina ingrijirea pielii cu integritatea etica. Brandul crede intr-o ingrijire a pielii usoara si consecventa, cu ingrediente active curate, amestecate holistic si frumos in formule rafinate, complexe si avansate tehnologic, concepute pentru pielea dificila. Toate produsele lor sunt testate dermatologic, cruelty-free si 100% vegane.\nAmfibian\neste un gel de curatare extrem de delicat, potrivit pentru tenul normal pana la gras.\nIn contact cu apa, acesta se transforma intr-o spuma foarte blanda care aluneca peste piele si indeparteaza fara efort murdaria exogena, sebumul si machiajul.\nT",
+    "usage": "Utilizeaza gelul de curatare de doua ori pe zi, dimineata si seara, aplicand o cantitate mica pe tenul umed pana cand formeaza o spuma delicata, apoi clateste cu apa calduta. Perfect si dupa etapa de pre-curatare, curata bland si eficient tenul, oferind ingrijirea ideala pentru o piele sensibila si predispusa la inflamatii. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "168d1e32-4285-4485-bd34-61e447729155",
+   "evidence": {
+    "description": "Cu SOME BY MI\nAha\nBha\nPha 30 Days Miracle Acne Clear Body Cleanser\n, rutina zilnica de dus devine o ingrijire completa pentru pielea predispusa la acnee.\nAcest gel de dus este special  conceput pentru a combate eruptiile cutanate de pe corp, in special pe spate, umeri si piept. Formula sa combina\nAHA\n,\nBHA\nsi PHA pentru a exfolia delicat celulele moarte, a curata porii si a regla excesul de sebum, in timp ce acidul salicilic tinteste cosurile si previne aparitia lor. Extractele naturale de\nceai verde\nsi\nCentella Asiatica\ncalmeaza pielea iritata, reduc roseata si sprijina procesul de vindecare,",
+    "usage": "Aplicati o cantitate potrivita pe un burete de dus umed si masezati usor pentru a crea o spuma bogata. Clatiti cu apa calduta si folositi zilnic pentru o curatare profunda si bland-a, special conceputa pentru pielea predispusa la acnee. Evitati zona ochilor si usucarea excesiva a pielii pentru rezultate optimale.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "df302e94-7c30-41a2-8b05-df1203f07f63",
+   "evidence": {
+    "description": "Lee Stafford\nPlump Up The Volume Plumping Shampoo\ncurata delicat parul de sebum si impuritati, lasandu-l reimprospatat si cu un plus de elasticitate si flexibilitate. Formula sa fara sulfati este special conceputa pentru a oferi volum parului subtire si lipsit de stralucire.\nIngrediente active\n:\nPro-Vitamina B5: Hidrateaza si hraneste parul, oferindu-i elasticitate si flexibilitate.\nPolimeri de volum: Adauga densitate parului, creand un efect de volum spectaculos.\nBeneficii\n:\nCuratare delicata\nPar mai voluminos si mai dens\nElasticitate si flexibilitate imbunatatita\nHidratare profunda\nStralucir",
+    "usage": "Aplica o cantitate suficienta de sampon pe parul umed si maseaza delicat scalpul pana obtii o spuma fina, apoi clateste bine. Pentru rezultate optime, utilizeaza-l impreuna cu balsamul si crema volumizanta din aceeasi gama. Evita contactul direct cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "177959f7-c20f-41f8-9087-55d5f300f7c2",
+   "evidence": {
+    "description": "Crema de ochi energizanta COSRX Advanced Snail\nPeptide\ncontine 72% filtrat de secretie de melc, 5 tipuri de\npeptide\nsi\nniacinamida\n. Aceasta lumineaza vizibil zona ochilor, contribuind la diminuarea aspectului cearcanelor si al umflaturilor.\nCa o extensie a esentei Advanced Snail 96 Mucin Power Essence, aceasta crema pentru ochi cu functie dubla contine filtrat de secretie de melc care hidrateaza, protejeaza si ajuta la intinerirea zonei ochilor. Complexul peptidic-5, care consta din 5 tipuri diferite de\npeptide\n, ajuta la producerea colagenului, iar\nniacinamida\nlumineaza cercurile intunecate ",
+    "usage": "Aplicati o cantitate mica pe zona din jurul ochilor dupa curatare si aplicarea esentei sau a serului, dimineata si seara. Masati usor pana la absorbtia completa pentru a reduce vizibil cearcanele, umflaturile si semnele fine de imbatranire. Pentru rezultate optime, folositi constant, de doua ori pe zi.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "059beeae-122a-4e61-b484-990d268443ce",
+   "evidence": {
+    "description": "Permite-i pielii tale sa beneficieze de un ritual de curatare hranitor si calmant care sa o lase revigorata, revitalizata si echilibrata!\nSkinlick Kindwash Cica Cleanser este solutia perfecta pentru o rutina blanda si hranitoare de curatare a fetei. Acesta combina o selectie atenta de ingrediente pentru a oferi o ingrijire optima pielii sensibile si deshidratate.\nImbogatit cu extract de Cica si proteine de ovaz, textura sa de gel laptos hidrateaza si catifeleaza eficient pielea si datorita ingredientelor sale de curatare care nu usuca pielea, inlatura cu usurinta impuritatile acumulate si urme",
+    "usage": "Aplica o cantitate mica de produs pe pielea umeda si maseaza usor, prin miscari circulare, apoi clateste bine cu apa calduta. Potrivit pentru utilizare zilnica, acest cleanser delicat curata eficient impuritatile si machiajul, lasand pielea hidratata si calma. Evita contactul direct cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "5a802cb6-fc9d-443e-8dbb-699da72e7221",
+   "evidence": {
+    "description": "Acest set contine 5 masti tip servetel SKIN1004 Madagascar Centella Poremizing Clarifying Mask, create pentru a reduce vizibil porii, a controla excesul de sebum si a imbunatati textura pielii, oferind in acelasi timp fermitate si prospetime fara a irita.\nImbogatite cu extract de\nCentella Asiatica\ndin Madagascar, saruri minerale roz din Himalaya si acid succinic, mastile curata eficient porii, calmeaza pielea si lasa tenul echilibrat si revitalizat. Formula este completata de un complex de acizi exfolianti blanzi (\nAHA\n,\nBHA\n, PHA si LHA) care sustin un efect clarifiant si o piele neteda.\nBene",
+    "usage": "Dupa curatarea tenului si aplicarea tonerului, aseaza masca tip servetel pe fata si las-o sa actioneze 10-20 minute pentru un efect clarifiant asupra porilor si sebumului. Indeparteaz-o, apoi tapoteaza usor esenta ramasa pana la absorbire completa, pentru o piele neteda, echilibrata si revigorata, potrivita inclusiv pielii sensibile.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "eefafb3a-eeec-4708-9da0-fbc94fe480c9",
+   "evidence": {
+    "description": "Trezeste-ti simturile cu\nDrip Hot Water Tint\n- O colectie de rujuri in nuante pentru toamna-iarna, inspirata de 5 tipuri de cafea, fiecare nuanta reprezentand o intensitate diferita de cafeina.\nAlegerea perfecta pentru o zi plina de energie, textura lor usoara si subtire adera pe buze in doar 30 de secunde, creand un strat neted si mat care hidrateaza buzele. In plus, tehnologia exclusiva Tatoo Lasting de la Black Rouge garanteaza durabilitatea culorii, care se mentine intacta pe tot parcursul zilei.\nNuante:\nLV06 -\nHoney Roasting\n(Honey Latte)\nLV07 -\nCaramel Roasting\n(Caramel Macchiato)\nLV08 -",
+    "usage": "Aplica o cantitate adecvata pe buzele curate si uscate, fie uniform pe intreaga suprafata, fie in gradient, de la interior spre exterior, pentru un efect subtil si modern. Utilizeaza zilnic pentru buze hidratate si culoare intensa, rezistenta pe tot parcursul zilei. Evita contactul cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "633f7a86-5093-4f97-8e46-f8333e92703a",
+   "evidence": {
+    "description": "VT\nReedle Shot Vita-light Eye Cream\neste o crema intensiva de ingrijire a ochilor si a zonelor predispuse la hiperpigmentare sau aspect tern, precum colturile nasului si conturul buzelor.\nDezvoltata cu tehnologia inovatoare CICA REEDLE si o formula bogata in\nvitamina C\n, vitamina E si acid ferulic, aceasta actioneaza pentru revitalizarea si iluminarea pielii, uniformizarea nuantei tenului si imbunatatirea texturii cutanate.\nCu o textura lejera de gel-crema, patrunde rapid in piele, fara sa lase reziduuri, si este ideal pentru pielea lipsita de vitalitate. Ingredientele active sustin o ingrijir",
+    "usage": "Aplicati crema zilnic pe pielea curata in jurul ochilor, colturile nasului sau conturul buzelor si masati usor folosind aplicatorul cu vibratii micro-sonice, pentru absorbtie rapida si revitalizare optima. Curatati bine aplicatorul dupa fiecare utilizare pentru a-i mentine performanta si igiena. Evitati contactul direct cu interiorul ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "2e30ad6b-e111-44e5-8543-7d6c416c8b18",
+   "evidence": {
+    "description": "Centellian24\nMadeca Cream Time Reverse\neste o crema multifunctionala creata pentru a oferi pielii un aspect mai neted, mai ferm si mai luminos. Cu o formula avansata bazata pe tehnologia TECAnology, aceasta combina ingrediente derivate din\nCentella Asiatica\ncu un complex concentrat de extracte active si compusi hidratanti, oferind o ingrijire completa pielii sensibile si uscate.\nFormula contine ACTIVE-\nTECA\n(30.000 ppm), o combinatie patentata de madecassoside, asiaticoside si acid asiatic, care sustine refacerea pielii si o protejeaza impotriva factorilor externi. Extractele si uleiurile bota",
+    "usage": "Aceasta crema de fata se aplica zilnic pe tenul curat, dimineata si/sau seara, masand usor pe fata, gat si decolteu pana la absorbire completa. Integreaz-o in rutina ta dupa toner si ser pentru hidratare intensiva, calmarea pielii sensibile si un aspect mai ferm, neted si luminos. Pentru rezultate vizibile pe termen lung si estomparea ridurilor fine, utilizeaz-o consecvent.\nAtentie! Deoarece formula include o cantitate mica de retinol, ca masura de precautie standard pentru derivatii de vitamina A, produsul nu este recomandat in perioada sarcinii sau alaptarii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "50c8aed0-be53-45f7-ab03-563ad301e2cf",
+   "evidence": {
+    "description": "Masca tip servetel\nReal Hyaluron Hydra Care Mask\nofera pielii tale un boost intens de hidratare!\nSolutia ideala pentru tenul uscat si deshidratat, care are nevoie de confort si elasticitate, aceasta formula cu\nacidul hialuronic\najuta la refacerea barierei cutanate si previne pierderea apei din piele, lasand-o supla, neteda si vizibil mai sanatoasa.\nFabricata din material vegetal biodegradabil, fin si usor, masca adera perfect pe fata si livreaza uniform esenta concentrata in care este imbibata.\nBeneficii\nHidrateaza intens si reda pielii elasticitatea pierduta.\nCalmeaza disconfortul provocat de",
+    "usage": "Pe ten curat si uscat, aplica masca tip servetel, potriveste-o pe conturul fetei si lasa sa actioneze 10-20 minute. Indeparteaza si maseaza esenta bogata in acid hialuronic pe ten si gat pana la absorbire, fara clatire. Foloseste de 2-3 ori pe saptamana sau ori de cate ori tenul uscat si deshidratat are nevoie de hidratare intensiva si efect calmant; evita contactul cu ochii.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "012aff67-ffd3-4591-9911-1771fcd7c245",
+   "evidence": {
+    "description": "AYUNCHE\nEnhancing Silky Oil\neste un ulei de finisare pentru par, conceput pentru a oferi hranire profunda, netezire si luciu, fara senzatie lipicioasa. Este recomandat mai ales dupa vopsire, cand parul poate deveni mai aspru si are nevoie de un plus de suplete si stralucire. Ajuta la disciplinarea cuticulei si lasa parul mai moale, cu un aspect ingrijit si un finisaj curat, ideal si pentru ingrijirea zilnica a parului deteriorat.\nFormula include un amestec de ulei de camelia, ulei de argan si ulei din samburi de piersica, care contribuie la catifelare si la imbunatatirea aspectului lungimilor.",
+    "usage": "Aplica 1-3 pompe pe parul umed sau uscat, concentrandu-te pe lungimi si varfuri; piaptana pentru distribuire uniforma si coafeaza ca de obicei (nu se clateste). Ideal imediat dupa vopsire si inainte de uscarea cu feonul pentru protectie termica, poate fi folosit zilnic pentru netezire, stralucire si disciplinarea firelor, fara a incarca parul.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "7c769734-3219-4572-8deb-8d0b632d59a3",
+   "evidence": {
+    "description": "Tenul tau se confrunta cu exces de sebum, pori vizibili si imperfectiuni, dar are nevoie in acelasi timp de o formula delicata?\nDescopera JUMISO\nNiacinamide\n2+ Oil Control Cream\n, o crema-gel lejera creata special pentru tenul cu tendinta acneica si sensibil, care ajuta la echilibrarea sebumului, netezirea texturii si diminuarea aspectului porilor, fara sa incarce pielea.\nFormula sa combina 2%\nniacinamida\n,\nacid tranexamic\nsi glutation, pentru a contribui la uniformizarea nuantei si diminuarea aspectului petelor si semnelor post-acnee. Fermentii de Galactomyces si Bifida completeaza ingrijirea",
+    "usage": "Aplica o cantitate potrivita pe fata curata, ca ultim pas al rutinei de ingrijire, si maseaza usor pana la absorbtie completa. Foloseste zilnic, dimineata si seara, pentru a ajuta la controlul sebumului, netezirea texturii si estomparea semnelor post-acnee. Ziua, continua cu o crema cu protectie solara.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "25045a8b-b897-4090-a55f-2131c879261d",
+   "evidence": {
+    "description": "Visezi la un look proaspat, difuz si natural, fara efort? Descopera\nBanila Co Romantic Blush Lip & Cheek,\nprodusul multifunctional care reinventeaza machiajul zilnic pentru buze si obraji.\nTextura sa moale si cremoasa se topeste instantaneu pe piele, transformandu-se intr-un finisaj mat catifelat care se estompeaza impecabil pentru un aspect natural, aproape filtrat, fara a lasa urme sau a incarca tenul. Va deveni rapid secretul unui look monocromatic chic, oferindu-ti culoare si confort pe tot parcursul zilei.\nFormula sa iti permite sa controlezi cu usurinta intensitatea culorii pe buze si ob",
+    "usage": "Rasuceste usor capacul si ridica produsul doar cat ai nevoie, apoi aplica direct pe obraji si tapoteaza cu degetele pentru un efect de blush difuz, cu finisaj mat catifelat. Aplica si pe buze pentru un look soft-focus, iar pentru o culoare mai intensa, stratifica pana obtii nuanta dorita. La final, rasuceste complet in jos pana la blocarea automata, pentru depozitare sigura in geanta.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "5d312d8b-f174-4238-993e-c829a6003491",
+   "evidence": {
+    "description": "Transforma-ti dusul intr-o experienta senzoriala si lasa-te purtata de aromele rafinate ale celor mai populare parfumuri Skybottle, care te vor transpune intr-o lume a relaxarii si a bunastarii.\nO formula delicata, creata cu ingrediente naturale, te invaluie intr-o spuma bogata si parfumata, oferindu-ti un finisaj revigorant si catifelat. Pielea ta va straluci de vitalitate si luminozitate, datorita ingredientelor atent selectate.\nParfumul White Rain al acestui gel de dus te va transporta intr-o gradina de flori, plina de tuberoze stropite de roua si caprifoi. Daca iti plac parfumurile florale",
+    "usage": "Aplicati o cantitate potrivita pe pielea umeda, masand usor pentru a crea spuma bogata si parfumata, apoi clatiti bine cu apa. Pentru rezultate optime si o experienta revigoranta de fiecare data, folositi zilnic. Evitati contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "2b76240d-423a-4b57-bf44-d524c928812d",
+   "evidence": {
+    "description": "Dr. Althea\nPDRN\nReju 5000 Cream\neste o crema lejera, creata pentru momentele in care pielea are nevoie de calmare rapida, hidratare stabila si sustinerea barierei cutanate. Se absoarbe fara senzatie grea si lasa tenul neted, elastic si confortabil, fiind ideala atat pentru pielea sensibila, cat si pentru tenul iritat sau fragilizat de factori externi.\nFormula este gandita ca un pas final de sigilare a hidratarii si de refacere a echilibrului pielii, mai ales atunci cand apar roseata, disconfort sau uscaciune. In centrul acesteia se afla Biome\nPDRN\n(Sodium DNA) 5.000 ppm, o forma de\nPDRN\nobtinu",
+    "usage": "Aplica o cantitate potrivita pe fata si gat, ca ultim pas al rutinei dupa ser, si maseaza usor pana la absorbtie. Pentru zonele iritate sau uscate, aplica un strat mai generos pentru calmare intensa; poate fi folosita zilnic si ca masca de noapte pentru hidratare si refacerea barierei cutanate.\nVezi mai multe detalii\nAscunde"
+   }
+  },
+  {
+   "id": "67d193d7-9b1f-4222-a8e9-02c171102b1b",
+   "evidence": {
+    "description": "Skin1004 Madagascar Centella Watergel Sheet Ampoule Mask este o masca de fata imbibata cu un gel hidratant concentrat. Aceasta contine 51% Extract de\nCentella Asiatica\ndin inima Madagascarului, pentru a calma si hidrata intens pielea si ulei de frunze de Mentha Arvensis care ofera pielii ingrijire si senzatie revigoranta.\nMod de utilizare:\nDupa curatarea fetei si folosirea tonerului, aplicati masca si lasati-o sa actioneze 10-20 de minute. La final, indepartati masca si masati usor pentru ca gelul ramas sa se absoarba.\nVezi mai mult\nAscunde",
+    "usage": "Dupa curatarea tenului si aplicarea tonerului, aplica masca pe fata si las-o sa actioneze timp de 10-20 minute. Indeparteaza masca dupa expirarea timpului si maseaza usor gelul ramas pana la absorbtia completa, pentru o piele hidratata si revigorata. Evita contactul direct cu zona ochilor.\nVezi mai multe detalii\nAscunde"
+   }
+  }
+ ]
+}

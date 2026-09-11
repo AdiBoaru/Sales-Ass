@@ -38,6 +38,7 @@ import math
 import pathlib
 import random
 import sys
+import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -49,6 +50,12 @@ from src.catalog.derivation import (  # noqa: E402
     build_matchers,
     match_keys,
     tokens,
+)
+from src.catalog.product_type import (  # noqa: E402
+    MIN_SUPPORT,
+    build_vocabulary,
+    classify,
+    split_name,
 )
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
@@ -70,6 +77,20 @@ POSITIVE_SECTIONS = (
     "questions",
     "editorial",
 )
+
+# NX-271: ce vede AUDITORUL ca sursă de adevăr — separat de ce citește derivarea.
+#
+# Toate secțiunile de mai sus au `source = 'aura'`: text redactat pornind de la produs, deci
+# corelat cu intrarea regulii. Pentru nevoi e exact ce trebuie (regula chiar acolo potrivește, iar
+# auditorul verifică potrivirea). Pentru `product_type` e o capcană: regula citește NUMELE, iar
+# fișa `aura` începe cu „Această cremă de față…", adică repetă numele. Un auditor care citește asta
+# nu confirmă tipul, ci reconfirmă exact ce a văzut regula — iar acordul lor arată ca precizie când
+# e părtinire comună.
+#
+# Dovada independentă e textul COMERCIANTULUI (`source = 'merchant_pdp'`): descrierea lui și, mai
+# ales, modul de folosire — „aplică pe părul umed, clătește" spune ce E produsul prin comportament,
+# nu prin cum l-am parsat noi. Se afișează PRIMELE.
+MERCHANT_SECTIONS = ("description", "usage")
 
 VERDICTS = {"y": "correct", "n": "wrong", "?": "unsure"}
 
@@ -101,6 +122,23 @@ def _policy_fingerprint(policy: dict) -> str:
 
 def _audit_path(business_id: str, facet: str) -> pathlib.Path:
     return AUDIT_DIR / f"{business_id[:8]}-{facet}.json"
+
+
+def _require_uuid(business_id: str) -> str:
+    """`--business` TREBUIE să fie UUID, nu slug.
+
+    Fișierele de audit se numesc după primele 8 caractere ale argumentului. Cu un slug (`sole-ro`)
+    scriptul nu crapă — creează TĂCUT un univers paralel gol: `--report` ar raporta „0 eșantioane"
+    peste un audit care există, iar concluzia ar fi exact pe dos. Măsurat pe pielea mea de două ori
+    în aceeași zi. Mai bine un refuz explicit decât o cifră greșită care arată plauzibil."""
+    try:
+        uuid.UUID(business_id)
+    except ValueError:
+        raise SystemExit(
+            f"--business cere UUID-ul tenantului, nu slugul ({business_id!r}). "
+            "Fișierele de audit se cheamă după el, deci un slug ar deschide un audit gol, paralel."
+        ) from None
+    return business_id
 
 
 def _load_audit(business_id: str, facet: str) -> dict:
@@ -157,6 +195,16 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
     for s in sections:
         by_product[s["id"]][s["kind"]].append(s["body"])
 
+    # NX-271: `product_type` NU se derivă din potrivirea de fraze pe secțiuni, ci din NUME, cu două
+    # reguli gramaticale (`src/catalog/product_type.py`). Auditul trebuie să cheme exact
+    # producătorul care scrie în catalog — altfel ar măsura alt sistem, exact eroarea împotriva
+    # căreia e scris docstringul lui `_derive_all`. Vocabularul se construiește peste ACELEAȘI nume
+    # (toate produsele active) și cu același `min_support` ca `scripts/derive_product_type.py`,
+    # fiindcă o cheie e canonică doar relativ la corpusul în care a fost numărată.
+    type_mapping, _ = build_vocabulary((p["name"] for p in products), min_support=MIN_SUPPORT)
+    type_allowed = facet_values.get("product_type") or set()
+    type_drift = 0
+
     derived: dict[str, dict] = {}
     context: dict[str, dict] = {}
     for p in products:
@@ -174,17 +222,36 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
             values = sorted(k for k in hits if k in allowed)
             if values:
                 per_facet[facet] = values
+        # NX-271: sursa STRUCTURALĂ. Pe catalogul real nu poate intra în coliziune cu potrivirea de
+        # fraze (cheile acelea sunt nevoi — `oily`, `dry` —, nu tipuri de produs), dar dacă vreodată
+        # un pachet ar declara o cheie comună, valoarea structurală e cea care câștigă: ea vine din
+        # ACELAȘI producător care scrie în catalog, deci e ce s-ar aplica în enforcement.
+        ptype = classify(p["name"], type_mapping)
+        if ptype and type_allowed and ptype not in type_allowed:
+            type_drift += 1  # cheie derivată care nu mai e în pachet → vizibilă, nu tăcută
+            ptype = None
+        if ptype:
+            per_facet["product_type"] = [ptype]
+            head, tail = split_name(p["name"])
+            # Dovada se indexează după VALOARE, nu după fațetă: bucla de adnotare caută
+            # `evidence[valoare]` (pentru fațetele din fraze, cheia potrivită E valoarea). Pe
+            # cheia greșită, auditorul n-ar vedea deloc ce a citit regula.
+            evidence[ptype] = [f"cap: {head}"] + ([f"coadă: {tail}"] if tail else [])
         if per_facet:
             derived[pid] = per_facet
             context[pid] = {
                 "name": p["name"],
                 "evidence": {k: sorted(set(v))[:4] for k, v in evidence.items()},
+                # Comerciantul ÎNTÂI (dovadă independentă), apoi fișa derivată. `_annotate` taie
+                # la primele trei, deci ordinea decide ce apucă auditorul să citească.
                 "sections": {
                     kind: " ".join(secs.get(kind, []))[:600]
-                    for kind in POSITIVE_SECTIONS
+                    for kind in MERCHANT_SECTIONS + POSITIVE_SECTIONS
                     if secs.get(kind)
                 },
             }
+    if type_drift:
+        print(f"atenție: {type_drift} produse au un `product_type` care nu mai e în pachet (drift)")
     return derived, context
 
 
@@ -299,16 +366,115 @@ def _report(args) -> int:
     return 0
 
 
+async def _blind_out(args) -> int:
+    """Scrie foaia de lucru ÎN ORB: doar dovada comerciantului, fără nume și fără valoarea derivată.
+
+    De ce există modul ăsta: un auditor căruia i se arată întâi `derivat = crema de fata` e ANCORAT
+    — practic o va confirma, iar acordul rezultat nu e o măsurătoare, e o formalitate. Aici judeci
+    invers: citești ce FACE produsul și numești tu tipul, din lista închisă. Codul compară după.
+
+    Numele produsului e ascuns DELIBERAT: coada lui e chiar intrarea regulii, deci a-l arăta ar
+    reintroduce ancorarea pe ușa din dos."""
+    policy = _policy()
+    spec = policy["facets"].get(args.facet)
+    if spec is None:
+        raise SystemExit(f"fațeta {args.facet!r} nu e în politica preînregistrată")
+    derived, context = await _derive_all(args.business)
+    sample = _sample(derived, args.facet, spec["sample_size"], f"{args.business}:{args.facet}")
+    seen: set[str] = set()
+    if args.exclude_seen:
+        seen = set(json.loads(pathlib.Path(args.exclude_seen).read_text(encoding="utf-8")))
+
+    items = []
+    for pid in sample:
+        if pid in seen:
+            continue  # contaminat: valoarea derivată a fost deja văzută pentru produsul ăsta
+        evidence = {
+            kind: body
+            for kind, body in context[pid]["sections"].items()
+            if kind in MERCHANT_SECTIONS
+        }
+        if not evidence:
+            continue  # fără text de comerciant nu există dovadă independentă → nu se judecă în orb
+        items.append({"id": pid, "evidence": evidence})
+
+    out = pathlib.Path(args.blind_out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {
+                "business_id": args.business,
+                "facet": args.facet,
+                "allowed_keys": sorted(_allowed_keys(args.business, derived, args.facet)),
+                "skipped_seen": sorted(seen & set(sample)),
+                "skipped_no_merchant_text": (
+                    spec["sample_size"] - len(items) - len(seen & set(sample))
+                ),
+                "items": items,
+            },
+            ensure_ascii=False,
+            indent=1,
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"foaie în orb: {out} · {len(items)} de judecat · {len(seen & set(sample))} sărite (văzute)"
+    )
+    return 0
+
+
+def _allowed_keys(business_id: str, derived: dict, facet: str) -> set[str]:
+    """Lista ÎNCHISĂ din care poate alege judecătorul: exact cheile pe care regula le poate produce
+    pe catalogul ăsta. Un vocabular deschis ar face dezacordul nemăsurabil (ai inventa o cheie pe
+    care regula n-avea cum s-o aleagă)."""
+    return {vals[0] for f in derived.values() if (vals := f.get(facet))}
+
+
+async def _blind_in(args) -> int:
+    """Ingerează răspunsurile în orb și scrie verdictele. COMPARAȚIA O FACE CODUL, nu judecătorul:
+    el a spus doar ce crede că e produsul, fără să știe ce zisese regula."""
+    derived, _ = await _derive_all(args.business)
+    answers = json.loads(pathlib.Path(args.blind_in).read_text(encoding="utf-8"))
+    data = _load_audit(args.business, args.facet)
+    data["labeled_by"] = "model_blind"  # proveniența stă pe fața artefactului, ca la NX-203
+    agree = disagree = unsure = 0
+    for pid, said in answers.items():
+        truth = (derived.get(pid) or {}).get(args.facet, [None])[0]
+        if truth is None:
+            continue
+        if said in (None, "", "?"):
+            verdict, unsure = "unsure", unsure + 1
+        elif said == truth:
+            verdict, agree = "correct", agree + 1
+        else:
+            verdict, disagree = "wrong", disagree + 1
+        data["verdicts"][pid] = {"verdict": verdict, "values": [truth], "blind_said": said}
+    _save_audit(data)
+    print(
+        f"acord {agree} · dezacord {disagree} · nedecis {unsure} → "
+        f"{_audit_path(args.business, args.facet)}"
+    )
+    return 0
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--business", required=True)
     ap.add_argument("--facet", help="fațeta de auditat (cere adnotare interactivă)")
     ap.add_argument("--report", action="store_true", help="verdicte din ce s-a adnotat deja")
+    ap.add_argument("--blind-out", help="scrie foaia de lucru ÎN ORB (fără nume, fără valoare)")
+    ap.add_argument("--blind-in", help="ingerează răspunsurile în orb și scrie verdictele")
+    ap.add_argument("--exclude-seen", help="JSON cu id-uri deja văzute (contaminate)")
     args = ap.parse_args()
+    _require_uuid(args.business)
     if args.report:
         return _report(args)
     if not args.facet:
         raise SystemExit("dă --facet <nume> ca să adnotezi, sau --report ca să vezi verdictele")
+    if args.blind_out:
+        return await _blind_out(args)
+    if args.blind_in:
+        return await _blind_in(args)
     return await _annotate(args)
 
 

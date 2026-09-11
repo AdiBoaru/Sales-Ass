@@ -136,3 +136,58 @@ class TestClassify:
         assert classify("BRAND NOU - aparat de microneedling formulat cu x", mapping) is None
         assert classify("BRAND FARA COADA", mapping) is None
         assert classify("X - crema de fata formulata cu y", mapping) == "crema de fata"
+
+
+# --- NX-271: auditul de precizie trebuie să măsoare PRODUCĂTORUL, nu o copie a lui ------------
+
+
+def test_audit_derives_product_type_with_the_same_producer_as_the_job():
+    """Auditul (`scripts/derived_precision_audit.py`) re-derivă valorile în loc să citească
+    `attributes`, ca să măsoare regula, nu o scriere veche. Dar atunci el TREBUIE să cheme exact
+    producătorul pe care îl cheamă jobul care scrie în catalog — altfel auditul dă un verdict
+    despre alt sistem decât cel care rulează, iar `enforce_ready` s-ar aprinde pe o măsurătoare
+    care nu descrie nimic.
+
+    Garda e ieftină și structurală: ambele module trebuie să lege ACELEAȘI simboluri din
+    `src.catalog.product_type`. O reimplementare locală în oricare dintre ele sparge testul."""
+    import importlib.util
+    import pathlib
+
+    from src.catalog import product_type as canonical
+
+    mods = {}
+    for name in ("derived_precision_audit", "derive_product_type"):
+        path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / f"{name}.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mods[name] = mod
+
+    for name, mod in mods.items():
+        for symbol in ("build_vocabulary", "classify"):
+            assert getattr(mod, symbol) is getattr(canonical, symbol), (
+                f"{name} nu folosește `{symbol}` din src/catalog/product_type.py"
+            )
+        assert mod.MIN_SUPPORT is canonical.MIN_SUPPORT
+
+
+def test_product_type_threshold_is_preregistered_above_the_claim_tier():
+    """Pragul lui `product_type` nu poate coborî sub tierul de `claim`. Fațeta PARTIȚIONEAZĂ: sub
+    enforcement decide cine intră în răspuns, iar o valoare greșită ascunde produsul corect —
+    tăcut, și fără ca vreo poartă din aval s-o prindă (validatorul verifică adevărul, nu
+    potrivirea). Testul apără disciplina de preînregistrare: pragul se schimbă doar deliberat."""
+    import json
+    import pathlib
+
+    policy = json.loads(
+        (
+            pathlib.Path(__file__).resolve().parents[1] / "tests" / "derived_precision_policy.json"
+        ).read_text(encoding="utf-8")
+    )
+    spec = policy["facets"]["product_type"]
+    claim_tier = max(
+        f["min_precision"] for f in policy["facets"].values() if f.get("promise") == "claim"
+    )
+    assert spec["promise"] == "partitioning"
+    assert spec["min_precision"] >= claim_tier
+    assert spec["min_sample"] >= 60
