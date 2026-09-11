@@ -29,7 +29,7 @@ flowchart TD
   end
 
   subgraph InfraErr["Infra failures"]
-    I1["Redis down at webhook → 503, Meta retries<br/>webhook/app.py:127-128"]:::err
+    I1["Redis down la accept → 503, clientul reîncearcă<br/>webhook/app.py:112-113"]:::err
     I2["cache/FAQ error → miss, turn continues<br/>cache.py:169"]:::deg
     I3["analytics fail → log only<br/>aftercare.py:86"]:::deg
     I4["conv lock busy → requeue capped<br/>consumer.py:96-102"]:::deg

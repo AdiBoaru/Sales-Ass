@@ -132,7 +132,7 @@ async def _load_turn(
         contact = await get_or_create_contact(
             conn,
             business.id,
-            event.get("channel_kind", "whatsapp"),
+            event.get("channel_kind", "webchat"),
             identity_external_id,
             display_name=event.get("sender_name"),
             verified=bool(verified_customer_ref),

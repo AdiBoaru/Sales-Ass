@@ -230,4 +230,4 @@ nouă. Cazul care a cauzat incidentul trebuie să fie deja în corpusul de dezvo
 - nu promovează singur (niciodată, în nicio configurație);
 - nu acceptă `business_id`, procent, mod sau hash din requestul widgetului ori din output de model;
 - nu are endpoint HTTP — singurul drum e CLI-ul, cu credential de control plane;
-- nu atinge WhatsApp/Telegram (înghețate) și nu face canary pe proactiv.
+- nu face canary pe proactiv. (WhatsApp/Telegram nu mai există — NX-289.)

@@ -13,7 +13,7 @@
 |---|---|---|
 | `core.businesses` | `businesses` | schemă plată `public`, fără prefix |
 | `core.channel_instances` | `channels` | `kind`, `provider_account_id` |
-| `core.wa_templates` | `wa_templates` | identic ca structură |
+| ~~`core.wa_templates`~~ | — | tabelul a fost ȘTERS de NX-289 (migrarea 051): template-urile aprobate erau un concept al platformei Meta |
 | `core.audit_log` | `audit_log` | |
 | `conv.contacts` | `contacts` | `locale` (nu `language`), `lifecycle`, `lead_score` |
 | `conv.channel_identities` | `channel_identities` | `channel_kind`, `external_id` (+ `external_id_hash` generat) |

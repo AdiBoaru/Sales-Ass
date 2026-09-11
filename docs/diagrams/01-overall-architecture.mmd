@@ -13,17 +13,13 @@ flowchart LR
   classDef bg fill:#a3e4d7,stroke:#148f77,color:#000
 
   subgraph Users["Users"]
-    WA_USER["WhatsApp customer"]:::user
-    TG_USER["Telegram tester"]:::user
     WEB_USER["Website visitor widget"]:::user
     SHOP["Shop platform orders"]:::ext
   end
 
   subgraph Ingress["Ingress Edges — thin, no DB"]
-    WEBHOOK["GET /webhook verify · POST /webhook<br/>signature + dedupe L1"]:::edge
     ORDERS["POST /webhook/orders/:biz<br/>HMAC"]:::edge
     WEB_API["GET /web/bootstrap session<br/>POST /web/messages async · POST /web/chat sync"]:::edge
-    POLLER["Telegram poller<br/>getUpdates loop"]:::edge
   end
 
   subgraph Queue["Redis Backbone"]
@@ -40,8 +36,6 @@ flowchart LR
   subgraph Egress["Egress"]
     OUTBOX[("outbox table")]:::db
     DISPATCHER["Dispatcher<br/>claim_due → send → mark"]:::worker
-    META_C["MetaClient"]:::ext
-    TG_C["TelegramClient"]:::ext
     WEB_S["WebSender → SSE"]:::ext
   end
 
@@ -55,21 +49,16 @@ flowchart LR
     OPENAI["OpenAI API<br/>nano triage · mini agent<br/>embed · vision · moderation"]:::ai
   end
 
-  WA_USER --> WEBHOOK --> STREAM
   SHOP --> ORDERS --> STREAM
   WEB_USER --> WEB_API
   WEB_API -- "async envelope" --> STREAM
   WEB_API -- "sync in-process" --> PROCESSOR
-  TG_USER --> POLLER --> STREAM
   STREAM --> CONSUMER --> PROCESSOR --> PIPELINE
   PIPELINE <--> OPENAI
   PIPELINE <--> PG
   PROCESSOR --> OUTBOX --> DISPATCHER
-  DISPATCHER --> META_C --> WA_USER
-  DISPATCHER --> TG_C --> TG_USER
   DISPATCHER --> WEB_S -- "SSE /web/stream" --> WEB_USER
   JOBS --> PG
   JOBS --> PROACTIVE
   PROACTIVE --> OUTBOX
   CONSUMER <--> LOCKS
-  CONSUMER -. "typing direct — ocolește outbox<br/>consumer.py:63-81" .-> META_C

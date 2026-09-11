@@ -212,7 +212,6 @@ APP_SERVICES = (
     "dispatcher",
     "scheduler",
     "migrate",
-    "telegram-poller",
     "proactive",
 )
 

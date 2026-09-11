@@ -79,7 +79,7 @@ def test_config_revision_nu_se_misca_la_schimbarea_unui_secret(monkeypatch):
         ("database_url_bot", True),
         ("redis_url", True),
         ("web_action_keys", True),
-        ("meta_app_secret", True),
+        ("orders_webhook_secret", True),
         ("ops_health_token", True),
         ("web_session_secret_ttl_s", False),
         ("web_cors_origins", False),
@@ -98,9 +98,6 @@ SECRET_FIELDS = frozenset(
     {
         "database_url_bot",
         "database_url_migration",
-        "meta_access_token",
-        "meta_app_secret",
-        "meta_verify_token",
         "observability_trace_secret",
         "openai_api_key",
         "ops_health_token",
@@ -108,7 +105,6 @@ SECRET_FIELDS = frozenset(
         "redis_url",
         "retrieval_decision_key",
         "supabase_db_url",
-        "telegram_bot_token",
         "web_action_keys",
         "web_demo_access_secret",
         "web_feedback_prompt_secret",
@@ -142,7 +138,7 @@ def test_niciun_secret_nu_apare_in_amprenta(monkeypatch):
     identitatea publică a artefactului."""
     canary = "CANARY248"
     monkeypatch.setenv("OPENAI_API_KEY", f"sk-{canary}")
-    monkeypatch.setenv("META_APP_SECRET", canary)
+    monkeypatch.setenv("ORDERS_WEBHOOK_SECRET", canary)
     monkeypatch.setenv("OPS_HEALTH_TOKEN", canary)
     settings = Settings()
     payload = json.dumps(bi.build_info(settings, role="api").operator())

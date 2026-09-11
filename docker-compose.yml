@@ -6,7 +6,7 @@
 #  • --appendonly yes --appendfsync everysec → un restart nu pierde mesaje în zbor
 #  • --requirepass → fără auth nu se conectează nimeni la backbone
 #  • --maxmemory-policy noeviction → la presiune de memorie, XADD dă eroare
-#    (webhook → 503, Meta reîncearcă, NX-51 deduplică) în loc de pierdere TĂCUTĂ
+#    (acceptul web → 503, clientul vede o eroare) în loc de pierdere TĂCUTĂ
 #  • fără `ports:` publicat → Redis e doar pe rețeaua internă compose
 #    (pentru redis-cli: `docker compose exec redis redis-cli -a $REDIS_PASSWORD`)
 
@@ -90,20 +90,6 @@ services:
     volumes:
       - ./src:/app/src
     env_file: .env
-
-  # Canal de TEST (NX-61): long polling Telegram → stream inbound.
-  # ÎNGHEȚAT (NX-179) — focusul e 100% pe WEB WIDGET. OFF by default; pornește-l explicit cu
-  # `docker compose --profile telegram up` dacă se reia canalul. Codul rămâne intact.
-  telegram-poller:
-    build: .
-    command: python -m src.channels.telegram.poller
-    volumes:
-      - ./src:/app/src
-    env_file: .env
-    profiles: ["telegram"]
-    depends_on:
-      redis:
-        condition: service_healthy
 
 volumes:
   redis-data:

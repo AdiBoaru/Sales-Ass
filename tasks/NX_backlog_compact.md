@@ -52,12 +52,12 @@ Mapare complementaritate per categorie în taxonomie (`goes_with`); context buil
 ## NX-31 · Export CRM: webhook + CSV zilnic (P2 · 12h · dep T120 + NX-52)
 Eveniment `lead.qualified` POST-at către URL-ul clientului, semnat HMAC cu același mecanism ca NX-52 (secret separat, outbound de data asta) + CSV zilnic per tenant în storage privat. DoD: lead calificat ajunge la endpointul de test cu semnătură validă; fișierul zilnic există și e descărcabil.
 
-## Epicul E26 · Web Widget (V1.5 — după clientul 1 stabil pe WhatsApp)
+## Epicul E26 · Web Widget (SINGURUL canal, din NX-179/NX-289)
 Ordinea W1→W6; zona 1b din diagrama v4. Estimări în Excel.
 - **NX-20 · Gateway SSE (W1):** POST /web/messages + GET /web/stream; sesiune semnată cu token public per tenant; rate limit IP+visitor; reconectare Last-Event-ID. SSE, nu WebSocket: trece prin orice proxy/CDN. DoD: 200 sesiuni simultane stabile 10 min pe staging.
 - **NX-21 · widget.js (W2):** shadow DOM (zero conflict CSS), embed 1 linie cu data-token, temă din settings, i18n RO/HU/EN, disclosure AI vizibil permanent (art. 50). DoD: funcționează pe un site terț de test.
 - **NX-22 · Canal web în gates/sender (W3):** `channel_kind='web'`: fără fereastră 24h, debounce 800ms, typing = eveniment SSE; senderul scrie în stream-ul sesiunii. DoD: golden echo pe web verde.
 - **NX-25 · CORS/CSP + allowlist (W3):** allowlist domenii per tenant; token public ≠ secret (doar identifică tenantul, rate-limitat agresiv). DoD: embed de pe domeniu neautorizat respins cu 403.
-- **NX-23 · Identitate vizitator + merge (W4):** visitor_id semnat în cookie first-party → channel_identities; la capturarea telefonului → merge cu identitatea WhatsApp, logat în audit_log, reversibil. DoD: istoricul unificat, zero contacte duplicate pe demo.
+- **NX-23 · Identitate vizitator + merge (W4):** visitor_id semnat în cookie first-party → channel_identities; la capturarea unei identități verificate → merge, logat în audit_log, reversibil. DoD: istoricul unificat, zero contacte duplicate pe demo.
 - **NX-24 · Context pagină (W5):** page_url/product_id din widget → hint de retrieval prioritar în context builder. DoD: „cât costă asta?" pe pagina unui produs răspunde despre ACEL produs.
 - **NX-26 · Golden web + load SSE (W6):** suita golden rulată pe canalul web + load 200 sesiuni/10 min; p95 și mesaje pierdute măsurate. DoD: p95 < țintă, 0 pierdute.

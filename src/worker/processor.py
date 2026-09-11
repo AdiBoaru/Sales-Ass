@@ -30,7 +30,7 @@ from uuid import uuid4
 from redis.asyncio import Redis
 
 from src.agent.llm import get_llm
-from src.channels.base import IDENTIFIED_CHANNELS
+from src.channels.base import identity_is_stable
 from src.channels.media import get_media_registry
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary
@@ -122,7 +122,7 @@ class TurnResult:
 
     `reply` + `language` sunt populate DOAR pe calea sincronă (`deliver=False`, gateway web
     request/response): apelantul mapează `reply` (text + produse + chips) direct în răspunsul HTTP,
-    fără outbox/dispatcher. Pe calea async (WhatsApp/Telegram/SSE) rămân None — livrarea e prin
+    fără outbox/dispatcher. Pe calea async (SSE) rămân None — livrarea e prin
     outbox, iar `reply_text` (text PUR, fără disclaimer) e suficient pt log/teste."""
 
     conversation_id: str | None
@@ -162,8 +162,9 @@ async def _llm_within_budget(
                 "cost guard: business %s peste plafon ($%.2f) → LLM dezactivat", business.id, cap
             )
             return None
-        # NX-125: plafon SOFT per-contact (canale identificate; web = NX-120). Pre-check read-only.
-        if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
+        # NX-125: plafon SOFT per-contact (contact identificabil; anonim = NX-120). Pre-check
+        # read-only. NX-289: „identificat" nu mai e un nume de canal, vezi `identity_is_stable`.
+        if contact_cap and identity_is_stable(channel_kind, ctx.verified_customer_ref):
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_capped(redis, scope, contact_cap):
                 ctx.emit("contact_spend_capped", cap_usd=contact_cap)
@@ -202,9 +203,10 @@ async def _record_turn_cost(
             ctx.emit("cost_guard_tripped", cap_usd=cap, total_usd=round(total, 6))
     except Exception as e:  # noqa: BLE001 — contor best-effort, turul a răspuns deja
         log.warning("cost guard: add eșuat (%s)", type(e).__name__)
-    # NX-125: plafon per-contact (canale identificate; web = NX-120). Increment atomic + compară.
+    # NX-125: plafon per-contact (contact identificabil; anonim = NX-120). Increment atomic +
+    # compară.
     contact_cap = settings.contact_daily_cost_cap_usd
-    if contact_cap and channel_kind in IDENTIFIED_CHANNELS:
+    if contact_cap and identity_is_stable(channel_kind, ctx.verified_customer_ref):
         try:
             scope = contact_scope_key(business.id, ctx.contact.id)
             if await spend_over_cap(redis, scope, cost, contact_cap, CONTACT_COST_WINDOW_S):
@@ -422,8 +424,10 @@ def _build_new_state(
 
     new_state = base_state
     if (is_rich or has_products) and ctx.reply.products:
-        # Recomandare BOGATĂ (iZi) / carusel (R2): persistăm setul afișat → navigarea
-        # caruselului (handle_callback) îl citește din state (ref-uri, principiul 8).
+        # Recomandare BOGATĂ (iZi): persistăm setul afișat → turul următor rezolvă
+        # referințele („al doilea", „crema asta") din state (ref-uri, principiul 8).
+        # NX-289: consumatorul istoric era și navigarea de carusel (`handle_callback`), ștearsă
+        # odată cu butoanele inline Telegram; `reference_resolver` rămâne cititorul viu.
         new_state = {
             **base_state,
             "displayed_products": _displayed_product_refs(ctx.reply.products),
@@ -484,7 +488,7 @@ async def handle_turn(
     channel_account_id, sender_external_id, provider_msg_id, content_type, body, ...
 
     `deliver` (NX-25b — gateway web sincron): True (default, calea async) = Sender-ul scrie
-    reply-ul în `outbox` → dispatcher-ul îl livrează (WhatsApp/Telegram/SSE), eventual spart în 2.
+    reply-ul în `outbox` → dispatcher-ul îl livrează (SSE), eventual spart în 2.
     False (request/response: răspunsul HTTP E transportul) = persistăm mesajul outbound (status
     `sent`, un singur fragment) + state, dar NU punem în outbox (n-ar avea cine-l livra) și
     întoarcem `ctx.reply` în `TurnResult` ca apelantul să-l mapeze în răspuns. Restul (dedupe,
@@ -504,7 +508,7 @@ async def handle_turn(
     """
     stages = stages or DEFAULT_STAGES
     turn_id = turn_id or str(uuid4())
-    channel_kind = event.get("channel_kind", "whatsapp")
+    channel_kind = event.get("channel_kind", "webchat")
     sender_external_id = event["sender_external_id"]
     provider_msg_id = event.get("provider_msg_id")
     # NX-129: login passthrough — dacă marginea de canal a verificat o identitate stabilă

@@ -48,7 +48,7 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
             channel_id = await conn.fetchval(
                 """
                 insert into channels (business_id, kind, provider_account_id)
-                values ($1, 'whatsapp', $2)
+                values ($1, 'webchat', $2)
                 returning id::text
                 """,
                 business_id,
@@ -70,8 +70,8 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
 async def test_contact_created_then_resolved(pool):
     async with tenant_tx(pool) as (conn, _):
         ext = f"+4072{uuid4().hex[:7]}"
-        c1 = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", ext, display_name="Ana")
-        c2 = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", ext)
+        c1 = await get_or_create_contact(conn, DEMO_BIZ, "webchat", ext, display_name="Ana")
+        c2 = await get_or_create_contact(conn, DEMO_BIZ, "webchat", ext)
         assert c1.id == c2.id  # același user → același contact
         assert c1.business_id == DEMO_BIZ
         assert c1.display_name == "Ana"
@@ -80,8 +80,8 @@ async def test_contact_created_then_resolved(pool):
 
 async def test_different_external_id_different_contact(pool):
     async with tenant_tx(pool) as (conn, _):
-        a = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
-        b = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        a = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
+        b = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         assert a.id != b.id
 
 
@@ -92,7 +92,7 @@ async def test_different_external_id_different_contact(pool):
 
 async def test_conversation_get_or_create_is_idempotent(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv1 = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         conv2 = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         assert conv1["id"] == conv2["id"]
@@ -103,7 +103,7 @@ async def test_conversation_get_or_create_is_idempotent(pool):
 
 async def test_patch_state_optimistic_lock(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
 
         v1 = await patch_conversation_state(
@@ -128,7 +128,7 @@ async def test_patch_state_optimistic_lock(pool):
 
 async def test_touch_last_inbound(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         await touch_last_inbound(conn, DEMO_BIZ, conv["id"])
         ts = await conn.fetchval(
@@ -144,7 +144,7 @@ async def test_touch_last_inbound(pool):
 
 async def test_insert_and_roundtrip_message(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         mid = await insert_message(
             conn,
@@ -165,7 +165,7 @@ async def test_insert_and_roundtrip_message(pool):
 
 async def test_history_capped_at_8_oldest_first(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         # now() e constant în tranzacție → forțăm created_at distincte explicit
         for i in range(10):
@@ -191,7 +191,7 @@ async def test_get_turn_messages_scoped_to_turn_not_last_n(pool):
     conversația a continuat cu un tur ULTERIOR — spre deosebire de euristica veche (ultimele N
     mesaje ale conversației), care ar fi întors corpurile turului 2, nu ale turului 1."""
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         turn1, turn2 = str(uuid4()), str(uuid4())
         rows = [
@@ -234,7 +234,7 @@ async def test_get_turn_messages_orders_outbound_fragments_by_index_not_created_
     query-ul s-ar baza pe `created_at asc`, ar ieși GREȘIT determinist; cu `fragment_index` +
     `direction` ca sortare primară, iese CORECT determinist indiferent de `created_at`."""
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         turn_id = str(uuid4())
         rows = [
@@ -279,7 +279,7 @@ async def test_get_turn_messages_orders_outbound_fragments_by_index_not_created_
 
 async def test_enqueue_is_idempotent(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         key = f"turn-{uuid4()}"
         first = await enqueue_outbox(conn, DEMO_BIZ, conv["id"], key, {"text": "hi"})
@@ -290,7 +290,7 @@ async def test_enqueue_is_idempotent(pool):
 
 async def test_claim_due_marks_dispatching_once(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
         oid = await enqueue_outbox(conn, DEMO_BIZ, conv["id"], f"turn-{uuid4()}", {"text": "hi"})
 
@@ -308,7 +308,7 @@ async def test_claim_due_marks_dispatching_once(pool):
 
 async def test_mark_sent_and_failed(pool):
     async with tenant_tx(pool) as (conn, channel_id):
-        contact = await get_or_create_contact(conn, DEMO_BIZ, "whatsapp", f"+40{uuid4().hex[:9]}")
+        contact = await get_or_create_contact(conn, DEMO_BIZ, "webchat", f"+40{uuid4().hex[:9]}")
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id)
 
         sent_id = await enqueue_outbox(conn, DEMO_BIZ, conv["id"], f"turn-{uuid4()}", {"t": 1})

@@ -34,7 +34,7 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
         try:
             channel_id = await conn.fetchval(
                 "insert into channels (business_id, kind, provider_account_id) "
-                "values ($1, 'whatsapp', $2) returning id::text",
+                "values ($1, 'webchat', $2) returning id::text",
                 business_id,
                 f"PN-{uuid4().hex[:10]}",
             )

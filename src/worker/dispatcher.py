@@ -1,7 +1,8 @@
-"""Dispatcher — outbox → Meta. Singurul care trimite efectiv (principiul 5).
+"""Dispatcher — outbox → canal. Singurul care trimite efectiv (principiul 5).
 
-Sender-ul scrie în `outbox` (stagiul 9); dispatcher-ul citește, trimite la Meta
-și marchează rezultatul. Rulează ca proces separat de worker.
+Sender-ul scrie în `outbox` (stagiul 9); dispatcher-ul citește, trimite prin
+`ChannelSender`-ul canalului și marchează rezultatul. Rulează ca proces separat de worker.
+NX-289: singurul sender înregistrat e `WebSender` (webchat).
 
 Flux:
   1. control plane (admin_conn): ce tenanți au rânduri scadente
@@ -17,10 +18,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
-import httpx
-
 from src.channels.base import Capability, ChannelSenderRegistry
-from src.channels.telegram.client import TelegramClient
 from src.channels.web.sender import WebSender
 from src.config import get_settings
 from src.db.connection import admin_conn, close_pool, get_bot_pool, get_pool
@@ -33,7 +31,6 @@ from src.db.queries.outbox import (
     mark_failed,
     mark_sent,
 )
-from src.meta_client import MetaClient
 from src.models import Event
 from src.redis_bus import close_redis, get_redis
 
@@ -42,28 +39,19 @@ log = logging.getLogger(__name__)
 
 _DELIVERED = {
     "rich": "rich",
-    "carousel": "carousel",
     "products": "cards",
-    "edit": "edit",
-    "template": "template",
 }
 
 
 def _requested_render(payload: dict, ptype: str | None) -> str:
     """Randarea CERUTĂ de pipeline (taxonomie aliniată cu `_DELIVERED` ca să nu raportăm un
-    carousel→carousel reușit drept degradare). rich > carousel > cards > text. IZI-compare:
-    `comparison` se cere ca `rich` (web îl livrează prin `send_rich`; canalele text → degradare).
-    `template` (proactiv, PL-1) e propria cerere → degradarea template→text e vizibilă în
-    render_path."""
-    if ptype == "template":
-        return "template"
+    cards→cards reușit drept degradare). rich > cards > text. IZI-compare: `comparison` se cere
+    ca `rich` (web îl livrează prin `send_rich`; canalele fără el → degradare)."""
     if payload.get("rich") or payload.get("comparison"):
         return "rich"
     if not payload.get("products"):
         return "text"
-    if ptype == "carousel":
-        return "carousel"
-    if ptype == "products":
+    if ptype in ("carousel", "products"):
         return "cards"
     return "text"
 
@@ -142,27 +130,22 @@ async def _emit_outbox_dispatch(
 
 def choose_render(payload: dict, ptype: str | None, caps: frozenset[Capability]) -> str:
     """NX-115 — rutare table-driven PURĂ pe capabilități. Întoarce ramura de randat:
-    'rich' | 'edit' | 'edit_unsupported' | 'carousel' | 'products' | 'text'. Degradează
-    mereu spre 'text' (P6, niciodată tăcere). `edit_media` NU degradează la text — e o
-    navigare UI, nu conținut nou → 'edit_unsupported' (dead) dacă lipsește EDIT.
+    'rich' | 'products' | 'text'. Degradează mereu spre 'text' (P6, niciodată tăcere).
 
     `Reply.offer` (NX-114) e deja aplatizat în payload['text'] (floor); randarea nativă pe
-    canale cu OFFER e follow-up (NX-127/CTA WhatsApp) → nicio ramură dedicată azi.
+    canale cu OFFER e follow-up (NX-127) → nicio ramură dedicată azi.
 
     IZI-compare: `comparison` se randează prin `send_rich` DOAR pe canale cu COMPARISON (web);
-    altundeva cade pe floor-ul aplatizat (tabelul ca text) prin degradarea normală spre 'text'."""
+    altundeva cade pe floor-ul aplatizat (tabelul ca text) prin degradarea normală spre 'text'.
+
+    NX-289: ramurile 'template' (proactiv Meta în afara ferestrei 24h) și 'edit'/'carousel'
+    (navigare de carusel Telegram) au dispărut odată cu canalele lor. `ptype == 'carousel'`
+    rămâne o valoare LEGITIMĂ pe sârmă (o listă de carduri produs, scrisă de processor) — numele
+    nu s-a schimbat fiindcă e persistat în `outbox`; se randează pe ramura 'products'."""
     if payload.get("comparison") and Capability.COMPARISON in caps:
         return "rich"
     if payload.get("rich") and Capability.RICH in caps:
         return "rich"
-    if ptype == "template":
-        # Proactiv în afara ferestrei 24h (PL-1): doar canalele cu TEMPLATE (WhatsApp). Altundeva
-        # degradăm grațios la text (floor = `payload['text']`, textul randat) — P6, fără tăcere.
-        return "template" if Capability.TEMPLATE in caps else "text"
-    if ptype == "edit_media":
-        return "edit" if Capability.EDIT in caps else "edit_unsupported"
-    if ptype == "carousel" and payload.get("products") and Capability.CAROUSEL in caps:
-        return "carousel"
     if ptype in ("carousel", "products") and payload.get("products") and Capability.CARDS in caps:
         return "products"
     return "text"
@@ -176,7 +159,7 @@ async def dispatch_row(
     Alege transportul din registru după `channel_kind` (NX-60). `db` e providerul tenant-scoped
     pe `business_id`.
 
-    NX-231: apelul HTTP către provider (Meta/Telegram/web publish) rulează cu ZERO conexiune
+    NX-231: apelul către transport (web publish) rulează cu ZERO conexiune
     ținută. Înainte, `_dispatch_claimed_row` deschidea `tenant_conn` și îl păstra peste `send_*`
     — exact anti-pattern-ul pe care îl scoatem din calea turului, doar în alt proces: sub un
     provider lent, dispatcher-ul epuiza poolul pe timp de rețea, nu pe muncă de DB.
@@ -190,10 +173,8 @@ async def dispatch_row(
         "text",
         "products",
         "carousel",
-        "edit_media",
-        "template",
     ):
-        # text/products/carousel/edit_media/template; interactive/typing → follow-up.
+        # text/products/carousel; interactive/typing → follow-up.
         log.warning(
             "outbox %s: kind/type nesuportat (%s/%s) — marcat dead",
             row["id"],
@@ -215,52 +196,24 @@ async def dispatch_row(
         return "dead"
 
     # NX-115: matrice de capabilități în loc de scară `hasattr`. Ramura aleasă pur (testabil)
-    # apoi executată; degradare grațioasă spre text (P6). edit_media fără EDIT = dead (UI, nu text).
+    # apoi executată; degradare grațioasă spre text (P6).
     caps = getattr(sender, "capabilities", frozenset())
     branch = choose_render(payload, ptype, caps)
-    if branch == "edit_unsupported":
-        log.warning("outbox %s: edit_media pe canal fără EDIT (%s)", row["id"], channel_kind)
-        async with db("outbox_mark_failed") as conn:
-            await mark_failed(conn, business_id, row["id"], 999, "edit_media nesuportat")
-        return "dead"
 
     try:
         account_id = row["channel_account_id"]
-        if branch == "template":
-            # Proactiv în afara ferestrei 24h (PL-1): template Meta aprobat (poarta NX-71 a validat
-            # consent + status). Trimitem name/language/params (NU textul randat — Meta randează).
-            provider_id = await sender.send_template(
-                account_id,
-                payload["to"],
-                payload["template_name"],
-                payload["language"],
-                payload.get("params") or [],
-            )
-        elif branch == "rich":
+        if branch == "rich":
             # Recomandare bogată (model iZi): intro + carduri + pick + chips. Canalele fără RICH
             # au degradat deja la 'text' în choose_render (aplatizare — payload['text']).
             provider_id = await sender.send_rich(account_id, payload["to"], payload)
-        elif branch == "edit":
-            # navigare carusel (R2): editează cardul existent (canal cu EDIT).
-            provider_id = await sender.edit_message_media(
-                account_id,
-                payload["to"],
-                payload["card_message_id"],
-                payload["products"],
-                payload["index"],
-            )
-        elif branch == "carousel":
-            provider_id = await sender.send_carousel_card(
-                account_id, payload["to"], payload["products"], 0
-            )
         elif branch == "products":
-            # listă compactă cu butoane-link (carusel nesuportat de canal, dar are CARDS).
+            # listă compactă cu butoane-link (canal cu CARDS).
             provider_id = await sender.send_products(
                 account_id, payload["to"], payload["text"], payload["products"]
             )
         else:
-            # text, sau carusel/products pe un canal fără CARDS/CAROUSEL → lead-in ca text
-            # (conține deja recomandarea + offer-ul aplatizat — degradare grațioasă, P6).
+            # text, sau products pe un canal fără CARDS → lead-in ca text (conține deja
+            # recomandarea + offer-ul aplatizat — degradare grațioasă, P6).
             provider_id = await sender.send_text(account_id, payload["to"], payload["text"])
     except Exception as e:  # noqa: BLE001 — orice eroare de transport/HTTP → retry
         async with db("outbox_mark_failed") as conn:
@@ -369,15 +322,11 @@ async def run_dispatcher(
             await asyncio.sleep(idle_sleep)
 
 
-def build_registry(http: httpx.AsyncClient, settings, redis=None) -> ChannelSenderRegistry:
+def build_registry(settings, redis=None) -> ChannelSenderRegistry:
     """Construiește registrul de sender-e din config. Canalele fără credențiale
     nu se înregistrează (rândurile lor → 'dead' cu log explicit). `redis` (NX-20) e necesar
     pt WebSender (publish SSE); fără el / web dezactivat → canalul webchat nu se înregistrează."""
     registry = ChannelSenderRegistry()
-    if settings.meta_access_token:
-        registry.register("whatsapp", MetaClient(http, settings.meta_access_token))
-    if settings.telegram_bot_token:
-        registry.register("telegram", TelegramClient(http, settings.telegram_bot_token))
     if settings.web_enabled and redis is not None:
         registry.register(
             "webchat",
@@ -392,26 +341,24 @@ def build_registry(http: httpx.AsyncClient, settings, redis=None) -> ChannelSend
 
 async def _main() -> None:
     logging.basicConfig(level=logging.INFO)
-    logging.getLogger("httpx").setLevel(logging.WARNING)  # nu loga URL-uri cu token
     settings = get_settings()
     pool = await get_pool()  # admin (control plane: business_ids_with_due_outbox)
     await get_bot_pool()  # eager: parolă bot_runtime greșită → crapă la boot
     redis = await get_redis() if settings.web_enabled else None  # NX-20: WebSender publică pe SSE
-    async with httpx.AsyncClient(timeout=15.0) as http:
-        registry = build_registry(http, settings, redis)
-        try:
-            await run_dispatcher(
-                pool,
-                registry,
-                idle_sleep=settings.dispatcher_idle_sleep_s,
-                batch=settings.dispatcher_batch_size,
-                global_concurrency=settings.dispatcher_global_concurrency,
-                tenant_concurrency=settings.dispatcher_tenant_concurrency,
-            )
-        finally:
-            if redis is not None:
-                await close_redis()
-            await close_pool()
+    registry = build_registry(settings, redis)
+    try:
+        await run_dispatcher(
+            pool,
+            registry,
+            idle_sleep=settings.dispatcher_idle_sleep_s,
+            batch=settings.dispatcher_batch_size,
+            global_concurrency=settings.dispatcher_global_concurrency,
+            tenant_concurrency=settings.dispatcher_tenant_concurrency,
+        )
+    finally:
+        if redis is not None:
+            await close_redis()
+        await close_pool()
 
 
 if __name__ == "__main__":

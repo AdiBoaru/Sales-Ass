@@ -17,15 +17,14 @@ flowchart LR
     RTY["bounded retry _with_retry :45<br/>respects Retry-After"]:::sys
   end
 
-  subgraph Meta["Meta Cloud API"]
+  subgraph Commerce["Webhook comenzi (ecommerce)"]
     MIN["webhook inbound signed<br/>X-Hub-Signature-256"]:::ext
-    MOUT["MetaClient send text/template/typing<br/>meta_client.py:28"]:::ext
-    MMED["media download GET — fetch_media<br/>meta_client.py:137 · media.py:34-43"]:::ext
+    MMED["media download — registru GOL din NX-289<br/>gates degradează pe no_downloader · media.py:27-33"]:::ext
   end
 
-  subgraph TG["Telegram Bot API"]
+  subgraph WebOut["Transport web"]
     TIN["long polling getUpdates<br/>poller.py:70"]:::ext
-    TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:78"]:::ext
+    TOUT["WebSender publish Pub/Sub + backlog SSE<br/>channels/web/sender.py"]:::ext
   end
 
   subgraph Web["Web widget — FE repo separat"]
@@ -34,7 +33,7 @@ flowchart LR
   end
 
   subgraph Shop["Shop platform"]
-    OIN["orders webhook HMAC<br/>webhook/app.py:127 → attribution"]:::ext
+    OIN["orders webhook HMAC<br/>webhook/app.py:91 → attribution"]:::ext
   end
 
   subgraph RedisSvc["Redis"]
@@ -48,7 +47,6 @@ flowchart LR
   WIN --> SYS
   OIN --> SYS
   MMED --> SYS
-  SYS --> MOUT
   SYS --> TOUT
   SYS --> WOUT2
   SYS <--> RS

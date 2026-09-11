@@ -329,7 +329,7 @@ def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
     să scrie linkuri (regulile rich) → linkul era creat în DB (`checkout_link_created`) și apoi
     murea tăcut — reply fără URL. Offer e neutru de canal (NX-114): marginile bogate randează
     buton/CTA; floor-ul din `set_offer` lipește URL-ul la text DOAR dacă nu e deja acolo (proza
-    de WhatsApp îl poate conține deja — fără dublare)."""
+    îl poate conține deja — fără dublare)."""
     if not url or ctx.reply is None:
         return
     ctx.set_offer(Offer(kind="open_url", label=_checkout_label(ctx.language), url=url))

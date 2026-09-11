@@ -42,14 +42,13 @@ def _job(**kw):
         "contact_id": "c1",
         "conversation_id": "conv1",
         "payload": {"awb": "123", "carrier": "FAN"},
-        "template_id": None,
         "scheduled_at": None,
     }
     base.update(kw)
     return base
 
 
-ROUTE = {"id": "conv1", "channel_id": "ch1", "locale": "ro", "channel_kind": "telegram"}
+ROUTE = {"id": "conv1", "channel_id": "ch1", "locale": "ro", "channel_kind": "webchat"}
 
 
 def _patch_engine(
@@ -75,9 +74,9 @@ def _patch_engine(
         return to
 
     async def f_spec(conn, biz, job, r):
-        return spec or MessageSpec(free_text="hi", template_name="awb_update", variables={})
+        return spec or MessageSpec(free_text="hi")
 
-    async def f_decide(conn, **kw):
+    def f_decide(**kw):  # NX-289: poarta nu mai atinge DB-ul → nu mai e async, nu mai ia `conn`
         return decision or ProactiveDecision(
             allowed=True, mode="free", reason="ok_free", rendered_text="hi"
         )
@@ -100,7 +99,7 @@ def _patch_engine(
 
 
 # --------------------------------------------------------------------------- #
-# _process_job — happy path, idempotență, skip-uri, template blocat în v1
+# _process_job — happy path, idempotență, skip pe consent
 # --------------------------------------------------------------------------- #
 
 
@@ -135,53 +134,22 @@ async def test_no_optin_skips_without_enqueue(monkeypatch):
     assert events[0].properties == {"kind": "awb_update", "reason": "no_optin"}
 
 
-async def test_no_window_no_template_skips(monkeypatch):
-    calls = _patch_engine(
-        monkeypatch, decision=ProactiveDecision(False, "blocked", "no_window_no_template")
-    )
-    events: list[Event] = []
-    await scheduler._process_job(FakeConn(), "b1", _job(), events)
-    assert calls["enqueue"] == []
-    assert calls["mark"] == [("job1", "skipped_no_window")]
+async def test_only_payload_shape_is_plain_text(monkeypatch):
+    """NX-289: motorul nu mai are ramură de payload.
 
-
-async def test_template_mode_enqueues_template(monkeypatch):
-    """PL-1: calea template e LIVE — în afara ferestrei 24h, motorul pune un payload
-    `type=template` în outbox (name/language/params), nu mai dă skip."""
+    Înainte alegea între `type='text'` (în fereastra de 24h) și `type='template'` (în afara ei,
+    cu name/language/params pentru Meta). Template-urile au plecat cu canalul, deci un verdict
+    `allowed=True` produce EXACT o formă. Testul o fixează ca să nu reapară o a doua ramură
+    tăcut — dispatcher-ul respinge acum `type='template'` ca nesuportat."""
     calls = _patch_engine(
         monkeypatch,
-        decision=ProactiveDecision(
-            True,
-            "template",
-            "ok_template",
-            rendered_text="AWB 123 la FAN",
-            template_id="x",
-            provider_template_id="y",
-            template_name="awb_update",
-            template_language="ro",
-            template_params=["123", "FAN"],
-        ),
+        decision=ProactiveDecision(True, "free", "ok_free", rendered_text="AWB 123 la FAN"),
     )
     events: list[Event] = []
     await scheduler._process_job(FakeConn(), "b1", _job(), events)
-    assert calls["enqueue"] == [
-        (
-            "conv1",
-            "proactive:job1",
-            {
-                "type": "template",
-                "to": "chat-9",
-                "text": "AWB 123 la FAN",  # floor de degradare pe canale fără TEMPLATE
-                "template_name": "awb_update",
-                "language": "ro",
-                "params": ["123", "FAN"],
-            },
-            "message",
-        )
-    ]
-    assert calls["mark"] == [("job1", "sent")]
-    assert events[0].type == "proactive_enqueued"
-    assert events[0].properties == {"kind": "awb_update", "deduped": False, "mode": "template"}
+    [(_conv, _idem, payload, _kind)] = calls["enqueue"]
+    assert payload == {"type": "text", "to": "chat-9", "text": "AWB 123 la FAN"}
+    assert events[0].properties["mode"] == "free"
 
 
 async def test_cancel_when_spec_cancel(monkeypatch):
@@ -270,8 +238,9 @@ async def test_build_awb_from_payload():
     spec = await builders.build_message_spec(
         FakeConn(), "b1", _job(payload={"awb": "AWB1", "carrier": "FAN"}), ROUTE
     )
+    # NX-289: `variables` a plecat cu template-urile Meta — AWB-ul și curierul trebuie să fie
+    # în TEXT, nu într-un dicționar pe care îl randa altcineva.
     assert "AWB1" in spec.free_text and "FAN" in spec.free_text
-    assert spec.variables == {"awb": "AWB1", "courier": "FAN"}
 
 
 async def test_build_unknown_kind_raises():
@@ -315,8 +284,11 @@ def test_tenant_queries_filter_business_id():
 
 
 def test_no_direct_channel_send_in_proactive():
-    for fname in ("scheduler.py", "builders.py"):
+    """P5: proactivul PROPUNE (outbox), nu trimite. NX-289: garda numea clasele WhatsApp/Telegram,
+    care nu mai există — deci ar fi trecut orice. O ancorăm pe ce apără de fapt: niciun sender de
+    canal și niciun client HTTP în motor."""
+    for fname in ("scheduler.py", "builders.py", "templates.py"):
         src = Path(f"src/proactive/{fname}").read_text(encoding="utf-8")
-        assert "MetaClient" not in src
-        assert "TelegramClient" not in src
+        assert "ChannelSender" not in src
+        assert "WebSender" not in src
         assert "import httpx" not in src

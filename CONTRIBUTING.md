@@ -88,11 +88,11 @@ nu observă). S-a întâmplat de 3 ori (#15, #17, #23). Reguli:
 ## Reguli permanente (din CLAUDE.md)
 
 1. Orice query SQL are `WHERE business_id = $1` — fără excepție
-2. Lookup-urile în `faqs` / `semantic_cache` / `wa_templates` includ și `locale` (limba e parte din cheie)
+2. Lookup-urile în `faqs` / `semantic_cache` includ și `locale` (limba e parte din cheie)
 3. PII (telefoane / id-uri de canal) DOAR în `channel_identities` — `orders` NU are customer_phone; niciodată în loguri
 4. LLM se apelează DOAR din stagiile triaj și agent
 5. Un singur scriitor per câmp din `TurnContext` — respectă docstring-ul câmpului
-6. `outbox` e singurul punct de ieșire — nicio trimitere directă la Meta din stagii
+6. `outbox` e singurul punct de ieșire — nicio trimitere directă la un canal din stagii
 
 ## Structura unui task
 

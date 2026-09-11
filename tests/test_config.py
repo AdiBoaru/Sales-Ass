@@ -5,7 +5,7 @@ from src.config import Settings
 BASE_ENV = {
     "SUPABASE_DB_URL": "postgresql://u:p@host:5432/db",
     "OPENAI_API_KEY": "sk-test",
-    "META_VERIFY_TOKEN": "verify-123",
+    "ORDERS_WEBHOOK_SECRET": "ord-123",
 }
 
 
@@ -20,7 +20,7 @@ def test_reads_required_and_optional(monkeypatch):
     s = _settings(monkeypatch)
     assert s.supabase_db_url == "postgresql://u:p@host:5432/db"
     assert s.openai_api_key == "sk-test"
-    assert s.meta_verify_token == "verify-123"
+    assert s.orders_webhook_secret == "ord-123"
 
 
 def test_defaults(monkeypatch):

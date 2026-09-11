@@ -27,13 +27,19 @@ ORDER = {
 
 
 def _ctx(*, route=Route.ORDER, body="unde e comanda mea?", contact_id="c") -> TurnContext:
+    """Turul unui client IDENTIFICAT (contrapunctul lui `_web_ctx`, care e anonim).
+
+    NX-289: identitatea era dată de canal (`whatsapp` = telefon = cont). Odată cu canalul,
+    singura sursă rămasă e login passthrough-ul verificat (NX-129) — deci contextul „identificat"
+    se construiește punând `verified_customer_ref`, nu numind un canal."""
     ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
         contact=Contact(id=contact_id, business_id="b"),
-        message=InboundMessage(provider_msg_id="m", body=body),
+        message=InboundMessage(provider_msg_id="m", body=body, channel_kind="webchat"),
         conversation_id="conv",
     )
+    ctx.verified_customer_ref = "cust_identified"
     if route is not None:
         ctx.route = RouteDecision(route=route)
     return ctx
@@ -90,18 +96,23 @@ async def test_check_order_by_contact(monkeypatch):
     assert res.ok is True and res.products == []
     assert 247.50 in res.prices and 82.99 in res.prices  # total + unit_price grounded
     assert "ORD-1" in res.llm_view and "shipped" in res.llm_view and "RO123456789" in res.llm_view
-    # izolare: lookup scoped pe contactul curent, fără order_ref → ultimele 3
-    assert sink["contact_id"] == "c" and sink["external_id"] is None and sink["limit"] == 3
-    # NX-130: canal identificat (fără login passthrough) → pe contact_id, NU pe customer_ref
-    assert sink["external_customer_ref"] is None
+    # izolare: lookup scoped pe clientul VERIFICAT, fără order_ref → ultimele 3
+    assert sink["external_customer_ref"] == "cust_identified"
+    assert sink["external_id"] is None and sink["limit"] == 3
+    # NX-289: contactul (throwaway pe web) nu mai e cheie de lookup — comenzile reale nu-s
+    # legate de el. Cheia vine din identitatea verificată server-side.
+    assert sink["contact_id"] is None
 
 
-async def test_check_order_by_ref_is_contact_scoped(monkeypatch):
+async def test_check_order_by_ref_is_identity_scoped(monkeypatch):
     sink: dict = {}
     _patch_orders(monkeypatch, [ORDER], sink)
     await om.check_order_tool(_ctx(), _deps(), {"order_ref": "ORD-1"})
-    # IZOLARE: și pe lookup după nr comandă, filtrăm pe contactul curent (în SQL) + limit 1
-    assert sink["external_id"] == "ORD-1" and sink["contact_id"] == "c" and sink["limit"] == 1
+    # IZOLARE: și pe lookup după nr comandă, filtrăm pe identitatea verificată (în SQL) + limit 1.
+    # Un `order_ref` corect al ALTUI client nu poate întoarce nimic — args-ul îngustează, nu alege.
+    assert sink["external_id"] == "ORD-1"
+    assert sink["external_customer_ref"] == "cust_identified"
+    assert sink["limit"] == 1
 
 
 async def test_check_order_not_found(monkeypatch):
@@ -260,10 +271,10 @@ async def test_web_order_login_never_offers_an_operator():
 
 
 async def test_no_orders_message_is_channel_aware(monkeypatch):
-    _patch_orders(monkeypatch, [])  # canal identificat (whatsapp), fără comenzi
+    _patch_orders(monkeypatch, [])  # client identificat, fără comenzi
     res = await om.check_order_tool(_ctx(), _deps(), {"order_ref": "GHOST"})
     assert res.ok is False and res.error == "not_found"
-    # onest „pe contul tău" (telefon = cont), NU „pe acest cont" (cont căutat inexistent)
+    # onest „pe contul tău" (contul lui, verificat), NU „pe acest cont" (cont căutat inexistent)
     assert "contul tău" in res.llm_view and "acest cont" not in res.llm_view
 
 
@@ -330,9 +341,9 @@ async def test_reorder_tool_walls_web_anonymous(monkeypatch):
     assert calls["n"] == 0
 
 
-async def test_check_order_tool_identified_channel_not_walled(monkeypatch):
-    # Canal identificat (whatsapp = telefon = cont): NU se aplică zidul de login — lookup normal.
+async def test_check_order_tool_identified_contact_not_walled(monkeypatch):
+    # Client identificat (login passthrough verificat): NU se aplică zidul de login — lookup normal.
     sink: dict = {}
     _patch_orders(monkeypatch, [ORDER], sink)
-    res = await om.check_order_tool(_ctx(), _deps(), {"order_ref": None})  # _ctx → channel whatsapp
+    res = await om.check_order_tool(_ctx(), _deps(), {"order_ref": None})
     assert res.ok is True and "ORD-1" in res.llm_view

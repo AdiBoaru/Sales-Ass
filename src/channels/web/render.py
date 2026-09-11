@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 
 # Web = UI premium: max 5 chips ca butoane (widget-ul nu trebuie să pară încărcat). Chat-urile
-# (WhatsApp/Telegram) rămân pe _MAX_CHIPS din compose — capul ăsta e DOAR pe render-ul web.
+# rămân pe _MAX_CHIPS din compose — capul ăsta e DOAR pe render-ul web.
 _MAX_WEB_CHIPS = 5
 # Lungimea e cea din contract (`models.MAX_CHIP_LEN`), NU una mai mică: un chip e mesajul pe care
 # l-ar scrie clientul, iar producătorii (compose, fallbacks, deterministic) scurtează deja la
@@ -224,7 +224,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
     }
     offer = getattr(reply, "offer", None)
     if offer is not None:
-        # Web = buton tappabil; pe WhatsApp/Telegram același offer e CTA/text (floor aplatizat).
+        # Web = buton tappabil; pe floor-ul text același offer e url append-uit (aplatizat).
         out["offer"] = {"kind": offer.kind, "label": offer.label}
         if offer.url:
             out["offer"]["url"] = offer.url

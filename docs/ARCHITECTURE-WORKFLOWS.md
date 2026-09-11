@@ -78,12 +78,11 @@ Siguranță → secțiunea [Lentile](#lentile).
 
 | Serviciu            | Comandă                                   | Rol                                                           |
 | ------------------- | ------------------------------------------ | ------------------------------------------------------------- |
-| `webhook`         | `uvicorn src.webhook.app:app`            | Ingress HTTP (Meta + orders + /web/*)                         |
+| `webhook`         | `uvicorn src.webhook.app:app`            | Ingress HTTP (orders + /web/* + health)                       |
 | `worker`          | `python -m src.worker.consumer`          | Consumer Redis Streams → pipeline                            |
 | `dispatcher`      | `python -m src.worker.dispatcher`        | outbox → canale (singurul punct de trimitere)                |
 | `scheduler`       | `python -m src.jobs.scheduler`           | Joburi mentenanță (7: rollup usage/demand, embed, lifecycle, cleanup, partiții, inițiatori)          |
 | `proactive`       | `python -m src.proactive.scheduler`      | proactive_jobs → outbox                                      |
-| `telegram-poller` | `python -m src.channels.telegram.poller` | Long polling Telegram (canal TEST)                            |
 | `redis`           | —                                         | Streams · locks · dedupe L1 · cost counters · SSE pub/sub |
 
 DB = Supabase Postgres 16 (extern), RLS pe rol `bot_runtime`.
@@ -104,17 +103,13 @@ flowchart LR
   classDef bg fill:#a3e4d7,stroke:#148f77,color:#000
 
   subgraph Users["Users"]
-    WA_USER["WhatsApp customer"]:::user
-    TG_USER["Telegram tester"]:::user
     WEB_USER["Website visitor widget"]:::user
     SHOP["Shop platform orders"]:::ext
   end
 
   subgraph Ingress["Ingress Edges — thin, no DB"]
-    WEBHOOK["GET /webhook verify · POST /webhook<br/>signature + dedupe L1"]:::edge
     ORDERS["POST /webhook/orders/:biz<br/>HMAC"]:::edge
     WEB_API["GET /web/bootstrap session<br/>POST /web/messages async · POST /web/chat sync"]:::edge
-    POLLER["Telegram poller<br/>getUpdates loop"]:::edge
   end
 
   subgraph Queue["Redis Backbone"]
@@ -131,8 +126,6 @@ flowchart LR
   subgraph Egress["Egress"]
     OUTBOX[("outbox table")]:::db
     DISPATCHER["Dispatcher<br/>claim_due → send → mark"]:::worker
-    META_C["MetaClient"]:::ext
-    TG_C["TelegramClient"]:::ext
     WEB_S["WebSender → SSE"]:::ext
   end
 
@@ -146,49 +139,39 @@ flowchart LR
     OPENAI["OpenAI API<br/>nano triage · mini agent<br/>embed · vision · moderation"]:::ai
   end
 
-  WA_USER --> WEBHOOK --> STREAM
   SHOP --> ORDERS --> STREAM
   WEB_USER --> WEB_API
   WEB_API -- "async envelope" --> STREAM
   WEB_API -- "sync in-process" --> PROCESSOR
-  TG_USER --> POLLER --> STREAM
   STREAM --> CONSUMER --> PROCESSOR --> PIPELINE
   PIPELINE <--> OPENAI
   PIPELINE <--> PG
   PROCESSOR --> OUTBOX --> DISPATCHER
-  DISPATCHER --> META_C --> WA_USER
-  DISPATCHER --> TG_C --> TG_USER
   DISPATCHER --> WEB_S -- "SSE /web/stream" --> WEB_USER
   JOBS --> PG
   JOBS --> PROACTIVE
   PROACTIVE --> OUTBOX
   CONSUMER <--> LOCKS
-  CONSUMER -. "typing direct — ocolește outbox<br/>consumer.py:63-81" .-> META_C
 ```
 
 **Metadata (noduri cheie):**
 
 | Nod                  | Fișier                                | Funcție               | Responsabilitate                                                            |
 | -------------------- | -------------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
-| POST /webhook        | `src/webhook/app.py:81`              | `receive_webhook()`  | Verifică semnătura Meta, dedupe L1, XADD, ACK 200 <50ms                   |
-| POST /webhook/orders | `src/webhook/app.py:127`             | `receive_order()`    | HMAC pe corp brut → envelope`kind=order` pe stream                       |
+| POST /webhook/orders | `src/webhook/app.py:91`              | `receive_order()`    | HMAC pe corp brut → envelope`kind=order` pe stream                       |
 | POST /web/chat       | `src/web/app.py:190`                 | `web_chat()`         | Pipeline in-process, răspuns în același HTTP request                     |
 | POST /web/messages   | `src/web/app.py:157`                 | `web_message()`      | Envelope neutru pe stream; reply prin SSE                                   |
-| Telegram poller      | `src/channels/telegram/poller.py:70` | `poll_once()`        | getUpdates → envelope neutru pe stream                                     |
 | Stream inbound       | `src/redis_bus.py:66`                | `enqueue_inbound()`  | XADD cu maxlen ~100k                                                        |
 | Consumer             | `src/worker/consumer.py:333`         | `run_consumer()`     | XREADGROUP + debounce + reaper PEL                                          |
 | handle_turn          | `src/worker/processor.py:200`        | `handle_turn()`      | Miezul turului: dedupe L2 → context → pipeline → outbox TX               |
 | Pipeline             | `src/worker/runner.py:62`            | `run_pipeline()`     | Stagii în ordine fixă, early-exit pe reply/halt, măsoară                |
 | Dispatcher           | `src/worker/dispatcher.py:325`       | `run_dispatcher()`   | Singurul punct de trimitere: outbox → ChannelSender                        |
-| MetaClient           | `src/meta_client.py:28`              | `MetaClient`         | WhatsApp Cloud API send (text/template/typing)                              |
-| TelegramClient       | `src/channels/telegram/client.py:78` | `TelegramClient`     | Bot API send + edit carusel                                                 |
 | WebSender            | `src/channels/web/sender.py:34`      | `WebSender`          | Publish SSE pe`web:out:{visitor}` + backlog replay                        |
 | Proactive            | `src/proactive/scheduler.py:253`     | `run_scheduler()`    | Joburi scadente → poartă consent/24h → outbox                            |
 | Jobs scheduler       | `src/jobs/scheduler.py:132`          | `Job` loop           | rollup_usage · rollup_demand · embed_products · lifecycle · cleanup_dedupe · partition_maintenance · proactive_initiators |
-| GET /webhook         | `src/webhook/app.py:62`              | `verify_webhook()`   | Handshake verificare Meta (token → challenge / 403)                        |
 | GET /web/bootstrap   | `src/web/app.py:136`                 | `web_bootstrap()`    | Emite sesiunea vizitatorului (HMAC) + verificare Origin server-side         |
 | Rich compose         | `src/worker/compose.py:344`          | `assemble()`         | Lanțul de grounding al căii bogate — v. Diagram 4c                       |
-| Proactive gate       | `src/proactive/templates.py:83`      | `decide_proactive()` | Consent per kind + fereastra 24h + template aprobat — v. Diagram 10        |
+| Proactive gate       | `src/proactive/templates.py:59`      | `decide_proactive()` | Consent per kind — SINGURA poartă (NX-289) — v. Diagram 10                 |
 
 ---
 
@@ -209,7 +192,7 @@ flowchart TD
     W4{"current_user == bot_runtime?<br/>connection.py:96"}:::gate
     W5["register pgvector codec<br/>connection.py:138"]:::step
     W6["get_redis"]:::step
-    W7["build_registry — Meta/TG senders<br/>dispatcher.py:348"]:::step
+    W7["build_registry — WebSender<br/>dispatcher.py:325"]:::step
     W8["ensure_group XGROUP MKSTREAM<br/>consumer.py:81"]:::step
     W9["run_consumer loop READY"]:::proc
     WFAIL["BOOT REFUSED — crash loud"]:::gate
@@ -224,7 +207,7 @@ flowchart TD
   end
 
   subgraph DispatcherBoot["dispatcher: python -m src.worker.dispatcher"]
-    D0["_main dispatcher.py:369"]:::proc
+    D0["_main dispatcher.py:342"]:::proc
     D1["get_pool + get_bot_pool eager"]:::step
     D2{"web_enabled?"}:::gate
     D3["get_redis → WebSender"]:::step
@@ -232,7 +215,7 @@ flowchart TD
     D5["run_dispatcher loop READY"]:::proc
   end
 
-  subgraph OtherBoot["scheduler / proactive / telegram-poller"]
+  subgraph OtherBoot["scheduler / proactive"]
     J0["jobs._main scheduler.py:224<br/>job list built by flags :122-162"]:::proc
     J1["loop: run due jobs + heartbeat<br/>scheduler.py:186-194"]:::step
     P0["proactive._main scheduler.py:262"]:::proc
@@ -240,11 +223,6 @@ flowchart TD
     P2["get_pool + get_bot_pool eager<br/>:268-269"]:::step
     P3["run_scheduler loop READY"]:::proc
     PX["exit — process ends :266-267"]:::gate
-    T0["poller._main poller.py:118"]:::proc
-    T1{"telegram_bot_token? :122"}:::gate
-    T2["get_me → account_id :129-130"]:::step
-    T3["run_poller loop READY"]:::proc
-    TX2["exit — no token :123-124"]:::gate
   end
 
   subgraph Config["Configuration"]
@@ -259,9 +237,6 @@ flowchart TD
   P0 --> P1
   P1 -- no --> PX
   P1 -- yes --> P2 --> P3
-  T0 --> T1
-  T1 -- no --> TX2
-  T1 -- yes --> T2 --> T3
   W0 --> W1 --> W2
   W2 -- "pending migration" --> WFAIL
   W2 -- ok --> W3 --> W4
@@ -277,11 +252,11 @@ flowchart TD
 ```
 
 Evidență: poarta de boot pe migrări `src/worker/consumer.py:373-386`; assert rol `bot_runtime` `src/db/connection.py:96-107`; pool eager („parolă greșită crapă la boot, nu la primul mesaj") `src/worker/consumer.py:388`.
-**Shutdown** (audit adversarial): worker `finally: close_media + close_redis + close_pool` (`consumer.py:397-401`); dispatcher idem (`dispatcher.py:286-289`). Singletoni lazy la runtime (nu la boot): `get_llm`, `get_media_registry` (`channels/media.py:34-43`), `SessionSecretCache` (`web/session.py:98-101`).
+**Shutdown** (audit adversarial): worker `finally: close_media + close_redis + close_pool` (`consumer.py:397-401`); dispatcher idem (`dispatcher.py:286-289`). Singletoni lazy la runtime (nu la boot): `get_llm`, `get_media_registry` (`channels/media.py:27-33`), `SessionSecretCache` (`web/session.py:98-101`).
 
 ---
 
-## Diagram 3 — User Message Workflow (async: WhatsApp / Telegram / web-SSE)
+## Diagram 3 — User Message Workflow (async: web-SSE)
 
 ```mermaid
 flowchart TD
@@ -292,10 +267,10 @@ flowchart TD
   classDef db fill:#d5dbdb,stroke:#566573,color:#000
   classDef err fill:#f1948a,stroke:#922b21,color:#000
 
-  MSG["Mesaj primit<br/>(WhatsApp / Telegram / site)"]:::edge
+  MSG["Mesaj primit<br/>(site — widget web)"]:::edge
   CAP{"Mesajul e anormal de mare?<br/>(apărare anti-OOM) (app.py:99-101)"}:::dec
   R413["Refuzat: prea mare (413)"]:::err
-  SIG{"Semnătura Meta e autentică?<br/>(webhook/app.py:103)"}:::dec
+  SIG{"Sesiunea web e autentică?<br/>(web/session.py)"}:::dec
   JSONV{"E JSON valid? (:106-109)"}:::dec
   R400["Refuzat: cerere stricată (400)"]:::err
   R403["Refuzat: semnătură falsă (403)"]:::err
@@ -340,7 +315,7 @@ flowchart TD
 
   DISP["Dispecerul (alt proces) ia din coadă<br/>ce e de trimis"]:::step
   RENDER{"Alegem forma după ce POATE canalul:<br/>carduri / carusel / șablon / text<br/>(dispatcher.py:101)"}:::dec
-  SEND["Trimitem prin canal (Meta / Telegram)"]:::edge
+  SEND["Trimitem prin canal (web)"]:::edge
   SENT["Marcat trimis + legăm id-ul de la<br/>provider (dispatcher.py:215)"]:::db
   FAIL["Eșec → reîncercăm cu pauze crescânde<br/>→ marcat mort (dispatcher.py:211)"]:::err
   RP["Notăm când forma cerută ≠ forma<br/>livrată (dispatcher.py:69-98)"]:::step
@@ -1270,15 +1245,14 @@ flowchart LR
     RTY["bounded retry _with_retry :45<br/>respects Retry-After"]:::sys
   end
 
-  subgraph Meta["Meta Cloud API"]
+  subgraph Commerce["Webhook comenzi (ecommerce)"]
     MIN["webhook inbound signed<br/>X-Hub-Signature-256"]:::ext
-    MOUT["MetaClient send text/template/typing<br/>meta_client.py:28"]:::ext
-    MMED["media download GET — fetch_media<br/>meta_client.py:137 · media.py:34-43"]:::ext
+    MMED["media download — registru GOL din NX-289<br/>gates degradează pe no_downloader · media.py:27-33"]:::ext
   end
 
-  subgraph TG["Telegram Bot API"]
+  subgraph WebOut["Transport web"]
     TIN["long polling getUpdates<br/>poller.py:70"]:::ext
-    TOUT["TelegramClient send + edit carousel<br/>telegram/client.py:78"]:::ext
+    TOUT["WebSender publish Pub/Sub + backlog SSE<br/>channels/web/sender.py"]:::ext
   end
 
   subgraph Web["Web widget — FE repo separat"]
@@ -1287,7 +1261,7 @@ flowchart LR
   end
 
   subgraph Shop["Shop platform"]
-    OIN["orders webhook HMAC<br/>webhook/app.py:127 → attribution"]:::ext
+    OIN["orders webhook HMAC<br/>webhook/app.py:91 → attribution"]:::ext
   end
 
   subgraph RedisSvc["Redis"]
@@ -1301,7 +1275,6 @@ flowchart LR
   WIN --> SYS
   OIN --> SYS
   MMED --> SYS
-  SYS --> MOUT
   SYS --> TOUT
   SYS --> WOUT2
   SYS <--> RS
@@ -1350,7 +1323,7 @@ flowchart TD
   end
 
   subgraph InfraErr["Infra failures"]
-    I1["Redis down at webhook → 503, Meta retries<br/>webhook/app.py:127-128"]:::err
+    I1["Redis down la accept → 503, clientul reîncearcă<br/>webhook/app.py:112-113"]:::err
     I2["cache/FAQ error → miss, turn continues<br/>cache.py:169"]:::deg
     I3["analytics fail → log only<br/>aftercare.py:86"]:::deg
     I4["conv lock busy → requeue capped<br/>consumer.py:96-102"]:::deg
@@ -1395,7 +1368,9 @@ flowchart TD
 
 ## Diagram 10 — Proactive Lifecycle (adăugată la auditul adversarial)
 
-Cele mai reglementate decizii din sistem (consent + fereastra 24h Meta) — 100% cod determinist, zero LLM (`templates.py`).
+Cea mai reglementată decizie din sistem (consent) — 100% cod determinist, zero LLM
+(`templates.py`). NX-289: fereastra de 24h Meta și template-urile aprobate au plecat cu canalul,
+deci poarta are UN etaj, nu trei.
 
 ```mermaid
 flowchart TD
@@ -1425,7 +1400,7 @@ flowchart TD
   end
 
   subgraph Gate["GATE — decide_proactive, templates.py (NX-71)"]
-    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — templates.py:83"}:::dec
+    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — templates.py:59"}:::dec
     SK1["skipped_no_optin"]:::out
     WIN{"in 24h window?<br/>is_in_24h_window"}:::dec
     TPL{"approved template<br/>in locale? P11"}:::dec
@@ -1437,7 +1412,7 @@ flowchart TD
   OB[("outbox — idempotency proactive:job_id<br/>scheduler.py:186-194")]:::db
   SENTP["mark sent + proactive_enqueued event<br/>:195-200"]:::out
   FAILP["job exception → mark failed +<br/>proactive_failed event, clean savepoint<br/>:220-227"]:::err
-  DISPP["dispatcher — TEMPLATE capability?<br/>WhatsApp: send_template · else degrade to text<br/>dispatcher.py:158-160, :218"]:::step
+  DISPP["dispatcher — payload type=text<br/>WebSender.send_text<br/>dispatcher.py:131"]:::step
 
   SW1 --> PJ
   SW2 --> PJ
@@ -1470,8 +1445,8 @@ flowchart TD
 2. **Docstring stale în runner:** `src/worker/runner.py:8-10` descrie „un singur stagiu real (`echo_stage`)" — `echo_stage` nu există în `DEFAULT_STAGES`; pipeline-ul are 12 stagii.
 3. **„Validatorul (stagiul 8)" din CLAUDE.md nu e stagiu separat:** trăiește în [`src/agent/validator.py`](../src/agent/validator.py) (`validate_prose:195`) și e chemat din faza F a agentului, nu ca stagiu al pipeline-ului. Comportamentul e cel documentat, structura diferă. *(Actualizat 2026-08-10: până la NX-142 erau funcții private în monolitul `agent.py` — de aceea R2 din tabelul de refactoring apare ca rezolvat.)*
 4. **arch_explorer e ușor stale pe branch-ul curent:** raportează `agent_stage` la linia 858 și `triage_stage` la 179; în cod sunt la `stages/agent.py:347` și `triage.py:293`. Necesită re-rulare `arch_explorer/analyze.py`.
-5. **`webhook/status.py` NU există** — CLAUDE.md îl listează ca LIVE; statusurile sunt parsate în `webhook/meta.py:104` (`parse_statuses`) și scrise de worker (`consumer.py:137-146`).
-6. **STT/Whisper NU e implementat** — CLAUDE.md promite „vocale → STT (Whisper)"; `audio` e doar un tip de media parsat cu caption drept body (`webhook/meta.py:27,36-39`), ne-rutat spre vreo transcriere (gates rutează DOAR `image`, `gates.py:436`).
+5. **~~`webhook/status.py` NU există~~** — REZOLVAT altfel de NX-289: statusurile de livrare erau raportate de provider prin webhook; odată cu canalul au dispărut parserul, ramura din consumer și tabelul `message_status_events`. Nu mai există nici promisiunea, nici gaura.
+6. **STT/Whisper NU e implementat** — decis won't-do; NX-289 a scos și singurul canal care putea livra audio inbound, deci registrul de media e gol (gates degradează pe `no_downloader`).
 7. **Tool-ul `delivery_eta` NU există** — CLAUDE.md îl listează; registry-ul real are 10 tool-uri (grep `@register` în `src/tools/`), fără `delivery_eta`.
 
 **Adăugate de auditul NX-250 (2026-08-18)** — detalii, dovezi și dispoziții în
@@ -1492,7 +1467,7 @@ flowchart TD
 
 ## Puncte slabe / riscuri
 
-1. **⚠ Cel mai serios: excepție de procesare = tur pierdut tăcut.** La orice excepție în `process_event`, consumer-ul face ACK și doar loghează (`src/worker/consumer.py:286-288`; la fel reaper-ul, per-intrare, `:308`). Meta a primit deja 200 → nu re-trimite. Clientul nu primește NIMIC — încălcare a principiului 6 exact pe calea de eroare pe care principiul o vizează. **A doua cale de pierdere (găsită la trace-ul invers):** lock ocupat persistent → după `conv_lock_max_requeues` evenimentul e DROPAT cu un simplu log (`consumer.py:99-100`). → **NX-140**
+1. **⚠ Cel mai serios: excepție de procesare = tur pierdut tăcut.** La orice excepție în `process_event`, consumer-ul face ACK și doar loghează (`src/worker/consumer.py`; la fel reaper-ul, per-intrare). Acceptul a întors deja 202/200 → clientul nu re-trimite. Clientul nu primește NIMIC — încălcare a principiului 6 exact pe calea de eroare pe care principiul o vizează. **A doua cale de pierdere (găsită la trace-ul invers):** lock ocupat persistent → după `conv_lock_max_requeues` evenimentul e DROPAT cu un simplu log (`consumer.py:99-100`). → **NX-140**
 2. **`agent.py` e un god-module** — 1200+ linii; `agent_stage` (`:957+`) amestecă 3 intenții deterministe, bucla LLM, login-wall, checkout-fallback, cross-sell; validatorul + 3 căi de finalize în același fișier.
 3. **Cuplaj maxim în processor** — `handle_turn` are fan-out 45 (cel mai mare din sistem, `arch_explorer/GRAPH_REPORT.md`) și ~300 linii: orchestrare + politică de state-merge + sender + post-tur.
 4. **Ciclu de import gestionat manual** — stagiile importă `PipelineDeps` din runner sub `TYPE_CHECKING` (`src/worker/stages/gates.py:37-38`); runner-ul importă stagiile la sfârșitul fișierului (`src/worker/runner.py:189-199`).
@@ -1577,7 +1552,7 @@ zero rezultate ──→ mesaj sigur, cacheable=False ──→ chips de continu
 ```
 
 **Cele două locuri unde tăcerea e corectă**, ambele intenționate: `halt` din Gates (om a preluat
-conversația / burst de rate-limit) și dedupe (retry Meta pe un mesaj deja procesat).
+conversația / burst de rate-limit) și dedupe (retry pe un mesaj deja procesat).
 
 **Cache poisoning** e clasa de bug care revine: orice reply de tip „n-am găsit" trebuie
 `cacheable=False`. Altfel un `hit_count` care crește servește „n-am găsit" la orice query similar,
@@ -1709,7 +1684,6 @@ dispatcher
 proactive
 redis
 scheduler
-telegram-poller
 webhook
 worker
 ```
@@ -1724,12 +1698,10 @@ GET /startup
 GET /stream
 GET /v2/turns/{turn_id}
 GET /v2/turns/{turn_id}/events
-GET /webhook
 POST /chat
 POST /messages
 POST /v2/feedback
 POST /v2/turns
-POST /webhook
 POST /webhook/orders/{business_id}
 ```
 
@@ -1863,7 +1835,6 @@ turn_latency_spans_enabled = true
 turn_parallel_reads_enabled = false
 turn_profiles_enabled = false
 typed_constraints_enabled = false
-typing_enabled = true
 validator_bare_numbers_enabled = true
 validator_claims_enabled = true
 validator_stock_claims_enabled = false
@@ -1937,6 +1908,7 @@ welcome_enabled = true
 048_relation_provenance.sql
 049_search_tsv_product_type.sql
 050_review_summary_provenance.sql
+051_drop_frozen_channels.sql
 ```
 
 

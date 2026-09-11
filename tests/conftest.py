@@ -28,10 +28,6 @@ if not os.getenv("NX_TESTS_READ_ENV_FILE"):
     os.environ["NX_CONFIG_ENV_FILE"] = ""
     for _key, _value in {
         "OPENAI_API_KEY": "test-key",
-        "META_ACCESS_TOKEN": "test-token",
-        "META_APP_SECRET": "test-secret",
-        "META_VERIFY_TOKEN": "test-verify",
-        "META_PHONE_NUMBER_ID": "000000000",
         "SUPABASE_DB_URL": "postgresql://test:test@localhost/test",
         "REDIS_URL": "redis://localhost:6379/0",
         "ENV": "test",

@@ -8,23 +8,15 @@ _Ultima actualizare: 2026-08-24_
 
 ---
 
-## ⛔ FOCUS ACTUAL: DOAR WEB WIDGET (NX-179, 2026-07-17)
+## ⛔ FOCUS ACTUAL: DOAR WEB WIDGET (NX-179 → NX-289)
 
-Se lucrează **exclusiv pe web widget**. Telegram și WhatsApp sunt **ÎNGHEȚATE** — codul rămâne, dar
-nu se investește în ele și nu rulează (poller Telegram OFF: `profiles: ["telegram"]`). Deci,
-**deocamdată NU sunt nevoie de tine** taskurile de mai jos (T013 WhatsApp, TG-TEST Telegram) — sunt
-păstrate pentru când se reia un canal de mesagerie. Ce contează acum e pe web, iar webul nu-ți cere
-setup extern (rulează deja pe `bot.nativextech.com`).
+Se lucrează **exclusiv pe web widget**. NX-179 declarase Telegram și WhatsApp ÎNGHEȚATE;
+**NX-289 (2026-09-10) le-a ȘTERS din proiect** — cod, schemă, servicii de compose, variabile de
+mediu. Ce înseamnă asta pentru tine: taskurile manuale care le deblocau (T013 — Meta developer app
++ număr WhatsApp; TG-TEST — bot Telegram) **au dispărut de pe listă**, nu sunt amânate. Dacă se
+reia vreodată un canal de mesagerie, se redeschid atunci, cu setup-ul de atunci.
 
-## 🎯 „Telegram e2e live" — ✅ ATINS (2026-06-13, LOCAL pe laptop)
-
-Botul **@solechat_bot** răspunde echo pe Telegram, cu stack-ul rulând local prin
-Docker Desktop (WSL2). Lanțul complet `poller → worker → dispatcher → Telegram`
-e dovedit pe infrastructură reală.
-
-Ce a mai rămas (OPȚIONAL / pasul următor):
-- **Deploy VPS** (secțiunea de mai jos) — ca botul să ruleze CONTINUU, nu doar cât e laptopul pornit.
-- **T017 spend limit** — înainte de G3 (botul „inteligent", nu doar echo).
+Webul nu-ți cere setup extern (rulează deja pe `bot.nativextech.com`).
 
 ---
 
@@ -108,20 +100,6 @@ Rollup-ul nocturn `usage_daily` are nevoie de coloana `cached_tokens`. Afișarea
 
 ## 🔴 Blochează progresul imediat (fă-le primele)
 
-### T013 — Meta developer app + WhatsApp test number  ·  ~1.5h
-
-Deblochează tot WhatsApp-ul. Fără el, nimic din webhook/mesaje nu se poate testa live.
-
-- [ ] developers.facebook.com → Create App → tip **Business** → adaugă produsul **WhatsApp**
-- [ ] Notează **Phone Number ID** + **test phone number** (sandbox, instant)
-- [ ] Business Settings → **System User** cu rol admin → generează **token permanent** (scopes: `whatsapp_business_messaging`, `whatsapp_business_management`, fără expirare). NU rămâne pe token-ul de 24h!
-- [ ] Settings → Basic → notează **APP_SECRET**
-- [ ] Adaugă telefoanele tale + ale juniorului ca **recipient phone numbers** (max 5)
-- [ ] Trimite un "hello world" din Graph API Explorer către telefonul tău (confirmă că merge)
-- [ ] Pune în `.env` local: `META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_PHONE_NUMBER_ID`
-- [ ] Dă-i lui Claude **Phone Number ID** → inserează rândul în `channels` pentru
-  business-ul demo (fără el, worker-ul nu poate mapa mesajele live la tenant)
-
 ### T017 — OpenAI: chei + limite de spend  ·  ~0.5h  ⬅️ **BLOCKER pe drumul critic**
 
 Protecție financiară înainte de primul apel LLM. Din 2026-06-13: e SINGURUL
@@ -173,25 +151,14 @@ trafic real cu mai mulți clienți):
 - [ ] Confirmă că `.env`-ul de runtime al workerului folosește `bot_runtime`, nu `postgres`
       (acesta din urmă rămâne DOAR pt admin/migrări — control plane).
 
-> Nu blochează testul Telegram. E pe lista „înainte de clienți reali", lângă Supabase Pro.
-
-### TG-TEST — Bot Telegram pentru testul rapid pe VPS  ·  ~15 min  ⬅️ cale de test fără birocrație
-
-Ca să testăm botul vorbind direct pe Telegram (pe VPS), fără Meta/HTTPS/tunel.
-WhatsApp rămâne canalul primar — Telegram e DOAR pentru iterare rapidă (NX-61/62/63).
-
-- [X] Telegram → caută **@BotFather** → `/newbot` → nume + username → copiază **tokenul**
-- [X] `TELEGRAM_BOT_TOKEN=...` în `.env` (pe VPS; și local dacă testezi)
-- [X] (long polling → NU e nevoie de setWebhook, HTTPS sau tunel)
-- [X] ✅ Echo confirmat: **@solechat_bot** răspunde pe Telegram (LOCAL, 2026-06-13)
+> E pe lista „înainte de clienți reali", lângă Supabase Pro.
 
 ---
 
 ## 🚀 Deploy pe VPS (rulare CONTINUĂ) · ~1h
 
-> ℹ️ Echo-ul a fost deja testat **local** (Docker Desktop + WSL2 pe laptop, 2026-06-13).
-> VPS-ul e pentru ca botul să ruleze non-stop, independent de laptop. Pașii de mai jos
-> (REDIS_PASSWORD, seed canal, compose) sunt deja validați local — se repetă pe VPS.
+> ℹ️ VPS-ul e pentru ca botul să ruleze non-stop, independent de laptop. Pașii de mai jos
+> (REDIS_PASSWORD, seed canal, compose) sunt validați local — se repetă pe VPS.
 > ⚠️ Parola `SUPABASE_DB_URL` trebuie percent-encoded (`@`→`%40`) — vezi README troubleshooting.
 
 DB rămâne Supabase remote (NU instalezi Postgres pe VPS). Depinde de: un VPS cu Docker.
@@ -202,18 +169,16 @@ DB rămâne Supabase remote (NU instalezi Postgres pe VPS). Depinde de: un VPS c
   - [ ] `SUPABASE_DB_URL=...` (Session pooler, ca local)
   - [ ] `REDIS_PASSWORD=...` — **generează** una reală: `openssl rand -base64 32`
         (înlocuiește placeholder-ul; pune-o ȘI în `REDIS_URL=redis://:PAROLA@redis:6379/0`)
-  - [ ] `TELEGRAM_BOT_TOKEN=...` (din BotFather, TG-TEST)
-  - [ ] `OPENAI_API_KEY=...` (când e gata T017; fără el botul merge pe echo)
-  - [ ] `META_*` — lasă-le goale deocamdată (Telegram nu le folosește)
-- [ ] După ce Claude livrează NX-63 (seed canal): rulează scriptul de seed o dată
-      (inserează rândul `channels` telegram pentru demo — poate rula și de pe laptop)
-- [ ] `docker compose up -d` → verifică `docker compose ps` (redis, worker, dispatcher, telegram-poller verzi)
-- [ ] Scrie „salut" botului pe Telegram → aștepți echo-ul
-- [ ] (când schimbi codul: `git pull && docker compose up -d --build`)
+  - [ ] `OPENAI_API_KEY=...` (când e gata T017)
+  - [ ] `WEB_ENABLED=true` + secretele web (vezi `.env.prod.example`)
+- [ ] Seed canal webchat: `python scripts/seed_web_channel.py --business <slug>` (idempotent;
+      întoarce `public_token`-ul pe care îl pui ca `data-token` în widget)
+- [ ] `docker compose up -d` → verifică `docker compose ps` (redis, webhook, worker, dispatcher verzi)
+- [ ] Scrie în widget → aștepți răspunsul
+- [ ] (când schimbi codul: promovare prin `gh workflow run` + approve, vezi RELEASE-RUNBOOK)
 
-> 🔒 Secretele trăiesc DOAR în `.env`-ul de pe VPS, niciodată în repo. Firewall:
-> expune doar portul de webhook DACĂ ajungi pe WhatsApp; pentru Telegram (long
-> polling) nu trebuie niciun port deschis spre exterior.
+> 🔒 Secretele trăiesc DOAR în `.env`-ul de pe VPS, niciodată în repo. Firewall: niciun port
+> publicat pe host — Traefik rutează către serviciul `webhook` pe rețeaua internă.
 
 ---
 
@@ -265,33 +230,16 @@ până popularezi tabelul. Jobul e idempotent (re-rulabil) și scrie în Supabas
 
 ---
 
-## 🟡 Pornește acum, durează zile (birocrație)
+## ⚪ Scoase de pe listă (NX-289, 2026-09-10)
 
-### T016 — Verificare Meta Business (producție)  ·  ~1h + așteptare 3-15 zile
+Nu sunt amânate — nu mai au obiect. Canalele pe care le deblocau au fost șterse din proiect.
 
-**Pornește-l AZI** — e cel mai lung proces din tot proiectul. Demo merge pe sandbox, dar primul client plătitor cere număr de producție.
+- **T013** — Meta developer app + număr WhatsApp de test.
+- **T015** — tunel local `cloudflared` (expunea `localhost:8000` spre webhook-ul Meta).
+- **T016** — verificare Meta Business pentru producție.
+- **TG-TEST** — bot Telegram pentru iterare rapidă.
 
-- [ ] Precondiții: site live pe nativxtech.com cu **datele firmei vizibile** + email pe domeniu (contact@nativxtech.com, NU gmail)
-- [ ] business.facebook.com → Security Center → **Start Verification** cu documentele SRL (CUI/certificat)
-- [ ] Reminder recurent (luni) de check status
-
-- Depinde de: T013
-
----
-
-## 🟢 Setup local (când ajungi la testat webhook-ul live)
-
-### T015 — Tunel local (cloudflared)  ·  ~1h
-
-Expune localhost:8000 spre Meta prin HTTPS public, fără deploy.
-
-- [ ] Instalează `cloudflared` (tu + junior)
-- [ ] `cloudflared tunnel --url http://localhost:8000` → copiază URL-ul https
-- [ ] Pune `URL/webhook` + verify token în Meta config → **Verify and Save** (verde — testează codul din T014)
-- [ ] Subscribe la câmpurile `messages` ȘI `message_status`
-- [ ] (URL-ul se schimbă la fiecare restart de tunel → re-verifică în Meta. Tunel cu domeniu fix = bonus P1)
-
-- Depinde de: T014 (✓ codul e gata, PR #9)
+Dacă se reia vreodată un canal de mesagerie, se rescriu atunci, cu birocrația de atunci.
 
 ---
 

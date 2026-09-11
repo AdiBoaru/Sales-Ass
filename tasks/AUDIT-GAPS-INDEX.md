@@ -18,7 +18,7 @@ sunt **deja în main** — vezi `git log`.
 | ID | Titlu | Cmplx | Est | Prioritate | Dep cheie |
 |----|-------|:-----:|:---:|:----------:|-----------|
 | [NX-70](NX-70.md) | Motorul proactiv — scheduler peste `proactive_jobs` | M | 4h | 🔴 | NX-71 |
-| [NX-71](NX-71.md) | Gating proactiv: consent + 24h + template approved | S | 3.5h | 🔴 | — |
+| ~~[NX-71](archive/NX-71.md)~~ | Gating proactiv — redus la CONSENT de NX-289 (24h + template = reguli Meta, șterse) | S | — | ⚪ | — |
 | [NX-72](NX-72.md) | Strat GDPR Python — erase + export/access | M | 4h | 🔴 | 003 |
 | [NX-73](NX-73.md) | Strat gratuit: alias lookup (`intent_aliases`) | S | 3.5h | 🔴 | G5a/b/c |
 | [NX-74](NX-74.md) | Strat gratuit FAQ + tool `faq_lookup` (`faqs`) | M | 4h | 🔴 | G7 |
@@ -36,7 +36,7 @@ sunt **deja în main** — vezi `git log`.
 | [NX-86](NX-86.md) | XAUTOCLAIM reaper + dead-letter inbound | M | 4h | 🔴 | NX-51 |
 | [NX-87](NX-87.md) | Debounce durabil + creare conversație fără race | M | 4h | 🟠 | R1, NX-51 |
 | [NX-88](NX-88.md) | Post-tur: extractor profil (nano) + `lead_score` | M | 4h | 🟠 | G6-2 |
-| [NX-89](NX-89.md) | WhatsApp outbound bogat (carduri/carusel/media) | M | 4h | 🟠 | NX-60, R2 |
+| ~~[NX-89](archive/NX-89.md)~~ | WhatsApp outbound bogat — ȘTERS de NX-289 (canalul nu mai există) | M | — | ⚪ | — |
 | [NX-90](NX-90.md) | Typing indicator + spargere mesaj >200ch | S | 3.5h | 🟠 | #26 |
 | [NX-91](NX-91.md) | Validator: cifre fără valută (numere halucinate) | S | 3h | 🟠 | G7-1 |
 | [NX-92](NX-92.md) | Evals: LLM-as-judge + `conversation_evals` + `golden_tests` | L | 4h | 🟠 | G8-1 |
@@ -129,7 +129,7 @@ Aceste fișiere sunt atinse de multe carduri — secvențiază sau merge cu grij
 
 **Lanțuri backlog:** NX-70/71 ▶ NX-07, NX-09 · NX-88 ▶ NX-43, NX-31 · NX-83 ▶ NX-11 ·
 NX-91 ▶ NX-30 (validator discount) · **epic web E26 strict secvențial:** NX-20 ▶ {21, 22, 25} ▶ 23 ▶ 24 ▶ 26.
-**Epicul web (NX-20..26, ~32h) = V1.5** — după primul client stabil pe WhatsApp; nu-l ataca înainte.
+**Epicul web (NX-20..26)** — livrat; din NX-179/NX-289 e SINGURUL canal, nu V1.5.
 
 ---
 

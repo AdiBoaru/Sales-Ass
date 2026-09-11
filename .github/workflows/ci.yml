@@ -77,10 +77,6 @@ jobs:
       contents: read
     env:
       OPENAI_API_KEY: test-key
-      META_ACCESS_TOKEN: test-token
-      META_APP_SECRET: test-secret
-      META_VERIFY_TOKEN: test-verify
-      META_PHONE_NUMBER_ID: "000000000"
       SUPABASE_DB_URL: postgresql://test:test@localhost/test
       REDIS_URL: redis://localhost:6379/0
       ENV: test

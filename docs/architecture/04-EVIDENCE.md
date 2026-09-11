@@ -502,7 +502,7 @@ livrează nimic.
 |---|---|---|
 | browser → `POST /web/chat` | request/response **sincron**; reply-ul se mapează direct în HTTP, fără outbox | „accept idempotent prin `client_turn_id`" — ledgerul e NX-232, **OFF** |
 | retry de client pe `/web/chat` | **at-least-once**: fără ledger, un retry după response loss **re-execută turul** | „replay idempotent" |
-| dedupe inbound (WhatsApp/Telegram) | idempotent prin `inbound_dedupe` (claim înainte de orice scriere) | — |
+| dedupe inbound | idempotent prin `inbound_dedupe` (claim înainte de orice scriere) | — |
 | commit intern | atomic pe rândurile din aceeași tranzacție (`TurnCommit`) | atomicitate peste API extern |
 | moderation / LLM / tools | **at-least-once**, fără fencing pe calea sincronă | „exactly-once" pe orice apel de model sau tool |
 | analytics / `emit()` | best-effort, bounded, cu goluri vizibile | telemetria ca sursă de adevăr |

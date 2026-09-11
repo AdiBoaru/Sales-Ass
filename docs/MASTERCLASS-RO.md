@@ -40,7 +40,8 @@
 <a name="1-ce-este-proiectul"></a>
 ## 1. Ce este proiectul
 
-**În trei propoziții:** un vânzător-robot pe WhatsApp (și web + Telegram) pentru magazine online din România.
+**În trei propoziții:** un vânzător-robot în **widgetul de chat de pe site** pentru magazine online din
+România.
 Clientul scrie „ce ser cu vitamina C aveți sub 100 lei?", iar botul caută în catalogul magazinului și
 răspunde ca un vânzător priceput — cu prețuri și linkuri **reale**, nu inventate. E **multi-tenant**: aceeași
 aplicație servește mai multe magazine, fiecare izolat de celelalte prin `business_id`.
@@ -54,8 +55,13 @@ apărat de două mecanisme (validatorul + compose), pe care le vei înțelege co
 2. **LLM doar în 2 puncte** — triaj (model ieftin „nano") + agent (model „mini"). Tot restul e cod determinist.
 3. **Niciodată tăcere** — mereu iese ceva spre client. Degradare: mini → retry → nano → template → om notificat.
 
-**Stack:** Python 3.12 asyncio, FastAPI (webhook), Redis Streams (coadă), Postgres 16 pe Supabase (DB),
-OpenAI (LLM), Meta Cloud API (WhatsApp), Telegram Bot API, widget web (SSE).
+**Stack:** Python 3.12 asyncio, FastAPI, Redis Streams (coadă), Postgres pe Supabase (DB),
+OpenAI (LLM), widget web (SSE).
+
+> **NX-289 (2026-09-10):** proiectul a avut și WhatsApp (Meta Cloud API) și Telegram. Au fost
+> ÎNGHEȚATE de NX-179, apoi **ȘTERSE** — cod, schemă, servicii, variabile de mediu. Ce a rămas e
+> **abstracția** de canal (NX-60), motivul pentru care pipeline-ul nu știe de niciun canal.
+> Dacă găsești în cod ceva ce contrazice asta, codul câștigă — spune-mi și repar documentul.
 
 ---
 
@@ -67,29 +73,30 @@ restaurant cu bucătărie, ospătari, oficiu de livrare și un manager de menten
 
 | Proces | Comandă | Rol | Fișier entry point |
 |---|---|---|---|
-| `webhook` | `uvicorn src.webhook.app:app` | Poarta HTTP: primește de la Meta/web/shop | `src/webhook/app.py` |
+| `webhook` | `uvicorn src.webhook.app:app` | Poarta HTTP: widget web + webhook de comenzi + health | `src/webhook/app.py` |
 | `worker` | `python -m src.worker.consumer` | **Creierul**: coadă → pipeline → răspuns | `src/worker/consumer.py` |
 | `dispatcher` | `python -m src.worker.dispatcher` | **Singura ieșire**: outbox → canale | `src/worker/dispatcher.py` |
 | `scheduler` | `python -m src.jobs.scheduler` | Mentenanță (rollup, embed, lifecycle, curățenie) | `src/jobs/scheduler.py` |
 | `proactive` | `python -m src.proactive.scheduler` | Mesaje inițiate de bot | `src/proactive/scheduler.py` |
-| `telegram-poller` | `python -m src.channels.telegram.poller` | Ascultă Telegram | `src/channels/telegram/poller.py` |
 | `redis` | — | Coada + lock-uri + dedupe + contoare cost | (serviciu) |
 
 **Cum comunică:** nimeni nu cheamă pe altul direct. Totul curge prin **coada Redis** (stream-ul `inbound`)
-și prin **tabelul `outbox`**. De ce? Ca `webhook`-ul să răspundă în <50ms (Meta face retry agresiv), iar
+și prin **tabelul `outbox`**. De ce? Ca acceptul să răspundă rapid, iar
 procesarea grea (LLM, DB) să se facă separat în `worker`. E ca la restaurant: ospătarul ia comanda și pleacă
 (bonul pe cui), nu stă lângă bucătar până e gata mâncarea.
 
 ```
 INTRARE                COADĂ            CREIER (worker)                IEȘIRE
-webhook  ─┐                             ┌─ Gates                       outbox ─┐
-web      ─┼─> Redis stream ─> consumer ─┼─ Free layers (cache/FAQ)             ├─> dispatcher ─> WhatsApp
-telegram ─┤   "inbound"                 ├─ Triaj (nano)                        │                Telegram
-orders   ─┘                             ├─ Agent (mini + tools + validator)    │                Web (SSE)
+/web/messages ─┐                        ┌─ Gates                       outbox ─┐
+/web/chat     ─┼> Redis stream > consumer ─ Free layers (cache/FAQ)             ├> dispatcher > Web (SSE)
+orders        ─┘   "inbound"            ├─ Triaj (nano)                        │
+                                        ├─ Agent (mini + tools + validator)    │
                                         └─ Sender ─> outbox ───────────────────┘
                                               │
                                    Postgres (Supabase) + OpenAI
 ```
+> `/web/chat` e SINCRON: răspunsul iese direct în HTTP (fără outbox/dispatcher), prin `render_web`.
+> `/web/messages` e async: envelope pe stream → worker → outbox → dispatcher → SSE.
 
 ---
 
@@ -101,12 +108,11 @@ src/
 ├── config.py              ← TOATE setările/bugetele/plafoanele (cap. 19)
 ├── models.py              ← TurnContext + toate dataclass-urile (cap. 4)
 ├── redis_bus.py           ← client Redis: XADD inbound, dedupe L1, lock-uri
-├── meta_client.py         ← MetaClient (trimite pe WhatsApp)
 │
-├── webhook/               ← INTRAREA (margine subțire, fără DB)
-│   ├── app.py             ← FastAPI: GET verify + POST inbound + POST orders
-│   ├── signature.py       ← verifică X-Hub-Signature-256
-│   ├── meta.py            ← parsează payload Meta → envelope neutru
+├── webhook/               ← APLICAȚIA FastAPI (margini subțiri, fără DB)
+│   ├── app.py             ← montează health + redirect + POST orders + /web/*
+│   ├── signature.py       ← verifică HMAC-SHA256 pe corpul BRUT (comenzi)
+│   ├── health.py          ← live / startup / ready (NX-248)
 │   ├── body_limit.py      ← plafon de mărime pe corp (anti-OOM)
 │   └── orders.py          ← webhook comenzi → atribuire
 │
@@ -157,10 +163,9 @@ src/
 │   └── queries/           ← SQL per domeniu (contacts, conversations, catalog, ...)
 │
 ├── channels/              ← marginile de canal
-│   ├── base.py            ← ChannelSender Protocol + Capability matrix
-│   ├── media.py           ← download media (Vision)
-│   ├── telegram/          ← client + poller
-│   └── web/               ← sender SSE + render
+│   ├── base.py            ← ChannelSender/MediaFetcher Protocol + Capability matrix
+│   ├── media.py           ← registru de download media (GOL din NX-289)
+│   └── web/               ← sender SSE + render (v1) + render_v2 (projector pur)
 │
 ├── web/                   ← gateway widget web
 │   ├── app.py             ← /web/bootstrap, /messages, /stream, /chat
@@ -241,8 +246,14 @@ Bugetul e 8KB (impus în DB cu CHECK). Când ai nevoie de detalii, re-hidratezi 
 
 📄 `src/webhook/app.py`
 
-Marginea de intrare e **subțire și fără DB**. Face doar: verifică, deduplică rapid, pune pe coadă, răspunde 200.
-De ce subțire? Meta face retry agresiv la timeout → trebuie ACK în <50ms.
+Marginea de intrare e **subțire și fără DB**. Face doar: verifică, deduplică rapid, pune pe coadă,
+răspunde. De ce subțire? Ca vizitatorul să nu aștepte munca grea pe conexiunea de accept, și ca un
+retry (al lui sau al rețelei) să nu producă un al doilea tur.
+
+> **NX-289:** capitolul ăsta descria rutele Meta (`GET /webhook` handshake + `POST /webhook` cu
+> `X-Hub-Signature-256`). Au fost ȘTERSE odată cu canalul. Ce a rămas pe `src/webhook/app.py` e
+> montajul aplicației (health, redirect de atribuire, webhook de comenzi, `/web/*`); acceptul de
+> mesaje trăiește în `src/web/app.py`.
 
 ### Middleware: plasa anti-OOM (`app.py:25`)
 
@@ -255,48 +266,45 @@ async def _request_size_guard(request, call_next):
 ```
 
 **DE CE?** VPS-ul e mic (1vCPU, 4GB, 0 swap). Un POST uriaș ar putea OOM-ui procesul înainte să-l parsezi.
-Cap global 256KB (webhook), rafinat per-endpoint (web = 16KB). Ăsta e **primul** filtru din Diagrama 3 (`CAP`).
+Cap global 256KB, rafinat per-endpoint (web = 16KB). Ăsta e **primul** filtru din Diagrama 3 (`CAP`).
 
-### GET /webhook — handshake Meta (`app.py:62`)
-
-Meta trimite `hub.mode=subscribe` + `hub.verify_token` + `hub.challenge`. Dacă token-ul corespunde, întorci
-challenge-ul ca **text brut** (Meta compară exact). Altfel 403. Se face o singură dată, la configurare.
-
-### POST /webhook — mesajele inbound (`app.py:80`)
+### POST /web/messages — mesajul clientului (`src/web/app.py`)
 
 Pașii, toți rapizi (fără LLM, fără DB):
 
 ```python
-raw = await enforce_body_cap(request, ...)              # 1. plasă de mărime
-signature = request.headers.get("X-Hub-Signature-256")
-if not verify_meta_signature(app_secret, raw, signature):
-    return 403                                           # 2. semnătura pe corpul BRUT
-payload = json.loads(raw)                                # 3. JSON valid? altfel 400
-for event in parse_webhook(payload):
-    if await seen_before(redis, event.channel_account_id, event.provider_msg_id):
-        continue                                         # 4. dedupe L1 (Redis) — retry Meta
-    await enqueue_inbound(redis, event.to_dict())        # 5. XADD pe stream
-for status in parse_statuses(payload):                   # statusurile NU se deduplică
-    await enqueue_inbound(redis, status.to_dict())
-return 200                                               # 6. ACK rapid
+await enforce_body_cap(request, s.web_max_body_bytes)    # 1. plasă de mărime (16KB)
+_enforce_demo_access(request); origin = _enforce_origin(request)
+session = await _verify(req.token, req.visitor_id, req.sig)
+if session is None:
+    raise HTTPException(403, "invalid session")          # 2. sesiune semnată HMAC
+if await web_rate_limited(redis, req.token, ip, req.visitor_id, fail_closed=False):
+    raise HTTPException(429, "rate limited")             # 3. rate limit pe DOUĂ chei
+event = InboundEvent(channel_kind="webchat",             # 4. envelope NEUTRU (NX-60)
+                     channel_account_id=req.token,       #    public_token = id-ul canalului
+                     sender_external_id=req.visitor_id,  #    vizitatorul = userul pe canal
+                     provider_msg_id=req.client_msg_id or str(uuid4()))
+await enqueue_inbound(redis, event.to_dict())            # 5. XADD pe stream
+return {"accepted": True, "msg_id": event.provider_msg_id}
 ```
 
 **Detalii pe care le vei fi întrebat:**
-- **Semnătura pe corpul BRUT** (`signature.py`): dacă ai reserializa JSON-ul, ai schimba bytes → semnătura
-  n-ar mai potrivi. De aceea verifici `raw`, nu `payload`.
-- **Dedupe L1** (`redis_bus.py:53`, `seen_before`) = `SET NX EX` pe `(channel_account_id, provider_msg_id)`.
-  E **primul strat** de dedupe. Al doilea (durabil, în DB) e în worker — vezi cap. 7. De ce două? Redis se
-  poate goli (FLUSHALL/restart); DB-ul prinde ce scapă.
-- **Statusurile nu se deduplică**: `delivered` și `read` au același `wamid` → dacă le-ai deduplica, ai pierde
-  `read`.
-- **Redis jos → 503** (`app.py:119`): NU pierdem tăcut. 503 → Meta reîncearcă, iar la retry dedupe-ul prinde
-  ce-a intrat deja.
+- **Envelope NEUTRU**: din acest punct înainte, NIMIC din pipeline nu știe că mesajul a venit de pe web.
+  Asta e abstracția NX-60 — vezi cap. 2. Un canal nou umple ACELEAȘI câmpuri.
+- **`provider_msg_id` din client**: dacă widgetul trimite un `client_msg_id`, un retry al lui e idempotent
+  (dedupe L1 îl prinde). Fără el, generăm un uuid — deci retryul ar fi un tur nou. Widgetul îl trimite.
+- **Dedupe L1** (`redis_bus.py`, `seen_before`) = `SET NX EX` pe `(channel_account_id, provider_msg_id)`.
+  E **primul strat**. Al doilea (durabil, în DB) e în worker — vezi cap. 7. De ce două? Redis se poate goli
+  (FLUSHALL/restart); DB-ul prinde ce scapă.
+- **Rate limit fail-OPEN aici** (`fail_closed=False`): acceptul doar pune pe stream; spend-ul real se
+  evaluează în worker. Pe `/web/chat` (sincron, care CHIAR cheltuie) e fail-CLOSED.
 
-### POST /webhook/orders/{business_id} (`app.py:127`)
+### POST /webhook/orders/{business_id} (`webhook/app.py`)
 
-Webhook de comenzi de la platforma de shop. Margine subțire, ca Meta: verifică HMAC pe corpul brut, pune un
+Webhook de comenzi de la platforma de shop. Margine subțire: verifică HMAC pe corpul brut, pune un
 envelope `kind="order"` pe stream. Comenzile au `business_id` din path (autentificat de secret), deci NU trec
-prin `resolve_channel`.
+prin `resolve_channel`. **Nu e un eveniment de canal** — de asta a supraviețuit ștergerii NX-289: depindea de
+WhatsApp doar prin vecinătate în fișier.
 
 **Ce se întâmplă cu un mesaj TROLL / semnătură falsă?** 403 imediat, fără să atingem coada sau DB-ul.
 
@@ -341,7 +349,7 @@ else:
 ```
 
 > ⚠️ **Gaura #1 (NX-140), memoreaz-o:** dacă `process_event` aruncă o excepție (`consumer.py:228-230`),
-> mesajul e **ACK-uit** și doar logat (`log.exception("eroare la procesarea mesajului")`). Meta a primit
+> mesajul e **ACK-uit** și doar logat (`log.exception("eroare la procesarea mesajului")`). Acceptul a întors deja
 > deja 200 → nu re-trimite → **clientul nu primește nimic**. E singura încălcare structurală a principiului 6.
 > DE CE totuși ACK? Ca un mesaj „otrăvit" (care crapă mereu) să nu blocheze coada pentru toți. Fix corect:
 > re-queue cu contor + fallback în outbox la epuizare. **La depanare „botul n-a răspuns": ăsta e primul grep.**
@@ -422,7 +430,7 @@ if provider_msg_id and not await claim_inbound(conn, business.id, provider_msg_i
     return TurnResult(..., deduped=True)   # deja procesat
 ```
 
-Al doilea strat de dedupe, **durabil în DB**. Prinde retry-uri Meta care scapă de Redis (FLUSHALL/restart).
+Al doilea strat de dedupe, **durabil în DB**. Prinde retry-uri care scapă de Redis (FLUSHALL/restart).
 **Guard ÎNAINTE de orice scriere** — un duplicat nu produce nici mesaj, nici outbox.
 
 **Subtilitate (NX-86, claim-or-resume):** `claim_inbound` marchează „în lucru" (nu „gata"). Dacă turul crapă la
@@ -435,11 +443,13 @@ outbox) îl finalizează.
 contact = await get_or_create_contact(conn, business.id, channel_kind, identity_external_id, ...)
 conv = await get_or_create_conversation(conn, business.id, contact.id, channel_id, ...)
 await insert_message(conn, ..., Direction.INBOUND, Author.CONTACT, body=event.get("body"), ...)
-await touch_last_inbound(conn, business.id, conv["id"])   # alimentează fereastra 24h
+await touch_last_inbound(conn, business.id, conv["id"])   # alimentează sweeper-ele proactive
 ```
 
-`touch_last_inbound` setează `last_inbound_at = now()` → alimentează fereastra de 24h (Meta permite mesaje
-libere doar 24h de la ultimul inbound al clientului). E derivat, nu un flag.
+`touch_last_inbound` setează `last_inbound_at = now()`. Îl citesc sweeper-ele proactive (coșul abandonat:
+„n-a mai scris de N ore"). **NX-289:** consumatorul lui istoric era fereastra de 24h impusă de Meta (mesaje
+libere doar 24h de la ultimul inbound al clientului); funcția SQL `in_24h_window` a fost ștearsă de
+migrarea 051 — coloana rămâne, regula platformei nu.
 
 ### Pas 3 — Construiește TurnContext + încarcă memoria (linii 490-510)
 
@@ -1001,7 +1011,7 @@ for row in rows:
 ```
 
 - **`FOR UPDATE SKIP LOCKED`**: dacă rulezi 2 dispatchere, fiecare ia rânduri diferite (nu dublă trimitere).
-- **`choose_render`** (`dispatcher.py:101`): alege forma după **capabilitățile** canalului. WhatsApp are
+- **`choose_render`** (`dispatcher.py`): alege forma după **capabilitățile** canalului. Un canal are
   carusel; un canal fără rich primește `text` (floor aplatizat).
 - **Visibility timeout self-healing**: dacă dispatcher-ul moare între claim și mark, rândul e „redeemed" după
   timeout (nu rămâne blocat).
@@ -1014,8 +1024,12 @@ for row in rows:
 
 | Canal | Client | Capabilities | Notă |
 |---|---|---|---|
-| WhatsApp | `MetaClient` (`meta_client.py:28`) | TEXT, CAROUSEL, TEMPLATE, TYPING | canal PRIMAR de producție; fereastră 24h |
-| Telegram | `TelegramClient` (`telegram/client.py:62`) | TEXT, RICH, TYPING | canal de TEST; edit carusel |
+| Web | `WebSender` (`channels/web/sender.py`) | TEXT, RICH, CARDS, OFFER, COMPARISON | SINGURUL sender înregistrat |
+
+> **NX-289:** tabelul avea și `MetaClient` (WhatsApp: TEXT/CAROUSEL/TEMPLATE/TYPING) și
+> `TelegramClient` (TEXT/RICH/TYPING). Amândouă au fost șterse, împreună cu capabilitățile pe care
+> doar ele le declarau. Matricea de capabilități RĂMÂNE — e contractul pe care îl completează
+> canalul următor, iar `choose_render` degradează grațios spre text pentru orice îi lipsește.
 | Web | `WebSender` (`web/sender.py:34`) | TEXT, RICH, COMPARISON | publish SSE + backlog replay |
 
 **DE CE „registry"?** Dispatcher-ul nu știe de canale — cere `registry.get(channel_kind)`. Adaugi un canal nou
@@ -1026,7 +1040,7 @@ implementând `ChannelSender` + înregistrându-l. Cuplajul de canal trăiește 
 
 - **Sincron** (`/web/chat`, `web/app.py:190`): `handle_turn(deliver=False)` → **fără outbox**, răspunsul HTTP e
   transportul. Frontendul primește direct.
-- **Async** (`/web/messages` + SSE `/web/stream`): envelope pe stream (ca Telegram) → worker → dispatcher →
+- **Async** (`/web/messages` + SSE `/web/stream`): envelope pe stream → worker → dispatcher →
   WebSender publică pe SSE → browserul primește.
 
 ---
@@ -1169,7 +1183,7 @@ Vezi Diagrama 9. Principiul 6 pus în practică pe fiecare tip de eroare:
 | LLM pică | retry mărginit → triaj route None / agent return → `fallback_stage` | întrebare de clarificare (nu tăcere) |
 | Validator pică | 1 retry cu prețuri permise → răspuns determinist din DB | zero prețuri inventate |
 | Cost guard atins | `llm=None` — gates+cache merg, stagiile LLM sar | degradare |
-| Redis jos la webhook | 503 → Meta reîncearcă | dedupe prinde la retry |
+| Redis jos la accept | 503 → clientul reîncearcă | dedupe prinde la retry |
 | Cache/FAQ eroare | miss, turul continuă | best-effort |
 | Analytics eroare | log only | observabilitatea nu blochează |
 | Conv lock busy | requeue cu cap → **drop la epuizare** ⚠️ | NX-140 |
@@ -1188,14 +1202,15 @@ Vezi Diagrama 9. Principiul 6 pus în practică pe fiecare tip de eroare:
 📄 `src/proactive/` — vezi Diagrama 10.
 
 Mesaje pe care botul le trimite **primul** (coș abandonat, stoc revenit). Cele mai reglementate decizii
-(consent + fereastra 24h Meta) — 100% cod determinist, zero LLM.
+(consent) — 100% cod determinist, zero LLM. **NX-289:** fereastra de 24h Meta și template-urile
+aprobate erau reguli ale PLATFORMEI, nu ale produsului; au plecat cu canalul.
 
 1. **FEED**: `jobs.scheduler` rulează sweepere (`sweep_abandoned_cart`, `sweep_back_in_stock`, `initiators.py`)
    → creează rânduri în `proactive_jobs`. ⚠️ `schedule_awb_update` + `schedule_follow_up` sunt **definite dar
    niciodată apelate** (seam-uri TODO).
 2. **ENGINE** (`proactive/scheduler.py:181`): `claim_due_jobs` (FOR UPDATE SKIP LOCKED) → rezolvă conversație+
    canal+destinatar → `build_message_spec`.
-3. **GATE** (`decide_proactive`, `templates.py:39`): consent pe acel tip? → în fereastra 24h? → dacă da, text
+3. **GATE** (`decide_proactive`, `templates.py`): consent pe acel tip? → dacă da, text
    liber; dacă nu, template aprobat în locale? → altfel `skipped_no_window`.
 4. → `outbox` (idempotency `proactive:job_id`) → dispatcher.
 

@@ -1,5 +1,10 @@
 # Epicul „Tool-uri Agent" — Arhitectură + Analiză de producție (2026)
 
+> ⚠️ **Document DATAT (2026).** NX-289 (2026-09-10) a șters WhatsApp și Telegram din proiect;
+> punctele de mai jos care le numesc (disclosure pe WhatsApp/Telegram, „WhatsApp e2e" ca poartă
+> spre primul client, tarife Meta) nu mai au obiect. Restul — arhitectura de tool-calling — e
+> valabil. Harta verificată automat contra codului: [`ARCHITECTURE-WORKFLOWS.md`](ARCHITECTURE-WORKFLOWS.md).
+
 _Document de design. Decide CUM convertim agentul din RAG (retrieve-then-generate) într-un
 agent cu tool-calling determinist, CE tool-uri construim și în ce ordine,
 și CE mai lipsește pentru producție reală în 2026. Sursă pentru cardurile epicului._

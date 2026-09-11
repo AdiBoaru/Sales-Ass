@@ -29,7 +29,7 @@ flowchart TD
   end
 
   subgraph Gate["GATE — decide_proactive, templates.py (NX-71)"]
-    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — templates.py:83"}:::dec
+    CONS{"consent by kind?<br/>marketing: abandoned_cart/follow_up<br/>transactional: awb/back_in_stock — templates.py:59"}:::dec
     SK1["skipped_no_optin"]:::out
     WIN{"in 24h window?<br/>is_in_24h_window"}:::dec
     TPL{"approved template<br/>in locale? P11"}:::dec
@@ -41,7 +41,7 @@ flowchart TD
   OB[("outbox — idempotency proactive:job_id<br/>scheduler.py:186-194")]:::db
   SENTP["mark sent + proactive_enqueued event<br/>:195-200"]:::out
   FAILP["job exception → mark failed +<br/>proactive_failed event, clean savepoint<br/>:220-227"]:::err
-  DISPP["dispatcher — TEMPLATE capability?<br/>WhatsApp: send_template · else degrade to text<br/>dispatcher.py:158-160, :218"]:::step
+  DISPP["dispatcher — payload type=text<br/>WebSender.send_text<br/>dispatcher.py:131"]:::step
 
   SW1 --> PJ
   SW2 --> PJ

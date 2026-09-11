@@ -21,20 +21,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.channels.base import IDENTIFIED_CHANNELS
+from src.channels.base import identity_is_stable
 
 if TYPE_CHECKING:
     from src.models import TurnContext
 
 
 def web_unidentified(ctx: TurnContext) -> bool:
-    """True dacă turul vine pe un canal ANONIM (web) fără identitate verificată → nu poate avea
-    comenzi legate de contact. Canalele identificate (WhatsApp/Telegram: id-ul de canal = userul) →
-    False. NX-129: web-ul cu login passthrough verificat (`ctx.verified_customer_ref`) trece de
-    poartă (e identificat), deci poate ajunge la `check_order`."""
-    if ctx.message.channel_kind in IDENTIFIED_CHANNELS:
-        return False
-    return not getattr(ctx, "verified_customer_ref", None)
+    """True dacă turul vine de la un vizitator ANONIM → nu poate avea comenzi legate de contact.
+
+    NX-129: web-ul cu login passthrough verificat (`ctx.verified_customer_ref`) trece de poartă
+    (e identificat), deci poate ajunge la `check_order`. NX-289: după scoaterea canalelor cu
+    identitate „de facto", ASTA e singura sursă de identitate — vezi `identity_is_stable`."""
+    return not identity_is_stable(
+        ctx.message.channel_kind, getattr(ctx, "verified_customer_ref", None)
+    )
 
 
 _LOGIN_REQUIRED: dict[str, str] = {

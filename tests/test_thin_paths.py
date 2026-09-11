@@ -45,6 +45,9 @@ def _ctx():
         state=ConversationState(),
     )
     ctx.language = "ro"
+    # NX-289: fluxul ORDER (no-result → „dă-mi numărul comenzii") presupune un client
+    # identificat; altfel poarta NX-128 răspunde cu mesajul de login înainte de el.
+    ctx.verified_customer_ref = "cust_identified"
     return ctx
 
 

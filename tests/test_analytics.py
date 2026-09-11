@@ -38,7 +38,7 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
         try:
             channel_id = await conn.fetchval(
                 "insert into channels (business_id, kind, provider_account_id) "
-                "values ($1, 'whatsapp', $2) returning id::text",
+                "values ($1, 'webchat', $2) returning id::text",
                 business_id,
                 f"PN-{uuid4().hex[:10]}",
             )
@@ -51,7 +51,7 @@ async def tenant_tx(pool, business_id=DEMO_BIZ):
 
 def _event(body="salut"):
     return {
-        "channel_kind": "whatsapp",
+        "channel_kind": "webchat",
         "channel_account_id": "PNID-demo",
         "sender_external_id": f"+40{uuid4().hex[:9]}",
         "provider_msg_id": f"wamid.{uuid4().hex[:10]}",
