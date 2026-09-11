@@ -33,6 +33,7 @@ de electrocasnice declară alte familii (pașii de instalare) și tool-ul funcț
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -61,6 +62,50 @@ CANDIDATES_PER_STEP = 8
 #: Câte runde de re-alegere după poarta de siguranță. UNA: dacă și înlocuitorul e contraindicat,
 #: pasul se declară neacoperit. O buclă nemărginită ar plăti hidratări la infinit pe un tur.
 SAFETY_RETRIES = 1
+
+
+@dataclass(frozen=True)
+class RoutineStepRef:
+    """Un pas ACOPERIT, așa cum îl vede compunerea răspunsului."""
+
+    position: int
+    step: str  # cheia din pachet ('curatare')
+    label: str  # eticheta localizată, din pachet (fallback: cheia humanizată)
+    product_id: str
+
+
+@dataclass(frozen=True)
+class RoutineView:
+    """Secvența turului, pentru randare. Scrisă DOAR de `routine_plan` (owner unic, P3).
+
+    Există fiindcă trei decizii de randare depind de ea și, fără ea, toate trei se iau greșit —
+    tăcut:
+
+    1. **Ordinalele din proză sunt FAPTE.** `scrub_intro` aruncă ÎNTREG intro-ul dacă întâlnește o
+       cifră negrounded — apărare corectă împotriva prețurilor inventate. Dar pașii se scriu
+       numerotat, iar „1. Curățare… 2. Tonifiere…" conține cifre pe care serverul le-a atribuit.
+       Fără lista asta, răspunsul la o rutină ieșea cu cardurile pe ecran și FĂRĂ niciun text.
+    2. **Cardul trebuie să spună ce pas e.** Șase carduri la rând, fără etichetă, obligă clientul
+       să potrivească singur proza cu produsele.
+    3. **Ordinea cardurilor e a SLOTURILOR.** Compunerea reordonează determinist după rankingul de
+       retrieval; într-o secvență, asta ar pune „pasul 3" din text în dreptul cardului 5.
+    """
+
+    family: str
+    steps: tuple[RoutineStepRef, ...]
+
+    def by_product(self) -> dict[str, RoutineStepRef]:
+        return {s.product_id: s for s in self.steps}
+
+    def ordered_ids(self) -> tuple[str, ...]:
+        return tuple(s.product_id for s in self.steps)
+
+    def ordinals(self) -> set[str]:
+        """Cifrele pe care modelul are voie să le rostească fiindcă le-a atribuit SERVERUL.
+
+        Doar pozițiile sloturilor ACOPERITE, nu `range(1, 10)`: un plafon generos ar deschide
+        poarta pentru orice cifră mică inventată, exact în turul în care listăm prețuri."""
+        return {str(s.position) for s in self.steps}
 
 
 class RoutineArgs(BaseModel):
@@ -316,6 +361,24 @@ async def routine_plan_tool(
         )
 
     ordered = [hydrated[s.product_id] for s in plan.covered_slots if s.product_id in hydrated]
+
+    # Seam-ul către compunere. Scris ÎNAINTE de ramura de eșec? Nu: o secvență pe care n-o afirmăm
+    # nu trebuie să dicteze randarea. `ctx.routine` rămâne None, cardurile se randează normal.
+    if plan.is_routine:
+        ctx.routine = RoutineView(
+            family=a.family,
+            steps=tuple(
+                RoutineStepRef(
+                    position=slot.position,
+                    step=slot.step,
+                    label=spec.label_of(slot.step, ctx.language),
+                    product_id=slot.product_id,
+                )
+                for slot in plan.covered_slots
+                if slot.product_id in hydrated
+            ),
+        )
+
     if not plan.is_routine:
         return ToolResult(
             ok=False,
