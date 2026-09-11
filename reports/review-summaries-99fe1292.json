@@ -3,7 +3,7 @@
   "locale": "ro",
   "rule_id": "review_themes.v1:sole.2026-09-07",
   "vocabulary": {
-    "source": "db/seed/domain_pack_sole_ro.json",
+    "source": "businesses.settings.domain_pack.review_themes",
     "version": "sole.2026-09-07",
     "themes": 26,
     "rejected": []
@@ -291,5 +291,5 @@
     "unchanged": 0,
     "stale": 0
   },
-  "applied": false
+  "applied": true
 }
