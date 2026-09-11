@@ -77,6 +77,20 @@ POSITIVE_SECTIONS = (
     "editorial",
 )
 
+# NX-271: ce vede AUDITORUL ca sursă de adevăr — separat de ce citește derivarea.
+#
+# Toate secțiunile de mai sus au `source = 'aura'`: text redactat pornind de la produs, deci
+# corelat cu intrarea regulii. Pentru nevoi e exact ce trebuie (regula chiar acolo potrivește, iar
+# auditorul verifică potrivirea). Pentru `product_type` e o capcană: regula citește NUMELE, iar
+# fișa `aura` începe cu „Această cremă de față…", adică repetă numele. Un auditor care citește asta
+# nu confirmă tipul, ci reconfirmă exact ce a văzut regula — iar acordul lor arată ca precizie când
+# e părtinire comună.
+#
+# Dovada independentă e textul COMERCIANTULUI (`source = 'merchant_pdp'`): descrierea lui și, mai
+# ales, modul de folosire — „aplică pe părul umed, clătește" spune ce E produsul prin comportament,
+# nu prin cum l-am parsat noi. Se afișează PRIMELE.
+MERCHANT_SECTIONS = ("description", "usage")
+
 VERDICTS = {"y": "correct", "n": "wrong", "?": "unsure"}
 
 
@@ -210,9 +224,11 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
             context[pid] = {
                 "name": p["name"],
                 "evidence": {k: sorted(set(v))[:4] for k, v in evidence.items()},
+                # Comerciantul ÎNTÂI (dovadă independentă), apoi fișa derivată. `_annotate` taie
+                # la primele trei, deci ordinea decide ce apucă auditorul să citească.
                 "sections": {
                     kind: " ".join(secs.get(kind, []))[:600]
-                    for kind in POSITIVE_SECTIONS
+                    for kind in MERCHANT_SECTIONS + POSITIVE_SECTIONS
                     if secs.get(kind)
                 },
             }
