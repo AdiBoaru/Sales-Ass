@@ -199,6 +199,35 @@ def test_state_block_drops_whole_entries_never_half_an_id():
         assert i in block or i[:20] not in block
 
 
+def test_prompt_cap_matches_state_cap():
+    """Promptul arată ce ȚINE starea. Două plafoane care diverg înseamnă că memoria reține un
+    produs pe care modelul nu-l vede niciodată, iar căutarea cauzei începe în locul greșit."""
+    import inspect
+
+    from src.conversation.state_v2 import MAX_DISPLAYED
+
+    default = inspect.signature(state_block).parameters["max_products"].default
+    assert default == MAX_DISPLAYED
+
+
+def test_state_block_budget_never_binds_before_max_displayed():
+    """Bugetul de caractere e o PLASĂ, nu o politică. Câte produse ține memoria e decis o dată, în
+    `MAX_DISPLAYED`; un plafon de caractere care taie înaintea lui ar fi a doua politică, ascunsă.
+
+    Cazul cel mai rău măsurat pe catalogul SOLE: `display_name` are max 83 de caractere, iar opt
+    astfel de intrări dau 1.133 de caractere. Testul le construiește deliberat la maximul ăla."""
+    from src.conversation.state_v2 import MAX_DISPLAYED
+
+    worst = "X" * 83  # `display_name` fără ` - ` întoarce numele ca atare
+    ids = _uuids(MAX_DISPLAYED)
+    s = ConversationState(displayed_products=[ProductRef(i, worst, 1234.56) for i in ids])
+
+    block = state_block(s)
+
+    for i in ids:
+        assert f"[{i}]" in block
+
+
 def test_state_block_reserves_room_for_constraints():
     """Constrângerile se rezervă înaintea produselor: un set mare de produse n-are voie să împingă
     afară bugetul clientului, care e o limită, nu o sugestie."""

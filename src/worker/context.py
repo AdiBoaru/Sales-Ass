@@ -192,7 +192,7 @@ def state_block(
     state: ConversationState,
     *,
     max_products: int = 8,
-    max_chars: int = 1000,
+    max_chars: int = 1200,
     include_constraints: bool = True,
     language: str | None = None,
 ) -> str:
@@ -233,9 +233,24 @@ def state_block(
       onestă (lipsesc produse, se vede) în loc să fie coruptă (un id rupt, care nu se vede).
 
     Abia după astea are sens plafonul de 8: aliniat cu `MAX_DISPLAYED` din starea v2, ca promptul
-    să arate ce ȚINE starea, nu o a doua limită, mai strânsă, pe care nimeni n-o mai citește. Cu
-    nume scurte, 8 produse ocupă ~850 de caractere (~210 tokeni), iar blocul e oricum dinamic per
-    tur, deci nu atinge prefixul cacheabil.
+    să arate ce ȚINE starea, nu o a doua limită, mai strânsă, pe care nimeni n-o mai citește.
+
+    ## De ce 1200 și nu „cât mai mult"
+
+    `max_chars` e bugetul ACESTUI bloc, nu al promptului: un singur paragraf, vecin cu transcriptul
+    (1200), rezumatul, profilul (300) și `memory_block` (500). La ~4 caractere pe token, blocul
+    plin costă ~300 de tokeni pe tur, și e dinamic, deci nu atinge prefixul cacheabil (NX-275).
+
+    Cifra nu e rotunjită din intuiție, e pragul la care bugetul ÎNCETEAZĂ să lege. Măsurat pe cele
+    2.019 produse cu pas: `display_name` are mediana 37, p90 53, p99 69, **max 83**. În cazul cel
+    mai rău (cele 8 cele mai lungi nume din catalog) blocul plin are **1.133** de caractere — deci
+    la 1000 pierdeam 2 din 8 produse, iar peste 1200 nu se mai schimbă nimic, fiindcă limita
+    devine `MAX_DISPLAYED`.
+
+    Asta e și regula: **bugetul de caractere e o plasă, nu o politică.** Câte produse ține memoria
+    e o decizie luată o dată, în `MAX_DISPLAYED` (unde e păzită de CHECK-ul de 8KB din 003). Un
+    plafon de caractere care taie înaintea ei ar fi a doua politică, ascunsă, pe care nimeni n-o
+    citește când se întreabă „de ce nu-și amintește al patrulea produs".
     """
     from src.catalog.render_text import display_name  # noqa: PLC0415 — evită cuplaj la import
 
