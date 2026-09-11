@@ -423,6 +423,7 @@ jobs:
         run: python scripts/migrate.py --json
 
       - name: Deploy producție (digest, fără git pull, fără build)
+        id: deploy
         env:
           DEPLOY_HOST: ${{ secrets.VPS_HOST }}
           DEPLOY_USER: ${{ secrets.VPS_USER }}
@@ -440,16 +441,74 @@ jobs:
       # NX-249, adaugă `SMOKE_EXPECT_PROFILE: v2` aici: din acel moment, o cădere tăcută înapoi pe
       # v1 (flag stins din greșeală) devine eșec în loc de smoke verde pe alt contract.
       - name: Smoke producție (tenant de test dedicat)
+        id: smoke
         env:
           SMOKE_BASE_URL: ${{ secrets.PROD_BASE_URL }}
           SMOKE_PUBLIC_TOKEN: ${{ secrets.PROD_SMOKE_TOKEN }}
         run: python scripts/release/smoke_web_v2.py --json --out smoke-prod.json
 
+      # Până aici, smoke-ul DETECTA o promovare stricată, dar nu o repara: cineva trebuia să
+      # citească logul și să ruleze rollbackul de mână. Fereastra dintre „deploy verde, smoke roșu"
+      # și „un om observă" era timp de nefuncționare pentru clienți.
+      #
+      # Un rollback E un deploy al digestului precedent, deci refolosim `deploy.sh` — singurul drum
+      # testat către host (digest validat, `.env` rescris pe o linie, așteptare de health). Un al
+      # doilea mecanism de atins producția ar fi exact cel care nu e exersat când chiar contează.
+      #
+      # De ce e SIGUR să revii peste o migrare care tocmai a rulat: `--require-rollback-possible` a
+      # verificat ÎNAINTE de deploy că imaginea precedentă tolerează schema aplicată. Poarta aia
+      # (reparată în #313, până atunci netrecută niciodată) e chiar precondiția care face automat
+      # ce altfel ar fi fost o decizie de judecată în incident.
+      #
+      # Trei condiții, fiecare pentru un mod distinct de a face rău:
+      #   • `!inputs.rollback` — o promovare de rollback care pică NU se „repară" revenind, fiindcă
+      #     întoarcerea ei e chiar versiunea stricată de la care fugim;
+      #   • outcome-ul pașilor — dacă preflight a picat, hostul n-a fost atins, iar un „rollback"
+      #     ar reporni containerele degeaba (downtime pentru nimic);
+      #   • țintă existentă — fără `previous_digest` nu există unde să revii; atunci spunem clar
+      #     că e nevoie de om, în loc să eșuăm tăcut.
+      - name: Rollback automat (deployul sau smoke-ul au picat)
+        id: rollback
+        if: >-
+          ${{ always() && !inputs.rollback
+              && (steps.deploy.outcome == 'failure' || steps.smoke.outcome == 'failure') }}
+        env:
+          DEPLOY_HOST: ${{ secrets.VPS_HOST }}
+          DEPLOY_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_KEY: ${{ secrets.VPS_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+        run: |
+          set -eo pipefail
+          target="$(python -c "import json; print(json.load(open('manifest.json'))['previous_digest'])")"
+          if [ -z "${target}" ]; then
+            echo "::error::deploy/smoke au picat, dar manifestul n-are țintă de rollback."
+            echo "Producția rămâne pe digestul promovat. Intervenție MANUALĂ: RELEASE-RUNBOOK §4."
+            exit 1
+          fi
+          echo "::warning::rollback automat către ${target}"
+          IMAGE_DIGEST="${target}" ./scripts/release/deploy.sh production
+
+      # Un rollback neverificat e o speranță. `deploy.sh` așteaptă deja containerul healthy, dar
+      # health ≠ servește corect — smoke-ul e singurul care trece printr-un tur real.
+      - name: Verifică rollbackul (smoke pe versiunea revenită)
+        if: ${{ always() && steps.rollback.outcome == 'success' }}
+        env:
+          SMOKE_BASE_URL: ${{ secrets.PROD_BASE_URL }}
+          SMOKE_PUBLIC_TOKEN: ${{ secrets.PROD_SMOKE_TOKEN }}
+        run: python scripts/release/smoke_web_v2.py --json --out smoke-rollback.json
+
+      # `always()`, din exact motivul pentru care raportul de scan îl are (vezi jobul de build):
+      # fără el, artefactul se pierdea EXACT când e cel mai necesar — la promovarea picată, pe un
+      # mediu pe care poate nu-l mai poți reproduce. `warn`, nu `error`: dacă smoke-ul n-a apucat
+      # să ruleze, absența fișierului nu e un al doilea eșec de raportat.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
         with:
           name: production-evidence-${{ github.run_id }}
-          path: smoke-prod.json
-          if-no-files-found: error
+          path: |
+            smoke-prod.json
+            smoke-rollback.json
+          if-no-files-found: warn
           retention-days: 365
 
       # Ce rulează în producție devine ținta de rollback a buildurilor următoare. Se scrie ABIA
@@ -459,6 +518,11 @@ jobs:
       # Numele e STABIL între rulări, tocmai ca buildul să poată cere „cel mai recent champion"
       # fără să știe ID-uri. Retenția e maximă: dacă artefactul expiră, buildul rămâne fără țintă
       # și poarta blochează — recuperabil cu `previous_build_run_id`, dar mai bine să nu se ajungă.
+      #
+      # NU adăuga `if: always()` aici. Pasul se bazează pe `if: success()`-ul implicit: dacă smoke-ul
+      # a picat și s-a făcut rollback, championul a RĂMAS cel vechi. Înregistrarea manifestului nou
+      # ar declara champion tocmai digestul de la care am fugit, iar buildul următor și-ar lua ținta
+      # de rollback dintr-o versiune despre care ȘTIM că nu servește. Garda e în teste.
       - name: Înregistrează championul (ținta de rollback pentru buildurile următoare)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
