@@ -238,13 +238,16 @@ def test_acoperirea_mare_nu_deschide_enforcement():
 
 def test_politica_de_precizie_e_preinregistrata_si_completa():
     """Pragurile se scriu ÎNAINTE de audit. Un prag scris după ce vezi rezultatul e o justificare,
-    nu o poartă — de aia politica e un artefact separat, amprentat în raport."""
+    nu o poartă — de aia politica e un artefact separat, amprentat în raport.
+
+    `promise` rămâne vocabular ÎNCHIS, cu trei membri (NX-271 l-a extins deliberat): o valoare
+    nouă apărută din neatenție ar însemna o fațetă căreia nimeni nu i-a ales conștient tierul."""
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     assert policy.get("version"), "politica trebuie să declare o versiune"
     for facet, spec in policy["facets"].items():
         assert 0 < spec["min_precision"] <= 1, facet
         assert spec["min_sample"] >= 1 and spec["sample_size"] >= spec["min_sample"], facet
-        assert spec["promise"] in ("claim", "rank_signal"), facet
+        assert spec["promise"] in ("claim", "rank_signal", "partitioning"), facet
 
 
 def test_promisiunile_au_prag_mai_inalt_decat_semnalele_de_rang():
@@ -255,6 +258,12 @@ def test_promisiunile_au_prag_mai_inalt_decat_semnalele_de_rang():
     claims = [s["min_precision"] for s in policy.values() if s["promise"] == "claim"]
     signals = [s["min_precision"] for s in policy.values() if s["promise"] == "rank_signal"]
     assert min(claims) > max(signals)
+    # NX-271: o fațetă care PARTIȚIONEAZĂ stă cel puțin la nivelul promisiunilor. O afirmație
+    # falsă e vizibilă pe card și contestabilă; o excludere greșită e tăcută — produsul corect nu
+    # apare, iar clientul nu află niciodată că exista.
+    parts = [s["min_precision"] for s in policy.values() if s["promise"] == "partitioning"]
+    if parts:
+        assert min(parts) >= max(claims)
 
 
 # --- ce DEȚINE o rulare de derivare (NX-268, ștergerea faptelor moarte) -------------------------

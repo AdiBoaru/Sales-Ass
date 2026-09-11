@@ -50,6 +50,12 @@ from src.catalog.derivation import (  # noqa: E402
     match_keys,
     tokens,
 )
+from src.catalog.product_type import (  # noqa: E402
+    MIN_SUPPORT,
+    build_vocabulary,
+    classify,
+    split_name,
+)
 from src.db.connection import close_pool, tenant_conn  # noqa: E402
 from src.db.queries.businesses import load_business  # noqa: E402
 from src.domain.loader import load_domain_pack  # noqa: E402
@@ -157,6 +163,16 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
     for s in sections:
         by_product[s["id"]][s["kind"]].append(s["body"])
 
+    # NX-271: `product_type` NU se derivă din potrivirea de fraze pe secțiuni, ci din NUME, cu două
+    # reguli gramaticale (`src/catalog/product_type.py`). Auditul trebuie să cheme exact
+    # producătorul care scrie în catalog — altfel ar măsura alt sistem, exact eroarea împotriva
+    # căreia e scris docstringul lui `_derive_all`. Vocabularul se construiește peste ACELEAȘI nume
+    # (toate produsele active) și cu același `min_support` ca `scripts/derive_product_type.py`,
+    # fiindcă o cheie e canonică doar relativ la corpusul în care a fost numărată.
+    type_mapping, _ = build_vocabulary((p["name"] for p in products), min_support=MIN_SUPPORT)
+    type_allowed = facet_values.get("product_type") or set()
+    type_drift = 0
+
     derived: dict[str, dict] = {}
     context: dict[str, dict] = {}
     for p in products:
@@ -174,6 +190,15 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
             values = sorted(k for k in hits if k in allowed)
             if values:
                 per_facet[facet] = values
+        # NX-271: sursa structurală, adăugată DUPĂ cele din fraze (nu le poate suprascrie).
+        ptype = classify(p["name"], type_mapping)
+        if ptype and type_allowed and ptype not in type_allowed:
+            type_drift += 1  # cheie derivată care nu mai e în pachet → vizibilă, nu tăcută
+            ptype = None
+        if ptype:
+            per_facet["product_type"] = [ptype]
+            head, tail = split_name(p["name"])
+            evidence["product_type"] = [f"cap: {head}"] + ([f"coadă: {tail}"] if tail else [])
         if per_facet:
             derived[pid] = per_facet
             context[pid] = {
@@ -185,6 +210,8 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
                     if secs.get(kind)
                 },
             }
+    if type_drift:
+        print(f"atenție: {type_drift} produse au un `product_type` care nu mai e în pachet (drift)")
     return derived, context
 
 
