@@ -74,6 +74,10 @@ _SPECS: dict[str, ToolSpec] = {
         # NX-275 felia 5: citire pură pe graful de relații. `OPTIONAL` fiindcă un tur rămâne util
         # și fără pașii următori, iar la buget epuizat vrem să cadă ăsta, nu căutarea.
         _spec("related_products", ToolKind.READ, True, True, ToolPriority.OPTIONAL),
+        # NX-292: citire pură (candidați + hidratare), fără scriere. `CRITICAL`, spre deosebire de
+        # `related_products`: pe un tur de rutină ĂSTA e răspunsul, nu un plus. Dacă îl tăiem la
+        # buget epuizat, turul rămâne fără singura unealtă care poate produce o secvență.
+        _spec("routine_plan", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("faq_lookup", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("check_order", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("reorder", ToolKind.READ, True, True, ToolPriority.OPTIONAL),

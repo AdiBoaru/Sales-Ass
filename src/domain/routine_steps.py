@@ -127,6 +127,22 @@ class RoutineSpec:
     #: Amândouă întorc None din `resolve`; diferă în RAPORT, unde contează: o scăpare trebuie
     #: reparată, o ambiguitate declarată e o decizie luată.
     ambiguous: frozenset[str] = field(default_factory=frozenset)
+    #: `pas → locale → etichetă afișabilă`. OPȚIONAL: fără el, eticheta e cheia humanizată.
+    #:
+    #: Cheile sunt fără diacritice (se potrivesc cu ce scrie clientul, P11), dar ce vede clientul
+    #: trebuie să fie scris corect: „Curățare", nu „Curatare". Traducerea e a TENANTULUI, ca la
+    #: `relation_kinds.labels` — un dicționar românesc în cod ar fi exact scurgerea de domeniu pe
+    #: care poarta NX-264 o interzice.
+    labels: dict[str, dict[str, str]] = field(default_factory=dict)
+
+    def label_of(self, step: str, locale: str | None = None) -> str:
+        """Eticheta afișabilă a unui pas. Fallback: cheia humanizată (`_` → spațiu, capitalizat).
+
+        Fallback-ul nu e o scuză să nu declari etichete — e garanția că o etichetă lipsă degradează
+        VIZIBIL (scrie „Curatare"), nu tăcut (un card fără nimic pe el)."""
+        by_locale = self.labels.get(step) or {}
+        text = by_locale.get((locale or "").split("-")[0]) or by_locale.get("ro") or ""
+        return text or step.replace("_", " ").strip().capitalize()
 
     def canonical_values(self) -> tuple[str, ...]:
         """Toate valorile `familie:pas` posibile, în ordinea de parcurs. Astea intră ca `values`
@@ -222,12 +238,29 @@ def build_spec(raw: Any) -> RoutineSpec:
     if both := buckets["not_a_step"] & buckets["ambiguous"]:
         raise RoutineStepConfigError(f"tipuri și not_a_step, și ambiguous: {sorted(both)}")
 
+    labels: dict[str, dict[str, str]] = {}
+    raw_labels = raw.get("labels") or {}
+    if not isinstance(raw_labels, dict):
+        raise RoutineStepConfigError("routine_steps.labels trebuie să fie obiect")
+    all_steps = {s for steps in families.values() for s in steps}
+    for step, by_locale in raw_labels.items():
+        if step not in all_steps:
+            # Fail-closed: o etichetă pentru un pas inexistent e o hartă și un vocabular care au
+            # divergit. Tăcut, ar însemna că cineva a redenumit un pas și crede că a tradus.
+            raise RoutineStepConfigError(f"labels[{step!r}] nu e un pas declarat în families")
+        if not isinstance(by_locale, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in by_locale.items()
+        ):
+            raise RoutineStepConfigError(f"labels[{step!r}] trebuie să fie `locale → text`")
+        labels[step] = {k: v.strip() for k, v in by_locale.items()}
+
     return RoutineSpec(
         families=families,
         by_product_type=by_product_type,
         promotions=tuple(promotions),
         not_a_step=buckets["not_a_step"],
         ambiguous=buckets["ambiguous"],
+        labels=labels,
     )
 
 

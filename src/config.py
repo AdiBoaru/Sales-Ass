@@ -880,6 +880,13 @@ class Settings(BaseSettings):
     routine_evidence_required: bool = Field(
         default=True, validation_alias="ROUTINE_EVIDENCE_REQUIRED"
     )
+    # NX-292: rutina compusă de SERVER — profilul `routine` + unealta `routine_plan`. Flag PROPRIU,
+    # nu `TURN_PROFILES_ENABLED`: acela aprinde toate cele cinci profile deodată, deci schimbă
+    # sufixul de system pentru TOT traficul, iar aprinderea lui se decide pe golden (D15). Ăsta
+    # atinge exclusiv turele care CER o secvență, unde azi răspunsul e garantat degradat: poarta
+    # `routine_evidence_required` e aprinsă, dar unealta care poate produce dovada nu se oferă.
+    # OFF = byte-identic (niciun sufix, nicio unealtă în plus).
+    routine_enabled: bool = Field(default=False, validation_alias="ROUTINE_ENABLED")
     # IZI: badge de card DERIVAT din semnale reale (rating+recenzii → „Top Favorit"; reducere reală
     # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).
     # Determinist, NU inventat. OFF → doar badge-uri pre-seedate curate (comportament vechi).
@@ -1701,6 +1708,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SPECULATIVE_RETRIEVAL_ENABLED cere TURN_PROFILES_ENABLED (profilul e cel care "
                 "spune CÂND se speculează; fără el nu s-ar specula niciodată)"
+            )
+        if self.routine_enabled and not self.single_brain_enabled:
+            raise ValueError(
+                "ROUTINE_ENABLED cere SINGLE_BRAIN_ENABLED (profilul de rutină și unealta lui se "
+                "atașează pe promptul MainBrain; fără el n-ar exista unde)"
             )
         return self
 

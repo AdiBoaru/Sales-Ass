@@ -364,6 +364,59 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    # NX-292 — secvența completă a unei familii, compusă de SERVER. Distinct de `related_products`:
+    # acela pornește de la o ancoră și urmează muchii (deci depinde de ce muchii există), ăsta
+    # umple TOȚI pașii declarați ai familiei din fațeta `routine_step` și spune explicit care pas
+    # n-are produs. Modelul nu poate ști care dintre șase produse e gelul de curățare — numele de
+    # catalog are mediana 200 de caractere și e nume plus reclamă (NX-280/049).
+    #
+    # `family` e `enum` completat din pachetul TENANTULUI. Niciun cuvânt de cosmetică aici:
+    # familiile sunt declarate în `domain_pack.routine_steps`, iar la alt vertical aceeași poziție
+    # e ocupată de altceva (pașii de instalare).
+    "routine_plan": {
+        "type": "function",
+        "function": {
+            "name": "routine_plan",
+            "description": (
+                "Secvența completă de pași a unei familii, cu un produs pe pas, în ordine. "
+                "Folosește când clientul cere o rutină, pași, sau ce să folosească întâi și apoi. "
+                "Serverul alege produsele și spune care pas n-are produs."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "family": {
+                        "type": "string",
+                        "enum": [],  # completat per tenant; gol ⇒ tool-ul nu se oferă deloc
+                        "description": "Pentru ce e rutina.",
+                    },
+                    "concerns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Nevoile clientului{NEED_EXAMPLES}. Gol dacă n-a spus niciuna."
+                        ),
+                    },
+                    "budget_max": {
+                        "type": ["number", "null"],
+                        "description": (
+                            "Bugetul TOTAL al rutinei, dacă l-a spus clientul. Null altfel."
+                        ),
+                    },
+                    "anchor_id": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Id-ul unui produs pe care clientul îl are deja sau îl discută, ca "
+                            "pașii să pornească de la el. Null dacă nu există unul."
+                        ),
+                    },
+                },
+                "required": ["family", "concerns", "budget_max", "anchor_id"],
+            },
+        },
+    },
 }
 
 
@@ -401,10 +454,21 @@ def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
     return out
 
 
+#: Enumuri completate din pachetul TENANTULUI: tool → parametru → numele setului de valori.
+#:
+#: Un registru, nu câte o funcție per tool: regula e aceeași (valori închise, sortate, din pachet),
+#: iar a doua copie a ei ar fi locul unde a treia ar uita `sorted()` și ar strica prompt caching-ul.
+_TENANT_ENUMS: dict[str, dict[str, str]] = {
+    "related_products": {"relation": "relation_kinds"},
+    "routine_plan": {"family": "families"},
+}
+
+
 def tool_schemas(
     names: list[str],
     examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES,
     relation_kinds: tuple[str, ...] = (),
+    families: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching).
 
@@ -416,24 +480,30 @@ def tool_schemas(
         "{FEATURE_EXAMPLES}": vocab_examples.clause(examples.features),
     }
     out = [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]
-    return [_with_relation_enum(s, relation_kinds) for s in out]
+    values = {"relation_kinds": relation_kinds, "families": families}
+    return [_with_tenant_enums(s, values) for s in out]
 
 
-def _with_relation_enum(schema: dict[str, Any], kinds: tuple[str, ...]) -> dict[str, Any]:
-    """Completează enumul de relații al lui `related_products` din registrul TENANTULUI.
+def _with_tenant_enums(
+    schema: dict[str, Any], values: dict[str, tuple[str, ...]]
+) -> dict[str, Any]:
+    """Completează enumurile care vin din pachetul TENANTULUI (vezi `_TENANT_ENUMS`).
 
-    De ce enum și nu string liber: `strict: true` cere valori închise, iar un `relation` liber ar
-    lăsa modelul să inventeze un tip de muchie care nu există — o interogare pe gol care arată ca
-    un răspuns onest („nu am legături de tipul ăsta") fără să fie.
+    De ce enum și nu string liber: `strict: true` cere valori închise, iar un `relation`/`family`
+    liber ar lăsa modelul să inventeze un tip de muchie sau o familie care nu există — o interogare
+    pe gol care arată ca un răspuns onest („nu am legături de tipul ăsta") fără să fie.
 
     Sortat: pentru același pachet ies aceiași octeți, deci schema rămâne cache-uibilă (felia 3).
     Enum GOL înseamnă că tenantul n-a declarat nimic; apelantul nu trebuie să ofere tool-ul deloc
     (vezi `turn_profile.select`), iar dacă totuși o face, un enum vid e refuzat de furnizor —
     zgomotos, nu tăcut."""
     fn = schema.get("function", {})
-    if fn.get("name") != "related_products":
+    spec = _TENANT_ENUMS.get(str(fn.get("name") or ""))
+    if not spec:
         return schema
     props = dict(fn["parameters"]["properties"])
-    props["relation"] = {**props["relation"], "enum": sorted(set(kinds))}
+    for param, key in spec.items():
+        if param in props:
+            props[param] = {**props[param], "enum": sorted(set(values.get(key) or ()))}
     params = {**fn["parameters"], "properties": props}
     return {**schema, "function": {**fn, "parameters": params}}
