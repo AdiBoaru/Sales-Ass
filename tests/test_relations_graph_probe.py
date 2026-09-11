@@ -222,19 +222,45 @@ async def test_un_graf_ciclic_si_ramificat_nu_mai_face_proba_sa_crape():
 
     from src.db.connection import admin_conn, close_pool, get_pool
 
+    # `product_relations.kind` are CHECK pe vocabular ÎNCHIS, deci un tip inventat („seq")
+    # e respins de schemă. Alegem unul REAL, coerent cu graful pe care îl construim aici:
+    # `complement` e singurul în care ciclurile sunt semantice, nu o eroare de date.
+    # (Proba însăși rămâne agnostică de tip — asta o apără testul de mai sus.)
+    _KIND = "complement"
     biz = str(uuid.uuid4())
     nodes = [str(uuid.uuid4()) for _ in range(200)]
     edges = [
-        (biz, nodes[i], nodes[(i + step) % len(nodes)], "seq")
+        (biz, nodes[i], nodes[(i + step) % len(nodes)], _KIND)
         for i in range(len(nodes))
         for step in range(1, 7)
     ]
+    # Muchiile de mai sus fac graful ciclic GLOBAL, dar nu și în adâncimea pe care o măsoară proba:
+    # cu pași de cel mult 6 și 200 de noduri, șase salturi adună maximum 36 — prea puțin ca să te
+    # întorci de unde ai plecat. Deci aserțiunea „graful trebuia să fie ciclic" n-avea cum să
+    # treacă, iar asta n-a ieșit la iveală fiindcă testul nu apuca să ruleze (poarta de migrări
+    # pica înaintea lui). Muchia inversă adaugă cicluri de lungime 2, vizibile la orice adâncime,
+    # fără să schimbe evantaiul care produce explozia combinatorie.
+    edges += [(biz, nodes[(i + 1) % len(nodes)], nodes[i], _KIND) for i in range(len(nodes))]
     pool = await get_pool()
     try:
         async with admin_conn(pool) as conn:
+            # `products.business_id` are FK către `businesses`, deci tenantul sintetic trebuie
+            # să EXISTE, nu doar să aibă un uuid. (Testul inventa un id și se baza pe faptul că
+            # nimeni nu verifică — FK-ul verifică.)
             await conn.execute(
-                "insert into products (id, business_id, name, status)"
-                " select unnest($1::uuid[]), $2::uuid, 'n', 'active'",
+                "insert into businesses (id, name, slug) values ($1::uuid, 'probe', $2)",
+                biz,
+                f"probe-{biz[:8]}",
+            )
+            # Coloanele OBLIGATORII fără default ale lui `products` sunt exact patru:
+            # `business_id`, `name`, `slug`, `price` (verificat în `information_schema`, nu ghicit).
+            # Inserția le dădea doar pe primele două, deci testul crăpa de fiecare dată când
+            # ajungea să ruleze — adică abia după ce poarta de migrări a încetat să pice înaintea
+            # lui. `slug` se derivă din id: unic prin construcție, fără secvență separată.
+            await conn.execute(
+                "insert into products (id, business_id, name, slug, price, status)"
+                " select n, $2::uuid, 'n', 'probe-' || n::text, 0, 'active'"
+                " from unnest($1::uuid[]) as n",
                 nodes,
                 biz,
             )
@@ -245,11 +271,12 @@ async def test_un_graf_ciclic_si_ramificat_nu_mai_face_proba_sa_crape():
             )
             report = await probe.measure(biz, 6, sample=50, max_branch=3)
         kinds = {k["kind"]: k for k in report["kinds"]}
-        assert "seq" in kinds, "proba n-a văzut muchiile"
-        assert kinds["seq"]["cyclic_anchors"] > 0, "graful sintetic trebuia să fie ciclic"
+        assert _KIND in kinds, "proba n-a văzut muchiile"
+        assert kinds[_KIND]["cyclic_anchors"] > 0, "graful sintetic trebuia să fie ciclic"
         assert report["probe_budget"]["max_rows_per_kind"] == 50 * 3**6
     finally:
         async with admin_conn(pool) as conn:
             await conn.execute("delete from product_relations where business_id = $1::uuid", biz)
             await conn.execute("delete from products where business_id = $1::uuid", biz)
+            await conn.execute("delete from businesses where id = $1::uuid", biz)
         await close_pool()
