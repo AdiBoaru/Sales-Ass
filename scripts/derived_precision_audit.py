@@ -198,7 +198,10 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
         if ptype:
             per_facet["product_type"] = [ptype]
             head, tail = split_name(p["name"])
-            evidence["product_type"] = [f"cap: {head}"] + ([f"coadă: {tail}"] if tail else [])
+            # Dovada se indexează după VALOARE, nu după fațetă: bucla de adnotare caută
+            # `evidence[valoare]` (pentru fațetele din fraze, cheia potrivită E valoarea). Pe
+            # cheia greșită, auditorul n-ar vedea deloc ce a citit regula.
+            evidence[ptype] = [f"cap: {head}"] + ([f"coadă: {tail}"] if tail else [])
         if per_facet:
             derived[pid] = per_facet
             context[pid] = {
