@@ -8,6 +8,13 @@
 Randorul backend unic e [`render_web`](../src/channels/web/render.py) (NX-127): **aceeași formă**
 pe ruta sincronă (`POST /web/chat` → JSON HTTP) și pe cea async (SSE, eveniment `type:"rich"`).
 
+> **NX-290 — transportul async v1 e DEPRECAT (sunset 2026-10-08).** Forma payload-ului descrisă
+> mai jos nu se schimbă; se retrage doar drumul pe care ajunge. `POST /web/messages` →
+> `POST /web/v2/turns`, `GET /web/stream` → `GET /web/v2/turns/{turn_id}/events`. Ruta sincronă
+> `POST /web/chat` rămâne neatinsă până la cutoverul NX-249. Câmpul `sse_url` din
+> `GET /web/bootstrap` dispare odată cu transportul — nu-l trata ca obligatoriu. Faze, porți și
+> rollback: [`WEB-TRANSPORT-CONSOLIDATION.md`](WEB-TRANSPORT-CONSOLIDATION.md).
+
 ---
 
 ## 1. Forma răspunsului (sync + SSE)

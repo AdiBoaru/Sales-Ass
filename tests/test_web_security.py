@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from redis.exceptions import RedisError
 
 from src.web import app as wa
@@ -202,7 +202,9 @@ async def test_web_message_fail_open_on_redis_error(monkeypatch):
     monkeypatch.setattr(wa, "_verify", fake_verify)
     monkeypatch.setattr(wa, "enqueue_inbound", fake_enqueue)
     monkeypatch.setattr(wa, "get_redis", lambda: _coro(RaisingRedis()))
-    res = await wa.web_message(WebMessageIn(token="t", visitor_id="v", sig="s", text="hi"), _Req())
+    res = await wa.web_message(
+        WebMessageIn(token="t", visitor_id="v", sig="s", text="hi"), _Req(), Response()
+    )
     assert res["accepted"] is True  # fail-OPEN: redis jos nu blochează ingestia ieftină
 
 
@@ -222,6 +224,9 @@ def _settings_with_origins(origins, **over):
         # NX-244: bootstrapul citește flagul ca să decidă dacă atașează copy-ul de shell. OFF aici
         # (valoarea de producție), ca testele de origin să măsoare originul, nu copy-ul.
         web_turn_v2_enabled=False,
+        # NX-290: transportul async v1 e încă montat (valoarea de producție la merge), ca testele
+        # de origin să măsoare originul, nu poarta de retragere.
+        web_legacy_async_enabled=True,
         web_session_ttl_s=43200,
         web_session_origin_binding=False,
         web_max_body_bytes=16384,
@@ -563,6 +568,7 @@ async def test_messages_rejects_disallowed_origin(monkeypatch):
         await wa.web_message(
             WebMessageIn(token="t", visitor_id="v", sig="s", text="hi"),
             _origin_req("https://evil.example"),
+            Response(),
         )
     assert ei.value.status_code == 403
 

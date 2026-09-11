@@ -1876,6 +1876,7 @@ web_demo_access_enabled = false
 web_enabled = false
 web_feedback_enabled = false
 web_identity_enabled = false
+web_legacy_async_enabled = true
 web_session_origin_binding = false
 web_session_v2_enabled = false
 web_session_v2_required = false

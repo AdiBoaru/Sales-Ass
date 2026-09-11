@@ -30,6 +30,18 @@ Tokenul public al tenantului identifică magazinul și se pasează pe fiecare ap
 3. **Primire** — `GET /web/stream?token=…&visitor_id=…&sig=…` (EventSource SSE). Răspunsurile bot
    vin pe acest stream; reconectare nativă la drop de rețea (Last-Event-ID).
 
+> ## ⚠️ Pașii 2 și 3 sunt DEPRECAȚI (NX-290) — sunset **2026-10-08**
+>
+> Transportul async v1 se retrage: `POST /web/messages` → **`POST /web/v2/turns`**,
+> `GET /web/stream` → **`GET /web/v2/turns/{turn_id}/events`**. Motivul nu e stilul, ci livrarea:
+> aici mesajul se publică pe un pub/sub și trăiește 300s într-un backlog, deci ajunge doar la cine
+> e conectat ACUM; acolo autoritatea e un rând din DB, iar clientul se reia după cursor.
+>
+> Cât timp rutele răspund, poartă headere `Deprecation` / `Sunset` / `Link`. După flip întorc
+> `410 Gone` cu succesorul în corp. Integrare nouă: folosește `POST /web/chat` (sincron, stabil
+> până la cutoverul NX-249) sau ruta v2. Detalii, faze și rollback:
+> [`WEB-TRANSPORT-CONSOLIDATION.md`](WEB-TRANSPORT-CONSOLIDATION.md).
+
 ## Variantă sincronă — `POST /web/chat` (NX-25b)
 
 Pentru widget-uri care **randează carduri de produs** și vor răspunsul în același request (nu prin
