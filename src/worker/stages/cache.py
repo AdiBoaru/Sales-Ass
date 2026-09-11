@@ -30,6 +30,7 @@ from src.db.queries.semantic_cache import (
     current_prices,
     delete_entry,
     exact_lookup,
+    semantic_candidates_exist,
     semantic_lookup,
     touch_hit,
 )
@@ -68,6 +69,29 @@ async def _is_fresh_dynamic(ctx: TurnContext, conn: Any, entry: dict[str, Any]) 
         if cur is None or abs(cur - float(s["price"])) > _PRICE_EPS:
             return False
     return True
+
+
+async def _has_semantic_candidates(
+    conn: Any, ctx: TurnContext, *, volatility: str, prompt_version: str
+) -> bool:
+    """Sonda de dinaintea embed-ului, cu eșec FAIL-OPEN.
+
+    O optimizare a unei optimizări n-are voie să stingă stratul pe care îl servește: dacă sonda
+    pică (migrare, DB, permisiune), răspundem „poate există" și plătim embed-ul, adică exact
+    comportamentul de dinainte. Invers ar fi mult mai rău și complet tăcut — un cache care nu mai
+    servește niciodată nu se vede în niciun răspuns, doar în factură."""
+    try:
+        return await semantic_candidates_exist(
+            conn,
+            ctx.business.id,
+            ctx.language,
+            volatility_class=volatility,
+            embedding_model=get_settings().model_embed,
+            prompt_version=prompt_version,
+        )
+    except Exception as e:  # noqa: BLE001 — vezi docstring: dubiul se rezolvă în favoarea lui L2
+        log.debug("cache: sonda de candidați a eșuat (%s) → continuăm cu embed", type(e).__name__)
+        return True
 
 
 async def _serve(
@@ -150,6 +174,18 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             )
             if hit is not None and await _serve(ctx, conn, hit, volatility, layer="exact"):
                 return
+            # NX-291: are L2 pe ce opera? Sonda rulează în ACELAȘI checkout (verificare pe index,
+            # zero conexiune în plus) și folosește exact filtrul lui `semantic_lookup`.
+            has_candidates = await _has_semantic_candidates(
+                conn, ctx, volatility=volatility, prompt_version=prompt_version
+            )
+
+        # Mulțime servibilă goală ⇒ `semantic_lookup` NU poate întoarce nimic, deci embed-ul ar fi
+        # un apel extern plătit pentru un rezultat imposibil. E starea normală a unui tenant nou
+        # (cache-ul se umple din write-back, adică din trafic care încă n-a existat), nu o excepție.
+        if not has_candidates:
+            ctx.emit("cache_lookup", layer="miss", volatility=volatility, reason="no_candidates")
+            return
 
         # L2 semantic (paraphrase). Fără LLM → nu putem embed → miss grațios.
         if deps.llm is None:

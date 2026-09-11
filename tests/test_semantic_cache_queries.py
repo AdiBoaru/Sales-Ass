@@ -7,7 +7,12 @@ ca bot_runtime, în tranzacție rollback-uită (zero poluare demo).
 import pytest
 
 from src.db.connection import close_pool, get_pool
-from src.db.queries.semantic_cache import exact_lookup, semantic_lookup, upsert_entry
+from src.db.queries.semantic_cache import (
+    exact_lookup,
+    semantic_candidates_exist,
+    semantic_lookup,
+    upsert_entry,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -53,5 +58,28 @@ async def test_cache_roundtrip(pool):
             )
             assert cand is not None
             assert float(cand["similarity"]) > 0.99  # vectorul identic → cosine ~1
+
+            # NX-291: sonda de dinaintea embed-ului trebuie să răspundă despre EXACT mulțimea pe
+            # care o interoghează `semantic_lookup`. Se verifică pe DB real, în ambele sensuri:
+            # dacă ar diverge, L2 s-ar stinge tăcut (sau am plăti embed-ul degeaba).
+            assert await semantic_candidates_exist(
+                conn, DEMO, "ro", embedding_model="text-embedding-3-small"
+            )
+            for divergent in (
+                {"locale": "en"},  # altă limbă (P11)
+                {"embedding_model": "text-embedding-3-large"},  # alt spațiu vectorial
+                {"volatility_class": "dynamic"},  # altă clasă de volatilitate
+                {"prompt_version": "vnext"},  # alt namespace de prompt
+            ):
+                kwargs = {
+                    "locale": "ro",
+                    "embedding_model": "text-embedding-3-small",
+                    **divergent,
+                }
+                locale = kwargs.pop("locale")
+                assert not await semantic_candidates_exist(conn, DEMO, locale, **kwargs)
+                assert (
+                    await semantic_lookup(conn, DEMO, locale, emb, **kwargs) is None
+                )  # sonda și lookup-ul cad de acord pe fiecare dimensiune de cheie
         finally:
             await tr.rollback()
