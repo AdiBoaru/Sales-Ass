@@ -21,7 +21,6 @@ import pytest
 
 from src.agent import deterministic as deterministic_mod
 from src.agent import planner as planner_mod
-from src.agent.llm import ModerationResult
 from src.config import get_settings
 from src.evals.golden import (
     GoldenExpect,
@@ -30,6 +29,7 @@ from src.evals.golden import (
     run_case,
     run_conversation,
 )
+from src.evals.scripted_llm import ScriptedLLM, brain_gap
 from src.models import (
     BusinessConfig,
     Comparison,
@@ -56,192 +56,11 @@ CASES = load_cases(Path(__file__).parent / "golden" / "cases.json")
 CONVERSATIONS = load_cases(Path(__file__).parent / "golden" / "conversations.json")
 
 
-# --- LLM scriptat (zero apeluri reale) ---------------------------------------
-
-
-class ScriptedLLM:
-    """LLM determinist scriptat din `fixtures`. Implementează exact metodele chemate
-    de pipeline: `moderate` (gates), `embed` (cache + tool-uri), `classify_json`
-    (triaj), `run_tool_loop` + `complete` (agent + validator retry).
-
-    `fx` poate fi un dict (caz single-tur) sau un getter fără argumente care întoarce
-    fixtures-ul turului CURENT (caz multi-tur — comutat de `on_turn`)."""
-
-    def __init__(self, fx, *, business_id: str = "biz-golden", locale: str = "ro") -> None:
-        self._get = fx if callable(fx) else (lambda: fx)
-        self._business_id = business_id
-        self._locale = locale
-
-    @property
-    def _fx(self) -> dict:
-        return self._get()
-
-    async def moderate(self, text, *, model=None):
-        m = self._fx.get("moderation", {})
-        return ModerationResult(
-            flagged=bool(m.get("flagged")), categories=list(m.get("categories", []))
-        )
-
-    async def embed(self, texts, *, model=None):
-        # vectori determiniști (zerouri) — search/cache-ul real e oricum stubat.
-        return [[0.0] * 8 for _ in texts]
-
-    async def classify_json(self, system, user, *, model=None):
-        return dict(self._fx.get("triage", {}))
-
-    async def complete(self, system, user, *, model=None):
-        # textul de la validator-retry (poate fi tot invalid → fallback determinist).
-        return self._fx.get("retry", "")
-
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
-        for name, args in self._fx.get("tool_calls", []):
-            await execute(name, args)
-        return self._fx.get("final", "")
-
-    # --- creierul unic (NX-239): ACELEAȘI fixturi, alt contract de ieșire -----
-
-    async def run_tool_loop_structured(self, system, user, tools, execute, schema, **kw):
-        """Bucla structurată: aceleași tool calls, dar ieșirea e un `AnswerPlanV2`.
-
-        Planul vine din `fx["plan_v2"]` dacă e scris explicit (cazuri care testează planuri
-        anume — invalide, parțiale), altfel e DERIVAT din aceleași fixturi ca pe calea v1."""
-        for name, args in self._fx.get("tool_calls", []):
-            await execute(name, args)
-        rounds = 1 if self._fx.get("tool_calls") else 0
-        return self._plan(user), rounds
-
-    async def complete_schema(self, system, user, schema, **kw):
-        """Repair-ul bounded. `plan_repair` scris explicit = cazul testează repararea; altfel
-        repetăm ACELAȘI plan — un model care nu știe să repare, deci turul trebuie să cadă în
-        fallback determinist. A întoarce aici un plan „reparat" din senin ar face repair-ul să
-        pară că funcționează în cazuri în care n-a fost niciodată exercitat."""
-        repair = self._fx.get("plan_repair")
-        return dict(repair) if repair else self._plan(user)
-
-    def _plan(self, user: str) -> dict:
-        fx = self._fx
-        explicit = fx.get("plan_v2")
-        if explicit:
-            return dict(explicit)
-        return _derive_plan(fx, user=user, business_id=self._business_id, locale=self._locale)
-
-
-# --- planul V2 derivat din fixturile v1 --------------------------------------
-
-_OBLIGATIONS_LINE = "Obligațiile turului (acoperă-le pe TOATE în plan): "
-
-
-def _obligations_from_prompt(user: str) -> list[tuple[str, str]]:
-    """Obligațiile turului, citite din promptul pe care brain-ul le-a scris el însuși.
-
-    Nu le re-derivăm cu extractorul: dacă harnessul ar chema aceeași funcție ca produsul, un bug
-    în extractor ar fi invizibil — testul și codul ar greși identic. Aici citim exact ce a ajuns
-    în fața modelului, adică ce ar citi și un model real."""
-    for line in user.splitlines():
-        if line.startswith(_OBLIGATIONS_LINE):
-            raw = line[len(_OBLIGATIONS_LINE) :]
-            out = []
-            for chunk in raw.split(";"):
-                kind, _, key = chunk.strip().partition(":")
-                if kind and key:
-                    out.append((kind, key))
-            return out
-    return []
-
-
-def _derive_plan(fx: dict, *, user: str, business_id: str, locale: str) -> dict:
-    """Planul pe care l-ar emite un model COMPETENT pentru fixtura asta — nu unul PERFECT.
-
-    Regula care ține testul onest: `direct_answer` e EXACT textul scriptat al cazului. Nu-l
-    rescriem, nu-i atașăm evidence pentru cifre pe care catalogul nu le are. Deci un caz cu preț
-    inventat rămâne cu preț inventat, iar validatorul V2 trebuie să-l respingă exact cum îl
-    respingea validatorul v1 — altfel migrarea pe creierul unic ar „repara" fix cazurile negative
-    pe care golden-ul există ca să le prindă."""
-    # Catalogul fixturii NU e retrieval: produsele intră în plan doar dacă turul chiar a căutat.
-    # Altfel planul ar cita produse pe care serverul nu le-a văzut în turul ăsta —
-    # `unknown_product`, și pe bună dreptate: exact asta previne validatorul.
-    searched = any(name == "search_products" for name, _ in fx.get("tool_calls", []))
-    products = list(fx.get("catalog", []))[:6] if searched else []
-    obligations = _obligations_from_prompt(user)
-    kinds = {kind for kind, _ in obligations}
-    triage = fx.get("triage") or {}
-    # Sub creierul unic, `simple`/`clarify` NU mai sunt servite de nano — ajung tot la brain.
-    # Textul lor scriptat trăiește în fixtura `triage`, nu în `final`: pentru cazurile astea,
-    # ce „ar fi spus nano" este exact ce trebuie să spună acum planul.
-    answer = fx.get("final") or triage.get("reply") or ""
-    clarification = None
-    if triage.get("route") == "clarify" and triage.get("reply"):
-        clarification = {
-            "question": triage["reply"],
-            "target_need": (triage.get("missing_field") or "intent")[:48],
-            "reason": "missing_required",
-            "options": list(triage.get("suggestions") or [])[:4],
-        }
-
-    def ev(product: dict, kind: str) -> str:
-        return f"product:{product['id']}:{kind}"
-
-    selected = [
-        {"product_id": p["id"], "variant_id": None, "evidence_ids": [ev(p, "identity")]}
-        for p in products
-    ]
-    recommendations = [
-        {
-            "product_id": p["id"],
-            "variant_id": None,
-            "reason": "potrivit pentru ce ai cerut",
-            "evidence_ids": [ev(p, "identity")],
-            "need_ids": [],
-        }
-        for p in products
-    ]
-    comparison = None
-    if "compare" in kinds and len(products) >= 2:
-        pair = products[:4]
-        comparison = {
-            "product_ids": [p["id"] for p in pair],
-            "axes": ["price"],
-            "cells": [
-                {
-                    "product_id": p["id"],
-                    "axis": "price",
-                    "value": p.get("price"),
-                    "evidence_id": ev(p, "price"),
-                }
-                for p in pair
-                if p.get("price") is not None
-            ],
-        }
-    # Fără produse, o obligație de recomandare/comparație NU poate fi acoperită onest: `no_match`
-    # e clasa corectă, iar `insufficient_data` ar fi minciuna pe care D7 o interzice (UNKNOWN ≠
-    # MISMATCH). Cazurile care testează chiar taxonomia asta își scriu `plan_v2` explicit.
-    no_results = None
-    if not products and kinds & {"recommend", "compare"}:
-        no_results = {"reason_class": "no_match", "criteria": [], "alternatives": []}
-
-    return {
-        "schema_version": 2,
-        "business_id": business_id,
-        "locale": locale,
-        "intent_summary": "caz golden",
-        "obligations": [{"kind": k, "key": key} for k, key in obligations][:8],
-        "direct_answer": answer,
-        "selected_products": selected,
-        "claims": [],
-        "facts": {"prices": [], "stocks": [], "urls": []},
-        "recommendations": recommendations if "recommend" in kinds else [],
-        "comparison": comparison,
-        "constraints_applied": [],
-        "unknowns": [],
-        "relaxations": [],
-        "clarification": clarification,
-        "no_results": no_results,
-        "state_update_proposals": [],
-        "action_intents": [],
-        "disclosures": [],
-        "confirmed_actions": [],
-        "style_signals": {"tone": "neutral", "verbosity": "short"},
-    }
+# --- LLM scriptat: definit în `src/evals/scripted_llm.py` --------------------
+#
+# Era definit AICI, iar `scripts/eval_regression.py` avea a doua copie — care a rămas în urmă
+# fix pe calea creierului unic. Definiția s-a mutat în `src/`, unde o pot importa amândouă
+# fără ca scriptul să depindă de un modul de test (vezi antetul modulului).
 
 
 # --- stub-uri DB + settings (hermetic, independent de .env local) -------------
@@ -336,16 +155,10 @@ def _build_ctx(case) -> TurnContext:
 # clarificare aruncată ca `ungrounded_price`, `ctx.retrieval` nescris pe calea brain) — lista de
 # mai jos a scăzut de la 20 la 1, iar scăderea a fost RAPORTATĂ de suită, nu declarată de mine.
 
-# Limită de HARNESS, nu de produs: nano returna `reply: null`, iar textul îl compunea codul v1.
-# Nu există ce deriva, iar a inventa noi textul ar însemna să testăm ce am scris tot noi.
-# Se deblochează cu un `plan_v2` explicit în fixtură.
-_BRAIN_NO_SCRIPTED_TEXT = {"clarify-low-confidence-sales"}
-
-
-def _brain_gap(case_id: str) -> str | None:
-    if case_id in _BRAIN_NO_SCRIPTED_TEXT:
-        return "fixtura n-are text scriptat pentru calea brain (cere `plan_v2` explicit)"
-    return None
+# Lista trăiește lângă derivarea planului (`src/evals/scripted_llm.py`): golul e al HARNESSULUI,
+# deci aparține harnessului, iar `scripts/eval_regression.py` are nevoie de aceeași listă ca să nu
+# raporteze ca regresie un caz despre care se știe că n-are text scriptat pe calea brain.
+_brain_gap = brain_gap
 
 
 @pytest.mark.parametrize("single_brain", [False, True], ids=["v1", "brain"])

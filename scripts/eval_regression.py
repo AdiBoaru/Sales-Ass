@@ -17,9 +17,15 @@ Exit code 1 dacă (a) un caz e ROȘU sau (b) `--baseline` găsește un DIFF → 
 manual/nocturn. Judge-ul LLM de naturalețe (`scripts/sim/halu_run.py`) rămâne separat
 (cost + nedeterminism) — aici e strict determinist.
 
-NB: harness-ul scriptat e reimplementat aici (nu importat din `tests/`) intenționat — un
-script din `scripts/` nu trebuie să depindă de un modul de test. Sursa de adevăr a
-semnalelor de snapshot (`_ctx_tool_names` / `_ctx_product_ids`) e reutilizată din
+Fiecare caz se rulează pe AMBELE contracte, ca gate-ul CI: `v1` (`run_tool_loop` → text) și
+`brain` (`run_tool_loop_structured` → `AnswerPlanV2`). Cheia de snapshot poartă calea
+(`<caz>` / `<caz>@brain`), fiindcă altfel aprinderea lui `SINGLE_BRAIN_ENABLED` în producție ar
+fi arătat în diff ca „s-a schimbat totul", fără să se poată spune ce anume.
+
+NB: harness-ul scriptat NU se reimplementează aici și nici nu se importă din `tests/` — trăiește
+în `src/evals/scripted_llm.py`, de unde îl iau amândouă consumatoarele. Copia locală de dinainte
+rămăsese fără metodele căii structurate, deci scriptul măsura v1 și când produsul rula brain.
+Sursa de adevăr a semnalelor de snapshot (`_ctx_tool_names` / `_ctx_product_ids`) vine din
 `src/evals/golden.py` ca să nu divergem de checker.
 """
 
@@ -35,7 +41,6 @@ from typing import Any
 
 from src.agent import deterministic as deterministic_mod
 from src.agent import planner as planner_mod
-from src.agent.llm import ModerationResult
 from src.config import get_settings
 from src.evals.golden import (
     GoldenCase,
@@ -45,8 +50,10 @@ from src.evals.golden import (
     evaluate_reply,
     load_cases,
 )
+from src.evals.scripted_llm import ScriptedLLM, brain_gap
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
+from src.tools.catalog_tools import clear_embeddings_cache
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, run_pipeline
 from src.worker.stages import agent as agent_mod
 from src.worker.stages import cache as cache_mod
@@ -55,41 +62,6 @@ from src.worker.stages import triage as triage_mod
 ROOT = Path(__file__).resolve().parents[1]
 CASES_PATH = ROOT / "tests" / "golden" / "cases.json"
 CONVERSATIONS_PATH = ROOT / "tests" / "golden" / "conversations.json"
-
-
-# --- LLM scriptat (comutabil pe turul curent prin getter) --------------------
-
-
-class ScriptedLLM:
-    """Oglindă a LLM-ului scriptat din gate-ul CI. `fx` = getter care întoarce fixtures-ul
-    turului curent (multi-tur) sau un dict fix (single-tur)."""
-
-    def __init__(self, fx: Any) -> None:
-        self._get = fx if callable(fx) else (lambda: fx)
-
-    @property
-    def _fx(self) -> dict:
-        return self._get()
-
-    async def moderate(self, text, *, model=None):
-        m = self._fx.get("moderation", {})
-        return ModerationResult(
-            flagged=bool(m.get("flagged")), categories=list(m.get("categories", []))
-        )
-
-    async def embed(self, texts, *, model=None):
-        return [[0.0] * 8 for _ in texts]
-
-    async def classify_json(self, system, user, *, model=None):
-        return dict(self._fx.get("triage", {}))
-
-    async def complete(self, system, user, *, model=None):
-        return self._fx.get("retry", "")
-
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
-        for name, args in self._fx.get("tool_calls", []):
-            await execute(name, args)
-        return self._fx.get("final", "")
 
 
 # --- stub-uri DB (aceleași ca gate-ul CI), aplicate prin ExitStack -----------
@@ -107,7 +79,7 @@ class _Patcher:
         setattr(target, name, value)
 
 
-def _apply_stubs(patch: _Patcher, get_fx) -> None:
+def _apply_stubs(patch: _Patcher, get_fx, *, single_brain: bool = False) -> None:
     async def fake_categories(conn, business_id):
         return list(get_fx().get("categories", []))
 
@@ -155,6 +127,20 @@ def _apply_stubs(patch: _Patcher, get_fx) -> None:
     patch.setattr(cache_mod, "exact_lookup", none_lookup)
     patch.setattr(cache_mod, "semantic_lookup", none_lookup)
     patch.setattr(get_settings(), "moderation_enabled", True)
+    # Calea e a HARNESSULUI, nu a `.env`-ului mașinii — aceeași regulă ca în gate-ul CI. Fără
+    # pinul ăsta, snapshot-ul depindea de cine îl rulează, iar diff-ul dintre două rulări putea
+    # însemna „s-a schimbat produsul" sau „s-a schimbat mașina", fără cale de a le deosebi.
+    # `triage_sync_shadow` rămâne stins: cazurile golden își declară ruta prin fixtura `triage`.
+    patch.setattr(get_settings(), "single_brain_enabled", single_brain)
+    patch.setattr(get_settings(), "triage_sync_shadow_enabled", False)
+    # Brațul semantic e OFF în producție (2026-09-08), dar fixturile golden stubează
+    # `search_products_semantic` — cu el stins, stubul nu se cheamă deloc și fiecare caz de
+    # vânzare raportează „zero produse observate". Gate-ul CI îl aprinde printr-un fixture autouse
+    # (`tests/conftest.py`); scriptul trebuie să pinuiască ACELAȘI lucru, altfel cele două
+    # instrumente care rulează aceleași cazuri dau rezultate diferite — și l-am fi citit ca
+    # regresie de produs. Cache-ul de `has_embeddings` e per tenant, deci se golește odată cu el.
+    patch.setattr(get_settings(), "search_semantic_enabled", True)
+    clear_embeddings_cache()
 
 
 # --- snapshot + rulare -------------------------------------------------------
@@ -171,8 +157,50 @@ def _build_ctx(case_id: str, body: str, language: str) -> TurnContext:
     )
 
 
-def _snapshot(ctx: TurnContext, passed: bool, failures: list[str]) -> dict[str, Any]:
+#: Cele două contracte pe care rulează fiecare caz. Sufixul intră în cheia de snapshot; `v1` NU
+#: primește sufix, ca baseline-urile scrise înainte de dualizare să rămână comparabile.
+_PATHS: tuple[tuple[str, bool], ...] = (("v1", False), ("brain", True))
+
+#: Cazurile care PICĂ pe calea `brain` și de ce. Nu sunt scuze: sunt măsurători, cu cauza scrisă
+#: lângă ele, iar `tests/test_eval_regression.py` cere ca mulțimea să fie EXACT asta — un roșu nou
+#: pică gate-ul, iar o reparație îl pică la fel (ca `xfail(strict=True)`), deci nu se poate repara
+#: tăcut și nici degrada tăcut.
+#:
+#: Cauza primelor trei e una singură și e de PRODUS, nu de harness: sub `single_brain_enabled`,
+#: `agent_stage` cheamă `run_main_brain` și se întoarce ÎNAINTE de `planner.build_plan`, deci Faza
+#: E (shaping determinist post-loop) nu mai rulează deloc. `search_cheaper_than` și
+#: `get_complementary_products` n-au alt apelant în tot `src/`, deci pe calea brain «ceva mai
+#: ieftin» nu mai are drum determinist — rămâne o căutare pe care o compune modelul, adică exact
+#: bug-ul pe care calea deterministă a fost scrisă să-l repare (cea mai ieftină 80.99 când există
+#: 18.99, vezi `tests/test_cheaper_followup.py`).
+KNOWN_BRAIN_DIVERGENCES: dict[str, str] = {
+    "conv-sales-cheaper-link-3turn#1@brain": (
+        "«ceva mai ieftin»: produsele veneau din `build_plan` (search_cheaper_than), care nu mai "
+        "rulează sub creierul unic"
+    ),
+    "conv-sales-cheaper-link-3turn#2@brain": (
+        "turul de link depinde de produsele injectate la turul anterior de `build_plan`"
+    ),
+    "nx172-conv-cheaper-alternative#1@brain": (
+        "«ceva mai ieftin»: aceeași cauză ca `conv-sales-cheaper-link-3turn#1`"
+    ),
+    "conv-sales-then-injection-price-blocked#1@brain": (
+        "injecția E blocată (prețul fals nu iese), dar planul cade pe `unknown_product` și turul "
+        "degradează la refuzul generic, în loc de răspunsul grounded pe care îl dă v1"
+    ),
+    "conv-sales-then-invented-product-blocked#1@brain": (
+        "produs inventat: blocat corect, dar aceeași degradare la refuz generic ca la injecție"
+    ),
+}
+
+
+def _key(case_key: str, path: str) -> str:
+    return case_key if path == "v1" else f"{case_key}@{path}"
+
+
+def _snapshot(ctx: TurnContext, passed: bool, failures: list[str], path: str) -> dict[str, Any]:
     return {
+        "path": path,
         "route": ctx.route.route.value if ctx.route is not None else None,
         "tools": sorted(set(_ctx_tool_names(ctx))),
         "product_ids": sorted(_ctx_product_ids(ctx)),
@@ -182,25 +210,53 @@ def _snapshot(ctx: TurnContext, passed: bool, failures: list[str]) -> dict[str, 
     }
 
 
-async def _run_single(case: GoldenCase) -> dict[str, dict[str, Any]]:
+def _gap_entry(path: str, reason: str) -> dict[str, Any]:
+    """Un gol DECLARAT al harnessului: `passed` e None, nu False.
+
+    Distincția e aceeași ca la NX-238 („n-am măsurat" ≠ „am măsurat și a picat"): un caz fără
+    text scriptat pe calea brain n-a fost rulat, deci a-l trece la roșu ar umfla raportul cu un
+    eșec inexistent, iar a-l trece la verde ar ascunde o gaură de acoperire."""
+    return {
+        "path": path,
+        "route": None,
+        "tools": [],
+        "product_ids": [],
+        "cacheable": None,
+        "passed": None,
+        "failures": [],
+        "gap": reason,
+    }
+
+
+async def _run_single(case: GoldenCase, *, path: str, single_brain: bool) -> dict[str, Any]:
     with contextlib.ExitStack() as stack:
         patch = _Patcher(stack)
-        _apply_stubs(patch, lambda: case.fixtures)
+        _apply_stubs(patch, lambda: case.fixtures, single_brain=single_brain)
         ctx = _build_ctx(case.id, case.input, case.language)
-        deps = PipelineDeps(conn=object(), redis=None, llm=ScriptedLLM(case.fixtures))
+        deps = PipelineDeps(
+            conn=object(),
+            redis=None,
+            llm=ScriptedLLM(case.fixtures, business_id="biz-golden", locale=case.language),
+        )
         await run_pipeline(ctx, deps, DEFAULT_STAGES)
         res = evaluate_reply(ctx, case.expect, case_id=case.id)
-        return {case.id: _snapshot(ctx, res.passed, res.failures)}
+        return _snapshot(ctx, res.passed, res.failures, path)
 
 
-async def _run_conversation(case: GoldenCase) -> dict[str, dict[str, Any]]:
+async def _run_conversation(
+    case: GoldenCase, *, path: str, single_brain: bool
+) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     holder = {"fx": case.turns[0].fixtures}
     with contextlib.ExitStack() as stack:
         patch = _Patcher(stack)
-        _apply_stubs(patch, lambda: holder["fx"])
+        _apply_stubs(patch, lambda: holder["fx"], single_brain=single_brain)
         ctx = _build_ctx(case.id, case.turns[0].input, case.language)
-        deps = PipelineDeps(conn=object(), redis=None, llm=ScriptedLLM(lambda: holder["fx"]))
+        deps = PipelineDeps(
+            conn=object(),
+            redis=None,
+            llm=ScriptedLLM(lambda: holder["fx"], business_id="biz-golden", locale=case.language),
+        )
         for i, turn in enumerate(case.turns):
             if i > 0:
                 msg = InboundMessage(provider_msg_id=f"m-{case.id}-{i}", body=turn.input)
@@ -208,17 +264,28 @@ async def _run_conversation(case: GoldenCase) -> dict[str, dict[str, Any]]:
             holder["fx"] = turn.fixtures
             await run_pipeline(ctx, deps, DEFAULT_STAGES)
             res = evaluate_reply(ctx, turn.expect, case_id=f"{case.id}#{i}")
-            out[f"{case.id}#{i}"] = _snapshot(ctx, res.passed, res.failures)
+            out[_key(f"{case.id}#{i}", path)] = _snapshot(ctx, res.passed, res.failures, path)
     return out
 
 
 async def _run_all() -> dict[str, dict[str, Any]]:
     snapshot: dict[str, dict[str, Any]] = {}
-    for case in load_cases(CASES_PATH):
-        snapshot.update(await _run_single(case))
-    if CONVERSATIONS_PATH.exists():
-        for case in load_cases(CONVERSATIONS_PATH):
-            snapshot.update(await _run_conversation(case))
+    singles = load_cases(CASES_PATH)
+    conversations = load_cases(CONVERSATIONS_PATH) if CONVERSATIONS_PATH.exists() else []
+    for path, single_brain in _PATHS:
+        for case in singles:
+            gap = brain_gap(case.id) if single_brain else None
+            snapshot[_key(case.id, path)] = (
+                _gap_entry(path, gap)
+                if gap
+                else await _run_single(case, path=path, single_brain=single_brain)
+            )
+        for case in conversations:
+            gap = brain_gap(case.id) if single_brain else None
+            if gap:
+                snapshot[_key(case.id, path)] = _gap_entry(path, gap)
+                continue
+            snapshot.update(await _run_conversation(case, path=path, single_brain=single_brain))
     return snapshot
 
 
@@ -256,10 +323,19 @@ def main() -> int:
 
     current = asyncio.run(_run_all())
     total = len(current)
-    red = {k: v["failures"] for k, v in current.items() if not v["passed"]}
-    print(f"golden regression: {total - len(red)}/{total} verzi")
-    for k, failures in red.items():
+    red = {k: v["failures"] for k, v in current.items() if v["passed"] is False}
+    gaps = {k: v["gap"] for k, v in current.items() if v.get("gap")}
+    known = {k: v for k, v in red.items() if k in KNOWN_BRAIN_DIVERGENCES}
+    unknown = {k: v for k, v in red.items() if k not in KNOWN_BRAIN_DIVERGENCES}
+    green = total - len(red) - len(gaps)
+    print(f"golden regression: {green}/{total} verzi (ambele contracte)")
+    for k, failures in unknown.items():
         print(f"  ROȘU {k}: {failures}")
+    for k in known:
+        print(f"  DIVERGENȚĂ CUNOSCUTĂ {k}: {KNOWN_BRAIN_DIVERGENCES[k]}")
+    for k, reason in gaps.items():
+        print(f"  NERULAT {k}: {reason}")
+    red = unknown
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

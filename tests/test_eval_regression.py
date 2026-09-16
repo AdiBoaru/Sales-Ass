@@ -8,14 +8,31 @@ refactor mută o funcție de catalog), gate-ul CI prinde asta — scriptul nu ar
 
 import asyncio
 
-from scripts.eval_regression import _diff, _run_all
+from scripts.eval_regression import KNOWN_BRAIN_DIVERGENCES, _diff, _run_all
 
 
 def test_eval_regression_snapshot_all_green():
+    """Verde pe v1, iar pe `brain` EXACT divergențele declarate — nici mai multe, nici mai puține.
+
+    Egalitate, nu incluziune: o divergență nouă pică gate-ul (regresie), dar și una reparată îl
+    pică (ca `xfail(strict=True)`), ca lista să nu poată rămâne în urmă și să treacă drept
+    „acoperire". Golurile de harness (`gap`) au `passed is None` — „n-am măsurat" nu e „a picat".
+    """
     snapshot = asyncio.run(_run_all())
-    red = {k: v["failures"] for k, v in snapshot.items() if not v["passed"]}
-    assert not red, f"cazuri roșii în harness-ul de regresie: {red}"
+    red = {k: v["failures"] for k, v in snapshot.items() if v["passed"] is False}
+    assert set(red) == set(KNOWN_BRAIN_DIVERGENCES), (
+        f"roșii NOI: {sorted(set(red) - set(KNOWN_BRAIN_DIVERGENCES))}; "
+        f"divergențe REPARATE (scoate-le din listă): "
+        f"{sorted(set(KNOWN_BRAIN_DIVERGENCES) - set(red))}"
+    )
     assert len(snapshot) >= 30, f"prea puține intrări în snapshot: {len(snapshot)}"
+
+
+def test_every_declared_divergence_names_a_cause():
+    """O listă de excepții fără motive devine, în două luni, o listă de cazuri ignorate."""
+    for key, reason in KNOWN_BRAIN_DIVERGENCES.items():
+        assert key.endswith("@brain"), f"{key}: divergențele declarate sunt ale căii brain"
+        assert len(reason) > 40, f"{key}: motivul e prea scurt ca să fie un motiv"
 
 
 def test_eval_regression_diff_detects_route_change():
