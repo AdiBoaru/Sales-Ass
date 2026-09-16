@@ -30,12 +30,13 @@ import hashlib
 import json
 import math
 import re
-import unicodedata
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 from uuid import UUID, uuid4
+
+from src.catalog.folding import fold as _fold
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_DIR = ROOT / "qa-suite" / "stage1" / "web-v2"
@@ -50,12 +51,11 @@ EMBED_DIM = 1536  # `product_embeddings.embedding` e `vector(1536)` — dimensiu
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
-def fold(text: str) -> str:
-    """lower + fără diacritice: „vitaminăC" și „vitamina c" trebuie să cadă pe același token.
-    Aceeași normalizare pe care o face catalogul (`ro_unaccent`), ca spațiul semantic sintetic să
-    nu fie mai indulgent decât SQL-ul."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+#: Aceeași normalizare pe care o face catalogul, IMPORTATĂ din unicul ei producător — ca spațiul
+#: semantic sintetic să nu fie mai indulgent decât SQL-ul. Copia locală de dinainte folosea NFKD și
+#: era deci mai indulgentă exact pe numele internaționale, adică fix unde harnessul ar fi trebuit să
+#: exerseze potrivirea.
+fold = _fold
 
 
 def tokens(text: str) -> list[str]:

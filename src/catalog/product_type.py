@@ -55,9 +55,10 @@ cu fraze de marketing.
 from __future__ import annotations
 
 import re
-import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+
+from src.catalog.folding import fold as _fold
 
 #: Suport minim ca un tip să intre în vocabular. Sub el, valoarea rămâne nescrisă (`None`) — un
 #: tip cu două produse nu e o fațetă, e o coincidență, iar `load_vocabulary` l-ar tăia oricum.
@@ -88,10 +89,14 @@ _MAX_CHARS = 40
 
 
 def fold(text: str) -> str:
-    """Aceeași normalizare ca `ro_unaccent` (033): minuscule, fără diacritice. Dacă cele două
-    capete diferă, potrivirea nu se produce — vezi comentariul migrării 046."""
-    d = unicodedata.normalize("NFKD", (text or "").lower())
-    return "".join(c for c in d if not unicodedata.combining(c))
+    """Cheia de potrivire, din unicul producător (`src/catalog/folding.py`).
+
+    Aici se decide clasa unui produs din numele lui, iar clasa ajunge în `attributes.product_type`
+    și, prin 049, în greutatea `A` din `search_tsv`. Deci capătul celălalt al potrivirii e SQL-ul,
+    și normalizarea trebuie să fie a LUI. Înainte era o reimplementare cu `NFKD`, care pliază orice
+    diacritic, nu doar cele șapte românești pe care le pliază `ro_unaccent`.
+    """
+    return _fold(text or "")
 
 
 def split_name(name: str) -> tuple[str, str | None]:

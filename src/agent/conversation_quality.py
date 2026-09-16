@@ -16,9 +16,10 @@ Rezultatele ies ca `QualityCheck(check, outcome)` — vocabular închis, direct 
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass
 from typing import Any
+
+from src.catalog.folding import fold_text
 
 #: Deschideri ȘABLON care amână răspunsul (RO/EN, fără diacritice, lowercase).
 _TEMPLATE_OPENERS: tuple[str, ...] = (
@@ -56,8 +57,7 @@ _NO_RESULTS_CLASSES: frozenset[str] = frozenset(
 
 
 def _norm(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", (text or "").lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    return fold_text(text or "")
 
 
 @dataclass(frozen=True, slots=True)

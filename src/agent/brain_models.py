@@ -13,9 +13,10 @@ e deja rehidratat canonic în snapshot). Owner al construcției: `worker.context
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from src.catalog.folding import fold_text
 
 ObligationSource = Literal[
     "question",
@@ -86,9 +87,12 @@ _RECOMMEND_RE = re.compile(
 
 
 def _norm(text: str) -> str:
-    """Lowercase + fără diacritice (NFKD) — aceleași reguli ca stagiile deterministe."""
-    decomposed = unicodedata.normalize("NFKD", (text or "").lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    """Lowercase + fără diacritice — aceleași reguli ca stagiile deterministe.
+
+    „Aceleași reguli" e acum o dependență, nu o promisiune din docstring: `fold_text` e unicul
+    producător al comparației de text (`src/catalog/folding.py`).
+    """
+    return fold_text(text or "")
 
 
 @dataclass(frozen=True, slots=True)

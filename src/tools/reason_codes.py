@@ -8,13 +8,13 @@ NICIODATĂ nu transformăm o inferență în excludere dură (doar hard+source+v
 
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
+
+from src.catalog.folding import fold_text
 
 
 def _norm(s: str) -> str:
-    d = unicodedata.normalize("NFKD", (s or "").lower())
-    return "".join(c for c in d if not unicodedata.combining(c))
+    return fold_text(s or "")
 
 
 def _attrs(product: dict) -> dict:

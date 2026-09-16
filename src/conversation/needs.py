@@ -20,11 +20,12 @@ kernel.
 from __future__ import annotations
 
 import re
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
+
+from src.catalog.folding import fold_text
 
 if TYPE_CHECKING:
     from src.domain.pack import DomainPack
@@ -149,9 +150,7 @@ def norm_text(text: object) -> str:
     „ten mixt" să fie același fapt, nu două."""
     if not isinstance(text, str):
         return ""
-    decomposed = unicodedata.normalize("NFKD", text.strip().lower())
-    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return " ".join(stripped.split())
+    return " ".join(fold_text(text.strip()).split())
 
 
 def norm_key(key: object) -> str:

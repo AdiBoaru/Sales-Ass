@@ -17,7 +17,8 @@ Trei niveluri (calea bogată vs proză au verificări de cifre diferite):
 from __future__ import annotations
 
 import re
-import unicodedata
+
+from src.catalog.folding import fold_text
 
 _DIGIT = re.compile(r"\d")
 _PCT = re.compile(r"%|\bla sută\b", re.IGNORECASE)
@@ -148,9 +149,8 @@ _MED_AUTHORITY = re.compile(
 
 
 def _norm_claim(text: str) -> str:
-    """Lowercase + fără diacritice (NFKD) → match robust pe text generat (cu/fără diacritice)."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    """Lowercase + fără diacritice → match robust pe text generat (cu/fără diacritice)."""
+    return fold_text(text)
 
 
 def has_medical_claim(text: str | None) -> bool:

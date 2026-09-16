@@ -11,10 +11,9 @@ comportamentul). Acesta e doar numitorul comun pentru chei de config.
 
 from __future__ import annotations
 
-import unicodedata
+from src.catalog.folding import fold_text
 
 
 def normalize(s: str) -> str:
-    """lower + NFKD strip-diacritice + trim. Determinist, testabil, prompt-cache-friendly."""
-    nfkd = unicodedata.normalize("NFKD", s.strip().lower())
-    return "".join(c for c in nfkd if not unicodedata.combining(c))
+    """lower + fără diacritice + trim. Determinist, testabil, prompt-cache-friendly."""
+    return fold_text(s.strip())

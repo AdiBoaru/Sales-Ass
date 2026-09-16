@@ -21,8 +21,8 @@ posibile la aceeaşi întrebare.
 from __future__ import annotations
 
 import re
-import unicodedata
 
+from src.catalog.folding import strip_diacritics
 from src.domain.normalize import normalize
 
 _EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
@@ -54,9 +54,12 @@ _DECLARED_NAME_CASED_RE = re.compile(r"\b[Ss]unt\s+[A-Z][a-z]{2,}\s+[A-Z][a-z]{2
 
 def _strip_diacritics(text: str) -> str:
     """Ca `normalize`, dar PĂSTREAZĂ litera mare — `normalize` face lower, iar aici majuscula e
-    exact informaţia de care avem nevoie."""
-    nfkd = unicodedata.normalize("NFKD", text.strip())
-    return "".join(c for c in nfkd if not unicodedata.combining(c))
+    exact informaţia de care avem nevoie.
+
+    De aceea cheamă primitiva (`folding.strip_diacritics`), nu `fold_text`: acesta din urmă e
+    `lower` + pliere, iar `lower`-ul ar șterge exact semnalul.
+    """
+    return strip_diacritics(text.strip())
 
 
 #: Identifică o PERSOANĂ. Verificat de oricine exportă text în afara sistemului.

@@ -6,6 +6,7 @@ plauzibile: fiecare din ele întorcea zero rezultate cu clauza de dinainte.
 
 import pytest
 
+from src.catalog.folding import fold_text
 from src.catalog.query_terms import (
     content_terms,
     fold,
@@ -21,6 +22,29 @@ def test_fold_oglindeste_ro_unaccent():
     assert fold("Șampon PĂRUL Îngrijit") == "sampon parul ingrijit"
     # formele cu sedilă (U+015F/U+0163), care apar în text copiat din surse vechi
     assert fold("şampon ţinuta") == "sampon tinuta"
+
+
+@pytest.mark.parametrize(
+    ("text", "as_catalog_key", "as_text_key"),
+    [
+        ("L'Oréal Éclat", "l'oréal éclat", "l'oreal eclat"),
+        ("Nuxe Rêve de Miel", "nuxe rêve de miel", "nuxe reve de miel"),
+        ("Müller Öl", "müller öl", "muller ol"),
+    ],
+)
+def test_cei_doi_producatori_diverg_pe_diacritice_ne_romanesti(text, as_catalog_key, as_text_key):
+    """Diferența dintre `fold` și `fold_text` e reală și INTENȚIONATĂ — pinuită aici.
+
+    `ro_unaccent` (033) pliază exact șapte caractere românești, deci `fold` trebuie să lase `é`
+    neatins: altfel termenul cerut nu s-ar mai potrivi cu `search_tsv`, care e o coloană generată
+    și indexată. `fold_text` compară text cu vocabulare din COD, unde nu există un al doilea capăt
+    stocat, deci pliază tot.
+
+    Cazul ăsta lipsea din suită, și de-aia divergența a putut trăi în patru reimplementări: toate
+    testele foloseau doar diacritice românești, unde cele două formule dau același rezultat.
+    """
+    assert fold(text) == as_catalog_key
+    assert fold_text(text) == as_text_key
 
 
 def test_cuvintele_functionale_dispar_termenii_de_produs_raman():

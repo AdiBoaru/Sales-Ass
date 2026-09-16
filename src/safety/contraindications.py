@@ -25,11 +25,12 @@ from __future__ import annotations
 import json
 import logging
 import re
-import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from src.catalog.folding import fold_text
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +43,13 @@ _INGREDIENT_FIELDS = ("key_ingredients", "ingredients", "ingredients_db")
 
 
 def _norm(s: Any) -> str:
-    """lower + fără diacritice (paritate cu `reason_codes._norm` și cu normalizarea SQL)."""
-    d = unicodedata.normalize("NFKD", str(s or "").lower())
-    return "".join(c for c in d if not unicodedata.combining(c))
+    """lower + fără diacritice, din unicul producător (deci paritate REALĂ cu `reason_codes._norm`).
+
+    Atenție la alegere: aici se compară text cu registrul de contraindicații din COD, deci
+    `fold_text`. Dacă vreodată rezultatul ajunge într-un `WHERE` peste catalog, producătorul corect
+    e `folding.fold` — vezi regula din docstring-ul modulului.
+    """
+    return fold_text(str(s or ""))
 
 
 class RegistryError(RuntimeError):
