@@ -252,7 +252,15 @@ def _products_brief(products: list[dict[str, Any]], language: str | None = None)
     return "\n".join(lines)
 
 
-def grounded_fallback_reply(products: list[dict[str, Any]]) -> str | None:
+#: Câte produse NUMEȘTE în text fallback-ul determinist. Public fiindcă apelantul trebuie să
+#: atașeze EXACT produsele numite: două plafoane independente au produs deja un răspuns în care
+#: textul enumera 3 produse iar ecranul arăta 6 carduri, fără nicio legătură vizibilă între ele.
+DETERMINISTIC_REPLY_MAX = 3
+
+
+def grounded_fallback_reply(
+    products: list[dict[str, Any]],
+) -> tuple[str, list[dict[str, Any]]] | None:
     """Fallback-ul care PREZINTĂ faptele, nu doar refuză — `None` dacă n-avem niciun fapt.
 
     Calea v1 face asta de mult (`_finalize` → `_deterministic_reply`): când proza modelului pică
@@ -262,14 +270,20 @@ def grounded_fallback_reply(products: list[dict[str, Any]]) -> str | None:
     acolo unde clientul vede diferența dintre un asistent și un zid.
 
     `None` (fără produse cu nume ȘI preț) rămâne cazul lui `safe_fallback`: fără fapte, forma de
-    produs ar fi o promisiune goală."""
+    produs ar fi o promisiune goală.
+
+    Întoarce ȘI produsele pe care textul chiar le numește, ca apelantul să nu fie nevoit să
+    reconstruiască felia după aceeași regulă — vezi `DETERMINISTIC_REPLY_MAX`."""
     usable = [p for p in products if p.get("name") and p.get("price") is not None]
-    return _deterministic_reply(usable) if usable else None
+    if not usable:
+        return None
+    named = usable[:DETERMINISTIC_REPLY_MAX]
+    return _deterministic_reply(usable), named
 
 
 def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     lines = ["Îți recomand:"]
-    for p in products[:3]:
+    for p in products[:DETERMINISTIC_REPLY_MAX]:
         lines.append(f"• {p['name']}, {amount_text(p['price'], 'ro')} lei")
     lines.append("Vrei detalii sau linkul la vreunul?")
     return "\n".join(lines)

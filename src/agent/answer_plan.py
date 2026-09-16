@@ -439,9 +439,26 @@ def validate_answer_plan(plan: AnswerPlan, context: AnswerPlanContext) -> Answer
                 failures.append("stale_evidence")
             if item.product_id != selected.product_id:
                 failures.append("unknown_evidence")
-            if item.kind == "identity" and item.variant_id is None:
-                has_identity = True
-            if item.kind == "variant" and item.variant_id == selected.variant_id:
+                # Un rând care aparține ALTUI produs nu are voie să dovedească produsul ăsta.
+                # Fără `continue`, o dovadă străină de tip `identity` bifa `has_identity` pe un
+                # produs pe care nu-l atingea: planul pica oricum (`unknown_evidence`), dar
+                # dovedirea mergea pe un drum greșit, iar relaxarea de mai jos ar fi moștenit-o.
+                continue
+            # ORICE rând de evidence al produsului îi dovedește EXISTENȚA. Rândurile sunt
+            # construite de server din catalogul viu (`build_answer_plan_context`), nu afirmate de
+            # model, iar apartenența tocmai a fost verificată — deci `product:<id>:price` susține
+            # existența exact cât `product:<id>:identity`, al cărui `value` e chiar product_id-ul.
+            # A cere EXACT `kind == "identity"` era un ritual de formă pe care modelul nu-l poate
+            # deduce: nici promptul, nici codul de eroare nu-l numesc, iar un plan care cita
+            # dovezile RELEVANTE (prețul și linkul produsului recomandat) pica cu
+            # `missing_product_evidence` după ce citase corect. Măsurat în producție pe creierul
+            # unic: 100% din planurile cu produse au fost respinse aici, iar clientul a primit
+            # fallback-ul determinist în locul recomandării scrise de model.
+            has_identity = True
+            # Varianta se dovedește la fel: orice rând LEGAT de exact varianta aleasă (`:variant`,
+            # dar și `:price:<vid>` / `:stock:<vid>`) există doar fiindcă serverul a găsit varianta
+            # pe rândul viu. Rândurile fără variantă nu dovedesc nimic despre ea.
+            if selected.variant_id is not None and item.variant_id == selected.variant_id:
                 has_variant = True
         if not has_identity or not has_variant:
             failures.append("missing_product_evidence")
