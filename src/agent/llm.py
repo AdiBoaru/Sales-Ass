@@ -262,6 +262,16 @@ _VISION_SYSTEM = (
 # Necunoscutul: prefix nedeclarat ⇒ niciun optional. Nu e „sigur" in absolut (un model care
 # rationeaza implicit ar refuza tool-urile oricum, si n-avem ce trimite ca sa-l oprim), dar e cea
 # mai mica presupunere pe care o putem face, iar smoke-ul de release o prinde la prima promovare.
+#
+# A TREIA optionala, masurata separat (2026-09-16, `scripts/preflight_structured_tools.py`):
+# `response_format={"type": "json_schema", strict}` TRIMIS ODATA CU `tools`, pe `gpt-5.6-luna`,
+# cu schema REALA a planului V2 si tool-urile reale ale agentului → ACCEPTAT (raspuns JSON valid).
+# Conta fiindca `run_tool_loop_structured` (calea creierului unic, NX-239) le trimite impreuna pe
+# FIECARE apel, in timp ce productia de azi le foloseste doar separat: `complete_schema` fara
+# tool-uri (calea rich) si `run_tool_loop` fara schema (bucla de vanzare v1). Nu devine camp in
+# `ModelProfile`: nimic nu l-ar impune, iar un camp neverificat sugereaza o garantie pe care n-o
+# avem. Ramane masuratoare cu data pe ea, ca tabelul de mai sus, si se RE-RULEAZA la orice
+# schimbare de `MODEL_AGENT` — un refuz aici nu degradeaza, omoara calea de vanzare intreaga.
 _NO_REASONING = "none"
 
 
