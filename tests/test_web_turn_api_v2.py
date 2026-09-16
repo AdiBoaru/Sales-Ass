@@ -14,7 +14,7 @@ Garanțiile verificate AICI:
 
 import json
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -732,13 +732,24 @@ def test_projection_of_actions_is_byte_deterministic(monkeypatch):
 def _release_policy(*, mode="canary", percent=100, stage=6, rollback_compatible=False):
     from src.release.models import ReleasePolicy
 
+    # Fereastra de validitate e RELATIVĂ la ceas, nu absolută.
+    #
+    # Varianta veche fixa `expires_at="2026-09-13T10:00:00+00:00"`. Pe 2026-09-14 policy-ul a
+    # devenit expirat, `is_valid_at` a început să întoarcă False, iar asignarea a căzut fail-closed
+    # pe `control` — deci testul a trecut pe roșu singur, fără ca nimeni să atingă codul, și a ținut
+    # CI-ul de pe `main` roșu (#371) până azi. Codul de producție e corect: `is_valid_at` primește
+    # ceasul ca argument, tocmai ca să nu existe `now()` ascuns.
+    #
+    # Un test cu dată absolută în viitor nu verifică un invariant, verifică în ce zi îl rulezi —
+    # și expiră exact ca un certificat, la fel de tăcut.
+    now = datetime.now(UTC)
     return ReleasePolicy(
         policy_id="nx249-api",
         revision=2,
         environment="test",
-        created_at="2026-08-13T09:00:00+00:00",
-        not_before="2026-08-13T10:00:00+00:00",
-        expires_at="2026-09-13T10:00:00+00:00",
+        created_at=(now - timedelta(days=2)).isoformat(),
+        not_before=(now - timedelta(days=1)).isoformat(),
+        expires_at=(now + timedelta(days=30)).isoformat(),
         control_release_sha="c0ntr0l1234567",
         control_pipeline_version="web-chat.v1",
         candidate_release_sha="cand1date7654321",
