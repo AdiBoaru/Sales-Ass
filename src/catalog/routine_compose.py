@@ -160,6 +160,7 @@ def compose(
     seed: Sequence[tuple[str, str]] = (),
     pinned: Mapping[int, str] | None = None,
     reasons: Mapping[str, str] | None = None,
+    steps: Sequence[str] | None = None,
 ) -> RoutinePlan:
     """Așază produsele pe pașii familiei. Pur și determinist.
 
@@ -171,15 +172,37 @@ def compose(
                   re-alege tăcut primul, iar clientul ar vedea cum i se anulează alegerea.
     `reasons`     pas → motiv (din `UNCOVERED_REASONS`) pentru care lista lui e goală. Apelantul
                   e singurul care ȘTIE: el a filtrat pe buget, stoc și siguranță.
+    `steps`       SUBSECVENȚA de compus, când nu toți pașii familiei se aplică (o rutină de seară
+                  n-are pas de protecție solară). Trebuie să fie o submulțime a familiei, în
+                  ordinea ei: un pas străin n-ar avea poziție, iar o reordonare ar contrazice
+                  singura sursă a ordinii de aplicare. Absent ⇒ toată familia.
+
+                  Există ca parametru, și nu ca filtrare făcută de apelant pe rezultat, fiindcă
+                  POZIȚIILE trebuie să fie consecutive: dacă pasul 6 dispare după compunere,
+                  clientul vede „1, 2, 3, 4, 5" iar un follow-up pe „pasul 5" mai înseamnă ceva.
+                  Dacă dispărea pasul 3, o filtrare post-factum ar lăsa „1, 2, 4, 5, 6".
 
     Precedența e pin > graf > fațetă, și e ordinea autorității: alegerea clientului bate forma
     dedusă din conținut, iar aceea bate umplerea din inventar.
     """
-    steps = spec.families.get(family)
-    if not steps:
+    declared = spec.families.get(family)
+    if not declared:
         raise UnknownFamilyError(
             f"familia {family!r} nu e declarată în pachet (declarate: {sorted(spec.families)})"
         )
+    if steps is None:
+        steps = declared
+    else:
+        if unknown := [s for s in steps if s not in declared]:
+            raise UnknownFamilyError(
+                f"pași care nu sunt ai familiei {family!r}: {unknown} (declarați: {list(declared)})"
+            )
+        # Reordonăm după familie, nu după cum a venit lista: ordinea de aplicare are o singură
+        # sursă, iar un apelant care o rescrie ar produce o rutină fizic imposibilă.
+        keep = set(steps)
+        steps = tuple(s for s in declared if s in keep)
+    if not steps:
+        raise ValueError(f"subsecvență goală pentru familia {family!r}")
 
     pinned = dict(pinned or {})
     reasons = dict(reasons or {})

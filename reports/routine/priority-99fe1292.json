@@ -1,0 +1,355 @@
+{
+  "families": {
+    "corp": {
+      "cohorts": {
+        "am": {
+          "n": 4,
+          "priority": null,
+          "shares": {
+            "curatare": 1.0,
+            "exfoliere": 0.0,
+            "hidratare": 0.5
+          },
+          "verdict": "INSUFFICIENT"
+        },
+        "both": {
+          "n": 5,
+          "priority": null,
+          "shares": {
+            "curatare": 0.8,
+            "exfoliere": 0.0,
+            "hidratare": 0.0
+          },
+          "verdict": "INSUFFICIENT"
+        },
+        "pm": {
+          "n": 3,
+          "priority": null,
+          "shares": {
+            "curatare": 1.0,
+            "exfoliere": 0.0,
+            "hidratare": 0.3333
+          },
+          "verdict": "INSUFFICIENT"
+        },
+        "unspecified": {
+          "n": 102,
+          "priority": [
+            "curatare",
+            "hidratare",
+            "exfoliere"
+          ],
+          "shares": {
+            "curatare": 0.6176,
+            "exfoliere": 0.1863,
+            "hidratare": 0.1961
+          },
+          "verdict": "OK"
+        }
+      },
+      "global_priority": [
+        "curatare",
+        "hidratare",
+        "exfoliere"
+      ],
+      "n_sequences": 114,
+      "priority": {
+        "_default_from": "ordinea globală (both insuficient)",
+        "default": [
+          "curatare",
+          "hidratare",
+          "exfoliere"
+        ]
+      },
+      "step_time": {
+        "curatare": "both",
+        "exfoliere": "both",
+        "hidratare": "both"
+      },
+      "steps": {
+        "curatare": 0.6491,
+        "exfoliere": 0.1667,
+        "hidratare": 0.2018
+      },
+      "verdict": "OK"
+    },
+    "fata": {
+      "cohorts": {
+        "am": {
+          "n": 256,
+          "priority": [
+            "curatare",
+            "protectie",
+            "hidratare",
+            "tratament",
+            "tonifiere",
+            "esenta"
+          ],
+          "shares": {
+            "curatare": 1.0,
+            "esenta": 0.25,
+            "hidratare": 0.8477,
+            "protectie": 0.9727,
+            "tonifiere": 0.4883,
+            "tratament": 0.6758
+          },
+          "verdict": "OK"
+        },
+        "both": {
+          "n": 386,
+          "priority": [
+            "curatare",
+            "hidratare",
+            "tratament",
+            "protectie",
+            "tonifiere",
+            "esenta"
+          ],
+          "shares": {
+            "curatare": 0.9663,
+            "esenta": 0.2461,
+            "hidratare": 0.8057,
+            "protectie": 0.6347,
+            "tonifiere": 0.5596,
+            "tratament": 0.7202
+          },
+          "verdict": "OK"
+        },
+        "pm": {
+          "n": 84,
+          "priority": [
+            "curatare",
+            "tratament",
+            "hidratare",
+            "tonifiere",
+            "esenta",
+            "protectie"
+          ],
+          "shares": {
+            "curatare": 0.9524,
+            "esenta": 0.3214,
+            "hidratare": 0.5714,
+            "protectie": 0.1071,
+            "tonifiere": 0.381,
+            "tratament": 0.75
+          },
+          "verdict": "OK"
+        },
+        "unspecified": {
+          "n": 456,
+          "priority": [
+            "curatare",
+            "tratament",
+            "hidratare",
+            "tonifiere",
+            "esenta",
+            "protectie"
+          ],
+          "shares": {
+            "curatare": 0.943,
+            "esenta": 0.3311,
+            "hidratare": 0.6579,
+            "protectie": 0.0417,
+            "tonifiere": 0.5088,
+            "tratament": 0.7522
+          },
+          "verdict": "OK"
+        }
+      },
+      "global_priority": [
+        "curatare",
+        "hidratare",
+        "tratament",
+        "tonifiere",
+        "protectie",
+        "esenta"
+      ],
+      "n_sequences": 1182,
+      "priority": {
+        "_default_from": "cohorta `both`",
+        "am": [
+          "curatare",
+          "protectie",
+          "hidratare",
+          "tratament",
+          "tonifiere",
+          "esenta"
+        ],
+        "default": [
+          "curatare",
+          "hidratare",
+          "tratament",
+          "protectie",
+          "tonifiere",
+          "esenta"
+        ],
+        "pm": [
+          "curatare",
+          "tratament",
+          "hidratare",
+          "tonifiere",
+          "esenta",
+          "protectie"
+        ]
+      },
+      "step_time": {
+        "curatare": "both",
+        "esenta": "both",
+        "hidratare": "both",
+        "protectie": "am",
+        "tonifiere": "both",
+        "tratament": "both"
+      },
+      "steps": {
+        "curatare": 0.9636,
+        "esenta": 0.2851,
+        "hidratare": 0.7411,
+        "protectie": 0.4416,
+        "tonifiere": 0.5118,
+        "tratament": 0.725
+      },
+      "verdict": "OK"
+    },
+    "machiaj": {
+      "cohorts": {
+        "am": {
+          "n": 22,
+          "priority": null,
+          "shares": {
+            "buze": 0.0455,
+            "obraz": 0.0,
+            "ochi": 0.0,
+            "pudra": 0.6364,
+            "ten": 0.3636
+          },
+          "verdict": "INSUFFICIENT"
+        },
+        "both": {
+          "n": 2,
+          "priority": null,
+          "shares": {
+            "buze": 0.5,
+            "obraz": 0.0,
+            "ochi": 0.0,
+            "pudra": 0.0,
+            "ten": 0.0
+          },
+          "verdict": "INSUFFICIENT"
+        },
+        "pm": {
+          "n": 8,
+          "priority": null,
+          "shares": {
+            "buze": 0.125,
+            "obraz": 0.0,
+            "ochi": 0.0,
+            "pudra": 0.0,
+            "ten": 0.0
+          },
+          "verdict": "INSUFFICIENT"
+        },
+        "unspecified": {
+          "n": 420,
+          "priority": [
+            "ten",
+            "buze",
+            "pudra",
+            "obraz",
+            "ochi"
+          ],
+          "shares": {
+            "buze": 0.3214,
+            "obraz": 0.1881,
+            "ochi": 0.0405,
+            "pudra": 0.2286,
+            "ten": 0.4429
+          },
+          "verdict": "OK"
+        }
+      },
+      "global_priority": [
+        "ten",
+        "buze",
+        "pudra",
+        "obraz",
+        "ochi"
+      ],
+      "n_sequences": 452,
+      "priority": {
+        "_default_from": "ordinea globală (both insuficient)",
+        "default": [
+          "ten",
+          "buze",
+          "pudra",
+          "obraz",
+          "ochi"
+        ]
+      },
+      "step_time": {
+        "buze": "both",
+        "obraz": "both",
+        "ochi": "both",
+        "pudra": "both",
+        "ten": "both"
+      },
+      "steps": {
+        "buze": 0.3053,
+        "obraz": 0.1748,
+        "ochi": 0.0376,
+        "pudra": 0.2434,
+        "ten": 0.4292
+      },
+      "verdict": "OK"
+    },
+    "par": {
+      "cohorts": {
+        "unspecified": {
+          "n": 151,
+          "priority": [
+            "spalare",
+            "conditionare",
+            "tratament",
+            "styling"
+          ],
+          "shares": {
+            "conditionare": 0.5695,
+            "spalare": 0.9801,
+            "styling": 0.1126,
+            "tratament": 0.3245
+          },
+          "verdict": "OK"
+        }
+      },
+      "global_priority": [
+        "spalare",
+        "conditionare",
+        "tratament",
+        "styling"
+      ],
+      "n_sequences": 151,
+      "priority": {
+        "_default_from": "ordinea globală (both insuficient)",
+        "default": [
+          "spalare",
+          "conditionare",
+          "tratament",
+          "styling"
+        ]
+      },
+      "step_time": {
+        "conditionare": "both",
+        "spalare": "both",
+        "styling": "both",
+        "tratament": "both"
+      },
+      "steps": {
+        "conditionare": 0.5695,
+        "spalare": 0.9801,
+        "styling": 0.1126,
+        "tratament": 0.3245
+      },
+      "verdict": "OK"
+    }
+  },
+  "skipped_without_sequence": 0
+}

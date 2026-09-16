@@ -480,3 +480,84 @@ def test_un_plan_care_nu_afirma_rutina_nu_e_atins():
         plan, context, required_obligations=(("recommend", "recommend_0"),)
     )
     assert "routine_without_sequence" not in got.failures
+
+
+# ── Rafinamentele nu au voie să omoare nucleul (NX-292 felia 2b) ─────────────────────────────────
+
+
+_REFINED = {
+    **RAW,
+    "time_markers": {"am": ["dimineata"], "pm": ["seara"]},
+    "step_time": {"protectie": "am"},
+    "priority": {
+        "fata": {
+            "default": ["curatare", "hidratare", "tratament", "protectie", "tonifiere"],
+            "am": ["curatare", "protectie", "hidratare", "tratament", "tonifiere"],
+        }
+    },
+    "step_stems": {"curatare": ["curat"], "protectie": ["spf"]},
+}
+
+
+def test_prioritatea_trebuie_sa_fie_permutare_nu_submultime():
+    """O ordine parțială ar lăsa pași fără loc în sacrificiu, iar compunerea ar trebui să ghicească
+    unde intră — adică exact decizia pe care config-ul pretinde c-a luat-o."""
+    raw = {**_REFINED, "priority": {"fata": {"default": ["curatare", "hidratare"]}}}
+    with pytest.raises(RoutineStepConfigError, match="permutare"):
+        build_spec(raw)
+
+
+def test_prioritatea_cere_cheia_default():
+    """Fără `default`, un tur fără moment declarat n-ar avea ordine, deci n-ar putea scurta — iar
+    tenantul ar crede că a configurat scurtarea."""
+    raw = {**_REFINED, "priority": {"fata": {"am": list(_REFINED["families"]["fata"])}}}
+    with pytest.raises(RoutineStepConfigError, match="default"):
+        build_spec(raw)
+
+
+def test_momentul_nedeclarat_in_step_time_e_respins():
+    """Fail-closed: un moment absent din `time_markers` ar face `applies_at` să respingă pasul în
+    TOATE momentele, deci pasul ar dispărea din orice rutină cerută pe un moment anume."""
+    raw = {**_REFINED, "step_time": {"protectie": "la_pranz"}}
+    with pytest.raises(RoutineStepConfigError, match="time_markers"):
+        build_spec(raw)
+
+
+def test_driftul_unui_rafinament_NU_omoara_rutinele():
+    """La CITIRE, degradarea e pe straturi. `priority` e strict aditiv: fără el rutinele se compun
+    ca înainte de a exista, doar nu se scurtează la buget.
+
+    Cazul real pe care îl apără: cineva adaugă un pas în `families` și uită să regenereze
+    prioritatea. Cu degradare totul-sau-nimic, rutinele ar dispărea complet și TĂCUT pentru client
+    (tool-ul nu s-ar mai oferi, `has_routine` False, turul ar cădea pe o recomandare)."""
+    raw = {**_REFINED, "priority": {"fata": {"default": ["curatare", "inexistent"]}}}
+    spec = load_routine_steps(raw)
+
+    assert sorted(spec.families) == sorted(RAW["families"])  # nucleul supraviețuiește
+    assert spec.priority == {}  # rafinamentul a căzut
+    assert spec.sacrifice_order("fata") == ()  # deci nu se scurtează nimic
+
+
+def test_driftul_NUCLEULUI_omoara_capabilitatea_ca_inainte():
+    """Asimetria are o limită: fără `by_product_type` nu există noțiunea de pas, deci nu e nimic
+    de degradat. Comportamentul de dinainte, neatins."""
+    assert load_routine_steps({**_REFINED, "by_product_type": {}}) is EMPTY_ROUTINE_STEPS
+
+
+def test_ordinea_de_sacrificiu_cade_pe_default_pt_moment_necunoscut():
+    spec = build_spec(_REFINED)
+
+    assert spec.sacrifice_order("fata", "am")[1] == "protectie"
+    assert spec.sacrifice_order("fata", "la_pranz") == spec.sacrifice_order("fata")
+    assert spec.sacrifice_order("inexistenta") == ()
+
+
+def test_pasul_fara_declaratie_de_timp_ramane_in_rutina():
+    """Asimetria lui `applies_at`: necunoscutul RĂMÂNE. Mai bine un pas în plus decât o rutină de
+    dimineață fără protecție solară fiindcă cineva a uitat o cheie de config (P6)."""
+    spec = build_spec(_REFINED)
+
+    assert spec.applies_at("protectie", "am") is True
+    assert spec.applies_at("protectie", "pm") is False
+    assert spec.applies_at("curatare", "pm") is True  # `both` implicit
+    assert spec.applies_at("protectie", None) is True  # fără moment, totul se aplică

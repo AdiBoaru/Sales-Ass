@@ -40,6 +40,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.catalog.routine_compose import RoutinePlan, compose
+from src.catalog.vocabulary import facet_overlays, resolve_any
+from src.catalog.vocabulary_cache import get_vocabulary
 from src.db.queries.catalog import (
     get_products_by_ids,
     routine_candidates,
@@ -58,6 +60,10 @@ if TYPE_CHECKING:
 #: Câți candidați aducem pe pas. Mai mulți decât ne trebuie (1), fiindcă bugetul „urcă" prin ei și
 #: fiindcă o excludere de siguranță trebuie să aibă pe ce cădea. Ieftin: rândurile n-au laterale.
 CANDIDATES_PER_STEP = 8
+
+#: Câți termeni nerezolvați raportăm (telemetrie + `llm_view`). Plafon, fiindcă lista vine din
+#: argumentele modelului: vocabular scurt și normalizat, dar tot plafonat (P12).
+_UNRESOLVED_MAX = 5
 
 #: Câte runde de re-alegere după poarta de siguranță. UNA: dacă și înlocuitorul e contraindicat,
 #: pasul se declară neacoperit. O buclă nemărginită ar plăti hidratări la infinit pe un tur.
@@ -117,6 +123,10 @@ class RoutineArgs(BaseModel):
     concerns: list[str] = Field(default_factory=list)
     budget_max: float | None = None
     anchor_id: str | None = None
+    #: Momentul zilei, dacă clientul l-a spus. Validat contra `time_markers` în handler, ca
+    #: `family`: un moment necunoscut se IGNORĂ (cade pe ordinea de zi întreagă), nu respinge
+    #: turul — e un rafinament, nu o constrângere.
+    moment: str | None = None
 
 
 def _price(row: dict[str, Any]) -> Decimal | None:
@@ -125,13 +135,30 @@ def _price(row: dict[str, Any]) -> Decimal | None:
 
 
 def _fit_budget(
-    steps: list[str], by_step: dict[str, list[dict[str, Any]]], budget: Decimal
-) -> tuple[dict[str, list[str]], Decimal]:
-    """Candidați reordonați ca rutina să intre în buget, plus MINIMUL realizabil.
+    steps: list[str],
+    by_step: dict[str, list[dict[str, Any]]],
+    budget: Decimal,
+    *,
+    sacrifice: tuple[str, ...] = (),
+) -> tuple[dict[str, list[str]], Decimal, dict[str, Decimal]]:
+    """Candidați reordonați ca rutina să intre în buget, MINIMUL pentru toți pașii, și pașii lăsați
+    deoparte ca să încapă (cu cât ar costa fiecare).
 
-    Algoritmul e „podea, apoi urcare": pornim de la cel mai ieftin candidat pe fiecare pas (podeaua
-    = minimul pe care îl poate costa rutina) și cheltuim restul urcând pașii, în ordine, către
-    candidatul mai bine cotat care încă încape.
+    Algoritmul e „podea, apoi scurtare, apoi urcare":
+
+    1. **Podeaua** = cel mai ieftin candidat pe fiecare pas, adică minimul pentru rutina COMPLETĂ.
+    2. **Scurtarea**, dacă podeaua depășește bugetul: se renunță la pași în ordinea de sacrificiu
+       DECLARATĂ (`sacrifice`), de la coadă, până ce restul încape. Lungimea rutinei devine astfel o
+       consecință a bugetului, nu o constantă — un client cu 200 de lei primește o rutină de patru
+       pași, nu un refuz. Măsurat pe `sole-ro`: rutina de față pentru ten uscat cerea 375 lei pe
+       toți cei șase pași, iar patru costă 165. „Nu se poate sub 200" era fals, și era un fals
+       produs de insistența noastră pe lungimea maximă, nu de catalog.
+    3. **Urcarea**: restul bugetului se cheltuie înlocuind candidați cu unii mai bine cotați.
+
+    Fără `sacrifice` (tenantul n-a declarat prioritate) pasul 2 NU rulează: se păstrează toți pașii
+    și se declară minimul, adică exact comportamentul de dinainte. Config lipsă degradează într-un
+    răspuns onest, nu într-unul arbitrar — a scurta după ordinea de APLICARE ar tăia protecția
+    solară prima, fiindcă e ultimul pas aplicat și aproape primul în importanță.
 
     De ce nu o simplă filtrare pe preț: un plafon per produs nu e ce cere clientul. „Rutină completă
     sub 200 lei" e o constrângere pe SUMĂ, iar filtrarea per produs ori taie pași care ar fi
@@ -140,7 +167,7 @@ def _fit_budget(
     inventat ar fi precizie falsă.
 
     Podeaua se întoarce ÎNTOTDEAUNA, chiar dacă depășește bugetul: e cifra pe care clientul trebuie
-    s-o audă („cel mai ieftin se face cu X"), nu un eșec de ascuns.
+    s-o audă („toți pașii ar costa X"), nu un eșec de ascuns.
     """
     floor = Decimal(0)
     cheapest: dict[str, dict[str, Any]] = {}
@@ -152,9 +179,53 @@ def _fit_budget(
         cheapest[step] = pick
         floor += _price(pick) or Decimal(0)
 
-    chosen = {step: pick for step, pick in cheapest.items()}
-    spent = floor
-    if floor <= budget:
+    # Scurtarea: renunțăm la pași de la coada ordinii de sacrificiu, dar DOAR la cei care au un
+    # cost de plătit. Un pas fără candidat nu contribuie la podea, deci renunțarea la el n-ar
+    # elibera nimic, iar raportul ar spune „l-am scos pentru buget" despre un pas care oricum
+    # lipsea (`no_candidate` ≠ `budget`).
+    dropped: dict[str, Decimal] = {}
+    remaining = floor
+    for step in reversed([s for s in sacrifice if s in cheapest]):
+        if remaining <= budget:
+            break
+        price = _price(cheapest[step]) or Decimal(0)
+        dropped[step] = price
+        remaining -= price
+        del cheapest[step]
+
+    # Dacă nici renunțând la tot în afară de primul pas nu încape, nu s-a câștigat nimic: rutina
+    # ciuntită ar fi la fel de imposibilă, dar și mai puțin utilă. Se revine la forma completă și
+    # se declară minimul, ca înainte.
+    if dropped and remaining > budget:
+        for step, _price_of in dropped.items():
+            cheapest[step] = min(
+                (c for c in by_step.get(step, []) if _price(c) is not None),
+                key=lambda c: (_price(c), c["id"]),
+            )
+        dropped = {}
+
+    # Re-adăugarea: bucla de mai sus renunță în ordine, deci poate tăia mai mult decât trebuie.
+    # Măsurat pe `sole-ro`, „rutină de dimineață sub 150 lei" scotea patru pași și lăsa 25 de lei
+    # nefolosiți, deși tratamentul costă 10 — clientul plătea în pași o precizie de care nimeni
+    # n-avea nevoie. O trecere greedy în ordinea priorității recuperează ce încape.
+    #
+    # Se face ÎNAINTEA urcării, și ordinea celor două nu e arbitrară: un pas în plus valorează mai
+    # mult pentru client decât un produs mai bine cotat pe un pas care există deja. Rămâne în
+    # ordinea de sacrificiu, deci nu poate readuce un pas mai puțin esențial peste unul mai
+    # esențial care încă nu încape.
+    for step in [s for s in sacrifice if s in dropped]:
+        price = dropped[step]
+        if remaining + price <= budget:
+            cheapest[step] = min(
+                (c for c in by_step.get(step, []) if _price(c) is not None),
+                key=lambda c: (_price(c), c["id"]),
+            )
+            remaining += price
+            del dropped[step]
+
+    chosen = dict(cheapest)
+    spent = sum((_price(p) or Decimal(0) for p in chosen.values()), Decimal(0))
+    if spent <= budget:
         # Urcare, în ordinea pașilor: primul pas al rutinei e cel pe care clientul îl vede primul.
         for step in steps:
             pool = by_step.get(step, [])
@@ -169,15 +240,20 @@ def _fit_budget(
                     break
 
     # Candidatul ales trece în FAȚĂ, restul rămân ca alternative (pentru re-alegerea de siguranță).
+    # Pasul la care s-a renunțat iese GOL, nu cu alternative: dacă ar rămâne candidați în listă,
+    # compunerea l-ar umple oricum și bugetul ar fi depășit tăcut.
     out: dict[str, list[str]] = {}
     for step in steps:
+        if step in dropped:
+            out[step] = []
+            continue
         pool = by_step.get(step, [])
         head = chosen.get(step)
         ids = [c["id"] for c in pool]
         if head is not None:
             ids = [head["id"]] + [i for i in ids if i != head["id"]]
         out[step] = ids
-    return out, floor
+    return out, floor, dropped
 
 
 async def _seed_from_anchor(
@@ -224,6 +300,10 @@ def _view(
     *,
     floor: Decimal | None,
     budget: Decimal | None,
+    unresolved: list[str] | None = None,
+    dropped: dict[str, Decimal] | None = None,
+    skipped_for_moment: list[str] | None = None,
+    moment: str | None = None,
 ) -> str:
     """Vederea pentru MODEL: pașii numerotați, cu pasul numit explicit, și golurile declarate.
 
@@ -232,7 +312,17 @@ def _view(
     „pasul 3" la turul următor — exact ancora pe care se sprijină un follow-up."""
     from src.catalog.render_text import display_name
 
-    lines = [f"Rutina {plan.family}, {len(plan.slots)} pași:"]
+    # Antetul spune ACOPERIT din DECLARAT, nu doar declarat: la un buget strâns, „Rutina fata,
+    # 6 pași" urmat de patru LIPSĂ îl invită pe model să anunțe o rutină în șase pași.
+    #
+    # Formulat ca „pași acoperiți: 1 din 6", nu „1 pași acoperiți": cifra nu stă lipită de
+    # substantiv, deci nu cere acord de plural. Alternativa ar fi fost un tabel de forme CLDR
+    # pentru un text pe care îl citește modelul, nu clientul — iar „1 pași" în promptul lui e
+    # exact felul de greșeală pe care o repetă în proză.
+    covered = len(plan.covered_slots)
+    total = len(plan.slots)
+    head = f"{total} pași" if covered == total else f"pași acoperiți: {covered} din {total}"
+    lines = [f"Rutina {plan.family}, {head}:"]
     for slot in plan.slots:
         if slot.product_id is None:
             lines.append(f"{slot.position}. {slot.step} — LIPSĂ ({slot.uncovered_reason})")
@@ -245,7 +335,31 @@ def _view(
             f"{display_name(row.get('name'))}{price_text}"
         )
 
-    if budget is not None and floor is not None and floor > budget:
+    if moment:
+        lines.append(f"Rutina cerută e pentru momentul «{moment}».")
+    if skipped_for_moment:
+        # Distinct de LIPSĂ, și distincția e a clientului, nu a noastră: un pas care nu se aplică
+        # seara nu e un gol de acoperit, e un pas care n-are ce căuta acolo. Fără rândul ăsta,
+        # modelul ar putea să-l „adauge" din proprie inițiativă ca să pară rutina completă.
+        lines.append(
+            "Pași care NU se aplică în momentul cerut, deci nu lipsesc: "
+            + ", ".join(skipped_for_moment)
+            + "."
+        )
+    if dropped:
+        # Cifrele sunt cele mai MICI disponibile pe pasul respectiv, deci un prag inferior, nu un
+        # preț. „Ar costa 210 lei" ar fi o afirmație pe care clientul o ia ca exactă și pe care
+        # nimic din aval n-o poate contrazice: prețurile sunt reale, doar citite ca altceva.
+        extra = sum(dropped.values(), Decimal(0))
+        lines.append(
+            "Am scurtat rutina ca să încapă în buget. Pași lăsați deoparte: "
+            + ", ".join(
+                f"{s} (de la {amount_text(float(p), language)} lei)" for s, p in dropped.items()
+            )
+            + f". Adăugați toți, ar costa cel puțin {amount_text(float(extra), language)} lei în "
+            "plus. Spune-i clientului ce i-ai dat și ce poate adăuga mai târziu, nu că nu se poate."
+        )
+    if budget is not None and floor is not None and floor > budget and not dropped:
         lines.append(
             f"Bugetul cerut nu acoperă toți pașii. Cel mai ieftin se face cu "
             f"{amount_text(float(floor), language)} lei. Spune-i asta, nu tăia pași în tăcere."
@@ -255,7 +369,73 @@ def _view(
             "Pașii marcați LIPSĂ nu au produs. Spune-i clientului care lipsește și de ce, "
             "nu inventa unul și nu renumerota restul."
         )
+    if unresolved:
+        # Un termen pe care catalogul nu-l cunoaște nu a filtrat nimic. Fără rândul ăsta, modelul
+        # ar confirma o constrângere care n-a rulat („rutină fără parfum, gata") pe produse alese
+        # fără ea. Validatorul nu poate prinde asta: prețurile și produsele sunt reale.
+        lines.append(
+            "Nu am putut filtra pe: "
+            + ", ".join(f"«{t}»" for t in unresolved[:_UNRESOLVED_MAX])
+            + ". Nu confirma cerința asta ca îndeplinită, spune că n-o pot verifica."
+        )
     return "\n".join(lines)
+
+
+async def _resolve_needs(
+    ctx: TurnContext, deps: PipelineDeps, raw: list[str] | None
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Termenii clientului → `dimensiune → chei canonice`, prin ACELAȘI vocabular ca căutarea.
+
+    De ce nu se filtrează direct pe ce a scris modelul. Argumentul `concerns` ajunge aici cu
+    cuvintele clientului („ten uscat", „hidratare"), fiindcă exact așa funcționează pe
+    `search_products`, unde fiecare termen trece prin rezoluția contra catalogului. Aici nu trecea:
+    lista mergea brut în `attributes->'concerns' ?| ...`. Măsurat pe `sole-ro` (2026-09-16), «rutina
+    pentru ten uscat» scotea toți cei șase pași ai familiei `fata` ca `LIPSĂ (filtered)`, deși
+    fiecare are peste o sută de produse vandabile. Iar `llm_view` îi spunea modelului „prea puțini
+    pași au produs", adică îl trimitea să anunțe clientul că magazinul n-are rutină.
+
+    Două cauze, amândouă închise de rezoluție. Prima e canonicitatea: cheia reală e `hydration`, nu
+    „hidratare". A doua e mai adâncă și e chiar lecția NX-257: o nevoie a clientului nu e
+    întotdeauna un `concern`. «ten uscat» e `skin_type=dry`, o dimensiune DISTINCTĂ (partiționantă,
+    nu aditivă), deci nici cheia canonică n-ar fi ajutat cât timp SQL-ul filtra pe o singură
+    dimensiune numită în cod.
+
+    Termenul nerezolvat se ARUNCĂ, nu se pasează (P6: mai bine fără filtru decât cu unul care
+    golește tăcut), dar se și RAPORTEAZĂ modelului, ca să nu confirme o constrângere pe care n-a
+    aplicat-o nimeni. Vocabularul vine din cache-ul cu TTL (`get_vocabulary`), nu direct din DB, și
+    își aduce propriul checkout scurt: rezoluția se face ÎNAINTE de checkout-ul de candidați, ca să
+    nu ținem o conexiune peste altă muncă (NX-231).
+    """
+    terms = [t for t in (raw or []) if isinstance(t, str) and t.strip()]
+    if not terms:
+        return {}, []
+
+    vocab = await get_vocabulary(deps, ctx.business.id)
+    overlays = facet_overlays(getattr(ctx.business, "domain_pack", None), vocab.facet_names)
+
+    filters: dict[str, list[str]] = {}
+    unresolved: list[str] = []
+    for term in terms:
+        r = resolve_any(vocab, term, overlays=overlays, dimensions=vocab.facet_names)
+        ctx.emit(
+            "vocabulary_resolved",
+            dimension=r.dimension,
+            status=r.status.value,
+            matched_by=r.matched_by,
+            reason=r.reason,
+            n_keys=len(r.constraint_keys),
+            evidence=r.evidence,
+            consumer="routine_plan",
+        )
+        if keys := r.constraint_keys:
+            filters.setdefault(r.dimension, []).extend(keys)
+        else:
+            unresolved.append(r.term or term)
+    for dim in filters:
+        filters[dim] = sorted(dict.fromkeys(filters[dim]))
+    if unresolved:
+        ctx.emit("concern_unmapped", terms=unresolved[:_UNRESOLVED_MAX], locale=ctx.language)
+    return filters, unresolved
 
 
 @register("routine_plan")
@@ -286,7 +466,7 @@ async def routine_plan_tool(
 
     steps = list(families[a.family])
     values = [f"{a.family}{SEP}{s}" for s in steps]
-    concerns = [c for c in (a.concerns or []) if c]
+    facet_filters, unresolved = await _resolve_needs(ctx, deps, a.concerns)
 
     async with deps.db("routine_candidates") as conn:
         # Cu buget cerem și cei mai ieftini de pe fiecare pas: un pool ales doar pe rang face
@@ -296,7 +476,7 @@ async def routine_plan_tool(
             conn,
             ctx.business.id,
             values=values,
-            concerns=concerns,
+            facet_filters=facet_filters or None,
             per_step=CANDIDATES_PER_STEP,
             include_cheapest=a.budget_max is not None,
         )
@@ -308,12 +488,12 @@ async def routine_plan_tool(
         # să aflăm care dintre cele două e. Nu relaxăm nimic — rezultatul nu intră în candidați.
         reasons: dict[str, str] = {}
         empty = [s for s in steps if not by_step.get(s)]
-        if empty and concerns:
+        if empty and facet_filters:
             probe = await routine_candidates(
                 conn,
                 ctx.business.id,
                 values=[f"{a.family}{SEP}{s}" for s in empty],
-                concerns=None,
+                facet_filters=None,
                 per_step=1,
             )
             exists = {str(r["step"]).partition(SEP)[2] for r in probe}
@@ -321,15 +501,53 @@ async def routine_plan_tool(
         else:
             reasons = dict.fromkeys(empty, "no_candidate")
 
+    # Momentul necunoscut se ignoră: ordinea de zi întreagă e răspunsul corect pentru un client
+    # care n-a spus când, iar un 422 pe un rafinament ar pierde turul.
+    moment = a.moment if a.moment in (spec.time_markers or {}) else None
+
+    # Pasul care nu se aplică în momentul cerut nu e un gol, e o neaplicabilitate: o rutină de
+    # seară nu „ratează" protecția solară. Iese din secvență ÎNAINTE de compunere, ca să nu ocupe
+    # o poziție și să nu ceară o explicație pentru ceva ce nimeni nu se aștepta să fie acolo.
+    if moment:
+        skipped_for_moment = [s for s in steps if not spec.applies_at(s, moment)]
+        steps = [s for s in steps if s not in skipped_for_moment]
+        for s in skipped_for_moment:
+            by_step.pop(s, None)
+            reasons.pop(s, None)
+        if not steps:
+            # Toți pașii familiei sunt ai celuilalt moment. Nu e atins pe pachetul de azi (doar
+            # protecția solară e legată de dimineață), dar un pachet în care ar fi e o configurare
+            # validă, iar `compose` refuză o subsecvență goală. Un tool nu are voie să ridice:
+            # răspundem cu ce E adevărat, ca modelul să poată spune de ce n-are ce oferi (P6).
+            return ToolResult(
+                ok=False,
+                products=[],
+                error="no_step_at_moment",
+                llm_view=(
+                    f"Niciun pas din rutina «{a.family}» nu se aplică în momentul «{moment}». "
+                    "Spune-i clientului că pașii pe care îi avem sunt pentru celălalt moment al "
+                    "zilei, nu inventa pași și nu compune o rutină."
+                ),
+            )
+    else:
+        skipped_for_moment = []
+
     floor: Decimal | None = None
+    dropped: dict[str, Decimal] = {}
     budget = Decimal(str(a.budget_max)) if a.budget_max else None
     if budget is not None:
-        candidates, floor = _fit_budget(steps, by_step, budget)
+        candidates, floor, dropped = _fit_budget(
+            steps,
+            by_step,
+            budget,
+            sacrifice=tuple(s for s in spec.sacrifice_order(a.family, moment) if s in steps),
+        )
+        reasons.update(dict.fromkeys(dropped, "budget"))
     else:
         candidates = {s: [c["id"] for c in by_step.get(s, [])] for s in steps}
 
     seed = await _seed_from_anchor(ctx, deps, a.anchor_id, a.family) if a.anchor_id else []
-    plan = compose(a.family, spec, candidates=candidates, seed=seed, reasons=reasons)
+    plan = compose(a.family, spec, candidates=candidates, seed=seed, reasons=reasons, steps=steps)
 
     # NX-173 (P0): poarta de siguranță e pe produsele HIDRATATE (are nevoie de ingrediente), deci
     # după alegere. Un pas al cărui produs e contraindicat primește următorul candidat; dacă și
@@ -357,7 +575,11 @@ async def routine_plan_tool(
             spec,
             candidates=candidates,
             seed=[(p, s) for p, s in seed if p not in blocked],
-            reasons={**reasons, **{s: "safety" for s in steps if not candidates.get(s)}},
+            reasons={
+                **reasons,
+                **{s: "safety" for s in steps if not candidates.get(s) and s not in dropped},
+            },
+            steps=steps,
         )
 
     ordered = [hydrated[s.product_id] for s in plan.covered_slots if s.product_id in hydrated]
@@ -379,19 +601,30 @@ async def routine_plan_tool(
             ),
         )
 
+    view_args: dict[str, Any] = {
+        "floor": floor,
+        "budget": budget,
+        "unresolved": unresolved,
+        "dropped": dropped,
+        "skipped_for_moment": skipped_for_moment,
+        "moment": moment,
+    }
     if not plan.is_routine:
         return ToolResult(
             ok=False,
             products=ordered,
             error="no_sequence",
             llm_view=(
-                "Nu pot compune o secvență pentru asta: prea puțini pași au produs. "
-                "Spune-i clientului și oferă ce ai, nu inventa pași.\n"
-                + _view(plan, hydrated, ctx.language, floor=floor, budget=budget)
+                (
+                    "Bugetul cerut ajunge pentru un singur pas, deci nu e o rutină. Spune-i cât "
+                    "costă cel mai ieftin pas complet următor și oferă ce ai.\n"
+                    if dropped
+                    else "Nu pot compune o secvență pentru asta: prea puțini pași au produs. "
+                    "Spune-i clientului și oferă ce ai, nu inventa pași.\n"
+                )
+                + _view(plan, hydrated, ctx.language, **view_args)
             ),
         )
     return ToolResult(
-        ok=True,
-        products=ordered,
-        llm_view=_view(plan, hydrated, ctx.language, floor=floor, budget=budget),
+        ok=True, products=ordered, llm_view=_view(plan, hydrated, ctx.language, **view_args)
     )

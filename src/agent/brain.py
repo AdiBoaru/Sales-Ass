@@ -910,7 +910,8 @@ async def run_main_brain(
             # refuzat de tool oricum (`unknown_relation`).
             declared = tuple(getattr(registry, "specs", {})) if registry is not None else ()
             examples = vocab_examples.from_pack(pack)
-            tools = [*tools, *tool_schemas(extra, examples, declared, families)]
+            moments = tuple(getattr(getattr(pack, "routine_steps", None), "time_markers", {}) or ())
+            tools = [*tools, *tool_schemas(extra, examples, declared, families, moments)]
 
     brain_system = f"{system}\n{_PLAN_V2_SYSTEM}"
     if profile is not None:

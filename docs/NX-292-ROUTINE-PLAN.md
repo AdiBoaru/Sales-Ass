@@ -280,6 +280,146 @@ rămâne pe drumul de azi, deci aprinderea nu poate regresa ce merge acum.
 
 Cere `SINGLE_BRAIN_ENABLED` (validat la boot, ca celelalte lanțuri de flaguri).
 
+### 10.1 Defectul găsit la prima aprindere (2026-09-16)
+
+Aprinderea flagului, singură, ar fi făcut răspunsul mai RĂU decât cel de dinainte. Măsurat pe
+`sole-ro` cu tool-ul chemat direct pe catalogul real: cu nevoile scrise așa cum le scrie un client
+(`concerns=["ten uscat", "hidratare"]`), **toți cei șase pași** ai familiei `fata` ieșeau
+`LIPSĂ (filtered)`, iar `llm_view` îi spunea modelului „prea puțini pași au produs" — adică îl
+trimitea să anunțe clientul că magazinul n-are rutină, pe un catalog unde fiecare pas are peste o
+sută de produse vandabile.
+
+Două cauze suprapuse, amândouă la seam-ul tool → SQL:
+
+1. **`concerns` nu se canonicaliza.** `search_products` trece fiecare termen prin rezoluția contra
+   vocabularului (`resolve_any`); `routine_plan` îl băga brut în `attributes->'concerns' ?| ...`.
+   Același nume de argument, două contracte — iar modelul, care învățase că frazele românești merg
+   pe căutare, le trimitea și aici. Cheia reală e `hydration`, nu „hidratare".
+2. **O nevoie a clientului nu e întotdeauna un `concern`.** «ten uscat» e `skin_type=dry`, o
+   dimensiune DISTINCTĂ (NX-257: partiționantă, nu aditivă). Cât timp SQL-ul numea o singură
+   dimensiune în cod, o rutină pentru ten uscat nu era exprimabilă NICI cu cheia canonică.
+
+Reparat prin refolosire, nu prin a doua implementare: formula celor două straturi de overlay a fost
+extrasă în `vocabulary.facet_overlays` (un singur loc, folosit de căutare ȘI de rutină), iar
+`routine_candidates` primește acum `facet_filters` (`dimensiune → chei`) și le aplică prin ACELAȘI
+`_facet_filter_clause` ca `search_products` — dimensiuni cu AND, valori cu OR, fațete-listă și
+fațete-scalar. Termenul pe care catalogul nu-l cunoaște se aruncă (P6: mai bine fără filtru decât cu
+unul care golește tăcut), dar se RAPORTEAZĂ modelului, ca să nu confirme o cerință neaplicată.
+Verificat pe DB real: **0/6 → 6/6** sloturi acoperite, iar cu buget de 200 lei minimul onest e
+declarat (375 lei sub filtrul de ten uscat).
+
+**De ce testele nu l-au prins.** Toate cele 18 teste ale feliei 2 monkeypatch-uiau
+`routine_candidates`, deci nu se uitau niciodată la ce ARGUMENTE primește. Garda adăugată e pe
+argumente, nu pe răspuns (`tests/test_routine_tool.py`, secțiunea „Nevoia clientului → cheie de
+catalog"): un termen brut care ajunge la query e acum o regresie roșie. Aceeași lecție ca la
+migrarea 046 și la `TypedFacet.aliases` — un strat care „traduce" și e ocolit de un apelant nu dă
+eroare, dă zero rezultate.
+
+## 10.2 Lungimea rutinei e o consecință a bugetului, nu o constantă
+
+Prima versiune cerea TOȚI pașii declarați ai familiei, mereu. Pe `sole-ro` asta însemna șase, iar
+consecința era măsurabilă în lei: „rutină pentru ten uscat sub 200" primea «minimul e 375», deși
+patru pași costă 165. Cifra era reală și totuși răspunsul era fals — un fals produs de insistența
+NOASTRĂ pe lungimea maximă, nu de catalog. Un „nu se poate" închide vânzarea mai sigur decât o
+recomandare slabă.
+
+### Ce spune conținutul clientului despre lungime
+
+Măsurat pe `aura.routine_integration`, secțiunea în care sursa descrie per produs o secvență
+numerotată explicită («Ordinea tipică: 1. … 2. … 3. …»). Există pe 2.533 de produse și **fiecare**
+conține o secvență. Pe familia `fata`, 1.182 de secvențe:
+
+| Pași distincți per rutină descrisă | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|
+| Cât de des | 21,2% | **30,9%** | 22,5% | **6,5%** |
+
+Deci propriul conținut al magazinului descrie rutine de 3-5 pași. Rutina de șase, pe care o
+serveam ca standard, apare în 6,5% din cazuri. Lungimea nu e nici 6, nici 4: **variază**.
+
+### Ordinea de sacrificiu, derivată, per moment al zilei
+
+Lungimea o decide bugetul, dar CINE cedează cere un semnal de esențialitate. Frecvența cu care un
+pas apare în rutinele descrise de magazin e afirmația lui despre cât e indispensabil pasul:
+
+| Pas | Global | doar dimineața (n=256) | doar seara (n=84) |
+|---|---|---|---|
+| curățare | 96,4% | **100,0%** | **95,2%** |
+| hidratare | 74,1% | 84,8% | 57,1% |
+| tratament | 72,5% | 67,6% | **75,0%** |
+| tonifiere | 51,2% | 48,8% | 38,1% |
+| protecție | 44,2% | **97,3%** | 10,7% |
+| esență | 28,5% | 25,0% | 32,1% |
+
+**Cohorta de timp nu e un rafinament, e condiția corectitudinii.** Pe medie, protecția solară
+(44,2%) pare mai puțin esențială decât tonicul (51,2%), deci o ordine derivată din medie ar tăia
+SPF-ul înaintea tonicului — sfat prost servit cu prețuri reale, pe care validatorul (stagiul 8) și
+`grounding_guard` îl lasă să treacă, fiind porți de ADEVĂR, nu de POTRIVIRE. Separat pe cohorte,
+aceleași date spun 97,3% dimineața vs 10,7% seara: protecția nu e opțională, e a dimineții.
+
+Trei ordini, toate derivate cu `scripts/derive_routine_priority.py`, niciuna scrisă de mână:
+
+- `am`: curățare → **protecție** → hidratare → tratament → tonifiere → esență
+- `pm`: curățare → tratament → hidratare → tonifiere → esență → **protecție**
+- `default`: curățare → hidratare → tratament → **protecție** → tonifiere → esență
+
+`default` vine din cohorta `both` (n=386), adică din secvențele care descriu ziua întreagă — exact
+situația clientului care cere „o rutină" fără să spună când. NU din media globală (protecția a
+cincea) și NU din secvențele fără moment declarat (protecția în 4,2%, deci ar cădea PRIMA).
+
+### Algoritmul: podea → scurtare → re-adăugare → urcare
+
+1. **Podeaua** = cel mai ieftin candidat pe fiecare pas (minimul rutinei complete). Se raportează
+   ÎNTOTDEAUNA: e cifra pe care clientul trebuie s-o audă.
+2. **Scurtarea**: se renunță la pași de la coada ordinii de sacrificiu până ce restul încape.
+3. **Re-adăugarea**: renunțarea în ordine poate tăia mai mult decât trebuie. Măsurat: „rutină de
+   dimineață sub 150" scotea patru pași și lăsa **25 de lei nefolosiți**, deși tratamentul costă
+   10. O trecere greedy în ordinea priorității recuperează ce încape. Se face ÎNAINTEA urcării,
+   fiindcă un pas în plus valorează mai mult pentru client decât un produs mai bine cotat pe un pas
+   care există deja.
+4. **Urcarea**: restul bugetului se cheltuie pe candidați mai bine cotați.
+
+**Fără `priority` în pachet, pasul 2 nu rulează** — tenantul primește exact comportamentul de
+dinainte (rutină întreagă la minim, plus cifra). Kill-switch prin DATE, nu prin flag. A scurta după
+ordinea de APLICARE ar tăia protecția solară prima, fiindcă e ultimul pas aplicat și aproape primul
+în importanță.
+
+Cifrele raportate pentru pașii scoși sunt **cele mai mici** de pe pasul respectiv, deci un prag
+inferior: vederea spune „de la 150 lei" și „cel puțin 210 lei în plus", nu o sumă exactă. Un „ar
+costa 210" ar fi luat de client ca preț, iar nimic din aval nu poate contrazice un preț real citit
+ca altceva.
+
+### Degradarea e pe STRATURI, nu totul-sau-nimic
+
+Găsit la verificarea propriei implementări, nu presupus: `priority` trebuie să fie o PERMUTARE a
+pașilor familiei, deci cineva care adaugă un pas în `families` și uită să regenereze prioritatea ar
+fi făcut `build_spec` să respingă tot `routine_steps` — iar `load_routine_steps` ar fi întors spec
+GOL. Consecința: rutinele dispar **complet**, și tăcut pentru client (tool-ul nu se mai oferă,
+`has_routine` False, turul cade pe o recomandare). Un config strict aditiv ar fi omorât
+capabilitatea pe care o îmbogățește.
+
+Acum cheile de rafinament (`priority`, `step_time`, `time_markers`, `step_stems`) se aruncă
+SEPARAT: nucleul (`families`, `by_product_type`, promovări) supraviețuiește, rutinele se compun ca
+înainte, doar nu se scurtează la buget. Nucleul rămâne totul-sau-nimic, fiindcă fără el nu există
+noțiunea de pas. La SCRIERE regula e inversă și neatinsă: `build_spec` refuză orice invaliditate,
+deci `derive_*` și `set_domain_pack.py` nu pot publica un config pe jumătate valid.
+
+**Pasul care nu se aplică în momentul cerut nu e un gol.** O rutină de seară nu „ratează" protecția
+solară: pasul iese din secvență înaintea compunerii, pozițiile se renumerotează consecutiv (ca
+„pasul 3" să însemne ceva la turul următor) și se declară separat, ca modelul să nu-l adauge singur
+pentru a părea rutina completă. `UNKNOWN ≠ MISMATCH`, aplicat la timp.
+
+### Măsurat pe catalogul real, același tenant, aceeași nevoie
+
+| Cerere | Pași serviți |
+|---|---|
+| fără buget, fără moment | **6** |
+| buget 200 | **4** (esența și tonicul lăsate deoparte, +210 lei declarați) |
+| buget 120 | **3** |
+| buget 60 | **1** ⇒ nu e o rutină, se spune direct cât costă pasul următor |
+| rutina de seară | **5** (protecția declarată neaplicabilă, nu lipsă) |
+| seara, buget 150 | **3** |
+| dimineața, buget 150 | **3**, și protecția solară e păstrată |
+
 ## 11. Matricea de eșec
 
 | Situație | Ce se întâmplă |
@@ -293,6 +433,14 @@ Cere `SINGLE_BRAIN_ENABLED` (validat la boot, ca celelalte lanțuri de flaguri).
 | `routine_ref` pierdut la degradare | se spune onest, se oferă recompunerea |
 | Model care rearanjează în proză | `routine_drift` → repair → fallback |
 | Pachet fără `routine_steps` | capabilitatea lipsește, se cade pe `recommend` |
+| Nevoie pe care catalogul nu o cunoaște | niciun filtru pe ea + se spune modelului că n-a rulat (§10.1) |
+| Buget sub rutina completă | se scurtează în ordinea derivată, cu „ce ai lăsat deoparte și cât ar adăuga" (§10.2) |
+| Buget doar pentru un pas | nu se promite o rutină; se spune cât costă pasul următor |
+| Pachet fără `priority` | nu se scurtează nimic, se declară minimul (comportamentul de dinainte) |
+| `priority` driftat (pas adăugat în `families`) | rafinamentele cad separat, rutinele rămân vii |
+| Pas din alt moment al zilei | iese din secvență, pozițiile se renumerotează, se declară neaplicabil |
+| TOȚI pașii sunt ai celuilalt moment | `no_step_at_moment`, cu explicație; tool-ul NU ridică excepție |
+| Tenant fără `time_markers` | parametrul `moment` dispare din schemă (enum vid = tool refuzat) |
 
 ## 12. Out of scope
 

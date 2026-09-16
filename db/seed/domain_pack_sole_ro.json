@@ -1014,7 +1014,162 @@
         "en": "Treat"
       }
     },
-    "_labels_note": "NX-292: eticheta AFISATA a pasului (badge de card). Cheile raman fara diacritice, fiindca se potrivesc cu ce scrie clientul (P11); ce vede clientul e scris corect. Fallback in cod = cheia humanizata, deci o eticheta lipsa degradeaza vizibil, nu tacut."
+    "_labels_note": "NX-292: eticheta AFISATA a pasului (badge de card). Cheile raman fara diacritice, fiindca se potrivesc cu ce scrie clientul (P11); ce vede clientul e scris corect. Fallback in cod = cheia humanizata, deci o eticheta lipsa degradeaza vizibil, nu tacut.",
+    "_step_stems_note": "NX-292: tulpini care numesc pasul in PROZA, folosite EXCLUSIV de `scripts/derive_routine_priority.py` (niciodata pe drumul turului). Exista fiindca numele tipurilor de produs s-au dovedit partinitoare pe date reale: textul spune `serul`, pachetul are `ser de fata`, iar tratamentul ieșea 18,3% in loc de 72,5%. Potrivirea e pe tulpina, nu pe cuvant intreg: romana flexioneaza des (curata / curatare / curatat).",
+    "step_stems": {
+      "buze": [
+        "ruj",
+        "balsam de buze",
+        "gloss",
+        "creion de buze"
+      ],
+      "conditionare": [
+        "balsam",
+        "conditioner"
+      ],
+      "curatare": [
+        "curat",
+        "cleanser",
+        "demachi",
+        "spuma"
+      ],
+      "esenta": [
+        "esenta",
+        "essence"
+      ],
+      "exfoliere": [
+        "exfoli",
+        "scrub",
+        "peeling"
+      ],
+      "hidratare": [
+        "crema hidratanta",
+        "hidratant",
+        "crema de fata",
+        "emolient"
+      ],
+      "obraz": [
+        "blush",
+        "fard de obraz",
+        "iluminator",
+        "contur"
+      ],
+      "ochi": [
+        "rimel",
+        "mascara",
+        "creion de ochi",
+        "fard de ochi",
+        "eyeliner",
+        "sprancene"
+      ],
+      "protectie": [
+        "protectie solara",
+        "spf",
+        "sunscreen"
+      ],
+      "pudra": [
+        "pudra"
+      ],
+      "spalare": [
+        "sampon",
+        "spala",
+        "shampoo"
+      ],
+      "styling": [
+        "styling",
+        "fixativ",
+        "coafare",
+        "ulei de par"
+      ],
+      "ten": [
+        "fond de ten",
+        "baza de machiaj",
+        "cushion",
+        "corector"
+      ],
+      "tonifiere": [
+        "toner",
+        "tonic"
+      ],
+      "tratament": [
+        "ser",
+        "tratament",
+        "masca",
+        "exfoli",
+        "plasture",
+        "ampul"
+      ]
+    },
+    "_time_markers_note": "NX-292: marcajele de moment al zilei in proza. Vocabular de LIMBA (P11), folosit de derivare ca sa separe cohortele. Conditia corectitudinii, nu un rafinament: pe TOATE secventele la un loc, protectia solara apare in 44,2% M-bM-^@M-^T sub tonifiere (51,2%) M-bM-^@M-^T deci o ordine derivata din medie ar taia SPF-ul inaintea tonicului. Separat pe cohorte: 97,3% dimineata, 10,7% seara.",
+    "time_markers": {
+      "am": [
+        "dimineata",
+        "dimineti",
+        "de dimineata"
+      ],
+      "pm": [
+        "seara",
+        "noapte",
+        "inainte de culcare"
+      ]
+    },
+    "_priority_note": "NX-292: ordinea de SACRIFICIU (primul cedeaza ultimul), per moment al zilei. NU un numar de pasi si nu un set `de baza`: lungimea o decide bugetul turului. DERIVATA din cele 1.899 de secvente numerotate din `aura.routine_integration` cu `python scripts/derive_routine_priority.py --business sole-ro`, nu scrisa de mana. `default` vine din cohorta `both` (n=386 pe `fata`) M-bM-^@M-^T secventele care descriu ziua intreaga, adica exact situatia clientului care cere `o rutina` fara sa spuna cand. NU din media globala (acolo protectia solara iese a cincea, sub tonifiere) si nu din secventele fara moment declarat (4,2% protectie), care ar taia SPF-ul PRIMUL. Masurat pe `fata`: am 97,3% protectie vs pm 10,7%. `machiaj` are incredere mai mica: pasul `ochi` iese 3,8%, probabil o subnumarare a tulpinilor, nu o afirmatie despre machiaj.",
+    "priority": {
+      "corp": {
+        "default": [
+          "curatare",
+          "hidratare",
+          "exfoliere"
+        ]
+      },
+      "fata": {
+        "am": [
+          "curatare",
+          "protectie",
+          "hidratare",
+          "tratament",
+          "tonifiere",
+          "esenta"
+        ],
+        "default": [
+          "curatare",
+          "hidratare",
+          "tratament",
+          "protectie",
+          "tonifiere",
+          "esenta"
+        ],
+        "pm": [
+          "curatare",
+          "tratament",
+          "hidratare",
+          "tonifiere",
+          "esenta",
+          "protectie"
+        ]
+      },
+      "machiaj": {
+        "default": [
+          "ten",
+          "buze",
+          "pudra",
+          "obraz",
+          "ochi"
+        ]
+      },
+      "par": {
+        "default": [
+          "spalare",
+          "conditionare",
+          "tratament",
+          "styling"
+        ]
+      }
+    },
+    "_step_time_note": "NX-292: pasul relevant DOAR intr-un moment al zilei. Fara el, o rutina de seara ar cere protectie solara si, negasind-o potrivita, ar raporta un gol M-bM-^@M-^T un pas `lipsa` care de fapt nu se aplica. Derivat: pas peste 80% intr-o cohorta si sub 25% in cealalta. Doar `protectie` trece testul (97,3% / 10,7%); restul ramane `both`, care e si default-ul prudent.",
+    "step_time": {
+      "protectie": "am"
+    }
   },
   "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. `ambiguous` e DISTINCT de `not_a_step`: un «set» nu e un pas (afirmatie), o «lotiune de fata» e sigur un pas dar nu se stie care (ignoranta) — cele 18 se imprastie pe sase categorii. Amandoua nu primesc pas; difera in RAPORT, unde o scapare cere reparatie iar o ambiguitate declarata e o decizie luata.",
   "_spf_advice_note": "NX-286. `spf` se deriva din nume, iar daca numele tace din descriere. Masurat pe catalog: din 44 de valori luate din descriere, 10 veneau din fraze de SFAT, care trimit catre ALT produs — «Folositi crema cu SPF 50+ in timpul zilei, deoarece retinolul face pielea mai sensibila la soare» punea spf=50 pe o crema cu retinol. Produsele prinse asa sunt exact cele care sensibilizeaza pielea la soare (retinol, AHA/BHA), deci a le prezenta ca protectie solara contrazice propria fisa a produsului. Fallback-ul pe descriere RAMANE: 33 din 44 sunt corecte. Radacinile sunt PREFIXE de cuvant, nu infixuri: „aplica” a fost SCOS fiindca potrivea substantivul „aplicarea” din «face aplicarea protectiei solare usoara», marcand gresit o protectie solara reala (Beauty of Joseon Ginseng Moist Sun Serum). Raman doar formele imperative. Masurat final: 10 refuzate, zero fals pozitive.",
