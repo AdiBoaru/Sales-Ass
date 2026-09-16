@@ -7,6 +7,8 @@ de siguranță și degradarea onestă — nu SQL-ul, care are sondele lui.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
@@ -586,19 +588,29 @@ def test_momentul_dispare_la_tenantul_fara_momente():
     assert "family" in params["properties"]  # restul schemei, neatins
 
 
-def test_momentul_nullable_are_null_in_enum():
-    """`type` permite null, dar `enum` RESTRÂNGE: un `null` absent din enum face invalidă exact
-    valoarea pe care descrierea o cere („Null dacă n-a precizat")."""
+def test_momentul_nu_are_enum_ci_valori_in_descriere():
+    """Decizie de RISC, nu de stil. Parametrul trebuie să accepte `null` („n-a precizat"), iar
+    `enum` restrânge TOATE valorile, deci `null` ar fi trebuit pus în enum ca să rămână valid — o
+    construcție neverificabilă fără un apel real, al cărei eșec ar fi un 400 pe FIECARE tur de
+    rutină al oricărui tenant cu momente (vezi 2026-08-24, când un 400 a omorât toată calea de
+    vânzare și numai pe ea).
+
+    Câștigul enum-ului e mic aici: un moment inventat e ignorat de handler și se cade pe ordinea de
+    zi întreagă. La `family` e invers, de-aia acolo enum-ul rămâne."""
     from src.agent.tool_definitions import tool_schemas
 
     params = tool_schemas(["routine_plan"], families=("fata",), moments=("am", "pm"))[0][
         "function"
     ]["parameters"]
+    moment = params["properties"]["moment"]
 
-    assert params["properties"]["moment"]["enum"] == ["am", "pm", None]
+    assert "enum" not in moment
+    assert "am" in moment["description"] and "pm" in moment["description"]
+    assert moment["type"] == ["string", "null"]
     assert "moment" in params["required"]
-    # `family` nu e nullable, deci nu primește null în enum.
-    assert None not in params["properties"]["family"]["enum"]
+    # `family` rămâne cu mulțime ÎNCHISĂ: o familie inventată ar fi o interogare pe gol
+    # prezentată ca răspuns onest.
+    assert params["properties"]["family"]["enum"] == ["fata"]
 
 
 def test_schema_altui_tool_nu_e_atinsa_de_parametrul_nou():
@@ -623,3 +635,31 @@ async def test_antetul_nu_promite_pasi_pe_care_nu_i_a_dat(_catalog):
     parțial = await _run(_ctx())
     assert parțial.llm_view.startswith("Rutina fata, pași acoperiți: 3 din 4:")
     assert "3 pași acoperiți" not in parțial.llm_view  # fără acord greșit de plural
+
+
+def test_nicio_schema_generata_nu_mai_conține_marcatori():
+    """Garda pentru defectul care NU dă eroare: un marcator scris într-o schemă și uitat din
+    registru pleacă LITERAL în descrierea citită de model („{MOMENT_VALUES}"). Schema e validă,
+    testele trec, doar instrucțiunea e absurdă. S-a întâmplat exact așa la NX-292."""
+    import re
+
+    from src.agent.tool_definitions import TOOL_NAMES, tool_schemas
+
+    schemas = tool_schemas(
+        list(TOOL_NAMES), relation_kinds=("complement",), families=("fata",), moments=("am", "pm")
+    )
+    leftovers = re.findall(r"\{[A-Z_]+\}", json.dumps(schemas, ensure_ascii=False))
+
+    assert leftovers == [], f"marcatori neumpluți în schemele trimise modelului: {leftovers}"
+
+
+def test_poarta_de_marcatori_prinde_unul_nedeclarat():
+    """Poarta e la IMPORT, deci un marcator nou nedeclarat oprește procesul, nu primul tur."""
+    import src.agent.tool_definitions as td
+
+    td._SCHEMAS["__probe__"] = {"function": {"description": "ceva {NEDECLARAT} aici"}}
+    try:
+        with pytest.raises(ValueError, match="nedeclarați"):
+            td._assert_markers_declared()
+    finally:
+        td._SCHEMAS.pop("__probe__", None)

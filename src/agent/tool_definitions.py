@@ -5,6 +5,7 @@ Prefix STATIC (ordine fixă) → prompt caching OpenAI pe tokenii de schemă. `s
 `business_id` NU apare în scheme — se ia din `ctx` în tool (izolare, principiul 7).
 """
 
+import re
 from typing import Any
 
 from src.domain import vocab_examples
@@ -414,14 +415,22 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     },
                     # Momentul zilei schimbă și CE pași se aplică, și ORDINEA în care cedează la
                     # buget: pe catalogul SOLE protecția solară apare în 97,3% din rutinele de
-                    # dimineață și în 10,7% din cele de seară. Enum din pachet, ca `family`: un
-                    # vertical fără momente nu primește parametrul cu valori.
+                    # dimineață și în 10,7% din cele de seară.
+                    #
+                    # Valorile stau în DESCRIERE, nu în `enum`, și asta e o decizie de risc, nu
+                    # una de stil. Parametrul trebuie să accepte `null` („clientul n-a precizat"),
+                    # iar `enum` restrânge TOATE valorile, deci `null` ar fi trebuit pus în enum ca
+                    # să rămână valid — o construcție pe care n-o putem verifica fără un apel real,
+                    # și al cărei eșec ar fi un 400 pe FIECARE tur de rutină al oricărui tenant cu
+                    # momente. Câștigul enum-ului e mic aici: un moment inventat e ignorat de
+                    # handler și se cade pe ordinea de zi întreagă, deci nu poate produce un
+                    # răspuns greșit — spre deosebire de `family`, unde o valoare inventată ar
+                    # însemna o interogare pe gol prezentată ca răspuns onest.
                     "moment": {
                         "type": ["string", "null"],
-                        "enum": [],  # completat per tenant; gol ⇒ rămâne doar `null`
                         "description": (
-                            "Momentul zilei, dacă clientul l-a spus. Null dacă vrea rutina "
-                            "întreagă sau n-a precizat."
+                            "Momentul zilei, dacă clientul l-a spus{MOMENT_VALUES}. Null dacă "
+                            "vrea rutina întreagă sau n-a precizat."
                         ),
                     },
                 },
@@ -444,7 +453,36 @@ TOOL_NAMES: tuple[str, ...] = tuple(_SCHEMAS)
 # parametru nu e documentație, e o INSTRUCȚIUNE: un model care citește „ex. «ten gras»" învață ce
 # fel de valori se așteaptă acolo. Scrise de mână, făceau sistemul mai bun pe clientul de azi și
 # mai prost pe următorul, fără niciun semnal.
-_EXAMPLE_MARKERS = ("{NEED_EXAMPLES}", "{FEATURE_EXAMPLES}")
+_EXAMPLE_MARKERS = ("{NEED_EXAMPLES}", "{FEATURE_EXAMPLES}", "{MOMENT_VALUES}")
+
+
+def _assert_markers_declared() -> None:
+    """Poartă de IMPORT: un marcator scris într-o schemă și nedeclarat oprește procesul.
+
+    Fără ea, marcatorul pleacă LITERAL în descrierea pe care o citește modelul — nu o eroare, o
+    instrucțiune stricată. S-a întâmplat la `{MOMENT_VALUES}` (NX-292) și n-a fost prins de nimic:
+    schema era validă, testele treceau, doar textul era absurd."""
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+        elif isinstance(node, str):
+            found.update(re.findall(r"\{[A-Z_]+\}", node))
+
+    walk(_SCHEMAS)
+    if undeclared := found - set(_EXAMPLE_MARKERS):
+        raise ValueError(
+            f"marcatori nedeclarați în _SCHEMAS: {sorted(undeclared)} — ar pleca literal în "
+            "descrierea citită de model. Adaugă-i în _EXAMPLE_MARKERS și umple-i în tool_schemas."
+        )
+
+
+_assert_markers_declared()
 
 
 def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
@@ -457,7 +495,11 @@ def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
     for key, value in schema.items():
         if isinstance(value, dict):
             out[key] = _fill(value, filled)
-        elif isinstance(value, str) and any(m in value for m in _EXAMPLE_MARKERS):
+        elif isinstance(value, str) and any(m in value for m in filled):
+            # Condiția e pe cheile lui `filled`, nu pe un registru paralel de marcatori: un marcator
+            # nou adăugat într-o schemă și uitat din registru pleca la model LITERAL („{MOMENT_
+            # VALUES}"), fără nicio eroare. Aici, orice marcator pe care apelantul îl umple e
+            # înlocuit prin construcție; `_assert_markers_declared` prinde cazul invers.
             for marker, text in filled.items():
                 value = value.replace(marker, text)
             out[key] = value
@@ -472,16 +514,17 @@ def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
 #: iar a doua copie a ei ar fi locul unde a treia ar uita `sorted()` și ar strica prompt caching-ul.
 _TENANT_ENUMS: dict[str, dict[str, str]] = {
     "related_products": {"relation": "relation_kinds"},
-    "routine_plan": {"family": "families", "moment": "moments"},
+    "routine_plan": {"family": "families"},
 }
 
-#: Parametri care DISPAR când tenantul n-a declarat valori, în loc să rămână cu enum gol.
+#: `(tool, param) → cheia de valori` pentru parametrii care DISPAR când tenantul n-a declarat
+#: nimic, în loc să rămână ca întrebare fără răspuns posibil.
 #:
 #: Distincția e între un parametru fără care tool-ul n-are sens (`family`: fără familii nu se oferă
-#: tool-ul deloc) și un RAFINAMENT (`moment`: o rutină e validă și fără el). Pentru al doilea, un
-#: enum vid ar fi refuzat de furnizor și ar omorî tot tool-ul la un tenant care pur și simplu n-are
-#: momente ale zilei — un service auto n-are dimineață.
-_DROP_PARAM_IF_NO_VALUES: frozenset[tuple[str, str]] = frozenset({("routine_plan", "moment")})
+#: tool-ul deloc) și un RAFINAMENT (`moment`: o rutină e validă și fără el). Al doilea trebuie să
+#: dispară, nu să rămână: un vertical fără momente ale zilei (un service auto n-are dimineață) ar
+#: primi altfel un parametru obligatoriu pe care modelul nu are cum să-l completeze corect.
+_DROP_PARAM_IF_NO_VALUES: dict[tuple[str, str], str] = {("routine_plan", "moment"): "moments"}
 
 
 def tool_schemas(
@@ -499,6 +542,8 @@ def tool_schemas(
     filled = {
         "{NEED_EXAMPLES}": vocab_examples.clause(examples.needs),
         "{FEATURE_EXAMPLES}": vocab_examples.clause(examples.features),
+        # Momentele intră în DESCRIERE, nu în enum — vezi comentariul de la parametrul `moment`.
+        "{MOMENT_VALUES}": vocab_examples.clause(tuple(sorted(moments))),
     }
     out = [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]
     values = {"relation_kinds": relation_kinds, "families": families, "moments": moments}
@@ -517,31 +562,30 @@ def _with_tenant_enums(
     Sortat: pentru același pachet ies aceiași octeți, deci schema rămâne cache-uibilă (felia 3).
     Enum GOL înseamnă că tenantul n-a declarat nimic; apelantul nu trebuie să ofere tool-ul deloc
     (vezi `turn_profile.select`), iar dacă totuși o face, un enum vid e refuzat de furnizor —
-    zgomotos, nu tăcut. EXCEPȚIA sunt parametrii din `_DROP_PARAM_IF_NO_VALUES`, care dispar."""
+    zgomotos, nu tăcut.
+
+    Separat de enumuri, parametrii din `_DROP_PARAM_IF_NO_VALUES` DISPAR când tenantul n-are valori
+    pentru ei. Cele două mecanisme nu se suprapun: unul închide mulțimea de valori a unui parametru
+    indispensabil, celălalt scoate un parametru de rafinament care n-are ce întreba."""
     fn = schema.get("function") or {}
     name = str(fn.get("name") or "")
     spec = _TENANT_ENUMS.get(name)
-    if not spec:
+    droppable = {p: k for (tool, p), k in _DROP_PARAM_IF_NO_VALUES.items() if tool == name}
+    if not spec and not droppable:
         return schema
     params_in = fn["parameters"]
     props = dict(params_in["properties"])
     # `required` se rescrie doar dacă exista: a-l ADĂUGA gol acolo unde n-a fost ar schimba schema
     # unui tool care nu are legătură cu enumurile tenantului, iar `strict: true` îl citește.
     required = list(params_in["required"]) if "required" in params_in else None
-    for param, key in spec.items():
-        if param not in props:
-            continue
-        declared = sorted(set(values.get(key) or ()))
-        if not declared and (name, param) in _DROP_PARAM_IF_NO_VALUES:
-            props.pop(param, None)
+    for param, key in droppable.items():
+        if param in props and not (values.get(key) or ()):
+            props.pop(param)
             if required is not None:
                 required = [r for r in required if r != param]
-            continue
-        # Un parametru care acceptă `null` trebuie să-l aibă și în enum: `type` permite, dar
-        # `enum` restrânge, iar un `null` absent din enum face invalidă exact valoarea pe care
-        # descrierea o cere („Null dacă n-a precizat").
-        allows_null = "null" in (props[param].get("type") or ())
-        props[param] = {**props[param], "enum": [*declared, *([None] if allows_null else [])]}
+    for param, key in (spec or {}).items():
+        if param in props:
+            props[param] = {**props[param], "enum": sorted(set(values.get(key) or ()))}
     params = {**params_in, "properties": props}
     if required is not None:
         params["required"] = required
