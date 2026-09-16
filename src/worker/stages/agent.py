@@ -64,6 +64,8 @@ from src.agent.validator import (
     _valid,  # noqa: F401 — re-export (teste; patch-uit în test_golden)
     validate_prose,  # noqa: F401 — re-export (consumatori/teste)
 )
+from src.catalog.vocabulary import named_topic_roots, topic_root_of, topic_switched
+from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary
 from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
@@ -138,7 +140,11 @@ _MAX_CONCERNS = 5
 
 
 def merge_constraints(
-    stored: Any, filters: dict[str, Any] | None, category_key: str | None
+    stored: Any,
+    filters: dict[str, Any] | None,
+    category_key: str | None,
+    *,
+    switched_topic: bool = False,
 ) -> tuple[dict[str, Any], bool]:
     """Funcție PURĂ: împacă stiva stocată cu sloturile turului curent (`filters` din triaj), pt ca
     o RAFINARE („am tenul mixt") să NU piardă constrângerile deja spuse („ser cu vitamina C sub
@@ -147,11 +153,21 @@ def merge_constraints(
     - `concerns` → UNION (recent întâi), dedupe case-insensitive, cap 5;
     - RESET total când `category_key` e set ȘI diferă de cel stocat (subiect nou: alt tip produs).
       `category_key` null (follow-up neancorat) → stiva se PĂSTREAZĂ — exact cazul rafinării.
+    - RESET total și când apelantul a stabilit ALTFEL că s-a schimbat subiectul
+      (`switched_topic`) — vezi mai jos de ce trebuie să existe a doua cale.
+
+    Al doilea declanșator nu e redundanță, e reparația unei porți care nu se putea deschide:
+    `category_key` vine EXCLUSIV din triaj, iar triajul nu rulează pe turul de după o clarificare
+    (`clarify_resume` rutează determinist) și oricum nu produce o categorie pe majoritatea turelor
+    (măsurat pe SOLE: 11 din 15). Cu ambele condiții legate de același câmp absent, resetul era
+    inaccesibil în practică: `reset=true` o singură dată în 11 merge-uri, iar un `brand` extras de
+    nano dintr-un follow-up despre un ruj a plecat, trei tururi mai târziu, în căutarea de șampon.
+
     Întoarce `(merged, reset)`. Robust la stored corupt (non-dict → {})."""
     stored = stored if isinstance(stored, dict) else {}
     filters = filters if isinstance(filters, dict) else {}
     prev_cat = stored.get("category_key")
-    reset = bool(category_key) and bool(prev_cat) and category_key != prev_cat
+    reset = switched_topic or (bool(category_key) and bool(prev_cat) and category_key != prev_cat)
     base = {} if reset else dict(stored)
     merged: dict[str, Any] = {}
 
@@ -274,6 +290,36 @@ def _filters_hint(filters: dict[str, Any]) -> str:
     if not parts:
         return ""
     return "Constrângeri detectate (folosește-le în search_products): " + "; ".join(parts) + "\n"
+
+
+async def _topic_switched(ctx: TurnContext, deps: PipelineDeps) -> bool:
+    """A numit clientul alt RAFT de catalog decât cel pe care stă stiva de constrângeri?
+
+    Costul e plătit doar când poate conta: fără o categorie stocată nu există nici ce reseta, nici
+    față de ce compara, deci ieșim înainte de a atinge vocabularul (care oricum e cache-uit per
+    tenant, cu TTL). Vocabular indisponibil ⇒ `topic_switched` întoarce `False`, adică exact
+    comportamentul de dinainte: dacă nu putem verifica raftul, nu inventăm o schimbare de subiect.
+    """
+    if not get_settings().topic_switch_reset_enabled:
+        return False
+    stored = ctx.state.search_constraints
+    if not isinstance(stored, dict):
+        return False
+    prev = stored.get("category_key")
+    if not prev:
+        return False
+    vocab = await get_vocabulary(deps, ctx.business.id)
+    if not topic_switched(vocab, ctx.message.body or "", prev):
+        return False
+    # P12: chei și slug-uri de catalog, niciodată valorile constrângerilor (un `brand` e vocabular,
+    # dar `suitable_for` poate purta text de client).
+    ctx.emit(
+        "topic_switch_reset",
+        from_root=topic_root_of(vocab, prev),
+        to_roots=sorted(named_topic_roots(vocab, ctx.message.body or "")),
+        dropped=sorted(k for k in stored if k != "category_key"),
+    )
+    return True
 
 
 def _lead_score_hint(ctx: TurnContext) -> str:
@@ -452,8 +498,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if is_order:
         merged_constraints = route.filters
     else:
+        switched = await _topic_switched(ctx, deps)
         merged_constraints, cons_reset = merge_constraints(
-            ctx.state.search_constraints, route.filters, route.category_key
+            ctx.state.search_constraints,
+            route.filters,
+            route.category_key,
+            switched_topic=switched,
         )
         # NX-235: cu v2 aprins, stiva NU mai e un merge liber de dicționare — e rezultatul
         # reducerului, cu tărie/sursă/status per nevoie. Forma rămâne identică pentru consumatori

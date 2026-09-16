@@ -383,3 +383,124 @@ async def test_compare_guard_fail_open_on_missing_path(monkeypatch):
     )
 
     assert served is True  # fail-open: fără date de categorie NU blocăm
+
+
+# --- categoria care n-a putut fi verificată + un brand DUR (incident 2026-09-16) ---
+
+
+def _stub_brand_only_search(monkeypatch):
+    """Retrievalul așa cum s-a comportat live: categoria cerută nu e în vocabular, deci nu ajunge
+    niciodată în `WHERE`, iar singurul filtru rămas e brandul — care nu se relaxează NICIODATĂ.
+    Setul întors e catalogul brandului, nu un răspuns la cererea clientului."""
+    from src.tools import catalog_tools as ct
+
+    async def fake_lexical(
+        conn,
+        business_id,
+        *,
+        query_text,
+        price_max,
+        category,
+        facet_filters=None,
+        brand,
+        sort_mode,
+        in_stock_only,
+        pool,
+        **kwargs,
+    ):
+        assert category is None  # o categorie UNKNOWN nu are voie să devină filtru
+        return [{"id": "blush-1", "name": "MUZIGAE Fitting Blush", "price": 100.0}]
+
+    async def no_embeddings(conn, business_id):
+        return False
+
+    async def fake_vocab(deps, business_id):
+        # «ingrijirea-parului» NU e în vocabularul ăsta ⇒ `UNKNOWN(not_in_vocabulary)`.
+        return CatalogVocabulary(
+            business_id=business_id,
+            dimensions={"category": (VocabEntry(key="machiaj", label="Machiaj", count=681),)},
+        )
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
+    monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
+    monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
+    monkeypatch.setattr(ct, "get_vocabulary", fake_vocab)
+
+
+async def test_unverified_category_plus_hard_brand_is_suppressed(monkeypatch):
+    """Turul care a trimis clientului farduri de obraz la „altceva?" într-o discuție despre păr.
+
+    Nimic din aval nu-l putea prinde: produsele și prețurile sunt REALE, deci validatorul și
+    grounding guardul (porți de ADEVĂR, nu de POTRIVIRE) l-au lăsat să treacă — `validator_ok`
+    a fost `true`."""
+    from src.tools.catalog_tools import search_products_tool
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", True)
+    _stub_brand_only_search(monkeypatch)
+
+    ctx = _fresh_ctx("altceva ?")
+    res = await search_products_tool(
+        ctx,
+        PipelineDeps(conn=object(), redis=None, llm=_LLM()),
+        {"query": "par", "category": "ingrijirea-parului", "brand": "MUZIGAE"},
+    )
+
+    assert res.products == []
+    assert "MUZIGAE" in res.llm_view  # modelul poate spune ADEVĂRUL: brandul nu acoperă cererea
+    ev = [e for e in ctx.events if e.type == "offcategory_suppressed"]
+    assert ev and ev[0].properties["reason"] == "unverified_category_brand"
+    assert "active_search" not in ctx.state_patch
+
+
+async def test_unverified_category_without_hard_filter_keeps_results(monkeypatch):
+    """Cealaltă jumătate a regulii, deliberată: fără un filtru dur care să fi format setul,
+    rezultatele vin din potrivirea pe TEXTUL cererii — sunt despre ce a cerut clientul, doar
+    nefiltrate pe raft. Suprimarea lor ar fi fix tăcerea pe care o evităm (P6); rămâne nota."""
+    from src.tools.catalog_tools import search_products_tool
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", True)
+    _stub_brand_only_search(monkeypatch)
+
+    ctx = _fresh_ctx("vreau ceva de par")
+    res = await search_products_tool(
+        ctx,
+        PipelineDeps(conn=object(), redis=None, llm=_LLM()),
+        {"query": "par", "category": "ingrijirea-parului"},
+    )
+
+    assert res.products  # nesuprimate
+    assert "nu e o categorie din catalog" in res.llm_view  # dar declarate onest
+    assert not [e for e in ctx.events if e.type == "offcategory_suppressed"]
+
+
+async def test_degraded_vocabulary_never_suppresses(monkeypatch):
+    """Regresia pe care a prins-o suita existentă, acum ținută explicit.
+
+    Cu vocabularul indisponibil (DB jos → `load_vocabulary` degradează la gol), TOT ce cere
+    modelul iese `UNKNOWN`. O gardă scrisă pe „zero chei de categorie" ar fi transformat o
+    clipeală de DB în „niciun rezultat" pe FIECARE căutare cu brand — adică o degradare a noastră
+    ar fi devenit un răspuns greșit pentru client. Verdictul separă cele două: `unknown_dimension`
+    („n-am putut judeca") nu suprimă nimic."""
+    from src.tools import catalog_tools as ct
+    from src.tools.catalog_tools import search_products_tool
+    from src.worker.runner import PipelineDeps
+
+    monkeypatch.setattr(get_settings(), "search_offcategory_guard_enabled", True)
+    _stub_brand_only_search(monkeypatch)
+
+    async def empty_vocab(deps, business_id):  # exact ce întoarce cache-ul când DB-ul pică
+        return CatalogVocabulary(business_id=business_id)
+
+    monkeypatch.setattr(ct, "get_vocabulary", empty_vocab)
+
+    ctx = _fresh_ctx("altceva ?")
+    res = await search_products_tool(
+        ctx,
+        PipelineDeps(conn=object(), redis=None, llm=_LLM()),
+        {"query": "par", "category": "ingrijirea-parului", "brand": "MUZIGAE"},
+    )
+
+    assert res.products  # degradarea NOASTRĂ nu devine „n-am găsit" pentru client
+    assert not [e for e in ctx.events if e.type == "offcategory_suppressed"]

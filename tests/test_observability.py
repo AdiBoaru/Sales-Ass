@@ -277,11 +277,21 @@ async def test_tool_call_event_on_failure_has_error_no_pii(monkeypatch):
 
 
 async def _none_rich(*a, **k):
-    return None
+    return finalize_mod._RichOutcome(reply=None)
 
 
-async def _empty_rich(*a, **k):
+def _empty_reply() -> RichReply:
     return RichReply(intro=None, items=[], pick=None, education=None, chips=[], disclaimer="")
+
+
+async def _dropped_rich(*a, **k):
+    """Modelul a NUMIT produse, dar toate au picat la poarta de apartenență (id-uri străine)."""
+    return finalize_mod._RichOutcome(reply=_empty_reply(), model_items=3)
+
+
+async def _refused_rich(*a, **k):
+    """Modelul a răspuns, dar n-a selectat niciun produs — nu s-a dropat nimic."""
+    return finalize_mod._RichOutcome(reply=_empty_reply(), model_items=0)
 
 
 async def test_rich_downgraded_structured_call_failed(monkeypatch):
@@ -299,7 +309,7 @@ async def test_rich_downgraded_structured_call_failed(monkeypatch):
 
 async def test_rich_downgraded_all_items_dropped(monkeypatch):
     _patch_search(monkeypatch, _PRODUCTS)
-    monkeypatch.setattr(finalize_mod, "_finalize_rich", _empty_rich)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _dropped_rich)
     llm = _FakeLLM(
         tool_calls=[("search_products", {"query": "cremă", "category": "creme"})],
         final="Îți recomand aceste produse.",
@@ -308,6 +318,23 @@ async def test_rich_downgraded_all_items_dropped(monkeypatch):
     await agent_stage(ctx, _deps(llm))
     ev = next(e for e in ctx.events if e.type == "rich_downgraded")
     assert ev.properties["reason"] == "all-items-dropped-by-membership"
+
+
+async def test_rich_downgraded_no_items_selected(monkeypatch):
+    """Al treilea motiv, care înainte se ascundea sub al doilea: modelul a răspuns și n-a ales
+    NICIUN produs. Pe 2026-09-16 a fost refuzul corect al unui set de farduri de obraz la o cerere
+    de produse de păr — etichetat, ca tot restul, «all-items-dropped-by-membership», deși nu se
+    dropase nimic. Două defecte diferite sub aceeași etichetă nu se pot număra separat."""
+    _patch_search(monkeypatch, _PRODUCTS)
+    monkeypatch.setattr(finalize_mod, "_finalize_rich", _refused_rich)
+    llm = _FakeLLM(
+        tool_calls=[("search_products", {"query": "cremă", "category": "creme"})],
+        final="Îți recomand aceste produse.",
+    )
+    ctx = _ctx()
+    await agent_stage(ctx, _deps(llm))
+    ev = next(e for e in ctx.events if e.type == "rich_downgraded")
+    assert ev.properties["reason"] == "no-items-selected"
 
 
 async def test_all_events_of_a_turn_share_turn_id(monkeypatch):

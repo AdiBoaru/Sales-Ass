@@ -54,10 +54,13 @@ __all__ = [
     "ResolutionStatus",
     "VocabEntry",
     "load_vocabulary",
+    "named_topic_roots",
     "resolve",
     "resolve_any",
     "servable_count_sql",
     "servable_subtree_counts_sql",
+    "topic_root_of",
+    "topic_switched",
 ]
 
 # Numele REZERVAT al dimensiunii structurale. Categoriile nu vin din `attributes`, ci din tabelul
@@ -444,12 +447,24 @@ def _index(entries: tuple[VocabEntry, ...]) -> dict[str, list[VocabEntry]]:
     return idx
 
 
+def _tokens(text: str) -> set[str]:
+    """Cuvintele unui text, cu `-` și `_` tratate ca spațiu.
+
+    Un singur tokenizator pentru AMBELE părți ale potrivirii. Înainte, intrările se despărțeau pe
+    `-` (slug-urile așa arată) dar TERMENUL cerut nu: `norm.split()` desparte doar pe spații, deci
+    «ingrijirea-parului» rămânea UN cuvânt și nu putea fi niciodată subset al lui
+    {par, ingrijirea, parului}. Rezultatul, măsurat pe trafic real (2026-09-16): aceeași categorie
+    scrisă cu spațiu se rezolva (AMBIGUOUS, 206 produse), scrisă cu cratimă ieșea
+    `UNKNOWN(not_in_vocabulary)` — iar un UNKNOWN nu ajunge în `WHERE`, deci filtrul de categorie
+    pur și simplu nu rula. Modelul scrie forma cu cratimă tocmai fiindcă slug-urile arată așa.
+    """
+    return {w for w in _norm(text).replace("-", " ").replace("_", " ").split() if w}
+
+
 def _words(entry: VocabEntry) -> set[str]:
-    """Cuvintele unei intrări, din cheie ȘI etichetă (slug-urile despart cu `-`, numele cu spații).
-    Fără liste de stopwords: potrivirea cere cuvinte întregi, în ambele sensuri."""
-    return {w for w in _norm(entry.label).split() if w} | {
-        w for w in _norm(entry.key).replace("-", " ").replace("_", " ").split() if w
-    }
+    """Cuvintele unei intrări, din cheie ȘI etichetă. Fără liste de stopwords: potrivirea cere
+    cuvinte întregi, în ambele sensuri."""
+    return _tokens(entry.label) | _tokens(entry.key)
 
 
 def _best(entries: list[VocabEntry]) -> list[VocabEntry]:
@@ -519,7 +534,7 @@ def resolve(
     # Potrivire pe cuvinte întregi, în ambele sensuri — dar o intrare de UN cuvânt nu are voie să
     # fie „inclusă" într-o cerere mai lungă: ar însemna că un singur cuvânt comun decide dimensiunea
     # întregii cereri (vezi `_MIN_WORDS_FOR_SUBSET`). Un cuvânt se potrivește exact, sau deloc.
-    words = {w for w in norm.split() if w}
+    words = _tokens(norm)
     subset = []
     for e in entries:
         e_words = _words(e)
@@ -583,6 +598,78 @@ def resolve_any(
     return best or Resolution(
         status=ResolutionStatus.UNKNOWN, term=_norm(term or ""), dimension="", reason="no_dimension"
     )
+
+
+# --- subiectul conversației, derivat din arborele de catalog ---------------------------------
+
+
+def topic_root_of(vocab: CatalogVocabulary, category_key: str | None) -> str | None:
+    """Rădăcina de catalog („raftul") sub care stă o cheie de categorie. `None` dacă nu e a
+    tenantului sau nu are cale — nu ghicim."""
+    if not category_key:
+        return None
+    for e in vocab.categories:
+        if e.key == category_key and e.path:
+            return e.path.split("/", 1)[0]
+    return None
+
+
+def named_topic_roots(vocab: CatalogVocabulary, text: str) -> frozenset[str]:
+    """Rafturile pe care le NUMEȘTE un mesaj, cu cuvinte întregi.
+
+    Doar intrările de NIVEL 0 (rădăcinile arborelui) contează, și asta e toată prudența funcției.
+    O subcategorie poate purta un cuvânt care apare firesc în cererea altui raft — pe catalogul
+    SOLE, «Fata» și «Ochi» sunt subcategorii de MACHIAJ, deci „vreau o crema de fata" ar numi
+    machiajul, deși e o cerere de îngrijire a tenului. Numele de raft („par", „ten", „corp",
+    „machiaj") nu au ambiguitatea asta: sunt exact cuvintele cu care un client anunță că schimbă
+    subiectul.
+
+    Pură. Textul e tokenizat cu ACELAȘI `_tokens` ca intrările — vezi de ce contează acolo.
+    """
+    tokens = _tokens(text)
+    if not tokens:
+        return frozenset()
+    roots = set()
+    for e in vocab.categories:
+        if e.depth or not e.path:  # doar rădăcini; fără cale nu există raft
+            continue
+        words = _words(e)
+        if words and words <= tokens:
+            roots.add(e.path)
+    return frozenset(roots)
+
+
+def topic_switched(vocab: CatalogVocabulary, text: str, previous_category_key: str | None) -> bool:
+    """A anunțat clientul un RAFT diferit de cel pe care stă stiva de constrângeri?
+
+    Întrebarea are un singur scop: să existe un declanșator de reset care NU depinde de triaj.
+    Resetul de azi se uită la `RouteDecision.category_key`, iar acela e `None` pe majoritatea
+    turelor (măsurat pe tenantul SOLE: 11 din 15) și **întotdeauna** pe turul de după o
+    clarificare, fiindcă `clarify_resume` rutează determinist și triajul devine no-op. Adică exact
+    turul în care clientul răspunde „vreau sa vad produse de par" nu putea reseta nimic, iar un
+    brand rămas din discuția despre un ruj pleca mai departe în promptul de căutare.
+
+    Fail-closed în toate direcțiile în care nu știm: raft anterior necunoscut ⇒ `False`; mesaj care
+    nu numește niciun raft (o rafinare — „mai ieftin", „am tenul mixt") ⇒ `False`; mesaj care
+    numește și raftul curent ⇒ `False` (e o lărgire, nu o schimbare).
+
+    Asimetria care justifică pragul: un reset fals costă o stivă de constrângeri pe care modelul
+    o mai are oricum în istoric; un reset ratat trimite în prompt, ca imperativ, o constrângere de
+    pe alt raft. Primul e o pierdere de context, al doilea e un răspuns greșit.
+
+    Costul ACCEPTAT, măsurat pe catalogul SOLE: un nume de raft de un singur cuvânt poate fi
+    omograf cu un cuvânt obișnuit — „mi se par cam scumpe" numește raftul «par», deși «par» e
+    acolo verb. Rezultatul e un reset nemeritat, adică jumătatea ieftină a asimetriei. Reparația
+    ar cere o regulă gramaticală per limbă (clitic reflexiv înaintea cuvântului), iar P11 spune
+    limpede că limba e configurație, nu constantă — deci se decide pe măsurătoare
+    (`topic_switch_reset` numără fiecare declanșare), nu pe intuiție. Pe cele 9 mesaje reale ale
+    conversației care a produs cardul: 2 declanșări, ambele corecte, zero false.
+    """
+    prev_root = topic_root_of(vocab, previous_category_key)
+    if not prev_root:
+        return False
+    named = named_topic_roots(vocab, text)
+    return bool(named) and prev_root not in named
 
 
 def _from_hits(hits: list[VocabEntry], term: str, dimension: str, matched_by: str) -> Resolution:

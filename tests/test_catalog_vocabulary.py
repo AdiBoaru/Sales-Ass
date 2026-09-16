@@ -19,8 +19,11 @@ from src.catalog.vocabulary import (
     ResolutionStatus,
     VocabEntry,
     _keep_dimension,
+    named_topic_roots,
     resolve,
     resolve_any,
+    topic_root_of,
+    topic_switched,
 )
 
 
@@ -197,3 +200,111 @@ def test_empty_dimension_is_never_a_filter() -> None:
     assert r.status is ResolutionStatus.UNKNOWN
     assert r.reason == "unknown_dimension"
     assert r.constraint_keys == ()
+
+
+# --- simetria tokenizării + subiectul conversației (incident 2026-09-16) -----
+#
+# Intrările de mai jos sunt cele REALE din catalogul SOLE (slug, etichetă, cale), fiindcă defectul
+# a apărut din forma lor: etichete care se repetă pe două ramuri, un raft numit cu un singur
+# cuvânt, și o subcategorie de machiaj („Fata") al cărei nume apare firesc într-o cerere de ten.
+
+PAR = VocabEntry(key="par", label="Par", count=234, path="par")
+PAR_ING = VocabEntry(
+    key="par-ingrijirea-parului",
+    label="Ingrijirea parului",
+    count=205,
+    path="par/ingrijirea-parului",
+)
+DERMA_PAR = VocabEntry(
+    key="dermato-cosmetice-ingrijirea-parului",
+    label="Ingrijirea parului",
+    count=1,
+    path="dermato-cosmetice/ingrijirea-parului",
+)
+MACHIAJ = VocabEntry(key="machiaj", label="Machiaj", count=681, path="machiaj")
+MACHIAJ_BUZE = VocabEntry(key="machiaj-buze", label="Buze", count=298, path="machiaj/buze")
+MACHIAJ_FATA = VocabEntry(key="machiaj-fata", label="Fata", count=274, path="machiaj/fata")
+TEN = VocabEntry(key="ten", label="Ten", count=1461, path="ten")
+TEN_ING = VocabEntry(
+    key="ten-ingrijirea-tenului",
+    label="Ingrijirea tenului",
+    count=933,
+    path="ten/ingrijirea-tenului",
+)
+
+_SOLE = (PAR, PAR_ING, DERMA_PAR, MACHIAJ, MACHIAJ_BUZE, MACHIAJ_FATA, TEN, TEN_ING)
+
+
+def test_slug_spelling_resolves_like_label_spelling() -> None:
+    """Defectul, în forma lui minimă: o CRATIMĂ decidea dacă filtrul de categorie rulează.
+
+    Pe trafic real, modelul a cerut aceeași categorie de două ori în două tururi consecutive —
+    «ingrijirea parului» (AMBIGUOUS, 206 produse în spate) și «ingrijirea-parului»
+    (`UNKNOWN(not_in_vocabulary)`). Forma cu cratimă e cea pe care modelul o scrie natural,
+    fiindcă slug-urile arată așa. Un UNKNOWN nu ajunge în `WHERE`, deci a doua cerere a rulat
+    fără niciun filtru de raft."""
+    vocab = _vocab(category=_SOLE)
+    with_space = resolve(vocab, "ingrijirea parului", CATEGORY_DIMENSION)
+    with_hyphen = resolve(vocab, "ingrijirea-parului", CATEGORY_DIMENSION)
+    assert with_hyphen.constraint_keys, "categoria scrisă ca slug nu mai are voie să iasă UNKNOWN"
+    assert with_hyphen.status is with_space.status
+    assert set(with_hyphen.constraint_keys) == set(with_space.constraint_keys)
+
+
+def test_topic_switch_detected_without_any_help_from_triage() -> None:
+    """Cazul incidentului: discuție despre un ruj, apoi „vreau sa vad produse de par". Triajul nu
+    rulează pe turul ăsta (vine după o clarificare), deci detectarea trebuie să vină din catalog."""
+    assert topic_switched(_vocab(category=_SOLE), "vreau sa vad produse de par", "machiaj-buze")
+
+
+def test_refinement_is_not_a_topic_switch() -> None:
+    """O rafinare nu numește niciun raft ⇒ stiva se păstrează, exact ca înainte."""
+    assert (
+        topic_switched(_vocab(category=_SOLE), "mai ieftin, sub 100 lei", "machiaj-buze") is False
+    )
+
+
+def test_naming_the_same_shelf_is_not_a_switch() -> None:
+    """„alt sampon de par" numește raftul CURENT: e o lărgire, nu o schimbare de subiect."""
+    assert (
+        topic_switched(_vocab(category=_SOLE), "alt sampon de par", "par-ingrijirea-parului")
+        is False
+    )
+
+
+def test_subcategory_name_does_not_trigger_a_switch() -> None:
+    """De ce doar rădăcinile: «Fata» și «Buze» sunt subcategorii de MACHIAJ, iar cuvintele lor apar
+    firesc în cereri de pe alt raft. „o crema de fata" e o cerere de ten; dacă subcategoriile ar
+    conta, ar reseta stiva unei discuții despre ten."""
+    vocab = _vocab(category=_SOLE)
+    assert topic_switched(vocab, "vreau o crema de fata", "ten-ingrijirea-tenului") is False
+    assert named_topic_roots(vocab, "vreau o crema de fata") == frozenset()
+
+
+def test_unknown_previous_shelf_never_switches() -> None:
+    """Fail-closed: dacă nu putem afla pe ce raft stă stiva, nu inventăm o schimbare de subiect."""
+    vocab = _vocab(category=_SOLE)
+    assert topic_switched(vocab, "vreau sa vad produse de par", "categorie-stearsa") is False
+    assert topic_switched(vocab, "vreau sa vad produse de par", None) is False
+
+
+def test_empty_vocabulary_never_switches() -> None:
+    """Vocabular indisponibil (DB jos) ⇒ comportamentul de dinainte, nu un reset ghicit."""
+    assert topic_switched(_vocab(), "vreau sa vad produse de par", "machiaj-buze") is False
+
+
+def test_topic_root_is_the_first_path_segment() -> None:
+    vocab = _vocab(category=_SOLE)
+    assert topic_root_of(vocab, "machiaj-buze") == "machiaj"
+    assert topic_root_of(vocab, "par-ingrijirea-parului") == "par"
+    assert topic_root_of(vocab, "inexistent") is None
+
+
+def test_known_false_positive_is_pinned_not_hidden() -> None:
+    """Costul acceptat al detectorului, scris ca test ca să nu se schimbe tăcut.
+
+    «Par» e și nume de raft, și formă verbală: „mi se par cam scumpe" resetează stiva degeaba.
+    E jumătatea ieftină a asimetriei (pierdere de context, nu răspuns greșit), iar alternativa —
+    o regulă gramaticală per limbă — ar contrazice P11. Dacă cineva o repară, testul ăsta trebuie
+    să pice și să fie rescris, nu ocolit."""
+    assert topic_switched(_vocab(category=_SOLE), "mi se par cam scumpe", "ten-ingrijirea-tenului")

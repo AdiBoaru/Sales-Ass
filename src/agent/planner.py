@@ -388,17 +388,19 @@ async def build_plan(
                 products=complementary,
                 source="relation_chain" if sequence_label else "cross_sell",
             )
-            rich = await _finalize_rich(
-                deps.llm,
-                prompt_builder.build_rich_system(
-                    inp, routine=getattr(ctx, "routine", None) is not None
-                ),
-                _relation_chain_query(added, ctx.language, sequence_label),
-                complementary,
-                ctx,
-                history,
-                notes=commerce_note,
-            )
+            rich = (
+                await _finalize_rich(
+                    deps.llm,
+                    prompt_builder.build_rich_system(
+                        inp, routine=getattr(ctx, "routine", None) is not None
+                    ),
+                    _relation_chain_query(added, ctx.language, sequence_label),
+                    complementary,
+                    ctx,
+                    history,
+                    notes=commerce_note,
+                )
+            ).reply
             if rich is not None and rich.items:
                 rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
                 rich.pick = None  # fără „Recomandarea mea" între complementare
