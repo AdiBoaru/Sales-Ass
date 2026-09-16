@@ -139,6 +139,27 @@ _LEXICAL_RELAXED = "relaxed"
 # producă zerouri noi (P6). Cu 2 termeni perechea E singularul, deci treapta se sare.
 _LEXICAL_RELAXED_ANY = "relaxed_any"
 _LEXICAL_FUZZY = "fuzzy"
+# NX-293 — ultima treaptă: NICIUN predicat de text, doar filtrele dure. Se încearcă exclusiv când
+# cererea poartă un filtru de SUBIECT rezolvat (vezi `_has_subject_filter`) și toate treptele de
+# text de deasupra au întors zero.
+#
+# De ce trebuie să existe: până acum textul era singurul lucru pe care NICIO scară nu-l putea lăsa
+# deoparte. Scara asta relaxează potrivirea de text cu filtrele fixe; scara complementară din
+# `search_products_tool` relaxează filtrele cu TEXTUL fix. Rezultatul e că o cerere a cărei
+# formulare ESTE numele filtrului se anulează singură: măsurat pe catalogul SOLE, «ce produse de
+# barbati ai» rezolvă `category=barbati` (3 produse servabile, verdict `known`/`exact`), dar
+# cuvântul „barbati" apare în vectorul de căutare al UNUI singur produs din 2.758, iar acela nu e
+# pe raft. Categoria ȘI textul = 0. Pe rafturile rădăcină ale aceluiași catalog, 4 din 12 tac
+# complet când formularea e numele raftului, iar cele care răspund pierd majoritatea raftului
+# (Ten 1461 → 533, Machiaj 681 → 368).
+#
+# De ce e SIGURĂ, spre deosebire de `relaxed`/`fuzzy`: setul întors e prin construcție o submulțime
+# a ceea ce filtrele dure permit. `relaxed` poate rătăci prin tot catalogul (de acolo vine „parfum
+# de dama" → spray parfumat de păr); treapta asta nu poate ieși de pe raftul cerut. Riscul ei e
+# altul, și e de FRAMING, nu de conținut: produsele sunt de pe raftul corect, dar nu răspund
+# formulării. De aceea marcajul `lexical_step` ajunge până la model (`_brief`) — un rezultat de
+# aici trebuie prezentat drept „asta am pe raft", niciodată drept „uite ce ai cerut".
+_LEXICAL_FILTERS_ONLY = "filters_only"
 _LEXICAL_STEPS = (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_RELAXED_ANY, _LEXICAL_FUZZY)
 
 # Pragul treptei de typo, scris EXPLICIT în cod și nu lăsat pe seama GUC-ului `pg_trgm`
@@ -155,21 +176,65 @@ _LEXICAL_STEPS = (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_RELAXED_ANY, _LEXI
 _WORD_SIM_MIN = 0.6
 
 
-def _lexical_steps(v2: bool, terms: list[str]) -> tuple[str, ...]:
+def _has_subject_filter(
+    *,
+    category: str | Sequence[str] | None,
+    brand: str | None,
+    concerns: Sequence[str] | None,
+    facet_filters: Mapping[str, Sequence[str]] | None,
+    features: Sequence[str] | None,
+    variant_label: str | None,
+) -> bool:
+    """Cererea poartă un filtru care spune CE caută clientul (un subiect), nu doar o condiție pusă
+    peste el (un calificativ)?
+
+    Distincția e chiar poarta treptei `filters_only`, și e singurul lucru care o ține onestă.
+    Subiect = raftul, fațeta (nevoie/tip/tip de ten), brandul, eticheta de variantă: fiecare
+    identifică un SET pe care clientul chiar l-a cerut, deci a-l servi când formularea nu prinde
+    nimic e un răspuns, nu o invenție.
+
+    Calificativele — `price_max`, `in_stock_only`, constrângerile numerice — sunt deliberat EXCLUSE.
+    Ele îngustează un set, nu îl numesc. „Ceva sub 100 de lei" al cărui text nu prinde nimic ar
+    întoarce, altfel, cele mai bine notate produse din TOT catalogul sub 100 de lei: adevărat, dar
+    arbitrar, fiindcă nimeni n-a cerut mulțimea aia. Un calificativ singur nu e o cerere.
+
+    Nu numește nicio dimensiune și nu citește nicio listă de cuvinte: ține pe orice vertical și
+    orice limbă (P11)."""
+    return bool(category or brand or concerns or facet_filters or features or variant_label)
+
+
+def _lexical_steps(
+    v2: bool, terms: list[str], *, has_subject_filter: bool = False
+) -> tuple[str, ...]:
     """Treptele pe care le are rost să le încerce ACEASTĂ interogare.
 
-    Cu kill-switch-ul stins sau fără niciun termen, rămâne clauza unică de dinainte.
+    Cu kill-switch-ul stins, rămâne clauza unică de dinainte.
 
     Treapta relaxată se sare la UN singur termen, fiindcă `SAU` peste un termen e ACELAȘI tsquery
     ca `ȘI` peste el: ar fi un query identic, executat a doua oară, pe drumul pe care oricum n-am
-    găsit nimic. Cu un singur cuvânt, singura degradare care mai spune ceva e plasa de typo."""
-    if not v2 or not terms:
+    găsit nimic. Cu un singur cuvânt, singura degradare care mai spune ceva e plasa de typo.
+
+    NX-293: după toate treptele de text vine `filters_only`, dar DOAR când cererea poartă un filtru
+    de subiect. Fără filtru, o interogare al cărei text nu prinde nimic TREBUIE să rămână zero:
+    „nu am găsit" e răspunsul corect acolo, iar a servi catalogul ordonat după rating ar fi
+    exact zgomotul pe care restul scării se străduiește să-l evite."""
+    if not v2:
         return (_LEXICAL_STRICT,)
+    tail = (
+        (_LEXICAL_FILTERS_ONLY,)
+        if has_subject_filter and get_settings().search_filters_only_fallback_enabled
+        else ()
+    )
+    # Fără niciun termen de conținut, treptele de text sunt toate același query gol
+    # (`websearch_to_tsquery('simple', '')` nu prinde nimic). Păstrăm `strict` — ca să rămână
+    # byte-identic drumul de azi când nu există coadă — și mergem direct la filtre.
+    if not terms:
+        return (_LEXICAL_STRICT, *tail)
     if len(terms) == 1:
-        return (_LEXICAL_STRICT, _LEXICAL_FUZZY)
+        return (_LEXICAL_STRICT, _LEXICAL_FUZZY, *tail)
     if len(terms) == 2:
-        return (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_FUZZY)
-    return _LEXICAL_STEPS
+        return (_LEXICAL_STRICT, _LEXICAL_RELAXED, _LEXICAL_FUZZY, *tail)
+    return (*_LEXICAL_STEPS, *tail)
 
 
 def _lexical_rank_expr(q_ph: str) -> str:
@@ -686,6 +751,7 @@ async def search_products_lexical(
     sort_mode: str = "relevance",
     in_stock_only: bool = False,
     locale: str | None = None,
+    allow_filters_only: bool = False,
     pool: int = 50,
 ) -> list[dict[str, Any]]:
     """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. ACELEAȘI filtre dure ca
@@ -707,10 +773,31 @@ async def search_products_lexical(
     Kill-switch `lexical_query_v2_enabled` OFF → clauza unică de dinainte (FTS SAU `similarity` pe
     nume), byte-identic. `locale` alege lista de cuvinte goale; `None` = nicio eliminare (P11:
     limba e cheie, nu constantă).
+
+    `allow_filters_only` (NX-293) deschide treapta care renunță COMPLET la text și servește setul
+    filtrelor. E **opt-in**, nu default, și asta e o decizie, nu prudență: a renunța la cuvintele
+    clientului e ultima concesie din tot sistemul, deci trebuie cerută explicit de apelantul care
+    știe că a epuizat și relaxarea de FILTRE (vezi `search_products_tool`, care o cere doar pe
+    ULTIMA treaptă a scării lui). Apelanții care măsoară sau clasifică au nevoie de opusul ei:
+    sonda de variantă (`missing_variant` vs `no_result`) ar clasifica orice ca „variantă lipsă"
+    dacă raftul i-ar răspunde mereu, iar harnessul de retrieval ar măsura alt sistem decât cel pe
+    care îl compară.
     """
     v2 = get_settings().lexical_query_v2_enabled
     terms = content_terms(query_text, locale) if v2 else []
-    steps = _lexical_steps(v2, terms)
+    steps = _lexical_steps(
+        v2,
+        terms,
+        has_subject_filter=allow_filters_only
+        and _has_subject_filter(
+            category=category,
+            brand=brand,
+            concerns=concerns,
+            facet_filters=facet_filters,
+            features=features if searchable_facets else None,
+            variant_label=variant_label,
+        ),
+    )
     for step in steps:
         rows = await _lexical_fetch(
             conn,
@@ -770,7 +857,10 @@ async def _lexical_fetch(
 ) -> list[dict[str, Any]]:
     """O treaptă a scării lexicale. Filtrele dure sunt IDENTICE pe toate treptele — se relaxează
     potrivirea de TEXT, niciodată constrângerile (preț, brand, categorie, variantă, stoc). Scara
-    din `search_products_tool` face lucrul complementar: relaxează filtrele, cu textul fix."""
+    din `search_products_tool` face lucrul complementar: relaxează filtrele, cu textul fix.
+
+    `filters_only` (NX-293) e capătul acestei axe: textul relaxat până la ZERO predicate, filtrele
+    neatinse. Nu e o excepție de la regula de mai sus, e limita ei."""
     conds = ["p.business_id = $1", "p.status = 'active'"]
     params: list[Any] = [business_id]
 
@@ -778,8 +868,14 @@ async def _lexical_fetch(
         params.append(value)
         return f"${len(params)}"
 
-    rank_expr: str
-    if not v2:
+    rank_expr: str | None
+    if step == _LEXICAL_FILTERS_ONLY:
+        # NICIUN predicat de text, deci nici expresie de rang: n-ar avea ce măsura. Ordinea vine
+        # din `_order_clause`, adică rating shrinkuit apoi preț, cu `p.id` ca tie-break — cel mai
+        # onest semnal disponibil când textul nu contribuie cu nimic, și determinist (golden/cache).
+        # `not v2` nu poate ajunge aici: `_lexical_steps` întoarce atunci doar `strict`.
+        rank_expr = None
+    elif not v2:
         q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
         # Comportamentul de dinainte de 046, păstrat sub kill-switch. NX-178: AMBELE capete trec
         # prin `ro_unaccent` (033) — `search_tsv` e construit peste text normalizat, deci aici se
@@ -836,7 +932,7 @@ async def _lexical_fetch(
     if cs := _content_status_pred():  # NX-171c: doar 'published' (per-tenant, gated)
         conds.append(cs)
 
-    if sort_mode == "relevance":
+    if sort_mode == "relevance" and rank_expr is not None:
         order = f" order by ({rank_expr}) desc, p.id"
     else:
         order = _order_clause(sort_mode)  # price/rating explicit → sort pe subsetul lexical filtrat

@@ -944,6 +944,17 @@ class Settings(BaseSettings):
     search_category_hard_enabled: bool = Field(
         default=True, validation_alias="SEARCH_CATEGORY_HARD_ENABLED"
     )
+    # NX-293: structura cererii bate formularea ei. Când clientul a cerut un SUBIECT care s-a
+    # rezolvat într-un filtru dur (raft, fațetă, brand, variantă), iar potrivirea de TEXT nu
+    # întoarce nimic pe niciuna dintre treptele ei, ultima treaptă servește SETUL FILTRULUI, fără
+    # predicat de text. Nu poate ieși în afara cererii: rezultatul e prin construcție un submulțime
+    # a ceea ce filtrul dur permite — spre deosebire de `relaxed`/`fuzzy`, care rătăcesc prin tot
+    # catalogul. Fără ea, textul e singurul lucru pe care nicio scară nu-l poate lăsa deoparte, deci
+    # o cerere a cărei formulare E numele raftului („ce produse de barbati ai") se anulează singură.
+    # OFF → tăcerea de dinainte, byte-identic.
+    search_filters_only_fallback_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_FILTERS_ONLY_FALLBACK_ENABLED"
+    )
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
     # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.

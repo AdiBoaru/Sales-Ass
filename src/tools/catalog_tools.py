@@ -242,6 +242,34 @@ _REASON_RO = {
 }
 
 
+# NX-293 — ce a produs de fapt acest rezultat, spus MODELULUI, nu doar telemetriei.
+#
+# Până acum `lexical_step` se publica exclusiv în `product_search`: un rezultat de pe o treaptă
+# degradată ajungea la model indistinct de o potrivire exactă, deci modelul îl prezenta drept
+# „uite ce ai cerut". Pe `relaxed`/`fuzzy` asta era deja o gaură (măsurat pe SOLE: «parfum de dama»
+# → un spray parfumat de păr, prezentat ca parfum). Odată cu `filters_only` devine obligatorie:
+# treapta aia întoarce produse de pe raftul CORECT care nu răspund formulării, iar diferența dintre
+# „asta am pe raft" și „asta ai cerut" e chiar diferența dintre onest și fals.
+#
+# Nimic din aval nu poate prinde asta: produsele și prețurile sunt REALE, deci validatorul
+# (stagiul 8) și `grounding_guard` le lasă să treacă — sunt porți de ADEVĂR, nu de POTRIVIRE.
+# Singurul loc unde se poate repara e aici, înainte ca modelul să scrie.
+_STEP_NOTE_RO: dict[str, str] = {
+    "relaxed": "potrivire parțială, nu toate cuvintele cerute",
+    "relaxed_any": "potrivire parțială, nu toate cuvintele cerute",
+    "fuzzy": "potrivire aproximativă, posibil o scriere greșită",
+    "filters_only": "nu potrivește formularea, e de pe raftul cerut",
+}
+
+
+def _step_note(p: dict[str, Any]) -> str:
+    """Nota de treaptă pentru un produs servit degradat. `strict` (potrivire curată) n-are notă:
+    tăcerea ACOLO e informație, iar o notă pe fiecare rând ar deveni zgomot pe care modelul îl
+    ignoră exact când contează."""
+    note = _STEP_NOTE_RO.get(str(p.get("lexical_step") or ""))
+    return f" | {note}" if note else ""
+
+
 def _reason_str(p: dict[str, Any]) -> str:
     codes = p.get("reason_codes") or []
     parts = [_REASON_RO.get(c, c) for c in codes]
@@ -274,6 +302,7 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
             f"[{p['id']}] {p['name']} | {p.get('brand') or '-'} | "
             f"{amount_text(p['price'], locale)} lei{rating}{avail}{vmatch}{vline}"
         )
+        step = _step_note(p)
         if proj:
             a = _pattrs(p)
             # NX-169: fapte-cheie canonice (fit specific, nu tautologie) + best_for static, compact.
@@ -282,9 +311,9 @@ def _brief(products: list[dict[str, Any]], pack: Any = None, locale: str = "ro")
             if a.get("best_for"):
                 bits.append(f"bun pt {a['best_for']}")
             fline = (" | " + " · ".join(bits)) if bits else ""
-            lines.append(f"{base}{fline}{sline}{_reason_str(p)}")
+            lines.append(f"{base}{fline}{sline}{_reason_str(p)}{step}")
         else:
-            lines.append(f"{base}{sline}{_reason_str(p)}")
+            lines.append(f"{base}{sline}{_reason_str(p)}{step}")
     return "\n".join(lines)
 
 
@@ -1146,6 +1175,13 @@ async def search_products_tool(
                 sort_mode=a.sort_mode,
                 in_stock_only=f["in_stock_only"],
                 locale=ctx.language,  # 046: locala alege lista de cuvinte goale (P11)
+                # NX-293: a renunța la CUVINTELE clientului e ultima concesie din sistem, deci se
+                # oferă abia pe ULTIMA treaptă de filtre. Ordinea contează și e ușor de greșit:
+                # oferită pe treapta 0, ar servi setul filtrelor stricte ÎNAINTE să fi încercat
+                # măcar o relaxare de filtre cu textul încă în joc — adică ar prefera „ce am pe
+                # raft" în locul unui răspuns care chiar potrivește ce a cerut clientul, doar
+                # fiindcă o fațetă era prea îngustă. Precizia întâi pe AMBELE axe, nu doar pe a ei.
+                allow_filters_only=(i == len(ladder) - 1),
                 pool=_FUSION_POOL,
             )
             vector: list[dict[str, Any]] = []
@@ -1255,6 +1291,10 @@ async def search_products_tool(
     # NX-163: produs NUMIT cerut dar absent din setul întors — precomputat aici (o dată) fiindcă e
     # și semnalul de unmet «named_not_found» (mai jos) și condiția de disclosure (nota de mai jos).
     named_miss = bool(a.product_name) and not _named_product_found(a.product_name, products)
+    # Treapta de TEXT care a servit pagina, calculată o dată: o citesc și evenimentul de căutare, și
+    # captura de cerere neîmplinită de mai jos (NX-293 — un set servit din filtre înseamnă că
+    # formularea n-a găsit nimic, chiar dacă raftul a găsit).
+    served_step = next((p["lexical_step"] for p in products if p.get("lexical_step")), "strict")
     ctx.emit(
         "product_search",
         mode=mode,
@@ -1268,7 +1308,7 @@ async def search_products_tool(
         # sus descriu relaxarea FILTRELOR; asta e cealaltă axă, iar confundarea lor ar ascunde exact
         # cazul periculos: cerere fără filtre, servită din plasa de typo. `strict` = cererea a
         # potrivit cum a fost formulată.
-        lexical_step=next((p["lexical_step"] for p in products if p.get("lexical_step")), "strict"),
+        lexical_step=served_step,
         fused=bool(lexical_pool_n) and bool(vector_pool_n),
         lexical_pool=lexical_pool_n,
         vector_pool=vector_pool_n,
@@ -1330,6 +1370,20 @@ async def search_products_tool(
         ctx.emit(
             "unmet_query",
             reason="no_result",
+            category_key=a.category,
+            brand=a.brand,
+            locale=ctx.language,
+        )
+    elif served_step == "filters_only":
+        # NX-293: raftul a răspuns, formularea NU. Fără branch-ul ăsta, fixul ar fi stins tăcut
+        # semnalul de gap din catalog: înainte turul ieșea cu `no_result` (marfă lipsă), acum iese
+        # cu produse, deci n-ar mai emite nimic — și exact cazul interesant („am raftul, dar n-am
+        # NIMIC pentru ce a cerut clientul") ar dispărea din raportul de cerere fix când devine
+        # măsurabil. Motiv SEPARAT, nu `no_result`: ăla înseamnă „n-am marfa", ăsta „am marfa,
+        # n-am potrivirea" — două acțiuni diferite pentru comerciant.
+        ctx.emit(
+            "unmet_query",
+            reason="text_unmatched",
             category_key=a.category,
             brand=a.brand,
             locale=ctx.language,

@@ -44,6 +44,51 @@ def test_scara_lexicala_pastreaza_singularii_ca_treapta_separata():
     assert _lexical_steps(True, ["a"]) == ("strict", "fuzzy")
 
 
+def test_scara_lexicala_adauga_filters_only_doar_cu_filtru_de_subiect():
+    """NX-293: treapta care serveste SETUL FILTRULUI, fara predicat de text.
+
+    E ultima, nu prima: precizie intai. Si e conditionata de un filtru de SUBIECT — fara el,
+    o interogare al carei text nu prinde nimic TREBUIE sa ramana zero."""
+    assert _lexical_steps(True, ["a"], has_subject_filter=True) == (
+        "strict",
+        "fuzzy",
+        "filters_only",
+    )
+    assert _lexical_steps(True, ["a", "b", "c"], has_subject_filter=True)[-1] == "filters_only"
+    assert "filters_only" not in _lexical_steps(True, ["a"], has_subject_filter=False)
+    # Kill-switch-ul vechi (046) are prioritate: OFF inseamna „clauza unica de dinainte", nu
+    # „vechiul comportament plus o treapta noua".
+    assert _lexical_steps(False, ["a"], has_subject_filter=True) == ("strict",)
+
+
+def test_scara_lexicala_fara_termeni_ajunge_la_filtre():
+    """Un query din care nu ramane niciun termen de continut face toate treptele de text identice
+    (tsquery gol, care nu prinde nimic). Cu un filtru de subiect, raftul raspunde totusi."""
+    assert _lexical_steps(True, [], has_subject_filter=True) == ("strict", "filters_only")
+    assert _lexical_steps(True, [], has_subject_filter=False) == ("strict",)
+
+
+def test_filtrul_de_subiect_exclude_calificativele():
+    """Poarta lui `filters_only`, enuntata pur: subiectul NUMESTE un set, calificativul doar il
+    ingusteaza. Nicio dimensiune si nicio lista de cuvinte — tine pe orice vertical (P11)."""
+    from src.db.queries.catalog import _has_subject_filter
+
+    none_of_them = dict(
+        category=None,
+        brand=None,
+        concerns=None,
+        facet_filters=None,
+        features=None,
+        variant_label=None,
+    )
+    assert not _has_subject_filter(**none_of_them)
+    for subject in ("category", "brand", "variant_label"):
+        assert _has_subject_filter(**{**none_of_them, subject: "orice"}), subject
+    assert _has_subject_filter(**{**none_of_them, "concerns": ["riduri"]})
+    assert _has_subject_filter(**{**none_of_them, "facet_filters": {"skin_type": ["uscat"]}})
+    assert _has_subject_filter(**{**none_of_them, "features": ["niacinamida"]})
+
+
 # --- fuziune: epuizatul coboară, dar rămâne candidat ------------------------------------------
 
 

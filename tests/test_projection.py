@@ -58,6 +58,27 @@ def test_brief_projects_facts_and_best_for():
     assert "attributes" not in v and "{" not in v  # fără obiecte brute
 
 
+def test_brief_spune_modelului_ca_setul_vine_de_pe_o_treapta_degradata():
+    """NX-293: `lexical_step` nu mai e doar telemetrie, ajunge la MODEL.
+
+    Fără nota asta, un produs servit fiindcă e pe raftul cerut (dar care nu răspunde formulării)
+    arată identic cu o potrivire exactă, iar modelul îl prezintă drept „uite ce ai cerut". Nimic
+    din aval nu poate prinde diferența: produsul și prețul sunt REALE, deci validatorul (stagiul 8)
+    și `grounding_guard` sunt porți de ADEVĂR, nu de POTRIVIRE.
+    """
+    clean = _brief([_prod()], _pack(), "ro")
+    assert "de pe raftul cerut" not in clean  # potrivire curată → nicio notă, tăcerea e informație
+
+    shelf = _brief([_prod(lexical_step="filters_only")], _pack(), "ro")
+    assert "nu potrivește formularea, e de pe raftul cerut" in shelf
+
+    fuzzy = _brief([_prod(lexical_step="fuzzy")], _pack(), "ro")
+    assert "aproximativă" in fuzzy
+
+    partial = _brief([_prod(lexical_step="relaxed")], _pack(), "ro")
+    assert "parțială" in partial
+
+
 def test_detail_projects_usage_badges_sections():
     p = _prod()
     p["attributes"]["usage"] = {"time": ["evening"]}

@@ -754,9 +754,25 @@ interogări măsurate, singura pe care a servit-o a fost `parfum de dama` — un
 („n-am găsit"); acum e un produs vag înrudit.
 
 De aceea fiecare produs servit de pe o treaptă degradată poartă `lexical_step`
-(`relaxed` | `fuzzy`), iar evenimentul `product_search` îl publică. Marcajul e SEPARAT de `relaxed`
-/ `relax_depth`, care descriu relaxarea FILTRELOR: confundarea celor două ar ascunde exact cazul
-periculos — o cerere fără niciun filtru, servită din plasa de typo.
+(`relaxed` | `relaxed_any` | `fuzzy` | `filters_only`), iar evenimentul `product_search` îl publică.
+Marcajul e SEPARAT de `relaxed` / `relax_depth`, care descriu relaxarea FILTRELOR: confundarea celor
+două ar ascunde exact cazul periculos — o cerere fără niciun filtru, servită din plasa de typo.
+
+**NX-293 a adăugat treapta `filters_only` și a dus marcajul până la MODEL.** Treapta renunță complet
+la predicatul de text și servește setul filtrelor, dar numai când cererea poartă un filtru de
+SUBIECT (raft/fațetă/brand/variantă) și numai pe ultima treaptă a scării de filtre. Motivul e că
+altfel o cerere a cărei formulare E numele filtrului se anulează singură: pe catalogul ăsta,
+«ce produse de barbati ai» rezolva `category=barbati` cu 3 produse servabile, dar cuvântul „barbati"
+apare în vectorul de căutare al UNUI produs din 2.758, deci categoria ȘI textul dădeau 0. Măsurat pe
+rafturile rădăcină, 4 din 12 tăceau complet pe formularea „ce ai la X".
+
+Spre deosebire de `relaxed`/`fuzzy`, treapta asta nu poate ieși din cerere — rezultatul e prin
+construcție o submulțime a ceea ce filtrele dure permit. Riscul ei e de FRAMING, nu de conținut:
+produsele sunt de pe raftul corect dar nu răspund formulării. De aceea `lexical_step` nu mai e doar
+telemetrie, ci apare ca notă în vederea modelului (`_brief`) — un rezultat de aici trebuie prezentat
+drept „asta am pe raft", niciodată drept „uite ce ai cerut". Pe cazul complementar, raftul care
+răspunde fără ca formularea să prindă ceva se capturează ca `unmet_query reason=text_unmatched`
+(distinct de `no_result`: acolo lipsește marfa, aici potrivirea pe marfa existentă).
 
 Poarta care ar respinge un rezultat off-target nu există încă:
 `search_offcategory_guard_enabled` se declanșează doar când scara a renunțat la o CATEGORIE cerută
