@@ -1,0 +1,563 @@
+{
+  "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+  "products_with_step": 2019,
+  "sellable_with_step": 1778,
+  "top_concerns": [
+    {
+      "key": "hydration",
+      "n": 1407
+    },
+    {
+      "key": "redness",
+      "n": 850
+    },
+    {
+      "key": "anti_aging",
+      "n": 487
+    },
+    {
+      "key": "dullness",
+      "n": 410
+    },
+    {
+      "key": "acne",
+      "n": 389
+    }
+  ],
+  "families": {
+    "par": {
+      "steps": [
+        "spalare",
+        "conditionare",
+        "tratament",
+        "styling"
+      ],
+      "inventory": {
+        "spalare": {
+          "total": 64,
+          "sellable": 51
+        },
+        "conditionare": {
+          "total": 31,
+          "sellable": 29
+        },
+        "tratament": {
+          "total": 50,
+          "sellable": 48
+        },
+        "styling": {
+          "total": 13,
+          "sellable": 12
+        }
+      },
+      "cheapest_complete": {
+        "total": 126.0,
+        "complete": true
+      },
+      "profiles": {
+        "base": {
+          "covered": 4,
+          "steps": 4,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": [],
+          "swap": {
+            "per_slot": [
+              {
+                "step": "spalare",
+                "cheaper": 29
+              },
+              {
+                "step": "conditionare",
+                "cheaper": 26
+              },
+              {
+                "step": "tratament",
+                "cheaper": 23
+              },
+              {
+                "step": "styling",
+                "cheaper": 11
+              }
+            ],
+            "slots_without_cheaper": 0,
+            "median_cheaper": 24.5
+          }
+        },
+        "concern:hydration": {
+          "covered": 4,
+          "steps": 4,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:redness": {
+          "covered": 3,
+          "steps": 4,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "styling",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "styling",
+              "reason": "filtered"
+            }
+          ]
+        },
+        "concern:anti_aging": {
+          "covered": 4,
+          "steps": 4,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:dullness": {
+          "covered": 2,
+          "steps": 4,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "tratament",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "tratament",
+              "reason": "filtered"
+            },
+            {
+              "step": "styling",
+              "reason": "filtered"
+            }
+          ]
+        },
+        "concern:acne": {
+          "covered": 0,
+          "steps": 4,
+          "complete": false,
+          "is_routine": false,
+          "first_gap": {
+            "step": "spalare",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "spalare",
+              "reason": "filtered"
+            },
+            {
+              "step": "conditionare",
+              "reason": "filtered"
+            },
+            {
+              "step": "tratament",
+              "reason": "filtered"
+            },
+            {
+              "step": "styling",
+              "reason": "filtered"
+            }
+          ]
+        }
+      }
+    },
+    "corp": {
+      "steps": [
+        "curatare",
+        "exfoliere",
+        "hidratare"
+      ],
+      "inventory": {
+        "curatare": {
+          "total": 40,
+          "sellable": 31
+        },
+        "exfoliere": {
+          "total": 14,
+          "sellable": 14
+        },
+        "hidratare": {
+          "total": 71,
+          "sellable": 62
+        }
+      },
+      "cheapest_complete": {
+        "total": 90.0,
+        "complete": true
+      },
+      "profiles": {
+        "base": {
+          "covered": 3,
+          "steps": 3,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": [],
+          "swap": {
+            "per_slot": [
+              {
+                "step": "curatare",
+                "cheaper": 25
+              },
+              {
+                "step": "exfoliere",
+                "cheaper": 3
+              },
+              {
+                "step": "hidratare",
+                "cheaper": 61
+              }
+            ],
+            "slots_without_cheaper": 0,
+            "median_cheaper": 25
+          }
+        },
+        "concern:hydration": {
+          "covered": 3,
+          "steps": 3,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:redness": {
+          "covered": 3,
+          "steps": 3,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:anti_aging": {
+          "covered": 2,
+          "steps": 3,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "curatare",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "curatare",
+              "reason": "filtered"
+            }
+          ]
+        },
+        "concern:dullness": {
+          "covered": 3,
+          "steps": 3,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:acne": {
+          "covered": 1,
+          "steps": 3,
+          "complete": false,
+          "is_routine": false,
+          "first_gap": {
+            "step": "curatare",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "curatare",
+              "reason": "filtered"
+            },
+            {
+              "step": "exfoliere",
+              "reason": "filtered"
+            }
+          ]
+        }
+      }
+    },
+    "fata": {
+      "steps": [
+        "curatare",
+        "tonifiere",
+        "esenta",
+        "tratament",
+        "hidratare",
+        "protectie"
+      ],
+      "inventory": {
+        "curatare": {
+          "total": 157,
+          "sellable": 143
+        },
+        "tonifiere": {
+          "total": 140,
+          "sellable": 118
+        },
+        "esenta": {
+          "total": 21,
+          "sellable": 20
+        },
+        "tratament": {
+          "total": 588,
+          "sellable": 534
+        },
+        "hidratare": {
+          "total": 248,
+          "sellable": 215
+        },
+        "protectie": {
+          "total": 99,
+          "sellable": 83
+        }
+      },
+      "cheapest_complete": {
+        "total": 187.0,
+        "complete": true
+      },
+      "profiles": {
+        "base": {
+          "covered": 6,
+          "steps": 6,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": [],
+          "swap": {
+            "per_slot": [
+              {
+                "step": "curatare",
+                "cheaper": 72
+              },
+              {
+                "step": "tonifiere",
+                "cheaper": 16
+              },
+              {
+                "step": "esenta",
+                "cheaper": 10
+              },
+              {
+                "step": "tratament",
+                "cheaper": 129
+              },
+              {
+                "step": "hidratare",
+                "cheaper": 111
+              },
+              {
+                "step": "protectie",
+                "cheaper": 10
+              }
+            ],
+            "slots_without_cheaper": 0,
+            "median_cheaper": 44.0
+          }
+        },
+        "concern:hydration": {
+          "covered": 6,
+          "steps": 6,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:redness": {
+          "covered": 6,
+          "steps": 6,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:anti_aging": {
+          "covered": 6,
+          "steps": 6,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:dullness": {
+          "covered": 6,
+          "steps": 6,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:acne": {
+          "covered": 6,
+          "steps": 6,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        }
+      }
+    },
+    "machiaj": {
+      "steps": [
+        "ten",
+        "pudra",
+        "obraz",
+        "ochi",
+        "buze"
+      ],
+      "inventory": {
+        "ten": {
+          "total": 168,
+          "sellable": 139
+        },
+        "pudra": {
+          "total": 7,
+          "sellable": 7
+        },
+        "obraz": {
+          "total": 22,
+          "sellable": 20
+        },
+        "ochi": {
+          "total": 23,
+          "sellable": 11
+        },
+        "buze": {
+          "total": 263,
+          "sellable": 241
+        }
+      },
+      "cheapest_complete": {
+        "total": 210.0,
+        "complete": true
+      },
+      "profiles": {
+        "base": {
+          "covered": 5,
+          "steps": 5,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": [],
+          "swap": {
+            "per_slot": [
+              {
+                "step": "ten",
+                "cheaper": 37
+              },
+              {
+                "step": "pudra",
+                "cheaper": 0
+              },
+              {
+                "step": "obraz",
+                "cheaper": 0
+              },
+              {
+                "step": "ochi",
+                "cheaper": 6
+              },
+              {
+                "step": "buze",
+                "cheaper": 131
+              }
+            ],
+            "slots_without_cheaper": 2,
+            "median_cheaper": 6
+          }
+        },
+        "concern:hydration": {
+          "covered": 4,
+          "steps": 5,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "ochi",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "ochi",
+              "reason": "filtered"
+            }
+          ]
+        },
+        "concern:redness": {
+          "covered": 3,
+          "steps": 5,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "obraz",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "obraz",
+              "reason": "filtered"
+            },
+            {
+              "step": "ochi",
+              "reason": "filtered"
+            }
+          ]
+        },
+        "concern:anti_aging": {
+          "covered": 2,
+          "steps": 5,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "pudra",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "pudra",
+              "reason": "filtered"
+            },
+            {
+              "step": "obraz",
+              "reason": "filtered"
+            },
+            {
+              "step": "ochi",
+              "reason": "filtered"
+            }
+          ]
+        },
+        "concern:dullness": {
+          "covered": 5,
+          "steps": 5,
+          "complete": true,
+          "is_routine": true,
+          "first_gap": null,
+          "gaps": []
+        },
+        "concern:acne": {
+          "covered": 3,
+          "steps": 5,
+          "complete": false,
+          "is_routine": true,
+          "first_gap": {
+            "step": "obraz",
+            "reason": "filtered"
+          },
+          "gaps": [
+            {
+              "step": "obraz",
+              "reason": "filtered"
+            },
+            {
+              "step": "ochi",
+              "reason": "filtered"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

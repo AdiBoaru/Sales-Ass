@@ -427,6 +427,10 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     pack = getattr(ctx.business, "domain_pack", None)
     badge_rules = pack.badge_rules if pack else None
     currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
+    # NX-292: secvența turului, dacă `routine_plan` a compus una. Owner unic = tool-ul; aici e
+    # citită, niciodată scrisă. None ⇒ tot ce urmează se comportă exact ca înainte.
+    routine = getattr(ctx, "routine", None)
+    routine_by_product = routine.by_product() if routine is not None else {}
     # Modelul NAREAZĂ per-produs (fit_clause/pro_index), keyed pe product_id; CODUL decide ORDINEA.
     # Membership (P1): id care nu e în retrieval → ignorat. Dedupe pe prima apariție.
     llm_items: dict[str, dict[str, Any]] = {}
@@ -475,7 +479,11 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
 
     def _build(pid: str) -> RichItem:
         p = facts[pid]
-        it = llm_items[pid]
+        # `.get`, nu `[]`: pe un tur de rutină, un pas pe care modelul nu l-a narat rămâne în
+        # secvență (vezi reordonarea de mai jos), deci cardul se construiește fără `fit_clause`.
+        # Cu indexare directă, exact pasul omis ar fi crăpat turul — un `KeyError` în locul unui
+        # card fără o propoziție.
+        it = llm_items.get(pid, {})
         idx = it.get("pro_index")
         anchor = _recommendation_anchor(p, idx)
         rc = p.get("review_count")
@@ -485,7 +493,31 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         # (catalog, medical-guarded, cap 400). `seeded` (badge pre-curat) n-are kind → fără ton.
         seeded = _safe_badge(p.get("badge"))
         kind = derive_badge_kind(p, badge_rules) if (badges_on and not seeded) else None
+        # NX-292: pe un tur de rutină, eticheta pasului BATE badge-ul derivat. „Super Preț" pe al
+        # treilea card dintr-o secvență nu ajută pe nimeni să potrivească proza cu produsul, iar
+        # „Curățare" e singurul lucru care face cardul lizibil fără să reciteşti textul. Eticheta e
+        # a PACHETULUI (fallback: cheia humanizată), nu un dicționar românesc în cod.
+        step_ref = routine_by_product.get(pid)
         ai = " ".join((p.get("ai_summary") or "").split())[:400]
+        if step_ref is not None:
+            return RichItem(
+                product_id=pid,
+                name=p["name"],
+                price=eff,
+                reason=_drop_unfounded_stock(
+                    _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
+                ),
+                url=p.get("url"),
+                image=p.get("image"),
+                rating=float(p["rating"]) if p.get("rating") is not None else None,
+                review_count=int(rc) if rc else None,
+                badge=step_ref.label,
+                badge_tone="info",
+                list_price=float(lp) if lp is not None and float(lp) > eff else None,
+                currency=currency,
+                details=ai if (ai and not _unsafe_medical(ai)) else None,
+                variants=_card_variants(p),
+            )
         return RichItem(
             product_id=pid,
             name=p["name"],
@@ -505,6 +537,26 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             variants=_card_variants(p),
         )
 
+    # NX-292 — pe un tur de rutină, ordinea cardurilor e a SLOTURILOR, nu a rankingului.
+    #
+    # Reordonarea deterministă de mai sus e corectă pentru o listă de recomandări (rankingul știe
+    # mai bine decât ordinea liberă a modelului). Într-o SECVENȚĂ însă ar rupe exact legătura pe
+    # care textul o face: „pasul 3" din proză ar ajunge în dreptul cardului 5. Sloturile sunt deja
+    # o ordine decisă de server, deci nu e „ordinea modelului" pe care reordonarea o corectează.
+    #
+    # Produsele pe care modelul le-a omis din curatare se adaugă la coadă: o rutină cu un pas care
+    # există dar nu se vede e un gol pe care clientul nu-l poate explica.
+    if routine is not None:
+        in_routine = [pid for pid in routine.ordered_ids() if pid in facts]
+        rest = [pid for pid in ordered_ids if pid not in set(in_routine)]
+        if set(ordered_ids) != set(in_routine):
+            ctx.emit(
+                "routine_card_set_adjusted",
+                slots=len(in_routine),
+                model_items=len(ordered_ids),
+            )
+        ordered_ids = in_routine + rest
+
     items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
 
     # izi-parity hardening: retrieval OFF-CATEGORY (produse din categoria greșită — ex. „fond de
@@ -517,6 +569,17 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     # NX-139: cifrele permise în proză = ale CLIENTULUI (R4) + cifrele de SPECIFICAȚIE din
     # produsele AFIȘATE (nume/fațete, `spec_numbers` — gated). Prețurile nu intră (nu-s în nume).
     allowed_numbers = _allowed_client_numbers(ctx)
+    # NX-292 — ordinalele pașilor sunt FAPTE ale serverului, deci proza are voie să le rostească.
+    #
+    # `scrub_intro` aruncă ÎNTREG intro-ul la prima cifră negrounded. E apărarea corectă împotriva
+    # prețurilor inventate, dar o rutină se scrie numerotat, iar „1. Curățare… 2. Tonifiere…" e
+    # exact forma cerută de sufixul profilului. Măsurat: fără linia asta, un răspuns de rutină iese
+    # cu șase carduri pe ecran și ZERO text — nu o degradare vizibilă, ci un mesaj care dispare.
+    #
+    # Se adaugă DOAR pozițiile sloturilor acoperite. Un `range(1, 10)` generos ar deschide poarta
+    # pentru orice cifră mică inventată, fix în turul în care se listează prețuri.
+    if routine is not None:
+        allowed_numbers |= routine.ordinals()
     if get_settings().spec_digits_grounded_enabled:
         pack = getattr(ctx.business, "domain_pack", None)
         shown = [facts[it.product_id] for it in items if it.product_id in facts]

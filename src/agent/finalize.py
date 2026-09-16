@@ -383,7 +383,9 @@ async def render(
         if not is_order:
             rich = await _finalize_rich(
                 deps.llm,
-                prompt_builder.build_rich_system(plan.inp),
+                prompt_builder.build_rich_system(
+                    plan.inp, routine=getattr(ctx, "routine", None) is not None
+                ),
                 plan.query,
                 products,
                 ctx,

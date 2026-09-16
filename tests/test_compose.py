@@ -791,3 +791,129 @@ def test_diacriticele_lipsa_din_proza_nu_rup_potrivirea() -> None:
     }
     rich = compose.assemble(ctx, j, _hand_creams())
     assert [i.product_id for i in rich.items][:2] == ["R", "N"]
+
+
+# --- NX-292: randarea unei SECVENȚE (nu a unei liste) -------------------------------
+
+
+_ROUTINE_RETRIEVED = [
+    {
+        "id": "C",
+        "name": "Ulei de curatare",
+        "price": 100.0,
+        "rating": 4.2,
+        "availability": "in_stock",
+    },
+    {"id": "T", "name": "Toner", "price": 90.0, "rating": 4.8, "availability": "in_stock"},
+    {"id": "H", "name": "Crema", "price": 125.0, "rating": 4.5, "availability": "in_stock"},
+]
+
+
+def _routine_view(pairs=(("C", 1, "curatare"), ("T", 2, "tonifiere"), ("H", 3, "hidratare"))):
+    from src.tools.routine_tools import RoutineStepRef, RoutineView
+
+    return RoutineView(
+        family="fata",
+        steps=tuple(
+            RoutineStepRef(position=pos, step=step, label=step.capitalize(), product_id=pid)
+            for pid, pos, step in pairs
+        ),
+    )
+
+
+def _routine_j(intro: str):
+    return {
+        "intro": intro,
+        "items": [
+            {"product_id": "C", "fit_clause": "dizolva SPF-ul"},
+            {"product_id": "T", "fit_clause": "reface bariera"},
+            {"product_id": "H", "fit_clause": "sigileaza hidratarea"},
+        ],
+        "education": "",
+        "suggestions": [],
+    }
+
+
+def test_routine_intro_numerotat_supravietuieste(monkeypatch) -> None:
+    """Ordinalele pașilor sunt FAPTE ale serverului, deci proza are voie să le rostească.
+
+    Fără linia asta, `scrub_intro` arunca ÎNTREG intro-ul la prima cifră negrounded, iar răspunsul
+    la o rutină ieșea cu cardurile pe ecran și ZERO text — un mesaj care dispare, nu o degradare."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx()
+    ctx.routine = _routine_view()
+
+    rich = compose.assemble(
+        ctx, _routine_j("1. Curatare, apoi 2. tonifiere, la final 3. hidratare"), _ROUTINE_RETRIEVED
+    )
+
+    assert rich.intro is not None
+    assert "1." in rich.intro and "3." in rich.intro
+
+
+def test_fara_rutina_intro_numerotat_cade_ca_inainte(monkeypatch) -> None:
+    """Poarta rămâne închisă pe turele obișnuite: o cifră negrounded într-o recomandare e în
+    continuare un motiv de DROP. Altfel am fi relaxat validarea pentru tot traficul."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+
+    rich = compose.assemble(_ctx(), _routine_j("1. Ceva, 2. altceva"), _ROUTINE_RETRIEVED)
+
+    assert rich.intro is None
+
+
+def test_doar_pozitiile_sloturilor_sunt_permise(monkeypatch) -> None:
+    """Nu `range(1, 10)`: un plafon generos ar deschide poarta pentru orice cifră mică inventată,
+    fix în turul în care se listează prețuri. Rutina are 3 pași, deci „4" rămâne negrounded."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx()
+    ctx.routine = _routine_view()
+
+    rich = compose.assemble(
+        ctx, _routine_j("1. Curatare, 2. tonifiere, 4. ceva inventat"), _ROUTINE_RETRIEVED
+    )
+
+    assert rich.intro is None
+
+
+def test_cardul_poarta_eticheta_pasului(monkeypatch) -> None:
+    """Șase carduri la rând, fără etichetă, obligă clientul să potrivească singur proza cu
+    produsele. Eticheta bate badge-ul derivat: „Super Preț" pe al treilea pas nu ajută pe nimeni."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings(card_badges_enabled=True))
+    ctx = _ctx()
+    ctx.routine = _routine_view()
+
+    rich = compose.assemble(
+        ctx, _routine_j("Incepe bland si termina cu hidratare."), _ROUTINE_RETRIEVED
+    )
+
+    assert [it.badge for it in rich.items] == ["Curatare", "Tonifiere", "Hidratare"]
+    assert all(it.badge_tone == "info" for it in rich.items)
+
+
+def test_ordinea_cardurilor_e_a_sloturilor_nu_a_rankingului(monkeypatch) -> None:
+    """Reordonarea deterministă e corectă pentru o listă de recomandări, dar într-o secvență ar
+    pune „pasul 3" din text în dreptul cardului 5. Aici tonerul are cel mai bun rating, deci
+    rankingul l-ar urca primul."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx()
+    ctx.routine = _routine_view()
+    ranked = [_ROUTINE_RETRIEVED[1], _ROUTINE_RETRIEVED[2], _ROUTINE_RETRIEVED[0]]
+
+    rich = compose.assemble(ctx, _routine_j("Uite secventa."), ranked)
+
+    assert [it.product_id for it in rich.items] == ["C", "T", "H"]
+
+
+def test_produsul_omis_de_model_nu_dispare_din_secventa(monkeypatch) -> None:
+    """O rutină cu un pas care există dar nu se vede e un gol pe care clientul nu-l poate explica.
+    Ajustarea se și NUMĂRĂ, ca divergența model-server să nu fie tăcută."""
+    monkeypatch.setattr(compose, "get_settings", lambda: _settings())
+    ctx = _ctx()
+    ctx.routine = _routine_view()
+    j = _routine_j("Uite secventa.")
+    j["items"] = [it for it in j["items"] if it["product_id"] != "T"]
+
+    rich = compose.assemble(ctx, j, _ROUTINE_RETRIEVED)
+
+    assert [it.product_id for it in rich.items] == ["C", "T", "H"]
+    assert any(e[0] == "routine_card_set_adjusted" for e in ctx.events)

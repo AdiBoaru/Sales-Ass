@@ -388,16 +388,40 @@ def build_reco_system(inp: PromptInputs) -> str:
     return f"{base}\n{style}" if style else base
 
 
+# NX-292 — ce se schimbă când produsele din față sunt o SECVENȚĂ, nu o listă.
+#
+# Regula despre `intro` e cea care contează. Pe web, enumerarea produselor NU ajunge la client:
+# `flatten_framing` o omite deliberat, fiindcă o fac cardurile. Într-o rutină însă, ordinea și rolul
+# fiecărui pas SUNT răspunsul, iar singurul câmp care le poate purta e `intro`. Un model care pune
+# povestea pașilor în `fit_clause` scrie corect și clientul nu vede nimic.
+#
+# Numerotarea e permisă aici (și numai aici): pozițiile sunt atribuite de server, deci sunt fapte,
+# iar `assemble` le trece în `allowed_numbers` pentru turul ăsta.
+_ROUTINE_RICH_RULES = """Produsele de mai jos sunt PAȘII unei rutine, în ordine, nu variante între
+care se alege.
+- În `intro` scrii secvența: un rând per pas, numerotat (1., 2., …), cu ce face pasul și de ce
+  produsul ăla. Aia e partea pe care o citește clientul. Nu o muta în `fit_clause`.
+- Numerotarea din `intro` trebuie să corespundă ordinii în care primești produsele.
+- `fit_clause` rămâne scurt: o propoziție despre produs, nu despre pas.
+- Nu inventa pași și nu schimba ordinea. Dacă ți s-a spus că un pas lipsește, spune-o și treci mai
+  departe, fără să renumerotezi restul."""
+
+
 @lru_cache(maxsize=256)
-def build_rich_system(inp: PromptInputs) -> str:
+def build_rich_system(inp: PromptInputs, *, routine: bool = False) -> str:
     """System pt recomandarea STRUCTURATĂ / model iZi (înlocuiește `_FINAL_SCHEMA_SYSTEM`).
-    Antet generat din DB + REGULI DURE identice pe toți tenanții."""
+    Antet generat din DB + REGULI DURE identice pe toți tenanții.
+
+    `routine=True` adaugă regulile de secvență (NX-292). Nu înlocuiește nimic din regulile de bază:
+    o rutină e tot o recomandare, doar cu o formă impusă de server."""
     base = (
         f"{_store_header(inp)}\n"
         "Primești nevoia clientului și o listă de produse REALE "
         "(id, preț, rating, avantaje din recenzii).\n"
         f"{_RICH_RULES}\n{_SAFETY_RULES}\n{VOICE_RULES}"
     )
+    if routine:
+        base = f"{base}\n{_ROUTINE_RICH_RULES}"
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
 

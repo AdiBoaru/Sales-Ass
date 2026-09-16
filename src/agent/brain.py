@@ -888,23 +888,29 @@ async def run_main_brain(
     # tool-uri în plus. OFF → `profile is None` și nimic nu se schimbă.
     pack = getattr(ctx.business, "domain_pack", None)
     registry = getattr(pack, "relation_kinds", None)
-    sequences = tuple(s.kind for s in registry.sequences()) if registry is not None else ()
-    profile = (
-        turn_profile.select(turn_class, obligations, has_sequences=bool(sequences))
-        if getattr(settings, "turn_profiles_enabled", False)
-        else None
-    )
+    families = tuple(getattr(getattr(pack, "routine_steps", None), "families", {}) or ())
+    # NX-292: două flag-uri, două domenii. `TURN_PROFILES_ENABLED` aprinde toate cele cinci profile
+    # (deci schimbă sufixul pentru TOT traficul, și se decide pe golden). `ROUTINE_ENABLED` aprinde
+    # exclusiv profilul `routine` — singurul unde răspunsul de azi e garantat degradat, fiindcă
+    # poarta `routine_evidence_required` cere o dovadă pe care nicio unealtă oferită n-o poate
+    # produce. Ambele stinse ⇒ `profile is None` și nimic nu se schimbă.
+    profiles_on = bool(getattr(settings, "turn_profiles_enabled", False))
+    routine_on = bool(getattr(settings, "routine_enabled", False))
+    profile = None
+    if profiles_on or routine_on:
+        candidate = turn_profile.select(turn_class, obligations, has_routine=bool(families))
+        profile = candidate if profiles_on or candidate.name == "routine" else None
     if profile is not None:
         ctx.emit("turn_profile", name=profile.name, turn_class=turn_class.value)
         have = {s.get("function", {}).get("name") for s in tools}
         extra = [t for t in profile.extra_tools if t not in have]
         if extra:
-            # Enumul de relații e al TENANTULUI. Trimitem tipurile DECLARATE (nu doar secvențele):
-            # o rutină poate avea nevoie și de un complement, iar un tip nedeclarat e refuzat de
-            # tool oricum (`unknown_relation`).
+            # Enumurile sunt ale TENANTULUI. La relații trimitem tipurile DECLARATE (nu doar
+            # secvențele): o rutină poate avea nevoie și de un complement, iar un tip nedeclarat e
+            # refuzat de tool oricum (`unknown_relation`).
             declared = tuple(getattr(registry, "specs", {})) if registry is not None else ()
             examples = vocab_examples.from_pack(pack)
-            tools = [*tools, *tool_schemas(extra, examples, declared)]
+            tools = [*tools, *tool_schemas(extra, examples, declared, families)]
 
     brain_system = f"{system}\n{_PLAN_V2_SYSTEM}"
     if profile is not None:

@@ -596,6 +596,12 @@ class TurnContext:
     # NX-239: reply-uri de stagiu DEMOTE-uite (incomplete pe mesaj mixt) → semnale pt MainBrain
     # (`brain_models.BrainSignal`). Owner UNIC: control plane. Gol cu flagul stins.
     brain_signals: list[Any] = field(default_factory=list)
+    # NX-292: secvența compusă a turului (`routine_tools.RoutineView`). Owner UNIC: tool-ul
+    # `routine_plan` — singurul care o produce. Compunerea o citește ca să știe trei lucruri pe
+    # care altfel le-ar afla greșit: că ordinalele din proză sunt FAPTE (deci nu se scrub-uiesc),
+    # care e eticheta de pas a fiecărui card, și că ordinea cardurilor e a SLOTURILOR, nu a
+    # rankingului. None = turul n-a compus o rutină. `Any` — ciclu models → tools.
+    routine: Any = None
     reply: Reply | None = None  # owner: orice stagiu (early exit)
     # NX-173 (P0): decizia de siguranță ACUMULATĂ a turului (`safety.Decision`). Owner UNIC la
     # scriere: `SafetyPolicy.gate` (via `_merge_decision`) — call-site-urile nu o setează direct.

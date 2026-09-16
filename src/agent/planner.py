@@ -390,7 +390,9 @@ async def build_plan(
             )
             rich = await _finalize_rich(
                 deps.llm,
-                prompt_builder.build_rich_system(inp),
+                prompt_builder.build_rich_system(
+                    inp, routine=getattr(ctx, "routine", None) is not None
+                ),
                 _relation_chain_query(added, ctx.language, sequence_label),
                 complementary,
                 ctx,
