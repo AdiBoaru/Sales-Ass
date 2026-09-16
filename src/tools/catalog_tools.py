@@ -26,6 +26,7 @@ from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
     CatalogVocabulary,
     Resolution,
+    facet_overlays,
     resolve,
     resolve_any,
 )
@@ -571,15 +572,9 @@ def _resolve_search_terms(
     `skin_type` sau `concerns`. „seara" nu e o nevoie, e un moment al rutinei — iar o hartă în care
     încap amândouă n-ar mai putea fi verificată de nimic.
     """
-    pack = getattr(ctx.business, "domain_pack", None)
-    lang_overlay = dict(getattr(pack, "concern_map", None) or {})
-    facet_aliases = {
-        f.key: dict(f.aliases)
-        for f in (getattr(pack, "facets", ()) or ())
-        if getattr(f, "aliases", None)
-    }
-    overlays = {name: {**lang_overlay, **facet_aliases.get(name, {})} for name in vocab.facet_names}
-    overlays = {name: ov for name, ov in overlays.items() if ov} or None
+    # Formula celor două straturi trăiește în `facet_overlays` (un singur loc): `routine_plan` are
+    # nevoie de EXACT aceeași rezoluție, iar când o avea pe cont propriu nu o avea deloc.
+    overlays = facet_overlays(getattr(ctx.business, "domain_pack", None), vocab.facet_names)
 
     emitted: list[Resolution] = []
 

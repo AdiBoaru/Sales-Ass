@@ -1130,10 +1130,10 @@ _ROUTINE_CANDIDATES_SQL = """
            and p.status = 'active'
            and p.availability <> 'out_of_stock'
            and p.attributes->>'routine_step' = any($2::text[])
-           and ($3::text[] is null or p.attributes->'concerns' ?| $3)
+           {facets}
     )
     select id, step, price from ranked
-     where rn <= $4 or ($5 and rn_price <= $4)
+     where rn <= {per_step} or ({cheapest} and rn_price <= {per_step})
      order by step, rn
 """
 
@@ -1143,7 +1143,7 @@ async def routine_candidates(
     business_id: str,
     *,
     values: list[str],
-    concerns: list[str] | None = None,
+    facet_filters: Mapping[str, Sequence[str]] | None = None,
     per_step: int = 8,
     include_cheapest: bool = False,
 ) -> list[dict[str, Any]]:
@@ -1162,22 +1162,36 @@ async def routine_candidates(
     „curatare" există și la `fata`, și la `corp`, iar un șampon nimerit în rutina feței e exact
     eșecul pe care fațeta îl repară (NX-280).
 
-    `concerns` filtrează pe nevoile cerute (`attributes->'concerns' ?| ...`). `None`/gol = fără
-    filtru. Operatorul e non-leakproof, deci sub RLS nu devine condiție de index (vezi §12.2 din
+    `facet_filters` e `dimensiune → chei CANONICE`, exact forma pe care o produce rezoluția contra
+    vocabularului, și se aplică prin ACELAȘI `_facet_filter_clause` ca `search_products`:
+    dimensiunile cu AND, valorile aceleiași dimensiuni cu OR, fațete-listă și fațete-scalar
+    amândouă. Semnătura cerea înainte o listă de `concerns`, filtrată direct pe
+    `attributes->'concerns'` — iar asta punea o afirmație de vertical în stratul de SQL: pe
+    catalogul SOLE «ten uscat» e `skin_type`, nu `concerns`, deci o rutină pentru ten uscat nu era
+    exprimabilă NICI cu chei canonice. `None`/gol = fără filtru.
+
+    Operatorii de fațetă sunt non-leakproof, deci sub RLS nu devin condiții de index (vezi §12.2 din
     `docs/DB-V3-SOLE-IMPORT.md`) — la 2.019 rânduri cu pas e suportabil, crește liniar cu catalogul.
 
     Gol pe un pas = niciun candidat; apelantul decide dacă e „nu există" sau „nu pentru nevoia
     asta" (`UNKNOWN ≠ MISMATCH`). `business_id = $1` (izolare P7; RLS plasă)."""
     if not values:
         return []
-    rows = await conn.fetch(
-        _ROUTINE_CANDIDATES_SQL,
-        business_id,
-        values,
-        list(concerns) if concerns else None,
-        min(per_step, 12),
-        include_cheapest,
+    params: list[Any] = [business_id, values]
+
+    def placeholder(value: Any) -> str:
+        params.append(value)
+        return f"${len(params)}"
+
+    facets = ""
+    if facet_filters and (fc := _facet_filter_clause(facet_filters, placeholder)):
+        facets = f"and {fc}"
+    sql = _ROUTINE_CANDIDATES_SQL.format(
+        facets=facets,
+        per_step=placeholder(min(per_step, 12)),
+        cheapest=placeholder(include_cheapest),
     )
+    rows = await conn.fetch(sql, *params)
     return [{"id": r["id"], "step": r["step"], "price": r["price"]} for r in rows]
 
 

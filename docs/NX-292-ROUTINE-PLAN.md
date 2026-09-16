@@ -280,6 +280,41 @@ rămâne pe drumul de azi, deci aprinderea nu poate regresa ce merge acum.
 
 Cere `SINGLE_BRAIN_ENABLED` (validat la boot, ca celelalte lanțuri de flaguri).
 
+### 10.1 Defectul găsit la prima aprindere (2026-09-16)
+
+Aprinderea flagului, singură, ar fi făcut răspunsul mai RĂU decât cel de dinainte. Măsurat pe
+`sole-ro` cu tool-ul chemat direct pe catalogul real: cu nevoile scrise așa cum le scrie un client
+(`concerns=["ten uscat", "hidratare"]`), **toți cei șase pași** ai familiei `fata` ieșeau
+`LIPSĂ (filtered)`, iar `llm_view` îi spunea modelului „prea puțini pași au produs" — adică îl
+trimitea să anunțe clientul că magazinul n-are rutină, pe un catalog unde fiecare pas are peste o
+sută de produse vandabile.
+
+Două cauze suprapuse, amândouă la seam-ul tool → SQL:
+
+1. **`concerns` nu se canonicaliza.** `search_products` trece fiecare termen prin rezoluția contra
+   vocabularului (`resolve_any`); `routine_plan` îl băga brut în `attributes->'concerns' ?| ...`.
+   Același nume de argument, două contracte — iar modelul, care învățase că frazele românești merg
+   pe căutare, le trimitea și aici. Cheia reală e `hydration`, nu „hidratare".
+2. **O nevoie a clientului nu e întotdeauna un `concern`.** «ten uscat» e `skin_type=dry`, o
+   dimensiune DISTINCTĂ (NX-257: partiționantă, nu aditivă). Cât timp SQL-ul numea o singură
+   dimensiune în cod, o rutină pentru ten uscat nu era exprimabilă NICI cu cheia canonică.
+
+Reparat prin refolosire, nu prin a doua implementare: formula celor două straturi de overlay a fost
+extrasă în `vocabulary.facet_overlays` (un singur loc, folosit de căutare ȘI de rutină), iar
+`routine_candidates` primește acum `facet_filters` (`dimensiune → chei`) și le aplică prin ACELAȘI
+`_facet_filter_clause` ca `search_products` — dimensiuni cu AND, valori cu OR, fațete-listă și
+fațete-scalar. Termenul pe care catalogul nu-l cunoaște se aruncă (P6: mai bine fără filtru decât cu
+unul care golește tăcut), dar se RAPORTEAZĂ modelului, ca să nu confirme o cerință neaplicată.
+Verificat pe DB real: **0/6 → 6/6** sloturi acoperite, iar cu buget de 200 lei minimul onest e
+declarat (375 lei sub filtrul de ten uscat).
+
+**De ce testele nu l-au prins.** Toate cele 18 teste ale feliei 2 monkeypatch-uiau
+`routine_candidates`, deci nu se uitau niciodată la ce ARGUMENTE primește. Garda adăugată e pe
+argumente, nu pe răspuns (`tests/test_routine_tool.py`, secțiunea „Nevoia clientului → cheie de
+catalog"): un termen brut care ajunge la query e acum o regresie roșie. Aceeași lecție ca la
+migrarea 046 și la `TypedFacet.aliases` — un strat care „traduce" și e ocolit de un apelant nu dă
+eroare, dă zero rezultate.
+
 ## 11. Matricea de eșec
 
 | Situație | Ce se întâmplă |
@@ -293,6 +328,7 @@ Cere `SINGLE_BRAIN_ENABLED` (validat la boot, ca celelalte lanțuri de flaguri).
 | `routine_ref` pierdut la degradare | se spune onest, se oferă recompunerea |
 | Model care rearanjează în proză | `routine_drift` → repair → fallback |
 | Pachet fără `routine_steps` | capabilitatea lipsește, se cade pe `recommend` |
+| Nevoie pe care catalogul nu o cunoaște | niciun filtru pe ea + se spune modelului că n-a rulat (§10.1) |
 
 ## 12. Out of scope
 

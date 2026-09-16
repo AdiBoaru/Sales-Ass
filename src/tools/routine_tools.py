@@ -40,6 +40,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.catalog.routine_compose import RoutinePlan, compose
+from src.catalog.vocabulary import facet_overlays, resolve_any
+from src.catalog.vocabulary_cache import get_vocabulary
 from src.db.queries.catalog import (
     get_products_by_ids,
     routine_candidates,
@@ -58,6 +60,10 @@ if TYPE_CHECKING:
 #: Câți candidați aducem pe pas. Mai mulți decât ne trebuie (1), fiindcă bugetul „urcă" prin ei și
 #: fiindcă o excludere de siguranță trebuie să aibă pe ce cădea. Ieftin: rândurile n-au laterale.
 CANDIDATES_PER_STEP = 8
+
+#: Câți termeni nerezolvați raportăm (telemetrie + `llm_view`). Plafon, fiindcă lista vine din
+#: argumentele modelului: vocabular scurt și normalizat, dar tot plafonat (P12).
+_UNRESOLVED_MAX = 5
 
 #: Câte runde de re-alegere după poarta de siguranță. UNA: dacă și înlocuitorul e contraindicat,
 #: pasul se declară neacoperit. O buclă nemărginită ar plăti hidratări la infinit pe un tur.
@@ -224,6 +230,7 @@ def _view(
     *,
     floor: Decimal | None,
     budget: Decimal | None,
+    unresolved: list[str] | None = None,
 ) -> str:
     """Vederea pentru MODEL: pașii numerotați, cu pasul numit explicit, și golurile declarate.
 
@@ -255,7 +262,73 @@ def _view(
             "Pașii marcați LIPSĂ nu au produs. Spune-i clientului care lipsește și de ce, "
             "nu inventa unul și nu renumerota restul."
         )
+    if unresolved:
+        # Un termen pe care catalogul nu-l cunoaște nu a filtrat nimic. Fără rândul ăsta, modelul
+        # ar confirma o constrângere care n-a rulat („rutină fără parfum, gata") pe produse alese
+        # fără ea. Validatorul nu poate prinde asta: prețurile și produsele sunt reale.
+        lines.append(
+            "Nu am putut filtra pe: "
+            + ", ".join(f"«{t}»" for t in unresolved[:_UNRESOLVED_MAX])
+            + ". Nu confirma cerința asta ca îndeplinită, spune că n-o pot verifica."
+        )
     return "\n".join(lines)
+
+
+async def _resolve_needs(
+    ctx: TurnContext, deps: PipelineDeps, raw: list[str] | None
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Termenii clientului → `dimensiune → chei canonice`, prin ACELAȘI vocabular ca căutarea.
+
+    De ce nu se filtrează direct pe ce a scris modelul. Argumentul `concerns` ajunge aici cu
+    cuvintele clientului („ten uscat", „hidratare"), fiindcă exact așa funcționează pe
+    `search_products`, unde fiecare termen trece prin rezoluția contra catalogului. Aici nu trecea:
+    lista mergea brut în `attributes->'concerns' ?| ...`. Măsurat pe `sole-ro` (2026-09-16), «rutina
+    pentru ten uscat» scotea toți cei șase pași ai familiei `fata` ca `LIPSĂ (filtered)`, deși
+    fiecare are peste o sută de produse vandabile. Iar `llm_view` îi spunea modelului „prea puțini
+    pași au produs", adică îl trimitea să anunțe clientul că magazinul n-are rutină.
+
+    Două cauze, amândouă închise de rezoluție. Prima e canonicitatea: cheia reală e `hydration`, nu
+    „hidratare". A doua e mai adâncă și e chiar lecția NX-257: o nevoie a clientului nu e
+    întotdeauna un `concern`. «ten uscat» e `skin_type=dry`, o dimensiune DISTINCTĂ (partiționantă,
+    nu aditivă), deci nici cheia canonică n-ar fi ajutat cât timp SQL-ul filtra pe o singură
+    dimensiune numită în cod.
+
+    Termenul nerezolvat se ARUNCĂ, nu se pasează (P6: mai bine fără filtru decât cu unul care
+    golește tăcut), dar se și RAPORTEAZĂ modelului, ca să nu confirme o constrângere pe care n-a
+    aplicat-o nimeni. Vocabularul vine din cache-ul cu TTL (`get_vocabulary`), nu direct din DB, și
+    își aduce propriul checkout scurt: rezoluția se face ÎNAINTE de checkout-ul de candidați, ca să
+    nu ținem o conexiune peste altă muncă (NX-231).
+    """
+    terms = [t for t in (raw or []) if isinstance(t, str) and t.strip()]
+    if not terms:
+        return {}, []
+
+    vocab = await get_vocabulary(deps, ctx.business.id)
+    overlays = facet_overlays(getattr(ctx.business, "domain_pack", None), vocab.facet_names)
+
+    filters: dict[str, list[str]] = {}
+    unresolved: list[str] = []
+    for term in terms:
+        r = resolve_any(vocab, term, overlays=overlays, dimensions=vocab.facet_names)
+        ctx.emit(
+            "vocabulary_resolved",
+            dimension=r.dimension,
+            status=r.status.value,
+            matched_by=r.matched_by,
+            reason=r.reason,
+            n_keys=len(r.constraint_keys),
+            evidence=r.evidence,
+            consumer="routine_plan",
+        )
+        if keys := r.constraint_keys:
+            filters.setdefault(r.dimension, []).extend(keys)
+        else:
+            unresolved.append(r.term or term)
+    for dim in filters:
+        filters[dim] = sorted(dict.fromkeys(filters[dim]))
+    if unresolved:
+        ctx.emit("concern_unmapped", terms=unresolved[:_UNRESOLVED_MAX], locale=ctx.language)
+    return filters, unresolved
 
 
 @register("routine_plan")
@@ -286,7 +359,7 @@ async def routine_plan_tool(
 
     steps = list(families[a.family])
     values = [f"{a.family}{SEP}{s}" for s in steps]
-    concerns = [c for c in (a.concerns or []) if c]
+    facet_filters, unresolved = await _resolve_needs(ctx, deps, a.concerns)
 
     async with deps.db("routine_candidates") as conn:
         # Cu buget cerem și cei mai ieftini de pe fiecare pas: un pool ales doar pe rang face
@@ -296,7 +369,7 @@ async def routine_plan_tool(
             conn,
             ctx.business.id,
             values=values,
-            concerns=concerns,
+            facet_filters=facet_filters or None,
             per_step=CANDIDATES_PER_STEP,
             include_cheapest=a.budget_max is not None,
         )
@@ -308,12 +381,12 @@ async def routine_plan_tool(
         # să aflăm care dintre cele două e. Nu relaxăm nimic — rezultatul nu intră în candidați.
         reasons: dict[str, str] = {}
         empty = [s for s in steps if not by_step.get(s)]
-        if empty and concerns:
+        if empty and facet_filters:
             probe = await routine_candidates(
                 conn,
                 ctx.business.id,
                 values=[f"{a.family}{SEP}{s}" for s in empty],
-                concerns=None,
+                facet_filters=None,
                 per_step=1,
             )
             exists = {str(r["step"]).partition(SEP)[2] for r in probe}
@@ -387,11 +460,20 @@ async def routine_plan_tool(
             llm_view=(
                 "Nu pot compune o secvență pentru asta: prea puțini pași au produs. "
                 "Spune-i clientului și oferă ce ai, nu inventa pași.\n"
-                + _view(plan, hydrated, ctx.language, floor=floor, budget=budget)
+                + _view(
+                    plan,
+                    hydrated,
+                    ctx.language,
+                    floor=floor,
+                    budget=budget,
+                    unresolved=unresolved,
+                )
             ),
         )
     return ToolResult(
         ok=True,
         products=ordered,
-        llm_view=_view(plan, hydrated, ctx.language, floor=floor, budget=budget),
+        llm_view=_view(
+            plan, hydrated, ctx.language, floor=floor, budget=budget, unresolved=unresolved
+        ),
     )

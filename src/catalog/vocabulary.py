@@ -37,7 +37,7 @@ Totul e pur (fără I/O) în afară de `load_vocabulary`. Tenant-scoped peste to
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -53,6 +53,7 @@ __all__ = [
     "Resolution",
     "ResolutionStatus",
     "VocabEntry",
+    "facet_overlays",
     "load_vocabulary",
     "resolve",
     "resolve_any",
@@ -538,6 +539,33 @@ def resolve(
         dimension=dimension,
         reason="not_in_vocabulary",
     )
+
+
+def facet_overlays(pack: object, facet_names: Iterable[str]) -> dict[str, dict[str, str]] | None:
+    """Overlay-urile de limbă ale tenantului, per dimensiune. PUR, duck-typed pe pachet.
+
+    Două straturi, cu domenii DIFERITE, și diferența contează: harta de nevoi
+    (`domain_pack.concern_map`) e un overlay de LIMBĂ, deci se încearcă pe toate fațetele —
+    validarea contra vocabularului decide unde se potrivește. Aliasurile DECLARATE ale unei fațete
+    (`TypedFacet.aliases`) se aplică DOAR fațetei lor, fiindcă „seara" e un moment al rutinei, nu o
+    nevoie, iar o hartă în care încap amândouă n-ar mai putea fi verificată de nimic.
+
+    Există ca funcție, și nu inline la apelant, fiindcă e a DOUA jumătate a rezoluției: cine cheamă
+    `resolve_any` fără overlay-uri primește alt răspuns pentru același cuvânt. Exact asta s-a
+    întâmplat cu `routine_plan` (NX-292), care filtra termenii clientului bruti pe `concerns`: pe
+    catalogul SOLE, «ten uscat» e `skin_type=dry`, deci toți cei șase pași ai rutinei ieșeau
+    `LIPSĂ (filtered)` — iar mesajul spunea „prea puțini pași au produs", adică fix pe dos.
+
+    `None` când n-are nimic de adăugat, ca apelantul să poată pasa direct mai departe.
+    """
+    lang = dict(getattr(pack, "concern_map", None) or {})
+    aliases = {
+        f.key: dict(f.aliases)
+        for f in (getattr(pack, "facets", ()) or ())
+        if getattr(f, "aliases", None)
+    }
+    merged = {name: {**lang, **aliases.get(name, {})} for name in facet_names}
+    return {name: ov for name, ov in merged.items() if ov} or None
 
 
 def resolve_any(

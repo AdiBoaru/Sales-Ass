@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.domain.pack import DomainPack
 from src.domain.routine_steps import build_spec
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
@@ -22,6 +23,17 @@ RAW = {
     },
     "by_product_type": {"gel de curatare": "fata:curatare", "sampon": "par:spalare"},
 }
+
+#: Vocabularul fals al tenantului. Are DOUĂ dimensiuni cu intenție: nevoia clientului „ten uscat"
+#: e `skin_type`, nu `concerns` — exact separarea din NX-257 pe care tool-ul o ignora, filtrând
+#: totul pe `concerns` și golind astfel fiecare pas al rutinei.
+VOCAB = CatalogVocabulary(
+    business_id="b",
+    dimensions={
+        "concerns": (VocabEntry(key="hydration", label="hidratare", count=40),),
+        "skin_type": (VocabEntry(key="dry", label="ten uscat", count=30),),
+    },
+)
 
 #: Catalogul fals: `{id: (pas, preț)}`. Ordinea din listă = ordinea de ranking.
 CATALOG = {
@@ -66,12 +78,17 @@ def _ctx_without_pack() -> TurnContext:
 @pytest.fixture(autouse=True)
 def _catalog(monkeypatch):
     """Query-urile de catalog, scriptate. `available` e mutabil per test (ca să putem goli pași)."""
-    state = {"available": set(CATALOG), "concern_only": set(CATALOG)}
+    state = {
+        "available": set(CATALOG),
+        "concern_only": set(CATALOG),
+        "seen_filters": [],
+    }
 
     async def fake_candidates(
-        conn, business_id, *, values, concerns=None, per_step=8, include_cheapest=False
+        conn, business_id, *, values, facet_filters=None, per_step=8, include_cheapest=False
     ):
-        pool = state["concern_only"] if concerns else state["available"]
+        state["seen_filters"].append(facet_filters)
+        pool = state["concern_only"] if facet_filters else state["available"]
         rows = [
             {"id": pid, "step": step, "price": price}
             for pid, (step, price) in CATALOG.items()
@@ -79,6 +96,9 @@ def _catalog(monkeypatch):
         ]
         state["include_cheapest"] = include_cheapest
         return rows[:per_step] if per_step < len(rows) else rows
+
+    async def fake_vocabulary(deps, business_id):
+        return VOCAB
 
     async def fake_hydrate(conn, business_id, ids, *, limit=6, respect_content_status=False):
         return [
@@ -88,6 +108,7 @@ def _catalog(monkeypatch):
         ]
 
     monkeypatch.setattr(rt, "routine_candidates", fake_candidates)
+    monkeypatch.setattr(rt, "get_vocabulary", fake_vocabulary)
     monkeypatch.setattr(rt, "get_products_by_ids", fake_hydrate)
     monkeypatch.setattr(rt, "_safety_gate", lambda ctx, products, purpose: (products, ""))
     return state
@@ -166,6 +187,52 @@ async def test_sonda_de_motiv_nu_relaxeaza_nevoia(_catalog):
     result = await _run(_ctx(), concerns=["hydration"])
 
     assert all(p["id"] not in {"t1", "t2"} for p in result.products)
+
+
+# ── Nevoia clientului → cheie de catalog ────────────────────────────────────────────────────────
+#
+# Defectul pe care secțiunea asta o pinuiește a existat în producție și NU putea fi prins de
+# testele de mai sus: ele monkeypatch-uiau query-ul, deci nu se uitau NICIODATĂ la ce anume îi
+# trimite tool-ul. Măsurat pe `sole-ro` la 2026-09-16, «rutina pentru ten uscat» scotea toți cei
+# șase pași ai familiei `fata` ca `LIPSĂ (filtered)` — pe un catalog unde fiecare pas are peste o
+# sută de produse vandabile. Garda e deci pe ARGUMENTELE primite de query, nu pe răspuns.
+
+
+async def test_nevoia_scrisa_de_client_ajunge_canonica_la_query(_catalog):
+    """Modelul trimite cuvintele clientului („hidratare"); query-ul trebuie să primească cheia
+    reală („hydration"). Un termen brut în `attributes->'concerns' ?| ...` nu se potrivește cu
+    nimic, iar golul rezultat arată identic cu „magazinul n-are produse"."""
+    await _run(_ctx(), concerns=["hidratare"])
+
+    assert _catalog["seen_filters"][0] == {"concerns": ["hydration"]}
+
+
+async def test_nevoia_de_pe_alta_dimensiune_nu_se_filtreaza_ca_concern(_catalog):
+    """«ten uscat» e `skin_type`, nu `concerns` (NX-257: partiționant, nu aditiv). Cât timp
+    filtrarea era numită în cod pe o singură dimensiune, o rutină pentru ten uscat nu era
+    exprimabilă NICI cu cheia canonică."""
+    await _run(_ctx(), concerns=["ten uscat"])
+
+    assert _catalog["seen_filters"][0] == {"skin_type": ["dry"]}
+
+
+async def test_termenul_necunoscut_nu_filtreaza_si_i_se_spune_modelului(_catalog):
+    """Un termen pe care catalogul nu-l cunoaște nu are voie să devină filtru (ar goli tăcut), dar
+    nici să dispară: fără rândul din `llm_view`, modelul ar confirma o cerință pe care nimeni n-a
+    aplicat-o, pe produse alese fără ea. Validatorul nu poate prinde asta, prețurile fiind reale."""
+    result = await _run(_ctx(), concerns=["fara parfum"])
+
+    assert _catalog["seen_filters"][0] is None
+    assert "Nu am putut filtra pe: «fara parfum»" in result.llm_view
+    assert "Nu confirma" in result.llm_view
+
+
+async def test_nevoile_de_pe_dimensiuni_diferite_se_cumuleaza(_catalog):
+    """Două dimensiuni = AND (cerințe care se adună), nu OR. Valorile aceleiași dimensiuni rămân
+    alternative; asta o decide `_facet_filter_clause`, partajat cu `search_products`."""
+    await _run(_ctx(), concerns=["ten uscat", "hidratare"])
+
+    assert _catalog["seen_filters"][0] == {"concerns": ["hydration"], "skin_type": ["dry"]}
 
 
 # ── Bugetul ─────────────────────────────────────────────────────────────────────────────────────
