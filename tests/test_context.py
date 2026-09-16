@@ -12,6 +12,7 @@ from src.models import (
     TurnContext,
 )
 from src.worker.context import (
+    _SHOWN_PREFIX,
     context_blocks,
     conversation_transcript,
     customer_profile_block,
@@ -134,22 +135,110 @@ def test_state_block_empty_state_is_blank():
     assert state_block(ConversationState()) == ""
 
 
-def test_state_block_exposes_full_uuids_without_truncation():
-    # R3: 3 produse cu UUID-uri reale (36 char) + nume lungi (cazul cel mai rău de buget) →
-    # fiecare id COMPLET în bloc. O trunchiere care ar tăia un UUID l-ar corupe → DataError la cast.
-    ids = [
-        "11111111-1111-1111-1111-111111111111",
-        "22222222-2222-2222-2222-222222222222",
-        "33333333-3333-3333-3333-333333333333",
-    ]
-    s = ConversationState(
-        displayed_products=[
-            ProductRef(i, "Mira Atelier Balance Crema pentru hidratare 214", 97.99) for i in ids
-        ]
-    )
+#: Un nume de catalog REAL, la scara măsurată pe SOLE (mediana 200 de caractere, p90 242): nume
+#: plus frază de marketing. Varianta veche a testului folosea un nume demo de 46 de caractere, deci
+#: invariantul „id-urile ies întregi" trecea în CI și era fals în producție.
+_REAL_NAME = (
+    "IUNIK Propolis Vitamin Synergy Serum - ser de fata formulat cu propolis si vitamina C, "
+    "care contribuie la iluminarea tenului, la reducerea petelor pigmentare si la mentinerea "
+    "hidratarii pielii pe parcursul zilei"
+)
+
+
+def _uuids(n: int) -> list[str]:
+    return [f"{i:08d}-1111-1111-1111-111111111111" for i in range(1, n + 1)]
+
+
+def test_state_block_exposes_full_uuids_at_real_name_scale():
+    # R3: id-urile trebuie să iasă ÎNTREGI. O tăiere care secționează un UUID îl corupe, iar un id
+    # pe jumătate ARATĂ ca un id: modelul îl pasează unui tool → DataError la cast.
+    ids = _uuids(3)
+    s = ConversationState(displayed_products=[ProductRef(i, _REAL_NAME, 97.99) for i in ids])
+
     block = state_block(s)
+
     for i in ids:
         assert f"[{i}]" in block
+
+
+def test_state_block_uses_short_name_not_marketing_tail():
+    """Numele scurt e capul dinaintea primului ` - `. Coada e frază de reclamă, nu identitate, și
+    pe catalogul real ocupă ~165 din cele ~200 de caractere ale unui nume."""
+    s = ConversationState(displayed_products=[ProductRef(_uuids(1)[0], _REAL_NAME, 97.99)])
+
+    block = state_block(s)
+
+    assert "IUNIK Propolis Vitamin Synergy Serum" in block
+    assert "care contribuie" not in block
+
+
+def test_state_block_carries_a_full_routine():
+    """Șase produse (o rutină de față completă) încap toate. Vechiul plafon de 3 făcea ca un
+    follow-up pe pasul 4 să nu aibă pe ce se ancora."""
+    ids = _uuids(6)
+    s = ConversationState(displayed_products=[ProductRef(i, _REAL_NAME, 97.99) for i in ids])
+
+    block = state_block(s)
+
+    for i in ids:
+        assert f"[{i}]" in block
+
+
+def test_state_block_drops_whole_entries_never_half_an_id():
+    """Degradarea e onestă (lipsesc produse, se vede), nu coruptă (un id rupt, care nu se vede).
+    Bugetul strâns e ales ca să taie SIGUR: două intrări nu au cum să încapă."""
+    ids = _uuids(4)
+    s = ConversationState(displayed_products=[ProductRef(i, _REAL_NAME, 97.99) for i in ids])
+
+    block = state_block(s, max_chars=len(_SHOWN_PREFIX) + 90)
+
+    kept = [i for i in ids if f"[{i}]" in block]
+    assert len(kept) < len(ids)  # a tăiat
+    for i in ids:
+        # niciun id nu apare PARȚIAL: ori întreg, ori deloc.
+        assert i in block or i[:20] not in block
+
+
+def test_prompt_cap_matches_state_cap():
+    """Promptul arată ce ȚINE starea. Două plafoane care diverg înseamnă că memoria reține un
+    produs pe care modelul nu-l vede niciodată, iar căutarea cauzei începe în locul greșit."""
+    import inspect
+
+    from src.conversation.state_v2 import MAX_DISPLAYED
+
+    default = inspect.signature(state_block).parameters["max_products"].default
+    assert default == MAX_DISPLAYED
+
+
+def test_state_block_budget_never_binds_before_max_displayed():
+    """Bugetul de caractere e o PLASĂ, nu o politică. Câte produse ține memoria e decis o dată, în
+    `MAX_DISPLAYED`; un plafon de caractere care taie înaintea lui ar fi a doua politică, ascunsă.
+
+    Cazul cel mai rău măsurat pe catalogul SOLE: `display_name` are max 83 de caractere, iar opt
+    astfel de intrări dau 1.133 de caractere. Testul le construiește deliberat la maximul ăla."""
+    from src.conversation.state_v2 import MAX_DISPLAYED
+
+    worst = "X" * 83  # `display_name` fără ` - ` întoarce numele ca atare
+    ids = _uuids(MAX_DISPLAYED)
+    s = ConversationState(displayed_products=[ProductRef(i, worst, 1234.56) for i in ids])
+
+    block = state_block(s)
+
+    for i in ids:
+        assert f"[{i}]" in block
+
+
+def test_state_block_reserves_room_for_constraints():
+    """Constrângerile se rezervă înaintea produselor: un set mare de produse n-are voie să împingă
+    afară bugetul clientului, care e o limită, nu o sugestie."""
+    s = ConversationState(
+        displayed_products=[ProductRef(i, _REAL_NAME, 97.99) for i in _uuids(8)],
+        constraints={"buget_max": 100},
+    )
+
+    block = state_block(s, max_chars=400)
+
+    assert "buget_max: 100" in block
 
 
 def _ctx(*, profile=None, products=None) -> TurnContext:

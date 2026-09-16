@@ -179,11 +179,20 @@ def memory_block(ctx: TurnContext, *, max_needs: int = 8, max_chars: int = 500) 
     return "\n".join(lines)[:max_chars]
 
 
+#: Prefixul liniei de produse. Extras ca să intre în calculul bugetului: fără el, bugetul s-ar
+#: cheltui pe text pe care îl scriem noi și l-am uita.
+_SHOWN_PREFIX = "Produse arătate recent (folosește id-ul din [] pt detalii/comparație/checkout): "
+
+#: Cât din buget poate lua linia de constrângeri. Se rezervă ÎNAINTEA produselor: e scurtă,
+#: mărginită, și sub state v2 nici nu se emite (`include_constraints=False`).
+_CONSTRAINTS_BUDGET = 200
+
+
 def state_block(
     state: ConversationState,
     *,
-    max_products: int = 3,
-    max_chars: int = 600,
+    max_products: int = 8,
+    max_chars: int = 1200,
     include_constraints: bool = True,
     language: str | None = None,
 ) -> str:
@@ -197,24 +206,81 @@ def state_block(
     NX-251 — `include_constraints=False` când starea v2 e activă: constrângerile de aici sunt
     proiecția v1 a acelorași nevoi pe care `memory_block` le emite canonic (cu tărie și revocări).
     Ambele blocuri în același prompt înseamnă aceleași fapte de două ori, iar copia mai săracă e
-    exact cea care poate contrazice: „buget: 200" fără „(obligatoriu)" invită la relaxare."""
+    exact cea care poate contrazice: „buget: 200" fără „(obligatoriu)" invită la relaxare.
+
+    ## De ce numele e SCURT și tăierea e pe INTRARE (măsurat pe catalogul SOLE, 2026-09-11)
+
+    Vechea formă (3 produse, 600 de caractere, nume ÎNTREG, `[:max_chars]` orb) își rata propriul
+    scop pe primul catalog real. Numele de catalog are **mediana 200 de caractere** (p90 242,
+    max 325), fiindcă e nume PLUS frază de marketing — aceeași constatare care a cerut migrarea
+    049. Deci trei produse reale ocupau **837** de caractere, iar tăierea la 600 lăsa **2 din 3**
+    id-uri intacte: al treilea era retezat la mijloc.
+
+    Nu era o pierdere de informație, era o CORUPERE. Tăierea oarbă poate secționa un UUID, iar un
+    id pe jumătate arată ca un id — modelul îl pasează unui tool și primim `DataError` pe cast,
+    adică exact defectul pe care R3 îl reparase expunând id-urile. Garda exista
+    (`test_state_block_exposes_full_uuids_without_truncation`), dar rula pe un nume de 46 de
+    caractere din catalogul demo: invariantul pe care îl apăra era deja fals în producție.
+
+    Două schimbări, în ordinea asta:
+
+    * **`display_name`** (capul dinaintea primului ` - `) duce mediana de la 200 la **35** de
+      caractere. Nu e o economie oportunistă: promptul e deja locul unde produsul e numit scurt
+      (axele de comparație, vederile `llm_view` ale substitutelor și ale relațiilor), fiindcă
+      coada e frază de reclamă, nu identitate. Validatorul nu potrivește NUME (preț, link, cifre
+      bare, claim-uri, stoc), deci scurtarea nu poate invalida nimic.
+    * **tăiere pe INTRARE** — o intrare intră întreagă sau nu intră deloc. Degradarea rămâne
+      onestă (lipsesc produse, se vede) în loc să fie coruptă (un id rupt, care nu se vede).
+
+    Abia după astea are sens plafonul de 8: aliniat cu `MAX_DISPLAYED` din starea v2, ca promptul
+    să arate ce ȚINE starea, nu o a doua limită, mai strânsă, pe care nimeni n-o mai citește.
+
+    ## De ce 1200 și nu „cât mai mult"
+
+    `max_chars` e bugetul ACESTUI bloc, nu al promptului: un singur paragraf, vecin cu transcriptul
+    (1200), rezumatul, profilul (300) și `memory_block` (500). La ~4 caractere pe token, blocul
+    plin costă ~300 de tokeni pe tur, și e dinamic, deci nu atinge prefixul cacheabil (NX-275).
+
+    Cifra nu e rotunjită din intuiție, e pragul la care bugetul ÎNCETEAZĂ să lege. Măsurat pe cele
+    2.019 produse cu pas: `display_name` are mediana 37, p90 53, p99 69, **max 83**. În cazul cel
+    mai rău (cele 8 cele mai lungi nume din catalog) blocul plin are **1.133** de caractere — deci
+    la 1000 pierdeam 2 din 8 produse, iar peste 1200 nu se mai schimbă nimic, fiindcă limita
+    devine `MAX_DISPLAYED`.
+
+    Asta e și regula: **bugetul de caractere e o plasă, nu o politică.** Câte produse ține memoria
+    e o decizie luată o dată, în `MAX_DISPLAYED` (unde e păzită de CHECK-ul de 8KB din 003). Un
+    plafon de caractere care taie înaintea ei ar fi a doua politică, ascunsă, pe care nimeni n-o
+    citește când se întreabă „de ce nu-și amintește al patrulea produs".
+    """
+    from src.catalog.render_text import display_name  # noqa: PLC0415 — evită cuplaj la import
+
     lines: list[str] = []
-    if state.displayed_products:
-        shown = "; ".join(
-            f"[{p.product_id}] {p.name} ({amount_text(p.price, language)} lei)"
-            for p in state.displayed_products[:max_products]
-        )
-        lines.append(
-            "Produse arătate recent (folosește id-ul din [] pt detalii/comparație/checkout): "
-            + shown
-        )
+
+    constraints_line = ""
     if include_constraints and state.constraints:
         cons = "; ".join(
             f"{k}: {v}" for k, v in state.constraints.items() if v not in (None, "", [], {})
         )
         if cons:
-            lines.append(f"Constrângeri știute: {cons}")
-    return "\n".join(lines)[:max_chars]
+            constraints_line = f"Constrângeri știute: {cons}"[:_CONSTRAINTS_BUDGET]
+
+    # Constrângerile se rezervă întâi: sunt scurte și mărginite, iar produsele sunt cele care pot
+    # umple orice buget. Invers, un set mare de produse ar împinge afară o constrângere de buget.
+    budget = max_chars - (len(constraints_line) + 1 if constraints_line else 0) - len(_SHOWN_PREFIX)
+    entries: list[str] = []
+    used = 0
+    for p in state.displayed_products[:max_products]:
+        entry = f"[{p.product_id}] {display_name(p.name)} ({amount_text(p.price, language)} lei)"
+        cost = len(entry) + (2 if entries else 0)  # "; " între intrări
+        if used + cost > budget:
+            break
+        entries.append(entry)
+        used += cost
+    if entries:
+        lines.append(_SHOWN_PREFIX + "; ".join(entries))
+    if constraints_line:
+        lines.append(constraints_line)
+    return "\n".join(lines)
 
 
 def page_context_block(ctx: TurnContext, *, max_chars: int = 300) -> str:
