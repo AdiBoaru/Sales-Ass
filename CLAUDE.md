@@ -328,6 +328,41 @@ determinist (P6). Producția rămâne OFF până la GO-ul NX-246. Detalii:
 [`docs/NX-239-SINGLE-BRAIN.md`](docs/NX-239-SINGLE-BRAIN.md); drive:
 `python scripts/sim/single_brain_drive.py`.
 
+**Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
+Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
+`analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi
+„sincer nu stiu tu ce mi recomanzi?", iar modelul a scris de DOUĂ ORI o recomandare motivată („Aș
+începe cu o mască hidratantă, fiindcă…"; „aș alege Kundal Macadamia Hair Serum, 80 lei, fără
+clătire…"). Clientul n-a văzut niciuna: a primit fallback-ul determinist. Trei defecte care se
+compun.
+(1) **Registrul de evidence se construia DUPĂ bucla de tool-calling**, iar planul se cerea ÎN
+timpul ei — deci la primul apel modelul nu văzuse niciun `evidence_id`, deși instrucțiunile îi cer
+să citeze „evidence_ids din evidence-ul serverului". Le inventa (`search-1`,
+`search:<product_id>`): **6 din 6, 100%**, deci `unknown_evidence` era garantat pe ORICE tur cu
+produse, iar reparația nu era o plasă, ci o taxă (3 runde de model, 32-82 s e2e). Rândurile se
+atașează acum la rezultatul fiecărui tool care aduce produse, construite de ACELAȘI
+`build_answer_plan_context` care validează. Calea v1 nu avea defectul (`_plan_prompt` le pune de la
+primul apel) — creierul unic l-a introdus, iar flagul l-a făcut vizibil.
+(2) **`missing_product_evidence` cerea un ritual nedeclarat.** Validatorul pretindea pe fiecare
+produs exact un rând `kind == "identity"` ȘI unul `kind == "variant"`; reparația cita `:url` +
+`:price`, adică dovezile care chiar susțin recomandarea, și pica după ce citase corect. Dovedirea
+e acum pe APARTENENȚĂ (rândurile sunt construite de server din catalogul viu, deci `:price`
+dovedește existența exact cât `:identity`, al cărui `value` e chiar product_id-ul), iar regula e
+SPUSĂ în prompt. Poarta rămâne închisă pe id inventat, pe variantă numită fără dovadă a ei și pe
+rândul ALTUI produs — ultimul era o gaură latentă: fără `continue`, o dovadă străină de tip
+`identity` bifa `has_identity` pe un produs pe care nu-l atingea.
+(3) **Textul numea 3 produse, ecranul arăta 6.** `_deterministic_reply` taie la 3, iar
+`_serve_exhausted` atașa `run.retrieved[:6]`: două plafoane independente peste aceeași listă nu pot
+rămâne de acord. `grounded_fallback_reply` întoarce acum ȘI produsele pe care textul le numește.
+Nimic din aval nu putea prinde nimic din toate astea: produsele și prețurile erau REALE, deci
+validatorul (stagiul 8) și `grounding_guard` le-au lăsat să treacă — sunt porți de **ADEVĂR**, nu
+de **POTRIVIRE**. Regresii: `tests/test_brain_evidence_contract.py` (verificat că pică pe codul
+vechi: id-urile arătate trebuie să fie EXACT cele acceptate, nu doar „există un bloc").
+**Rămâne deschis, deliberat:** pe aceeași conversație, locul 1 la „păr uscat după duș" a fost un
+PROSOP, fiindcă `concerns` s-a rezolvat `not_in_vocabulary` (filtrul n-a rulat) iar numele
+produsului conține literal fraza. Fațeta `product_type` l-ar exclude, dar e `enforce_ready: false`
+— dreptul de a exclude cere auditul de precizie NX-268/271, nu o decizie luată în trecere (D15).
+
 **NX-251 — autoritatea faptelor + triajul iese de pe drumul sincron (DARK, flag OFF).**
 NX-239 rezolvase doar jumătatea de SCRIERE a lui D1: nano nu mai era writer, dar APELUL rămânea —
 fiecare tur plătea o clasificare care primea contextul complet, după care ACELEAȘI blocuri plecau

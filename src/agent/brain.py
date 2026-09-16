@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -84,6 +85,10 @@ MAX_REPAIRS = 1
 #: crește cu catalogul ar transforma reparația într-un al doilea apel scump.
 MAX_REPAIR_EVIDENCE = 24
 
+#: Câte rânduri de evidence se atașează la UN rezultat de tool. Bugetul stă în cod (P4), la fel ca
+#: la repair: blocul însoțește fiecare apel, deci un plafon lipsă l-ar înmulți cu numărul de runde.
+MAX_TOOL_EVIDENCE = 32
+
 #: Instrucțiunile V2, versionate (BRAIN_PROMPT_VERSION). Se ADAUGĂ system-ului generat din DB
 #: (P9) — nu îl înlocuiesc. Fără nume de provider de retrieval, fără model hardcodat.
 _PLAN_V2_SYSTEM = """
@@ -96,6 +101,9 @@ REGULI DE PLAN (AnswerPlanV2, schema_version=2):
 - `claims`/`recommendations`: FIECARE afirmație factuală sau motiv de recomandare are evidence_ids
   din evidence-ul serverului. Motive CONCRETE (proprietate/review/fapt legat de nevoia clientului),
   zero motive generice. `need_ids` DOAR din nevoile date.
+- `evidence_ids` se COPIAZĂ din blocurile EVIDENCE primite după rezultatele tool-urilor, exact cum
+  sunt scrise. Nu construi id-uri după un tipar ghicit. Fiecare produs din `selected_products` are
+  cel puțin un id AL LUI; dacă numești o variantă, adaugă și un id legat de acea variantă.
 - UNKNOWN nu e MISMATCH: ce nu poți verifica intră în `unknowns`, nu se inventează.
 - Constrângerile HARD nu se relaxează NICIODATĂ, iar `relaxations` poate conține doar preferințe
   soft.
@@ -287,7 +295,12 @@ def _serve_exhausted(ctx: TurnContext, run: ToolRun) -> None:
     se contrazice singur."""
     grounded = grounded_fallback_reply(run.retrieved)
     if grounded is not None:
-        ctx.set_reply(grounded, products=list(run.retrieved[:6]), cacheable=False)
+        # Cardurile sunt EXACT produsele pe care le numește textul. Înainte, textul enumera 3
+        # (`_deterministic_reply`) iar aici se atașau 6: clientul vedea șase carduri și o listă de
+        # trei nume care nu explica de ce apar celelalte trei. Două plafoane independente peste
+        # aceeași listă nu pot rămâne de acord, așa că acum există unul singur.
+        text, named = grounded
+        ctx.set_reply(text, products=named, cacheable=False)
         return
     ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
 
@@ -334,19 +347,20 @@ def _draft_grounded_prices(ctx: TurnContext, run: ToolRun, plan: AnswerPlanV2) -
     return base
 
 
-def _evidence_digest(context: AnswerPlanContext, limit: int = MAX_REPAIR_EVIDENCE) -> str:
-    """Evidence-ul deja colectat al turului, ca text scurt pentru repair.
+def _product_key(product: dict[str, Any]) -> str:
+    """Id-ul rândului, sub ambele nume pe care le poartă produsele în drumul lor prin tool-uri."""
+    return str(product.get("id") or product.get("product_id") or "")
 
-    Repair-ul rulează pe `complete_schema`, adică în AFARA conversației în care s-au văzut
-    rezultatele tool-urilor. Fără digestul ăsta i se cerea să citeze `evidence_ids` pe care nu le
-    mai avea în față: singurele planuri reparabile erau cele care nu depindeau de evidence, adică
-    aproape niciunul după o rundă de căutare — deci reparația era decorativă exact acolo unde
-    conta. Îi dăm înapoi strict ce a validat deja serverul (id + tip + produs + valoare), nu
-    payload brut de tool.
+
+def _evidence_block(evidence: Sequence[Any], *, header: str, limit: int) -> str:
+    """Rândurile de evidence ca text, în SINGURUL format pe care îl vede modelul.
+
+    Un singur proprietar al formei, fiindcă sunt două locuri care i-o arată (rezultatul de tool și
+    promptul de repair) și două id-uri scrise diferit ar fi exact defectul pe care îl reparăm.
 
     Trunchierea se DECLARĂ: un digest tăiat în tăcere l-ar face să creadă că restul nu există și
-    ar produce un al doilea plan invalid, din alt motiv."""
-    usable = [item for item in context.evidence if item.current]
+    ar produce un plan invalid, din alt motiv."""
+    usable = [item for item in evidence if item.current]
     rows = [
         f"{item.evidence_id} | {item.kind} | {item.product_id} | {item.value}"
         for item in usable[:limit]
@@ -355,8 +369,23 @@ def _evidence_digest(context: AnswerPlanContext, limit: int = MAX_REPAIR_EVIDENC
         return ""
     hidden = len(usable) - len(rows)
     tail = f"\n(+{hidden} nelistate, folosește doar id-urile de mai sus)" if hidden else ""
-    header = "\nEVIDENCE DISPONIBIL (evidence_id | tip | product_id | valoare):\n"
     return header + "\n".join(rows) + tail
+
+
+def _evidence_digest(context: AnswerPlanContext, limit: int = MAX_REPAIR_EVIDENCE) -> str:
+    """Evidence-ul deja colectat al turului, ca text scurt pentru repair.
+
+    Repair-ul rulează pe `complete_schema`, adică în AFARA conversației în care s-au văzut
+    rezultatele tool-urilor. Fără digestul ăsta i se cerea să citeze `evidence_ids` pe care nu le
+    mai avea în față: singurele planuri reparabile erau cele care nu depindeau de evidence, adică
+    aproape niciunul după o rundă de căutare — deci reparația era decorativă exact acolo unde
+    conta. Îi dăm înapoi strict ce a validat deja serverul (id + tip + produs + valoare), nu
+    payload brut de tool."""
+    return _evidence_block(
+        context.evidence,
+        header="\nEVIDENCE DISPONIBIL (evidence_id | tip | product_id | valoare):\n",
+        limit=limit,
+    )
 
 
 async def _repair_plan(
@@ -705,6 +734,58 @@ class _PortedExecute:
         self.bundles: list[Any] = []
 
     async def __call__(self, name: str, args: dict[str, Any]) -> str:
+        """Rezultatul tool-ului, PLUS id-urile de evidence ale produselor pe care tocmai le-a adus.
+
+        De ce aici: `build_answer_plan_context` rula abia DUPĂ bucla de tool-calling, deci în
+        momentul în care modelului i se cerea planul nu văzuse niciun `evidence_id` — deși
+        instrucțiunile îi cer să citeze „evidence_ids din evidence-ul serverului". Nu avea ce
+        respecta, așa că le inventa (`search-1`, `search:<product_id>`), iar validatorul respingea
+        planul cu `unknown_evidence`. Măsurat în producție: 6 din 6 id-uri emise la primul apel
+        erau inventate, adică FIECARE tur cu produse plătea obligatoriu un repair, iar când și
+        acela rata, clientul primea fallback-ul determinist în loc de recomandare.
+
+        Calea v1 nu avea defectul (`_plan_prompt` pune evidence-ul în promptul de la primul apel);
+        creierul unic l-a introdus. Blocul îl repune pe același traseu, dar acolo unde aparține pe
+        calea structurată: lipit de rezultatul care l-a produs.
+
+        Se atașează DOAR evidence-ul produselor NOI din acest apel: rândurile deja arătate sunt în
+        conversație, iar relistarea lor ar crește cu fiecare rundă exact partea care e plătită de
+        fiecare dată."""
+        before = {_product_key(p) for p in self.run.retrieved}
+        view = await self._dispatch(name, args)
+        return self._with_evidence(view, before)
+
+    def _with_evidence(self, view: str, before: set[str]) -> str:
+        fresh: list[dict[str, Any]] = []
+        seen = set(before)
+        for product in self.run.retrieved:
+            key = _product_key(product)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            fresh.append(product)
+        if not fresh:
+            return view
+        # ACELAȘI constructor ca la validare, deci id-urile arătate sunt exact cele acceptate.
+        # Un al doilea loc care le-ar compune după aceeași regulă ar putea diverge în tăcere.
+        evidence = build_answer_plan_context(
+            business_id=self.ctx.business.id,
+            locale=self.ctx.language,
+            products=fresh,
+        ).evidence
+        block = _evidence_block(
+            evidence,
+            header=(
+                "\nEVIDENCE pentru produsele de mai sus (evidence_id | tip | product_id | valoare)."
+                "\nCitează aceste id-uri în `claims`/`recommendations`: pentru fiecare produs ales,"
+                " cel puțin un id AL LUI; dacă numești o variantă, și un id legat de acea variantă."
+                " Nu inventa id-uri.\n"
+            ),
+            limit=MAX_TOOL_EVIDENCE,
+        )
+        return f"{view}\n{block}" if block else view
+
+    async def _dispatch(self, name: str, args: dict[str, Any]) -> str:
         if name != "search_products":
             return await self.run.execute(name, args)
         # NX-241: căutarea prin port trece prin ACELEAȘI porți ca orice tool — admission (plafon de

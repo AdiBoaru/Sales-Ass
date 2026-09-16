@@ -46,6 +46,32 @@ TurnSnapshot durabil (NX-234)
 - **`BrainInput`** (`worker/context.build_brain_input`): mesaj + obligații + transcript BUGETAT +
   blocuri de context (PII-redactate) + semnale demote-uite + proiecțiile de nevoi
   (active/hard/revocate). Fără conexiune DB, fără istoric nelimitat, fără fapte de frontend.
+- **`evidence_id` se ARATĂ, nu se ghicește.** Rândurile de evidence se atașează la REZULTATUL
+  fiecărui tool care aduce produse (`_PortedExecute.__call__` → `_evidence_block`, plafon
+  `MAX_TOOL_EVIDENCE`), nu doar în promptul de repair. Construcția e a ACELUIAȘI
+  `build_answer_plan_context` care validează, deci id-urile arătate sunt prin construcție cele
+  acceptate. Se listează doar produsele NOI din apel: restul sunt deja în conversație, iar
+  relistarea lor ar crește cu fiecare rundă exact partea plătită de fiecare dată.
+
+  **De ce e un contract, nu o optimizare de prompt** (defect măsurat în producție pe `sole-ro`,
+  2026-09-16): registrul se construia abia DUPĂ bucla de tool-calling, deci la momentul în care i
+  se cerea planul modelul nu văzuse niciun id, deși instrucțiunile îi cer să citeze „evidence_ids
+  din evidence-ul serverului". Le inventa (`search-1`, `search:<product_id>`) — **6 din 6 id-uri
+  emise la primul apel, 100%** — iar validatorul respingea planul cu `unknown_evidence`. Fiecare
+  tur cu produse plătea obligatoriu un repair (3 runde de model, 32-82 s e2e), iar când și acela
+  rata, clientul primea fallback-ul determinist în locul recomandării scrise de model. Calea v1 nu
+  avea defectul (`_plan_prompt` pune evidence-ul în promptul de la primul apel); creierul unic l-a
+  introdus, iar flagul l-a făcut vizibil.
+- **Dovedirea produsului e pe APARTENENȚĂ, nu pe tipul rândului** (`validate_answer_plan`): orice
+  rând de evidence al produsului îi dovedește existența, fiindcă rândurile sunt construite de
+  server din catalogul viu, nu afirmate de model. A cere EXACT `kind == "identity"` era un ritual
+  de formă pe care modelul nu-l putea deduce — nici promptul, nici codul de eroare nu-l numeau —
+  iar `product:<id>:identity` are ca `value` chiar product_id-ul, deci nu susține nimic în plus
+  față de `:price` sau `:url`. În producție, reparația cita dovezile RELEVANTE (prețul și linkul
+  produsului recomandat) și pica cu `missing_product_evidence` după ce citase corect. Varianta se
+  dovedește la fel, dar strict: doar un rând LEGAT de exact varianta aleasă. Poarta rămâne închisă
+  pe id inventat, pe rând al ALTUI produs (care acum nu mai dovedește nimic, indiferent de tip) și
+  pe variantă numită fără dovadă a ei.
 
 ## Cine mai scrie ce (single writer)
 
