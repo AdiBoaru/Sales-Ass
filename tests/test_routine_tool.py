@@ -48,9 +48,12 @@ CATALOG = {
 }
 
 
-def _ctx(*, families: dict | None = None) -> TurnContext:
+def _ctx(*, families: dict | None = None, **extra: object) -> TurnContext:
     business = BusinessConfig(id="b", slug="s", name="n", vertical="beauty")
-    spec = build_spec({**RAW, "families": families} if families else RAW)
+    raw = {**RAW, **extra}
+    if families:
+        raw["families"] = families
+    spec = build_spec(raw)
     business.domain_pack = DomainPack(vertical="beauty_salon", routine_steps=spec)
     return TurnContext(
         turn_id="t",
@@ -278,6 +281,123 @@ async def test_bugetul_cere_si_candidatii_ieftini_din_catalog(_catalog):
 
     await _run(_ctx())
     assert _catalog["include_cheapest"] is False  # fără buget, pool-ul rămâne cel de dinainte
+
+
+# ── Lungimea rutinei: o consecință a bugetului, nu o constantă ───────────────────────────────────
+#
+# Pașii unei familii erau ceruți TOȚI, mereu, iar un buget prea mic producea „nu se poate" cu o
+# cifră care era artefactul insistenței pe lungimea maximă. Măsurat pe `sole-ro`: rutina de față
+# pentru ten uscat cerea 375 lei pe șase pași, iar patru costă 165 — deci „rutină sub 200" ERA
+# posibilă. Ordinea în care pașii cedează vine din pachet, derivată din conținutul tenantului
+# (`scripts/derive_routine_priority.py`), niciodată din ordinea de APLICARE.
+
+#: Ordinea de sacrificiu pentru familia de test: tonifierea cedează prima, curățarea ultima.
+#: Deliberat DIFERITĂ de ordinea de aplicare (curatare, tonifiere, tratament, hidratare), ca un
+#: test care trece să nu poată trece din întâmplare.
+_PRIORITY = {"fata": {"default": ["curatare", "hidratare", "tratament", "tonifiere"]}}
+
+
+async def test_bugetul_scurteaza_rutina_in_ordinea_declarata():
+    """Podeaua e 200, bugetul 150. Cu prioritate declarată, rutina se scurtează în loc să refuze.
+
+    Cade tonifierea (30) → 170, apoi tratamentul (90) → 80. Re-adăugarea readuce tonifierea (110
+    încape), tratamentul nu (170 n-ar încăpea). Deci: trei pași, nu un refuz."""
+    result = await _run(_ctx(priority=_PRIORITY), budget_max=150)
+
+    assert result.ok
+    steps = [line.split("—")[0].strip() for line in result.llm_view.splitlines()[1:5]]
+    assert "3. tratament — LIPSĂ (budget)" in result.llm_view
+    assert steps  # sanity: vederea are pași numerotați
+    assert sum(CATALOG[p["id"]][1] for p in result.products) <= 150
+    assert "Am scurtat rutina ca să încapă în buget" in result.llm_view
+    assert "tratament (+90,00 lei)" in result.llm_view
+
+
+async def test_fara_prioritate_declarata_nu_se_scurteaza_nimic():
+    """Kill-switch prin DATE, nu prin flag: un tenant fără `priority` primește exact
+    comportamentul de dinainte — rutină întreagă la minim, plus cifra minimului.
+
+    A scurta după ordinea de APLICARE ar fi tăiat protecția solară prima, fiindcă e ultimul pas
+    aplicat și aproape primul în importanță. Mai bine niciun scurtat decât unul arbitrar."""
+    result = await _run(_ctx(), budget_max=150)
+
+    assert result.ok
+    assert len(result.products) == 4  # toți pașii familiei
+    assert "Cel mai ieftin se face cu 200,00 lei" in result.llm_view
+    assert "Am scurtat" not in result.llm_view
+
+
+async def test_re_adaugarea_recupereaza_pasul_care_incape():
+    """Renunțarea în ordine poate tăia mai mult decât trebuie. Măsurat pe `sole-ro`: „rutină de
+    dimineață sub 150" scotea patru pași și lăsa 25 de lei nefolosiți, deși tratamentul costă 10.
+
+    Aici: bugetul 150 lasă loc tonifierii (30) după ce tratamentul (90) a căzut."""
+    result = await _run(_ctx(priority=_PRIORITY), budget_max=150)
+
+    served = {CATALOG[p["id"]][0] for p in result.products}
+    assert "fata:tonifiere" in served
+    assert "fata:tratament" not in served
+
+
+async def test_pasul_mai_esential_nu_cedeaza_inaintea_unuia_mai_putin_esential():
+    """Garda împotriva sfatului prost. Cu prioritatea de dimineață a lui `sole-ro`, protecția
+    solară e a DOUA, deci un buget strâns taie hidratarea și tratamentul, nu SPF-ul.
+
+    Ordonarea pe frecvență GLOBALĂ ar fi dat exact invers: pe toate secvențele la un loc protecția
+    apare în 44,2%, sub tonifiere (51,2%), deci ar fi căzut prima. Aceleași date, separate pe
+    momente, spun 97,3% dimineața."""
+    priority = {
+        "fata": {
+            "default": ["curatare", "hidratare", "tratament", "tonifiere"],
+            # `tonifiere` joacă rolul pasului legat de moment (SPF-ul catalogului real): al doilea
+            # în importanță dimineața, deci trebuie să SUPRAVIEȚUIASCĂ tăierii.
+            "am": ["curatare", "tonifiere", "hidratare", "tratament"],
+        }
+    }
+    ctx = _ctx(
+        priority=priority,
+        time_markers={"am": ["dimineata"], "pm": ["seara"]},
+    )
+    result = await _run(ctx, budget_max=120, moment="am")
+
+    served = {CATALOG[p["id"]][0] for p in result.products}
+    assert "fata:tonifiere" in served, "pasul al doilea în importanță a fost tăiat"
+    assert sum(CATALOG[p["id"]][1] for p in result.products) <= 120
+
+
+# ── Momentul zilei: un pas care nu se aplică nu e un gol ─────────────────────────────────────────
+
+
+async def test_pasul_din_alt_moment_nu_apare_ca_lipsa():
+    """O rutină de seară nu «ratează» protecția solară. `UNKNOWN ≠ MISMATCH`, aplicat la timp: un
+    pas care nu se aplică iese din secvență, cu poziții RENUMEROTATE consecutiv, și se declară
+    separat — altfel modelul l-ar putea adăuga singur ca să pară rutina completă."""
+    ctx = _ctx(
+        priority=_PRIORITY,
+        time_markers={"am": ["dimineata"], "pm": ["seara"]},
+        step_time={"tonifiere": "am"},
+    )
+    result = await _run(ctx, moment="pm")
+
+    assert result.ok
+    assert "tonifiere" not in [CATALOG[p["id"]][0].partition(":")[2] for p in result.products]
+    assert "LIPSĂ" not in result.llm_view
+    assert "NU se aplică în momentul cerut, deci nu lipsesc: tonifiere" in result.llm_view
+    # Pozițiile rămân consecutive: „pasul 3" din conversație trebuie să însemne ceva la turul
+    # următor, iar o filtrare de după compunere ar fi lăsat 1, 3, 4.
+    assert "1. curatare" in result.llm_view
+    assert "2. tratament" in result.llm_view
+    assert "3. hidratare" in result.llm_view
+
+
+async def test_momentul_necunoscut_se_ignora_nu_respinge_turul():
+    """Un moment care nu e în `time_markers` e un rafinament nereușit, nu o constrângere ratată: se
+    cade pe ordinea de zi întreagă. Un 422 aici ar pierde turul pentru un cuvânt în plus."""
+    result = await _run(_ctx(priority=_PRIORITY), moment="la_pranz")
+
+    assert result.ok
+    assert len(result.products) == 4
+    assert "momentul" not in result.llm_view
 
 
 # ── Degradare onestă ────────────────────────────────────────────────────────────────────────────

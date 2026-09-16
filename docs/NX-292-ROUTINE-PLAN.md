@@ -315,6 +315,91 @@ catalog"): un termen brut care ajunge la query e acum o regresie roșie. Aceeaș
 migrarea 046 și la `TypedFacet.aliases` — un strat care „traduce" și e ocolit de un apelant nu dă
 eroare, dă zero rezultate.
 
+## 10.2 Lungimea rutinei e o consecință a bugetului, nu o constantă
+
+Prima versiune cerea TOȚI pașii declarați ai familiei, mereu. Pe `sole-ro` asta însemna șase, iar
+consecința era măsurabilă în lei: „rutină pentru ten uscat sub 200" primea «minimul e 375», deși
+patru pași costă 165. Cifra era reală și totuși răspunsul era fals — un fals produs de insistența
+NOASTRĂ pe lungimea maximă, nu de catalog. Un „nu se poate" închide vânzarea mai sigur decât o
+recomandare slabă.
+
+### Ce spune conținutul clientului despre lungime
+
+Măsurat pe `aura.routine_integration`, secțiunea în care sursa descrie per produs o secvență
+numerotată explicită («Ordinea tipică: 1. … 2. … 3. …»). Există pe 2.533 de produse și **fiecare**
+conține o secvență. Pe familia `fata`, 1.182 de secvențe:
+
+| Pași distincți per rutină descrisă | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|
+| Cât de des | 21,2% | **30,9%** | 22,5% | **6,5%** |
+
+Deci propriul conținut al magazinului descrie rutine de 3-5 pași. Rutina de șase, pe care o
+serveam ca standard, apare în 6,5% din cazuri. Lungimea nu e nici 6, nici 4: **variază**.
+
+### Ordinea de sacrificiu, derivată, per moment al zilei
+
+Lungimea o decide bugetul, dar CINE cedează cere un semnal de esențialitate. Frecvența cu care un
+pas apare în rutinele descrise de magazin e afirmația lui despre cât e indispensabil pasul:
+
+| Pas | Global | doar dimineața (n=256) | doar seara (n=84) |
+|---|---|---|---|
+| curățare | 96,4% | **100,0%** | **95,2%** |
+| hidratare | 74,1% | 84,8% | 57,1% |
+| tratament | 72,5% | 67,6% | **75,0%** |
+| tonifiere | 51,2% | 48,8% | 38,1% |
+| protecție | 44,2% | **97,3%** | 10,7% |
+| esență | 28,5% | 25,0% | 32,1% |
+
+**Cohorta de timp nu e un rafinament, e condiția corectitudinii.** Pe medie, protecția solară
+(44,2%) pare mai puțin esențială decât tonicul (51,2%), deci o ordine derivată din medie ar tăia
+SPF-ul înaintea tonicului — sfat prost servit cu prețuri reale, pe care validatorul (stagiul 8) și
+`grounding_guard` îl lasă să treacă, fiind porți de ADEVĂR, nu de POTRIVIRE. Separat pe cohorte,
+aceleași date spun 97,3% dimineața vs 10,7% seara: protecția nu e opțională, e a dimineții.
+
+Trei ordini, toate derivate cu `scripts/derive_routine_priority.py`, niciuna scrisă de mână:
+
+- `am`: curățare → **protecție** → hidratare → tratament → tonifiere → esență
+- `pm`: curățare → tratament → hidratare → tonifiere → esență → **protecție**
+- `default`: curățare → hidratare → tratament → **protecție** → tonifiere → esență
+
+`default` vine din cohorta `both` (n=386), adică din secvențele care descriu ziua întreagă — exact
+situația clientului care cere „o rutină" fără să spună când. NU din media globală (protecția a
+cincea) și NU din secvențele fără moment declarat (protecția în 4,2%, deci ar cădea PRIMA).
+
+### Algoritmul: podea → scurtare → re-adăugare → urcare
+
+1. **Podeaua** = cel mai ieftin candidat pe fiecare pas (minimul rutinei complete). Se raportează
+   ÎNTOTDEAUNA: e cifra pe care clientul trebuie s-o audă.
+2. **Scurtarea**: se renunță la pași de la coada ordinii de sacrificiu până ce restul încape.
+3. **Re-adăugarea**: renunțarea în ordine poate tăia mai mult decât trebuie. Măsurat: „rutină de
+   dimineață sub 150" scotea patru pași și lăsa **25 de lei nefolosiți**, deși tratamentul costă
+   10. O trecere greedy în ordinea priorității recuperează ce încape. Se face ÎNAINTEA urcării,
+   fiindcă un pas în plus valorează mai mult pentru client decât un produs mai bine cotat pe un pas
+   care există deja.
+4. **Urcarea**: restul bugetului se cheltuie pe candidați mai bine cotați.
+
+**Fără `priority` în pachet, pasul 2 nu rulează** — tenantul primește exact comportamentul de
+dinainte (rutină întreagă la minim, plus cifra). Kill-switch prin DATE, nu prin flag. A scurta după
+ordinea de APLICARE ar tăia protecția solară prima, fiindcă e ultimul pas aplicat și aproape primul
+în importanță.
+
+**Pasul care nu se aplică în momentul cerut nu e un gol.** O rutină de seară nu „ratează" protecția
+solară: pasul iese din secvență înaintea compunerii, pozițiile se renumerotează consecutiv (ca
+„pasul 3" să însemne ceva la turul următor) și se declară separat, ca modelul să nu-l adauge singur
+pentru a părea rutina completă. `UNKNOWN ≠ MISMATCH`, aplicat la timp.
+
+### Măsurat pe catalogul real, același tenant, aceeași nevoie
+
+| Cerere | Pași serviți |
+|---|---|
+| fără buget, fără moment | **6** |
+| buget 200 | **4** (esența și tonicul lăsate deoparte, +210 lei declarați) |
+| buget 120 | **3** |
+| buget 60 | **1** ⇒ nu e o rutină, se spune direct cât costă pasul următor |
+| rutina de seară | **5** (protecția declarată neaplicabilă, nu lipsă) |
+| seara, buget 150 | **3** |
+| dimineața, buget 150 | **3**, și protecția solară e păstrată |
+
 ## 11. Matricea de eșec
 
 | Situație | Ce se întâmplă |
@@ -329,6 +414,10 @@ eroare, dă zero rezultate.
 | Model care rearanjează în proză | `routine_drift` → repair → fallback |
 | Pachet fără `routine_steps` | capabilitatea lipsește, se cade pe `recommend` |
 | Nevoie pe care catalogul nu o cunoaște | niciun filtru pe ea + se spune modelului că n-a rulat (§10.1) |
+| Buget sub rutina completă | se scurtează în ordinea derivată, cu „ce ai lăsat deoparte și cât ar adăuga" (§10.2) |
+| Buget doar pentru un pas | nu se promite o rutină; se spune cât costă pasul următor |
+| Pachet fără `priority` | nu se scurtează nimic, se declară minimul (comportamentul de dinainte) |
+| Pas din alt moment al zilei | iese din secvență, pozițiile se renumerotează, se declară neaplicabil |
 
 ## 12. Out of scope
 

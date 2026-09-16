@@ -412,8 +412,20 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                             "pașii să pornească de la el. Null dacă nu există unul."
                         ),
                     },
+                    # Momentul zilei schimbă și CE pași se aplică, și ORDINEA în care cedează la
+                    # buget: pe catalogul SOLE protecția solară apare în 97,3% din rutinele de
+                    # dimineață și în 10,7% din cele de seară. Enum din pachet, ca `family`: un
+                    # vertical fără momente nu primește parametrul cu valori.
+                    "moment": {
+                        "type": ["string", "null"],
+                        "enum": [],  # completat per tenant; gol ⇒ rămâne doar `null`
+                        "description": (
+                            "Momentul zilei, dacă clientul l-a spus. Null dacă vrea rutina "
+                            "întreagă sau n-a precizat."
+                        ),
+                    },
                 },
-                "required": ["family", "concerns", "budget_max", "anchor_id"],
+                "required": ["family", "concerns", "budget_max", "anchor_id", "moment"],
             },
         },
     },
@@ -460,8 +472,16 @@ def _fill(schema: dict[str, Any], filled: dict[str, str]) -> dict[str, Any]:
 #: iar a doua copie a ei ar fi locul unde a treia ar uita `sorted()` și ar strica prompt caching-ul.
 _TENANT_ENUMS: dict[str, dict[str, str]] = {
     "related_products": {"relation": "relation_kinds"},
-    "routine_plan": {"family": "families"},
+    "routine_plan": {"family": "families", "moment": "moments"},
 }
+
+#: Parametri care DISPAR când tenantul n-a declarat valori, în loc să rămână cu enum gol.
+#:
+#: Distincția e între un parametru fără care tool-ul n-are sens (`family`: fără familii nu se oferă
+#: tool-ul deloc) și un RAFINAMENT (`moment`: o rutină e validă și fără el). Pentru al doilea, un
+#: enum vid ar fi refuzat de furnizor și ar omorî tot tool-ul la un tenant care pur și simplu n-are
+#: momente ale zilei — un service auto n-are dimineață.
+_DROP_PARAM_IF_NO_VALUES: frozenset[tuple[str, str]] = frozenset({("routine_plan", "moment")})
 
 
 def tool_schemas(
@@ -469,6 +489,7 @@ def tool_schemas(
     examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES,
     relation_kinds: tuple[str, ...] = (),
     families: tuple[str, ...] = (),
+    moments: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching).
 
@@ -480,7 +501,7 @@ def tool_schemas(
         "{FEATURE_EXAMPLES}": vocab_examples.clause(examples.features),
     }
     out = [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]
-    values = {"relation_kinds": relation_kinds, "families": families}
+    values = {"relation_kinds": relation_kinds, "families": families, "moments": moments}
     return [_with_tenant_enums(s, values) for s in out]
 
 
@@ -497,13 +518,24 @@ def _with_tenant_enums(
     Enum GOL înseamnă că tenantul n-a declarat nimic; apelantul nu trebuie să ofere tool-ul deloc
     (vezi `turn_profile.select`), iar dacă totuși o face, un enum vid e refuzat de furnizor —
     zgomotos, nu tăcut."""
-    fn = schema.get("function", {})
-    spec = _TENANT_ENUMS.get(str(fn.get("name") or ""))
+    name = str(fn_name) if (fn_name := (fn := schema.get("function", {})).get("name")) else ""
+    spec = _TENANT_ENUMS.get(name)
     if not spec:
         return schema
     props = dict(fn["parameters"]["properties"])
+    required = list(fn["parameters"].get("required") or ())
     for param, key in spec.items():
-        if param in props:
-            props[param] = {**props[param], "enum": sorted(set(values.get(key) or ()))}
-    params = {**fn["parameters"], "properties": props}
+        if param not in props:
+            continue
+        declared = sorted(set(values.get(key) or ()))
+        if not declared and (name, param) in _DROP_PARAM_IF_NO_VALUES:
+            props.pop(param, None)
+            required = [r for r in required if r != param]
+            continue
+        # Un parametru care acceptă `null` trebuie să-l aibă și în enum: `type` permite, dar
+        # `enum` restrânge, iar un `null` absent din enum face invalidă exact valoarea pe care
+        # descrierea o cere („Null dacă n-a precizat").
+        allows_null = "null" in (props[param].get("type") or ())
+        props[param] = {**props[param], "enum": [*declared, *([None] if allows_null else [])]}
+    params = {**fn["parameters"], "properties": props, "required": required}
     return {**schema, "function": {**fn, "parameters": params}}

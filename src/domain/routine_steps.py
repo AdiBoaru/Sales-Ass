@@ -127,6 +127,39 @@ class RoutineSpec:
     #: Amândouă întorc None din `resolve`; diferă în RAPORT, unde contează: o scăpare trebuie
     #: reparată, o ambiguitate declarată e o decizie luată.
     ambiguous: frozenset[str] = field(default_factory=frozenset)
+    #: familie → moment → pașii în ORDINEA DE SACRIFICIU: primul cedează ultimul. OPȚIONAL.
+    #:
+    #: E un al doilea adevăr despre aceiași pași, dar nu o a doua sursă pentru același adevăr:
+    #: `families` spune ordinea de APLICARE (tonicul se pune după spălare, o proprietate fizică),
+    #: asta spune cât e indispensabil pasul. Sunt independente — pe catalogul SOLE, ultimul pas
+    #: aplicat (protecția solară) e al doilea cel mai indispensabil dimineața.
+    #:
+    #: **Ordinea e per MOMENT, și asta e condiția corectitudinii, nu un rafinament.** Aceleași date
+    #: dau ordini diferite: dimineața protecția solară e a doua (97,3% din secvențe), seara e
+    #: ultima (10,7%). O singură ordine, derivată din medie, ar tăia SPF-ul înaintea tonicului.
+    #: Cheia `default` e obligatorie când familia apare; `am`/`pm` sunt opționale și trebuie să fie
+    #: chei din `time_markers`.
+    #:
+    #: Absentă ⇒ nicio rutină nu se scurtează, adică exact comportamentul de dinainte: cu un buget
+    #: prea mic se cer tot toți pașii și se declară minimul. Deci lipsa configurației degradează
+    #: într-un răspuns onest, nu într-unul arbitrar.
+    #:
+    #: NU declară un NUMĂR de pași și nici un set „de bază": lungimea o decide bugetul turului, deci
+    #: se schimbă de la client la client. Se derivă din conținutul tenantului cu
+    #: `scripts/derive_routine_priority.py`, nu se scrie de mână.
+    priority: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
+    #: pas → momentul zilei în care e relevant: o cheie din `time_markers`, sau `both`.
+    #:
+    #: Fără el, o rutină de seară ar cere protecție solară și, negăsind-o potrivită, ar raporta un
+    #: gol — un pas „lipsă" care de fapt nu se aplică. `UNKNOWN ≠ MISMATCH`, aplicat la timp.
+    step_time: dict[str, str] = field(default_factory=dict)
+    #: nume de moment (`am`/`pm`) → marcajele lui în proză. Vocabular de LIMBĂ (P11), folosit de
+    #: derivare ca să separe cohortele. Absent ⇒ nu se derivă cohorte.
+    time_markers: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: pas → tulpini care îl numesc în PROZĂ. Folosit exclusiv de derivare, niciodată pe drumul
+    #: turului. Există fiindcă numele tipurilor de produs s-au dovedit părtinitoare: textul spune
+    #: „serul", pachetul are „ser de fata", iar tratamentul ieșea 18,3% în loc de 72,5%.
+    step_stems: dict[str, tuple[str, ...]] = field(default_factory=dict)
     #: `pas → locale → etichetă afișabilă`. OPȚIONAL: fără el, eticheta e cheia humanizată.
     #:
     #: Cheile sunt fără diacritice (se potrivesc cu ce scrie clientul, P11), dar ce vede clientul
@@ -161,6 +194,33 @@ class RoutineSpec:
     def family_of(self, value: str) -> str | None:
         fam = value.partition(SEP)[0]
         return fam if fam in self.families else None
+
+    def sacrifice_order(self, family: str, moment: str | None = None) -> tuple[str, ...]:
+        """Pașii familiei, de la cel mai indispensabil la cel care cedează primul.
+
+        Gol când tenantul n-a declarat prioritate. Apelantul TREBUIE să trateze golul ca „nu
+        scurta", nu să inventeze o ordine din `families`: ordinea de aplicare n-are nicio legătură
+        cu esențialitatea, iar folosită ca substitut ar tăia exact pasul de protecție solară, care e
+        ultimul aplicat și aproape primul în importanță.
+
+        Momentul necunoscut cade pe `default`, nu pe prima cheie care se nimerește: `default` e
+        derivat din secvențele care descriu ZIUA ÎNTREAGĂ, deci e ordinea potrivită pentru un
+        client care cere „o rutină" fără să spună când."""
+        by_moment = self.priority.get(family) or {}
+        if moment and (order := by_moment.get(moment)):
+            return order
+        return by_moment.get("default", ())
+
+    def applies_at(self, step: str, moment: str | None) -> bool:
+        """Pasul e relevant în momentul cerut? Necunoscut sau nedeclarat ⇒ da.
+
+        Asimetria e deliberată: un pas fără declarație de timp rămâne în rutină (P6 — mai bine un
+        pas în plus decât o rutină de dimineață fără protecție solară fiindcă cineva a uitat o
+        cheie de config)."""
+        if not moment:
+            return True
+        declared = self.step_time.get(step)
+        return declared in (None, "", "both", moment)
 
 
 def build_spec(raw: Any) -> RoutineSpec:
@@ -254,6 +314,82 @@ def build_spec(raw: Any) -> RoutineSpec:
             raise RoutineStepConfigError(f"labels[{step!r}] trebuie să fie `locale → text`")
         labels[step] = {k: v.strip() for k, v in by_locale.items()}
 
+    # Prioritatea trebuie să fie o PERMUTARE a pașilor familiei, nu o submulțime: o listă parțială
+    # ar lăsa pași fără loc în ordinea de sacrificiu, iar compunerea ar trebui să ghicească unde
+    # intră — adică exact decizia pe care config-ul pretinde că a luat-o.
+    time_markers: dict[str, tuple[str, ...]] = {}
+    raw_markers = raw.get("time_markers") or {}
+    if not isinstance(raw_markers, dict):
+        raise RoutineStepConfigError("routine_steps.time_markers trebuie să fie obiect")
+    for moment, terms in raw_markers.items():
+        if not isinstance(moment, str) or not moment or moment == "both":
+            raise RoutineStepConfigError(f"nume de moment invalid: {moment!r} («both» e rezervat)")
+        if not isinstance(terms, list) or not all(isinstance(t, str) and t.strip() for t in terms):
+            raise RoutineStepConfigError(f"time_markers[{moment!r}] trebuie să fie listă de texte")
+        time_markers[moment] = tuple(t.strip() for t in terms)
+
+    step_time: dict[str, str] = {}
+    raw_step_time = raw.get("step_time") or {}
+    if not isinstance(raw_step_time, dict):
+        raise RoutineStepConfigError("routine_steps.step_time trebuie să fie obiect")
+    for step, moment in raw_step_time.items():
+        if step not in all_steps:
+            raise RoutineStepConfigError(f"step_time[{step!r}] nu e un pas declarat")
+        if moment != "both" and moment not in time_markers:
+            # Fail-closed: un moment nedeclarat ar face `applies_at` să respingă pasul în TOATE
+            # momentele, deci pasul ar dispărea din orice rutină cerută pe un moment anume.
+            raise RoutineStepConfigError(
+                f"step_time[{step!r}] = {moment!r}, care nu e în time_markers "
+                f"({sorted(time_markers)}) și nu e «both»"
+            )
+        step_time[step] = moment
+
+    # Prioritatea trebuie să fie o PERMUTARE a pașilor familiei, nu o submulțime: o listă parțială
+    # ar lăsa pași fără loc în ordinea de sacrificiu, iar compunerea ar trebui să ghicească unde
+    # intră — adică exact decizia pe care config-ul pretinde că a luat-o.
+    priority: dict[str, dict[str, tuple[str, ...]]] = {}
+    raw_priority = raw.get("priority") or {}
+    if not isinstance(raw_priority, dict):
+        raise RoutineStepConfigError("routine_steps.priority trebuie să fie obiect")
+    for fam, by_moment in raw_priority.items():
+        if fam not in families:
+            raise RoutineStepConfigError(f"priority[{fam!r}] nu e o familie declarată")
+        if not isinstance(by_moment, dict) or not by_moment:
+            raise RoutineStepConfigError(
+                f"priority[{fam!r}] trebuie să fie `moment → listă de pași` (cel puțin `default`)"
+            )
+        if "default" not in by_moment:
+            # Fără `default`, un tur fără moment declarat n-ar avea ordine, deci n-ar putea
+            # scurta — iar tenantul ar crede că a configurat scurtarea.
+            raise RoutineStepConfigError(f"priority[{fam!r}] n-are cheia obligatorie `default`")
+        orders: dict[str, tuple[str, ...]] = {}
+        for moment, order in by_moment.items():
+            if moment != "default" and moment not in time_markers:
+                raise RoutineStepConfigError(
+                    f"priority[{fam!r}][{moment!r}]: momentul nu e în time_markers "
+                    f"({sorted(time_markers)}) și nu e `default`"
+                )
+            if not isinstance(order, list) or not all(isinstance(s, str) for s in order):
+                raise RoutineStepConfigError(f"priority[{fam!r}][{moment!r}] nu e listă de pași")
+            if sorted(order) != sorted(families[fam]):
+                raise RoutineStepConfigError(
+                    f"priority[{fam!r}][{moment!r}] = {order!r} nu e o permutare a pașilor "
+                    f"familiei ({list(families[fam])!r}) — o ordine parțială ar lăsa pași fără loc"
+                )
+            orders[moment] = tuple(order)
+        priority[fam] = orders
+
+    step_stems: dict[str, tuple[str, ...]] = {}
+    raw_stems = raw.get("step_stems") or {}
+    if not isinstance(raw_stems, dict):
+        raise RoutineStepConfigError("routine_steps.step_stems trebuie să fie obiect")
+    for step, terms in raw_stems.items():
+        if step not in all_steps:
+            raise RoutineStepConfigError(f"step_stems[{step!r}] nu e un pas declarat")
+        if not isinstance(terms, list) or not all(isinstance(t, str) and t.strip() for t in terms):
+            raise RoutineStepConfigError(f"step_stems[{step!r}] trebuie să fie listă de texte")
+        step_stems[step] = tuple(t.strip() for t in terms)
+
     return RoutineSpec(
         families=families,
         by_product_type=by_product_type,
@@ -261,6 +397,10 @@ def build_spec(raw: Any) -> RoutineSpec:
         not_a_step=buckets["not_a_step"],
         ambiguous=buckets["ambiguous"],
         labels=labels,
+        priority=priority,
+        step_time=step_time,
+        time_markers=time_markers,
+        step_stems=step_stems,
     )
 
 
