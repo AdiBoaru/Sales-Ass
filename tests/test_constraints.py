@@ -159,3 +159,72 @@ async def test_order_route_does_not_touch_stack():
     # ruta ORDER nu atinge stiva (rămâne cum era) și nu emite constraints_merged
     assert ctx.state.search_constraints == {"budget_max": 150, "category_key": "seruri"}
     assert not any(e.type == "constraints_merged" for e in ctx.events)
+
+
+# --- al doilea declanșator de reset: schimbarea de RAFT (incident 2026-09-16) --
+
+
+def test_topic_switch_resets_stack_without_any_category_key():
+    """Incidentul, în forma lui pură: stiva stă pe machiaj (un ruj), clientul cere produse de păr,
+    iar triajul NU dă nicio categorie (turul vine după o clarificare, deci triajul nici nu rulează).
+    Fără al doilea declanșator, `brand` pleca mai departe în promptul de căutare."""
+    stored = {"brand": "MUZIGAE", "concerns": ["ruj mat"], "category_key": "machiaj-buze"}
+    merged, reset = merge_constraints(stored, {}, None, switched_topic=True)
+    assert reset is True
+    assert merged == {}  # stiva cade INTEGRAL, inclusiv ancora de categorie
+
+
+def test_topic_switch_keeps_what_the_current_turn_declares():
+    """Resetul șterge ISTORIA, nu turul curent: ce spune clientul ACUM rămâne."""
+    stored = {"brand": "MUZIGAE", "category_key": "machiaj-buze"}
+    merged, reset = merge_constraints(stored, {"budget_max": 100}, None, switched_topic=True)
+    assert reset is True and merged == {"budget_max": 100}
+
+
+def test_no_topic_switch_is_byte_identical_to_before():
+    """Kill-switch-ul stins (sau raft nenumit) ⇒ exact comportamentul de dinainte."""
+    stored = {"brand": "MUZIGAE", "category_key": "machiaj-buze"}
+    assert merge_constraints(stored, {}, None, switched_topic=False) == merge_constraints(
+        stored, {}, None
+    )
+
+
+async def test_brand_from_another_shelf_no_longer_reaches_the_prompt(monkeypatch):
+    """Capătul lanțului, pe pipeline: cu stiva pe machiaj și mesajul „vreau sa vad produse de par",
+    hint-ul nu mai poate ordona modelului `brand: MUZIGAE`.
+
+    Asta e fraza care a produs `search_products(brand="MUZIGAE", category="ingrijirea parului")`
+    și, două tururi mai târziu, patru carduri de fard de obraz la o cerere de păr."""
+    from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
+
+    async def _vocab(deps, business_id):
+        return CatalogVocabulary(
+            business_id=business_id,
+            dimensions={
+                "category": (
+                    VocabEntry(key="par", label="Par", count=234, path="par"),
+                    VocabEntry(key="machiaj", label="Machiaj", count=681, path="machiaj"),
+                    VocabEntry(key="machiaj-buze", label="Buze", count=298, path="machiaj/buze"),
+                )
+            },
+        )
+
+    monkeypatch.setattr(agent_mod, "get_vocabulary", _vocab)
+    state = ConversationState(
+        search_constraints={
+            "brand": "MUZIGAE",
+            "concerns": ["ruj mat"],
+            "category_key": "machiaj-buze",
+        }
+    )
+    ctx = _ctx(state=state, filters={}, category_key=None, body="vreau sa vad produse de par")
+    llm = _CaptureLLM()
+    await agent_stage(ctx, PipelineDeps(conn=object(), redis=None, llm=llm))
+
+    assert llm.user is not None
+    assert "MUZIGAE" not in llm.user and "ruj mat" not in llm.user
+    assert ctx.state.search_constraints == {}
+    ev = [e for e in ctx.events if e.type == "topic_switch_reset"]
+    assert ev and ev[0].properties["from_root"] == "machiaj"
+    assert ev[0].properties["to_roots"] == ["par"]
+    assert set(ev[0].properties["dropped"]) == {"brand", "concerns"}

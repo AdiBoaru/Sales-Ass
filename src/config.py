@@ -872,6 +872,15 @@ class Settings(BaseSettings):
     refinement_guard_enabled: bool = Field(
         default=True, validation_alias="REFINEMENT_GUARD_ENABLED"
     )
+    # Al doilea declanșator de reset al stivei de constrângeri: clientul NUMEȘTE alt raft de
+    # catalog („vreau sa vad produse de par" după o discuție despre un ruj). Primul declanșator —
+    # `category_key` din triaj — nu se putea aprinde pe turul care contează: triajul nu rulează
+    # după o clarificare, iar pe restul turelor nu produce o categorie (măsurat pe SOLE: 11/15
+    # NULL). Raftul se citește din arborele de catalog, nu dintr-o listă de cuvinte. OFF → doar
+    # declanșatorul vechi, byte-identic.
+    topic_switch_reset_enabled: bool = Field(
+        default=True, validation_alias="TOPIC_SWITCH_RESET_ENABLED"
+    )
     # NX-280: o rutină afirmată cere DOVADA unei secvențe (doi pași DISTINCȚI din aceeași familie,
     # din `attributes.routine_step`), nu doar ≥2 produse. Pragul de cardinalitate lăsa să treacă
     # „rutine" din două rujuri cu prețuri reale, fiindcă validatorul și `grounding_guard` sunt porți

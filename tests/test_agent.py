@@ -268,7 +268,7 @@ async def test_finalize_rich_notes_reach_user():
     out = await finalize_mod._finalize_rich(
         _CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "", notes="fără chips de coș"
     )
-    assert out is None  # excepție la apel → fallback pe proză (comportament existent)
+    assert out.reply is None  # excepție la apel → fallback pe proză (comportament existent)
     assert "NB: fără chips de coș" in captured[0]
 
     await finalize_mod._finalize_rich(_CapSchemaLLM(), "sys", "vreau o cremă", PRODUCTS, ctx, "")

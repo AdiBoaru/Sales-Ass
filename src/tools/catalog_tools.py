@@ -543,6 +543,11 @@ class _ResolvedTerms:
     flat_facet_keys: list[str]
     unresolved: list[str]
     emitted: list[Resolution]
+    #: Verdictul pe CATEGORIE, păstrat întreg (nu doar cheile). „N-am putut judeca" (vocabular
+    #: indisponibil → `unknown_dimension`) și „am judecat, nu există" (`not_in_vocabulary`) produc
+    #: amândouă zero chei, dar cer reacții OPUSE: prima e o degradare a noastră și nu are voie să
+    #: schimbe nimic pentru client, a doua e o eroare de argument a modelului.
+    category: Resolution | None = None
 
 
 def _resolve_search_terms(
@@ -584,10 +589,12 @@ def _resolve_search_terms(
     emitted: list[Resolution] = []
 
     category_keys: tuple[str, ...] = ()
+    category_verdict: Resolution | None = None
     if a.category:
         r = resolve(vocab, a.category, CATEGORY_DIMENSION)
         emitted.append(r)
         category_keys = r.constraint_keys
+        category_verdict = r
 
     facet_filters: dict[str, list[str]] = {}
     unresolved: list[str] = []
@@ -610,6 +617,7 @@ def _resolve_search_terms(
         flat_facet_keys=flat,
         unresolved=sorted(dict.fromkeys(unresolved)),
         emitted=emitted,
+        category=category_verdict,
     )
 
 
@@ -1439,28 +1447,69 @@ async def search_products_tool(
     category_dropped = bool(category_keys) and (
         winning_step is not None and winning_step.get("category") is None
     )
+    # …dar exact aici garda acoperea mulțimea VIDĂ, iar asta nu se vedea din cod: singurele
+    # trepte care pun `category: None` sunt gated pe `not search_category_hard_enabled`, iar
+    # flagul e `True` implicit. Deci cu categorie REZOLVATĂ nu se relaxează niciodată (al doilea
+    # conjunct fals), iar cu categorie NEREZOLVATĂ `category_keys` e gol (primul conjunct fals).
+    # Măsurat pe tenantul SOLE: `offcategory_suppressed` = 0 declanșări, vreodată — inclusiv pe
+    # turul care a servit farduri de obraz la o cerere de produse de păr.
+    #
+    # Al doilea caz e cel care doare, dar NU pe toată întinderea lui. Când filtrul de categorie
+    # n-a rulat, întrebarea corectă e „ce a format atunci setul?":
+    #   • potrivirea pe TEXTUL cererii (cazul obișnuit) → rezultatele sunt despre ce a cerut
+    #     clientul, doar nefiltrate pe raft; suprimarea lor ar fi exact tăcerea pe care o evităm,
+    #     deci rămâne doar nota de onestitate de mai sus;
+    #   • ALT filtru DUR — brand sau variantă, singurele care nu se relaxează NICIODATĂ (vezi
+    #     `_relax_ladder`) → setul e „tot ce are brandul", nu un răspuns la cerere. Asta s-a
+    #     întâmplat: `category="ingrijirea-parului"` a ieșit `UNKNOWN`, `brand="MUZIGAE"` a rămas
+    #     dur, iar rezultatul a fost catalogul de machiaj al brandului, servit cu prețuri reale —
+    #     deci validatorul (poartă de ADEVĂR) l-a lăsat să treacă, corect.
+    #
+    # Condiția e pe VERDICT, nu pe „zero chei", și distincția a fost găsită de un test existent:
+    # cu vocabularul indisponibil (DB degradat) TOT se rezolvă `UNKNOWN`, deci o regulă scrisă pe
+    # absența cheilor ar fi transformat o clipeală de DB în „niciun rezultat" pe fiecare căutare cu
+    # brand. `unknown_dimension` = n-am putut judeca ⇒ nu schimbăm nimic pentru client;
+    # `not_in_vocabulary` = am judecat pe un vocabular VIU și categoria nu există ⇒ e o eroare de
+    # argument a modelului.
+    shelf_forced_by = "brand" if a.brand else ("variant" if a.variant_label else None)
+    verdict = resolutions.category
+    category_judged_absent = verdict is not None and verdict.reason == "not_in_vocabulary"
+    suppress = category_dropped or (category_judged_absent and shelf_forced_by is not None)
     # NX-167 (B): cerere CLARĂ de categorie, dar potrivirea a picat pe ALTĂ ramură (categoria cerută
     # a fost renunțată în relaxare — nici pe arbore nu s-a găsit nimic pe ea) → NU prezenta produse
     # off-category ca match. Suprimă cardurile + semnal de clarificare (P6: nu tăcere — agentul
     # întreabă / oferă o subcategorie, nu minte că e ce a cerut). Curăță și sesiunea, ca
     # „arată-mi altele" (fp identic) să NU pagineze gunoiul off-category suprimat.
-    if get_settings().search_offcategory_guard_enabled and category_dropped and products:
+    if get_settings().search_offcategory_guard_enabled and suppress and products:
         ctx.emit(
             "offcategory_suppressed",
             category_key=a.category,
             relax_depth=relax_depth,
             pool_size=len(products),
+            # DE CE s-a suprimat: „categoria a fost relaxată" și „categoria n-a existat niciodată,
+            # iar setul l-a format brandul" sunt defecte diferite, cu reparații diferite.
+            reason="category_relaxed"
+            if category_dropped
+            else f"unverified_category_{shelf_forced_by}",
         )
         ctx.state_patch.pop("active_search", None)
-        return ToolResult(
-            ok=True,
-            products=[],
-            llm_view=(
+        if category_dropped:
+            view = (
                 f"Nu am găsit produse pe categoria «{a.category}» în catalog. NU prezenta produse "
                 f"din altă categorie ca fiind «{a.category}». Întreabă clientul ce anume caută sau "
                 f"propune-i o categorie înrudită — nu inventa o potrivire."
-            ),
-        )
+            )
+        else:
+            # Formulare precisă, fiindcă modelul POATE răspunde util din ea: nu „n-am găsit nimic",
+            # ci „brandul ăsta nu are așa ceva" — care e adevărul și e un răspuns de vânzare.
+            forced = f"brandul «{a.brand}»" if a.brand else f"varianta «{a.variant_label}»"
+            view = (
+                f"«{a.category}» nu e o categorie din catalog, deci filtrul pe ea NU a rulat, iar "
+                f"rezultatele au fost restrânse DOAR la {forced} — sunt produsele lui, nu un "
+                f"răspuns la ce a cerut clientul. NU le prezenta. Spune-i onest că {forced} nu "
+                f"pare să acopere ce caută și propune-i o căutare fără el sau o categorie reală."
+            )
+        return ToolResult(ok=True, products=[], llm_view=view)
     relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
     return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 

@@ -13,6 +13,7 @@ Grounding-ul rămâne la `validator` (P2: modelul propune, codul dispune); texte
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
@@ -37,7 +38,7 @@ from src.agent.validator import (
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
 from src.config import get_settings
-from src.models import Offer, TurnContext
+from src.models import Offer, RichReply, TurnContext
 from src.web.localization import amount_text
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
@@ -268,6 +269,22 @@ def _rich_bundle(
     return "\n".join(lines)
 
 
+@dataclass(frozen=True, slots=True)
+class _RichOutcome:
+    """Ce a produs apelul structurat — și, când n-a produs carduri, DE CE.
+
+    `model_items` e numărul de produse pe care le-a NUMIT modelul, înainte de poarta de
+    apartenență. Fără el, două eșecuri diferite arătau identic în analytics: „modelul a emis
+    id-uri străine de retrieval" (defect de model, produsele sunt bune) și „modelul n-a selectat
+    niciun produs" (refuz deliberat: pe 2026-09-16 a refuzat, corect, un set de farduri de obraz
+    la o cerere de produse de păr). Ambele se etichetau `all-items-dropped-by-membership`, deși în
+    al doilea caz nu se dropase nimic — deci nu se putea număra nici măcar cât de des se întâmplă.
+    """
+
+    reply: RichReply | None
+    model_items: int = 0
+
+
 async def _finalize_rich(
     llm,
     rich_system: str,
@@ -276,12 +293,12 @@ async def _finalize_rich(
     ctx,
     history: str,
     notes: str = "",
-):
+) -> _RichOutcome:
     """Compune recomandarea STRUCTURATĂ (model iZi). Modelul emite intro + referințe
     product_id/pro_index/fit_clause + pick + education + chip_intents (enum închis); codul
     (compose) hidratează faptele. `rich_system` = system generat din DB (NX-78). `notes` =
     context per-tur din bucla de tool-uri (NX-137: ex. checkout eșuat → fără chips de coș).
-    Întoarce `RichReply` sau None (→ fallback pe proză)."""
+    Întoarce `_RichOutcome`; `reply is None` → fallback pe proză."""
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     notes_block = f"NB: {notes}\n" if notes else ""
     # NX-139: axele pe care VARIAZĂ setul (fațete DomainPack cu dispersie + interval de preț) —
@@ -313,14 +330,15 @@ async def _finalize_rich(
         log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
         if trace is not None:
             trace["rich_error"] = type(e).__name__  # NX-256: în captura de diagnoză
-        return None
+        return _RichOutcome(reply=None)
     # NX-256: JSON-ul BRUT al modelului, înainte de membership/scrub — singurul loc unde există.
     # Incidentul din 24 aug: rich-ul degradase pe „all-items-dropped-by-membership" și nu aveam
     # cum să aflăm ce id-uri emisese modelul, fiindcă `j` murea aici, în memorie. Merge DOAR în
     # `ctx.trace` (→ `conversation_traces`, sub flag), NU în analytics (P12: acolo contoare).
     if trace is not None:
         trace["rich_raw"] = j
-    return compose.assemble(ctx, j, products)
+    emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
+    return _RichOutcome(reply=compose.assemble(ctx, j, products), model_items=len(emitted))
 
 
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
@@ -381,7 +399,7 @@ async def render(
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
-            rich = await _finalize_rich(
+            outcome = await _finalize_rich(
                 deps.llm,
                 prompt_builder.build_rich_system(
                     plan.inp, routine=getattr(ctx, "routine", None) is not None
@@ -392,6 +410,7 @@ async def render(
                 plan.history,
                 notes=plan.commerce_note,
             )
+            rich = outcome.reply
             if rich is not None and rich.items:
                 ctx.set_rich_reply(
                     rich,
@@ -410,12 +429,17 @@ async def render(
                     product_ids=clean_ids(it.product_id for it in rich.items),
                 )
                 return None
-            # NX-122: downgrade tăcut rich → proză, acum vizibil. `rich is None` = apelul
-            # structurat a eșuat/excepție; `rich.items == []` = toate produsele au picat la
-            # grounding-ul de apartenență. Pur observabilitate (downgrade-ul exista deja, P6).
-            reason = (
-                "all-items-dropped-by-membership" if rich is not None else "structured-call-failed"
-            )
+            # NX-122: downgrade tăcut rich → proză, acum vizibil. Trei motive, nu două: apelul
+            # structurat a eșuat; modelul a numit produse și TOATE au picat la poarta de
+            # apartenență (defect de model); modelul n-a numit niciunul (refuz — setul nu i s-a
+            # părut un răspuns). Ultimul se eticheta „dropped-by-membership" deși nu se dropa
+            # nimic, deci nu exista cifră pentru el. Pur observabilitate (downgrade-ul exista, P6).
+            if rich is None:
+                reason = "structured-call-failed"
+            elif outcome.model_items:
+                reason = "all-items-dropped-by-membership"
+            else:
+                reason = "no-items-selected"
             ctx.emit("rich_downgraded", reason=reason)
             if getattr(ctx, "trace", None) is not None:
                 ctx.trace["rich_downgraded"] = reason  # NX-256: lângă `rich_raw`, în captura full

@@ -418,6 +418,41 @@ proza din docstring-uri. Detalii:
 [`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql) +
 [`tasks/NX-289.md`](tasks/NX-289.md).
 
+**Fix 2026-09-16 — o cratimă anula filtrul de raft, iar stiva de constrângeri nu se putea reseta.**
+Găsite pe o conversație REALĂ (`conversation_traces` + `analytics_events`), nu pe fixture: clientul
+a discutat despre un ruj, apoi a cerut „vreau sa vad produse de par" și a primit UN șampon de
+mătreață, iar la „altceva ?" patru carduri de fard de obraz. Trei defecte independente, care se
+compun.
+(1) **Tokenizare asimetrică în vocabular** (`src/catalog/vocabulary.py`): intrările se despărțeau
+pe `-`, TERMENUL cerut nu — deci «ingrijirea parului» se rezolva (AMBIGUOUS, 206 produse), iar
+«ingrijirea-parului», forma pe care modelul o scrie natural fiindcă slug-urile arată așa, ieșea
+`UNKNOWN(not_in_vocabulary)`. Un UNKNOWN nu ajunge NICIODATĂ în `WHERE`, deci turul a rulat fără
+filtru de categorie, iar singurul filtru rămas a fost `brand`, care **nu se relaxează niciodată** —
+rezultatul a fost catalogul de machiaj al brandului, servit la o cerere de păr. Un singur
+tokenizator (`_tokens`) pentru ambele părți ale potrivirii.
+(2) **Resetul stivei depindea de un câmp gol.** `merge_constraints` reseta doar când
+`RouteDecision.category_key` există ȘI diferă — dar acela vine EXCLUSIV din triaj, care nu rulează
+pe turul de după o clarificare (`clarify_resume` rutează determinist) și oricum nu produce o
+categorie pe majoritatea turelor (măsurat pe SOLE: 11/15 NULL; `reset=true` o dată în 11 merge-uri).
+Al doilea declanșator citește RAFTUL din arborele de catalog (`topic_switched`, doar rădăcini —
+subcategoriile precum «Fata»/«Buze» sunt omografe cu cereri de pe alt raft). Kill-switch
+`TOPIC_SWITCH_RESET_ENABLED`. Costul acceptat, pin-uit în test: un nume de raft de un cuvânt poate
+fi omograf cu un verb („mi se par cam scumpe" → reset nemeritat) — jumătatea ieftină a asimetriei.
+(3) **Garda off-category acoperea mulțimea vidă.** `category_dropped` cerea categorie REZOLVATĂ
+**și** renunțată în relaxare, dar treptele care renunță sunt gated pe `search_category_hard_enabled`
+(`True` implicit) — deci condiția nu putea fi adevărată: `offcategory_suppressed` = 0 declanșări,
+vreodată. Acum suprimă și cazul „categoria a fost JUDECATĂ pe un vocabular viu și nu există, iar
+setul l-a format un filtru dur (brand/variantă)". Distincția `not_in_vocabulary` vs
+`unknown_dimension` e esențială și a fost găsită de suită: cu vocabularul indisponibil (DB jos) tot
+ce cere modelul iese UNKNOWN, iar o regulă scrisă pe „zero chei" ar fi transformat o clipeală de DB
+în „niciun rezultat" pe fiecare căutare cu brand.
+Nimic din aval nu putea prinde nimic din toate astea: produsele și prețurile erau REALE, deci
+validatorul (stagiul 8) și `grounding_guard` le-au lăsat să treacă — sunt porți de **ADEVĂR**, nu
+de **POTRIVIRE** (`validator_ok: true` pe turul cu fardurile). În plus, eticheta de downgrade
+`all-items-dropped-by-membership` se punea și când modelul REFUZASE setul fără să numească niciun
+produs (nu se dropase nimic): două defecte diferite sub aceeași etichetă nu se pot număra separat,
+deci motivul e acum tri-state (`no-items-selected` e distinct).
+
 ---
 
 ## Arhitectura — pipeline liniar (12 stagii)

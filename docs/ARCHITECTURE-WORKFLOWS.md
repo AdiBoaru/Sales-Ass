@@ -1827,6 +1827,7 @@ single_brain_enabled = false
 spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
 summary_enabled = true
+topic_switch_reset_enabled = true
 triage_factual_guard_enabled = true
 triage_shadow_enabled = true
 triage_sync_shadow_enabled = false
