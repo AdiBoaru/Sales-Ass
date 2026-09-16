@@ -56,6 +56,29 @@ def _stub_agent_prompt_inputs(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_catalog_cache_leaks_between_tests():
+    """Cache-urile de catalog sunt PE PROCES, deci scurg între teste.
+
+    A devenit o capcană reală odată cu meniul de clarificare (`src/catalog/clarify_menu.py`):
+    fiecare tur de triaj încarcă acum vocabularul tenantului, deci ORICE test care rulează
+    stagiul cu un `conn` fals îl populează pentru `business_id`-ul lui. Cum majoritatea testelor
+    folosesc `b1`, un test care servește un catalog bogat lăsa următorului un vocabular pe care
+    acela nu-l ceruse — iar poarta de sugestii începea să filtreze într-un test care n-avea
+    treabă cu ea. S-a întâmplat exact așa, la prima rulare: trei teste de clarify au picat în
+    funcție de ORDINEA rulării, nu de cod.
+
+    Golire înainte ȘI după: un test nu moștenește și nu lasă nimic."""
+    from src.catalog.clarify_menu import clear_clarify_menu_cache
+    from src.catalog.vocabulary_cache import clear_vocabulary_cache
+
+    clear_vocabulary_cache()
+    clear_clarify_menu_cache()
+    yield
+    clear_vocabulary_cache()
+    clear_clarify_menu_cache()
+
+
+@pytest.fixture(autouse=True)
 def _semantic_arm_on_for_suite():
     """Brațul semantic e OFF în producție (decizie 2026-09-08, `SEARCH_SEMANTIC_ENABLED`), dar
     codul lui rămâne și trebuie să rămână testat: zeci de teste exersează fuziunea, degradarea

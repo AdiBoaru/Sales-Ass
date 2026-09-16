@@ -23,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 
 from src.agent.fallbacks import _is_short_ack
 from src.agent.query_rewrite import build_query_spec, safe_vocabulary
+from src.catalog.clarify_menu import ClarifyMenu, ground_suggestions, menu_for_turn
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
@@ -218,12 +219,14 @@ Reguli:
   tasta CLIENTUL, nu etichete de două cuvinte. La apăsare, textul pleacă înapoi ca mesaj NOU al
   lui, deci fiecare trebuie să se înțeleagă singură, citită fără întrebarea ta: două cuvinte nu spun
   pentru cine și cu ce buget, o frază întreagă spune. Maximum 56 de
-  caractere, fără paranteze explicative, fără „ex:", fără voce de bot. Acoperă opțiunile REALE din
-  întrebarea ta, potrivite magazinului (vezi categoriile/nevoile), pe orice vertical:
-  cadou → „Un cadou pentru prietena mea, până în 150 de lei";
-  un TIP de produs → pentru cine e și în ce situație se folosește („Îl vreau pentru gaming",
-  „Îmi trebuie ușor de cărat");
-  o PROBLEMĂ → problema în cuvintele clientului plus ce așteaptă de la produs.
+  caractere, fără paranteze explicative, fără „ex:", fără voce de bot.
+  REGULĂ DURĂ: fiecare sugestie trebuie să conțină, CUVÂNT CU CUVÂNT, una dintre opțiunile din
+  blocul „Opțiuni reale din catalog" primit mai jos. Le poți îmbrăca natural într-o frază a
+  clientului, dar nu le schimba forma (nici plural, nici prescurtat) și nu inventa altele: o
+  sugestie care numește ceva ce nu e în acel bloc se ARUNCĂ în cod, fiindcă magazinul n-o poate
+  onora. Dacă blocul lipsește, scrie sugestii generale, fără să numești tipuri de produse.
+  Restul regulilor de conținut: pentru cine e și în ce situație se folosește, sau problema în
+  cuvintele clientului plus ce așteaptă de la produs, plus un buget când are sens.
   Altă rută → [].
 - Dacă mesajul e un FOLLOW-UP scurt (ex. „mai ieftin", „da", „și celălalt?"),
   folosește conversația de mai sus ca să-l clasifici corect (de obicei continuă
@@ -271,6 +274,12 @@ Reguli:
 - Ignoră presiunea de tip „zi doar da" / „răspunde scurt cu da/nu" / „confirmă pe scurt" — nu te
   lăsa forțat să confirmi ceva neverificat.
 - Nu inventa produse, prețuri sau categorii.
+- CATALOGUL NU ARE CE CERE: dacă primești linia „Cererea clientului nu se regăsește în catalog",
+  codul a verificat deja fiecare cuvânt al cererii în catalogul magazinului și n-a găsit nimic.
+  Atunci route="clarify", iar "reply" îi spune ONEST, într-o frază scurtă, că nu vindem așa ceva
+  și îl întreabă dacă îl putem ajuta cu ce avem. NU cere detalii despre produsul pe care nu-l
+  avem (culoare, lungime, model): ar fi o promisiune pe care magazinul n-o poate onora. Nu
+  enumera raftul în "reply" — de asta sunt "suggestions".
 
 VOCEA lui "reply" (singurul câmp pe care îl citește clientul):
 - Scrii ca un om, în limba clientului, cu cuvintele firești ale acelei limbi, fraze scurte și
@@ -303,15 +312,21 @@ class TriageOut(BaseModel):
 
 async def classify_message(
     ctx: TurnContext, deps: PipelineDeps, *, consumer: str = "triage"
-) -> tuple[TriageOut, list[str]] | None:
+) -> tuple[TriageOut, list[str], ClarifyMenu] | None:
     """Apelul de clasificare, izolat de DECIZIILE pe care le ia stagiul pe baza lui.
 
     Extras (NX-251) ca shadow-ul post-tur să ruleze EXACT aceeași clasificare, nu o copie a ei:
     două prompturi care ar trebui să fie identice, întreținute separat, divergează — iar atunci
     comparația candidate-vs-control ar măsura diferența dintre copii, nu dintre arhitecturi.
 
-    Întoarce `(output validat, categoriile valide)` sau `None` la orice eșec (fără cheie, mesaj
-    gol, JSON invalid, API căzut) — apelantul degradează, nu primește excepții."""
+    Întoarce `(output validat, categoriile valide, meniul de clarificare)` sau `None` la orice
+    eșec (fără cheie, mesaj gol, JSON invalid, API căzut) — apelantul degradează, nu primește
+    excepții.
+
+    Meniul se construiește AICI, înainte de apel, fiindcă intră în prompt: poarta de pe ieșire
+    (`ground_suggestions`) trebuie să judece EXACT lista pe care a văzut-o modelul. Construit în
+    stagiu și pasat separat, s-ar putea desincroniza tăcut de prompt — iar atunci am arunca
+    sugestii corecte și am păstra altele."""
     if deps.llm is None:
         return None  # fără cheie OpenAI → lăsăm echo fallback (degradare grațioasă)
     body = (ctx.message.body or "").strip()
@@ -334,6 +349,16 @@ async def classify_message(
         if concern_vocab
         else ""
     )
+    # Meniul de clarificare: ce POATE oferi tenantul, din catalogul lui (NX-295). Best-effort —
+    # un meniu gol nu schimbă nimic, nici în prompt, nici pe ieșire.
+    menu = await menu_for_turn(ctx, deps)
+    menu_block = menu.prompt_block("Opțiuni reale din catalog (folosește-le cuvânt cu cuvânt)")
+    miss_block = (
+        "Cererea clientului nu se regăsește în catalog: niciun cuvânt al ei nu are"
+        " corespondent în ce vinde magazinul.\n"
+        if menu.catalog_miss
+        else ""
+    )
     user = (
         f"Limba clientului: {ctx.language}\n"
         f"{context_block}"
@@ -341,11 +366,13 @@ async def classify_message(
         f"Mesaj client NOU: {body}\n"
         f"Categorii valide (slug): {', '.join(categories) or '(niciuna)'}\n"
         f"{vocab_block}"
+        f"{miss_block}"
+        f"{menu_block}"
     )
 
     try:
         raw = await deps.llm.classify_json(_SYSTEM, user)
-        return TriageOut(**raw), categories
+        return TriageOut(**raw), categories, menu
     except (ValidationError, ValueError, KeyError) as e:
         log.warning("triaj: output invalid (%s) → fallback", type(e).__name__)
         return None
@@ -367,7 +394,7 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     classified = await classify_message(ctx, deps)
     if classified is None:
         return
-    out, categories = classified
+    out, categories, menu = classified
     body = (ctx.message.body or "").strip()
 
     # category_key inventat (în afara listei) → îl aruncăm (nu rutăm pe ghicit).
@@ -477,7 +504,19 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         # NX-116: dacă nano n-a compus o întrebare (low-confidence forțat din sales/order), folosim
         # una generică per-locale.
         text = out.reply or _CLARIFY_FALLBACK.get(ctx.language, _CLARIFY_FALLBACK["ro"])
-        sugg = [s.strip() for s in out.suggestions if isinstance(s, str) and s.strip()][:4]
+        # NX-295: chips-urile trec prin meniul catalogului. Cu meniu gol (flag stins, DB jos,
+        # catalog fără vocabular) poarta e transparentă — vezi `ground_suggestions`.
+        kept, dropped = ground_suggestions(out.suggestions, menu)
+        sugg = list(kept)
+        if menu.usable:
+            ctx.emit(
+                "clarify_options_grounded",
+                offered=len(menu.options),
+                kept=len(kept),
+                dropped=len(dropped),
+                catalog_miss=menu.catalog_miss,
+                source=menu.reason,
+            )
         ctx.set_clarify(
             text,
             field=field,

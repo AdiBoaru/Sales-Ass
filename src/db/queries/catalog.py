@@ -2007,3 +2007,78 @@ async def find_product_named_in_query(
     if len(rows) > 1 and rows[0]["name_len"] == rows[1]["name_len"]:
         return None, "ambiguous"
     return rows[0]["id"], "named_in_query"
+
+
+_FACET_KEYS_IN_SCOPE_SQL = """
+select kv.key as dimension,
+       e.elem  as value,
+       count(*) as n
+  from products p
+ cross join lateral jsonb_each(coalesce(p.attributes, '{}'::jsonb)) kv
+ cross join lateral (
+        select jsonb_array_elements_text(kv.value) as elem
+         where jsonb_typeof(kv.value) = 'array'
+        union all
+        select kv.value #>> '{}' as elem
+         where jsonb_typeof(kv.value) = 'string'
+       ) e
+ where p.business_id = $1
+   and p.status = 'active'
+   and kv.key = any($2::text[])
+   and e.elem is not null
+   and length(e.elem) between 1 and 60
+   and ($3::text[] is null or exists (
+         select 1
+           from categories c
+          where c.business_id = p.business_id
+            and c.slug = any($3::text[])
+            and (c.id = p.primary_category_id
+                 or exists (select 1 from product_category_map m
+                             where m.product_id = p.id
+                               and m.category_id = c.id))))
+ group by 1, 2
+having count(*) >= $4
+ order by 1, 3 desc, 2
+"""
+
+
+async def facet_keys_in_scope(
+    conn: asyncpg.Connection,
+    business_id: str,
+    *,
+    dimensions: Sequence[str],
+    category_slugs: Sequence[str] = (),
+    min_support: int = 2,
+    limit_per_dimension: int = 12,
+) -> dict[str, list[str]]:
+    """Ce valori de fațetă EXISTĂ efectiv pe raftul discutat — nu în catalog, pe raft.
+
+    Vocabularul (`src/catalog/vocabulary.py`) numără global: el știe că tenantul are produse
+    pentru `hair_dryness`, dar nu că sub «Ingrijirea tenului» nu există niciunul. Diferența
+    contează exact într-un loc: când OFERIM clientului o opțiune. Un meniu de clarificare
+    construit pe numere globale poate propune «par uscat» într-o discuție despre creme — o
+    combinație care returnează zero, adică aceeași minciună ca „cablu USB", doar mai subtilă.
+
+    `category_slugs` gol = tot catalogul (întrebarea e globală, deci și numărătoarea). Altfel,
+    apelantul trimite subarborele DEJA calculat din vocabular — categoriile au arbore acolo, iar
+    a-l recalcula în SQL ar dubla definiția de apartenență.
+
+    Ordinea e a catalogului (câte produse susțin valoarea), deci meniul începe cu alegerea care
+    desparte cel mai mult. `conn` tenant-scoped (P7); `dimensions` vine din cod/pachet, niciodată
+    din textul clientului, și e pasat ca parametru, nu interpolat."""
+    wanted = [d for d in dict.fromkeys(dimensions) if d]
+    if not wanted:
+        return {}
+    rows = await conn.fetch(
+        _FACET_KEYS_IN_SCOPE_SQL,
+        business_id,
+        wanted,
+        list(category_slugs) or None,
+        min_support,
+    )
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        keys = out.setdefault(str(r["dimension"]), [])
+        if len(keys) < limit_per_dimension:
+            keys.append(str(r["value"]))
+    return out
