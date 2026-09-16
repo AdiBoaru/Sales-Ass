@@ -71,8 +71,17 @@ jobs:
             : > body.txt; : > err.txt
             # `curl` tipărește el însuși `000` la eșec de conexiune (prin `-w`), deci un
             # `|| echo "000"` ar concatena încă unul și ar produce `000000`.
+            # `/health/ready`, NU `/health`: ruta din urmă nu mai există din NX-248, care a spart
+            # health-ul în `live` / `startup` / `ready`. Măsurat 2026-09-16, cu producția
+            # DEMONSTRABIL sănătoasă: `/health` → 404 `{"detail":"Not Found"}`. Deci sonda nu putea
+            # ieși verde NICIODATĂ, iar issue-ul de alarmă nu se putea închide singur.
+            #
+            # A stat invizibil fiindcă producția a fost efectiv jos pe toată durata de viață a
+            # sondei: o alarmă adevărată nu validează un monitor. Trebuie să-l vezi și trecând pe
+            # verde măcar o dată — de-aia `tests/test_prod_reachability_probe.py` ține calea asta
+            # legată de rutele pe care aplicația chiar le montează.
             code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 20 \
-                     "${BASE_URL%/}/health" 2>err.txt) || true
+                     "${BASE_URL%/}/health/ready" 2>err.txt) || true
             [ -n "$code" ] || code="000"
             if [ "$code" = "200" ]; then
               verdict=up
