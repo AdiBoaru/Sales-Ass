@@ -166,32 +166,13 @@ _PATHS: tuple[tuple[str, bool], ...] = (("v1", False), ("brain", True))
 #: pică gate-ul, iar o reparație îl pică la fel (ca `xfail(strict=True)`), deci nu se poate repara
 #: tăcut și nici degrada tăcut.
 #:
-#: Cauza primelor trei e una singură și e de PRODUS, nu de harness: sub `single_brain_enabled`,
-#: `agent_stage` cheamă `run_main_brain` și se întoarce ÎNAINTE de `planner.build_plan`, deci Faza
-#: E (shaping determinist post-loop) nu mai rulează deloc. `search_cheaper_than` și
-#: `get_complementary_products` n-au alt apelant în tot `src/`, deci pe calea brain «ceva mai
-#: ieftin» nu mai are drum determinist — rămâne o căutare pe care o compune modelul, adică exact
-#: bug-ul pe care calea deterministă a fost scrisă să-l repare (cea mai ieftină 80.99 când există
-#: 18.99, vezi `tests/test_cheaper_followup.py`).
-KNOWN_BRAIN_DIVERGENCES: dict[str, str] = {
-    "conv-sales-cheaper-link-3turn#1@brain": (
-        "«ceva mai ieftin»: produsele veneau din `build_plan` (search_cheaper_than), care nu mai "
-        "rulează sub creierul unic"
-    ),
-    "conv-sales-cheaper-link-3turn#2@brain": (
-        "turul de link depinde de produsele injectate la turul anterior de `build_plan`"
-    ),
-    "nx172-conv-cheaper-alternative#1@brain": (
-        "«ceva mai ieftin»: aceeași cauză ca `conv-sales-cheaper-link-3turn#1`"
-    ),
-    "conv-sales-then-injection-price-blocked#1@brain": (
-        "injecția E blocată (prețul fals nu iese), dar planul cade pe `unknown_product` și turul "
-        "degradează la refuzul generic, în loc de răspunsul grounded pe care îl dă v1"
-    ),
-    "conv-sales-then-invented-product-blocked#1@brain": (
-        "produs inventat: blocat corect, dar aceeași degradare la refuz generic ca la injecție"
-    ),
-}
+#: GOALĂ azi, și a fost goală prin reparare, nu prin ștergere. Cele cinci divergențe de la
+#: dualizare aveau O SINGURĂ cauză: sub `single_brain_enabled`, `agent_stage` se întorcea înainte
+#: de `planner.build_plan`, deci Faza E nu mai rula deloc — «ceva mai ieftin» rămânea pe seama
+#: modelului, rehidratarea produselor afișate dispărea, iar fallback-ul servea text fără carduri,
+#: așa că turul următor pierdea referința. Gate-ul le-a raportat una câte una pe măsură ce au fost
+#: reparate; lista a ajuns aici fiindcă nu mai are ce să conțină.
+KNOWN_BRAIN_DIVERGENCES: dict[str, str] = {}
 
 
 def _key(case_key: str, path: str) -> str:

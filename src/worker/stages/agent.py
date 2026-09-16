@@ -40,7 +40,13 @@ from src.agent.finalize import (
     render,
 )
 from src.agent.observability import agent_prompt_event
-from src.agent.planner import build_plan
+from src.agent.planner import (
+    build_plan,
+    cheaper_followup_detected,
+    cheaper_seed_messages,
+    maybe_cross_sell,
+    resolve_cheaper_followup,
+)
 from src.agent.prompt_builder import PromptInputs
 from src.agent.tool_definitions import tool_schemas
 from src.agent.tool_executor import (
@@ -400,6 +406,29 @@ async def _prune_displayed(ctx: TurnContext, deps: PipelineDeps, policy: SafetyP
     ]
 
 
+async def _cheaper_seed(
+    ctx: TurnContext, deps: PipelineDeps, *, run: ToolRun, query: str, show_more: bool
+) -> list[dict[str, Any]] | None:
+    """«Ceva mai ieftin» pe calea creierului unic: set DETERMINIST, dus în fața modelului ca seed.
+
+    Întoarce mesajele de seed, sau `None` dacă intenția nu e a turului. Când nu există nimic mai
+    ieftin, `resolve_cheaper_followup` a setat deja reply-ul onest — apelantul verifică `ctx.reply`,
+    nu o a treia valoare de retur, fiindcă „turul s-a terminat" e o stare a contextului, nu un fel
+    de seed.
+
+    Produsele intră EXPLICIT în `run.retrieved`, fiindcă seed-ul ocolește `execute`: `ToolRun` n-a
+    văzut niciun tool, deci acumulatorul ar rămâne gol, `ctx.retrieval` la fel, iar validatorul ar
+    respinge ca negroundat exact setul pe care serverul îl alesese. Un set care ajunge la client
+    trebuie să fie în evidența turului, oricare ar fi drumul pe care a venit."""
+    if show_more or not cheaper_followup_detected(ctx, query):
+        return None
+    outcome = await resolve_cheaper_followup(ctx, deps, policy=SafetyPolicy.for_turn(ctx))
+    if outcome.handled or not outcome.products:
+        return None
+    run.retrieved.extend(outcome.products)
+    return cheaper_seed_messages(ctx, outcome.products, baseline=outcome.baseline)
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -571,6 +600,18 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             if getattr(get_settings(), "single_brain_enabled", False) and not is_order:
                 from src.agent.brain import run_main_brain  # noqa: PLC0415 — evită ciclul
 
+                # Faza E nu mai rulează pe calea asta (ne întoarcem înainte de `build_plan`), iar
+                # «ceva mai ieftin» trăia ACOLO. Lăsat pe seama modelului, follow-up-ul de preț
+                # redevine exact bug-ul pe care calea deterministă a fost scrisă să-l repare: „cea
+                # mai ieftină 80.99" cu 18.99 în catalog. Baseline-ul e minimul a ceea ce clientul
+                # a VĂZUT — o proprietate a stării, nu ceva deductibil din text, deci garanția o
+                # poate da doar codul. Rulează ÎNAINTEA buclei fiindcă aici încă putem alege setul;
+                # după buclă am fi putut doar să-l cenzurăm.
+                forced_seed = await _cheaper_seed(
+                    ctx, deps, run=run, query=query, show_more=show_more
+                )
+                if ctx.reply is not None:
+                    return  # nimic mai ieftin → mesajul onest e deja setat (P6)
                 await run_main_brain(
                     ctx,
                     deps,
@@ -581,6 +622,21 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                     user=user,
                     user_parts=user_parts,
                     query=query,
+                    forced_seed=forced_seed,
+                )
+                # Cross-sell-ul e singura bucată din Faza E care NU poate fi mutată înaintea buclei:
+                # reacționează la ce a chemat MODELUL în turul ăsta (`run.added_product`), nu la
+                # mesajul de intrare. Rulează deci după, exact ca pe calea v1, și pentru același
+                # motiv: complementarele se aduc din graf, iar `related_products` nu e în niciun
+                # toolset — fără linia asta, un `cart_add` sub creierul unic nu are cum să propună
+                # un complement, nu „propune mai rar".
+                await maybe_cross_sell(
+                    ctx,
+                    deps,
+                    run=run,
+                    inp=inp,
+                    history=history,
+                    policy=SafetyPolicy.for_turn(ctx),
                 )
                 return
             final = await deps.llm.run_tool_loop(system, user, tools, run.execute)

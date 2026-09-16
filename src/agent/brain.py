@@ -271,13 +271,25 @@ async def _generate_plan(
         return None, 0
 
 
-def _exhausted_reply(ctx: TurnContext, run: ToolRun) -> str:
+def _serve_exhausted(ctx: TurnContext, run: ToolRun) -> None:
     """Ce spunem când planul s-a epuizat: faptele reale dacă le avem, refuzul onest dacă nu.
 
     Paritate cu v1 (`_finalize`): ACEEAȘI formă de răspuns, produsă din ACELEAȘI produse
     grounded. Fără asta, creierul unic răspundea „nu pot confirma recomandarea" cu retrieval-ul
-    plin — o degradare vizibilă exact pe inputurile adversariale, unde v1 răspundea util."""
-    return grounded_fallback_reply(run.retrieved) or safe_fallback(ctx.language)
+    plin — o degradare vizibilă exact pe inputurile adversariale, unde v1 răspundea util.
+
+    CARDURILE merg cu textul, și nu e cosmetică: `displayed_products` se scrie din
+    `reply.products` (`worker/processor.py`), nu din `ctx.retrieval`. Fără ele, un tur servit din
+    fallback lăsa starea GOALĂ, deci turul următor pierdea referința — „dă-mi linkul" după un
+    „ceva mai ieftin" reușit nu mai avea la ce să se refere, iar clientul vedea produsul pe ecran
+    și botul răspundea că nu știe despre care e vorba. Se atașează DOAR pe ramura grounded: pe
+    refuzul onest textul nu numește niciun produs, iar niște carduri sub el ar fi un răspuns care
+    se contrazice singur."""
+    grounded = grounded_fallback_reply(run.retrieved)
+    if grounded is not None:
+        ctx.set_reply(grounded, products=list(run.retrieved[:6]), cacheable=False)
+        return
+    ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
 
 
 #: Numere din draft (preț, buget, gramaj) — separatorul poate fi `.` sau `,`.
@@ -855,6 +867,7 @@ async def run_main_brain(
     user: str,
     user_parts: UserParts | None = None,
     query: str,
+    forced_seed: list[dict[str, Any]] | None = None,
 ) -> None:
     """Turul MainBrain: plan structurat în aceeași buclă → validare → (un repair) → render →
     critic selectiv → reply. ÎNTOTDEAUNA setează un reply non-gol (P6) — fallback determinist la
@@ -931,7 +944,14 @@ async def run_main_brain(
     versions = brain_versions(brain_system, tools, model, profile.name if profile else None)
 
     execute = _PortedExecute(ctx, deps, run, port)
-    seed = await _speculative_seed(ctx, profile, execute, query)
+    # Un seed FORȚAT bate speculația, și nu e o prioritate arbitrară: speculativul GHICEȘTE că
+    # turul are nevoie de o căutare (poate rata, și atunci costă un apel în plus), pe când seed-ul
+    # forțat poartă un set pe care CODUL l-a ales determinist și pentru care există o garanție de
+    # respectat — azi «ceva mai ieftin» (`planner.resolve_cheaper_followup`), unde baseline-ul e
+    # minimul a ceea ce clientul a VĂZUT. A lăsa speculativul să caute din nou peste el ar readuce
+    # exact riscul pe care calea deterministă îl elimină: un set ales de model, care poate conține
+    # produse mai scumpe decât ce s-a arătat deja.
+    seed = forced_seed or await _speculative_seed(ctx, profile, execute, query)
     raw, rounds = await _generate_plan(
         ctx,
         deps,
@@ -943,15 +963,34 @@ async def run_main_brain(
         seed=seed,
     )
     ctx.emit("main_brain_tool_rounds_bucket", bucket=_rounds_bucket(rounds))
-    if seed is not None:
+    if seed is not None and forced_seed is None:
         # HIT = modelul a produs planul din candidații seedați, fără să mai caute (rounds == 0),
         # adică am scos un apel întreg. MISS = a căutat din nou, deci seed-ul a costat un apel în
         # plus. Raportul dintre ele decide dacă felia merită: pragul e 43% (vezi design §6).
+        #
+        # Seed-ul FORȚAT nu intră în raportul ăsta: el n-a fost un pariu pe care să-l câștigăm sau
+        # să-l pierdem, ci o căutare pe care codul trebuia s-o facă oricum. Numărat aici, ar fi
+        # umflat rata de hit cu ture în care speculația nici n-a rulat — adică exact metrica pe
+        # baza căreia se decide dacă felia 6 rămâne aprinsă.
         ctx.emit("speculative_retrieval", outcome="hit" if rounds == 0 else "miss")
     # NX-256: planul BRUT al modelului, înainte de validare — singurul loc unde există. Un plan
     # respins la validare e exact cazul pe care vrei să-l citești, iar el nu ajunge nici în
     # `ctx.answer_plan`, nici în reply.
     _trace(ctx, "brain_plan_raw", raw)
+
+    # R3 — plasa de grounding pe produsele DEJA arătate. Trăia în `build_plan`, care nu mai rulează
+    # pe calea asta, iar lipsa ei nu se vedea ca o eroare: bucla se termina fără produse, planul
+    # cita ce avea clientul pe ecran, validatorul îl respingea ca `unknown_product` și turul ieșea
+    # cu refuzul generic — exact pe follow-up-urile neclasificate („care e cea mai bună?"), unde v1
+    # răspundea util. Rulează DOAR când bucla n-a adus nimic: un set proaspăt are întâietate, iar
+    # rehidratarea nu are voie să dilueze o căutare reușită.
+    if not run.retrieved and ctx.state.displayed_products:
+        from src.agent.planner import rehydrate_displayed  # noqa: PLC0415 — evită ciclul
+
+        recovered = await rehydrate_displayed(ctx, deps, policy=SafetyPolicy.for_turn(ctx))
+        if recovered:
+            run.retrieved.extend(recovered)
+            ctx.emit("brain_rehydrated_displayed", n=len(recovered))
 
     # NX-173 (P0) ENFORCEMENT FINAL + contractul `ctx.retrieval`, exact ca pe calea v1
     # (`planner.build_plan`). Brain-ul returnează înainte de `build_plan`, deci fără asta nimeni
@@ -998,7 +1037,7 @@ async def run_main_brain(
         )
         ctx.emit("main_brain_call", phase="plan", outcome="fallback")
         _trace(ctx, "brain_plan_fallback", failures[0] if failures else "unparseable")
-        ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
+        _serve_exhausted(ctx, run)
         return
 
     ctx.emit("answer_plan_validation", outcome="ok", reason=None, **versions)
@@ -1018,7 +1057,7 @@ async def run_main_brain(
     text = render_plan_text(plan, ctx.language, ask_clarification=ask_clarification)
     if not text.strip():
         ctx.emit("main_brain_call", phase="render", outcome="empty_fallback")
-        ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
+        _serve_exhausted(ctx, run)
         return
 
     draft_validation = validate_revised_draft(
@@ -1038,7 +1077,7 @@ async def run_main_brain(
             outcome="draft_invalid",
             reason=draft_validation.reasons[0] if draft_validation.reasons else "unknown",
         )
-        ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
+        _serve_exhausted(ctx, run)
         return
 
     # Critic SELECTIV, codes-only (reuse NX-211): rulează doar pe triggeri; „unavailable" nu e
@@ -1060,7 +1099,7 @@ async def run_main_brain(
     )
     if critic.status == "rejected":
         if repairs >= MAX_REPAIRS:
-            ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
+            _serve_exhausted(ctx, run)
             return
         repairs += 1
         repaired = await _repair_plan(
@@ -1075,7 +1114,7 @@ async def run_main_brain(
         plan2, failures2 = _validate(ctx, brain_input, repaired, context, required)
         ctx.emit("repair", outcome="ok" if plan2 is not None and not failures2 else "exhausted")
         if plan2 is None or failures2:
-            ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
+            _serve_exhausted(ctx, run)
             return
         plan = plan2
         ctx.answer_plan = plan
@@ -1091,7 +1130,7 @@ async def run_main_brain(
             plan=plan.to_v1(),
         )
         if not text.strip() or not draft_validation.ok:
-            ctx.set_reply(_exhausted_reply(ctx, run), cacheable=False)
+            _serve_exhausted(ctx, run)
             return
 
     previous = tuple(

@@ -14,6 +14,8 @@ rămâne la `validator`/`finalize` (P2); planner-ul DOAR decide, `render` (faza 
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -258,6 +260,227 @@ class ResponsePlan:
     successful_action_ids: set[str] = field(default_factory=set)
 
 
+@dataclass(frozen=True)
+class CheaperOutcome:
+    """Ce a decis calea DETERMINISTĂ de «ceva mai ieftin».
+
+    `handled=True` înseamnă că turul s-a încheiat aici: nu există nimic strict mai ieftin, iar
+    mesajul onest e deja în `ctx.reply`. `products` ne-gol înseamnă că setul e ales și rămâne de
+    COMPUS — de asta cele două nu sunt un singur câmp: „n-am găsit" e un răspuns, nu o listă goală
+    pe care apelantul ar putea s-o trateze ca pe „mai caută tu"."""
+
+    handled: bool = False
+    products: list[dict[str, Any]] = field(default_factory=list)
+    #: Pragul folosit: minimul AFIȘAT. Iese din funcție fiindcă apelantul de pe calea creierului
+    #: unic îl pune în argumentele tool call-ului seedat — altfel l-ar recalcula, iar a doua
+    #: derivare a aceleiași cifre e locul unde cele două ar ajunge să difere.
+    baseline: float = 0.0
+
+
+def cheaper_followup_detected(ctx: TurnContext, query: str) -> bool:
+    """Mesajul cere ceva mai ieftin decât ce s-a ARĂTAT? Pur, fără DB.
+
+    Predicatul e separat de execuție fiindcă are doi apelanți în momente diferite ale turului
+    (vezi `resolve_cheaper_followup`), iar un al doilea regex scris la al doilea apelant ar fi
+    exact felul de divergență care face ca o intenție să fie prinsă pe o cale și nu pe cealaltă."""
+    return (
+        get_settings().cheaper_intent_enabled
+        and bool(ctx.state.displayed_products)
+        and _CHEAPER_RE.search(query) is not None
+    )
+
+
+async def resolve_cheaper_followup(
+    ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
+) -> CheaperOutcome:
+    """P1 (ARCH-product-retrieval): re-căutare DETERMINISTĂ a produselor strict mai ieftine decât
+    cel mai ieftin AFIȘAT, în aceeași categorie — NU re-rank pe setul afișat.
+
+    Există ca funcție, nu ca bloc în `build_plan`, fiindcă are doi apelanți: calea v1 (de unde a
+    fost extrasă, neschimbată) și calea creierului unic, care nu mai trece prin `build_plan` deloc
+    (`agent_stage` se întoarce după `run_main_brain`). Fără ea, aprinderea lui
+    `SINGLE_BRAIN_ENABLED` ar fi lăsat «mai ieftin» pe seama modelului, adică exact bug-ul pe care
+    calea asta a fost scrisă să-l repare: «cea mai ieftină 80.99» cu 18.99 în catalog. Garanția nu
+    e o preferință de stil — e o proprietate pe care numai codul o poate da, fiindcă baseline-ul e
+    minimul a ceea ce clientul a VĂZUT, nu ceva ce se poate deduce din text."""
+    baseline = min(p.price for p in ctx.state.displayed_products)
+    ref_ids = [p.product_id for p in ctx.state.displayed_products]
+    async with deps.db("search_cheaper_than") as conn:
+        cheaper = await search_cheaper_than(conn, ctx.business.id, ref_ids, baseline, limit=6)
+    # NX-173 (P0): „ceva mai ieftin" e o CĂUTARE NOUĂ în DB, în afara `ToolRun` → gate propriu.
+    cheaper = policy.gate(ctx, cheaper, purpose="cheaper")[0]
+    ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
+    if cheaper:
+        return CheaperOutcome(products=cheaper, baseline=baseline)
+    # NX-163b: „ceva mai ieftin" + zero rezultate = GOL DE PREȚ în categoria setului afișat —
+    # cerere reală pe care catalogul n-o acoperă. Marcat LA SURSĂ (aici se știe că turul a fost o
+    # intenție de preț), NU inferat post-hoc din `no_result`: din rollup n-ai cum să distingi
+    # „n-am găsit nimic" de „n-am găsit nimic mai ieftin". Dimensiunea = categoria (acțiunea
+    # derivată e „adaugă opțiune entry-level"), pragul e preț rotunjit — atribute, nu text de
+    # user (P12). `product_ids` = setul AFIȘAT (ref-uri deja în mână, zero query în plus):
+    # rollup-ul derivă categoria prin join pe `products`. Dimensiunea se calculează unde se
+    # agregă, nu în calea de răspuns a clientului — care n-are voie să crape pentru o etichetă.
+    ctx.emit(
+        "unmet_query",
+        reason="price_gap",
+        product_ids=clean_ids(ref_ids),
+        price_below=round(baseline, 2),
+        locale=ctx.language,
+    )
+    # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI client;
+    # un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
+    ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
+    # NX-159 felia 2: mesajul are deja o întrebare, dar atașăm chips de continuare (popular / alt
+    # buget / altă categorie) → opțiuni clickabile, nu doar text.
+    if get_settings().cheapest_alternatives_enabled:
+        ctx.reply.suggestions = _thin_path_chips(ctx.language)
+    return CheaperOutcome(handled=True, baseline=baseline)
+
+
+async def maybe_cross_sell(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    *,
+    run: ToolRun,
+    inp: PromptInputs,
+    history: str,
+    commerce_note: str = "",
+    policy: SafetyPolicy,
+    is_order: bool = False,
+) -> bool:
+    """Cross-sell «merge bine cu»: clientul tocmai a adăugat în coș → complementare ca CARDURI.
+    Întoarce True dacă a răspuns el (reply setat).
+
+    Declanșatorul e DETERMINIST și trebuie să rămână așa. Sub creierul unic ar fi fost tentant să-l
+    lăsăm modelului, dar modelul nici nu poate: `related_products` e înregistrat ca tool și nu se
+    află în NICIUN toolset (`_SALES_TOOLS`) și în niciun profil, iar complementarele se aduc aici
+    direct din graf. Fără funcția asta, calea brain pur și simplu n-are cum să propună un complement
+    după `cart_add` — nu „o face mai rar", ci deloc.
+
+    Retrieval DETERMINIST (brand/concern, categorie DIFERITĂ = complement, nu substitut); copy de la
+    model (fit per produs, scrubuit); intro = confirmarea DETERMINISTĂ a coșului (robustă la scrub
+    pe nume cu cifre) și pick scos (n-are sens un „pick" între complementare). Fără complementare
+    sau rich eșuat → False, adică fluxul normal (confirmarea de coș)."""
+    added = run.added_product
+    if (
+        is_order
+        or added is None
+        or run.generated_links  # checkout link creat în acest tur → linkul, nu cross-sell
+        or not get_settings().cross_sell_enabled
+    ):
+        return False
+    # NX-237 (sub flag): excluderile vin din snapshotul canonic (cart_add tocmai a rulat →
+    # `run.cart_snapshot` e setat; nu facem o citire DOAR pentru exclude).
+    if get_settings().conversation_cart_enabled:
+        cart_lines = await _current_cart_lines(ctx, deps, run, fetch=False)
+    else:
+        cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
+    exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
+    complementary, sequence_label = await _cart_followup_products(
+        ctx, deps, str(added["id"]), exclude_ids
+    )
+    # NX-173 (P0): cross-sell-ul e un set NOU, adus direct din DB, în afara `ToolRun` → nu-l vede
+    # niciun backstop de tool. Un `cart_add` perfect sigur putea trage un complement contraindicat.
+    complementary = policy.gate(ctx, complementary, purpose="cross_sell")[0]
+    if complementary:
+        ctx.retrieval = RetrievalResult(
+            products=complementary,
+            source="relation_chain" if sequence_label else "cross_sell",
+        )
+        rich = (
+            await _finalize_rich(
+                deps.llm,
+                prompt_builder.build_rich_system(
+                    inp, routine=getattr(ctx, "routine", None) is not None
+                ),
+                _relation_chain_query(added, ctx.language, sequence_label),
+                complementary,
+                ctx,
+                history,
+                notes=commerce_note,
+            )
+        ).reply
+        if rich is not None and rich.items:
+            rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
+            rich.pick = None  # fără „Recomandarea mea" între complementare
+            ctx.set_rich_reply(
+                rich,
+                text=compose.flatten(rich, ctx.language),
+                products=compose.card_products(rich.items),
+            )
+            ctx.emit("cross_sell", added=str(added["id"]), n=len(rich.items))
+            return True
+    ctx.emit("cross_sell", added=str(added["id"]), n=0)
+    return False
+
+
+async def rehydrate_displayed(
+    ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
+) -> list[dict[str, Any]]:
+    """R3 — produsele DEJA arătate, re-aduse din catalog după id, ca set de retrieval.
+
+    Plasa de grounding pentru follow-up-urile neclasificate: „care e cea mai bună?" nu recheamă
+    niciun tool, deci fără ea turul ar răspunde „n-am găsit" despre produsele pe care clientul le
+    are pe ecran. Extrasă din `build_plan` fiindcă are acum doi apelanți — v1 (neschimbat) și
+    creierul unic, care nu mai trece pe acolo.
+
+    Re-citim din DB în loc să folosim ref-urile din state, și asta e intenționat: state-ul poartă
+    doar `{id, nume, preț}` de la turul în care produsele au fost arătate, iar prețul acela poate
+    fi vechi. Un răspuns grounded pe o cifră stale e tot o cifră greșită.
+
+    NX-173 (P0): rehidratarea aduce state VECHI, posibil de dinaintea unei declarații de sarcină —
+    deci trece prin gate ca orice altă cale."""
+    ids = [p.product_id for p in ctx.state.displayed_products]
+    if not ids:
+        return []
+    async with deps.db("rehydrate_displayed") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
+    return policy.gate(ctx, products, purpose="rehydrate")[0]
+
+
+def cheaper_seed_messages(
+    ctx: TurnContext, products: list[dict[str, Any]], *, baseline: float
+) -> list[dict[str, Any]]:
+    """Perechea (assistant tool_call, tool result) care duce setul DETERMINIST în fața modelului.
+
+    Calea v1 nu are nevoie de asta: acolo produsele intră în `ResponsePlan` și `render` compune
+    peste ele. Creierul unic compune însă din conversație, iar un set care n-a trecut printr-un
+    tool call pur și simplu nu există pentru model — ar fi căutat singur și am fi pierdut fix
+    garanția.
+
+    Tool call-ul e `search_products` cu `price_max = baseline`, și NU e o ficțiune: asta E
+    semantica lui `search_cheaper_than` (strict mai ieftin decât minimul afișat, aceeași
+    categorie), exprimată în vocabularul pe care modelul îl cunoaște. Un nume de tool inventat ar
+    fi fost o minciună — `search_cheaper_than` nu e în toolset, deci modelul n-ar fi putut să-l
+    cheme niciodată, iar noi i-am fi spus că l-a chemat.
+
+    Id-ul e DETERMINIST (derivat din `turn_id`), din același motiv ca la seed-ul speculativ: un
+    tur reluat trebuie să reconstruiască aceiași octeți, altfel prompt cachingul nu se mai prinde
+    pe reluări."""
+    from src.tools.catalog_tools import _brief  # noqa: PLC0415 — evită ciclul la import
+
+    call_id = "cheap_" + hashlib.sha256(f"cheaper:{ctx.turn_id}".encode()).hexdigest()[:16]
+    args = {"query": (ctx.message.body or "").strip()[:200], "price_max": round(baseline, 2)}
+    view = _brief(products, getattr(ctx.business, "domain_pack", None), ctx.language)
+    return [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "search_products",
+                        "arguments": json.dumps(args, sort_keys=True, ensure_ascii=False),
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": call_id, "content": view},
+    ]
+
+
 def _plan_mode(
     ctx: TurnContext,
     *,
@@ -356,63 +579,20 @@ async def build_plan(
             await run.execute("checkout_link", {"cart_items": items})
             ctx.emit("checkout_intent_fallback", items=len(items))
 
-    # #7b — cross-sell „merge bine cu" (model iZi): clientul tocmai a adăugat un produs în coș →
-    # sugerăm produse COMPLEMENTARE (rutină/accesorii) ca CARDURI, prin calea rich existentă.
-    # Retrieval DETERMINIST (brand/concern, categorie DIFERITĂ = complement, nu substitut); copy
-    # de la model (fit per produs, scrubuit); intro = confirmare DETERMINISTĂ a coșului (robustă la
-    # scrub pe nume cu cifre) + pick scos (n-are sens un „pick" între complementare). Gated de
-    # kill-switch; fără complementare / rich eșuat → cade în flux normal (confirmarea de coș).
-    added = run.added_product
-    if (
-        not is_order
-        and added is not None
-        and not run.generated_links  # checkout link creat în acest tur → linkul, nu cross-sell
-        and get_settings().cross_sell_enabled
+    # #7b — cross-sell: clientul tocmai a adaugat in cos → complementare ca CARDURI. Extras in
+    # `maybe_cross_sell` fiindca are doi apelanti (v1 aici, creierul unic dupa bucla); el emite
+    # telemetria si seteaza reply-ul.
+    if await maybe_cross_sell(
+        ctx,
+        deps,
+        run=run,
+        inp=inp,
+        history=history,
+        commerce_note=commerce_note,
+        policy=policy,
+        is_order=is_order,
     ):
-        # NX-237 (sub flag): excluderile vin din snapshotul canonic (cart_add tocmai a rulat →
-        # `run.cart_snapshot` e setat; nu facem o citire DOAR pentru exclude).
-        if get_settings().conversation_cart_enabled:
-            cart_lines = await _current_cart_lines(ctx, deps, run, fetch=False)
-        else:
-            cart_lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
-        exclude_ids = [str(line.get("product_id")) for line in cart_lines if line.get("product_id")]
-        complementary, sequence_label = await _cart_followup_products(
-            ctx, deps, str(added["id"]), exclude_ids
-        )
-        # NX-173 (P0): cross-sell-ul e un set NOU, adus direct din DB, în afara `ToolRun` → nu-l
-        # vede niciun backstop de tool. Un `cart_add` perfect sigur putea trage un complement
-        # contraindicat (review Codex).
-        complementary = policy.gate(ctx, complementary, purpose="cross_sell")[0]
-        if complementary:
-            ctx.retrieval = RetrievalResult(
-                products=complementary,
-                source="relation_chain" if sequence_label else "cross_sell",
-            )
-            rich = (
-                await _finalize_rich(
-                    deps.llm,
-                    prompt_builder.build_rich_system(
-                        inp, routine=getattr(ctx, "routine", None) is not None
-                    ),
-                    _relation_chain_query(added, ctx.language, sequence_label),
-                    complementary,
-                    ctx,
-                    history,
-                    notes=commerce_note,
-                )
-            ).reply
-            if rich is not None and rich.items:
-                rich.intro = _cart_confirm_msg(added, ctx.language)  # confirmare robustă (no scrub)
-                rich.pick = None  # fără „Recomandarea mea" între complementare
-                ctx.set_rich_reply(
-                    rich,
-                    text=compose.flatten(rich, ctx.language),
-                    products=compose.card_products(rich.items),
-                )
-                ctx.emit("cross_sell", added=str(added["id"]), n=len(rich.items))
-                return ResponsePlan(handled=True)
-        ctx.emit("cross_sell", added=str(added["id"]), n=0)
-        # niciun complement / rich eșuat → cade în fluxul normal (confirmarea de coș a agentului)
+        return ResponsePlan(handled=True)
 
     products = _dedupe(retrieved)
     # MOD SUPERLATIV (IZI): întrebare „care dintre ele e cea mai X" pe setul AFIȘAT → re-hidratează
@@ -447,45 +627,14 @@ async def build_plan(
         not is_order
         and not show_more  # „mai arată-mi" deja paginat determinist mai sus
         and not attr_query
-        and get_settings().cheaper_intent_enabled
-        and bool(ctx.state.displayed_products)
-        and _CHEAPER_RE.search(query) is not None
+        and cheaper_followup_detected(ctx, query)
     )
     if cheaper_intent:
-        baseline = min(p.price for p in ctx.state.displayed_products)
-        ref_ids = [p.product_id for p in ctx.state.displayed_products]
-        async with deps.db("search_cheaper_than") as conn:
-            cheaper = await search_cheaper_than(conn, ctx.business.id, ref_ids, baseline, limit=6)
-        # NX-173 (P0): „ceva mai ieftin" e o CĂUTARE NOUĂ în DB, în afara `ToolRun` → gate propriu.
-        cheaper = policy.gate(ctx, cheaper, purpose="cheaper")[0]
-        ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
-        if cheaper:
-            products = _dedupe(cheaper)
-        else:
-            # NX-163b: „ceva mai ieftin" + zero rezultate = GOL DE PREȚ în categoria setului
-            # afișat — cerere reală pe care catalogul n-o acoperă. Marcat LA SURSĂ (aici se știe
-            # că turul a fost o intenție de preț), NU inferat post-hoc din `no_result`: din
-            # rollup n-ai cum să distingi „n-am găsit nimic" de „n-am găsit nimic mai ieftin".
-            # Dimensiunea = categoria (acțiunea derivată e „adaugă opțiune entry-level"), pragul
-            # e preț rotunjit — atribute, nu text de user (P12).
-            # `product_ids` = setul AFIȘAT (ref-uri deja în mână, zero query în plus): rollup-ul
-            # derivă categoria prin join pe `products`. Dimensiunea se calculează unde se agregă,
-            # nu în calea de răspuns a clientului — care n-are voie să crape pentru o etichetă.
-            ctx.emit(
-                "unmet_query",
-                reason="price_gap",
-                product_ids=clean_ids(ref_ids),
-                price_below=round(baseline, 2),
-                locale=ctx.language,
-            )
-            # Nimic mai ieftin → mesaj sigur (NU cacheabil: e relativ la setul afișat al ACESTUI
-            # client; un cache hit l-ar servi altui context — clasa de cache-poisoning știută).
-            ctx.set_reply(_cheapest_already_msg(ctx.language), cacheable=False)
-            # NX-159 felia 2: mesajul are deja o întrebare, dar atașăm chips de continuare
-            # (popular / alt buget / altă categorie) → opțiuni clickabile, nu doar text.
-            if get_settings().cheapest_alternatives_enabled:
-                ctx.reply.suggestions = _thin_path_chips(ctx.language)
+        outcome = await resolve_cheaper_followup(ctx, deps, policy=policy)
+        if outcome.handled:
             return ResponsePlan(handled=True)
+        if outcome.products:
+            products = _dedupe(outcome.products)
     # R3: follow-up pe produse DEJA arătate („care e cea mai bună?") la care modelul n-a rechemat
     # un tool → re-hidratează produsele afișate (după id, din state) ca set de retrieval, ca să
     # răspundem GROUNDED pe ele în loc de „n-am găsit". Doar SALES, NU pe intenția de preț (aia o
@@ -500,11 +649,7 @@ async def build_plan(
         and ctx.state.displayed_products
         and not (final and _valid(final, [], run.generated_links, run.grounded_prices))
     ):
-        ids = [p.product_id for p in ctx.state.displayed_products]
-        async with deps.db("rehydrate_displayed") as conn:
-            products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
-        # NX-173 (P0): plasa de grounding rehidratează state vechi → gate ca pe orice altă cale.
-        products = policy.gate(ctx, products, purpose="rehydrate")[0]
+        products = await rehydrate_displayed(ctx, deps, policy=policy)
         rehydrated = True
     # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
     # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
