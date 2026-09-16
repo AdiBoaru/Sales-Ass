@@ -517,25 +517,32 @@ def _with_tenant_enums(
     Sortat: pentru același pachet ies aceiași octeți, deci schema rămâne cache-uibilă (felia 3).
     Enum GOL înseamnă că tenantul n-a declarat nimic; apelantul nu trebuie să ofere tool-ul deloc
     (vezi `turn_profile.select`), iar dacă totuși o face, un enum vid e refuzat de furnizor —
-    zgomotos, nu tăcut."""
-    name = str(fn_name) if (fn_name := (fn := schema.get("function", {})).get("name")) else ""
+    zgomotos, nu tăcut. EXCEPȚIA sunt parametrii din `_DROP_PARAM_IF_NO_VALUES`, care dispar."""
+    fn = schema.get("function") or {}
+    name = str(fn.get("name") or "")
     spec = _TENANT_ENUMS.get(name)
     if not spec:
         return schema
-    props = dict(fn["parameters"]["properties"])
-    required = list(fn["parameters"].get("required") or ())
+    params_in = fn["parameters"]
+    props = dict(params_in["properties"])
+    # `required` se rescrie doar dacă exista: a-l ADĂUGA gol acolo unde n-a fost ar schimba schema
+    # unui tool care nu are legătură cu enumurile tenantului, iar `strict: true` îl citește.
+    required = list(params_in["required"]) if "required" in params_in else None
     for param, key in spec.items():
         if param not in props:
             continue
         declared = sorted(set(values.get(key) or ()))
         if not declared and (name, param) in _DROP_PARAM_IF_NO_VALUES:
             props.pop(param, None)
-            required = [r for r in required if r != param]
+            if required is not None:
+                required = [r for r in required if r != param]
             continue
         # Un parametru care acceptă `null` trebuie să-l aibă și în enum: `type` permite, dar
         # `enum` restrânge, iar un `null` absent din enum face invalidă exact valoarea pe care
         # descrierea o cere („Null dacă n-a precizat").
         allows_null = "null" in (props[param].get("type") or ())
         props[param] = {**props[param], "enum": [*declared, *([None] if allows_null else [])]}
-    params = {**fn["parameters"], "properties": props, "required": required}
+    params = {**params_in, "properties": props}
+    if required is not None:
+        params["required"] = required
     return {**schema, "function": {**fn, "parameters": params}}

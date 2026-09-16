@@ -305,12 +305,14 @@ async def test_bugetul_scurteaza_rutina_in_ordinea_declarata():
     result = await _run(_ctx(priority=_PRIORITY), budget_max=150)
 
     assert result.ok
-    steps = [line.split("—")[0].strip() for line in result.llm_view.splitlines()[1:5]]
     assert "3. tratament — LIPSĂ (budget)" in result.llm_view
-    assert steps  # sanity: vederea are pași numerotați
     assert sum(CATALOG[p["id"]][1] for p in result.products) <= 150
     assert "Am scurtat rutina ca să încapă în buget" in result.llm_view
-    assert "tratament (+90,00 lei)" in result.llm_view
+    # „de la", nu „+": cifra e cel mai MIC preț de pe pasul scos, deci un prag inferior. Un „ar
+    # costa 90 lei" ar fi luat ca exact, iar nimic din aval nu poate contrazice un preț real citit
+    # ca altceva.
+    assert "tratament (de la 90,00 lei)" in result.llm_view
+    assert "cel puțin" in result.llm_view
 
 
 async def test_fara_prioritate_declarata_nu_se_scurteaza_nimic():
@@ -388,6 +390,41 @@ async def test_pasul_din_alt_moment_nu_apare_ca_lipsa():
     assert "1. curatare" in result.llm_view
     assert "2. tratament" in result.llm_view
     assert "3. hidratare" in result.llm_view
+
+
+async def test_bugetul_nu_e_depasit_niciodata_cand_s_a_scurtat():
+    """Invariantul algoritmului greedy, pe o plajă de bugete: dacă s-a renunțat la vreun pas,
+    suma servită NU depășește bugetul. Dacă nu s-a renunțat, rutina e întreagă la minim (și atunci
+    poate depăși, declarat).
+
+    Testat pe plajă, nu pe un buget, fiindcă bugul unei greedy cu renunțare, re-adăugare și urcare
+    ar fi o depășire la o singură valoare, exact între treptele de preț ale catalogului."""
+    for budget in (50, 80, 110, 140, 170, 200, 230, 260, 300):
+        result = await _run(_ctx(priority=_PRIORITY), budget_max=budget)
+        total = sum(CATALOG[p["id"]][1] for p in result.products)
+        if "Am scurtat" in (result.llm_view or ""):
+            assert total <= budget, f"buget {budget}: s-a scurtat dar s-a cheltuit {total}"
+        else:
+            # Nimic de renunțat ⇒ rutină întreagă la minim; depășirea e declarată, nu ascunsă.
+            assert len(result.products) == 4 or not result.ok
+
+
+async def test_niciun_pas_in_momentul_cerut_nu_ridica_excepție():
+    """Toți pașii familiei sunt ai celuilalt moment. `compose` refuză o subsecvență goală, deci
+    fără garda din tool ar ieși un `ValueError` NECAPTURAT dintr-un tool — adică tăcere pentru
+    client (P6). Nu e atins pe pachetul de azi, dar e o configurare validă."""
+    ctx = _ctx(
+        families={"fata": ["tonifiere", "tratament"]},
+        by_product_type={"toner de fata": "fata:tonifiere", "ser de fata": "fata:tratament"},
+        time_markers={"am": ["dimineata"], "pm": ["seara"]},
+        step_time={"tonifiere": "am", "tratament": "am"},
+    )
+    result = await _run(ctx, moment="pm")
+
+    assert result.ok is False
+    assert result.error == "no_step_at_moment"
+    assert "nu se aplică în momentul «pm»" in result.llm_view
+    assert "nu inventa pași" in result.llm_view
 
 
 async def test_momentul_necunoscut_se_ignora_nu_respinge_turul():
@@ -529,3 +566,60 @@ async def test_fara_muchii_declarate_ancora_e_ignorata_nu_ghicita():
 
     assert result.ok
     assert len(result.products) == 4
+
+
+# ── Schema tool-ului: enumurile tenantului ──────────────────────────────────────────────────────
+
+
+def test_momentul_dispare_la_tenantul_fara_momente():
+    """Un RAFINAMENT nu are voie să omoare tool-ul. Furnizorul refuză un enum vid, deci dacă
+    `moment` ar rămâne cu `enum: []` la un vertical fără momente ale zilei (un service auto n-are
+    dimineață), TOT `routine_plan` ar crăpa — pentru un parametru opțional."""
+    from src.agent.tool_definitions import tool_schemas
+
+    params = tool_schemas(["routine_plan"], families=("fata",), moments=())[0]["function"][
+        "parameters"
+    ]
+
+    assert "moment" not in params["properties"]
+    assert "moment" not in params["required"]
+    assert "family" in params["properties"]  # restul schemei, neatins
+
+
+def test_momentul_nullable_are_null_in_enum():
+    """`type` permite null, dar `enum` RESTRÂNGE: un `null` absent din enum face invalidă exact
+    valoarea pe care descrierea o cere („Null dacă n-a precizat")."""
+    from src.agent.tool_definitions import tool_schemas
+
+    params = tool_schemas(["routine_plan"], families=("fata",), moments=("am", "pm"))[0][
+        "function"
+    ]["parameters"]
+
+    assert params["properties"]["moment"]["enum"] == ["am", "pm", None]
+    assert "moment" in params["required"]
+    # `family` nu e nullable, deci nu primește null în enum.
+    assert None not in params["properties"]["family"]["enum"]
+
+
+def test_schema_altui_tool_nu_e_atinsa_de_parametrul_nou():
+    """Garda împotriva efectului colateral: rescrierea lui `required` se face doar unde exista."""
+    from src.agent.tool_definitions import _SCHEMAS, tool_schemas
+
+    got = tool_schemas(["related_products"], relation_kinds=("complement",))[0]
+    original = _SCHEMAS["related_products"]["function"]["parameters"]
+
+    assert got["function"]["parameters"]["required"] == original["required"]
+    assert sorted(got["function"]["parameters"]["properties"]) == sorted(original["properties"])
+
+
+async def test_antetul_nu_promite_pasi_pe_care_nu_i_a_dat(_catalog):
+    """Antetul e prima linie pe care o citește modelul. „Rutina fata, 6 pași" urmat de patru LIPSĂ
+    îl invită să anunțe o rutină în șase pași. Și e formulat fără cifră lipită de substantiv, ca să
+    nu apară „1 pași" în promptul din care modelul copiază tonul."""
+    complet = await _run(_ctx())
+    assert complet.llm_view.startswith("Rutina fata, 4 pași:")
+
+    _catalog["available"] -= {"t1", "t2"}
+    parțial = await _run(_ctx())
+    assert parțial.llm_view.startswith("Rutina fata, pași acoperiți: 3 din 4:")
+    assert "3 pași acoperiți" not in parțial.llm_view  # fără acord greșit de plural

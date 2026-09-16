@@ -383,6 +383,26 @@ dinainte (rutină întreagă la minim, plus cifra). Kill-switch prin DATE, nu pr
 ordinea de APLICARE ar tăia protecția solară prima, fiindcă e ultimul pas aplicat și aproape primul
 în importanță.
 
+Cifrele raportate pentru pașii scoși sunt **cele mai mici** de pe pasul respectiv, deci un prag
+inferior: vederea spune „de la 150 lei" și „cel puțin 210 lei în plus", nu o sumă exactă. Un „ar
+costa 210" ar fi luat de client ca preț, iar nimic din aval nu poate contrazice un preț real citit
+ca altceva.
+
+### Degradarea e pe STRATURI, nu totul-sau-nimic
+
+Găsit la verificarea propriei implementări, nu presupus: `priority` trebuie să fie o PERMUTARE a
+pașilor familiei, deci cineva care adaugă un pas în `families` și uită să regenereze prioritatea ar
+fi făcut `build_spec` să respingă tot `routine_steps` — iar `load_routine_steps` ar fi întors spec
+GOL. Consecința: rutinele dispar **complet**, și tăcut pentru client (tool-ul nu se mai oferă,
+`has_routine` False, turul cade pe o recomandare). Un config strict aditiv ar fi omorât
+capabilitatea pe care o îmbogățește.
+
+Acum cheile de rafinament (`priority`, `step_time`, `time_markers`, `step_stems`) se aruncă
+SEPARAT: nucleul (`families`, `by_product_type`, promovări) supraviețuiește, rutinele se compun ca
+înainte, doar nu se scurtează la buget. Nucleul rămâne totul-sau-nimic, fiindcă fără el nu există
+noțiunea de pas. La SCRIERE regula e inversă și neatinsă: `build_spec` refuză orice invaliditate,
+deci `derive_*` și `set_domain_pack.py` nu pot publica un config pe jumătate valid.
+
 **Pasul care nu se aplică în momentul cerut nu e un gol.** O rutină de seară nu „ratează" protecția
 solară: pasul iese din secvență înaintea compunerii, pozițiile se renumerotează consecutiv (ca
 „pasul 3" să însemne ceva la turul următor) și se declară separat, ca modelul să nu-l adauge singur
@@ -417,7 +437,10 @@ pentru a părea rutina completă. `UNKNOWN ≠ MISMATCH`, aplicat la timp.
 | Buget sub rutina completă | se scurtează în ordinea derivată, cu „ce ai lăsat deoparte și cât ar adăuga" (§10.2) |
 | Buget doar pentru un pas | nu se promite o rutină; se spune cât costă pasul următor |
 | Pachet fără `priority` | nu se scurtează nimic, se declară minimul (comportamentul de dinainte) |
+| `priority` driftat (pas adăugat în `families`) | rafinamentele cad separat, rutinele rămân vii |
 | Pas din alt moment al zilei | iese din secvență, pozițiile se renumerotează, se declară neaplicabil |
+| TOȚI pașii sunt ai celuilalt moment | `no_step_at_moment`, cu explicație; tool-ul NU ridică excepție |
+| Tenant fără `time_markers` | parametrul `moment` dispare din schemă (enum vid = tool refuzat) |
 
 ## 12. Out of scope
 

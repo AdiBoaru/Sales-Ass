@@ -314,9 +314,14 @@ def _view(
 
     # Antetul spune ACOPERIT din DECLARAT, nu doar declarat: la un buget strâns, „Rutina fata,
     # 6 pași" urmat de patru LIPSĂ îl invită pe model să anunțe o rutină în șase pași.
+    #
+    # Formulat ca „pași acoperiți: 1 din 6", nu „1 pași acoperiți": cifra nu stă lipită de
+    # substantiv, deci nu cere acord de plural. Alternativa ar fi fost un tabel de forme CLDR
+    # pentru un text pe care îl citește modelul, nu clientul — iar „1 pași" în promptul lui e
+    # exact felul de greșeală pe care o repetă în proză.
     covered = len(plan.covered_slots)
     total = len(plan.slots)
-    head = f"{covered} pași" if covered == total else f"{covered} pași acoperiți din {total}"
+    head = f"{total} pași" if covered == total else f"pași acoperiți: {covered} din {total}"
     lines = [f"Rutina {plan.family}, {head}:"]
     for slot in plan.slots:
         if slot.product_id is None:
@@ -342,12 +347,17 @@ def _view(
             + "."
         )
     if dropped:
+        # Cifrele sunt cele mai MICI disponibile pe pasul respectiv, deci un prag inferior, nu un
+        # preț. „Ar costa 210 lei" ar fi o afirmație pe care clientul o ia ca exactă și pe care
+        # nimic din aval n-o poate contrazice: prețurile sunt reale, doar citite ca altceva.
         extra = sum(dropped.values(), Decimal(0))
         lines.append(
             "Am scurtat rutina ca să încapă în buget. Pași lăsați deoparte: "
-            + ", ".join(f"{s} (+{amount_text(float(p), language)} lei)" for s, p in dropped.items())
-            + f". Adăugați toți, ar costa {amount_text(float(extra), language)} lei în plus. "
-            "Spune-i clientului ce i-ai dat și ce poate adăuga mai târziu, nu că nu se poate."
+            + ", ".join(
+                f"{s} (de la {amount_text(float(p), language)} lei)" for s, p in dropped.items()
+            )
+            + f". Adăugați toți, ar costa cel puțin {amount_text(float(extra), language)} lei în "
+            "plus. Spune-i clientului ce i-ai dat și ce poate adăuga mai târziu, nu că nu se poate."
         )
     if budget is not None and floor is not None and floor > budget and not dropped:
         lines.append(
@@ -504,6 +514,21 @@ async def routine_plan_tool(
         for s in skipped_for_moment:
             by_step.pop(s, None)
             reasons.pop(s, None)
+        if not steps:
+            # Toți pașii familiei sunt ai celuilalt moment. Nu e atins pe pachetul de azi (doar
+            # protecția solară e legată de dimineață), dar un pachet în care ar fi e o configurare
+            # validă, iar `compose` refuză o subsecvență goală. Un tool nu are voie să ridice:
+            # răspundem cu ce E adevărat, ca modelul să poată spune de ce n-are ce oferi (P6).
+            return ToolResult(
+                ok=False,
+                products=[],
+                error="no_step_at_moment",
+                llm_view=(
+                    f"Niciun pas din rutina «{a.family}» nu se aplică în momentul «{moment}». "
+                    "Spune-i clientului că pașii pe care îi avem sunt pentru celălalt moment al "
+                    "zilei, nu inventa pași și nu compune o rutină."
+                ),
+            )
     else:
         skipped_for_moment = []
 

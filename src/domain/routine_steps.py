@@ -406,6 +406,10 @@ def build_spec(raw: Any) -> RoutineSpec:
 
 EMPTY_ROUTINE_STEPS = RoutineSpec(families={}, by_product_type={})
 
+#: Cheile care ADAUGĂ o comportare, fără ca absența lor să schimbe ce funcționa înainte. Sunt
+#: singurele pe care `load_routine_steps` le poate arunca separat — vezi docstringul lui.
+_OPTIONAL_KEYS: frozenset[str] = frozenset({"priority", "step_time", "time_markers", "step_stems"})
+
 
 def load_routine_steps(raw: Any) -> RoutineSpec:
     """Varianta TOLERANTĂ, pentru încărcarea pachetului în producție.
@@ -418,13 +422,41 @@ def load_routine_steps(raw: Any) -> RoutineSpec:
     nu-i declară, iar filtrul ar întoarce tăcut zero rânduri.
 
     Config absent → spec gol, adică EXACT comportamentul de azi: niciun produs n-are pas.
+
+    **Degradarea e pe STRATURI, nu totul-sau-nimic.** Cheile de RAFINAMENT (`priority`, `step_time`,
+    `time_markers`, `step_stems`) sunt strict aditive: fără ele, rutinele se compun exact ca înainte
+    de a exista, doar nu se scurtează la buget. Deci un drift în ele nu are voie să coste
+    capabilitatea întreagă — iar asta nu e o precauție teoretică: `priority` trebuie să fie o
+    PERMUTARE a pașilor familiei, deci cineva care adaugă un pas în `families` și uită să
+    regenereze prioritatea ar face rutinele să dispară complet, tăcut pentru client (tool-ul nu s-ar
+    mai oferi, `has_routine` ar fi False, turul ar cădea pe o recomandare).
+
+    Nucleul (`families`, `by_product_type`, promovări) rămâne totul-sau-nimic: fără el nu există
+    noțiunea de pas, deci nu există nimic de degradat.
+
+    La SCRIERE regula e inversă și rămâne neatinsă: `build_spec` refuză orice invaliditate, deci
+    `scripts/derive_*` și `set_domain_pack.py` nu pot publica un config pe jumătate valid.
     """
     if not raw:
         return EMPTY_ROUTINE_STEPS
     try:
         return build_spec(raw)
-    except RoutineStepConfigError as e:
-        log.warning("routine_steps: config respins, rutinele rămân indisponibile (%s)", e)
+    except RoutineStepConfigError as core_error:
+        if isinstance(raw, dict) and any(k in raw for k in _OPTIONAL_KEYS):
+            reduced = {k: v for k, v in raw.items() if k not in _OPTIONAL_KEYS}
+            try:
+                spec = build_spec(reduced)
+            except RoutineStepConfigError:
+                pass  # nucleul e stricat și el → degradare completă, mai jos
+            else:
+                log.warning(
+                    "routine_steps: rafinamentele (%s) au fost respinse, rutinele se compun fără "
+                    "ele (nu se scurtează la buget): %s",
+                    ", ".join(sorted(_OPTIONAL_KEYS)),
+                    core_error,
+                )
+                return spec
+        log.warning("routine_steps: config respins, rutinele rămân indisponibile (%s)", core_error)
         return EMPTY_ROUTINE_STEPS
 
 
