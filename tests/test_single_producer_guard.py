@@ -12,18 +12,30 @@ propria pliere de diacritice.
 O rescriere e corectă în ziua în care o scrii. Divergează tăcut după, iar testele nu prind nimic
 fiindcă verifică o copie contra altei copii.
 
-Poarta asta închide clasa pentru PLIEREA DE DIACRITICE, care e cheia de potrivire a întregii căi
-lexicale. Detecția e pe FORMĂ (AST), nu pe o listă de nume de funcții: o listă ar fi ea însăși
-încă o rescriere a adevărului, și ar rata exact copia următoare, care va avea alt nume. Precedentul
-e `tests/test_dropped_objects_guard.py` (NX-289), care citește migrările în loc să țină minte ce
-s-a șters.
+Poarta acoperă azi DOUĂ adevăruri:
+
+1. **Plierea de diacritice** — cheia de potrivire a întregii căi lexicale.
+   Registru: `folding.DISTINCT_FOLDINGS`.
+2. **Ce poate PROMITE magazinul (chips)** — un chip nu e o părere, e o promisiune apăsabilă, iar
+   apăsarea lui reintră în pipeline ca mesaj nou al clientului.
+   Registru: `clarify_menu.CHIP_PRODUCERS`.
+
+În ambele cazuri detecția e pe FORMĂ (AST), nu pe o listă de nume de funcții: o listă ar fi ea
+însăși încă o rescriere a adevărului, și ar rata exact copia următoare, care va avea alt nume.
+Măsurat: la pliere, cititul cu ochiul găsise 4 locuri și poarta a găsit 19; la chips, 5 și 12.
+Precedentul e `tests/test_dropped_objects_guard.py` (NX-289), care citește migrările în loc să țină
+minte ce s-a șters.
 
 ## Ce NU face
 
-Nu interzice o a doua pliere, o cere DECLARATĂ. Un slug ASCII e un adevăr diferit de o cheie de
-potrivire, iar a le unifica fiindcă arată la fel ar fi greșeala simetrică — vezi lecția NX-295: un
-mecanism care pare general poate fi greșit tocmai prin generalitate. Excepțiile stau în
-`folding.DISTINCT_FOLDINGS`, cu motiv, lângă producător.
+Nu interzice al doilea producător, îl cere DECLARAT cu sursa lui. Un slug ASCII chiar e un adevăr
+diferit de o cheie de potrivire, iar a le unifica fiindcă arată la fel ar fi greșeala simetrică —
+vezi lecția NX-295: un mecanism care pare general poate fi greșit tocmai prin generalitate.
+Registrul de chips nu face chip-urile adevărate; face vizibil cine le produce, fiindcă azi 11 din
+12 sunt ancorați ACCIDENTAL (se întâmplă să cheme date reale), ceea ce nu e un invariant.
+
+Simetric, fiecare registru e verificat și invers: o intrare care nu mai corespunde codului e la fel
+de periculoasă ca una lipsă, fiindcă amândouă afirmă că sistemul e într-o stare în care nu e.
 """
 
 from __future__ import annotations
@@ -31,6 +43,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from src.catalog.clarify_menu import CHIP_PRODUCERS
 from src.catalog.folding import DISTINCT_FOLDINGS
 
 REPO = Path(__file__).resolve().parents[1]
@@ -181,3 +194,103 @@ def test_fiecare_exceptie_are_motiv_nu_doar_o_bifa() -> None:
     """Motivul e partea care lucrează: el e citit de următorul om care vrea să adauge o copie."""
     thin = sorted(k for k, why in DISTINCT_FOLDINGS.items() if len(why.strip()) < 40)
     assert not thin, f"Excepții fără motiv real: {thin}"
+
+
+# ── Adevărul 2: ce poate PROMITE magazinul (chips) ───────────────────────────────────────────
+
+
+class _ChipFinder(ast.NodeVisitor):
+    """Adună funcțiile care emit un chip către client.
+
+    Două forme, amândouă structurale:
+
+    1. atribuire pe `.suggestions` (`ctx.reply.suggestions = …`);
+    2. argument `suggestions=` sau `chips=` într-un apel (construcție de `Reply`, `set_clarify`,
+       `set_comparison`).
+
+    Un chip nu e o părere, e o promisiune apăsabilă: apăsarea lui reintră în pipeline ca mesaj NOU
+    al clientului. De-aia producătorii se declară, chiar și cei care azi nu pot minți.
+    """
+
+    KWARGS = {"suggestions", "chips"}
+
+    def __init__(self) -> None:
+        self.found: set[str] = set()
+        self._stack: list[str] = []
+
+    def _here(self) -> str:
+        return self._stack[-1] if self._stack else "<module>"
+
+    def _enter(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self._stack.append(node.name)
+        self.generic_visit(node)
+        self._stack.pop()
+
+    visit_FunctionDef = _enter  # noqa: N815
+    visit_AsyncFunctionDef = _enter  # noqa: N815
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+        for target in node.targets:
+            if isinstance(target, ast.Attribute) and target.attr == "suggestions":
+                self.found.add(self._here())
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        # `suggestions=` pe DEFINIȚIE (un parametru cu acest nume) nu e emitere; doar pe APEL.
+        if any(kw.arg in self.KWARGS for kw in node.keywords if kw.arg):
+            self.found.add(self._here())
+        self.generic_visit(node)
+
+
+#: Funcții care POARTĂ chips fără să le producă: transportă mai departe ce a decis altcineva.
+#: Declarate aici, nu în `CHIP_PRODUCERS`, fiindcă registrul ăla răspunde la „de unde vine
+#: afirmația" — iar răspunsul unui releu ar fi „de mai sus", adică nimic.
+_RELAYS = {
+    # Primesc `suggestions`/`chips` de la apelant. Apelanții sunt cei declarați în `CHIP_PRODUCERS`;
+    # a cere unui releu „sursa afirmației" ar primi răspunsul „de mai sus", adică nimic.
+    "src/models.py::set_clarify",
+    "src/models.py::set_comparison_reply",
+    # Rehidratează chips-urile dintr-un payload de outbox deja scris — transport, nu decizie.
+    "src/channels/web/render.py::reply_from_outbox",
+    # Copiază `reply.suggestions` într-un semnal intern (NX-239); nu iese nimic nou spre client.
+    "src/agent/control_plane.py::gate_early_exit",
+}
+
+
+def _scan_chips() -> set[str]:
+    out: set[str] = set()
+    for path in sorted(SRC.rglob("*.py")):
+        rel = _rel(path)
+        finder = _ChipFinder()
+        finder.visit(ast.parse(path.read_text(encoding="utf-8")))
+        for fn in finder.found:
+            key = f"{rel}::{fn}"
+            if key in _RELAYS or f"{rel}::*" in _RELAYS:
+                continue
+            out.add(key)
+    return out
+
+
+def test_fiecare_producator_de_chips_e_declarat_cu_sursa_lui() -> None:
+    """Un producător nou de chips nu intră tăcut.
+
+    Azi patru din cinci sunt ancorați PRIN CONSTRUCȚIE — cheamă date reale, deci se întâmplă să nu
+    poată minți. „Se întâmplă" nu e invariant. Registrul nu face chip-urile adevărate; face vizibil
+    cine le produce, ca al șaselea să nu apară fără ca nimeni să se uite la sursa lui.
+    """
+    undeclared = sorted(_scan_chips() - set(CHIP_PRODUCERS))
+    assert not undeclared, (
+        "Producător de chips nedeclarat:\n"
+        + "\n".join(f"  {k}" for k in undeclared)
+        + "\n\nDeclară-l în `clarify_menu.CHIP_PRODUCERS`, cu SURSA din care se poate verifica "
+        "că numește ceva servabil. Dacă doar transportă chips decise de altcineva, e un releu: "
+        "vezi `_RELAYS` în test."
+    )
+
+
+def test_registrul_de_chips_nu_ramane_in_urma_codului() -> None:
+    """Un producător declarat care nu mai emite chips e o afirmație falsă despre sistem."""
+    stale = sorted(set(CHIP_PRODUCERS) - _scan_chips())
+    assert not stale, "Intrări în `CHIP_PRODUCERS` care nu mai emit chips:\n" + "\n".join(
+        f"  {k}" for k in stale
+    )
