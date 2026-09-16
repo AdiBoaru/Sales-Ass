@@ -606,7 +606,7 @@ async def _triage_shadow(db: DbProvider, ctx: TurnContext, llm) -> None:
         if classified is None:
             ctx.emit("triage_shadow", shadow_route=None, outcome="unavailable", agrees=False)
             return
-        out, _ = classified
+        out, _, _ = classified
         outcome = _brain_outcome(ctx)
         ctx.emit(
             "triage_shadow",

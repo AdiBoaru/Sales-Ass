@@ -418,6 +418,46 @@ proza din docstring-uri. Detalii:
 [`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql) +
 [`tasks/NX-289.md`](tasks/NX-289.md).
 
+**Fix 2026-09-16 — botul oferea chips pentru produse pe care magazinul nu le vinde.**
+Găsit pe o conversație REALĂ (`conversation_traces`): la „vreau un cablu usb", un magazin de
+COSMETICE a răspuns cu o întrebare de clarificare și patru sugestii — «Pentru telefon, USB-C, 1-2
+metri», «Pentru consola, cablu USB de date». `suggestions` era SINGURUL câmp al contractului de
+triaj fără poartă: `category_key` inventat se aruncă de mult, `concerns` se filtrează pe
+vocabularul pachetului, dar chips-urile plecau la client exact cum le scria nano. Un chip nu e o
+părere, e o promisiune apăsabilă: textul lui reintră în pipeline ca mesaj NOU al clientului.
+**Reparația nu e un filtru peste ce scrie modelul, ci un MENIU ÎNCHIS dat înainte**
+(`src/catalog/clarify_menu.py`), iar distincția e măsurată, nu stilistică: pe catalogul SOLE,
+rezolvarea termen-cu-termen a chip-ului cu cablul întoarce `c` = KNOWN pe `key_ingredients` (de la
+«vitamina c») și `1`/`2` = KNOWN pe `shade_code`, deci un filtru „măcar un termen se rezolvă" ar fi
+PĂSTRAT tocmai chip-ul fals și ar fi aruncat «Am tenul uscat». Un vocabular bogat are un cuvânt
+pentru aproape orice, deci nu poate fi folosit ca detector de minciuni.
+Meniul se compune din catalogul REAL (categorii servabile + fațetele care există CHIAR sub raftul
+discutat, `facet_keys_in_scope`) și din conversație (cheile pe care clientul le-a spus deja nu se
+mai oferă). Invarianta care îl face onest e **round-trip-ul**: o frază intră doar dacă se rezolvă
+înapoi, prin ACEEAȘI `resolve_any` pe care o folosește căutarea, pe o cheie cu produse. Măsurat:
+182 din 186 de fraze candidate trec, iar cele 4 respinse sunt exact «ten mixt»/«ten normal» — chei
+pe care pachetul le promite și catalogul nu le are. Nicio listă scrisă de mână nu le-ar fi prins.
+Poarta e ASIMETRICĂ, deliberat: **fail-OPEN pe vocabular** (DB jos ⇒ meniu gol ⇒ sugestiile trec ca
+azi, altfel o clipeală de DB ar deveni „zero chips, mereu" — aceeași capcană ca la garda
+off-category) și **fail-CLOSED pe chip** (nu numește nimic din meniu ⇒ se aruncă; lista se
+COMPLETEAZĂ din meniu, nu se înlocuiește).
+Afirmația mai tare — „nu vindem așa ceva" — are prag propriu de dovadă și a fost calibrată pe
+trafic: regula naivă («≥2 termeni, niciunul rezolvabil») declanșa pe 8 din 25 de ture reale și era
+corectă pe 2, adică ar fi răspuns „nu vindem asta" la „Trimite-mi linkul la produs". Cu două
+condiții STRUCTURALE în plus — conversația n-a arătat încă produse, și niciun cuvânt nu e aproape
+de limba catalogului (typo guard) — ajunge la 2 declanșări, ambele corecte, zero false. Nicio listă
+de cuvinte românești (P11).
+Patru defecte au ieșit doar la RULAREA pe catalogul real, după ce codul „arăta corect": rafturile
+oferite erau cele mai MICI patru (tăiere înainte de sortare), căderea pe meniu ARUNCA singura
+sugestie validată, `oily` se oferea drept «luciu» (cel mai scurt alias, un simptom fără context),
+iar poarta accepta „am **ten**ul uscat" fiindcă «Ten» e subșir — acum potrivirea e pe cuvinte
+întregi consecutive. Toate patru sunt pinuite în `tests/test_clarify_menu.py`.
+Kill-switch `CLARIFY_MENU_ENABLED=false` → comportamentul de dinainte, byte-identic.
+**Neacoperit, declarat:** calea creierului unic (`SINGLE_BRAIN_ENABLED`) nu emite azi chips deloc
+(`brain.py` cheamă `set_reply` fără `suggestions`), deci clasa de defect nu există acolo; sugestiile
+bogate ale agentului de vânzare (`compose._suggestion_chips`) rămân NEfiltrate — în turul măsurat
+au fost salvate de downgrade-ul `no-items-selected`, ceea ce nu e o garanție.
+
 **Fix 2026-09-16 — o cratimă anula filtrul de raft, iar stiva de constrângeri nu se putea reseta.**
 Găsite pe o conversație REALĂ (`conversation_traces` + `analytics_events`), nu pe fixture: clientul
 a discutat despre un ruj, apoi a cerut „vreau sa vad produse de par" și a primit UN șampon de
@@ -452,6 +492,37 @@ de **POTRIVIRE** (`validator_ok: true` pe turul cu fardurile). În plus, etichet
 `all-items-dropped-by-membership` se punea și când modelul REFUZASE setul fără să numească niciun
 produs (nu se dropase nimic): două defecte diferite sub aceeași etichetă nu se pot număra separat,
 deci motivul e acum tri-state (`no-items-selected` e distinct).
+
+**NX-293 — cererea se anula singură: textul clientului era cerut a doua oară, ca TEXT.**
+Găsit pe o conversație REALĂ: „ce produse de barbati ai" → „nu am găsit produse în categoria pentru
+bărbați", pe un raft cu 3 produse `published`/`in_stock`. Triajul și vocabularul au funcționat
+(`category=barbati`, `known`/`exact`, `evidence=3`); căutarea a golit setul cu propriul predicat de
+text, fiindcă `_lexical_fetch` leagă cu ȘI potrivirea de text și filtrele dure, iar când cererea
+**este** categoria, textul ei e numele raftului — cuvânt care nu apare în numele produselor de pe el
+(„Men Shower Gel", „Madeca Homme"). Măsurat: doar filtrul = 3, filtru ȘI text = 0, iar „barbati"
+apare în vectorul de căutare al UNUI produs din 2.758. Cauza e structurală, nu a raftului: sistemul
+are DOUĂ scări complementare — cea de TEXT (046) relaxează cuvintele cu filtrele fixe, cea de FILTRE
+relaxează filtrele cu textul fix — deci **textul era singurul lucru pe care nimic nu-l putea lăsa
+deoparte**. Pe rafturile rădăcină ale aceluiași catalog, 4 din 12 tăceau complet când formularea e
+numele raftului, iar restul pierdeau majoritatea (Ten 1461→533, Machiaj 681→368). Nimic din aval
+n-o putea prinde: validatorul și `grounding_guard` sunt porți de ADEVĂR, nu de POTRIVIRE
+(`validator_ok: true` pe turul mut). Fixul e o treaptă TERMINALĂ `filters_only` care nu pune niciun
+predicat de text și servește setul filtrelor — sigură prin construcție, fiindcă rezultatul e o
+submulțime a ceea ce filtrele dure permit (spre deosebire de `relaxed`/`fuzzy`, care rătăcesc prin
+catalog). Poarta e „filtru de SUBIECT", nu „orice filtru": raftul/fațeta/brandul/varianta NUMESC un
+set cerut, pe când `price_max`/`in_stock_only` doar îngustează unul — fără filtru de subiect, un text
+care nu prinde nimic RĂMÂNE zero. Se oferă doar pe ULTIMA treaptă a scării de filtre
+(`allow_filters_only`, opt-in): a renunța la cuvintele clientului e ultima concesie din sistem, iar
+oferită pe treapta 0 ar fi preferat „ce am pe raft" în locul unui răspuns care chiar potrivește, doar
+fiindcă o fațetă era prea îngustă. Default-ul opt-in protejează doi apelanți care au nevoie de opusul
+ei: sonda de variantă (ar eticheta orice drept `missing_variant`) și harnessul de retrieval (ar
+măsura alt sistem decât cel comparat). Perechea obligatorie a fixului: `lexical_step` ajunge acum la
+MODEL (`_brief`), fiindcă o treaptă degradată arăta identic cu o potrivire exactă și modelul o
+prezenta drept „uite ce ai cerut" — `filters_only` sunt produsele corecte ca RAFT și greșite ca
+POTRIVIRE. Semnalul de cerere neîmplinită nu se stinge: `unmet_query reason=text_unmatched`
+(„am marfa, n-am potrivirea") e distinct de `no_result` („n-am marfa"), citit ca secțiune proprie în
+`demand_report`. Kill-switch `SEARCH_FILTERS_ONLY_FALLBACK_ENABLED=false` → tăcerea de dinainte,
+byte-identic. Detalii: [`tasks/stage1/NX-293.md`](tasks/stage1/NX-293.md).
 
 ---
 
@@ -1181,7 +1252,15 @@ NULL pe orice card) — dar are acum PRODUCĂTOR determinist (NX-279,
 distincte, zero model; cere migrarea 050, pachetul re-aplicat și `--apply`; vechiul
 `summarize_reviews.py` INVENTA rezumatele și rescria `products.rating`, e arhivat cu gardă);
 `intent_aliases` = 0; `faqs.embedding` = 0 pe toate cele 20 (deci lookup-ul de
-FAQ la nivel de business tot nu servește nimic).
+FAQ la nivel de business tot nu servește nimic); **`product_category_map` = 0** (măsurat
+2026-09-16) — deci catalogul e o **PARTIȚIE strictă**: acoperirea pe rafturi e 2.758/2.758, suma
+pe rafturi e exact 2.758 (zero suprapuneri), iar apartenența vine EXCLUSIV din
+`primary_category_id`. Consecința nu e cosmetică: rafturile de PUBLIC (`Barbati`, `Copii`) taie
+transversal peste cele funcționale (`Par`, `Corp`, `Ten`), iar într-o partiție asta e
+nereprezentabil — un șampon pentru bărbați e ori pe `Par`, ori pe `Barbati`, și e invizibil pe
+celălalt, în ambele direcții. Nu e un import ratat (catalogul are în total 6 produse cu semnal
+masculin în nume, 3 deja pe raft): e tabelul destinat apartenenței multiple, nefolosit. Card:
+[`tasks/stage1/NX-294.md`](tasks/stage1/NX-294.md).
 **`domain_pack` NU mai lipsește** (§13 din doc): 20 de chei canonice de
 nevoie derivate din cele 12.665 de fraze reale de căutare din secțiunile `aura`, fiecare
 confruntată cu catalogul, plus `skin_type` declarat SEPARAT de `concerns` (`partitioning` vs

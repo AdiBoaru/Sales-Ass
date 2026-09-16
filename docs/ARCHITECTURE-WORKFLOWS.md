@@ -1735,6 +1735,7 @@ cheaper_intent_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
 clarification_policy_v2_enabled = false
+clarify_menu_enabled = true
 closure_chips_enabled = true
 compare_coherence_guard_enabled = true
 compare_intent_enabled = true

@@ -881,6 +881,12 @@ class Settings(BaseSettings):
     topic_switch_reset_enabled: bool = Field(
         default=True, validation_alias="TOPIC_SWITCH_RESET_ENABLED"
     )
+    # Chips-urile de clarificare se aleg dintr-un MENIU ÎNCHIS, construit din catalogul REAL al
+    # tenantului (`src/catalog/clarify_menu.py`), iar ce nu numește o opțiune din meniu se aruncă.
+    # Fără poarta asta, `suggestions` era singurul câmp al triajului fără validare: măsurat pe
+    # trafic real, la „vreau un cablu usb" un magazin de cosmetice a oferit «Pentru consola, cablu
+    # USB de date». OFF → sugestiile modelului pleacă neverificate, ca înainte, byte-identic.
+    clarify_menu_enabled: bool = Field(default=True, validation_alias="CLARIFY_MENU_ENABLED")
     # NX-280: o rutină afirmată cere DOVADA unei secvențe (doi pași DISTINCȚI din aceeași familie,
     # din `attributes.routine_step`), nu doar ≥2 produse. Pragul de cardinalitate lăsa să treacă
     # „rutine" din două rujuri cu prețuri reale, fiindcă validatorul și `grounding_guard` sunt porți
