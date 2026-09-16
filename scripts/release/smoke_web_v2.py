@@ -91,6 +91,24 @@ RUNNER_FALLBACK_MARKER = "n-am înțeles exact"
 READY_TIMEOUT_S = 60.0
 READY_POLL_S = 3.0
 
+#: Cât are voie să dureze turul SINCRON (`/web/chat`), care rulează tot pipeline-ul in-process.
+#:
+#: Era 45s, ales când nimeni nu măsurase. Pe producție, 2026-09-16: un tur real ia **35,5s**, deci
+#: plafonul cădea nedeterminist FIX pe muchie — aceeași promovare făcea deploy cu succes și pica
+#: apoi pe smoke, iar championul nu se înregistra, ceea ce bloca promovarea următoare. Un release
+#: dat înapoi de zgomot, nu de un defect.
+#:
+#: Valoarea de acum NU e un verdict de performanță: e doar „cât aștept până declar pană". Judecata
+#: de latență se face pe `duration_s`, raportat mai jos.
+TURN_TIMEOUT_S = 120.0
+
+#: Plafonul dur din manifestul de bugete NX-241 (`nx241.2026-08-16`). Aici e RAPORTAT, nu impus:
+#: `TURN_BUDGET_ENFORCED=false`, deci nimic din sistem nu-l respectă încă, iar o poartă care pică
+#: pe un prag neratificat ar bloca fiecare release fără ca nimeni să poată face nimic — exact
+#: greșeala reparată la poarta de scan din `release.yml`. Ce câștigăm: cifra intră în artefactul
+#: de release, deci degradarea devine vizibilă în loc să fie un timeout ocazional.
+TURN_SLOW_S = 15.0
+
 
 class SmokeError(RuntimeError):
     pass
@@ -307,6 +325,7 @@ def _run_v1_chain(base: str, token: str, session: dict, step) -> None:
     garanții pe care le introduce ledgerul din v2 (NX-232); v1 nu le promite. Un smoke care le-ar
     cere oricum ar raporta ca defect exact comportamentul specificat.
     """
+    turn_started = time.monotonic()
     status, payload, raw = _request(
         f"{base}/web/chat",
         method="POST",
@@ -318,9 +337,18 @@ def _run_v1_chain(base: str, token: str, session: dict, step) -> None:
             "client_msg_id": str(uuid.uuid4()),
         },
         # Turul sincron rulează pipeline-ul IN-PROCES (DB + model), deci e mai lent decât un accept.
-        timeout=45.0,
+        timeout=TURN_TIMEOUT_S,
     )
-    step("chat_v1", status == 200, status=status)
+    duration_s = round(time.monotonic() - turn_started, 1)
+    # Latența e RAPORTATĂ, nu judecată (vezi `TURN_SLOW_S`): `slow` intră în artefact, dar `ok` nu
+    # depinde de el. Altfel poarta ar pica pe un prag pe care sistemul nu-l impune încă.
+    step(
+        "chat_v1",
+        status == 200,
+        status=status,
+        duration_s=duration_s,
+        slow=duration_s > TURN_SLOW_S,
+    )
     content = payload.get("content") or ""
     # Lungimea și amprenta, nu textul: raportul se păstrează 365 de zile ca artefact de CI, iar
     # răspunsul e conversație de tenant. P6 spune „niciodată tăcere" — un `content` gol e un bug.
