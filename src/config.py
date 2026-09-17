@@ -615,6 +615,20 @@ class Settings(BaseSettings):
     answer_plan_max_quality: bool = Field(default=False, validation_alias="ANSWER_PLAN_MAX_QUALITY")
     # NX-239: MainBrain unic + control plane determinist. OFF (default) = pipeline-ul de azi,
     # byte-identic. ON = dark/shadow DOAR — producția rămâne OFF până la GO-ul pairwise NX-246.
+    # Creierul unic livrează RĂSPUNS BOGAT (carduri cu motiv/rating/badge/preț tăiat + chips), nu
+    # doar proză cu ref-uri. `brain.py` chema `set_reply`, deci `render_web` cădea de pe ramura
+    # `rich` pe cea `products` — carduri reale, dar fără `reason`, `rating`, `review_count`,
+    # `badge`, `list_price`, `currency`, `details`, și cu `product_id` NULL pe sârmă (rândurile de
+    # retrieval poartă cheia `id`). Aprinderea single-brain a devenit astfel o regresie vizibilă de
+    # UI pe care nicio poartă din aval n-o putea prinde: validatorul și `grounding_guard` judecă
+    # ADEVĂRUL, nu FORMA. OFF → comportamentul de dinainte, byte-identic.
+    brain_rich_reply_enabled: bool = Field(
+        default=True, validation_alias="BRAIN_RICH_REPLY_ENABLED"
+    )
+    # Chips-urile turului de creier unic vin din MENIUL ÎNCHIS al catalogului (NX-295), nu din
+    # output-ul modelului — planul nici n-are câmp de sugestii. Costul e o interogare de fațete,
+    # cache-uită per (tenant, raft). OFF → zero chips, adică exact starea de azi.
+    brain_chips_enabled: bool = Field(default=True, validation_alias="BRAIN_CHIPS_ENABLED")
     single_brain_enabled: bool = Field(default=False, validation_alias="SINGLE_BRAIN_ENABLED")
     # NX-251: triajul nano IESE de pe drumul sincron. Sub single-brain el nu mai era writer
     # (control plane-ul îi demota reply-ul), dar APELUL rămânea: fiecare tur plătea o clasificare
