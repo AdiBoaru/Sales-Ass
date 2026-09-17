@@ -262,7 +262,11 @@ async def extract_profile(
         history, message, language, include_facts=include_facts, canonical_keys=canonical_keys
     )
     try:
-        raw = await llm.classify_json(system, user, model=llm.model_triage)
+        # NX-297: extracția de fundal trece de pe nano pe modelul agentului. Nu e o schimbare de
+        # cost: `gpt-5.4-nano` costă 0,20/1,25 $ per 1M, `gpt-5.6-luna` 0,20/**1,20** — la fel pe
+        # input, mai puțin pe output. Nano a încetat să fie modelul ieftin pe 2026-08-24, când
+        # `MODEL_AGENT` a trecut de la `gpt-5.4-mini` (0,75/4,50); nimeni n-a recalculat de atunci.
+        raw = await llm.classify_json(system, user, model=llm.model_agent)
         return ProfileDelta.model_validate(raw)
     except (ValidationError, ValueError, KeyError, TypeError) as e:
         log.warning("extractor profil: output invalid (%s) → deltă goală", type(e).__name__)

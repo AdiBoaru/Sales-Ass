@@ -37,8 +37,8 @@ from src.agent.validator import (
     validate_prose,
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
-from src.config import get_settings
-from src.models import Offer, RichReply, TurnContext
+from src.config import chip_slots, get_settings
+from src.models import MAX_OFFERED_CHIPS, Offer, RichReply, TurnContext
 from src.web.localization import amount_text
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
@@ -285,6 +285,75 @@ class _RichOutcome:
     model_items: int = 0
 
 
+async def _apply_move_chips(ctx, deps, rich) -> None:
+    """NX-297 felia 5 — chips-urile v1 devin MUTĂRI cu dovadă (NX-296), nu fraze scrise liber.
+
+    Pe v1 textul chip-ului ESTE comanda: apăsarea îl retrimite ca mesaj NOU al clientului. Scris
+    liber de modelul rich, putea numi orice — exact producătorul pe care `CHIP_PRODUCERS` îl
+    declară NEANCORAT, și clasa de defect măsurată la NX-295 («Pentru consola, cablu USB de date»
+    într-un magazin de cosmetice).
+
+    Sursa devine aceeași ca pe calea creierului unic: meniul ÎNCHIS al catalogului plus cardurile
+    turului. Diferența e că aici nu există `chip_labels` — modelul n-are unde să reformuleze — deci
+    fiecare mutare iese cu ȘABLONUL tenantului. Nu e o degradare, e ramura fail-OPEN a lui NX-296:
+    „modelul tace ⇒ rămâne șablonul". Textul e ancorat prin construcție.
+
+    Rolurile vin din obligațiile DETERMINISTE ale mesajului (`extract_obligations`, cod pur), nu
+    dintr-un plan: pe un tur factual n-ai nevoie de cinci îngustări, ai nevoie de continuări pe
+    produsul discutat.
+
+    Best-effort: orice eșec lasă chips-urile compuse de `compose`, adică exact comportamentul de
+    azi. Un chip mai puțin nu e un motiv să pierzi răspunsul (P6).
+    """
+    if not getattr(get_settings(), "chip_moves_v1_enabled", False):
+        return
+    try:
+        from src.agent.brain_models import extract_obligations  # noqa: PLC0415 — evită ciclul
+        from src.catalog.clarify_menu import menu_for_turn  # noqa: PLC0415
+        from src.conversation import chip_moves  # noqa: PLC0415
+
+        pack = getattr(ctx.business, "domain_pack", None)
+        offered_before = tuple(getattr(ctx.state, "offered_chips", ()) or ())
+        menu = await menu_for_turn(ctx, deps)
+        candidates = []
+        if menu.usable:
+            candidates += chip_moves.renderable(
+                chip_moves.from_menu(menu, offered_before=offered_before), pack, ctx.language
+            )
+        cards = [
+            {"product_id": it.product_id, "name": it.name, "price": it.price} for it in rich.items
+        ]
+        candidates += chip_moves.renderable(
+            chip_moves.from_cards(cards, offered_before=offered_before), pack, ctx.language
+        )
+        obligations = extract_obligations(ctx.message.body or "")
+        picked = chip_moves.select(
+            candidates,
+            slots=chip_slots(get_settings()),
+            role_order=chip_moves.roles_for(o.kind for o in obligations),
+            offered_before=offered_before,
+        )
+        if not picked:
+            return
+        texts, _ = chip_moves.apply_labels(picked, {}, pack, ctx.language)
+        if not texts:
+            return
+        rich.chips = compose._suggestion_chips(list(texts))
+        ctx.emit(
+            "chip_moves",
+            n=len(texts),
+            kinds=sorted({m.kind for m in picked}),
+            roles=sorted({m.role for m in picked}),
+            offered=len(candidates),
+            path="v1",
+        )
+        previous = [str(m) for m in offered_before]
+        merged = previous + [m.move_id for m in picked if m.move_id not in previous]
+        ctx.state_patch["offered_chips"] = merged[-MAX_OFFERED_CHIPS:]
+    except Exception as e:  # noqa: BLE001 — chips-urile nu sunt răspunsul (P6)
+        log.warning("finalize: chips ca mutări au eșuat (%s)", type(e).__name__)
+
+
 async def _finalize_rich(
     llm,
     rich_system: str,
@@ -412,6 +481,7 @@ async def render(
             )
             rich = outcome.reply
             if rich is not None and rich.items:
+                await _apply_move_chips(ctx, deps, rich)
                 ctx.set_rich_reply(
                     rich,
                     text=compose.flatten(rich, ctx.language),

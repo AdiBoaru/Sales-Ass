@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
-from src.agent.deterministic import _CHEAPER_RE
+from src.agent.deterministic import _CHEAPER_RE, turn_has_new_constraints
 from src.agent.fallbacks import (
     _cart_confirm_msg,
     _cheapest_already_msg,
@@ -599,12 +599,20 @@ async def build_plan(
     # ÎNTREGUL set afișat (nu o căutare nouă, nu 1 produs) ca modelul să RĂSPUNDĂ la superlativ
     # peste toate candidatele reale (fațete/descriere în bundle). Precede cheaper: „care dintre
     # ACESTEA e cea mai ieftină" = min-ul setului afișat, NU „ceva mai ieftin" (căutare nouă).
-    # ≥2 afișate, fără filtre noi (cu filtre = căutare/rafinare → bucla LLM). Kill-switch propriu.
+    # ≥2 afișate, fără constrângeri noi (cu ele = căutare/rafinare → bucla LLM). Kill-switch
+    # propriu.
+    #
+    # NX-297: predicatul era `not route.filters`, adică avea un singur producător — sloturile
+    # triajului. E a TREIA poartă ancorată din aceeași clasă (link și compare sunt în
+    # `deterministic.py`, paginarea are `carries_new_constraints` de la NX-251), iar o clasă
+    # reparată pe două din trei nu e reparată: fără nano, «care dintre astea e cea mai hidratantă,
+    # dar sub 100 lei» ar rehidrata setul AFIȘAT în loc să caute, cu produse și prețuri reale — deci
+    # validatorul și grounding guardul o lasă să treacă (porți de ADEVĂR, nu de POTRIVIRE).
     attr_query = (
         not is_order
         and get_settings().attr_query_enabled
         and len(ctx.state.displayed_products) >= 2
-        and not route.filters
+        and not turn_has_new_constraints(ctx, route)
         and _ATTR_QUERY_RE.search(query) is not None
     )
     if attr_query:

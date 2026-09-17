@@ -48,7 +48,7 @@ from src.agent.planner import (
     resolve_cheaper_followup,
 )
 from src.agent.prompt_builder import PromptInputs
-from src.agent.tool_definitions import tool_schemas
+from src.agent.tool_definitions import tenant_enum_values, tool_schemas
 from src.agent.tool_executor import (
     ToolRun,
     _safe_tool_args,  # noqa: F401 — re-export (teste)
@@ -73,6 +73,7 @@ from src.agent.validator import (
 from src.catalog.vocabulary import named_topic_roots, topic_root_of, topic_switched
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
+from src.conversation import observed_constraints
 from src.conversation.needs import NeedVocabulary
 from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
 from src.conversation.state_v2 import ConversationStateV2, project_v1
@@ -216,7 +217,6 @@ def _filter_proposals(ctx: TurnContext, route: RouteDecision) -> list[StateUpdat
     declarația într-un slot validat de cod (`_normalize_slots`). `model_inferred` rămâne pentru ce
     modelul PRESUPUNE fără ca cineva să fi spus (un rezumat care „deduce" o preferință) — și doar
     acolo interdicția de a promova la `hard` are un sens real (D7)."""
-    filters = route.filters if isinstance(route.filters, dict) else {}
     proposals: list[StateUpdateProposal] = []
     if route.category_key:
         # PRIMUL: nevoile propuse mai jos se leagă de categoria curentă (`scope`), iar o schimbare
@@ -229,6 +229,19 @@ def _filter_proposals(ctx: TurnContext, route: RouteDecision) -> list[StateUpdat
                 turn_id=ctx.turn_id,
             )
         )
+    proposals.extend(_need_proposals(ctx, route.filters))
+    return proposals
+
+
+def _need_proposals(ctx: TurnContext, values: Any) -> list[StateUpdateProposal]:
+    """Stiva v1 (dict de sloturi) → propuneri `set_need`. UN singur loc pentru traducere.
+
+    Are doi apelanți cu aceeași formă de intrare și aceeași justificare pentru `user_explicit`:
+    sloturile triajului (`_normalize_slots` validează transcrierea lui nano) și constrângerile
+    OBSERVATE din argumentele agentului (`corroborated_by` confirmă că valoarea a fost chiar
+    ROSTITĂ, NX-251/297). În ambele, codul e cel care stabilește sursa, nu modelul (D7)."""
+    filters = values if isinstance(values, dict) else {}
+    proposals: list[StateUpdateProposal] = []
     for key in _V2_SCALAR_KEYS:
         value = filters.get(key)
         if value not in (None, ""):
@@ -430,6 +443,39 @@ async def _cheaper_seed(
     return cheaper_seed_messages(ctx, outcome.products, baseline=outcome.baseline)
 
 
+def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
+    """Constrângerile observate în apelurile de căutare ale turului → stiva persistată (NX-297).
+
+    Sursa e ce a cerut agentul, iar ce le face ale CLIENTULUI e `corroborated_by`, nu o declarație
+    a modelului. Scriitor unic: stagiul ăsta, ca și înainte (P3) — doar momentul se schimbă, din
+    „înainte de buclă, din sloturile triajului" în „după buclă, din argumentele uneltelor".
+
+    Se aplică peste stiva DEJA merged a turului, deci un tur fără căutări o lasă neatinsă.
+
+    Se scrie în AMBELE forme de stare, fiindcă sunt două mecanisme de persistare, nu două copii ale
+    aceluiași: pe v1 stiva E dicționarul de pe `ctx.state`, iar pe v2 (`..._write_enabled`) docul
+    persistat se re-derivă la commit din PROPUNERI, din starea proaspăt citită — deci o mutație pe
+    `ctx.state` n-ar ajunge niciodată în el. Scrisă doar în prima formă, felia asta era inertă exact
+    pe profilul care rulează azi, adică se pierdea tăcut chiar lucrul pe care e pusă să-l apere.
+    """
+    if not get_settings().observed_constraints_enabled or not run.search_args:
+        return
+    observed, stats = observed_constraints.from_search_args(run.search_args, message)
+    if not observed:
+        if stats["inferred"]:
+            ctx.emit("constraint_source", kept=0, inferred=stats["inferred"])
+        return
+    merged, _ = merge_constraints(ctx.state.search_constraints, observed, None)
+    ctx.state.search_constraints = merged
+    ctx.state_proposals.extend(_need_proposals(ctx, observed))
+    ctx.emit(
+        "constraint_source",
+        kept=stats["kept"],
+        inferred=stats["inferred"],
+        keys=sorted(observed),
+    )
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -508,9 +554,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         tool_names = list(dict.fromkeys(tool_names + enabled_tools(ctx.business, "order")))
     # NX-273: descrierile parametrilor primesc exemplele TENANTULUI. Sunt instrucțiuni pentru
     # model, nu documentație — vezi `tool_definitions`.
-    tools = tool_schemas(
-        tool_names, vocab_examples.from_pack(getattr(ctx.business, "domain_pack", None))
-    )
+    #
+    # ENUMURILE tenantului trec pe aceeași cale: `routine_plan`/`related_products` (intrate în
+    # toolsetul v1 la NX-297) au parametri cu valori ÎNCHISE, care vin din pachet. Fără ele, schema
+    # pleca la furnizor cu `enum: []` — refuzată, 4xx terminal, tot drumul de vânzare mut.
+    pack = getattr(ctx.business, "domain_pack", None)
+    tools = tool_schemas(tool_names, vocab_examples.from_pack(pack), **tenant_enum_values(pack))
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)
@@ -645,6 +694,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
+
+    # NX-297 felia 3: stiva învață din ce a CĂUTAT agentul, nu din ce a extras un model mic.
+    # Rulează DUPĂ buclă fiindcă abia acum există argumentele; seed-ul din promptul turului ăsta a
+    # fost stiva stocată, deci clientul nu trebuie să-și repete bugetul ca să fie ținut minte.
+    if not is_order:
+        _learn_constraints(ctx, run, query)
 
     # Faza E (NX-144): shaping determinist post-loop (checkout-fallback/cross-sell/attr_query/
     # cheaper/rehidratare) → `ResponsePlan`. Ramurile care răspund direct (login / cross-sell /

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.agent.compare_narrative import compose_comparison
 from src.agent.fallbacks import (
@@ -43,6 +43,7 @@ from src.catalog.query_terms import fold, stopwords
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.db.queries.catalog import get_products_by_ids, product_category_roots
+from src.domain.constraints import extract_constraints
 from src.models import Offer, ProductRef, RetrievalResult, Route, TurnContext
 from src.safety.policy import SafetyPolicy
 from src.web.action_models import action_command, action_kind
@@ -662,6 +663,45 @@ def show_more_phrase(query: str) -> bool:
     return _MORE_RE.search(query) is not None and _CHEAPER_RE.search(query) is None
 
 
+def turn_has_new_constraints(ctx: TurnContext, route: Any) -> bool:
+    """Turul cere ceva ÎN PLUS față de ce se vede pe ecran? (NX-297 felia 3)
+
+    Porțile ANCORATE (link, comparație, superlativ pe setul afișat) au nevoie de predicatul ăsta ca
+    să nu servească tăcut produsul de bază când clientul a adăugat o condiție: «compară-le, dar sub
+    100 lei» nu e o comparație pe setul afișat, e o căutare nouă.
+
+    Avea un singur producător: sloturile triajului. Fără nano, `route.filters` e gol la fiecare tur
+    și poarta ar rămâne permanent deschisă — aceeași clasă de defect ca la paginare (NX-251), doar
+    pe alte TREI porți: `link_intent` și `compare_intent` de aici, plus `attr_query` din
+    `planner.py`. Public (nu `_`) exact din motivul ăsta: a treia a rămas pe `not route.filters`
+    într-o primă rundă fiindcă stătea în alt modul, iar o clasă reparată pe două din trei nu e
+    reparată — e una în care defectul rămas e mai greu de găsit.
+
+    A doua sursă e DETERMINISTĂ și, spre deosebire de reziduul lexical de la paginare, e precisă:
+    `extract_constraints` (NX-266) scoate din mesajul BRUT valorile cu unitate (preț, volum, indici
+    declarați), folosind registrul de unități al TENANTULUI. „linkul la crema asta" n-are niciun
+    număr cu unitate, deci poarta rămâne deschisă — corect. „dar sub 100 lei" are, deci se închide.
+
+    **Ce NU acoperă, declarat:** rafinările NE-numerice pe o poartă ancorată («compară-le, dar doar
+    cele fără parfum»). Reziduul lexical le-ar prinde, dar pe porțile ancorate nu poate fi folosit:
+    nu deosebește o referință („crema asta") de o rafinare, iar căderea pe model ar risca regresia
+    NX-131. Rămâne consecința ASUMATĂ de la NX-251, nici lărgită, nici restrânsă de felia asta.
+    """
+    if route is not None and getattr(route, "filters", None):
+        return True
+    pack = getattr(ctx.business, "domain_pack", None)
+    units = getattr(pack, "units", None)
+    if units is None or not getattr(units, "specs", None):
+        # Tenant fără tabel de unități: nu putem deosebi o cifră de o valoare („am 2 copii" nu e
+        # un buget). Fail-OPEN, ca azi — poarta rămâne pe comportamentul pre-NX-297.
+        return False
+    message = (ctx.message.body or "").strip()
+    if not message:
+        return False  # acțiune opacă (NX-236): comanda e DECLARATĂ, nu dedusă din text
+    spoken, _ = extract_constraints(message, units=units, locale=ctx.language)
+    return bool(spoken)
+
+
 async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     """Faza B: intenții deterministe PRE-loop (link + compare). True = tratat (early-exit din
     `stage.py`); False = lasă bucla LLM. Doar SALES; toate exclud «mai ieftin» (cheaper_intent) și
@@ -724,7 +764,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     link_intent = (
         get_settings().link_intent_enabled
         and bool(anchorable)
-        and not route.filters
+        and not turn_has_new_constraints(ctx, route)
         and _LINK_RE.search(query) is not None
         and _CHEAPER_RE.search(query) is None
     )
@@ -738,7 +778,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     compare_intent = (
         get_settings().compare_intent_enabled
         and len(ctx.state.displayed_products) >= 2
-        and not route.filters
+        and not turn_has_new_constraints(ctx, route)
         and _COMPARE_RE.search(query) is not None
         and _CHEAPER_RE.search(query) is None
     )

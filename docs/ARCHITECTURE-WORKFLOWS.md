@@ -1560,8 +1560,10 @@ sărind agentul. S-a întâmplat live pe demo.
 
 ## Lentila 4 · FLAG-URI — ce rulează de fapt
 
-**86 de flag-uri bool** în `Settings`; **71 ON**, **15 OFF** by default. Lista exactă e în blocul
-`claim:flags` — CI-ul cade dacă divergeaza. Ce contează arhitectural:
+**152 de flag-uri bool** în `Settings`; **91 ON**, **61 OFF** by default (numărate din cod, nu ținute
+minte: `[f for f in Settings.model_fields.values() if f.annotation is bool]`; cifra scrisă aici a
+fost 86/71/15 și a îmbătrânit tăcut). Lista exactă e în blocul `claim:flags` — CI-ul cade dacă
+divergează. Ce contează arhitectural:
 
 **Stratul shadow** — rulează în paralel cu producția, observă, nu atinge `reply`:
 `query_spec_shadow_enabled` · `match_gate_shadow_enabled` · `search_shadow_enabled`.
@@ -1571,6 +1573,14 @@ măsurăm calitatea căutării fără să riscăm răspunsul.
 **Construit dar neactivat**: `answer_plan_enabled` (+ `_critic`, `_max_quality`) ·
 `injection_screen_enabled` · `web_identity_enabled` · `ai_disclaimer_enabled` ·
 `faq_locale_fallback_enabled` · `replay_store_prompt_enabled` · `validator_stock_claims_enabled`.
+
+**NX-297 (nano iese din proiect)** — patru flaguri independente, toate OFF, aprinse în ordinea
+feliilor: `agent_only_writer_enabled` (triajul nu mai SCRIE `simple`/`clarify`, doar clasifică) ·
+`clarify_tool_enabled` (`clarify_options`, opțiunile reale ale catalogului ca unealtă) ·
+`observed_constraints_enabled` (stiva învață din argumentele agentului, nu din sloturile nano) ·
+`chip_moves_v1_enabled` (chips-urile v1 devin mutări cu dovadă). Independente deliberat: fiecare
+poate fi stins fără să dea înapoi celelalte, iar `observed_constraints` scrie în aceeași stivă ca
+triajul, deci o a doua sursă pornită din reflex s-ar vedea abia pe trafic.
 
 **Atenție la citire**: `web_enabled` e OFF în default-urile din cod și ON în `.env.prod`.
 Un flag OFF în `config.py` nu înseamnă OFF în producție — înseamnă „decizia se ia în env".
@@ -1739,6 +1749,7 @@ cheaper_intent_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
 chip_moves_enabled = true
+chip_moves_v1_enabled = false
 clarification_policy_v2_enabled = false
 clarify_menu_enabled = true
 clarify_tool_enabled = false
@@ -1790,6 +1801,7 @@ no_result_alternatives_enabled = true
 observability_enabled = false
 observability_metrics_enabled = true
 observability_traces_enabled = true
+observed_constraints_enabled = false
 partition_job_enabled = true
 plan_server_owned_fields_enabled = false
 pool_metrics_enabled = true
