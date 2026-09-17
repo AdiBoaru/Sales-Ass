@@ -457,6 +457,31 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
     _emit_query_spec_shadow(ctx, route)
 
+    # NX-297 felia 1 — nano își pierde pixul, își păstrează ochii.
+    #
+    # Retrogradăm la `sales` rutele pe care nano le SCRIA (`simple`/`clarify`), în loc să lărgim
+    # `allowed` în `agent_stage`. Diferența nu e stilistică: cu ruta rescrisă, tot ce e în aval
+    # vede un tur de vânzare obișnuit, deci nu trebuie auditată fiecare comparație cu `Route.SALES`
+    # din calea agentului. Blast radius: acest bloc.
+    #
+    # Ce se PIERDE aici, declarat: întrebarea de clarificare nu mai persistă un `pending_question`,
+    # deci `clarify_resume_stage` n-are ce relua la turul următor. E intenționat pentru felia 1 —
+    # agentul răspunde grounded cu ce știe, în loc să pună o întrebare goală. Clarificarea ca
+    # unealtă a agentului (cu slotul ei persistat) e felia 2.
+    #
+    # `purchase_intent` rămâne cum l-a calculat codul de mai sus (False pe non-sales): retrogradarea
+    # e o decizie de RUTARE, nu o licență de a inventa intenție de cumpărare.
+    if get_settings().agent_only_writer_enabled and route in (Route.SIMPLE, Route.CLARIFY):
+        ctx.route = RouteDecision(
+            route=Route.SALES,
+            category_key=category_key,
+            filters=filters,
+            missing_field=missing_field,
+            purchase_intent=purchase_intent,
+        )
+        ctx.emit("triage_demoted", original=route.value, field=missing_field or "")
+        return
+
     # simple / clarify: nano a compus răspunsul → early exit la Sender.
     # simple = răspuns static reutilizabil (cacheabil); clarify = specific contextului.
     if route == Route.SIMPLE and out.reply:

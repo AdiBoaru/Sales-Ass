@@ -86,6 +86,7 @@ from src.models import Route, RouteDecision, TurnContext
 from src.safety.policy import SafetyPolicy, safety_state
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
+    clarify_tools,
     commerce_tools,
     faq_tools,
     orders_tools,

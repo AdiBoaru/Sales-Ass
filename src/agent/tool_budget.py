@@ -79,6 +79,10 @@ _SPECS: dict[str, ToolSpec] = {
         # buget epuizat, turul rămâne fără singura unealtă care poate produce o secvență.
         _spec("routine_plan", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("faq_lookup", ToolKind.READ, True, True, ToolPriority.CRITICAL),
+        # NX-297: citire pură (vocabular din cache + o interogare de fațete). `CRITICAL` fiindcă pe
+        # un tur în care agentul chiar are nevoie să întrebe, asta e singura sursă de opțiuni pe
+        # care magazinul le poate onora — tăiată la buget epuizat, întrebarea redevine inventată.
+        _spec("clarify_options", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("check_order", ToolKind.READ, True, True, ToolPriority.CRITICAL),
         _spec("reorder", ToolKind.READ, True, True, ToolPriority.OPTIONAL),
         _spec("cart_add", ToolKind.MUTATION, False, True, ToolPriority.CRITICAL),

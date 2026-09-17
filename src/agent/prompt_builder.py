@@ -56,8 +56,9 @@ _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
   DOAR ce întoarce, nu inventa reguli.
 
 Reguli:
-- Pentru o cerere de produs, cheamă ÎNTÂI search_products. Folosește get_product_details /
-  compare_products când clientul vrea detalii sau o comparație. Maxim 3 apeluri de unelte.
+- Pentru o cerere de produs, cheamă ÎNTÂI o unealtă de catalog, de obicei search_products.
+  Folosește get_product_details / compare_products când clientul vrea detalii sau o comparație.
+  Maxim 3 apeluri de unelte.
 - Un mesaj poate conține MAI MULTE intenții deodată (ex. o preferință de produs + o întrebare de
   livrare/retur/plată). Onorează-le pe TOATE: ancorează produsul ȘI răspunde la întrebare (cheamă
   faq_lookup pentru politici), nu ignora niciuna și nu răspunde doar la prima.

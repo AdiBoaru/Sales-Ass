@@ -16,6 +16,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from src.config import get_settings
+
 if TYPE_CHECKING:
     from src.models import Relevance, TurnContext
     from src.worker.runner import PipelineDeps
@@ -74,11 +76,24 @@ _SALES_TOOLS = (
     "reorder",  # NX-79: re-comandă din istoricul contactului
     "subscribe_back_in_stock",  # NX-80: notificare la restock (WRITE; citit de proactiv NX-70)
     "faq_lookup",
+    "clarify_options",  # NX-297: opțiunile oferibile, înaintea unei întrebări (gated, vezi mai jos)
 )
 # `faq_lookup` și pe ORDER: o întrebare de PROCES/POLITICĂ rutată aici (cum comand, ce retur, cât e
 # livrarea) primește un răspuns grounded din baza de cunoștințe — FĂRĂ cont — în loc să cadă în
 # zidul de login. `check_order` rămâne singurul lookup care CHIAR are nevoie de contul clientului.
 _ORDER_TOOLS = ("check_order", "faq_lookup")
+
+#: Unelte care se oferă DOAR sub un flag: nume → câmpul din `Settings` care le aprinde.
+#: Kill-switch-ul trăiește AICI, nu în modulul uneltei, dintr-un motiv mecanic: o unealtă care se
+#: auto-dezactivează întorcând un rezultat gol tot ar apărea în schema trimisă modelului, deci tot
+#: ar costa tokeni și tot ar putea fi chemată. Singurul mod de a o stinge cu adevărat e să n-o
+#: OFERI.
+_FLAGGED_TOOLS: dict[str, str] = {"clarify_options": "clarify_tool_enabled"}
+
+
+def _disabled_by_flag() -> set[str]:
+    settings = get_settings()
+    return {name for name, flag in _FLAGGED_TOOLS.items() if not getattr(settings, flag, False)}
 
 
 def enabled_tools(business: Any, route: str | None = None) -> list[str]:
@@ -91,6 +106,7 @@ def enabled_tools(business: Any, route: str | None = None) -> list[str]:
     names = list(_ORDER_TOOLS if route == "order" else _SALES_TOOLS)
     cfg = (getattr(business, "settings", None) or {}).get("tools", {}) if business else {}
     disabled = set(cfg.get("disabled") or [])
+    disabled |= _disabled_by_flag()
     return [name for name in names if name in TOOL_REGISTRY and name not in disabled]
 
 

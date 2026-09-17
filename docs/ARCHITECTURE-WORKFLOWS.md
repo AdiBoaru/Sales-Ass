@@ -1670,6 +1670,7 @@ fallback_stage
 cart_add
 check_order
 checkout_link
+clarify_options
 compare_products
 faq_lookup
 get_product_details
@@ -1721,6 +1722,7 @@ rollup_usage
 ```claim:flags
 admission_distributed_enabled = true
 admission_enabled = true
+agent_only_writer_enabled = false
 ai_disclaimer_enabled = false
 alias_enabled = true
 answer_plan_critic_enabled = false
@@ -1728,7 +1730,6 @@ answer_plan_enabled = false
 answer_plan_max_quality = false
 attr_query_enabled = true
 brain_chips_enabled = true
-chip_moves_enabled = true
 brain_rich_reply_enabled = true
 cache_enabled = true
 card_badges_enabled = true
@@ -1737,8 +1738,10 @@ catalog_reason_codes_enabled = true
 cheaper_intent_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
+chip_moves_enabled = true
 clarification_policy_v2_enabled = false
 clarify_menu_enabled = true
+clarify_tool_enabled = false
 closure_chips_enabled = true
 compare_coherence_guard_enabled = true
 compare_intent_enabled = true
@@ -1803,8 +1806,6 @@ relation_traversal_enabled = false
 relations_first_enabled = true
 release_controller_enabled = false
 relevance_mask_enabled = false
-routine_enabled = false
-routine_evidence_required = true
 replay_store_prompt_enabled = false
 response_style_enabled = true
 response_telemetry_enabled = true
@@ -1815,6 +1816,8 @@ rich_pick_deterministic_enabled = true
 rich_pick_relevance_gate_enabled = true
 rich_pick_web_enabled = false
 rich_review_anchor_enabled = false
+routine_enabled = false
+routine_evidence_required = true
 safety_contraindications_enabled = true
 safety_medical_guardrail_enabled = true
 search_blended_rank_enabled = true
