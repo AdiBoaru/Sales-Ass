@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from src.agent.deterministic import _turn_has_new_constraints
 from src.conversation.observed_constraints import from_search_args
 from src.domain.constraints import build_units
-from src.models import BusinessConfig, Contact, InboundMessage, RouteDecision, Route, TurnContext
+from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDecision, TurnContext
 
 # ── funcția pură ───────────────────────────────────────────────────────────────────────────────
 
