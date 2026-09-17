@@ -45,13 +45,13 @@
       "traces_complete_for_covered_scenarios_ratio": 1.0
     },
     "known_gaps": {
-      "_note": "Ce NU e acoperit, numarat explicit. Prezenta acestor numere in artefact e deliberata: un gate care isi ascunde propriile goluri e mai periculos decat unul care le publica. Fiecare scenariu `blocked` are motiv scris in scenarios.json, iar un test refuza motivele vagi si cere ca sub-categoriile sa insumeze `scenarios_blocked`. Se aduc la zero inainte de NX-249.",
+      "_note": "Ce NU e acoperit, numarat explicit. Prezenta acestor numere in artefact e deliberata: un gate care isi ascunde propriile goluri e mai periculos decat unul care le publica. Fiecare scenariu `blocked` are motiv scris in scenarios.json, iar un test refuza motivele vagi si cere ca sub-categoriile sa insumeze `scenarios_blocked`. Se aduc la zero inainte de NX-249. | Cinci invarianti au plecat odata cu envelope-ul de blocuri `web-view.v2`, care a fost STERS din produs: chips opace, sumar de cos server-owned, copy de shell la bootstrap, „doar string-uri display-ready\" si pasii de rutina. Trei nu au producator pe `web-chat.v1`, iar al patrulea e FALS prin proiectare acolo (pretul e un numar; formatarea e a frontendului). 22 -> 17.",
       "scenarios_total": 16,
       "scenarios_backend_covered": 9,
       "scenarios_blocked": 5,
       "scenarios_frontend_only": 2,
-      "backend_invariants_total": 22,
-      "backend_invariants_executed_on_real_data": 16,
+      "backend_invariants_total": 17,
+      "backend_invariants_executed_on_real_data": 13,
       "blocked_by_defects_found_by_this_gate": 0,
       "blocked_by_unpromoted_flag": 2,
       "blocked_by_missing_producer": 1,

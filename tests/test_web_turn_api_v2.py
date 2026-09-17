@@ -6,7 +6,7 @@ Garanțiile verificate AICI:
   • conflicte tipizate: `idempotency_conflict` și `conversation_turn_in_progress` (cu
     referința AUTORIZATĂ la turnul activ), erori structurate ÎNAINTE de accept (schema/action);
   • GET reautorizează sesiunea (hash de sesiune): alt vizitator → 404 indistinct;
-  • proiecția v1→v2: validată de contract (parse_view), byte-deterministă, `running` nu iese
+  • proiecția de status: `running` nu iese niciodată pe sârmă (NX-232)
     NICIODATĂ pe sârmă, terminalele au mereu ceva randabil (P6), reducerea se calculează server;
   • SSE: id-uri monotonice pe lifecycle, `Last-Event-ID` reia fără dubluri, rezultatul terminal
     o singură dată, zero tokeni/draft.
@@ -25,7 +25,7 @@ from src.db.queries.web_turns import WebTurnRow
 from src.web import app as wa
 from src.web import turn_events as tev
 from src.web import turn_service as ts
-from src.web.contracts_v2 import parse_view
+from src.web.turn_view_v1 import v1_terminal_view
 
 NOW = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
 
@@ -76,106 +76,6 @@ COMPLETED_PAYLOAD = {
     ],
     "suggestions": ["Vezi alternative"],
 }
-
-
-# ── Proiecția v1 → web-view.v2 ────────────────────────────────────────────────
-
-
-def test_terminal_view_completed_is_valid_and_display_ready():
-    row = _row(status="completed", response_json=COMPLETED_PAYLOAD, completed_at=NOW)
-    view = tev.terminal_view(row, "ro")
-    parse_view(view)  # contractul NX-228 e poarta
-    assert view["turn"]["status"] == "completed"
-    blocks = view["messages"][0]["blocks"]
-    assert blocks[0]["type"] == "text"
-    products = [b for b in blocks if b["type"] == "product_list"][0]["items"]
-    item = products[0]
-    # Cifrele rămân în backend: prețul, reducerea și ratingul sunt TEXT localizat, gata.
-    assert item["price"]["current"] == "89,00 lei"
-    assert item["price"]["previous"] == "109,00 lei"
-    assert item["price"]["discount"] == "-18%"
-    assert item["rating"] == "4,8 din 5 (120 recenzii)"
-    # CTA-ul e navigate către URL-ul deja validat; niciun submit fără token semnat (NX-236).
-    assert item["actions"][0]["activation"] == {
-        "type": "navigate",
-        "href": "https://shop.example.com/p/ser",
-        "target": "_blank",
-    }
-    # `view_id`, nu `product_id`: id-ul de catalog nu pleacă în browser.
-    dumped = json.dumps(view)
-    assert "p-1" not in dumped and "fp" not in dumped
-
-
-def test_terminal_view_is_byte_deterministic():
-    row = _row(status="completed", response_json=COMPLETED_PAYLOAD, completed_at=NOW)
-    a = json.dumps(tev.terminal_view(row, "ro"), sort_keys=True)
-    b = json.dumps(tev.terminal_view(row, "ro"), sort_keys=True)
-    assert a == b  # replay byte-echivalent: aceeași intrare → aceiași bytes
-
-
-def test_terminal_view_failed_has_error_and_notice():
-    payload = ts.error_view("deadline_exceeded", "ro")
-    row = _row(
-        status="failed",
-        response_json=payload,
-        safe_error_code="deadline_exceeded",
-        completed_at=NOW,
-    )
-    view = tev.terminal_view(row, "ro")
-    parse_view(view)
-    assert view["error"]["code"] == "deadline_exceeded" and view["error"]["retryable"]
-    assert view["messages"][0]["blocks"][0]["type"] == "notice"
-
-
-def test_terminal_view_cancelled_is_renderable_without_error():
-    row = _row(
-        status="cancelled",
-        response_json=ts.error_view("cancelled", "ro"),
-        safe_error_code="cancelled",
-        completed_at=NOW,
-    )
-    view = tev.terminal_view(row, "ro")
-    parse_view(view)
-    assert "error" not in view  # `error` doar pe failed (contract)
-    assert view["messages"][0]["blocks"][0]["type"] == "notice"  # dar NU e gol (P6)
-
-
-def test_terminal_view_unrenderable_falls_back_to_safe_failed():
-    row = _row(status="completed", response_json={"content": "", "products": []}, completed_at=NOW)
-    view = tev.terminal_view(row, "ro")
-    parse_view(view)
-    assert view["error"]["code"] == "projection_error"  # niciodată tăcere pe terminal
-
-
-def test_terminal_view_comparison_maps_to_table():
-    payload = {
-        "content": "Comparăm cele două seruri.",
-        "products": [],
-        "suggestions": [],
-        "comparison": {
-            "columns": [{"name": "Ser A", "price": 10.0}, {"name": "Ser B", "price": 20.0}],
-            "rows": [{"label": "Textură", "values": ["gel", None]}],
-        },
-    }
-    row = _row(status="completed", response_json=payload, completed_at=NOW)
-    view = tev.terminal_view(row, "ro")
-    parse_view(view)
-    cmp_block = [b for m in view["messages"] for b in m["blocks"] if b["type"] == "comparison"][0]
-    assert cmp_block["headers"] == ["Ser A", "Ser B"]
-    assert cmp_block["rows"][0]["cells"][1]["text"] is None  # necunoscut ≠ gol
-
-
-def test_terminal_view_rejects_dangerous_urls():
-    payload = {
-        "content": "x",
-        "products": [{"name": "P", "price": 1.0, "url": "javascript:alert(1)"}],
-        "suggestions": [],
-    }
-    row = _row(status="completed", response_json=payload, completed_at=NOW)
-    view = tev.terminal_view(row, "ro")
-    parse_view(view)
-    dumped = json.dumps(view)
-    assert "javascript:" not in dumped
 
 
 def test_status_projection_never_leaks_running():
@@ -344,7 +244,7 @@ async def test_accept_existing_terminal_replays_projection(monkeypatch):
     )
     assert res.status_code == 200
     view = json.loads(res.body)
-    assert view == tev.terminal_payload(row, "ro")  # replay = proiecția aceluiași rând, exact
+    assert view == v1_terminal_view(row, "ro")  # replay = proiecția aceluiași rând, exact
 
 
 async def test_accept_idempotency_conflict_409(monkeypatch):
@@ -421,32 +321,21 @@ async def test_get_returns_200_terminal_projection(monkeypatch):
         row.id, token="tok", visitor_id="web_1", sig="s", request=_Req()
     )
     assert res.status_code == 200
-    assert json.loads(res.body) == tev.terminal_payload(row, "ro")
+    assert json.loads(res.body) == v1_terminal_view(row, "ro")
 
 
-async def test_get_serves_the_view_contract_the_server_selected(monkeypatch):
-    """Transportul și VEDEREA sunt două axe. Ruta nu-și alege singură contractul și nu îl
-    negociază cu clientul: îl citește din config, iar corpul spune ce e (`schema_version`)."""
+async def test_get_serves_the_only_view_there_is(monkeypatch):
+    """O singură vedere: `web-chat.v1`, auto-descriptivă prin `schema_version`. Nu există selector
+    și nu există negociere — envelope-ul de blocuri a fost ȘTERS, nu înghețat."""
     row = _row(status="completed", response_json=COMPLETED_PAYLOAD, completed_at=NOW)
     _wire_v2(monkeypatch, session_row=row)
-
-    async def get_body():
-        res = await wa.web_turn_status_v2(
-            row.id, token="tok", visitor_id="web_1", sig="s", request=_Req()
-        )
-        return json.loads(res.body)
-
-    # Implicit: payload-ul persistat, exact ce randează widgetul de azi.
-    monkeypatch.setattr(get_settings(), "web_turn_view_contract", "web-chat.v1")
-    v1 = await get_body()
-    assert v1["schema_version"] == "web-chat.v1"
-    assert v1["content"] == COMPLETED_PAYLOAD["content"]
-
-    # Selectat explicit: envelope-ul de blocuri. Rămâne servibil, nu e cod mort.
-    monkeypatch.setattr(get_settings(), "web_turn_view_contract", "web-view.v2")
-    v2 = await get_body()
-    assert v2["schema_version"] == "web-view.v2"
-    assert "messages" in v2
+    res = await wa.web_turn_status_v2(
+        row.id, token="tok", visitor_id="web_1", sig="s", request=_Req()
+    )
+    body = json.loads(res.body)
+    assert body["schema_version"] == ts.RESPONSE_CONTRACT_SYNC_V1
+    assert body["content"] == COMPLETED_PAYLOAD["content"]
+    assert "messages" not in body  # blocurile nu mai există nicăieri
 
 
 async def test_get_unknown_or_foreign_turn_is_404(monkeypatch):
@@ -714,43 +603,6 @@ async def test_action_is_refused_when_the_kill_switch_is_off(monkeypatch):
     assert json.loads(res.body)["error"]["code"] == "action_not_supported"
 
 
-def test_projection_emits_submit_actions_only_with_the_flag_on(monkeypatch):
-    source = _action_source()
-    settings = get_settings()
-    monkeypatch.setattr(settings, "web_actions_enabled", False)
-    tev._ring.cache_clear()
-    off = tev.terminal_view(source, "ro")
-    parse_view(off)
-    assert "submit" not in json.dumps(off)
-
-    monkeypatch.setattr(settings, "web_actions_enabled", True)
-    monkeypatch.setattr(
-        settings, "web_action_keys", "k1:bngyMzYtdGVzdC1rZXktb25lLS0tLS0tLS0tLS0tLS0="
-    )
-    monkeypatch.setattr(settings, "web_action_ttl_s", 1800)
-    tev._ring.cache_clear()
-    on = tev.terminal_view(source, "ro")
-    parse_view(on)
-    dumped = json.dumps(on)
-    assert '"type": "submit"' in dumped
-    # Tokenul e opac: nici kind-ul, nici id-ul de catalog nu se citesc din el.
-    assert "request_details" not in dumped and "p-1" not in dumped
-
-
-def test_projection_of_actions_is_byte_deterministic(monkeypatch):
-    source = _action_source()
-    settings = get_settings()
-    monkeypatch.setattr(settings, "web_actions_enabled", True)
-    monkeypatch.setattr(
-        settings, "web_action_keys", "k1:bngyMzYtdGVzdC1rZXktb25lLS0tLS0tLS0tLS0tLS0="
-    )
-    monkeypatch.setattr(settings, "web_action_ttl_s", 1800)
-    tev._ring.cache_clear()
-    a = json.dumps(tev.terminal_view(source, "ro"), sort_keys=True)
-    b = json.dumps(tev.terminal_view(source, "ro"), sort_keys=True)
-    assert a == b
-
-
 # ── NX-249: asignarea de release la marginea de accept ────────────────────────
 
 
@@ -937,7 +789,7 @@ async def test_frontendul_nu_afla_nimic_despre_canary(monkeypatch):
     accepted = await wa.web_turn_accept_v2(
         _Req(_body(row.client_turn_id)), token="tok", visitor_id="web_1", sig="s"
     )
-    terminal = tev.terminal_view(
+    terminal = v1_terminal_view(
         _row(
             status="completed",
             response_json=COMPLETED_PAYLOAD,

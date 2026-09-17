@@ -47,16 +47,15 @@ from src.agent.brain_models import BrainInput, UserParts
 from src.agent.brain_rich import card_refs, rich_from_plan
 from src.agent.conversation_quality import evaluate_reply
 from src.agent.deterministic import _comparison_facets
-from src.agent.evidence_bundle import EvidenceBundle, build_evidence_bundle
+from src.agent.evidence_bundle import EvidenceBundle
 from src.agent.fallbacks import grounded_fallback_reply
-from src.agent.grounding_guard import GroundedAnswer, ground_answer
+from src.agent.grounding_guard import GroundedAnswer
 from src.agent.llm import prompt_cache_scope
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_definitions import tool_schemas
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
 from src.analytics.demand import clean_ids
-from src.catalog.freshness import facts_sla_s
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
@@ -690,53 +689,6 @@ def _emit_grounding_telemetry(
             ctx.emit("view_field_omitted", field=omission.field, reason=omission.reason)
 
 
-def _attach_grounding(
-    ctx: TurnContext,
-    run: ToolRun,
-    plan: AnswerPlanV2,
-    execute: Any,
-    *,
-    ask_clarification: bool,
-) -> None:
-    """Îngheață faptele turului și trece planul prin `GroundingGuard`. DOAR sub flag; cu flagul
-    stins `ctx.grounded` rămâne None, deci marginea web persistă exact ce persista înainte.
-
-    Rulează după validarea planului și după validarea prozei: guardul e ultima poartă, nu prima —
-    ce respinge el a trecut deja de tot restul, deci un refuz aici e un semnal real, nu zgomot."""
-    settings = get_settings()
-    if not settings.web_view_v2_projector_enabled:
-        return
-    classes, constraints = _retrieval_annotations(getattr(execute, "bundles", []) or [])
-    bundle = build_evidence_bundle(
-        business_id=ctx.business.id,
-        locale=ctx.language,
-        rows=run.retrieved,
-        now=datetime.now(UTC),
-        # Pragul aparține TENANTULUI, nu mediului: un catalog alimentat de feed live și unul
-        # importat o dată nu se pot judeca cu aceeași cifră (`src/catalog/freshness.py`).
-        sla_s=facts_sla_s(ctx.business.settings, default=settings.commerce_facts_sla_s),
-        match_class_by_product=classes,
-        constraints_by_product=constraints,
-        cart=getattr(run, "cart_snapshot", None),
-        # Bugetul de query-uri al bundle-ului e ZERO prin construcție: se hidratează din rândurile
-        # deja retrievate. Contorul raportează câte căutări au alimentat faptele, nu câte a făcut
-        # builderul — altfel ar raporta mereu 0 și n-ar detecta nimic.
-        query_count=len(getattr(execute, "bundles", []) or []),
-    )
-    # NX-241: grounding-ul e o FAZĂ (validare), măsurată din afară ca guardul să rămână determinist.
-    with turn_latency.span("validation"):
-        answer = ground_answer(
-            plan,
-            bundle,
-            locale=ctx.language,
-            ask_clarification=ask_clarification,
-            memory_criteria=_memory_criteria(ctx, ctx.language),
-            commerce_enabled=settings.conversation_cart_enabled,
-        )
-    _emit_grounding_telemetry(ctx, bundle, answer)
-    ctx.grounded = answer if answer.ok else None
-
-
 def _plan_source(ctx: TurnContext, vocab: NeedVocabulary, proposal: Any) -> str:
     """Cine AFIRMĂ faptul propus de plan: clientul sau modelul?
 
@@ -1359,9 +1311,11 @@ async def run_main_brain(
     for check in evaluate_reply(text, plan=plan, previous_bot_texts=previous):
         ctx.emit("conversation_quality", check=check.check, outcome=check.outcome)
 
-    # NX-240: faptele se îngheață AICI, după ce planul și proza au trecut toate porțile. Ce iese
-    # de aici e ce va proiecta `render_v2` — și nimic din catalog nu-l mai poate schimba.
-    _attach_grounding(ctx, run, plan, execute, ask_clarification=ask_clarification)
+    # NX-240 (grounding) era cablat AICI, dar verdictul lui nu respingea turul: îl consuma
+    # projectorul `web-view.v2`, care a fost ȘTERS. Cablajul a plecat cu el, ca să nu rămână o
+    # fază care costă și nu decide nimic. `src/agent/grounding_guard.py` +
+    # `src/agent/evidence_bundle.py` rămân INTACTE și nereferite: ca să redevină o poartă, le
+    # trebuie o destinație pe contractul v1 (respingere → fallback), adică o decizie, nu un cablu.
 
     ctx.emit("main_brain_call", phase="final", outcome="ok", **versions)
     await _set_brain_reply(ctx, deps, plan, run, text)

@@ -91,17 +91,16 @@ from src.web.session import (
     issue_visitor,
     verify_web_session_any,
 )
-from src.web.shell_copy import BOOTSTRAP_COPY_KEY, shell_copy
 from src.web.turn_events import (
     get_phase,
     progress_copy,
     result_event,
     status_event,
     status_payload,
-    terminal_payload,
 )
 from src.web.turn_executor import wake_executor
 from src.web.turn_service import (
+    RESPONSE_CONTRACT_SYNC_V1,
     TERMINAL_LEDGER_STATUSES,
     Accepted,
     ActiveTurnConflict,
@@ -122,6 +121,7 @@ from src.web.turn_service import (
     request_fingerprint,
     session_ref_hash,
 )
+from src.web.turn_view_v1 import v1_terminal_view
 from src.webhook.body_limit import enforce_body_cap
 from src.worker.admission import get_admission, tenant_bucket
 from src.worker.aftercare import persist_events, run_aftercare
@@ -426,7 +426,6 @@ async def web_bootstrap(token: str, request: Request) -> dict:
     # să le inventeze — ceea ce boundary-ul „frontend pasiv" interzice. Strict aditiv și gated pe
     # flagul v2: cu ruta v2 stinsă, calea v1 primește exact aceiași bytes ca înainte.
     if s.web_turn_v2_enabled:
-        body[BOOTSTRAP_COPY_KEY] = shell_copy(resolved.get("default_locale"))
         # CAPABILITATE, nu adresă. Clientul își construiește singur URL-urile (altfel un backend
         # compromis ar putea redirecta requesturile); de la noi află DOAR că turul poate fi
         # acceptat asincron și în ce contract îi va veni rezultatul.
@@ -437,7 +436,7 @@ async def web_bootstrap(token: str, request: Request) -> dict:
         # frontend. Un build-time flag ar fi legat rollbackul de un pipeline de FE, adică exact
         # de lucrul pe care nu-l ai la îndemână în incident.
         body["async_turns"] = {
-            "view_contract": s.web_turn_view_contract,
+            "view_contract": RESPONSE_CONTRACT_SYNC_V1,
             "sse": s.web_turn_sse_enabled,
             "poll_after_ms": s.web_turn_poll_after_ms,
             # Textul fazelor vine tot de la server, localizat pe tenant (D3). Altfel widgetul ar
@@ -1417,7 +1416,7 @@ async def _accept_turn_v2(request: Request, token: str, visitor_id: str, sig: st
             )
         await _ledger_emit(db, outcome.row, *replay_events)
         hooks.on_replay(outcome.row.status)
-        return JSONResponse(status_code=200, content=terminal_payload(outcome.row, lang))
+        return JSONResponse(status_code=200, content=v1_terminal_view(outcome.row, lang))
     if isinstance(outcome, ExistingInProgress):
         await _ledger_emit(
             db,
@@ -1515,7 +1514,7 @@ async def web_turn_status_v2(turn_id: str, token: str, visitor_id: str, sig: str
     if row.status in TERMINAL_LEDGER_STATUSES:
         business = await _v2_business(db, session.business_id)
         return JSONResponse(
-            status_code=200, content=terminal_payload(row, business.default_locale or "ro")
+            status_code=200, content=v1_terminal_view(row, business.default_locale or "ro")
         )
     redis = await get_redis()
     return _v2_status_response(row, phase=await get_phase(redis, session.business_id, row.id))

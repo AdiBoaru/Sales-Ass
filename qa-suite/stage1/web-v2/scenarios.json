@@ -1,5 +1,5 @@
 {
-  "_note": "NX-247 — manifestul de scenarii și invarianți al gate-ului Stage 1. Conține IDs și AȘTEPTĂRI, niciodată ViewModelul: dacă ar conține payloadul, testul ar compara serverul cu o copie a serverului. `invariants` sunt vocabular ÎNCHIS (tests/e2e/stage1_scenarios.py::INVARIANTS); un id nedeclarat sau un invariant fără checker rupe suita. `backend_coverage` spune ce se EXECUTĂ efectiv la backend: `covered` trebuie să corespundă exact suitei care rulează (test_declared_backend_coverage_matches_what_runs), iar `blocked` cere motiv — altfel acoperirea ar putea minți prin omisiune.",
+  "_note": "NX-247 — manifestul de scenarii și invarianți al gate-ului Stage 1. Conține IDs și AȘTEPTĂRI, niciodată ViewModelul: dacă ar conține payloadul, testul ar compara serverul cu o copie a serverului. `invariants` sunt vocabular ÎNCHIS (tests/e2e/stage1_scenarios.py::INVARIANTS); un id nedeclarat sau un invariant fără checker rupe suita. `backend_coverage` spune ce se EXECUTĂ efectiv la backend: `covered` trebuie să corespundă exact suitei care rulează (test_declared_backend_coverage_matches_what_runs), iar `blocked` cere motiv — altfel acoperirea ar putea minți prin omisiune.  |  Invarianții scriși pe envelope-ul de blocuri `web-view.v2` au fost ȘTERȘI odată cu el: chips opace, sumar de coș server-owned, copy de shell la bootstrap, „doar string-uri display-ready\" și pașii de rutină. Pe contractul `web-chat.v1` trei dintre ei nu au producător, iar al patrulea (numerele pe sârmă) e FALS prin proiectare — prețul e un număr, formatarea e a frontendului.",
   "manifest_version": "stage1.web-v2.1",
   "contract": {
     "schema_version": "web-view.v2",
@@ -45,17 +45,9 @@
       "owner": "backend",
       "why": "Comparația se emite ca bloc structurat, nu ca proză cu tabel improvizat."
     },
-    "action_chips_opaque": {
-      "owner": "backend",
-      "why": "Fiecare acțiune emisă are token sigilat; eticheta nu este payload (NX-236)."
-    },
     "no_results_notice_honest": {
       "owner": "backend",
       "why": "Zero rezultate = notice onest și ZERO produse inventate ca umplutură."
-    },
-    "routine_steps_ordered": {
-      "owner": "backend",
-      "why": "Rutina are pași ordonați server-side; ordinea nu se recalculează în client."
     },
     "revoked_need_absent": {
       "owner": "backend",
@@ -69,10 +61,6 @@
       "owner": "backend",
       "why": "NX-237: receipt idempotent per (tur, acțiune) — probă în DB, nu în UI."
     },
-    "cart_summary_server_owned": {
-      "owner": "backend",
-      "why": "Totalurile coșului sunt string-uri display-ready calculate server-side."
-    },
     "no_false_commerce_success": {
       "owner": "backend",
       "why": "Preț/stoc stale ⇒ revalidare și vedere terminală onestă, ZERO succes fals."
@@ -84,10 +72,6 @@
     "one_feedback_row": {
       "owner": "backend",
       "why": "NX-246 felia 2: un vot per prompt, idempotent în SCHEMĂ, nu în cod."
-    },
-    "display_strings_only": {
-      "owner": "backend",
-      "why": "NX-240: niciun număr pe sârmă în afară de conversation.revision."
     },
     "prices_match_catalog_snapshot": {
       "owner": "backend",
@@ -104,10 +88,6 @@
     "only_known_block_types": {
       "owner": "backend",
       "why": "NX-228: serverul emite exclusiv din unionul finit de blocuri."
-    },
-    "bootstrap_copy_server_owned": {
-      "owner": "backend",
-      "why": "NX-244: view_copy ajunge la widget ÎNAINTE de primul tur, ca să nu-și invente numele."
     },
     "dom_order_equals_backend_order": {
       "owner": "frontend",
@@ -157,7 +137,6 @@
       "tenant": "alpha",
       "turns": [],
       "invariants": [
-        "bootstrap_copy_server_owned",
         "no_local_greeting"
       ],
       "backend_coverage": "covered"
@@ -194,7 +173,6 @@
       "invariants": [
         "terminal_view_renderable",
         "min_three_product_cards",
-        "display_strings_only",
         "prices_match_catalog_snapshot",
         "product_ids_from_own_tenant",
         "no_client_derived_price",
@@ -220,7 +198,6 @@
       ],
       "invariants": [
         "comparison_block_present",
-        "display_strings_only",
         "dom_order_equals_backend_order",
         "responsive_semantics_preserved"
       ],
@@ -238,7 +215,6 @@
       ],
       "invariants": [
         "terminal_view_renderable",
-        "action_chips_opaque",
         "action_token_byte_identical"
       ],
       "backend_coverage": "covered"
@@ -272,7 +248,6 @@
       ],
       "invariants": [
         "terminal_view_renderable",
-        "routine_steps_ordered",
         "only_known_block_types"
       ],
       "backend_coverage": "blocked",
@@ -334,8 +309,6 @@
       ],
       "invariants": [
         "one_receipt_per_action",
-        "cart_summary_server_owned",
-        "display_strings_only",
         "no_localstorage_mutation"
       ],
       "backend_coverage": "blocked",

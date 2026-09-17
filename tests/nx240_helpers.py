@@ -18,7 +18,6 @@ from src.agent.answer_plan import (
     SelectedProduct,
     StyleSignals,
 )
-from src.channels.web.render_v2 import TurnIdentity
 
 NOW = datetime(2026, 8, 14, 12, 0, 0, tzinfo=UTC)
 VERIFIED_AT = datetime(2026, 8, 14, 11, 30, 0, tzinfo=UTC)  # 30 min vechime → fresh la SLA 1 zi
@@ -92,18 +91,6 @@ def plan(**overrides: Any) -> AnswerPlanV2:
     }
     base.update(overrides)
     return AnswerPlanV2(**base)
-
-
-def identity(**overrides: Any) -> TurnIdentity:
-    base: dict[str, Any] = {
-        "turn_id": "t-nx240",
-        "client_turn_id": CLIENT_TURN_ID,
-        "conversation_id": "conv-nx240",
-        "conversation_revision": 3,
-        "status": "completed",
-    }
-    base.update(overrides)
-    return TurnIdentity(**base)
 
 
 class FakeArgs:

@@ -781,39 +781,34 @@ class InvariantInput:
     state: dict[str, Any] = field(default_factory=dict)
 
 
-def _blocks(view: dict[str, Any]) -> list[dict[str, Any]]:
-    return [b for m in view.get("messages", []) for b in m.get("blocks", [])]
+# ── Forma vederii: `web-chat.v1` ────────────────────────────────────────────────────────────
+# Envelope-ul de blocuri `web-view.v2` a fost ȘTERS din produs, deci invarianții de aici sunt
+# rescriși pe contractul pe care serverul chiar îl servește: payload-ul persistat de executor
+# (`render_web`) + plicul de tur. Ce s-a pierdut odată cu blocurile e DECLARAT, nu tăcut:
+#   • „chips opace" — pe v1 un chip e MESAJUL pe care l-ar scrie clientul, nu un token sigilat;
+#   • „sumar de coș server-owned" și „copy de shell la bootstrap" — nu au producător pe v1;
+#   • „doar string-uri display-ready" — pe v1 prețul e un NUMĂR, deliberat: formatarea e a
+#     frontendului. Era o proprietate a lui v2, nu un adevăr despre produs.
 
 
-def _blocks_of(view: dict[str, Any], kind: str) -> list[dict[str, Any]]:
-    return [b for b in _blocks(view) if b.get("type") == kind]
+def _products(view: dict[str, Any]) -> list[dict[str, Any]]:
+    return [p for p in (view.get("products") or []) if isinstance(p, dict)]
 
 
-def _product_items(view: dict[str, Any]) -> list[dict[str, Any]]:
-    return [item for b in _blocks_of(view, "product_list") for item in b.get("items", [])]
-
-
-def _actions(view: dict[str, Any]) -> list[dict[str, Any]]:
-    out = [a for b in _blocks_of(view, "action_row") for a in b.get("actions", [])]
-    out += [a for item in _product_items(view) for a in item.get("actions", [])]
-    if isinstance(view.get("error"), dict) and view["error"].get("retry_action"):
-        out.append(view["error"]["retry_action"])
-    return out
-
-
-_KNOWN_BLOCK_TYPES = frozenset(
+#: Cheile pe care contractul v1 le pune pe sârmă. Aceeași allowlist ca `src/web/turn_view_v1.py` —
+#: dacă vederea ar începe să emită altceva, gate-ul trebuie să o vadă.
+_KNOWN_VIEW_KEYS = frozenset(
     {
-        "text",
-        "product_list",
+        "schema_version",
+        "conversation",
+        "turn",
+        "error",
+        "content",
+        "products",
+        "suggestions",
         "comparison",
-        "key_value",
-        "status_list",
-        "routine",
-        "notice",
-        "memory",
-        "cart_summary",
-        "action_row",
-        "divider",
+        "offer",
+        "error_code",
     }
 )
 
@@ -829,10 +824,12 @@ _COT_MARKERS = (
 
 
 def _check_terminal_view_renderable(inp: InvariantInput) -> None:
-    messages = inp.view.get("messages") or []
-    assert messages, "vedere terminală fără mesaje (P6)"
-    content = [b for b in _blocks(inp.view) if b.get("type") != "divider"]
-    assert content, "vedere terminală doar cu blocuri fără conținut (P6)"
+    """P6: niciun terminal mut. Aceeași regulă ca `turn_service.renderable()`, care e poarta de
+    la commit — verificată aici pe ce a ieșit efectiv pe sârmă."""
+    view = inp.view
+    assert (
+        view.get("content") or view.get("products") or view.get("comparison") or view.get("offer")
+    ), "vedere terminală fără nimic randabil (P6)"
 
 
 def _check_single_ledger_row(inp: InvariantInput) -> None:
@@ -846,60 +843,36 @@ def _check_single_execution(inp: InvariantInput) -> None:
 
 
 def _check_no_product_block(inp: InvariantInput) -> None:
-    assert not _blocks_of(inp.view, "product_list"), "răspuns textual cu carduri nesolicitate"
+    assert not _products(inp.view), "răspuns textual cu carduri nesolicitate"
 
 
 def _check_min_three_product_cards(inp: InvariantInput) -> None:
-    items = _product_items(inp.view)
+    items = _products(inp.view)
     assert len(items) >= 3, f"doar {len(items)} carduri (minim 3)"
     for item in items:
-        assert item.get("price", {}).get("current"), "card fără preț display-ready"
+        assert isinstance(item.get("price"), (int, float)), "card fără preț"
+        assert item.get("product_id"), "card fără identitate de catalog"
 
 
 def _check_comparison_block_present(inp: InvariantInput) -> None:
-    """Câmpul e `headers`, nu `columns` — contractul (`ComparisonBlock`) și proiecția reală
-    (`turn_events._comparison_block`) folosesc `headers`. Prima versiune a checkerului cerea
-    `columns` și n-ar fi trecut niciodată pe date reale; a fost prinsă abia când scenariul a început
-    să producă un bloc adevărat."""
-    blocks = _blocks_of(inp.view, "comparison")
-    assert blocks, "comparație cerută, bloc absent"
-    headers = blocks[0].get("headers") or []
-    rows = blocks[0].get("rows") or []
-    assert len(headers) >= 2, f"comparație cu {len(headers)} coloane (minim 2)"
+    """Pe v1 tabelul e `comparison: {columns, rows}`, cu `values` aliniat 1:1 cu coloanele —
+    frontendul nu are voie să ghicească alinierea."""
+    table = inp.view.get("comparison")
+    assert isinstance(table, dict), "comparație cerută, tabel absent"
+    columns = table.get("columns") or []
+    rows = table.get("rows") or []
+    assert len(columns) >= 2, f"comparație cu {len(columns)} coloane (minim 2)"
     assert rows, "comparație fără rânduri"
     for i, row in enumerate(rows):
-        cells = row.get("cells") or []
-        assert len(cells) == len(headers), (
-            f"rândul {i} are {len(cells)} celule pentru {len(headers)} coloane — FE-ul ar trebui "
-            "să ghicească alinierea"
+        values = row.get("values") or []
+        assert len(values) == len(columns), (
+            f"rândul {i} are {len(values)} valori pentru {len(columns)} coloane"
         )
 
 
-def _check_action_chips_opaque(inp: InvariantInput) -> None:
-    actions = _actions(inp.view)
-    assert actions, "scenariu de acțiuni fără nicio acțiune emisă"
-    for action in actions:
-        activation = action.get("activation") or {}
-        if activation.get("type") == "submit":
-            token = activation.get("token") or ""
-            assert token, "acțiune submit fără token"
-            assert fold(action.get("label", "")) not in fold(token), (
-                "tokenul conține eticheta — nu e opac"
-            )
-
-
 def _check_no_results_notice_honest(inp: InvariantInput) -> None:
-    assert _blocks_of(inp.view, "notice") or _blocks_of(inp.view, "text"), (
-        "zero rezultate fără niciun mesaj (tăcere)"
-    )
-    assert not _product_items(inp.view), "zero rezultate, dar cu produse afișate"
-
-
-def _check_routine_steps_ordered(inp: InvariantInput) -> None:
-    blocks = _blocks_of(inp.view, "routine") or _blocks_of(inp.view, "status_list")
-    assert blocks, "rutină cerută, bloc de pași absent"
-    steps = blocks[0].get("steps") or blocks[0].get("items") or []
-    assert len(steps) >= 2, "rutină cu mai puțin de doi pași"
+    assert (inp.view.get("content") or "").strip(), "zero rezultate fără niciun mesaj (tăcere)"
+    assert not _products(inp.view), "zero rezultate, dar cu produse afișate"
 
 
 def _check_revoked_need_absent(inp: InvariantInput) -> None:
@@ -920,13 +893,6 @@ def _check_one_receipt_per_action(inp: InvariantInput) -> None:
     assert inp.probes.get("receipts") == 1, f"receipts: {inp.probes.get('receipts')} (așteptat 1)"
 
 
-def _check_cart_summary_server_owned(inp: InvariantInput) -> None:
-    blocks = _blocks_of(inp.view, "cart_summary")
-    assert blocks, "mutație de coș fără sumar server-owned"
-    total = blocks[0].get("total")
-    assert isinstance(total, str) and total, "totalul coșului nu e text display-ready"
-
-
 def _check_no_false_commerce_success(inp: InvariantInput) -> None:
     assert inp.probes.get("cart_items", 0) == 0, "s-a scris în coș pe date stale"
     _check_terminal_view_renderable(inp)
@@ -944,36 +910,14 @@ def _check_one_feedback_row(inp: InvariantInput) -> None:
     )
 
 
-def _check_display_strings_only(inp: InvariantInput) -> None:
-    """Singurul număr permis pe sârmă e `conversation.revision` (NX-240). Verificarea e pe
-    STRUCTURĂ, recursiv: un `price: 89.0` strecurat oriunde e un frontend obligat să formateze."""
-    allowed_paths = {("conversation", "revision")}
-
-    def walk(node: Any, path: tuple[str, ...]) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                walk(value, (*path, key))
-        elif isinstance(node, list):
-            for item in node:
-                walk(item, path)
-        elif isinstance(node, bool):
-            return
-        elif isinstance(node, (int, float)):
-            assert path in allowed_paths, f"număr pe sârmă la {'.'.join(path)}: {node!r}"
-
-    walk(inp.view, ())
-
-
 def _check_prices_match_catalog_snapshot(inp: InvariantInput) -> None:
     snapshot = inp.tenant.price_snapshot
-    for item in _product_items(inp.view):
-        title = item.get("title") or ""
-        expected = next((v for k, v in snapshot.items() if k == title), None)
-        assert expected is not None, f"card cu titlu care nu e în catalogul seedat: {title!r}"
-        current = (item.get("price") or {}).get("current") or ""
-        digits = re.sub(r"[^\d]", "", current.split(",")[0])
-        assert digits == str(expected), (
-            f"preț afișat {current!r} ≠ snapshot {expected} pentru {title!r}"
+    for item in _products(inp.view):
+        name = item.get("name") or ""
+        expected = next((v for k, v in snapshot.items() if k == name), None)
+        assert expected is not None, f"card cu nume care nu e în catalogul seedat: {name!r}"
+        assert int(float(item.get("price") or 0)) == int(expected), (
+            f"preț afișat {item.get('price')!r} ≠ snapshot {expected} pentru {name!r}"
         )
 
 
@@ -985,22 +929,18 @@ def _check_no_chain_of_thought(inp: InvariantInput) -> None:
 
 def _check_product_ids_from_own_tenant(inp: InvariantInput) -> None:
     own = {p.name for p in inp.tenant.products}
-    for item in _product_items(inp.view):
-        assert item.get("title") in own, (
-            f"produs din alt catalog în vederea lui {inp.tenant.key}: {item.get('title')!r}"
+    for item in _products(inp.view):
+        assert item.get("name") in own, (
+            f"produs din alt catalog în vederea lui {inp.tenant.key}: {item.get('name')!r}"
         )
 
 
 def _check_only_known_block_types(inp: InvariantInput) -> None:
-    for block in _blocks(inp.view):
-        assert block.get("type") in _KNOWN_BLOCK_TYPES, f"bloc necunoscut: {block.get('type')!r}"
-
-
-def _check_bootstrap_copy_server_owned(inp: InvariantInput) -> None:
-    copy = inp.state.get("view_copy") or {}
-    assert copy.get("chrome", {}).get("launcher_label"), "bootstrap fără eticheta launcherului"
-    assert copy.get("composer", {}).get("placeholder"), "bootstrap fără placeholder de composer"
-    assert copy.get("a11y", {}).get("announcements"), "bootstrap fără anunțuri de accesibilitate"
+    """Numele invariantului a rămas (e cheie în `scenarios.json`), dar întrebarea e cea a lui v1:
+    vederea emite DOAR cheile de contract? O cheie scursă din payload-ul intern e exact clasa pe
+    care allowlistul din `turn_view_v1.py` o închide."""
+    unknown = sorted(set(inp.view) - _KNOWN_VIEW_KEYS)
+    assert not unknown, f"chei necunoscute pe sârmă: {unknown}"
 
 
 #: Registrul de checkere. Cheia e invariantul din manifest; testul de acoperire cere ca fiecare
@@ -1012,22 +952,17 @@ INVARIANT_CHECKS: dict[str, Callable[[InvariantInput], None]] = {
     "no_product_block": _check_no_product_block,
     "min_three_product_cards": _check_min_three_product_cards,
     "comparison_block_present": _check_comparison_block_present,
-    "action_chips_opaque": _check_action_chips_opaque,
     "no_results_notice_honest": _check_no_results_notice_honest,
-    "routine_steps_ordered": _check_routine_steps_ordered,
     "revoked_need_absent": _check_revoked_need_absent,
     "context_resolved_server_side": _check_context_resolved_server_side,
     "one_receipt_per_action": _check_one_receipt_per_action,
-    "cart_summary_server_owned": _check_cart_summary_server_owned,
     "no_false_commerce_success": _check_no_false_commerce_success,
     "deadline_fallback_persisted": _check_deadline_fallback_persisted,
     "one_feedback_row": _check_one_feedback_row,
-    "display_strings_only": _check_display_strings_only,
     "prices_match_catalog_snapshot": _check_prices_match_catalog_snapshot,
     "no_chain_of_thought": _check_no_chain_of_thought,
     "product_ids_from_own_tenant": _check_product_ids_from_own_tenant,
     "only_known_block_types": _check_only_known_block_types,
-    "bootstrap_copy_server_owned": _check_bootstrap_copy_server_owned,
 }
 
 

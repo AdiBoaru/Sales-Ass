@@ -350,16 +350,3 @@ def test_executor_deadline_subtracts_queue_wait_without_a_ledger_deadline():
     row = _row(accepted_at=datetime(2026, 8, 16, 12, 0, 0, tzinfo=UTC), deadline_at=None)
     d = tex._build_turn_deadline(row, now, _settings(TURN_DEADLINE_ENABLED=True))
     assert d.elapsed_before_ms == 5_000
-
-
-# ── projectorul rămâne pur ─────────────────────────────────────────────────────────────────
-def test_projection_is_measured_from_outside_the_projector():
-    """NX-240 interzice orice ceas în `render_v2` (`test_projector_source_contains_no_clock...`).
-    NX-241 măsoară proiecția — deci spanul trebuie să fie la APELANT, nu în projector."""
-    import inspect
-
-    import src.channels.web.render_v2 as projector
-    import src.web.turn_events as caller
-
-    assert "turn_latency" not in inspect.getsource(projector)
-    assert 'span("projection")' in inspect.getsource(caller)

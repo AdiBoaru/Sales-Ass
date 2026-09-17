@@ -45,11 +45,9 @@ if str(ROOT) not in sys.path:
 
 from src.web.contracts_v2 import (  # noqa: E402 — după ajustarea sys.path
     TURN_SCHEMA_VERSION,
-    VIEW_SCHEMA_VERSION,
     _canonical,
     schema_hash,
     turn_json_schema,
-    view_json_schema,
 )
 
 QA_DIR = ROOT / "qa-suite" / "stage1" / "web-v2"
@@ -61,15 +59,10 @@ THRESHOLDS_PATH = QA_DIR / "gate-thresholds.json"
 #: pe orice platformă). Setul e închis și verificat: un fixture nou care nu ajunge aici ar fi un
 #: fixture pe care frontendul nu-l validează niciodată, adică exact gaura pe care manifestul
 #: există ca să o închidă (vezi testul `test_fixture_set_is_complete`).
-CONTRACT_FIXTURES: tuple[str, ...] = (
-    "tests/fixtures/web_v2/valid_views.json",
-    "tests/fixtures/web_v2/invalid_views.json",
-    "tests/fixtures/web_v2/requests.json",
-)
+CONTRACT_FIXTURES: tuple[str, ...] = ("tests/fixtures/web_v2/requests.json",)
 
 #: Proiecțiile REALE ale projectorului (NX-240), separate de fixturile de contract: ele nu descriu
 #: forma, ci ce produce serverul pe scenariile canonice. Frontendul le randează în browser.
-PROJECTION_FIXTURES_DIR = "tests/fixtures/web_v2_golden"
 
 _NOTE = (
     "GENERAT de scripts/stage1_contract_manifest.py — nu edita manual. "
@@ -90,28 +83,18 @@ def _digest_of(mapping: dict[str, str]) -> str:
     ).hexdigest()
 
 
-def _projection_fixtures() -> dict[str, str]:
-    base = ROOT / PROJECTION_FIXTURES_DIR
-    return {
-        f"{PROJECTION_FIXTURES_DIR}/{p.name}": normalized_sha256(p)
-        for p in sorted(base.glob("*.json"))
-    }
-
-
 def contract_pack() -> dict:
     """Pachetul de contract, PUR: aceleași bytes pentru același tree, pe orice platformă."""
     fixtures = {name: normalized_sha256(ROOT / name) for name in CONTRACT_FIXTURES}
-    projections = _projection_fixtures()
     pack: dict = {
         "_note": _NOTE,
-        "schema_version": VIEW_SCHEMA_VERSION,
+        # Contractul negociat e al CERERII. Vederea are UN singur format (`web-chat.v1`, payload-ul
+        # persistat de executor), deci nu mai e nimic de negociat pe direcția aia: envelope-ul de
+        # blocuri `web-view.v2` a fost ȘTERS, nu înghețat.
         "turn_schema_version": TURN_SCHEMA_VERSION,
-        "schema_sha256": schema_hash(view_json_schema()),
         "turn_schema_sha256": schema_hash(turn_json_schema()),
         "fixtures_sha256": _digest_of(fixtures),
         "fixtures": fixtures,
-        "projections_sha256": _digest_of(projections),
-        "projections": projections,
         # `backend_commit` rămâne null AICI: vezi docstring. Se completează în certificat.
         "backend_commit": None,
     }
@@ -129,7 +112,7 @@ def render(pack: dict) -> str:
 
 def canonical_schema_bytes() -> bytes:
     """Exact bytes-ii peste care se calculează `schema_hash()` — ce copiază frontendul."""
-    return _canonical(view_json_schema()).encode("utf-8")
+    return _canonical(turn_json_schema()).encode("utf-8")
 
 
 def read_manifest() -> dict:
@@ -212,7 +195,8 @@ def main() -> None:
         print("\nRulează: python scripts/stage1_contract_manifest.py --write", file=sys.stderr)
         raise SystemExit(2)
     pack = read_manifest()
-    print(f"contract la zi: {pack['schema_version']} schema={pack['schema_sha256'][:16]}…")
+    version, digest = pack["turn_schema_version"], pack["turn_schema_sha256"][:16]
+    print(f"contract la zi: {version} schema={digest}…")
 
 
 if __name__ == "__main__":

@@ -663,14 +663,21 @@ _TENANT_FOR_CHECKS = sc.SyntheticTenant(
 
 
 def _view(**over) -> dict:
+    """Vederea pe care o servește serverul: `web-chat.v1` (payload-ul persistat + plic de tur)."""
     base = {
-        "schema_version": "web-view.v2",
+        "schema_version": "web-chat.v1",
         "conversation": {"id": "c", "revision": 1},
         "turn": {"id": "t", "client_turn_id": "u", "status": "completed"},
-        "messages": [{"id": "m", "role": "assistant", "blocks": [{"type": "text", "text": "ok"}]}],
+        "content": "ok",
+        "products": [],
+        "suggestions": [],
     }
     base.update(over)
     return base
+
+
+def _card(name: str, price: float = 89.0, **over) -> dict:
+    return {"product_id": f"p-{name}", "name": name, "price": price, **over}
 
 
 def _inp(view: dict, **over) -> sc.InvariantInput:
@@ -679,127 +686,44 @@ def _inp(view: dict, **over) -> sc.InvariantInput:
 
 def test_renderable_checker_fails_on_a_silent_terminal() -> None:
     with pytest.raises(AssertionError):
-        sc.INVARIANT_CHECKS["terminal_view_renderable"](_inp(_view(messages=[])))
+        sc.INVARIANT_CHECKS["terminal_view_renderable"](_inp(_view(content="")))
 
 
-def test_renderable_checker_fails_on_divider_only() -> None:
-    view = _view(messages=[{"id": "m", "role": "assistant", "blocks": [{"type": "divider"}]}])
-    with pytest.raises(AssertionError):
-        sc.INVARIANT_CHECKS["terminal_view_renderable"](_inp(view))
-
-
-def test_display_strings_checker_catches_a_raw_number_anywhere() -> None:
-    view = _view(
-        messages=[
-            {
-                "id": "m",
-                "role": "assistant",
-                "blocks": [
-                    {
-                        "type": "product_list",
-                        "items": [{"view_id": "v", "title": "X", "price": {"current": 89.0}}],
-                    }
-                ],
-            }
-        ]
-    )
-    with pytest.raises(AssertionError, match="număr pe sârmă"):
-        sc.INVARIANT_CHECKS["display_strings_only"](_inp(view))
-
-
-def test_display_strings_checker_allows_conversation_revision() -> None:
-    sc.INVARIANT_CHECKS["display_strings_only"](_inp(_view()))
+def test_renderable_checker_accepts_cards_without_prose() -> None:
+    """P6 cere ceva RANDABIL, nu neapărat text: un răspuns numai cu carduri e un răspuns."""
+    sc.INVARIANT_CHECKS["terminal_view_renderable"](_inp(_view(content="", products=[_card("X")])))
 
 
 def test_price_checker_catches_a_price_that_is_not_in_the_catalog() -> None:
     product = sc.ALPHA_PRODUCTS[0]
-    view = _view(
-        messages=[
-            {
-                "id": "m",
-                "role": "assistant",
-                "blocks": [
-                    {
-                        "type": "product_list",
-                        "items": [
-                            {
-                                "view_id": "v",
-                                "title": product.name,
-                                "price": {"current": "77,00 lei"},
-                            }
-                        ],
-                    }
-                ],
-            }
-        ]
-    )
+    view = _view(products=[_card(product.name, price=77.0)])
     with pytest.raises(AssertionError, match="snapshot"):
         sc.INVARIANT_CHECKS["prices_match_catalog_snapshot"](_inp(view))
 
 
 def test_price_checker_accepts_the_seeded_price() -> None:
     product = sc.ALPHA_PRODUCTS[0]
-    view = _view(
-        messages=[
-            {
-                "id": "m",
-                "role": "assistant",
-                "blocks": [
-                    {
-                        "type": "product_list",
-                        "items": [
-                            {
-                                "view_id": "v",
-                                "title": product.name,
-                                "price": {"current": f"{product.effective_price},00 lei"},
-                            }
-                        ],
-                    }
-                ],
-            }
-        ]
-    )
+    view = _view(products=[_card(product.name, price=float(product.effective_price))])
     sc.INVARIANT_CHECKS["prices_match_catalog_snapshot"](_inp(view))
 
 
 def test_tenant_checker_catches_a_product_from_the_other_catalog() -> None:
-    view = _view(
-        messages=[
-            {
-                "id": "m",
-                "role": "assistant",
-                "blocks": [
-                    {
-                        "type": "product_list",
-                        "items": [{"view_id": "v", "title": sc.BETA_PRODUCTS[0].name}],
-                    }
-                ],
-            }
-        ]
-    )
+    view = _view(products=[_card(sc.BETA_PRODUCTS[0].name)])
     with pytest.raises(AssertionError, match="alt catalog"):
         sc.INVARIANT_CHECKS["product_ids_from_own_tenant"](_inp(view))
 
 
 def test_cot_checker_catches_leaked_reasoning() -> None:
-    view = _view(
-        messages=[
-            {
-                "id": "m",
-                "role": "assistant",
-                "blocks": [{"type": "text", "text": "Thought: caut in catalog"}],
-            }
-        ]
-    )
+    view = _view(content="Thought: caut in catalog")
     with pytest.raises(AssertionError, match="raționament"):
         sc.INVARIANT_CHECKS["no_chain_of_thought"](_inp(view))
 
 
-def test_unknown_block_checker_catches_an_undeclared_type() -> None:
-    view = _view(
-        messages=[{"id": "m", "role": "assistant", "blocks": [{"type": "iframe", "src": "x"}]}]
-    )
-    with pytest.raises(AssertionError, match="bloc necunoscut"):
+def test_unknown_key_checker_catches_an_internal_leak() -> None:
+    """Clasa reală pe v1: o cheie INTERNĂ scursă pe sârmă (planul de acțiuni, verdictul de
+    grounding, orice se adaugă mâine în payload-ul persistat)."""
+    view = _view(grounded_v2={"claims": ["x"]})
+    with pytest.raises(AssertionError, match="chei necunoscute"):
         sc.INVARIANT_CHECKS["only_known_block_types"](_inp(view))
 
 

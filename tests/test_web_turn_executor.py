@@ -25,9 +25,9 @@ import pytest
 from src.config import get_settings
 from src.db.queries.web_turns import ClaimResult, ExecutionRefs, WebTurnRow
 from src.models import Reply
-from src.web import turn_events as tev
 from src.web import turn_executor as te
 from src.web import turn_service as ts
+from src.web.turn_view_v1 import v1_terminal_view
 from src.worker.admission import reset_admission
 from src.worker.processor import TurnResult
 
@@ -227,7 +227,7 @@ async def test_persisted_view_projects_back_as_the_widget_contract(monkeypatch):
         response_json=persisted,
         completed_at=datetime.now(UTC),
     )
-    served = tev.terminal_payload(terminal, "ro")
+    served = v1_terminal_view(terminal, "ro")
 
     assert served["schema_version"] == ts.RESPONSE_CONTRACT_SYNC_V1
     assert served["turn"] == {

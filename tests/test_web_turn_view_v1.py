@@ -271,12 +271,7 @@ async def _bootstrap(monkeypatch: pytest.MonkeyPatch, **overrides):
 async def test_bootstrap_advertises_async_turns_with_the_view_contract(monkeypatch) -> None:
     """Comutarea sincron↔asincron are UN owner: serverul. Clientul află din bootstrap că poate
     accepta asincron ȘI în ce contract primește rezultatul — nu deduce din forma răspunsului."""
-    body = await _bootstrap(
-        monkeypatch,
-        web_turn_v2_enabled=True,
-        web_turn_sse_enabled=True,
-        web_turn_view_contract="web-chat.v1",
-    )
+    body = await _bootstrap(monkeypatch, web_turn_v2_enabled=True, web_turn_sse_enabled=True)
     assert body["async_turns"] == {
         "view_contract": "web-chat.v1",
         "sse": True,
@@ -297,22 +292,3 @@ async def test_bootstrap_drops_the_key_when_async_is_off(monkeypatch) -> None:
     Asta e și rollbackul: stingi flagul, clientul cade pe `/web/chat`, zero rebuild de frontend."""
     body = await _bootstrap(monkeypatch, web_turn_v2_enabled=False)
     assert "async_turns" not in body
-
-
-@pytest.mark.asyncio
-async def test_bootstrap_advertises_the_contract_it_will_actually_serve(monkeypatch) -> None:
-    """Anunțul nu e o constantă: dacă serverul e configurat pe blocuri, asta anunță. Altfel
-    clientul ar decoda cu schema greșită exact în ziua în care cineva schimbă configul."""
-    body = await _bootstrap(
-        monkeypatch, web_turn_v2_enabled=True, web_turn_view_contract="web-view.v2"
-    )
-    assert body["async_turns"]["view_contract"] == "web-view.v2"
-
-
-def test_selector_defaults_to_v1(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Vederea e SERVER-OWNED și implicit v1. Testul ancorează default-ul: un flip accidental
-    pe `web-view.v2` ar schimba contractul widgetului fără o linie de cod în rute."""
-    from src.config import Settings
-
-    monkeypatch.delenv("WEB_TURN_VIEW_CONTRACT", raising=False)
-    assert Settings(_env_file=None).web_turn_view_contract == "web-chat.v1"

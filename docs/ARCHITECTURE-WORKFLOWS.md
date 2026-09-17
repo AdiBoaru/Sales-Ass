@@ -755,7 +755,7 @@ flowchart TD
   ACC["[OFF] accept_web_turn — insert-or-inspect<br/>(web/turn_service.py:291)"]:::off
   LEDGER[("[OFF] web_turns — AUTORITATEA<br/>insert_turn (db/queries/web_turns.py:89)")]:::auth
   DUP{"[OFF] Cheia există deja?"}:::dec
-  R202["[OFF] 202 + status<br/>(turn_events.py:209)"]:::out
+  R202["[OFF] 202 + status<br/>(turn_events.py:115)"]:::out
   R409["[OFF] 409 idempotency_conflict —<br/>aceeași cheie, alt corp (web/app.py:549)"]:::out
   REPLAY["[OFF] Replay EXACT al aceluiași<br/>ViewModel din ledger (web/app.py:431)"]:::out
   WAKE["[OFF] Trezire Redis — best-effort,<br/>NU autoritate (turn_executor.py:80)"]:::off
@@ -1864,7 +1864,6 @@ web_turn_lock_enabled = true
 web_turn_recovery_enabled = false
 web_turn_sse_enabled = false
 web_turn_v2_enabled = false
-web_view_v2_projector_enabled = false
 welcome_enabled = true
 ```
 

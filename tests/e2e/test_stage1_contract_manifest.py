@@ -25,15 +25,12 @@ import json
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator
 
 from scripts import stage1_contract_manifest as manifest_script
 from src.web.contracts_v2 import (
     TURN_SCHEMA_VERSION,
-    VIEW_SCHEMA_VERSION,
     schema_hash,
     turn_json_schema,
-    view_json_schema,
 )
 from tests.e2e import stage1_scenarios as sc
 
@@ -54,10 +51,11 @@ def test_manifest_is_current() -> None:
 
 def test_manifest_declares_the_versions_the_code_speaks() -> None:
     pack = manifest_script.read_manifest()
-    assert pack["schema_version"] == VIEW_SCHEMA_VERSION
     assert pack["turn_schema_version"] == TURN_SCHEMA_VERSION
-    assert pack["schema_sha256"] == schema_hash(view_json_schema())
     assert pack["turn_schema_sha256"] == schema_hash(turn_json_schema())
+    # Vederea nu mai e un contract negociat: are UN singur format, `web-chat.v1`, care e chiar
+    # payload-ul persistat. Un `schema_version` aici ar fi promisiunea unui al doilea contract.
+    assert "schema_version" not in pack and "schema_sha256" not in pack
 
 
 # ── 2. Determinism ──────────────────────────────────────────────────────────────────────────
@@ -100,7 +98,7 @@ def test_schema_bytes_hash_to_the_published_hash() -> None:
     """Bytes-ii pe care îi copiază frontendul TREBUIE să hash-uiască la hashul negociat. Dacă
     cele două ar divergea, negocierea de capability ar promite un contract și livra altul."""
     canonical = manifest_script.canonical_schema_bytes()
-    assert hashlib.sha256(canonical).hexdigest() == schema_hash(view_json_schema())
+    assert hashlib.sha256(canonical).hexdigest() == schema_hash(turn_json_schema())
 
 
 # ── 3. Mutație: driftul rupe gate-ul (R16) ──────────────────────────────────────────────────
@@ -109,9 +107,8 @@ def test_schema_bytes_hash_to_the_published_hash() -> None:
 @pytest.mark.parametrize(
     "key",
     [
-        "schema_sha256",
+        "turn_schema_sha256",
         "fixtures_sha256",
-        "projections_sha256",
         "scenarios_sha256",
         "thresholds_sha256",
     ],
@@ -146,49 +143,6 @@ def test_truncating_the_fixture_set_is_detected() -> None:
 
 def _fixture(name: str) -> dict:
     return json.loads((ROOT / "tests" / "fixtures" / "web_v2" / name).read_text(encoding="utf-8"))
-
-
-def test_all_contract_fixtures_validate_against_the_published_schema() -> None:
-    validator = Draft202012Validator(view_json_schema())
-    views = {k: v for k, v in _fixture("valid_views.json").items() if not k.startswith("_")}
-    assert views, "setul de fixture valide e gol"
-    for name, payload in views.items():
-        try:
-            validator.validate(payload)
-        except Exception as e:  # noqa: BLE001 — re-ridicat cu numele fixture-ului
-            raise AssertionError(f"fixture-ul valid {name!r} nu trece schema publicată: {e}") from e
-
-
-def test_invalid_fixtures_are_actually_rejected() -> None:
-    """Fixturile invalide trebuie să fie invalide — prin schemă SAU prin model. Un fixture
-    „invalid" care trece ambele porți e un test negativ mort, iar acelea se strică neobservate."""
-    from src.web.contracts_v2 import parse_view
-
-    validator = Draft202012Validator(view_json_schema())
-    cases = _fixture("invalid_views.json")["cases"]
-    assert cases, "setul de fixture invalide e gol"
-    for case in cases:
-        payload = case["payload"]
-        schema_ok = validator.is_valid(payload)
-        try:
-            parse_view(payload)
-            model_ok = True
-        except Exception:  # noqa: BLE001 — orice respingere e o respingere
-            model_ok = False
-        assert not (schema_ok and model_ok), (
-            f"fixture-ul invalid {case['name']!r} trece ambele porți ({case['reason']})"
-        )
-
-
-def test_projection_fixtures_validate_too() -> None:
-    """Proiecțiile NX-240 sunt ce randează browserul. Dacă ele n-ar valida, gate-ul ar cere
-    frontendului să deseneze ceva ce contractul interzice."""
-    validator = Draft202012Validator(view_json_schema())
-    base = ROOT / "tests" / "fixtures" / "web_v2_golden"
-    files = sorted(base.glob("*.json"))
-    assert files, "nu există proiecții golden — projectorul nu e acoperit"
-    for path in files:
-        validator.validate(json.loads(path.read_text(encoding="utf-8")))
 
 
 # ── 5. Completitudine ───────────────────────────────────────────────────────────────────────
