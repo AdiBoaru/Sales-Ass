@@ -222,6 +222,23 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
     if not 5 <= len(text) <= 4000:
         return
 
+    # NX-297: un tur care A CĂUTAT și s-a întors fără produse NU e un răspuns static reutilizabil —
+    # e o clarificare sau un „n-am găsit". Ambele sunt relative la conversația ASTA.
+    #
+    # Poarta lipsea fiindcă n-avea cum să se declanșeze: `clarify` era servit de nano, iar reply-ul
+    # lui nu era cacheabil. Cu triajul șters, aceleași ture ajung la agent, iar
+    # `classify_volatility` judecă DOAR textul întrebării: „ser cu vitamina C pentru ten uscat"
+    # n-are cuvânt de buget și nicio deixă, deci iese `static` — iar un răspuns fără produse se
+    # scria în cache-ul PARTAJAT,
+    # pe zile. Turul următor cu exact același text primea hit (zero apeluri de model) și rămânea
+    # fără carduri: clasa `cache_poisoning`, de data asta pe drumul de vânzare.
+    #
+    # Măsurat de gate-ul E2E NX-247, nu dedus: `min_three_product_cards` a căzut cu 0 carduri și
+    # contoare `{moderate: 1, tool_loop: 0}` — adică turul n-a chemat niciun model.
+    if ctx.retrieval is not None and not reply.products:
+        ctx.emit("cache_write_skipped", reason="searched_without_products")
+        return
+
     volatility = classify_volatility(body)
     # Gate de eligibilitate (fără DB): decide DOAR dacă se cache-uiește. Read-ul de `data_version`
     # (dynamic) se face în TRY, ca un eșec de CHECKOUT să fie best-effort — nu propage din aftercare
