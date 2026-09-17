@@ -82,19 +82,13 @@ def derive_plan(fx: dict, *, user: str, business_id: str, locale: str) -> dict:
     products = list(fx.get("catalog", []))[:6] if searched else []
     obligations = obligations_from_prompt(user)
     kinds = {kind for kind, _ in obligations}
-    triage = fx.get("triage") or {}
-    # Sub creierul unic, `simple`/`clarify` NU mai sunt servite de nano — ajung tot la brain.
-    # Textul lor scriptat trăiește în fixtura `triage`, nu în `final`: pentru cazurile astea,
-    # ce „ar fi spus nano" este exact ce trebuie să spună acum planul.
-    answer = fx.get("final") or triage.get("reply") or ""
-    clarification = None
-    if triage.get("route") == "clarify" and triage.get("reply"):
-        clarification = {
-            "question": triage["reply"],
-            "target_need": (triage.get("missing_field") or "intent")[:48],
-            "reason": "missing_required",
-            "options": list(triage.get("suggestions") or [])[:4],
-        }
+    # NX-297: fixtura `triage` a dispărut odată cu stagiul. Textul scriptat al unui tur trăiește
+    # într-un singur loc (`final`) pe AMBELE contracte — cât timp existau două, un caz putea trece
+    # pe v1 din fixtura triajului și pe brain din `final`, adică din surse diferite.
+    answer = fx.get("final") or ""
+    # O clarificare rămâne exprimabilă, dar DECLARAT, nu dedusă din ruta unui clasificator care nu
+    # mai există: cazul care vrea să testeze planul de clarificare o scrie explicit.
+    clarification = fx.get("clarification")
 
     def ev(product: dict, kind: str) -> str:
         return f"product:{product['id']}:{kind}"
@@ -188,7 +182,9 @@ class ScriptedLLM:
         return [[0.0] * 8 for _ in texts]
 
     async def classify_json(self, system, user, *, model=None):
-        return dict(self._fx.get("triage", {}))
+        # NX-297: nimic din pipeline nu mai clasifică. Singurul consumator de
+        # `classify_json` e extracția de fundal (POST-tur), care nu rulează în golden.
+        return dict(self._fx.get("classify", {}))
 
     async def complete(self, system, user, *, model=None):
         # textul de la validator-retry (poate fi tot invalid → fallback determinist).

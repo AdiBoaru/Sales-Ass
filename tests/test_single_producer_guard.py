@@ -204,15 +204,22 @@ class _ChipFinder(ast.NodeVisitor):
 
     Două forme, amândouă structurale:
 
-    1. atribuire pe `.suggestions` (`ctx.reply.suggestions = …`);
+    1. atribuire pe `.suggestions` SAU pe `.chips` (`ctx.reply.suggestions = …`, `rich.chips = …`);
     2. argument `suggestions=` sau `chips=` într-un apel (construcție de `Reply`, `set_clarify`,
        `set_comparison`).
 
     Un chip nu e o părere, e o promisiune apăsabilă: apăsarea lui reintră în pipeline ca mesaj NOU
     al clientului. De-aia producătorii se declară, chiar și cei care azi nu pot minți.
+
+    `.chips` a intrat în forma 1 la NX-297: poarta urmărea `chips=` ca ARGUMENT, dar nu și ca
+    atribut, iar `RichReply.chips` se scrie prin atribuire. Gaura era de mărimea exactă a unui
+    producător — primul care a trecut prin ea a fost chiar felia care rescria chips-urile v1.
     """
 
     KWARGS = {"suggestions", "chips"}
+    #: Atributele care POARTĂ chips spre client. `RichReply.chips` ajunge în `Reply` prin
+    #: `set_rich_reply`, deci o scriere pe el e tot o emitere, doar cu un pas mai devreme.
+    ATTRS = {"suggestions", "chips"}
 
     def __init__(self) -> None:
         self.found: set[str] = set()
@@ -231,7 +238,7 @@ class _ChipFinder(ast.NodeVisitor):
 
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
         for target in node.targets:
-            if isinstance(target, ast.Attribute) and target.attr == "suggestions":
+            if isinstance(target, ast.Attribute) and target.attr in self.ATTRS:
                 self.found.add(self._here())
         self.generic_visit(node)
 

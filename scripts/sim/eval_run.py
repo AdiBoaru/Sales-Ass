@@ -741,7 +741,6 @@ async def main() -> int:
                 "runs_per_case": args.runs,
                 # #234: mereu OFF pe durata rulării (scoped, restaurat după)
                 "cache_enabled": False,
-                "model_triage": llm.model_triage,
                 "model_agent": base_model,  # baza, nu ultimul braț rulat
                 "model_arm": args.model_arm,
                 "judge_model": judge_model,  # PINUIT: aceeași riglă pe ambele brațe (NX-204)

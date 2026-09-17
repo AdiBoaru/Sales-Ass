@@ -27,10 +27,8 @@ from src.models import (
 )
 from src.worker.runner import PipelineDeps, fallback_stage, run_pipeline
 from src.worker.stages import agent as agent_stage_mod
-from src.worker.stages import triage as triage_mod
 from src.worker.stages.agent import agent_stage
 from src.worker.stages.clarify import clarify_resume_stage
-from src.worker.stages.triage import triage_stage
 from tests.test_single_brain import _FakePort, _plan_dict
 
 _PRODUCT = {
@@ -42,17 +40,16 @@ _PRODUCT = {
     "product_url": "https://demo.example/p1",
 }
 
-_STAGES = [clarify_resume_stage, triage_stage, agent_stage, fallback_stage]
+_STAGES = [clarify_resume_stage, agent_stage, fallback_stage]
 
 POLICY = ReducerPolicy(vocabulary=NeedVocabulary.from_pack(None))
 
 
 class _BrainOnlyLLM:
-    """Doar creierul e scriptat. `classify_json` NU trebuie chemat niciodată în journey-urile
-    astea — dacă e, cardul și-a ratat scopul, deci îl facem să pice zgomotos."""
+    """Doar creierul e scriptat. `classify_json` NU trebuie chemat niciodată pe drumul sincron —
+    NX-297 a șters singurul stagiu care o făcea, deci un apel aici e o regresie, nu o variantă."""
 
     model_agent = "model-de-test"
-    model_triage = "nano-de-test"
 
     def __init__(self, plans: list[dict], *, search: bool = True):
         self.plans = list(plans)
@@ -86,13 +83,11 @@ class _BrainOnlyLLM:
 def _wire(monkeypatch, port: _FakePort | None = None) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "single_brain_enabled", True, raising=False)
-    monkeypatch.setattr(settings, "triage_sync_shadow_enabled", True, raising=False)
     monkeypatch.setattr(settings, "conversation_state_v2_enabled", True, raising=False)
 
     async def _empty(conn, business_id):
         return []
 
-    monkeypatch.setattr(triage_mod, "list_category_slugs", _empty)
     monkeypatch.setattr(agent_stage_mod, "list_category_names", _empty)
     monkeypatch.setattr(agent_stage_mod, "list_routing_aliases", _empty)
     monkeypatch.setattr(brain_mod, "build_port", lambda ctx, deps, sel, **kw: port or _FakePort())

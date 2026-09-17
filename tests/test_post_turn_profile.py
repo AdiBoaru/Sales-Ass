@@ -143,8 +143,7 @@ def test_score_engaged_via_state_only():
 
 
 class _ScriptedLLM:
-    model_triage = "nano"
-    model_agent = "mini"
+    model_agent = "agent"
 
     def __init__(self, out=None, *, boom=False):
         self._out = out
@@ -158,7 +157,7 @@ class _ScriptedLLM:
         return self._out
 
 
-async def test_extract_profile_parses_and_forces_nano():
+async def test_extract_profile_parses_and_uses_the_agent_model():
     out = {
         "profile_patch": {"skin_type": "uscat"},
         "lead_signals": {"buying_stage": "narrowing", "has_budget": True},
@@ -170,7 +169,9 @@ async def test_extract_profile_parses_and_forces_nano():
     assert delta is not None
     assert delta.profile_patch == {"skin_type": "uscat"}
     assert delta.lead_signals.buying_stage == "narrowing" and delta.lead_signals.has_budget is True
-    assert llm.calls[0]["model"] == "nano"  # FORȚEAZĂ model_triage (nano), nu mini
+    # NX-297: nano iese din proiect. Extracția de fundal rulează pe modelul agentului, la
+    # același preț de input și mai puțin pe output (0,20/1,20 vs 0,20/1,25 per 1M).
+    assert llm.calls[0]["model"] == "agent"
 
 
 async def test_extract_profile_invalid_json_returns_none():

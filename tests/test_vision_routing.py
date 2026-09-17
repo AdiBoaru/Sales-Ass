@@ -53,7 +53,6 @@ def _llm(content="ser hidratant Cerave ambalaj alb"):
     captured: dict = {}
     client = LLMClient(
         _FakeOpenAI(content, captured),
-        model_triage="nano",
         model_agent="mini",
         model_vision="gpt-5.4-mini",
     )

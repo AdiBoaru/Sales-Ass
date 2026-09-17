@@ -508,22 +508,48 @@ async def test_pasul_ramane_gol_daca_si_inlocuitorul_cade(monkeypatch, _catalog)
 # ── Poarta de boot ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_routine_enabled_cere_single_brain():
-    """Profilul și unealta se atașează pe promptul MainBrain. Aprins singur, `ROUTINE_ENABLED` ar
-    fi un flag care nu poate face nimic — și, mai rău, ar sugera în config o capabilitate care nu
-    rulează.
+def test_routine_enabled_nu_mai_cere_single_brain():
+    """NX-297 felia 5 — rutina are acum DOUĂ gazde, deci poarta de boot a dispărut.
+
+    Cât timp singura gazdă era profilul de tur al creierului unic, poarta era corectă: un flag care
+    nu poate face nimic trebuie refuzat la boot. Acum `routine_plan` intră în toolsetul v1, iar
+    randarea secvenței exista deja acolo — combinația nu mai e imposibilă, iar poarta ar fi
+    interzis o configurație validă.
 
     Validatorul se apelează DIRECT pe un obiect construit, nu prin `Settings()`: construcția reală
     citește `.env`-ul mașinii, deci testul ar pica din cauza altui flag și ar raporta altceva decât
     măsoară."""
     from src.config import Settings
 
-    obj = Settings.model_construct(routine_enabled=True, single_brain_enabled=False)
-    with pytest.raises(ValueError, match="ROUTINE_ENABLED cere SINGLE_BRAIN_ENABLED"):
-        Settings._web_turn_relations(obj)
+    on_v1 = Settings.model_construct(routine_enabled=True, single_brain_enabled=False)
+    assert Settings._web_turn_relations(on_v1) is on_v1
 
-    ok = Settings.model_construct(routine_enabled=True, single_brain_enabled=True)
-    assert Settings._web_turn_relations(ok) is ok
+    on_brain = Settings.model_construct(routine_enabled=True, single_brain_enabled=True)
+    assert Settings._web_turn_relations(on_brain) is on_brain
+
+
+def test_routine_plan_e_chemabil_de_model_cand_flagul_e_aprins():
+    """Gaura pe care felia o închide: unealta era ÎNREGISTRATĂ, dar niciun toolset n-o numea, deci
+    modelul n-o putea chema deloc. Aceeași clasă cu `related_products`."""
+    from src.config import get_settings
+    from src.tools.base import enabled_tools
+
+    settings = get_settings()
+    before_routine = settings.routine_enabled
+    before_relations = settings.relation_traversal_enabled
+    try:
+        object.__setattr__(settings, "routine_enabled", False)
+        object.__setattr__(settings, "relation_traversal_enabled", False)
+        offered = enabled_tools(None)
+        assert "routine_plan" not in offered and "related_products" not in offered
+
+        object.__setattr__(settings, "routine_enabled", True)
+        object.__setattr__(settings, "relation_traversal_enabled", True)
+        offered = enabled_tools(None)
+        assert "routine_plan" in offered and "related_products" in offered
+    finally:
+        object.__setattr__(settings, "routine_enabled", before_routine)
+        object.__setattr__(settings, "relation_traversal_enabled", before_relations)
 
 
 # ── Ancora de graf ──────────────────────────────────────────────────────────────────────────────

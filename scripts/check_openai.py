@@ -1,4 +1,4 @@
-"""Verifică rapid că OPENAI_API_KEY + cele 3 modele din config răspund.
+"""Verifică rapid că OPENAI_API_KEY + cele 2 modele din config răspund.
 
 Rulează: python scripts/check_openai.py
 Citește OPENAI_API_KEY (+ MODEL_* dacă le-ai suprascris) din .env. Bifează
@@ -22,7 +22,6 @@ if sys.platform == "win32":
 load_dotenv()
 
 # Aceleași default-uri ca src/config.py (modelele pe care le folosește botul).
-MODEL_TRIAGE = os.environ.get("MODEL_TRIAGE", "gpt-5.4-nano")
 MODEL_AGENT = os.environ.get("MODEL_AGENT", "gpt-5.6-luna")
 MODEL_EMBED = os.environ.get("MODEL_EMBED", "text-embedding-3-small")
 
@@ -48,12 +47,11 @@ def main() -> int:
 
     client = OpenAI(api_key=key)
     checks = [
-        ("triaj", MODEL_TRIAGE, _check_chat),
         ("agent", MODEL_AGENT, _check_chat),
         ("embed", MODEL_EMBED, _check_embed),
     ]
 
-    print("Verific cheia + cele 3 modele (apeluri minuscule)...\n")
+    print("Verific cheia + cele 2 modele (apeluri minuscule)...\n")
     failed = 0
     for label, model, fn in checks:
         try:

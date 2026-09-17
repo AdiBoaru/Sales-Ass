@@ -112,10 +112,16 @@ async def test_runner_emits_one_turn_latency_event_with_phase_breakdown(monkeypa
     async def gates_stage(ctx, deps):  # noqa: ARG001 — numele contează (mapare fază)
         await asyncio.sleep(0)
 
-    async def triage_stage(ctx, deps):  # noqa: ARG001
+    async def agent_stage(ctx, deps):  # noqa: ARG001
+        # Faza „model" NU vine din maparea de stagii: `agent_stage` conține model + tools +
+        # validare, deci se măsoară pe DINĂUNTRU (span-uri în `llm.py`). Testul o produce la fel.
+        # NX-297: înainte, faza asta venea din `triage_stage`, singurul stagiu care ERA o singură
+        # fază de model — a plecat odată cu nano, iar testul măsura maparea, nu agregarea.
+        with span("model"):
+            pass
         ctx.set_reply("gata")
 
-    await run_pipeline(ctx, PipelineDeps(), [gates_stage, triage_stage])
+    await run_pipeline(ctx, PipelineDeps(), [gates_stage, agent_stage])
     events = _events(ctx, "turn_latency")
     assert len(events) == 1
     props = events[0]

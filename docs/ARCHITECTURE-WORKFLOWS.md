@@ -4,10 +4,11 @@
 > întrebare e cât de departe ai ajuns de aici: `git log --oneline 6bbeb6f..HEAD`.
 >
 > **Regulă de evidență:** fiecare muchie corespunde unui call/import real, citat `file:line`.
-> Scheletul e verificat contra `arch_explorer/` (AST-derivat, regenerabil determinist:
-> `python arch_explorer/analyze.py --repo . --root src` → **182 fișiere / 1272 noduri /
-> 941 muchii**, plus `verify.py` care re-derivă graful printr-o metodă DIFERITĂ, regex vs AST,
-> și cade dacă cele două nu sunt de acord).
+> Verificarea muchiilor e a CITITORULUI: singura poartă automată e cea de mai jos, iar ea judecă
+> listele, nu săgețile. (Până în 2026-09-17 scheletul era confruntat cu `arch_explorer/`, un
+> derivator de graf din AST — care însă n-a fost comis niciodată, deci rula doar pe mașina
+> autorului. Un instrument pe care nimeni altcineva nu-l poate rula nu verifică nimic; a fost
+> șters, împreună cu trimiterile la el.)
 >
 > **Poartă anti-putrezire (CI):** `python scripts/verify_architecture_doc.py` compară blocurile
 > ```` ```claim:...` ```` de la finalul documentului cu codul. Divergență → CI roșu. Ce garantează:
@@ -1444,7 +1445,7 @@ flowchart TD
 1. **CLAUDE.md e în urmă:** secțiunea „Structura proiectului" spune `stages/ … TODO: gates, free_layers; echo=fallback` — dar `gates.py`, `greeting.py`, `alias.py`, `cache.py`, `faq.py`, `clarify.py`, `handoff.py`, `language.py` există și sunt LIVE în `src/worker/runner.py:207-219`.
 2. **Docstring stale în runner:** `src/worker/runner.py:8-10` descrie „un singur stagiu real (`echo_stage`)" — `echo_stage` nu există în `DEFAULT_STAGES`; pipeline-ul are 12 stagii.
 3. **„Validatorul (stagiul 8)" din CLAUDE.md nu e stagiu separat:** trăiește în [`src/agent/validator.py`](../src/agent/validator.py) (`validate_prose:195`) și e chemat din faza F a agentului, nu ca stagiu al pipeline-ului. Comportamentul e cel documentat, structura diferă. *(Actualizat 2026-08-10: până la NX-142 erau funcții private în monolitul `agent.py` — de aceea R2 din tabelul de refactoring apare ca rezolvat.)*
-4. **arch_explorer e ușor stale pe branch-ul curent:** raportează `agent_stage` la linia 858 și `triage_stage` la 179; în cod sunt la `stages/agent.py:347` și `triage.py:293`. Necesită re-rulare `arch_explorer/analyze.py`.
+4. **~~arch_explorer e stale~~** — REZOLVAT prin ștergere (2026-09-17): unealta n-a fost niciodată în git, deci „re-rulează `analyze.py`" era o instrucțiune pe care doar o mașină din lume o putea executa. Nota citea oricum linii dintr-un `triage.py` care nu mai există (NX-297).
 5. **~~`webhook/status.py` NU există~~** — REZOLVAT altfel de NX-289: statusurile de livrare erau raportate de provider prin webhook; odată cu canalul au dispărut parserul, ramura din consumer și tabelul `message_status_events`. Nu mai există nici promisiunea, nici gaura.
 6. **STT/Whisper NU e implementat** — decis won't-do; NX-289 a scos și singurul canal care putea livra audio inbound, deci registrul de media e gol (gates degradează pe `no_downloader`).
 7. **Tool-ul `delivery_eta` NU există** — CLAUDE.md îl listează; registry-ul real are 10 tool-uri (grep `@register` în `src/tools/`), fără `delivery_eta`.
@@ -1469,7 +1470,7 @@ flowchart TD
 
 1. **⚠ Cel mai serios: excepție de procesare = tur pierdut tăcut.** La orice excepție în `process_event`, consumer-ul face ACK și doar loghează (`src/worker/consumer.py`; la fel reaper-ul, per-intrare). Acceptul a întors deja 202/200 → clientul nu re-trimite. Clientul nu primește NIMIC — încălcare a principiului 6 exact pe calea de eroare pe care principiul o vizează. **A doua cale de pierdere (găsită la trace-ul invers):** lock ocupat persistent → după `conv_lock_max_requeues` evenimentul e DROPAT cu un simplu log (`consumer.py:99-100`). → **NX-140**
 2. **`agent.py` e un god-module** — 1200+ linii; `agent_stage` (`:957+`) amestecă 3 intenții deterministe, bucla LLM, login-wall, checkout-fallback, cross-sell; validatorul + 3 căi de finalize în același fișier.
-3. **Cuplaj maxim în processor** — `handle_turn` are fan-out 45 (cel mai mare din sistem, `arch_explorer/GRAPH_REPORT.md`) și ~300 linii: orchestrare + politică de state-merge + sender + post-tur.
+3. **Cuplaj maxim în processor** — `handle_turn` are fan-out 45 (cel mai mare din sistem; cifră măsurată în 2026-08 cu `arch_explorer/`, unealtă ștearsă între timp — deci verific-o înainte s-o citezi) și ~300 linii: orchestrare + politică de state-merge + sender + post-tur.
 4. **Ciclu de import gestionat manual** — stagiile importă `PipelineDeps` din runner sub `TYPE_CHECKING` (`src/worker/stages/gates.py:37-38`); runner-ul importă stagiile la sfârșitul fișierului (`src/worker/runner.py:189-199`).
 5. **Conexiune DB ținută pe durata apelurilor LLM** — pipeline-ul rulează pe `conn` din `bot_pool` (max_size=10, `src/db/connection.py:224-229`) în timp ce agentul face 1-4 apeluri LLM (`src/worker/processor.py:345`); la fel `/web/chat` (`src/web/app.py:223-243`). Plafon ~10 tururi concurente/proces; pooler Supabase capat la ~15 sesiuni. **Bottleneck-ul #1 de scalare.** → **NX-141**
 6. **Dispatcher secvențial + poll de 2s** — rând cu rând, tenant cu tenant (`src/worker/dispatcher.py:233-241`), sleep 2s la idle (`:245-251`). Un tenant lent întârzie toți ceilalți; +0-2s latență pe calea async.
@@ -1560,8 +1561,10 @@ sărind agentul. S-a întâmplat live pe demo.
 
 ## Lentila 4 · FLAG-URI — ce rulează de fapt
 
-**86 de flag-uri bool** în `Settings`; **71 ON**, **15 OFF** by default. Lista exactă e în blocul
-`claim:flags` — CI-ul cade dacă divergeaza. Ce contează arhitectural:
+**147 de flag-uri bool** în `Settings`; **89 ON**, **58 OFF** by default (numărate din cod, nu ținute
+minte: `[f for f in Settings.model_fields.values() if f.annotation is bool]`; cifra scrisă aici a
+fost 86/71/15 și a îmbătrânit tăcut). Lista exactă e în blocul `claim:flags` — CI-ul cade dacă
+divergează. Ce contează arhitectural:
 
 **Stratul shadow** — rulează în paralel cu producția, observă, nu atinge `reply`:
 `query_spec_shadow_enabled` · `match_gate_shadow_enabled` · `search_shadow_enabled`.
@@ -1571,6 +1574,15 @@ măsurăm calitatea căutării fără să riscăm răspunsul.
 **Construit dar neactivat**: `answer_plan_enabled` (+ `_critic`, `_max_quality`) ·
 `injection_screen_enabled` · `web_identity_enabled` · `ai_disclaimer_enabled` ·
 `faq_locale_fallback_enabled` · `replay_store_prompt_enabled` · `validator_stock_claims_enabled`.
+
+**NX-297 (nano a IEȘIT din proiect)** — `stages/triage.py` e ȘTERS, împreună cu `MODEL_TRIAGE`,
+`TRIAGE_SYNC_SHADOW_ENABLED`, `TRIAGE_SHADOW_*`, `TRIAGE_FACTUAL_GUARD_ENABLED`,
+`CLOSURE_CHIPS_ENABLED`, `AGENT_ONLY_WRITER_ENABLED` și `COST_TRIAGE_USD`. Pipeline-ul are acum
+**10 stagii**, niciunul cu model înaintea agentului (poartă AST în `test_context_orchestration`).
+Ce a rămas sub flag: `clarify_tool_enabled` (OFF — `clarify_options` ca unealtă) și
+`chip_moves_v1_enabled` (OFF — chips ca mutări). `observed_constraints_enabled` a trecut pe **ON**:
+era a doua sursă a stivei de constrângeri, acum e singura, iar stinsă înseamnă „botul uită
+bugetul", nu „ca înainte".
 
 **Atenție la citire**: `web_enabled` e OFF în default-urile din cod și ON în `.env.prod`.
 Un flag OFF în `config.py` nu înseamnă OFF în producție — înseamnă „decizia se ia în env".
@@ -1650,7 +1662,7 @@ Blocurile de mai jos sunt comparate cu codul de `scripts/verify_architecture_doc
 Nu le edita de mână: `python scripts/verify_architecture_doc.py --emit-claims` le regenerează.
 
 Ce se verifică: **listele**. Ce nu: **săgețile**. O diagramă poate avea toate stagiile corecte și
-o muchie greșită între ele — pentru muchii rămân `arch_explorer/verify.py` și cititorul.
+o muchie greșită între ele — pentru muchii rămâne cititorul; poartă automată nu există.
 
 ```claim:stages
 gates_stage
@@ -1661,7 +1673,6 @@ greeting_stage
 alias_stage
 cache_stage
 faq_stage
-triage_stage
 agent_stage
 fallback_stage
 ```
@@ -1722,7 +1733,6 @@ rollup_usage
 ```claim:flags
 admission_distributed_enabled = true
 admission_enabled = true
-agent_only_writer_enabled = false
 ai_disclaimer_enabled = false
 alias_enabled = true
 answer_plan_critic_enabled = false
@@ -1739,10 +1749,10 @@ cheaper_intent_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
 chip_moves_enabled = true
+chip_moves_v1_enabled = false
 clarification_policy_v2_enabled = false
 clarify_menu_enabled = true
 clarify_tool_enabled = false
-closure_chips_enabled = true
 compare_coherence_guard_enabled = true
 compare_intent_enabled = true
 comparison_facets_enabled = true
@@ -1790,6 +1800,7 @@ no_result_alternatives_enabled = true
 observability_enabled = false
 observability_metrics_enabled = true
 observability_traces_enabled = true
+observed_constraints_enabled = true
 partition_job_enabled = true
 plan_server_owned_fields_enabled = false
 pool_metrics_enabled = true
@@ -1836,9 +1847,6 @@ spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
 summary_enabled = true
 topic_switch_reset_enabled = true
-triage_factual_guard_enabled = true
-triage_shadow_enabled = true
-triage_sync_shadow_enabled = false
 turn_budget_alerts_enabled = true
 turn_budget_enforced = false
 turn_deadline_enabled = false
@@ -1947,6 +1955,6 @@ welcome_enabled = true
 | R5 | Conexiune DB ținută prin apelurile LLM → plafon ~10 tururi concurente       | `processor.py:345`, `connection.py:227` | Fazează handle_turn: load → release conn → LLM fără conn → TX pe conn proaspăt         | Concurența limitată de LLM, nu de pool                                                | **NX-141** |
 | R6 | Dispatcher serial + poll 2s                                                    | `dispatcher.py:233-251`                   | gather bounded per tenant; tenanti în paralel; idle 0.5s                                     | Latență de livrare constantă sub load mixt                                           | —               |
 | R7 | fallback_stage RO-only (încalcă P11)                                         | `runner.py:173-176`                       | Dict per-locale ro/en pe`ctx.language`                                                   | Paritate multilingvă pe toate ieșirile                                                | —               |
-| R8 | Docstring-uri/documentație stale                                              | `runner.py:8-10`, CLAUDE.md „Structura"  | Update + re-rulare`arch_explorer/analyze.py`                                                | Previne decizii greșite pe documentație veche                                         | —               |
+| R8 | Docstring-uri/documentație stale                                              | `runner.py:8-10`, CLAUDE.md „Structura"  | Update manual; regeneratorul de graf nu mai există                                        | Previne decizii greșite pe documentație veche                                         | —               |
 
 **Concluzie:** sistemul e neobișnuit de disciplinat — principiile din CLAUDE.md chiar sunt implementate (pipeline liniar, single-exit, validator structural, RLS în straturi), iar mecanismele de fiabilitate sunt de calitate de producție. Cele două datorii reale: **concentrarea** (agent.py + processor.py acumulează tot ce e nou — R2/R3/R4 le dezamorsează ieftin) și **gaura ACK-on-error** (R1, singura încălcare structurală a propriilor principii). R5 e singurul subiect veritabil de scalare.

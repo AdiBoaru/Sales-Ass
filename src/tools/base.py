@@ -77,6 +77,12 @@ _SALES_TOOLS = (
     "subscribe_back_in_stock",  # NX-80: notificare la restock (WRITE; citit de proactiv NX-70)
     "faq_lookup",
     "clarify_options",  # NX-297: opțiunile oferibile, înaintea unei întrebări (gated, vezi mai jos)
+    # NX-297 felia 5: două unelte care erau ÎNREGISTRATE dar pe care modelul nu le putea chema,
+    # fiindcă niciun toolset nu le numea. `routine_plan` (NX-292) și `related_products` (NX-275
+    # felia 5) au existat luni de zile ca decor: graful de relații al tenantului (37.082 de muchii
+    # măsurate pe SOLE) era inert nu din lipsă de date, ci fiindcă nimeni nu-l putea interoga.
+    "routine_plan",
+    "related_products",
 )
 # `faq_lookup` și pe ORDER: o întrebare de PROCES/POLITICĂ rutată aici (cum comand, ce retur, cât e
 # livrarea) primește un răspuns grounded din baza de cunoștințe — FĂRĂ cont — în loc să cadă în
@@ -88,7 +94,11 @@ _ORDER_TOOLS = ("check_order", "faq_lookup")
 #: auto-dezactivează întorcând un rezultat gol tot ar apărea în schema trimisă modelului, deci tot
 #: ar costa tokeni și tot ar putea fi chemată. Singurul mod de a o stinge cu adevărat e să n-o
 #: OFERI.
-_FLAGGED_TOOLS: dict[str, str] = {"clarify_options": "clarify_tool_enabled"}
+_FLAGGED_TOOLS: dict[str, str] = {
+    "clarify_options": "clarify_tool_enabled",
+    "routine_plan": "routine_enabled",
+    "related_products": "relation_traversal_enabled",
+}
 
 
 def _disabled_by_flag() -> set[str]:

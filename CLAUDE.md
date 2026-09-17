@@ -21,7 +21,6 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | Coadă | Redis Streams (lock per conversație, debounce) |
 | DB | Postgres **17.6** — Supabase, proiect `NativexSales` eu-west-2 (**o singură schemă `public`**, multi-tenant pe `business_id`). Proiectul vechi (eu-west-1, PG16) e abandonat din 2026-08-28 |
 | LLM sales | OpenAI **`gpt-5.6-luna`** (`MODEL_AGENT`; era `gpt-5.4-mini` până pe 2026-08-24). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit |
-| LLM triaj + simple | OpenAI GPT-5.4-nano |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
 | Validare | Pydantic v2 |
@@ -453,6 +452,35 @@ proza din docstring-uri. Detalii:
 [`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql) +
 [`tasks/NX-289.md`](tasks/NX-289.md).
 
+**NX-297 — nano a IEȘIT din proiect: un singur model pe drumul răspunsului.**
+Triajul (`stages/triage.py`, 559 de linii + un prompt de 2.785 de tokeni pe FIECARE tur) scria 42%
+din răspunsuri fără să fi făcut vreo căutare — de acolo veneau chips-urile seci, clarificările
+despre produse pe care magazinul nu le are, și turele de rutină închise înainte de orice unealtă.
+Justificarea lui economică dispăruse pe 2026-08-24, când `MODEL_AGENT` a trecut pe `gpt-5.6-luna`
+(0,20/1,20 $ per 1M): nano costă LA FEL pe input și MAI MULT pe output. Câștigul cardului e de
+CALITATE, nu de cost.
+Au plecat: stagiul, `MODEL_TRIAGE`, `COST_TRIAGE_USD`, toate flagurile `TRIAGE_*`,
+`CLOSURE_CHIPS_ENABLED`, măsurătoarea shadow din `aftercare.py` și referințele din
+`control_plane.py`. Pipeline-ul are **10 stagii**. Ruta n-o mai decide nimeni: absența ei e cazul
+NORMAL, iar `agent_stage` o tratează ca atare (`route_defaulted` + toolsetul REUNIUNE sales+order,
+fiindcă „unde e comanda mea" nu mai e clasificat). `order` nu mai e rută; `check_order` își
+păstrează zidul de login (NX-128/129).
+**Patru mecanisme rămâneau fără producător și ar fi degradat TĂCUT**, toate re-cheiate pe cod pur:
+clasa de tur (`turn_class_for(obligations)` în loc de `classify(route, purchase_intent)` — altfel
+orice tur devenea `RECOMMENDATION` în ziua în care cineva aprinde bugetele); stiva de constrângeri
+(`OBSERVED_CONSTRAINTS_ENABLED` trece pe **ON**: era a doua sursă, e acum singura); raftul
+conversației (`category` cu care a CĂUTAT agentul — decizia OPUSĂ celei din felia 3, fiindcă atunci
+alternativa era o sursă mai bună, acum e niciuna); și `_emit_query_spec_shadow` (NX-208), mutat în
+`agent_stage` — ștearsă odată cu fișierul, ar fi dispărut tocmai măsurătoarea pe care se decide
+dezghețarea NX-188/189. Felia 3 nu rula DELOC pe creierul unic (ramura iese înainte, iar căutarea
+ocolește `ToolRun.execute` prin portul NX-238): ambele reparate.
+Invarianta D1 devine verificabilă pe FORMĂ, nu pe un flag: o poartă AST refuză ca vreun stagiu din
+`src/worker/stages/` să cheme `classify_json`/`complete_schema`/`run_tool_loop`. Un al doilea triaj
+scris peste șase luni ar arăta exact ca primul.
+**Consecință de produs, declarată:** o întrebare de clarificare nu mai poate cita o cifră pe care
+catalogul n-o susține — validatorul stagiului 8 o respinge, iar nano o servea fără validator.
+Kill-switch: NU există. Card: [`tasks/stage1/NX-297.md`](tasks/stage1/NX-297.md).
+
 **NX-296 — sugestiile: de la etichete seci la continuări pe care serverul le poate onora.**
 Cererea a fost „5 sugestii, ca la iZi, legate de mesaj și de istoric". Cifra nu era însă una, ci
 TREI, în module care nu se cunoșteau: producătorul tăia la 4 (`clarify_menu._MAX_CHIPS`), calea
@@ -727,12 +755,15 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • clarificare: dacă state are pending_question → formulare din cod/prompt
     • oricare produce reply → early exit la Sender
 
-[5] TRIAJ (GPT-5.4-nano, ~300 tokens input)
-    • clasificare: simple | sales | order | clarify
-    • output JSON validat cu Pydantic: {route, category_key, filters, missing_field}
-    • category_key validat contra categories (dacă inventează → CLARIFY)
-    • «simple»: nano compune și răspunsul → early exit la Sender
-    • incertitudinea = CLARIFY, NU recovery agent
+[5] TRIAJ — ȘTERS (NX-297). Nu mai există niciun model între client și agent.
+    • ruta o decide `agent_stage`: fără rută la intrare → `sales`, cu toolsetul REUNIUNE
+      (sales + order), fiindcă „unde e comanda mea" nu mai e clasificat de nimeni
+    • clasa de tur vine din obligațiile DETERMINISTE ale mesajului (`turn_class_for`)
+    • constrângerile (buget/nevoi/brand/raft) se învață din ce a CĂUTAT agentul
+      (`observed_constraints`, ON), nu din sloturi re-extrase de un model mic
+    • clarificarea e o UNEALTĂ (`clarify_options`, flag), nu o rută
+    • poartă mecanică: niciun stagiu din `src/worker/stages/` n-are voie să cheme un
+      clasificator de model (test AST în `test_context_orchestration`)
 
 [6] CONTEXT BUILDER (buget impus în cod)
     • istoric: max 8 mesaje (cele mai recente)
@@ -752,7 +783,7 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       mare, se decide pe măsurători (D15), nu ca să scăpăm de un 400. Divergența config↔sârmă se
       numără (`llm_reasoning_disabled_for_tools`). Fără poarta asta, o schimbare de model sau de
       effort omoară TOATĂ calea de vânzare și numai pe ea: 4xx e terminal în `_with_retry`,
-      `agent_stage` îl înghite, iar triajul (nano) rămâne intact deasupra — deci sistemul pare
+      `agent_stage` îl înghite, iar straturile gratuite rămân intacte deasupra — deci sistemul pare
       sănătos. S-a întâmplat pe 2026-08-24 (bbb77b3, ambele schimbări deodată)
     • buying stages framework: browsing → narrowing → comparing → ready_to_buy
     • AGENT decide mutarea de vânzare (NU routerul)
@@ -798,7 +829,7 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       pe Redis Pub/Sub + backlog SSE) → retry cu backoff la fail
     • NX-289: statusurile de livrare (delivered/read/failed) erau raportate de provider
       prin webhook; nu mai există producător, iar `message_status_events` a fost ștearsă
-    • POST-TUR async (nu blochează): extractor profil nano + lead_score update
+    • POST-TUR async (nu blochează): extractor profil + lead_score update (pe `model_agent`)
 
 PROACTIV (în afara pipeline-ului, scheduler separat — proactive_jobs)
     • AWB la expediere (shipments) · back-in-stock · follow-up coș abandonat
@@ -853,7 +884,7 @@ Canale — **NX-179: se lucrează DOAR pe web widget.**
   > **one-shot** (`src/web/action_service.py`): dovada de emitere se re-derivă din
   > `response_json["actions"]` (scris în tranzacția terminală), iar consumul E chiar rândul de
   > ledger al turului care folosește acțiunea — ZERO migrare, zero registru paralel în Redis.
-  > Execuția e `src/agent/action_kernel.py`, stagiu ÎNAINTEA triajului (o acțiune e o decizie, nu
+  > Execuția e `src/agent/action_kernel.py`, stagiu ÎNAINTEA agentului (o acțiune e o decizie, nu
   > o intenție de ghicit). Numele de acțiuni și cele de tool-uri sunt registre DISJUNCTE (verificat
   > la import). Flag `WEB_ACTIONS_ENABLED` (default OFF; cere `WEB_TURN_V2_ENABLED` +
   > `WEB_ACTION_KEYS`); contract + threat model + runbook de rotație:
@@ -1172,11 +1203,11 @@ poartă pe worker și pe `/web/chat`). Detalii: `docs/db_connections.md`.
 ## Principii — respectă-le în tot codul
 
 1. **Pipeline liniar** — niciun stagiu nu sare înapoi, niciun loop de orchestrare
-2. **LLM doar la 2 puncte** — triaj (nano) și agent (mini). Tot restul: cod determinist
+2. **LLM doar la 1 punct pe drumul sincron** — agentul. NX-297 a șters triajul nano; extracția de profil și rezumatul rulează POST-tur, pe modelul agentului. Tot restul: cod determinist
 3. **Un singur proprietar per câmp** — dacă două funcții scriu același câmp din TurnContext, e o greșeală de design
 4. **Buget de context impus în cod** — nu în prompturi, nu prin disciplină, în cod (state 8KB tăiat de context builder; CHECK în DB ca plasă)
 5. **Un singur punct de ieșire** — Sender → outbox → dispatcher. Orice alt loc care trimite mesaje e o greșeală
-6. **Niciodată tăcere** — degradare: mini → retry → nano → template → om notificat
+6. **Niciodată tăcere** — degradare: agent → retry → fallback determinist → template
 7. **business_id pe tot, SERVER-OWNED** — niciun query fără `WHERE business_id = $1`; RLS (`bot_runtime` + `app.business_id`) ca plasă, nu ca mecanism primar. `business_id` se injectează server-side: **niciodată** din output-ul modelului, niciodată parametru de tool controlabil de LLM
 8. **State = ref-uri, nu obiecte** — în displayed_products: {product_id, name, price}, NU obiectul complet
 9. **Promptul se generează din DB** — system prompt din `categories` (+ `intent_aliases`), nu hardcodat. (Un tabel `taxonomy` bogat se adaugă aditiv DOAR când verticalul cere filtre pe concerns — vezi schema_reference.)
@@ -1187,7 +1218,7 @@ poartă pe worker și pe `/web/chat`). Detalii: `docs/db_connections.md`.
     către client NU există liniuță de pauză („—", „–" sau „-" între spații) și nici punct și
     virgulă. Cratima din cuvinte („să-ți", „nu-s") rămâne, e ortografie. Regula trăiește în
     [`src/agent/voice.py`](src/agent/voice.py): `VOICE_RULES` intră în TOATE prompturile de
-    compunere (bucla de tool-calling, retry, rich, status comandă, triaj, MainBrain), iar
+    compunere (bucla de tool-calling, retry, rich, status comandă, MainBrain), iar
     `naturalize()` e plasa DETERMINISTĂ din `TurnContext.set_reply` + scrub-urile din `compose`
     (pură, idempotentă, atinge doar punctuația → nu poate invalida un text tocmai validat).
     Două consecințe practice: (a) prompturile se scriu ÎN vocea pe care o cer, fiindcă un exemplu
@@ -1262,8 +1293,8 @@ nativx-assistant/
 │   │   ├── admission.py         ← frâna de concurență: lease-uri Redis, plafon global + per-tenant
 │   │   ├── runner.py            ← pipeline runner (stagii în ordine, early-exit, măsoară)
 │   │   ├── dispatcher.py        ← LIVE: outbox → ChannelSender (webchat), retry idempotent
-│   │   ├── context.py           ← stagiul 6: istoric conversație bugetat (triaj+agent)
-│   │   └── stages/             ← triage.py (nano) ✅ + agent.py (mini, RAG+validator) ✅;
+│   │   ├── context.py           ← stagiul 6: istoric conversație bugetat (agent)
+│   │   └── stages/             ← agent.py (RAG + validator) ✅; triage.py ȘTERS (NX-297);
 │   │                             TODO: gates, free_layers; echo=fallback
 │   ├── channels/                ← abstracția de canal (NX-60+); cuplajul de transport
 │   │   ├── base.py              ← ChannelSender/MediaFetcher + Capability matrix (NX-115) + registre

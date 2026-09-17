@@ -96,11 +96,10 @@ __all__ = [
 #: nu are nimic care să-l oprească.
 CHIP_PRODUCERS: dict[str, str] = {
     # ── poartă EXPLICITĂ ────────────────────────────────────────────────────────────────────
-    "src/worker/stages/triage.py::triage_stage": (
-        "ANCORAT STRUCTURAL: sugestiile lui nano trec prin `ground_suggestions` contra meniului "
-        "închis construit din catalogul real (NX-295). Singurul producător cu poartă explicită, "
-        "fiindcă e singurul unde textul chip-ului e scris de un model."
-    ),
+    # NX-297: intrarea triajului a plecat odată cu stagiul. Era singurul producător în care textul
+    # chip-ului era scris de un MODEL și trecea printr-o poartă (`ground_suggestions` contra
+    # meniului închis). Azi niciun model nu mai rostește un chip liber pe calea vie: modelul poate
+    # doar REFORMULA o mutare oferită, iar reformularea are poarta ei, per mutare.
     "src/agent/brain.py::_set_brain_reply": (
         "ANCORAT STRUCTURAL, prin MUTĂRI (NX-296): chip-ul nu e un text pe care îl validăm, ci o "
         "mutare cu dovadă calculată în tur (`conversation/chip_moves.py`), exprimată dintr-un "
@@ -109,6 +108,13 @@ CHIP_PRODUCERS: dict[str, str] = {
         "inventat se numără și se ignoră, deci nu există cale prin care o sugestie scrisă de "
         "model să ajungă la client fără o mutare în spate. Cu felia stinsă rămâne comportamentul "
         "de dinainte (`_clarify_chips`: chip-urile SUNT frazele meniului închis)."
+    ),
+    "src/agent/finalize.py::_apply_move_chips": (
+        "ANCORAT STRUCTURAL, prin MUTĂRI (NX-296), pe calea v1 — aceeași sursă ca pe creierul "
+        "unic: meniul ÎNCHIS plus cardurile turului. Diferența e că aici modelul n-are câmp de "
+        "reformulare, deci fiecare mutare iese cu ȘABLONUL tenantului: nu trece niciun text de "
+        "model. Sub `CHIP_MOVES_V1_ENABLED` stins, chips-urile rămân cele de la `compose.assemble` "
+        "(intrarea NEANCORATĂ de mai jos), deci gaura nu e închisă, e OCOLITĂ sub flag."
     ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
     "src/worker/stages/faq.py::faq_stage": (
@@ -152,7 +158,11 @@ CHIP_PRODUCERS: dict[str, str] = {
     "src/worker/compose.py::assemble": (
         "NEANCORAT — gaura cunoscută, singura din listă. Calea bogată ia `j['suggestions']` direct "
         "din modelul de vânzare și doar le normalizează (trim/dedupe/cap), fără nicio verificare "
-        "că numesc ceva servabil. `ground_suggestions` NU e poarta potrivită aici: meniul închis e "
+        "că numesc ceva servabil. NX-297 felia 5 o OCOLEȘTE, nu o închide: cu "
+        "`CHIP_MOVES_V1_ENABLED` aprins, `finalize._apply_move_chips` suprascrie rezultatul de "
+        "aici cu mutări; cu flagul stins, textul modelului ajunge la client ca înainte. Deci "
+        "intrarea rămâne, și rămâne NEANCORATĂ: un producător ocolit pe un drum nu e reparat. "
+        "`ground_suggestions` NU e poarta potrivită aici: meniul închis e "
         "construit pentru CLARIFICARE, pe când astea sunt follow-up-uri despre produse deja "
         "afișate, iar aplicarea lui oarbă ar fi exact greșeala pe care NX-295 a MĂSURAT-O (poarta "
         "naivă păstra chip-ul fals și arunca pe cel adevărat). Ancorarea corectă cere întâi un "

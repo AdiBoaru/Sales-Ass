@@ -53,7 +53,7 @@ from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
 from src.agent.llm import prompt_cache_scope
 from src.agent.query_spec import Constraint, RuntimeQuerySpec
-from src.agent.tool_definitions import tool_schemas
+from src.agent.tool_definitions import tenant_enum_values, tool_schemas
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
 from src.analytics.demand import clean_ids
@@ -1078,6 +1078,12 @@ class _PortedExecute:
 
     async def _search(self, name: str, args: dict[str, Any], *, seq: int | None = None) -> str:
         ctx, run = self.ctx, self.run
+        # NX-297 felia 3: stiva de constrângeri învață din ce a CERUT agentul. Pe v1 înregistrarea
+        # stă în `ToolRun.execute`, dar calea asta o OCOLEȘTE (căutarea trece prin portul NX-238),
+        # deci fără linia de aici creierul unic ar fi singurul contract fără memorie de buget sau
+        # raft. N-ar fi apărut ca eroare: doar botul ar fi uitat, iar uitarea nu are stack trace.
+        if isinstance(args, dict):
+            run.search_args.append(dict(args))
         started = perf_counter()
         spec = _spec_from_args(ctx, args)
         budget = turn_budget.current()
@@ -1245,8 +1251,7 @@ async def run_main_brain(
     # sufix la FINALUL system-ului (prefixul rămâne byte-identic, deci cache-ul ține) și, cel mult,
     # tool-uri în plus. OFF → `profile is None` și nimic nu se schimbă.
     pack = getattr(ctx.business, "domain_pack", None)
-    registry = getattr(pack, "relation_kinds", None)
-    families = tuple(getattr(getattr(pack, "routine_steps", None), "families", {}) or ())
+    families = tenant_enum_values(pack)["families"]
     # NX-292: două flag-uri, două domenii. `TURN_PROFILES_ENABLED` aprinde toate cele cinci profile
     # (deci schimbă sufixul pentru TOT traficul, și se decide pe golden). `ROUTINE_ENABLED` aprinde
     # exclusiv profilul `routine` — singurul unde răspunsul de azi e garantat degradat, fiindcă
@@ -1263,13 +1268,11 @@ async def run_main_brain(
         have = {s.get("function", {}).get("name") for s in tools}
         extra = [t for t in profile.extra_tools if t not in have]
         if extra:
-            # Enumurile sunt ale TENANTULUI. La relații trimitem tipurile DECLARATE (nu doar
-            # secvențele): o rutină poate avea nevoie și de un complement, iar un tip nedeclarat e
-            # refuzat de tool oricum (`unknown_relation`).
-            declared = tuple(getattr(registry, "specs", {})) if registry is not None else ()
+            # Enumurile sunt ale TENANTULUI, citite dintr-un singur loc (`tenant_enum_values`): la
+            # relații intră tipurile DECLARATE, nu doar secvențele — o rutină poate avea nevoie și
+            # de un complement, iar un tip nedeclarat e refuzat de tool oricum (`unknown_relation`).
             examples = vocab_examples.from_pack(pack)
-            moments = tuple(getattr(getattr(pack, "routine_steps", None), "time_markers", {}) or ())
-            tools = [*tools, *tool_schemas(extra, examples, declared, families, moments)]
+            tools = [*tools, *tool_schemas(extra, examples, **tenant_enum_values(pack))]
 
     # NX-296: mutările oferibile ale turului, construite din catalog ÎNAINTE de apel. Costul e
     # apelul de meniu care se făcea oricum după plan (cache 300s per tenant și raft): se mută

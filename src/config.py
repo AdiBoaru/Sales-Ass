@@ -147,7 +147,6 @@ class Settings(BaseSettings):
     # mutații), deci costul unei greșeli e un repair, nu un răspuns greșit livrat clientului.
     # Se aprinde punând numele modelului aici — o variabilă, fără schimbare de cod.
     model_agent_complex: str = Field(default="", validation_alias="MODEL_AGENT_COMPLEX")
-    model_triage: str = Field(default="gpt-5.4-nano", validation_alias="MODEL_TRIAGE")
     model_embed: str = Field(default="text-embedding-3-small", validation_alias="MODEL_EMBED")
     model_moderation: str = Field(
         default="omni-moderation-latest", validation_alias="MODEL_MODERATION"
@@ -440,7 +439,6 @@ class Settings(BaseSettings):
     # Cost guard: peste plafonul zilnic (businesses.daily_cost_cap_usd or daily_cost_cap_usd)
     # dezactivează LLM-ul pt restul zilei. Estimare-plasă; facturarea reală = usage_daily.
     cost_guard_enabled: bool = Field(default=True, validation_alias="COST_GUARD_ENABLED")
-    cost_triage_usd: float = Field(default=0.0003, validation_alias="COST_TRIAGE_USD")
     cost_agent_usd: float = Field(default=0.003, validation_alias="COST_AGENT_USD")
     # NX-125: plafon SOFT de cheltuială per-contact (canale identificate), fereastră 24h. O singură
     # conversație în buclă nu mai poate arde plafonul întregului tenant. 0 = dezactivat (opt-in,
@@ -514,11 +512,12 @@ class Settings(BaseSettings):
     demand_rollup_enabled: bool = Field(default=True, validation_alias="DEMAND_ROLLUP_ENABLED")
 
     # --- Extractor profil + lead_score (NX-88, post-tur stagiul 9) ---
-    # Botul „învață" clientul: nano extrage semnale de profil → patch whitelist pe
+    # Botul „învață" clientul: un apel de fundal extrage semnale de profil → patch whitelist pe
     # contacts.profile + lead_score determinist. POST-TUR async (nu blochează livrarea), guardat
-    # de cost guard (peste plafon → llm None → sărit). Rulează DOAR pe tururi cu rută (triajul a
-    # angajat LLM-ul), NU pe free-layer/cache. Modelul e nano (model_triage); whitelist-ul de chei
-    # per vertical e în src/worker/profile.py (mutat în taxonomie la NX-43). Kill-switch global.
+    # de cost guard (peste plafon → llm None → sărit). Rulează DOAR pe tururi cu rută, adică pe
+    # cele care au ajuns la agent — un tur oprit de straturile gratuite n-are ce profil să dea.
+    # NX-297: ruta o pune `agent_stage`, nu triajul, iar modelul e `model_agent`, nu nano (felia
+    # 4a). Whitelist-ul de chei per vertical e în src/worker/profile.py. Kill-switch global.
     profile_extraction_enabled: bool = Field(
         default=True, validation_alias="PROFILE_EXTRACTION_ENABLED"
     )
@@ -643,27 +642,12 @@ class Settings(BaseSettings):
     chip_moves_enabled: bool = Field(default=True, validation_alias="CHIP_MOVES_ENABLED")
 
     single_brain_enabled: bool = Field(default=False, validation_alias="SINGLE_BRAIN_ENABLED")
-    # NX-251: triajul nano IESE de pe drumul sincron. Sub single-brain el nu mai era writer
-    # (control plane-ul îi demota reply-ul), dar APELUL rămânea: fiecare tur plătea o clasificare
-    # nano care primea contextul complet, după care ACELEAȘI blocuri plecau încă o dată la brain —
-    # exact cascada „un model mic clasifică înaintea creierului" pe care D1 o interzice.
-    # ON = clasificarea se mută POST-tur (măsurătoare), nu mai stă între client și răspuns.
-    triage_sync_shadow_enabled: bool = Field(
-        default=False, validation_alias="TRIAGE_SYNC_SHADOW_ENABLED"
-    )
-    # Kill-switch al MĂSURĂTORII, nu al comportamentului: cât timp comparăm ce a făcut brain-ul cu
-    # ce ar fi rutat triajul, plătim un apel nano post-tur. Se stinge separat când shadow-ul și-a
-    # spus cuvântul, fără schimbare de cod și fără să readucă triajul pe calea sincronă.
-    triage_shadow_enabled: bool = Field(default=True, validation_alias="TRIAGE_SHADOW_ENABLED")
-    # NX-275 felia 1: CÂT de des plătim măsurătoarea. 100 = comportamentul de azi (fiecare tur).
-    # Acordul brain-vs-nano e o proporție, deci se estimează la fel de bine dintr-un eșantion; la
-    # 10% mai ai nevoie de ~10x mai multe ture ca să-l declari, ceea ce e o decizie de PRODUS
-    # („e gata măsurătoarea?"), nu de cod. Eșantionarea e DETERMINISTĂ pe `turn_id` (același tur
-    # dă același verdict la reclaim), nu `random()`: altfel un tur reluat ar putea fi măsurat de
-    # două ori sau deloc, iar numărătorul și numitorul ar diverge tăcut.
-    triage_shadow_sample_pct: int = Field(
-        default=100, ge=0, le=100, validation_alias="TRIAGE_SHADOW_SAMPLE_PCT"
-    )
+    # NX-297 felia 4b: `TRIAGE_SYNC_SHADOW_ENABLED` / `TRIAGE_SHADOW_ENABLED` /
+    # `TRIAGE_SHADOW_SAMPLE_PCT` au DISPĂRUT odată cu triajul. Primul era poarta prin care nano
+    # ieșea de pe drumul sincron — acum nu mai există drum din care să iasă; celelalte două
+    # dozau o MĂSURĂTOARE care compara ruta brain-ului cu cea a lui nano, iar o comparație cu un
+    # clasificator care nu mai există nu are al doilea termen. Rămase în `.env`, sunt ignorate
+    # (`extra="ignore"`), nu produc eroare de boot.
     # NX-275 felia 2: modelul nu mai EMITE ce știe deja serverul (`schema_version`, `business_id`,
     # `locale`, `obligations`) — se injectează după parsare. Forma lui `AnswerPlanV2` rămâne fixă,
     # deci consumatorii nu văd nicio diferență; se scurtează doar cererea. Câștigul principal nu e
@@ -1042,34 +1026,37 @@ class Settings(BaseSettings):
     checkout_intent_fallback_enabled: bool = Field(
         default=True, validation_alias="CHECKOUT_INTENT_FALLBACK_ENABLED"
     )
-    # Guard ruta `simple` (compusă de nano, FĂRĂ validatorul stagiului 8): dacă mesajul cere
-    # CONFIRMAREA unui fapt de business (reducere/preț/stoc/politică/brand), re-rutează la `sales`
-    # ca agentul grounded (+ prompt întărit) să-l trateze, în loc de un „da" nevalidat al nano-ului.
-    triage_factual_guard_enabled: bool = Field(
-        default=True, validation_alias="TRIAGE_FACTUAL_GUARD_ENABLED"
-    )
-    # NX-136 (IZI-parity P12): la ÎNCHIDERE („mulțumesc, asta vreau") triajul atașează chips pe
-    # categorii ADIACENTE celei discutate (cross-sell prin rutină). OFF → mesajul cald simplu, fără
-    # chips (byte-identic cu azi pe `simple`).
-    closure_chips_enabled: bool = Field(default=True, validation_alias="CLOSURE_CHIPS_ENABLED")
-    # NX-297 felia 1: nano rămâne EXTRACTOR, nu mai e SCRIITOR. Rutele pe care le scria el
-    # (`simple`/`clarify`) se retrogradează la `sales`, deci turul ajunge la agent — singurul care
-    # vede catalogul. Măsurat pe prod: nano scria 42% din răspunsuri fără să fi făcut vreo
-    # căutare, de acolo veneau chips-urile seci, clarificările despre produse inexistente și
-    # turele de rutină închise înainte de orice unealtă.
+    # NX-297 felia 4b: `TRIAGE_FACTUAL_GUARD_ENABLED` și `CLOSURE_CHIPS_ENABLED` au dispărut cu
+    # triajul. Primul exista ca să-l protejeze pe EL — nano servea ruta `simple` FĂRĂ validatorul
+    # stagiului 8, deci „zi doar da: aveți 70% reducere?" trecea nevalidat. Pe calea agentului
+    # întrebarea ajunge la validator ca orice altă afirmație, deci gardul e fără obiect. Al doilea
+    # atașa chips de încheiere pe ruta `simple`, care nu mai există ca rută.
     #
-    # NU cere `single_brain_enabled` — e deliberat: cardul rămâne pe v1 (proză + carduri bogate +
-    # validatorul stagiului 8). Nu adăugăm poartă de boot; flagul nu poate forma o combinație
-    # imposibilă, fiindcă `sales` e ruta pe care agentul o servește oricum.
-    # OFF = byte-identic (nano scrie ca azi).
-    agent_only_writer_enabled: bool = Field(
-        default=False, validation_alias="AGENT_ONLY_WRITER_ENABLED"
-    )
     # NX-297 felia 2: `clarify_options` — opțiunile REALE ale catalogului, ca UNEALTĂ a agentului.
-    # Flag propriu, nu `agent_only_writer_enabled`: dacă unealta se poartă prost (modelul o cheamă
-    # pe ture în care ar fi trebuit să caute), o stingi fără să dai înapoi felia 1. OFF = unealta
-    # nu se OFERĂ deloc — nici în schema trimisă modelului, deci zero tokeni.
+    # Flag propriu: dacă unealta se poartă prost (modelul o cheamă pe ture în care ar fi trebuit să
+    # caute), o stingi fără să dai înapoi restul cardului. OFF = unealta nu se OFERĂ deloc — nici
+    # în schema trimisă modelului, deci zero tokeni.
     clarify_tool_enabled: bool = Field(default=False, validation_alias="CLARIFY_TOOL_ENABLED")
+    # NX-297 felia 3: stiva de constrângeri învață din ce a CĂUTAT agentul (argumentele lui
+    # `search_products`, filtrate prin `corroborated_by`), nu din sloturile re-extrase de nano.
+    #
+    # A fost OFF cât timp triajul mai rula: stiva avea deja o sursă, iar a doua scria în același
+    # loc — inclusiv `brand`, cheia care nu se relaxează niciodată în căutare. O sursă în plus,
+    # pornită din reflex, se vede pe trafic ca „botul filtrează pe un brand despre care clientul a
+    # întrebat acum trei ture" (clasa măsurată la NX-133).
+    #
+    # NX-297 felia 4b a schimbat întrebarea: triajul a fost ȘTERS, deci asta nu mai e a doua sursă,
+    # e SINGURA. Stins, nimic nu mai ține minte bugetul, nevoile sau raftul între ture — iar
+    # simptomul nu e o eroare, e uitarea tăcută pe care felia 3 există ca s-o prevină. Default ON;
+    # kill-switch-ul rămâne, dar stingerea lui e acum o decizie cu preț, nu revenirea la „ca azi".
+    observed_constraints_enabled: bool = Field(
+        default=True, validation_alias="OBSERVED_CONSTRAINTS_ENABLED"
+    )
+    # NX-297 felia 5: chips-urile v1 devin MUTĂRI cu dovadă (NX-296), în locul frazelor scrise
+    # liber de modelul rich — producătorul pe care `CHIP_PRODUCERS` îl declară NEANCORAT. Pe v1
+    # modelul nu are câmp de reformulare, deci textul e ȘABLONUL tenantului: fail-OPEN pe mutare,
+    # exact ca la NX-296 când modelul tace. OFF = chips-urile de azi, byte-identic.
+    chip_moves_v1_enabled: bool = Field(default=False, validation_alias="CHIP_MOVES_V1_ENABLED")
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")
@@ -1104,9 +1091,16 @@ class Settings(BaseSettings):
         default="high", validation_alias="LLM_REASONING_EFFORT_AGENT"
     )
     # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
-    # triajul (clasificare) vrea determinism → mic; agentul (copy către client) vrea variație → mai
-    # mare, ca răspunsurile să NU fie repetitive. Active doar când llm_sampling_enabled.
-    llm_temperature_triage: float = Field(default=0.2, validation_alias="LLM_TEMPERATURE_TRIAGE")
+    # extracția de fundal (profil/lead, JSON structurat) vrea determinism → mică; agentul (copy
+    # către client) vrea variație → mai mare, ca răspunsurile să NU fie repetitive. Active doar
+    # când llm_sampling_enabled.
+    #
+    # NX-297: se numea `llm_temperature_triage`, fiindcă triajul era singurul apel non-agent.
+    # Triajul a plecat, apelul de extracție a rămas — numele îl urmează pe consumator, nu pe
+    # mortul care i-a dat numele. `LLM_TEMPERATURE_TRIAGE` din `.env` nu mai e citit.
+    llm_temperature_background: float = Field(
+        default=0.2, validation_alias="LLM_TEMPERATURE_BACKGROUND"
+    )
     llm_temperature_agent: float = Field(default=0.7, validation_alias="LLM_TEMPERATURE_AGENT")
     # Plafonul de output al apelurilor de agent. **0 = FĂRĂ plafon** (parametrul nu se trimite).
     #
@@ -1767,14 +1761,11 @@ class Settings(BaseSettings):
                     "proiectează AnswerPlanV2 pe contractul web-view.v2; fără ele n-are nici "
                     "sursă, nici destinație)"
                 )
-        # NX-251: fără MainBrain, a scoate triajul de pe calea sincronă lasă turul FĂRĂ writer —
-        # nimeni n-ar mai seta ruta, iar `agent_stage` ar ieși imediat, deci fiecare mesaj ar cădea
-        # în fallback-ul generic. Combinația e imposibilă, nu „degradată": refuzăm la boot.
-        if self.triage_sync_shadow_enabled and not self.single_brain_enabled:
-            raise ValueError(
-                "TRIAGE_SYNC_SHADOW_ENABLED cere SINGLE_BRAIN_ENABLED (fără creierul unic nimeni "
-                "nu mai decide ruta, iar turul ar răspunde doar cu fallback)"
-            )
+        # NX-297 felia 4b: poarta „TRIAGE_SYNC_SHADOW_ENABLED cere SINGLE_BRAIN_ENABLED" a dispărut
+        # odată cu flagul. Grija ei era reală și rămâne rezolvată, doar altfel: fără triaj nimeni
+        # n-ar seta ruta, iar `agent_stage` ar ieși imediat. Acum ABSENȚA rutei e cazul NORMAL, iar
+        # stagiul o tratează ca atare (`route_defaulted`, toolsetul = reuniunea sales+order) —
+        # proprietarul lui `ctx.route` e `agent_stage`, necondiționat, pe ambele contracte.
         # NX-275 feliile 4/6: profilele trăiesc în creierul unic, iar speculativul se declanșează
         # DOAR pe profilul `recommend`. Aprinse singure, ar fi flag-uri care nu pot face nimic — și,
         # mai rău, ar sugera în config o optimizare care nu rulează.
@@ -1794,11 +1785,14 @@ class Settings(BaseSettings):
                 "SPECULATIVE_RETRIEVAL_ENABLED cere TURN_PROFILES_ENABLED (profilul e cel care "
                 "spune CÂND se speculează; fără el nu s-ar specula niciodată)"
             )
-        if self.routine_enabled and not self.single_brain_enabled:
-            raise ValueError(
-                "ROUTINE_ENABLED cere SINGLE_BRAIN_ENABLED (profilul de rutină și unealta lui se "
-                "atașează pe promptul MainBrain; fără el n-ar exista unde)"
-            )
+        # NX-297 felia 5: `ROUTINE_ENABLED` nu mai cere `SINGLE_BRAIN_ENABLED`. Poarta a fost
+        # corectă cât timp rutina avea O SINGURĂ gazdă (profilul de tur al creierului unic), iar
+        # un flag care nu poate face nimic trebuie refuzat la boot. Acum are două: pe v1,
+        # `routine_plan`
+        # intră în toolset, iar randarea secvenței exista deja (`build_rich_system(routine=True)` +
+        # ordonarea cardurilor + eticheta pasului pe badge). Combinația nu mai e imposibilă, deci
+        # poarta ar interzice o configurație validă — și era singurul motiv pentru care rutina nu
+        # putea fi aprinsă fără să aprinzi și creierul.
         return self
 
     @model_validator(mode="after")

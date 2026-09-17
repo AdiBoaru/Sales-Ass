@@ -41,8 +41,7 @@ def test_build_summary_prompt_includes_prev_and_messages():
 
 
 class _ScriptedLLM:
-    model_triage = "nano"
-    model_agent = "mini"
+    model_agent = "agent"
 
     def __init__(self, out="REZUMAT", *, boom=False):
         self._out = out
@@ -56,11 +55,13 @@ class _ScriptedLLM:
         return self._out
 
 
-async def test_generate_summary_uses_nano_and_redacts():
+async def test_generate_summary_uses_the_agent_model_and_redacts():
     llm = _ScriptedLLM(out="Clientul a cerut numărul 0712345678")
     out = await sm.generate_summary(llm, [_msg(Direction.INBOUND, "salut")], None, "ro")
     assert out == "Clientul a cerut numărul ***"  # PII redactat în output
-    assert llm.calls[0]["model"] == "nano"  # FORȚEAZĂ model_triage (nano), nu mini
+    # NX-297: rezumatul e memoria conversației, deci rulează pe modelul AGENTULUI. Nu e o
+    # schimbare de cost (nano 0,20/1,25 vs luna 0,20/1,20 per 1M), e una de calitate.
+    assert llm.calls[0]["model"] == "agent"
 
 
 async def test_generate_summary_empty_messages_is_none():

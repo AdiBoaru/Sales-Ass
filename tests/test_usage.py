@@ -355,7 +355,7 @@ class _FakeOpenAI:
 
 
 async def test_adapter_complete_records_usage():
-    llm = LLMClient(_FakeOpenAI(), model_triage="gpt-5.4-nano", model_agent="gpt-5.4-mini")
+    llm = LLMClient(_FakeOpenAI(), model_agent="gpt-5.4-mini")
     acc, token = usage.push()
     try:
         await llm.complete("sys", "user")
@@ -478,7 +478,7 @@ def test_modelele_din_config_au_tarife_publicate():
     în `.env` fără să adauge tariful. `has_rates` există din NX-204a tocmai ca fallback-ul să fie
     DETECTABIL; aici îl facem și blocant pentru modelele pe care chiar le rutăm."""
     s = get_settings()
-    routed = [s.model_agent, s.model_triage, s.model_embed]
+    routed = [s.model_agent, s.model_embed]
     if s.model_agent_complex.strip():
         routed.append(s.model_agent_complex.strip())
     missing = [m for m in routed if m and not pricing.has_rates(m)]

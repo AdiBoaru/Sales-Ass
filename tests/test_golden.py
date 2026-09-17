@@ -50,7 +50,6 @@ from src.worker.runner import DEFAULT_STAGES, PipelineDeps
 from src.worker.stages import agent as agent_mod
 from src.worker.stages import cache as cache_mod
 from src.worker.stages import gates as gates_mod
-from src.worker.stages import triage as triage_mod
 
 CASES = load_cases(Path(__file__).parent / "golden" / "cases.json")
 CONVERSATIONS = load_cases(Path(__file__).parent / "golden" / "conversations.json")
@@ -113,8 +112,6 @@ def _apply_stubs_dyn(monkeypatch, get_fx, *, single_brain: bool = False) -> None
     async def none_lookup(*args, **kwargs):
         return None
 
-    # triaj → categorii valide ale cazului
-    monkeypatch.setattr(triage_mod, "list_category_slugs", fake_categories)
     # tool-uri agent → catalogul cazului
     monkeypatch.setattr(ct, "has_embeddings", has_emb)
     monkeypatch.setattr(ct, "search_products_semantic", fake_search)
@@ -126,11 +123,7 @@ def _apply_stubs_dyn(monkeypatch, get_fx, *, single_brain: bool = False) -> None
     # moderation gate e premisa cazului moderation-neutral → pin True (independent de .env)
     monkeypatch.setattr(get_settings(), "moderation_enabled", True)
     # Calea (v1 legacy / creier unic) e a HARNESSULUI, nu a `.env`-ului mașinii — vezi antetul.
-    # `triage_sync_shadow` rămâne pinuit stins: cazurile golden își declară ruta prin fixtura
-    # `triage`, deci fără triaj sincron n-ar mai avea cine s-o seteze și fiecare caz ar măsura
-    # fallback-ul, nu ce e scris în el.
     monkeypatch.setattr(get_settings(), "single_brain_enabled", single_brain, raising=False)
-    monkeypatch.setattr(get_settings(), "triage_sync_shadow_enabled", False, raising=False)
 
 
 def _build_ctx(case) -> TurnContext:

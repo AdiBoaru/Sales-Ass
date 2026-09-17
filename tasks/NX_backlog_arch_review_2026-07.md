@@ -7,13 +7,16 @@ Deja carduite din review: **A1/A2 → NX-140**, **A3 → NX-141**.
 
 ---
 
-## NX-149 · Docs & docstrings stale + rerun arch explorer (A11 · P2 · XS · 2h)
-**Context:** audit §5.2/§8 — docstring runner descrie 9 stagii, codul are 11; `CLAUDE.md` +
-`PROJECT_STATUS.md` marcate stale în memorie; `arch_explorer/` e derivat determinist din AST și trebuie
-re-rulat după refactor. **Scop:** aliniază docstring-ul `run_pipeline`, secțiunea de pipeline din
-`CLAUDE.md` (stagii reale), nota de date din `PROJECT_STATUS.md`, și re-rulează `arch_explorer/analyze.py`.
-**DoD:** numărul de stagii din docstring == stagiile reale; `arch_explorer` regenerat (diff comis);
-grep de „9 stagii" în docs = 0 unde e greșit. **Dep:** ideal după NX-142/143 (refactor schimbă structura). **Fișiere:** `src/worker/runner.py`, `CLAUDE.md`, `docs/PROJECT_STATUS.md`, `arch_explorer/`.
+## NX-149 · Docs & docstrings stale (A11 · P2 · XS · 2h) — ÎNCHIS parțial
+**Context:** audit §5.2/§8 — docstring runner descrie 9 stagii, `CLAUDE.md` + `PROJECT_STATUS.md`
+marcate stale. **Scop:** aliniază docstring-ul `run_pipeline`, secțiunea de pipeline din `CLAUDE.md`
+(stagii reale) și nota de date din `PROJECT_STATUS.md`.
+**DoD:** numărul de stagii din docstring == stagiile reale; grep de „9 stagii" în docs = 0 unde e
+greșit. **Dep:** — **Fișiere:** `src/worker/runner.py`, `CLAUDE.md`, `docs/PROJECT_STATUS.md`.
+*(2026-09-17: jumătatea „rerun arch explorer" a fost SCOASĂ din card. Unealta n-a fost comisă
+niciodată, deci „regenerat (diff comis)" era un DoD pe care nimeni în afara autorului nu-l putea
+îndeplini. Docstring-ul runnerului și pipeline-ul din `CLAUDE.md` au fost aliniate la NX-297, unde
+stagiile au ajuns 10.)*
 
 ## NX-150 · Prompt/tool injection tests + tool authorization layer (A12 · P2 · M · 6h)
 **Context:** audit §5.13 (scor 7.8). Există gate anti-prompt-injection (NX-16) + moderation (NX-15,

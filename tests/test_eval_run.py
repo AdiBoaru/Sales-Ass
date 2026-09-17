@@ -103,7 +103,6 @@ class _RecordingLLM:
     """Înregistrează mesajul USER pe care-l primește judge-ul (ca să dovedim că vede întrebarea)."""
 
     model_agent = "fake"
-    model_triage = "fake-nano"
 
     def __init__(self):
         self.seen_user_msgs = []
@@ -517,7 +516,6 @@ async def test_report_meta_carries_all_reproducibility_pins(monkeypatch, tmp_pat
         "valid",
         "business_id",
         "runs_per_case",
-        "model_triage",
         "model_agent",
         "judge_model",
         "judge_model_pinned",

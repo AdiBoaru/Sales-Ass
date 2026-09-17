@@ -5,8 +5,8 @@ processor._summarize_if_needed): comprimă mesajele care ies din fereastra de 8 
 de fundal, ca prompturile triaj/agent să țină firul pe conversații lungi FĂRĂ să trimită zeci
 de mesaje vechi.
 
-LLM = NANO (model_triage), consistent cu pattern-ul „extractor profil nano" din stagiul 9 —
-NU un al treilea punct LLM în pipeline-ul sincron (principiul 2). PII (principiul 12):
+LLM = modelul AGENTULUI (NX-297: nano a ieșit din proiect), chemat POST-TUR — NU un al treilea
+punct LLM în pipeline-ul sincron (principiul 2). PII (principiul 12):
 redactare defensivă a secvențelor tip telefon, ÎN PLUS de instrucțiunea din system prompt.
 """
 
@@ -66,10 +66,14 @@ def build_summary_prompt(
 async def generate_summary(
     llm, messages: list[Message], prev_summary: str | None, language: str
 ) -> str | None:
-    """Cheamă NANO (model_triage) ca să producă rezumatul actualizat. None dacă nu e nimic de
-    sumarizat sau modelul întoarce gol. Ridică la eroare de API — caller-ul (hook) prinde."""
+    """Produce rezumatul actualizat. None dacă nu e nimic de sumarizat sau modelul întoarce gol.
+    Ridică la eroare de API — caller-ul (hook) prinde.
+
+    NX-297: rulează pe modelul AGENTULUI, nu pe nano. Rezumatul e memoria conversației — ce scrie
+    prost aici se propagă în toate turele următoare, iar diferența de cost e zero (vezi
+    `profile.py`). Un model mai bun pe același preț nu e o alegere, e o corecție."""
     if not messages:
         return None
     system, user = build_summary_prompt(messages, prev_summary, language)
-    text = await llm.complete(system, user, model=llm.model_triage)
+    text = await llm.complete(system, user, model=llm.model_agent)
     return _redact_pii((text or "").strip()) or None

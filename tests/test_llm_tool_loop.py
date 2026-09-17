@@ -57,7 +57,7 @@ class _FakeOpenAI:
 
 
 def _llm(script):
-    return LLMClient(_FakeOpenAI(script), model_triage="t", model_agent="a")
+    return LLMClient(_FakeOpenAI(script), model_agent="a")
 
 
 async def test_loop_executes_tool_then_returns_final():

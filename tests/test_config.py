@@ -28,7 +28,6 @@ def test_defaults(monkeypatch):
     # scurgă mediul (CI le setează ca env de job)
     for k in (
         "MODEL_AGENT",
-        "MODEL_TRIAGE",
         "MODEL_EMBED",
         "REDIS_URL",
         "DAILY_COST_CAP_USD",
@@ -41,7 +40,6 @@ def test_defaults(monkeypatch):
     assert s.model_agent == "gpt-5.6-luna"
     # Escaladarea la modelul mare e OPRITĂ implicit: se aprinde cu o variabilă, nu din cod.
     assert s.model_agent_complex == ""
-    assert s.model_triage == "gpt-5.4-nano"
     assert s.model_embed == "text-embedding-3-small"
     assert s.llm_reasoning_effort_agent == "high"
     assert s.redis_url == "redis://redis:6379/0"

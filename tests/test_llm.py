@@ -57,12 +57,12 @@ def _client(behaviors):
     return SimpleNamespace(chat=SimpleNamespace(completions=comp), _comp=comp)
 
 
-def _llm_client(behaviors, *, model_triage="gpt-5.4-nano", model_agent="gpt-5.4-mini"):
+def _llm_client(behaviors, *, model_agent="gpt-5.4-mini"):
     """Numele de model sunt REALE, nu „nano"/„mini": de ele atârnă acum ce parametri pleacă pe
     sârmă (`llm.supported_params`). Un fake fără prefix cunoscut ar fi tratat ca model necunoscut,
     deci testele ar valida calea fail-safe crezând că o validează pe cea normală."""
     cl = _client(behaviors)
-    return LLMClient(cl, model_triage=model_triage, model_agent=model_agent), cl._comp
+    return LLMClient(cl, model_agent=model_agent), cl._comp
 
 
 #: Un tool oarecare: contează DOAR că cererea poartă `tools`, nu ce e în ele.
@@ -128,11 +128,14 @@ async def test_agent_call_includes_sampling_params():
     assert "max_tokens" not in comp.last_kwargs
 
 
-async def test_triage_has_temperature_but_no_ceiling():
+async def test_extractia_de_fundal_are_temperatura_dar_niciun_plafon():
+    """NX-297: `classify_json` a rămas cu UN consumator — extracția de profil, POST-tur. Numele
+    de rol s-a schimbat, contractul de sampling nu: temperatură mică (extracția vrea determinism),
+    fără plafon de output (JSON scurt)."""
     c, comp = _llm_client([_Resp("{}")])
     await c.classify_json("sys", "usr")
-    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_triage
-    assert "max_tokens" not in comp.last_kwargs  # JSON triaj nu primește plafon (răspuns scurt)
+    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_background
+    assert "max_tokens" not in comp.last_kwargs
     assert "max_completion_tokens" not in comp.last_kwargs
 
 
@@ -197,15 +200,17 @@ async def test_agent_fara_tooluri_pastreaza_effortul_configurat_si_pierde_temper
 
 async def test_modelul_clasic_fara_effort_pastreaza_temperature():
     """`gpt-5.4-*` mergea nu fiindca ar fi „alta familie", ci fiindca implicit nu rationeaza."""
-    c, comp = _llm_client([_Resp("{}")], model_triage="gpt-5.4-nano")
+    c, comp = _llm_client([_Resp("{}")], model_agent="gpt-5.4-mini")
     await c.classify_json("sys", "usr")
-    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_triage
-    assert "reasoning_effort" not in comp.last_kwargs  # triajul nu primeste effort
+    assert comp.last_kwargs["temperature"] == get_settings().llm_temperature_background
+    assert "reasoning_effort" not in comp.last_kwargs  # apelul de fundal nu primeste effort
 
 
-async def test_triajul_pe_model_de_rationament_nu_trimite_temperature():
-    """Poarta e pe CERERE, nu pe rol: daca `MODEL_TRIAGE` ajunge vreodata pe 5.6, aceeasi cadere."""
-    c, comp = _llm_client([_Resp("{}")], model_triage="gpt-5.6-luna")
+async def test_apelul_de_fundal_pe_model_de_rationament_nu_trimite_temperature():
+    """Poarta e pe CERERE, nu pe rol. NX-297 a facut cazul asta REAL, nu ipotetic: extractia de
+    fundal ruleaza acum pe `model_agent`, care e din familia care rationeaza implicit — deci
+    temperatura configurata NU pleaca pe sarma, si asta trebuie sa fie vizibil, nu presupus."""
+    c, comp = _llm_client([_Resp("{}")], model_agent="gpt-5.6-luna")
     await c.classify_json("sys", "usr")
     assert "temperature" not in comp.last_kwargs
 
@@ -335,7 +340,6 @@ def test_get_llm_builds_client_with_timeout_and_no_sdk_retry(monkeypatch):
         "get_settings",
         lambda: SimpleNamespace(
             openai_api_key="k",
-            model_triage="nano",
             model_agent="mini",
             model_embed="emb",
             model_moderation="mod",

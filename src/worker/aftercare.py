@@ -13,7 +13,6 @@ mereu `read scurt → (LLM fără conn) → write scurt`. Altfel „deferred" ar
 """
 
 import asyncio
-import hashlib
 import logging
 from dataclasses import asdict, dataclass
 from time import perf_counter
@@ -286,7 +285,8 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
 async def _summarize_if_needed(
     db: DbProvider, redis, business_id, conversation_id, ctx, llm
 ) -> None:
-    """POST-TUR async (G6-2 felia 2), best-effort — întreține rezumatul rolling. NANO (triage).
+    """POST-TUR async (G6-2 felia 2), best-effort — întreține rezumatul rolling (NX-297: pe
+    modelul agentului; nano nu mai există).
     Sumarizează `get_messages_for_summary` (mesajele care ies din ultimele 8), watermark = cel mai
     NOU mesaj INCLUS. Anti-regenerare: re-sumarizăm doar la >= `summary_regen_delta` mesaje noi.
 
@@ -520,105 +520,6 @@ async def _extract_profile_and_score(
         log.exception("extractor profil a eșuat (turul continuă)")
 
 
-#: Ce a FĂCUT turul → cu ce rută a triajului e de acord. Strict, deliberat: o hartă indulgentă
-#: („clarify e ok și dacă a răspuns") ar coborî rata de dezacord exact acolo unde vrem s-o vedem.
-_SHADOW_AGREEMENT: dict[str, str] = {
-    "sales": "answered",
-    "simple": "answered",
-    "clarify": "clarify",
-    "order": "order",
-}
-
-
-def _brain_outcome(ctx: TurnContext) -> str:
-    """Ce a făcut turul, citit din artefactele deja produse (plan, reply, tool calls).
-
-    Vocabular ÎNCHIS — intră ca label. Nu re-interpretăm textul: ne uităm la deciziile structurale,
-    singurele care se pot compara cu o rută."""
-    plan = getattr(ctx, "answer_plan", None)
-    if ctx.reply is not None and ctx.reply.pending_question:
-        return "clarify"
-    if any(
-        event.type == "tool_call" and (event.properties or {}).get("name") == "check_order"
-        for event in ctx.events
-    ):
-        return "order"
-    if plan is not None:
-        return "answered"
-    return "other"
-
-
-def _shadow_sampled(turn_id: str, pct: int) -> bool:
-    """Eșantionare DETERMINISTĂ pe `turn_id` (NX-275 felia 1), nu `random()`.
-
-    Refolosește `should_sample` din NX-246 — aceeași decizie, o singură implementare. Determinismul
-    contează la reclaim: un tur reluat trebuie să dea ACELAȘI verdict, altfel aceeași conversație
-    ar putea fi măsurată de două ori (sau deloc) și rata de acord s-ar calcula pe o bază care se
-    mișcă.
-
-    `turn_id`-ul se TREGE printr-un hash înainte, și nu e o precauție teoretică: `should_sample`
-    citește ultimele 16 caractere hex ca fracțiune din 2^64, iar într-un UUID RFC 4122 exact acolo
-    începe nibble-ul de VARIANTĂ, care e mereu 8, 9, a sau b. Bucket-ul unui UUID cade deci
-    întotdeauna în [0,5 … 0,75): orice rată sub 50% ar fi eșantionat ZERO ture, tăcut, iar
-    raportul de acord ar fi rămas gol fără ca nimic să pară stricat. NX-246 nu pățește asta
-    fiindcă își derivă `trace_id` prin HMAC (uniform prin construcție); aici cheia e id-ul brut.
-    """
-    if pct >= 100:
-        return True
-    if pct <= 0:
-        return False
-    from src.observability.tracing import should_sample  # noqa: PLC0415 — evită ciclu la import
-
-    if not turn_id:
-        return True  # id absent → măsurăm (mai bine un apel în plus decât un gol tăcut)
-    uniform = hashlib.sha256(turn_id.encode("utf-8")).hexdigest()
-    return should_sample(uniform, pct / 100.0)
-
-
-async def _triage_shadow(db: DbProvider, ctx: TurnContext, llm) -> None:
-    """NX-251 — clasificarea triajului, POST-tur, ca MĂSURĂTOARE a deciziei brain-ului.
-
-    Triajul a ieșit de pe drumul sincron (D1). Ce rămâne de aflat înainte de a-l scoate cu totul e
-    dacă brain-ul chiar acoperă ce ruta el — și asta nu se decide din intuiție (D15). Comparăm
-    VERDICTELE structurale, nu textele: ruta pe care ar fi ales-o nano vs. ce a făcut efectiv turul.
-
-    Rulează în bugetul aftercare-ului, după munca utilă, și nu atinge nimic din răspunsul deja
-    livrat. `ctx.route is None` = turul s-a încheiat într-un strat gratuit, înainte de locul unde
-    ar fi rulat triajul: acolo n-a existat clasificare nici înainte, deci n-avem ce compara."""
-    settings = get_settings()
-    if not (settings.triage_sync_shadow_enabled and settings.triage_shadow_enabled):
-        return
-    if llm is None or ctx.route is None:
-        return
-    if not _shadow_sampled(ctx.turn_id, settings.triage_shadow_sample_pct):
-        # Emitem oricum, ca NUMITORUL să fie cunoscut: fără rândul ăsta, un raport de acord
-        # calculat pe evenimentele existente n-ar putea deosebi „turul n-a fost eșantionat" de
-        # „turul n-a avut rută", iar rata de acord ar fi citită pe o bază greșită.
-        ctx.emit("triage_shadow", shadow_route=None, outcome="not_sampled", agrees=False)
-        return
-    try:
-        from src.worker.runner import PipelineDeps  # noqa: PLC0415 — evită ciclu la import
-        from src.worker.stages.triage import classify_message  # noqa: PLC0415
-
-        classified = await classify_message(
-            ctx, PipelineDeps(db=db, llm=llm), consumer="triage_shadow"
-        )
-        if classified is None:
-            ctx.emit("triage_shadow", shadow_route=None, outcome="unavailable", agrees=False)
-            return
-        out, _, _ = classified
-        outcome = _brain_outcome(ctx)
-        ctx.emit(
-            "triage_shadow",
-            shadow_route=out.route.value,
-            outcome=outcome,
-            agrees=_SHADOW_AGREEMENT.get(out.route.value) == outcome,
-            confidence=out.confidence,
-        )
-    except Exception:  # noqa: BLE001 — o măsurătoare nu are voie să atingă un tur deja livrat
-        log.exception("triage shadow a eșuat (turul continuă)")
-
-
 async def _record_aftercare_cost(redis: Redis | None, work: AftercareWork, cost_usd: float) -> None:
     """Record the real post-turn LLM cost exactly once."""
     settings = get_settings()
@@ -674,9 +575,6 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
                 shadow_mode=work.shadow_mode,
                 source_message_id=work.inbound_msg_id,
             )
-            # ULTIMUL: e o măsurătoare, nu muncă utilă. Dacă bugetul se termină, se pierde
-            # comparația, nu rezumatul sau profilul.
-            await _triage_shadow(db, work.ctx, work.llm)
     except TimeoutError:
         outcome = "timeout"
         log.warning("aftercare abandonat la deadline (rezultatul turului e deja livrat)")

@@ -503,7 +503,6 @@ class Stage1FakeLLM:
     """
 
     model_agent = "fake-agent"
-    model_triage = "fake-triage"
 
     def __init__(self) -> None:
         self.counters = ModelCounters()
