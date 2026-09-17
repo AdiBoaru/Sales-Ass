@@ -516,6 +516,35 @@ NX-295, declarat, nu schimbat pe tăcute. Kill-switch `CHIP_MOVES_ENABLED=false`
 [`tasks/stage1/NX-296.md`](tasks/stage1/NX-296.md); probă:
 `python scripts/chip_press_probe.py --business sole-ro`.
 
+**NX-298 — un card acolo unde catalogul avea 518: numărul de produse are un PROPRIETAR, iar pagina
+se umple.** Găsit pe un tur REAL (`conversation_traces`, turn `aa2dc1d9`): la „vreau ceva sa scap
+de cosuri", nevoia s-a rezolvat `concerns=acne` cu dovadă **518 produse**, iar clientul a primit
+**UN** card. Trei plafoane s-au compus, iar a câștigat cel mai mic. (1) Cifra „câte produse" avea
+PATRU proprietari care nu se cunoșteau — promptul de vânzare „2-3", promptul rich „până la 4",
+`compose._MAX_RICH_ITEMS = 4`, schema uneltei „1-6" — deci modelul a cerut `limit=3` fiindcă așa
+scria în prompt. Acum e `settings.card_slots` (**6**), citit de toți patru (prompturile prin
+marcatorul `{CARD_SLOTS}`, cu poarta de import care refuză un marcator nedeclarat; `SearchArgs.limit`
+prin `default_factory`), exact ca `chip_slots` la NX-296. (2) Textul se cerea a DOUA oară peste
+filtrul care îl însemna deja: pool 5 din 518, fiindcă magazinul scrie „acnee" și clientul „coșuri".
+E clasa NX-293 în varianta care NU dă zero, deci pe care `filters_only` n-o prinde (scara se oprește
+la prima treaptă cu ORICE rezultat). **Varianta evidentă a fost încercată și RESPINSĂ pe
+măsurătoare:** scăzând din text termenii purtați de filtre, fraza rămâne fără niciun cuvânt, deci
+fără ordonator, iar pagina devine „cele mai bine notate produse cu eticheta acnee" (un aparat sonic
+de curățare în locul plasturilor) — un termen poate fi redundant ca POARTĂ și informativ ca
+ORDONATOR. Reparația e la capătul celălalt: pe treapta terminală textul coboară din poartă în
+ordonator (`WHERE` = filtrele, `ORDER BY` = `ts_rank_cd`, apoi rating/preț/`p.id`), iar sloturile
+neumplute se completează din setul filtrului de SUBIECT (`only_filters_step`), DUPĂ potrivirile de
+text și marcate `lexical_step='filters_only'`. (3) Diversificarea echilibra brand și preț, dar nu
+știa ce ESTE produsul: cotă pe `attributes.product_type` (max 2/tip), ORDINE nu excludere (tipul e
+`enforce_ready: false`), cu relaxare GRADUALĂ — dintr-odată, faza 2 lua înapoi exact ce sărise faza
+1, deci efectul cotei era zero. Măsurat: «crema pentru cosuri» 2 → **6** produse (potrivirile de
+text rămân primele), cota pe tip 3 → **4** tipuri pe pool real, NX-293 neatins. Kill-switch
+`SEARCH_FILL_FROM_SUBJECT_FILTER_ENABLED=false`. Rămâne declarat NEACOPERIT: `coupon_code` +
+`coupon_price` există pe **2.123/2.758** de produse și nu le citește nimeni din `src/` (voucherul
+iZi), `delivery_class` = 0/2.758 (livrarea nu e reprezentabilă), iar chips-urile ancorate rămân
+stinse pe v1 (`CHIP_MOVES_V1_ENABLED=false`). Card: [`tasks/stage1/NX-298.md`](tasks/stage1/NX-298.md);
+probă: `python -m scripts.nx298_recall_probe`.
+
 **Fix 2026-09-16 — botul oferea chips pentru produse pe care magazinul nu le vinde.**
 Găsit pe o conversație REALĂ (`conversation_traces`): la „vreau un cablu usb", un magazin de
 COSMETICE a răspuns cu o întrebare de clarificare și patru sugestii — «Pentru telefon, USB-C, 1-2

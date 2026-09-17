@@ -1198,3 +1198,106 @@ async def test_unmapped_term_does_not_change_session_fp(monkeypatch):
     ses = next(e for e in reversed(ctx2.events) if e.type == "search_session")
     assert ses.properties["action"] == "page"  # aceeași sesiune, nu una nouă
     assert _events(ctx2, "concern_unmapped") == []  # paginarea nu re-numără aceeași cerere
+
+
+# --- NX-298: diversitate pe TIP + completarea paginii din filtrul de subiect ---
+
+
+def _ct(pid: str, brand: str | None, price: float | None, ptype: str | None) -> dict:
+    d = _c(pid, brand, price)
+    if ptype is not None:
+        d["attributes"] = {"product_type": ptype}
+    return d
+
+
+def test_diversify_spreads_product_types():
+    """Brandul și prețul nu spun nimic despre ce ESTE produsul: șase seruri de la șase branduri, la
+    trei prețuri, treceau drept „sortiment". Cota pe tip e ce face răspunsul să acopere clasele de
+    soluție, nu variații ale aceleiași."""
+    # Ordinea de relevanță pune serurile primele (cazul real: textul clientului prinde o singură
+    # clasă), dar pool-ul are din ce compune o pagină cu trei clase.
+    cands = [_ct(f"s{i}", chr(65 + i), 10.0 + i * 9, "ser") for i in range(6)]
+    cands += [_ct(f"c{i}", f"X{i}", 20.0 + i * 12, "crema") for i in range(3)]
+    cands += [_ct(f"m{i}", f"Y{i}", 15.0 + i * 15, "masca") for i in range(3)]
+    from collections import Counter
+
+    page = ct.diversify_pool(cands, 6)[:6]
+    types = Counter(ct._product_type(p) for p in page)
+    assert page[0]["id"] == "s0"  # top-1 (relevanță) neschimbat
+    assert types["ser"] <= 2  # cota pe tip se aplică
+    assert len(types) == 3  # toate clasele din pool ajung în pagină
+    # Contra-proba: fără cotă (comportamentul de dinainte), pagina e dominată de o singură clasă.
+    fara = Counter(ct._product_type(p) for p in ct.diversify_pool(cands, 6, max_per_type=None)[:6])
+    assert fara["ser"] > types["ser"]
+
+
+def test_diversify_missing_type_does_not_form_a_class():
+    """Un sfert din catalogul real n-are tip derivat. Dacă „fără tip" ar fi o clasă, ele s-ar
+    plafona reciproc ca și cum ar fi același lucru — adică exact invers decât știm."""
+    cands = [_ct(f"n{i}", None, 10.0 + i, None) for i in range(9)]
+    page = ct.diversify_pool(cands, 6)[:6]
+    assert len(page) == 6
+
+
+def test_diversify_relaxes_type_quota_only_when_forced():
+    """Pool cu un singur tip → tot `limit` rezultate. Relaxarea e graduală: dacă ar fi „totul sau
+    nimic", faza 2 ar lua înapoi imediat exact candidații pe care faza 1 i-a sărit, iar cota ar
+    exista în cod fără să existe în rezultat (măsurat pe pool-ul real de 50)."""
+    cands = [_ct(f"s{i}", chr(65 + i), 10.0 + i * 9, "ser") for i in range(9)]
+    page = ct.diversify_pool(cands, 6)[:6]
+    assert len(page) == 6 and page[0]["id"] == "s0"
+
+
+async def test_pagina_se_completeaza_din_filtrul_de_subiect(monkeypatch):
+    """Turul real: textul a găsit 5 din 518, iar 5 e destul cât să oprească scara și prea puțin cât
+    să fie un răspuns. Sloturile rămase vin din setul filtrului, DUPĂ potrivirile de text."""
+
+    async def fake_lex(conn, business_id, **k):
+        if k.get("only_filters_step"):
+            return [{**PRODUCTS[0], "id": f"raft{i}", "brand": f"B{i}"} for i in range(6)]
+        return [{**PRODUCTS[0], "id": "text1"}, {**PRODUCTS[1], "id": "text2"}]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "x", "concerns": ["acne"], "limit": 6}
+    )
+    ids = [p["id"] for p in res.products]
+    assert len(ids) == 6
+    assert ids[0] == "text1"  # potrivirile de text rămân primele
+    assert {"text1", "text2"} <= set(ids)
+    assert _search_event(ctx).properties["filled_from_filter"] == 4
+
+
+async def test_completarea_nu_se_cere_cand_pagina_e_deja_plina(monkeypatch):
+    """Zero query-uri în plus când textul a ajuns: completarea e o reparație, nu un al doilea
+    retrieval pe fiecare tur."""
+    calls: list[dict] = []
+
+    async def fake_lex(conn, business_id, **k):
+        calls.append(k)
+        return [{**PRODUCTS[0], "id": f"t{i}", "brand": f"B{i}"} for i in range(6)]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx, _deps_no_llm(), "search_products", {"query": "x", "concerns": ["acne"], "limit": 6}
+    )
+    assert len(res.products) == 6
+    assert not any(k.get("only_filters_step") for k in calls)
+    assert _search_event(ctx).properties["filled_from_filter"] == 0
+
+
+async def test_completarea_respecta_kill_switch(monkeypatch):
+    monkeypatch.setattr(get_settings(), "search_fill_from_subject_filter_enabled", False)
+
+    async def fake_lex(conn, business_id, **k):
+        if k.get("only_filters_step"):
+            raise AssertionError("cu flagul stins nu se cere treapta terminală")
+        return [{**PRODUCTS[0], "id": "text1"}]
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    res = await run_tool(
+        _ctx(), _deps_no_llm(), "search_products", {"query": "x", "concerns": ["acne"], "limit": 6}
+    )
+    assert [p["id"] for p in res.products] == ["text1"]

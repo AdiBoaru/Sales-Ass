@@ -32,7 +32,7 @@ from src.catalog.vocabulary import (
 )
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
-from src.config import get_settings
+from src.config import card_slots, get_settings
 from src.conversation.needs import corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
@@ -115,7 +115,12 @@ class SearchArgs(BaseModel):
     features: list[str] | None = None
     sort_mode: str = "relevance"  # relevance | price_asc | price_desc | rating_desc (clamp în SQL)
     in_stock_only: bool = False
-    limit: int = Field(default=6, ge=1, le=6)
+    # NX-298: plafonul nu mai e o a CINCEA cifră scrisă de mână. Default-ul vine de la proprietar
+    # (`Settings.card_slots`, citit la instanțiere, nu la import), iar `le` e capul ABSOLUT al
+    # contractului de unealtă — nu plafonul de produs. Cu `le=6` fix, o creștere a lui `card_slots`
+    # ar fi produs exact defectul pe care cardul îl repară, doar mutat: modelul ar cere cifra pe
+    # care i-o spune schema și ar primi eroare de validare, adică un tur fără căutare.
+    limit: int = Field(default_factory=card_slots, ge=1, le=8)
     # A1 (Val1): numele EXACT al unui produs ANUME cerut de client (ex. „Hidra Boost Ultra"). DOAR
     # când clientul numește un produs specific, nu o nevoie. Dacă search NU întoarce un produs care
     # să-l conțină → disclosure „nu există ca atare" (anti-bait-and-switch, ca brand-not-found).
@@ -197,6 +202,14 @@ def _projection_on() -> bool:
 def _pattrs(p: dict[str, Any]) -> dict[str, Any]:
     a = p.get("attributes")
     return a if isinstance(a, dict) else {}
+
+
+def _product_type(p: dict[str, Any]) -> str:
+    """Tipul canonic al produsului (`attributes.product_type`, derivat determinist — NX-268), sau
+    șirul gol când nu a putut fi extras. Gol NU e o clasă: un produs fără tip nu poate fi numărat
+    lângă altul fără tip, fiindcă nu știm dacă sunt același lucru."""
+    value = _pattrs(p).get("product_type")
+    return str(value).strip() if isinstance(value, str) else ""
 
 
 def _facet_pairs(
@@ -662,6 +675,11 @@ def _rank_weights(ctx: TurnContext) -> dict[str, float] | None:
 # NX-134: diversificare sortiment. Max produse per brand în prima pagină + acoperirea terțelor de
 # preț → sortiment ca un arbore de decizie (ieftin/mediu/scump, mărci diferite), nu top-N clone.
 _MAX_PER_BRAND = 2
+# NX-298: max produse din același TIP canonic în prima pagină. 2 la o pagină de 6 înseamnă cel
+# puțin trei clase de soluție când catalogul le are — forma răspunsului iZi („plasturi ȘI
+# tratamente/creme"), nu șase variații ale aceluiași lucru. Nu e o excludere: e ordine (vezi
+# `diversify_pool`), iar faza 2 relaxează cota dacă tipurile nu ajung.
+_MAX_PER_TYPE = 2
 
 
 def _price_tertile(price: float, lo: float, hi: float) -> int:
@@ -674,16 +692,33 @@ def _price_tertile(price: float, lo: float, hi: float) -> int:
 
 
 def diversify_pool(
-    candidates: list[dict[str, Any]], limit: int, *, max_per_brand: int = _MAX_PER_BRAND
+    candidates: list[dict[str, Any]],
+    limit: int,
+    *,
+    max_per_brand: int = _MAX_PER_BRAND,
+    max_per_type: int | None = _MAX_PER_TYPE,
 ) -> list[dict[str, Any]]:
     """Reordonează candidații (DEJA ordonați pe relevanță) ca PRIMELE `limit` să fie DIVERSE — scară
-    de preț (terțe) + max `max_per_brand` per brand — păstrând top-1 primul și ordinea de relevanță
-    ÎN INTERIORUL selecției. Restul pool-ului urmează în ordinea de relevanță (pt paginare). Greedy
-    DETERMINIST (fără random). `len <= limit` → neschimbat (nimic de diversificat).
+    de preț (terțe) + max `max_per_brand` per brand + max `max_per_type` per TIP de produs —
+    păstrând top-1 primul și ordinea de relevanță ÎN INTERIORUL selecției. Restul pool-ului urmează
+    în ordinea de relevanță (pt paginare). Greedy DETERMINIST (fără random). `len <= limit` →
+    neschimbat (nimic de diversificat).
 
-    Fază 1: acoperă terțele de preț prezente (câte una întâi), respectând cota de brand. Fază 2:
-    umple sloturile rămase pe relevanță, relaxând cota când brandurile nu ajung (ex. toate produsele
-    de la un singur brand → tot `limit` rezultate, nu 2)."""
+    Fază 1: acoperă terțele de preț prezente (câte una întâi), respectând cotele. Fază 2: umple
+    sloturile rămase pe relevanță, relaxând cotele când nu ajung (ex. toate produsele de la un
+    singur brand → tot `limit` rezultate, nu 2).
+
+    NX-298 — de ce și TIPUL, nu doar brandul și prețul: la «vreau ceva sa scap de cosuri», iZi
+    răspunde cu plasturi ȘI tratament ȘI gel de spălare, adică acoperă CLASELE de soluție; noi
+    diversificam pe două axe care nu spun nimic despre ce E produsul, deci șase seruri de la șase
+    branduri, la trei prețuri, treceau drept „sortiment". Raftul de acnee al tenantului pilot are
+    ser 60, cremă 50, mască 43, spumă de curățare 20, plasturi 18 — paleta există în date.
+    Cota NU e o excludere: `diversify_pool` doar REORDONEAZĂ, iar ce trece de `limit` rămâne în
+    pool pentru paginare. Distincția contează, fiindcă `product_type` e declarat `enforce_ready:
+    false` (acoperire 75,7%) — n-are dreptul să arunce candidați, dar are dreptul să-i așeze.
+    Tipul LIPSĂ nu formează o clasă: produsele fără tip nu se numără între ele (vezi
+    `_product_type`), altfel un sfert din catalog ar fi plafonat ca și cum ar fi un singur lucru.
+    """
     n = len(candidates)
     if limit <= 0 or n <= limit:
         return list(candidates)
@@ -698,36 +733,69 @@ def diversify_pool(
 
     selected: list[int] = [0]
     brand_count: dict[Any, int] = {}
+    type_count: dict[str, int] = {}
     covered: set[int] = set()
     if candidates[0].get("brand"):
         brand_count[candidates[0]["brand"]] = 1
+    if first_type := _product_type(candidates[0]):
+        type_count[first_type] = 1
     if tert[0] is not None:
         covered.add(tert[0])
 
-    # Fază 1: greedy pe acoperirea terțelor de preț, sub cota de brand.
+    # Fază 1: greedy pe acoperirea terțelor de preț, sub cotele de brand și de tip.
     for i in range(1, n):
         if len(selected) >= limit:
             break
         brand = candidates[i].get("brand")
         if brand and brand_count.get(brand, 0) >= max_per_brand:
             continue
+        ptype = _product_type(candidates[i])
+        if ptype and max_per_type is not None and type_count.get(ptype, 0) >= max_per_type:
+            continue
         all_covered = present <= covered  # toate terțele prezente deja acoperite
         if tert[i] is None or tert[i] not in covered or all_covered:
             selected.append(i)
             if brand:
                 brand_count[brand] = brand_count.get(brand, 0) + 1
+            if ptype:
+                type_count[ptype] = type_count.get(ptype, 0) + 1
             if tert[i] is not None:
                 covered.add(tert[i])
 
-    # Fază 2: umple pe relevanță (relaxează cota) → niciodată < limit când există candidați.
+    # Fază 2: umple pe relevanță → niciodată < limit când există candidați. Cotele se relaxează
+    # PAS CU PAS, nu dintr-odată: fiecare rundă mărește plafonul cu unu și reia lista în ordinea
+    # de relevanță. Varianta de dinainte le abandona complet la prima ratare, iar efectul măsurat
+    # pe pool-ul real de acnee era ZERO: faza 1 sărea al treilea ser, faza 2 îl lua înapoi imediat,
+    # deci cota de tip exista în cod și nu exista în rezultat.
     if len(selected) < limit:
         chosen = set(selected)
-        for i in range(1, n):
+        allow_brand = max_per_brand
+        allow_type = max_per_type if max_per_type is not None else n
+        for _ in range(n + 1):  # mărginit: la `allow > n` orice candidat trece
             if len(selected) >= limit:
                 break
-            if i not in chosen:
+            progressed = False
+            for i in range(1, n):
+                if len(selected) >= limit:
+                    break
+                if i in chosen:
+                    continue
+                brand = candidates[i].get("brand")
+                if brand and brand_count.get(brand, 0) >= allow_brand:
+                    continue
+                ptype = _product_type(candidates[i])
+                if ptype and type_count.get(ptype, 0) >= allow_type:
+                    continue
                 selected.append(i)
                 chosen.add(i)
+                progressed = True
+                if brand:
+                    brand_count[brand] = brand_count.get(brand, 0) + 1
+                if ptype:
+                    type_count[ptype] = type_count.get(ptype, 0) + 1
+            if not progressed:
+                allow_brand += 1
+                allow_type += 1
 
     selected_set = set(selected)
     front = [candidates[i] for i in sorted(selected_set)]  # ordinea de relevanță (top-1 primul)
@@ -1065,6 +1133,16 @@ async def search_products_tool(
     # Compatibilitate cu straturile care mai vorbesc despre „concerns" ca listă plată (rerank,
     # sesiune, telemetrie): cheile rezolvate, indiferent de dimensiunea din care provin.
     concern_keys = resolutions.flat_facet_keys or None
+    # NX-298 — o variantă ÎNCERCATĂ ȘI RESPINSĂ, scrisă aici ca să nu fie reintrodusă: să SCĂDEM
+    # din text termenii pe care filtrele îi poartă deja („cosuri", când `concerns=acne` e în
+    # WHERE). Pare curat — aceeași cerere nu trebuie pusă de două ori — și pe hârtie repară exact
+    # pool-ul de 5 din 518. Măsurat pe catalogul real, strică mai mult decât repară: la «vreau
+    # ceva sa scap de cosuri» rămâne fără NICIUN cuvânt, deci fără niciun semnal de ordonare, iar
+    # pagina devine „cele mai bine notate produse cu eticheta acnee": un aparat sonic de curățare
+    # și un tonic, în locul plasturilor anti-acnee. Un termen poate fi redundant ca POARTĂ și
+    # informativ ca ORDONATOR; scăderea le confundă. Reparația e la capătul celălalt: textul
+    # rămâne întreg, iar treapta terminală îl coboară din poartă în ordonator (`filters_only`,
+    # `db/queries/catalog.py`) și completează pagina de acolo.
     # Tier 2b p2: features („cu niacinamidă") → filtru pe searchable_facets, NORMALIZAT (lower+strip
     # diacritice, ca SQL) → „niacinamida"/„niacinamidă" se potrivesc. Fără searchable_facets → None.
     searchable_facets = _searchable_facets(ctx)
@@ -1223,6 +1301,55 @@ async def search_products_tool(
                 winning_step = f
                 break
 
+        # NX-298: pagina nu s-a umplut, iar cererea NUMEȘTE un set (raft/fațetă/brand/variantă).
+        # Sloturile rămase se completează din setul filtrului, ordonat după ACELEAȘI cuvinte ale
+        # clientului (treapta `filters_only`, unde textul e ordonator, nu poartă). Trei proprietăți
+        # care o țin onestă:
+        #   • nu ÎNLOCUIEȘTE nimic — potrivirile de text rămân primele, în ordinea lor; completarea
+        #     vine strict după, deci un răspuns bun nu poate fi împins în jos de raft;
+        #   • nu poate ieși din cerere — rândurile sunt prin construcție o submulțime a ceea ce
+        #     filtrele TREPTEI CÂȘTIGĂTOARE permit (aceleași filtre, fără predicatul de text);
+        #   • nu e tăcută — fiecare rând adus așa poartă `lexical_step='filters_only'`, care ajunge
+        #     la model (`_brief`), deci se prezintă „asta am pe raft", nu „uite ce ai cerut".
+        # De ce e nevoie de ea, deși scara are deja `filters_only` pe ultima treaptă: aceea se
+        # atinge doar când textul n-a găsit NIMIC. Cazul măsurat e celălalt — textul a găsit CINCI
+        # din 518, iar cinci e destul cât să oprească scara și prea puțin cât să fie un răspuns.
+        fill_n = 0
+        if (
+            get_settings().search_fill_from_subject_filter_enabled
+            and winning_step is not None
+            and len(ranked_final) < a.limit
+        ):
+            # Cu `search_filters_only_fallback_enabled` stins, treapta nu există, deci lista vine
+            # goală și completarea e un no-op: kill-switch-urile se compun, nu se contrazic.
+            extra = await search_products_lexical(
+                conn,
+                ctx.business.id,
+                query_text=a.query,
+                price_max=winning_step["price_max"],
+                constraints=winning_step["constraints"],
+                facet_filters=winning_step["facet_filters"],
+                features=winning_step["features"],
+                searchable_facets=searchable_facets,
+                variant_label=a.variant_label,
+                category=winning_step["category"],
+                brand=a.brand,
+                sort_mode=a.sort_mode,
+                in_stock_only=winning_step["in_stock_only"],
+                locale=ctx.language,
+                allow_filters_only=True,
+                only_filters_step=True,
+                pool=_FUSION_POOL,
+            )
+            have = {str(p.get("id")) for p in ranked_final}
+            for p in extra:
+                if len(ranked_final) >= a.limit:
+                    break
+                if str(p.get("id")) in have:
+                    continue
+                ranked_final.append(p)
+                fill_n += 1
+
     # NX-173 (P0): gate de contraindicații pe setul FUZIONAT, ÎNAINTE de diversificare/pool/pagină.
     # Poziția e esențială: `pool_ids` (mai jos) semănează sesiunea din `ranked_final`, iar sesiunea
     # supraviețuiește turului → un produs filtrat mai târziu (ex. la `annotate_reasons`, după pool)
@@ -1322,6 +1449,12 @@ async def search_products_tool(
         is not None,  # NX-135: căutare de variantă (nuanță/mărime)
         diversified=diversified,  # NX-134: prima pagină a fost re-compusă divers
         brands_in_result=len({p.get("brand") for p in products if p.get("brand")}),
+        # NX-298: câte sloturi din pagină le-a umplut RAFTUL, fiindcă formularea clientului n-a
+        # ajuns pentru atâtea. Zero = textul a fost destul. Mare și des = limba catalogului și
+        # limba clienților au divergit, iar asta se repară în date (sinonime, `search_document`),
+        # nu în scara de căutare.
+        filled_from_filter=fill_n,
+        types_in_result=len({_product_type(p) for p in products if _product_type(p)}),
         # NX-163 Demand Capture: ce s-a cerut, ca ref-uri/atribute NORMALIZATE (P8/P12) →
         # raportul de cerere (NX-164). `category_key`/`brand` = filtrele cerute (structurate de
         # triaj, nu text de user); `top_product_ids` = ce a întors search-ul. FĂRĂ query brut/PII.

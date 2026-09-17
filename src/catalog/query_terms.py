@@ -40,12 +40,23 @@ from src.catalog.folding import fold as _fold
 # nu poate numi niciodată un produs, un brand sau o nevoie. „crema", „ulei", „par" NU au ce căuta
 # în listă, oricât de frecvente ar fi. Scrise ca text, nu ca set literal, ca lista să rămână
 # citibilă pe grupuri gramaticale după trecerea formatterului.
+#
+# NX-298: grupul al treilea de verbe/conjuncții e DERIVAT, nu ghicit — din cele 98 de mesaje reale
+# ale tenantului pilot, confruntând fiecare termen supraviețuitor cu catalogul: „sa" apare în 20 de
+# mesaje și prinde 2.084 din 2.758 de produse (76% — deci nu desparte nimic), „pai"/„stiu"/„zici"/
+# „cumpar" prind ZERO. `e` și `s` au fost măsurate la fel și NU au intrat, deliberat: un prag pe
+# lungime ar tăia „vitamina E" și „spf 50", exact termenii scurți care discriminează cel mai bine.
+# Lista rămâne igienă de RANKING, nu poartă: recall-ul e apărat mecanic, de treapta terminală în
+# care textul coboară din poartă în ordonator și de completarea paginii din filtrul de subiect
+# (`filters_only`, `db/queries/catalog.py`). Un cuvânt scăpat aici înseamnă o ordine puțin mai
+# proastă, niciodată un răspuns mai scurt.
 _RO_STOPWORDS = """
     a al ale cu de din dintre in intr intre la pe pentru peste pana prin spre sub si sau dar ori ca
     un o una unui unei niste cel cea cei cele acest aceasta acesta aceste acestea
     eu tu el ea noi voi ei imi iti isi mi ti ma te se ne va le lui mea meu mei tau ta
     am ai are as ar au fi fie este sunt esti era fost vreau vrei vrea caut cauti doresc trebuie
     poate pot recomanzi recomanda spune arata da ajuta
+    sa nu pai stiu zici cumpar cumpara iau vad pune scap scapa scape scapi despre multe asta
     nevoie nevoi
     ce care cine cum cand unde cat cata cati cate ceva orice altceva nimic mai prea foarte doar
     numai tot toate toti buna salut multumesc rog
@@ -122,6 +133,17 @@ def stopwords(locale: str | None) -> frozenset[str]:
     return _STOPWORDS.get(locale.split("-")[0].lower(), frozenset())
 
 
+def _tokens(text: str) -> list[str]:
+    """Tokenii unei fraze: text pliat, doar litere și cifre. UN SINGUR producător.
+
+    Există ca funcție fiindcă ambele capete ale unei potriviri trebuie tăiate la fel. Precedentul
+    e măsurat: în `vocabulary.py`, intrările se despărțeau pe „-" iar termenul cerut nu, deci
+    «ingrijirea-parului» ieșea `UNKNOWN` acolo unde «ingrijirea parului» se rezolva, iar turul
+    rula fără filtru de raft. O a doua tokenizare scrisă de mână aici ar reface exact defectul.
+    """
+    return [t for t in re.split(r"[^0-9a-z]+", fold(text)) if t]
+
+
 def content_terms(query: str, locale: str | None) -> list[str]:
     """Termenii PURTĂTORI DE SENS dintr-o frază, normalizați, în ordinea din text, fără duplicate.
 
@@ -136,7 +158,7 @@ def content_terms(query: str, locale: str | None) -> list[str]:
     recomanzi"), întoarcem tokenii bruți: o căutare slabă e recuperabilă de treapta de relaxare, o
     căutare fără niciun termen nu e — ar deveni tăcere (P6).
     """
-    tokens = [t for t in re.split(r"[^0-9a-z]+", fold(query)) if t]
+    tokens = _tokens(query)
     if not tokens:
         return []
     stop = stopwords(locale)

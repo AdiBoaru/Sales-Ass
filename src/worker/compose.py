@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
-from src.config import chip_slots, get_settings
+from src.config import card_slots, chip_slots, get_settings
 from src.domain.normalize import normalize
 from src.models import (
     MAX_CHIP_LEN,
@@ -110,10 +110,11 @@ def _off_category(relevance: Relevance | None) -> bool:
 
 
 # IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
-# Constante de PRODUS (decizii de UX, nu ops-tuning) — pick-ul pe web e separat un kill-switch în
-# config (`rich_pick_web_enabled`). `_MAX_RICH_ITEMS` = câte carduri (modelul curează, codul taie la
-# cap). Câte CHIPS ies nu se mai decide aici: proprietarul e `settings.chip_slots`, citit la apel.
-_MAX_RICH_ITEMS = 4
+# Nici cardurile nu se mai decid aici (NX-298): proprietarul e `settings.card_slots`, citit la
+# apel, exact ca `chip_slots`. Constanta locală de dinainte (4) era cel mai mic dintre patru
+# plafoane care nu se cunoșteau, iar tăierea din cod era ultimul dintre ele — deci o creștere în
+# prompt s-ar fi pierdut TĂCUT aici. Modelul curează ce intră, codul taie la cap.
+# Pick-ul pe web rămâne kill-switch separat în config (`rich_pick_web_enabled`).
 
 # --- scrub proză LLM (validatorul de proză) ----------------------------------
 # NX-117: pattern-urile trăiesc în `text_scrub` (loc canonic partajat cu calea de proză).
@@ -416,7 +417,7 @@ def _select_pick(
 def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]]) -> RichReply:
     """Asamblează `RichReply` din JSON-ul modelului + produsele retrievate. Hidratează
     fiecare card din `facts` (preț/rating/link/badge), motivul = fit scrubuit + pro real;
-    id necunoscut → drop tăcut; cap la `_MAX_RICH_ITEMS`, dedupe."""
+    id necunoscut → drop tăcut; cap la `settings.card_slots`, dedupe."""
     facts = {p["id"]: p for p in retrieved if p.get("id")}
     # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
     # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).
@@ -557,7 +558,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             )
         ordered_ids = in_routine + rest
 
-    items: list[RichItem] = [_build(pid) for pid in ordered_ids[:_MAX_RICH_ITEMS]]
+    items: list[RichItem] = [_build(pid) for pid in ordered_ids[: card_slots()]]
 
     # izi-parity hardening: retrieval OFF-CATEGORY (produse din categoria greșită — ex. „fond de
     # ten" pe catalog skincare) → NU pretinde o recomandare. Suprimă pick-ul ȘI înlocuiește intro-ul

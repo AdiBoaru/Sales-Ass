@@ -1835,6 +1835,7 @@ search_blended_rank_enabled = true
 search_category_hard_enabled = true
 search_category_tree_enabled = true
 search_diversify_enabled = true
+search_fill_from_subject_filter_enabled = true
 search_filters_only_fallback_enabled = true
 search_offcategory_guard_enabled = true
 search_semantic_enabled = false
