@@ -1052,6 +1052,19 @@ class Settings(BaseSettings):
     # categorii ADIACENTE celei discutate (cross-sell prin rutină). OFF → mesajul cald simplu, fără
     # chips (byte-identic cu azi pe `simple`).
     closure_chips_enabled: bool = Field(default=True, validation_alias="CLOSURE_CHIPS_ENABLED")
+    # NX-297 felia 1: nano rămâne EXTRACTOR, nu mai e SCRIITOR. Rutele pe care le scria el
+    # (`simple`/`clarify`) se retrogradează la `sales`, deci turul ajunge la agent — singurul care
+    # vede catalogul. Măsurat pe prod: nano scria 42% din răspunsuri fără să fi făcut vreo
+    # căutare, de acolo veneau chips-urile seci, clarificările despre produse inexistente și
+    # turele de rutină închise înainte de orice unealtă.
+    #
+    # NU cere `single_brain_enabled` — e deliberat: cardul rămâne pe v1 (proză + carduri bogate +
+    # validatorul stagiului 8). Nu adăugăm poartă de boot; flagul nu poate forma o combinație
+    # imposibilă, fiindcă `sales` e ruta pe care agentul o servește oricum.
+    # OFF = byte-identic (nano scrie ca azi).
+    agent_only_writer_enabled: bool = Field(
+        default=False, validation_alias="AGENT_ONLY_WRITER_ENABLED"
+    )
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")
