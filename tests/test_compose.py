@@ -7,6 +7,7 @@ implicit ca motiv de recomandare; kill-switch-ul legacy rămâne testat separat.
 
 from types import SimpleNamespace
 
+from src.config import chip_slots
 from src.models import Direction, Relevance, RichItem, RichReply
 from src.worker import compose
 
@@ -239,14 +240,16 @@ def test_suggestion_chips_are_normalized_capped_not_hardcoded() -> None:
             "Compară CeraVe cu La Roche-Posay Cicaplast pentru mâinile foarte uscate ale tale",
             "Ceva fără parfum",
             "Hidratant de corp",
-            "Pentru ten sensibil",
-            "Are protecție SPF?",  # al 6-lea unic → cap atins aici
+            "Pentru ten sensibil",  # al 5-lea unic → cap atins aici
+            "Are protecție SPF?",  # peste cap → exclus
             "Cum îl folosesc?",  # peste cap → exclus
             "a noua peste cap",  # peste cap → exclus
         ]
     )
     labels = [c.label for c in chips]
-    assert len(chips) == 6  # cap 6 (IZI-parity), nu 4
+    # Capul nu mai e scris aici: proprietarul e `settings.chip_slots` (5 implicit), citit de
+    # producător, de calea bogată și de randorul web deopotrivă. Vezi `tests/test_chip_slots.py`.
+    assert len(chips) == chip_slots()
     assert labels.count("Vreau una mai ieftină") == 1  # de-duplicat
     assert "Cum îl folosesc?" not in labels and "a noua peste cap" not in labels  # peste cap
     assert any(lbl.endswith("…") for lbl in labels)  # cea lungă e scurtată

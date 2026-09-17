@@ -7,6 +7,7 @@ Aceste teste blochează CONTRACTUL de cod al căii clarify (nano scriptat): cân
 live cu `scripts/sim/web_audit.py` (DB + OpenAI), NU aici (FakeLLM e scriptat).
 """
 
+from src.config import chip_slots
 from src.domain.pack import DomainPack
 from src.models import (
     BusinessConfig,
@@ -89,8 +90,8 @@ async def test_underspecified_clarify_persists_slot_and_suggestions():
     assert ctx.reply.cacheable is False  # specific contextului → nu otrăvește cache-ul
 
 
-async def test_clarify_suggestions_capped_at_4():
-    """Nano dă 6 chips → codul păstrează max 4 (butoane, nu listă)."""
+async def test_clarify_suggestions_capped_at_chip_slots():
+    """Nano dă 6 chips → codul păstrează exact `settings.chip_slots` (butoane, nu listă)."""
     ctx = _ctx("vreau un laptop", domain_pack=_ELECTRONICS)
     llm = FakeLLM(
         {
@@ -109,7 +110,8 @@ async def test_clarify_suggestions_capped_at_4():
     )
     await triage_stage(ctx, _deps(llm))
     assert ctx.route.route == Route.CLARIFY
-    assert len(ctx.reply.suggestions) == 4  # [:4] în cod
+    # Capul nu mai e scris în test: proprietarul e `settings.chip_slots` (vezi test_chip_slots.py).
+    assert len(ctx.reply.suggestions) == chip_slots()
 
 
 async def test_clarify_drops_empty_suggestions():

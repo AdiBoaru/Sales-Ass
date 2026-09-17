@@ -177,8 +177,10 @@ _MAX_CANDIDATE_SCAN = 24
 # catalogul SOLE: perfectă la căutare, inutilă la oferit — oricare patru ai alege, ai ales
 # arbitrar dintr-o listă pe care clientul n-o vede.
 _MAX_VALUES_FOR_QUESTION = 60
-# Câte chips ies la client (același cap ca azi în triaj).
-_MAX_CHIPS = 4
+# Câte chips ies la client NU se decide aici. `limit` e parametru OBLIGATORIU al lui
+# `ground_suggestions` tocmai ca să nu existe un al doilea adevăr: proprietarul e
+# `settings.chip_slots`, iar un apelant care uită de el nu compilează, în loc să taie tăcut la o
+# cifră scrisă în modulul ăsta.
 # Sub atâtea chips supraviețuitoare nu merită să servim rămășițele modelului: cădem pe etichetele
 # din meniu, care sunt adevărate prin construcție. Unul singur ar arăta ca o alegere, nu ca o listă.
 _MIN_KEPT = 2
@@ -596,7 +598,7 @@ def _contains_run(haystack: list[str], needle: list[str]) -> bool:
 
 
 def ground_suggestions(
-    suggestions: Sequence[str], menu: ClarifyMenu, *, limit: int = _MAX_CHIPS
+    suggestions: Sequence[str], menu: ClarifyMenu, *, limit: int
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """`(chips păstrate, chips aruncate)`.
 

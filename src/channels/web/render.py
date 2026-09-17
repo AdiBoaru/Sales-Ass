@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.config import chip_slots, get_settings
 from src.models import (
     MAX_CHIP_LEN,
     Chip,
@@ -30,9 +31,11 @@ if TYPE_CHECKING:
     pass
 
 
-# Web = UI premium: max 5 chips ca butoane (widget-ul nu trebuie să pară încărcat). Chat-urile
-# rămân pe _MAX_CHIPS din compose — capul ăsta e DOAR pe render-ul web.
-_MAX_WEB_CHIPS = 5
+# Câte chips ies ca butoane: `settings.chip_slots`, ACELAȘI număr pe care îl folosesc
+# producătorii. Capul separat de dinainte (5, „widget-ul nu trebuie să pară încărcat") era o a
+# doua cifră care nu știa de prima: producătorul tăia la 4, deci al cincilea slot al widgetului
+# n-a fost folosit niciodată, iar o creștere la 6 s-ar fi pierdut TĂCUT exact aici. Limita de UI
+# rămâne exprimabilă — se scrie în `CHIP_SLOTS`, într-un singur loc.
 # Lungimea e cea din contract (`models.MAX_CHIP_LEN`), NU una mai mică: un chip e mesajul pe care
 # l-ar scrie clientul, iar producătorii (compose, fallbacks, deterministic) scurtează deja la
 # valoarea aia. Un cap mai mic aici ar face ca exact sugestiile bogate, cele care se înțeleg
@@ -48,14 +51,15 @@ _BOT_VOICE_RE = re.compile(r"[()]|\bex\s*[:.]|\bde exemplu\b|\be\.g\.", re.IGNOR
 
 def _web_chips(labels: list[str]) -> list[str]:
     """Sanitizează chips-urile pentru contractul widgetului: strip, drop goale / cu voce de bot /
-    peste capul de contract, cap la _MAX_WEB_CHIPS. Structural, nu prin disciplina promptului (P4).
-    """
+    peste capul de contract, cap la `settings.chip_slots`. Structural, nu prin disciplina
+    promptului (P4)."""
+    slots = chip_slots(get_settings())
     out: list[str] = []
     for raw in labels:
         s = (raw or "").strip()
         if s and len(s) <= _MAX_WEB_CHIP_LEN and not _BOT_VOICE_RE.search(s):
             out.append(s)
-        if len(out) >= _MAX_WEB_CHIPS:
+        if len(out) >= slots:
             break
     return out
 

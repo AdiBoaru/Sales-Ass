@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
-from src.config import get_settings
+from src.config import chip_slots, get_settings
 from src.domain.normalize import normalize
 from src.models import (
     MAX_CHIP_LEN,
@@ -112,9 +112,8 @@ def _off_category(relevance: Relevance | None) -> bool:
 # IZI-parity (feedback Adi 2026-06-30): câte produse / chips afișăm în recomandarea bogată.
 # Constante de PRODUS (decizii de UX, nu ops-tuning) — pick-ul pe web e separat un kill-switch în
 # config (`rich_pick_web_enabled`). `_MAX_RICH_ITEMS` = câte carduri (modelul curează, codul taie la
-# cap); `_MAX_CHIPS` = câte sugestii de follow-up (ca iZi: ~5-6, nu 3).
+# cap). Câte CHIPS ies nu se mai decide aici: proprietarul e `settings.chip_slots`, citit la apel.
 _MAX_RICH_ITEMS = 4
-_MAX_CHIPS = 6
 
 # --- scrub proză LLM (validatorul de proză) ----------------------------------
 # NX-117: pattern-urile trăiesc în `text_scrub` (loc canonic partajat cu calea de proză).
@@ -249,10 +248,11 @@ def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
     """Chips = mesaje de follow-up DIN PARTEA CLIENTULUI, generate de model pe contextul lui
     (NU hardcodate). Apăsarea trimite `label` ca mesaj NOU → reintră în pipeline ca tur nou
     → e voce de client, nu afirmație a botului, deci FĂRĂ scrub. Doar normalizare: trim,
-    dedupe, scurtează la capul de contract (`MAX_CHIP_LEN`), cap `_MAX_CHIPS`.
+    dedupe, scurtează la capul de contract (`MAX_CHIP_LEN`), cap `settings.chip_slots`.
 
     Scurtarea folosește ACELAȘI cap ca randorul web, altfel un chip contextual („Compară rujurile
     Maybelline Superstay între ele") ar trece de aici întreg și ar fi dropat tăcut mai jos."""
+    slots = chip_slots(get_settings())
     out: list[Chip] = []
     seen: set[str] = set()
     for s in suggestions:
@@ -266,7 +266,7 @@ def _suggestion_chips(suggestions: list[str]) -> list[Chip]:
             continue
         seen.add(key)
         out.append(Chip(label=label, payload=label))
-        if len(out) >= _MAX_CHIPS:
+        if len(out) >= slots:
             break
     return out
 

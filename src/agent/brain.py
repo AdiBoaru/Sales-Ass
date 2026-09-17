@@ -57,7 +57,7 @@ from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
 from src.analytics.demand import clean_ids
 from src.catalog.freshness import facts_sla_s
-from src.config import get_settings
+from src.config import chip_slots, get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
@@ -282,7 +282,7 @@ async def _clarify_chips(ctx: TurnContext, deps: Any) -> tuple[str, ...]:
     menu = await menu_for_turn(ctx, deps)
     if not menu.usable:
         return ()
-    kept, _ = ground_suggestions((), menu)
+    kept, _ = ground_suggestions((), menu, limit=chip_slots(get_settings()))
     return kept
 
 

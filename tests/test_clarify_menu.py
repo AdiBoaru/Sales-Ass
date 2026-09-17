@@ -210,6 +210,7 @@ def test_fallback_completes_instead_of_replacing() -> None:
             "Un cablu USB-C de 2 metri",
         ],
         menu,
+        limit=5,
     )
     assert kept[0] == "Am tenul uscat si caut o crema de fata"
     assert len(kept) > 1, "lista se completează din meniu, nu rămâne cu una singură"
@@ -231,6 +232,7 @@ def test_the_reported_bug_every_usb_chip_is_dropped() -> None:
             "Nu stiu, imi recomanzi un cablu bun?",
         ],
         menu,
+        limit=5,
     )
     assert len(dropped) == 4
     assert all("USB" not in k and "cablu" not in k for k in kept)
@@ -241,7 +243,7 @@ def test_model_phrasing_survives_diacritics_and_wrapping() -> None:
     """Meniul e închis, dar nu rigid: modelul are voie să îmbrace fraza natural, cu diacritice."""
     menu = build_menu(FULL, PACK, locale="ro", scoped_keys=SCOPED_ALL)
     kept, dropped = ground_suggestions(
-        ["Caut o cremă de față pentru fiecare zi", "Am tenul uscat de la frig"], menu
+        ["Caut o cremă de față pentru fiecare zi", "Am tenul uscat de la frig"], menu, limit=5
     )
     assert "Caut o cremă de față pentru fiecare zi" in kept
     # «ten uscat» ≠ «tenul uscat» (fail-closed), iar «Ten» nu se potrivește ca SUBȘIR în „tenul":
@@ -255,14 +257,14 @@ def test_empty_vocabulary_lets_everything_through() -> None:
     menu = build_menu(CatalogVocabulary(business_id="biz-1"), PACK, locale="ro")
     assert not menu.usable
     assert menu.reason == "vocabulary_unavailable"
-    kept, dropped = ground_suggestions(["Pentru consola, cablu USB de date"], menu)
+    kept, dropped = ground_suggestions(["Pentru consola, cablu USB de date"], menu, limit=5)
     assert kept == ("Pentru consola, cablu USB de date",)
     assert dropped == ()
 
 
 def test_menu_object_without_options_is_transparent() -> None:
     """Aceeași poartă, exprimată pe contract: `usable=False` nu filtrează."""
-    kept, dropped = ground_suggestions(["orice"], ClarifyMenu())
+    kept, dropped = ground_suggestions(["orice"], ClarifyMenu(), limit=5)
     assert kept == ("orice",)
     assert dropped == ()
 
