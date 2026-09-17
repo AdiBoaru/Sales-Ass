@@ -40,20 +40,22 @@ _ALWAYS_COMPLETE: frozenset[str] = frozenset(
 #: Stagiile cu conținut canonic care finalizează DOAR pe o singură obligație (nu pe mesaj mixt).
 _SINGLE_OBLIGATION_ONLY: frozenset[str] = frozenset({"faq_stage", "cache_stage", "alias_stage"})
 #: Stagii care nu finalizează NICIODATĂ sub single-brain (writer LLM concurent).
-_NEVER_COMPLETE: frozenset[str] = frozenset({"triage_stage"})
+#: NX-297: mulțimea e GOALĂ de când triajul a fost șters — el era singurul writer LLM care putea
+#: încheia un tur în paralel cu brain-ul. Rămâne ca punct de extindere DECLARAT: un al doilea
+#: writer adăugat mâine trebuie trecut aici, nu descoperit pe trafic.
+_NEVER_COMPLETE: frozenset[str] = frozenset()
 
 
 def _stage_covers() -> dict[str, tuple[str, ...]]:
     """Ce acoperă reply-ul fiecărui stagiu — DECLARAT de stagii (`FAST_PATH_COVERS`), citit aici.
     Import LAZY + tolerant: un stagiu fără declarație cade pe default-ul conservator."""
     try:
-        from src.worker.stages import cache, faq, greeting, triage  # noqa: PLC0415
+        from src.worker.stages import cache, faq, greeting  # noqa: PLC0415
 
         return {
             "greeting_stage": greeting.FAST_PATH_COVERS,
             "faq_stage": faq.FAST_PATH_COVERS,
             "cache_stage": cache.FAST_PATH_COVERS,
-            "triage_stage": triage.FAST_PATH_COVERS,
             "alias_stage": ("question_0",),
             "action_kernel_stage": ("opaque_action",),
             "clarify_resume_stage": ("pending_clarification",),
@@ -162,7 +164,7 @@ def gate_early_exit(ctx: Any, stage_name: str) -> FastPathDecision:
         ctx.brain_signals.append(
             BrainSignal(
                 stage=stage_name,
-                kind="triage_reply" if stage_name == "triage_stage" else "stage_reply",
+                kind="stage_reply",
                 text=reply.text,
                 suggestions=tuple(reply.suggestions or ()),
             )

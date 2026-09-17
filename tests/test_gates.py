@@ -250,7 +250,7 @@ class _FakeOpenAI:
 
 
 async def test_adapter_moderate_parses_flagged_categories():
-    llm = LLMClient(_FakeOpenAI(), model_triage="t", model_agent="a")
+    llm = LLMClient(_FakeOpenAI(), model_agent="a")
     res = await llm.moderate("ceva")
     assert res.flagged is True
     assert res.categories == ["harassment", "violence"]  # sortate, doar True

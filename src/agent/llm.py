@@ -383,14 +383,12 @@ class LLMClient:
         self,
         client: AsyncOpenAI,
         *,
-        model_triage: str,
         model_agent: str,
         model_embed: str = "text-embedding-3-small",
         model_moderation: str = "omni-moderation-latest",
         model_vision: str = "gpt-5.6-terra",
     ) -> None:
         self._client = client
-        self.model_triage = model_triage
         self.model_agent = model_agent
         self.model_embed = model_embed
         self.model_moderation = model_moderation
@@ -454,7 +452,9 @@ class LLMClient:
         reasoning_on = effort != _NO_REASONING if effort else profile.reasons_by_default
         if s.llm_sampling_enabled:
             if "temperature" in profile.params and not reasoning_on:
-                out["temperature"] = s.llm_temperature_agent if agent else s.llm_temperature_triage
+                out["temperature"] = (
+                    s.llm_temperature_agent if agent else s.llm_temperature_background
+                )
             else:
                 turn_latency.degrade("llm_param_unsupported_temperature")
         return out
@@ -486,10 +486,12 @@ class LLMClient:
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
         """Apel chat cu răspuns JSON forțat (`response_format=json_object`).
 
-        Întoarce dict-ul parsat. Folosit de triaj (clasificare rută). Modelul
-        implicit e cel de triaj (nano). Ridică la JSON invalid / eroare de API —
-        caller-ul (stagiul) prinde și degradează."""
-        mdl = model or self.model_triage
+        Întoarce dict-ul parsat. NX-297: singurul consumator rămas e extracția de fundal
+        (profil + lead score, POST-tur) — triajul, pentru care fusese scris, nu mai există.
+        `agent=False` nu mai înseamnă „nano", înseamnă „apel care nu e pe drumul răspunsului":
+        fără plafonul de output al agentului, cu temperatura de fundal. Ridică la JSON invalid /
+        eroare de API — caller-ul prinde și degradează."""
+        mdl = model or self.model_agent
         resp = await self._chat(
             agent=False,
             model=mdl,
@@ -778,7 +780,6 @@ def get_llm() -> LLMClient | None:
         # (folosim `_with_retry` ca să controlăm backoff-ul + logul `llm_api_failure`).
         _llm = LLMClient(
             AsyncOpenAI(api_key=s.openai_api_key, timeout=s.llm_timeout_s, max_retries=0),
-            model_triage=s.model_triage,
             model_agent=s.model_agent,
             model_embed=s.model_embed,
             model_moderation=s.model_moderation,

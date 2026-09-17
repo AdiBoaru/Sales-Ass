@@ -90,22 +90,19 @@ async def test_route_hit_sets_route_no_reply(monkeypatch):
     )
 
 
-async def test_route_hit_makes_triage_a_noop(monkeypatch):
-    # dovedește „triaj sărit": cu ctx.route deja setat, triajul nu cheamă LLM-ul (DoD)
-    from src.worker.stages.triage import triage_stage
+async def test_route_hit_survives_the_agent(monkeypatch):
+    """Aliasul rutează determinist; NX-297 a mutat proprietatea lui `ctx.route` pe `agent_stage`,
+    iar un writer nou care ar suprascrie ar șterge tăcut exact deciziile ieftine ale straturilor
+    gratuite. Verificat pe ruta `order`, unde greșeala ar costa zidul de login."""
+    from src.worker.stages.agent import agent_stage
 
     _patch_lookup(monkeypatch, _alias("route", target_value="order"))
     ctx = _ctx("unde e comanda")
     await alias_stage(ctx, PipelineDeps(conn=None, llm=None))
 
-    class _LLMBoom:
-        model_triage = "nano"
-
-        async def classify_json(self, *a, **k):
-            raise AssertionError("triajul NU trebuie să cheme LLM când ruta e deja setată")
-
-    await triage_stage(ctx, PipelineDeps(conn=None, llm=_LLMBoom()))
-    assert ctx.route.route == Route.ORDER  # neschimbat de triaj
+    await agent_stage(ctx, PipelineDeps(conn=None, llm=None))  # llm None → iese imediat
+    assert ctx.route.route == Route.ORDER
+    assert not any(e.type == "route_defaulted" for e in ctx.events)
 
 
 async def test_category_hit_routes_sales_with_slug(monkeypatch):

@@ -55,7 +55,7 @@ class _FakeClient:
 
 async def test_adapter_embed_returns_vectors_and_uses_embed_model():
     client = _FakeClient()
-    llm = LLMClient(client, model_triage="n", model_agent="m", model_embed="emb-model")
+    llm = LLMClient(client, model_agent="m", model_embed="emb-model")
     vecs = await llm.embed(["a", "b", "c"])
     assert len(vecs) == 3
     assert len(vecs[0]) == 4

@@ -183,21 +183,20 @@ async def seed_daily_cost(conn: asyncpg.Connection, redis: Redis, business_id: s
         log.warning("cost guard: reseed eșuat (%s) → continuă fără seed", type(e).__name__)
 
 
-def estimate_turn_cost(
-    events: Sequence[Event], *, cost_triage_usd: float, cost_agent_usd: float
-) -> float:
+def estimate_turn_cost(events: Sequence[Event], *, cost_agent_usd: float) -> float:
     """DEPRECATED pentru contorizare (NX-125): contorul zilnic e alimentat acum cu costul EXACT
     din tokeni (`ctx.usage.cost_usd`, vezi `_record_turn_cost`). Rămâne ca estimare-ceiling
     pre-LLM (opțional, înainte de a apela LLM-ul) + pt costurile best-effort fără `ctx.usage`.
 
     Estimare grosieră a costului LLM al unui tur, din evenimente (sursa de FACTURARE rămâne
-    `usage_daily`). `intent_detected` = triajul (nano) a rulat; `agent_recommended`/`tool_call`
-    = agentul (mini). Tool-calling: mini ≈ ×(1 + nr tool_call). Compatibil cu agentul RAG
-    (zero `tool_call`) și cu G7-1."""
+    `usage_daily`). `agent_recommended`/`tool_call` = agentul a rulat; tool-calling ≈
+    ×(1 + nr tool_call). Compatibil cu agentul RAG (zero `tool_call`) și cu G7-1.
+
+    NX-297: termenul de triaj a dispărut odată cu nano. Era ancorat pe `intent_detected`, un
+    eveniment pe care nu-l mai emite nimeni — deci ar fi rămas un zero adunat la fiecare tur,
+    adică o linie care arată ca o măsurătoare fără să mai măsoare ceva."""
     types = [e.type for e in events]
     cost = 0.0
-    if "intent_detected" in types:
-        cost += cost_triage_usd
     tool_calls = types.count("tool_call")
     if tool_calls or "agent_recommended" in types:
         cost += cost_agent_usd * (1 + tool_calls)

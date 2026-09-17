@@ -22,12 +22,27 @@ de tărie, deci singurul mod onest de a exprima „soft" e să NU persiste.
 Fără poarta asta, o constrângere halucinată la turul 3 ar filtra tăcut turele 4-9, iar clientul
 n-ar avea cum să afle de ce nu mai vede nimic.
 
-## Ce NU intră, și de ce
+## `category` — raftul, nu o constrângere. Și de ce a intrat totuși
 
-`category` nu intră în stivă, deși modelul o pasează. Categoria e singura cheie care declanșează
-RESETUL stivei (`merge_constraints`), iar o categorie aleasă de model, necoroborată, ar putea
-șterge constrângerile clientului. Resetul are deja o a doua sursă, nano-free: raftul citit din
-arborele de catalog (`topic_switched`, NX-133). Nu-i dăm o a treia, mai slabă.
+La prima livrare a feliei, `category` a fost ținută DELIBERAT afară: e singura cheie care
+declanșează RESETUL stivei, iar o categorie aleasă de model ar fi putut șterge constrângerile
+clientului. Argumentul era valid cât timp triajul mai rula — categoria venea de acolo, deci a
+adăuga o a doua sursă, mai slabă, pentru aceeași cheie era risc fără câștig.
+
+După ștergerea triajului (NX-297 felia 4b) alternativa nu mai e „o sursă bună vs una slabă", ci
+„sursa asta sau niciuna": nimic nu mai știe pe ce raft stă conversația. Fără marker,
+`topic_switched` n-are `prev` cu ce compara, iar meniul de clarificare nu mai știe ce fațete să
+ofere — amândouă degradează TĂCUT.
+
+Ce face riscul acceptabil e ORDINEA din `merge_constraints`: resetul golește doar ce s-a CĂRAT din
+turele trecute, iar valorile turului CURENT se aplică după el. Deci o schimbare greșită de raft
+poate pierde o constrângere veche nerepetată, nu una tocmai rostită. Iar `topic_switched` (NX-133),
+care citește raftul din cuvintele BRUTE ale clientului, rămâne a doua cale, independentă.
+
+`category` nu trece prin `corroborated_by`: nu e o afirmație a clientului, e nota serverului despre
+ce s-a căutat. Un slug inventat e inert în aval (`topic_root_of` îl întoarce `None`).
+
+## Ce NU intră
 
 `sort_mode`, `in_stock_only`, `limit`, `product_name` nu sunt constrângeri ale clientului peste
 ture: sunt decizii de execuție ale turului curent.
@@ -53,6 +68,26 @@ _LIST_ARG = "concerns"
 #: Cap pe `concerns`, ACELAȘI ca la `merge_constraints` (P4: bugetul stă în cod). Două plafoane
 #: peste aceeași listă nu pot rămâne de acord decât dacă al doilea îl citează pe primul.
 MAX_CONCERNS = 5
+
+
+#: Raftul căutat. Separat de `_ARG_TO_SLOT` fiindcă are alt contract: nu se coroborează, nu e o
+#: constrângere, și e singurul care poate declanșa resetul stivei (vezi docstring-ul modulului).
+_CATEGORY_ARG = "category"
+
+
+def observed_category(calls: list[dict[str, Any]]) -> str | None:
+    """Ultimul raft pe care a căutat agentul, sau `None`. PURĂ.
+
+    Ultimul, nu primul: pe un tur cu două căutări, a doua e rafinarea — dacă modelul a schimbat
+    raftul în timpul turului, raftul final e cel pe care s-a oprit."""
+    found: str | None = None
+    for args in calls:
+        if not isinstance(args, dict):
+            continue
+        value = args.get(_CATEGORY_ARG)
+        if isinstance(value, str) and value.strip():
+            found = value.strip()
+    return found
 
 
 def from_search_args(

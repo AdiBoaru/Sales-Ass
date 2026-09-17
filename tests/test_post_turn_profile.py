@@ -143,7 +143,6 @@ def test_score_engaged_via_state_only():
 
 
 class _ScriptedLLM:
-    model_triage = "nano"
     model_agent = "agent"
 
     def __init__(self, out=None, *, boom=False):

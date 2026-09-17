@@ -218,7 +218,6 @@ def model_role(model: str) -> str:
     except Exception:  # noqa: BLE001 — fără settings (script/test parțial) nu ghicim
         return "agent"
     for role, attr in (
-        ("triage", "model_triage"),
         ("embed", "model_embed"),
         ("vision", "model_vision"),
         ("moderation", "model_moderation"),

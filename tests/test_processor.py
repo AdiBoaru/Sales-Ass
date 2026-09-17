@@ -263,8 +263,6 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
     from src.worker.aftercare import _summarize_if_needed
 
     class _LLM:
-        model_triage = "nano"
-
         async def complete(self, system, user, *, model=None):
             return "REZUMAT"
 

@@ -288,11 +288,6 @@
       "role": "ro-quality",
       "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
     },
-    "clarify-low-confidence-sales": {
-      "bucket": "keep",
-      "role": "ro-quality",
-      "note": "fast-path/clarify valid pe țintă (clarify se îmbogățește la NX-212)"
-    },
     "simple-en-thanks": {
       "bucket": "keep",
       "role": "locale-regression",

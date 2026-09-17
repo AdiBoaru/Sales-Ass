@@ -18,7 +18,6 @@ from src.worker import turn_uow as uow
 from src.worker.processor import handle_turn
 from src.worker.runner import PipelineDeps
 from src.worker.stages.clarify import clarify_resume_stage
-from src.worker.stages.triage import triage_stage
 
 
 def _ctx(body: str = "x", *, pending=None, route=None) -> TurnContext:
@@ -176,17 +175,21 @@ async def test_resume_below_threshold_no_escalation():
     assert not any(e.type == "clarify_escalated" for e in ctx.events)
 
 
-# --- garda din triaj: un singur owner pe `route` (P3) ------------------------
+# --- un singur owner pe `route` (P3) ----------------------------------------
 
 
-async def test_triage_noop_when_route_already_set():
-    class _SpyLLM:
-        async def classify_json(self, *a, **k):
-            raise AssertionError("triajul NU trebuie să cheme nano când ruta e deja setată")
+async def test_agent_does_not_overwrite_a_route_already_set():
+    """NX-297: proprietarul lui `ctx.route` e `agent_stage` — dar DOAR când n-o are nimeni.
 
-    ctx = _ctx("200 lei", route=RouteDecision(route=Route.SALES))
-    await triage_stage(ctx, _deps(_SpyLLM()))  # garda întoarce înainte de orice apel LLM
-    assert ctx.route.route == Route.SALES  # neschimbat
+    `clarify_resume` rulează înaintea lui și rutează determinist pe răspunsul scurt al clientului.
+    Dacă agentul ar suprascrie, reluarea slotului s-ar pierde tăcut: mesajul „200 lei" ar redeveni
+    o cerere de vânzare fără legătură cu întrebarea la care răspunde."""
+    from src.worker.stages.agent import agent_stage
+
+    ctx = _ctx("200 lei", route=RouteDecision(route=Route.ORDER))
+    await agent_stage(ctx, PipelineDeps(conn=None, llm=None))  # llm None → iese imediat
+    assert ctx.route.route == Route.ORDER  # neschimbat
+    assert not any(e.type == "route_defaulted" for e in ctx.events)
 
 
 # --- processor: pending_question scris / curățat în new_state ----------------

@@ -41,7 +41,6 @@ def test_build_summary_prompt_includes_prev_and_messages():
 
 
 class _ScriptedLLM:
-    model_triage = "nano"
     model_agent = "agent"
 
     def __init__(self, out="REZUMAT", *, boom=False):

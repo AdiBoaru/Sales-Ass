@@ -57,7 +57,6 @@ from src.tools.catalog_tools import clear_embeddings_cache
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, run_pipeline
 from src.worker.stages import agent as agent_mod
 from src.worker.stages import cache as cache_mod
-from src.worker.stages import triage as triage_mod
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES_PATH = ROOT / "tests" / "golden" / "cases.json"
@@ -112,7 +111,6 @@ def _apply_stubs(patch: _Patcher, get_fx, *, single_brain: bool = False) -> None
     # fals → stub → prompt generic (oglindește fixture-ul autouse din tests/conftest.py).
     patch.setattr(agent_mod, "list_category_names", no_prompt_inputs)
     patch.setattr(agent_mod, "list_routing_aliases", no_prompt_inputs)
-    patch.setattr(triage_mod, "list_category_slugs", fake_categories)
     patch.setattr(ct, "has_embeddings", has_emb)
     patch.setattr(ct, "search_products_semantic", fake_search)
     patch.setattr(ct, "search_products_lexical", fake_lexical)
@@ -130,9 +128,7 @@ def _apply_stubs(patch: _Patcher, get_fx, *, single_brain: bool = False) -> None
     # Calea e a HARNESSULUI, nu a `.env`-ului mașinii — aceeași regulă ca în gate-ul CI. Fără
     # pinul ăsta, snapshot-ul depindea de cine îl rulează, iar diff-ul dintre două rulări putea
     # însemna „s-a schimbat produsul" sau „s-a schimbat mașina", fără cale de a le deosebi.
-    # `triage_sync_shadow` rămâne stins: cazurile golden își declară ruta prin fixtura `triage`.
     patch.setattr(get_settings(), "single_brain_enabled", single_brain)
-    patch.setattr(get_settings(), "triage_sync_shadow_enabled", False)
     # Brațul semantic e OFF în producție (2026-09-08), dar fixturile golden stubează
     # `search_products_semantic` — cu el stins, stubul nu se cheamă deloc și fiecare caz de
     # vânzare raportează „zero produse observate". Gate-ul CI îl aprinde printr-un fixture autouse

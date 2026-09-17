@@ -18,15 +18,12 @@ copii ale aceluiași fake divergează, și atunci testezi copia, nu sistemul).
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
-from src.config import Settings, get_settings
+from src.config import get_settings
 from src.conversation.state_v2 import ConversationStateV2, Need
-from src.models import Contact, ConversationState, Route, RouteDecision
-from src.worker import aftercare as aftercare_mod
+from src.models import Contact, ConversationState, Route
 from src.worker.context import context_blocks
 from src.worker.runner import PipelineDeps
-from src.worker.stages import triage as triage_mod
 from tests.test_single_brain import (
     _PRODUCT,
     _ctx,
@@ -284,117 +281,58 @@ def test_building_the_context_without_a_consumer_measures_nothing():
 # ── Triajul iese de pe drumul sincron (Card 2) ───────────────────────────────
 
 
-class _CountingTriageLLM:
-    """Numără apelurile de clasificare. Un fake care ARUNCĂ n-ar dovedi nimic: `classify_message`
-    degradează corect la orice excepție, deci testul ar trece și dacă apelul chiar s-a făcut."""
-
-    model_triage = "nano-de-test"
-
-    def __init__(self):
-        self.calls = 0
-
-    async def classify_json(self, system, user, **kw):
-        self.calls += 1
-        return {"route": "sales", "category_key": None, "reply": None, "confidence": "high"}
+# ── D1, verificat STRUCTURAL: niciun model mic între client și agent ─────────
 
 
-async def _run_triage(monkeypatch, *, flag: bool):
-    monkeypatch.setattr(get_settings(), "triage_sync_shadow_enabled", flag, raising=False)
+def test_no_stage_classifies_with_a_model() -> None:
+    """Invariantul D1, ca poartă pe FORMĂ — nu ca test pe un flag.
 
-    async def _no_categories(conn, business_id):
-        return []
+    Cât timp triajul exista, „nano nu mai rulează sincron" era o proprietate a unei SETĂRI, deci
+    se putea pierde prin config. NX-297 l-a șters, iar atunci invariantul devine verificabil pe
+    cod: niciun stagiu din pipeline n-are voie să cheme un clasificator de model. Un al doilea
+    triaj adăugat mâine ar arăta exact ca primul — alt nume, același defect — și n-ar fi prins de
+    niciun test de comportament, fiindcă ar trece.
 
-    monkeypatch.setattr(triage_mod, "list_category_slugs", _no_categories)
-    ctx, llm = _ctx(), _CountingTriageLLM()
-    await triage_mod.triage_stage(ctx, PipelineDeps(conn=None, llm=llm))
-    return ctx, llm
-
-
-async def test_no_small_model_runs_before_the_brain(monkeypatch):
-    """D1, verificat pe apeluri, nu pe intenții: sub flag nu se mai cheltuie nicio clasificare
-    între client și răspuns."""
-    ctx, llm = await _run_triage(monkeypatch, flag=True)
-
-    assert llm.calls == 0
-    assert ctx.route is None  # proprietarul rutei devine `agent_stage`
-    assert _events(ctx, "triage_deferred")[0].properties["reason"] == "sync_shadow"
-
-
-async def test_with_the_flag_off_triage_still_classifies(monkeypatch):
-    """Contra-testul care ține flagul onest: stins = comportamentul de azi, neatins."""
-    ctx, llm = await _run_triage(monkeypatch, flag=False)
-
-    assert llm.calls == 1
-    assert ctx.route is not None and ctx.route.route is Route.SALES
-    assert _events(ctx, "triage_deferred") == []
-
-
-def test_moving_triage_off_the_path_without_a_brain_is_refused_at_boot(monkeypatch):
-    """Combinația e imposibilă, nu degradată: nimeni n-ar mai decide ruta, deci fiecare mesaj ar
-    cădea în fallback-ul generic. Un proces care pornește așa ar arăta sănătos și ar răspunde
-    prostii."""
-    for key, value in {
-        "SUPABASE_DB_URL": "postgresql://u:p@host:5432/db",
-        "OPENAI_API_KEY": "sk-test",
-        "TRIAGE_SYNC_SHADOW_ENABLED": "true",
-        "SINGLE_BRAIN_ENABLED": "false",
-    }.items():
-        monkeypatch.setenv(key, value)
-
-    with pytest.raises(ValidationError, match="SINGLE_BRAIN_ENABLED"):
-        Settings(_env_file=None)
-
-
-# ── Shadow-ul post-tur compară VERDICTE, nu texte ────────────────────────────
-
-
-def test_what_the_turn_did_is_read_from_artefacts_not_reinterpreted():
-    ctx = _ctx()
-    ctx.route = RouteDecision(route=Route.SALES)
-    assert aftercare_mod._brain_outcome(ctx) == "other"
-
-    ctx.set_reply("text")
-    ctx.reply.pending_question = {"field": "budget_max", "attempts": 1}
-    assert aftercare_mod._brain_outcome(ctx) == "clarify"
-
-
-def test_the_agreement_map_is_strict():
-    """O hartă indulgentă („clarify e ok și dacă a răspuns") ar coborî rata de dezacord exact
-    acolo unde vrem s-o vedem, iar shadow-ul ar valida promovarea din construcție."""
-    assert aftercare_mod._SHADOW_AGREEMENT["clarify"] == "clarify"
-    assert aftercare_mod._SHADOW_AGREEMENT["order"] == "order"
-    assert "handoff" not in aftercare_mod._SHADOW_AGREEMENT  # ruta nu mai există
-
-
-# --- NX-275 felia 1: eșantionarea măsurătorii ---------------------------------
-
-
-def test_shadow_sampling_este_uniforma_pe_uuid_uri():
-    """Regresie pe o capcană reală, nu pe una imaginată.
-
-    Prima versiune pasa `turn_id`-ul direct lui `should_sample`, care citește ultimele 16
-    caractere hex ca fracțiune din 2^64. Într-un UUID RFC 4122, exact acolo începe nibble-ul de
-    VARIANTĂ (mereu 8|9|a|b), deci bucket-ul cade întotdeauna în [0,5 … 0,75): la 10% se
-    eșantiona ZERO, fără nicio eroare, iar raportul de acord ar fi rămas gol la nesfârșit.
-    Testul pinuiește proprietatea care contează (distribuția), nu implementarea hashului.
+    `agent_stage` e EXCLUS explicit: bucla lui de tool-calling e chiar agentul, nu un strat
+    dinaintea lui. `classify_json` (un singur consumator: extracția de fundal, POST-tur) nu
+    trăiește în `stages/`.
     """
-    import uuid
+    import ast
+    from pathlib import Path
 
-    ids = [str(uuid.uuid4()) for _ in range(3000)]
-    for pct, tol in ((50, 0.04), (10, 0.03), (1, 0.015)):
-        rate = sum(aftercare_mod._shadow_sampled(i, pct) for i in ids) / len(ids)
-        assert abs(rate - pct / 100) < tol, f"la {pct}% rata măsurată e {rate:.3f}"
+    offenders: list[str] = []
+    for path in sorted(Path("src/worker/stages").glob("*.py")):
+        if path.name == "agent.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"classify_json", "complete_schema", "run_tool_loop"}
+            ):
+                offenders.append(f"{path.as_posix()}:{node.lineno} → {node.func.attr}")
+    assert not offenders, "stagiu care cheamă un model înaintea agentului (D1): " + ", ".join(
+        offenders
+    )
 
 
-def test_shadow_sampling_este_determinista_si_fail_open():
-    """Determinismul e cerința de la reclaim: un tur reluat nu are voie să fie măsurat de două
-    ori (ar dubla numărătorul fără să miște numitorul). Iar un id absent MĂSOARĂ: mai bine un
-    apel nano în plus decât un gol tăcut în raport."""
-    turn = "7ac7fc36-9bac-44d6-93c8-c3dec0fe42eb"
-    assert len({aftercare_mod._shadow_sampled(turn, 37) for _ in range(50)}) == 1
-    assert aftercare_mod._shadow_sampled("", 1) is True
-    assert aftercare_mod._shadow_sampled(turn, 100) is True
-    assert aftercare_mod._shadow_sampled(turn, 0) is False
+async def test_the_agent_owns_the_route_when_nobody_else_set_it():
+    """Perechea: absența rutei nu mai e o excepție sub flag, e cazul NORMAL, iar `agent_stage` o
+    tratează ca atare. Fără asta, ștergerea triajului ar fi lăsat fiecare mesaj în fallback."""
+    from src.worker.stages.agent import agent_stage
+
+    class _BoomLLM:
+        model_agent = "model-de-test"
+
+        async def run_tool_loop(self, *a, **kw):
+            raise RuntimeError("oprim după ce ruta e decisă")
+
+    ctx = _ctx()
+    assert ctx.route is None
+    await agent_stage(ctx, PipelineDeps(conn=None, llm=_BoomLLM()))
+
+    assert ctx.route is not None and ctx.route.route is Route.SALES
+    assert _events(ctx, "route_defaulted")[0].properties["reason"] == "no_triage"
 
 
 # --- NX-275 felia 3: layoutul pentru prompt caching --------------------------
@@ -411,7 +349,6 @@ def test_layoutul_stins_e_byte_identic_cu_azi(monkeypatch):
     test care citește configul ambiental măsoară mediul, nu invariantul."""
     from src.agent.brain import _compose_user
     from src.agent.brain_models import UserParts
-    from src.config import get_settings
 
     monkeypatch.setenv("PROMPT_CACHE_LAYOUT_ENABLED", "false")
     get_settings.cache_clear()
@@ -433,7 +370,6 @@ def test_layoutul_aprins_urca_istoricul_in_fata(monkeypatch):
     octet variabil pus înaintea lui îl scoate din joc."""
     from src.agent.brain import _compose_user
     from src.agent.brain_models import UserParts
-    from src.config import get_settings
 
     monkeypatch.setenv("PROMPT_CACHE_LAYOUT_ENABLED", "true")
     get_settings.cache_clear()
@@ -474,7 +410,6 @@ def test_cheia_de_cache_nu_pleaca_pe_sarma_cu_flagul_stins(monkeypatch):
     from types import SimpleNamespace
 
     from src.agent import llm as llm_mod
-    from src.config import get_settings
 
     monkeypatch.setenv("PROMPT_CACHE_LAYOUT_ENABLED", "false")
     get_settings.cache_clear()

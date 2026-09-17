@@ -60,9 +60,12 @@ async def test_cost_add_accumulates_and_skips_zero():
 
 
 def test_estimate_rag_turn():
+    """NX-297: termenul de triaj a dispărut din estimare odată cu nano. `intent_detected` rămâne
+    în evenimentele testului DELIBERAT — un eveniment pe care nimeni nu-l mai emite nu are voie să
+    mai adauge cost dacă totuși apare (replay de analytics vechi, de exemplu)."""
     events = [Event("intent_detected"), Event("agent_recommended")]
-    cost = estimate_turn_cost(events, cost_triage_usd=0.0003, cost_agent_usd=0.003)
-    assert abs(cost - (0.0003 + 0.003)) < 1e-9
+    cost = estimate_turn_cost(events, cost_agent_usd=0.003)
+    assert abs(cost - 0.003) < 1e-9
 
 
 def test_estimate_tool_calling_turn():
@@ -72,14 +75,11 @@ def test_estimate_tool_calling_turn():
         Event("tool_call"),
         Event("agent_recommended"),
     ]
-    cost = estimate_turn_cost(events, cost_triage_usd=0.0003, cost_agent_usd=0.003)
-    assert abs(cost - (0.0003 + 0.003 * 3)) < 1e-9  # mini ×(1+2 tool_call)
+    cost = estimate_turn_cost(events, cost_agent_usd=0.003)
+    assert abs(cost - 0.003 * 3) < 1e-9  # agent ×(1+2 tool_call)
 
 
 def test_estimate_no_llm_is_zero():
-    assert estimate_turn_cost([], cost_triage_usd=0.0003, cost_agent_usd=0.003) == 0.0
+    assert estimate_turn_cost([], cost_agent_usd=0.003) == 0.0
     # doar cache hit (fără LLM) → 0
-    assert (
-        estimate_turn_cost([Event("cache_lookup")], cost_triage_usd=0.0003, cost_agent_usd=0.003)
-        == 0.0
-    )
+    assert estimate_turn_cost([Event("cache_lookup")], cost_agent_usd=0.003) == 0.0

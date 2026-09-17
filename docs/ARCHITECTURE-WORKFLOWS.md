@@ -1560,7 +1560,7 @@ sărind agentul. S-a întâmplat live pe demo.
 
 ## Lentila 4 · FLAG-URI — ce rulează de fapt
 
-**152 de flag-uri bool** în `Settings`; **91 ON**, **61 OFF** by default (numărate din cod, nu ținute
+**147 de flag-uri bool** în `Settings`; **89 ON**, **58 OFF** by default (numărate din cod, nu ținute
 minte: `[f for f in Settings.model_fields.values() if f.annotation is bool]`; cifra scrisă aici a
 fost 86/71/15 și a îmbătrânit tăcut). Lista exactă e în blocul `claim:flags` — CI-ul cade dacă
 divergează. Ce contează arhitectural:
@@ -1574,13 +1574,14 @@ măsurăm calitatea căutării fără să riscăm răspunsul.
 `injection_screen_enabled` · `web_identity_enabled` · `ai_disclaimer_enabled` ·
 `faq_locale_fallback_enabled` · `replay_store_prompt_enabled` · `validator_stock_claims_enabled`.
 
-**NX-297 (nano iese din proiect)** — patru flaguri independente, toate OFF, aprinse în ordinea
-feliilor: `agent_only_writer_enabled` (triajul nu mai SCRIE `simple`/`clarify`, doar clasifică) ·
-`clarify_tool_enabled` (`clarify_options`, opțiunile reale ale catalogului ca unealtă) ·
-`observed_constraints_enabled` (stiva învață din argumentele agentului, nu din sloturile nano) ·
-`chip_moves_v1_enabled` (chips-urile v1 devin mutări cu dovadă). Independente deliberat: fiecare
-poate fi stins fără să dea înapoi celelalte, iar `observed_constraints` scrie în aceeași stivă ca
-triajul, deci o a doua sursă pornită din reflex s-ar vedea abia pe trafic.
+**NX-297 (nano a IEȘIT din proiect)** — `stages/triage.py` e ȘTERS, împreună cu `MODEL_TRIAGE`,
+`TRIAGE_SYNC_SHADOW_ENABLED`, `TRIAGE_SHADOW_*`, `TRIAGE_FACTUAL_GUARD_ENABLED`,
+`CLOSURE_CHIPS_ENABLED`, `AGENT_ONLY_WRITER_ENABLED` și `COST_TRIAGE_USD`. Pipeline-ul are acum
+**10 stagii**, niciunul cu model înaintea agentului (poartă AST în `test_context_orchestration`).
+Ce a rămas sub flag: `clarify_tool_enabled` (OFF — `clarify_options` ca unealtă) și
+`chip_moves_v1_enabled` (OFF — chips ca mutări). `observed_constraints_enabled` a trecut pe **ON**:
+era a doua sursă a stivei de constrângeri, acum e singura, iar stinsă înseamnă „botul uită
+bugetul", nu „ca înainte".
 
 **Atenție la citire**: `web_enabled` e OFF în default-urile din cod și ON în `.env.prod`.
 Un flag OFF în `config.py` nu înseamnă OFF în producție — înseamnă „decizia se ia în env".
@@ -1671,7 +1672,6 @@ greeting_stage
 alias_stage
 cache_stage
 faq_stage
-triage_stage
 agent_stage
 fallback_stage
 ```
@@ -1732,7 +1732,6 @@ rollup_usage
 ```claim:flags
 admission_distributed_enabled = true
 admission_enabled = true
-agent_only_writer_enabled = false
 ai_disclaimer_enabled = false
 alias_enabled = true
 answer_plan_critic_enabled = false
@@ -1753,7 +1752,6 @@ chip_moves_v1_enabled = false
 clarification_policy_v2_enabled = false
 clarify_menu_enabled = true
 clarify_tool_enabled = false
-closure_chips_enabled = true
 compare_coherence_guard_enabled = true
 compare_intent_enabled = true
 comparison_facets_enabled = true
@@ -1801,7 +1799,7 @@ no_result_alternatives_enabled = true
 observability_enabled = false
 observability_metrics_enabled = true
 observability_traces_enabled = true
-observed_constraints_enabled = false
+observed_constraints_enabled = true
 partition_job_enabled = true
 plan_server_owned_fields_enabled = false
 pool_metrics_enabled = true
@@ -1848,9 +1846,6 @@ spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
 summary_enabled = true
 topic_switch_reset_enabled = true
-triage_factual_guard_enabled = true
-triage_shadow_enabled = true
-triage_sync_shadow_enabled = false
 turn_budget_alerts_enabled = true
 turn_budget_enforced = false
 turn_deadline_enabled = false

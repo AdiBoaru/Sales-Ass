@@ -52,10 +52,17 @@ def test_greeting_complete_only_on_pure_greeting():
     assert mixed.uncovered  # obligația de întrebare rămâne pe listă
 
 
-def test_triage_never_finalizes_under_single_brain():
-    decision = control_plane.decide(_ctx("mulțumesc frumos"), "triage_stage")
-    assert not decision.complete
-    assert decision.reason == "competing_llm_writer"
+def test_the_never_complete_set_is_empty_but_declared():
+    """NX-297: `_NEVER_COMPLETE` conținea `triage_stage`, singurul writer LLM care putea încheia un
+    tur în paralel cu brain-ul. A plecat odată cu nano, deci mulțimea e GOALĂ — dar rămâne, ca
+    punct de extindere declarat. Testul pinuiește exact asta: dacă cineva adaugă un al doilea
+    writer, îl adaugă AICI, nu îl descoperă pe trafic."""
+    assert control_plane._NEVER_COMPLETE == frozenset()
+    # Golirea mulțimii nu slăbește poarta: un stagiu cu conținut canonic tot nu finalizează un
+    # mesaj MIXT — regula aia e separată (`_SINGLE_OBLIGATION_ONLY`) și trebuie să rămână în
+    # picioare singură.
+    mixed = control_plane.decide(_ctx("vreau o cremă și cât costă livrarea?"), "faq_stage")
+    assert not mixed.complete and mixed.reason == "mixed_intent"
 
 
 def test_gates_and_terminal_stages_always_finalize():
@@ -104,10 +111,10 @@ def test_gate_keeps_complete_reply():
 
 
 def test_gate_drops_pending_question_proposal_on_demote():
-    ctx = _ctx("un cadou și cât costă livrarea?")
+    ctx = _ctx("vreau o cremă și cât costă livrarea?")
     ctx.state_proposals.append(SimpleNamespace(op="set_pending_question", key="intent"))
     ctx.set_clarify("Pentru cine e cadoul?", field="intent", resume_route="sales")
-    control_plane.gate_early_exit(ctx, "triage_stage")
+    control_plane.gate_early_exit(ctx, "faq_stage")
     assert ctx.reply is None
     assert all(p.op != "set_pending_question" for p in ctx.state_proposals)
 

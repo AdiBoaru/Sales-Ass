@@ -7,7 +7,7 @@ from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.config import get_settings
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Contact, InboundMessage, Route, TurnContext
-from src.worker.stages.triage import _emit_query_spec_shadow
+from src.worker.stages.agent import _emit_query_spec_shadow
 
 
 def _pack():

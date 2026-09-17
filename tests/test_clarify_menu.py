@@ -449,87 +449,90 @@ def _turn_ctx(body: str):
     return ctx
 
 
-async def test_triage_stage_drops_ungrounded_chips_end_to_end(monkeypatch) -> None:
-    """Firul întreg, cu mesajul REAL care a produs cardul: catalogul intră în prompt, iar
-    sugestiile despre cabluri nu ajung la client."""
-    from src.catalog.clarify_menu import clear_clarify_menu_cache
+async def test_the_closed_menu_drops_ungrounded_chips_end_to_end() -> None:
+    """Firul întreg, cu mesajul REAL care a produs cardul: meniul se compune din catalogul fals,
+    iar sugestiile despre cabluri nu trec de poartă.
+
+    NX-297: testul mergea prin `triage_stage`, fiindcă acolo trăia singurul producător în care un
+    MODEL scria textul chip-ului. Stagiul a fost șters; poarta a rămas, și ea e subiectul. Testul
+    cheamă acum exact funcțiile pe care le cheamă calea vie (`menu_for_turn` +
+    `ground_suggestions`), deci acoperă aceeași compunere reală — vocabular + fațete + round-trip
+    — fără vehicul."""
+    from src.catalog.clarify_menu import (
+        clear_clarify_menu_cache,
+        ground_suggestions,
+        menu_for_turn,
+    )
     from src.catalog.vocabulary_cache import clear_vocabulary_cache
     from src.worker.runner import PipelineDeps
-    from src.worker.stages.triage import triage_stage
 
     clear_vocabulary_cache()
     clear_clarify_menu_cache()
-    llm = _RecordingLLM(
-        {
-            "route": "clarify",
-            "missing_field": "intent",
-            "confidence": "low",
-            "reply": "Ca sa te ajut mai bine, poti sa-mi spui mai exact ce cauti?",
-            "suggestions": [
-                "Pentru telefon, USB-C, 1-2 metri",
-                "Pentru incarcator, USB-A la USB-C",
-                "Pentru consola, cablu USB de date",
-                "Nu stiu, imi recomanzi un cablu bun?",
-            ],
-        }
-    )
     ctx = _turn_ctx("vreau un cablu usb")
-    await triage_stage(ctx, PipelineDeps(conn=_FakeConn(), llm=llm))
+    menu = await menu_for_turn(ctx, PipelineDeps(conn=_FakeConn(), llm=None))
 
-    assert "Opțiuni reale din catalog" in llm.user_prompt
-    assert "Ten" in llm.user_prompt
-    assert "nu se regăsește în catalog" in llm.user_prompt  # a cerut ceva ce nu vindem
-    chips = ctx.reply.suggestions
-    assert all("USB" not in c and "cablu" not in c and "consola" not in c for c in chips), chips
-    assert chips == ["Ten", "Machiaj", "Par"]
+    assert menu.usable
+    assert menu.catalog_miss  # a cerut ceva ce magazinul nu vinde
+    kept, dropped = ground_suggestions(
+        [
+            "Pentru telefon, USB-C, 1-2 metri",
+            "Pentru incarcator, USB-A la USB-C",
+            "Pentru consola, cablu USB de date",
+            "Nu stiu, imi recomanzi un cablu bun?",
+        ],
+        menu,
+        limit=5,
+    )
+    assert all("USB" not in c and "cablu" not in c and "consola" not in c for c in kept), kept
+    assert list(kept) == ["Ten", "Machiaj", "Par"]
+    assert len(dropped) == 4
 
 
-async def test_triage_stage_keeps_grounded_chips(monkeypatch) -> None:
+async def test_the_closed_menu_keeps_grounded_chips() -> None:
     """Simetria care contează: o sugestie care numește catalogul NU se atinge."""
-    from src.catalog.clarify_menu import clear_clarify_menu_cache
+    from src.catalog.clarify_menu import (
+        clear_clarify_menu_cache,
+        ground_suggestions,
+        menu_for_turn,
+    )
     from src.catalog.vocabulary_cache import clear_vocabulary_cache
     from src.worker.runner import PipelineDeps
-    from src.worker.stages.triage import triage_stage
 
     clear_vocabulary_cache()
     clear_clarify_menu_cache()
-    llm = _RecordingLLM(
-        {
-            "route": "clarify",
-            "missing_field": "intent",
-            "reply": "Pentru ce zona cauti?",
-            "suggestions": ["Caut ceva pentru Ten", "Ma intereseaza Machiaj", "Ceva de pe Marte"],
-        }
-    )
     ctx = _turn_ctx("vreau ceva bun")
-    await triage_stage(ctx, PipelineDeps(conn=_FakeConn(), llm=llm))
+    menu = await menu_for_turn(ctx, PipelineDeps(conn=_FakeConn(), llm=None))
 
-    chips = ctx.reply.suggestions
-    assert "Caut ceva pentru Ten" in chips
-    assert "Ma intereseaza Machiaj" in chips
-    assert "Ceva de pe Marte" not in chips
+    kept, _ = ground_suggestions(
+        ["Caut ceva pentru Ten", "Ma intereseaza Machiaj", "Ceva de pe Marte"], menu, limit=5
+    )
+    assert "Caut ceva pentru Ten" in kept
+    assert "Ma intereseaza Machiaj" in kept
+    assert "Ceva de pe Marte" not in kept
 
 
-async def test_triage_stage_is_unchanged_when_the_flag_is_off(monkeypatch) -> None:
-    """Kill-switch: cu poarta stinsă, sugestiile modelului pleacă exact ca înainte."""
+async def test_the_gate_is_transparent_when_the_flag_is_off(monkeypatch) -> None:
+    """Kill-switch: cu poarta stinsă, meniul e gol, iar un meniu gol nu filtrează nimic
+    (invariantul 2) — sugestiile trec exact ca înainte."""
+    from src.catalog.clarify_menu import (
+        clear_clarify_menu_cache,
+        ground_suggestions,
+        menu_for_turn,
+    )
+    from src.catalog.vocabulary_cache import clear_vocabulary_cache
     from src.config import get_settings
     from src.worker.runner import PipelineDeps
-    from src.worker.stages.triage import triage_stage
 
     get_settings.cache_clear()
+    clear_vocabulary_cache()
+    clear_clarify_menu_cache()
     monkeypatch.setenv("CLARIFY_MENU_ENABLED", "false")
     try:
-        llm = _RecordingLLM(
-            {
-                "route": "clarify",
-                "missing_field": "intent",
-                "reply": "Ce cauti?",
-                "suggestions": ["Pentru consola, cablu USB de date"],
-            }
-        )
         ctx = _turn_ctx("vreau un cablu usb")
-        await triage_stage(ctx, PipelineDeps(conn=_FakeConn(), llm=llm))
-        assert ctx.reply.suggestions == ["Pentru consola, cablu USB de date"]
-        assert "Opțiuni reale din catalog" not in llm.user_prompt
+        menu = await menu_for_turn(ctx, PipelineDeps(conn=_FakeConn(), llm=None))
+        assert not menu.usable and menu.reason == "disabled"
+        kept, dropped = ground_suggestions(["Pentru consola, cablu USB de date"], menu, limit=5)
+        assert list(kept) == ["Pentru consola, cablu USB de date"]
+        assert not dropped
     finally:
         get_settings.cache_clear()

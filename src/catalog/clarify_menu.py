@@ -96,11 +96,10 @@ __all__ = [
 #: nu are nimic care să-l oprească.
 CHIP_PRODUCERS: dict[str, str] = {
     # ── poartă EXPLICITĂ ────────────────────────────────────────────────────────────────────
-    "src/worker/stages/triage.py::triage_stage": (
-        "ANCORAT STRUCTURAL: sugestiile lui nano trec prin `ground_suggestions` contra meniului "
-        "închis construit din catalogul real (NX-295). Singurul producător cu poartă explicită, "
-        "fiindcă e singurul unde textul chip-ului e scris de un model."
-    ),
+    # NX-297: intrarea triajului a plecat odată cu stagiul. Era singurul producător în care textul
+    # chip-ului era scris de un MODEL și trecea printr-o poartă (`ground_suggestions` contra
+    # meniului închis). Azi niciun model nu mai rostește un chip liber pe calea vie: modelul poate
+    # doar REFORMULA o mutare oferită, iar reformularea are poarta ei, per mutare.
     "src/agent/brain.py::_set_brain_reply": (
         "ANCORAT STRUCTURAL, prin MUTĂRI (NX-296): chip-ul nu e un text pe care îl validăm, ci o "
         "mutare cu dovadă calculată în tur (`conversation/chip_moves.py`), exprimată dintr-un "

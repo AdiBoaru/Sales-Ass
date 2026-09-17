@@ -1078,6 +1078,12 @@ class _PortedExecute:
 
     async def _search(self, name: str, args: dict[str, Any], *, seq: int | None = None) -> str:
         ctx, run = self.ctx, self.run
+        # NX-297 felia 3: stiva de constrângeri învață din ce a CERUT agentul. Pe v1 înregistrarea
+        # stă în `ToolRun.execute`, dar calea asta o OCOLEȘTE (căutarea trece prin portul NX-238),
+        # deci fără linia de aici creierul unic ar fi singurul contract fără memorie de buget sau
+        # raft. N-ar fi apărut ca eroare: doar botul ar fi uitat, iar uitarea nu are stack trace.
+        if isinstance(args, dict):
+            run.search_args.append(dict(args))
         started = perf_counter()
         spec = _spec_from_args(ctx, args)
         budget = turn_budget.current()

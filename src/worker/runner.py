@@ -5,9 +5,9 @@ poate seta `ctx.reply` → early exit. Stagiile NU știu că sunt măsurate — 
 emite evenimentele de observabilitate (principiul 10). Niciun loop de orchestrare,
 nicio săritură înapoi (principiul 1).
 
-Pentru G2b există un singur stagiu real (`echo_stage`, determinist, fără LLM) ca
-să dovedim fluxul cap-coadă. Stagiile adevărate (gates → free_layers → triaj →
-context → agent → validator → sender) se adaugă în ordine în G3+.
+Ordinea reală: gates → straturi gratuite (alias/cache/FAQ/greeting) → agent (cu validator
+inline) → fallback. NX-297: triajul nano a fost ȘTERS din pipeline — nu mai există niciun model
+mic între client și agent, iar ruta o decide `agent_stage` (P3: proprietar unic, altul).
 """
 
 import logging
@@ -188,7 +188,6 @@ _PHASE_BY_STAGE: dict[str, str] = {
     "alias_stage": "gates",
     "cache_stage": "gates",
     "faq_stage": "gates",
-    "triage_stage": "model",
 }
 
 
@@ -262,28 +261,28 @@ def _record_phase(stage_name: str, latency_ms: float) -> None:
 
 
 def _rebind_turn_class(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> None:
-    """Clasa de tur se știe abia după ce ruta e decisă (triaj / kernel de acțiune). Re-legăm o
-    dată, PĂSTRÂND contoarele consumate — un tur nu-și șterge istoria fiindcă s-a reclasificat."""
-    if rt.ledger is None or stage_name not in ("triage_stage", "action_kernel_stage"):
-        return
-    route = ctx.route.route.value if ctx.route and ctx.route.route else None
-    compare = False
-    if route is None and getattr(get_settings(), "triage_sync_shadow_enabled", False):
-        # NX-251: fără triaj sincron nu există rută în punctul ăsta, iar `classify(None)` ar da
-        # mereu clasa implicită — adică o comparație ar primi bugetul unei recomandări. Semnalul
-        # vine din ACELEAȘI obligații deterministe pe care le citește control plane-ul: o
-        # comparație rămâne comparație și fără un clasificator care s-o numească.
-        from src.agent.brain_models import obligations_from_ctx  # noqa: PLC0415 — evită ciclu
+    """Clasa de tur, re-legată o dată, PĂSTRÂND contoarele consumate — un tur nu-și șterge istoria
+    fiindcă s-a reclasificat.
 
-        compare = any(o.kind == "compare" for o in obligations_from_ctx(ctx))
-    turn_class = turn_budget.classify(
-        route,
-        # `ctx.action` e comanda opacă a clientului (NX-236) — un tur care EXECUTĂ ceva e mutație,
-        # oricât de simplu ar arăta textul.
-        has_action=getattr(ctx, "action", None) is not None,
-        purchase_intent=bool(ctx.route.purchase_intent) if ctx.route else False,
-        compare=compare,
-    )
+    NX-297 felia 4b: sursa nu mai e RUTA, ci OBLIGAȚIILE deterministe ale mesajului
+    (`turn_class_for`, cod pur). Nu e o înlocuire de convenienț: `classify(route=…)` avea AMBELE
+    semnale (`route`, `purchase_intent`) din triaj, deci fără el orice tur ar fi devenit
+    `RECOMMENDATION` — riscul declarat în card, latent cât timp `turn_budget_enforced=false` și
+    vizibil exact în ziua în care cineva aprinde bugetele.
+
+    Momentul rămâne după `action_kernel_stage`: obligațiile există din mesajul brut, dar una
+    dintre ele (`action`) apare abia după ce kernelul a deschis tokenul opac, iar o mutație
+    trebuie să-și primească bugetul de mutație.
+
+    Ce se pierde, declarat: `purchase_intent` (nano) urca turul la `MUTATION` înainte ca vreo
+    mutație să existe. Nu se înlocuiește cu nimic — o intenție de cumpărare GHICITĂ nu e o
+    mutație; mutația apare când modelul cheamă `cart_add`/`checkout_link`, iar aia se vede în
+    `action`."""
+    if rt.ledger is None or stage_name != "action_kernel_stage":
+        return
+    from src.agent.brain_models import obligations_from_ctx  # noqa: PLC0415 — evită ciclu
+
+    turn_class = turn_budget.turn_class_for(obligations_from_ctx(ctx))
     if turn_class is rt.ledger.budget.turn_class:
         return
     rt.ledger.rebind(turn_budget.budget_for(turn_class, get_settings()))
@@ -452,9 +451,9 @@ def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Fallback grațios: dacă niciun stagiu n-a produs reply (rută order neacoperită
-    încă, triaj fără răspuns, sau fără cheie OpenAI), iese o întrebare
-    de clarificare — NU tăcere (principiul 6) și NU text de schelet."""
+    """Fallback grațios: dacă niciun stagiu n-a produs reply (mesaj gol, bucla agentului
+    eșuată, sau fără cheie OpenAI), iese o întrebare de clarificare — NU tăcere (principiul 6)
+    și NU text de schelet."""
     ctx.set_reply(
         "Hmm, n-am înțeles exact 🙂 Cauți un produs anume, ai o întrebare despre o "
         "comandă, sau altceva?",
@@ -482,18 +481,17 @@ from src.worker.stages.faq import faq_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.greeting import greeting_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
-from src.worker.stages.triage import triage_stage  # noqa: E402
 
-# clarify_resume (NX-130) rulează după `language` și ÎNAINTE de greeting/cache/triage:
+# clarify_resume (NX-130) rulează după `language` și ÎNAINTE de greeting/cache:
 # dacă un slot e în așteptare, răspunsul scurt al clientului e consumat determinist
-# (rută + constraint), nu tratat ca salut / cache / re-triat de la zero.
+# (rută + constraint), nu tratat ca salut / cache / trimis de la zero la agent.
 # alias (NX-73) e IMEDIAT ÎNAINTE de cache: match exact pe index, mai ieftin și mai sigur decât
 # embed-ul semantic din cache. Un hit FAQ early-exit-ează; un hit route/category setează ctx.route,
-# iar cache/FAQ/triaj îl respectă (skip dacă ctx.route e setat) → agentul servește.
+# iar cache/FAQ îl respectă (skip dacă ctx.route e setat) → agentul servește.
 # action_kernel (NX-236) rulează IMEDIAT după `language` și înaintea tuturor straturilor care
 # interpretează TEXT: o acțiune opacă e o decizie deja luată, nu o intenție de ghicit, iar mesajul
 # ei e gol prin construcție (eticheta butonului nu e input). Un `Handled` iese cu reply; un
-# `Continue` setează `ctx.route`, pe care alias/cache/FAQ/triaj îl respectă (skip). Fără acțiune pe
+# `Continue` setează `ctx.route`, pe care alias/cache/FAQ îl respectă (skip). Fără acțiune pe
 # tur, stagiul e un no-op — pipeline-ul de text rămâne byte-identic.
 DEFAULT_STAGES: list[Stage] = [
     gates_stage,
@@ -504,7 +502,6 @@ DEFAULT_STAGES: list[Stage] = [
     alias_stage,
     cache_stage,
     faq_stage,
-    triage_stage,
     agent_stage,
     fallback_stage,
 ]

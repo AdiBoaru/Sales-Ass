@@ -127,7 +127,6 @@ def _measure(inp, business, examples) -> dict[str, int]:
         "system_rich": tok(prompt_builder.build_rich_system(inp)),
         "system_reco": tok(prompt_builder.build_reco_system(inp)),
         "system_compare": tok(prompt_builder.build_compare_system(inp)),
-        "system_triage": tok(_triple_quoted(ROOT / "src/worker/stages/triage.py", "_SYSTEM")),
         "system_plan_v2": tok(_triple_quoted(ROOT / "src/agent/brain.py", "_PLAN_V2_SYSTEM")),
         "tools_sales": tok_json(tool_schemas(sales, examples)),
         "tools_union": tok_json(tool_schemas(union, examples)),
@@ -147,11 +146,14 @@ def _cost_model(m: dict[str, int], args) -> dict[str, float]:
     `--schema-uncached` păstrează scenariul pesimist, ca ipoteza să rămână testabilă, nu ștearsă.
 
     Ce NU se cache-uiește rămâne partea per tur: mesajul, istoricul care crește, tool results."""
-    agent, nano, c = args.model_agent, args.model_triage, args.cache_ratio
+    agent, c = args.model_agent, args.cache_ratio
     user, tool_res = args.user_tokens, args.tool_result_tokens
 
+    # NX-297: termenul de triaj a dispărut din AMBELE părți ale comparației. Pe v1 era primul
+    # apel al turului; pe v2 era măsurătoarea shadow. Nano a fost șters din proiect, deci un model
+    # de cost care încă îl adună ar compara două sisteme care nu există.
     v1_static = m["system_agent"] + m["tools_sales"]
-    v1 = cost_for(nano, m["system_triage"] + 300, int(m["system_triage"] * c), args.out_triage)
+    v1 = 0.0
     for i in range(args.rounds):
         v1 += cost_for(agent, v1_static + user + i * tool_res, int(v1_static * c), 120)
     v1 += cost_for(
@@ -169,9 +171,7 @@ def _cost_model(m: dict[str, int], args) -> dict[str, float]:
             int(v2_cacheable * c),
             args.out_plan if last else 120,
         )
-    v2_no_shadow = v2
-    v2 += cost_for(nano, m["system_triage"] + 300, int(m["system_triage"] * c), args.out_triage)
-    return {"v1": v1, "v2": v2, "v2_fara_shadow": v2_no_shadow}
+    return {"v1": v1, "v2": v2, "v2_fara_shadow": v2}
 
 
 async def main() -> None:
@@ -183,7 +183,6 @@ async def main() -> None:
     p.add_argument("--tool-result-tokens", type=int, default=1200, help="IPOTEZĂ: 6 produse")
     p.add_argument("--out-plan", type=int, default=700, help="IPOTEZĂ: output AnswerPlanV2")
     p.add_argument("--out-prose", type=int, default=350, help="IPOTEZĂ: output proză v1")
-    p.add_argument("--out-triage", type=int, default=90, help="IPOTEZĂ: output triaj")
     p.add_argument("--cache-ratio", type=float, default=0.0, help="fracția de prefix din cache")
     p.add_argument(
         "--schema-uncached",
@@ -194,7 +193,6 @@ async def main() -> None:
     args = p.parse_args()
     settings = get_settings()
     args.model_agent = settings.model_agent
-    args.model_triage = settings.model_triage
 
     inp, business, examples, n_cat, n_alias = await _tenant_prompt_inputs(args.business)
     m = _measure(inp, business, examples)
@@ -208,7 +206,7 @@ async def main() -> None:
     v1_call = m["system_agent"] + m["tools_sales"]
     v2_call = m["system_agent"] + m["system_plan_v2"] + m["tools_union"] + m["plan_schema"]
     print(f"business={args.business}  categorii={n_cat}  aliase_aprobate={n_alias}")
-    print(f"model_agent={args.model_agent}  model_triage={args.model_triage}")
+    print(f"model_agent={args.model_agent}")
     if not has_rates(args.model_agent):
         print(
             f"  ⚠ {args.model_agent} NU are tarife (`src/agent/pricing.py`) → cade pe fallback-ul "
@@ -219,7 +217,6 @@ async def main() -> None:
     print("\n=== TOKENI MĂSURAȚI (retrimiși la FIECARE apel de model) ===")
     for label, key in (
         ("system agent (generat din DB)", "system_agent"),
-        ("system triaj nano (v1)", "system_triage"),
         ("system rich compose (v1)", "system_rich"),
         ("system reco/retry (v1)", "system_reco"),
         ("system compare (v1)", "system_compare"),

@@ -6,7 +6,7 @@ NU atinge Supabase/OpenAI reale: query-urile de DB sunt monkeypatch-uite pe un M
 (`_Store`) — dar `conversations.state` se persistă/re-hidratează prin codul REAL
 (`patch_conversation_state` fake stochează jsonb-ul → `from_jsonb` îl reîncarcă la turul 2). LLM-ul
 e scriptat (`ScriptedLLM`). Pipeline-ul rulat = `DEFAULT_STAGES` (gates→language→clarify→greeting→
-alias→cache→faq→triage→agent→fallback), exact ca în producție. Calea SYNC web (deliver=False, ca
+alias→cache→faq→agent→fallback), exact ca în producție. Calea SYNC web (deliver=False, ca
 `src/web/app.py` POST /web/chat).
 
 Turul 1: search → 3 produse (88.99 / 58.99 / 97.99) → reply rich → displayed_products = cele 3.
@@ -26,7 +26,6 @@ import src.worker.processor as proc
 import src.worker.stages.alias as alias_mod
 import src.worker.stages.cache as cache_mod
 import src.worker.stages.faq as faq_mod
-import src.worker.stages.triage as triage_mod
 from src.agent import planner as planner_mod
 from src.db.provider import static_db
 from src.models import BusinessConfig, Contact
@@ -137,10 +136,9 @@ class _Store:
 
 
 class ScriptedLLM:
-    """Triaj (classify_json) + bucla agentului (run_tool_loop) + recomandarea rich
-    (complete_schema), scriptate per-tur. Embed → vector neutru (cache/faq stub-uite = miss)."""
+    """Bucla agentului (run_tool_loop) + recomandarea rich (complete_schema), scriptate per-tur.
+    Embed → vector neutru (cache/faq stub-uite = miss)."""
 
-    model_triage = "nano"
     model_agent = "mini"
 
     def __init__(self, *, mode: str, tool_products: list[dict[str, Any]]):
@@ -302,8 +300,6 @@ def store(monkeypatch):
     async def _routing_aliases(conn, business_id, **k):
         return []
 
-    # list_category_slugs e importat în triage.py; list_category_names/list_routing_aliases în agent
-    monkeypatch.setattr(triage_mod, "list_category_slugs", _cat_slugs)
     monkeypatch.setattr(agent_mod, "list_category_names", _cat_names)
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _routing_aliases)
 

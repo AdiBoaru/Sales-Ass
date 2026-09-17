@@ -257,7 +257,6 @@ def _client(behaviors):
     comp = _Completions(behaviors)
     return LLMClient(
         SimpleNamespace(chat=SimpleNamespace(completions=comp)),
-        model_triage="nano",
         model_agent="mini",
     ), comp
 
@@ -355,7 +354,6 @@ async def test_slow_call_is_cut_by_the_turn_deadline(monkeypatch, _no_sleep):
 
     client = LLMClient(
         SimpleNamespace(chat=SimpleNamespace(completions=_Hanging())),
-        model_triage="nano",
         model_agent="mini",
     )
     d = TurnDeadline(total_ms=120, terminal_reserve_ms=20)

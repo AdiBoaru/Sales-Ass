@@ -48,6 +48,7 @@ from src.agent.planner import (
     resolve_cheaper_followup,
 )
 from src.agent.prompt_builder import PromptInputs
+from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.agent.tool_definitions import tenant_enum_values, tool_schemas
 from src.agent.tool_executor import (
     ToolRun,
@@ -76,7 +77,7 @@ from src.config import get_settings
 from src.conversation import observed_constraints
 from src.conversation.needs import NeedVocabulary
 from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
-from src.conversation.state_v2 import ConversationStateV2, project_v1
+from src.conversation.state_v2 import ConversationStateV2, active_needs, project_v1
 from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
@@ -443,6 +444,46 @@ async def _cheaper_seed(
     return cheaper_seed_messages(ctx, outcome.products, baseline=outcome.baseline)
 
 
+def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:
+    """NX-208 (D6/D11): emite `query_spec_shadow` pe turul sales/order — telemetrie FĂRĂ PII,
+    ZERO schimbare de comportament. Kill-switch `query_spec_shadow_enabled` (default OFF).
+
+    Emite DOAR proiecția Safe (fără raw/text liber): intent, sort, fațete, nr. constrângeri,
+    prezența unei referințe. Best-effort — orice eroare e înghițită (nu atinge turul, P6).
+
+    NX-297: trăia în `stages/triage.py`, dar n-avea nicio legătură cu nano — doar se întâmpla ca
+    acolo să fie locul unde ruta devenea cunoscută. Ștearsă odată cu fișierul, ar fi dispărut tăcut
+    tocmai măsurătoarea pe care se decide dezghețarea enforcement-ului QuerySpec (NX-188/189/210).
+    S-a mutat aici, unde ruta e decisă azi, cu același kill-switch și același vocabular."""
+    if not get_settings().query_spec_shadow_enabled or route not in (Route.SALES, Route.ORDER):
+        return
+    try:
+        spec = build_query_spec(
+            ctx.message.body or "",
+            ctx.business.domain_pack,
+            locale=ctx.language,
+            needs=active_needs(ctx),
+        )
+        # Vocabular CONTROLAT (fațete din cod + concern-uri din pack + locale-urile
+        # businessului): fără el proiecția Safe e goală (fail-closed); cu el telemetria rămâne,
+        # iar PII-ul tot nu poate ieși.
+        safe = spec.to_safe(
+            safe_vocabulary(
+                ctx.business.domain_pack, locales=tuple(ctx.business.supported_locales or ())
+            )
+        )
+        ctx.emit(
+            "query_spec_shadow",
+            intent=safe.intent,
+            sort=safe.sort,
+            n_constraints=len(safe.constraints),
+            facets=sorted({c.facet for c in safe.constraints}),
+            has_reference=bool(spec.reference_terms),
+        )
+    except Exception:  # noqa: BLE001 — shadow pur observabil; nu blochează niciodată turul
+        log.warning("query_spec_shadow emit failed", exc_info=True)
+
+
 def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
     """Constrângerile observate în apelurile de căutare ale turului → stiva persistată (NX-297).
 
@@ -461,11 +502,15 @@ def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
     if not get_settings().observed_constraints_enabled or not run.search_args:
         return
     observed, stats = observed_constraints.from_search_args(run.search_args, message)
-    if not observed:
+    # Raftul căutat e marker de SUBIECT, nu constrângere: nu se coroborează și e singurul care poate
+    # reseta stiva. Se pasează chiar și cu `observed` gol — „am schimbat raftul" e o informație
+    # completă în sine.
+    category = observed_constraints.observed_category(run.search_args)
+    if not observed and not category:
         if stats["inferred"]:
             ctx.emit("constraint_source", kept=0, inferred=stats["inferred"])
         return
-    merged, _ = merge_constraints(ctx.state.search_constraints, observed, None)
+    merged, _ = merge_constraints(ctx.state.search_constraints, observed, category)
     ctx.state.search_constraints = merged
     ctx.state_proposals.extend(_need_proposals(ctx, observed))
     ctx.emit(
@@ -482,24 +527,28 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if deps.llm is None:
         return
     route: RouteDecision | None = ctx.route
-    # NX-239: sub single-brain, agentul (MainBrain) e writerul unic și pentru rutele pe care azi
-    # le scria nano (`simple`/`clarify` — reply-urile triajului sunt demote-uite de control plane
-    # în semnale). Cu flagul stins, mulțimea rămâne cea de azi — byte-identic.
+    # NX-239: sub single-brain, agentul (MainBrain) e writerul unic și pentru rutele `simple`/
+    # `clarify`, pe care le mai poate produce `clarify_resume`/`alias`. Cu flagul stins, mulțimea
+    # rămâne cea de azi.
     allowed = (Route.SALES, Route.ORDER)
     if getattr(get_settings(), "single_brain_enabled", False):
         allowed = (Route.SALES, Route.ORDER, Route.SIMPLE, Route.CLARIFY)
-    # NX-251: fără triaj sincron nu există rută când ajungem aici. Absența ei nu înseamnă „nimic
-    # de făcut", ci „tot ce n-au oprit straturile gratuite" — brain-ul e writerul acelui rest.
-    # Sub flag, proprietarul lui `ctx.route` devine stagiul ăsta (triajul nu mai scrie nimic), deci
-    # P3 se păstrează: un singur writer, doar că altul. `clarify_resume` rămâne întâietate — dacă
-    # el a setat deja ruta, nu o atingem.
-    unrouted = route is None and getattr(get_settings(), "triage_sync_shadow_enabled", False)
+    # NX-297 felia 4b: fără triaj, ABSENȚA rutei e cazul NORMAL, nu o excepție sub flag. Nu
+    # înseamnă „nimic de făcut", ci „tot ce n-au oprit straturile gratuite" — iar agentul e
+    # writerul acelui rest. Proprietarul lui `ctx.route` e stagiul ăsta, deci P3 se păstrează: un
+    # singur writer, doar că altul. `clarify_resume`, `alias` și `action_kernel` rămân cu
+    # întâietate — dacă au setat deja ruta, n-o atingem.
+    unrouted = route is None
     if unrouted:
         route = RouteDecision(route=Route.SALES)
         ctx.route = route
         ctx.emit("route_defaulted", reason="no_triage")
     if route is None or route.route not in allowed:
         return
+    # NX-208: telemetria QuerySpec se emite AICI de la NX-297 — primul punct în care ruta e
+    # cunoscută. Înainte de orice muncă, ca un tur care iese devreme (link/compare determinist)
+    # să fie tot numărat.
+    _emit_query_spec_shadow(ctx, route.route)
     query = (ctx.message.body or "").strip()
     if not query:
         return
@@ -688,6 +737,11 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                     history=history,
                     policy=SafetyPolicy.for_turn(ctx),
                 )
+                # Aceeași învățare a stivei ca pe v1 (vezi mai jos). Ramura asta se întoarce
+                # ÎNAINTE de ea, deci fără linia de aici creierul unic ar fi singurul contract
+                # fără memorie de constrângeri — și n-ar fi apărut ca eroare, ci ca „botul uită
+                # bugetul", pe un flag deja aprins în `.env`.
+                _learn_constraints(ctx, run, query)
                 return
             final = await deps.llm.run_tool_loop(system, user, tools, run.execute)
             retrieved = run.retrieved  # produsele acumulate de tool executor în această buclă
