@@ -663,16 +663,19 @@ def show_more_phrase(query: str) -> bool:
     return _MORE_RE.search(query) is not None and _CHEAPER_RE.search(query) is None
 
 
-def _turn_has_new_constraints(ctx: TurnContext, route: Any) -> bool:
+def turn_has_new_constraints(ctx: TurnContext, route: Any) -> bool:
     """Turul cere ceva ÎN PLUS față de ce se vede pe ecran? (NX-297 felia 3)
 
-    Porțile ANCORATE (link, comparație) au nevoie de predicatul ăsta ca să nu servească tăcut
-    produsul de bază când clientul a adăugat o condiție: «compară-le, dar sub 100 lei» nu e o
-    comparație pe setul afișat, e o căutare nouă.
+    Porțile ANCORATE (link, comparație, superlativ pe setul afișat) au nevoie de predicatul ăsta ca
+    să nu servească tăcut produsul de bază când clientul a adăugat o condiție: «compară-le, dar sub
+    100 lei» nu e o comparație pe setul afișat, e o căutare nouă.
 
     Avea un singur producător: sloturile triajului. Fără nano, `route.filters` e gol la fiecare tur
     și poarta ar rămâne permanent deschisă — aceeași clasă de defect ca la paginare (NX-251), doar
-    pe alte două porți.
+    pe alte TREI porți: `link_intent` și `compare_intent` de aici, plus `attr_query` din
+    `planner.py`. Public (nu `_`) exact din motivul ăsta: a treia a rămas pe `not route.filters`
+    într-o primă rundă fiindcă stătea în alt modul, iar o clasă reparată pe două din trei nu e
+    reparată — e una în care defectul rămas e mai greu de găsit.
 
     A doua sursă e DETERMINISTĂ și, spre deosebire de reziduul lexical de la paginare, e precisă:
     `extract_constraints` (NX-266) scoate din mesajul BRUT valorile cu unitate (preț, volum, indici
@@ -761,7 +764,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     link_intent = (
         get_settings().link_intent_enabled
         and bool(anchorable)
-        and not _turn_has_new_constraints(ctx, route)
+        and not turn_has_new_constraints(ctx, route)
         and _LINK_RE.search(query) is not None
         and _CHEAPER_RE.search(query) is None
     )
@@ -775,7 +778,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     compare_intent = (
         get_settings().compare_intent_enabled
         and len(ctx.state.displayed_products) >= 2
-        and not _turn_has_new_constraints(ctx, route)
+        and not turn_has_new_constraints(ctx, route)
         and _COMPARE_RE.search(query) is not None
         and _CHEAPER_RE.search(query) is None
     )
