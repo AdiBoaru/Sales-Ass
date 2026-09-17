@@ -232,6 +232,13 @@ async def demand_report(
         "named_not_found": await top_unmet(
             conn, business_id, since, until, reason="named_not_found", limit=limit
         ),
+        # NX-293: raftul EXISTĂ și a fost servit, dar nimic din el nu potrivea formularea
+        # clientului. Secțiune separată de `zero_result`, fiindcă acțiunea comerciantului e alta:
+        # acolo lipsește marfa, aici lipsește potrivirea (denumiri, descrieri, atribute) pe marfa
+        # pe care o are deja.
+        "text_unmatched": await top_unmet(
+            conn, business_id, since, until, reason="text_unmatched", limit=limit
+        ),
         "top_requested_brands": await top_requested_brands(
             conn, business_id, since, until, limit=limit
         ),

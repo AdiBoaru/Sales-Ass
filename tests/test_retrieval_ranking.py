@@ -248,7 +248,7 @@ async def test_lexical_kill_switch_reface_clauza_unica(monkeypatch):
     from src.config import get_settings
 
     monkeypatch.setattr(get_settings(), "lexical_query_v2_enabled", False)
-    conn = _CaptureConn([[], [], []])
+    conn = _CaptureConn([[], []])
     await catalog.search_products_lexical(conn, "b", "cremă pentru ten gras", locale="ro", pool=10)
 
     assert len(conn.sqls) == 1  # nicio scară
@@ -276,6 +276,166 @@ async def test_lexical_explicit_sort_keeps_filter_but_sorts(flag_on):
     assert "websearch_to_tsquery" in conn.sql  # filtrul lexical păstrat
     assert "coalesce(vp.price" in conn.sql and "asc" in conn.sql  # ordonare pe preț
     assert "ts_rank_cd" not in conn.sql.split("order by")[-1]  # NU pe rank în ORDER BY final
+
+
+# --- NX-293: structura cererii bate formularea ei (treapta `filters_only`) -------------------
+#
+# Defectul, măsurat pe catalogul SOLE real: «ce produse de barbati ai» rezolvă `category=barbati`
+# (verdict `known`/`exact`, 3 produse servabile), dar cuvântul „barbati" apare în vectorul de
+# căutare al UNUI produs din 2.758 — și acela nu e pe raft. Categoria ȘI textul = 0, deci clientul
+# primea „nu am produse în categoria pentru bărbați" despre un raft plin.
+#
+# Cauza NU era categoria: era faptul că textul e singurul lucru pe care nicio scară nu-l putea lăsa
+# deoparte. Scara de text relaxează textul cu filtrele fixe; scara de filtre relaxează filtrele cu
+# textul fix. O cerere a cărei formulare ESTE numele filtrului se anulează pe sine.
+
+
+async def test_filters_only_serveste_raftul_cand_formularea_nu_prinde_nimic():
+    """Invariantul general: un filtru de SUBIECT al cărui set NU e gol nu are voie să producă zero.
+
+    E enunțul defectului, nu al cazului: nu apare nicăieri „barbati", nicio listă de cuvinte și
+    nicio categorie anume. Orice cerere care s-a rezolvat într-un filtru dur intră aici."""
+    # Toate treptele de text ratează; treapta de filtre găsește raftul.
+    conn = _CaptureConn([[], [], [{"id": "p1"}, {"id": "p2"}]])
+    out = await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        category="barbati",
+        allow_filters_only=True,
+        pool=50,
+    )
+
+    assert len(conn.sqls) == 3  # strict → fuzzy → filters_only («barbati» = un singur termen)
+    assert out, "raftul are produse, deci turul nu are voie să iasă gol (P6)"
+    final = conn.sqls[-1]
+    # Treapta finală nu mai cere NIMIC de la text.
+    assert "websearch_to_tsquery" not in final
+    assert "word_similarity" not in final
+    assert "ro_unaccent(p.name) %" not in final
+    # ...dar filtrul de subiect rămâne întreg: rezultatul e prin construcție DE PE raftul cerut.
+    assert "from categories reqc" in final
+    assert ["barbati"] in conn.all_params[-1]
+
+
+async def test_filters_only_marcheaza_fiecare_produs_servit():
+    """Degradarea trebuie să fie VIZIBILĂ. Aici marcajul nu e doar telemetrie: produsele sunt de pe
+    raftul corect dar NU răspund formulării, iar diferența dintre „asta am pe raft" și „asta ai
+    cerut" e chiar diferența dintre onest și fals. Nimic din aval nu o poate prinde — produsele și
+    prețurile sunt reale, deci validatorul și `grounding_guard` le lasă să treacă."""
+    conn = _CaptureConn([[], [], [{"id": "p1"}]])
+    out = await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        category="barbati",
+        allow_filters_only=True,
+        pool=50,
+    )
+    assert [p.get("lexical_step") for p in out] == ["filters_only"]
+
+
+async def test_filters_only_nu_se_incearca_fara_filtru_de_subiect():
+    """Fără filtru, textul e TOT ce a cerut clientul. „Nu am găsit" e atunci răspunsul corect, iar
+    a servi catalogul ordonat după rating ar fi exact zgomotul pe care restul scării îl evită."""
+    conn = _CaptureConn([[], []])
+    out = await catalog.search_products_lexical(
+        conn, "b", "ce produse de barbati ai", locale="ro", allow_filters_only=True, pool=50
+    )
+
+    assert len(conn.sqls) == 2  # strict → fuzzy, și STOP
+    assert out == []
+
+
+async def test_filters_only_nu_se_declanseaza_pe_calificative():
+    """Poarta e „subiect", nu „orice filtru". Un calificativ îngustează un set, nu îl NUMEȘTE:
+    «ceva sub 100 de lei» al cărui text nu prinde nimic ar întoarce altfel cele mai bine notate
+    produse din TOT catalogul sub 100 de lei — adevărat, dar arbitrar, fiindcă nimeni n-a cerut
+    mulțimea aia."""
+    conn = _CaptureConn([[], []])
+    await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        price_max=100.0,
+        in_stock_only=True,
+        allow_filters_only=True,
+        pool=50,
+    )
+    assert len(conn.sqls) == 2
+    for sql in conn.sqls:
+        assert "websearch_to_tsquery" in sql or "word_similarity" in sql
+
+
+async def test_filters_only_ordoneaza_neutru_si_determinist(flag_on):
+    """Fără text nu există rang de text. Ordinea e rating shrinkuit → preț → `p.id`: cel mai onest
+    semnal rămas, și stabil (golden/cache depind de asta)."""
+    conn = _CaptureConn([[], [], [{"id": "p1"}]])
+    await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        category="barbati",
+        allow_filters_only=True,
+        pool=50,
+    )
+    order = conn.sqls[-1].split("order by")[-1]
+    assert "ts_rank_cd" not in order and "word_similarity" not in order
+    assert "p.id" in order  # tie-break determinist
+
+
+async def test_filters_only_respecta_sortul_explicit_al_clientului(flag_on):
+    conn = _CaptureConn([[], [], [{"id": "p1"}]])
+    await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        category="barbati",
+        sort_mode="price_asc",
+        allow_filters_only=True,
+        pool=50,
+    )
+    order = conn.sqls[-1].split("order by")[-1]
+    assert "coalesce(vp.price" in order and "asc" in order
+
+
+async def test_filters_only_e_opt_in_nu_default():
+    """Default-ul e tăcerea, și e o decizie, nu prudență.
+
+    Doi apelanți au nevoie de OPUSUL treptei: sonda de variantă (`missing_variant` vs `no_result`)
+    ar eticheta orice drept „variantă lipsă" dacă raftul i-ar răspunde mereu, iar harnessul de
+    retrieval ar măsura alt sistem decât cel pe care îl compară. Un default „pornit" le-ar fi
+    schimbat verdictele tăcut."""
+    conn = _CaptureConn([[], []])
+    out = await catalog.search_products_lexical(
+        conn, "b", "ce produse de barbati ai", locale="ro", category="barbati", pool=50
+    )
+    assert len(conn.sqls) == 2  # strict → fuzzy, fără treapta de filtre
+    assert out == []
+
+
+async def test_filters_only_kill_switch(monkeypatch):
+    """OFF → tăcerea de dinainte, byte-identic."""
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "search_filters_only_fallback_enabled", False)
+    conn = _CaptureConn([[], []])
+    out = await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        category="barbati",
+        allow_filters_only=True,
+        pool=50,
+    )
+    assert len(conn.sqls) == 2
+    assert out == []
 
 
 async def test_semantic_sql_injects_cosine_and_sends_vector_list():

@@ -126,6 +126,81 @@ async def test_unmet_query_no_result_carries_brand(monkeypatch):
     assert unmet[0].properties["brand"] == "Bioderma"
 
 
+async def test_filters_only_se_ofera_DOAR_pe_ultima_treapta_de_filtre(monkeypatch):
+    """NX-293, ordinea celor două scări. Precizia întâi pe AMBELE axe, nu doar pe a textului.
+
+    Scara de TEXT relaxează cuvintele cu filtrele fixe; scara de FILTRE relaxează filtrele cu
+    cuvintele fixe. `filters_only` e capătul celei dintâi, deci dacă s-ar oferi pe treapta 0 ar
+    servi „ce am pe raft" ÎNAINTE să fi încercat măcar o relaxare de filtre cu textul încă în joc.
+    Concret: o fațetă prea îngustă ar face botul să răspundă cu rafturi în loc să lărgească fațeta
+    și să găsească exact ce a cerut clientul. A renunța la cuvintele omului se plătește ultimul.
+    """
+    seen: list[bool] = []
+
+    async def fake_lex(conn, business_id, **k):
+        seen.append(k["allow_filters_only"])
+        return []
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    # Scară de filtre cu 3 trepte, independentă de rezoluția de vocabular.
+    monkeypatch.setattr(
+        ct,
+        "_relax_ladder",
+        lambda **_: [
+            {
+                "price_max": None,
+                "facet_filters": None,
+                "category": ["ten"],
+                "in_stock_only": False,
+                "features": None,
+                "constraints": (),
+            }
+            for _ in range(3)
+        ],
+    )
+    await run_tool(_ctx(), _deps(), "search_products", {"query": "orice", "category": "ten"})
+
+    assert seen == [False, False, True]
+
+
+async def test_unmet_query_text_unmatched_cand_raftul_a_raspuns_dar_formularea_nu(monkeypatch):
+    """NX-293: fixul nu are voie să STINGĂ semnalul de cerere neîmplinită.
+
+    Înainte, turul ăsta ieșea gol și emitea `no_result` (= „n-am marfa"). Acum raftul răspunde, deci
+    fără un motiv NOU n-ar mai emite nimic, și exact cazul interesant — „am raftul, dar n-am nimic
+    pentru ce a cerut clientul" — ar dispărea din raportul de cerere fix când devine măsurabil.
+    Motivul e separat fiindcă acțiunea comerciantului e alta: acolo lipsește marfa, aici lipsește
+    potrivirea (denumiri, descrieri, atribute) pe marfa pe care o are deja.
+    """
+    served = [dict(p, lexical_step="filters_only") for p in PRODUCTS]
+    _patch_lex(monkeypatch, served)
+    ctx = _ctx()
+    res = await run_tool(
+        ctx,
+        _deps(),
+        "search_products",
+        {"query": "ce produse de barbati ai", "category": "barbati"},
+    )
+    assert res.ok
+    ev = _events(ctx, "product_search")[-1]
+    assert ev.properties["lexical_step"] == "filters_only"
+    assert ev.properties["zero_result"] is False  # clientul a primit produse (P6)
+    unmet = _events(ctx, "unmet_query")
+    assert len(unmet) == 1
+    assert unmet[0].properties["reason"] == "text_unmatched"
+    assert unmet[0].properties["category_key"] == "barbati"
+
+
+async def test_unmet_query_tace_cand_potrivirea_a_fost_curata(monkeypatch):
+    """Simetric: o potrivire `strict` nu e o cerere neîmplinită. Fără asta, motivul nou ar deveni
+    zgomot pe fiecare căutare reușită."""
+    _patch_lex(monkeypatch, PRODUCTS)
+    ctx = _ctx()
+    await run_tool(ctx, _deps(), "search_products", {"query": "crema", "category": "creme-fata"})
+    assert _events(ctx, "unmet_query") == []
+
+
 async def test_unmet_query_named_not_found_with_alternatives(monkeypatch):
     """Produs NUMIT absent, dar există alternative → reason=named_not_found (nu no_result)."""
     _patch_lex(monkeypatch, PRODUCTS)  # alternative există, dar niciuna nu e „Hidra Boost Ultra"
