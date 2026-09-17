@@ -102,11 +102,13 @@ CHIP_PRODUCERS: dict[str, str] = {
         "fiindcă e singurul unde textul chip-ului e scris de un model."
     ),
     "src/agent/brain.py::_set_brain_reply": (
-        "ANCORAT STRUCTURAL, și mai tare decât triajul: chip-urile NU sunt filtrate după ce le "
-        "scrie cineva, ci SUNT chiar frazele meniului închis (`_clarify_chips` cheamă "
-        "`ground_suggestions` cu lista goală, deci rămâne doar completarea din meniu). Planul "
-        "creierului unic n-are câmp de sugestii, deci niciun model nu poate rosti un chip pe "
-        "această cale. Meniu indisponibil ⇒ zero chips, nu chips neverificate."
+        "ANCORAT STRUCTURAL, prin MUTĂRI (NX-296): chip-ul nu e un text pe care îl validăm, ci o "
+        "mutare cu dovadă calculată în tur (`conversation/chip_moves.py`), exprimată dintr-un "
+        "șablon al tenantului. Modelul poate doar să REFORMULEZE o mutare oferită, iar poarta e "
+        "per mutare: textul lui trebuie să păstreze ancora, altfel cade pe șablon. Un `move_id` "
+        "inventat se numără și se ignoră, deci nu există cale prin care o sugestie scrisă de "
+        "model să ajungă la client fără o mutare în spate. Cu felia stinsă rămâne comportamentul "
+        "de dinainte (`_clarify_chips`: chip-urile SUNT frazele meniului închis)."
     ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
     "src/worker/stages/faq.py::faq_stage": (

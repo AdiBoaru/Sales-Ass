@@ -83,8 +83,9 @@ _REASON_CODES: frozenset[str] = frozenset(
     {"user_explicit", "superseded", "topic_reset", "policy", "legacy"}
 )
 # Cheile v1 pe care v2 nu le modelează, dar nu are voie să le piardă: `cart` e al NX-237,
-# `safety` al NX-173 (P3 — un singur proprietar per câmp; v2 le CARĂ, nu le rescrie).
-PASSTHROUGH_KEYS: tuple[str, ...] = ("cart", "safety")
+# `safety` al NX-173, `offered_chips` al NX-296 (P3 — un singur proprietar per câmp; v2 le CARĂ,
+# nu le rescrie).
+PASSTHROUGH_KEYS: tuple[str, ...] = ("cart", "safety", "offered_chips")
 # Câmpurile pe care v2 le MODELEAZĂ. Orice altă cheie găsită într-un document e passthrough —
 # scrisă de o cale pe care reducerul n-o cunoaște. O cărăm, n-o pierdem: o cheie necunoscută e
 # aproape sigur date reale ale altui card, nu gunoi.

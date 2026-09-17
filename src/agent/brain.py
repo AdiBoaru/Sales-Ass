@@ -23,6 +23,7 @@ import json
 import logging
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -58,11 +59,12 @@ from src.agent.voice import VOICE_RULES
 from src.analytics.demand import clean_ids
 from src.catalog.freshness import facts_sla_s
 from src.config import chip_slots, get_settings
+from src.conversation import chip_moves
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
 from src.domain import vocab_examples
-from src.models import Offer, RetrievalResult, Route, TurnContext
+from src.models import MAX_OFFERED_CHIPS, Offer, RetrievalResult, Route, TurnContext
 from src.observability import turn_latency
 from src.retrieval.port import deadline_from_turn, query_count_bucket
 from src.retrieval.selector import build_port, select_provider
@@ -117,6 +119,19 @@ REGULI DE PLAN (AnswerPlanV2, schema_version=2):
   insufficient_data (nu putem verifica), dependency_unavailable (serviciu indisponibil).
 - Nu confirma nicio acțiune care nu e în successful_action_ids, iar `action_intents` vin doar din
   registrul dat. Nu inventa produse, prețuri, linkuri sau stoc. Fără date personale în plan.
+"""
+
+#: Instrucțiunile pentru `chip_labels`, adăugate DOAR când felia e aprinsă și turul chiar are
+#: mutări de oferit. Separate de blocul de mai sus fiindcă un tur fără mutări n-are de ce să
+#: plătească tokenii lor, iar un model care primește regula fără lista de mutări e invitat să
+#: inventeze `move_id`-uri.
+_CHIP_LABELS_SYSTEM = """
+- `chip_labels`: rescrie sugestiile OFERITE mai jos ca mesaje pe care le-ar scrie CLIENTUL, la
+  persoana I, scurt și natural. Pentru fiecare: `move_id` copiat exact din listă și `text` care
+  păstrează ÎNTREAGĂ fraza dintre ghilimele a acelei sugestii, cu aceleași cuvinte, în aceeași
+  ordine. Poți adăuga cuvinte în jur. Nu inventa sugestii noi și nu propune produse sau
+  categorii care nu sunt în listă. O sugestie pe care n-o rescrii rămâne în forma ei implicită,
+  deci e mai bine să sari peste una decât să-i strici fraza.
 """
 # VOCE: `direct_answer` e proza pe care o citește clientul, deci contractul de voce e parte din
 # instrucțiuni, nu o rafinare de ton lăsată la latitudinea modelului.
@@ -260,6 +275,105 @@ def _plan_products(plan: AnswerPlanV2, retrieved: list[dict[str, Any]]) -> list[
     ]
 
 
+@dataclass(frozen=True, slots=True)
+class ChipContext:
+    """Ce știm despre sugestiile turului ÎNAINTE de apelul de model (NX-296).
+
+    Există ca obiect, și nu ca două variabile pasate prin lanț, fiindcă cele două jumătăți TREBUIE
+    să fie aceleași: mutările puse în prompt și mutările judecate de poartă. Construite de două
+    ori, ar diverge la primul filtru adăugat într-un singur loc, iar poarta ar evalua alt meniu
+    decât a văzut modelul — exact greșeala pe care NX-295 o descrie la `_clarify_options`.
+    """
+
+    moves: tuple[Any, ...] = ()
+    offered_before: tuple[str, ...] = ()
+
+
+async def _chip_context(ctx: TurnContext, deps: Any) -> ChipContext:
+    """Mutările oferibile ale turului, din meniul închis al catalogului.
+
+    Se cheamă ÎNAINTE de model, spre deosebire de `_clarify_chips`, fiindcă mutările intră în
+    prompt. Costul rămâne UN apel de meniu per tur (cache 300s per tenant și raft), la fel ca azi:
+    se mută momentul, nu numărul de interogări.
+    """
+    from src.catalog.clarify_menu import menu_for_turn  # noqa: PLC0415
+    from src.conversation import chip_moves  # noqa: PLC0415
+
+    offered = tuple(getattr(ctx.state, "offered_chips", ()) or ())
+    menu = await menu_for_turn(ctx, deps)
+    if not menu.usable:
+        # Meniu indisponibil (flag stins, DB jos, vocabular gol) ⇒ zero mutări din catalog. Turul
+        # rămâne cu cele derivate din cardurile lui, care nu depind de vocabular.
+        return ChipContext(offered_before=offered)
+    pack = getattr(ctx.business, "domain_pack", None)
+    return ChipContext(
+        moves=tuple(
+            chip_moves.renderable(
+                chip_moves.from_menu(menu, offered_before=offered), pack, ctx.language
+            )
+        ),
+        offered_before=offered,
+    )
+
+
+def _turn_chips(
+    ctx: TurnContext, plan: AnswerPlanV2, run: ToolRun, chip_ctx: ChipContext
+) -> tuple[str, ...]:
+    """Sugestiile turului: mutări (meniu + carduri) → mix de roluri → textul modelului sau șablon.
+
+    Cardurile turului intră ca sursă de mutări abia aici, fiindcă abia acum există: `detail`,
+    `reviews`, `compare` și `link` numesc produse pe care planul tocmai le-a selectat. De aceea
+    ele NU sunt reformulabile (n-ar fi avut cum să ajungă în promptul aceluiași apel), iar textul
+    lor vine din șablonul tenantului.
+
+    Mutările oferite se PERSISTĂ în stare, ca turul următor să nu le repete. Se scriu cele
+    oferite, nu cele apăsate: un client care a văzut o cale și n-a luat-o n-are nevoie s-o
+    revadă la fiecare tur.
+    """
+    from src.conversation import chip_moves  # noqa: PLC0415
+
+    pack = getattr(ctx.business, "domain_pack", None)
+    candidates = [
+        *chip_ctx.moves,
+        # Mutările cardurilor se filtrează AICI, ca și cele din meniu în `_chip_context`: o mutare
+        # pe care n-o putem exprima nu are voie să consume un slot de selecție.
+        *chip_moves.renderable(
+            chip_moves.from_cards(
+                _plan_products(plan, run.retrieved), offered_before=chip_ctx.offered_before
+            ),
+            pack,
+            ctx.language,
+        ),
+    ]
+    picked = chip_moves.select(
+        candidates,
+        slots=chip_slots(get_settings()),
+        role_order=chip_moves.roles_for(o.kind for o in plan.obligations),
+        offered_before=chip_ctx.offered_before,
+    )
+    labels = {label.move_id: label.text for label in plan.chip_labels}
+    texts, stats = chip_moves.apply_labels(picked, labels, pack, ctx.language)
+    if picked:
+        ctx.emit(
+            "chip_moves",
+            n=len(texts),
+            kinds=sorted({m.kind for m in picked}),
+            roles=sorted({m.role for m in picked}),
+            offered=len(candidates),
+            **{f"label_{k}": v for k, v in stats.items()},
+        )
+        _remember_offered(ctx, [m.move_id for m in picked])
+    return tuple(texts)
+
+
+def _remember_offered(ctx: TurnContext, move_ids: list[str]) -> None:
+    """Scrie `move_id`-urile oferite în starea conversației, prin `state_patch` (P3: processor-ul e
+    singurul scriitor). Cap `MAX_OFFERED_CHIPS`, cele mai recente."""
+    previous = [str(m) for m in (getattr(ctx.state, "offered_chips", ()) or ())]
+    merged = previous + [m for m in move_ids if m not in previous]
+    ctx.state_patch["offered_chips"] = merged[-MAX_OFFERED_CHIPS:]
+
+
 async def _clarify_chips(ctx: TurnContext, deps: Any) -> tuple[str, ...]:
     """Chips-urile turului, din MENIUL ÎNCHIS al catalogului (NX-295) — nu din output-ul modelului.
 
@@ -306,7 +420,12 @@ def _attach_checkout_offer(ctx: TurnContext, run: ToolRun) -> None:
 
 
 async def _set_brain_reply(
-    ctx: TurnContext, deps: Any, plan: AnswerPlanV2, run: ToolRun, text: str
+    ctx: TurnContext,
+    deps: Any,
+    plan: AnswerPlanV2,
+    run: ToolRun,
+    text: str,
+    chip_ctx: ChipContext | None = None,
 ) -> None:
     """Punctul UNIC prin care planul devine reply: comparație, recomandare bogată sau proză.
 
@@ -323,7 +442,15 @@ async def _set_brain_reply(
     ORDER nu ajunge aici: `agent_stage` cheamă creierul unic doar pe `not is_order`.
     """
     settings = get_settings()
-    chips = await _clarify_chips(ctx, deps) if settings.brain_chips_enabled else ()
+    # Două surse, un singur consumator. `chip_ctx is None` = felia NX-296 stinsă (sau un apelant
+    # care n-a trecut prin `run_main_brain`), deci rămâne comportamentul de azi: etichetele seci
+    # ale meniului. Kill-switch-ul nu are ramură proprie mai jos — schimbă doar de unde vin.
+    if not settings.brain_chips_enabled:
+        chips: tuple[str, ...] = ()
+    elif chip_ctx is not None:
+        chips = _turn_chips(ctx, plan, run, chip_ctx)
+    else:
+        chips = await _clarify_chips(ctx, deps)
 
     if settings.brain_rich_reply_enabled:
         # ── COMPARAȚIE ────────────────────────────────────────────────────────────────────────
@@ -1144,7 +1271,27 @@ async def run_main_brain(
             moments = tuple(getattr(getattr(pack, "routine_steps", None), "time_markers", {}) or ())
             tools = [*tools, *tool_schemas(extra, examples, declared, families, moments)]
 
+    # NX-296: mutările oferibile ale turului, construite din catalog ÎNAINTE de apel. Costul e
+    # apelul de meniu care se făcea oricum după plan (cache 300s per tenant și raft): se mută
+    # momentul, nu numărul de interogări.
+    chip_ctx = (
+        await _chip_context(ctx, deps)
+        if (settings.chip_moves_enabled and settings.brain_chips_enabled)
+        else None
+    )
+    chip_block = (
+        chip_moves.offer_block(
+            chip_ctx.moves, pack, ctx.language, "Sugestii oferite (rescrie-le, nu inventa altele):"
+        )
+        if chip_ctx is not None
+        else ""
+    )
+
     brain_system = f"{system}\n{_PLAN_V2_SYSTEM}"
+    if chip_block:
+        # Regula intră DOAR cu lista: fără mutări, un model care primește instrucțiunea e invitat
+        # să inventeze `move_id`-uri, iar noi am plăti tokeni ca să le numărăm ca respinse.
+        brain_system = f"{brain_system}{_CHIP_LABELS_SYSTEM}"
     if profile is not None:
         brain_system = f"{brain_system}\n{profile.suffix}"
     obligations_block = (
@@ -1158,7 +1305,9 @@ async def run_main_brain(
     needs_block = (
         "Nevoi cunoscute (need_ids valide): " + ", ".join(_known_need_ids(brain_input)) + "\n"
     )
-    brain_user = _compose_user(user, user_parts, f"{obligations_block}{needs_block}{signals_block}")
+    brain_user = _compose_user(
+        user, user_parts, f"{obligations_block}{needs_block}{chip_block}{signals_block}"
+    )
     versions = brain_versions(brain_system, tools, model, profile.name if profile else None)
 
     execute = _PortedExecute(ctx, deps, run, port)
@@ -1364,7 +1513,7 @@ async def run_main_brain(
     _attach_grounding(ctx, run, plan, execute, ask_clarification=ask_clarification)
 
     ctx.emit("main_brain_call", phase="final", outcome="ok", **versions)
-    await _set_brain_reply(ctx, deps, plan, run, text)
+    await _set_brain_reply(ctx, deps, plan, run, text, chip_ctx)
     if ask_clarification:
         _persist_clarification(ctx, plan)
 

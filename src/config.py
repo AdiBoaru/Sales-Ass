@@ -635,6 +635,12 @@ class Settings(BaseSettings):
     # widget vedea 4 și nu avea de unde ști că al cincilea e permis, iar o creștere la 6 s-ar fi
     # pierdut TĂCUT în randor. Acum cifra e una singură și toți trei o citesc.
     chip_slots: int = Field(default=5, ge=1, le=8, validation_alias="CHIP_SLOTS")
+    # NX-296: chips-urile ca MUTĂRI cu dovadă, nu ca text de validat. Serverul compune mutările
+    # din catalog (meniul NX-295 + cardurile turului), modelul le poate ÎMBRACA natural, iar poarta
+    # e per mutare: textul trebuie să păstreze ancora, altfel cade pe șablonul serverului. OFF =
+    # chips-urile de azi (etichetele seci ale meniului), iar `chip_labels` dispare din schema
+    # cerută modelului, deci promptul redevine cel de dinainte.
+    chip_moves_enabled: bool = Field(default=True, validation_alias="CHIP_MOVES_ENABLED")
 
     single_brain_enabled: bool = Field(default=False, validation_alias="SINGLE_BRAIN_ENABLED")
     # NX-251: triajul nano IESE de pe drumul sincron. Sub single-brain el nu mai era writer

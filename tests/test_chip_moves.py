@@ -158,12 +158,24 @@ def test_every_declared_move_kind_has_copy_in_every_default_pack() -> None:
             assert "ro" in per_locale, (vertical, kind)
 
 
-def test_rendered_chip_always_fits_the_contract() -> None:
+def test_a_move_whose_anchor_would_be_truncated_is_not_offered() -> None:
+    """Găsit rulând felia, nu dedus: «Compara Serum Hidratant LumaDe… cu Crema Bogata NordSkin»
+    arăta plauzibil, dar numele trunchiat e exact partea pe care apăsarea trebuie s-o rezolve.
+    Regula e aceeași pe care i-o aplicăm modelului — ar fi fost incoerent să respingem
+    reformularea LUI pentru asta și să lăsăm șablonul NOSTRU s-o facă în tăcere."""
     long_name = "Crema " + "foarte lunga " * 8
     moves = cm.from_cards([{"product_id": "A", "name": long_name, "price": 10.0}])
+    assert moves, "mutările se construiesc; filtrul e la exprimare"
     for move in moves:
         rendered = cm.render_move(move, PACK, "ro")
-        assert rendered and len(rendered) <= MAX_CHIP_LEN, move.kind
+        assert rendered is None or len(rendered) <= MAX_CHIP_LEN, move.kind
+    assert cm.renderable(moves, PACK, "ro") == []
+
+
+def test_short_names_still_render_within_the_contract() -> None:
+    moves = cm.from_cards(CARDS)
+    rendered = [cm.render_move(m, PACK, "ro") for m in cm.renderable(moves, PACK, "ro")]
+    assert rendered and all(r and len(r) <= MAX_CHIP_LEN for r in rendered)
 
 
 # --- selecția: mix de roluri, nu cinci filtre --------------------------------------------------

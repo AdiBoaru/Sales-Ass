@@ -239,6 +239,23 @@ class NeedProposal(BaseModel):
     value: Scalar | None
 
 
+class ChipLabel(BaseModel):
+    """Reformularea unei sugestii pe care SERVERUL a oferit-o (NX-296).
+
+    Modelul nu propune sugestii, ci doar ÎMBRACĂ mutări pe care codul le-a construit din catalog
+    și le-a trecut prin dovadă. `move_id` e o valoare pe care a primit-o în prompt, nu una pe care
+    o inventează: una necunoscută se numără și se ignoră. `text` trebuie să păstreze ancora
+    mutării, altfel se cade pe șablonul serverului — vezi `conversation/chip_moves.apply_labels`.
+
+    `max_length` pe text e ACELAȘI cu `models.MAX_CHIP_LEN`: un chip mai lung n-ar putea fi decât
+    trunchiat, iar trunchierea de după verificare poate scoate tocmai ancora."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    move_id: str = Field(max_length=96)
+    text: str = Field(max_length=56)
+
+
 class StyleSignals(BaseModel):
     """Semnale de stil LIMITATE (ton/verbozitate). Fără CSS/layout/UI remote — randarea e a
     backendului (NX-240), frontendul e pasiv."""
@@ -280,6 +297,12 @@ class AnswerPlanV2(BaseModel):
     disclosures: tuple[str, ...] = Field(max_length=4)
     confirmed_actions: tuple[ConfirmedAction, ...] = Field(max_length=4)
     style_signals: StyleSignals
+    # NX-296. Singurul câmp al planului cu DEFAULT, și are un motiv: absența lui nu e o formă
+    # invalidă de plan, e „turul ăsta n-a oferit mutări" (flag stins, meniu indisponibil). Pe
+    # sârmă rămâne required — `plan_schema_for_model` îl adaugă în `required` când e aprins și îl
+    # ȘTERGE din schemă când e stins, deci strict-ul furnizorului e respectat în ambele stări,
+    # iar cu flagul stins modelul nici nu vede câmpul.
+    chip_labels: tuple[ChipLabel, ...] = Field(default=(), max_length=8)
 
     @model_validator(mode="after")
     def _contains_no_pii(self) -> AnswerPlanV2:
@@ -296,6 +319,9 @@ class AnswerPlanV2(BaseModel):
             *self.relaxations,
             *self.action_intents,
             *self.disclosures,
+            # NX-296: chip-ul e text scris de model care pleacă LA CLIENT și se întoarce ca mesaj
+            # al lui. Dacă ar scăpa un telefon acolo, l-am afișa pe un buton.
+            *(label.text for label in self.chip_labels),
         ]
         if self.clarification is not None:
             clarification = self.clarification

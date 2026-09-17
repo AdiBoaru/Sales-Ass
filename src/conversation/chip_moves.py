@@ -83,6 +83,7 @@ __all__ = [
     "from_cards",
     "from_menu",
     "offer_block",
+    "renderable",
     "render_move",
     "roles_for",
     "select",
@@ -109,7 +110,7 @@ MOVE_ROLES: dict[str, str] = {
 #: toate sloturile cu îngustări, iar clientul primește cinci feluri de a filtra și niciun fel de
 #: a continua. Screenshotul iZi de la care a pornit cererea are exact forma asta: patru îngustări
 #: și o cale laterală.
-_MAX_PER_KIND = 3
+_MAX_PER_KIND = 2
 
 #: Câte prețuri se uită la construirea benzii de preț. Cardurile turului, nu catalogul.
 _MIN_PRICES_FOR_BAND = 3
@@ -168,16 +169,41 @@ def _template(pack: object, kind: str, locale: str) -> str | None:
 
 
 def render_move(move: ChipMove, pack: object, locale: str) -> str | None:
-    """Textul SERVERULUI pentru o mutare. `None` = pachetul n-are șablon pentru ea."""
+    """Textul SERVERULUI pentru o mutare. `None` = mutarea nu se poate oferi onest.
+
+    Două motive, și al doilea a fost găsit rulând felia pe date reale, nu presupus. Primul:
+    pachetul n-are șablon pentru mutare (P11). Al doilea: șablonul a intrat în plafon doar
+    SCURTÂND ancora — «Compara Serum Hidratant LumaDe… cu Crema Bogata NordSkin». Textul arată
+    plauzibil, dar numele trunchiat e exact partea pe care apăsarea trebuie s-o rezolve.
+
+    Regula e ACEEAȘI pe care o aplicăm modelului în `apply_labels`: un text care nu conține ancora
+    întreagă nu se emite. Ar fi fost incoerent să respingem reformularea modelului pentru asta și
+    să lăsăm șablonul nostru să facă același lucru în tăcere. O comparație între două nume lungi
+    pur și simplu nu încape în 56 de caractere, deci nu se oferă.
+    """
     template = _template(pack, move.kind, locale)
     if template is None:
         return None
     try:
-        return fit_template(template, **move.slot_map())
+        text = fit_template(template, **move.slot_map())
     except (KeyError, IndexError):
         # Șablon cu alt slot decât produce mutarea: e o eroare de configurare a tenantului, nu un
         # motiv să crape turul. Mutarea pur și simplu nu se oferă.
         return None
+    if move.anchor and not contains_run(words_of(text), words_of(move.anchor)):
+        return None
+    return text
+
+
+def renderable(moves: Iterable[ChipMove], pack: object, locale: str) -> list[ChipMove]:
+    """Doar mutările pe care le putem EXPRIMA (șablon prezent, ancoră întreagă în text).
+
+    Se aplică ÎNAINTE de selecție, nu după, iar diferența e un slot pierdut: filtrată la randare,
+    o mutare aleasă și apoi aruncată lăsa patru chips acolo unde catalogul avea cinci de oferit.
+    Măsurat pe ieșirea reală a feliei — o comparație între două nume lungi nu încape în plafon,
+    deci nu are ce căuta nici în prompt, nici în selecție.
+    """
+    return [m for m in moves if render_move(m, pack, locale) is not None]
 
 
 # --- construcția mutărilor: fiecare familie din datele pe care turul le are deja ---------------
@@ -332,15 +358,31 @@ def select(
     ale aceluiași tur ar face imposibil dedupe-ul pe conversație.
     """
     seen = {str(m) for m in offered_before}
-    by_role: dict[str, list[ChipMove]] = {role: [] for role in role_order}
-    per_kind: dict[str, int] = {}
+    by_kind: dict[str, list[ChipMove]] = {}
     for move in sorted(candidates, key=lambda m: (-m.evidence, m.move_id)):
-        if move.move_id in seen or move.role not in by_role:
+        if move.move_id in seen or move.role not in role_order:
             continue
-        if per_kind.get(move.kind, 0) >= _MAX_PER_KIND:
-            continue
-        per_kind[move.kind] = per_kind.get(move.kind, 0) + 1
-        by_role[move.role].append(move)
+        pool = by_kind.setdefault(move.kind, [])
+        if len(pool) < _MAX_PER_KIND:
+            pool.append(move)
+
+    # Round-robin și ÎN INTERIORUL rolului, nu doar între roluri. Fără el, mutările se ordonau pe
+    # `(-evidence, move_id)`, iar la dovadă egală câștiga alfabetul: pe un tur cu trei carduri
+    # ieșeau `compare`, `detail`, `link`, iar `reviews` nu apărea NICIODATĂ. Măsurat pe ieșirea
+    # reală a feliei, nu dedus.
+    by_role: dict[str, list[ChipMove]] = {role: [] for role in role_order}
+    for role in role_order:
+        # Felurile se iau în ordinea DOVEZII lor celei mai bune, nu alfabetic: pe un tur de
+        # recomandare, «ten uscat» (420 de produse) e o continuare mai bună decât o bandă de
+        # preț care desparte un singur card, iar clientul citește primul chip, nu pe al cincilea.
+        pools = sorted(
+            (by_kind[k] for k in by_kind if MOVE_ROLES.get(k) == role),
+            key=lambda pool: (-pool[0].evidence, pool[0].kind),
+        )
+        for rank in range(_MAX_PER_KIND):
+            for pool in pools:
+                if rank < len(pool):
+                    by_role[role].append(pool[rank])
 
     picked: list[ChipMove] = []
     rank = 0

@@ -66,12 +66,51 @@ ANSWER_PLAN_SCHEMA: dict[str, Any] = {
     "schema": AnswerPlan.model_json_schema(by_alias=True),
 }
 
+# NX-296: câmpul prin care modelul ÎMBRACĂ sugestiile oferite de server. E singurul câmp al
+#: planului cu default în Pydantic (absența lui = „turul n-a oferit mutări", nu plan invalid), deci
+#: `model_json_schema` nu-l pune în `required` — iar `strict: true` cere required == properties.
+#: Se rezolvă cu două scheme DERIVATE din aceeași sursă, nu cu o excepție în invariant.
+_CHIP_FIELD = "chip_labels"
+_CHIP_DEF = "ChipLabel"
+
+
+def _split_chip_labels(schema: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """`(fără chips, cu chips cerut)` din aceeași schemă generată de Pydantic.
+
+    Varianta fără: dispare și proprietatea, și definiția ei din `$defs` — cu felia stinsă, schema
+    redevine byte-identică cu cea de dinainte de card. Un `$def` orfan ar fi inofensiv funcțional,
+    dar ar face falsă exact afirmația pe care se sprijină kill-switch-ul.
+    """
+    without = dict(schema)
+    props = {k: v for k, v in schema["properties"].items() if k != _CHIP_FIELD}
+    without["properties"] = props
+    without["required"] = [k for k in schema.get("required", ()) if k != _CHIP_FIELD]
+    defs = {k: v for k, v in schema.get("$defs", {}).items() if k != _CHIP_DEF}
+    if defs or "$defs" in schema:
+        without["$defs"] = defs
+
+    with_chips = dict(schema)
+    with_chips["required"] = [*without["required"], _CHIP_FIELD]
+    return without, with_chips
+
+
+_V2_WITHOUT_CHIPS, _V2_WITH_CHIPS = _split_chip_labels(
+    AnswerPlanV2.model_json_schema(by_alias=True)
+)
+
 # NX-239: schema STRUCTURATĂ a planului V2 — folosită de MainBrain ca răspuns FINAL al aceleiași
 # bucle de tool-calling (nu un post-writer). Un singur loc de definiție; brain-ul o importă.
 ANSWER_PLAN_V2_SCHEMA: dict[str, Any] = {
     "name": "answer_plan_v2",
     "strict": True,
-    "schema": AnswerPlanV2.model_json_schema(by_alias=True),
+    "schema": _V2_WITHOUT_CHIPS,
+}
+
+#: Aceeași schemă, cu `chip_labels` CERUT (felia NX-296 aprinsă).
+ANSWER_PLAN_V2_CHIPS_SCHEMA: dict[str, Any] = {
+    "name": "answer_plan_v2",
+    "strict": True,
+    "schema": _V2_WITH_CHIPS,
 }
 
 # NX-275 felia 2 — câmpurile pe care SERVERUL le știe deja și pe care modelul doar le repeta.
@@ -111,14 +150,26 @@ def _without_server_owned(schema: dict[str, Any]) -> dict[str, Any]:
 #: Ce i se cere EFECTIV modelului sub `PLAN_SERVER_OWNED_FIELDS_ENABLED`.
 ANSWER_PLAN_V2_MODEL_SCHEMA: dict[str, Any] = _without_server_owned(ANSWER_PLAN_V2_SCHEMA)
 
+#: Cele patru variante, precalculate: două flag-uri independente, niciun dict construit per tur.
+_PLAN_SCHEMA_VARIANTS: dict[tuple[bool, bool], dict[str, Any]] = {
+    (False, False): ANSWER_PLAN_V2_SCHEMA,
+    (False, True): ANSWER_PLAN_V2_CHIPS_SCHEMA,
+    (True, False): ANSWER_PLAN_V2_MODEL_SCHEMA,
+    (True, True): _without_server_owned(ANSWER_PLAN_V2_CHIPS_SCHEMA),
+}
+
 
 def plan_schema_for_model() -> dict[str, Any]:
     """Schema cerută modelului: redusă sub flag, cea de azi altfel (OFF = byte-identic)."""
     from src.config import get_settings  # noqa: PLC0415 — evită ciclul la import
 
-    if getattr(get_settings(), "plan_server_owned_fields_enabled", False):
-        return ANSWER_PLAN_V2_MODEL_SCHEMA
-    return ANSWER_PLAN_V2_SCHEMA
+    settings = get_settings()
+    return _PLAN_SCHEMA_VARIANTS[
+        (
+            bool(getattr(settings, "plan_server_owned_fields_enabled", False)),
+            bool(getattr(settings, "chip_moves_enabled", False)),
+        )
+    ]
 
 
 def inject_server_owned(
