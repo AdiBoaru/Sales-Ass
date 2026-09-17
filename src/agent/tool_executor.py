@@ -97,6 +97,11 @@ class ToolRun:
     order_gated_login: bool = False  # web anonim a încercat lookup de comandă → login wall
     added_product: dict[str, Any] | None = None  # #7b: ultimul produs adăugat în coș (cart_add)
     search_relevance: Any = None  # izi-parity: relevanța ultimului search_products (off-category)
+    # NX-297 felia 3: argumentele cu care modelul a CĂUTAT, în ordinea apelurilor. Din ele se
+    # învață stiva de constrângeri când nu mai există un model mic care s-o re-extragă din mesaj
+    # (`src/conversation/observed_constraints.py`). Doar `search_products`: celelalte unelte
+    # primesc id-uri, nu constrângeri.
+    search_args: list[dict[str, Any]] = field(default_factory=list)
     failed_commerce: set[str] = field(default_factory=set)  # NX-137: cart/checkout eșuate
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
     # NX-237: ultimul snapshot al coșului CANONIC (CartService, sub flag). Plannerul citește de
@@ -257,6 +262,12 @@ class ToolRun:
         # o punem pe ctx.retrieval mai jos, ca compose să suprime pick-ul pe categoria greșită.
         if name == "search_products" and result.relevance is not None:
             self.search_relevance = result.relevance
+        # NX-297: argumentele se rețin indiferent dacă apelul a întors produse. O căutare cu
+        # `price_max=100` care n-a găsit nimic spune despre client exact același lucru ca una
+        # reușită: că a cerut sub 100. Filtrată pe `result.ok`, stiva ar uita tocmai constrângerile
+        # prea strânse, adică pe cele care contează.
+        if name == "search_products" and isinstance(args, dict):
+            self.search_args.append(dict(args))
         self.generated_links.update(result.links)
         self.grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)

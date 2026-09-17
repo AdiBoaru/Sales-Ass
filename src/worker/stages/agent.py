@@ -73,6 +73,7 @@ from src.agent.validator import (
 from src.catalog.vocabulary import named_topic_roots, topic_root_of, topic_switched
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
+from src.conversation import observed_constraints
 from src.conversation.needs import NeedVocabulary
 from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
 from src.conversation.state_v2 import ConversationStateV2, project_v1
@@ -430,6 +431,32 @@ async def _cheaper_seed(
     return cheaper_seed_messages(ctx, outcome.products, baseline=outcome.baseline)
 
 
+def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
+    """Constrângerile observate în apelurile de căutare ale turului → stiva persistată (NX-297).
+
+    Sursa e ce a cerut agentul, iar ce le face ale CLIENTULUI e `corroborated_by`, nu o declarație
+    a modelului. Scriitor unic: stagiul ăsta, ca și înainte (P3) — doar momentul se schimbă, din
+    „înainte de buclă, din sloturile triajului" în „după buclă, din argumentele uneltelor".
+
+    Se aplică peste stiva DEJA merged a turului, deci un tur fără căutări o lasă neatinsă.
+    """
+    if not run.search_args:
+        return
+    observed, stats = observed_constraints.from_search_args(run.search_args, message)
+    if not observed:
+        if stats["inferred"]:
+            ctx.emit("constraint_source", kept=0, inferred=stats["inferred"])
+        return
+    merged, _ = merge_constraints(ctx.state.search_constraints, observed, None)
+    ctx.state.search_constraints = merged
+    ctx.emit(
+        "constraint_source",
+        kept=stats["kept"],
+        inferred=stats["inferred"],
+        keys=sorted(observed),
+    )
+
+
 async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """Bucla de tool-calling cu toolset PER RUTĂ: `sales` → recomandare grounded; `order` →
     status comandă (G7-3). Ambele validate; alte rute → no-op (lasă fallback/echo)."""
@@ -645,6 +672,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
         return
+
+    # NX-297 felia 3: stiva învață din ce a CĂUTAT agentul, nu din ce a extras un model mic.
+    # Rulează DUPĂ buclă fiindcă abia acum există argumentele; seed-ul din promptul turului ăsta a
+    # fost stiva stocată, deci clientul nu trebuie să-și repete bugetul ca să fie ținut minte.
+    if not is_order:
+        _learn_constraints(ctx, run, query)
 
     # Faza E (NX-144): shaping determinist post-loop (checkout-fallback/cross-sell/attr_query/
     # cheaper/rehidratare) → `ResponsePlan`. Ramurile care răspund direct (login / cross-sell /
