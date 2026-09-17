@@ -108,6 +108,11 @@ class DomainPack:
     # ale agentului (proză/order/rich), peste regulile dure de grounding și siguranță.
     # Gol → fără ghid de stil (byte-identic). Per-vertical (defaults JSON) + override per-tenant.
     response_style: dict[str, str] = field(default_factory=dict)
+    # Șabloanele chips-urilor (NX-296): `kind` → locale → frază cu `{slot}`. Copy-ul unui chip e
+    # limbă, iar limba e configurație (P11) — un fallback românesc scris în cod ar face pilotul
+    # `ro` să pară că merge și ar tăcea pe orice alt tenant. Fără șablon pentru o mutare, mutarea
+    # nu se oferă deloc.
+    chip_templates: dict[str, dict[str, str]] = field(default_factory=dict)
     # NX-205: câmpurile OBLIGATORII per categorie — contractul de completitudine al catalogului.
     # Frunza BATE rădăcina (override, NU cumul — vezi `CategoryRequirements.required_for`): o
     # categorie de ochi cere `key_benefit`, dar NU moștenește `finish`-ul rădăcinii `machiaj`.

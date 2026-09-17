@@ -629,6 +629,19 @@ class Settings(BaseSettings):
     # output-ul modelului — planul nici n-are câmp de sugestii. Costul e o interogare de fațete,
     # cache-uită per (tenant, raft). OFF → zero chips, adică exact starea de azi.
     brain_chips_enabled: bool = Field(default=True, validation_alias="BRAIN_CHIPS_ENABLED")
+    # Câte sugestii ies la client. PROPRIETARUL UNIC al cifrei — înainte trăia în trei locuri care
+    # nu se cunoșteau: producătorul tăia la 4 (`clarify_menu._MAX_CHIPS`), calea bogată v1 la 6
+    # (`compose._MAX_CHIPS`), iar randorul web la 5 (`render._MAX_WEB_CHIPS`). Cine se uita la
+    # widget vedea 4 și nu avea de unde ști că al cincilea e permis, iar o creștere la 6 s-ar fi
+    # pierdut TĂCUT în randor. Acum cifra e una singură și toți trei o citesc.
+    chip_slots: int = Field(default=5, ge=1, le=8, validation_alias="CHIP_SLOTS")
+    # NX-296: chips-urile ca MUTĂRI cu dovadă, nu ca text de validat. Serverul compune mutările
+    # din catalog (meniul NX-295 + cardurile turului), modelul le poate ÎMBRACA natural, iar poarta
+    # e per mutare: textul trebuie să păstreze ancora, altfel cade pe șablonul serverului. OFF =
+    # chips-urile de azi (etichetele seci ale meniului), iar `chip_labels` dispare din schema
+    # cerută modelului, deci promptul redevine cel de dinainte.
+    chip_moves_enabled: bool = Field(default=True, validation_alias="CHIP_MOVES_ENABLED")
+
     single_brain_enabled: bool = Field(default=False, validation_alias="SINGLE_BRAIN_ENABLED")
     # NX-251: triajul nano IESE de pe drumul sincron. Sub single-brain el nu mai era writer
     # (control plane-ul îi demota reply-ul), dar APELUL rămânea: fiecare tur plătea o clasificare
@@ -1830,3 +1843,21 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Singleton — citit o singură dată per proces."""
     return Settings()
+
+
+def chip_slots(settings: object | None = None) -> int:
+    """Câte sugestii ies la client. PROPRIETAR UNIC: `Settings.chip_slots`.
+
+    Există ca funcție, nu ca citire directă, dintr-un motiv mecanic: 111 teste înlocuiesc
+    `get_settings` cu un `SimpleNamespace` care declară doar câmpurile care le interesează, iar
+    un câmp nou citit cu `.chip_slots` le-ar face roșii pe toate — presiune exact în direcția
+    greșită, spre o a doua constantă scrisă de mână „ca să nu pice testele".
+
+    Fallback-ul nu e o a doua cifră: e DEFAULT-UL DECLARAT ÎN MODEL. Schimbi câmpul, se schimbă
+    și ce primește un stub — nu există unde să diveargă.
+    """
+    source = settings if settings is not None else get_settings()
+    value = getattr(source, "chip_slots", None)
+    if value is None:
+        value = Settings.model_fields["chip_slots"].default
+    return int(value)

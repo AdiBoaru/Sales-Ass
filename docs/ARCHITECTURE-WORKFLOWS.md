@@ -1728,6 +1728,7 @@ answer_plan_enabled = false
 answer_plan_max_quality = false
 attr_query_enabled = true
 brain_chips_enabled = true
+chip_moves_enabled = true
 brain_rich_reply_enabled = true
 cache_enabled = true
 card_badges_enabled = true

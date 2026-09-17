@@ -453,6 +453,41 @@ proza din docstring-uri. Detalii:
 [`docs/051_drop_frozen_channels.sql`](docs/051_drop_frozen_channels.sql) +
 [`tasks/NX-289.md`](tasks/NX-289.md).
 
+**NX-296 — sugestiile: de la etichete seci la continuări pe care serverul le poate onora.**
+Cererea a fost „5 sugestii, ca la iZi, legate de mesaj și de istoric". Cifra nu era însă una, ci
+TREI, în module care nu se cunoșteau: producătorul tăia la 4 (`clarify_menu._MAX_CHIPS`), calea
+bogată v1 la 6, randorul web la 5 — deci contractul FE scria „max 5" și clientul primea 4, iar o
+creștere a producătorului s-ar fi pierdut TĂCUT în randor. Acum cifra e `settings.chip_slots`
+(implicit 5) și `ground_suggestions` cere `limit` ca parametru OBLIGATORIU: un apelant care uită de
+proprietar nu mai poate cădea pe o constantă locală, fiindcă nu mai există.
+Conținutul era ori sec, ori negarantat: pe calea vie chips-urile SUNT etichetele meniului închis
+(«Ten», «ten uscat»), iar bogăția de tip iZi exista doar pe v1, unde textul era scris liber de
+model — producătorul pe care `CHIP_PRODUCERS` îl declară NEANCORAT. Reparația inversează ordinea:
+**un chip nu e un TEXT pe care îl validăm, e o MUTARE pe care serverul o poate executa**
+(`src/conversation/chip_moves.py`) — șapte feluri, vocabular ÎNCHIS, fiecare cu dovada calculată
+din date pe care turul le are deja (meniul NX-295, cardurile turului, prețurile lor), deci ZERO
+I/O nou pe drumul sincron. Modelul poate doar să REFORMULEZE o mutare oferită
+(`AnswerPlanV2.chip_labels`, același apel, zero rundă în plus), iar poarta e PER MUTARE: textul
+trebuie să păstreze fraza-ancoră, altfel se emite șablonul serverului. Mulțimea de comparat are UN
+element, deci nu mai poate trece din întâmplare — exact obiecția pentru care NX-295 spune că
+`ground_suggestions` nu e poarta potrivită pentru follow-up-uri. Poarta nu e cosmetică: pe v1
+apăsarea retrimite `label` ca MESAJ NOU al clientului, deci **textul ESTE comanda**. Asimetria e
+deliberată: fail-CLOSED pe textul modelului, fail-OPEN pe mutare. Copy-ul nu e în cod
+(`DomainPack.chip_templates`, per locale, P11). Legătura cu istoricul e `state.offered_chips`
+(`move_id`-uri, nu texte — P8; cap 20, în `PASSTHROUGH_KEYS`), iar rolurile vin din
+`plan.obligations`: pe un tur `answer` lipsește `forward` cu totul, fiindcă cinci îngustări sub un
+răspuns punctual arată ca un bot care nu te-a auzit.
+**Patru defecte au ieșit doar la RULARE**, trei pe catalogul real: șablonul NOSTRU trunchia ancora
+(«Compara Serum Hidratant LumaDe… cu…»), `reviews` nu apărea NICIODATĂ (la dovadă egală câștiga
+alfabetul), pe un tur factual nu rămânea nicio cale de adâncire (numele scurt real are ~33 de
+caractere, plafonul e 56), iar primul tur dădea 2 chips din 5 (fără raft, singurul fel disponibil e
+`pivot_shelf`, iar plafonul pe fel îl tăia — plafonul e acum o PREFERINȚĂ, nu o limită). Ancora se
+scurtează pe CUVINTE ÎNTREGI, minimum două, pe TOATE sloturile. Verdict măsurat pe SOLE:
+**14 chips, 0 moarte, `PASS`**; primul tur rămâne 4/5, cauza fiind `_MAX_PER_DIMENSION=4` din
+NX-295, declarat, nu schimbat pe tăcute. Kill-switch `CHIP_MOVES_ENABLED=false`. Card:
+[`tasks/stage1/NX-296.md`](tasks/stage1/NX-296.md); probă:
+`python scripts/chip_press_probe.py --business sole-ro`.
+
 **Fix 2026-09-16 — botul oferea chips pentru produse pe care magazinul nu le vinde.**
 Găsit pe o conversație REALĂ (`conversation_traces`): la „vreau un cablu usb", un magazin de
 COSMETICE a răspuns cu o întrebare de clarificare și patru sugestii — «Pentru telefon, USB-C, 1-2

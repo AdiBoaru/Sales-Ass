@@ -24,7 +24,7 @@ from src.agent.fallbacks import _is_short_ack
 from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.catalog.clarify_menu import ClarifyMenu, ground_suggestions, menu_for_turn
 from src.catalog.folding import fold_text
-from src.config import get_settings
+from src.config import chip_slots, get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
 from src.db.queries.catalog import list_category_slugs, sibling_categories
@@ -504,7 +504,7 @@ async def triage_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         text = out.reply or _CLARIFY_FALLBACK.get(ctx.language, _CLARIFY_FALLBACK["ro"])
         # NX-295: chips-urile trec prin meniul catalogului. Cu meniu gol (flag stins, DB jos,
         # catalog fără vocabular) poarta e transparentă — vezi `ground_suggestions`.
-        kept, dropped = ground_suggestions(out.suggestions, menu)
+        kept, dropped = ground_suggestions(out.suggestions, menu, limit=chip_slots(get_settings()))
         sugg = list(kept)
         if menu.usable:
             ctx.emit(

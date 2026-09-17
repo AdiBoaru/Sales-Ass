@@ -1,5 +1,15 @@
 {
   "_note": "NX-114 seed fallback — vertical necunoscut (ex. hvac). Whitelist minim agnostic.",
+  "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
+  "chip_templates": {
+    "refine_facet": {"ro": "Caut ceva pentru {slot}", "en": "Show me something for {slot}"},
+    "pivot_shelf": {"ro": "Arata-mi ce ai la {slot}", "en": "Show me what you have in {slot}"},
+    "price_band": {"ro": "Vreau ceva sub {slot} lei", "en": "Something under {slot}"},
+    "detail": {"ro": "Spune-mi mai multe despre {slot}", "en": "Tell me more about {slot}"},
+    "reviews": {"ro": "Ce spun recenziile despre {slot}", "en": "What do reviews say about {slot}"},
+    "compare": {"ro": "Compara {slot} cu {slot_b}", "en": "Compare {slot} with {slot_b}"},
+    "link": {"ro": "Trimite-mi linkul la {slot}", "en": "Send me the link for {slot}"}
+  },
   "currency": "RON",
   "concern_map": {},
   "profile_whitelist": ["budget_band", "fav_brands", "concerns"],

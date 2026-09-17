@@ -274,8 +274,21 @@ astea" nu. Ex. la o comparație:
 
 | Limită | Valoare | Impusă în |
 |---|---|---|
-| Număr de chips | max **5** | `channels/web/render._MAX_WEB_CHIPS` |
+| Număr de chips | max **5** | `settings.chip_slots` (`CHIP_SLOTS`) |
 | Lungimea unui chip | max **56** caractere | `models.MAX_CHIP_LEN` |
+
+> **NX-296 — proprietar unic al numărului.** Înainte cifra trăia în trei module care nu se
+> cunoșteau (producătorul tăia la 4, calea bogată la 6, randorul web la 5), deci contractul zicea
+> „max 5" iar clientul primea 4. Acum toți trei citesc `settings.chip_slots`. Frontendul continuă
+> să nu taie: dacă tenantul urcă limita, o vede în payload.
+
+**De unde vin chips-urile (NX-296).** Nu din textul liber al unui model: fiecare chip e o MUTARE
+pe care serverul o poate executa (îngustare pe o fațetă care există sub raftul discutat, schimbare
+de raft, bandă de preț care chiar desparte setul, detaliu/recenzii/comparație/link pe un produs
+tocmai afișat), cu dovadă calculată în tur. Modelul poate doar să REFORMULEZE o mutare oferită, iar
+textul lui trebuie să păstreze fraza-ancoră, altfel se emite șablonul serverului. Consecința pentru
+FE: textul unui chip e mereu „apăsabil cu sens" — conține ori o frază de catalog rezolvabilă, ori
+un prefix de nume de produs suficient ca serverul să regăsească produsul.
 
 Backendul garantează amândouă, deci **frontendul nu taie și nu trunchiază**: randează textul
 integral. Pastilele se stivuiesc vertical, aliniate la stânga, și au voie să curgă pe două rânduri

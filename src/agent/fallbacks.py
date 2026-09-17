@@ -151,13 +151,32 @@ _COMPARE_FOLLOWUPS: dict[str, dict[str, str]] = {
 }
 
 
+def fit_template(template: str, **slots: str) -> str:
+    """Umple un șablon de chip scurtând SLOTURILE, nu chip-ul.
+
+    Tăierea la coadă („Adaugă Velora Soft…") ar rupe fix partea care rutează (în engleză verbul e
+    la început: „Add to cart: …"), deci bugetul se calculează din ce rămâne după șablon.
+
+    Cu mai multe sloturi (o comparație numește două produse) se scurtează mereu CEL MAI LUNG,
+    până încape: două nume tăiate la jumătate identifică mai prost decât unul întreg și unul
+    scurtat. Ordinea e deterministă (lungime, apoi nume de slot), deci același chip iese identic
+    la fiecare rulare — un chip care se schimbă între ture ar rupe dedupe-ul de mai sus.
+    """
+    budget = MAX_CHIP_LEN - len(template.format(**dict.fromkeys(slots, "")))
+    values = {k: " ".join(str(v).split()) for k, v in slots.items()}
+    while values and sum(len(v) for v in values.values()) > budget:
+        key = max(values, key=lambda k: (len(values[k]), k))
+        allowed = budget - sum(len(v) for k, v in values.items() if k != key)
+        if allowed <= 1:
+            values[key] = values[key][:1]
+            break
+        values[key] = values[key][: allowed - 1].rstrip() + "…"
+    return template.format(**values)
+
+
 def fit_chip(template: str, name: str) -> str:
-    """Umple `{name}` scurtând NUMELE, nu chip-ul. Tăierea la coadă („Adaugă Velora Soft…") ar
-    rupe fix partea care rutează (în engleză verbul e la început: „Add to cart: …"), deci bugetul
-    se calculează din ce rămâne după șablon. Nume prea lung → elipsă pe nume, chip întreg."""
-    budget = MAX_CHIP_LEN - len(template.format(name=""))
-    trimmed = name if len(name) <= budget else name[: max(1, budget - 1)].rstrip() + "…"
-    return template.format(name=trimmed)
+    """`fit_template` cu slotul clasic `{name}` — păstrat fiindcă îl cheamă patru producători."""
+    return fit_template(template, name=name)
 
 
 def _compare_chips(columns: list[Any], language: str | None) -> list[str]:

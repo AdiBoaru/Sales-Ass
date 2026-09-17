@@ -1,0 +1,166 @@
+{
+  "business": "sole-ro",
+  "chip_slots": 5,
+  "turns": [
+    {
+      "scenario": "primul tur, fără raft",
+      "obligation": "clarify",
+      "slots": 5,
+      "filled": 4,
+      "roles": [
+        "lateral"
+      ],
+      "chips": [
+        {
+          "kind": "pivot_shelf",
+          "role": "lateral",
+          "evidence": 1461,
+          "text": "Arata-mi ce ai la Ten",
+          "press": "resolves",
+          "too_long": false
+        },
+        {
+          "kind": "pivot_shelf",
+          "role": "lateral",
+          "evidence": 681,
+          "text": "Arata-mi ce ai la Machiaj",
+          "press": "resolves",
+          "too_long": false
+        },
+        {
+          "kind": "pivot_shelf",
+          "role": "lateral",
+          "evidence": 233,
+          "text": "Arata-mi ce ai la Par",
+          "press": "resolves",
+          "too_long": false
+        },
+        {
+          "kind": "pivot_shelf",
+          "role": "lateral",
+          "evidence": 163,
+          "text": "Arata-mi ce ai la Corp",
+          "press": "resolves",
+          "too_long": false
+        }
+      ]
+    },
+    {
+      "scenario": "recomandare pe raftul discutat",
+      "obligation": "recommend",
+      "slots": 5,
+      "filled": 5,
+      "roles": [
+        "commit",
+        "deepen",
+        "forward",
+        "lateral"
+      ],
+      "chips": [
+        {
+          "kind": "refine_facet",
+          "role": "forward",
+          "evidence": 1929,
+          "text": "Caut ceva pentru hidratare",
+          "press": "resolves",
+          "too_long": false
+        },
+        {
+          "kind": "pivot_shelf",
+          "role": "lateral",
+          "evidence": 1461,
+          "text": "Arata-mi ce ai la Ten",
+          "press": "resolves",
+          "too_long": false
+        },
+        {
+          "kind": "compare",
+          "role": "deepen",
+          "evidence": 2,
+          "text": "Compara BEAUTY OF JOSEON Relief cu PURITO Daily Soft",
+          "press": "product_ref",
+          "too_long": false
+        },
+        {
+          "kind": "link",
+          "role": "commit",
+          "evidence": 1,
+          "text": "Trimite-mi linkul la BEAUTY OF JOSEON Relief Sun",
+          "press": "product_ref",
+          "too_long": false
+        },
+        {
+          "kind": "price_band",
+          "role": "forward",
+          "evidence": 1,
+          "text": "Vreau ceva sub 100 lei",
+          "press": "numeric",
+          "too_long": false
+        }
+      ]
+    },
+    {
+      "scenario": "întrebare factuală despre un produs",
+      "obligation": "answer",
+      "slots": 5,
+      "filled": 5,
+      "roles": [
+        "commit",
+        "deepen",
+        "lateral"
+      ],
+      "chips": [
+        {
+          "kind": "compare",
+          "role": "deepen",
+          "evidence": 2,
+          "text": "Compara BEAUTY OF JOSEON Relief cu PURITO Daily Soft",
+          "press": "product_ref",
+          "too_long": false
+        },
+        {
+          "kind": "link",
+          "role": "commit",
+          "evidence": 1,
+          "text": "Trimite-mi linkul la BEAUTY OF JOSEON Relief Sun",
+          "press": "product_ref",
+          "too_long": false
+        },
+        {
+          "kind": "pivot_shelf",
+          "role": "lateral",
+          "evidence": 1461,
+          "text": "Arata-mi ce ai la Ten",
+          "press": "resolves",
+          "too_long": false
+        },
+        {
+          "kind": "detail",
+          "role": "deepen",
+          "evidence": 1,
+          "text": "Spune-mi mai multe despre BEAUTY OF JOSEON Relief Sun",
+          "press": "product_ref",
+          "too_long": false
+        },
+        {
+          "kind": "link",
+          "role": "commit",
+          "evidence": 1,
+          "text": "Trimite-mi linkul la PURITO Daily Soft Touch SPF 50+ 60",
+          "press": "product_ref",
+          "too_long": false
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "chips": 14,
+    "press": {
+      "resolves": 7,
+      "product_ref": 6,
+      "numeric": 1
+    },
+    "dead": 0,
+    "verdict": "PASS"
+  }
+}

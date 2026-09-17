@@ -76,11 +76,13 @@ __all__ = [
     "MenuOption",
     "build_menu",
     "catalog_evidence",
+    "contains_run",
     "clear_clarify_menu_cache",
     "ground_suggestions",
     "is_catalog_miss",
     "menu_dimensions",
     "menu_for_turn",
+    "words_of",
 ]
 
 #: Fiecare loc din `src/` care poate emite un chip către client, cu sursa lui de ancorare.
@@ -100,11 +102,13 @@ CHIP_PRODUCERS: dict[str, str] = {
         "fiindcă e singurul unde textul chip-ului e scris de un model."
     ),
     "src/agent/brain.py::_set_brain_reply": (
-        "ANCORAT STRUCTURAL, și mai tare decât triajul: chip-urile NU sunt filtrate după ce le "
-        "scrie cineva, ci SUNT chiar frazele meniului închis (`_clarify_chips` cheamă "
-        "`ground_suggestions` cu lista goală, deci rămâne doar completarea din meniu). Planul "
-        "creierului unic n-are câmp de sugestii, deci niciun model nu poate rosti un chip pe "
-        "această cale. Meniu indisponibil ⇒ zero chips, nu chips neverificate."
+        "ANCORAT STRUCTURAL, prin MUTĂRI (NX-296): chip-ul nu e un text pe care îl validăm, ci o "
+        "mutare cu dovadă calculată în tur (`conversation/chip_moves.py`), exprimată dintr-un "
+        "șablon al tenantului. Modelul poate doar să REFORMULEZE o mutare oferită, iar poarta e "
+        "per mutare: textul lui trebuie să păstreze ancora, altfel cade pe șablon. Un `move_id` "
+        "inventat se numără și se ignoră, deci nu există cale prin care o sugestie scrisă de "
+        "model să ajungă la client fără o mutare în spate. Cu felia stinsă rămâne comportamentul "
+        "de dinainte (`_clarify_chips`: chip-urile SUNT frazele meniului închis)."
     ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
     "src/worker/stages/faq.py::faq_stage": (
@@ -177,8 +181,10 @@ _MAX_CANDIDATE_SCAN = 24
 # catalogul SOLE: perfectă la căutare, inutilă la oferit — oricare patru ai alege, ai ales
 # arbitrar dintr-o listă pe care clientul n-o vede.
 _MAX_VALUES_FOR_QUESTION = 60
-# Câte chips ies la client (același cap ca azi în triaj).
-_MAX_CHIPS = 4
+# Câte chips ies la client NU se decide aici. `limit` e parametru OBLIGATORIU al lui
+# `ground_suggestions` tocmai ca să nu existe un al doilea adevăr: proprietarul e
+# `settings.chip_slots`, iar un apelant care uită de el nu compilează, în loc să taie tăcut la o
+# cifră scrisă în modulul ăsta.
 # Sub atâtea chips supraviețuitoare nu merită să servim rămășițele modelului: cădem pe etichetele
 # din meniu, care sunt adevărate prin construcție. Unul singur ar arăta ca o alegere, nu ca o listă.
 _MIN_KEPT = 2
@@ -581,13 +587,13 @@ def build_menu(
     )
 
 
-def _words_of(text: str) -> list[str]:
+def words_of(text: str) -> list[str]:
     """Cuvintele unui text, pliate (fără diacritice) și fără punctuație. Ordinea se PĂSTREAZĂ:
     potrivirea cere cuvinte consecutive, nu o mulțime."""
     return [w for w in re.split(r"[^0-9a-z]+", fold(text)) if w]
 
 
-def _contains_run(haystack: list[str], needle: list[str]) -> bool:
+def contains_run(haystack: list[str], needle: list[str]) -> bool:
     """Apare `needle` ca secvență consecutivă de cuvinte în `haystack`?"""
     n = len(needle)
     if not n or n > len(haystack):
@@ -596,7 +602,7 @@ def _contains_run(haystack: list[str], needle: list[str]) -> bool:
 
 
 def ground_suggestions(
-    suggestions: Sequence[str], menu: ClarifyMenu, *, limit: int = _MAX_CHIPS
+    suggestions: Sequence[str], menu: ClarifyMenu, *, limit: int
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """`(chips păstrate, chips aruncate)`.
 
@@ -618,15 +624,15 @@ def ground_suggestions(
         cleaned = tuple(dict.fromkeys(s.strip() for s in suggestions if s and s.strip()))
         return cleaned[:limit], ()
 
-    needles = [_words_of(p) for p in menu.phrases()]
+    needles = [words_of(p) for p in menu.phrases()]
     kept: list[str] = []
     dropped: list[str] = []
     for raw in suggestions:
         if not isinstance(raw, str) or not raw.strip():
             continue
         text = " ".join(raw.split()).strip()
-        haystack = _words_of(text)
-        if any(n and _contains_run(haystack, n) for n in needles):
+        haystack = words_of(text)
+        if any(n and contains_run(haystack, n) for n in needles):
             if text not in kept:
                 kept.append(text)
         else:

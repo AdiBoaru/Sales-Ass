@@ -185,6 +185,10 @@ class ConversationState:
     # Cap 8 (P4), populat de clarify_resume_stage. NU e vocabular hardcodat (field-uri dinamice).
     asked_intents: list[str] = field(default_factory=list)
     constraints: dict[str, Any] = field(default_factory=dict)
+    # NX-296: `move_id`-urile sugestiilor deja OFERITE în conversație, ca să nu le repetăm.
+    # Ref-uri scurte (P8), nu texte: textul unui chip se re-derivă din mutare, iar o listă de
+    # fraze ar consuma bugetul de 8KB cu proză. Cap `MAX_OFFERED_CHIPS`, cele mai recente.
+    offered_chips: list[str] = field(default_factory=list)
     # NX-133: STIVA de constrângeri de căutare multi-tur (buget/concerns/brand/suitable_for +
     # category_key pt reset). Distinct de `constraints` (acela = slot-fill din clarify, NX-112).
     # Owner la scriere: stagiul agent (`merge_constraints`, după triaj); persistat de processor.
@@ -248,6 +252,9 @@ class ConversationState:
             pending_question=raw.get("pending_question"),
             # NX-112: cap 8 la hidratare (plasă peste clarify; state vechi cu >8 intrări se taie).
             asked_intents=(raw.get("asked_intents") or [])[-8:],
+            offered_chips=[str(m) for m in (raw.get("offered_chips") or []) if isinstance(m, str)][
+                -MAX_OFFERED_CHIPS:
+            ],
             constraints=raw.get("constraints") or {},
             # NX-133: back-compat — state vechi fără cheia asta / corupt (non-dict) → stivă goală.
             search_constraints=(
@@ -377,6 +384,12 @@ class Chip:
 # Toți producătorii de chips (compose, fallbacks, deterministic) și randorul web împart valoarea
 # asta: dacă randorul ar tăia mai jos, chips-urile lungi ar dispărea TĂCUT înainte de client.
 MAX_CHIP_LEN = 56
+
+# Câte sugestii OFERITE ținem minte pe conversație, ca să nu le repetăm. Un chip repetat la
+# fiecare tur nu e o greșeală de adevăr, e o conversație care se învârte în loc. Plafonul e mic
+# deliberat: memoria lungă ar bloca o cale pe care clientul chiar ar vrea-o a doua oară, după ce
+# s-a plimbat prin catalog. Aproximativ patru ture de sugestii.
+MAX_OFFERED_CHIPS = 20
 
 
 @dataclass
