@@ -1,7 +1,9 @@
 """Extractor de profil + lead_score (NX-88) — pasul prin care botul „învață" clientul.
 
 Logică PURĂ (testabilă fără DB/Redis), în aceeași familie cu `summarizer.py`: după un tur,
-un singur apel NANO (model_triage) pe istoricul scurt extrage semnale de profil + de lead.
+un singur apel de model pe istoricul scurt extrage semnale de profil + de lead. NX-297 felia 4a:
+apelul rulează pe modelul AGENTULUI, nu pe nano — antetul ăsta a rămas în urma codului o rundă
+(`summarizer.py` fusese actualizat, ăsta nu).
 Codul determinist preia de aici:
   • filtrează `profile_patch` pe o WHITELIST de chei per vertical → modelul nu poate scrie chei
     arbitrare (sau PII) în `contacts.profile`; cheile necunoscute se aruncă (semnal pentru NX-43);
