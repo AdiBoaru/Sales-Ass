@@ -1779,7 +1779,8 @@ la scară până nu ai un raport pe care clientul îl poate deschide singur.**
 
 **Artefacte de măsurare** — `qa-suite/baselines/baseline-v1.json` (2026-07-18) ·
 `reports/pilot-data-pack.md` (2026-07-06) · `qa-suite/*.xlsx` (2880 de cazuri **specificate**,
-neexecutate) · `arch_explorer/`.
+neexecutate). *(`arch_explorer/` figura aici ca artefact de măsurare; a fost șters în
+2026-09-17 — n-a fost niciodată în git, deci nu era verificabil de nimeni altcineva.)*
 
 **Baza de date live** — interogări exclusiv de citire pe instanța demo, 2026-07-19.
 

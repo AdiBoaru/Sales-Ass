@@ -15,7 +15,10 @@ le compară cu blocurile ```claim:<nume>``` din document. Divergență → exit 
 
 CE **NU** GARANTEAZĂ (onest, ca să nu fie fals confort): verifică LISTELE, nu
 săgețile. O diagramă poate avea toate stagiile corecte și o muchie greșită între
-ele. Muchiile rămân în sarcina cititorului + `arch_explorer/verify.py`.
+ele. Muchiile rămân în sarcina CITITORULUI — nu există azi nicio poartă pe ele.
+(Au fost verificate o vreme cu `arch_explorer/`, un derivator de graf din AST care
+n-a intrat niciodată în repo și a fost șters în 2026-09-17: o unealtă care trăiește
+pe o singură mașină nu e o poartă, e o amintire.)
 
 Utilizare:
     python scripts/verify_architecture_doc.py            # verifică (CI)
